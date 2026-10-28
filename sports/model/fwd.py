@@ -318,12 +318,14 @@ def build_history(src, out_gz):
 
 # ----------------------------------------------------------------------------------------------------------- run
 def vm_cap_mb(env=None):
-    """Address-space backstop (RLIMIT_AS) of the forward child: SPORTS_FORECAST_MAX_VM_MB, default 640. NOT the
+    """Address-space backstop (RLIMIT_AS): explicit SPORTS_FORECAST_MAX_VM_MB wins; default follows the plan. NOT the
     collector's SPORTS_WORKER_MAX_VM_MB (320 on Starter, sized for ingest): numpy + the feature frame map more address
     space than they touch (ingest: VmPeak ~60-70 MB above RSS). Address space is not memory; the real guard is the
     scheduler's RSS cap (SPORTS_JOB_MODEL_FORWARD_CAP_MB, 340), which kills the child before the container fills."""
     env = os.environ if env is None else env
-    return int(env.get("SPORTS_FORECAST_MAX_VM_MB") or 640)
+    from .. import scheduler
+    memory = int(env.get("SPORTS_MEMORY_MB") or scheduler.memory_mb())
+    return int(env.get("SPORTS_FORECAST_MAX_VM_MB") or (1280 if memory >= 2048 else 640))
 
 
 def run_record_path():

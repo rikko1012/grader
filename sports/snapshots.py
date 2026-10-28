@@ -116,6 +116,10 @@ def _r(x, n=4):
 
 # ---------------------------------------------------------------------------------------------- store reads (worker)
 def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
+    return list(_iter_latest(con, kind, where, args, as_of, limit))
+
+
+def _iter_latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
     """Latest revision per (source, source_key) among rows of `kind` matching `where`, known at as_of.
     One indexed scan, reduced in Python (SQLite's plan for the GROUP BY self-join scanned every row of the kind).
     Same CURRENT rule as store.offers (store.CURRENT_SQL: late, delayed responses are history, never current)."""
@@ -131,7 +135,6 @@ def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
         cur = best.get(k)
         if cur is None or row["revision"] > cur["revision"]:
             best[k] = row
-    out = []
     rows = list(best.values())[:int(limit)]
     for i in range(0, len(rows), 500):
         chunk = rows[i:i + 500]
@@ -139,10 +142,9 @@ def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
             f"SELECT record_id, payload FROM records WHERE record_id IN ({','.join('?' * len(chunk))})",
             [r["record_id"] for r in chunk])}
         for row in chunk:
-            out.append((row["record_id"], from_dict(store._unpack(pay[row["record_id"]])),
+            yield (row["record_id"], from_dict(store._unpack(pay[row["record_id"]])),
                         {"known_at": row["known_at"], "revision": row["revision"], "last_seen_at": row["last_seen_at"],
-                         "last_source_updated_at": row["last_source_updated_at"], "source_key": row["source_key"]}))
-    return out
+                         "last_source_updated_at": row["last_source_updated_at"], "source_key": row["source_key"]})
 
 
 def _all_forecasts(con, league, as_of, event_ids=None):
@@ -299,7 +301,7 @@ def board_player_ids(con, league, now):
               if e.start_source == "espn"}
     out = []
     seen = set()
-    for _, o, _ in _latest(con, "offer", "league = ?", [league], now):
+    for _, o, _ in _iter_latest(con, "offer", "league = ?", [league], now):
         ev = events.get(o.event_id)
         if not o.player_id or o.player_id in seen or not ev or not ev.start_utc or ev.start_utc < now:
             continue

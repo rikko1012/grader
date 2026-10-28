@@ -203,10 +203,14 @@ def build(con, league, platform, now=None, policy="member", market_at=None, cal_
     now_s = _iso(now)
     offers = store.offers(con, league=league, platform=platform, limit=100000)
     seen, revs = {}, {}
-    for r in con.execute("SELECT record_id, revision, last_seen_at FROM records WHERE kind='offer' AND league=? AND "
-                         "platform=?", (league, platform)).fetchall():
-        seen[r["record_id"]] = r["last_seen_at"]
-        revs[r["record_id"]] = r["revision"]
+    # Only metadata for the selected revisions is needed. Historical revisions can number in the millions.
+    rids = [rid for rid, _ in offers]
+    for i in range(0, len(rids), 400):
+        part = rids[i:i + 400]
+        for r in con.execute("SELECT record_id, revision, last_seen_at FROM records WHERE record_id IN "
+                             f"({','.join('?' * len(part))})", part):
+            seen[r["record_id"]] = r["last_seen_at"]
+            revs[r["record_id"]] = r["revision"]
     events = {e.event_id: e for _, e in store.events(con, league=league, limit=100000)}
     live = {o.event_id for _, o in offers if o.availability == "open" and o.event_id and
             (events.get(o.event_id) is None or (events[o.event_id].start_utc or "9") > now_s)}

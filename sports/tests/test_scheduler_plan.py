@@ -13,6 +13,20 @@ from sports import scheduler
 PY = sys.executable
 
 
+def test_growing_standard_store_jobs_have_headroom_within_existing_budget(monkeypatch):
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
+    monkeypatch.setenv("SPORTS_CHILD_BUDGET_MB", "1200")
+    jobs = scheduler.default_jobs()
+    assert 223 < jobs["settle"]["cap_mb"] < scheduler.budget_mb()
+    assert jobs["prebuilt"]["timeout_s"] == 600
+    assert 612 < jobs["model-forward"]["cap_mb"] < scheduler.budget_mb()
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "512")
+    monkeypatch.delenv("SPORTS_CHILD_BUDGET_MB")
+    jobs = scheduler.default_jobs()
+    assert jobs["settle"]["cap_mb"] == 120
+    assert jobs["prebuilt"]["timeout_s"] == 120
+
+
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
     monkeypatch.setenv("SPORTS_API", "1")

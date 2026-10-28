@@ -711,7 +711,7 @@
     return '<p class="sw-tb-valid" id="sw-validation"><b>Research estimates.</b> Forward validation: ' + ms.map(function (x) {
       return esc(S.kindLabel(x.model_version)) + " " + esc(S.validationState(x.settled)); }).join(" · ") +
       ". Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>" +
-      '<p class="sw-small sw-faint sw-tb-rule">' + esc(S.GATE_RULE) + "</p>";
+      '<details class="sw-validation-details"><summary>How validation works</summary><p class="sw-small sw-faint sw-tb-rule">' + esc(S.GATE_RULE) + "</p></details>";
   }
   function renderBoard(params, onlyEvent) {
     var f = state.filters[state.lg];
@@ -955,7 +955,7 @@
       if (!markets.length) { main.innerHTML = errorBox({kind: "notfound"}); return; }
       var ps = state.player[pid] = state.player[pid] || {};
       ps.stat = params.get("stat") || ps.stat || markets[0].stat;
-      var m = markets.filter(function (x) { return x.stat === ps.stat; })[0] || markets[0];
+      var m = S.playerMarket(markets, ps.stat, params.get("market"), params.get("q"));
       ps.stat = m.stat;
       function shownQuotes(mk) {                         // books only with a usable price now (every stat tab, not only the first)
         return mk.quotes.concat(mk.alternates).filter(function (q) {
@@ -982,8 +982,9 @@
           (P.injury ? " " + injuryHtml(P.injury) : "") + "</div>" +
           (ev ? '<div class="sw-small" style="margin-top:4px">Next: <b>' + (ev.home === false ? "at " : ev.home ? "vs " : "") + esc(ev.opponent ? (ev.opponent.name || ev.opponent.abbr) : "") + "</b> · " + esc(S.localTime(ev.start_utc)) + ' · <a href="#/game/' + encodeURIComponent(ev.event_id) + '">Match context</a></div>' : "") +
           "</div></div>";
-        h += '<div class="sw-stats-tabs" role="group" aria-label="Stat">' + markets.map(function (x) {
-          return '<button type="button" data-stat="' + esc(x.stat) + '" aria-pressed="' + (x.stat === m.stat) + '">' + esc(x.stat_label) + "</button>";
+        h += '<div class="sw-stats-tabs" role="group" aria-label="Stat">' + markets.map(function (x, i) {
+          var period = (x.scope || "full_game").replace(/_/g, " ");
+          return '<button type="button" data-market-index="' + i + '" data-stat="' + esc(x.stat) + '" aria-pressed="' + (x === m) + '">' + esc(x.stat_label) + ' · ' + esc(period) + "</button>";
         }).join("") + "</div>";
         // comparison strip
         h += '<h2 class="sw-sr">Lines for ' + esc(m.stat_label) + "</h2>";
@@ -997,10 +998,12 @@
             '<span class="sw-offered">' + offeredText([sides.over && sides.over.offered ? 1 : 0, sides.under && sides.under.offered ? 1 : 0]) + "</span>" +
             (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Scout projection yet" : esc(L.gateReason((q.not_gradable_because || [])[0] || "") || "Not settled by Scout")) + "</span>") + "</button>";
         }).join("") + '</div><button type="button" class="sw-stripbtn next" data-strip="1" aria-label="More lines" hidden>›</button></div>';
-        h += '<div class="sw-grid2" style="margin-top:12px"><div>' + historyPanel(m, ln, sel) + '<div id="sw-without"></div></div><div>' + forecastPanel(fc, det, sel, m) + "</div></div>";
-        h += matchupPanel(P, games, m, ln);
-        h += contextPanel(P, games, m);
-        h += factorsSection(state.lg, m, fc);
+        h += '<div class="sw-grid2" style="margin-top:12px"><div>' + (m.scope && m.scope !== "full_game" ? '<section class="sw-state">Period-specific history is unavailable for ' + esc(m.scope.replace(/_/g, " ")) + '. Full-game totals are not compared with this line.</section>' : historyPanel(m, ln, sel)) + '<div id="sw-without"></div></div><div>' + forecastPanel(fc, det, sel, m) + "</div></div>";
+        if (!m.scope || m.scope === "full_game") {
+          h += matchupPanel(P, games, m, ln);
+          h += contextPanel(P, games, m);
+          h += factorsSection(state.lg, m, fc);
+        }
         var rungs = m.kalshi.filter(function (k) {      // a rung with no YES bid and no ask has no price: not listed
           var s = k.sides && k.sides[0]; return s && ((s.bid !== null && s.bid !== undefined) || (s.ask !== null && s.ask !== undefined));
         });
@@ -1019,7 +1022,7 @@
         bind();
         try {                                           // sheets agent: "Games without teammate" module mounts here
           var wo = document.getElementById("sw-without");
-          if (wo && window.SportsWithout && window.SportsWithout.render) window.SportsWithout.render(wo, P, games, {stat: m.stat, line: ln, league: state.lg});
+          if ((!m.scope || m.scope === "full_game") && wo && window.SportsWithout && window.SportsWithout.render) window.SportsWithout.render(wo, P, games, {stat: m.stat, line: ln, league: state.lg});
         } catch (e) { /* the module never breaks the player page */ }
       }
 
@@ -1222,10 +1225,10 @@
         main.querySelectorAll("[data-stat]").forEach(function (b) {
           b.addEventListener("click", function () {
             ps.stat = b.getAttribute("data-stat"); ps.customLine = null;
-            m = markets.filter(function (x) { return x.stat === ps.stat; })[0]; pick = shownQuotes(m);
+            m = markets[Number(b.getAttribute("data-market-index"))]; pick = shownQuotes(m);
             sel = pick.filter(function (q) { return q.forecast_id; })[0] || pick[0] || null;
-            setHashParams({lg: state.lg, stat: ps.stat, q: sel ? sel.record_id : ""}); draw();
-            var t = main.querySelector('[data-stat="' + ps.stat + '"]'); if (t) t.focus();
+            setHashParams({lg: state.lg, stat: ps.stat, market: m.key || "", q: sel ? sel.record_id : ""}); draw();
+            var t = main.querySelector('[data-market-index="' + markets.indexOf(m) + '"]'); if (t) t.focus();
           });
         });
         main.querySelectorAll("[data-q]").forEach(function (b) {

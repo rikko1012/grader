@@ -551,7 +551,21 @@ class Forecast(_Record):
         e = (_enum(self, "league", LEAGUES) + _enum(self, "scope", SCOPES)
              + _ts_errors(self, ("forecast_at", "observed_at", "known_at"), required=("forecast_at",)))
         for nm in ("p_over", "p_under", "p_push", "p_over_given_no_push", "p_under_given_no_push"):
-            e += _prob(getattr(self, nm), nm)
+            value = getattr(self, nm)
+            if value is None and nm in ("p_over", "p_under", "p_push"):
+                e.append(f"{nm} is required")
+            elif isinstance(value, bool):
+                e.append(f"{nm} must be a numeric probability, not a boolean")
+            else:
+                e += _prob(value, nm)
+        # Reject invalid numbers before arithmetic, rounding or downstream JSON serialization.
+        # Optional projections may be unknown, but a recorded value must be finite.
+        for nm in ("line", "projection_mean", "projection_median", "stake_units"):
+            value = getattr(self, nm)
+            if value is None and nm != "line":
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                e.append(f"{nm} must be a finite number")
         if not e:
             if abs(self.p_over + self.p_under + self.p_push - 1.0) > 1e-6:
                 e.append(f"p_over+p_under+p_push = {self.p_over + self.p_under + self.p_push:.9f} != 1")

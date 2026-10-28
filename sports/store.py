@@ -560,7 +560,7 @@ def current_record_id(con, kind, source, source_key):
     return row[0] if row else None
 
 
-def _latest_rows(con, kind, where, args, as_of, limit, scoped=False):
+def _latest_rows(con, kind, where, args, as_of, limit, scoped=False, stream=False):
     """CURRENT revision per identity (store.CURRENT_SQL) among rows matching `where`, known at as_of. A CURRENT (as_of
     None) league-wide offer listing reads the hot window (offers seen in the last SPORTS_ARCHIVE_AFTER_H); point-in-time
     and event / player scoped reads span hot + archive (records_all) - sports/archive.py."""
@@ -575,7 +575,8 @@ def _latest_rows(con, kind, where, args, as_of, limit, scoped=False):
     q = (f"SELECT r.* FROM {tbl} r JOIN (SELECT source, source_key, MAX(revision) AS rv FROM {tbl} WHERE {cond} "
          f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
          f"WHERE r.kind = ? ORDER BY r.known_at DESC, r.source, r.source_key LIMIT ?")
-    return con.execute(q, a + [kind, int(limit)]).fetchall()
+    cursor = con.execute(q, a + [kind, int(limit)])
+    return cursor if stream else cursor.fetchall()
 
 
 def _archive_span_latest(con, cond, args, limit):
@@ -594,6 +595,10 @@ def _archive_span_latest(con, cond, args, limit):
 
 
 def offers(con, league=None, event_id=None, player_id=None, stat=None, platform=None, as_of=None, limit=5000):
+    return list(iter_offers(con, league, event_id, player_id, stat, platform, as_of, limit))
+
+
+def iter_offers(con, league=None, event_id=None, player_id=None, stat=None, platform=None, as_of=None, limit=5000):
     """CURRENT revision of each offer (per platform + provider offer id) known at as_of -> [(record_id, OfferSnapshot)].
     The board, the player card, the slip pool / validation and new forecasts all read offers through this one rule."""
     w, a = [], []
@@ -603,8 +608,9 @@ def offers(con, league=None, event_id=None, player_id=None, stat=None, platform=
             w.append(f"{col} = ?")
             a.append(v)
     rows = _latest_rows(con, "offer", " AND ".join(w), a, as_of, limit,
-                        scoped=event_id is not None or player_id is not None)
-    return [(r["record_id"], _rec(r)) for r in rows]
+                        scoped=event_id is not None or player_id is not None, stream=True)
+    for r in rows:
+        yield r["record_id"], _rec(r)
 
 
 def events(con, league=None, as_of=None, limit=2000):

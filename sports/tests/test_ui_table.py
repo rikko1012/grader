@@ -8,6 +8,15 @@ from pathlib import Path
 
 import pytest
 
+
+def test_period_markets_do_not_inherit_full_game_history():
+    games = [{"participation": "played", "values": {"points": 24}, "season": 2026, "start_utc": "2026-10-01T00:00:00Z"}]
+    rows = [{"key": scope, "scope": scope, "stat": "points", "quotes": [{"line": 12.5}]}
+            for scope in ("full_game", "first_half", "q1", "unknown")]
+    result = board_view.player_rows(rows, games)
+    assert set(result) == {"full_game"}
+    assert result["full_game"]["lines"]["12.5"][:4] == [1, 0, 0, 1]
+
 from sports import api_board, board_view, web
 from sports.tests.test_ui_snapshots import KAT, built, _load  # noqa: F401  (shared built-snapshot fixture)
 
