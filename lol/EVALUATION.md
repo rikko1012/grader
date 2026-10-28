@@ -679,3 +679,59 @@ it for reference only). **Recorded with the result.**
   apart from one low-scoring stretch. A8a's known limitation applies (an honest fit on a market far from 50% favours one side).
 - What the owner can run once more series settle: in the cs2-scout Render Shell `python -m lol.cal eval` (report only) and
   `python -m lol.cal fit` (writes `<LOL_DATA_DIR>/model/lol_cal.json`; a market switches ON only where the rule passes).
+
+## Amendment A15 (2026-10-28, registered BEFORE any candidate number): the multilevel forward check and three level-up candidates
+
+**Owner directive (2026-10-28):** "do a multilevel full check for grading logic across every single board ... level up these projections
+and grades". Everything here runs on a fresh read-only pull of production taken 2026-10-28 ~11:16 UTC (lol_forecasts 15,443 rows,
+lol_settlements 1,258, c_series for the 34 forecast series, the history 128,568 player-game rows / 12,857 games to 2026-10-27); no
+production call writes anything. Below the A6 minimum (27 settled series), so every result is forward evidence of ONE event
+(Worlds 2026) plus two Play-In and one EM series; stakes stay 0U; grade bands and "Lean Over / Under" wording unchanged.
+
+**The record (rule stated once, used everywhere).** The LATEST pre-match forecast per (platform, market_key, line) (forecast_at <
+series_start; the learning dashboard's join), joined to the latest settlement version; status graded; pushes and dnp counted apart.
+One row per offered line (alternates and both books count, and the duplicate count is reported); projection accuracy is scored once
+per player-market (series, player, stat, scope) on the latest saved record. Shown chance = the record's chance (lc-1 is OFF in
+production, so raw). Intervals: series-grouped bootstrap, 2,000 resamples, seed 7. Levels: overall, platform, stat, scope, role,
+grade band, Over / Under, side offered, standard / goblin / demon, best-of, tournament, day, history depth, data quality, model
+version, win-chance band, and their crosses. Everything the check found BEFORE this text was written (the multilevel tables and the
+"why" diagnostic) is development evidence that motivated the candidates and is disclosed as such; none of it is a test result.
+
+**What motivated the candidates (seen before registration, disclosed).** Over picks hit 45.7% at 59.7% stated with projection bias
++1.04 (projection minus actual) while Under picks are level (65.4 / 63.2, bias -0.13); kills Map 1 runs +10.8% high; the 19
+Worlds 2026 teams score 12.75 kills per team-game at Worlds against 15.98 in their earlier games (16 of 19 lower), and the projected
+team kill pool is 14.4 against 13.0 actual (+10.8%); lol-1f's factor multiplier (mean 1.027 kills / 1.051 assists, led by the
+"combined kill pace" feature) is above 1 and its top tercile carries most of the bias (lol-1 alone: kills +1.8%, lol-1f +7.1%).
+
+### Candidates (each is a multiplier on the saved record's projection; nb_size unchanged; the chance recomputed from the same NB)
+
+1. **ep-2 (event pace, revised ep-1).** The A8 formula (lol/event_pace.py: c = (sum actual + K m) / (sum expected + K m) over the
+   event's earlier days, expected from each team's games outside the event in the 120 days before) with two registered changes:
+   (a) the event key is the tournament name with a stage suffix removed (" Play-In", " Main Event", " Group Stage", " Swiss Stage",
+   " Knockout Stage", " Playoffs") so a Play-In teaches the Main Event - chosen after seeing that both Worlds 2026 stages sit at 12.7
+   kills per team-game (disclosed); (b) b = 1 and K in {5, 10, 20} (ep-1's F-TRAIN grid chose K=40, b=0.5, the weakest setting, on
+   periods whose events did not deviate). Default K = 10.
+2. **lb-1 (line blend, the A4 market-informed variant - the line archive now has 27 settled series).** lambda' = lambda x (L /
+   lambda)^w, L = the mean of the standard lines (PrizePicks standard, Underdog balanced) saved pre-match for the same player-market
+   on the same day; alternates (goblin / demon) never anchor but are scored with the blended lambda; no standard line -> no change.
+   w in {0.25, 0.5, 0.75}, default 0.5. Disclosed: it is market-informed and by construction moves chances toward 50%; the grade
+   counts it removes are reported, and it is judged on projection accuracy (does the blended projection predict the actual total
+   better), never on fewer grades.
+3. **lc-2 (lc-1 on the corrected projection).** The A14 design unchanged (features, prior, walk-forward, promotion rule 6 incl. the
+   balance check) with the inputs (lambda, raw chance) replaced by a passing candidate's; plus lc-1 itself re-run on the fresh pull as
+   A14 asks. lc-2 is evaluated only if 1 or 2 passes; its verdict follows A14 6 per market.
+
+**Walk-forward (ep-2, lb-1).** Day = UTC date of the series start. For day D, the parameter (K or w) is the grid value with the best
+mean NB log score over the scored player-market units of earlier days of the forward record; a day with no earlier scored unit of
+that stat is not scored. Per stat (kills, assists), all scopes together (Map 1 dominates: 20 of 27 series are best-of-1), with the
+Map 1 / Maps 1-2 / Maps 1-3 rows reported.
+
+**Decision per stat (fixed now).** A candidate PASSES for a stat if, on the walk-forward-scored units of the forward record:
+(i) NB log score gain over the live projection has a series-grouped 95% interval above 0; (ii) MAE not higher; (iii) at the offered
+lines (every scored row), |share of rows favouring Over - over rate| <= 0.15 (A8a / A14); (iv) the chosen side's hit rate is not
+lower than live's on the same rows; and for ep-2 additionally (v) the historical guard: on F-VALID and the spent period
+(lol/event_pace_study.py with the family key, K=10, b=1) the Maps 1-2 log-score gain interval is not entirely below 0 (not
+measurably worse where events did not deviate). A pass ships on the branch only (never deployed here) as a multiplier applied at
+save time in lol.center.forecast.forecast_one, version-tagged in the record (`lol-1f+ep2` / `lol-1f+lb1`, the uncorrected lambda
+kept in inputs), with an environment off switch (`LOL_EP2=0` / `LOL_LB1=0`) and tests; the forward record is then reported per
+version. A fail is recorded with its numbers and nothing changes. At most these three candidates are tested on this record.
