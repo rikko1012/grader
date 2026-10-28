@@ -1,5 +1,17 @@
 # Frozen shadow challengers
 
+## oc-1 and sd-bo3-1 - registered 2026-10-28, FAILED their pre-registered rules (documented shadows, never logged live)
+
+Registered in research/cs2_grade_1028/REGISTER.md (commit 38fb79d) before scoring; results in RESULTS.md section 4.
+- **oc-1** (family `offered-cal-1`): P(Over) = Phi(a_c + w_c z) per stat x scope cell, walk-forward by UTC day on the P1
+  units (4,376 units / 249 matches / 18 scored days). Log-loss gain +0.0014 [-0.0025, +0.0057], Brier +0.0006
+  [-0.0013, +0.0027], staked retention 43% (888 vs 2,061), staked hit 51.5% vs live 52.8%. Fails rules 1-4 and the
+  upset-day balance check. Not a shadow arm in the learning ledger: it is scored only in the research folder.
+- **sd-bo3-1** (family `bo3-spread-1`): sd x m on `perf-2-bo3` lines only, m by walk-forward grid. 148 units / 32 matches:
+  gain +0.0049 [-0.0059, +0.0171], Brier +0.0025 [-0.0027, +0.0084], staked hit 30.4% vs 31.0%, balance 29 pts. Fails.
+  The BO3.gg-route cohort is anti-signal (33.8% hit vs 58.8% stated); a wider spread does not repair it.
+Neither may be promoted; a new attempt needs a new registration.
+
 Shadow only: a challenger never changes a member's grade, chance or stake. It is scored next to the live model on the
 same forecasts and decided only at the fixed review windows (learning.REVIEW_RULE: 300 / 600 / 1000 distinct forward
 matches). Passing = "eligible for review"; promotion is an explicit admin action with a recorded reason, versioned, with

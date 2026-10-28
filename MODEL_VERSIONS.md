@@ -1,5 +1,22 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Multilevel grading check 2026-10-28 (branch grade/cs2-1028; CS2 model tag unchanged: `2085aa791c`; research only, no model change)
+
+Owner directive 2026-10-28 ("multilevel full check for grading logic ... level up these projections and grades").
+research/cs2_grade_1028: REGISTER.md (rules committed in 38fb79d before scoring), RESULTS.md, LEVELS_*.md, scripts, outputs.
+- Data: 4,376 P1 units / 249 matches (Oct 11-28) and 11,232 first-grade board rows / 321 matches. Overall P1 55.6% stated,
+  52.3% hit [50.3, 54.4]; staked picks 59.2% stated, 52.0% hit (+7.2 pts [+4.0, +10.7]); Leans calibrated (+1.0). Worst
+  cohorts: BO3.gg-route projections (perf-2-bo3) 33.8% hit on 148 units / 32 matches, Map 1 44.4% (19 matches), B+ 48.9%.
+- Candidates: every registered challenger is still short of its first REVIEW_RULE window (interim gains +0.001..+0.005, all
+  intervals include 0); rm-1 / th-1 have 0 eligible forward units; LW-1 forward (Oct 26-28, frozen weights) -0.0066
+  [-0.0158, +0.0041]. Two new registered candidates, oc-1 (offered-line calibration per cell) and sd-bo3-1 (spread
+  multiplier on the BO3.gg route), FAILED their pre-registered rules (RESULTS section 4) and stay documented shadows.
+- Nothing shipped: no chance, grade, stake, cap, threshold or constant changed; no file the model tag hashes was edited.
+  audit.py on the live board (40 rows / 40 cards): 0 grade / units mismatches.
+- Stake-rule evidence gaps for the owner (not changed, nothing registered for them before the data was seen): FORM FIGHT 0U
+  cohort hits 62.1% (178 rows), AWPer-on-HS 0U cohort 56.0% (753, calibrated), TAPE FIGHT 0.5U cohort 57.3% (737), while the
+  uncapped PROVISIONAL BO3.gg route hits 37.4% (259) and rust 15-28 d (flag only) 44.9% (575).
+
 ## Map veto display + logging, live 2026-10-23 20:30 UTC (main 0ee4d3e, PRs #12 + #14; rollback 2fbfc0e; CS2 model tag unchanged: `aa6696d5d6`; display / logging / shadow only)
 
 No grade, chance, stake, threshold, model weight or frozen constant changed; no file the model tag hashes was edited

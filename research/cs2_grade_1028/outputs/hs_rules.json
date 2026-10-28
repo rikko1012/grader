@@ -1,0 +1,548 @@
+{
+ "hs_cm2": {
+  "cand": "hs-cm2 (published HS Maps 1-2 since Oct 21) vs the perf-2 arm of the same forecast",
+  "units": 136,
+  "matches": 44,
+  "days": 7,
+  "logloss_live": 0.7162,
+  "logloss_cand": 0.7142,
+  "gain": 0.00199,
+  "gain_ci": [
+   -0.0181,
+   0.0233
+  ],
+  "brier_gain": 0.00078,
+  "brier_gain_ci": [
+   -0.00892,
+   0.01089
+  ],
+  "staked_live": {
+   "n": 71,
+   "matches": 34,
+   "hit": 50.7,
+   "hit_ci": [
+    38.0,
+    64.0
+   ],
+   "stated": 60.2,
+   "over_share": 23.9,
+   "over_rate": 42.3,
+   "balance_gap": 0.183
+  },
+  "staked_cand": {
+   "n": 65,
+   "matches": 32,
+   "hit": 44.6,
+   "hit_ci": [
+    31.0,
+    59.1
+   ],
+   "stated": 59.1,
+   "over_share": 29.2,
+   "over_rate": 50.8,
+   "balance_gap": 0.215
+  },
+  "retention": 0.915,
+  "worst_balance_day": null,
+  "slices": [
+   {
+    "slice": "hs 12",
+    "units": 136,
+    "matches": 44,
+    "gain": 0.00199
+   }
+  ],
+  "missing": {
+   "forecast not a P1 unit": 4306,
+   "published chance differs from P1 chance": 133,
+   "no perf-2 arm": 9
+  }
+ },
+ "stake_rules": [
+  {
+   "n": 389,
+   "wlp": "182-201-6",
+   "matches": 56,
+   "stated": 58.2,
+   "hit": 47.5,
+   "hit_ci": [
+    36.2,
+    56.9
+   ],
+   "gap": 10.7,
+   "gap_ci": [
+    1.1,
+    22.3
+   ],
+   "brier": 0.2622,
+   "logloss": 0.7193,
+   "bias": 0.31,
+   "over_share": 48.8,
+   "over_rate": 46.5,
+   "balance_gap": 2.3,
+   "cohort": "thin data <20 maps (1.5U cap)"
+  },
+  {
+   "n": 28,
+   "wlp": "12-16-0",
+   "matches": 8,
+   "stated": 62.8,
+   "hit": 42.9,
+   "hit_ci": [
+    23.1,
+    60.0
+   ],
+   "gap": 19.9,
+   "gap_ci": [
+    -0.7,
+    41.5
+   ],
+   "brier": 0.3034,
+   "logloss": 0.8122,
+   "bias": 1.77,
+   "over_share": 57.1,
+   "over_rate": 42.9,
+   "balance_gap": 14.3,
+   "cohort": "sample <10 maps"
+  },
+  {
+   "n": 575,
+   "wlp": "256-314-5",
+   "matches": 31,
+   "stated": 55.8,
+   "hit": 44.9,
+   "hit_ci": [
+    37.2,
+    53.8
+   ],
+   "gap": 10.9,
+   "gap_ci": [
+    1.9,
+    18.8
+   ],
+   "brier": 0.2639,
+   "logloss": 0.7216,
+   "bias": -0.76,
+   "over_share": 30.9,
+   "over_rate": 53.0,
+   "balance_gap": -22.1,
+   "cohort": "rust 15-28d"
+  },
+  {
+   "n": 141,
+   "wlp": "66-75-0",
+   "matches": 14,
+   "stated": 58.9,
+   "hit": 46.8,
+   "hit_ci": [
+    33.3,
+    61.7
+   ],
+   "gap": 12.1,
+   "gap_ci": [
+    -2.2,
+    26.0
+   ],
+   "brier": 0.2641,
+   "logloss": 0.7228,
+   "bias": 0.9,
+   "over_share": 44.0,
+   "over_rate": 41.8,
+   "balance_gap": 2.1,
+   "cohort": "rust >28d (1U cap)"
+  },
+  {
+   "n": 131,
+   "wlp": "72-58-1",
+   "matches": 29,
+   "stated": 56.3,
+   "hit": 55.4,
+   "hit_ci": [
+    41.0,
+    67.2
+   ],
+   "gap": 0.9,
+   "gap_ci": [
+    -10.3,
+    15.4
+   ],
+   "brier": 0.243,
+   "logloss": 0.6787,
+   "bias": -1.54,
+   "over_share": 55.4,
+   "over_rate": 46.2,
+   "balance_gap": 9.2,
+   "cohort": "stand-in (1U cap)"
+  },
+  {
+   "n": 8269,
+   "wlp": "4308-3895-66",
+   "matches": 255,
+   "stated": 55.7,
+   "hit": 52.5,
+   "hit_ci": [
+    50.2,
+    54.6
+   ],
+   "gap": 3.2,
+   "gap_ci": [
+    1.1,
+    5.5
+   ],
+   "brier": 0.252,
+   "logloss": 0.6974,
+   "bias": -0.36,
+   "over_share": 43.9,
+   "over_rate": 50.0,
+   "balance_gap": -6.1,
+   "cohort": "SOFT BOOK (1.5U cap)"
+  },
+  {
+   "n": 794,
+   "wlp": "367-421-6",
+   "matches": 42,
+   "stated": 56.4,
+   "hit": 46.6,
+   "hit_ci": [
+    41.6,
+    51.5
+   ],
+   "gap": 9.8,
+   "gap_ci": [
+    4.4,
+    14.6
+   ],
+   "brier": 0.2588,
+   "logloss": 0.7109,
+   "bias": 0.11,
+   "over_share": 47.8,
+   "over_rate": 46.2,
+   "balance_gap": 1.6,
+   "cohort": "NO MARKET (1.5U cap)"
+  },
+  {
+   "n": 737,
+   "wlp": "421-314-2",
+   "matches": 201,
+   "stated": 60.1,
+   "hit": 57.3,
+   "hit_ci": [
+    51.0,
+    62.9
+   ],
+   "gap": 2.9,
+   "gap_ci": [
+    -2.6,
+    9.2
+   ],
+   "brier": 0.2459,
+   "logloss": 0.685,
+   "bias": 0.49,
+   "over_share": 61.1,
+   "over_rate": 48.3,
+   "balance_gap": 12.8,
+   "cohort": "TAPE FIGHT (0.5U cap)"
+  },
+  {
+   "n": 178,
+   "wlp": "110-67-1",
+   "matches": 80,
+   "stated": 60.7,
+   "hit": 62.1,
+   "hit_ci": [
+    51.4,
+    73.7
+   ],
+   "gap": -1.5,
+   "gap_ci": [
+    -12.8,
+    9.0
+   ],
+   "brier": 0.2358,
+   "logloss": 0.6649,
+   "bias": -0.89,
+   "over_share": 39.5,
+   "over_rate": 52.5,
+   "balance_gap": -13.0,
+   "cohort": "FORM FIGHT (0U)"
+  },
+  {
+   "n": 753,
+   "wlp": "414-325-14",
+   "matches": 267,
+   "stated": 56.2,
+   "hit": 56.0,
+   "hit_ci": [
+    52.2,
+    60.3
+   ],
+   "gap": 0.2,
+   "gap_ci": [
+    -4.1,
+    4.2
+   ],
+   "brier": 0.2446,
+   "logloss": 0.682,
+   "bias": -0.22,
+   "over_share": 41.7,
+   "over_rate": 51.3,
+   "balance_gap": -9.6,
+   "cohort": "AWPer on HS (0U)"
+  },
+  {
+   "n": 259,
+   "wlp": "96-161-2",
+   "matches": 34,
+   "stated": 58.6,
+   "hit": 37.4,
+   "hit_ci": [
+    28.0,
+    46.4
+   ],
+   "gap": 21.3,
+   "gap_ci": [
+    12.2,
+    30.8
+   ],
+   "brier": 0.2834,
+   "logloss": 0.7624,
+   "bias": 0.81,
+   "over_share": 53.3,
+   "over_rate": 46.7,
+   "balance_gap": 6.6,
+   "cohort": "PROVISIONAL BO3.gg route (no cap today)"
+  },
+  {
+   "n": 3,
+   "wlp": "2-1-0",
+   "matches": 2,
+   "stated": 78.0,
+   "hit": 66.7,
+   "hit_ci": [
+    50.0,
+    100.0
+   ],
+   "gap": 11.3,
+   "gap_ci": [
+    -22.0,
+    28.0
+   ],
+   "brier": 0.2351,
+   "logloss": 0.6704,
+   "bias": 7.69,
+   "over_share": 100.0,
+   "over_rate": 66.7,
+   "balance_gap": 33.3,
+   "cohort": "kills CAP 78% hit"
+  },
+  {
+   "n": 665,
+   "wlp": "351-304-10",
+   "matches": 29,
+   "stated": 55.6,
+   "hit": 53.6,
+   "hit_ci": [
+    47.7,
+    59.1
+   ],
+   "gap": 2.0,
+   "gap_ci": [
+    -3.3,
+    7.8
+   ],
+   "brier": 0.2474,
+   "logloss": 0.6878,
+   "bias": -0.87,
+   "over_share": 54.0,
+   "over_rate": 54.7,
+   "balance_gap": -0.6,
+   "cohort": "Rested +4% (legacy only)"
+  },
+  {
+   "n": 341,
+   "wlp": "186-153-2",
+   "matches": 49,
+   "stated": 57.3,
+   "hit": 54.9,
+   "hit_ci": [
+    44.4,
+    65.5
+   ],
+   "gap": 2.5,
+   "gap_ci": [
+    -7.9,
+    12.5
+   ],
+   "brier": 0.2452,
+   "logloss": 0.6832,
+   "bias": 0.4,
+   "over_share": 51.9,
+   "over_rate": 41.0,
+   "balance_gap": 10.9,
+   "cohort": "Star lower (legacy only)"
+  },
+  {
+   "n": 1013,
+   "wlp": "498-509-6",
+   "matches": 66,
+   "stated": 56.9,
+   "hit": 49.5,
+   "hit_ci": [
+    44.2,
+    54.9
+   ],
+   "gap": 7.4,
+   "gap_ci": [
+    2.0,
+    12.9
+   ],
+   "brier": 0.2544,
+   "logloss": 0.7022,
+   "bias": 0.16,
+   "over_share": 50.4,
+   "over_rate": 48.0,
+   "balance_gap": 2.5,
+   "cohort": "Hot form (legacy only)"
+  },
+  {
+   "n": 1516,
+   "wlp": "776-721-19",
+   "matches": 124,
+   "stated": 54.9,
+   "hit": 51.8,
+   "hit_ci": [
+    49.2,
+    54.3
+   ],
+   "gap": 3.0,
+   "gap_ci": [
+    0.4,
+    5.8
+   ],
+   "brier": 0.2504,
+   "logloss": 0.6941,
+   "bias": 0.04,
+   "over_share": 47.4,
+   "over_rate": 48.0,
+   "balance_gap": -0.6,
+   "cohort": "no flag of the above"
+  }
+ ],
+ "by_units": [
+  {
+   "n": 6803,
+   "wlp": "3483-3255-65",
+   "matches": 315,
+   "stated": 53.4,
+   "hit": 51.7,
+   "hit_ci": [
+    50.1,
+    53.3
+   ],
+   "gap": 1.7,
+   "gap_ci": [
+    0.1,
+    3.1
+   ],
+   "brier": 0.2502,
+   "logloss": 0.6936,
+   "bias": -0.36,
+   "over_share": 43.6,
+   "over_rate": 50.1,
+   "balance_gap": -6.5,
+   "units": 0
+  },
+  {
+   "n": 3851,
+   "wlp": "2012-1812-27",
+   "matches": 298,
+   "stated": 58.2,
+   "hit": 52.6,
+   "hit_ci": [
+    49.1,
+    55.7
+   ],
+   "gap": 5.6,
+   "gap_ci": [
+    2.4,
+    9.0
+   ],
+   "brier": 0.2534,
+   "logloss": 0.7001,
+   "bias": -0.33,
+   "over_share": 45.9,
+   "over_rate": 49.3,
+   "balance_gap": -3.5,
+   "units": 0.5
+  },
+  {
+   "n": 447,
+   "wlp": "229-213-5",
+   "matches": 160,
+   "stated": 65.2,
+   "hit": 51.8,
+   "hit_ci": [
+    46.4,
+    57.5
+   ],
+   "gap": 13.4,
+   "gap_ci": [
+    7.6,
+    18.6
+   ],
+   "brier": 0.268,
+   "logloss": 0.7312,
+   "bias": 0.87,
+   "over_share": 52.9,
+   "over_rate": 44.6,
+   "balance_gap": 8.4,
+   "units": 1.0
+  },
+  {
+   "n": 130,
+   "wlp": "71-58-1",
+   "matches": 52,
+   "stated": 70.8,
+   "hit": 55.0,
+   "hit_ci": [
+    42.9,
+    64.7
+   ],
+   "gap": 15.8,
+   "gap_ci": [
+    5.5,
+    26.8
+   ],
+   "brier": 0.2716,
+   "logloss": 0.7423,
+   "bias": 1.23,
+   "over_share": 72.9,
+   "over_rate": 55.8,
+   "balance_gap": 17.1,
+   "units": 1.5
+  },
+  {
+   "n": 1,
+   "wlp": "0-1-0",
+   "matches": 1,
+   "stated": 75.4,
+   "hit": 0.0,
+   "hit_ci": [
+    0.0,
+    0.0
+   ],
+   "gap": 75.4,
+   "gap_ci": [
+    75.4,
+    75.4
+   ],
+   "brier": 0.5685,
+   "logloss": 1.4024,
+   "bias": 13.78,
+   "over_share": 100.0,
+   "over_rate": 0.0,
+   "balance_gap": 100.0,
+   "units": 2.0
+  }
+ ]
+}

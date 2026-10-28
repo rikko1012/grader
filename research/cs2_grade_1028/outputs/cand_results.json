@@ -1,0 +1,297 @@
+{
+ "oc1": {
+  "cand": "oc-1",
+  "units": 4376,
+  "matches": 249,
+  "days": 18,
+  "logloss_live": 0.6987,
+  "logloss_cand": 0.6973,
+  "gain": 0.00141,
+  "gain_ci": [
+   -0.0025,
+   0.00566
+  ],
+  "brier_gain": 0.00063,
+  "brier_gain_ci": [
+   -0.00126,
+   0.00269
+  ],
+  "staked_live": {
+   "n": 2061,
+   "matches": 248,
+   "hit": 52.8,
+   "hit_ci": [
+    49.8,
+    56.1
+   ],
+   "stated": 59.3,
+   "over_share": 43.0,
+   "over_rate": 49.2,
+   "balance_gap": 0.062
+  },
+  "staked_cand": {
+   "n": 888,
+   "matches": 194,
+   "hit": 51.5,
+   "hit_ci": [
+    47.4,
+    56.1
+   ],
+   "stated": 58.8,
+   "over_share": 34.0,
+   "over_rate": 46.5,
+   "balance_gap": 0.125
+  },
+  "retention": 0.431,
+  "worst_balance_day": [
+   "2026-10-18",
+   0.5,
+   22
+  ],
+  "slices": [
+   {
+    "slice": "kills 12",
+    "units": 2099,
+    "matches": 230,
+    "gain": 0.00304
+   },
+   {
+    "slice": "hs 12",
+    "units": 1960,
+    "matches": 229,
+    "gain": -8e-05
+   },
+   {
+    "slice": "kills 123",
+    "units": 20,
+    "matches": 2,
+    "gain": 0.00014
+   },
+   {
+    "slice": "hs 123",
+    "units": 20,
+    "matches": 2,
+    "gain": -0.00018
+   },
+   {
+    "slice": "hs 1",
+    "units": 127,
+    "matches": 19,
+    "gain": -2e-05
+   },
+   {
+    "slice": "kills 1",
+    "units": 150,
+    "matches": 19,
+    "gain": -9e-05
+   }
+  ],
+  "fits_last_day": {
+   "kills 12": [
+    0.008,
+    0.165
+   ],
+   "hs 12": [
+    -0.0142,
+    0.4917
+   ]
+  },
+  "fits_by_day": {
+   "2026-10-25": {
+    "kills 12": [
+     0.0312,
+     0.0679
+    ],
+    "hs 12": [
+     -0.0,
+     0.4108
+    ]
+   },
+   "2026-10-26": {
+    "kills 12": [
+     0.024,
+     0.0717
+    ],
+    "hs 12": [
+     -0.0039,
+     0.4009
+    ]
+   },
+   "2026-10-27": {
+    "kills 12": [
+     0.0338,
+     0.1267
+    ],
+    "hs 12": [
+     0.0011,
+     0.4585
+    ]
+   },
+   "2026-10-28": {
+    "kills 12": [
+     0.008,
+     0.165
+    ],
+    "hs 12": [
+     -0.0142,
+     0.4917
+    ]
+   }
+  },
+  "replay_gap_mean": 0.0002
+ },
+ "sd_bo3_1": {
+  "cand": "sd-bo3-1",
+  "units": 148,
+  "matches": 32,
+  "days": 13,
+  "logloss_live": 0.78,
+  "logloss_cand": 0.7751,
+  "gain": 0.00491,
+  "gain_ci": [
+   -0.00589,
+   0.01713
+  ],
+  "brier_gain": 0.00249,
+  "brier_gain_ci": [
+   -0.00268,
+   0.00839
+  ],
+  "staked_live": {
+   "n": 100,
+   "matches": 29,
+   "hit": 31.0,
+   "hit_ci": [
+    20.2,
+    42.9
+   ],
+   "stated": 61.7,
+   "over_share": 63.0,
+   "over_rate": 40.0,
+   "balance_gap": 0.23
+  },
+  "staked_cand": {
+   "n": 79,
+   "matches": 23,
+   "hit": 30.4,
+   "hit_ci": [
+    18.1,
+    44.8
+   ],
+   "stated": 61.8,
+   "over_share": 69.6,
+   "over_rate": 40.5,
+   "balance_gap": 0.291
+  },
+  "retention": 0.79,
+  "worst_balance_day": [
+   "2026-10-12",
+   0.2,
+   20
+  ],
+  "slices": [
+   {
+    "slice": "kills 12",
+    "units": 67,
+    "matches": 28,
+    "gain": 0.00851
+   },
+   {
+    "slice": "hs 12",
+    "units": 62,
+    "matches": 28,
+    "gain": 0.00809
+   },
+   {
+    "slice": "kills 1",
+    "units": 13,
+    "matches": 4,
+    "gain": -0.00066
+   },
+   {
+    "slice": "hs 1",
+    "units": 6,
+    "matches": 2,
+    "gain": -0.05616
+   }
+  ],
+  "m_by_day": {
+   "2026-10-11": 1.0,
+   "2026-10-12": 1.0,
+   "2026-10-13": 1.0,
+   "2026-10-14": 1.0,
+   "2026-10-15": 1.0,
+   "2026-10-16": 1.0,
+   "2026-10-17": 1.0,
+   "2026-10-19": 1.0,
+   "2026-10-20": 1.0,
+   "2026-10-21": 2.5,
+   "2026-10-22": 2.5,
+   "2026-10-23": 2.5,
+   "2026-10-24": 2.5
+  },
+  "cohort_units": 148,
+  "sd_inversion_gap_mean": 0.0091,
+  "decidable": true
+ },
+ "lw1_forward": {
+  "cand": "LW-1 forward (final frozen weights, starts after 2026-10-25 19:38 UTC)",
+  "units": 688,
+  "matches": 37,
+  "days": 3,
+  "logloss_live": 0.6832,
+  "logloss_cand": 0.6898,
+  "gain": -0.00656,
+  "gain_ci": [
+   -0.01584,
+   0.00406
+  ],
+  "brier_gain": -0.0033,
+  "brier_gain_ci": [
+   -0.00786,
+   0.00196
+  ],
+  "staked_live": {
+   "n": 286,
+   "matches": 37,
+   "hit": 60.8,
+   "hit_ci": [
+    53.1,
+    68.4
+   ],
+   "stated": 58.4,
+   "over_share": 35.3,
+   "over_rate": 45.1,
+   "balance_gap": 0.098
+  },
+  "staked_cand": {
+   "n": 13,
+   "matches": 12,
+   "hit": 69.2,
+   "hit_ci": [
+    41.7,
+    92.3
+   ],
+   "stated": 55.8,
+   "over_share": 7.7,
+   "over_rate": 23.1,
+   "balance_gap": 0.154
+  },
+  "retention": 0.045,
+  "worst_balance_day": null,
+  "slices": [
+   {
+    "slice": "kills 12",
+    "units": 349,
+    "matches": 37,
+    "gain": -0.00725
+   },
+   {
+    "slice": "hs 12",
+    "units": 339,
+    "matches": 37,
+    "gain": -0.00585
+   }
+  ]
+ }
+}
