@@ -182,7 +182,11 @@ def default_jobs():
                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
                               locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=900 if std else 3600, timeout_s=900,
-                       flag="SPORTS_INGEST", cap_mb=240 if std else 120, cls=HEAVY, prio=4),  # live Standard settlement exceeded its old 216 MB scaled cap
+                       flag="SPORTS_INGEST", cap_mb=240 if std else 120, cls=HEAVY, prio=4,
+                       # Settlement also imports the model scorecard's native libraries. The old collector VM
+                       # limit (320 MB) lets settlement finish but breaks that import. RSS remains watchdog-bound.
+                       env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
+                       if std else {}),
         "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # member picks: spool -> picks.db
         "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=900 if std else 3600, timeout_s=600,
