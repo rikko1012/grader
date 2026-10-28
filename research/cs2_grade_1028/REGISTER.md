@@ -142,3 +142,54 @@ behind an env off-switch with tests and a MODEL_VERSIONS.md entry, and audit.py 
 - **Switch:** `BO3_PROJ_SHADOW` (default 1 = shadow; 0 restores the previous display; the sr-bo3-1 0U gate still applies).
 - **Review:** none registered - this is display policy. The sr-bo3-1 forward review (100 provisional-route P1 units) is the
   measurement that continues underneath it.
+
+## sr-gates-1 - stake-rule tests on the gated / capped cohorts (family `stake-gates-1`; owner 2026-10-28 "finish this ... level up these projections and grades"; written BEFORE any number below was computed, commit recorded in RESULTS.md section 7)
+
+- **Said plainly: these cohorts were SEEN in the Oct 28 check** (RESULTS.md section 3, PICKS rule, first grades): FORM FIGHT 0U
+  178 rows 62.1%, AWPer-on-HS 0U 753 rows 56.0%, TAPE FIGHT 0.5U cap 737 rows 57.3%, rust 15-28 d (flag only) 575 rows
+  44.9%, and stake size not tracking hit (0.5U 52.6% / 1U 51.8% / 1.5U 55.0%). Nothing was changed then because no stake-rule
+  test existed. Because the data motivated the rules, the test here is NOT the pooled number: it is a **chronological split**
+  of the P1 units - the FIRST half of matches by start time vs the SECOND half - and BOTH halves must agree. A pooled
+  figure alone never passes anything in this section.
+- **Data and rule:** the Oct 28 P1 units (4,376 units / 249 matches, starts Oct 11-28, scratchpad `cs2grade1028/`,
+  registered product rule: latest board forecast >= 30 min before the start on a standard offered line, pushes out) joined
+  to their forecast (chance of the P1 side) and to the first-grade pick row's saved inputs (`factors`: sniping, recent
+  {n, overs}, days_since_last_map, prop). The scored chance is the P1 side's chance; hit = that side's result.
+- **Split:** matches ordered by start time; the first 50% of DISTINCT matches (by count) = half 1, the rest = half 2; a
+  match is never split. Reported per half and pooled.
+- **Cohort membership is recomputed from the P1 chance and the saved inputs with the grader's own thresholds**, because
+  the first-grade flag can differ from the state at P1 time (the chance moves; the record may not):
+  - FORM FIGHT: Maps 1-2, record n > 0, P1-side chance >= 57% and smoothed record (overs + 2) / (n + 4) <= 0.36 for an
+    Over side or >= 0.64 for an Under side (grader form_fight_margin 0.14). The gate zeroes the model's side.
+  - AWPer-HS: prop HS, sniping > 40 (grader Gate A). Zeroes both sides.
+  - TAPE FIGHT: Maps 1-2, not FORM FIGHT, P1-side chance >= 57% and raw record overs / n <= 0.50 (Over side) or >= 0.60
+    (Under side). The cap holds the stake at 0.5U.
+  - rust 15-28 d: days_since_last_map in [15, 28] (grader rust_flag_days 15, rust_cap_days 29). Flag only today.
+  The first-grade flag text ("FORM FIGHT", "AWPer on a headshot", "TAPE FIGHT", sd_reasons "rust 15-28d") is reported
+  beside it as a cross-check; the recomputed membership is the one tested.
+- **Staked-eligible picks** = cohort units whose P1-side chance >= 55% (what the stake rule would stake if lifted). For the
+  TAPE FIGHT cap raise the affected set is narrower: units whose chance earns >= 1U (chance >= 63%); the test runs on that
+  set (and reports >= 55% beside it).
+- **Minimum evidence:** each half needs >= 40 staked-eligible units and >= 15 distinct matches; below that the verdict is
+  "not decidable" and nothing changes.
+- **Statistics:** match-grouped bootstrap (1,000 resamples, seed 7, as ana.py) of the hit rate; balance = |Over share of
+  the staked-eligible picks - Over hit rate on them|; upset-day check = leave-one-UTC-start-day-out, every day in turn.
+- **LIFT a 0U gate (FORM FIGHT; AWPer-HS) - pass = ALL of:** (1) hit >= 50.0% in half 1 AND in half 2; (2) pooled 95%
+  lower bound > 50.0%; (3) |pooled hit - pooled stated chance| <= 5.0 pts; (4) balance <= 0.15 pooled and in each half;
+  (5) removing any single UTC start day keeps the pooled hit >= 50.0%; (6) the minimum evidence in both halves.
+- **RAISE the TAPE FIGHT cap 0.5U -> 1U - same six conditions** on the >= 63% set (the one the raise touches).
+- **ADD a cap on rust 15-28 d - pass =** the cohort's hit-rate 95% upper bound < 50.0% in half 1 AND in half 2 (each half's
+  own interval), with the minimum evidence in both halves, on the staked-eligible set (>= 55%; the cap only acts there).
+  Cap chosen now: **0.5U** if both upper bounds < 50.0%; **0U** only if both upper bounds < 45.0%.
+- **Everything else stays:** stake sizes (0.5 / 1 / 1.5 / 2 / 3U), grade bands, chances, projections, side, Lean wording,
+  the sr-bo3-1 gate, the sample / stand-in / transfer / rust >28 d / market caps, LoL. Letter + reason stay on every 0U
+  pick (gd-1); board = card = slips = picks.
+- **If applied:** one env switch `SR_GATES_1` (default 1 = the new rules; `SR_GATES_1=0` at grade time restores every
+  previous gate and cap exactly, no deploy); cfg key `sr_gates_1` for tests. grader.py is hashed, so the tag moves and is
+  recorded in MODEL_VERSIONS.md. Tests: gate on / off per cohort, letter and chance unchanged, env restore, other gates
+  untouched. audit.py on the live board afterwards.
+- **Forward review per applied change:** at 100 further P1 units in that cohort logged after activation (staked-eligible
+  set; the one the change touches), hit rate with a match-grouped 95% interval, W-L-P, stated chance, balance.
+  **Reversal rule:** a lifted gate or raised cap is RESTORED if the forward interval lies entirely below 55% (the stake
+  threshold) or the point estimate is below 50%; an added rust cap is REMOVED if the forward lower bound is above 50%.
+  Reviewed again at 300 units with the same rule.
