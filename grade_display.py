@@ -18,6 +18,48 @@ import re
 DISPLAY_VERSION = "gd-1"
 LETTERS = ("A+", "A", "A-", "B+", "B", "B-")
 
+# sr-bo3-2 (owner 2026-10-28: "get rid of BO3.gg ... or keep it in shadow unless 100% needed"): a PROVISIONAL BO3.gg-route
+# projection (performance-model version ending in "-bo3": HLTV has no history for the player, the projection comes from
+# BO3.gg maps) is SHADOW ONLY. The forecast is still computed and logged exactly as before (sr-bo3-1's forward review and
+# the shadow arms keep their data), but it is never shown as a chance, letter, side or stake on any member surface: the
+# board row has no side (so board, slips, compare and the content book skip it - the owner's no-projection rule: hide the
+# line, never "No bet"); the card says the line has no projection. Admin views still see the row, marked shadow.
+# BO3_PROJ_SHADOW=0 restores the previous behaviour (the sr-bo3-1 0U gate still applies). Not in the model hash.
+BO3_SHADOW_VERSION = "sr-bo3-2"
+BO3_SHADOW_REASON = "No HLTV history for this player - a BO3.gg-only projection is kept in shadow, not shown"
+
+
+def bo3_shadow_enabled():
+    import os
+    return os.environ.get("BO3_PROJ_SHADOW", "1").strip() != "0"
+
+
+def bo3_route(g):
+    """True when this grade's projection came from the BO3.gg fallback route (perf-*-bo3)."""
+    return str((g or {}).get("projection_source") or "").endswith("-bo3")
+
+
+def bo3_shadow(g):
+    """True when the grade must be hidden from members (BO3.gg-route projection, shadow mode on)."""
+    return bo3_route(g) and bo3_shadow_enabled()
+
+
+def shadow_board_row(r, g, v, now, graded_at):
+    """The board's stored row for a shadow grade: no side / grade / chance / units (every member surface keys on the
+    side), the hidden grade kept under shadow_grade for the admin board and diagnostics only."""
+    g, v = g or {}, v or {}
+    return {"at": now, "graded_at": graded_at, "state": "SHADOW", "shadow": True, "shadow_version": BO3_SHADOW_VERSION,
+            "reason": BO3_SHADOW_REASON, "graded_line": r.get("line"), "book": r.get("book") or "underdog",
+            "shadow_grade": {"grade": v.get("grade"), "model_grade": model_grade(g, v), "side": v.get("side"), "p": v.get("p"),
+                             "units": v.get("units"), "proj": g.get("lambda_final"), "source": g.get("projection_source")}}
+
+
+def shadow_verdict():
+    """The member card's verdict for a shadow grade: no side, chance, letter or stake - the line is hidden."""
+    return {"side": None, "p": None, "grade": None, "units": 0.0, "state": "UNAVAILABLE", "unavailable": True,
+            "shadow": True, "shadow_version": BO3_SHADOW_VERSION, "kept_from_board": False, "stale": False, "temporary": False,
+            "reason": BO3_SHADOW_REASON}
+
 
 def _letter_from_p(p):
     from grader import grade_from_p

@@ -1671,6 +1671,22 @@ def withhold_temporary(res):
     return res
 
 
+def withhold_shadow(res):
+    """sr-bo3-2: a member card for a BO3.gg-route (shadow) grade shows no projection, chance, letter, stake, ladder,
+    simulation or line comparison - the line is hidden; the full grade was already logged. Returns res."""
+    g = res.get("grade") or {}
+    res["grade"] = dict({k: g[k] for k in _OUTAGE_GRADE_KEYS if k in g}, status="NO PROJECTION", withheld=True, shadow=True,
+                        reason=grade_display.BO3_SHADOW_REASON)
+    res["verdict"] = grade_display.shadow_verdict()
+    res["ladder"] = []
+    res["simulation"] = None
+    res["comparison"] = {"error": "no line comparison: this line has no shown projection"}
+    fg = res.get("form_gap")
+    if isinstance(fg, dict):
+        res["form_gap"] = {k: v for k, v in fg.items() if k not in ("projection", "gap")}
+    return res
+
+
 def outage_info(res, causes):
     """The card's outage notice: the cause(s), the odds note for a Thunderpick blip, and the saved board grade it shows
     (only the exact pick - never another line's grade)."""
@@ -3015,6 +3031,10 @@ def board_forever():
                             picklog.log_async(res, v, test=2)
                         except Exception:
                             traceback.print_exc()
+                    if grade_display.bo3_shadow(g):
+                        # sr-bo3-2: a BO3.gg-route projection is logged exactly as above but never shown - the stored row has
+                        # no side, so the board, slips, compare table and content book skip the line (admin sees it as SHADOW)
+                        BOARD[r["id"]] = grade_display.shadow_board_row(r, g, v, time.time(), BOARD[r["id"]].get("graded_at"))
                 except Exception:
                     traceback.print_exc()
                 if len(BOARD) % 10 == 0:
@@ -5012,6 +5032,8 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
+            if not outage and grade_display.bo3_shadow(res.get("grade")):
+                withhold_shadow(res)                     # sr-bo3-2: logged above, hidden here (no chance / letter / side / stake)
             try:                                         # the card's distribution chart (display only, dist_view.py)
                 import dist_view
                 res["dist_view"] = None if outage else dist_view.view(res.get("grade"))

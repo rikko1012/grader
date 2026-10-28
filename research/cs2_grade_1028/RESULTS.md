@@ -167,3 +167,16 @@ version 2085aa791c (gate not yet live); 20 board rows / 20 graded; 0 grade/chanc
 mismatches; 2 bets (both Less), 18 leans; the same MIBR name note. **Rows on the PROVISIONAL BO3.gg route at that moment:
 0 of 20** (no row's source, flags or reason names perf-2-bo3 / PROVISIONAL), so the gate would hold 0 live rows today.
 Historically it would have held 259 first-grade board rows (100 of them staked, 31.0% hit) and 148 P1 units over Oct 11-28.
+
+### 6c. sr-bo3-2 (owner directive: BO3.gg-route projections shadow only) - third audit.py run, 2026-10-28 ~18:40 UTC
+
+Live board version 3007c59b74 (main after the grade/cs2-1028 merge; sr-bo3-2 not yet deployed): 100 rows / 100 graded,
+46 bets (31 More / 15 Less), 54 leans, 21 coin flips; 0 "grade != chance", 0 "graded but 0U"; 2 "units != grade with no cap
+reason" are the pre-existing same-match-cap display rows (vinaabEAST / puni, Turma do Pagode) that audit.py's cap-word
+regex does not recognise - unrelated to this change; 10 MIBR-name notes, 4 LAN/online unknown, 2 last-10 under 10.
+**Rows on the PROVISIONAL BO3.gg route today: 0 of 88 member-visible rows** - sr-bo3-2 would hide nothing on the board
+at this moment.
+**Oct 11-28 (first grades):** 368 provisional-route forecasts, of which **299 platform board lines (240 Underdog, 59
+PrizePicks; 276 distinct player x stat x line x scope x match; 38 matches; 257 settled / 40 void / 2 push; 174 were
+staked)** would have been hidden from members, plus 69 member-typed card lookups that would have shown "no projection".
+Last provisional board line logged 2026-10-24.

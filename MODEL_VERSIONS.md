@@ -1,5 +1,23 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## sr-bo3-2 — BO3.gg-route projections shadow only (branch grade/cs2-bo3-shadow, 2026-10-28; CS2 model tag unchanged: `dbca2af0fe`; display / logging policy, owner-directed)
+
+Owner 2026-10-28: "get rid of BO3.gg then" / "or keep it in shadow unless 100% needed". Registered as sr-bo3-2 in
+research/cs2_grade_1028/REGISTER.md (no claim of a tested gain). grader.py, pick_verdict.py and every other hashed file are
+untouched, so the model tag stays `dbca2af0fe`; the change lives in grade_display.py (not hashed) and server.py.
+- **Shadow:** a grade whose projection source ends in `-bo3` (perf-2-bo3, the PROVISIONAL BO3.gg route) is computed and
+  logged exactly as before (pick log, forecasts, fh-1 / cm shadow records, comparison snapshots - the sr-bo3-1 forward
+  review keeps its data) but is never shown: the board row has no side / grade / chance / units (state SHADOW; the hidden
+  grade under shadow_grade for the admin board / diagnostics only), so the member board, slips, Slip studio, the
+  match-compare table and the content book skip the line, and the member card shows "no projection" (no chance, letter,
+  side, stake, ladder, simulation or comparison). The owner's no-projection rule: hide the line, never "No bet".
+- **BO3.gg stays where it is 100% needed** (no HLTV substitute, feeds no projection): player / team identity and name
+  variants, benched status (status 2), the search fallback while the HLTV index is down, zero-history lookups (profile
+  team, roles / body-shot rate, scoreboards for settlement and quick rechecks).
+- **Unchanged:** every HLTV-route line (perf-2 / perf-cm2), legacy lines, chances, letters, bands, caps, stakes, LoL.
+- **Rollback:** `BO3_PROJ_SHADOW=0` on Render (read at grade time, no deploy) restores the previous display; the sr-bo3-1
+  0U gate still applies. Tests: tests/test_sr_bo3_2_shadow.py.
+
 ## `dbca2af0fe` — sr-bo3-1 stake gate on PROVISIONAL BO3.gg-route projections (branch grade/cs2-1028, 2026-10-28; stake rule only, no chance / grade change)
 
 Base: `2085aa791c`. Only `grader.py` changed (it is in the model hash, so the tag moves; the stake rule cannot live outside

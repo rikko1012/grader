@@ -119,3 +119,26 @@ behind an env off-switch with tests and a MODEL_VERSIONS.md entry, and audit.py 
 - **Model tag:** grader.py is in picklog._model_version's hash, so the tag changes; the stake rule cannot live outside the
   hashed files (units are set in grade_leg and read by pick_verdict, also hashed). No chance, grade band, cap, threshold,
   weight or constant changed.
+
+## sr-bo3-2 - BO3.gg-route projections are SHADOW ONLY (owner-directed 2026-10-28: "get rid of BO3.gg then / or keep it in shadow unless 100% needed"; no claim of a tested gain)
+
+- **Owner directive, not a tested candidate.** Nothing here claims an accuracy gain; it removes a projection route from
+  member surfaces on the owner's instruction, with the sr-bo3-1 evidence as background (P1 148 units / 32 matches 33.8%
+  [24.2, 44.8]; first-grade board 259 rows 37.4% [28.0, 46.4]).
+- **What it does (grade_display.bo3_shadow, server board loop + member card; not in the model hash):** a grade whose
+  projection source ends in `-bo3` (perf-2-bo3 - HLTV has no history for the player, the projection comes from BO3.gg maps)
+  is still computed, graded and LOGGED exactly as before (pick log, forecasts, fh-1 / cm shadow records, comparison
+  snapshots - so sr-bo3-1's forward review and every shadow arm keep their data), but it is never shown: the board stores a
+  row with no side / grade / chance / units (state SHADOW, the hidden grade under `shadow_grade` for the admin board and
+  diagnostics), so the member board, slips, Slip studio, the match-compare table and the content book skip the line; the
+  member card shows the line as having no projection (no chance, letter, side, stake, ladder, simulation or comparison) -
+  the owner's no-projection rule: hide the line, never "No bet". Posts and the content book build only from staked saved
+  forecasts, which the route no longer has (sr-bo3-1).
+- **What stays on BO3.gg (100% needed, no HLTV substitute):** player / team identity and name variants (ids behind the
+  Underdog / PrizePicks player map and settlement identity), benched status (status 2: lineups, team totals, teammate
+  panels), the search fallback while the HLTV index is down, zero-history lookups that feed NO projection (profile team,
+  roles / body-shot rate as a measured AWP signal, scoreboards for settlement and quick rechecks). None of these produce a
+  chance or a letter.
+- **Switch:** `BO3_PROJ_SHADOW` (default 1 = shadow; 0 restores the previous display; the sr-bo3-1 0U gate still applies).
+- **Review:** none registered - this is display policy. The sr-bo3-1 forward review (100 provisional-route P1 units) is the
+  measurement that continues underneath it.
