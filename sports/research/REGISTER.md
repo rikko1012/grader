@@ -641,3 +641,56 @@ every market OFF (A8 + A8a); stakes 0U everywhere. No `gradecheck` output existe
    A release of NFL letters keeps edges, confidence and edge ranking withheld (vg-1 unchanged) and stakes at 0U.
 6. **Nothing else changes.** sports-gp-1 bands, sports-sp-1 (0U), gate H / gate F, A8 / A8a, cf-2, N4, sg-1 and
    `VG_CONTAIN_LEAN` are unchanged by this amendment. `gradecheck` is read-only (it writes no file and no row).
+
+## Amendment A9a - A9 applied automatically on the service: daily cal-mi fit, daily grade check, data-driven containment (registered 2026-10-28, BEFORE any of the code below was written)
+
+Owner 2026-10-28: "finish this ... we have enough data for NFL and NBA grades now." State when this was written: the
+owner ran `gradecheck` on the live service (2026-10-28): NBA verdict CONTAIN (A+B 1,634 props, 3 game-days, hit 53.43%
+vs stated 65.56%); NFL verdict INSUFFICIENT (A+B 900 props, 2 game-days, hit 58.78% vs stated 67.83%). Production
+sports data lives only on the service disk. A9 5 said "nothing changes automatically; the letters of a league change
+only through the owner release process". A9a replaces that sentence with a data-driven process that applies A9 5
+verbatim on the service, once a day. Nothing in the A9 5 rule itself (numbers, sets, conditions) changes.
+
+1. **Seed state (owner decision from the production run above).** NBA letters CONTAINED and NFL letters CONTAINED
+   from the first deploy of this amendment (committed seed `sports/model/artifacts/containment_default.json`, one log
+   entry per league, source "owner-run gradecheck 2026-10-28", with the numbers above). NBA is contained by the A9 5
+   contain rule (hit 53.43% is more than 0.10 below stated 65.56%). NFL stays contained (insufficient = no change, and
+   it was contained).
+2. **Daily cal-mi fit (job `grades-daily`, step 1).** At most once per game-day (UTC date of now - 10 h, the A8 4
+   boundary), not before SPORTS_DAILY_AFTER_UTC_H = 10:00 UTC (after the overnight settlement), and only when
+   learning.db holds a settlement newer than the last daily run. The service runs the exact `sports.model.cal` fit path
+   (A8 2-6 + A8a: `rows_from_learning` -> `walk` -> `report` -> `weights_obj`) and writes
+   `<SPORTS_DATA_DIR>/model/cal_mi.json`. Per-market switch with hysteresis: a market switches ON on the first daily
+   fit whose A8 6 + A8a rule it passes. A market that is ON switches OFF only after 2 CONSECUTIVE daily fails (one fail
+   keeps it ON with the newly fitted parameters; "not evaluable" counts as a fail). Each market's decision (date, n
+   scored, verdict, on before / after, consecutive fails, why) is appended to `model/cal_mi_log.jsonl`.
+   `SPORTS_CAL_AUTOFIT=0` disables this step. The owner's manual `python -m sports.model.cal fit` keeps working
+   unchanged (no hysteresis on a manual fit, as A8 7); its file is the "before" state of the next daily run.
+3. **Daily grade check (job `grades-daily`, step 2).** After step 1, in the same child: `gradecheck.run` (gc-1,
+   unchanged) on every league, reading the weights step 1 just wrote (A9 2: a market ON scores its A8 4 walk-forward
+   chance = the chance the board shows). Output: `model/gradecheck.json` (compact, under 400 lines) plus dated copies
+   `model/gradecheck/gradecheck_<game-day>.json` (newest 30 kept). Read-only admin route
+   `GET /api/sports/admin/model/gradecheck`; the headline per league (n, stated, hit, CI, verdict, letter table) in
+   `GET /api/sports/admin/model/learning` ("grades") and in the admin diagnostics page. `SPORTS_GRADECHECK_DAILY=0`
+   disables steps 3-4.
+4. **Containment from the verdict (step 3, the A9 5 reading).** Per league, from the latest gradecheck verdict:
+   `release` -> letters shown; `contain` -> letters hidden for the whole league; `contain:<stats>` -> letters hidden for
+   those stats (a league already hidden as a whole stays hidden: it did not pass release); `keep` and `insufficient` ->
+   unchanged. State + decision log (date, n, hit, stated, CI, verdict, before / after, source) in
+   `model/containment.json`. THE containment source is `sports/containment.py contained(league, stat)`: env
+   `SPORTS_CONTAIN_NBA=0|1` / `SPORTS_CONTAIN_NFL=0|1` wins over everything; else `model/containment.json`; else the
+   committed seed (1); else the legacy rule (`board_view.VG_CONTAIN_LEAN` and the stat's gate failed). Board, cards,
+   compare, sheets, slips, tracked picks and the public results page all read it through `board_view.contain_reason`.
+   A contained league shows the existing contained-league wording (today's NFL text, `board_view.GATE_TEXT` with the
+   league name); no new label of any kind on member pages. The same rule applies to both leagues (owner: accuracy,
+   not a special case). sports-gp-1 bands are unchanged.
+5. **Calibration can release letters; selection cannot be faked.** Because step 3 scores a market that is ON in cal-mi
+   with its calibrated chance, a passing fit lowers "stated" toward the hit rate. Release still needs the A9 5
+   selection conditions (hit interval lower bound >= 0.50, balance, no failing stat), which calibration cannot change.
+   After a release, letters are the sports-gp-1 bands of the calibrated chance (A8 6).
+6. **What members saw is stored.** While a market is ON, the displayed (calibrated) chance of every board quote's
+   forecast is persisted at snapshot-build time in `model/shown.db` (forecast id -> shown chance + cal version; first
+   write wins). The raw chance stays in the immutable forecast record. The public results page scores the lean side
+   with the shown chance when one exists (closing the A9 audit gap noted in `results_public.grades`).
+7. **Nothing else changes.** A8 / A8a / A9 rules, gate H / gate F, sports-sp-1 (0U everywhere), cf-2, N4, sg-1; edges,
+   confidence and rank stay withheld for a failed-gate market even when its letters are released (A9 5).

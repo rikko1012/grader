@@ -35,6 +35,7 @@ select,button{font:inherit;font-size:12px;padding:11px 14px;border-radius:9px;ba
 <select aria-label="Model version" id="fver"><option value="">All versions</option></select><span class="muted small" id="gen"></span></div>
 <div id="out" class="muted">Loading…</div>
 <div id="mlstore" class="card small" aria-label="Moneyline quote store"></div>
+<div id="sportsgrades" class="card small" aria-label="Sports grade check"></div>
 </div>
 <script>
 const tok = new URLSearchParams(location.search).get("token");
@@ -109,4 +110,28 @@ async function loadStore() {
     <div class="muted">${esc(S.gaps_total ?? (S.gaps || []).length)} recorded gaps (immutable; missing quotes are never backfilled)</div>`;
 }
 loadStore();
+// Scout Sports daily grade check (REGISTER A9a): per league the A9 5 verdict, letters stated vs hit, and containment
+async function loadSportsGrades() {
+  const el = $("#sportsgrades");
+  let G;
+  try {
+    const t = await (await fetch("/api/sports/token", { headers: { "X-Admin-Token": tok }, cache: "no-store" })).json();
+    if (!t.token) throw new Error(t.error || "no sports token");
+    const r = await fetch((t.api_base || "").replace(/\/$/, "") + "/api/sports/admin/model/gradecheck?part=headline",
+                          { headers: { "Authorization": "Bearer " + t.token }, cache: "no-store" });
+    G = await r.json(); if (!r.ok) throw new Error(G.error || r.status);
+  } catch (e) { el.textContent = "Sports grade check: couldn't load (" + e.message + ")"; return; }
+  const H = G.headline || {}, C = (G.containment || {}).leagues || {};
+  const ci = c => c && c[0] != null ? `${pc(c[0])}–${pc(c[1])}` : "–";
+  const lgs = [...new Set([...Object.keys(H), ...Object.keys(C)])].sort();
+  el.innerHTML = `<b>Sports grade check</b> · game-day ${esc(G.game_day || "none yet")} · generated ${esc(G.generated_at || "–")}
+    ${lgs.map(lg => { const h = H[lg] || {}, c = C[lg] || {}, L = h.letters || {};
+      const shown = c.contained ? "letters HIDDEN" : ((c.stats || []).length ? "letters shown except " + c.stats.map(esc).join(", ") : "letters shown");
+      return `<div style="margin-top:6px"><b>${esc(lg.toUpperCase())}</b> · verdict <b>${esc(h.verdict || "–")}</b> · ${shown} <span class="muted">(${esc(c.source || "–")})</span>
+      <div class="muted">${esc(h.why || "")} · A+B n ${esc(h.n ?? "–")} from ${esc(h.games ?? "–")} games / ${esc(h.game_days ?? "–")} days · cal-mi ON: ${(h.cal_mi_on || []).map(esc).join(", ") || "none"}</div>
+      <div class="scroll"><table><thead><tr><th>Grade</th><th>n</th><th>Stated</th><th>Hit</th><th>95% (by game)</th></tr></thead><tbody>
+      ${["A", "B", "C", "Lean", "AB"].filter(g => L[g]).map(g => `<tr><td>${g === "AB" ? "A+B" : g}</td><td>${esc(L[g].n ?? "–")}</td><td>${pc(L[g].stated)}</td><td>${pc(L[g].hit)}</td><td>${ci(L[g].ci)}</td></tr>`).join("") || `<tr><td colspan="5">No daily run yet</td></tr>`}
+      </tbody></table></div></div>`; }).join("")}`;
+}
+loadSportsGrades();
 </script></body></html>

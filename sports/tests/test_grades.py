@@ -54,10 +54,10 @@ def test_nfl_contained_by_default_again():
     assert board_view.VG_CONTAIN_LEAN is True
 
 
-def test_nfl_lean_and_grade_lifted_behind_the_rules_with_label(monkeypatch):
+def test_nfl_lean_and_grade_lifted_behind_the_rules_without_hedge_label(monkeypatch):
     monkeypatch.setattr(board_view, "VG_CONTAIN_LEAN", False)
     x, code = board_view.quote_x("nfl", "rec_yds", 0.3, 0.7, 40.0, 50.5, {"po": 0.45, "pu": 0.55, "n": 3}, L10)
-    assert code is None and x["ln"] == "under" and x["gr"] == "A" and x["nv"] == "NFL model not validated"
+    assert code is None and x["ln"] == "under" and x["gr"] == "A" and "nv" not in x   # A9a 4: the wording shows only while contained
     assert "e" not in x and "s" not in x and "g" not in x and x["c"] is None       # no edge / confidence / rank
     # the rules still apply to NFL: sanity hold, N4
     x, code = board_view.quote_x("nfl", "rec_yds", 0.0, 1.0, 0.1, 11.5, None, L10)

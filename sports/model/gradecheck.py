@@ -501,6 +501,7 @@ def league_report(rows, league, cal_info):
     rep["model"] = by(shown, lambda r: f"sm-1:{r['sha']}" if r.get("sha") else "sm-1:?")
     rep["guards"] = {"vg1_gate": {st: board_view.gate_state(st) for st in sorted({r["stat"] for r in rows})},
                      "vg1_contain_lean": board_view.VG_CONTAIN_LEAN,
+                     "containment": _containment(league),
                      "n4_blocked": stat_of([r for r in leans if r.get("n4")]),
                      "sg1_ratio_held": stat_of([r for r in leans if r.get("sg_ratio")]),
                      "sg1_l10_held": stat_of([r for r in leans if r.get("sg_l10")]),
@@ -511,6 +512,15 @@ def league_report(rows, league, cal_info):
                    for st in sorted({r["stat"] for r in shown})}
     rep["verdict"] = verdict(rep["letter"]["AB"], s_all, per_stat_ab, len(days))
     return rep
+
+
+def _containment(league):
+    """The live letter containment of this league (sports/containment.py, A9a 4) - reported, never applied here."""
+    try:
+        from .. import containment
+        return containment.league_state(league)
+    except Exception as e:                              # noqa: BLE001
+        return {"error": type(e).__name__}
 
 
 def cal_mi_compact(lcon, icon, league):
@@ -554,7 +564,8 @@ def run(learning, inputs=None, store_path=None, history=None, games=None, league
                       "side": "board lean (lean_of: chance > 50% and the mean on that side), never the max-p side",
                       "stated": "mean lean-side chance given no push; hit = wins / (wins + losses)",
                       "ci": "game-clustered bootstrap 95% (B = 2,000, seed 20261023); null below 2 games",
-                      "min_slice": MIN_SLICE, "vg1_contain_lean": board_view.VG_CONTAIN_LEAN},
+                      "min_slice": MIN_SLICE, "vg1_contain_lean": board_view.VG_CONTAIN_LEAN,
+                      "containment": "sports/containment.py (A9a 4); per league in leagues.<lg>.guards"},
            "leagues": {}}
     try:
         for lg in (league,) if league else LEAGUES:

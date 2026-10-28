@@ -28,6 +28,14 @@ def private_sports_data(monkeypatch, tmp_path):
     for k in ("ODDSPAPI_API_KEY", "odds_papi_api", "SPORTS_ODDSPAPI", "SPORTS_ODDSPAPI_MONTHLY_REQUESTS",
               "SPORTS_ODDSPAPI_CS2_FLOOR"):
         monkeypatch.delenv(k, raising=False)
+    # containment (REGISTER A9a): tests run on the legacy rule (VG_CONTAIN_LEAN + failed gate = NBA letters shown,
+    # NFL contained) unless they write a state; the committed seed (both contained) is checked in test_containment
+    from sports import containment
+    monkeypatch.setattr(containment, "DEFAULT_PATH", tmp_path / "no_containment_seed.json")
+    containment.reset_cache()
+    for k in ("SPORTS_CONTAIN_NBA", "SPORTS_CONTAIN_NFL", "SPORTS_CAL_AUTOFIT", "SPORTS_GRADECHECK_DAILY",
+              "SPORTS_DAILY_AFTER_UTC_H"):
+        monkeypatch.delenv(k, raising=False)
 
     def offline(*a, **k):
         raise ConnectionError("network disabled in tests")

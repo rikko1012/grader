@@ -201,6 +201,14 @@ def default_jobs():
                                timeout_s=300, flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=6),   # 43-47 MB
         "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=900 if std else 3600, timeout_s=600,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=4),    # 22 MB
+        # REGISTER A9a: daily cal-mi fit (hysteresis) -> gradecheck -> containment. The child checks itself and exits
+        # at once unless due: once per game-day, after 10:00 UTC (overnight settlement), only when something new
+        # settled. Heavy slot (numpy fit + read-only gradecheck); SPORTS_CAL_AUTOFIT / SPORTS_GRADECHECK_DAILY = 0 skip
+        # its steps. Reads learning.db / forecasts.db / canonical.db read-only; writes only model/*.json.
+        # measured (synthetic, both leagues): 3.5k settled props 6.5 s / 72 MB, 10k props over 12 days 131 s / 96 MB;
+        # the walk-forward refits once per game-day, so time grows ~ days^2 - one hour of headroom, once a day
+        "grades-daily": dict(argv=_py("-m", "sports.model.daily", "run"), every_s=1800, timeout_s=3600,
+                             flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=6, locks=("model-daily",)),
         # forward forecasts, INFERENCE ONLY (sports/model/fwd.py): frozen hash-verified artifacts, no fit / learn /
         # retrain. SPORTS_FORECAST - independent of SPORTS_TRAIN (owner 2026-10-24). Exclusive: never beside ingestion.
         "model-forward": dict(argv=_py("-m", "sports.model.fwd", "run", *lg), every_s=1800, timeout_s=900,

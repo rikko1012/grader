@@ -585,11 +585,10 @@
     return '<div class="sw-grade-line">' + L.gradeHtml(x.gr, x.ln, x.nv) + (open ? "" : ' <span class="sw-tb-note" data-grade-closed>' +
       (x.ln === "over" ? "Over" : "Under") + " not offered on " + esc(bookName(q.p || q.platform)) + "</span>") + "</div>";
   }
-  function gradeBanner(lg, B) {                         // the letter legend only when a letter can show (vg-1 contained
-    var any = B && B.markets.some(function (m) { return (m.q || []).some(function (q) { return q.x && q.x.gr; }); });   // NFL: none)
-    if (!any) return "";
-    return '<p class="sw-grade-banner" data-grade-banner>' + esc(L.GRADE_TAG) + " · " + esc(L.GRADE_BANDS) + " · stakes 0" +
-      (lg === "nfl" ? " · NFL model not validated" : "") + "</p>";
+  function gradeBanner(lg, B) {                         // the letter legend only when a letter can show (a contained
+    var any = B && B.markets.some(function (m) { return (m.q || []).some(function (q) { return q.x && q.x.gr; }); });   // league: none)
+    if (!any) return "";                                // contained wording lives on the held rows (A9a 4), never here
+    return '<p class="sw-grade-banner" data-grade-banner>' + esc(L.GRADE_TAG) + " · " + esc(L.GRADE_BANDS) + " · stakes 0</p>";
   }
   function scoutBlock(m, q, f, B) {                     // Scout's own projection (sm-1) or mi-1, labelled
     var stat = (B.stats[m.st] || m.st).toLowerCase(), kind = f ? S.kindOf(f.m) : null;

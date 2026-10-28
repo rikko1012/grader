@@ -186,6 +186,7 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | ingest-kalshi | `sports.worker ingest nba nfl --bucket-min 1 --sources kalshi` | 20 min in a league's 2 h pre-tip window, else 60 min (SPORTS_KALSHI_HOT_S / _IDLE_S) | heavy | 240 | prod 70-84 | SPORTS_INGEST |
 | settle | `sports.worker settle nba nfl` (+ catch-up of unsettled games since SPORTS_SETTLE_FLOOR, 40 per run; then writes results.json streamed per event) | 60 min | heavy | 120 | 58 (+ ledger 71 on 80k settlements) | SPORTS_INGEST |
 | slips-settle | `sports.slips settle` | 60 min | light | 60 | 23 | SPORTS_INGEST |
+| grades-daily | `sports.model.daily run` (REGISTER A9a: cal-mi fit -> gradecheck -> containment; exits at once unless due: once per game-day, after 10:00 UTC, only when something new settled) | 30 min check | heavy | 300 | 72-96 synthetic (3.5k-10k props, 6-131 s) | SPORTS_INGEST |
 | model-forecast | `sports.worker train forecast nba nfl` (incremental: unchanged runs add 0 records) | 60 min | exclusive | 340 | 272-311 | SPORTS_TRAIN |
 | model-learn | `sports.worker train learn` | 60 min | heavy | 250 | 78-218 | SPORTS_TRAIN |
 | model-snapshot | `sports.worker train snapshot` | 30 min | heavy | 250 | 77-217 | SPORTS_TRAIN |
@@ -351,6 +352,20 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
    stated, game-clustered 95% interval, Over balance), the vg-1 / sg-1 / N4 guard counts, cf-2 bins, the cal-mi-1
    walk-forward (A8a) and the A9 5 verdict (release / keep / contain / insufficient). It reads learning.db,
    forecasts.db, canonical.db, model/history.db and games.db under SPORTS_DATA_DIR and writes nothing.
+7. Daily grades (REGISTER A9a, job `grades-daily`; nothing to paste - it runs ON the service). What runs: once per
+   game-day after 10:00 UTC, when learning.db has a settlement newer than the last run: (1) the cal-mi fit (A8 + A8a,
+   the same path as `python -m sports.model.cal fit`) with hysteresis - a market switches ON the day it passes and OFF
+   only after 2 consecutive daily fails -> `model/cal_mi.json`, one line per market in `model/cal_mi_log.jsonl`;
+   (2) gradecheck on both leagues, scoring the chance members see (cal-mi chance on markets that are ON) ->
+   `model/gradecheck.json` + `model/gradecheck/gradecheck_<day>.json` (30 kept); (3) letters per league from the A9 5
+   verdict (release = shown, contain = hidden, contain:<stat> = that stat hidden, keep / insufficient = unchanged) ->
+   `model/containment.json` with its decision log. Seed (no file yet): NBA + NFL contained (owner-run gradecheck
+   2026-10-28). Read it: cs2-scout `/admin/diagnostics?token=...` -> "Sports grade check" (verdict, letters stated vs
+   hit, n, CI, letters shown / hidden); JSON: `GET /api/sports/admin/model/gradecheck` (admin st1 token; `?part=headline`
+   for the summary) or `python -m sports.model.daily status` in the Shell. Switches: `SPORTS_CAL_AUTOFIT=0` (no daily
+   fit; manual `fit` still works), `SPORTS_GRADECHECK_DAILY=0` (no daily gradecheck / containment change),
+   `SPORTS_CONTAIN_NBA=0|1` / `SPORTS_CONTAIN_NFL=0|1` (force letters shown / hidden, wins over everything),
+   `SPORTS_DAILY_AFTER_UTC_H` (default 10). Run now from the Shell: `python -m sports.model.daily run --force`.
 
 ## 11. Load results (2026-10-23, Windows workstation, 700 simultaneous members)
 
