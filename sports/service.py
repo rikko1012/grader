@@ -171,8 +171,7 @@ def feed_state():
         p = web.store.db_path()
         out["store_mb"] = round(sum(f.stat().st_size for f in p.parent.glob(p.name + "*")) / 1e6, 1)
         with web.store_ro(budget_s=10) as con:
-            rows = con.execute("SELECT platform, max(coalesce(last_seen_at, observed_at)) FROM records "
-                               "WHERE kind = 'offer' GROUP BY platform").fetchall()
+            rows = con.execute(web.store.FEED_SIGHTINGS_SQL).fetchall()
         now = time.time()
         for plat, last in rows:
             age = None
@@ -237,6 +236,9 @@ def alerts(o):
                                                                            round(time.time() - last_ok)}})
     feeds = o.get("feeds") or {}
     if ingest_on:
+        if feeds.get("error") or feeds.get("store") == "not_created":
+            out.append({"level": "warn", "code": "feed_status_unavailable",
+                        "detail": {"error": feeds.get("error") or feeds.get("store")}})
         for plat, f in (feeds.get("platforms") or {}).items():
             lim = ALERT_RULES["kalshi_stale_min"] if plat.startswith("kalshi") else ALERT_RULES["feed_stale_min"]
             if f.get("age_min") is None or f["age_min"] > lim:
@@ -258,7 +260,11 @@ def alerts(o):
     if svc["requests"] and (svc["rejected_busy"] + svc["errors_5xx"]) / svc["requests"] > 0.01:
         out.append({"level": "warn", "code": "service_shedding", "detail": {k: svc[k] for k in
                                                                          ("requests", "rejected_busy", "errors_5xx")}})
-    if o["db_pool"].get("waits_timed_out") or o["db_pool"].get("queries_interrupted"):
+    pool = o["db_pool"]
+    # Keep lifetime counters for diagnosis, but a recovered incident must stop paging the dashboard.
+    recent_error = (pool.get("last_error_at") is not None and time.time() - pool["last_error_at"] <= 300)
+    legacy_error = "last_error_at" not in pool and (pool.get("waits_timed_out") or pool.get("queries_interrupted"))
+    if recent_error or legacy_error:
         out.append({"level": "warn", "code": "store_slow", "detail": o["db_pool"]})
     for name, j in jobs.items():
         if not j.get("enabled"):

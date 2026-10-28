@@ -95,7 +95,14 @@ MIGRATIONS = [
              input_key TEXT PRIMARY KEY, forecast_id TEXT NOT NULL, league TEXT, known_at TEXT NOT NULL)""",
     ]),
     (5, list(_archive_schema2())),                      # per-identity archive index arch-2 (sports/archive.py)
+    (6, [
+        # Freshness reads need only these small index entries, not multi-GB payload pages.
+        "CREATE INDEX IF NOT EXISTS records_feed_seen ON records "
+        "(kind, platform, coalesce(last_seen_at, observed_at)) WHERE kind = 'offer'",
+    ]),
 ]
+FEED_SIGHTINGS_SQL = ("SELECT platform, max(coalesce(last_seen_at, observed_at)) FROM records "
+                     "WHERE kind = 'offer' GROUP BY platform")
 CURRENT_SQL = "late = 0"                           # the predicate every 'current' reader adds (see module docstring)
 UNIQUE_REVISION_INDEX = ("CREATE UNIQUE INDEX IF NOT EXISTS records_ident_rev ON records "
                          "(kind, source, source_key, revision)")

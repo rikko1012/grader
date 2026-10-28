@@ -50,3 +50,16 @@ Verification limits
   Existing started slip legs were correctly blocked. Production test picks were not created.
 - A green health endpoint or passing unit tests do not establish live job success or model profitability.
   Verify successful forecast/settlement/prebuilt/history/mapping cycles after deployment before closing those issues.
+
+Follow-up audit, 2026-10-28
+- Reproduced live feed status failure: canonical store ~3.17 GB, feed_state returned Busy and no platforms.
+  Added migration 6: a partial expression index covering offer kind/platform/last sighting. Query-plan
+  regression checks verify index use without a temporary grouping tree; migration keeps payload bytes unchanged.
+- Store-slow warnings previously used lifetime counters, so one timeout warned forever. Record the latest
+  timeout and warn for five minutes, retaining incident totals. Independently warn when feed status is unavailable.
+- Live prior-build worker exits confirmed successful history, archive/verification, mapping, model-forward,
+  ingestion and settlement cycles. Persisted model scorecards exist for NBA and NFL; this alone does not prove
+  every recent settlement has been incorporated or establish profitable projections.
+- Full Sports regression: 799 passed, 68 skipped, 101 warnings. Browser skips remain a coverage limitation.
+- External source authentication/rate limits and unresolved player mappings remain separate from these fixes.
+  No credential values, model promotion, member release or resource changes are included.

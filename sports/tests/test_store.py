@@ -31,6 +31,26 @@ def test_migrate_is_idempotent(db):
     assert store.migrate(db) == store.MIGRATIONS[-1][0]
 
 
+def test_feed_freshness_uses_small_index_and_preserves_sightings(db):
+    a = h.offer()
+    store.put(db, a)
+    later = "2026-10-23T21:00:00Z"
+    store.put(db, replace(a, observed_at=later, known_at=later))
+    rows = dict(db.execute(store.FEED_SIGHTINGS_SQL).fetchall())
+    assert rows[a.platform] == later
+    plan = " ".join(str(tuple(r)) for r in db.execute("EXPLAIN QUERY PLAN " + store.FEED_SIGHTINGS_SQL))
+    assert "records_feed_seen" in plan
+    assert "TEMP B-TREE" not in plan
+    # An old database migration adds only an index; historical payload bytes stay unchanged.
+    payloads = db.execute("SELECT record_id, payload FROM records ORDER BY rid").fetchall()
+    db.execute("DROP INDEX records_feed_seen")
+    db.execute("UPDATE meta SET v='5' WHERE k='schema_level'")
+    db.commit()
+    store.migrate(db)
+    assert db.execute("SELECT record_id, payload FROM records ORDER BY rid").fetchall() == payloads
+    assert store.migrate(db) == store.MIGRATIONS[-1][0]
+
+
 def test_dedupe_by_identity_and_hash_and_sighting_counter(db):
     a = h.offer()
     r1 = store.put(db, a)

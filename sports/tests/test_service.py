@@ -562,6 +562,18 @@ def test_alerts_clean_and_each_rule(monkeypatch):
     assert service.alerts(off) == []                                             # ingest off: no collector alerts
 
 
+def test_database_warning_recovers_without_erasing_incident_counters(monkeypatch):
+    monkeypatch.setattr(service.time, "time", lambda: 1000.0)
+    pool = {"waits_timed_out": 2, "queries_interrupted": 3, "last_error_at": 900.0}
+    codes = lambda o: {a["code"] for a in service.alerts(o)}
+    assert "store_slow" in codes(_ops(db_pool=pool))
+    pool["last_error_at"] = 699.0
+    assert "store_slow" not in codes(_ops(db_pool=pool))
+    assert pool["queries_interrupted"] == 3
+    assert "feed_status_unavailable" in codes(_ops(feeds={"error": "Busy", "platforms": {}}))
+    assert "feed_status_unavailable" not in codes(_ops(flags={"SPORTS_INGEST": False}, feeds={"error": "Busy"}))
+
+
 def test_member_answers_get_etag_304_and_gzip_once_per_body(svc, monkeypatch):
     import gzip as gz
     big = {"rows": [{"i": i, "player": "x" * 40} for i in range(500)]}
