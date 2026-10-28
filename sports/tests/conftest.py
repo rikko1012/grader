@@ -20,6 +20,7 @@ def private_sports_data(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "OUT_DIR", tmp_path / "output")
     monkeypatch.setattr(cache, "_local", threading.local())
     monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    monkeypatch.delenv("SPORTS_ODDSAPI", raising=False)
     monkeypatch.setenv("SPORTS_CONTEXT_INLINE", "1")      # snapshot builds compute player context in-process
     monkeypatch.setenv("SPORTS_MEMORY_MB", "512")         # the Starter plan unless a test sets another (never the CI box)
     for k in ("SPORTS_CHILD_BUDGET_MB", "SPORTS_MAX_HEAVY", "SPORTS_HEAVY_SLOTS"):

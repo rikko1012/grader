@@ -10,7 +10,20 @@ of `sports/`. **Production stays off:** this branch starts nothing on the server
 **Owner decision (2026-10-23): free sources only. No paid odds feed will be bought.** The live sportsbook
 sources are FanDuel's and BetRivers' own public feeds. DraftKings, BetMGM and Caesars stay out: their sites refuse
 this server, and the only legitimate route to their prices is a metered feed. The Odds API adapter stays in the
-code, inert without `ODDS_API_KEY`; with a free Starter key it would be held to that tier's 500 credits a month.
+code, disabled by default even if an old key is saved. Re-enabling it requires `SPORTS_ODDSAPI=1` and a valid
+`ODDS_API_KEY`; its credit ledger still enforces the configured free allowance. The scheduled `books` source
+continues collecting direct FanDuel and BetRivers quotes into the canonical store. No new account or subscription
+is needed for these feeds, and historical Odds API records remain intact.
+
+This is a replacement for the failed collector, not equivalent five-book coverage: DraftKings, BetMGM and Caesars
+remain unavailable unless a permitted feed is separately verified. Preserve book/jurisdiction/observation times;
+never relabel FanDuel prices as another book or use prediction-market prices as sportsbook odds.
+
+Free-provider review (2026-10-28): Odds-API.io pauses new free keys (`https://odds-api.io/pricing/free`). ParlayAPI
+advertises 1,000 monthly credits and 3 credits per player-props request
+(`https://api.parlay-api.com/free-sports-odds-api`), about 333 calls/month total. Its public status endpoint answers,
+but authenticated NBA/NFL prop coverage is not verified here. It is a possible sparse supplement, not a replacement
+for frequent direct-feed refreshes. No paid plan or signup has been performed.
 
 ## Sources
 

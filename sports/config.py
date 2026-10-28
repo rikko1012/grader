@@ -3,8 +3,8 @@
 SPORTS_DATA_DIR - persistent folder (default: <CS2_DATA_DIR>/sports on the server's disk, else sports/.data here).
                   Its own files only: cache.db (API answers), sports.db (forecast log + settlements), lines.jsonl
                   (every pick'em line seen), output/.
-ODDS_API_KEY    - optional The Odds API key (the-odds-api.com). Adds a multi-book consensus beside Pinnacle. Without it
-                  Pinnacle (free, no key) is the only sharp price. Never written to a file.
+ODDS_API_KEY    - optional The Odds API key, used only with SPORTS_ODDSAPI=1. Never written to a file.
+SPORTS_ODDSAPI  - default off; scheduled sportsbook collection uses direct FanDuel/BetRivers feeds instead.
 """
 import os
 from pathlib import Path
@@ -54,3 +54,8 @@ def league(key):
 
 def odds_api_key():
     return os.environ.get("ODDS_API_KEY") or None
+
+
+def odds_api_enabled():
+    """Metered aggregation is opt-in; direct FanDuel/BetRivers remain the free default."""
+    return os.environ.get("SPORTS_ODDSAPI") == "1"

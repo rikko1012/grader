@@ -61,7 +61,9 @@ services:
       - key: ADMIN_TOKEN
         sync: false           # the same admin token as cs2-scout (X-Admin-Token for /api/sports/admin/ops)
       - key: ODDS_API_KEY
-        sync: false           # The Odds API key (already saved by the owner)
+        sync: false           # optional; unused unless SPORTS_ODDSAPI=1
+      - key: SPORTS_ODDSAPI
+        value: "0"            # free direct FanDuel/BetRivers feeds are the default
       - key: SPORTS_LEAGUES
         value: nba nfl
       # ---- Starter service limits
