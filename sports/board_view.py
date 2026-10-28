@@ -177,6 +177,9 @@ def player_rows(rows, games):
     """Board rows of ONE player (snapshots markets_rows values) + his games -> {market key: summary}."""
     out = {}
     for r in rows:
+        # History contains full-game totals, not period-specific observations.
+        if r.get("scope", "full_game") != "full_game":
+            continue
         lines = [q.get("line") for q in r.get("quotes", []) + r.get("kalshi", [])]
         out[r["key"]] = row_summary(r["stat"], lines, games)
     return out

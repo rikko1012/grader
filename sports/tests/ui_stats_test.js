@@ -3,6 +3,17 @@
 const assert = require("assert");
 const S = require(require("path").resolve(process.argv[2]));
 
+// Same stat across periods/events must preserve the linked offer's identity.
+const periods = [
+  {key: 'half', stat: 'points', scope: 'first_half', quotes: [{record_id: 'half-offer'}]},
+  {key: 'game', stat: 'points', scope: 'full_game', quotes: [{record_id: 'game-offer'}]},
+  {key: 'tomorrow', stat: 'points', scope: 'full_game', quotes: [{record_id: 'next-offer'}]}
+];
+assert.strictEqual(S.playerMarket(periods, 'points', null, null).key, 'game');
+assert.strictEqual(S.playerMarket(periods, 'points', 'game', 'half-offer').key, 'half');
+assert.strictEqual(S.playerMarket(periods, 'points', null, 'next-offer').key, 'tomorrow');
+assert.strictEqual(S.playerMarket(periods, 'points', 'half', null).key, 'half');
+
 // one format for every surface
 assert.strictEqual(S.pct(0.48979631752544056), "49.0%");
 assert.strictEqual(S.pct(0.0005), "0.1%");

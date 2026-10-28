@@ -8,6 +8,28 @@ from sports.contracts import (ContextSnapshot, ContractError, Forecast, OfferSna
 from sports.tests import helpers as h
 
 
+@pytest.mark.parametrize("field", ["p_over", "p_under", "p_push"])
+def test_forecast_requires_unconditional_probabilities_without_crashing(field):
+    f = h.forecast(**{field: None})
+    assert any(field in err for err in f.validate())
+    with pytest.raises(ContractError):
+        f.validate_or_raise()
+
+
+@pytest.mark.parametrize("field", ["line", "projection_mean", "projection_median", "stake_units"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), "bad", True])
+def test_forecast_rejects_invalid_numeric_fields_without_crashing(field, value):
+    f = h.forecast(**{field: value})
+    assert any(field in err for err in f.validate())
+    with pytest.raises(ContractError):
+        f.validate_or_raise()
+
+
+def test_forecast_rejects_boolean_probabilities_but_keeps_unknown_optional_values():
+    assert h.forecast(projection_mean=None, projection_median=None, stake_units=None).validate() == []
+    assert h.forecast(p_over=True).validate()
+
+
 def test_utc_normalises_offsets_and_refuses_naive_times():
     assert utc("2026-10-23T19:00:00.000-04:00") == "2026-10-23T23:00:00Z"
     assert utc("2026-10-23T23:00Z") == "2026-10-23T23:00:00Z"

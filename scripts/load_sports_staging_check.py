@@ -39,9 +39,9 @@ def get(url, headers=None, timeout=20, method="GET"):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read()
-            return r.status, body, dict(r.headers), time.time() - t0
+            return r.status, body, {k.lower(): v for k, v in r.headers.items()}, time.time() - t0
     except urllib.error.HTTPError as e:
-        return e.code, e.read(), dict(e.headers), time.time() - t0
+        return e.code, e.read(), {k.lower(): v for k, v in e.headers.items()}, time.time() - t0
 
 
 def masked(tok):
@@ -110,7 +110,7 @@ def main():
     auth = {"Authorization": f"Bearer {tok}"} if tok else {}
     st, body, hd, _ = get(f"{api}/api/sports/status", dict(auth, Origin=a.origin))
     check("valid token -> 200 (SPORTS_API=1 on the sports service)", st == 200, str(st))
-    check("CORS allows our origin", hd.get("Access-Control-Allow-Origin") == a.origin, hd.get("Access-Control-Allow-Origin"))
+    check("CORS allows our origin", hd.get("access-control-allow-origin") == a.origin, hd.get("access-control-allow-origin"))
     st, _, _, _ = get(f"{api}/api/sports/status", dict(auth, Origin="https://not-our-origin.example"))
     check("CORS refuses another origin (403)", st == 403, str(st))
 
@@ -124,7 +124,8 @@ def main():
         check("admin ops readable", False, "ADMIN_TOKEN not set")
     sched = ops.get("scheduler") or {}
     jobs = sched.get("jobs") or {}
-    for name in ("ingest", "ingest-kalshi", "ui-snapshots", "prebuilt", "settle", "archive"):
+    check("scheduler reports jobs", bool(jobs), f"{len(jobs)} jobs")
+    for name in sorted(jobs):
         j = jobs.get(name) or {}
         if not j.get("enabled"):
             print(f"    {name}: not enabled (its flag is off)", flush=True)
@@ -149,7 +150,7 @@ def main():
         f"over-cap kills {stats.get('over_cap_kills')}")
     if rss is not None and stats.get("peak_children_rss_mb") is not None:
         print(f"    combined peak estimate: service {rss} + children {stats['peak_children_rss_mb']} MB "
-              f"(Starter container 512 MB)", flush=True)
+              f"(container {sched.get('memory_mb', 'unknown')} MB)", flush=True)
 
     print("4. latency (gentle)", flush=True)
     paths = ["/api/sports/status", "/api/sports/manifest?league=nba", "/api/sports/board?league=nba",

@@ -150,7 +150,7 @@ def default_jobs():
         "assistant": dict(argv=_py("-m", "sports.assistant.runner", "--once"), every_s=None, trigger="assistant_queued",
                           timeout_s=300, flag="SPORTS_ASSISTANT", cap_mb=120, cls=LIGHT, prio=0),
         # what members read
-        "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=45 if std else 90, timeout_s=120, flag="SPORTS_API",
+        "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=45 if std else 90, timeout_s=600 if std else 120, flag="SPORTS_API",
                          cap_mb=160, cls=HEAVY, prio=1, locks=("prebuilt",)),  # 105-109 MB (slim slip pool)
         # the board build, ONE PROCESS PER LEAGUE (fresh 2026-10-24): both leagues in one process were killed at
         # 251-265 MB in production; an NFL week alone measured 137 MB on one live read of every board (17k offers),
@@ -182,7 +182,7 @@ def default_jobs():
                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
                               locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=900 if std else 3600, timeout_s=900,
-                       flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=4),   # 58 MB
+                       flag="SPORTS_INGEST", cap_mb=240 if std else 120, cls=HEAVY, prio=4),  # live Standard settlement exceeded its old 216 MB scaled cap
         "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # member picks: spool -> picks.db
         "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=900 if std else 3600, timeout_s=600,
@@ -200,7 +200,7 @@ def default_jobs():
         # forward forecasts, INFERENCE ONLY (sports/model/fwd.py): frozen hash-verified artifacts, no fit / learn /
         # retrain. SPORTS_FORECAST - independent of SPORTS_TRAIN (owner 2026-10-24). Exclusive: never beside ingestion.
         "model-forward": dict(argv=_py("-m", "sports.model.fwd", "run", *lg), every_s=1800, timeout_s=900,
-                              flag="SPORTS_FORECAST", cap_mb=340, cls=EXCLUSIVE, prio=5),
+                              flag="SPORTS_FORECAST", cap_mb=400 if std else 340, cls=EXCLUSIVE, prio=5),
         # model (worker `train` commands need SPORTS_TRAIN - foundation rule)
         "model-forecast": dict(argv=_py("-m", "sports.worker", "train", "forecast", *lg), every_s=3600, timeout_s=900,
                                flag="SPORTS_TRAIN", cap_mb=340, cls=EXCLUSIVE, prio=5),   # 272-311 MB

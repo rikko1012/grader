@@ -19,6 +19,25 @@ BRUNSON = "nba:player:espn:3934672"
 WEB = Path(__file__).resolve().parents[2] / "web" / "sports"
 
 
+def test_latest_stream_does_not_decode_the_whole_offer_history(monkeypatch):
+    con = store.connect()
+    for i in range(12):
+        store.put(con, h.offer(oid=f"stream-{i}"))
+    decoded = []
+    unpack = store._unpack
+    def counted(payload):
+        decoded.append(1)
+        return unpack(payload)
+    monkeypatch.setattr(store, "_unpack", counted)
+    rows = snapshots._iter_latest(con, "offer")
+    first = next(rows)
+    assert len(decoded) == 1
+    remaining = list(rows)
+    assert len(remaining) == 11
+    assert [first, *remaining] == snapshots._latest(con, "offer")
+    con.close()
+
+
 def _gamelog_body():
     names = ["minutes", "fieldGoalsMade-fieldGoalsAttempted", "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
              "freeThrowsMade-freeThrowsAttempted", "totalRebounds", "assists", "blocks", "steals", "turnovers", "points"]

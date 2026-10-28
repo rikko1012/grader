@@ -1,0 +1,52 @@
+Scout audit, 2026-10-28
+Baseline: 3f6c40fe731e29b6b869753f7cb3c945d28da3ee
+
+Confirmed live defects (before this change)
+- Health was green while settlement exceeded its 216 MB child cap, prebuilt snapshots timed out at 120 seconds,
+  mapping audit exceeded 450 MB, and player history exceeded 360 MB. Slip-pool requests returned HTTP 503.
+- Forward inference failed with MemoryError at the old 640 MB address-space ceiling on the existing 2 GB service.
+- Player tabs selected a market by stat only, confusing full-game and partial-game versions of the same stat.
+  Full-game history could be compared to a partial-game line.
+- Forecast validation accepted non-finite projection values and could throw instead of rejecting missing probabilities.
+- The staging checker treated HTTP header capitalization as significant and omitted the per-league job names.
+
+Changes
+- Preserve exact offer/market identity in player selection and URLs; label periods; withhold full-game history and
+  matchup panels for partial-game props. Board history summaries also refuse partial-game markets.
+- Reject missing required probabilities, boolean probabilities, and non-finite line/projection/stake values.
+- Stream decoded offers for mapping/history jobs; load slip metadata only for selected current revisions.
+  Revision ordering and archived-record semantics are unchanged.
+- Give Standard settlement more RSS headroom, prebuilt jobs a 600-second timeout, and forward inference a
+  plan-aware address-space ceiling and RSS reservation. The existing total child budget and exclusivity remain.
+  Starter defaults remain unchanged. No hosting plan or storage purchase is made.
+- Check all reported scheduler jobs and normalize response headers in the staging checker.
+- Compact desktop board filters and place the longer validation explanation behind an accessible disclosure.
+
+Grade and model review
+- Preserve immutable historical forecasts and their original policy/model identifiers.
+- Do not promote a model from sample count alone. Live paired Scout/market intervals reviewed during this audit
+  included no difference for both NBA and NFL. NFL remains contained; research grades are not validated betting edges.
+- LoL EVALUATION.md reports the lc-1 gate failed; it must not be enabled as an alleged improvement.
+- CS2 research/esports_accuracy_2026_10_25/RESULTS.md reports limitations including Under concentration and
+  failure to beat the 50% baseline. No unsupported weight/grade change is made in this patch.
+
+External issue
+- Live The Odds API calls repeatedly return HTTP 401. A valid credential is required for that source.
+  Kalshi also has intermittent HTTP 429 responses. Do not bypass provider limits or manufacture replacement odds.
+
+UI comparison
+- Pine's current landing workspace uses restrained dark surfaces, clear primary actions and compact game cards.
+  Outlier's official Prop Finder guide emphasizes scan-friendly tables, book lines, history filters and drill-down.
+  Scout improvements prioritize these usability principles while keeping its own design and source provenance.
+- Sources: https://www.pine-sports.com/chat/
+  https://help.outlier.bet/en/articles/6711738-research-player-propositions-with-outlier-s-prop-finder
+
+Verification limits
+- Baseline combined local run: 2,651 passed, 75 skipped. Initial updated Sports run: 792 passed, 68 skipped.
+- Local fixture load: 4,200 requests / 700 simulated members, zero HTTP failures; not a production capacity claim.
+- Regression tests cover numeric validation, exact market selection, period history exclusion, streamed decoding,
+  plan limits and case-insensitive HTTP headers; final CI and deployment evidence are recorded separately.
+- Live signed-in boards, player history, results, sheets, empty comparison and pick-history states were inspected.
+  Existing started slip legs were correctly blocked. Production test picks were not created.
+- A green health endpoint or passing unit tests do not establish live job success or model profitability.
+  Verify successful forecast/settlement/prebuilt/history/mapping cycles after deployment before closing those issues.

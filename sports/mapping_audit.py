@@ -28,7 +28,7 @@ TARGETS = ("prizepicks", "underdog")
 
 
 def run(con, league, now=None):
-    from .snapshots import _latest, snap_root
+    from .snapshots import _latest, _iter_latest, snap_root
     now = now or now_utc()
     teams = {t.team_id: t for _, t, _ in _latest(con, "team", "league = ?", [league], now)}
     events = {e.event_id: e for _, e, _ in _latest(con, "event", "league = ?", [league], now)}
@@ -36,9 +36,9 @@ def run(con, league, now=None):
     for _, m, _ in _latest(con, "membership", "player_id LIKE ?", [f"{league}:%"], now):
         if m.valid_to is None and m.source == "espn":
             open_teams[m.player_id].add(m.team_id)
-    offers = [(rid, o) for rid, o, _ in _latest(con, "offer", "league = ?", [league], now)
+    offers = ((rid, o) for rid, o, _ in _iter_latest(con, "offer", "league = ?", [league], now)
               if o.availability == "open" and (o.event_id is None or (events.get(o.event_id) and
-                                                                      (events[o.event_id].start_utc or "") > now))]
+                                                                      (events[o.event_id].start_utc or "") > now)))
     checks = {k: {"count": 0, "by_platform": Counter(), "examples": []} for k in (
         "player_team_not_in_event", "team_label_mismatch", "player_unresolved", "event_unresolved",
         "multiple_open_teams", "start_mismatch")}
@@ -56,7 +56,9 @@ def run(con, league, now=None):
         return {x.lower() for x in (t.abbr, t.name) if x} if t else set()
 
     seen_multi = set()
+    offers_checked = 0
     for rid, o in offers:
+        offers_checked += 1
         if o.event_id is None:
             hit("event_unresolved", o, rid)
             continue
@@ -83,7 +85,7 @@ def run(con, league, now=None):
                 hit("start_mismatch", o, rid, listed=o.listed_start_utc, espn=ev.start_utc, gap_h=round(gap, 1))
     for c in checks.values():
         c["by_platform"] = dict(c["by_platform"])
-    out = {"version": VERSION, "league": league, "as_of": now, "offers_checked": len(offers), "checks": checks,
+    out = {"version": VERSION, "league": league, "as_of": now, "offers_checked": offers_checked, "checks": checks,
            "total_mismatches": sum(c["count"] for c in checks.values())}
     p = snap_root() / league / "mapping_audit.json"
     p.parent.mkdir(parents=True, exist_ok=True)

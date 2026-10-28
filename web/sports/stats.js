@@ -292,7 +292,14 @@
     return true;
   }
 
-  var api = {pct: pct, line: line, num: num, cents: cents, mult: mult, forecastNumbers: forecastNumbers,
+  function playerMarket(markets, stat, key, quote) {
+    // A player can have the same stat at different periods or events. Never resolve an exact offer by stat alone.
+    return markets.find(function (m) { return quote && (m.quotes || []).concat(m.alternates || [], m.kalshi || []).some(function (q) { return q.record_id === quote; }); }) ||
+      markets.find(function (m) { return key && m.key === key; }) ||
+      markets.find(function (m) { return m.stat === stat && (!m.scope || m.scope === "full_game"); }) ||
+      markets.find(function (m) { return m.stat === stat; }) || markets[0];
+  }
+  var api = {playerMarket: playerMarket, pct: pct, line: line, num: num, cents: cents, mult: mult, forecastNumbers: forecastNumbers,
              outcome: outcome, median: median, sd: sd, windowSummary: windowSummary, seasonGames: seasonGames,
              splits: splits, localTime: localTime, shortDate: shortDate, age: age, ageSeconds: ageSeconds,
              BOOKS: BOOKS, matchesFilters: matchesFilters, bookName: bookName, marketFor: marketFor,
