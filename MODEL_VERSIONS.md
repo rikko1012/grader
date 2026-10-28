@@ -1,5 +1,15 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## sr-gates-1 — stake-rule tests, nothing passed (branch grade/cs2-stakes, 2026-10-28; CS2 model tag unchanged; no model change)
+
+Registered in research/cs2_grade_1028/REGISTER.md (section sr-gates-1, commit c22fea1) before scoring. The cohorts were seen in
+the Oct 28 check, so the test was a chronological split of the 4,376 P1 units (first 124 vs last 125 matches); both halves had to agree.
+- FORM FIGHT 0U lift: FAIL (half 1 69.6%, half 2 47.5%; pooled 59.3% [48.8, 69.6]; balance 0.25).
+- AWPer-HS 0U lift: FAIL on balance only (hit 57.1% / 65.5%, pooled 61.2% [54.0, 68.5]; balance 0.262 pooled, 0.391 half 2 - Under-heavy, Overs hit 66.7%).
+- TAPE FIGHT 0.5U -> 1U: not decidable (26 / 22 units at >= 63%; pooled 47.9%).
+- rust 15-28 d cap: not decidable (12 matches per half; 31.7% / 54.0%).
+grader.py is unchanged and so is the tag (`dbca2af0fe` in the repo); no `SR_GATES_1` switch was created. Results: research/cs2_grade_1028/RESULTS.md section 7.
+
 ## sr-bo3-2 — BO3.gg-route projections shadow only (branch grade/cs2-bo3-shadow, 2026-10-28; CS2 model tag unchanged: `dbca2af0fe`; display / logging policy, owner-directed)
 
 Owner 2026-10-28: "get rid of BO3.gg then" / "or keep it in shadow unless 100% needed". Registered as sr-bo3-2 in

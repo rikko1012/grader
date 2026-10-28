@@ -180,3 +180,43 @@ at this moment.
 PrizePicks; 276 distinct player x stat x line x scope x match; 38 matches; 257 settled / 40 void / 2 push; 174 were
 staked)** would have been hidden from members, plus 69 member-typed card lookups that would have shown "no projection".
 Last provisional board line logged 2026-10-24.
+
+## 7. sr-gates-1 - stake-rule tests (registered in REGISTER.md section sr-gates-1, commit c22fea1, BEFORE this scoring)
+
+The cohorts were seen in the Oct 28 check (section 3), so the test is a chronological split of the P1 units: half 1 = the
+first 124 matches by start (Oct 11 11:30 -> Oct 20 14:00 UTC), half 2 = the other 125 (Oct 20 14:00 -> Oct 28 13:40 UTC).
+4,376 P1 units / 249 matches, all with first-grade inputs. Cohorts recomputed from the P1 chance + the saved inputs with
+the grader's own thresholds; staked-eligible = P1-side chance >= 55%. Hit rates with match-grouped bootstrap 95% intervals
+(1,000 resamples). Script `scripts/sr_gates_1.py`, output `outputs/sr_gates_1_results.json`.
+
+| rule | set | half 1: n / matches, hit [95%], balance | half 2: n / matches, hit [95%], balance | pooled: hit [95%], stated, balance | verdict |
+|---|---|---|---|---|---|
+| LIFT FORM FIGHT 0U | >= 55% | 46 / 35, 69.6% [56.1, 81.6], 0.249 | 40 / 28, **47.5%** [32.6, 63.4], 0.213 | 59.3% [**48.8**, 69.6], 60.8%, **0.25** | **FAIL** (half 2 < 50%, pooled lower bound < 50%, balance > 0.15) |
+| LIFT AWPer-HS 0U | >= 55% | 91 / 73, 57.1% [46.7, 68.1], 0.139 | 87 / 71, 65.5% [56.0, 76.1], **0.391** | 61.2% [54.0, 68.5], 59.5%, **0.262** | **FAIL** (balance only: Over share 40.4% vs Over hit 66.7%; half 2 27.6% vs 66.7%) |
+| RAISE TAPE FIGHT 0.5U -> 1U | >= 63% | 26 / 23, 50.0% [30.0, 72.0] | 22 / 15, 45.5% [23.5, 68.4] | 47.9% [31.9, 63.3], 65.7%, 0.272 | **not decidable** (< 40 units per half); would fail anyway (pooled 47.9%) |
+| (info) TAPE FIGHT | >= 55% | 140 / 72, 47.9% [38.9, 56.7] | 150 / 76, 52.0% [42.7, 61.2] | 50.0% [43.8, 56.5], 60.3%, 0.168 | the cap is not mis-set on P1 (10 pts overconfident) |
+| ADD rust 15-28 d cap | >= 55% | 60 / **12**, 31.7% [15.4, 48.9] | 63 / **12**, 54.0% [32.4, 74.3] | 43.1% [30.9, 57.4], 59.3%, 0.051 | **not decidable** (12 matches per half < 15); half 2 upper bound 74.3% would fail too |
+
+Leave-one-day-out (pooled hit with the worst day removed): FORM FIGHT 59.0%, AWPer-HS 60.3%, TAPE >= 63% 50.0%, rust 40.4%.
+Context: every P1 unit >= 55% = 52.8% [49.8, 56.1] on 2,061 units (half 1 53.0%, half 2 52.7%); rust > 28 d (already capped
+1U) 40.0% on 40 units / 10 matches. Flag-text cross-check (first-grade flags): FORM FIGHT 57.1% (77), AWPer 61.2% (178,
+identical set), TAPE FIGHT 50.2% (271), rust 15-28 d 43.1% (123, identical set).
+
+**Decision: nothing passed; no stake rule changed; grader.py untouched, CS2 tag unchanged.**
+- FORM FIGHT: the PICKS-rule 62.1% did not repeat in the later half (47.5% on 40 units) - the earlier figure was a first-half effect.
+- AWPer-HS: the hit rate holds in both halves (57.1% / 65.5%, pooled lower bound 54.0%, calibrated within 1.7 pts), but the
+  cohort is an Under-heavy selection whose Overs hit 66.7% - the owner's correlated-Under-risk rule (balance <= 0.15) fails,
+  0.262 pooled / 0.391 in half 2. Lifting it would add mostly Under stakes. Stays 0U. It is the strongest re-test candidate:
+  forward P1 units keep accumulating (the gate does not stop logging), so the same rule can be re-run on units logged after
+  2026-10-28 13:40 UTC as a true forward test.
+- TAPE FIGHT: the PICKS-rule 57.3% does not hold on P1 (50.0%); the >= 63% set the raise would touch hits 47.9%. Cap stays.
+- rust 15-28 d: below coin-flip pooled (43.1%) but on 24 matches; half 2 is 54.0%. Not enough to add a cap under the
+  owner's "clearly below coin-flip" rule. Stays flag-only.
+- Stake sizes unchanged (registered as out of scope).
+- `SR_GATES_1` env switch: not created (nothing to roll back).
+
+audit.py on the live board (2026-10-28, read-only GET, after scoring): version `3007c59b74`; 99 board rows / 99 graded; 39 bets
+(27 More / 12 Less), 60 leans, 23 coin flips; 0 "p out of range", 0 "bad projection", 0 "grade != chance", 0 "graded but 0U";
+2 "units != grade with no cap reason" = the same pre-existing same-match-cap display rows as in 6c (vinaabEAST / puni);
+10 MIBR / Made in Brazil name notes; 4 LAN/online unknown (one match with no event); 1 last-10 under 10; AWP source HLTV
+weapon stats 99/99; 40 full cards checked. Rows affected by sr-gates-1: 0 (no change).

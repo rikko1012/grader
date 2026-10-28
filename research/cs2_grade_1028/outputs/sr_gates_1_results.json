@@ -1,0 +1,454 @@
+{
+ "FORM FIGHT lift": {
+  "cohort": "FORM FIGHT (recomputed), chance >= 55%",
+  "half1": {
+   "n": 46,
+   "matches": 35,
+   "wl": "32-14",
+   "hit": 69.6,
+   "ci": [
+    56.1,
+    81.6
+   ],
+   "stated": 61.5,
+   "gap": -8.1,
+   "over_share": 47.8,
+   "over_hit": 72.7,
+   "balance": 0.249
+  },
+  "half2": {
+   "n": 40,
+   "matches": 28,
+   "wl": "19-21",
+   "hit": 47.5,
+   "ci": [
+    32.6,
+    63.4
+   ],
+   "stated": 60.1,
+   "gap": 12.6,
+   "over_share": 32.5,
+   "over_hit": 53.8,
+   "balance": 0.213
+  },
+  "pooled": {
+   "n": 86,
+   "matches": 63,
+   "wl": "51-35",
+   "hit": 59.3,
+   "ci": [
+    48.8,
+    69.6
+   ],
+   "stated": 60.8,
+   "gap": 1.5,
+   "over_share": 40.7,
+   "over_hit": 65.7,
+   "balance": 0.25
+  },
+  "min_evidence": true,
+  "lodo_worst": [
+   "2026-10-28",
+   59.0,
+   83
+  ],
+  "conditions": {
+   "halves >= 50": false,
+   "pooled lower > 50": false,
+   "|hit-stated| <= 5": true,
+   "balance <= 0.15": false,
+   "no upset day flips < 50": true
+  },
+  "verdict": "FAIL"
+ },
+ "AWPer-HS lift": {
+  "cohort": "AWPer on HS (sniping > 40), chance >= 55%",
+  "half1": {
+   "n": 91,
+   "matches": 73,
+   "wl": "52-39",
+   "hit": 57.1,
+   "ci": [
+    46.7,
+    68.1
+   ],
+   "stated": 59.3,
+   "gap": 2.1,
+   "over_share": 52.7,
+   "over_hit": 66.7,
+   "balance": 0.139
+  },
+  "half2": {
+   "n": 87,
+   "matches": 71,
+   "wl": "57-30",
+   "hit": 65.5,
+   "ci": [
+    56.0,
+    76.1
+   ],
+   "stated": 59.7,
+   "gap": -5.8,
+   "over_share": 27.6,
+   "over_hit": 66.7,
+   "balance": 0.391
+  },
+  "pooled": {
+   "n": 178,
+   "matches": 144,
+   "wl": "109-69",
+   "hit": 61.2,
+   "ci": [
+    54.0,
+    68.5
+   ],
+   "stated": 59.5,
+   "gap": -1.7,
+   "over_share": 40.4,
+   "over_hit": 66.7,
+   "balance": 0.262
+  },
+  "min_evidence": true,
+  "lodo_worst": [
+   "2026-10-28",
+   60.3,
+   174
+  ],
+  "conditions": {
+   "halves >= 50": true,
+   "pooled lower > 50": true,
+   "|hit-stated| <= 5": true,
+   "balance <= 0.15": false,
+   "no upset day flips < 50": true
+  },
+  "verdict": "FAIL"
+ },
+ "TAPE FIGHT raise (>=63%)": {
+  "cohort": "TAPE FIGHT (recomputed), chance >= 63%",
+  "half1": {
+   "n": 26,
+   "matches": 23,
+   "wl": "13-13",
+   "hit": 50.0,
+   "ci": [
+    30.0,
+    72.0
+   ],
+   "stated": 66.0,
+   "gap": 16.0,
+   "over_share": 80.8,
+   "over_hit": 47.6,
+   "balance": 0.332
+  },
+  "half2": {
+   "n": 22,
+   "matches": 15,
+   "wl": "10-12",
+   "hit": 45.5,
+   "ci": [
+    23.5,
+    68.4
+   ],
+   "stated": 65.4,
+   "gap": 19.9,
+   "over_share": 63.6,
+   "over_hit": 42.9,
+   "balance": 0.208
+  },
+  "pooled": {
+   "n": 48,
+   "matches": 38,
+   "wl": "23-25",
+   "hit": 47.9,
+   "ci": [
+    31.9,
+    63.3
+   ],
+   "stated": 65.7,
+   "gap": 17.8,
+   "over_share": 72.9,
+   "over_hit": 45.7,
+   "balance": 0.272
+  },
+  "min_evidence": false,
+  "lodo_worst": [
+   "2026-10-27",
+   50.0,
+   42
+  ],
+  "verdict": "not decidable (minimum evidence not met)"
+ },
+ "TAPE FIGHT info (>=55%)": {
+  "cohort": "TAPE FIGHT (recomputed), chance >= 55% (info)",
+  "half1": {
+   "n": 140,
+   "matches": 72,
+   "wl": "67-73",
+   "hit": 47.9,
+   "ci": [
+    38.9,
+    56.7
+   ],
+   "stated": 60.3,
+   "gap": 12.4,
+   "over_share": 68.6,
+   "over_hit": 45.8,
+   "balance": 0.227
+  },
+  "half2": {
+   "n": 150,
+   "matches": 76,
+   "wl": "78-72",
+   "hit": 52.0,
+   "ci": [
+    42.7,
+    61.2
+   ],
+   "stated": 60.3,
+   "gap": 8.3,
+   "over_share": 59.3,
+   "over_hit": 48.3,
+   "balance": 0.11
+  },
+  "pooled": {
+   "n": 290,
+   "matches": 148,
+   "wl": "145-145",
+   "hit": 50.0,
+   "ci": [
+    43.8,
+    56.5
+   ],
+   "stated": 60.3,
+   "gap": 10.3,
+   "over_share": 63.8,
+   "over_hit": 47.0,
+   "balance": 0.168
+  },
+  "min_evidence": true,
+  "lodo_worst": [
+   "2026-10-28",
+   49.7,
+   288
+  ],
+  "conditions": {
+   "halves >= 50": false,
+   "pooled lower > 50": false,
+   "|hit-stated| <= 5": false,
+   "balance <= 0.15": false,
+   "no upset day flips < 50": false
+  },
+  "verdict": "FAIL"
+ },
+ "rust 15-28 cap": {
+  "cohort": "rust 15-28 d, chance >= 55%",
+  "half1": {
+   "n": 60,
+   "matches": 12,
+   "wl": "19-41",
+   "hit": 31.7,
+   "ci": [
+    15.4,
+    48.9
+   ],
+   "stated": 59.7,
+   "gap": 28.0,
+   "over_share": 33.3,
+   "over_hit": 30.0,
+   "balance": 0.033
+  },
+  "half2": {
+   "n": 63,
+   "matches": 12,
+   "wl": "34-29",
+   "hit": 54.0,
+   "ci": [
+    32.4,
+    74.3
+   ],
+   "stated": 58.9,
+   "gap": 4.9,
+   "over_share": 27.0,
+   "over_hit": 41.2,
+   "balance": 0.142
+  },
+  "pooled": {
+   "n": 123,
+   "matches": 24,
+   "wl": "53-70",
+   "hit": 43.1,
+   "ci": [
+    30.9,
+    57.4
+   ],
+   "stated": 59.3,
+   "gap": 16.2,
+   "over_share": 30.1,
+   "over_hit": 35.1,
+   "balance": 0.051
+  },
+  "min_evidence": false,
+  "lodo_worst": [
+   "2026-10-27",
+   40.4,
+   114
+  ],
+  "verdict": "not decidable (minimum evidence not met)"
+ },
+ "xcheck FORM FIGHT flag": {
+  "cohort": "flag text FORM FIGHT, chance >= 55%",
+  "pooled": {
+   "n": 77,
+   "matches": 58,
+   "wl": "44-33",
+   "hit": 57.1,
+   "ci": [
+    46.8,
+    67.6
+   ],
+   "stated": 61.0,
+   "gap": 3.8,
+   "over_share": 36.4,
+   "over_hit": 64.3,
+   "balance": 0.279
+  }
+ },
+ "xcheck AWPer flag": {
+  "cohort": "flag text AWPer, chance >= 55%",
+  "pooled": {
+   "n": 178,
+   "matches": 144,
+   "wl": "109-69",
+   "hit": 61.2,
+   "ci": [
+    54.0,
+    68.5
+   ],
+   "stated": 59.5,
+   "gap": -1.7,
+   "over_share": 40.4,
+   "over_hit": 66.7,
+   "balance": 0.262
+  }
+ },
+ "xcheck TAPE FIGHT flag": {
+  "cohort": "flag text TAPE FIGHT, chance >= 55%",
+  "pooled": {
+   "n": 271,
+   "matches": 144,
+   "wl": "136-135",
+   "hit": 50.2,
+   "ci": [
+    43.6,
+    56.9
+   ],
+   "stated": 60.1,
+   "gap": 10.0,
+   "over_share": 61.3,
+   "over_hit": 45.8,
+   "balance": 0.155
+  }
+ },
+ "xcheck rust flag": {
+  "cohort": "sd_reasons rust 15-28d, chance >= 55%",
+  "pooled": {
+   "n": 123,
+   "matches": 24,
+   "wl": "53-70",
+   "hit": 43.1,
+   "ci": [
+    30.9,
+    57.4
+   ],
+   "stated": 59.3,
+   "gap": 16.2,
+   "over_share": 30.1,
+   "over_hit": 35.1,
+   "balance": 0.051
+  }
+ },
+ "context all >= 55%": {
+  "cohort": "all P1 units, chance >= 55%",
+  "pooled": {
+   "n": 2061,
+   "matches": 248,
+   "wl": "1089-972",
+   "hit": 52.8,
+   "ci": [
+    49.8,
+    56.1
+   ],
+   "stated": 59.3,
+   "gap": 6.4,
+   "over_share": 43.0,
+   "over_hit": 52.4,
+   "balance": 0.094
+  },
+  "half1": {
+   "n": 1047,
+   "matches": 123,
+   "wl": "555-492",
+   "hit": 53.0,
+   "ci": [
+    48.4,
+    57.1
+   ],
+   "stated": 59.5,
+   "gap": 6.5,
+   "over_share": 46.9,
+   "over_hit": 50.5,
+   "balance": 0.036
+  },
+  "half2": {
+   "n": 1014,
+   "matches": 125,
+   "wl": "534-480",
+   "hit": 52.7,
+   "ci": [
+    47.8,
+    57.2
+   ],
+   "stated": 59.0,
+   "gap": 6.3,
+   "over_share": 39.1,
+   "over_hit": 54.8,
+   "balance": 0.157
+  }
+ },
+ "context rust 15-28 all": {
+  "cohort": "rust 15-28 d, all chances",
+  "pooled": {
+   "n": 238,
+   "matches": 24,
+   "wl": "108-130",
+   "hit": 45.4,
+   "ci": [
+    34.6,
+    57.6
+   ],
+   "stated": 56.0,
+   "gap": 10.6,
+   "over_share": 34.0,
+   "over_hit": 42.0,
+   "balance": 0.079
+  }
+ },
+ "context rust >28": {
+  "cohort": "rust >28 d, chance >= 55%",
+  "pooled": {
+   "n": 40,
+   "matches": 10,
+   "wl": "16-24",
+   "hit": 40.0,
+   "ci": [
+    20.0,
+    60.5
+   ],
+   "stated": 61.1,
+   "gap": 21.1,
+   "over_share": 42.5,
+   "over_hit": 29.4,
+   "balance": 0.131
+  }
+ }
+}
