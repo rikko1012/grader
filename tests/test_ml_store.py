@@ -104,7 +104,8 @@ def new_rows(at, plat="polymarket", n=3):
             for k in range(n)]
 
 
-def test_evaluation_reads_identical_after_archive_and_rows_round_trip(store):
+def test_evaluation_reads_identical_after_archive_and_rows_round_trip(store, monkeypatch):
+    monkeypatch.setattr(ml_store, "RETAIN_DAYS", 7)       # the fixture's dates are laid out around a 7-day window
     db, n = built(store)
     before = all_rows(db)
     fwd0, _ = ml_eval.forward_rows(str(db), excl0 := __import__("collections").Counter())
@@ -271,3 +272,17 @@ def test_short_restart_gap_is_not_recorded(store):
     con.close()
     assert gaps == [(iso(NOW + timedelta(minutes=12)), iso(NOW + timedelta(minutes=50)),
                      "no quote saved (process down, source refresh failing or no listings)")]
+
+
+def test_retention_window_leaves_room_under_the_cap(monkeypatch):
+    """2026-10-29 production: ~4.7 MB/h (~113 MB/day) of new quotes. With a 7-day window the live store reached 775 of
+    900 MB and was due to hit the cap (every quote write pauses there) before the first post-gap day became archivable.
+    The default window must keep a full window of new rows plus the kept evaluation rows below the 80% alert line."""
+    monkeypatch.delenv("ML_ARCHIVE_RETAIN_DAYS", raising=False)
+    import importlib
+    m = importlib.reload(ml_store)
+    daily_mb, kept_mb = 113.0, 120.0                          # measured rate; kept rows ~114k (generous allowance)
+    assert m.RETAIN_DAYS <= 4
+    assert (m.RETAIN_DAYS + 1) * daily_mb + kept_mb < 0.8 * moneyline.SNAPSHOT_MAX_MB
+    now = datetime(2026, 10, 29, 13, 0, tzinfo=timezone.utc)
+    assert m.retain_from(now.timestamp()) == "2026-10-25"     # Oct 23-24 archivable now, not after Oct 31

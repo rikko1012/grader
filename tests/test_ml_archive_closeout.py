@@ -59,6 +59,7 @@ def _spanning_match(db):
 # ---------------------------------------------------------------- 1. unified lookup + evaluation through it
 
 def test_unified_lookup_spans_archive_and_live_store(store, monkeypatch):
+    monkeypatch.setattr(ml_store, "RETAIN_DAYS", 7)       # the fixture's dates are laid out around a 7-day window
     db, _ = built(store)
     before = all_rows(db)
     names = _names(db)

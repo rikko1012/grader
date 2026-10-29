@@ -52,7 +52,10 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-RETAIN_DAYS = float(os.environ.get("ML_ARCHIVE_RETAIN_DAYS") or 7)      # raw quotes stay live this many days
+# raw quotes stay live this many days. 4 (was 7) since 2026-10-29: at ~110 MB/day the 7-day window filled the live
+# store towards its 900 MB cap, where moneyline.write_snapshots pauses every quote write. Nothing is lost by archiving
+# sooner: the rows the evaluation reads stay live (keep set), and iter_quotes() reads archive + live as one store.
+RETAIN_DAYS = float(os.environ.get("ML_ARCHIVE_RETAIN_DAYS") or 4)
 SETTLED_DAYS = 3          # a linked match's rows move only once its (latest) earliest start is this old
 CONTEXT_H = 12            # kept: every row of a linked match within 12 h before its cutoff
 MAX_DAYS_PER_PASS = 4

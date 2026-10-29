@@ -52,7 +52,7 @@ History (CS2_DATA_DIR/.cache/ml_snapshots.db, rows immutable)
                 SNAPSHOT_MAX_MB of LIVE pages (or below DISK_FLOOR_MB free disk) the store stops growing (snapshot_error
                 on admin) instead of filling the data disk.  2026-10-23 (mlstore-1): the old guard measured the FILE (500 MB)
                 and paused every quote write once it was reached; now ml_store.py archives raw rows of days older than
-                7 days to verified gzip files beside the store (the rows the evaluation reads stay live; a row may leave
+                4 days to verified gzip files beside the store (the rows the evaluation reads stay live; a row may leave
                 only for a verified archived day - trigger) and freed pages are reused, so writes keep going.
   ml_gaps       every interval > GAP_MIN_S with no saved quote for a platform (when, why); never backfilled.
   ml_archive    manifest of archived days (file, rows, sha256); ml_meta small key/value bookkeeping.
