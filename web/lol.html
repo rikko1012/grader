@@ -408,7 +408,7 @@ async function openSlip(pl) {
     $("#slipmsg").textContent = `Nothing opened - ${bad.map(l => `${l.player} (${l.stat_name}, ${l.scope}): ${CHECK[l.key].text.replace(/\.$/, "")}`).join("; ")}. Remove ${bad.length > 1 ? "these picks" : "this pick"}, then try again.`;
     return false;
   }
-  let url;
+  let url, copied = false;
   if (pl === "prizepicks") {
     const k = ppLink(SLIP.legs, D.rows);
     if (!k.url) { render(); $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = `Nothing opened - ${k.why}`; return false; }
@@ -416,13 +416,14 @@ async function openSlip(pl) {
   } else {
     if (SLIP.legs.length < 2 || new Set(SLIP.legs.map(l => l.team)).size < 2) { render(); $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "Nothing opened - entries need at least 2 picks from 2 different teams."; return false; }
     url = PPL.ud;
-    await copyText(`${SLIP.legs[0].platform_label} - ${SLIP.legs.length} picks\n` + SLIP.legs.map(legText).join("\n"));
+    copied = await copyText(`${SLIP.legs[0].platform_label} - ${SLIP.legs.length} picks\n` + SLIP.legs.map(legText).join("\n"));
   }
   render();
   const m = $("#slipmsg"), opened = pplGo(url);
-  m.className = "actmsg ok";
-  if (opened) m.textContent = pl === "prizepicks" ? "Every line rechecked just now - opened in PrizePicks." : "Every line rechecked just now - picks copied, Underdog opened.";
-  else m.innerHTML = `Every line rechecked just now. <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(PPL_WORD[pl])}</a>`;
+  const cw = pl === "underdog" && !copied ? " Copy failed in this browser - nothing was copied; enter the picks in Underdog yourself." : "";
+  m.className = cw ? "actmsg bad" : "actmsg ok";
+  if (opened) m.textContent = pl === "prizepicks" ? "Every line rechecked just now - opened in PrizePicks." : copied ? "Every line rechecked just now - picks copied, Underdog opened." : "Every line rechecked just now - Underdog opened." + cw;
+  else m.innerHTML = `Every line rechecked just now.${esc(cw)} <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(PPL_WORD[pl])}</a>`;
   return url;
 }
 async function copyText(text) {

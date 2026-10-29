@@ -4,6 +4,7 @@ only after the server's slip check passed (CS2: POST /api/slip_log / Studio veri
 from rows already on the board (no upstream call). Default OFF: with the flag off every page draws exactly what the base
 commit drew. Every row, name and number is a TEST FIXTURE except the two projection ids of the owner's sample lineup."""
 import json
+import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 
@@ -122,6 +123,23 @@ def test_server_demon_more_and_standard_over_promo(feeds):
     assert code == 200 and d["pp_url"] == "https://app.prizepicks.com/board?projections=777-o-40.5,16360898-u-22.5"
 
 
+@pytest.mark.parametrize("side,tok", [("More", "o"), ("Less", "u")])
+def test_server_link_keeps_the_members_own_row(feeds, side, tok):
+    # review 2026-10-28: a promo row at a standard's line - the member's own row id (the promo) is the link, not the standard
+    code, d = _send([_leg("promoguy", "FUT", "Nemiga", 22.5, side=side, row_id="pp:16360899"), KAI])
+    assert code == 200 and d["pp_url"] == f"https://app.prizepicks.com/board?projections=16360899-{tok}-22.5,16360825-o-29.5"
+    code, d = _send([_leg("promoguy", "FUT", "Nemiga", 22.5, side=side, row_id="pp:16360898"), KAI])
+    assert code == 200 and d["pp_url"] == f"https://app.prizepicks.com/board?projections=16360898-{tok}-22.5,16360825-o-29.5"
+    # two standard projections at one line: the row id names exactly one of them
+    code, d = _send([_leg("twin", "Nemiga", "FUT", 18.5, row_id="pp:902"), SUN])
+    assert code == 200 and d["pp_url"] == "https://app.prizepicks.com/board?projections=902-o-18.5,16360820-u-31.5"
+    # a row id no longer in the feed (re-posted projection): the old rule - the single standard one
+    code, d = _send([_leg("promoguy", "FUT", "Nemiga", 22.5, side=side, row_id="pp:123"), KAI])
+    assert code == 200 and d["pp_url"].startswith(f"https://app.prizepicks.com/board?projections=16360898-{tok}-22.5,")
+    code, d = _send([_leg("twin", "Nemiga", "FUT", 18.5, row_id="pp:123"), SUN])
+    assert code == 409 and "not known" in json.dumps(d)
+
+
 @pytest.mark.parametrize("case,legs,book,reason", [
     ("moved line", [dict(SUN, line=30.5), KAI], "prizepicks", "SunPayus Under 30.5: Line moved to 31.5"),
     ("started", [dict(SUN, start=PAST), KAI], "prizepicks", "SunPayus Under 31.5: Match started"),
@@ -226,6 +244,8 @@ def _base_page(tmp_path, name):
     except Exception:
         src = None
     if src is None or src.returncode != 0:
+        if os.environ.get("CI"):                        # CI checks out full history: a missing base is a failure, never a skip
+            pytest.fail(f"base commit {BASE} not available in CI (checkout needs fetch-depth: 0)")
         pytest.skip("base commit not available")
     p = tmp_path / ("base_" + name)
     p.write_text(src.stdout, encoding="utf-8")
@@ -253,7 +273,8 @@ def _cs2_leg(p, line, side, bk="prizepicks", status="verified", tm="FUT", lt="st
 PP2 = [_cs2_leg("SunPayus", 31.5, "Less"), _cs2_leg("KaiR0N-", 29.5, "More", tm="Nemiga")]
 UD2 = [_cs2_leg("alpha1", 27.5, "More", bk="underdog", tm="Alpha"), _cs2_leg("bravo1", 20.5, "More", bk="underdog", tm="Bravo")]
 SLIPS = {"pp": PP2, "ud": UD2, "mixed": [PP2[0], UD2[1]], "unverified": [PP2[0], dict(PP2[1], now={"status": "changed"})],
-         "one": PP2[:1], "seven": [dict(PP2[i % 2], p=f"x{i}") for i in range(7)], "empty": []}
+         "one": PP2[:1], "seven": [dict(PP2[i % 2], p=f"x{i}") for i in range(7)], "empty": [],
+         "noid": [PP2[0], dict(PP2[1], rid="xx9")], "blankid": [PP2[0], dict(PP2[1], rid="")]}
 STUDIO = {"slip_id": "b1/s1", "book": "prizepicks", "n": 2, "status": "live", "legs": [
     {"row_id": "pp:16360820", "nick": "SunPayus", "side": "Less", "line": 31.5, "prop": "kills", "scope": "12", "grade": "B", "p": 0.6,
      "team": "FUT", "opponent": "Nemiga", "start": FUT, "book": "prizepicks", "market_type": "standard"},
@@ -278,7 +299,7 @@ def test_cs2_buttons_only_for_checked_single_platform_slips(tmp_path):
     out = run_file(tmp_path, CUR("index.html"), "PPL.on = true;\n" + DRAW, {"slips": SLIPS, "studio": STUDIO})
     assert out["pp"].count('data-slipopen="prizepicks">Open in PrizePicks</button>') == 1
     assert 'data-slipopen="underdog">Open Underdog</button>' in out["ud"] and "Open in PrizePicks" not in out["ud"]
-    for k in ("mixed", "unverified", "one", "seven"):
+    for k in ("mixed", "unverified", "one", "seven", "noid", "blankid"):   # noid/blankid: a projection id not known
         assert "data-slipopen" not in out[k], k
     assert 'data-studioopen="b1/s1">Open in PrizePicks</button>' in out["studio"]
     assert 'data-studioopen="b1/s1">Open Underdog</button>' in out["studio_ud"]
@@ -368,23 +389,28 @@ def test_cs2_open_blocked_popup_offers_a_real_link(tmp_path):
 
 
 STUDIO_OPEN = """(async () => {
-  const OPENED = [], T = [], C = [];
+  const OPENED = [], T = [], C = [], EVK = [];
   PPL.on = true; toast = m => T.push(m); copy = async t => C.push(t);
   window.open = u => { OPENED.push(u); return {}; };
-  studioCall = async (m, u) => (u === "/api/slip_studio/verify" ? {status: INPUT.status || 200, d: INPUT.d} : {status: 200, d: {}});
+  studioCall = async (m, u, b) => { if (u === "/api/slip_studio/event") EVK.push(b.kind);
+    return u === "/api/slip_studio/verify" ? {status: INPUT.status || 200, d: INPUT.d} : {status: 200, d: {}}; };
   studioBuild = async () => { T.push("rebuild"); };
   const btn = {textContent: "Open in PrizePicks", disabled: false};
   await studioVerify("b1/s1", btn, INPUT.book || "prizepicks");
   for (let i = 0; i < 50; i++) await Promise.resolve();
-  return {OPENED, T, C, label: btn.textContent, notes: STUDIO.notes};
+  STUDIO.batch = {slips: {2: [Object.assign({}, INPUT.slip || {}, {slip_id: "b1/s1"})]}};
+  let card = ""; try { card = INPUT.slip ? studioSlip(Object.assign({}, INPUT.slip, {slip_id: "b1/s1"})) : ""; } catch (e) { card = "ERR " + e; }
+  return {OPENED, T, C, EVK, label: btn.textContent, notes: STUDIO.notes, opened: Object.keys(STUDIO.opened || {}), card};
 })()"""
 
 
 @needs_node
 def test_studio_open_after_verify_ok_only(tmp_path):
     ok = {"ok": True, "book": "prizepicks", "batch_id": "b1", "copy_text": "x", "pp_url": SAMPLE}
-    out = run_file(tmp_path, CUR("index.html"), STUDIO_OPEN, {"d": ok})
+    out = run_file(tmp_path, CUR("index.html"), STUDIO_OPEN, {"d": ok, "slip": STUDIO})
     assert out["OPENED"] == [SAMPLE] and out["C"] == []
+    # review 2026-10-28: a PrizePicks open is recorded ('load' event) and the card says so, like every other way out
+    assert out["EVK"] == ["load"] and out["opened"] == ["b1/s1"] and "opened in PrizePicks" in out["card"] and "0U" not in out["card"]
     out = run_file(tmp_path, CUR("index.html"), STUDIO_OPEN, {"d": {"ok": False, "book": "prizepicks", "changes": ["SunPayus kills 31.5 Under: line moved"]}})
     assert out["OPENED"] == [] and "rebuild" in out["T"] and out["notes"]["b1/s1"] == ["SunPayus kills 31.5 Under: line moved"]
     out = run_file(tmp_path, CUR("index.html"), STUDIO_OPEN, {"d": dict(ok, pp_url=None, pp_reason="Goblin and demon picks are More only on PrizePicks")})
@@ -393,7 +419,7 @@ def test_studio_open_after_verify_ok_only(tmp_path):
     assert out["OPENED"] == [] and out["label"] == "Open in PrizePicks"
     out = run_file(tmp_path, CUR("index.html"), STUDIO_OPEN, {"d": {"ok": True, "book": "underdog", "batch_id": "b1", "copy_text": "slip text",
                                                                     "open_url": pplink.UD_HOME}, "book": "underdog"})
-    assert out["OPENED"] == [pplink.UD_HOME] and out["C"] == ["slip text"]
+    assert out["OPENED"] == [pplink.UD_HOME] and out["C"] == ["slip text"] and out["EVK"] == ["copy"] and out["opened"] == []
 
 
 # ---------------------------------------------------------------- LoL page
@@ -496,6 +522,17 @@ def test_lol_builder_never_builds_a_demon_under(tmp_path):
 def test_lol_open_underdog_copies_and_opens_home(tmp_path):
     out = _lopen(tmp_path, ["u1", "u2"], pl="underdog")
     assert out["OPENED"] == [pplink.UD_HOME] and len(out["C"]) == 1 and "Ud1" in out["C"][0]
+    assert "picks copied, Underdog opened" in out["msg"]
+
+
+@needs_node
+def test_lol_open_underdog_copy_failure_is_said(tmp_path):
+    # review 2026-10-28: a blocked clipboard never reads 'picks copied'
+    body = LOPEN.replace("navigator.clipboard.writeText = async t => { C.push(t); };",
+                         "navigator.clipboard.writeText = async t => { throw new Error('denied'); }; document.execCommand = () => false;")
+    d = {"rows": LROWS, "match_tables": [], "slips": {}, "stake_note": "n"}
+    out = run_file(tmp_path, CUR("lol.html"), body, {"d": d, "fresh": d, "keys": ["u1", "u2"], "pl": "underdog"})
+    assert out["OPENED"] == [pplink.UD_HOME] and "copied," not in out["msg"] and "Copy failed" in out["msg"], out
 
 
 # ---------------------------------------------------------------- Sports page (closure-private code: static wiring)
@@ -504,3 +541,7 @@ def test_sports_page_wiring():
     assert 'auth.pp_open_link === true' in js and 'r = await check("copy")' in js
     assert "if (!r || !r.ok) return;" in js.split("async function openSlip")[1].split("}")[0] + "}"
     assert 'id="ss-open"' not in js                     # never in the template: inserted only when the flag is on
+    op = js.split("async function openSlip")[1].split("async function postApi")[0]
+    # review 2026-10-28: 'Picks copied' only after writeText resolved; a rejected write says the clipboard was blocked
+    assert "copied = true; } catch (e) { copied = false; }" in op and 'var udMsg = copied ? "Picks copied' in op
+    assert "The browser blocked the clipboard" in op and op.count("Picks copied") == 1

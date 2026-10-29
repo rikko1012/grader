@@ -1502,13 +1502,17 @@ def slip_leg_problem(leg, feeds=None, now=None):
 
 
 def _pp_leg(leg, hit):
-    """One verified PrizePicks leg -> its link leg, from the feed row(s) the check matched: exactly one projection, else a
-    standard (not promo) one when exactly one; two that still fit = no link (never a guess)."""
+    """One verified PrizePicks leg -> its link leg, from the feed row(s) the check matched: the leg's own row id when it is
+    one of them, else exactly one projection, else a standard (not promo) one when exactly one; two that still fit = no
+    link (never a guess)."""
     rows = [r for r in (hit or {}).get("rows") or [] if pplink.projection_id(r.get("id"))]
     if (hit or {}).get("book") != "prizepicks" or not rows:
         return None
     ids = {pplink.projection_id(r["id"]) for r in rows}
-    if len(ids) > 1:
+    own = pplink.projection_id(leg.get("row_id"))
+    if own and own in ids:                             # the row the member picked (e.g. a promo at a standard's line)
+        rows = [r for r in rows if pplink.projection_id(r["id"]) == own]
+    elif len(ids) > 1:
         rows = [r for r in rows if (r.get("odds_type") or "standard") == "standard"]
         if len({pplink.projection_id(r["id"]) for r in rows}) != 1:
             return None

@@ -58,10 +58,12 @@
     if (!r || !r.ok) return;                            // the check names the reason; nothing opened
     var url = pl === "prizepicks" ? r.pp_link : r.open_url;
     if (!pplOk(url, pl)) { box.insertAdjacentHTML("afterbegin", '<p class="ss-banner ss-bad" role="alert">Not opened - ' + esc(pl === "prizepicks" ? "PrizePicks' id for a pick on this slip is not known; copy the slip instead." : "try again.") + "</p>"); return; }
-    if (pl === "underdog" && r.copy_text) { try { await navigator.clipboard.writeText(r.copy_text); } catch (e) {} }
+    var copied = false;
+    if (pl === "underdog" && r.copy_text) { try { await navigator.clipboard.writeText(r.copy_text); copied = true; } catch (e) { copied = false; } }
+    var udMsg = copied ? "Picks copied - Underdog opened. Enter them there and check every line." : "Underdog opened. The browser blocked the clipboard - use Copy, then enter the picks there and check every line.";
     var w = null; try { w = window.open(url, "_blank"); } catch (e) { w = null; }
-    if (w) { try { w.opener = null; } catch (e) {} box.insertAdjacentHTML("afterbegin", '<p class="ss-okmsg" role="status">' + esc(pl === "prizepicks" ? "Opened in PrizePicks - enter it there and check every line." : "Picks copied - Underdog opened. Enter them there and check every line.") + "</p>"); }
-    else box.insertAdjacentHTML("afterbegin", '<p class="ss-okmsg" role="status">Every pick checked. <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(OPEN_WORD[pl]) + "</a></p>");
+    if (w) { try { w.opener = null; } catch (e) {} box.insertAdjacentHTML("afterbegin", '<p class="ss-okmsg" role="status">' + esc(pl === "prizepicks" ? "Opened in PrizePicks - enter it there and check every line." : udMsg) + "</p>"); }
+    else box.insertAdjacentHTML("afterbegin", '<p class="ss-okmsg" role="status">Every pick checked.' + (pl === "underdog" && !copied ? " " + esc("The browser blocked the clipboard - use Copy.") : "") + ' <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(OPEN_WORD[pl]) + "</a></p>");
   }
   async function postApi(path, body, retried) {
     var t = await token();

@@ -1249,9 +1249,11 @@ function pplGo(url, book) {
   return true;
 }
 // the button only for a 2-6 pick slip of one platform whose every line is checked and up on that platform right now
+// (PrizePicks: every leg's projection id known; the server's slip check stays the final word)
 function pplButton(s, plat) {
   if (!PPL.on || !PPL_WORD[plat] || s.length < 2 || s.length > 6) return "";
   if (!s.every(x => x.bk === plat && ["verified", "stale"].includes(x.now?.status) && !legStarted(x))) return "";
+  if (plat === "prizepicks" && !s.every(x => /^pp:[0-9]{1,15}$/.test(String(x.rid || "")))) return "";   // every projection id known
   return `<button type="button" class="chipbtn" data-slipopen="${plat}">${PPL_WORD[plat]}</button>`;
 }
 function setProp(v) { prop = v; [...$("#prop").children].forEach(x => x.classList.toggle("on", x.dataset.v === v)); store.set("cs2s_prop", v); }
@@ -2151,7 +2153,7 @@ const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: 
 // rows shown for a view: one platform, or both (All Books - every row keeps its own platform label and line)
 // research tools state (declared up here: drawBoard reads it)
 let ML = {data: null, at: 0, err: null};                                     // Moneylines tab
-const STUDIO = {open: false, off: true, batch: null, last: null, busy: false, notes: {}, copied: {}, pins: [], sort: "chance"};   // Slip studio
+const STUDIO = {open: false, off: true, batch: null, last: null, busy: false, notes: {}, copied: {}, opened: {}, pins: [], sort: "chance"};   // Slip studio
 const viewRows = b => b === "all" ? [...BK.underdog.rows, ...BK.prizepicks.rows] : BK[b === "compare" ? "underdog" : b].rows;
 // one match, whichever platform listed it (2026-10-12 fix): the same two teams with starts within 45 min. It used to prefer
 // our match id, which one platform's row can lack, and compared start-time TEXT ("...Z" vs "...+00:00") - so the same
@@ -3226,7 +3228,7 @@ function studioLeg(l) {
 function studioSlip(s) {
   if (s.status && s.status !== "live") return `<div class="aslip changed"><div class="small muted"><b style="color:var(--warn)">${s.status === "replaced" ? "Replaced" : s.status === "changed" ? "Changed – not for copying" : "Dismissed"}</b>
     – slip ${esc(s.slip_id.split("/").slice(1).join("/"))}${s.replaced_by ? ` → see build ${esc(s.replaced_by.split("/").slice(1).join("/"))}` : ""}; it no longer counts toward this batch's repeats.</div>${s.legs.map(studioLeg).join("")}</div>`;
-  const note = STUDIO.notes[s.slip_id], cp = STUDIO.copied[s.slip_id], started = s.legs.some(l => legStarted(l));
+  const note = STUDIO.notes[s.slip_id], cp = STUDIO.copied[s.slip_id], opn = !cp && (STUDIO.opened || {})[s.slip_id], started = s.legs.some(l => legStarted(l));
   // studio-4: a build around pinned picks - each slip stores their ids as built_around (s.pinned: [{id, label}] also accepted);
   // older stored slips have neither
   const pinnedIds = new Set([...(s.built_around || []), ...(s.pinned || []).map(x => x && x.id)].filter(Boolean));
@@ -3238,7 +3240,7 @@ function studioSlip(s) {
       <span class="small muted">${bookName(s.book)} · ${sizeWord(s.n)} entry · slip ${esc(s.slip_id.split("/").slice(1).join("/"))}</span></div>
     <div class="small studio-fb">${note ? `<b style="color:var(--warn)">Changed since it was built – not copied:</b><ul>${note.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
       ${cp ? `<span style="color:var(--good)">✓ Every line checked on ${bookName(s.book)} ${esc(cp.at)} – copied. Enter it in the app yourself; if anything looks different there, verify again.</span>
-        <textarea class="studio-copy" readonly aria-label="Slip text">${esc(cp.text)}</textarea>` : ""}</div></div>`;
+        <textarea class="studio-copy" readonly aria-label="Slip text">${esc(cp.text)}</textarea>` : ""}${opn && !note ? `<span style="color:var(--good)">✓ Every line checked on ${bookName(s.book)} ${esc(opn.at)} – opened in PrizePicks. Submit it there yourself; if anything looks different there, verify again.</span>` : ""}</div></div>`;
 }
 function studioRender() {
   const b = STUDIO.batch, last = STUDIO.last && b && STUDIO.last.batch_id === b.batch_id ? STUDIO.last : null;
@@ -3311,7 +3313,7 @@ async function studioBuild(newBatch, why, replace) {
     if (!replace && (status === 409 || status === 404)) { delete body.batch_id; ({status, d} = await studioCall("POST", "/api/slip_studio/build", body)); }   // batch closed in another tab
     if (status === 404 && d.error === "not found") { STUDIO.off = true; studioShow(); return; }
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
-    if (newBatch) { STUDIO.notes = {}; STUDIO.copied = {}; }
+    if (newBatch) { STUDIO.notes = {}; STUDIO.copied = {}; STUDIO.opened = {}; }
     STUDIO.last = d;
     const made = [4, 3, 2].map(n => [n, (d.slips[n] || []).length]).filter(x => x[1]);
     await studioLoad(); loadSlipHistory();
@@ -3334,6 +3336,9 @@ async function studioVerify(id, btn, open) {
         STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
         await copy(d.copy_text);
         studioCall("POST", "/api/slip_studio/event", {batch_id: d.batch_id, slip_id: id, kind: "copy", idem: rid()}).catch(() => {});
+      } else {                                  // PrizePicks: loaded into the member's lineup - recorded like a copy ('load')
+        STUDIO.opened[id] = {at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
+        studioCall("POST", "/api/slip_studio/event", {batch_id: d.batch_id, slip_id: id, kind: "load", idem: rid()}).catch(() => {});
       }
       pplGo(url, open);
       try { const sl = studioFind(id); if (sl) expoAdd("studio", expoLegsStudio(sl)); } catch {}
