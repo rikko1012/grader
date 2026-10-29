@@ -249,7 +249,8 @@ def test_scheduler_forward_job_is_gated_by_sports_forecast_alone_and_exclusive(m
 
 
 # ------------------------------------------------------------------------------------------- settlement scorecard
-def test_settle_scorecard_reads_only_settled_events_and_never_retrains(fworld, monkeypatch):
+@pytest.mark.parametrize("late", [False, True])
+def test_settle_scorecard_reads_only_settled_events_and_never_retrains(fworld, monkeypatch, late):
     from sports.contracts import Settlement
     scon, hcon, art, rid1 = fworld
     fwd.run(["nba"], forecast_at=AT, log=lambda *x: None)
@@ -261,20 +262,22 @@ def test_settle_scorecard_reads_only_settled_events_and_never_retrains(fworld, m
                     line=offer.line, event_id=offer.event_id, player_id=offer.player_id, stat="points",
                     status="win" if fc.chosen_side == "over" else "loss", outcome="over", source_value=20.0,
                     source="espn", source_ref="x", rule_version="test", settled_at="2026-02-01T04:00:00Z")
-    store.put(scon, st)
+    observed = "2026-04-01T04:00:00Z" if late else "2026-02-01T04:00:00Z"
+    checked = "2026-04-02T00:00:00Z" if late else "2026-02-02T00:00:00Z"
+    store.put(scon, st, known_at=observed)
     monkeypatch.setattr(learning, "retrain", lambda *a, **k: (_ for _ in ()).throw(AssertionError("retrain")))
     monkeypatch.setattr(forward, "fit", lambda *a, **k: (_ for _ in ()).throw(AssertionError("fit")))
     decoded = []
     real = store._rec
     monkeypatch.setattr(store, "_rec", lambda row: (decoded.append(1), real(row))[1])
-    r1 = learning.on_settled(scon, now="2026-02-02T00:00:00Z")
+    r1 = learning.on_settled(scon, now=checked)
     assert r1["scorecard_rows_added"] == 1 and r1["events_read"] == 1
     assert len(decoded) < 20, len(decoded)                     # this event's settlement + forecasts, not 5,000
-    assert learning.on_settled(scon, now="2026-02-02T00:00:00Z")["scorecard_rows_added"] == 0
+    assert learning.on_settled(scon, now=checked)["scorecard_rows_added"] == 0
     # a corrected settlement (new revision) supersedes the earlier scorecard row - once
     store.put(scon, replace(st, settlement_id="s2", revision=2, supersedes="s1", source_value=12.0, status="loss" if st.status == "win" else "win",
-                            outcome="under"))
-    assert learning.on_settled(scon, now="2026-02-02T00:00:00Z")["scorecard_rows_added"] == 1
+                            outcome="under"), known_at=observed)
+    assert learning.on_settled(scon, now=checked)["scorecard_rows_added"] == 1
     sc = learning.scorecard()
     assert sum(r["settled"] for r in sc if r["model_version"] == "sm-1") == 1
 
