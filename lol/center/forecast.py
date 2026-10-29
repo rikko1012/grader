@@ -18,6 +18,7 @@ import hashlib
 import math
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 from . import rules, settle, store
@@ -670,6 +671,23 @@ def _settle_code():
         return None
 
 
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def _ud_ids(r):
+    """Underdog's ids that open this line in Underdog (display only, never a forecast input): the market id from the
+    market key ("ud:<over_under_id>|<line_type>", a uuid or nothing), the match id (digits) and match type. Offers seen
+    since 2026-10-29 carry the match type in their event; an offer open before then whose state never changed has no new
+    event, so a missing type with a known match id is Underdog's "Game" (every LoL appearance seen; review 2026-10-29)."""
+    k = str(r.get("market_key") or "")
+    ou = k[3:].split("|")[0].lower() if k.startswith("ud:") else ""
+    m = str(r.get("match_source_id") or "")
+    mid = m if m.isdigit() and len(m) <= 12 else None
+    mt = r.get("ud_match_type") if isinstance(r.get("ud_match_type"), str) and r.get("ud_match_type") else None
+    return {"ud_over_under_id": ou if _UUID.fullmatch(ou) else None, "ud_match_id": mid,
+            "ud_match_type": mt if mt is not None else ("Game" if mid else None)}
+
+
 def board(con, now=None):
     """The admin board: every open LoL offer with its latest forecast (or why there is none), the match tables (identical
     markets side by side) and each forecast's card data. Also the settled forecasts of the last 3 days."""
@@ -679,7 +697,8 @@ def board(con, now=None):
     series = {r["sid"]: dict(r) for r in con.execute("SELECT * FROM c_series")}
     rows = []
     q = ("SELECT s.platform, s.market_key, s.last_seen AS checked_at, e.id AS event_id, e.observed_at, e.player, e.team, e.opponent, e.start_time, e.stat, e.scope, "
-         "e.stat_label, e.market_type, e.odds_type, e.line, e.line_id, e.sides, l.status AS link_status, l.reason AS link_reason, l.sid, l.pid, "
+         "e.stat_label, e.market_type, e.odds_type, e.line, e.line_id, e.match_source_id, json_extract(e.data, '$.extra.match_type') AS ud_match_type, "
+         "e.sides, l.status AS link_status, l.reason AS link_reason, l.sid, l.pid, "
          "l.tid, l.opp_tid, l.role FROM market_state s JOIN market_events e ON e.id = s.last_event_id LEFT JOIN market_links l ON "
          "l.platform = s.platform AND l.market_key = s.market_key WHERE s.open = 1 ORDER BY e.start_time, e.player")
     for r in con.execute(q).fetchall():
@@ -696,6 +715,7 @@ def board(con, now=None):
             "series_start": s.get("scheduled_utc") or r["start_time"], "stat": r["stat"], "scope": SCOPE_LABEL.get(SCOPE.get(r["scope"] or ""), r["stat_label"]),
             "stat_label": r["stat_label"], "market_type": r["market_type"], "odds_type": r["odds_type"], "line": r["line"],
             "line_id": r["line_id"],          # the platform's own id of the CURRENT offer (PrizePicks: the projection id)
+            **(_ud_ids(r) if r["platform"] == "underdog" else {}),
             "sides": json.loads(r["sides"] or "{}"), "quote_seen_at": r["observed_at"], "quote_checked_at": r["checked_at"],
             "link": {"status": r.get("link_status"), "reason": r.get("link_reason"), "sid": r.get("sid"), "pid": r.get("pid")},
             "forecast": None if not f else {

@@ -1527,7 +1527,14 @@ def studio_open_link(rec, feed):
     {"pp_reason"}; Underdog -> {"open_url": the pick'em home} (no pre-fill). No I/O: the feed is the one verify read."""
     book = rec.get("book") or "underdog"
     if book == "underdog":
-        return {"open_url": pplink.UD_HOME}
+        # each leg's own line (2026-10-29): its row id must still be a row of the feed verify read, at the same line
+        live = {str(r.get("id")): r for r in (feed or {}).get("rows") or [] if r.get("id")}
+        lk = []
+        for l in rec.get("legs") or []:
+            r = live.get(str(l.get("row_id")))
+            ok = r is not None and (l.get("book") or "underdog") == "underdog" and r.get("line") == l.get("line")
+            lk.append(ud_row_link(l.get("row_id")) if ok else None)
+        return dict({"open_url": pplink.UD_HOME}, **ud_legs_open(lk))
     if book != "prizepicks":
         return {}
     legs = rec.get("legs") or []
@@ -1541,6 +1548,156 @@ def studio_open_link(rec, feed):
                    "odds_type": r.get("odds_type") or l.get("market_type"), "book": "prizepicks"})
     url, why = pplink.pp_link(pl)
     return {"pp_url": url} if url else {"pp_reason": why}
+
+
+def ud_row_link(row_id):
+    """PP_OPEN_LINK: Underdog's link to the market screen of one CURRENT Underdog line (its line id = the board row id),
+    from the ids the last board read carried (underdog.ud_ids) - None when that line is not on the board now."""
+    t = underdog.ud_ids(row_id)
+    return pplink.ud_link(*t) if t else None
+
+
+def _ud_leg(leg, hit):
+    """One verified Underdog leg -> its line's link: the leg's own row (line id) when it is one the check matched, else
+    exactly one matched row; two that still fit = no link (never a guess)."""
+    if (hit or {}).get("book") != "underdog":
+        return None
+    ids = [str(r.get("id")) for r in hit.get("rows") or [] if r.get("id")]
+    own = str(leg.get("row_id") or "")
+    rid = own if own and own in ids else ids[0] if len(set(ids)) == 1 else None
+    return ud_row_link(rid) if rid else None
+
+
+def ud_legs_open(links):
+    """[link or None per leg] -> {"legs_open": links} when at least one leg has one, else {} (the answer stays as it was)."""
+    return {"legs_open": list(links)} if any(links) else {}
+
+
+def with_ud_links(payload):
+    """PP_OPEN_LINK: the Underdog board answer with each row's "ud_app_link" (rows are copied - the shared board, the
+    shadow logs and Studio records never carry it)."""
+    rows = []
+    for r in payload.get("rows") or []:
+        lk = ud_row_link(r.get("id")) if (r.get("book") or "underdog") == "underdog" else None
+        rows.append(dict(r, ud_app_link=lk) if lk else r)
+    return dict(payload, rows=rows)
+
+
+def _ud_live():
+    """The current Underdog feed rows by line id (cached board: no network I/O)."""
+    return {str(r.get("id")): r for r in (underdog.board().get("rows") or []) if r.get("id")}
+
+
+def tail_visible(rec, tail, live, now=None):
+    """PP_OPEN_LINK owner tail link of one Studio slip -> the url members may open, or None: an Underdog slip, the link
+    attached to exactly these lines (signature), still a valid share link, no leg's match started (the one lock rule), and
+    every leg still on Underdog's board at its line with its side offered."""
+    import ud_tails
+    from slip_builder import lock_time
+    if not rec or not tail or (rec.get("book") or "underdog") != "underdog" or (rec.get("status") or "live") != "live":
+        return None
+    if tail.get("sig") != ud_tails.leg_sig(rec) or pplink.tail_share_id(tail.get("url"))[0] != tail.get("url"):
+        return None
+    now = now or datetime.now(timezone.utc)
+    legs = rec.get("legs") or []
+    if not legs:
+        return None
+    for l in legs:
+        r = live.get(str(l.get("row_id")))
+        if r is None or r.get("line") != l.get("line") or _started(r.get("start"), now):
+            return None
+        lk = lock_time({"start": l.get("start"), "match_start": l.get("match_start")})
+        lk2 = lock_time({"start": r.get("start"), "match_start": (BOARD.get(str(r.get("id"))) or {}).get("match_start")})
+        if any(x is not None and x <= now for x in (lk, lk2)):
+            return None
+        if (r.get("over_available") if l.get("side") == "More" else r.get("under_available")) is False:
+            return None
+    return tail["url"]
+
+
+def studio_tail_annotate(b):
+    """PP_OPEN_LINK: a Studio batch answer with "tail_url" on each slip whose owner tail link is still showable."""
+    if not PP_OPEN_LINK or not b:
+        return b
+    import ud_tails
+    tails = ud_tails.all_tails()
+    mine = [s_ for xs in (b.get("slips") or {}).values() for s_ in xs or [] if s_.get("slip_id") in tails]
+    if mine:
+        live = _ud_live()
+        for s_ in mine:
+            u_ = tail_visible(s_, tails[s_["slip_id"]], live)
+            if u_:
+                s_["tail_url"] = u_
+    return b
+
+
+_TAIL_LEG = ("nick", "player", "side", "line", "prop", "scope", "market_type", "grade", "p", "team", "opponent", "start",
+             "match_start", "lock_at", "row_id", "book")
+
+
+def studio_tails_payload():
+    """Members: the owner's Underdog slips with a showable tail link (legs as stored, display fields only)."""
+    import slip_builder
+    import ud_tails
+    tails, out = ud_tails.all_tails(), []
+    live = _ud_live() if tails else {}
+    for sid_, t in sorted(tails.items(), key=lambda kv: kv[1].get("at") or "", reverse=True):
+        rec = slip_builder.get_slip(sid_)
+        if not rec or not rec.get("batch_id"):
+            continue
+        dead = slip_builder.slip_status(rec["batch_id"], sid_)
+        u_ = None if dead else tail_visible(rec, t, live)
+        if u_:
+            out.append({"slip_id": sid_, "book": "underdog", "n": len(rec.get("legs") or []), "all_hit": rec.get("all_hit"),
+                        "legs": [{k: l.get(k) for k in _TAIL_LEG} for l in rec.get("legs") or []], "tail_url": u_})
+    return {"slips": out}
+
+
+def admin_ud_tail(form):
+    """POST /admin/ud_tail (admin token): slip_id + url attaches an Underdog share link; clear=1 removes it."""
+    import slip_builder
+    import ud_tails
+    sid_ = str(form.get("slip_id") or "").strip()
+    if not _SLIP_RE.match(sid_):
+        return 400, {"error": "slip_id must be a stored Studio slip id"}
+    if form.get("clear") == "1":
+        return 200, {"ok": True, "removed": ud_tails.detach(sid_)}
+    rec = slip_builder.get_slip(sid_)
+    if not rec:
+        return 404, {"error": "unknown slip"}
+    ent, why = ud_tails.attach(rec, form.get("url"))
+    if not ent:
+        return 400, {"error": why}
+    return 200, {"ok": True, "slip_id": sid_, "share_id": ent["share_id"], "url": ent["url"],
+                 "showing": bool(tail_visible(dict(rec, status="live"), ent, _ud_live()))}
+
+
+def admin_ud_tails_page(token):
+    import html as _h
+    import ud_tails
+    rows = "".join(f"<tr><td>{_h.escape(k)}</td><td>{_h.escape(v.get('share_id') or '')}</td><td>{_h.escape(v.get('at') or '')}</td></tr>"
+                   for k, v in sorted(ud_tails.all_tails().items()))
+    t = _h.escape(token or "", quote=True)
+    leg_txt = lambda l: f"{l.get('nick') or l.get('player')} {'Higher' if l.get('side') == 'More' else 'Lower'} {l.get('line')}"
+    try:                                           # the newest Underdog Studio slips, so the owner can pick the id
+        import slip_builder
+        with slip_builder._db() as con:
+            rec_ = [json.loads(r[0]) for r in con.execute("SELECT record FROM slips ORDER BY created_at DESC LIMIT 40")]
+        recent = "".join(f"<tr><td><code>{_h.escape(r_.get('slip_id') or '')}</code></td>"
+                         f"<td>{_h.escape(' / '.join(leg_txt(l) for l in r_.get('legs') or []))}</td></tr>"
+                         for r_ in rec_ if (r_.get("book") or "underdog") == "underdog")
+    except Exception:
+        recent = ""
+    return ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Underdog tail links</title>"
+            "<body style='font-family:system-ui;max-width:760px;margin:20px auto;padding:0 16px'><h2>Underdog tail links</h2>"
+            "<p>Paste the share link of the Underdog entry you made for a Slip Studio slip. Members see &ldquo;Tail on Underdog&rdquo; on it "
+            "until any leg's match starts or a line on it changes.</p>"
+            f"<form method=post action='/admin/ud_tail'><input type=hidden name=token value='{t}'>"
+            "<p><label>Slip id <input name=slip_id required style='width:100%'></label></p>"
+            f"<p><label>Underdog share link <input name=url type=url maxlength={pplink.TAIL_MAX} style='width:100%'></label></p>"
+            "<p><label><input type=checkbox name=clear value=1> Remove the link from this slip</label></p><button>Save</button></form>"
+            f"<h3>Attached</h3><table border=1 cellpadding=4><tr><th>Slip</th><th>Share id</th><th>Attached</th></tr>{rows}</table>"
+            f"<h3>Newest Underdog Studio slips</h3><table border=1 cellpadding=4><tr><th>Slip id</th><th>Legs</th></tr>{recent}</table></body>")
 
 
 def slip_check(d, link=False):
@@ -1572,6 +1729,8 @@ def slip_check(d, link=False):
     for x in out:
         x.setdefault("reason", x["text"])
     res = {"ok": not out, "legs": [x["text"] for x in out], "problems": out}
+    if link and res["ok"] and d.get("book") == "underdog" and all(l.get("book") == "underdog" for l in legs):
+        res["ud_legs"] = [_ud_leg(l, h) for l, h in zip(legs, hits)]      # each line's own Underdog link (or None)
     if link and res["ok"]:
         # PP_OPEN_LINK: the PrizePicks lineup link of THIS checked slip (the ids of the feed rows each leg verified against)
         if d.get("book") != "prizepicks" or any(l.get("book") != "prizepicks" for l in legs):
@@ -1947,6 +2106,10 @@ def _lol_member_rebuild(path, mt):
                      "model_version": str(f.get("model") or "").split(" ")[0] or None, "factors": inp.get("factors"), "team_win": inp.get("team_win")})
         if PP_OPEN_LINK and x.get("platform") == "prizepicks":     # the PrizePicks projection id of the CURRENT offer (lineup link)
             rows[-1]["pp_projection_id"] = pplink.projection_id(x.get("line_id"))
+        if PP_OPEN_LINK and x.get("platform") == "underdog":       # Underdog's link to this line's market screen (2026-10-29)
+            lk_ = pplink.ud_link(x.get("ud_over_under_id"), x.get("ud_match_id"), x.get("ud_match_type"))
+            if lk_:
+                rows[-1]["ud_app_link"] = lk_
     tables = []
     for t in b.get("match_tables") or []:
         mk = [m for m in (t.get("markets") or {}).values() if m.get("market_type") == "single"]
@@ -3979,14 +4142,16 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
             if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines", "/api/veto",
-                          "/api/slip_studio/batch", "/api/slip_studio/capacity", "/api/slip_studio/history", "/api/results") and not self.allowed():
+                          "/api/slip_studio/batch", "/api/slip_studio/capacity", "/api/slip_studio/history", "/api/slip_studio/tails",
+                          "/api/results") and not self.allowed():
                 sess = self.member()
                 return self.send(401, {"error": "members_only", "signed_in": bool(sess),
                                        "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
             if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/slip_studio/batch",
-                                                             "/api/slip_studio/capacity", "/api/slip_studio/history", "/api/results"):
+                                                             "/api/slip_studio/capacity", "/api/slip_studio/history",
+                                                             "/api/slip_studio/tails", "/api/results"):
                 LAST_MEMBER[0] = time.time()      # research reads are cheap: they don't make the board worker step aside
             if u.path == "/api/moneylines":
                 return self.moneylines()
@@ -3996,6 +4161,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.studio_history()
             if u.path == "/api/slip_studio/capacity":
                 return self.studio_capacity(q)
+            if u.path == "/api/slip_studio/tails":       # PP_OPEN_LINK: the owner's Underdog slips members can tail
+                if not (PP_OPEN_LINK and SLIP_STUDIO):
+                    return self.send(404, {"error": "not found"})
+                if not self.studio_member():
+                    return self.send(401, {"error": "members_only"})
+                st_, body_ = shared(("ud_tails",), lambda: (200, json.dumps(studio_tails_payload(), default=str).encode()), ttl=5)
+                return self.send_shared(("ud_tails",), st_, body_, keep=5)
             if u.path == "/api/veto":                    # map veto panel of one match (Matchroom): a stored answer, no compute
                 mid_ = (q.get("match") or "")[:40]
                 if not re.fullmatch(r"hltv:\d{1,9}", mid_):
@@ -4051,7 +4223,8 @@ class Handler(BaseHTTPRequestHandler):
                 # one build + encoding shared by every member for BOARD_TTL s (2026-10-13 load test: 700 members at once
                 # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
-                st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(board_payload(bk_), default=str).encode()), ttl=BOARD_TTL)
+                st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(with_ud_links(board_payload(bk_)) if PP_OPEN_LINK and bk_ == "underdog"
+                                                                     else board_payload(bk_), default=str).encode()), ttl=BOARD_TTL)
                 return self.send_shared(("board", bk_), st_, body_)
             if u.path == "/admin":
                 return self.admin(q)
@@ -4083,6 +4256,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(*ml_store.admin_lookup(q))
             if u.path == "/admin/ml_eval" and self.authed(q.get("token")):
                 return self.send(200, ml_eval_admin(q.get("refresh") == "1"))
+            if u.path == "/admin/ud_tails" and PP_OPEN_LINK and self.authed(q.get("token")):
+                return self.send(200, admin_ud_tails_page(q.get("token")).encode(), "text/html; charset=utf-8",
+                                 {"Cache-Control": "no-store"})
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
                 return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR), "hltv_roles": roles.hltv_status(),
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
@@ -4819,7 +4995,7 @@ class Handler(BaseHTTPRequestHandler):
         b = slip_builder.get_batch(bid or cur)
         if b is None:
             return self.send(404, {"error": "unknown batch"})
-        return self.send(200, dict(b, current=(b["batch_id"] == cur), settled_batches=settled_batches(),
+        return self.send(200, dict(studio_tail_annotate(b), current=(b["batch_id"] == cur), settled_batches=settled_batches(),
                                    track_record=studio_track_record(), builder_version=slip_builder.VERSION))
 
     def studio_history(self):
@@ -5084,6 +5260,8 @@ class Handler(BaseHTTPRequestHandler):
             outage = grade_transient(res.get("grade") or {})        # HLTV or Thunderpick blip (owner 2026-10-13)
             try:
                 res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
+                if PP_OPEN_LINK and res["underdog"] and ud_row_link(res["underdog"].get("id")):   # a copy: never the board's row
+                    res["underdog"] = dict(res["underdog"], ud_app_link=ud_row_link(res["underdog"].get("id")))
             except Exception:
                 res["underdog"] = None
             try:                                         # comparison panel: context only, never changes the grade
@@ -5271,7 +5449,9 @@ class Handler(BaseHTTPRequestHandler):
             # PP_OPEN_LINK: "open": "prizepicks" asks for the lineup link of this checked slip (built only after the same
             # check); with the flag off the field is ignored and the answer is exactly the copy answer
             want = d.get("open") if PP_OPEN_LINK and d.get("open") in ("prizepicks", "underdog") else None
-            v = slip_check(d, link=want == "prizepicks")
+            # an Underdog slip (copy or open, flag on) also gets each line's own Underdog link after the same check
+            udl = PP_OPEN_LINK and d.get("book") == "underdog"
+            v = slip_check(d, link=want == "prizepicks" or udl)
             if not v["ok"]:                            # rejected on the server: not copied, nothing logged
                 return self.send(409, {"ok": False, "error": "slip_has_unavailable_legs", "legs": v["legs"], "problems": v["problems"]})
             extra = {}
@@ -5284,6 +5464,8 @@ class Handler(BaseHTTPRequestHandler):
                 if d.get("book") != "underdog":
                     return self.send(409, {"ok": False, "error": "not_underdog", "legs": ["Only Underdog slips open Underdog"], "problems": []})
                 extra = {"open_url": pplink.UD_HOME}
+            if udl:
+                extra.update(ud_legs_open(v.get("ud_legs") or []))
             try:
                 new = slips.log_loaded(d)
             except ValueError:
@@ -5291,6 +5473,11 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:                          # the log file failed: the slip itself is valid - still copied
                 return self.send(200, {"ok": True, "logged": False, **extra})
             return self.send(200, {"ok": True, "duplicate": not new, **extra})
+        if u.path == "/admin/ud_tail":                # PP_OPEN_LINK owner tail link (admin token only)
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace")).items()}
+            if not PP_OPEN_LINK or not self.authed(form.get("token")):
+                return self.send(403, {"error": "forbidden"})
+            return self.send(*admin_ud_tail(form))
         form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
         if u.path != "/admin/closing" or not self.authed(form.get("token")):
             return self.send(403, {"error": "forbidden"})

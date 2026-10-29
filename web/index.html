@@ -395,6 +395,7 @@ body.locked #slip,body.locked.hasslip #slip{display:none!important}body.locked.h
 .lpin{background:none;border:1px solid var(--line-2);color:var(--muted);border-radius:99px;padding:4px 9px;font:600 11.5px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
 .lpin:hover{color:var(--accent-2);border-color:var(--accent)}.swapb{display:block;margin-top:8px;font-size:12.5px;text-align:left;white-space:normal;max-width:100%;height:auto}
 @media(max-width:760px){.lpin{padding:3px 7px;font-size:11px}}
+a.udopen{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .slipfoot{display:none}
 @media (max-width:1179px){.slip .slipfoot{display:flex;position:sticky;bottom:-22px;margin:14px -22px -22px;padding:12px 22px;background:#111923;border-top:1px solid var(--line-2);
   align-items:center;justify-content:space-between;gap:10px;font-size:14px;z-index:2}.slip .slipfoot .go{padding:9px 18px;min-height:40px}}
@@ -1256,6 +1257,61 @@ function pplButton(s, plat) {
   if (plat === "prizepicks" && !s.every(x => /^pp:[0-9]{1,15}$/.test(String(x.rid || "")))) return "";   // every projection id known
   return `<button type="button" class="chipbtn" data-slipopen="${plat}">${PPL_WORD[plat]}</button>`;
 }
+// ---- Underdog line links (2026-10-29, the same PP_OPEN_LINK switch): Underdog's own OneLink opens ONE line's market
+// screen in the Underdog app (owner-verified on a phone); on a PC it lands on that match's Underdog board. Underdog has
+// no pre-fill - the member taps Higher / Lower there and submits. The SERVER builds every link from Underdog's public
+// board ids (pplink.ud_link); the page draws only that exact pattern (udLink is its twin, for the tests).
+const UDL = {onelink: "https://underdogfantasy.onelink.me/vgwg?af_force_deeplink=true&af_dp=", legs: {}, sig: ""};
+const UD_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UD_LINK_RE = /^https:\/\/underdogfantasy\.onelink\.me\/vgwg\?af_force_deeplink=true&af_dp=underdogfantasy%3A%2F%2Fmarket-details%2F[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(&af_web_dp=https%3A%2F%2Fapp\.underdogsports\.com%2Fpick-em%2Fhigher-lower%2Fall%2Ffeatured%3Fmatch_id%3D[0-9]{1,12}%26match_type%3DGame)?$/;
+function udLink(ou, mid, mtype) {
+  const id = typeof ou === "string" ? ou.trim().toLowerCase() : "";
+  if (!UD_UUID.test(id)) return null;
+  const url = UDL.onelink + encodeURIComponent("underdogfantasy://market-details/" + id);
+  const m = typeof mid === "number" && Number.isInteger(mid) ? String(mid) : typeof mid === "string" ? mid : "";
+  return /^[0-9]{1,12}$/.test(m) && mtype === "Game"
+    ? url + "&af_web_dp=" + encodeURIComponent(`https://app.underdogsports.com/pick-em/higher-lower/all/featured?match_id=${m}&match_type=${mtype}`) : url;
+}
+const udLinkOk = u => typeof u === "string" && UD_LINK_RE.test(u);
+// an owner tail link (an Underdog entry's share link, attached on the server): the same strict rule as pplink.tail_share_id
+// 2026-10-29 review: only the server's REBUILT canonical forms (host, plain path, the share id key) - no other query key
+const UD_TAIL_RES = [
+  /^https:\/\/underdogfantasy\.onelink\.me\/[A-Za-z0-9]{2,12}\?deep_link_value=entry_slip&deep_link_sub1=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  /^https:\/\/(app|play)\.underdogsports\.com(\/[A-Za-z0-9_-]{1,64}){0,8}\/?\?entrySlipShareId=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  /^https:\/\/(app|play)\.underdogsports\.com(\/[A-Za-z0-9_-]{1,64}){0,8}\/?\?deep_link_value=entry_slip&deep_link_sub1=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  /^https:\/\/play\.underdogsports\.com(\/[A-Za-z0-9_-]{1,64}){0,7}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/];
+const udTailOk = u => typeof u === "string" && u.length <= 600 && UD_TAIL_RES.some(re => re.test(u));
+const udA = (url, label, cls) => `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" data-udopen="1">${label}</a>`;
+const udLegKey = x => [legKey(x), x.l, x.s, x.rid || ""].join("|");
+// a checked Underdog slip: the server's per-leg links (one per leg, in leg order); anything else clears them
+// 2026-10-29 review: the links belong to the exact slip that was checked (UDL.sig) and to legs still verified / stale -
+// a later page refusal, an added / removed leg or a changed line draws none
+const udSlipSig = s => (Array.isArray(s) ? s : []).map(udLegKey).join("|~|");
+function udKeep(s, links) {
+  UDL.legs = {}; UDL.sig = "";
+  if (PPL.on && Array.isArray(links) && links.length === s.length && slipBook(s) === "underdog") {
+    s.forEach((x, i) => { if (udLinkOk(links[i])) UDL.legs[udLegKey(x)] = links[i]; });
+    UDL.sig = udSlipSig(s);
+  }
+  try { drawSlip(); } catch {}
+}
+function udLegOpen(x, st) {
+  if (!PPL.on || x.bk !== "underdog" || st || !UDL.sig || !["verified", "stale"].includes(x.now?.status)) return "";
+  let cur = ""; try { cur = udSlipSig(store.get("cs2s_slip", [])); } catch {}
+  const u = cur === UDL.sig ? UDL.legs[udLegKey(x)] : null;
+  return udLinkOk(u) ? udA(u, "Open", "lpin udopen") : "";
+}
+// a card / board row of an Underdog line: its own link (the board row's, or the card's Underdog line when it is this line)
+function udRowLink(r) {
+  return PPL.on && (r.book || "underdog") === "underdog" && udLinkOk(r.ud_app_link) ? udA(r.ud_app_link, "Open in Underdog", "bslip udopen") : "";
+}
+function udCardLink(d) {
+  if (!PPL.on || (d.book || "underdog") !== "underdog") return "";   // a PrizePicks card never links to Underdog (2026-10-29 review)
+  const u = d.underdog, g = d.grade || {};
+  const url = udLinkOk(d.ud_app_link) ? d.ud_app_link
+    : u && !u.alt && (u.scope || "12") === "12" && (g.scope || "12") === "12" && (g.line_type || "standard") === "standard" && u.line != null && +u.line === +g.line ? u.ud_app_link : null;
+  return udLinkOk(url) ? udA(url, "Open in Underdog", "chipbtn udopen") : "";
+}
 function setProp(v) { prop = v; [...$("#prop").children].forEach(x => x.classList.toggle("on", x.dataset.v === v)); store.set("cs2s_prop", v); }
 setProp(store.get("cs2s_prop", "kills"));
 $("#lt").value = store.get("cs2s_lt", "standard");
@@ -1853,7 +1909,7 @@ function legRow(x, i, pins) {
                 x.vs ? "vs " + esc(x.vs) : "", st ? "" : legStartTxt(x)].filter(Boolean).join(" · ");
   return `<div class="leg${st ? " started" : ""}"><span><b>${esc(x.p)}</b> ${lean ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x, i)}
       <span class="lmeta muted small">${meta}</span></span>
-      ${pins && x.rid && x.bk && !st ? `<button type="button" class="lpin" data-pinleg="${i}" title="Build Studio slips around this pick">Build around</button>` : ""}
+      ${pins && x.rid && x.bk && !st ? `<button type="button" class="lpin" data-pinleg="${i}" title="Build Studio slips around this pick">Build around</button>` : ""}${udLegOpen(x, st)}
       <button type="button" class="x" data-rmleg="${i}" title="Remove" aria-label="Remove ${esc(x.p)}">✕</button></div>`;
 }
 function slipHtml(s, where) {
@@ -1981,6 +2037,7 @@ async function shareSlip() {
 }
 $("#slipbtn").onclick = () => { $("#slip").hidden ? openSlip() : ($("#slip").hidden = true); };
 function slipClick(e) {
+  if (e.target.closest("[data-udopen]")) return;            // an Underdog line link: the browser opens it
   const rm = e.target.closest("[data-rmleg]");
   if (rm) { const s = store.get("cs2s_slip", []); s.splice(+rm.dataset.rmleg, 1); store.set("cs2s_slip", s); return drawSlip(); }
   if (e.target.closest("#slipclear") || e.target.closest("[data-slipclear]")) { store.set("cs2s_slip", []); return drawSlip(); }
@@ -1992,6 +2049,7 @@ function slipClick(e) {
   const op = PPL.on ? e.target.closest("[data-slipopen]") : null;
   const act = e.target.closest("#slipcopy") || e.target.closest("[data-slipcopy]") ? "copy" : op && PPL_WORD[op.dataset.slipopen] ? op.dataset.slipopen : null;
   if (act) (async () => {
+    if (PPL.on) { UDL.legs = {}; UDL.sig = ""; }   // only the check that passes now draws per-leg links (2026-10-29 review)
     const s = await recheckSlip();
     if (new Set(s.map(x => x.bk).filter(Boolean)).size > 1) {
       await ask("One platform per slip", "These picks are on different platforms – remove the picks of one of them to copy this slip.", [{k: "review", label: "Review slip", primary: true}]);
@@ -2049,22 +2107,26 @@ function slipClick(e) {
       const w = act !== slipBook(s) || !s.every(x => x.bk === act) ? {ok: false, reasons: [`Only ${bookName(act)} slips open ${bookName(act)}`]} : await serverSlipCheck(s, act);
       const url = w.ok ? (act === "prizepicks" ? w.pp_url : w.open_url) : null;
       if (!w.ok || !pplOk(url, act)) {
+        if (PPL.on) udKeep(s, null);   // a refused check: no line links
         toast("Not opened", 2500);
         await ask("Not opened", (w.ok ? [SLIP_RETRY] : w.reasons).map(t => `<div>• ${esc(t)}</div>`).join(""), [{k: "review", label: "Review slip", primary: true}]);
         return;
       }
       if (act === "underdog") await copy(text);  // Underdog has no pre-filled entry: the picks go on the clipboard
       pplGo(url, act);
+      if (act === "underdog") udKeep(s, w.legs_open);   // each leg's own line link, in the leg list
       try { expoAdd("slip", expoLegsManual(s)); } catch {}
       return;
     }
     const v = await serverSlipCheck(s);
     if (!v.ok) {
+      if (PPL.on) udKeep(s, null);     // a refused check: no line links
       toast("Not copied", 2500);
       await ask("Not copied", v.reasons.map(t => `<div>• ${esc(t)}</div>`).join(""), [{k: "review", label: "Review slip", primary: true}]);
       return;
     }
     await copy(text);
+    if (PPL.on && slipBook(s) === "underdog") udKeep(s, v.legs_open);
     try { expoAdd("slip", expoLegsManual(s)); } catch {}
   })();
 }
@@ -2090,7 +2152,10 @@ async function serverSlipCheck(s, open) {
   try {
     const r = await Promise.race([fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body: slipLogBody(s, open), ...(ac ? {signal: ac.signal} : {})}), late]);
     let d = null; try { d = await Promise.race([r.json(), late]); } catch {}
-    if (r && r.status === 200 && d && d.ok === true) return open ? {ok: true, pp_url: d.pp_url, open_url: d.open_url} : {ok: true};
+    if (r && r.status === 200 && d && d.ok === true) {
+      const lo = PPL.on && Array.isArray(d.legs_open) ? {legs_open: d.legs_open} : {};
+      return open ? {ok: true, pp_url: d.pp_url, open_url: d.open_url, ...lo} : {ok: true, ...lo};
+    }
     if (r && r.status === 409 && d && Array.isArray(d.legs) && d.legs.length) return {ok: false, reasons: d.legs.map(String)};
     if (r && r.status === 429) return {ok: false, reasons: ["Too many copies in a minute - wait a moment and try again"]};
     return {ok: false, reasons: [SLIP_RETRY]};
@@ -2290,7 +2355,7 @@ function boardCard(r) {     // a board row in the shape addToSlip / pickLine exp
                     kept_from_board: !!r.hltv_retry, stale: !!r.hltv_retry, graded_at: r.graded_at, lock_at: lockIso(r) || null,
                     side_unavailable: r.unavailable || null},
           player_block: {player: {nick: r.nick || r.player, id: r.player_id}, current_team: r.team_name || r.team},
-          next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug || r.settle_slug}, match_start: r.match_start || "", from: "board", row_id: r.id || ""};
+          next_match: {opponent: r.opp_name || r.opponent, start: r.start, slug: r.match_slug || r.settle_slug}, match_start: r.match_start || "", from: "board", row_id: r.id || "", ...(PPL.on && udLinkOk(r.ud_app_link) ? {ud_app_link: r.ud_app_link} : {})};
 }
 const agoTxt = t => { if (!t) return ""; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : Math.round(m / 60) + " h ago"; };
 const DSTAT = {ok: ["ok", "Data complete"], limited: ["mid", "Limited history"]};
@@ -2519,7 +2584,7 @@ function drawBoard() {
       <div class="c-num"><span class="k">Proj</span>${r.proj != null ? num(r.proj, 1) : "–"}</div>
       <div class="c-pick b2pick">${pick}</div>
       <div class="c-stake">${stake}</div>
-      <div class="c-act">${whyB}${ctBtnRow(r)}${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
+      <div class="c-act">${whyB}${ctBtnRow(r)}${udRowLink(r)}${!r.side ? "<span></span>" : gone ? `<button type="button" class="bslip" disabled title="${esc(gone)}">Unavailable</button>` : r.state === "SCOUT" ? `<button type="button" class="bslip" disabled title="No upcoming match found for his team – there is nothing to enter on a slip yet">+ Slip</button>`
         : `<button type="button" class="bslip ${onSlip.has(slipKeyRow(r)) ? "on" : ""}" data-bslip="${esc(bslipKey(r))}">${onSlip.has(slipKeyRow(r)) ? "On slip" : "+ Slip"}</button>`}</div>
       ${meta ? `<div class="c-meta muted">${meta}</div>` : ""}${wOpen && r.side ? `<div class="c-why">${whyHtml(r)}</div>` : ""}
     </div>`; };
@@ -2578,6 +2643,7 @@ function boardClick(e) {
   if (e.target.closest(".c-why")) return;            // reading the Why panel never opens the card
   const st = e.target.closest("[data-bstar]");
   if (st) { e.stopPropagation(); toggleWatch(st.dataset.bstar); return drawBoard(); }
+  if (e.target.closest("[data-udopen]")) { e.stopPropagation(); return; }   // an Underdog line link: opens, never the card
   const cx = e.target.closest("[data-bcmp]");
   if (cx) { e.stopPropagation(); const r = boardRows.find(x => bslipKey(x) === cx.dataset.bcmp); if (r) ctToggle(r, "board"); return; }
   const b = e.target.closest("[data-bslip]");
@@ -3218,12 +3284,12 @@ function studioChance(s) {
   return `<span>Est. chance all ${s.n} hit${conditional ? " if none push" : ""} <b>${pct(s.all_hit)}</b></span> `
     + `<span class="muted small">${basis} multiplied; picks treated as independent${conditional ? "; pushes can reduce or void the entry" : ""}${maps}</span>`;
 }
-function studioLeg(l) {
+function studioLeg(l, link) {
   const mt = l.market_type && l.market_type !== "standard" ? ` <span class="pill" style="margin:0;padding:1px 7px">${esc(l.market_type)}</span>` : "";
   const pin = l.row_id && (l._pinned || (STUDIO.pins || []).some(x => x.id === l.row_id)) ? ` <span class="pill pinned" style="margin:0;padding:1px 7px">build around</span>` : "";
   return `<div class="lg"><span><span class="gtag ${gClass(l.grade)}" style="font-size:11px;padding:1px 6px">${esc(l.grade)}</span> <b>${esc(l.nick || l.player)}</b>
       ${l.side === "More" ? "Over" : "Under"} ${esc(l.line)} ${propWord(l.prop)}${mapsWord(l.scope)}${mt}${pin}</span>
-    <span class="m">${chance(l.p, l.prop)} · ${esc(l.team_name || l.team || "")} vs ${esc(l.opp_name || l.opponent || "")} · ${esc(shortWhen(l.start).split(" · ")[0])}</span></div>`;
+    <span class="m">${chance(l.p, l.prop)} · ${esc(l.team_name || l.team || "")} vs ${esc(l.opp_name || l.opponent || "")} · ${esc(shortWhen(l.start).split(" · ")[0])}${PPL.on && udLinkOk(link) ? " " + udA(link, "Open", "lpin udopen") : ""}</span></div>`;
 }
 function studioSlip(s) {
   if (s.status && s.status !== "live") return `<div class="aslip changed"><div class="small muted"><b style="color:var(--warn)">${s.status === "replaced" ? "Replaced" : s.status === "changed" ? "Changed – not for copying" : "Dismissed"}</b>
@@ -3232,11 +3298,12 @@ function studioSlip(s) {
   // studio-4: a build around pinned picks - each slip stores their ids as built_around (s.pinned: [{id, label}] also accepted);
   // older stored slips have neither
   const pinnedIds = new Set([...(s.built_around || []), ...(s.pinned || []).map(x => x && x.id)].filter(Boolean));
-  return `<div class="aslip${note ? " changed" : ""}">${s.legs.map(l => studioLeg(pinnedIds.has(l.row_id) ? Object.assign({}, l, {_pinned: 1}) : l)).join("")}
+  const udl = PPL.on && s.book === "underdog" && !note && !started ? (STUDIO.udlegs || {})[s.slip_id] || [] : [];
+  return `<div class="aslip${note ? " changed" : ""}">${s.legs.map((l, i) => studioLeg(pinnedIds.has(l.row_id) ? Object.assign({}, l, {_pinned: 1}) : l, legStarted(l) ? null : udl[i])).join("")}
     <div class="nums">${studioChance(s)}
       ${(s.repeats || []).length ? `<span class="pill reuse" title="${esc(s.repeats.join("; "))}" data-tip="${esc(s.repeats.join("; "))}" tabindex="0">${s.repeats.length} pick${s.repeats.length === 1 ? "" : "s"} reused</span>` : ""}</div>
     <div class="studio-actions"><button type="button" class="bslip" data-verify="${esc(s.slip_id)}"${started || note ? " disabled" : ""}>${note ? "Changed – not for copying" : started ? "Started – locked" : "Verify & copy"}</button>
-      ${PPL.on && PPL_WORD[s.book] && !started && !note ? `<button type="button" class="chipbtn" data-studioopen="${esc(s.slip_id)}">${PPL_WORD[s.book]}</button>` : ""}<button type="button" class="chipbtn" data-tomy="${esc(s.slip_id)}"${started || note ? " disabled" : ""} title="Puts these picks on your slip – each line is checked on ${bookName(s.book)}">Send to my slip</button>
+      ${PPL.on && PPL_WORD[s.book] && !started && !note ? `<button type="button" class="chipbtn" data-studioopen="${esc(s.slip_id)}">${PPL_WORD[s.book]}</button>` : ""}${PPL.on && s.book === "underdog" && !started && !note && udTailOk(s.tail_url) ? udA(s.tail_url, "Tail on Underdog", "chipbtn udopen") : ""}<button type="button" class="chipbtn" data-tomy="${esc(s.slip_id)}"${started || note ? " disabled" : ""} title="Puts these picks on your slip – each line is checked on ${bookName(s.book)}">Send to my slip</button>
       <span class="small muted">${bookName(s.book)} · ${sizeWord(s.n)} entry · slip ${esc(s.slip_id.split("/").slice(1).join("/"))}</span></div>
     <div class="small studio-fb">${note ? `<b style="color:var(--warn)">Changed since it was built – not copied:</b><ul>${note.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
       ${cp ? `<span style="color:var(--good)">✓ Every line checked on ${bookName(s.book)} ${esc(cp.at)} – copied. Enter it in the app yourself; if anything looks different there, verify again.</span>
@@ -3284,15 +3351,29 @@ function studioRender() {
   // 2026-10-21 UI review 10: the warning heading only when a size was short; otherwise eligibility is a plain note
   const msg = short ? `<div class="studio-exp" style="border-color:#f5c54240"><b>${slips.length ? "Couldn't fill every size" : "No slips from this build"}</b>${short}${elig}${excl}</div>`
     : elig || excl ? `<div class="studio-note">${elig}${excl}</div>` : "";
-  $("#st-out").innerHTML = plo + msg + exp + (slips.length ? bySize : msg ? "" : `<div class="small muted">No slips yet – choose your settings and press Build.</div>`)
+  $("#st-out").innerHTML = (PPL.on ? studioTailsHtml() : "") + plo + msg + exp + (slips.length ? bySize : msg ? "" : `<div class="small muted">No slips yet – choose your settings and press Build.</div>`)
     + `<div class="small muted" style="margin-top:6px">Each slip's chance is the model's estimate, not a measured hit rate.</div>`
     + `<details class="small muted" style="margin-top:8px"><summary>How the studio works</summary>
       ${(b.settings || studioCfg()).fill === "small" ? "Smaller slips are planned first (your Fill first choice), so 4-picks only get the picks that are left." : "Slip sizes are planned largest first, so 2-pick suggestions can't use up the picks a 4-pick needs."} Each slip takes the strongest eligible picks the batch rules allow:
       one pick per match, player and team in a slip, and – across the whole batch, every Build until you start a new batch – fresh players, props and matches first; with Repeats “When needed” the least-used picks are used again only to reach your count (never the same slip twice, never both sides of one player's stat). "Verify & copy" re-checks every line on the platform and against the current grade first; any change means a rebuild, never an old chance on a new line.
       The all-hit chance multiplies saved outcome probabilities, which assumes the picks are independent. Older slips without push probabilities are labelled conditional on no pushes. No payouts or returns are assumed. Builder ${esc(b.builder_version || "")}.</details>`;
 }
+// PP_OPEN_LINK: Underdog slips the owner entered and shared (members tail them in Underdog; hidden by the server once a
+// match starts or a line changes)
+function studioTailsHtml() {
+  const xs = (STUDIO.tails || []).filter(s => s && s.book === "underdog" && udTailOk(s.tail_url) && Array.isArray(s.legs) && !s.legs.some(l => legStarted(l)));
+  if (!xs.length) return "";
+  return `<div class="studio-exp"><b>Tail the owner's Underdog slips</b>${xs.map(s => `<div class="aslip">${s.legs.map(l => studioLeg(l)).join("")}
+    <div class="studio-actions">${udA(s.tail_url, "Tail on Underdog", "chipbtn udopen")}<span class="small muted">Underdog · ${esc(sizeWord(s.n))} entry · check every line in Underdog before you submit</span></div></div>`).join("")}</div>`;
+}
+async function studioTails() {
+  if (!PPL.on) return;
+  try { const {status, d} = await studioCall("GET", "/api/slip_studio/tails");
+    STUDIO.tails = status === 200 && d && Array.isArray(d.slips) ? d.slips : []; } catch { STUDIO.tails = []; }
+}
 async function studioLoad() {
   try {
+    if (PPL.on) await studioTails();
     const {status, d} = await studioCall("GET", "/api/slip_studio/batch");
     if (status === 404 && d.error === "slip_studio_off") { STUDIO.off = true; studioShow(); return; }
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
@@ -3326,12 +3407,22 @@ async function studioBuild(newBatch, why, replace) {
 async function studioVerify(id, btn, open) {
   const lab0 = btn.textContent;
   btn.disabled = true; btn.textContent = "Checking every line…";
+  // each Underdog leg's own line link comes only from THIS verify's OK (2026-10-29 review: a throw / 429 / refusal / a
+  // link that fails its check leaves none from an earlier verify)
+  const udHad = PPL.on && !!(STUDIO.udlegs || {})[id];
+  if (PPL.on) { STUDIO.udlegs = STUDIO.udlegs || {}; delete STUDIO.udlegs[id]; }
   try {
     const {status, d} = await studioCall("POST", "/api/slip_studio/verify", {slip: id, idem: rid()});
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
+    const udl = PPL.on && d.ok && d.book === "underdog" && Array.isArray(d.legs_open) ? d.legs_open.map(u => udLinkOk(u) ? u : null) : null;
     if (d.ok && open) {                        // PP_OPEN_LINK: the server's verify passed - open only its own link
       const url = d.book === "prizepicks" ? d.pp_url : d.book === "underdog" ? d.open_url : null;
-      if (d.book !== open || !pplOk(url, open)) { btn.disabled = false; btn.textContent = lab0; toast(`Not opened – ${d.pp_reason || SLIP_RETRY}`, 3500); return; }
+      if (d.book !== open || !pplOk(url, open)) {
+        toast(`Not opened – ${d.pp_reason || SLIP_RETRY}`, 3500);
+        if (udHad) return studioRender();
+        btn.disabled = false; btn.textContent = lab0; return;
+      }
+      if (udl) STUDIO.udlegs[id] = udl;
       if (open === "underdog") {                // no pre-filled Underdog entry: the slip text goes on the clipboard
         STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
         await copy(d.copy_text);
@@ -3345,6 +3436,7 @@ async function studioVerify(id, btn, open) {
       return studioRender();
     }
     if (d.ok) {
+      if (udl) STUDIO.udlegs[id] = udl;
       STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
       await copy(d.copy_text);
       try { const sl = studioFind(id); if (sl) expoAdd("studio", expoLegsStudio(sl)); } catch {}
@@ -3360,7 +3452,11 @@ async function studioVerify(id, btn, open) {
     }
     studioRender();
     return studioBuild(false, "A line changed – replacing this slip from the current board…", id);
-  } catch (e) { btn.disabled = false; btn.textContent = open ? lab0 : "Verify & copy"; toast(`Couldn't verify (${e.message})`); }
+  } catch (e) {
+    toast(`Couldn't verify (${e.message})`);
+    if (udHad) return studioRender();          // the earlier verify's leg links go with this failure
+    btn.disabled = false; btn.textContent = open ? lab0 : "Verify & copy";
+  }
 }
 const studioFind = id => { const b = STUDIO.batch; return b ? [4, 3, 2].flatMap(n => (b.slips || {})[n] || []).find(x => x.slip_id === id) || null : null; };
 // U2: a Studio slip's legs (their saved pick records) become manual-slip legs through the usual add path - one line check per
@@ -3422,6 +3518,7 @@ $("#studio").addEventListener("click", e => {
   if (e.target.closest("#st-build")) return studioBuild(false);
   if (e.target.closest("#st-new")) return studioBuild(true);
   const v = e.target.closest("[data-verify]"); if (v) return studioVerify(v.dataset.verify, v);
+  if (e.target.closest("[data-udopen]")) return;            // an Underdog link: the browser opens it
   const sop = PPL.on ? e.target.closest("[data-studioopen]") : null;
   if (sop) { const sl = studioFind(sop.dataset.studioopen); if (sl && PPL_WORD[sl.book]) return studioVerify(sop.dataset.studioopen, sop, sl.book); }
   const tm = e.target.closest("[data-tomy]"); if (tm) return studioToMySlip(tm.dataset.tomy);
@@ -3717,7 +3814,7 @@ function render(d) {
   // an outage card with the board's saved grade: it can go on a slip (marked stale there, never verified) or be copied
   if (g.withheld && v.side && !sideGone(v)) h += `<div class="actions"><button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button><button type="button" class="chipbtn" data-act="copy">Copy pick</button>
     <button type="button" class="chipbtn" data-act="link">Copy link</button><button type="button" class="chipbtn" data-act="compare">⇄ Compare</button></div>`;
-  if ("p_more" in g) h += `<div class="actions">${sideGone(v) ? `<span title="${esc(sideGone(v))}"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : v.state === "SCOUT" ? `<span title="No upcoming match found for his team – there is nothing to enter on a slip yet"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : `<button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button>`}<button type="button" class="chipbtn" data-act="copy">Copy pick</button>
+  if ("p_more" in g) h += `<div class="actions">${sideGone(v) ? `<span title="${esc(sideGone(v))}"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : v.state === "SCOUT" ? `<span title="No upcoming match found for his team – there is nothing to enter on a slip yet"><button type="button" class="chipbtn" disabled>+ Add to slip</button></span>` : `<button type="button" class="chipbtn" data-act="slip" style="border-color:var(--accent)">+ Add to slip</button>`}<button type="button" class="chipbtn" data-act="copy">Copy pick</button>${udCardLink(d)}
     <button type="button" class="chipbtn" data-act="link">Copy link</button>${v.side ? `<button type="button" class="chipbtn${ctHas(ctRowOfCard(d)) ? " on" : ""}" data-act="compare" aria-pressed="${ctHas(ctRowOfCard(d))}">${ctHas(ctRowOfCard(d)) ? "✓ In Compare" : "⇄ Compare"}</button>` : ""}
     <button type="button" class="chipbtn" data-act="nudge" data-d="-1">Line &minus;1</button>
     <button type="button" class="chipbtn" data-act="nudge" data-d="1">Line +1</button></div>`;

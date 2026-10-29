@@ -1028,11 +1028,21 @@ def compact_quote(q):
     return out
 
 
+def _ud_quote(cq, q, league):
+    """PP_OPEN_LINK (2026-10-29): an Underdog quote also carries "ud", Underdog's link to that line's market screen (the
+    current Underdog board's ids - slips/udlink.py). Off, or no known market id: the quote is exactly as before."""
+    if q.get("platform") != "underdog" or not league or os.environ.get("PP_OPEN_LINK", "").strip() != "1":
+        return cq
+    from .slips import udlink
+    lk = udlink.link_for(league, q.get("offer_id"))
+    return dict(cq, ud=lk) if lk else cq
+
+
 def compact_row(r, league=None):
     nv = board_view.contain_reason(league, r["stat"]) if league else None
     return {**({"nv": nv} if nv else {}), "k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
             "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
-            "q": [compact_quote(q) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
+            "q": [_ud_quote(compact_quote(q), q, league) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
             "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market"),
             "sc": r.get("sc", 0), "hid": scout_chance.hidden_reason(r)}
 

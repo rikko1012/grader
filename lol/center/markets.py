@@ -114,6 +114,8 @@ def parse_underdog(body):
             line = None
         out.append(dict(
             market_key=f"ud:{ln.get('over_under_id') or ou.get('id')}|{ln.get('line_type') or ''}", line_id=ln.get("id"),
+            # Underdog's market id (opens this line in Underdog: pplink.ud_link) - not hashed by state_sha
+            over_under_id=ln.get("over_under_id") or ou.get("id"),
             player=" ".join(x for x in (pl.get("first_name"), pl.get("last_name")) if x).strip() or None,
             player_source_id=app.get("player_id"), team=home_n if home else (away_n if away else None),
             opponent=away_n if home else (home_n if away else None), match_source_id=str(app.get("match_id") or ""),
@@ -125,6 +127,7 @@ def parse_underdog(body):
                    "live_event": ln.get("live_event"), "game_status": g.get("status"), "abbreviated_title": g.get("abbreviated_title"),
                    "full_team_names_title": g.get("full_team_names_title"), "position": pl.get("position_name"),
                    "has_alternates": ou.get("has_alternates"), "title": (ou.get("title") or "").strip(),
+                   "match_type": app.get("match_type"),
                    "matchup_names": None if (home or away) and away_n else (_pair(g.get("full_team_names_title")) or _pair(g.get("title")))}))
     return out
 

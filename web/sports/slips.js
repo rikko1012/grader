@@ -45,6 +45,16 @@
     return typeof url === "string" && (platform === "prizepicks" ? url.indexOf(PP_BOARD) === 0 && /^[0-9]+-[ou]-[0-9.]+(,[0-9]+-[ou]-[0-9.]+){1,5}$/.test(url.slice(PP_BOARD.length))
       : platform === "underdog" && url === UD_HOME);
   }
+  // each Underdog leg's own line link (2026-10-29): Underdog's OneLink opens that line's market screen in the app (no
+  // pre-fill - the member taps Higher / Lower there). Drawn only from an ok server check of THIS draft (legs_open, one per
+  // leg); a refused check draws none.
+  var UD_LINK_RE = /^https:\/\/underdogfantasy\.onelink\.me\/vgwg\?af_force_deeplink=true&af_dp=underdogfantasy%3A%2F%2Fmarket-details%2F[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(&af_web_dp=https%3A%2F%2Fapp\.underdogsports\.com%2Fpick-em%2Fhigher-lower%2Fall%2Ffeatured%3Fmatch_id%3D[0-9]{1,12}%26match_type%3DGame)?$/;
+  function udLegLink(i, l) {
+    var r = lastCheck, u = auth && auth.pp_open_link === true && ctx().platform === "underdog" && r && r.ok && !l.custom &&
+      Array.isArray(r.legs_open) && r.legs_open.length === getDraft().legs.length &&
+      r.current && r.current[i] && r.current[i].offer_id === l.offer_id ? r.legs_open[i] : null;
+    return typeof u === "string" && UD_LINK_RE.test(u) ? ' <a class="ss-btn ss-small" href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">Open</a>' : "";
+  }
   function pplSync() {
     var copyBtn = $("ss-copy"); if (!copyBtn) return;
     var b = $("ss-open"), on = !!(auth && auth.pp_open_link === true), pl = ctx().platform, n = getDraft().legs.length;
@@ -274,7 +284,7 @@
     var probs = {};
     (lastCheck && lastCheck.problems || []).forEach(function (p) { if (p.leg != null) (probs[p.leg] = probs[p.leg] || []).push(p); });
     el.innerHTML = '<ul class="ss-legs">' + d.legs.map(function (l, i) {
-      var extra = '<span class="ss-meta"><button class="ss-btn ss-small ss-quiet" type="button" data-rm="' + i + '">Remove</button> ' +
+      var extra = '<span class="ss-meta">' + udLegLink(i, l) + '<button class="ss-btn ss-small ss-quiet" type="button" data-rm="' + i + '">Remove</button> ' +
         '<label>Try line <input type="number" step="0.5" data-line="' + i + '" value="' + esc(l.line) + '" aria-label="Custom line for ' + esc(l.player) + '"></label>';
       var cur = lastCheck && lastCheck.current && lastCheck.current[i];
       if (probs[i] && cur && !l.custom) extra += ' <button class="ss-btn ss-small" type="button" data-take="' + i + '">Use current version</button>';
@@ -316,7 +326,12 @@
       h += jointText(r.joint) + payoutList(r.payout);
       box.innerHTML = h; renderDraft();
       return r;
-    } catch (e) { if (!stale("check", n, key, box)) box.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + " Nothing was copied.</p>"; return null; }
+    } catch (e) {
+      if (stale("check", n, key, box)) return null;
+      // PP_OPEN_LINK (2026-10-29 review): a failed check keeps no per-leg Open links from an earlier OK
+      if (auth && auth.pp_open_link === true && lastCheck) { lastCheck = null; renderDraft(); }
+      box.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + " Nothing was copied.</p>"; return null;
+    }
   }
   async function copy() {
     var r = await check("copy");

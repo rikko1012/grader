@@ -190,6 +190,12 @@ def check(slip, pool, mode="load", now=None, offer_lookup=None, live_current=Non
                     out["pp_link"] = link
             elif platform == "underdog":
                 out["open_url"] = UD_HOME
+    if ok and platform == "underdog" and open_link_on():
+        # each checked leg's own Underdog line link (opens that line's market screen; the member taps Higher / Lower)
+        from . import udlink
+        links = [udlink.link_for(l.get("league"), l.get("offer_id")) for l in legs_now]
+        if any(links):
+            out["legs_open"] = links
     return out
 
 
