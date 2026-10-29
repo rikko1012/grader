@@ -31,6 +31,23 @@ def test_migrate_is_idempotent(db):
     assert store.migrate(db) == store.MIGRATIONS[-1][0]
 
 
+def test_current_listing_fetches_selected_payloads_by_primary_key(db):
+    a = h.offer()
+    first = store.put(db, a)
+    last = store.put(db, replace(a, line=a.line + 1, observed_at="2026-10-23T21:00:00Z",
+                                 known_at="2026-10-23T21:00:00Z"))
+    statements = []
+    db.set_trace_callback(statements.append)
+    current = store.offers(db, league=a.league, platform=a.platform)
+    db.set_trace_callback(None)
+    assert [rid for rid, _ in current] == [last["record_id"]]
+    query = next(s for s in statements if s.startswith("SELECT r.* FROM (SELECT rid"))
+    plan = " ".join(str(tuple(r)) for r in db.execute("EXPLAIN QUERY PLAN " + query))
+    assert "records_current_league" in plan
+    assert "SEARCH r USING INTEGER PRIMARY KEY" in plan
+    assert store.offers(db, league=a.league, platform=a.platform, as_of=a.known_at)[0][0] == first["record_id"]
+
+
 def test_feed_freshness_uses_small_index_and_preserves_sightings(db):
     a = h.offer()
     store.put(db, a)

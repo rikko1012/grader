@@ -100,6 +100,11 @@ MIGRATIONS = [
         "CREATE INDEX IF NOT EXISTS records_feed_seen ON records "
         "(kind, platform, coalesce(last_seen_at, observed_at)) WHERE kind = 'offer'",
     ]),
+    (7, [
+        # Current league listings can group revisions without reading historical payload pages.
+        "CREATE INDEX IF NOT EXISTS records_current_league ON records "
+        "(kind, league, source, source_key, revision, platform) WHERE late = 0",
+    ]),
 ]
 FEED_SIGHTINGS_SQL = ("SELECT platform, max(coalesce(last_seen_at, observed_at)) FROM records "
                      "WHERE kind = 'offer' GROUP BY platform")
@@ -579,9 +584,11 @@ def _latest_rows(con, kind, where, args, as_of, limit, scoped=False, stream=Fals
         a.append(as_of)
     if tbl == "records_all":                        # spans the archive: select on metadata, then fetch by rid
         return _archive_span_latest(con, cond, a, limit)
-    q = (f"SELECT r.* FROM {tbl} r JOIN (SELECT source, source_key, MAX(revision) AS rv FROM {tbl} WHERE {cond} "
-         f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
-         f"WHERE r.kind = ? ORDER BY r.known_at DESC, r.source, r.source_key LIMIT ?")
+    # SQLite's single MAX aggregate returns bare rid from that maximum row. Revisions are unique per identity.
+    # Join by primary key so the planner cannot scan every historical offer payload on the outer side.
+    q = (f"SELECT r.* FROM (SELECT rid, MAX(revision) AS rv FROM {tbl} WHERE {cond} "
+         f"GROUP BY source, source_key) z CROSS JOIN {tbl} r "
+         f"WHERE r.rid = z.rid AND r.kind = ? ORDER BY r.known_at DESC, r.source, r.source_key LIMIT ?")
     cursor = con.execute(q, a + [kind, int(limit)])
     return cursor if stream else cursor.fetchall()
 
