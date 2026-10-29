@@ -55,7 +55,7 @@ def _pit(fc, value, pmf_row=None, lo=None):
 
 
 def on_settled(scon, log=None, now=None, days=30):
-    """Scorecard + diagnostic queue for every forecast (of the last `days`) whose offer has a (new) settlement.
+    """Score every forecast whose event has a settlement learned within the last `days`.
     Idempotent: one row per forecast x current settlement; a corrected settlement supersedes the earlier row.
 
     Bounded (Starter, 2026-10-24): event by event - only events with a settlement known in the window are read, each
@@ -75,8 +75,11 @@ def on_settled(scon, log=None, now=None, days=30):
             by_offer.setdefault((r["source"], r["source_key"].rsplit("|", 1)[0]), []).append(store._rec(r))
         if not by_offer:
             continue
-        for fr in scon.execute("SELECT record_id, payload FROM records WHERE kind='forecast' AND event_id=? AND "
-                               "known_at >= ? ORDER BY rid", (ev, cutoff)).fetchall():
+        # The window selects newly learned results, not forecast ages. A delayed result or
+        # correction must still update an older forecast. Stream this event's forecasts
+        # so catching up a long history does not materialize every payload in memory.
+        for fr in scon.execute("SELECT record_id, payload FROM records WHERE kind='forecast' AND event_id=? "
+                               "ORDER BY rid", (ev,)):
             fc = store._rec(fr)
             fid = fr["record_id"]
             if fc is None or not fc.offer_snapshot_ids or fc.chosen_side is None:
@@ -255,9 +258,11 @@ def forward_gate(lcon=None):
 
 
 def retrain_due(sport, lcon):
-    last = lcon.execute("SELECT MAX(fitted_at), MAX(data_as_of) FROM fits WHERE sport=?", (sport,)).fetchone()
+    last = lcon.execute("SELECT fitted_at, data_as_of FROM fits WHERE sport=? "
+                        "ORDER BY fitted_at DESC, artifact_sha DESC LIMIT 1", (sport,)).fetchone()
     art = forward.load_artifact(sport)
-    fitted_at = last[0] or (art or {}).get("fitted_at")
+    fitted_at = (last[0] if last else None) or (art or {}).get("fitted_at")
+    data_as_of = (last[1] if last else None) or (art or {}).get("data_as_of") or fitted_at
     if not fitted_at:
         return {"due": True, "why": "no artifact yet"}
     days = (parse_utc(now_utc()) - parse_utc(fitted_at)).total_seconds() / 86400
@@ -266,7 +271,7 @@ def retrain_due(sport, lcon):
         hcon = datasets.connect(read_only=True)
         tbl = "nba_pg" if sport == "nba" else "nfl_pg"
         new = hcon.execute(f"SELECT COUNT(*) FROM {tbl} p JOIN games g ON g.game_id = p.game_id AND g.league = ? "
-                           "WHERE g.start_utc > ?", (sport, (art or {}).get("data_as_of") or fitted_at)).fetchone()[0]
+                           "WHERE g.start_utc > ?", (sport, data_as_of)).fetchone()[0]
         hcon.close()
     except sqlite3.Error:
         new = None
