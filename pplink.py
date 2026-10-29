@@ -141,14 +141,20 @@ def ud_link_ok(url):
 _TAIL_HOSTS = ("play.underdogsports.com", "underdogfantasy.onelink.me", "app.underdogsports.com")
 TAIL_MAX = 600
 _TAIL_BAD = frozenset('"<>`' + chr(92))
+# a plain path (letters, digits, - _ separated by /) and query keys that redirect anywhere (AppsFlyer overrides + the usual names)
+_TAIL_PATH = re.compile(r"(/[A-Za-z0-9_-]{1,64}){0,8}/?")
+_TAIL_REDIRECT = re.compile(r"^(af_r|af_dp|af_web_dp|af_android_url|af_ios_url|af_.*_url|af_.*dp|redirect.*|.*_uri|.*url|to|next|return.*|continue|dest.*|goto|target)$", re.I)
 
 
 def tail_share_id(url):
     """An owner-pasted Underdog share link -> (canonical url, share id) or (None, reason). Strict: https, one of three
-    hosts, no user / port / fragment, <= TAIL_MAX characters, and the entry slip's share id is a uuid:
+    hosts, no user / port / fragment, <= TAIL_MAX characters, a plain path, and the entry slip's share id is a uuid:
       underdogfantasy.onelink.me/<code>?...deep_link_value=entry_slip&deep_link_sub1=<uuid>...
       app.underdogsports.com/...?entrySlipShareId=<uuid>
-      play.underdogsports.com/... with either of those, or the uuid as the last path segment."""
+      play.underdogsports.com/... with either of those, or the uuid as the last path segment.
+    The returned link is REBUILT from the checked pieces only (host, plain path, the share id keys) - every other query
+    key of the pasted text is dropped, so no redirect override (af_r / af_web_dp / af_dp / to= / redirect_uri= ...) is
+    ever stored or served (2026-10-29 review). A link naming a redirect key is refused outright."""
     from urllib.parse import urlsplit, parse_qs
     if not isinstance(url, str):
         return None, "Paste the share link"
@@ -165,17 +171,27 @@ def tail_share_id(url):
         q = parse_qs(p.query, keep_blank_values=True, strict_parsing=bool(p.query), max_num_fields=20)
     except ValueError:
         return None, "That is not an Underdog share link"
+    if any(_TAIL_REDIRECT.search(k) for k in q) or any("://" in v or "%3a%2f%2f" in v.lower() for vs in q.values() for v in vs):
+        return None, "That link would send members somewhere else"
+    path = p.path or ""
+    if not _TAIL_PATH.fullmatch(path):
+        return None, "That is not an Underdog share link"
     one = lambda k: (q.get(k) or [None])[0] if len(q.get(k) or []) <= 1 else None
-    sid = None
+    sid, form = None, None
     if one("deep_link_value") == "entry_slip":
-        sid = uuid_or_none(one("deep_link_sub1"))
+        sid, form = uuid_or_none(one("deep_link_sub1")), "dl"
     if sid is None and p.hostname != "underdogfantasy.onelink.me":
-        sid = uuid_or_none(one("entrySlipShareId"))
+        sid, form = uuid_or_none(one("entrySlipShareId")), "es"
     if sid is None and p.hostname == "play.underdogsports.com":
-        seg = [s for s in p.path.split("/") if s]
-        sid = uuid_or_none(seg[-1]) if seg else None
+        seg = [s for s in path.split("/") if s]
+        sid, form = (uuid_or_none(seg[-1]) if seg else None), "seg"
     if sid is None:
         return None, "The link has no entry slip share id"
-    if p.hostname == "underdogfantasy.onelink.me" and not re.fullmatch(r"/[A-Za-z0-9]{2,12}", p.path or ""):
+    if p.hostname == "underdogfantasy.onelink.me" and not re.fullmatch(r"/[A-Za-z0-9]{2,12}", path):
         return None, "That is not an Underdog share link"
-    return url, sid
+    base = f"https://{p.hostname}{path}"
+    if form == "dl":
+        return f"{base}?deep_link_value=entry_slip&deep_link_sub1={sid}", sid
+    if form == "es":
+        return f"{base}?entrySlipShareId={sid}", sid
+    return base, sid

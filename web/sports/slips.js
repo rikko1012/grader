@@ -326,7 +326,12 @@
       h += jointText(r.joint) + payoutList(r.payout);
       box.innerHTML = h; renderDraft();
       return r;
-    } catch (e) { if (!stale("check", n, key, box)) box.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + " Nothing was copied.</p>"; return null; }
+    } catch (e) {
+      if (stale("check", n, key, box)) return null;
+      // PP_OPEN_LINK (2026-10-29 review): a failed check keeps no per-leg Open links from an earlier OK
+      if (auth && auth.pp_open_link === true && lastCheck) { lastCheck = null; renderDraft(); }
+      box.innerHTML = '<p class="ss-banner ss-bad" role="alert">' + esc(e.message) + " Nothing was copied.</p>"; return null;
+    }
   }
   async function copy() {
     var r = await check("copy");

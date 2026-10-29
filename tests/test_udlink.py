@@ -81,15 +81,39 @@ def test_board_rows_unchanged_by_the_ids(monkeypatch):
 
 
 # ================================================================ owner tail links: the strict share-link rule
-@pytest.mark.parametrize("url", [
-    TAIL, f"https://underdogfantasy.onelink.me/vgwg?af_force_deeplink=true&deep_link_value=entry_slip&deep_link_sub1={SHARE}",
-    f"https://app.underdogsports.com/pick-em/higher-lower/all/home?entrySlipShareId={SHARE}",
-    f"https://play.underdogsports.com/pick-em/share/{SHARE}", f"https://play.underdogsports.com/x?entrySlipShareId={SHARE}",
-    f"https://play.underdogsports.com/x?deep_link_value=entry_slip&deep_link_sub1={SHARE.upper()}",
+@pytest.mark.parametrize("url,want", [
+    (TAIL, TAIL), (f"https://underdogfantasy.onelink.me/vgwg?af_force_deeplink=true&deep_link_value=entry_slip&deep_link_sub1={SHARE}", TAIL),
+    (f"https://underdogfantasy.onelink.me/vgwg?deep_link_value=entry_slip&deep_link_sub1={SHARE}&pid=share&c=x&af_xp=social", TAIL),
+    (f"https://app.underdogsports.com/pick-em/higher-lower/all/home?entrySlipShareId={SHARE}",) * 2,
+    (f"https://play.underdogsports.com/pick-em/share/{SHARE}",) * 2, (f"https://play.underdogsports.com/x?entrySlipShareId={SHARE}",) * 2,
+    (f"https://play.underdogsports.com/x?deep_link_value=entry_slip&deep_link_sub1={SHARE.upper()}",
+     f"https://play.underdogsports.com/x?deep_link_value=entry_slip&deep_link_sub1={SHARE}"),
+    (f"https://play.underdogsports.com/x?entrySlipShareId={SHARE}&utm_source=y", f"https://play.underdogsports.com/x?entrySlipShareId={SHARE}"),
 ])
-def test_tail_link_accepted(url):
+def test_tail_link_accepted(url, want):
+    # 2026-10-29 review: the stored link is REBUILT from the checked pieces - never the pasted text
     canon, sid = pplink.tail_share_id(url)
-    assert canon == url and sid == SHARE
+    assert canon == want and sid == SHARE
+    assert pplink.tail_share_id(canon) == (canon, SHARE)       # canonical is a fixed point (the serve-time re-check)
+
+
+# 2026-10-29 review: redirect overrides on the ALLOWED hosts (AppsFlyer af_r / af_web_dp / af_dp, to= / redirect_uri= ...)
+TAIL_REDIRECTS = [
+    f"{TAIL}&af_r=https://evil.example", f"{TAIL}&af_web_dp=https%3A%2F%2Fevil.example%2Fphish", f"{TAIL}&af_dp=evilapp%3A%2F%2Fx",
+    f"{TAIL}&af_android_url=https%3A%2F%2Fevil.example", f"{TAIL}&af_ios_url=https%3A%2F%2Fevil.example",
+    f"https://play.underdogsports.com/redirect?to=https://evil.example&entrySlipShareId={SHARE}",
+    f"https://play.underdogsports.com/redirect?url=https%3A%2F%2Fevil.example&entrySlipShareId={SHARE}",
+    f"https://app.underdogsports.com/?entrySlipShareId={SHARE}&redirect_uri=https://evil.example",
+    f"https://play.underdogsports.com/x?entrySlipShareId={SHARE}&redirect=https://evil.com",
+    f"https://play.underdogsports.com/x?entrySlipShareId={SHARE}&q=https://evil.com",
+    f"https://play.underdogsports.com/a.b/{SHARE}", f"https://play.underdogsports.com/a%2F%2Fevil.example/{SHARE}",
+]
+
+
+@pytest.mark.parametrize("url", TAIL_REDIRECTS)
+def test_tail_link_redirect_params_refused(url):
+    canon, why = pplink.tail_share_id(url)
+    assert canon is None and why, url
 
 
 @pytest.mark.parametrize("url", [
@@ -293,9 +317,11 @@ BOARDROWS = """(() => {
           card: udCardLink(d), cardOther: udCardLink(Object.assign({}, d, {underdog: Object.assign({}, d.underdog, {line: 26.5})})),
           cardAlt: udCardLink(Object.assign({}, d, {underdog: Object.assign({}, d.underdog, {alt: true})})),
           fromRow: udCardLink(boardCard(r)), js: udLink(INPUT.ou, 277401, "Game"), js2: udLink(INPUT.ou), js3: udLink("nope"), js4: udLink(INPUT.ou, 277401, "Season"),
-          tails: INPUT.tails.map(udTailOk)};
+          tails: INPUT.tails.map(udTailOk), cardPP: udCardLink(Object.assign({}, d, {book: "prizepicks"}))};
 })()"""
-TAIL_CASES = [TAIL, f"https://app.underdogsports.com/pick-em/higher-lower/all/home?entrySlipShareId={SHARE}", f"https://play.underdogsports.com/pick-em/share/{SHARE}",
+TAIL_CASES = TAIL_REDIRECTS + [f"https://app.underdogsports.com/x?deep_link_value=entry_slip&deep_link_sub1={SHARE}", f"{TAIL}&pid=share", f"https://play.underdogsports.com/x?deep_link_value=entry_slip&deep_link_sub1={SHARE}",
+              f"https://play.underdogsports.com/pick-em/share/{SHARE}/", f"https://app.underdogsports.com/?entrySlipShareId={SHARE}",
+              TAIL, f"https://app.underdogsports.com/pick-em/higher-lower/all/home?entrySlipShareId={SHARE}", f"https://play.underdogsports.com/pick-em/share/{SHARE}",
               f"https://evil.example/{SHARE}", f"https://underdogfantasy.onelink.me/vgwg?entrySlipShareId={SHARE}",
               f"https://play.underdogsports.com:444/share/{SHARE}", f"https://app.underdogsports.com/share/{SHARE}", "https://play.underdogsports.com/share/x"]
 
@@ -307,9 +333,12 @@ def test_cs2_js_twin_and_row_card_links(tmp_path):
     assert out["js"] == XAN_FULL == pplink.ud_link(XAN_OU, XAN_MATCH, "Game") and out["js2"] == XAN_APP and out["js3"] is None and out["js4"] == XAN_APP
     want = f'<a class="bslip udopen" href="{XAN_FULL}" target="_blank" rel="noopener noreferrer" data-udopen="1">Open in Underdog</a>'
     assert out["row"] == want.replace("&", "&amp;") and out["bad"] == "" and out["pp"] == ""
+    assert out["cardPP"] == ""                     # review 2026-10-29: a PrizePicks card never shows Open in Underdog
     assert "Open in Underdog</a>" in out["card"] and 'class="chipbtn udopen"' in out["card"] and out["cardOther"] == "" and out["cardAlt"] == ""
     assert "Open in Underdog" in out["fromRow"]
-    assert out["tails"] == [pplink.tail_share_id(u)[0] is not None for u in TAIL_CASES]
+    # the page draws only the server's canonical form (a pasted link with extra keys is rebuilt on the server first)
+    assert out["tails"] == [pplink.tail_share_id(u)[0] == u for u in TAIL_CASES]
+    assert sum(out["tails"]) >= 6 and not any(out["tails"][:len(TAIL_REDIRECTS)])
     off = run_file(tmp_path, CUR("index.html"), BOARDROWS, data)
     assert off["row"] == off["card"] == off["fromRow"] == ""
     assert "pre-fill" not in json.dumps(out).lower() and "prefill" not in json.dumps(out).lower()
@@ -353,6 +382,54 @@ def test_cs2_slip_leg_links_after_the_server_ok_only(tmp_path, act):
     out = run_file(tmp_path, CUR("index.html"), body, {"legs": UDLEGS, "act": act, "sl": bad})
     assert not any(">Open</a>" in x for x in out["legs"]) and "copy" not in out["EV"]
 
+
+# review 2026-10-29: links from an earlier server OK go away on the page's own refusal (changed line) and when legs change
+SLIP_TWICE = (SLIP_OPEN
+    .replace('if (u.startsWith("/api/line_check")) return {ok: true, status: 200, json: async () => ({status: "verified", note: null, rows: []})};',
+             'if (u.startsWith("/api/line_check")) return {ok: true, status: 200, json: async () => (window.LC || {status: "verified", note: null, rows: []})};')
+    .replace('slipClick({target: {closest: s => s === "[data-slipopen]" ? {dataset: {slipopen: INPUT.act}} : null}});\n  for (let i = 0; i < 400; i++) await Promise.resolve();',
+             'const CLICK = () => slipClick({target: {closest: s => s === "[data-slipcopy]" ? {} : null}});\n'
+             '  CLICK(); for (let i = 0; i < 400; i++) await Promise.resolve();\n'
+             '  const first = JSON.parse(localStorage.getItem("cs2s_slip")).map((x, i) => legRow(x, i, false));\n'
+             '  if (INPUT.then === "changed") { window.LC = {status: "changed", new_line: 29.5, note: "line changed to 29.5", rows: []}; CLICK(); }\n'
+             '  if (INPUT.then === "add") { const s = JSON.parse(localStorage.getItem("cs2s_slip")); s.push(Object.assign({}, s[0], {p: "charlie1", rid: "u3", tm: "Charlie"})); localStorage.setItem("cs2s_slip", JSON.stringify(s)); }\n'
+             '  for (let i = 0; i < 400; i++) await Promise.resolve();\n'
+             '  EV.push(first.filter(x => x.includes(">Open</a>")).length);'))
+
+
+@needs_node
+@pytest.mark.parametrize("then", ["changed", "add"])
+def test_cs2_slip_leg_links_cleared_by_a_later_page_refusal(tmp_path, then):
+    assert "window.LC" in SLIP_TWICE and "CLICK()" in SLIP_TWICE
+    ok = {"status": 200, "body": {"ok": True, "duplicate": False, "open_url": pplink.UD_HOME, "legs_open": [XAN_FULL, LINK2]}}
+    out = run_file(tmp_path, CUR("index.html"), SLIP_TWICE, {"legs": UDLEGS, "sl": ok, "then": then})
+    assert out["EV"][-1] == 2                      # the first OK drew both legs' links
+    assert out["legs"] and not any(">Open</a>" in x or "udopen" in x for x in out["legs"]), out["legs"]
+    if then == "changed":
+        assert any(a[0] == "Check these picks first" for a in out["A"]) and out["EV"].count("copy") == 1
+
+
+def _studio_twice():                              # STUDIO_UD is defined below
+    return STUDIO_UD.replace(
+    '  for (let i = 0; i < 50; i++) await Promise.resolve();\n  return studioSlip(s);',
+    '  for (let i = 0; i < 50; i++) await Promise.resolve();\n  const first = studioSlip(s);\n'
+    '  studioCall = async (m, u, b) => u === "/api/slip_studio/verify" ? (INPUT.d2 === "throw" ? Promise.reject(new Error("offline")) : {status: INPUT.st2 || 200, d: INPUT.d2}) : {status: 200, d: {}};\n'
+    '  await studioVerify("b1/s1", {textContent: "", disabled: false}, INPUT.open2 || undefined);\n'
+    '  for (let i = 0; i < 50; i++) await Promise.resolve();\n  return [first, studioSlip(s)];')
+
+
+@needs_node
+@pytest.mark.parametrize("st2,d2,open2", [(429, {"error": "Too many checks"}, None), (200, "throw", None),
+                                          (200, "OKBADURL", "underdog"), (200, {"ok": False, "book": "underdog", "changes": ["x"]}, None)])
+def test_studio_leg_links_cleared_by_a_later_failed_verify(tmp_path, st2, d2, open2):
+    STUDIO_UD_TWICE = _studio_twice()
+    assert "INPUT.d2" in STUDIO_UD_TWICE
+    slip = dict(STUDIO, book="underdog", legs=[dict(l, book="underdog") for l in STUDIO["legs"]])
+    ok = {"ok": True, "book": "underdog", "batch_id": "b1", "copy_text": "t", "open_url": pplink.UD_HOME, "legs_open": [XAN_FULL, None]}
+    if d2 == "OKBADURL":                           # verify OK but its open link fails the page check: 'Not opened', no links
+        d2 = dict(ok, open_url="https://evil.example/")
+    first, second = run_file(tmp_path, CUR("index.html"), STUDIO_UD_TWICE, {"d": ok, "slip": slip, "st2": st2, "d2": d2, "open2": open2})
+    assert first.count(">Open</a>") == 1 and ">Open</a>" not in second
 
 STUDIO_UD = """(async () => {
   PPL.on = true; toast = () => {}; copy = async () => {}; window.open = () => ({});
@@ -421,6 +498,9 @@ def test_sports_page_wiring():
     fn = js.split("function udLegLink")[1].split("function pplSync")[0]
     assert "auth.pp_open_link === true" in fn and "r.ok" in fn and "r.current[i].offer_id === l.offer_id" in fn and "UD_LINK_RE.test(u)" in fn
     assert ">Open</a>" in fn and "pre-fill" not in fn.split("*/")[-1]
+    # review 2026-10-29: a failed check (network / 5xx) drops the earlier OK's links and redraws the legs
+    ck = js.split("async function check(mode)")[1].split("async function copy()")[0].split("} catch (e) {")[1]
+    assert "auth.pp_open_link === true && lastCheck) { lastCheck = null; renderDraft(); }" in ck
     tb = (ROOT / "web" / "sports" / "table.js").read_text(encoding="utf-8")
     assert 'q.p === "underdog" && typeof q.ud === "string" && UD_LINK_RE.test(q.ud)' in tb and ">Open in Underdog</a>" in tb
     for f in ("index.html", "lol.html", "sports/slips.js", "sports/table.js"):

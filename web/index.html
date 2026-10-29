@@ -1261,7 +1261,7 @@ function pplButton(s, plat) {
 // screen in the Underdog app (owner-verified on a phone); on a PC it lands on that match's Underdog board. Underdog has
 // no pre-fill - the member taps Higher / Lower there and submits. The SERVER builds every link from Underdog's public
 // board ids (pplink.ud_link); the page draws only that exact pattern (udLink is its twin, for the tests).
-const UDL = {onelink: "https://underdogfantasy.onelink.me/vgwg?af_force_deeplink=true&af_dp=", legs: {}};
+const UDL = {onelink: "https://underdogfantasy.onelink.me/vgwg?af_force_deeplink=true&af_dp=", legs: {}, sig: ""};
 const UD_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const UD_LINK_RE = /^https:\/\/underdogfantasy\.onelink\.me\/vgwg\?af_force_deeplink=true&af_dp=underdogfantasy%3A%2F%2Fmarket-details%2F[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(&af_web_dp=https%3A%2F%2Fapp\.underdogsports\.com%2Fpick-em%2Fhigher-lower%2Fall%2Ffeatured%3Fmatch_id%3D[0-9]{1,12}%26match_type%3DGame)?$/;
 function udLink(ou, mid, mtype) {
@@ -1274,28 +1274,31 @@ function udLink(ou, mid, mtype) {
 }
 const udLinkOk = u => typeof u === "string" && UD_LINK_RE.test(u);
 // an owner tail link (an Underdog entry's share link, attached on the server): the same strict rule as pplink.tail_share_id
-function udTailOk(u) {
-  if (typeof u !== "string" || u.length > 600 || /[\s"<>`\\]/.test(u)) return false;
-  let x; try { x = new URL(u); } catch { return false; }
-  if (x.protocol !== "https:" || x.username || x.password || x.port || x.hash || !["play.underdogsports.com", "underdogfantasy.onelink.me", "app.underdogsports.com"].includes(x.hostname)) return false;
-  const q = x.searchParams, one = k => q.getAll(k).length === 1 ? q.get(k).toLowerCase() : "";
-  if (q.get("deep_link_value") === "entry_slip" && UD_UUID.test(one("deep_link_sub1"))) return x.hostname !== "underdogfantasy.onelink.me" || /^\/[A-Za-z0-9]{2,12}$/.test(x.pathname);
-  if (x.hostname === "underdogfantasy.onelink.me") return false;
-  if (UD_UUID.test(one("entrySlipShareId"))) return true;
-  const seg = x.pathname.split("/").filter(Boolean);
-  return x.hostname === "play.underdogsports.com" && seg.length > 0 && UD_UUID.test(seg[seg.length - 1].toLowerCase());
-}
+// 2026-10-29 review: only the server's REBUILT canonical forms (host, plain path, the share id key) - no other query key
+const UD_TAIL_RES = [
+  /^https:\/\/underdogfantasy\.onelink\.me\/[A-Za-z0-9]{2,12}\?deep_link_value=entry_slip&deep_link_sub1=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  /^https:\/\/(app|play)\.underdogsports\.com(\/[A-Za-z0-9_-]{1,64}){0,8}\/?\?entrySlipShareId=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  /^https:\/\/(app|play)\.underdogsports\.com(\/[A-Za-z0-9_-]{1,64}){0,8}\/?\?deep_link_value=entry_slip&deep_link_sub1=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  /^https:\/\/play\.underdogsports\.com(\/[A-Za-z0-9_-]{1,64}){0,7}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/];
+const udTailOk = u => typeof u === "string" && u.length <= 600 && UD_TAIL_RES.some(re => re.test(u));
 const udA = (url, label, cls) => `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" data-udopen="1">${label}</a>`;
 const udLegKey = x => [legKey(x), x.l, x.s, x.rid || ""].join("|");
 // a checked Underdog slip: the server's per-leg links (one per leg, in leg order); anything else clears them
+// 2026-10-29 review: the links belong to the exact slip that was checked (UDL.sig) and to legs still verified / stale -
+// a later page refusal, an added / removed leg or a changed line draws none
+const udSlipSig = s => (Array.isArray(s) ? s : []).map(udLegKey).join("|~|");
 function udKeep(s, links) {
-  UDL.legs = {};
-  if (PPL.on && Array.isArray(links) && links.length === s.length && slipBook(s) === "underdog")
+  UDL.legs = {}; UDL.sig = "";
+  if (PPL.on && Array.isArray(links) && links.length === s.length && slipBook(s) === "underdog") {
     s.forEach((x, i) => { if (udLinkOk(links[i])) UDL.legs[udLegKey(x)] = links[i]; });
+    UDL.sig = udSlipSig(s);
+  }
   try { drawSlip(); } catch {}
 }
 function udLegOpen(x, st) {
-  const u = PPL.on && x.bk === "underdog" && !st ? UDL.legs[udLegKey(x)] : null;
+  if (!PPL.on || x.bk !== "underdog" || st || !UDL.sig || !["verified", "stale"].includes(x.now?.status)) return "";
+  let cur = ""; try { cur = udSlipSig(store.get("cs2s_slip", [])); } catch {}
+  const u = cur === UDL.sig ? UDL.legs[udLegKey(x)] : null;
   return udLinkOk(u) ? udA(u, "Open", "lpin udopen") : "";
 }
 // a card / board row of an Underdog line: its own link (the board row's, or the card's Underdog line when it is this line)
@@ -1303,7 +1306,7 @@ function udRowLink(r) {
   return PPL.on && (r.book || "underdog") === "underdog" && udLinkOk(r.ud_app_link) ? udA(r.ud_app_link, "Open in Underdog", "bslip udopen") : "";
 }
 function udCardLink(d) {
-  if (!PPL.on) return "";
+  if (!PPL.on || (d.book || "underdog") !== "underdog") return "";   // a PrizePicks card never links to Underdog (2026-10-29 review)
   const u = d.underdog, g = d.grade || {};
   const url = udLinkOk(d.ud_app_link) ? d.ud_app_link
     : u && !u.alt && (u.scope || "12") === "12" && (g.scope || "12") === "12" && (g.line_type || "standard") === "standard" && u.line != null && +u.line === +g.line ? u.ud_app_link : null;
@@ -2046,6 +2049,7 @@ function slipClick(e) {
   const op = PPL.on ? e.target.closest("[data-slipopen]") : null;
   const act = e.target.closest("#slipcopy") || e.target.closest("[data-slipcopy]") ? "copy" : op && PPL_WORD[op.dataset.slipopen] ? op.dataset.slipopen : null;
   if (act) (async () => {
+    if (PPL.on) { UDL.legs = {}; UDL.sig = ""; }   // only the check that passes now draws per-leg links (2026-10-29 review)
     const s = await recheckSlip();
     if (new Set(s.map(x => x.bk).filter(Boolean)).size > 1) {
       await ask("One platform per slip", "These picks are on different platforms – remove the picks of one of them to copy this slip.", [{k: "review", label: "Review slip", primary: true}]);
@@ -2103,7 +2107,7 @@ function slipClick(e) {
       const w = act !== slipBook(s) || !s.every(x => x.bk === act) ? {ok: false, reasons: [`Only ${bookName(act)} slips open ${bookName(act)}`]} : await serverSlipCheck(s, act);
       const url = w.ok ? (act === "prizepicks" ? w.pp_url : w.open_url) : null;
       if (!w.ok || !pplOk(url, act)) {
-        if (PPL.on && Object.keys(UDL.legs).length) udKeep(s, null);   // a refused check: no line links
+        if (PPL.on) udKeep(s, null);   // a refused check: no line links
         toast("Not opened", 2500);
         await ask("Not opened", (w.ok ? [SLIP_RETRY] : w.reasons).map(t => `<div>• ${esc(t)}</div>`).join(""), [{k: "review", label: "Review slip", primary: true}]);
         return;
@@ -2116,7 +2120,7 @@ function slipClick(e) {
     }
     const v = await serverSlipCheck(s);
     if (!v.ok) {
-      if (PPL.on && Object.keys(UDL.legs).length) udKeep(s, null);     // a refused check: no line links
+      if (PPL.on) udKeep(s, null);     // a refused check: no line links
       toast("Not copied", 2500);
       await ask("Not copied", v.reasons.map(t => `<div>• ${esc(t)}</div>`).join(""), [{k: "review", label: "Review slip", primary: true}]);
       return;
@@ -3403,17 +3407,22 @@ async function studioBuild(newBatch, why, replace) {
 async function studioVerify(id, btn, open) {
   const lab0 = btn.textContent;
   btn.disabled = true; btn.textContent = "Checking every line…";
+  // each Underdog leg's own line link comes only from THIS verify's OK (2026-10-29 review: a throw / 429 / refusal / a
+  // link that fails its check leaves none from an earlier verify)
+  const udHad = PPL.on && !!(STUDIO.udlegs || {})[id];
+  if (PPL.on) { STUDIO.udlegs = STUDIO.udlegs || {}; delete STUDIO.udlegs[id]; }
   try {
     const {status, d} = await studioCall("POST", "/api/slip_studio/verify", {slip: id, idem: rid()});
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
-    if (PPL.on) {                              // each Underdog leg's own line link, only after this verify passed
-      STUDIO.udlegs = STUDIO.udlegs || {};
-      if (d.ok && d.book === "underdog" && Array.isArray(d.legs_open)) STUDIO.udlegs[id] = d.legs_open.map(u => udLinkOk(u) ? u : null);
-      else delete STUDIO.udlegs[id];
-    }
+    const udl = PPL.on && d.ok && d.book === "underdog" && Array.isArray(d.legs_open) ? d.legs_open.map(u => udLinkOk(u) ? u : null) : null;
     if (d.ok && open) {                        // PP_OPEN_LINK: the server's verify passed - open only its own link
       const url = d.book === "prizepicks" ? d.pp_url : d.book === "underdog" ? d.open_url : null;
-      if (d.book !== open || !pplOk(url, open)) { btn.disabled = false; btn.textContent = lab0; toast(`Not opened – ${d.pp_reason || SLIP_RETRY}`, 3500); return; }
+      if (d.book !== open || !pplOk(url, open)) {
+        toast(`Not opened – ${d.pp_reason || SLIP_RETRY}`, 3500);
+        if (udHad) return studioRender();
+        btn.disabled = false; btn.textContent = lab0; return;
+      }
+      if (udl) STUDIO.udlegs[id] = udl;
       if (open === "underdog") {                // no pre-filled Underdog entry: the slip text goes on the clipboard
         STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
         await copy(d.copy_text);
@@ -3427,6 +3436,7 @@ async function studioVerify(id, btn, open) {
       return studioRender();
     }
     if (d.ok) {
+      if (udl) STUDIO.udlegs[id] = udl;
       STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
       await copy(d.copy_text);
       try { const sl = studioFind(id); if (sl) expoAdd("studio", expoLegsStudio(sl)); } catch {}
@@ -3442,7 +3452,11 @@ async function studioVerify(id, btn, open) {
     }
     studioRender();
     return studioBuild(false, "A line changed – replacing this slip from the current board…", id);
-  } catch (e) { btn.disabled = false; btn.textContent = open ? lab0 : "Verify & copy"; toast(`Couldn't verify (${e.message})`); }
+  } catch (e) {
+    toast(`Couldn't verify (${e.message})`);
+    if (udHad) return studioRender();          // the earlier verify's leg links go with this failure
+    btn.disabled = false; btn.textContent = open ? lab0 : "Verify & copy";
+  }
 }
 const studioFind = id => { const b = STUDIO.batch; return b ? [4, 3, 2].flatMap(n => (b.slips || {})[n] || []).find(x => x.slip_id === id) || null : null; };
 // U2: a Studio slip's legs (their saved pick records) become manual-slip legs through the usual add path - one line check per

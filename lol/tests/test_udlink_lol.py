@@ -20,6 +20,14 @@ def test_lol_board_ud_ids():
         {"ud_over_under_id": None, "ud_match_id": None, "ud_match_type": None}
 
 
+def test_lol_older_event_without_match_type_still_lands_on_the_match_board():
+    # review 2026-10-29: an offer open before the deploy keeps its last event (no extra.match_type, state unchanged)
+    ids = forecast._ud_ids({"market_key": f"ud:{XAN_OU}|balanced", "match_source_id": "272955", "ud_match_type": None})
+    assert ids == {"ud_over_under_id": XAN_OU, "ud_match_id": "272955", "ud_match_type": "Game"}
+    # (pplink.ud_link adds the PC match landing exactly when the type is "Game": tests/test_udlink.py)
+    assert forecast._ud_ids({"market_key": f"ud:{XAN_OU}|", "match_source_id": "", "ud_match_type": None})["ud_match_type"] is None
+
+
 def test_lol_parse_keeps_the_ids_and_the_state_hash():
     body = json.loads((ROOT / "lol" / "tests" / "fixtures" / "underdog_lol_2026-10-17.json").read_text(encoding="utf-8"))
     offs = markets.parse_underdog(body)

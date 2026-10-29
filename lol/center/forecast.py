@@ -676,13 +676,16 @@ _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 def _ud_ids(r):
     """Underdog's ids that open this line in Underdog (display only, never a forecast input): the market id from the
-    market key ("ud:<over_under_id>|<line_type>", a uuid or nothing), the match id (digits) and match type (offers seen
-    since 2026-10-29 carry it; older ones none - then the link has no PC match landing)."""
+    market key ("ud:<over_under_id>|<line_type>", a uuid or nothing), the match id (digits) and match type. Offers seen
+    since 2026-10-29 carry the match type in their event; an offer open before then whose state never changed has no new
+    event, so a missing type with a known match id is Underdog's "Game" (every LoL appearance seen; review 2026-10-29)."""
     k = str(r.get("market_key") or "")
     ou = k[3:].split("|")[0].lower() if k.startswith("ud:") else ""
     m = str(r.get("match_source_id") or "")
-    return {"ud_over_under_id": ou if _UUID.fullmatch(ou) else None, "ud_match_id": m if m.isdigit() and len(m) <= 12 else None,
-            "ud_match_type": r.get("ud_match_type") if isinstance(r.get("ud_match_type"), str) else None}
+    mid = m if m.isdigit() and len(m) <= 12 else None
+    mt = r.get("ud_match_type") if isinstance(r.get("ud_match_type"), str) and r.get("ud_match_type") else None
+    return {"ud_over_under_id": ou if _UUID.fullmatch(ou) else None, "ud_match_id": mid,
+            "ud_match_type": mt if mt is not None else ("Game" if mid else None)}
 
 
 def board(con, now=None):
