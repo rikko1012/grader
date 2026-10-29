@@ -127,6 +127,30 @@ def parse(body):
     return rows
 
 
+def ids_of(body):
+    """Underdog's own ids that open one line in Underdog (pplink.ud_link), by LINE id: {line id: (over_under_id, match_id,
+    match_type)}. over_under_id = over_under_lines[].over_under_id (else over_under.id) - never the line or option id;
+    match_id / match_type = the line's appearance. Kept beside the board, never in its rows (the board, cards, saved
+    snapshots and slip records stay exactly as they were)."""
+    apps = {a.get("id"): a for a in body.get("appearances", []) if isinstance(a, dict)}
+    out = {}
+    for ln in body.get("over_under_lines", []):
+        if not isinstance(ln, dict) or not ln.get("id"):
+            continue
+        ou = ln.get("over_under") or {}
+        app = apps.get((ou.get("appearance_stat") or {}).get("appearance_id")) or {}
+        out[str(ln["id"])] = (ln.get("over_under_id") or ou.get("id"), app.get("match_id"), app.get("match_type"))
+    return out
+
+
+_IDS = {}           # line id -> (over_under_id, match_id, match_type) of the CURRENT board (replaced on each refresh)
+
+
+def ud_ids(line_id):
+    """(over_under_id, match_id, match_type) of a line on the current board, or None."""
+    return _IDS.get(str(line_id)) if line_id else None
+
+
 _LAST_SEEN = {}     # (player, prop, scope, start) -> (line, higher, lower) - only changes are logged
 
 
@@ -261,15 +285,22 @@ def _opening(rows, now=None):
 
 
 def _refresh():
+    global _IDS
     import requests
     try:
         r = requests.get(URL, headers=HEADERS, timeout=25)
         r.raise_for_status()
-        rows = parse(r.json())
+        body = r.json()
+        rows = parse(body)
+        try:
+            ids = ids_of(body)
+        except Exception:
+            ids = {}
         _log_moves(rows)
         _opening(rows)
         with _LOCK:
             _BOARD.update(at=time.time(), rows=rows, error=None)
+            _IDS = ids                                  # one swap: a reader sees the old or the new map, never half
     except Exception as e:                              # keep the last board; try again later
         with _LOCK:
             _BOARD.update(error=f"{type(e).__name__}: {str(e)[:160]}", at=_BOARD["at"] or 0.0)

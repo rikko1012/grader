@@ -391,6 +391,20 @@ function pplButton() {
   if (pl === "prizepicks" && !SLIP.legs.every(l => { const x = (D.rows || []).find(r => r.key === l.key); return x && /^[0-9]{1,15}$/.test(String(x.pp_projection_id == null ? "" : x.pp_projection_id)); })) return "";
   return `<button type="button" class="btn" id="openslip" data-open="${pl}">${PPL_WORD[pl]}</button>`;
 }
+// ---- Underdog line links (2026-10-29, same switch): Underdog's own OneLink opens ONE line's market screen in the Underdog
+// app (owner-verified on a phone; on a PC it lands on the match's Underdog board). No pre-fill: the member taps Higher /
+// Lower there. The server builds each row's link (pplink.ud_link); the page draws only that exact pattern.
+const UD_LINK_RE = /^https:\/\/underdogfantasy\.onelink\.me\/vgwg\?af_force_deeplink=true&af_dp=underdogfantasy%3A%2F%2Fmarket-details%2F[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(&af_web_dp=https%3A%2F%2Fapp\.underdogsports\.com%2Fpick-em%2Fhigher-lower%2Fall%2Ffeatured%3Fmatch_id%3D[0-9]{1,12}%26match_type%3DGame)?$/;
+const udLinkOk = u => typeof u === "string" && UD_LINK_RE.test(u);
+let ULEGS = {};                                   // slip leg key -> its line's link, set only by a passed recheck
+const udA = (url, label) => `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+function udCardLink(x) { return PPL.on && x.platform === "underdog" && udLinkOk(x.ud_app_link) && !started(x) ? udA(x.ud_app_link, "Open in Underdog") : ""; }
+// after a passed recheck of an Underdog slip: each leg's link from the FRESH board rows (one per leg); anything else clears
+function udKeep(ok) {
+  ULEGS = {};
+  if (!ok || !PPL.on || !SLIP.legs.length || SLIP.legs.some(l => l.platform !== "underdog")) return;
+  for (const l of SLIP.legs) { const x = (D.rows || []).find(r => r.key === l.key); if (x && udLinkOk(x.ud_app_link)) ULEGS[l.key] = x.ud_app_link; }
+}
 function pplGo(url) {
   let w = null; try { w = window.open(url, "_blank"); } catch {}
   if (w) { try { w.opener = null; } catch {} return true; }
@@ -400,9 +414,10 @@ async function openSlip(pl) {
   const msg = $("#slipmsg");
   msg.className = "actmsg"; msg.textContent = "Rechecking every line…";
   if (!SLIP.legs.length || SLIP.legs.some(l => l.platform !== pl)) { msg.className = "actmsg bad"; msg.textContent = `Only ${pl === "prizepicks" ? "PrizePicks" : "Underdog"} slips open there - nothing opened.`; return false; }
-  if (!await fresh()) { $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing opened."; return false; }
+  if (!await fresh()) { ULEGS = {}; $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing opened."; return false; }
   CHECK = {}; for (const l of SLIP.legs) CHECK[l.key] = legStatus(l);
   const bad = SLIP.legs.filter(l => !CHECK[l.key].ok);
+  udKeep(false);
   if (bad.length) {
     render(); $("#slipmsg").className = "actmsg bad";
     $("#slipmsg").textContent = `Nothing opened - ${bad.map(l => `${l.player} (${l.stat_name}, ${l.scope}): ${CHECK[l.key].text.replace(/\.$/, "")}`).join("; ")}. Remove ${bad.length > 1 ? "these picks" : "this pick"}, then try again.`;
@@ -416,6 +431,7 @@ async function openSlip(pl) {
   } else {
     if (SLIP.legs.length < 2 || new Set(SLIP.legs.map(l => l.team)).size < 2) { render(); $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "Nothing opened - entries need at least 2 picks from 2 different teams."; return false; }
     url = PPL.ud;
+    udKeep(true);
     copied = await copyText(`${SLIP.legs[0].platform_label} - ${SLIP.legs.length} picks\n` + SLIP.legs.map(legText).join("\n"));
   }
   render();
@@ -509,7 +525,7 @@ function slipView() {
   h += `<section class="panel"><h3>Your slip${SLIP.legs.length ? ` · ${esc(SLIP.legs[0].platform_label)}` : ""}</h3>`;
   if (!SLIP.legs.length) h += `<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
   else {
-    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); return `<div class="slipleg"><div>${esc(legText(l))}</div><button type="button" class="btn" data-rm="${i}">Remove</button>${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
+    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); const ul = PPL.on && c && c.ok && udLinkOk(ULEGS[l.key]) ? ULEGS[l.key] : null; return `<div class="slipleg"><div>${esc(legText(l))}</div>${ul ? `<span>${udA(ul, "Open")} ` : ""}<button type="button" class="btn" data-rm="${i}">Remove</button>${ul ? "</span>" : ""}${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
       <div class="actions"><button type="button" class="btn primary" id="copyslip">Recheck lines &amp; copy slip</button>${pplButton()}<button type="button" class="btn" id="clearslip">Clear</button><span class="actmsg" id="slipmsg"></span></div>
       <p class="small faint" style="margin:8px 0 0">${esc(D.stake_note)} Your slip is your own selection; it is not a suggestion.</p>`;
   }
@@ -538,9 +554,10 @@ function sendSuggested(id) {
 // was pulled or lost its side, is never copied - the copy is refused and each such pick is named (remove it, then copy)
 async function copySlip() {
   $("#slipmsg").className = "actmsg"; $("#slipmsg").textContent = "Rechecking every line…";
-  if (!await fresh()) { $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing copied."; return false; }
+  if (!await fresh()) { ULEGS = {}; $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing copied."; return false; }
   CHECK = {}; for (const l of SLIP.legs) CHECK[l.key] = legStatus(l);
   const bad = SLIP.legs.filter(l => !CHECK[l.key].ok);
+  udKeep(!bad.length);
   if (bad.length) {
     render(); $("#slipmsg").className = "actmsg bad";
     $("#slipmsg").textContent = `Nothing copied - ${bad.map(l => `${l.player} (${l.stat_name}, ${l.scope}): ${CHECK[l.key].text.replace(/\.$/, "")}`).join("; ")}. Remove ${bad.length > 1 ? "these picks" : "this pick"}, then copy.`;
@@ -751,7 +768,7 @@ function card(k, focusBack) {
     ${x.p_push ? `<div><span class="k">Exactly ${x.line} (push)</span>${pct(x.p_push)}</div>` : ""}
     <div><span class="k">Pick</span>${pickCell(x)}</div><div><span class="k">Grade</span>${gradeChip(x)}</div><div><span class="k">Stake</span><b>${x.units}U</b></div></div>
     <div class="small muted" style="margin-top:8px">${esc(x.stake_reason)}</div>
-    <div class="actions"><button type="button" class="btn primary" id="copypick" ${playable(x) ? "" : "disabled"}>Copy pick</button><button type="button" class="btn" id="addslip" ${slipRule(x) ? "disabled" : ""}>Add to slip</button>
+    <div class="actions"><button type="button" class="btn primary" id="copypick" ${playable(x) ? "" : "disabled"}>Copy pick</button><button type="button" class="btn" id="addslip" ${slipRule(x) ? "disabled" : ""}>Add to slip</button>${udCardLink(x)}
       <button type="button" class="btn" id="copylink">Copy link</button>
       ${ctBtnHtml(x)}
       <span class="actmsg ${playable(x) ? "" : "bad"}" id="actmsg">${esc(whyNot(x) || slipRule(x) || "")}</span></div>

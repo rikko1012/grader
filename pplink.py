@@ -84,3 +84,98 @@ def pp_link(legs):
             return None, "A pick on this slip has no current line"
         toks.append(f"{pid}-{sd}-{ln}")
     return PP_BOARD + "?projections=" + quote(",".join(toks), safe="-,."), None
+
+
+# ---------------------------------------------------------------- Underdog: one line's own market screen (2026-10-29)
+# OWNER-VERIFIED 2026-10-29 on a phone: Underdog's OneLink with af_dp=underdogfantasy://market-details/<over_under_id>
+# opens the Underdog app on that exact line's market screen (XANTARES kills). On a PC the link lands on the match's
+# pick'em board (af_web_dp = app.underdogsports.com ...featured?match_id=&match_type=, verified on the web); the
+# market-details route has no web page. Underdog has NO pre-fill: the member still taps Higher / Lower and submits, so
+# the member-facing word is "Open in Underdog" / "Open", never "pre-filled". over_under_id is the board's
+# over_under_lines[].over_under_id (== over_under.id) - never the line id or an option id; match_id / match_type are
+# that line's appearances[] values. Built only from Underdog's public board rows: no account, no private endpoint.
+UD_ONELINK = "https://underdogfantasy.onelink.me/vgwg?af_force_deeplink=true&af_dp="
+UD_MARKET = "underdogfantasy://market-details/"
+UD_FEATURED = "https://app.underdogsports.com/pick-em/higher-lower/all/featured"
+UD_MATCH_TYPES = ("Game",)                     # the only value seen (CS, LoL, NBA): anything else drops af_web_dp only
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+_MATCH = re.compile(r"^[0-9]{1,12}$")
+
+
+def uuid_or_none(x):
+    """A canonical (lower-case) uuid string, else None (never guessed, never trimmed into shape)."""
+    s = str(x).strip().lower() if isinstance(x, str) else ""
+    return s if _UUID.fullmatch(s) else None
+
+
+def ud_web_link(match_id, match_type):
+    """The PC landing: that match's Underdog pick'em board, or None (unknown match id / type)."""
+    m = str(match_id) if isinstance(match_id, int) and not isinstance(match_id, bool) else match_id if isinstance(match_id, str) else ""
+    if not _MATCH.fullmatch(m or "") or match_type not in UD_MATCH_TYPES:
+        return None
+    return f"{UD_FEATURED}?match_id={m}&match_type={match_type}"
+
+
+def ud_link(over_under_id, match_id=None, match_type=None):
+    """Underdog's OneLink to one line's market screen (app), landing on the match board on a PC when the match is known.
+    None when over_under_id is not a uuid (no link is better than a wrong market)."""
+    ou = uuid_or_none(over_under_id)
+    if ou is None:
+        return None
+    url = UD_ONELINK + quote(UD_MARKET + ou, safe="")
+    web = ud_web_link(match_id, match_type)
+    return url + "&af_web_dp=" + quote(web, safe="") if web else url
+
+
+_UD_LINK_RE = re.compile(r"^" + re.escape(UD_ONELINK) + re.escape(quote(UD_MARKET, safe="")) + r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                         r"(?:&af_web_dp=" + re.escape(quote(UD_FEATURED + "?match_id=", safe="")) + r"[0-9]{1,12}"
+                         + re.escape(quote("&match_type=", safe="")) + r"(?:" + "|".join(UD_MATCH_TYPES) + r"))?$")
+
+
+def ud_link_ok(url):
+    """Exactly a link ud_link builds (the page re-checks the same pattern before it draws one)."""
+    return isinstance(url, str) and bool(_UD_LINK_RE.fullmatch(url))
+
+
+# ---------------------------------------------------------------- owner tail links (an Underdog entry share link)
+_TAIL_HOSTS = ("play.underdogsports.com", "underdogfantasy.onelink.me", "app.underdogsports.com")
+TAIL_MAX = 600
+_TAIL_BAD = frozenset('"<>`' + chr(92))
+
+
+def tail_share_id(url):
+    """An owner-pasted Underdog share link -> (canonical url, share id) or (None, reason). Strict: https, one of three
+    hosts, no user / port / fragment, <= TAIL_MAX characters, and the entry slip's share id is a uuid:
+      underdogfantasy.onelink.me/<code>?...deep_link_value=entry_slip&deep_link_sub1=<uuid>...
+      app.underdogsports.com/...?entrySlipShareId=<uuid>
+      play.underdogsports.com/... with either of those, or the uuid as the last path segment."""
+    from urllib.parse import urlsplit, parse_qs
+    if not isinstance(url, str):
+        return None, "Paste the share link"
+    url = url.strip()
+    if not url or len(url) > TAIL_MAX or any(c.isspace() or ord(c) < 33 or c in _TAIL_BAD for c in url):
+        return None, "That is not an Underdog share link"
+    try:
+        p = urlsplit(url)
+    except ValueError:
+        return None, "That is not an Underdog share link"
+    if p.scheme != "https" or p.hostname not in _TAIL_HOSTS or p.netloc != p.hostname or p.fragment:
+        return None, "Only Underdog share links (play.underdogsports.com, underdogfantasy.onelink.me, app.underdogsports.com)"
+    try:
+        q = parse_qs(p.query, keep_blank_values=True, strict_parsing=bool(p.query), max_num_fields=20)
+    except ValueError:
+        return None, "That is not an Underdog share link"
+    one = lambda k: (q.get(k) or [None])[0] if len(q.get(k) or []) <= 1 else None
+    sid = None
+    if one("deep_link_value") == "entry_slip":
+        sid = uuid_or_none(one("deep_link_sub1"))
+    if sid is None and p.hostname != "underdogfantasy.onelink.me":
+        sid = uuid_or_none(one("entrySlipShareId"))
+    if sid is None and p.hostname == "play.underdogsports.com":
+        seg = [s for s in p.path.split("/") if s]
+        sid = uuid_or_none(seg[-1]) if seg else None
+    if sid is None:
+        return None, "The link has no entry slip share id"
+    if p.hostname == "underdogfantasy.onelink.me" and not re.fullmatch(r"/[A-Za-z0-9]{2,12}", p.path or ""):
+        return None, "That is not an Underdog share link"
+    return url, sid

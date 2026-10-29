@@ -102,6 +102,9 @@
     if ((fcAge !== null && fcAge > STALE_FC_S) || !r.fresh) { s = Math.min(s, 2); why.push("stale inputs (max 2)"); }
     return {score: s, why: why, version: X.v};
   }
+  // PP_OPEN_LINK (2026-10-29): an Underdog quote's "ud" = Underdog's link to that line's market screen (server-built,
+  // sent only when the switch is on; the page draws only the exact pattern). No pre-fill - the member taps Higher / Lower.
+  var UD_LINK_RE = /^https:\/\/underdogfantasy\.onelink\.me\/vgwg\?af_force_deeplink=true&af_dp=underdogfantasy%3A%2F%2Fmarket-details%2F[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(&af_web_dp=https%3A%2F%2Fapp\.underdogsports\.com%2Fpick-em%2Fhigher-lower%2Fall%2Ffeatured%3Fmatch_id%3D[0-9]{1,12}%26match_type%3DGame)?$/;
   // ONE board row for market m (decoded board row: m.ev set) and its offer q. ctx = {fc, view, now}
   function propRow(m, q, ctx) {
     var now = ctx.now || Date.now(), sc = scoutAt(q, ctx.fc || {}), mkc = marketAt(m.mk, q);
@@ -114,6 +117,7 @@
              pLean: null, market: mkc, mLean: null, edge: null, gapPts: null, gap: false,
              fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION,
              held: held ? held.t : null, heldCode: held ? held.b : null};
+    if (q.p === "underdog" && typeof q.ud === "string" && UD_LINK_RE.test(q.ud)) r.ud = q.ud;
     if (sc && lean) r.pLean = lean === "over" ? sc.po : sc.pu;
     if (sc && mkc && !held) {
       r.gapPts = 100 * (sc.po - mkc.po);
@@ -282,6 +286,7 @@
     return '<tr class="sw-tb-row' + (extra || "") + '" data-key="' + esc(r.key) + '" data-rid="' + esc(r.rid) + '">' +
       '<td class="sw-tb-stat" data-label="Stat"><a href="' + esc(opts.href(r.m, r.q)) + '">' + esc(stat) + "</a>" + (root.SportsCompare ? root.SportsCompare.rowButton(r) : "") + "</td>" +   // HOOK (compare)
       '<td class="sw-tb-line num" data-label="Line"><b>' + S.line(r.line) + '</b> <span class="sw-tb-book">' + esc(opts.bookName(r.book)) + "</span>" +
+        (r.ud ? ' <a class="sw-tb-note sw-udopen" href="' + esc(r.ud) + '" target="_blank" rel="noopener noreferrer">Open in Underdog</a>' : "") +
         (r.nBooks > 1 ? '<span class="sw-tb-note">' + r.nBooks + " books</span>" : "") + (!r.fresh ? '<span class="sw-tb-note warn">not re-confirmed</span>' : "") + "</td>" +
       '<td class="sw-tb-leanc" data-label="Lean">' + leanBadge(r) + (r.gap ? '<span class="sw-tb-gap" title="Scout and the market differ by ' + Math.abs(r.gapPts).toFixed(1) + ' points at this line">Model vs market gap</span>' : "") + "</td>" +
       '<td class="sw-tb-scout num" data-label="Scout">' + (sc ? '<span class="sw-tb-mu"' + (sc.via === "forecast" ? ' data-fc="' + esc(sc.fid) + '" data-fcside="mean"' : "") + ">" + (sc.mu !== null ? S.num(sc.mu, 1) : "—") + "</span> " +
