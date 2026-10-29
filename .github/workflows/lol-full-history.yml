@@ -43,6 +43,8 @@ jobs:
       LOL_TEST_PG_DSN: postgresql://postgres:postgres@localhost:5432/lol_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0              # tests/test_pplink.py compares the flag-off pages with the base commit's bytes
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

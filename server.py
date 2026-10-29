@@ -38,6 +38,7 @@ from pick_verdict import verdict, stake_cap_reasons, _CAP_WORDS, _CAP_RE, CAP_WO
 import hltv
 import picklog
 import platform_rules
+import pplink
 import slips
 import slip_batches
 import comparison
@@ -1420,7 +1421,7 @@ def _slip_feed(bk):
     return b, c[1]
 
 
-def slip_leg_check(leg, feeds=None, now=None):
+def slip_leg_check(leg, feeds=None, now=None, hit=None):
     """The ONE server rule for a slip leg against the platform feed NOW (2026-10-18 owner: a side that is not offered or
     not confirmed is never accepted - also from a slip saved earlier; closeout2 copyval: this answer decides whether the
     page may write the slip to the clipboard at all). -> None when the exact line is listed with this side offered and
@@ -1465,6 +1466,10 @@ def slip_leg_check(leg, feeds=None, now=None):
         check = slip_lock(check, leg.get("start"), leg.get("match_start"), leg.get("lock_at"), *graded, now=now)
         st, note = check.get("status"), check.get("note") or ""
         if st == "verified":
+            if hit is not None:                   # PP_OPEN_LINK: the feed rows this verified leg matched (their ids)
+                same = [r for r in check.get("rows") or [] if r.get("line") == line
+                        and ((not r.get("alt")) if _lt_norm(lt) == "standard" else r.get("odds_type") == lt)]
+                hit.update(book=bk, rows=[{"id": r.get("id"), "odds_type": r.get("odds_type"), "line": r.get("line")} for r in same])
             return None
         if note == LOCKED_NOTE:
             found.append((0, "locked", "Match started"))
@@ -1496,16 +1501,59 @@ def slip_leg_problem(leg, feeds=None, now=None):
     return None if c is None else f"{_leg_label(leg)}: {c['reason']}"
 
 
-def slip_check(d):
+def _pp_leg(leg, hit):
+    """One verified PrizePicks leg -> its link leg, from the feed row(s) the check matched: the leg's own row id when it is
+    one of them, else exactly one projection, else a standard (not promo) one when exactly one; two that still fit = no
+    link (never a guess)."""
+    rows = [r for r in (hit or {}).get("rows") or [] if pplink.projection_id(r.get("id"))]
+    if (hit or {}).get("book") != "prizepicks" or not rows:
+        return None
+    ids = {pplink.projection_id(r["id"]) for r in rows}
+    own = pplink.projection_id(leg.get("row_id"))
+    if own and own in ids:                             # the row the member picked (e.g. a promo at a standard's line)
+        rows = [r for r in rows if pplink.projection_id(r["id"]) == own]
+    elif len(ids) > 1:
+        rows = [r for r in rows if (r.get("odds_type") or "standard") == "standard"]
+        if len({pplink.projection_id(r["id"]) for r in rows}) != 1:
+            return None
+    r = rows[0]
+    return {"projection_id": pplink.projection_id(r["id"]), "side": _slip_side(leg.get("side")), "line": r.get("line"),
+            "odds_type": r.get("odds_type") or leg.get("line_type") or "standard", "book": "prizepicks"}
+
+
+def studio_open_link(rec, feed):
+    """PP_OPEN_LINK, a Slip Studio slip that verify_before_copy just passed: PrizePicks -> {"pp_url"} (each leg's row id is
+    the projection id - verify matched it to the current graded row - and must still be a row of the current feed) or
+    {"pp_reason"}; Underdog -> {"open_url": the pick'em home} (no pre-fill). No I/O: the feed is the one verify read."""
+    book = rec.get("book") or "underdog"
+    if book == "underdog":
+        return {"open_url": pplink.UD_HOME}
+    if book != "prizepicks":
+        return {}
+    legs = rec.get("legs") or []
+    live = {str(r.get("id")): r for r in (feed or {}).get("rows") or [] if str(r.get("id") or "").startswith("pp:")}
+    pl = []
+    for l in legs:
+        r = live.get(str(l.get("row_id")))
+        if r is None or (l.get("book") or "underdog") != "prizepicks":
+            return {"pp_reason": "PrizePicks' id for a pick on this slip is not known - copy the slip instead"}
+        pl.append({"row_id": l.get("row_id"), "side": l.get("side"), "line": r.get("line"),
+                   "odds_type": r.get("odds_type") or l.get("market_type"), "book": "prizepicks"})
+    url, why = pplink.pp_link(pl)
+    return {"pp_url": url} if url else {"pp_reason": why}
+
+
+def slip_check(d, link=False):
     """Every rule a copied slip must pass on the server BEFORE the page writes it to the clipboard (closeout2 copyval,
     owner: validation first, the clipboard only on the server's OK): each leg (slip_leg_check incl. the lock rule), one
     platform per slip, at least 2 picks, and the platform's published entry rules (platform_rules.entry_check).
     -> {"ok", "legs": [member-facing lines], "problems": [{leg, nick, code, reason}]}.
     Bounded: <= 6 legs, each platform's cached feed read once per request, no lock held, no network I/O."""
     legs = d["legs"]
-    feeds, out = {}, []
+    feeds, out, hits = {}, [], []
     for i, l in enumerate(legs):
-        c = slip_leg_check(l, feeds)
+        hits.append({})
+        c = slip_leg_check(l, feeds, hit=hits[-1]) if link else slip_leg_check(l, feeds)
         if c:
             out.append(dict(c, leg=i, nick=l.get("nick"), text=f"{_leg_label(l)}: {c['reason']}"))
     books_ = {str(l.get("book")) for l in legs if l.get("book")}     # a crafted non-string book: a refusal, never a 500
@@ -1523,7 +1571,21 @@ def slip_check(d):
                             "text": "Entries need players from at least 2 different teams" if "different teams" in r else r})
     for x in out:
         x.setdefault("reason", x["text"])
-    return {"ok": not out, "legs": [x["text"] for x in out], "problems": out}
+    res = {"ok": not out, "legs": [x["text"] for x in out], "problems": out}
+    if link and res["ok"]:
+        # PP_OPEN_LINK: the PrizePicks lineup link of THIS checked slip (the ids of the feed rows each leg verified against)
+        if d.get("book") != "prizepicks" or any(l.get("book") != "prizepicks" for l in legs):
+            res["pp_reason"] = "Only PrizePicks slips open in PrizePicks"
+        else:
+            pl = [_pp_leg(l, h) for l, h in zip(legs, hits)]
+            if any(x is None for x in pl):
+                res["pp_reason"] = "PrizePicks' id for a pick on this slip is not known - copy the slip instead"
+            else:
+                res["pp_url"], why = pplink.pp_link(pl)
+                if not res["pp_url"]:
+                    res.pop("pp_url")
+                    res["pp_reason"] = why
+    return res
 
 
 def board_stake(res, prop, scope, line, line_type="standard", book=None):
@@ -1712,6 +1774,7 @@ def studio_flag(env=None):
     return (os.environ if env is None else env).get("SLIP_STUDIO", "1") != "0"
 
 
+PP_OPEN_LINK = pplink.enabled()   # "Open in PrizePicks" / "Open Underdog" on checked slips - OFF unless PP_OPEN_LINK=1 (owner app test)
 SLIP_STUDIO = studio_flag()       # on by default (owner 2026-10-12); SLIP_STUDIO=0 turns the endpoints + panel off
 STUDIO_BUILDS_PER_MIN = 20        # Build presses per member per minute (a retry with the same idem key is free)
 STUDIO_EVENTS_PER_MIN = 40        # verify + event calls per member per minute (its own bucket - never eats build quota)
@@ -1882,6 +1945,8 @@ def _lol_member_rebuild(path, mt):
                      "line_seen": x.get("quote_seen_at"), "line_checked": x.get("quote_checked_at") or x.get("quote_seen_at"),
                      "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [], "not_modelled": inp.get("unknowns") or [],
                      "model_version": str(f.get("model") or "").split(" ")[0] or None, "factors": inp.get("factors"), "team_win": inp.get("team_win")})
+        if PP_OPEN_LINK and x.get("platform") == "prizepicks":     # the PrizePicks projection id of the CURRENT offer (lineup link)
+            rows[-1]["pp_projection_id"] = pplink.projection_id(x.get("line_id"))
     tables = []
     for t in b.get("match_tables") or []:
         mk = [m for m in (t.get("markets") or {}).values() if m.get("market_type") == "single"]
@@ -3898,7 +3963,8 @@ class Handler(BaseHTTPRequestHandler):
                 sess = self.member()
                 return self.send(200, {"required": whop_auth.enabled(), "signed_in": bool(sess),
                                        "member": bool(sess and sess["ok"]), "name": (sess or {}).get("name"),
-                                       "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO, "lol": lol_public()})
+                                       "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO, "lol": lol_public(),
+                                       **({"pp_open_link": True} if PP_OPEN_LINK else {})})
             if u.path == "/auth/login" and whop_auth.enabled():
                 url, pkce = whop_auth.start_login()
                 return self.redirect(url, [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"])
@@ -4917,8 +4983,11 @@ class Handler(BaseHTTPRequestHandler):
                             key=key, detail={"changes": v["changes"][:10]})
         except ValueError:
             pass
-        return self.send(200, dict(v, slip_id=rec["slip_id"], batch_id=rec["batch_id"], book=book,
-                                   copy_text=sb.copy_text(rec) if v["ok"] else None))
+        out = dict(v, slip_id=rec["slip_id"], batch_id=rec["batch_id"], book=book,
+                   copy_text=sb.copy_text(rec) if v["ok"] else None)
+        if PP_OPEN_LINK and v["ok"]:
+            out.update(studio_open_link(rec, feed))
+        return self.send(200, out)
 
     def studio_event(self, sb, sid, d, idem):
         if set(d) - {"batch_id", "slip_id", "kind", "idem"}:
@@ -5199,16 +5268,29 @@ class Handler(BaseHTTPRequestHandler):
                 assert all(isinstance(l, dict) for l in d["legs"]) and len(body) <= 20000
             except Exception:
                 return self.send(400, {"error": "bad slip"})
-            v = slip_check(d)
+            # PP_OPEN_LINK: "open": "prizepicks" asks for the lineup link of this checked slip (built only after the same
+            # check); with the flag off the field is ignored and the answer is exactly the copy answer
+            want = d.get("open") if PP_OPEN_LINK and d.get("open") in ("prizepicks", "underdog") else None
+            v = slip_check(d, link=want == "prizepicks")
             if not v["ok"]:                            # rejected on the server: not copied, nothing logged
                 return self.send(409, {"ok": False, "error": "slip_has_unavailable_legs", "legs": v["legs"], "problems": v["problems"]})
+            extra = {}
+            if want == "prizepicks":
+                if not v.get("pp_url"):                # a valid slip without a lineup link: nothing opened, nothing logged
+                    return self.send(409, {"ok": False, "error": "no_prizepicks_link", "legs": [v.get("pp_reason") or "This slip can't be opened in PrizePicks"],
+                                           "problems": []})
+                extra = {"pp_url": v["pp_url"]}
+            elif want == "underdog":
+                if d.get("book") != "underdog":
+                    return self.send(409, {"ok": False, "error": "not_underdog", "legs": ["Only Underdog slips open Underdog"], "problems": []})
+                extra = {"open_url": pplink.UD_HOME}
             try:
                 new = slips.log_loaded(d)
             except ValueError:
                 return self.send(400, {"error": "bad slip"})
             except Exception:                          # the log file failed: the slip itself is valid - still copied
-                return self.send(200, {"ok": True, "logged": False})
-            return self.send(200, {"ok": True, "duplicate": not new})
+                return self.send(200, {"ok": True, "logged": False, **extra})
+            return self.send(200, {"ok": True, "duplicate": not new, **extra})
         form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
         if u.path != "/admin/closing" or not self.authed(form.get("token")):
             return self.send(403, {"error": "forbidden"})
