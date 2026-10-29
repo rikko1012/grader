@@ -1059,6 +1059,7 @@ function showGate(state) {
   try {
     const s = await fetch("/auth/me").then(r => r.json());
     try { studioSwitch(!!s.slip_studio); } catch {}   // owner switch (default off)
+    if (s.pp_open_link === true) { PPL.on = true; try { drawSlip(); } catch {} }    // PP_OPEN_LINK owner switch (default off)
     try { if (s.lol) { $("#sportsw").hidden = false; $("#railgame").hidden = false; } } catch {}     // owner's LoL release switch (default off)
     if (!s.required) return document.body.classList.remove("locked");
     if (!s.member) return showGate(s);
@@ -1229,6 +1230,29 @@ async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast("Copied"); }
   catch { const a = document.createElement("textarea"); a.value = text; document.body.append(a); a.select();
           try { document.execCommand("copy"); toast("Copied"); } catch {} a.remove(); }
+}
+// ---- PP_OPEN_LINK (2026-10-28, owner switch, default off): "Open in PrizePicks" opens the member's PrizePicks lineup
+// builder with the slip's picks (PrizePicks' own ?projections= link, built by the SERVER after its slip check passed);
+// "Open Underdog" opens Underdog's pick'em home (no pre-fill there) after the same check. Off: nothing below is drawn.
+const PPL = {on: false, board: "https://app.prizepicks.com/board?projections=", ud: "https://app.underdogsports.com/pick-em/higher-lower/all/home"};
+const PPL_WORD = {prizepicks: "Open in PrizePicks", underdog: "Open Underdog"};
+function pplOk(url, book) {      // only the two exact destinations, never anything else an answer could carry
+  return typeof url === "string" && (book === "prizepicks" ? url.startsWith(PPL.board) && /^[0-9]+-[ou]-[0-9.]+(,[0-9]+-[ou]-[0-9.]+){1,5}$/.test(url.slice(PPL.board.length)) : book === "underdog" && url === PPL.ud);
+}
+function pplGo(url, book) {
+  if (!pplOk(url, book)) return false;
+  let w = null; try { w = window.open(url, "_blank"); } catch {}
+  if (w) { try { w.opener = null; } catch {} return true; }
+  // a blocked pop-up (the check took a moment): one tap on a real link opens it
+  ask(PPL_WORD[book], `<div>Every line checked.</div><div style="margin-top:10px"><a class="go" style="display:inline-block;text-decoration:none;padding:8px 14px" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(PPL_WORD[book])}</a></div>`,
+      [{k: "close", label: "Close"}]);
+  return true;
+}
+// the button only for a 2-6 pick slip of one platform whose every line is checked and up on that platform right now
+function pplButton(s, plat) {
+  if (!PPL.on || !PPL_WORD[plat] || s.length < 2 || s.length > 6) return "";
+  if (!s.every(x => x.bk === plat && ["verified", "stale"].includes(x.now?.status) && !legStarted(x))) return "";
+  return `<button type="button" class="chipbtn" data-slipopen="${plat}">${PPL_WORD[plat]}</button>`;
 }
 function setProp(v) { prop = v; [...$("#prop").children].forEach(x => x.classList.toggle("on", x.dataset.v === v)); store.set("cs2s_prop", v); }
 setProp(store.get("cs2s_prop", "kills"));
@@ -1850,7 +1874,7 @@ function slipHtml(s, where) {
     + (dupPlayer ? `<div class="warn">The same player appears twice – his picks move together, so the real chance differs from the %. Check your app allows it.</div>` : "")
     + (s.some(x => x.lt && x.lt !== "standard") ? `<div class="warn">Goblin / demon picks are their own PrizePicks entry type – check the entry in the app before you enter it.</div>` : "")
     + (leans ? `<div class="warn">${leans} pick${leans > 1 ? "s are" : " is a"} Lean${leans > 1 ? "s" : ""} (0 units) – the weakest legs on the slip.</div>` : "")
-    + `<div class="actions"><button type="button" class="chipbtn"${page ? "" : ` id="slipcopy"`} data-slipcopy="1">Copy slip</button><button type="button" class="chipbtn" data-slipshare="1" title="A link to these picks – it opens against the current board">Share link</button>`
+    + `<div class="actions"><button type="button" class="chipbtn"${page ? "" : ` id="slipcopy"`} data-slipcopy="1">Copy slip</button>${pplButton(s, plat)}<button type="button" class="chipbtn" data-slipshare="1" title="A link to these picks – it opens against the current board">Share link</button>`
     + `<button type="button" class="chipbtn"${page ? "" : ` id="slipclear"`} data-slipclear="1">Clear</button>${page ? "" : `<button type="button" class="chipbtn" id="slipclose">Close</button>`}</div>
        <div class="small muted" style="margin-top:8px">Every line is checked on ${plat ? bookName(plat) : "the platform"} before it is copied. Chances are multiplied as if the picks were independent.</div>`
     + (page ? "" : `<div class="slipfoot"><span>${n} pick${n === 1 ? "" : "s"}${est != null ? ` · Est. chance <b>${pct(est)}</b>` : ""}</span><button type="button" class="go" data-slipcopy="1">Copy</button></div>`);
@@ -1963,7 +1987,9 @@ function slipClick(e) {
   const pl = e.target.closest("[data-pinleg]");
   if (pl) { const x = store.get("cs2s_slip", [])[+pl.dataset.pinleg]; if (x) pinPick(x.rid, x.bk, `${x.p} ${sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}`); return; }
   if (e.target.closest("[data-slipshare]")) return shareSlip();
-  if (e.target.closest("#slipcopy") || e.target.closest("[data-slipcopy]")) (async () => {
+  const op = PPL.on ? e.target.closest("[data-slipopen]") : null;
+  const act = e.target.closest("#slipcopy") || e.target.closest("[data-slipcopy]") ? "copy" : op && PPL_WORD[op.dataset.slipopen] ? op.dataset.slipopen : null;
+  if (act) (async () => {
     const s = await recheckSlip();
     if (new Set(s.map(x => x.bk).filter(Boolean)).size > 1) {
       await ask("One platform per slip", "These picks are on different platforms – remove the picks of one of them to copy this slip.", [{k: "review", label: "Review slip", primary: true}]);
@@ -2017,6 +2043,19 @@ function slipClick(e) {
     // written only after its explicit OK - a refusal, a failure or a timeout copies nothing and names the reason.
     const text = `${s.length}-pick ${bookName(slipBook(s)) || "custom"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%`).join("\n");
     toast("Checking every line…", SLIP_CHECK.ms);
+    if (act !== "copy") {                       // PP_OPEN_LINK: the same checks, then the SERVER's OK + its link, else nothing opens
+      const w = act !== slipBook(s) || !s.every(x => x.bk === act) ? {ok: false, reasons: [`Only ${bookName(act)} slips open ${bookName(act)}`]} : await serverSlipCheck(s, act);
+      const url = w.ok ? (act === "prizepicks" ? w.pp_url : w.open_url) : null;
+      if (!w.ok || !pplOk(url, act)) {
+        toast("Not opened", 2500);
+        await ask("Not opened", (w.ok ? [SLIP_RETRY] : w.reasons).map(t => `<div>• ${esc(t)}</div>`).join(""), [{k: "review", label: "Review slip", primary: true}]);
+        return;
+      }
+      if (act === "underdog") await copy(text);  // Underdog has no pre-filled entry: the picks go on the clipboard
+      pplGo(url, act);
+      try { expoAdd("slip", expoLegsManual(s)); } catch {}
+      return;
+    }
     const v = await serverSlipCheck(s);
     if (!v.ok) {
       toast("Not copied", 2500);
@@ -2032,24 +2071,24 @@ function slipClick(e) {
 // a refused one never). -> {ok: true} only on the server's explicit OK, else {ok: false, reasons: [plain reasons]}.
 const SLIP_CHECK = {ms: 8000};
 const SLIP_RETRY = "Could not check the lines right now - try again";
-function slipLogBody(s) {
+function slipLogBody(s, open) {
   let cid; try { cid = crypto.randomUUID(); } catch { cid = String(Date.now()) + Math.random(); }
   // immutable load log (no member identity): what was copied and each leg's live-line state at that moment
-  return JSON.stringify({cid, mode: "member-copy", n: s.length, book: slipBook(s) || "research",
+  return JSON.stringify({cid, ...(open ? {open, mode: "member-open"} : {mode: "member-copy"}), n: s.length, book: slipBook(s) || "research",
     grader: boardVer || "", legs: s.map(x => ({nick: x.p, prop: x.t, scope: x.sc, line: x.l, side: x.s, book: x.bk || null, line_type: x.lt || "standard", p: x.pc, grade: x.g, match_slug: x.m,
       team: x.tm, opponent: x.vs, start: x.st, match_start: x.ms || null, lock_at: lockIso(x) || null, match_id: x.mid || null, row_id: x.rid || null,
       player_id: x.pid, model_outcomes: x.model_outcomes,
       check: x.now?.status || "unchecked", orig_line: x.orig?.line ?? x.l, check_note: x.now?.note || ""}))});
 }
-async function serverSlipCheck(s) {
+async function serverSlipCheck(s, open) {
   let timer, ac = null;
   try { ac = new AbortController(); } catch {}
   const late = new Promise((_, no) => { timer = setTimeout(() => { try { ac && ac.abort(); } catch {} no(new Error("timeout")); }, SLIP_CHECK.ms); });
   late.catch(() => {});
   try {
-    const r = await Promise.race([fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body: slipLogBody(s), ...(ac ? {signal: ac.signal} : {})}), late]);
+    const r = await Promise.race([fetch("/api/slip_log", {method: "POST", headers: {"Content-Type": "application/json"}, body: slipLogBody(s, open), ...(ac ? {signal: ac.signal} : {})}), late]);
     let d = null; try { d = await Promise.race([r.json(), late]); } catch {}
-    if (r && r.status === 200 && d && d.ok === true) return {ok: true};
+    if (r && r.status === 200 && d && d.ok === true) return open ? {ok: true, pp_url: d.pp_url, open_url: d.open_url} : {ok: true};
     if (r && r.status === 409 && d && Array.isArray(d.legs) && d.legs.length) return {ok: false, reasons: d.legs.map(String)};
     if (r && r.status === 429) return {ok: false, reasons: ["Too many copies in a minute - wait a moment and try again"]};
     return {ok: false, reasons: [SLIP_RETRY]};
@@ -3195,7 +3234,7 @@ function studioSlip(s) {
     <div class="nums">${studioChance(s)}
       ${(s.repeats || []).length ? `<span class="pill reuse" title="${esc(s.repeats.join("; "))}" data-tip="${esc(s.repeats.join("; "))}" tabindex="0">${s.repeats.length} pick${s.repeats.length === 1 ? "" : "s"} reused</span>` : ""}</div>
     <div class="studio-actions"><button type="button" class="bslip" data-verify="${esc(s.slip_id)}"${started || note ? " disabled" : ""}>${note ? "Changed – not for copying" : started ? "Started – locked" : "Verify & copy"}</button>
-      <button type="button" class="chipbtn" data-tomy="${esc(s.slip_id)}"${started || note ? " disabled" : ""} title="Puts these picks on your slip – each line is checked on ${bookName(s.book)}">Send to my slip</button>
+      ${PPL.on && PPL_WORD[s.book] && !started && !note ? `<button type="button" class="chipbtn" data-studioopen="${esc(s.slip_id)}">${PPL_WORD[s.book]}</button>` : ""}<button type="button" class="chipbtn" data-tomy="${esc(s.slip_id)}"${started || note ? " disabled" : ""} title="Puts these picks on your slip – each line is checked on ${bookName(s.book)}">Send to my slip</button>
       <span class="small muted">${bookName(s.book)} · ${sizeWord(s.n)} entry · slip ${esc(s.slip_id.split("/").slice(1).join("/"))}</span></div>
     <div class="small studio-fb">${note ? `<b style="color:var(--warn)">Changed since it was built – not copied:</b><ul>${note.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
       ${cp ? `<span style="color:var(--good)">✓ Every line checked on ${bookName(s.book)} ${esc(cp.at)} – copied. Enter it in the app yourself; if anything looks different there, verify again.</span>
@@ -3282,11 +3321,24 @@ async function studioBuild(newBatch, why, replace) {
   } catch (e) { $("#st-status").textContent = `Couldn't build (${e.message})`; }
   finally { STUDIO.busy = false; $("#st-build").disabled = $("#st-new").disabled = false; }
 }
-async function studioVerify(id, btn) {
+async function studioVerify(id, btn, open) {
+  const lab0 = btn.textContent;
   btn.disabled = true; btn.textContent = "Checking every line…";
   try {
     const {status, d} = await studioCall("POST", "/api/slip_studio/verify", {slip: id, idem: rid()});
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
+    if (d.ok && open) {                        // PP_OPEN_LINK: the server's verify passed - open only its own link
+      const url = d.book === "prizepicks" ? d.pp_url : d.book === "underdog" ? d.open_url : null;
+      if (d.book !== open || !pplOk(url, open)) { btn.disabled = false; btn.textContent = lab0; toast(`Not opened – ${d.pp_reason || SLIP_RETRY}`, 3500); return; }
+      if (open === "underdog") {                // no pre-filled Underdog entry: the slip text goes on the clipboard
+        STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
+        await copy(d.copy_text);
+        studioCall("POST", "/api/slip_studio/event", {batch_id: d.batch_id, slip_id: id, kind: "copy", idem: rid()}).catch(() => {});
+      }
+      pplGo(url, open);
+      try { const sl = studioFind(id); if (sl) expoAdd("studio", expoLegsStudio(sl)); } catch {}
+      return studioRender();
+    }
     if (d.ok) {
       STUDIO.copied[id] = {text: d.copy_text, at: new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"})};
       await copy(d.copy_text);
@@ -3303,7 +3355,7 @@ async function studioVerify(id, btn) {
     }
     studioRender();
     return studioBuild(false, "A line changed – replacing this slip from the current board…", id);
-  } catch (e) { btn.disabled = false; btn.textContent = "Verify & copy"; toast(`Couldn't verify (${e.message})`); }
+  } catch (e) { btn.disabled = false; btn.textContent = open ? lab0 : "Verify & copy"; toast(`Couldn't verify (${e.message})`); }
 }
 const studioFind = id => { const b = STUDIO.batch; return b ? [4, 3, 2].flatMap(n => (b.slips || {})[n] || []).find(x => x.slip_id === id) || null : null; };
 // U2: a Studio slip's legs (their saved pick records) become manual-slip legs through the usual add path - one line check per
@@ -3365,6 +3417,8 @@ $("#studio").addEventListener("click", e => {
   if (e.target.closest("#st-build")) return studioBuild(false);
   if (e.target.closest("#st-new")) return studioBuild(true);
   const v = e.target.closest("[data-verify]"); if (v) return studioVerify(v.dataset.verify, v);
+  const sop = PPL.on ? e.target.closest("[data-studioopen]") : null;
+  if (sop) { const sl = studioFind(sop.dataset.studioopen); if (sl && PPL_WORD[sl.book]) return studioVerify(sop.dataset.studioopen, sop, sl.book); }
   const tm = e.target.closest("[data-tomy]"); if (tm) return studioToMySlip(tm.dataset.tomy);
   const up = e.target.closest("[data-unpin]"); if (up) { STUDIO.pins = (STUDIO.pins || []).filter(x => x.id !== up.dataset.unpin); return studioPins(); }
   const so = e.target.closest("[data-ssort] button"); if (so) { STUDIO.sort = so.dataset.v === "start" ? "start" : "chance"; store.set("cs2s_studio_sort", STUDIO.sort); return studioRender(); }

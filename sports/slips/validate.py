@@ -17,6 +17,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import os
+import re
+from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 
 from .. import identity
@@ -26,6 +30,42 @@ from . import builder, joint, pool as poolmod, rules
 
 MAX_LEGS = 8
 MODES = ("load", "copy")
+
+# PP_OPEN_LINK (2026-10-28, owner switch, default OFF): an ok COPY answer also carries PrizePicks' own lineup link
+# (?projections=<projectionId>-<o|u>-<line_score>,...; the member's PrizePicks lineup builder opens with these picks and
+# the member enters it) or, for Underdog (no pre-fill link exists), its pick'em home. Built only from the checked current
+# legs; never an invite_code / wager_id. Same rules as the esports pplink.py (sports does not import CS2 modules).
+PP_BOARD = "https://app.prizepicks.com/board"
+UD_HOME = "https://app.underdogsports.com/pick-em/higher-lower/all/home"
+_PP_ID = re.compile(r"^pp:([0-9]{1,15})$")
+
+
+def open_link_on(env=None):
+    return (os.environ if env is None else env).get("PP_OPEN_LINK", "").strip() == "1"
+
+
+def pp_link(legs):
+    """Checked current legs -> the PrizePicks lineup URL, or None: 2-6 legs, every leg platform prizepicks with offer_id
+    'pp:<digits>', side exactly over / under, a goblin / demon only over, a finite line >= 0, no projection twice."""
+    if not isinstance(legs, list) or not 2 <= len(legs) <= 6:
+        return None
+    toks, seen = [], set()
+    for l in legs:
+        m = _PP_ID.match(str((l or {}).get("offer_id") or ""))
+        if not m or l.get("platform") != "prizepicks" or m.group(1) in seen:
+            return None
+        seen.add(m.group(1))
+        sd = {"over": "o", "under": "u"}.get(l.get("side"))
+        if sd is None or (str(l.get("variant") or "standard").lower() in ("goblin", "demon") and sd != "o"):
+            return None
+        try:
+            x = float(l.get("line"))
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(x) or x < 0:
+            return None
+        toks.append(f"{m.group(1)}-{sd}-{int(x) if x.is_integer() else repr(x)}")
+    return PP_BOARD + "?projections=" + quote(",".join(toks), safe="-,.")
 
 
 def payout_key(schedule):
@@ -143,6 +183,13 @@ def check(slip, pool, mode="load", now=None, offer_lookup=None, live_current=Non
            "joint": joint.joint(legs_now) if sched else None, "entry_check": entry}
     if ok and mode == "copy":
         out["copy_text"] = copy_text(platform, entry_type, legs_now)
+        if open_link_on():
+            if platform == "prizepicks":
+                link = pp_link(legs_now)
+                if link:
+                    out["pp_link"] = link
+            elif platform == "underdog":
+                out["open_url"] = UD_HOME
     return out
 
 

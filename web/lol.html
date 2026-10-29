@@ -357,6 +357,74 @@ function legStatus(l) {
   if (x.pick_side !== l.side) return {ok: false, text: `The model's pick on this line is now ${x.pick_side}.`};
   return {ok: true, text: `${l.side} ${x.line} still posted (line checked ${new Date(x.line_checked).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}).`};
 }
+// ---- PP_OPEN_LINK (2026-10-28, owner switch, default off). "Open in PrizePicks": the same recheck as Copy on a fresh
+// board, then PrizePicks' own lineup link (?projections=<id>-<o|u>-<line>,...) from the FRESH rows' projection ids - the
+// member's PrizePicks lineup builder opens with these picks and the member enters it there. "Open Underdog": the same
+// recheck, the picks copied, then Underdog's pick'em home (Underdog has no pre-filled link). Off: nothing below is drawn.
+const PPL = {on: false, board: "https://app.prizepicks.com/board?projections=", ud: "https://app.underdogsports.com/pick-em/higher-lower/all/home"};
+const PPL_WORD = {prizepicks: "Open in PrizePicks", underdog: "Open Underdog"};
+function ppSide(side) { return side === "Over" ? "o" : side === "Under" ? "u" : null; }      // exactly o / u, never guessed
+function ppLine(v) { const n = +v; return v == null || v === "" || !Number.isFinite(n) || n < 0 ? null : String(n); }   // 30 -> "30", 31.5 -> "31.5"
+// legs + the board rows (D.rows of a fresh board) -> {url} or {why}; mirrors pplink.pp_link on the server
+function ppLink(legs, rows) {
+  if (!Array.isArray(legs) || legs.length < 2 || legs.length > 6) return {why: "PrizePicks lineups take 2-6 picks."};
+  if (new Set(legs.map(l => l.team)).size < 2) return {why: "Entries need players from at least 2 different teams."};
+  const toks = [], seen = new Set();
+  for (const l of legs) {
+    if (l.platform !== "prizepicks") return {why: "Only PrizePicks picks open in PrizePicks."};
+    const x = (rows || []).find(r => r.key === l.key), id = x ? String(x.pp_projection_id == null ? "" : x.pp_projection_id) : "";
+    if (!x || !/^[0-9]{1,15}$/.test(id)) return {why: `PrizePicks' id for ${l.player} is not known - copy the slip instead.`};
+    if (seen.has(id)) return {why: "The same PrizePicks pick is on this slip twice."};
+    seen.add(id);
+    const sd = ppSide(l.side), offered = (x.sides || []).find(z => z.side === l.side);
+    if (!sd || !offered || !offered.offered) return {why: `${l.side} is not offered on ${l.player}'s line.`};
+    if (/goblin|demon/i.test(x.line_type || "") && sd !== "o") return {why: "Goblin and demon picks are More only on PrizePicks."};
+    const ln = ppLine(x.line); if (ln == null) return {why: `${l.player}'s line is not known.`};
+    toks.push(`${id}-${sd}-${ln}`);
+  }
+  return {url: PPL.board + toks.join(",")};
+}
+function pplButton() {
+  const pl = SLIP.legs.length ? SLIP.legs[0].platform : null;
+  if (!PPL.on || !PPL_WORD[pl] || SLIP.legs.length < 2 || SLIP.legs.length > (pl === "prizepicks" ? 6 : MAXLEGS[pl])) return "";
+  if (!SLIP.legs.every(l => l.platform === pl)) return "";
+  if (pl === "prizepicks" && !SLIP.legs.every(l => { const x = (D.rows || []).find(r => r.key === l.key); return x && /^[0-9]{1,15}$/.test(String(x.pp_projection_id == null ? "" : x.pp_projection_id)); })) return "";
+  return `<button type="button" class="btn" id="openslip" data-open="${pl}">${PPL_WORD[pl]}</button>`;
+}
+function pplGo(url) {
+  let w = null; try { w = window.open(url, "_blank"); } catch {}
+  if (w) { try { w.opener = null; } catch {} return true; }
+  return false;
+}
+async function openSlip(pl) {
+  const msg = $("#slipmsg");
+  msg.className = "actmsg"; msg.textContent = "Rechecking every line…";
+  if (!SLIP.legs.length || SLIP.legs.some(l => l.platform !== pl)) { msg.className = "actmsg bad"; msg.textContent = `Only ${pl === "prizepicks" ? "PrizePicks" : "Underdog"} slips open there - nothing opened.`; return false; }
+  if (!await fresh()) { $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "The board could not be reached - nothing opened."; return false; }
+  CHECK = {}; for (const l of SLIP.legs) CHECK[l.key] = legStatus(l);
+  const bad = SLIP.legs.filter(l => !CHECK[l.key].ok);
+  if (bad.length) {
+    render(); $("#slipmsg").className = "actmsg bad";
+    $("#slipmsg").textContent = `Nothing opened - ${bad.map(l => `${l.player} (${l.stat_name}, ${l.scope}): ${CHECK[l.key].text.replace(/\.$/, "")}`).join("; ")}. Remove ${bad.length > 1 ? "these picks" : "this pick"}, then try again.`;
+    return false;
+  }
+  let url;
+  if (pl === "prizepicks") {
+    const k = ppLink(SLIP.legs, D.rows);
+    if (!k.url) { render(); $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = `Nothing opened - ${k.why}`; return false; }
+    url = k.url;
+  } else {
+    if (SLIP.legs.length < 2 || new Set(SLIP.legs.map(l => l.team)).size < 2) { render(); $("#slipmsg").className = "actmsg bad"; $("#slipmsg").textContent = "Nothing opened - entries need at least 2 picks from 2 different teams."; return false; }
+    url = PPL.ud;
+    await copyText(`${SLIP.legs[0].platform_label} - ${SLIP.legs.length} picks\n` + SLIP.legs.map(legText).join("\n"));
+  }
+  render();
+  const m = $("#slipmsg"), opened = pplGo(url);
+  m.className = "actmsg ok";
+  if (opened) m.textContent = pl === "prizepicks" ? "Every line rechecked just now - opened in PrizePicks." : "Every line rechecked just now - picks copied, Underdog opened.";
+  else m.innerHTML = `Every line rechecked just now. <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(PPL_WORD[pl])}</a>`;
+  return url;
+}
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch {}
   try { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; } catch { return false; }
@@ -441,7 +509,7 @@ function slipView() {
   if (!SLIP.legs.length) h += `<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
   else {
     h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); return `<div class="slipleg"><div>${esc(legText(l))}</div><button type="button" class="btn" data-rm="${i}">Remove</button>${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
-      <div class="actions"><button type="button" class="btn primary" id="copyslip">Recheck lines &amp; copy slip</button><button type="button" class="btn" id="clearslip">Clear</button><span class="actmsg" id="slipmsg"></span></div>
+      <div class="actions"><button type="button" class="btn primary" id="copyslip">Recheck lines &amp; copy slip</button>${pplButton()}<button type="button" class="btn" id="clearslip">Clear</button><span class="actmsg" id="slipmsg"></span></div>
       <p class="small faint" style="margin:8px 0 0">${esc(D.stake_note)} Your slip is your own selection; it is not a suggestion.</p>`;
   }
   return h + `</section>`;
@@ -769,6 +837,7 @@ function render() {
   document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { SLIP.legs.splice(+b.dataset.rm, 1); saveSlip(); CHECK = {}; render(); });
   if ($("#clearslip")) $("#clearslip").onclick = () => { SLIP.legs = []; saveSlip(); CHECK = {}; render(); };
   if ($("#copyslip")) $("#copyslip").onclick = copySlip;
+  if (PPL.on && $("#openslip")) $("#openslip").onclick = () => openSlip($("#openslip").dataset.open);
   document.querySelectorAll("[data-send]").forEach(b => b.onclick = () => sendSuggested(b.dataset.send));
   $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; $("#g").value = F.floor; }
   const set = (k, v) => { F[k] = v; visibleLimit = 48; save(); render(); };
@@ -839,6 +908,7 @@ window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, Str
   const s = await fetch("/auth/me").then(r => r.json()).catch(() => ({}));
   if (s.required && !s.member) { gate(s); return; }
   if (s.name) $("#who").innerHTML = `${esc(s.name)} · <a href="/auth/logout">Sign out</a>`;
+  if (s.pp_open_link === true) PPL.on = true;           // PP_OPEN_LINK owner switch (default off)
   if (await load(true)) openLinked();
   if (!GATED) poll();
 })();

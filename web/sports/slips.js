@@ -32,7 +32,36 @@
     var r = await fetch("/api/sports/token", { credentials: "same-origin", cache: "no-store" });
     if (!r.ok) throw new Error(r.status === 401 ? "Sign in as a member to use Slip Studio." : "Sports is not available right now.");
     auth = await r.json();
+    pplSync();
     return auth;
+  }
+  /* PP_OPEN_LINK (owner switch, default off; the token answer says pp_open_link): "Open in PrizePicks" / "Open Underdog"
+     next to Copy. A click runs the SAME server check as Copy; only an ok answer's own link is opened (PrizePicks: the
+     lineup builder pre-filled from the checked legs; Underdog: its pick'em home - no pre-fill exists, the picks are
+     copied). A refused or failed check opens nothing. Off: the page is unchanged. */
+  var PP_BOARD = "https://app.prizepicks.com/board?projections=", UD_HOME = "https://app.underdogsports.com/pick-em/higher-lower/all/home";
+  var OPEN_WORD = { prizepicks: "Open in PrizePicks", underdog: "Open Underdog" };
+  function pplOk(url, platform) {
+    return typeof url === "string" && (platform === "prizepicks" ? url.indexOf(PP_BOARD) === 0 && /^[0-9]+-[ou]-[0-9.]+(,[0-9]+-[ou]-[0-9.]+){1,5}$/.test(url.slice(PP_BOARD.length))
+      : platform === "underdog" && url === UD_HOME);
+  }
+  function pplSync() {
+    var copyBtn = $("ss-copy"); if (!copyBtn) return;
+    var b = $("ss-open"), on = !!(auth && auth.pp_open_link === true), pl = ctx().platform, n = getDraft().legs.length;
+    if (!on || !OPEN_WORD[pl]) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement("button"); b.className = "ss-btn"; b.type = "button"; b.id = "ss-open"; b.addEventListener("click", openSlip); copyBtn.insertAdjacentElement("afterend", b); }
+    b.textContent = OPEN_WORD[pl];
+    b.disabled = n < 2 || (pl === "prizepicks" && n > 6);
+  }
+  async function openSlip() {
+    var pl = ctx().platform, r = await check("copy"), box = $("ss-check");
+    if (!r || !r.ok) return;                            // the check names the reason; nothing opened
+    var url = pl === "prizepicks" ? r.pp_link : r.open_url;
+    if (!pplOk(url, pl)) { box.insertAdjacentHTML("afterbegin", '<p class="ss-banner ss-bad" role="alert">Not opened - ' + esc(pl === "prizepicks" ? "PrizePicks' id for a pick on this slip is not known; copy the slip instead." : "try again.") + "</p>"); return; }
+    if (pl === "underdog" && r.copy_text) { try { await navigator.clipboard.writeText(r.copy_text); } catch (e) {} }
+    var w = null; try { w = window.open(url, "_blank"); } catch (e) { w = null; }
+    if (w) { try { w.opener = null; } catch (e) {} box.insertAdjacentHTML("afterbegin", '<p class="ss-okmsg" role="status">' + esc(pl === "prizepicks" ? "Opened in PrizePicks - enter it there and check every line." : "Picks copied - Underdog opened. Enter them there and check every line.") + "</p>"); }
+    else box.insertAdjacentHTML("afterbegin", '<p class="ss-okmsg" role="status">Every pick checked. <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(OPEN_WORD[pl]) + "</a></p>");
   }
   async function postApi(path, body, retried) {
     var t = await token();
@@ -237,6 +266,7 @@
   function renderDraft() {
     var d = getDraft(), c = ctx(), el = $("ss-draft");
     $("ss-draft-ctx").textContent = "- " + LABEL[c.platform] + " " + c.league.toUpperCase() + " " + (d.entry_type || c.entry_type);
+    pplSync();
     if (!d.legs.length) { el.innerHTML = '<p class="ss-empty">Empty. Use a suggestion to start a slip.</p>'; $("ss-copy").disabled = true; return; }
     $("ss-copy").disabled = false;
     var probs = {};

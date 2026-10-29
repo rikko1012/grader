@@ -162,7 +162,9 @@ def _token(member, allowed, admin, headers):
     except authtoken.TokenError:
         return _j(503, {"error": "sports_auth_not_configured"})
     _bump("token_minted")
-    return _j(200, {"token": t["token"], "exp": t["exp"], "ttl_s": t["ttl_s"], "api_base": api_base()},
+    return _j(200, {"token": t["token"], "exp": t["exp"], "ttl_s": t["ttl_s"], "api_base": api_base(),
+                    # PP_OPEN_LINK owner switch (default off): the page draws "Open in PrizePicks" / "Open Underdog"
+                    **({"pp_open_link": True} if os.environ.get("PP_OPEN_LINK", "").strip() == "1" else {})},
               {"Cache-Control": "no-store"})
 
 
