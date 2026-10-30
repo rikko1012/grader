@@ -12,6 +12,7 @@ Inside the worker:
   series / player links every 10 min
 - main thread: writes status.json / coverage.json / quarantine.json / links.json in DATA_DIR/lol/center every 60 s
   (atomic); exits when the parent server is gone
+- malloc-trim thread: hands freed memory back to the OS every 60 s (glibc arenas capped at 2 before any thread starts)
 
 - once per UTC day (from 06:00, right after the settle step): the A16 1 lc-1 decision as a child process
   (`python -m lol.cal autofit`; log <LOL_DATA_DIR>/model/lol_cal_log.jsonl), skipped when nothing new settled
@@ -41,6 +42,52 @@ STATE = {"started_at": None, "markets": {}, "ingest": {}, "riot": {}, "build": N
 # that moment; a peak while no step runs is "unattributed" (e.g. the LoL Esports pass). Measurement only.
 MEM = {"stages": {}, "active": {}, "unattributed": {"peak_mb": 0.0}}
 
+
+
+# glibc malloc (Linux / Render): each of this worker's threads gets its own malloc arena, and the memory a heavy step frees
+# stays in those arenas instead of going back to the OS, so the worker's resident memory ratchets up between restarts
+# (2026-10-29/30, no deploy for 17 h: 134 -> ~430 MB). The web process has handled this since 2026-10-18
+# (membudget.tune_allocator), but the worker is a separate process and inherits neither setting. Same treatment here:
+# cap the arenas before any thread starts, hand freed memory back every minute. Changes no data and no computation.
+ALLOC = {"arena_max": None, "trims": 0, "last_trim_freed_mb": None, "platform": None}
+
+
+def _trim_once(libc, collect=False):
+    """One trim: optionally a full gc pass (reference cycles), then malloc_trim(0); records what it gave back."""
+    import gc
+    before = _rss()
+    if collect:
+        ALLOC["gc_freed"] = gc.collect()
+    libc.malloc_trim(0)
+    after = _rss()
+    ALLOC["trims"] += 1
+    if before is not None and after is not None:
+        ALLOC["last_trim_freed_mb"] = round(before - after, 1)
+
+
+def _tune_allocator(arenas=2, trim_every=60):
+    """Cap glibc's arenas and start the trim thread. False (and nothing changed) off Linux / glibc."""
+    import ctypes
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+    except OSError:
+        ALLOC["platform"] = "no glibc - not tuned"
+        return False
+    M_ARENA_MAX = -8
+    ALLOC["arena_max"] = arenas if libc.mallopt(M_ARENA_MAX, arenas) == 1 else None
+    ALLOC["platform"] = "glibc"
+
+    def loop():
+        n = 0
+        while True:
+            time.sleep(trim_every)
+            n += 1
+            try:
+                _trim_once(libc, collect=n % 5 == 0)
+            except Exception:                              # noqa: BLE001 - a trim never stops the worker
+                pass
+    threading.Thread(target=loop, daemon=True, name="lol-malloc-trim").start()
+    return True
 
 
 def _market_odds(team, opponent, start):
@@ -362,7 +409,7 @@ def write_status():
                "quarantine": {r[0]: r[1] for r in con.execute(
                    "SELECT kind || ':' || reason, COUNT(*) FROM quarantine WHERE resolved_at IS NULL GROUP BY kind, reason")},
                "errors": STATE["errors"][-5:], "memory": dict(_memory(), stages=MEM["stages"], running=sorted(MEM["active"]),
-                                                              unattributed=MEM["unattributed"])}
+                                                              unattributed=MEM["unattributed"], allocator=ALLOC)}
         quarantine = [dict(r) for r in con.execute("SELECT kind, skey, reason, detail, first_seen, last_seen FROM quarantine "
                                                    "WHERE resolved_at IS NULL ORDER BY last_seen DESC LIMIT 500")]
         links = [dict(r) for r in con.execute("SELECT l.*, e.player, e.team, e.opponent, e.start_time, e.stat, e.scope, e.line "
@@ -380,6 +427,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     STATE["started_at"] = store.now_iso()
     parent = os.getppid()
+    _tune_allocator()                                      # before any other thread: the arena cap applies to new arenas
     threading.Thread(target=_mem_sampler, daemon=True, name="lol-mem").start()
     if os.environ.get("LOL_ARCHIVE", "1") != "0":
         threading.Thread(target=markets_loop, daemon=True, name="lol-markets").start()
