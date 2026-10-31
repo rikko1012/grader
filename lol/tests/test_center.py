@@ -434,6 +434,80 @@ def test_split_is_stable_for_the_aiming_lazyfeel_case(con):
     assert build.split_wrong_merges(con, "2026-10-17T21:20:00Z") == 0
 
 
+class _FakeLibc:
+    def __init__(self, mallopt_ok=1):
+        self.calls, self.ok = [], mallopt_ok
+
+    def mallopt(self, param, value):
+        self.calls.append(("mallopt", param, value))
+        return self.ok
+
+    def malloc_trim(self, pad):
+        self.calls.append(("malloc_trim", pad))
+        return 1
+
+
+class _Threads:
+    """Records threads in start order instead of running them."""
+    def __init__(self, log):
+        self.log = log
+
+    def __call__(self, target=None, args=(), daemon=None, name=None):
+        log = self.log
+
+        class T:
+            def start(self):
+                log.append(name)
+        return T()
+
+
+def test_worker_caps_arenas_and_trims_like_the_web_process(monkeypatch):
+    """2026-10-30: the worker is its own process, so the web process's allocator tuning never reached it and its resident
+    memory ratcheted up between deploys. It caps glibc's arenas itself and trims freed memory back to the OS."""
+    import ctypes
+    from lol.center import worker
+    libc, started = _FakeLibc(), []
+    monkeypatch.setattr(ctypes, "CDLL", lambda name: libc)
+    monkeypatch.setattr(worker.threading, "Thread", _Threads(started))
+    monkeypatch.setattr(worker, "ALLOC", {"arena_max": None, "trims": 0, "last_trim_freed_mb": None, "platform": None})
+    assert worker._tune_allocator(arenas=2) is True
+    assert libc.calls == [("mallopt", -8, 2)] and worker.ALLOC["arena_max"] == 2 and started == ["lol-malloc-trim"]
+    seq = iter([400.0, 310.0])
+    monkeypatch.setattr(worker, "_rss", lambda: next(seq))
+    worker._trim_once(libc)
+    assert libc.calls[-1] == ("malloc_trim", 0) and worker.ALLOC["trims"] == 1 and worker.ALLOC["last_trim_freed_mb"] == 90.0
+    monkeypatch.setattr(ctypes, "CDLL", lambda name: (_ for _ in ()).throw(OSError("no libc")))   # Windows / musl
+    assert worker._tune_allocator() is False and worker.ALLOC["platform"] == "no glibc - not tuned"
+
+
+def test_worker_is_first_in_line_for_the_oom_killer(monkeypatch, tmp_path):
+    """2026-10-31: the container's memory peaked at 1,884 of 2,147 MB. If it runs out, the kernel must end the worker
+    (restarted by server.py), never the web process members are on."""
+    from lol.center import worker
+    monkeypatch.setattr(worker, "ALLOC", {"arena_max": None, "trims": 0, "last_trim_freed_mb": None, "platform": None})
+    adj = tmp_path / "oom_score_adj"
+    adj.write_text("0")
+    assert worker._prefer_oom_kill(path=str(adj)) is True
+    assert adj.read_text() == "900" and worker.ALLOC["oom_score_adj"] == 900
+    assert worker._prefer_oom_kill(path=str(tmp_path / "missing" / "oom_score_adj")) is False   # no /proc (Windows)
+
+
+def test_worker_tunes_the_allocator_before_any_thread_starts(monkeypatch, tmp_path):
+    """mallopt's arena cap only binds arenas created after it, so it must run before the worker's threads exist."""
+    from lol.center import worker
+    order = []
+    monkeypatch.setattr(worker, "OUT", tmp_path)
+    monkeypatch.setattr(worker, "_tune_allocator", lambda: order.append("tune"))
+    monkeypatch.setattr(worker, "_prefer_oom_kill", lambda: order.append("oom"))
+    monkeypatch.setattr(worker.threading, "Thread", _Threads(order))
+    monkeypatch.setattr(worker, "write_status", lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
+    for k in ("LOL_ARCHIVE", "LOL_LP", "LOL_LE"):
+        monkeypatch.setenv(k, "1")
+    with pytest.raises(KeyboardInterrupt):
+        worker.main()
+    assert order[:2] == ["tune", "oom"] and len(order) > 2 and "tune" not in order[2:]
+
+
 def test_worker_stage_memory_is_recorded_per_step(monkeypatch):
     """2026-10-18 memory: each worker step records its start / peak / end resident memory (TEST values)."""
     from lol.center import worker
