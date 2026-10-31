@@ -152,7 +152,7 @@ def default_jobs():
                           timeout_s=300, flag="SPORTS_ASSISTANT", cap_mb=120, cls=LIGHT, prio=0),
         # what members read
         "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=45 if std else 90, timeout_s=600 if std else 120, flag="SPORTS_API",
-                         cap_mb=160, cls=HEAVY, prio=1, locks=("prebuilt",)),  # 105-109 MB (slim slip pool)
+                         urgent_after_s=300, cap_mb=160, cls=HEAVY, prio=1, locks=("prebuilt",)),  # 105-109 MB (slim slip pool)
         # the board build, ONE PROCESS PER LEAGUE (fresh 2026-10-24): both leagues in one process were killed at
         # 251-265 MB in production; an NFL week alone measured 137 MB on one live read of every board (17k offers),
         # NBA 90 MB. Cap 300 = the envelope the exclusive model jobs already run in (340): with it reserved no other
@@ -164,8 +164,10 @@ def default_jobs():
                                      timeout_s=420 if std else 240, urgent_after_s=300,
                                      flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2,
                                      league=x, locks=(f"snapshots:{x}",)) for x in lg},
-        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=300,
-                       flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3),   # 67 / 126 / 26 MB measured (synthetic 400-player league)
+        # locks (2026-10-31): a heavy job without them runs alone, so the other slot sat empty and sheets / settle / history
+        # waited 50 min. sheets reads the store read-only and writes only its own files; 420 s because a partner slows it
+        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=420 if std else 300,
+                       flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3, locks=("sheets",)),   # 67 / 126 / 26 MB measured (synthetic 400-player league)
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
@@ -187,6 +189,7 @@ def default_jobs():
                               locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=900 if std else 3600, timeout_s=900,
                        flag="SPORTS_INGEST", cap_mb=240 if std else 120, cls=HEAVY, prio=4,
+                       locks=("canonical", "books", "games", "cache", "model-daily"),      # never beside a collector
                        # Settlement also imports the model scorecard's native libraries. The old collector VM
                        # limit (320 MB) lets settlement finish but breaks that import. RSS remains watchdog-bound.
                        env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
@@ -200,7 +203,7 @@ def default_jobs():
         # the engine's player-page context, out of the 3-minute ui-snapshots job (319 MB inline with whole seasons vs
         # its 250 MB cap); ui-snapshots embeds the latest result one player file at a time (199 MB)
         "player-context": dict(argv=_py("-m", "sports.player_context", "build", *lg), every_s=1800, timeout_s=600,
-                               flag="SPORTS_INGEST", cap_mb=260, cls=HEAVY, prio=5),   # 170 MB, 13 s (1,724 games)
+                               flag="SPORTS_INGEST", cap_mb=260, cls=HEAVY, prio=5, locks=("games",)),   # 170 MB, 13 s (1,724 games)
         "games-backfill": dict(argv=_py("-m", "sports.games.backfill_job", "--budget", "120"), every_s=900,
                                timeout_s=300, flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=6),   # 43-47 MB
         "slips-settle": dict(argv=_py("-m", "sports.slips", "settle"), every_s=900 if std else 3600, timeout_s=600,
@@ -232,7 +235,8 @@ def default_jobs():
         # player game logs: small rotating batches (least recently checked first) every 15 min, so every board player
         # is re-read within ~3 h and a finished game reaches the player page the same night
         "history": dict(argv=_py("-m", "sports.snapshots", "history", *lg, "--max-players", "60"), every_s=900,
-                        timeout_s=900, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),   # 107 MB @ 40 players
+                        timeout_s=900, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6,
+                        locks=("canonical", "cache")),                         # 107 MB @ 40 players
         "archive": dict(argv=_py("-m", "sports.archive", "pass"), every_s=6 * 3600, timeout_s=1800,
                         flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),      # 140 MB (80k rows)
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,

@@ -156,7 +156,10 @@ overrides); every cap in the table below is the Starter-measured cap x min(plan 
 once = 2 from 1.5 GB (`SPORTS_MAX_HEAVY` overrides), and two run together only when both declare their store write
 locks, share none and are not one league's collector beside the same league's board build - in practice one
 league's board build beside the other league's collector (at 2 GB the collectors are heavy, not exclusive). Model /
-lab jobs stay exclusive. Jobs without declared locks still run one heavy at a time.
+lab jobs stay exclusive. Jobs without declared locks still run one heavy at a time. Since 2026-10-31 sheets, settle,
+player-context and history declare theirs (they waited ~50 min for an empty heavy slot): settle and history share
+locks with the collectors so they never run beside one, and the slip pool goes first when 5 min overdue like the board
+builds. On 1 CPU a pair slows both jobs; a job slot is only worth having if the timeouts still hold (sheets 420 s).
 
 **Standard cadences (code defaults when the plan is >= 1.5 GB, 2026-10-25; Starter in brackets):** collector per
 league 3 / 5 / 10 min near tip / game day / otherwise [5 / 10 / 15]; Kalshi 10 / 30 min [20 / 60]; board build per

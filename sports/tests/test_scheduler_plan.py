@@ -174,3 +174,22 @@ def test_ops_state_reports_the_plan(monkeypatch):
     st = scheduler.state()
     assert st["memory_mb"] == 2048 and st["budget_mb"] == 1466 and st["max_heavy"] == 2
     assert st["memory_source"] == "SPORTS_MEMORY_MB"
+
+
+def test_long_jobs_can_share_the_second_heavy_slot_but_never_a_collector_write(monkeypatch):
+    """2026-10-31: without locks settle / sheets / history waited ~50 min for an EMPTY heavy slot."""
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
+    monkeypatch.setenv("SPORTS_CHILD_BUDGET_MB", "1200")
+    jobs = scheduler.default_jobs()
+    pair = scheduler.Scheduler._pairable
+    for name in ("settle", "sheets", "history", "player-context"):
+        assert pair(jobs[name], jobs["ui-snapshots-nba"]), name
+        assert jobs[name]["cap_mb"] + jobs["ui-snapshots-nba"]["cap_mb"] <= 1200, name
+    for name in ("settle", "history"):
+        for writer in ("ingest-nba", "ingest-nfl", "ingest-kalshi"):
+            assert not pair(jobs[name], jobs[writer]), (name, writer)
+    assert not pair(jobs["settle"], jobs["history"])
+    assert not pair(jobs["settle"], jobs["grades-daily"])
+    assert jobs["sheets"]["timeout_s"] >= 420
+    assert jobs["prebuilt"]["urgent_after_s"] == 300
+
