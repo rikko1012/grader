@@ -12,7 +12,8 @@ Inside the worker:
   series / player links every 10 min
 - main thread: writes status.json / coverage.json / quarantine.json / links.json in DATA_DIR/lol/center every 60 s
   (atomic); exits when the parent server is gone
-- malloc-trim thread: hands freed memory back to the OS every 60 s (glibc arenas capped at 2 before any thread starts)
+- malloc-trim thread: hands freed memory back to the OS every 60 s (glibc arenas capped at 2 before any thread starts);
+  the worker is first in line for the kernel OOM killer (oom_score_adj 900), never the web process
 
 - once per UTC day (from 06:00, right after the settle step): the A16 1 lc-1 decision as a child process
   (`python -m lol.cal autofit`; log <LOL_DATA_DIR>/model/lol_cal_log.jsonl), skipped when nothing new settled
@@ -87,6 +88,20 @@ def _tune_allocator(arenas=2, trim_every=60):
             except Exception:                              # noqa: BLE001 - a trim never stops the worker
                 pass
     threading.Thread(target=loop, daemon=True, name="lol-malloc-trim").start()
+    return True
+
+
+def _prefer_oom_kill(path="/proc/self/oom_score_adj", score=900):
+    """First in line for the kernel's OOM killer, as the sports service's jobs are (sports/scheduler.py): if the
+    container reaches its memory limit, the kernel ends this worker - server.py restarts it with backoff - instead of the
+    web process members are on (2026-10-31 05:40 UTC: the container's anonymous memory peaked at 1,884 of 2,147 MB while
+    the worker held 617 MB). An unprivileged process may raise its own score; children inherit it. No-op off Linux."""
+    try:
+        with open(path, "w") as f:
+            f.write(str(score))
+    except OSError:
+        return False
+    ALLOC["oom_score_adj"] = score
     return True
 
 
@@ -428,6 +443,7 @@ def main():
     STATE["started_at"] = store.now_iso()
     parent = os.getppid()
     _tune_allocator()                                      # before any other thread: the arena cap applies to new arenas
+    _prefer_oom_kill()
     threading.Thread(target=_mem_sampler, daemon=True, name="lol-mem").start()
     if os.environ.get("LOL_ARCHIVE", "1") != "0":
         threading.Thread(target=markets_loop, daemon=True, name="lol-markets").start()
