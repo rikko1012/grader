@@ -177,6 +177,33 @@ def _stage(mem, name):
     sys.stderr.flush()
 
 
+def _last_read(con, league, as_of):
+    """platform -> newest re-confirmation of any current offer of this league. Walks records_feed_seen from the newest
+    sighting per platform: the GROUP BY read every offer revision the league ever stored (2026-10-31: NBA build)."""
+    out = {}
+    plats = [r[0] for r in con.execute(
+        "WITH RECURSIVE p(x) AS (SELECT MIN(platform) FROM records WHERE kind = 'offer' UNION ALL "
+        "SELECT (SELECT MIN(platform) FROM records WHERE kind = 'offer' AND platform > x) FROM p WHERE x IS NOT NULL) "
+        "SELECT x FROM p WHERE x IS NOT NULL")]
+    for plat in plats:
+        r = con.execute(f"SELECT COALESCE(last_seen_at, observed_at) FROM records WHERE kind = 'offer' AND platform = ? "
+                        f"AND league = ? AND {store.CURRENT_SQL} AND known_at <= ? "
+                        f"ORDER BY COALESCE(last_seen_at, observed_at) DESC LIMIT 1", (plat, league, as_of)).fetchone()
+        if r and r[0]:
+            out[plat] = r[0]
+    return out
+
+
+def _unmatched_offers(con, league, as_of):
+    """Offers whose latest revision has no game: starts from the rows with no event_id, not every revision stored."""
+    return con.execute(
+        f"SELECT COUNT(*) FROM (SELECT source, source_key, MAX(revision) AS rv FROM records WHERE kind = 'offer' "
+        f"AND event_id IS NULL AND league = ? AND {store.CURRENT_SQL} AND known_at <= ? GROUP BY source, source_key) c "
+        f"WHERE NOT EXISTS (SELECT 1 FROM records x WHERE x.kind = 'offer' AND x.source = c.source "
+        f"AND x.source_key = c.source_key AND x.revision > c.rv AND x.league = ? AND x.late = 0 AND x.known_at <= ?)",
+        (league, as_of, league, as_of)).fetchone()[0]
+
+
 def _iter_forecasts(con, event_ids, as_of):
     """One decoded forecast at a time (a generator: the caller keeps only what it needs)."""
     for i in range(0, len(event_ids), 400):
@@ -499,23 +526,38 @@ def _choose(fcs):
 
 
 # --------------------------------------------------------------------------------------------------------- games
-def player_games(con, league, pid, before, teams):
-    """Per-game history of one player from typed StatObservations of games that started before `before`."""
+def _events_of(con, ids, before, cache):
+    """event_id -> preferred event row, each game decoded once per build (a player's history repeats every teammate's)."""
+    need = [x for x in ids if x not in cache]
+    for x in need:
+        cache[x] = None
+    for i in range(0, len(need), 400):                  # one query per 400 games (was one per game)
+        chunk = need[i:i + 400]
+        for row in _latest(con, "event", f"event_id IN ({','.join('?' * len(chunk))})", chunk, before):
+            cur = cache[row[1].event_id]
+            if cur is None or (row[1].start_source == "espn" and cur[1].start_source != "espn"):
+                cache[row[1].event_id] = row
+    return {x: cache[x] for x in ids if cache[x] is not None}
+
+
+def player_games(con, league, pid, before, teams, ev_cache=None):
+    """Per-game history of one player from typed StatObservations of games that started before `before`. Only the
+    MAX_GAMES newest games' stats are decoded: whole seasons of an NBA regular made this the build's slowest loop."""
     fam = FAMILY[league]
-    rows = _latest(con, "stat", "player_id = ?", [pid], before)
+    ev_cache = {} if ev_cache is None else ev_cache
+    ids = [r[0] for r in con.execute(f"SELECT DISTINCT event_id FROM records WHERE kind = 'stat' AND player_id = ? "
+                                     f"AND {store.CURRENT_SQL} AND known_at <= ?", (pid, before)) if r[0]]
+    evs = _events_of(con, ids, before, ev_cache)
+    newest = sorted((x for x, r in evs.items() if r[1].start_utc and r[1].start_utc < before),
+                    key=lambda x: evs[x][1].start_utc, reverse=True)[:MAX_GAMES]
+    if not newest:
+        return []
+    rows = _latest(con, "stat", f"player_id = ? AND event_id IN ({','.join('?' * len(newest))})", [pid, *newest], before)
     by_ev = defaultdict(dict)
     for rid, obs, _ in rows:
         cur = by_ev[obs.event_id].get(obs.stat)
         if cur is None or (obs.source == "espn" and cur[1].source != "espn"):  # box score beats the game log
             by_ev[obs.event_id][obs.stat] = (rid, obs)
-    evs = {}
-    ids = sorted(by_ev)
-    for i in range(0, len(ids), 400):                   # one query per 400 games (was one per game)
-        chunk = ids[i:i + 400]
-        for row in _latest(con, "event", f"event_id IN ({','.join('?' * len(chunk))})", chunk, before):
-            cur = evs.get(row[1].event_id)
-            if cur is None or (row[1].start_source == "espn" and cur[1].start_source != "espn"):
-                evs[row[1].event_id] = row
     mems = defaultdict(list)
     for rid, m, _ in _latest(con, "membership", "player_id = ?", [pid], before):
         mems[m.player_id].append(m)
@@ -622,10 +664,15 @@ def _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root
 def build(con, league, now=None, base=None, history=True, results=True):
     """Build every snapshot file of one league. -> summary counts."""
     t0 = time.time()
-    mem = []
+    mem, stage_s = [], []
+    def stage(name):
+        _stage(mem, name)
+        stage_s.append([name, round(time.time() - t0, 1)])   # seconds since the build started
+        sys.stderr.write(f"  snapshots stage {name}: {stage_s[-1][1]} s\n")
     now = now or now_utc()
     fam = FAMILY[league]
     root = snap_root(base) / league
+    ev_cache = {}
     teams = {t.team_id: t for _, t, _ in _latest(con, "team", "league = ?", [league], now)}
     from datetime import timedelta
     horizon = (parse_utc(now) + timedelta(days=SLATE_DAYS[league])).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -642,19 +689,13 @@ def build(con, league, now=None, base=None, history=True, results=True):
     # (production 2026-10-25 01:00Z: killed_over_cap 254 > 250 MB six times in a row -> the board stopped refreshing).
     ev_ids = sorted(events)
     ev_in = ",".join("?" * len(ev_ids)) or "NULL"
-    last_read = {}                                          # platform -> newest re-confirmation of any of its offers
-    for r in con.execute(f"SELECT platform, MAX(COALESCE(last_seen_at, observed_at)) FROM records WHERE kind='offer' "
-                         f"AND league = ? AND {store.CURRENT_SQL} AND known_at <= ? GROUP BY platform", (league, now)):
-        if r[0] and r[1]:
-            last_read[r[0]] = r[1]
+    last_read = _last_read(con, league, now)                # platform -> newest re-confirmation of any of its offers
     offers = [(rid, o, m) for rid, o, m in _latest(
         con, "offer", f"league = ? AND (source, source_key) IN (SELECT source, source_key FROM records WHERE "
                       f"kind = 'offer' AND league = ? AND event_id IN ({ev_in}))", [league, league, *ev_ids], now)
         if o.event_id in events and o.availability == "open"]
-    unmatched = con.execute(
-        f"SELECT COUNT(*) FROM (SELECT event_id, MAX(revision) FROM records WHERE kind='offer' AND league = ? AND "
-        f"{store.CURRENT_SQL} AND known_at <= ? GROUP BY source, source_key) WHERE event_id IS NULL",
-        (league, now)).fetchone()[0]
+    unmatched = _unmatched_offers(con, league, now)
+    stage("offers read")
     revs = _offer_revisions(con, league, now, ev_ids)
     by_rid = {rid: (rid, o, m) for rid, o, m in offers}
     by_ident = {(o.platform, o.offer_id): (rid, o, m) for rid, o, m in offers}
@@ -686,7 +727,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
         attached[crid].append(hit)
     fc_objs = {hit[0].forecast_id: hit[0] for hit in best.values()}     # the decoded forecasts the files need
     del best, revs
-    _stage(mem, "offers + forecasts read")
+    stage("offers + forecasts read")
     # players
     pids = sorted({o.player_id for _, o, _ in offers if o.player_id})
     players = {}
@@ -765,10 +806,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
         same_line_forecasts(row, forecasts)
     # sort + slim the board: Kalshi rungs nearest the pick'em lines only (full ladder in the player file)
     # what each displayed forecast is (scout / informed / market), its 80% range, validation, used inputs, PMF
-    _stage(mem, "market rows")
+    stage("market rows")
     fd_info = forecast_detail.enrich(forecasts, league,
                                      with_pmf_for={k for k, f in forecasts.items() if f.get("kind") != "market"})
-    _stage(mem, "forecast detail")
+    stage("forecast detail")
     run = forward_run(league)
     board_rows = []
     dnp = market_view.dnp_share(league)
@@ -825,7 +866,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
     board_rows.sort(key=lambda r: (events[r["event_id"]][1].start_utc, r["event_id"], not r["quotes"], r["player"],
                                    not r["primary"], r["stat"]))
 
-    _stage(mem, "board rows")
+    stage("board rows")
     # slate
     slate = []
     glines = game_lines.game_lines(league, {eid: e for eid, (_, e, _) in events.items()})
@@ -918,7 +959,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
         k: ({**f, "detail": {x: y for x, y in f["detail"].items() if x != "pmf"}} if f.get("detail") else f)
         for k, f in forecasts.items()}})
 
-    _stage(mem, "slate+board files")
+    stage("slate+board files")
     # players
     n_players = 0
     pl_dir, hi_dir = root / "players", root / "history"
@@ -939,7 +980,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                        "home": None if tid is None else tid == e.home_team_id,
                        "opponent": _team_view(teams, e.away_team_id if tid == e.home_team_id else e.home_team_id)
                        if tid in (e.home_team_id, e.away_team_id) else None}
-        games = player_games(con, league, pid, now, teams) if history else []
+        games = player_games(con, league, pid, now, teams, ev_cache) if history else []
         vrows = board_view.player_rows(rows, games)
         view_out.add(vrows)
         for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
@@ -995,9 +1036,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
     if results:
         sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
-    _stage(mem, "players")
+    stage("players")
     manifest["build_s"] = round(time.time() - t0, 2)
     manifest["build_rss_mb"] = mem
+    manifest["build_stage_s"] = stage_s
     _write(root / "manifest.json", manifest)
     return {"league": league, **manifest["counts"], "player_files": n_players, "sizes": sizes,
             "build_s": manifest["build_s"]}

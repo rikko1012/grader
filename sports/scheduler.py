@@ -8,6 +8,7 @@ through a MEMORY-RESERVATION QUEUE:
   * at most ONE heavy job runs at a time ("heavy" = anything but the light slip / assistant jobs);
   * an "exclusive" job (model fit / forecast, lab training) waits until NOTHING else runs and blocks every other start
     while it runs - so ingestion is paused during training;
+  * a member-facing job overdue past urgent_after_s goes first and later jobs may not take its slot (2026-10-31);
   * priority with AGING (effective priority = prio - overdue / SPORTS_JOB_AGING_S, default 120 s per level), so a
     job that keeps losing the slot moves up; a job blocked only by the heavy slot / budget lets later jobs that fit
     start (backfill), but a waiting EXCLUSIVE job holds every later start back until it gets the whole budget;
@@ -158,7 +159,10 @@ def default_jobs():
         # heavy child and no light child fits the 310 MB budget, so service (~70) + build stays near 370 of 512 MB.
         **{f"ui-snapshots-{x}": dict(argv=_py("-m", "sports.snapshots", "build", x, "--no-results"),
                                      every_s=60 if std else 180,
-                                     timeout_s=240, flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2,
+                                     # 2026-10-31: NBA hit 240 s on the grown store and each timeout threw the whole
+                                     # build away (board 64 min old); urgent_after_s = what members read goes first
+                                     timeout_s=420 if std else 240, urgent_after_s=300,
+                                     flag="SPORTS_INGEST", cap_mb=300, cls=HEAVY, prio=2,
                                      league=x, locks=(f"snapshots:{x}",)) for x in lg},
         "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=300,
                        flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3),   # 67 / 126 / 26 MB measured (synthetic 400-player league)
@@ -448,6 +452,21 @@ class Scheduler:
                 return False
         return self.reserved() + spec["cap_mb"] <= self.budget
 
+    def _urgent(self, name, t):
+        """A member-facing job overdue past its urgent_after_s: ahead of everything, however aged the others are."""
+        after, ns = self.specs[name].get("urgent_after_s"), JOBS[name]["next_start"]
+        return bool(after and ns is not None and t - ns >= after)
+
+    def _may_pass(self, name, held):
+        """May `name` start while the urgent job `held` waits? Only if it leaves that job its slot and memory."""
+        spec, want = self.specs[name], self.specs[held]
+        if spec["cls"] == LIGHT:
+            return True
+        if spec["cls"] == EXCLUSIVE or not self._pairable(spec, want):
+            return False
+        heavy = sum(1 for n in self.running if self.specs[n]["cls"] == HEAVY)
+        return heavy + 1 < self.max_heavy and self.reserved() + spec["cap_mb"] + want["cap_mb"] <= self.budget
+
     def every(self, name):
         """The job's current interval: its game-day cadence when it has one (cached 30 s), else every_s."""
         spec = self.specs[name]
@@ -486,7 +505,7 @@ class Scheduler:
                 out.append(name)
         def eff(n):
             ns = JOBS[n]["next_start"] or t
-            return (self.specs[n]["prio"] - max(0.0, t - ns) / self.aging_s, ns)
+            return (not self._urgent(n, t), self.specs[n]["prio"] - max(0.0, t - ns) / self.aging_s, ns)
         out.sort(key=eff)
         return out
 
@@ -571,8 +590,9 @@ class Scheduler:
             self._finish(name, rc, t - t0)
         with _LOCK:
             STATS["peak_children_rss_mb"] = round(max(STATS["peak_children_rss_mb"], total), 1)
+        held = None                                     # an urgent job waiting for a slot
         for name in self.due():
-            if self._fits(name):
+            if (held is None or self._may_pass(name, held)) and self._fits(name):
                 self.start(name)
                 continue
             if JOBS[name]["queued_since"] is None:
@@ -581,6 +601,8 @@ class Scheduler:
                 STATS["deferred_ticks"] += 1
             if self.specs[name]["cls"] == EXCLUSIVE:
                 break                                   # hold everything behind a waiting exclusive job (no starvation)
+            if held is None and self._urgent(name, t):
+                held = name                             # nothing may take the slot it is waiting for
 
     def run(self):
         while not self.stop_ev.is_set():
