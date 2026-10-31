@@ -305,6 +305,19 @@ def prebuilt_state():
         return {"error": type(e).__name__}
 
 
+def board_builds():
+    """league -> the last finished board build: seconds, per-stage seconds, counts (admin ops only)."""
+    from . import snapshots
+    out = {}
+    for lg in os.environ.get("SPORTS_LEAGUES", "nba nfl").split():
+        try:
+            m = json.loads((snapshots.snap_root() / lg / "manifest.json").read_text(encoding="utf-8"))
+            out[lg] = {k: m.get(k) for k in ("built_at", "build_s", "build_stage_s", "counts")}
+        except (OSError, ValueError):
+            out[lg] = None
+    return out
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -315,6 +328,7 @@ def ops():
             "db_pool": web.pool_stats(), "cache": web.cache_stats(), "flags": flags.state(), "scheduler": scheduler_state(),
             "scheduler_alive": bool(_SCHED["thread"] and _SCHED["thread"].is_alive()) if _SCHED["thread"] else None,
             "prebuilt": prebuilt_state(),
+            "board_builds": board_builds(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 

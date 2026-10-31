@@ -115,11 +115,11 @@ def _r(x, n=4):
 
 
 # ---------------------------------------------------------------------------------------------- store reads (worker)
-def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
-    return list(_iter_latest(con, kind, where, args, as_of, limit))
+def _latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7, index=None):
+    return list(_iter_latest(con, kind, where, args, as_of, limit, index))
 
 
-def _iter_latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
+def _iter_latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7, index=None):
     """Latest revision per (source, source_key) among rows of `kind` matching `where`, known at as_of.
     One indexed scan, reduced in Python (SQLite's plan for the GROUP BY self-join scanned every row of the kind).
     Same CURRENT rule as store.offers (store.CURRENT_SQL: late, delayed responses are history, never current)."""
@@ -130,7 +130,7 @@ def _iter_latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7):
         a.append(as_of)
     best = {}
     for row in con.execute(f"SELECT record_id, source, source_key, revision, known_at, last_seen_at, "
-                           f"last_source_updated_at FROM records WHERE {cond}", a):
+                           f"last_source_updated_at FROM records{' INDEXED BY ' + index if index else ''} WHERE {cond}", a):
         k = (row["source"], row["source_key"])
         cur = best.get(k)
         if cur is None or row["revision"] > cur["revision"]:
@@ -186,7 +186,8 @@ def _last_read(con, league, as_of):
         "SELECT (SELECT MIN(platform) FROM records WHERE kind = 'offer' AND platform > x) FROM p WHERE x IS NOT NULL) "
         "SELECT x FROM p WHERE x IS NOT NULL")]
     for plat in plats:
-        r = con.execute(f"SELECT COALESCE(last_seen_at, observed_at) FROM records WHERE kind = 'offer' AND platform = ? "
+        r = con.execute(f"SELECT COALESCE(last_seen_at, observed_at) FROM records INDEXED BY records_feed_seen "
+                        f"WHERE kind = 'offer' AND platform = ? "
                         f"AND league = ? AND {store.CURRENT_SQL} AND known_at <= ? "
                         f"ORDER BY COALESCE(last_seen_at, observed_at) DESC LIMIT 1", (plat, league, as_of)).fetchone()
         if r and r[0]:
@@ -197,7 +198,8 @@ def _last_read(con, league, as_of):
 def _unmatched_offers(con, league, as_of):
     """Offers whose latest revision has no game: starts from the rows with no event_id, not every revision stored."""
     return con.execute(
-        f"SELECT COUNT(*) FROM (SELECT source, source_key, MAX(revision) AS rv FROM records WHERE kind = 'offer' "
+        f"SELECT COUNT(*) FROM (SELECT source, source_key, MAX(revision) AS rv FROM records INDEXED BY records_event "
+        f"WHERE kind = 'offer' "
         f"AND event_id IS NULL AND league = ? AND {store.CURRENT_SQL} AND known_at <= ? GROUP BY source, source_key) c "
         f"WHERE NOT EXISTS (SELECT 1 FROM records x WHERE x.kind = 'offer' AND x.source = c.source "
         f"AND x.source_key = c.source_key AND x.revision > c.rv AND x.league = ? AND x.late = 0 AND x.known_at <= ?)",
@@ -545,14 +547,17 @@ def player_games(con, league, pid, before, teams, ev_cache=None):
     MAX_GAMES newest games' stats are decoded: whole seasons of an NBA regular made this the build's slowest loop."""
     fam = FAMILY[league]
     ev_cache = {} if ev_cache is None else ev_cache
-    ids = [r[0] for r in con.execute(f"SELECT DISTINCT event_id FROM records WHERE kind = 'stat' AND player_id = ? "
-                                     f"AND {store.CURRENT_SQL} AND known_at <= ?", (pid, before)) if r[0]]
+    # INDEXED BY: unforced, SQLite walked every stat row in the store here, once per player (2026-10-31)
+    ids = [r[0] for r in con.execute(f"SELECT DISTINCT event_id FROM records INDEXED BY records_player "
+                                     f"WHERE kind = 'stat' AND player_id = ? AND {store.CURRENT_SQL} AND known_at <= ?",
+                                     (pid, before)) if r[0]]
     evs = _events_of(con, ids, before, ev_cache)
     newest = sorted((x for x, r in evs.items() if r[1].start_utc and r[1].start_utc < before),
                     key=lambda x: evs[x][1].start_utc, reverse=True)[:MAX_GAMES]
     if not newest:
         return []
-    rows = _latest(con, "stat", f"player_id = ? AND event_id IN ({','.join('?' * len(newest))})", [pid, *newest], before)
+    rows = _latest(con, "stat", f"player_id = ? AND event_id IN ({','.join('?' * len(newest))})", [pid, *newest], before,
+                   index="records_player")
     by_ev = defaultdict(dict)
     for rid, obs, _ in rows:
         cur = by_ev[obs.event_id].get(obs.stat)

@@ -135,3 +135,33 @@ def test_player_history_decodes_only_the_games_it_returns_and_each_game_once(mon
     assert snapshots.player_games(con, "nba", pid, ASOF, {}, cache) == games
     assert len(decoded) <= snapshots.MAX_GAMES + 5                       # a teammate's history re-decodes no game
     con.close()
+
+
+def test_new_reads_use_their_index_never_a_walk_of_every_row():
+    """The first cut of these reads looked bounded but SQLite planned them over every stat / league row: live builds
+    got slower (387-420 s). Every statement is checked with EXPLAIN on the SQL actually executed."""
+    con = store.connect()
+    _history(con, 3)
+    store.put(con, h.offer(oid="p1"))
+    store.put(con, h.offer(oid="p2", event_id=None))
+    seen = []
+    con.set_trace_callback(seen.append)
+    snapshots._last_read(con, "nba", ASOF)
+    snapshots._unmatched_offers(con, "nba", ASOF)
+    snapshots.player_games(con, "nba", "nba:player:espn:3134907", ASOF, {})
+    con.set_trace_callback(None)
+    checked = 0
+    for sql in seen:
+        if "platform = '" in sql:
+            want = "records_feed_seen"
+        elif "AS rv" in sql:
+            want = "records_event"
+        elif "kind = 'stat'" in sql or "kind = ? AND late = 0 AND player_id" in sql.replace("'stat'", "?"):
+            want = "records_player"
+        else:
+            continue
+        plan = " | ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN " + sql))
+        assert want in plan and "FOR ORDER BY" not in plan, (sql, plan)
+        checked += 1
+    assert checked >= 4
+    con.close()
