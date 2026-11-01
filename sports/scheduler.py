@@ -41,7 +41,7 @@ TICK_S = 0.25
 _LOCK = threading.Lock()
 JOBS = {}                     # name -> state (ops / alerts / tests)
 STATS = {"started": 0, "over_cap_kills": 0, "timeouts": 0, "deferred_ticks": 0, "peak_reserved_mb": 0,
-         "peak_children_rss_mb": 0.0}
+         "peak_children_rss_mb": 0.0, "recent_timeouts": []}
 
 
 def _env_num(name, default, cast=float):
@@ -590,6 +590,8 @@ class Scheduler:
                     _kill(p)
                     with _LOCK:
                         STATS["timeouts"] += 1
+                        STATS["recent_timeouts"] = (STATS["recent_timeouts"] + [
+                            {"job": name, "at": t, "ran_s": round(t - t0, 1)}])[-10:]   # last_exit is gone after the next run
                     del self.running[name]
                     self._finish(name, "timeout", t - t0)
                 continue

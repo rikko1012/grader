@@ -178,3 +178,15 @@ def test_default_job_caps_fit_the_starter_budget():
     assert service_steady + budget <= 450
     lights = [s["cap_mb"] for s in jobs.values() if s["cls"] == "light"]
     assert all(c <= 120 for c in lights)
+
+
+def test_ops_keeps_the_name_of_a_timed_out_job(monkeypatch):
+    monkeypatch.setitem(scheduler.STATS, "recent_timeouts", [])
+    sch = scheduler.Scheduler(jobs={"hung": J(sleeper(60), "heavy", every=60, timeout=0.2)}, budget=100, tick_s=0.05)
+    t = threading.Thread(target=sch.run)
+    t.start()
+    time.sleep(1.0)
+    sch.stop()
+    t.join(10)
+    assert scheduler.state()["stats"]["recent_timeouts"][0]["job"] == "hung"
+
