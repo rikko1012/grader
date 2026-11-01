@@ -179,6 +179,9 @@ def default_jobs():
         **{f"ingest-{x}": dict(argv=_py("-m", "sports.worker", "ingest", x, "--bucket-min", "1", "--sources",
                                         "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
                                every_s=600 if std else 900, cadence=("gameday", (x,)), then=(f"ui-snapshots-{x}",), collector=True,
+                               # 2026-10-31: a board shows only collected lines; 15 min overdue goes first (replay: 5 min
+                               # stopped settle / forecasts, none left line gaps of 55 min)
+                               urgent_after_s=900 if std else None,
                                timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
                                league=x, locks=("canonical", "books", "games", "cache"),
                                env={"SPORTS_WORKER_CONCURRENCY": "1"}) for x in lg},   # 191-197 MB both leagues

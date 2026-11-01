@@ -192,4 +192,5 @@ def test_long_jobs_can_share_the_second_heavy_slot_but_never_a_collector_write(m
     assert not pair(jobs["settle"], jobs["grades-daily"])
     assert jobs["sheets"]["timeout_s"] >= 420
     assert jobs["prebuilt"]["urgent_after_s"] == 300
+    assert jobs["ingest-nba"]["urgent_after_s"] == jobs["ingest-nfl"]["urgent_after_s"] == 900
 
