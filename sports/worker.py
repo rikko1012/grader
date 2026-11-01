@@ -554,6 +554,7 @@ def cmd_settle(a, con):
     if since and len(since) == 10:
         since += "T00:00:00Z"
     leagues = a.leagues or ["nba", "nfl"]
+    t0, stage_s = time.time(), []
     if since:                                           # explicit backfill: its own job key (never 'done' by an hourly run)
         out = {lg: jobs.run(f"settle-backfill:{lg}:{since}:{bucket(10)}", "settle",
                             lambda ctx, lg=lg: settle_league(con, lg, ctx, since=since, max_catchup=10 ** 6))
@@ -561,6 +562,7 @@ def cmd_settle(a, con):
     else:
         out = {lg: jobs.run(f"settle:{lg}:{bucket(getattr(a, 'bucket_min', None) or 60)}", "settle",
                             lambda ctx, lg=lg: settle_league(con, lg, ctx)) for lg in leagues}
+    stage_s.append(["settle", round(time.time() - t0, 1)])
     from . import snapshots                             # Results ledger right after settling (never breaks settlement)
     out["results"] = {}
     for lg in leagues:
@@ -570,11 +572,17 @@ def cmd_settle(a, con):
             out["results"][lg] = snapshots.write_results(con, lg)
         except Exception as e:                          # noqa: BLE001
             out["results"][lg] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    stage_s.append(["results", round(time.time() - t0, 1)])
     try:                                                # model scorecard + diagnostic queue (sports/model/learning.py)
         from .model import learning                     # never breaks settlement
         out["model_learning"] = learning.on_settled(con)
     except Exception as e:                              # noqa: BLE001
         out["model_learning"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    stage_s.append(["model_learning", round(time.time() - t0, 1)])
+    try:                                                # admin ops: seconds since start, as the board build's stages
+        (config.DATA_DIR / "settle_stages.json").write_text(json.dumps({"at": now_utc(), "stage_s": stage_s}))
+    except OSError:
+        pass
     _print(out)
     return out
 

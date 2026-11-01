@@ -318,6 +318,15 @@ def board_builds():
     return out
 
 
+def settle_stages():
+    """The last finished settle run: seconds since its start at the end of each stage (admin ops only)."""
+    from . import config
+    try:
+        return json.loads((config.DATA_DIR / "settle_stages.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -329,6 +338,7 @@ def ops():
             "scheduler_alive": bool(_SCHED["thread"] and _SCHED["thread"].is_alive()) if _SCHED["thread"] else None,
             "prebuilt": prebuilt_state(),
             "board_builds": board_builds(),
+            "settle_stages": settle_stages(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 
