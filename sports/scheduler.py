@@ -184,12 +184,15 @@ def default_jobs():
                                urgent_after_s=900 if std else None,
                                timeout_s=900, flag="SPORTS_INGEST", cap_mb=300, cls=EXCLUSIVE, prio=3,
                                league=x, locks=("canonical", "books", "games", "cache"),
-                               env={"SPORTS_WORKER_CONCURRENCY": "1"}) for x in lg},   # 191-197 MB both leagues
+                               # 2026-11-01: the worker's own 300 s limit restarted any 300+ s cycle up to 3 times
+                               # beside the old thread until this 900 s kill (ingest-nfl took 180-290 s, twice killed)
+                               env={"SPORTS_WORKER_CONCURRENCY": "1", "SPORTS_JOB_TIMEOUT_S": "870"})
+                            for x in lg},   # 191-197 MB both leagues
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
                                        "kalshi"),
                               every_s=1800 if std else 3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
-                              locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1"}),         # 70-84 MB (production 2026-10-25)
+                              locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1", "SPORTS_JOB_TIMEOUT_S": "870"}),   # 70-84 MB (production 2026-10-25)
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=900 if std else 3600,
                        timeout_s=1500 if std else 900,      # 764 s beside a partner on 2026-11-01, still rising
                        flag="SPORTS_INGEST", cap_mb=240 if std else 120, cls=HEAVY, prio=4,

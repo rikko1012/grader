@@ -195,3 +195,12 @@ def test_long_jobs_can_share_the_second_heavy_slot_but_never_a_collector_write(m
     assert jobs["prebuilt"]["urgent_after_s"] == 300
     assert jobs["ingest-nba"]["urgent_after_s"] == jobs["ingest-nfl"]["urgent_after_s"] == 900
 
+
+def test_a_collector_gets_one_long_attempt_inside_the_scheduler_kill(monkeypatch):
+    """2026-11-01: 300 s per attempt x 3 made a 300+ s cycle restart beside itself until the 900 s kill."""
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
+    monkeypatch.setenv("SPORTS_CHILD_BUDGET_MB", "1200")
+    jobs = scheduler.default_jobs()
+    for name in ("ingest-nba", "ingest-nfl", "ingest-kalshi"):
+        inner = int(scheduler._child_env(jobs[name])["SPORTS_JOB_TIMEOUT_S"])
+        assert 600 < inner < jobs[name]["timeout_s"], name
