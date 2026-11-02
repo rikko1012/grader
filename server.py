@@ -3909,6 +3909,13 @@ def landing_route(path):
     return False
 
 
+# Research workspace preview (stage one): a sample-data prototype, gated by Handler._workspace_on. Fixed names only -
+# web_file has no path guard, so a request path never reaches it. Nothing here reads a grade, forecast or stake.
+WORKSPACE_ROUTES = {"/preview/workspace": ("workspace.html", "text/html; charset=utf-8"),
+                    "/preview/workspace/workspace.css": ("workspace.css", "text/css; charset=utf-8"),
+                    "/preview/workspace/workspace.js": ("workspace.js", "text/javascript; charset=utf-8"),
+                    "/preview/workspace/workspace-data.js": ("workspace-data.js", "text/javascript; charset=utf-8")}
+
 STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
 LAST_MEMBER = [0.0]     # last member request on /api/* (the board worker steps aside while members are active)
 _BUSY_RE = re.compile(r"cannot connect|connection|timed? ?out|timeout|getaddrinfo|temporar|unreachable|\b50[234]\b", re.I)
@@ -4109,6 +4116,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(("page", "landing"), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
                 return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
+            if u.path in WORKSPACE_ROUTES and self._workspace_on(q):    # not allowed = the unknown-route answer below
+                name, ctype = WORKSPACE_ROUTES[u.path]
+                return self.send_shared(("workspace", name), 200, web_file(name), ctype, keep=600)
             if u.path in ("/", "/index.html"):
                 if self._sports_on("/sports"):                          # sports nav link: SPORTS_UI only (else unchanged)
                     return self.send_shared(("page", "index", "sports"), 200, sports_nav(page()), "text/html; charset=utf-8", keep=600)
@@ -5377,6 +5387,19 @@ class Handler(BaseHTTPRequestHandler):
             return False
         user = (self.member() or {}).get("user")
         return bool(user) and sports_allow_id(user) in allow
+
+    def _workspace_on(self, q):
+        """The research workspace preview: SCOUT_WORKSPACE_PREVIEW on (default off) for anyone who already passes the paid
+        check - sign-in off on a local run passes it, a signed-out visitor on the live site never does - or the owner: the
+        admin token (?token= or X-Admin-Token) or the SPORTS_UI_ALLOW allow list. The page's scripts and styles carry no
+        token, so with ?token= they are authorised from the page URL in their same-origin Referer."""
+        if os.environ.get("SCOUT_WORKSPACE_PREVIEW", "").strip().lower() in ("1", "true", "yes", "on") and self.allowed():
+            return True
+        token = q.get("token")
+        ref = urlparse(self.headers.get("Referer") or "")
+        if not token and ref.path == "/preview/workspace":
+            token = (parse_qs(ref.query).get("token") or [None])[0]
+        return self.authed(token) or self._sports_owner()
 
     def _sports_route(self, u, q):
         """Sports answers through sports/gateway.py (standard library only). In the default SPORTS_API_MODE=service the
