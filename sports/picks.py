@@ -228,7 +228,9 @@ def check(con, item, now=None):
                 if m and m.get("source") == platform and m.get("source_key") == o.offer_id:
                     same_offer = True
                     break
-        if not same_offer or fc.stat != o.stat or abs(float(fc.line) - float(o.line)) > 1e-9 \
+        # audit 2026-11-02: player, stat, line and a linked offer are not enough - event, league and period must match
+        if not same_offer or fc.event_id != o.event_id or fc.league != o.league or fc.scope != o.scope \
+                or fc.stat != o.stat or abs(float(fc.line) - float(o.line)) > 1e-9 \
                 or fc.player_id != o.player_id:
             raise Refused("forecast_mismatch", "The chance shown was made for another line - refresh")
         rec_p = {"p_over": fc.p_over, "p_under": fc.p_under, "p_push": fc.p_push}
