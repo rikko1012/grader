@@ -1,0 +1,721 @@
+{
+"note": "trimmed from a real admin board of 2026-10-17; times are replaced at load",
+"rows": [
+{
+"platform": "prizepicks",
+"market_key": "pp:226022|MAPS 1-3 Kills|standard|196456",
+"player": "Guigo",
+"team": "FURIA",
+"role": "Top",
+"opponent": "MVK Esports",
+"competition": "Worlds 2026 Play-In",
+"best_of": 5,
+"series_start": "2026-10-17T18:00:00Z",
+"stat": "kills",
+"scope": "Maps 1-3",
+"stat_label": "MAPS 1-3 Kills",
+"market_type": "single",
+"odds_type": "standard",
+"line": 7.5,
+"sides": {
+"basis": "allowed_wager_types",
+"higher": {
+"offered": true
+},
+"lower": {
+"offered": false
+}
+},
+"quote_seen_at": "2026-10-17T09:46:40Z",
+"quote_checked_at": "2026-10-17T14:05:21Z",
+"link": {
+"status": "matched",
+"reason": null,
+"sid": "lol:series:000091",
+"pid": "lol:player:000036"
+},
+"forecast": {
+"id": 33,
+"at": "2026-10-17T14:05:41Z",
+"line": 7.5,
+"projection": 8.2268,
+"p_over": 0.5202,
+"p_under": 0.4798,
+"p_push": 0.0,
+"model_side": "over",
+"side_offered": 1,
+"model": "lol-1 (share, fit f59d290ec261)",
+"inputs": {
+"median": 8,
+"range80": [
+3,
+14
+],
+"drivers": [
+"player share of team output 3.26 (98 earlier games)",
+"team pace factor 0.87",
+"opponent factor 0.93",
+"match-strength factor 1.04 (win chance 65%)"
+],
+"unknowns": [
+"lineup changes after the forecast",
+"draft and champions",
+"sides",
+"the tournament patch effect (not modelled)"
+],
+"recent": {
+"games": 10,
+"per_game": 1.7
+},
+"market": {
+"kind": "ordinary",
+"sides_offered": [
+"higher"
+],
+"payout_modifiers": null,
+"price_status": "price_unverified",
+"undocumented_no_vig_p_over": null,
+"overround": null,
+"anchor_eligible": false,
+"note": "PrizePicks lists no prices"
+}
+},
+"flags": [],
+"slip_eligible": false,
+"current": true,
+"grade": "Lean Over",
+"units": 0.0,
+"units_policy": 0.0,
+"stake_restriction": null
+},
+"grade": "Lean Over",
+"stake": 0.0
+},
+{
+"platform": "underdog",
+"market_key": "ud:ced41a33-baf8-4da4-824f-f89cd2f125c8|balanced",
+"player": "Guigo",
+"team": "FURIA",
+"role": "Top",
+"opponent": "MVK Esports",
+"competition": "Worlds 2026 Play-In",
+"best_of": 5,
+"series_start": "2026-10-17T18:00:00Z",
+"stat": "kills",
+"scope": "Maps 1-3",
+"stat_label": "Kills on Maps 1+2+3",
+"market_type": "single",
+"odds_type": "balanced",
+"line": 7.5,
+"sides": {
+"higher": {
+"american_price": "-112",
+"decimal_price": "1.9",
+"fantasy_american": "-115",
+"fantasy_decimal": "1.87",
+"fantasy_probability": "50",
+"option_id": "656d0529-a4df-4e38-85c8-f3cf46df75a8",
+"payout_multiplier": "1.0",
+"status": "active"
+},
+"lower": {
+"american_price": "-112",
+"decimal_price": "1.9",
+"fantasy_american": "-115",
+"fantasy_decimal": "1.87",
+"fantasy_probability": "50",
+"option_id": "10db7ae3-0f4c-4037-b18b-a0e2a77f1fe0",
+"payout_multiplier": "1.0",
+"status": "active"
+}
+},
+"quote_seen_at": "2026-10-17T06:45:27Z",
+"quote_checked_at": "2026-10-17T14:05:20Z",
+"link": {
+"status": "matched",
+"reason": null,
+"sid": "lol:series:000091",
+"pid": "lol:player:000036"
+},
+"forecast": {
+"id": 8,
+"at": "2026-10-17T14:05:41Z",
+"line": 7.5,
+"projection": 8.2268,
+"p_over": 0.5202,
+"p_under": 0.4798,
+"p_push": 0.0,
+"model_side": "over",
+"side_offered": 1,
+"model": "lol-1 (share, fit f59d290ec261)",
+"inputs": {
+"median": 8,
+"range80": [
+3,
+14
+],
+"drivers": [
+"player share of team output 3.26 (98 earlier games)",
+"team pace factor 0.87",
+"opponent factor 0.93",
+"match-strength factor 1.04 (win chance 65%)"
+],
+"unknowns": [
+"lineup changes after the forecast",
+"draft and champions",
+"sides",
+"the tournament patch effect (not modelled)"
+],
+"recent": {
+"games": 10,
+"per_game": 1.7
+},
+"market": {
+"kind": "ordinary",
+"sides_offered": [
+"higher",
+"lower"
+],
+"payout_modifiers": {
+"higher": "1.0",
+"lower": "1.0"
+},
+"undocumented_no_vig_p_over": 0.5,
+"overround": 1.0526,
+"price_status": "undocumented_two_sided_price",
+"anchor_eligible": true,
+"note": "payout_multiplier is a payout modifier (documented), not odds; decimal_price is undocumented"
+}
+},
+"flags": [],
+"slip_eligible": false,
+"current": true,
+"grade": "Lean Over",
+"units": 0.0,
+"units_policy": 0.0,
+"stake_restriction": null
+},
+"grade": "Lean Over",
+"stake": 0.0
+},
+{
+"platform": "prizepicks",
+"market_key": "pp:311957|MAPS 1-3 Kills|standard|196456",
+"player": "Harky",
+"team": "MVK Esports",
+"role": "Bot/ADC",
+"opponent": "FURIA",
+"competition": "Worlds 2026 Play-In",
+"best_of": 5,
+"series_start": "2026-10-17T18:00:00Z",
+"stat": "kills",
+"scope": "Maps 1-3",
+"stat_label": "MAPS 1-3 Kills",
+"market_type": "single",
+"odds_type": "standard",
+"line": 10.5,
+"sides": {
+"basis": "standard line, no restriction sent",
+"higher": {
+"offered": true
+},
+"lower": {
+"offered": true
+}
+},
+"quote_seen_at": "2026-10-17T02:40:59Z",
+"quote_checked_at": "2026-10-17T14:05:21Z",
+"link": {
+"status": "matched",
+"reason": null,
+"sid": "lol:series:000091",
+"pid": "lol:player:000034"
+},
+"forecast": {
+"id": 29,
+"at": "2026-10-17T14:05:41Z",
+"line": 10.5,
+"projection": 8.7235,
+"p_over": 0.3025,
+"p_under": 0.6975,
+"p_push": 0.0,
+"model_side": "under",
+"side_offered": 1,
+"model": "lol-1 (share, fit f59d290ec261)",
+"inputs": {
+"median": 8,
+"range80": [
+4,
+14
+],
+"drivers": [
+"player share of team output 4.59 (89 earlier games)",
+"team pace factor 0.86",
+"opponent factor 0.77",
+"match-strength factor 0.95 (win chance 35%)"
+],
+"unknowns": [
+"lineup changes after the forecast",
+"draft and champions",
+"sides",
+"the tournament patch effect (not modelled)"
+],
+"recent": {
+"games": 10,
+"per_game": 3.1
+},
+"market": {
+"kind": "ordinary",
+"sides_offered": [
+"higher",
+"lower"
+],
+"payout_modifiers": null,
+"price_status": "price_unverified",
+"undocumented_no_vig_p_over": null,
+"overround": null,
+"anchor_eligible": true,
+"note": "PrizePicks lists no prices"
+}
+},
+"flags": [],
+"slip_eligible": false,
+"current": true,
+"grade": "A-",
+"units": 0.0,
+"units_policy": 1.5,
+"stake_restriction": "0U - LoL projections are not yet validated at real offered lines (needs 300 settled player-markets across 60+ series, lol/EVALUATION.md); the grade is the model's, the stake is held at 0"
+},
+"grade": "A-",
+"stake": 0.0
+},
+{
+"platform": "underdog",
+"market_key": "ud:a44c6691-4b59-406d-bc2a-2671127ab69e|balanced",
+"player": "Harky",
+"team": "MVK Esports",
+"role": "Bot/ADC",
+"opponent": "FURIA",
+"competition": "Worlds 2026 Play-In",
+"best_of": 5,
+"series_start": "2026-10-17T18:00:00Z",
+"stat": "kills",
+"scope": "Maps 1-3",
+"stat_label": "Kills on Maps 1+2+3",
+"market_type": "single",
+"odds_type": "balanced",
+"line": 10.5,
+"sides": {
+"higher": {
+"american_price": "-110",
+"decimal_price": "1.91",
+"fantasy_american": "-115",
+"fantasy_decimal": "1.87",
+"fantasy_probability": "50",
+"option_id": "2ecc1cd7-3556-48b8-b6f3-d0c735d5be79",
+"payout_multiplier": "1.0",
+"status": "active"
+},
+"lower": {
+"american_price": "-112",
+"decimal_price": "1.9",
+"fantasy_american": "-115",
+"fantasy_decimal": "1.87",
+"fantasy_probability": "50",
+"option_id": "93867ed2-0949-495c-8fcc-46171ff3922b",
+"payout_multiplier": "1.0",
+"status": "active"
+}
+},
+"quote_seen_at": "2026-10-17T02:40:59Z",
+"quote_checked_at": "2026-10-17T14:05:20Z",
+"link": {
+"status": "matched",
+"reason": null,
+"sid": "lol:series:000091",
+"pid": "lol:player:000034"
+},
+"forecast": {
+"id": 6,
+"at": "2026-10-17T14:05:41Z",
+"line": 10.5,
+"projection": 8.7235,
+"p_over": 0.3025,
+"p_under": 0.6975,
+"p_push": 0.0,
+"model_side": "under",
+"side_offered": 1,
+"model": "lol-1 (share, fit f59d290ec261)",
+"inputs": {
+"median": 8,
+"range80": [
+4,
+14
+],
+"drivers": [
+"player share of team output 4.59 (89 earlier games)",
+"team pace factor 0.86",
+"opponent factor 0.77",
+"match-strength factor 0.95 (win chance 35%)"
+],
+"unknowns": [
+"lineup changes after the forecast",
+"draft and champions",
+"sides",
+"the tournament patch effect (not modelled)"
+],
+"recent": {
+"games": 10,
+"per_game": 3.1
+},
+"market": {
+"kind": "ordinary",
+"sides_offered": [
+"higher",
+"lower"
+],
+"payout_modifiers": {
+"higher": "1.0",
+"lower": "1.0"
+},
+"undocumented_no_vig_p_over": 0.4987,
+"overround": 1.0499,
+"price_status": "undocumented_two_sided_price",
+"anchor_eligible": true,
+"note": "payout_multiplier is a payout modifier (documented), not odds; decimal_price is undocumented"
+}
+},
+"flags": [],
+"slip_eligible": false,
+"current": true,
+"grade": "A-",
+"units": 0.0,
+"units_policy": 1.5,
+"stake_restriction": "0U - LoL projections are not yet validated at real offered lines (needs 300 settled player-markets across 60+ series, lol/EVALUATION.md); the grade is the model's, the stake is held at 0"
+},
+"grade": "A-",
+"stake": 0.0
+},
+{
+"platform": "underdog",
+"market_key": "ud:3d2d1f0c-cc39-460d-a3af-85de4bd45cb4|balanced",
+"player": "Ayu",
+"team": "FURIA",
+"role": "Bot/ADC",
+"opponent": "MVK Esports",
+"competition": "Worlds 2026 Play-In",
+"best_of": 5,
+"series_start": "2026-10-17T18:00:00Z",
+"stat": "kills",
+"scope": "Maps 1-3",
+"stat_label": "Kills on Maps 1+2+3",
+"market_type": "single",
+"odds_type": "balanced",
+"line": 13.5,
+"sides": {
+"higher": {
+"american_price": "-125",
+"decimal_price": "1.8",
+"fantasy_american": "-141",
+"fantasy_decimal": "1.71",
+"fantasy_probability": "55",
+"option_id": "1894be5a-a207-4009-98c4-7088e54f06fc",
+"payout_multiplier": "0.91",
+"status": "active"
+},
+"lower": {
+"american_price": "+103",
+"decimal_price": "2.03",
+"fantasy_american": "-105",
+"fantasy_decimal": "1.96",
+"fantasy_probability": "48",
+"option_id": "be7b232e-e182-413f-aafc-bf735ccb3cac",
+"payout_multiplier": "1.05",
+"status": "active"
+}
+},
+"quote_seen_at": "2026-10-17T02:40:59Z",
+"quote_checked_at": "2026-10-17T14:05:20Z",
+"link": {
+"status": "matched",
+"reason": null,
+"sid": "lol:series:000091",
+"pid": "lol:player:000039"
+},
+"forecast": {
+"id": 3,
+"at": "2026-10-17T14:05:41Z",
+"line": 13.5,
+"projection": 13.4604,
+"p_over": 0.448,
+"p_under": 0.552,
+"p_push": 0.0,
+"model_side": "under",
+"side_offered": 1,
+"model": "lol-1 (share, fit f59d290ec261)",
+"inputs": {
+"median": 13,
+"range80": [
+6,
+22
+],
+"drivers": [
+"player share of team output 5.33 (98 earlier games)",
+"team pace factor 0.87",
+"opponent factor 0.93",
+"match-strength factor 1.04 (win chance 65%)"
+],
+"unknowns": [
+"lineup changes after the forecast",
+"draft and champions",
+"sides",
+"the tournament patch effect (not modelled)"
+],
+"recent": {
+"games": 10,
+"per_game": 4.1
+},
+"market": {
+"kind": "ordinary",
+"sides_offered": [
+"higher",
+"lower"
+],
+"payout_modifiers": {
+"higher": "0.91",
+"lower": "1.05"
+},
+"undocumented_no_vig_p_over": 0.53,
+"overround": 1.0482,
+"price_status": "undocumented_two_sided_price",
+"anchor_eligible": true,
+"note": "payout_multiplier is a payout modifier (documented), not odds; decimal_price is undocumented"
+}
+},
+"flags": [],
+"slip_eligible": false,
+"current": true,
+"grade": "B-",
+"units": 0.0,
+"units_policy": 0.5,
+"stake_restriction": "0U - LoL projections are not yet validated at real offered lines (needs 300 settled player-markets across 60+ series, lol/EVALUATION.md); the grade is the model's, the stake is held at 0"
+},
+"grade": "B-",
+"stake": 0.0
+},
+{
+"platform": "underdog",
+"market_key": "ud:956c6a21-9b63-4ccc-bf48-e4c7d5b7dd31|balanced",
+"player": "Chika",
+"team": "MVK Esports",
+"role": "Mid",
+"opponent": "FURIA",
+"competition": "Worlds 2026 Play-In",
+"best_of": 5,
+"series_start": "2026-10-17T18:00:00Z",
+"stat": "kills",
+"scope": "Maps 1-3",
+"stat_label": "Kills on Maps 1+2+3",
+"market_type": "single",
+"odds_type": "balanced",
+"line": 10.5,
+"sides": {
+"higher": {
+"american_price": "+106",
+"decimal_price": "2.06",
+"fantasy_american": "-102",
+"fantasy_decimal": "1.99",
+"fantasy_probability": "47",
+"option_id": "99a9dfea-22f3-4403-a7c7-06aab8f69548",
+"payout_multiplier": "1.07",
+"status": "active"
+},
+"lower": {
+"american_price": "-130",
+"decimal_price": "1.77",
+"fantasy_american": "-145",
+"fantasy_decimal": "1.69",
+"fantasy_probability": "56",
+"option_id": "4bf99281-0c74-4527-9788-9f6a4519522d",
+"payout_multiplier": "0.9",
+"status": "active"
+}
+},
+"quote_seen_at": "2026-10-17T02:40:59Z",
+"quote_checked_at": "2026-10-17T14:05:20Z",
+"link": {
+"status": "matched",
+"reason": null,
+"sid": "lol:series:000091",
+"pid": "lol:player:000033"
+},
+"forecast": {
+"id": 5,
+"at": "2026-10-17T14:05:41Z",
+"line": 10.5,
+"projection": 8.6073,
+"p_over": 0.2927,
+"p_under": 0.7073,
+"p_push": 0.0,
+"model_side": "under",
+"side_offered": 1,
+"model": "lol-1 (share, fit f59d290ec261)",
+"inputs": {
+"median": 8,
+"range80": [
+4,
+14
+],
+"drivers": [
+"player share of team output 4.53 (66 earlier games)",
+"team pace factor 0.86",
+"opponent factor 0.77",
+"match-strength factor 0.95 (win chance 35%)"
+],
+"unknowns": [
+"lineup changes after the forecast",
+"draft and champions",
+"sides",
+"the tournament patch effect (not modelled)"
+],
+"recent": {
+"games": 10,
+"per_game": 4.6
+},
+"market": {
+"kind": "ordinary",
+"sides_offered": [
+"higher",
+"lower"
+],
+"payout_modifiers": {
+"higher": "1.07",
+"lower": "0.9"
+},
+"undocumented_no_vig_p_over": 0.4621,
+"overround": 1.0504,
+"price_status": "undocumented_two_sided_price",
+"anchor_eligible": true,
+"note": "payout_multiplier is a payout modifier (documented), not odds; decimal_price is undocumented"
+}
+},
+"flags": [],
+"slip_eligible": false,
+"current": true,
+"grade": "A-",
+"units": 0.0,
+"units_policy": 1.5,
+"stake_restriction": "0U - LoL projections are not yet validated at real offered lines (needs 300 settled player-markets across 60+ series, lol/EVALUATION.md); the grade is the model's, the stake is held at 0"
+},
+"grade": "A-",
+"stake": 0.0
+},
+{
+"platform": "underdog",
+"market_key": "ud:67946190-30e5-4251-8dd9-c1c81f861c87|balanced",
+"player": "Kratos",
+"team": "MVK Esports",
+"role": "Top",
+"opponent": "FURIA",
+"competition": "Worlds 2026 Play-In",
+"best_of": 5,
+"series_start": "2026-10-17T18:00:00Z",
+"stat": "kills",
+"scope": "Maps 1-3",
+"stat_label": "Kills on Maps 1+2+3",
+"market_type": "single",
+"odds_type": "balanced",
+"line": 6.5,
+"sides": {
+"higher": {
+"american_price": "-127",
+"decimal_price": "1.79",
+"fantasy_american": "-141",
+"fantasy_decimal": "1.71",
+"fantasy_probability": "55",
+"option_id": "670cf6b7-57ec-4b62-bc9c-e344417c329b",
+"payout_multiplier": "0.91",
+"status": "active"
+},
+"lower": {
+"american_price": "+104",
+"decimal_price": "2.04",
+"fantasy_american": "-105",
+"fantasy_decimal": "1.96",
+"fantasy_probability": "48",
+"option_id": "3d4b0e7f-d733-4833-bb09-b3b95a32e80a",
+"payout_multiplier": "1.05",
+"status": "active"
+}
+},
+"quote_seen_at": "2026-10-17T02:40:59Z",
+"quote_checked_at": "2026-10-17T14:05:20Z",
+"link": {
+"status": "matched",
+"reason": null,
+"sid": "lol:series:000091",
+"pid": "lol:player:000031"
+},
+"forecast": {
+"id": 4,
+"at": "2026-10-17T14:05:41Z",
+"line": 6.5,
+"projection": 6.1717,
+"p_over": 0.4096,
+"p_under": 0.5904,
+"p_push": 0.0,
+"model_side": "under",
+"side_offered": 1,
+"model": "lol-1 (share, fit f59d290ec261)",
+"inputs": {
+"median": 6,
+"range80": [
+2,
+11
+],
+"drivers": [
+"player share of team output 3.23 (53 earlier games)",
+"team pace factor 0.86",
+"opponent factor 0.77",
+"match-strength factor 0.96 (win chance 35%)"
+],
+"unknowns": [
+"lineup changes after the forecast",
+"draft and champions",
+"sides",
+"the tournament patch effect (not modelled)"
+],
+"recent": {
+"games": 10,
+"per_game": 2.4
+},
+"market": {
+"kind": "ordinary",
+"sides_offered": [
+"higher",
+"lower"
+],
+"payout_modifiers": {
+"higher": "0.91",
+"lower": "1.05"
+},
+"undocumented_no_vig_p_over": 0.5326,
+"overround": 1.0489,
+"price_status": "undocumented_two_sided_price",
+"anchor_eligible": true,
+"note": "payout_multiplier is a payout modifier (documented), not odds; decimal_price is undocumented"
+}
+},
+"flags": [],
+"slip_eligible": false,
+"current": true,
+"grade": "B",
+"units": 0.0,
+"units_policy": 0.5,
+"stake_restriction": "0U - LoL projections are not yet validated at real offered lines (needs 300 settled player-markets across 60+ series, lol/EVALUATION.md); the grade is the model's, the stake is held at 0"
+},
+"grade": "B",
+"stake": 0.0
+}
+]
+}

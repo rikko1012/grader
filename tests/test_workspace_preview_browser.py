@@ -1,11 +1,13 @@
-"""The research workspace in a real browser against a local server.Handler with fixture data (tests/workspace_fixture.py): the full
-CS2 flow from research through settlement, two devices, real failure states, and focus and layout. Skipped where Playwright or
-Chromium is missing. Nothing here reaches a network or production data."""
+"""The research workspace in a real browser against a local server.Handler with fixture data (tests/workspace_fixture.py and
+tests/workspace_other_fixture.py): the full flow from research through settlement on all four sports, two devices, real failure
+states, and focus and layout. Skipped where Playwright or Chromium is missing. Nothing here reaches a network or production data."""
 import json
+import os
 import re
 import threading
 from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +17,7 @@ import underdog
 import whop_auth
 import workspace_api
 from tests.workspace_fixture import Fixture, iso, row
+from tests.workspace_other_fixture import Lol, Sports
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
@@ -23,8 +26,9 @@ TAB = {"width": 1024, "height": 768}
 PHONE = {"width": 390, "height": 844}
 WIDE = {"width": 1920, "height": 1080}
 MIN = 60_000
-NBA_ROW = "nba.nba-e2.brandt.pra.full_game.33.5"
+NBA_ROW = "nba.nba:espn:1.nbaplayerespn301.points.full_game.20.5"
 OWNER = "the-owner"
+SHOTS = Path(os.environ.get("WORKSPACE_SHOTS") or "")
 
 
 @pytest.fixture(scope="module")
@@ -82,18 +86,26 @@ def ctx(browser, env):
 
 
 @pytest.fixture
-def octx(browser, env, monkeypatch):
-    """The owner: the one account that can turn sample sports on."""
-    monkeypatch.setenv("SPORTS_UI_ALLOW", server.sports_allow_id(OWNER))
+def sports(env, monkeypatch, tmp_path):
+    """LoL from a worker folder and NBA and NFL from a stub sports service, reached through the real hook and token path."""
+    env.sports = Sports()
+    for k, v in env.sports.env().items():
+        monkeypatch.setenv(k, v)
+    env.lol = Lol(tmp_path / "lol_center")
+    monkeypatch.setattr(server, "LOL_CENTER", env.lol.dir)
+    monkeypatch.setattr(server, "lol_public", lambda: True)
+    monkeypatch.setattr(server, "_LOL_MEMBER", {"mtime": None, "body": None, "lock": threading.Lock()})
+    yield env
+    env.sports.close()
+    env.lol.close()
+
+
+@pytest.fixture
+def octx(browser, env, sports):
+    """A member who sees all four sports."""
     c = context(browser, env, user=OWNER)
     yield c
     c.close()
-
-
-def samples(p):
-    p.click("#open-filters")
-    p.check("#sample-on")
-    p.click("#filters-done")
 
 
 def open_page(ctx, env, path="", size=None, wait=True):
@@ -130,10 +142,10 @@ def record_clipboard(p):
     p.evaluate("""() => { window.__clip = []; navigator.clipboard.writeText = (t) => { window.__clip.push(t); return Promise.resolve(); }; }""")
 
 
-def key_of(p, nick, book="underdog"):
-    return p.evaluate("""async ([n, b]) => { const res = await fetch('/preview/workspace/api/board'), r = await res.json();
+def key_of(p, nick, book="underdog", sport=None):
+    return p.evaluate("""async ([n, b, s]) => { const res = await fetch('/preview/workspace/api/board' + (s ? '?sport=' + s : '')), r = await res.json();
       if (!r.records) throw new Error('board answered ' + res.status + ' ' + JSON.stringify(r));
-      return r.records.find((x) => x.player.name === n && x.offer.platform === b).key; }""", [nick, book])
+      return r.records.find((x) => x.player.name === n && x.offer.platform === b).key; }""", [nick, book, sport])
 
 
 def go(p, h):
@@ -141,15 +153,15 @@ def go(p, h):
     p.wait_for_timeout(80)
 
 
-def panel(p, nick, book="underdog"):
-    go(p, "#/research/p/" + key_of(p, nick, book).replace("%", "%25"))
+def panel(p, nick, book="underdog", sport=None):
+    go(p, "#/research/p/" + key_of(p, nick, book, sport).replace("%", "%25"))
     p.wait_for_selector("#panel-name")
     if p.locator(f'[data-act="p-book"][data-id="{book}"]').count():
         p.locator(f'[data-act="p-book"][data-id="{book}"]').first.click()
 
 
-def add(p, nick, book="underdog"):
-    panel(p, nick, book)
+def add(p, nick, book="underdog", sport=None):
+    panel(p, nick, book, sport)
     p.click('[data-act="p-add"]')
     p.wait_for_function("document.querySelector('[data-act=\"p-add\"]').textContent.includes('Remove')")
 
@@ -273,24 +285,16 @@ def test_entry_type_changes_the_check(ctx, env):
 # ---- mixed slips
 def test_mixed_sports_by_platform(octx, env):
     p = open_page(octx, env)
-    samples(p)
     all_days(p)
     add(p, "vargo", "prizepicks")
-    go(p, "#/research/p/" + NBA_ROW)
-    p.wait_for_selector("#panel-name")
-    p.click('[data-act="p-book"][data-id="prizepicks"]')
-    p.click('[data-act="p-add"]')
+    add(p, "Reed Lean", "prizepicks", "nba")
     p.keyboard.press("Escape")
     ready(p)
     entry = p.inner_text("#rail-body .entry")
-    assert "CS2 + NBA" in entry and "NBA legs are sample data." in entry and p.is_disabled('#rail-body [data-act="track"][data-id="prizepicks"]')
-    assert p.is_disabled('#rail-body [data-act="copy"][data-id="prizepicks"]') and "0 of 1 entry ready" in p.inner_text("#rail-body .slip-status")
+    assert "CS2 + NBA" in entry and "1 of 1 entry ready" in p.inner_text("#rail-body .slip-status") and not p.is_disabled('#rail-body [data-act="track"][data-id="prizepicks"]')
     p.click('#rail-body [data-act="slip-clear"]')
     add(p, "vargo")
-    go(p, "#/research/p/" + NBA_ROW)
-    p.wait_for_selector("#panel-name")
-    p.click('[data-act="p-book"][data-id="underdog"]')
-    p.click('[data-act="p-add"]')
+    add(p, "Reed Lean", "underdog", "nba")
     p.keyboard.press("Escape")
     ready(p)
     assert "Underdog does not publish whether one entry can hold CS2 and NBA picks" in p.inner_text("#rail-body .entry")
@@ -386,12 +390,12 @@ def test_other_members_see_nothing(browser, env):
 
 
 # ---- real failure states
-def test_board_down_never_falls_back_to_sample_cs2(ctx, env):
+def test_board_down_says_so_and_shows_no_rows(ctx, env):
     env.board_ok = False
     p = open_page(ctx, env)
     p.wait_for_selector("#board-list .state")
     assert "CS2 board unavailable" in p.inner_text("#board-list")
-    assert p.evaluate("""() => WORKSPACE_DATA.records.every((r) => r.sport !== 'cs2') && WORKSPACE_DATA.receipts.every((r) => r.sport !== 'cs2')""")
+    assert p.locator(".row").count() == 0 and p.evaluate("() => !('records' in WORKSPACE_DATA) && !('receipts' in WORKSPACE_DATA)")
     env.board_ok = True
     server._RESULTS.clear()
     p.click('#board-list [data-act="retry-board"]')
@@ -489,27 +493,26 @@ def test_book_columns_show_each_platforms_own_line(ctx, env):
 
 
 def test_best_price_is_marked_only_among_prices_that_compare(octx, env):
+    env.sports.boards["nba"][0]["markets"][0]["q"].append({**env.sports.boards["nba"][0]["markets"][0]["q"][2], "p": "betrivers", "r": "offer:betrivers:br:1:r1:aaaaaaaaaa", "d": [1.95, 1.87]})
     p = open_page(octx, env)
-    samples(p)
     all_days(p)
     assert p.locator(f'.row[data-row="{NBA_ROW}"] .best').count() >= 1
     assert p.locator('.row:has-text("vargo") .best').count() == 0              # one priced book: nothing to compare
 
 
-def test_sample_tag_is_on_sample_rows_only(octx, env):
+def test_every_sport_is_on_the_board_with_its_tag(octx, env):
     p = open_page(octx, env)
-    samples(p)
     all_days(p)
-    assert p.locator('.row:has-text("vargo") .sample-tag').count() == 0
-    assert p.locator(f'.row[data-row="{NBA_ROW}"] .sample-tag').count() == 1
+    assert p.locator("#chips .chip").count() == 5
+    for name, tag in (("vargo", "CS2"), ("Harky", "LoL"), ("Karl Anders", "NBA"), ("Sam Field", "NFL")):
+        assert tag in p.locator(f'.row:has-text("{name}") .s-tag').first.inner_text(), name
 
 
 def test_match_groups_and_other_lines(octx, env):
     p = open_page(octx, env)
-    samples(p)
     all_days(p)
     assert p.locator(".match-head", has_text="Halcyon vs Norrland").count() == 1
-    assert p.locator(".row.is-sub").count() >= 1                # the sample prop with two lines
+    assert p.locator(".row.is-sub").count() >= 1                # one prop at two lines stays two rows
 
 
 def test_sort_header_works(ctx, env):
@@ -523,10 +526,11 @@ def test_sort_header_works(ctx, env):
 
 def test_decimal_odds_are_not_written_as_multipliers(octx, env):
     p = open_page(octx, env)
-    samples(p)
     go(p, "#/research/p/" + NBA_ROW + "/books")
     p.wait_for_selector("#panel-name")
-    assert "1.93" in p.inner_text("#panel") and "1.93x" not in p.inner_text("#panel") and "1.90x" in p.inner_text("#panel")
+    p.wait_for_function("document.querySelector('#panel').textContent.includes('Market chance')")
+    body = p.inner_text("#panel")
+    assert "1.91" in body and "1.91x" not in body and "0.42 / 0.46" in body and "Different line" in body
 
 
 # ---- research panel
@@ -581,9 +585,10 @@ def test_board_stays_live_beside_the_panel_when_there_is_room(ctx, env):
 
 def test_line_picker_and_remove_toggle(octx, env):
     p = open_page(octx, env)
-    samples(p)
-    go(p, "#/research/p/nba.nba-e1.delvane.pts.full_game.24.5")
+    all_days(p)
+    panel(p, "Jay Brown", "prizepicks", "nba")
     p.wait_for_selector(".line-pick")
+    p.click('[data-act="p-side"][data-id="over"]')
     p.click('[data-act="p-add"]')
     assert "Remove from slip" in p.inner_text(".p-foot")
     p.click('[data-act="p-add"]')
@@ -602,18 +607,16 @@ def test_history_tab_splits_by_map(ctx, env):
     assert "By map, last 20 series" in body and "Mirage" in body and "Average per map" in body
 
 
-def test_line_move_is_shown(octx, env):
-    p = open_page(octx, env)
-    samples(p)
-    go(p, "#/research/p/nba.nba-e1.delvane.pts.full_game.25.5")
-    p.wait_for_selector("#panel-name")
-    p.click('[data-act="p-book"][data-id="underdog"]')
-    assert "Moved from 24.5" in p.inner_text("#panel .p-sub")
+def test_line_move_is_shown(ctx, env):
+    env.by("vargo").update(open_line=37.5, moved_at=iso(datetime.now(timezone.utc)))
+    p = open_page(ctx, env)
+    all_days(p)
+    panel(p, "vargo")
+    assert "Moved from 37.5" in p.inner_text("#panel .p-sub")
 
 
 def test_a_slip_stops_at_the_servers_limit_with_a_reason(octx, env):
     p = open_page(octx, env)
-    samples(p)
     all_days(p)
     buttons = p.locator('.row .add[data-act="row-add"]')
     for i in range(9):
@@ -792,22 +795,20 @@ def test_phone_search_closes_by_touch_and_keyboard(ctx, env):
 # ---- keyboard
 def test_sport_chip_keeps_focus(octx, env):
     p = open_page(octx, env)
-    samples(p)
     enter(p, '[data-fk="chip:nba"]')
     assert active(p) == "BUTTON:chip:nba"
 
 
 def test_escape_returns_to_the_control_that_opened_the_panel(octx, env):
     p = open_page(octx, env)
-    samples(p)
     all_days(p)
-    add_btn = '.row[data-row="nba.nba-e2.moon.pts.full_game.18.5"] .add'
-    p.focus(add_btn)
+    row_key = "nfl.nfl:espn:1.nflplayerespn401.pass_yds.full_game.264.5"
+    p.focus(f'.row[data-row="{row_key}"] .add')
     p.keyboard.press("Enter")
     p.wait_for_timeout(100)
     p.keyboard.press("Escape")
     p.wait_for_timeout(150)
-    assert active(p) == "BUTTON:row-choose:nba.nba-e2.moon.pts.full_game.18.5"
+    assert active(p) == "BUTTON:row-choose:" + row_key
 
 
 def test_phone_panel_is_modal_and_keeps_tab_inside(ctx, env):
@@ -973,25 +974,28 @@ def test_page_never_calls_the_grader(ctx, env):
 
 
 # ---- regressions from the 91bf2bf review
-def test_a_member_sees_real_data_only(ctx, env):
+def test_a_member_with_cs2_only_sees_cs2_only(ctx, env):
     p = open_page(ctx, env)
     all_days(p)
     assert p.locator("#chips .chip").count() == 1 and "CS2" in p.inner_text("#chips")
-    for h in ("#/research", "#/slips", "#/picks", "#/results"):
+    p.click("#open-filters")
+    assert "NBA points" not in p.inner_text("#filters-body")
+
+
+def test_no_sample_row_reaches_any_view(octx, env):
+    p = open_page(octx, env)
+    all_days(p)
+    for h in ("#/research", "#/matches", "#/slips", "#/picks", "#/results"):
         go(p, h)
         p.wait_for_timeout(100)
         text = p.evaluate("document.body.innerText")
-        assert "SAMPLE DATA" not in text and "Sample sports" not in text and "Sample receipts" not in text, h
-    go(p, "#/research")
-    p.click("#open-filters")
-    assert p.locator("#sample-on").count() == 0 and "NBA points" not in p.inner_text("#filters-body")
+        assert not re.search(r"sample", text, re.I) and "Delvane" not in text and "Tidefall" not in text, h
 
 
-def test_a_forged_sample_pref_changes_nothing_for_a_member(ctx, env):
-    workspace_api.store().put_state(workspace_api.member_key("whop:u1"), 0, {"prefs": {"sample": True, "chip": "nba", "f": {"day": "all"}}})
+def test_a_saved_sport_the_member_lost_falls_back_to_all(ctx, env):
+    workspace_api.store().put_state(workspace_api.member_key("whop:u1"), 0, {"prefs": {"chip": "nba", "f": {"day": "all"}}})
     p = open_page(ctx, env)
-    assert p.locator(".row").count() >= 5 and p.locator(".sample-tag").count() == 0
-    assert p.locator('.row:has-text("Delvane")').count() == 0
+    assert p.locator(".row").count() >= 5
 
 
 def test_next_days_props_fill_a_first_visit_with_nothing_today(ctx, env):
@@ -1002,15 +1006,15 @@ def test_next_days_props_fill_a_first_visit_with_nothing_today(ctx, env):
     assert p.locator(".row").count() >= 5 and "No props match" not in p.inner_text("#board-list")
 
 
-def test_the_owner_turns_sample_sports_on_and_the_choice_stays(octx, env):
+def test_the_sport_switch_stays_on_the_account(octx, env):
     p = open_page(octx, env)
-    assert p.locator(".sample-tag").count() == 0
-    samples(p)
-    assert p.locator("#chips .chip").count() == 5 and p.locator(".sample-tag").count() > 0
+    all_days(p)
+    chip(p, "lol")
+    assert p.locator(".row").count() >= 5 and p.locator('.row:has-text("vargo")').count() == 0
     p.wait_for_timeout(2800)
     p.reload()
     p.wait_for_selector("#app[data-boot=done]", state="attached")
-    assert p.locator("#chips .chip").count() == 5
+    assert p.locator('#chips [data-act="chip"][data-id="lol"]').get_attribute("aria-pressed") == "true"
 
 
 def test_the_underdog_column_shows_its_real_prices(ctx, env):
@@ -1269,18 +1273,15 @@ def test_a_receipt_against_scout_names_scouts_side(ctx, env):
     assert "B Over" in body and "0.5U on Over" in body and "Under, against Scout" in body and "None saved for this side" in body
 
 
-def test_a_sample_leg_is_never_ready_and_never_copied(octx, env):
+def test_a_leg_the_sports_check_refuses_is_never_ready_and_never_copied(octx, env):
     p = open_page(octx, env)
-    samples(p)
     all_days(p)
-    go(p, "#/research/p/" + NBA_ROW)
-    p.wait_for_selector("#panel-name")
-    p.click('[data-act="p-book"][data-id="prizepicks"]')
-    p.click('[data-act="p-add"]')
+    env.sports.answers[next(q["r"] for m in env.sports.boards["nba"][0]["markets"] for q in m["q"] if q["p"] == "prizepicks" and q["l"] == 6.5)] = {"ok": False, "code": "stale", "text": "Price not fresh"}
+    add(p, "Reed Lean", "prizepicks", "nba")
     add(p, "vargo", "prizepicks")
     p.keyboard.press("Escape")
     ready(p)
-    assert "0 of 1 entry ready" in p.inner_text("#rail-body .slip-status")
+    assert "0 of 1 entry ready" in p.inner_text("#rail-body .slip-status") and "has not been re-read recently" in p.inner_text("#rail-body .entry")
     assert p.is_disabled('#rail-body [data-act="copy"][data-id="prizepicks"]') and p.is_disabled('#rail-body [data-act="track"][data-id="prizepicks"]')
 
 
@@ -1381,7 +1382,6 @@ def test_the_phone_slip_bar_waits_for_a_pick(ctx, env):
 
 def test_phone_chips_that_do_not_fit_say_so(octx, env):
     p = open_page(octx, env, size=PHONE)
-    samples(p)
     assert p.evaluate("document.getElementById('chips').scrollWidth > document.getElementById('chips').clientWidth")
     assert "scrolls" in p.get_attribute("#chips", "class")
 
@@ -1467,3 +1467,169 @@ def test_older_picks_load_on_request(ctx, env):
     p.click('#view-picks [data-act="mine-older"]')
     p.wait_for_function("document.querySelectorAll('#view-picks .pick-row').length === 80")
     assert p.locator('#view-picks [data-act="mine-older"]').count() == 0 and p.errors == []
+
+
+# ---- all four sports, end to end
+def shot(p, name):
+    if str(SHOTS) != ".":
+        SHOTS.mkdir(parents=True, exist_ok=True)
+        p.wait_for_timeout(150)
+        p.screenshot(path=str(SHOTS / name), full_page=False)
+
+
+def phone_add(p, nick, book, sport, side=None):
+    panel(p, nick, book, sport)
+    if side:
+        p.click(f'[data-act="p-side"][data-id="{side}"]')
+    p.click('[data-act="p-add"]')
+    p.wait_for_function("document.querySelector('[data-act=\"p-add\"]').textContent.includes('Remove')")
+
+
+@pytest.mark.parametrize("size,tag", [(DESK, "desk"), (PHONE, "phone")])
+def test_four_sport_flow(browser, env, sports, size, tag):
+    c = context(browser, env, size, user="fourway")
+    p = open_page(c, env)
+    all_days(p)
+    p.wait_for_selector('.row:has-text("Karl Anders")')
+    shot(p, f"{tag}-1-board.png")
+
+    # research on real records: hit cells, market, books, context, by sport
+    panel(p, "Karl Anders", "underdog", "nba")
+    p.wait_for_function("document.querySelector('#panel').textContent.includes('Market chance')")
+    p.wait_for_selector("#panel .chart svg")
+    body = p.inner_text("#panel")
+    assert "Research estimate" in body and "Hit rate, last 5" in body and "Hit rate, last 10" in body and "55.9%" in body
+    shot(p, f"{tag}-2-research-nba.png")
+    p.click("#tab-context")
+    p.wait_for_selector("#panel .ctx-list")
+    assert "questionable" in p.inner_text("#panel") and "Points allowed per game to C" in p.inner_text("#panel")
+    p.click("#tab-books")
+    assert "FanDuel" in p.inner_text("#panel")
+    shot(p, f"{tag}-3-books-nba.png")
+    panel(p, "Harky", "prizepicks", "lol")
+    p.wait_for_selector("#panel .chart svg, #panel .hit-tile")
+    assert "0U" in p.inner_text("#panel") or "Stake 0U" in p.inner_text("#panel")
+    p.click("#tab-context")
+    p.wait_for_selector("#panel .ctx-list")
+    assert "Role" in p.inner_text("#panel")
+
+    # one tray, four sports, one PrizePicks entry
+    phone_add(p, "vargo", "prizepicks", None)
+    phone_add(p, "Harky", "prizepicks", "lol")
+    phone_add(p, "Reed Lean", "prizepicks", "nba")
+    phone_add(p, "Sam Field", "prizepicks", "nfl", "over")
+    go(p, "#/slips")
+    p.wait_for_selector("#view-slips .entry")
+    ready(p, "#view-slips")
+    entry = p.inner_text("#view-slips .entry")
+    assert "CS2 + LoL + NBA + NFL" in entry and "1 of 1 entry ready" in p.inner_text("#view-slips .slip-status")
+    shot(p, f"{tag}-4-slip.png")
+
+    # the saved slip follows the member to another device
+    p.wait_for_timeout(1200)
+    c2 = context(browser, env, PHONE if size is DESK else DESK, user="fourway")
+    p2 = open_page(c2, env)
+    go(p2, "#/slips")
+    p2.wait_for_selector("#view-slips .entry")
+    ready(p2, "#view-slips")
+    assert p2.locator("#view-slips .leg").count() == 4 and "1 of 1 entry ready" in p2.inner_text("#view-slips .slip-status")
+    c2.close()
+
+    # track, then receipts
+    p.click('#view-slips [data-act="track"][data-id="prizepicks"]')
+    p.wait_for_selector("#view-slips .tracked")
+    go(p, "#/picks")
+    p.wait_for_selector("#view-picks .pick-row")
+    assert p.locator("#view-picks .pick-row").count() == 4
+    text = p.inner_text("#view-picks")
+    for name in ("CS2", "LoL", "NBA", "NFL"):
+        assert name in text
+    shot(p, f"{tag}-5-picks.png")
+
+    # settlement from each sport's own results: NBA and NFL from the sports service, LoL from its results, CS2 from the pick log
+    con = __import__("sqlite3").connect(workspace_api.store().path)
+    con.execute("UPDATE leg_watch SET start_utc = '2026-01-01T00:00:00Z'")
+    con.commit()
+    con.close()
+    env.sports.settled[("pp:4", "over")] = {"status": "win", "value": 8.0, "settlement_id": "st-1", "revision": 1}
+    env.sports.settled[("pp:n1", "over")] = {"status": "push", "value": 264.5, "settlement_id": "st-2", "revision": 1}
+    env.lol.settle(next(x for x in env.lol.rows if x["player"] == "Harky" and x["platform"] == "prizepicks"), "graded", 9, 0)
+    env.settle(env.by("vargo", "prizepicks"), "settled", 41.0)
+    workspace_api.store().settle_once()
+    p.evaluate("window.dispatchEvent(new Event('focus'))")
+    p.wait_for_function("document.querySelector('#view-picks').textContent.includes('Hit')")
+    p.wait_for_timeout(300)
+    text = p.inner_text("#view-picks")
+    assert "Push" in text and "Hit" in text
+    assert "3-0-1" in text
+    go(p, "#/results")
+    p.wait_for_selector("#view-results .rec-strip")
+    shot(p, f"{tag}-6-results-cs2.png")
+    for k, word in (("lol", "LoL forecast record"), ("nba", "NBA research record"), ("nfl", "NFL research record")):
+        p.click(f'[data-act="res-sport"][data-id="{k}"]')
+        p.wait_for_function("w => document.querySelector('#view-results').textContent.includes(w)", arg=word)
+        p.wait_for_selector("#view-results .res-tbl")
+        assert "Forecast chance" in p.inner_text("#view-results") and "Hit rate" in p.inner_text("#view-results")
+        shot(p, f"{tag}-7-results-{k}.png")
+    assert p.errors == []
+    c.close()
+
+
+def test_watchlist_and_saved_view_follow_the_account(browser, env, sports):
+    c = context(browser, env, user="watcher")
+    p = open_page(c, env)
+    all_days(p)
+    panel(p, "Karl Anders", "underdog", "nba")
+    p.click('[data-act="watch"]')
+    p.wait_for_timeout(1100)
+    assert state(env, "watcher")["watch"][0]["name"] == "Karl Anders"
+    p.keyboard.press("Escape")
+    assert p.locator('.row:has-text("Karl Anders") .w-mark').count() >= 1
+    p.click("#open-filters")
+    p.click('[data-act="view"][data-id="p-watch"]')
+    p.click("#filters-done")
+    assert p.locator(".row").count() >= 1 and p.locator('.row:has-text("vargo")').count() == 0
+    c.close()
+    c2 = context(browser, env, PHONE, user="watcher")
+    p2 = open_page(c2, env)
+    all_days(p2)
+    assert p2.locator('.row:has-text("Karl Anders") .w-mark').count() >= 1
+    c2.close()
+
+
+def test_matches_lists_every_sport_and_opens_its_props(octx, env):
+    p = open_page(octx, env)
+    all_days(p)
+    go(p, "#/matches")
+    p.wait_for_selector(".match-card")
+    text = p.inner_text("#view-matches")
+    assert "NYK at BOS" in text and "Halcyon vs Norrland" in text and "BUF at KC" in text
+    shot(p, "desk-8-matches.png")
+    p.locator(".match-card", has_text="NYK at BOS").click()
+    p.wait_for_timeout(150)
+    assert "All props" in p.inner_text("#feed-strips") and p.locator('.row:has-text("Karl Anders")').count() >= 1 and p.locator('.row:has-text("vargo")').count() == 0
+    p.click('[data-act="event-clear"]')
+    assert p.locator('.row:has-text("vargo")').count() >= 1
+
+
+def test_one_sport_down_leaves_the_others_on_the_board(octx, env):
+    env.sports.down = True
+    p = open_page(octx, env)
+    all_days(p)
+    assert "NBA, NFL board unavailable" in p.inner_text("#board-list") and p.locator('.row:has-text("vargo")').count() >= 1 and p.locator('.row:has-text("Harky")').count() >= 1
+
+
+def test_results_outage_for_one_sport_is_stated(octx, env):
+    env.sports.public = None
+    p = open_page(octx, env)
+    go(p, "#/results")
+    p.click('[data-act="res-sport"][data-id="nfl"]')
+    p.wait_for_function("document.querySelector('#view-results').textContent.includes('NFL record unavailable')")
+
+
+def test_held_rows_show_no_letter_and_lol_letters_show_0u(octx, env):
+    p = open_page(octx, env)
+    all_days(p)
+    held = p.locator('.row:has-text("Sam Field")').first.inner_text()
+    assert "Research estimate" in held and not re.search(r"\b[ABC][+-]?\s+(Over|Under)", held)
+    assert "0U" in p.locator('.row:has-text("Harky")').first.inner_text()

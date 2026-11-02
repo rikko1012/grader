@@ -1,7 +1,6 @@
-/* Research workspace. CS2 comes only from /preview/workspace/api/*: a failure shows the last copy with its time, or says the
-   board is unavailable, and never falls back to sample records. LoL, NBA and NFL are labelled sample records
-   (window.WORKSPACE_DATA), shown only when the owner turns them on: a member's board, picks and results are real data alone.
-   The slip, tracked picks, preferences and saved views live on the member's account. */
+/* Research workspace. Every sport comes only from /preview/workspace/api/*: a failure shows that sport's last copy with its time,
+   or says its board is unavailable, and one sport going down never touches another. Which sports a member sees is the server's
+   answer (me.sports). The slip, tracked picks, preferences, saved views and the watchlist live on the member's account. */
 (function () {
   "use strict";
   const D = window.WORKSPACE_DATA;
@@ -12,6 +11,7 @@
   const pct = (p) => (typeof p !== "number" ? "--" : (p * 100).toFixed(1) + "%");     /* one decimal, from the unrounded chance */
   const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const tenth = (x) => Math.round(x * 10) / 10;                /* a projection reads to one place; the saved number is untouched */
   const ICON = {
     plus: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     check: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg>',
@@ -19,14 +19,16 @@
     down: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     up: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>'
   };
+  ICON.star = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 4 2.5 5.2 5.7.8-4.1 4 1 5.6L12 17.3 6.9 19.6l1-5.6-4.1-4 5.7-.8z"/></svg>';
   const TABS = ["overview", "history", "books", "context"];
-  const VIEWS = ["research", "slips", "picks", "results"];
-  const DEFAULT_F = { day: "today", book: "all", market: "all", period: "all", side: "all", tier: "all", gapsOnly: false, hideOff: false, sort: "start" };
+  const VIEWS = ["research", "matches", "slips", "picks", "results"];
+  const SPORT_KEYS = ["cs2", "lol", "nba", "nfl"];
+  const DEFAULT_F = { day: "today", book: "all", market: "all", period: "all", side: "all", tier: "all", gapsOnly: false, hideOff: false, watchOnly: false, sort: "start" };
   const SORTS = ["start", "chance", "player"];
   const BOARD_POLL = 30000, MINE_POLL = 60000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, PREFS_DEBOUNCE = 2500, LINE_KEEP = 15000, MAX_LEGS = 8, DRAFT_MAX_MS = 86400000;
-  const SCOPES = "#sheet-body,#rail-body,#view-slips,#view-picks,#view-results,#panel,#filters-body,#chips,#feed-strips,#board-list,#board-head";
+  const SCOPES = "#sheet-body,#rail-body,#view-slips,#view-picks,#view-results,#view-matches,#panel,#filters-body,#chips,#feed-strips,#board-list,#board-head";
   const STATUS = { hit: "Hit", miss: "Miss", push: "Push", void: "Void", pending: "Pending" };
-  const CHECKS = ["Match not started", "Offer available and unchanged", "Forecast belongs to this match, line and maps", "Platform accepts this combination", "No duplicates or conflicts"];
+  const CHECKS = ["Game not started", "Offer available and unchanged", "Forecast belongs to this event, line and period", "Platform accepts this combination", "No duplicates or conflicts"];
 
   /* ---- requests ---- */
   class ApiError extends Error { constructor(status, doc) { super("api " + status); this.status = status; this.doc = doc; } }
@@ -46,7 +48,7 @@
       let doc = null;
       try { doc = await r.json(); } catch (e) { doc = null; }
       if (!r.ok) {
-        if ([401, 403, 404].includes(r.status) && !path.startsWith("line")) sessionEnded();    /* every other route exists for a signed-in member */
+        if ([401, 403, 404].includes(r.status) && !/^(line|board\?|results\?)/.test(path)) sessionEnded();    /* every other route exists for a signed-in member */
         throw new ApiError(r.status, doc);
       }
       return doc;
@@ -72,6 +74,7 @@
     return isObj(v) && isStr(v.id) && isStr(v.name) && isObj(v.state) && isObj(v.state.f) && (v.state.q == null || isStr(v.state.q))
       && (v.state.chip === "all" || own(D.sports, v.state.chip)) && SORTS.includes(v.state.f.sort == null ? "start" : v.state.f.sort);
   }
+  const cleanWatch = (w) => isObj(w) && isStr(w.id) && own(D.sports, w.sport) && isStr(w.key) && isStr(w.name) && (w.team == null || isStr(w.team));
 
   /* ---- time: one local clock everywhere, UTC only in a receipt's Details ---- */
   const fmtUTC = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" });
@@ -107,15 +110,19 @@
   /* ---- state ---- */
   const T = { board: "", slip: "", panel: "" };                 /* what each timed region last painted */
   const S = {
-    view: "research", chip: "all", q: "", f: Object.assign({}, DEFAULT_F), activeView: "p-today", me: null,
-    cs2: { status: "loading", records: [], at: null, feeds: null, version: null, fails: 0 },
+    view: "research", chip: "all", q: "", f: Object.assign({}, DEFAULT_F), activeView: "p-today", me: null, event: null,
+    boards: Object.fromEntries(SPORT_KEYS.map((k) => [k, { status: "loading", records: [], at: null, feeds: null, version: null, fails: 0 }])),
     panel: null, opener: null, openerSel: ".row-open", wanted: null, histN: 10, lines: {},
     slip: { legs: [], types: {} }, check: null, checkSig: "", checking: false, checkErr: null, tracked: null, trackIdem: {}, trackBusy: {}, sheetMark: null, searchJump: false,
-    rev: 0, stateReady: false, saveFail: false, views: [], syncedLegs: new Set(), syncedViews: new Set(), savedDay: false, sample: false, signedOut: false, copyBusy: false,
-    mine: { status: "loading", doc: null, older: [], next: null }, openPick: null, picksFilter: "all",
-    results: { status: "loading", doc: null }, group: "chance"
+    rev: 0, stateReady: false, saveFail: false, views: [], watch: [], syncedLegs: new Set(), syncedViews: new Set(), syncedWatch: new Set(), savedDay: false, signedOut: false, copyBusy: false,
+    mine: { status: "loading", doc: null, older: [], next: null }, openPick: null, picksFilter: "all", picksSport: "all",
+    results: Object.fromEntries(SPORT_KEYS.map((k) => [k, { status: "idle", doc: null }])), resSport: "cs2", group: "chance"
   };
-  const sampleOn = () => !!(S.sample && S.me && S.me.owner);
+  const sportsOn = () => SPORT_KEYS.filter((k) => k === "cs2" || !!(S.me && S.me.sports && S.me.sports[k]));
+  const anyLoading = () => sportsOn().some((k) => S.boards[k].status === "loading");
+  const boardList = () => (S.chip === "all" ? sportsOn() : [S.chip]).map((k) => [k, S.boards[k]]);
+  const watchId = (sport, key) => sport + ":" + key;
+  const watched = (r) => S.watch.some((w) => w.id === watchId(r.sport, r.player.key));
 
   /* ---- rows: one board row per exact prop and line. Offers at another line stay a separate row ---- */
   const rows = new Map();
@@ -123,7 +130,7 @@
   const propKey = (r) => [r.sport, r.event.id, r.player.key, r.market.stat, r.market.period].join(".");
   function rebuild() {
     rows.clear();
-    [...S.cs2.records, ...(sampleOn() ? D.records : [])].forEach((r) => {
+    sportsOn().flatMap((k) => S.boards[k].records).forEach((r) => {
       if (!rows.has(r.key)) rows.set(r.key, { id: r.key, offers: [], siblings: [] });
       rows.get(r.key).offers.push(r);
     });
@@ -137,6 +144,7 @@
 
   /* ---- offer helpers ---- */
   const started = (r) => r.event.status === "started" || new Date(r.event.lock_utc || r.event.start_utc) <= Date.now();
+  const startWord = (r) => (r.sport === "nba" || r.sport === "nfl" ? "Game started" : "Match started");
   const held = (r) => r.state.kind === "held";
   const slipOffer = (r) => D.platforms[r.offer.platform].slip;
   const liveOffer = (r) => !started(r);
@@ -190,7 +198,7 @@
     if (S.slip.legs.length) scheduleCheck();
   }
   function addRefusal(rec, side) {
-    if (started(rec)) return `Match started at ${when(rec.event.start_utc)}.`;
+    if (started(rec)) return `${startWord(rec)} at ${when(rec.event.start_utc)}.`;
     if (!slipOffer(rec)) return `${rec.offer.platform_label} is shown for comparison. Slips cover PrizePicks and Underdog.`;
     if (!rec.offer[side].offered) return `${cap(side)} is not offered on ${rec.offer.platform_label}.`;
     if (held(rec)) return "The grade on this line is held.";
@@ -325,15 +333,16 @@
   /* ---- account: slip, preferences and views save to the member's account ----
      Every device merges three ways against the copy it last synced, so an add or a removal on either device stands. A save that
      fails stays pending and tick sends it again; until the account has it, a local draft keeps the slip for this member. */
-  function prefs() { return { chip: S.chip, f: S.f, group: S.group, histN: S.histN, sample: S.sample }; }
-  const pendingSave = { slip: false, prefs: false, views: false };
+  function prefs() { return { chip: S.chip, f: S.f, group: S.group, histN: S.histN, resSport: S.resSport }; }
+  const pendingSave = { slip: false, prefs: false, views: false, watch: false };
   let saveGen = 0, saving = false;
-  const unsaved = () => pendingSave.slip || pendingSave.prefs || pendingSave.views;
+  const unsaved = () => pendingSave.slip || pendingSave.prefs || pendingSave.views || pendingSave.watch;
   function statePatch() {
     const p = { rev: S.rev };
     if (pendingSave.slip) p.slip = { legs: S.slip.legs, types: S.slip.types };
     if (pendingSave.prefs) p.prefs = prefs();
     if (pendingSave.views) p.views = S.views;
+    if (pendingSave.watch) p.watch = S.watch;
     return p;
   }
   const legIds = (legs) => new Set(legs.map((l) => l.id));
@@ -362,6 +371,15 @@
     S.syncedViews = tIds;
     if (keep.length !== t.length || keep.some((v) => !tIds.has(v.id))) pendingSave.views = true;
   }
+  function mergeWatch(theirs) {
+    const t = (theirs || []).filter(cleanWatch), tIds = viewIds(t), base = S.syncedWatch;
+    const keep = S.watch.filter((w) => tIds.has(w.id) || !base.has(w.id));
+    const mIds = viewIds(keep);
+    t.forEach((w) => { if (!mIds.has(w.id) && !base.has(w.id)) keep.push(w); });
+    S.watch = keep;
+    S.syncedWatch = tIds;
+    if (keep.length !== t.length || keep.some((w) => !tIds.has(w.id))) pendingSave.watch = true;
+  }
   function adoptRemote(doc) {                                   /* another device moved the account: this device takes its changes, always */
     S.rev = doc.rev || 0;
     if (doc.slip && Array.isArray(doc.slip.legs)) {
@@ -369,6 +387,7 @@
       if (isObj(doc.slip.types)) S.slip.types = Object.assign({}, doc.slip.types, pendingSave.slip ? S.slip.types : {});
     }
     if (Array.isArray(doc.views)) mergeViews(doc.views);
+    if (Array.isArray(doc.watch)) mergeWatch(doc.watch);
     S.check = S.checkSig === sig() ? S.check : null;
     renderSlips(); renderBoard(); renderPanel();
     if ($("filters-dialog").open) renderFilters();
@@ -377,13 +396,14 @@
   async function pushState(retried, leaving) {
     if (!S.stateReady || !unsaved() || saving || S.signedOut) return;
     saving = true;
-    const had = Object.assign({}, pendingSave), gen = saveGen, sentLegs = legIds(S.slip.legs), sentViews = viewIds(S.views);
+    const had = Object.assign({}, pendingSave), gen = saveGen, sentLegs = legIds(S.slip.legs), sentViews = viewIds(S.views), sentWatch = viewIds(S.watch);
     let conflict = false;
     try {
       const doc = await api("state", statePatch(), leaving);
       S.rev = doc.rev;
       if (had.slip) S.syncedLegs = sentLegs;
       if (had.views) S.syncedViews = sentViews;
+      if (had.watch) S.syncedWatch = sentWatch;
       if (gen === saveGen) {                                    /* a change made during this request stays pending */
         Object.keys(had).forEach((k) => { if (had[k]) pendingSave[k] = false; });
         if (had.slip) clearDraft();
@@ -406,7 +426,7 @@
     Object.assign(pendingSave, what);
     saveGen++;
     if (what.slip) saveDraft();
-    if (what.slip || what.views) saveSoon(); else prefsSoon();
+    if (what.slip || what.views || what.watch) saveSoon(); else prefsSoon();
   }
   async function syncState() {                                  /* picks up what another device saved */
     if (!S.stateReady || unsaved() || saving || S.signedOut) return;
@@ -443,13 +463,15 @@
     if (isObj(doc.prefs)) {
       const p = doc.prefs;
       if (isObj(p.f)) { S.f = Object.assign({}, DEFAULT_F, p.f); if (!SORTS.includes(S.f.sort)) S.f.sort = "start"; S.activeView = null; S.savedDay = true; }
-      if (p.sample === true) S.sample = true;
       if (p.chip === "all" || own(D.sports, p.chip)) S.chip = p.chip;
-      if (["chance", "stat", "side", "version"].includes(p.group)) S.group = p.group;
+      if (["chance", "stat", "side", "version", "role"].includes(p.group)) S.group = p.group;
       if ([5, 10, 20].includes(p.histN)) S.histN = p.histN;
+      if (own(D.sports, p.resSport)) S.resSport = p.resSport;
     }
     if (Array.isArray(doc.views)) { S.views = doc.views.filter(cleanView); S.syncedViews = viewIds(S.views); }
-    if (!sampleOn() && S.chip !== "cs2") S.chip = "all";
+    if (Array.isArray(doc.watch)) { S.watch = doc.watch.filter(cleanWatch); S.syncedWatch = viewIds(S.watch); }
+    if (S.chip !== "all" && !sportsOn().includes(S.chip)) S.chip = "all";
+    if (!sportsOn().includes(S.resSport)) S.resSport = "cs2";
     rebuild();
   }
 
@@ -473,15 +495,20 @@
   }
 
   /* ---- loads ---- */
-  async function loadBoard() {
+  async function loadSport(k) {
+    const b = S.boards[k];
     try {
-      const doc = await api("board");
-      S.cs2 = { status: "ok", records: doc.records, at: doc.board_at, feeds: doc.feeds, version: doc.version, fails: 0 };
+      const doc = await api(k === "cs2" ? "board" : "board?sport=" + k);
+      Object.entries(doc.platforms || {}).forEach(([p, v]) => { if (!own(D.platforms, p)) D.platforms[p] = v; });
+      S.boards[k] = { status: "ok", records: doc.records, at: doc.board_at, feeds: doc.feeds, version: doc.version, fails: 0 };
     } catch (e) {
-      S.cs2 = Object.assign({}, S.cs2, { status: S.cs2.records.length ? "stale" : "unavailable", fails: S.cs2.fails + 1 });
+      S.boards[k] = Object.assign({}, b, { status: b.records.length ? "stale" : "unavailable", fails: b.fails + 1 });
     }
+  }
+  async function loadBoard() {
+    await Promise.all(sportsOn().map(loadSport));
     rebuild();
-    renderChips(); renderBoard();
+    renderChips(); renderBoard(); renderMatches();
     if (S.panel) { renderPanel(); loadLine(); }
     if (S.wanted) route(false);
     if (S.slip.legs.length && !S.checking) scheduleCheck();
@@ -504,8 +531,10 @@
   }
   const mineReceipts = () => [S.mine.doc, ...S.mine.older].flatMap((d) => (d ? d.receipts : []));
   const mineSlips = () => [S.mine.doc, ...S.mine.older].flatMap((d) => (d ? d.slips : []));
-  async function loadResults() {
-    try { S.results = { status: "ok", doc: await api("results") }; } catch (e) { S.results = { status: S.results.doc ? "stale" : "unavailable", doc: S.results.doc }; }
+  async function loadResults(k) {
+    const sport = k || S.resSport, cur = S.results[sport];
+    if (cur.status === "idle") S.results[sport] = { status: "loading", doc: null };
+    try { S.results[sport] = { status: "ok", doc: await api(sport === "cs2" ? "results" : "results?sport=" + sport) }; } catch (e) { S.results[sport] = { status: cur.doc ? "stale" : "unavailable", doc: cur.doc }; }
     renderResults();
   }
   async function loadLine(force) {
@@ -514,12 +543,11 @@
     const row = rows.get(P.id);
     if (!row) return;
     const rec = offerOf(row, P.platform);
-    if (rec.sample) return;
     const k = rec.offer.platform + "|" + rec.offer.offer_id, had = S.lines[k];
     if (!force && had && had.doc && Date.now() - had.at < LINE_KEEP) return;
     S.lines[k] = { status: "loading", doc: had && had.doc, at: had ? had.at : 0 };
     try {
-      const doc = await api(`line?book=${encodeURIComponent(rec.offer.platform)}&id=${encodeURIComponent(rec.offer.offer_id)}`);
+      const doc = await api(`line?${rec.sport === "cs2" ? "" : "sport=" + rec.sport + "&"}book=${encodeURIComponent(rec.offer.platform)}&id=${encodeURIComponent(rec.offer.offer_id)}`);
       S.lines[k] = { status: "ok", doc, at: Date.now() };
     } catch (e) {
       S.lines[k] = { status: "unavailable", doc: had && had.doc, at: had ? had.at : 0 };
@@ -532,6 +560,8 @@
   function matches(row, ignoreChip) {
     const r = row.lead, f = S.f, q = S.q.trim().toLowerCase();
     if (!ignoreChip && S.chip !== "all" && r.sport !== S.chip) return false;
+    if (S.event && r.event.id !== S.event) return false;
+    if (f.watchOnly && !watched(r)) return false;
     if (q && ![r.player.name, r.player.team, r.player.opponent, r.event.label, r.event.competition, D.sports[r.sport]].join(" ").toLowerCase().includes(q)) return false;
     if (f.day !== "all" && dayOf(r.event.start_utc) !== f.day) return false;
     if (f.book !== "all" && !row.offers.some((o) => o.offer.platform === f.book)) return false;
@@ -557,7 +587,7 @@
     return list.sort((a, b) => off(a) - off(b) || by(a, b));
   }
   function setF(k, v) { S.f[k] = v; S.activeView = null; saveState({ prefs: true }); renderBoardAll(); }
-  function resetFilters() { S.f = Object.assign({}, DEFAULT_F, { day: "all" }); S.q = ""; S.chip = "all"; $("search").value = ""; S.activeView = null; saveState({ prefs: true }); renderBoardAll(); }
+  function resetFilters() { S.f = Object.assign({}, DEFAULT_F, { day: "all" }); S.q = ""; S.chip = "all"; S.event = null; $("search").value = ""; S.activeView = null; saveState({ prefs: true }); renderBoardAll(); }
 
   /* ---- render: toolbar ---- */
   function options(el, list, cur) {
@@ -574,37 +604,48 @@
   function paintChips() {
     const counts = { all: 0 };
     all.forEach((r) => { if (matches(r, true)) { counts.all++; counts[r.lead.sport] = (counts[r.lead.sport] || 0) + 1; } });
-    const list = sampleOn() ? [["all", "All"], ...Object.entries(D.sports)] : [["cs2", "CS2"]];         /* real data is one sport today */
+    const on = sportsOn(), list = on.length > 1 ? [["all", "All"], ...on.map((k) => [k, D.sports[k]])] : [["cs2", "CS2"]];    /* a member with one sport has no switch to make */
     $("chips").innerHTML = list.map(([k, v]) => {
-      const n = counts[k] || 0, down = k === "cs2" && S.cs2.status !== "ok" && S.cs2.status !== "loading";
-      return `<button class="chip" type="button" aria-pressed="${!sampleOn() || S.chip === k}" aria-label="${esc(v)}, ${plural(n, "prop")}" ${act("chip", k)}>${esc(v)}${down ? '<span class="dot"></span>' : ""}<span class="n">${n}</span></button>`;
+      const n = counts[k] || 0, down = k !== "all" && !["ok", "loading"].includes(S.boards[k].status);
+      return `<button class="chip" type="button" aria-pressed="${on.length === 1 || S.chip === k}" aria-label="${esc(v)}, ${plural(n, "prop")}" ${act("chip", k)}>${esc(v)}${down ? '<span class="dot"></span>' : ""}<span class="n">${n}</span></button>`;
     }).join("");
     $("chips").classList.toggle("scrolls", $("chips").scrollWidth > $("chips").clientWidth + 1);
     if (S.f.market !== "all" && !marketOpts().some(([v]) => v === S.f.market)) S.f.market = "all";
     options($("f-day"), dayOpts, S.f.day); options($("f-market"), marketOpts(), S.f.market);
     const phone = window.matchMedia("(max-width:760px)").matches;
-    const keys = phone ? ["day", "book", "market", "period", "side", "tier", "gapsOnly", "hideOff", "sort"] : ["book", "period", "side", "tier", "gapsOnly", "hideOff", "sort"];
+    const keys = phone ? ["day", "book", "market", "period", "side", "tier", "gapsOnly", "hideOff", "watchOnly", "sort"] : ["book", "period", "side", "tier", "gapsOnly", "hideOff", "watchOnly", "sort"];
     const n = keys.filter((k) => S.f[k] !== DEFAULT_F[k]).length;
     $("more-label").textContent = "Filters" + (n ? ` · ${n}` : "");
   }
   function renderFeedStrips() {
-    const c = S.cs2, show = S.chip === "all" || S.chip === "cs2", notes = [];
-    if (show && c.status === "stale" && !S.signedOut) notes.push(`<div class="strip"><b>CS2 lines as of ${esc(when(c.at))}</b><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>`);
-    if (show && c.status === "ok" && c.feeds) {
-      Object.entries(c.feeds).forEach(([k, f]) => {
-        if (!["ok", "empty", "loading"].includes(f.state)) notes.push(`<div class="strip"><b>${esc(D.platforms[k].label)} lines as of ${f.at ? esc(when(f.at)) : "the last read"}</b></div>`);
-      });
+    const notes = [];
+    if (S.event) {
+      const r = all.find((x) => x.lead.event.id === S.event);
+      notes.push(`<div class="strip"><b>${esc(r ? r.lead.event.label : "This match")}</b><button class="btn" type="button" ${act("event-clear")}>All props</button></div>`);
     }
+    boardList().forEach(([k, c]) => {
+      if (c.status === "stale" && !S.signedOut) notes.push(`<div class="strip"><b>${esc(D.sports[k])} lines as of ${esc(when(c.at))}</b><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>`);
+      if (c.status === "ok" && c.feeds) {
+        Object.entries(c.feeds).forEach(([p, f]) => {
+          if (!["ok", "empty", "loading"].includes(f.state)) notes.push(`<div class="strip"><b>${esc(D.sports[k])} ${esc((D.platforms[p] || {}).label || p)} lines as of ${f.at ? esc(when(f.at)) : "the last read"}</b></div>`);
+        });
+      }
+    });
     $("feed-strips").innerHTML = notes.join("");
   }
 
   /* ---- render: board ---- */
   function renderHead() {
     const sortBtn = (k, label) => `<button type="button" class="hd-sort" aria-pressed="${S.f.sort === k}" ${act("sort", k)}>${label}${S.f.sort === k ? ICON.down : ""}</button>`;
-    keepFocus(() => { $("board-head").innerHTML = `<span class="h-player">${sortBtn("start", "Start")}${sortBtn("player", "Player")}</span><span>Line</span><span>${sortBtn("chance", "Scout")}</span><span>Last 10</span><span class="h-pp">PrizePicks</span><span class="h-ud">Underdog</span><span class="h-other">Other books</span><span></span>`; });
+    keepFocus(() => { $("board-head").innerHTML = `<span class="h-player">${sortBtn("start", "Start")}${sortBtn("player", "Player")}</span><span>Line</span><span>${sortBtn("chance", "Scout")}</span><span>Hit rate</span><span class="h-pp">PrizePicks</span><span class="h-ud">Underdog</span><span class="h-other">Other books</span><span></span>`; });
+  }
+  function hitCell(n, t, side) {
+    const hits = side === "under" ? t.under : t.over, decided = t.n - t.push, rate = decided ? hits / decided : 0;
+    return `<span class="hc${rate >= 0.6 ? " hit-up" : ""}" title="${esc(`Last ${t.n} at this line: ${hits} for ${cap(side)}, ${t.push} push`)}"><i>L${n}</i><b>${hits}/${t.n}</b></span>`;
   }
   function histCell(rec) {
-    const t = rec.history.l10, side = rec.scout.side || "over";
+    const h = rec.history, t = h.l10, side = rec.scout.side || "over", more = [[5, h.l5], [10, h.l10], [20, h.l20]].filter(([, x]) => x);
+    if (more.length > 1) return `<div class="hist cells"><span class="sr">Hit rate at this line for ${cap(side)}</span>${more.map(([n, x]) => hitCell(n, x, side)).join("")}</div>`;
     if (!t) return '<div class="hist"><span class="hist-n none">No L10</span></div>';
     const hits = side === "under" ? t.under : t.over, cells = [];
     for (let i = 0; i < t.n; i++) cells.push(`<i class="${i < hits ? "m-hit" : i < hits + t.push ? "m-push" : ""}"></i>`);
@@ -638,7 +679,7 @@
   function otherCell(row) {
     const o = row.offers.filter((x) => !["prizepicks", "underdog"].includes(x.offer.platform));
     if (!o.length) return '<span class="bc none"><span class="sr">None</span><span aria-hidden="true">—</span></span>';
-    return `<span class="bc stack">${o.map((x) => `<span class="bo"><b>${esc(D.platforms[x.offer.platform].short)}</b>${priceBit(row, x, "over")}${priceBit(row, x, "under")}</span>`).join("")}</span>`;
+    return `<span class="bc stack">${o.slice(0, 3).map((x) => `<span class="bo"><b>${esc(D.platforms[x.offer.platform].short)}</b>${priceBit(row, x, "over")}${priceBit(row, x, "under")}</span>`).join("")}${o.length > 3 ? `<span class="bo"><b>+${o.length - 3}</b></span>` : ""}</span>`;
   }
   function renderRow(row, sub) {
     const rec = lead(row), flag = rowFlag(row), s = rec.scout, side = s.side, v = verdict(rec);
@@ -647,15 +688,16 @@
     const addBtn = flag ? `<button class="add" type="button" disabled aria-label="${esc(rec.player.name)}: Match started">${ICON.plus}</button>`
       : !side && !inSlip ? `<button class="add" type="button" ${act("row-choose", row.id)} aria-label="Choose a side for ${esc(rec.player.name)}">${ICON.plus}</button>`
         : `<button class="add" type="button" aria-pressed="${inSlip}" ${act("row-add", row.id)} aria-label="${inSlip ? "Remove" : "Add"} ${esc(pick)} ${inSlip ? "from" : "to"} slip">${inSlip ? ICON.check : ICON.plus}</button>`;
-    const read = flag ? "Match started" : side ? `Scout ${v.text} ${pct(s.p_side)}` : "No lean";
-    const sampleTag = rec.sample ? `<span class="sample-tag">SAMPLE DATA</span>` : "";
+    const read = flag ? startWord(rec) : side ? `Scout ${v.text} ${pct(s.p_side)}` : s.p_over != null ? `Over ${pct(s.p_over)}, Under ${pct(s.p_under)}` : "No lean";
     const marketLabel = esc(rec.market.stat_label) + (rec.market.period === "full_game" ? "" : ` · ${esc(rec.market.period_label)}`);
     const est = s.hold ? `<span class="g-est">Research estimate</span>` : "";
-    const sub2 = [est, s.projection != null ? `Proj ${esc(s.projection)}` : "", s.units ? `${esc(s.units)}U` : ""].filter(Boolean).join('<span class="sc-rest"> · </span>');
-    const scout = flag ? '<span class="off-note">Match started</span>'
-      : `<div class="sc-top"><b class="pct">${side ? pct(s.p_side) : "--"}</b>${v.html}</div><span class="sc-sub">${sub2}</span>`;
-    const sportTag = sampleOn() ? `<span class="s-tag">${esc(D.sports[rec.sport])}</span>` : "";
-    const name = sub ? `<span class="pl-name alt">Other line</span>` : `<span class="pl-name">${esc(rec.player.name)}</span><span class="pl-sub">${sampleTag}${sportTag}${marketLabel} · ${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""}</span>`;
+    const sub2 = [est, s.projection != null ? `Proj ${esc(tenth(s.projection))}` : "", s.units ? `${esc(s.units)}U` : "", rec.sport === "lol" && s.grade ? "0U" : ""].filter(Boolean).join('<span class="sc-rest"> · </span>');
+    const scout = flag ? `<span class="off-note">${startWord(rec)}</span>`
+      : !side && s.p_over != null ? `<div class="sc-top sc-both"><span><span class="sr">Over </span><i aria-hidden="true">O</i> <b>${pct(s.p_over)}</b></span><span><span class="sr">Under </span><i aria-hidden="true">U</i> <b>${pct(s.p_under)}</b></span></div><span class="sc-sub">${sub2}</span>`
+        : `<div class="sc-top"><b class="pct">${side ? pct(s.p_side) : "--"}</b>${v.html}</div><span class="sc-sub">${sub2}</span>`;
+    const sportTag = sportsOn().length > 1 ? `<span class="s-tag">${esc(D.sports[rec.sport])}</span>` : "";
+    const star = watched(rec) ? `<span class="w-mark" title="On your watchlist">${ICON.star}<span class="sr">On your watchlist</span></span>` : "";
+    const name = sub ? `<span class="pl-name alt">Other line</span>` : `<span class="pl-name">${star}${esc(rec.player.name)}</span><span class="pl-sub">${sportTag}${marketLabel} · ${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""}</span>`;
     return `<li class="row${flag ? " is-off" : ""}${sub ? " is-sub" : ""}${inSlip ? " on-slip" : ""}" data-row="${esc(row.id)}" data-open="${S.panel && S.panel.id === row.id}">
       <button class="row-open" type="button" ${act("open", row.id)} aria-label="Research ${esc(rec.player.name)}, ${esc(rec.market.stat_label)} ${esc(rec.market.period_label)}, line ${esc(rec.offer.line)}, ${esc(read)}"></button>
       <div class="c-player">${name}</div>
@@ -684,15 +726,16 @@
   const skeletonRows = (n) => `<div aria-busy="true"><p class="sr">Board loading</p>${Array.from({ length: n }, () => '<div class="skel-row"><i></i><i></i><i></i><i></i><i></i></div>').join("")}</div>`;
   function renderBoard() { keepFocus(paintBoard); T.board = boardSig(); }
   function paintBoard() {
-    const box = $("board-list"), c = S.cs2;
+    const box = $("board-list"), want = boardList();
     renderFeedStrips();
-    const wantCs2 = S.chip === "all" || S.chip === "cs2";
-    if (c.status === "loading" && !all.length) { box.innerHTML = skeletonRows(10); return; }
+    if (want.every(([, c]) => c.status === "loading") && !all.length) { box.innerHTML = skeletonRows(10); return; }
     const list = visibleRows();
     $("view-research").toggleAttribute("data-no-other", !list.some((r) => r.offers.some((o) => !["prizepicks", "underdog"].includes(o.offer.platform))));
-    const down = wantCs2 && c.status === "unavailable" ? `<div class="state"><h3>CS2 board unavailable</h3><p>Scout could not read the board. Your slip and tracked picks are safe.</p><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>` : "";
-    const loading = wantCs2 && c.status === "loading" ? skeletonRows(4) : "";
-    $("board-meta").textContent = `${plural(list.length, "prop")}${c.at && wantCs2 ? ` · Updated ${clock(c.at)}` : ""}`;
+    const off = want.filter(([, c]) => c.status === "unavailable");
+    const down = off.length ? `<div class="state"><h3>${esc(off.map(([k]) => D.sports[k]).join(", "))} board unavailable</h3><p>Scout could not read ${off.length > 1 ? "these boards" : "the board"}. Your slip and tracked picks are safe.</p><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>` : "";
+    const loading = want.some(([, c]) => c.status === "loading") ? skeletonRows(4) : "";
+    const at = want.map(([, c]) => c.at).filter(Boolean).sort()[0];
+    $("board-meta").textContent = `${plural(list.length, "prop")}${at ? ` · Updated ${clock(at)}` : ""}`;
     box.innerHTML = down + loading + (list.length ? `<ol aria-label="Props">${renderList(list)}</ol>`
       : down || loading ? "" : `<div class="empty"><p>No props match these filters.</p><button class="btn" type="button" ${act("reset-filters")}>Show all props</button></div>`);
   }
@@ -702,23 +745,15 @@
   function viewItem(v, mine) {
     return `<li><button class="view-link" type="button" aria-pressed="${S.activeView === v.id}" ${act("view", v.id)}>${esc(v.name)}</button>${mine ? `<button class="view-del" type="button" aria-label="Delete view ${esc(v.name)}" ${act("view-del", v.id)}>${ICON.x}</button>` : ""}</li>`;
   }
-  const presets = () => D.presets.filter((v) => sampleOn() || v.state.chip === "all" || v.state.chip === "cs2");
+  const presets = () => D.presets.filter((v) => v.state.chip === "all" || sportsOn().includes(v.state.chip));
   function applyView(id) {
     const v = [...presets(), ...S.views].find((x) => x.id === id);
     if (!v) return;
-    S.f = Object.assign({}, DEFAULT_F, v.state.f); S.chip = sampleOn() || v.state.chip === "cs2" ? v.state.chip : "all"; S.q = v.state.q || ""; $("search").value = S.q; S.activeView = id;
+    S.f = Object.assign({}, DEFAULT_F, v.state.f); S.chip = v.state.chip === "all" || sportsOn().includes(v.state.chip) ? v.state.chip : "all"; S.q = v.state.q || ""; $("search").value = S.q; S.activeView = id; S.event = null;
     if (S.view !== "research") location.hash = "#/research";
     saveState({ prefs: true });
     renderBoardAll();
     say(`View: ${v.name}`);
-  }
-  function setSample(on) {
-    S.sample = on;
-    if (!on && S.chip !== "cs2") S.chip = "all";
-    S.activeView = null;
-    saveState({ prefs: true });
-    rebuild();
-    renderBoardAll(); renderPicks(); renderResults();
   }
   function renderFilters() {
     const seg = (key, label, list) => `<div class="field"><span>${label}</span><div class="seg wide" role="group" aria-label="${label}">${list.map(([v, l]) => `<button type="button" aria-pressed="${S.f[key] === v}" ${act("f-set", key + ":" + v)}>${esc(l)}</button>`).join("")}</div></div>`;
@@ -730,9 +765,8 @@
         ${seg("sort", "Sort", [["start", "Start"], ["chance", "Chance"], ["player", "Player"]])}${seg("day", "Day", dayOpts)}
         ${seg("side", "Scout side", [["all", "Both"], ["over", "Over"], ["under", "Under"]])}
         ${seg("tier", "Scout read", [["all", "All"], ["graded", "Graded"], ["lean", "Lean"], ["estimate", "Estimate"]])}
-        ${seg("period", "Maps", [["all", "All"], ["map1", "Map 1"], ["maps12", "Maps 1-2"], ["maps13", "Maps 1-3"]])}
-        ${sel("book", "Book", bookOpts())}${sel("market", "Market", marketOpts())}${tog("gapsOnly", "Books differ on the line")}${tog("hideOff", "Hide started")}
-        ${S.me && S.me.owner ? `<label class="check"><input type="checkbox" id="sample-on"${S.sample ? " checked" : ""}><span>Show sample sports</span></label>` : ""}
+        ${seg("period", "Period", [["all", "All"], ["map1", "Map 1"], ["maps12", "Maps 1-2"], ["maps13", "Maps 1-3"], ["full_game", "Game"]])}
+        ${sel("book", "Book", bookOpts())}${sel("market", "Market", marketOpts())}${tog("gapsOnly", "Books differ on the line")}${tog("hideOff", "Hide started")}${tog("watchOnly", `Watchlist only (${S.watch.length})`)}
         <button class="btn btn-quiet" type="button" ${act("reset-filters")}>Reset filters</button>`;
     });
     $("filters-done").textContent = `Show ${plural(visibleRows().length, "prop")}`;
@@ -755,9 +789,8 @@
     const problems = c && !c.ok ? `<div class="problems">${c.problems.map((p) => `<p class="problem">${esc(p.text)}${p.swap ? `<br><button class="btn" type="button" ${act("swap-leg", l.id)}>Use current offer</button>` : ""}${p.retry ? `<br><button class="btn" type="button" ${act("check-now")}>Check again</button>` : ""}</p>`).join("")}</div>` : "";
     const against = l.shown_label.startsWith("Scout side");
     const read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
-    const sample = l.sport !== "cs2" ? '<span class="sample-tag">SAMPLE DATA</span>' : "";
     return `<div class="leg${c && !c.ok ? " bad" : ""}">
-      <span class="leg-name">${esc(l.player)}<span class="s-tag">${esc(D.sports[l.sport])}</span>${sample}</span>
+      <span class="leg-name">${esc(l.player)}<span class="s-tag">${esc(D.sports[l.sport])}</span></span>
       <span class="leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
       <span class="leg-meta">${read}${/^https:\/\//.test(link || "") ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">Open this line</a>` : ""}</span>
       <button class="leg-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" ${act("leg-remove", l.id)}>${ICON.x}</button>${problems}</div>`;
@@ -783,14 +816,13 @@
   function renderEntry(e, phase) {
     const c = phase === "fresh" ? S.check.entries[e.key] : null, ready = !!(c && c.ok), can = !!(c && c.trackable), busy = !!S.trackBusy[e.key];
     const entryP = c && c.problems.length ? `<div class="problems" style="margin:0">${c.problems.map((p) => `<p class="problem">${esc(p.text)}</p>`).join("")}</div>` : "";
-    const note = c && c.track_note ? `<p class="problem">${esc(c.track_note)}</p>` : "";
     const open = c && c.open ? `<a class="${primaryClass()} btn-block" href="${esc(c.open.url)}" target="_blank" rel="noopener">${esc(c.open.label)}</a>` : "";
     const trackClass = !open && can ? primaryClass() : "btn";
     const sports = [...new Set(e.legs.map((l) => D.sports[l.sport]))].join(" + ");
     return `<section class="entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry">
       <header class="entry-head"><span>${esc(e.label)}<small>${esc(sports)} · ${plural(e.legs.length, "pick")}</small></span>${typeSeg(e)}</header>
       ${e.legs.map((l, i) => renderLeg(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null)).join("")}
-      <div class="entry-foot">${entryP}${note}${moneyLines(c)}${ruleList(c)}${open}
+      <div class="entry-foot">${entryP}${moneyLines(c)}${ruleList(c)}${open}
         <div class="entry-acts"><button class="${trackClass}" type="button" ${can && !busy ? "" : "disabled"} ${act("track", e.key)}>${busy ? "Tracking" : "Track"}</button><button class="btn" type="button" ${ready ? "" : "disabled"} ${act("copy", e.key)}>${S.copyBusy ? "Checking" : "Copy"}</button></div>
       </div></section>`;
   }
@@ -887,27 +919,34 @@
 
   /* ---- render: research panel ---- */
   function seriesOf(rec) {
-    if (rec.sample) return rec.history.recent.results;
     const d = lineOf(rec).doc;
     return d && d.history ? d.history.series : null;
   }
+  function tallyOf(rec, n) {                                    /* past games at this line when they are here, else the board's own count */
+    const res = seriesOf(rec), line = rec.offer.line;
+    if (!res) return rec.history["l" + n] || null;
+    const list = res.slice(0, n);
+    if (list.length < Math.min(n, 5) || (n === 20 && list.length <= 10)) return rec.history["l" + n] || null;
+    return { over: list.filter((g) => g.value > line).length, under: list.filter((g) => g.value < line).length, push: list.filter((g) => g.value === line).length, n: list.length };
+  }
   function secStrip(rec, side) {
-    const t = rec.history.l10, s = rec.scout, hits = t ? (side === "under" ? t.under : t.over) : null;
-    const ln = rec.sample ? null : lineOf(rec).doc, m = ln && ln.market && ln.market.available ? (side === "under" ? ln.market.p_under : ln.market.p_over) : null;
+    const s = rec.scout;
+    const ln = lineOf(rec).doc, m = ln && ln.market && ln.market.available ? (side === "under" ? ln.market.p_under : ln.market.p_over) : null;
     const tile = (val, label, extra) => `<div class="hit-tile${extra || ""}"><b>${val}</b><span>${label}</span></div>`;
+    const windows = [5, 10, 20].map((n) => [n, tallyOf(rec, n)]).filter(([, t]) => t);
+    const hitTiles = windows.length ? windows.map(([, t]) => tile(`${side === "under" ? t.under : t.over}/${t.n}`, `Hit rate, last ${t.n}, ${cap(side)}`)).join("") : tile("--", "No past results at this line");
     return `<section class="sec strip-sec" aria-label="Key numbers"><div class="hit-strip">
-      ${tile(t ? `${hits}/${t.n}` : "--", t ? `Hit rate, last ${t.n}, ${cap(side)}` : "No last 10 record")}
+      ${hitTiles}
       ${tile(chanceOf(rec, side) != null ? pct(chanceOf(rec, side)) : "--", `Forecast chance, ${cap(side)}`, " gold")}
       ${m != null ? tile(pct(m), `Market chance, ${cap(side)}`) : ""}
-      ${tile(s.projection != null ? esc(s.projection) : "--", "Projection")}
+      ${tile(s.projection != null ? esc(tenth(s.projection)) : "--", "Projection")}
       ${rec.history.avg != null ? tile(esc(rec.history.avg), "Recent average") : ""}</div></section>`;
   }
   function secChart(rec, side, full) {
     const res = seriesOf(rec), t = rec.history.l10;
     if (!res) {
-      const load = !rec.sample && lineOf(rec).status === "loading";
-      if (load) return '<section class="sec" aria-label="Past results"><div class="skel-chart"></div></section>';
-      const text = t ? `Last ${t.n} at this line: ${t.over} over, ${t.under} under, ${t.push} push.` : rec.sport === "lol" ? `The ${D.sports[rec.sport]} feed sends a recent average only.` : "No last 10 record for this line.";
+      if (lineOf(rec).status === "loading") return '<section class="sec" aria-label="Past results"><div class="skel-chart"></div></section>';
+      const text = t ? `Last ${t.n} at this line: ${t.over} over, ${t.under} under, ${t.push} push.` : "No past results at this line.";
       return `<section class="sec" aria-label="Past results"><div class="sec-h"><h3 class="eyebrow">Past results</h3></div><p class="ln-note">${esc(text)}</p></section>`;
     }
     const n = full ? S.histN : 10, list = res.slice(0, n), line = rec.offer.line;
@@ -920,7 +959,7 @@
       <div class="legend"><span><i class="h"></i>Hit for ${cap(side)}</span><span><i></i>Miss</span><span><i class="p"></i>Push</span><span><i class="l"></i>Line ${esc(line)}</span></div>${table}</section>`;
   }
   function secMaps(rec) {                                       /* CS2: each map of the last 20 series, from the same rows as the chart */
-    const res = rec.sample ? null : seriesOf(rec), by = new Map();
+    const res = seriesOf(rec), by = new Map();
     (res || []).forEach((g) => (g.maps || []).forEach((name, i) => {
       if (!name || !g.values || g.values[i] == null) return;
       const e = by.get(name) || { n: 0, t: 0 };
@@ -942,17 +981,17 @@
   }
   function secForecast(rec, side) {
     const s = rec.scout, v = verdict(rec, side), p = chanceOf(rec, side), val = s.validation || {};
-    const off = s.side && side !== s.side;
+    const off = s.side && side !== s.side && p == null;
     const stake = s.hold ? "None" : `${s.units == null ? 0 : s.units}U`;
     const reason = s.stake_reason ? `<p class="consensus">${esc(s.stake_reason)}</p>` : "";
     const detail = val.detail ? `<p class="consensus">${esc(val.detail)}</p>` : "";
     const label = val.label ? `<span class="tag">${esc(val.label)}</span>` : "";
     return `<section class="sec" aria-label="Scout forecast"><div class="sec-h"><h3 class="eyebrow">Scout forecast</h3>${label}</div>
-      <div class="forecast"><div class="fc-top"><div class="fc-num">${off ? "--" : pct(p)}</div><div class="fc-lab">${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}<br>${v.html} · Stake ${esc(stake)}</div></div>${reason}${detail}</div></section>`;
+      <div class="forecast"><div class="fc-top"><div class="fc-num">${off ? "--" : pct(p)}</div><div class="fc-lab">${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}<br>${v.html} · Stake ${esc(stake)}</div></div>${s.range80 ? `<p class="consensus">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${reason}${detail}</div></section>`;
   }
   function secDetails(rec) {
-    const ln = rec.sample ? null : lineOf(rec).doc, f = ln && ln.forecast;
-    const kv = [["Model", rec.scout.model_version], ["Forecast saved", f ? when(f.logged_at) : when(rec.scout.forecast_at)], ...(f ? [["Saved chance", pct(f.p_saved)]] : [])];
+    const ln = lineOf(rec).doc, f = ln && ln.forecast;
+    const kv = [["Model", rec.scout.model_version || "--"], ["Forecast saved", f && f.logged_at ? when(f.logged_at) : rec.scout.forecast_at ? when(rec.scout.forecast_at) : "--"], ...(f && f.p_saved != null ? [["Saved chance", pct(f.p_saved)]] : [])];
     return `<details class="tbl details"><summary>Details</summary><dl class="kv">${kv.map(([k, val]) => `<div><dt>${k}</dt><dd>${esc(val)}</dd></div>`).join("")}</dl></details>`;
   }
   function priceCell(o, side) { return priceText(o, side) || (o.offer[side].offered ? esc(lineLabel(o)) : "Not offered"); }
@@ -968,20 +1007,24 @@
       return `<div class="ln-group other"><div class="ln-title"><span><b>${line}</b> <span class="tag">Different line</span></span><button class="link-btn" type="button" ${act("p-line", s.id)}>Open ${line}</button></div>
         <p class="ln-note">Not the same bet as ${esc(rec.offer.line)}. Its own forecast: ${esc(v.text)} ${sp == null ? "" : pct(sp)}.</p>${bookTable(s.offers, s)}</div>`;
     }).join("");
-    const ln = rec.sample ? null : lineOf(rec).doc;
+    const ln = lineOf(rec).doc;
     const market = ln && ln.market ? (ln.market.available ? `<p class="consensus">Market chance from ${esc(ln.market.source)}: Over ${pct(ln.market.p_over)}, Under ${pct(ln.market.p_under)}.</p>` : `<p class="consensus">${esc(ln.market.reason)}</p>`) : "";
+    const mb = (ln && ln.market_books) || null, price = (v) => (v == null ? "--" : esc(v));
+    const mbRow = (b, showLine) => `<tr><td>${esc(b.platform_label)}${showLine ? ` <span class="tag">${esc(b.line)}</span>` : ""}</td><td class="num">${price(b.over)}</td><td class="num">${price(b.under)}</td><td>${b.chance != null ? pct(b.chance) : "--"}</td></tr>`;
+    const mbHead = '<thead><tr><th style="width:38%">Book</th><th>Over</th><th>Under</th><th>Its chance</th></tr></thead>';
+    const extra = mb ? mb.same.filter((b) => !row.offers.some((o) => o.offer.platform === b.platform)) : [];       /* a book already in the table above is not listed twice */
+    const same = extra.length ? `<h4 class="eyebrow sub-h">Market books at ${esc(rec.offer.line)}</h4><table class="dt">${mbHead}<tbody>${extra.map((b) => mbRow(b, false)).join("")}</tbody></table>` : "";
+    const diff = mb && mb.other.length ? `<div class="ln-group other"><div class="ln-title"><span><b>Other lines</b> <span class="tag">Different line</span></span></div><p class="ln-note">Not the same bet as ${esc(rec.offer.line)}.</p><table class="dt">${mbHead}<tbody>${mb.other.map((b) => mbRow(b, true)).join("")}</tbody></table></div>` : "";
     return `<section class="sec" aria-label="Book comparison"><div class="sec-h"><h3 class="eyebrow">Books</h3></div>
-      <div class="ln-group current"><div class="ln-title"><span><b>${esc(rec.offer.line)}</b></span></div>${bookTable(row.offers, row)}${market}</div>${others}</section>`;
+      <div class="ln-group current"><div class="ln-title"><span><b>${esc(rec.offer.line)}</b></span></div>${bookTable(row.offers, row)}${same}${market}</div>${others}${diff}</section>`;
   }
   function secContext(rec) {
-    if (rec.sample) {
-      const c = D.context[rec.player.key] || D.context_default[rec.sport];
-      return `<section class="sec" aria-label="Context"><div class="sec-h"><h3 class="eyebrow">Context</h3></div><dl class="ctx-list">${c.rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><p class="ln-note" style="margin-top:6px">${esc(c.note)}</p></section>`;
-    }
     const ln = lineOf(rec);
     if (!ln.doc) return `<section class="sec" aria-label="Context">${ln.status === "loading" ? '<div class="skel-line"></div><div class="skel-line"></div>' : '<p class="ln-note">Context is unavailable right now.</p>'}</section>`;
-    const list = (ln.doc.context && ln.doc.context.rows) || [];
-    return `<section class="sec" aria-label="Context"><div class="sec-h"><h3 class="eyebrow">Inputs saved with this forecast</h3></div>${list.length ? `<dl class="ctx-list">${list.map((r) => `<div><dt>${esc(r.label)}</dt><dd>${esc(r.value)}</dd></div>`).join("")}</dl>` : '<p class="ln-note">This forecast saved no context inputs.</p>'}</section>`;
+    const list = (ln.doc.context && ln.doc.context.rows) || [], drivers = (ln.doc.context && ln.doc.context.drivers) || [];
+    const title = rec.sport === "cs2" ? "Inputs saved with this forecast" : "Context";
+    const empty = rec.sport === "cs2" ? "This forecast saved no context inputs." : "No context is on file for this line.";
+    return `<section class="sec" aria-label="Context"><div class="sec-h"><h3 class="eyebrow">${title}</h3></div>${list.length ? `<dl class="ctx-list">${list.map((r) => `<div><dt>${esc(r.label)}</dt><dd>${esc(r.value)}</dd></div>`).join("")}</dl>` : `<p class="ln-note">${empty}</p>`}${drivers.length ? `<h4 class="eyebrow sub-h">What moved this forecast</h4><ul class="drivers">${drivers.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}</section>`;
   }
   function panelNotice(row, rec) {
     const P = S.panel;
@@ -989,7 +1032,7 @@
       const moved = row.siblings.find((r) => r.offers.some((o) => o.offer.platform === P.platform));
       return `<div class="strip inset"><b>${esc(D.platforms[P.platform].label)} no longer lists ${esc(rec.offer.line)}. Showing ${esc(rec.offer.platform_label)}.</b>${moved ? `<button class="btn" type="button" ${act("p-line", moved.id)}>Open ${esc(moved.lead.offer.line)}</button>` : ""}</div>`;
     }
-    if (started(rec)) return `<div class="strip inset"><b>Match started at ${esc(when(rec.event.start_utc))}</b></div>`;
+    if (started(rec)) return `<div class="strip inset"><b>${startWord(rec)} at ${esc(when(rec.event.start_utc))}</b></div>`;
     if (held(rec)) return `<div class="strip inset"><b>The grade on this line is held</b></div>`;
     return "";
   }
@@ -1021,12 +1064,11 @@
     const tab = TABS.map((t) => `<button class="tab" type="button" role="tab" id="tab-${t}" aria-controls="p-body" aria-selected="${P.tab === t}" tabindex="${P.tab === t ? 0 : -1}" ${act("p-tab", t)}>${cap(t)}</button>`).join("");
     const picker = row.siblings.length ? `<span class="line-pick" role="group" aria-label="Lines on this prop">${[row, ...row.siblings].sort((a, b) => a.lead.offer.line - b.lead.offer.line).map((r) => `<button type="button" aria-pressed="${r === row}" ${act("p-line", r.id)}>${esc(r.lead.offer.line)}</button>`).join("")}</span>` : `<b class="p-line">${esc(rec.offer.line)}</b>`;
     const nb = neighbours();
-    const sample = rec.sample ? '<span class="sample-tag">SAMPLE DATA</span>' : "";
     const stepper = `<div class="p-step"><button class="icon-btn" type="button" ${nb.prev ? "" : "disabled"} aria-label="Previous prop" ${act("p-prev")}>${ICON.up}</button><button class="icon-btn" type="button" ${nb.next ? "" : "disabled"} aria-label="Next prop" ${act("p-next")}>${ICON.down}</button></div>`;
     keepFocus(() => {
       el.innerHTML = `<header class="p-head">
-        <div class="p-title"><h2 class="p-name" id="panel-name" tabindex="-1">${esc(rec.player.name)}</h2>${picker}<span class="p-stat">${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)} · ${esc(rec.offer.platform_label)}</span>${sample}</div>
-        <div class="p-ctrl">${stepper}<button class="icon-btn p-close" type="button" aria-label="Close research" ${act("p-close")}>${ICON.x}</button></div>
+        <div class="p-title"><h2 class="p-name" id="panel-name" tabindex="-1">${esc(rec.player.name)}</h2>${picker}<span class="p-stat">${esc(D.sports[rec.sport])} · ${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)} · ${esc(rec.offer.platform_label)}</span></div>
+        <div class="p-ctrl"><button class="icon-btn w-btn" type="button" aria-pressed="${watched(rec)}" aria-label="${watched(rec) ? "Remove" : "Add"} ${esc(rec.player.name)} ${watched(rec) ? "from" : "to"} your watchlist" ${act("watch", row.id)}>${ICON.star}</button>${stepper}<button class="icon-btn p-close" type="button" aria-label="Close research" ${act("p-close")}>${ICON.x}</button></div>
         <p class="p-sub">${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} · ${esc(rec.event.label)}${rec.event.competition ? " · " + esc(rec.event.competition) : ""} · ${started(rec) ? "Started" : "Starts"} ${esc(when(rec.event.start_utc))}${rec.event.best_of ? ` · BO${esc(rec.event.best_of)}` : ""}${rec.offer.moved_from != null ? ` · Moved from ${esc(rec.offer.moved_from)}` : ""}</p>
       </header>
       <div class="tabs" role="tablist" aria-label="Research sections">${tab}</div>
@@ -1094,19 +1136,20 @@
   function pickRow(r) {
     const st = r.status, open = S.openPick === r.id;
     const scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;      /* Scout's grade and stake belong to Scout's side, never to the member's */
-    const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", `${r.grade || "Lean"} ${scoutSide}`.trim()],
-      ["Scout stake", `${r.units == null ? 0 : r.units}U${scoutSide ? ` on ${scoutSide}` : ""}`], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
-      ["Projection", r.projection == null ? "--" : r.projection], ["Book", r.platform_label]];
-    const saved = r.forecast_p == null ? [] : [["Saved forecast", `${r.forecast_grade === "LEAN" || !r.forecast_grade ? "Lean" : r.forecast_grade} ${scoutSide} ${pct(r.forecast_p)}, ${r.forecast_units == null ? 0 : r.forecast_units}U`]];
+    const read = r.research ? `${r.hold || "Research estimate"} ${scoutSide}`.trim() : `${r.grade || "Lean"} ${scoutSide}`.trim();
+    const kv = [["Sport", D.sports[r.sport] || r.sport], ["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read],
+      ...(r.research ? [] : [["Scout stake", `${r.units == null ? 0 : r.units}U${scoutSide ? ` on ${scoutSide}` : ""}`]]), ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
+      ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label]];
+    const saved = r.forecast_p == null || r.research ? [] : [["Saved forecast", `${r.forecast_grade === "LEAN" || !r.forecast_grade ? "Lean" : r.forecast_grade} ${scoutSide} ${pct(r.forecast_p)}, ${r.forecast_units == null ? 0 : r.forecast_units}U`]];
     const ids = [...saved, ["Offer", r.offer_revision], ["Forecast", r.forecast_id], ["Model", r.model_version], ["Tracked", stamp(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="pick-body" id="pick-${esc(r.id)}"><dl class="kv">${kv.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
       <h3 class="eyebrow" style="margin-top:14px">Timeline</h3>${timelineHtml(r)}
       <details class="tbl details"><summary>Details</summary><dl class="kv">${ids.map(([k, v]) => `<div><dt>${k}</dt><dd class="mono">${esc(v)}</dd></div>`).join("")}</dl></details></div>` : "";
     return `<article class="pick-row"><button class="pick-head" type="button" aria-expanded="${open}" aria-controls="pick-${esc(r.id)}" ${act("pick", r.id)}>
-      <span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(r.stat_label)} · ${esc(r.period_label)} · ${esc(r.matchup)}</small></span>
+      <span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(D.sports[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)} · ${esc(r.matchup)}</small></span>
       <span class="pick-final">${esc(leadLine(r))}</span><span class="status ${st}">${STATUS[st]}${r.corrected ? '<small>Corrected</small>' : ""}</span>${ICON.down}</button>${body}</article>`;
   }
-  const picksShow = (r) => S.picksFilter === "all" || (S.picksFilter === "pending" ? r.status === "pending" : r.status !== "pending");
+  const picksShow = (r) => (S.picksSport === "all" || r.sport === S.picksSport) && (S.picksFilter === "all" || (S.picksFilter === "pending" ? r.status === "pending" : r.status !== "pending"));
   function summary(rec) {
     const rate = rec.hit_rate == null ? "--" : pct(rec.hit_rate);
     return `<div class="rec-strip"><div><b>${rec.hit}-${rec.miss}-${rec.push}</b><span>Hit, miss, push</span></div><div><b>${rate}</b><span>Hit rate, ${rec.decided} decided</span></div><div><b>${rec.void}</b><span>Void</span></div><div><b>${rec.pending}</b><span>Pending</span></div><div><b>${rec.matches}</b><span>Matches</span></div></div>`;
@@ -1114,7 +1157,8 @@
   function renderPicks() {
     const box = $("view-picks"), doc = S.mine.doc;
     const seg = `<div class="seg" role="group" aria-label="Show picks">${[["all", "All"], ["pending", "Pending"], ["settled", "Settled"]].map(([k, l]) => `<button type="button" aria-pressed="${S.picksFilter === k}" ${act("picks-filter", k)}>${l}</button>`).join("")}</div>`;
-    const head = `<div class="page-h"><div><h1 id="picks-h" tabindex="-1">My picks</h1><p>Each receipt keeps what you saw when you tracked it. Corrections are added below, never written over.</p></div>${seg}</div>`;
+    const sportSeg = sportsOn().length > 1 ? `<div class="seg" role="group" aria-label="Show sport">${[["all", "All"], ...sportsOn().map((k) => [k, D.sports[k]])].map(([k, l]) => `<button type="button" aria-pressed="${S.picksSport === k}" ${act("picks-sport", k)}>${l}</button>`).join("")}</div>` : "";
+    const head = `<div class="page-h"><div><h1 id="picks-h" tabindex="-1">My picks</h1><p>Each receipt keeps what you saw when you tracked it. Corrections are added below, never written over.</p></div><div class="page-acts">${sportSeg}${seg}</div></div>`;
     let inner;
     if (!doc) inner = S.mine.status === "unavailable" ? `<div class="state"><h3>My picks unavailable</h3><p>Your receipts are saved. Scout could not read them just now.</p><button class="btn" type="button" ${act("retry-mine")}>Retry</button></div>` : Array.from({ length: 4 }, () => '<div class="skel-line tall"></div>').join("");
     else {
@@ -1126,8 +1170,7 @@
       });
       inner = stale + summary(doc.record) + (groups.length ? groups.join("") : '<div class="empty"><p>No picks in this view.</p></div>') + olderBtn();
     }
-    const samples = sampleOn() ? `<details class="tbl sample-box"><summary>Sample receipts <span class="sample-tag">SAMPLE DATA</span></summary>${D.receipts.map((r) => `<div class="sample-rc"><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b> <span class="status ${r.status}">${STATUS[r.status]}</span>${timelineHtml(r)}</div>`).join("")}</details>` : "";
-    keepFocus(() => { box.innerHTML = head + inner + samples; });
+    keepFocus(() => { box.innerHTML = head + inner; });
   }
 
   /* ---- render: results. Separate populations, never totalled together ---- */
@@ -1142,12 +1185,12 @@
   }
   function boardRecord() {
     const seg = `<div class="seg" role="group" aria-label="Group results by">${Object.entries(GROUPS).map(([k, g]) => `<button type="button" aria-pressed="${S.group === k}" ${act("group", k)}>${g[2]}</button>`).join("")}</div>`;
-    const R = S.results.doc;
-    if (!R) return S.results.status === "unavailable" ? `<div class="state"><h3>Scout board record unavailable</h3><p>Scout could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
+    const R = S.results.cs2.doc;
+    if (!R) return S.results.cs2.status === "unavailable" ? `<div class="state"><h3>Scout board record unavailable</h3><p>Scout could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
     if (!R.picks || !R.picks.picks) return `<p class="ln-note">No settled picks meet this rule yet.</p><p class="ln-note">${esc(R.rule)}.</p><p class="ln-note">${esc(R.definition)}</p>`;
     const p = R.picks, g = GROUPS[S.group], rowsOut = (R[g[0]] || []).filter((x) => x.picks).map((x) => resRow(g[1] ? x[g[1]] : `${x.stat} ${x.scope}`, x)).join("");
     const ci = p.observed_ci ? `95% interval ${pct(p.observed_ci[0])} to ${pct(p.observed_ci[1])}, whole matches resampled.` : "";
-    const stale = S.results.status === "stale" ? '<p class="ln-note">Saved copy.</p>' : "";
+    const stale = S.results.cs2.status === "stale" ? '<p class="ln-note">Saved copy.</p>' : "";
     const asOf = R.as_of ? `As of ${esc(when(R.as_of))}.` : "";
     return `${stale}<div class="res-top"><div class="rec-strip"><div><b>${p.wins}-${p.losses}</b><span>Won-lost, ${p.pushes === 1 ? "1 push" : `${p.pushes} pushes`} apart</span></div><div><b>${pct(p.observed)}</b><span>Hit rate, settled picks</span></div><div><b class="gold-t">${pct(p.printed)}</b><span>Forecast chance, average</span></div><div><b>${p.matches}</b><span>Matches</span></div></div></div>
       <p class="ln-note">${esc(R.rule)}. ${ci} ${asOf}</p><p class="ln-note">${esc(R.definition)}</p>
@@ -1160,31 +1203,62 @@
     if (!doc) return S.mine.status === "unavailable" ? `<p class="ln-note">Your record is unavailable right now.</p>` : '<div class="skel-line tall"></div>';
     const r = doc.record;
     const groups = doc.by_platform.map((g) => `<li>${esc(g.name)}: ${g.hit}-${g.miss}-${g.push}${g.hit_rate == null ? "" : `, ${pct(g.hit_rate)}`}</li>`).join("");
-    return `${summary(r)}<p class="ln-note">${esc(r.rule)} ${esc(r.scope)}.${r.dupes ? ` ${plural(r.dupes, "pick")} repeat a player, stat and match on another platform.` : ""}</p>${groups ? `<ul class="plat-list">${groups}</ul>` : ""}${r.picks ? "" : '<p class="ln-note">No tracked picks yet.</p>'}`;
+    const sports = (doc.by_sport || []).length > 1 ? `<table class="res-tbl mine-tbl"><thead><tr><th>Sport</th><th>Hit-miss-push</th><th>Hit rate</th><th>Pending</th><th>Matches</th></tr></thead><tbody>${doc.by_sport.map((g) => `<tr><td>${esc(g.name)}</td><td data-l="Hit-miss-push">${g.hit}-${g.miss}-${g.push}</td><td data-l="Hit rate">${g.hit_rate == null ? "--" : pct(g.hit_rate)}</td><td data-l="Pending">${g.pending}</td><td data-l="Matches">${g.matches}</td></tr>`).join("")}</tbody></table>` : "";
+    return `${summary(r)}<p class="ln-note">${esc(r.rule)} ${esc(r.scope)}.${r.dupes ? ` ${plural(r.dupes, "pick")} repeat a player, stat and match on another platform.` : ""}</p>${sports}${groups ? `<ul class="plat-list">${groups}</ul>` : ""}${r.picks ? "" : '<p class="ln-note">No tracked picks yet.</p>'}`;
   }
-  function sampleRecord() {
-    const m = new Map();
-    D.results.forEach((r) => {
-      const k = D.sports[r[0]], g = m.get(k) || { name: k, h: 0, l: 0, p: 0, st: 0 }, n = r[4] + r[5];
-      g.h += r[4]; g.l += r[5]; g.p += r[6]; g.st += r[7] * n;
-      m.set(k, g);
-    });
-    return `<table class="res-tbl"><thead><tr><th>Sport</th><th>Won-lost-push</th><th>Forecast chance</th><th>Hit rate</th></tr></thead><tbody>${[...m.values()].map((g) => `<tr><td>${esc(g.name)}</td><td data-l="Won-lost-push">${g.h}-${g.l}-${g.p}</td><td data-l="Forecast chance">${pct(g.st / (g.h + g.l))}</td><td data-l="Hit rate">${pct(g.h / (g.h + g.l))}</td></tr>`).join("")}</tbody></table>`;
+  const num = (v) => (v == null ? "--" : esc(v));
+  function otherRow(x) {
+    const gap = x.printed != null && x.observed != null ? (x.observed - x.printed) * 100 : null, record = x.wins == null ? "--" : `${x.wins}-${x.losses}${x.pushes != null ? `-${x.pushes}` : ""}`;
+    return `<tr><td>${esc(x.name)}</td><td data-l="Picks">${x.picks}</td><td data-l="Won-lost-push">${record}</td><td data-l="Forecast chance">${x.printed == null ? "--" : pct(x.printed)}</td><td data-l="Hit rate">${x.observed == null ? "--" : pct(x.observed)}</td><td data-l="Gap">${gap == null ? "--" : `${gap >= 0 ? "+" : ""}${gap.toFixed(1)} pts`}</td><td class="w" data-l="Forecast v hit rate, 40% to 70%">${gap == null ? "" : dumb(x.printed, x.observed)}</td></tr>`;
+  }
+  function otherRecord(k) {
+    const box = S.results[k], R = box.doc, name = D.sports[k];
+    if (!R) return box.status === "unavailable" ? `<div class="state"><h3>${esc(name)} record unavailable</h3><p>Scout could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
+    const t = R.totals, word = t.match_word || "matches";
+    const stale = box.status === "stale" ? '<p class="ln-note">Saved copy.</p>' : "";
+    if (!t.picks) return `${stale}<p class="ln-note">No settled forecasts meet this rule yet.</p><p class="ln-note">${esc(R.population)}</p><p class="ln-note">${esc(R.rule)}</p>`;
+    const names = { chance: k === "lol" ? "Grade" : "Chance band", stat: "Stat", role: "Role" }, keys = Object.keys(R.groups).filter((g) => R.groups[g] && R.groups[g].length);
+    const group = keys.includes(S.group) ? S.group : keys[0];
+    const seg = keys.length > 1 ? `<div class="seg" role="group" aria-label="Group results by">${keys.map((g) => `<button type="button" aria-pressed="${group === g}" ${act("group", g)}>${names[g]}</button>`).join("")}</div>` : "<span></span>";
+    const ci = t.ci ? `95% interval ${pct(t.ci[0])} to ${pct(t.ci[1])}, whole ${word} resampled.` : "";
+    const mk = R.market ? `<p class="ln-note">Same props, scored against the market estimate ${esc(R.market.market || "")}: Scout Brier ${num(R.market.scout_brier)}, market Brier ${num(R.market.market_brier)} on ${num(R.market.pairs)} props across ${num(R.market.games)} games. Lower is better.</p>` : "";
+    return `${stale}<div class="res-top"><div class="rec-strip"><div><b>${t.wins == null ? t.picks : `${t.wins}-${t.losses}`}</b><span>${t.wins == null ? "Settled forecasts" : "Won-lost"}, ${t.pushes == null ? "pushes apart" : t.pushes === 1 ? "1 push apart" : `${t.pushes} pushes apart`}</span></div><div><b>${t.observed == null ? "--" : pct(t.observed)}</b><span>Hit rate, settled forecasts</span></div><div><b class="gold-t">${t.printed == null ? "--" : pct(t.printed)}</b><span>Forecast chance, average</span></div><div><b>${t.matches == null ? "--" : t.matches}</b><span>${cap(word)}</span></div></div></div>
+      <p class="ln-note">${esc(R.population)}</p><p class="ln-note">${esc(R.rule)} ${ci} ${R.as_of ? `As of ${esc(when(R.as_of))}.` : ""}</p>${R.gate ? `<p class="ln-note">${esc(R.gate)}</p>` : ""}
+      <div class="res-bar">${seg}<div class="res-legend"><span><i class="st"></i>Forecast chance</span><span><i class="ob"></i>Hit rate</span></div></div>
+      <table class="res-tbl"><thead><tr><th>${names[group]}</th><th>Picks</th><th>Won-lost-push</th><th>Forecast chance</th><th>Hit rate</th><th>Gap</th><th style="width:24%">Forecast v hit rate, 40% to 70%</th></tr></thead><tbody>${(R.groups[group] || []).map(otherRow).join("")}</tbody></table>${mk}`;
   }
   function renderResults() {
-    const box = $("view-results");
-    const head = `<div class="page-h"><div><h1 id="results-h" tabindex="-1">Results</h1><p>Separate records. They are never added together. A push is its own result: it is never a win.</p></div></div>`;
-    const inner = `<section class="res-sec first" aria-labelledby="res-board"><h2 id="res-board">Scout board record</h2><p class="ln-note">Saved Scout forecasts that meet the rule and definition below, whoever tracked them.</p>${boardRecord()}</section>
-      <section class="res-sec" aria-labelledby="res-mine"><h2 id="res-mine">Your tracked picks</h2>${yourRecord()}</section>
-      ${sampleOn() ? `<section class="res-sec" aria-labelledby="res-sample"><h2 id="res-sample">Sample sports <span class="sample-tag">SAMPLE DATA</span></h2><p class="ln-note">LoL, NBA and NFL figures here are invented for this stage.</p>${sampleRecord()}</section>` : ""}`;
+    const box = $("view-results"), on = sportsOn(), k = on.includes(S.resSport) ? S.resSport : "cs2";
+    const tabs = on.length > 1 ? `<div class="seg res-tabs" role="group" aria-label="Sport">${on.map((x) => `<button type="button" aria-pressed="${k === x}" ${act("res-sport", x)}>${esc(D.sports[x])}</button>`).join("")}</div>` : "";
+    const head = `<div class="page-h"><div><h1 id="results-h" tabindex="-1">Results</h1><p>Separate records. They are never added together. A push is its own result: it is never a win.</p></div>${tabs}</div>`;
+    const title = k === "cs2" ? "Scout board record" : S.results[k].doc ? S.results[k].doc.label : `${D.sports[k]} record`;
+    const lede = k === "cs2" ? '<p class="ln-note">Saved Scout forecasts that meet the rule and definition below, whoever tracked them.</p>' : "";
+    const inner = `<section class="res-sec first" aria-labelledby="res-board"><h2 id="res-board">${esc(title)}</h2>${lede}${k === "cs2" ? boardRecord() : otherRecord(k)}</section>
+      <section class="res-sec" aria-labelledby="res-mine"><h2 id="res-mine">Your tracked picks</h2>${yourRecord()}</section>`;
     keepFocus(() => { box.innerHTML = head + inner; });
+  }
+
+  /* ---- render: matches. Every event with a line on it, per sport, in start order ---- */
+  function renderMatches() {
+    const box = $("view-matches"), m = new Map(), on = sportsOn(), shown = S.chip === "all" ? on : [S.chip];
+    all.filter((r) => shown.includes(r.lead.sport) && !started(r.lead)).forEach((r) => {
+      const ev = r.lead.event, e = m.get(ev.id) || { ev, sport: r.lead.sport, props: 0, players: new Set(), books: new Set() };
+      e.props++; e.players.add(r.lead.player.key); r.offers.forEach((o) => { if (D.platforms[o.offer.platform].slip) e.books.add(o.offer.platform_label); });
+      m.set(ev.id, e);
+    });
+    const list = [...m.values()].sort((a, b) => new Date(a.ev.start_utc) - new Date(b.ev.start_utc));
+    const cards = list.map((e) => `<button class="match-card" type="button" ${act("event", e.ev.id)}><span class="mc-top"><span class="s-tag">${esc(D.sports[e.sport])}</span><span class="mc-time">${esc(until(e.ev.start_utc))}</span></span><b>${esc(e.ev.label)}</b><small>${esc(e.ev.competition)}${e.ev.best_of ? ` · BO${esc(e.ev.best_of)}` : ""}</small><small>${plural(e.props, "prop")} · ${plural(e.players.size, "player")}${e.books.size ? ` · ${esc([...e.books].join(", "))}` : ""}</small></button>`).join("");
+    const off = shown.filter((k) => S.boards[k].status === "unavailable");
+    const none = anyLoading() ? '<div class="skel-line tall"></div><div class="skel-line tall"></div>' : off.length ? "" : '<div class="empty"><p>No matches with lines right now.</p></div>';
+    const seg = on.length > 1 ? `<div class="seg" role="group" aria-label="Sport">${[["all", "All"], ...on.map((k) => [k, D.sports[k]])].map(([k, l]) => `<button type="button" aria-pressed="${S.chip === k}" ${act("chip", k)}>${esc(l)}</button>`).join("")}</div>` : "";
+    keepFocus(() => { box.innerHTML = `<div class="page-h"><div><h1 id="matches-h" tabindex="-1">Matches</h1><p>Every match with lines on it. Choose one to see its props.</p></div>${seg}</div>${off.length ? `<p class="ln-note">${esc(off.map((k) => D.sports[k]).join(", "))} ${off.length > 1 ? "boards are" : "board is"} unavailable right now.</p>` : ""}<div class="match-grid">${cards || none}</div>`; });
   }
 
   /* ---- routing ---- */
   function decoded(s) { try { return decodeURIComponent(s); } catch (e) { return ""; } }      /* a mangled link just shows the board */
   function parseHash() {
     const p = location.hash.replace(/^#\/?/, "").split("/");
-    const view = VIEWS.includes(p[0]) ? p[0] : "research";
+    const view = VIEWS.includes(p[0]) ? p[0] : "research";       /* #/board reads the same as the board's own route */
     return { view, panel: view === "research" && p[1] === "p" ? decoded(p[2] || "") : null, tab: TABS.includes(p[3]) ? p[3] : "overview", pick: view === "picks" ? p[1] || null : null };
   }
   const wide = () => window.matchMedia("(min-width:1440px)").matches;
@@ -1215,7 +1289,7 @@
   function openPanelUI(id, tab) {
     const row = rows.get(id);
     if (!row) {
-      if (S.cs2.status === "loading") { S.wanted = true; return; }
+      if (anyLoading()) { S.wanted = true; return; }
       S.wanted = null;
       closePanelUI();
       return;
@@ -1242,6 +1316,8 @@
       S.picksFilter = "all";                                  /* a Receipt link always lands on its receipt */
     }
     if (r.view === "picks") renderPicks();
+    if (r.view === "matches") renderMatches();
+    if (r.view === "results" && S.results[S.resSport].status === "idle") loadResults();
     if (r.panel) openPanelUI(r.panel, r.tab); else closePanelUI();
     renderNav();
     $("slip-fab").hidden = r.view === "slips" || !S.slip.legs.length;
@@ -1275,7 +1351,16 @@
 
   /* ---- actions ---- */
   const actions = {
-    chip(id) { S.chip = id; S.activeView = null; saveState({ prefs: true }); renderBoardAll(); $("board-scroll").scrollTop = 0; },
+    chip(id) { S.chip = id; S.activeView = null; S.event = null; saveState({ prefs: true }); renderBoardAll(); renderMatches(); $("board-scroll").scrollTop = 0; },
+    event(id) { S.event = id; S.f = Object.assign({}, S.f, { day: "all" }); renderBoardAll(); location.hash = "#/research"; $("board-scroll").scrollTop = 0; },
+    "event-clear"() { S.event = null; renderBoardAll(); },
+    watch(id) {
+      const r = rows.get(id).lead, k = watchId(r.sport, r.player.key), on = S.watch.some((w) => w.id === k);
+      S.watch = on ? S.watch.filter((w) => w.id !== k) : [...S.watch, { id: k, sport: r.sport, key: r.player.key, name: r.player.name, team: r.player.team }];
+      saveState({ watch: true });
+      renderBoard(); renderPanel();
+      say(on ? `${r.player.name} left your watchlist` : `${r.player.name} is on your watchlist`);
+    },
     open(id) { S.opener = id; S.openerSel = ".row-open"; location.hash = `#/research/p/${encodeURIComponent(id)}`; },
     "row-choose"(id) { S.opener = id; S.openerSel = ".add"; location.hash = `#/research/p/${encodeURIComponent(id)}`; },
     "row-add"(id) {
@@ -1288,6 +1373,8 @@
     "retry-mine"() { loadMine(); },
     "mine-older"() { loadOlder(); },
     "retry-results"() { loadResults(); },
+    "res-sport"(k) { S.resSport = k; saveState({ prefs: true }); renderResults(); if (S.results[k].status === "idle" || S.results[k].status === "unavailable") loadResults(k); },
+    "picks-sport"(k) { S.picksSport = k; renderPicks(); },
     "reset-filters"() { resetFilters(); },
     view: applyView,
     "view-del"(id) { S.views = S.views.filter((v) => v.id !== id); saveState({ views: true }); if (S.activeView === id) S.activeView = null; renderFilters(); },
@@ -1333,7 +1420,6 @@
   document.addEventListener("change", (e) => {
     const f = e.target.dataset ? e.target.dataset.f : null;
     if (f) { setF(f, e.target.type === "checkbox" ? e.target.checked : e.target.value); return; }
-    if (e.target.id === "sample-on") setSample(e.target.checked);
     if (e.target.id === "f-day") setF("day", e.target.value);
     if (e.target.id === "f-market") setF("market", e.target.value);
   });
@@ -1442,7 +1528,7 @@
   window.addEventListener("hashchange", () => route(true));
 
   /* ---- the clock: nothing on screen waits for a click to go out of date. Only what changed repaints ---- */
-  function boardSig() { return all.map((r) => rowFlag(r) + until(lead(r).event.start_utc)).join("|") + S.cs2.status; }
+  function boardSig() { return all.map((r) => rowFlag(r) + until(lead(r).event.start_utc)).join("|") + sportsOn().map((k) => S.boards[k].status).join(); }
   function slipSig() { const ph = slipPhase(); return ph + statusLine(ph); }
   function panelSig() {
     if (!S.panel || !rows.get(S.panel.id)) return "";
@@ -1485,8 +1571,8 @@
   /* ---- start ---- */
   async function boot() {
     rebuild();
-    renderHead(); renderChips(); renderBoard(); renderSlips(); renderPicks(); renderResults(); route(false);
-    try {                                                       /* who this is comes first: it decides sample data and the draft */
+    renderHead(); renderChips(); renderBoard(); renderSlips(); renderPicks(); renderResults(); renderMatches(); route(false);
+    try {                                                       /* who this is comes first: it decides the sports shown and the draft */
       S.me = await api("me");
       $("account-name").textContent = S.me.name || "Member";
       $("avatar").textContent = (S.me.name || "M").slice(0, 2).toUpperCase();
@@ -1494,9 +1580,9 @@
     await loadState();
     await loadBoard();
     if (!S.savedDay && !visibleRows().length && all.length) { S.f.day = "all"; S.activeView = null; }    /* no props today: the first look is the next ones */
-    renderHead(); renderBoardAll(); renderSlips(); renderPicks(); renderResults();
+    renderHead(); renderBoardAll(); renderSlips(); renderPicks(); renderResults(); renderMatches();
     if (S.slip.legs.length) scheduleCheck();
-    await Promise.allSettled([loadMine(), loadResults()]);
+    await Promise.allSettled([loadMine(), loadResults("cs2"), ...(S.resSport !== "cs2" ? [loadResults()] : [])]);
     $("app").dataset.boot = "done";
   }
   boot();

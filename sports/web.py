@@ -83,6 +83,7 @@ ROUTES = {
     "/api/sports/admin/assistant": ("sports.api_assist:admin_status", ADMIN, ("GET",)),
     "/api/sports/admin/lab/*": ("sports.api_lab:route", ADMIN, ("GET", "POST")),
     "/api/sports/picks/track": ("sports.api_picks:track", MEMBER, ("POST",)),
+    "/api/sports/picks/check": ("sports.api_picks:check", MEMBER, ("GET", "POST")),
     "/api/sports/picks/mine": ("sports.api_picks:mine", MEMBER, ("GET",)),
     "/api/sports/admin/picks": ("sports.api_picks:admin", ADMIN, ("GET",)),
     "/api/sports/admin/books": ("sports.api_books:admin", ADMIN, ("GET",)),

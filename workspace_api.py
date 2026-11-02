@@ -1,8 +1,12 @@
-"""Research workspace API, /preview/workspace/api/*: the CS2 path from saved grades through tracking and settlement.
+"""Research workspace API, /preview/workspace/api/*: all four sports from saved grades through tracking and settlement.
 
 Reads saved grades and offers; never grades, logs a forecast or touches picks.db (workspace_store.py owns workspace.db). The
 server runs as `python server.py`, so this module never imports server (that would load a second copy): the handler passes its
 own module in as `srv`. Imported on the first allowed request; with the preview off, no thread or database file exists.
+
+CS2 lives here. LoL is workspace_lol.py and NBA and NFL are workspace_sports.py: neither imports its sport, and each sport keeps its
+own board snapshot, so one sport going down never touches another. A member sees LoL and NBA/NFL exactly when the site's own gates
+let them see those pages (access).
 
 For 700 members at once: one board snapshot every 5 s over server.graded_board's single flight, shared by /board and every
 check; identical bytes keep the old object, so nothing is compressed twice. Forecast lookups, history and /line are shared per
@@ -17,6 +21,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import threading
 import time
 import zlib
@@ -29,7 +34,7 @@ import workspace_rules as rules
 import workspace_store as wstore
 
 SPORTS = ("cs2", "lol", "nba", "nfl")
-SAMPLE_SPORTS = ("lol", "nba", "nfl")
+LEAGUES = ("nba", "nfl")
 BOOKS = ("underdog", "prizepicks")
 SCOPE = {"1": ("map1", "Map 1"), "12": ("maps12", "Maps 1-2"), "123": ("maps13", "Maps 1-3")}
 STAT = {"kills": "Kills", "hs": "Headshots"}
@@ -40,6 +45,8 @@ OWNER_ID = "wm-owner-admin-token"
 CHECK_TTL_S = 300
 MAX_LEGS = 8
 STATE_MAX = 16 * 1024
+LEG_PAGE = 120                          # workspace_sports.SETTLE_PAGE: what one settler pass can read from the sports API
+WATCH_MAX = 100
 STATE_MAX_DEPTH = 12
 LINE_MAX = 100000
 RECHECK_PER_MIN, TRACK_PER_MIN, STATE_PER_MIN, MINE_PER_MIN = 40, 20, 30, 40
@@ -105,6 +112,22 @@ def data_dir():
     return Path(os.environ.get("CS2_DATA_DIR") or Path(picklog.DB).parent)
 
 
+def _sources():
+    """One reader per sport for the settler: each answers from that sport's own settled results. A pass with no request seen yet
+    has no server module to read through, so it reads nothing."""
+    def lol(rows):
+        import workspace_lol
+        return workspace_lol.settle(_ST["srv"], rows) if _ST.get("srv") else {}
+
+    def league(lg):
+        def read(rows):
+            import workspace_sports
+            return workspace_sports.settle(_ST["srv"], lg, rows) if _ST.get("srv") and _ST.get("sports") else {}
+        read.page = LEG_PAGE
+        return read
+    return {"lol": lol, "nba": league("nba"), "nfl": league("nfl")}
+
+
 def store():
     """The one store, opened on the first allowed request; its writer and settle threads start here and nowhere else."""
     path = data_dir() / "workspace.db"
@@ -116,6 +139,7 @@ def store():
                 if s is not None:
                     s.close()
                 s = _ST["store"] = wstore.Store(path)
+                s.sources = _sources()
                 s.start_settler()
     return s
 
@@ -126,16 +150,32 @@ def reset():
         if _ST["store"] is not None:
             _ST["store"].close()
         _ST["store"] = None
+        _ST["srv"] = None
+        _ST["sports"] = False
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
     for d in _HITS.values():
         d.clear()
+    for name in ("workspace_lol", "workspace_sports"):
+        mod = sys.modules.get(name)
+        if mod is not None:
+            mod.reset()
 
 
 # ---------------------------------------------------------------------------------------------------------------- identity
 
 def member_key(sid):
     return "wm-" + hashlib.sha256(("workspace|" + str(sid)).encode("utf-8")).hexdigest()[:24]
+
+
+def access(h, srv, q):
+    """Which sports this member sees: the same gates as the /lol page and the sports token. CS2 is every member of this page."""
+    owner = bool(_token_in_use(h, q) or h._sports_owner())
+    import workspace_sports
+    league = workspace_sports.on(h, q, owner)
+    if league:
+        _ST["sports"] = True                    # the settler reads the sports API only once a member has been let in to it
+    return {"cs2": True, "lol": bool(srv.lol_public() or owner), "nba": league, "nfl": league}
 
 
 def _token_in_use(h, q):
@@ -276,7 +316,7 @@ def record_of(x):
                       "projection": x.get("proj"), "range80": None, "grade": grade if grade in ("A+", "A", "A-", "B+", "B", "B-") else None, "units": x.get("units"),
                       "stake_reason": x.get("stake_reason") or x.get("cap_reason"), "hold": None, "model_version": x.get("graded_model"), "forecast_at": x.get("graded_at"),
                       "validation": {"kind": "live"}},
-            "history": {"l10": l10, "avg": x.get("l10_avg"), "recent": None},
+            "history": {"l5": None, "l10": l10, "l20": None, "avg": x.get("l10_avg"), "recent": None}, "market_chance": None,
             "state": {"kind": "ok" if not x.get("unavailable") and not x.get("hltv_retry") else "held",
                       "reason": x.get("unavailable") if isinstance(x.get("unavailable"), str) else None}}
 
@@ -508,7 +548,11 @@ def check_leg(srv, leg, snap, feeds, now):
     fp = forecast_problem(srv, x, leg, fc, lock)
     if fp:
         problems.append(fp)
-    return {"ok": not problems, "problems": problems, "current": _current(x, fc), "_x": x, "_hit": hit, "_fc": fc}
+    return {"ok": not problems, "problems": problems, "current": _current(x, fc), "_x": x, "_hit": hit, "_fc": fc,
+            "_ident": {"nick": _nick(x), "prop": x.get("prop"), "scope": x.get("scope") or "12", "match_slug": _slug_of(x), "match_key": event_id(x)[0], "platform": _book(x), "line": x.get("line"), "side": side},
+            "_rule": {"sport": "cs2", "book": book, "team": x.get("team_name") or x.get("team"), "nick": _nick(x), "side": side, "event": event_id(x)[0]},
+            "_ev": {"name": _nick(x), "sport": "cs2", "match": event_id(x)[0], "line": x.get("line"), "multiplier": x.get("higher") if side == "over" else x.get("lower"), "on_side": side == _side(x),
+                    "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"), "scope": x.get("scope") or "12"}}
 
 
 def _n(x):
@@ -523,13 +567,7 @@ def _same_prop(a, b):
 
 def _dup_checks(legs, results, st, member):
     """Duplicates and conflicts inside the slip, then against the member's receipts (a bounded indexed read)."""
-    real = []
-    for l in legs:
-        r = results[l["id"]]
-        x = r.get("_x")
-        if x is not None:
-            real.append((l, r, {"nick": _nick(x), "prop": x.get("prop"), "scope": x.get("scope") or "12", "match_slug": _slug_of(x), "match_key": event_id(x)[0],
-                                "platform": _book(x), "line": x.get("line"), "side": l["side"]}))
+    real = [(l, results[l["id"]], results[l["id"]]["_ident"]) for l in legs if results[l["id"]].get("_ident")]
     for i, (l, r, a) in enumerate(real):
         for j, (l2, _, b) in enumerate(real):
             if i != j and _same_prop(a, b):
@@ -561,30 +599,52 @@ def _gate(srv):
         return None
 
 
+def _adapter(sport):
+    if sport == "lol":
+        import workspace_lol
+        return workspace_lol
+    import workspace_sports
+    return workspace_sports
+
+
 def _open_link(srv, platform, entry_legs, results):
     if not srv.PP_OPEN_LINK:
         return None
     if platform == "prizepicks":
+        if any(l["sport"] != "cs2" for l in entry_legs):        # the lineup link is built from the CS2 feed's own projection ids
+            return None
         pl = [srv._pp_leg(_feed_leg(results[l["id"]]["_x"], l["side"]), results[l["id"]].get("_hit")) for l in entry_legs]
         if any(p is None for p in pl):
             return None
         url, _why = srv.pplink.pp_link(pl)
         return {"url": url, "label": "Open in PrizePicks"} if url else None
-    links = [srv.ud_row_link(l["row_id"]) for l in entry_legs]
+    links = [srv.ud_row_link(l["row_id"]) if l["sport"] == "cs2" else _adapter(l["sport"]).entry_link(results[l["id"]]["_x"], l["side"]) for l in entry_legs]
     return {"url": srv.pplink.UD_HOME, "label": "Open Underdog", "legs": links if any(links) else None}
 
 
-def run_check(srv, member, legs, entry_types, now=None):
-    """The five checks for every leg and entry. Raises LookupError when no board has been read yet."""
+def _check_one(srv, l, snap, feeds, now, allowed):
+    """One leg by its sport. A sport this member cannot see answers like a line that is not on the board."""
+    if allowed is not None and not allowed.get(l["sport"]):
+        return {"ok": False, "problems": [_pr(1, "gone", "This line is no longer on the board.")], "current": None}
+    if l["sport"] == "cs2":
+        if snap is None:
+            return {"ok": False, "problems": [_pr(1, "retry", "Scout could not check this line just now.", retry=True)], "current": None}
+        return check_leg(srv, l, snap, feeds, now)
+    if l["sport"] == "lol":
+        return _adapter("lol").check_leg(srv, l, now)
+    return _adapter(l["sport"]).check_leg(srv, l, l["sport"], now)
+
+
+def run_check(srv, member, legs, entry_types, now=None, allowed=None):
+    """The five checks for every leg and entry, each leg by its own sport. Raises LookupError when a CS2 leg has no board at all."""
     now = now or datetime.now(timezone.utc)
-    snap = snapshot(srv)
-    if snap is None:
+    snap = snapshot(srv) if any(l["sport"] == "cs2" for l in legs) else None
+    if snap is None and all(l["sport"] == "cs2" for l in legs):
         raise LookupError("no board")
     st = store()
     feeds, results = {}, {}
     for l in legs:
-        results[l["id"]] = ({"ok": True, "sample": True, "problems": [], "current": None} if l["sport"] != "cs2"
-                            else check_leg(srv, l, snap, feeds, now))
+        results[l["id"]] = _check_one(srv, l, snap, feeds, now, allowed)
     _dup_checks(legs, results, st, member)
     entries = {}
     by_platform = {}
@@ -599,23 +659,18 @@ def run_check(srv, member, legs, entry_types, now=None):
     for platform, ls in by_platform.items():
         rule_legs, ev_legs = [], []
         for l in ls:
-            x = results[l["id"]].get("_x")
-            if x is None:
-                rule_legs.append({"sport": l["sport"], "book": platform, "team": l.get("team"), "player": l.get("player"), "side": l["side"],
-                                  "event": l.get("event"), "sample": l["sport"] != "cs2"})
-                ev_legs.append({"name": l.get("player"), "sample": l["sport"] != "cs2", "sport": l["sport"], "line": l["line"]})
+            r = results[l["id"]]
+            if r.get("_rule") is None:          # gone from the board: the rules still read what the slip says it held
+                rule_legs.append({"sport": l["sport"], "book": platform, "team": l.get("team"), "player": l.get("player"), "side": l["side"], "event": l.get("event")})
+                ev_legs.append({"name": l.get("player"), "sport": l["sport"], "line": l["line"]})
                 continue
-            rule_legs.append({"sport": "cs2", "book": platform, "team": x.get("team_name") or x.get("team"), "nick": _nick(x), "side": l["side"],
-                              "event": event_id(x)[0], "sample": False})
-            mult = x.get("higher") if l["side"] == "over" else x.get("lower")
-            ev_legs.append({"name": _nick(x), "sample": False, "sport": "cs2", "match": event_id(x)[0], "line": x.get("line"), "multiplier": mult,
-                            "on_side": l["side"] == _side(x), "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"), "scope": x.get("scope") or "12"})
+            rule_legs.append(r["_rule"])
+            ev_legs.append(r["_ev"])
         et = (entry_types or {}).get(platform)
         e = rules.entry_status(platform, rule_legs, et if isinstance(et, str) and len(et) <= 16 else None)
         legs_ok = all(results[l["id"]]["ok"] for l in ls)
-        sample = any(results[l["id"]].get("sample") for l in ls)
-        e["rule_ok"] = e["ok"]                  # the platform takes this combination; ok also needs every leg real and passing
-        e["ok"] = e["rule_ok"] and legs_ok and not sample
+        e["rule_ok"] = e["ok"]                  # the platform takes this combination; ok also needs every leg passing
+        e["ok"] = e["rule_ok"] and legs_ok
         e["trackable"] = e["trackable"] and legs_ok
         if e["rule_ok"] and legs_ok:
             e["ev"] = rules.ev_status(e["platform"], e["entry_type"], ev_legs, gate, now.timestamp())
@@ -633,7 +688,7 @@ def run_check(srv, member, legs, entry_types, now=None):
     for e in entries.values():
         for p in e["problems"]:
             fails[p["check"]] += 1
-    return {"checked_at": now.isoformat(timespec="seconds"), "snapshot_at": _iso(snap["at"]), "ttl_s": CHECK_TTL_S,
+    return {"checked_at": now.isoformat(timespec="seconds"), "snapshot_at": _iso(snap["at"]) if snap else None, "ttl_s": CHECK_TTL_S,
             "legs": results, "entries": entries, "fails": fails}
 
 
@@ -797,26 +852,58 @@ def _limited(h, srv, bucket, member, limit):
 
 
 def get_me(h, srv, q, member, scratch, name):
-    return h.send(200, {"member": member, "name": name, "scratch": scratch, "sample_sports": list(SAMPLE_SPORTS), "rules_version": rules.RULES_VERSION,
+    return h.send(200, {"member": member, "name": name, "scratch": scratch, "sports": access(h, srv, q), "rules_version": rules.RULES_VERSION,
                         "owner": bool(scratch) or bool(h._sports_owner())})
 
 
+def _sport_q(h, srv, q):
+    """The sport a read asks for, or None when this member does not see it. CS2 is the default."""
+    sport = q.get("sport") or "cs2"
+    if sport not in SPORTS or (sport != "cs2" and not access(h, srv, q)[sport]):
+        return None
+    return sport
+
+
 def get_board(h, srv, q, member, scratch, name):
-    snap = snapshot(srv)
+    sport = _sport_q(h, srv, q)
+    if sport is None:
+        return h.send(404, {"error": "not found"})
+    if sport == "cs2":
+        snap = snapshot(srv)
+        if snap is None:
+            return h.send(503, {"error": "board_unavailable"})
+        return h.send_shared(("ws_board",), 200, snap["body"], keep=60)
+    snap = _adapter("lol").snapshot(srv) if sport == "lol" else _adapter(sport).snapshot(srv, sport)
     if snap is None:
         return h.send(503, {"error": "board_unavailable"})
-    return h.send_shared(("ws_board",), 200, snap["body"], keep=60)
+    return h.send_shared(("ws_board", sport), 200, snap["body"], keep=60)
 
 
 def get_line(h, srv, q, member, scratch, name):
-    book, rid = q.get("book"), q.get("id")
-    if book not in BOOKS or not rid or not _ID_RE.match(rid) or snapshot(srv) is None or (book, rid) not in _SNAP["index"]:
+    book, rid, sport = q.get("book"), q.get("id"), _sport_q(h, srv, q)
+    if sport is None or not book or len(book) > 40 or not rid or not _ID_RE.match(rid):
         return h.send(404, {"error": "not found"})
+    if sport == "cs2":
+        if book not in BOOKS or snapshot(srv) is None or (book, rid) not in _SNAP["index"]:
+            return h.send(404, {"error": "not found"})
+        fn = lambda: _line_body(srv, book, rid)
+    elif sport == "lol":
+        mod = _adapter("lol")
+        snap = mod.snapshot(srv)
+        if snap is None or (book, rid) not in snap["index"]:
+            return h.send(404, {"error": "not found"})
+        fn = lambda: mod.line_doc(srv, book, rid)
+    else:
+        mod = _adapter(sport)
+        snap = mod.snapshot(srv, sport)
+        if snap is None or (book, rid) not in snap["index"]:
+            return h.send(404, {"error": "not found"})
+        fn = lambda: mod.line_doc(srv, sport, book, rid)
 
     def compute():
-        st, doc = _line_body(srv, book, rid)
+        st, doc = fn()
         return st, json.dumps(doc, default=str, separators=(",", ":")).encode()
-    st, body = srv.shared(("ws_line", book, rid), compute, ttl=LINE_TTL)
+    st, body = srv.shared(("ws_line", sport, book, rid), compute, ttl=LINE_TTL)
     return h.send(st, body)
 
 
@@ -842,8 +929,22 @@ def get_mine(h, srv, q, member, scratch, name):
 
 
 def get_results(h, srv, q, member, scratch, name):
-    st_, body_ = srv.shared(("results",), lambda: (200, json.dumps(srv.results_payload(), default=str).encode()), ttl=300)
-    return h.send_shared(("results",), st_, body_, keep=300)
+    sport = _sport_q(h, srv, q)
+    if sport is None:
+        return h.send(404, {"error": "not found"})
+    if sport == "cs2":
+        st_, body_ = srv.shared(("results",), lambda: (200, json.dumps(srv.results_payload(), default=str).encode()), ttl=300)
+        return h.send_shared(("results",), st_, body_, keep=300)
+    mod = _adapter(sport)
+
+    def compute():
+        try:
+            doc = mod.results(srv) if sport == "lol" else mod.results(srv, sport)
+        except mod.Down:                        # not written yet, or the sports API down: the page says so, never a zero
+            return 503, b'{"error":"results_unavailable"}'
+        return 200, json.dumps(doc, default=str, separators=(",", ":")).encode()
+    st_, body_ = srv.shared(("ws_results", sport), compute, ttl=300)
+    return h.send_shared(("ws_results", sport), st_, body_, keep=300) if st_ == 200 else h.send(st_, body_)
 
 
 def get_state(h, srv, q, member, scratch, name):
@@ -875,7 +976,7 @@ def post_recheck(h, srv, q, member, scratch, name, n):
     if _limited(h, srv, "recheck", member, RECHECK_PER_MIN):
         return None
     try:
-        res = run_check(srv, member, legs, d.get("entry_types") if isinstance(d.get("entry_types"), dict) else {})
+        res = run_check(srv, member, legs, d.get("entry_types") if isinstance(d.get("entry_types"), dict) else {}, allowed=access(h, srv, q))
     except LookupError:
         return h.send(503, {"error": "check_unavailable"})
     return h.send(200, public_check(res))
@@ -912,7 +1013,7 @@ def post_track(h, srv, q, member, scratch, name, n):
         return h.send(200, {"ok": True, "slip_id": slip_id, "receipts": prev})
     et = d.get("entry_type")
     try:
-        res = run_check(srv, member, legs, {key: et if isinstance(et, str) else None})
+        res = run_check(srv, member, legs, {key: et if isinstance(et, str) else None}, allowed=access(h, srv, q))
     except LookupError:
         return h.send(503, {"error": "check_unavailable"})
     e = res["entries"].get(key) or {}
@@ -922,14 +1023,18 @@ def post_track(h, srv, q, member, scratch, name, n):
     receipts = []
     for i, l in enumerate(legs):
         r = res["legs"][l["id"]]
-        x, fc = r["_x"], r["_fc"]
-        rev = offer_rev(x)
-        receipts.append({"receipt_id": "rc-" + hashlib.sha256(f"{member}|{key}|{l['row_id']}|{x.get('line')}|{l['side']}|{rev}".encode()).hexdigest()[:20],
-                         "member": member, "slip_id": slip_id, "leg_no": i, "tracked_at": now, "sport": "cs2", "platform": key, "row_id": l["row_id"], "offer_rev": rev,
-                         "side": l["side"], "line": x.get("line"), "line_type": line_type_of(x), "pick_id": fc["pick_id"], "forecast_id": fc["id"],
-                         "match_slug": _slug_of(x), "match_id": x.get("match_id"), "match_key": event_id(x)[0], "nick": _nick(x), "prop": x.get("prop"),
-                         "scope": x.get("scope") or "12", "start_utc": x.get("start"), "model_version": x.get("graded_model"), "scratch": scratch,
-                         "payload": _payload(x, l, r, e)})
+        x = r["_x"]
+        if l["sport"] == "cs2":
+            fc = r["_fc"]
+            f = {"sport": "cs2", "row_id": l["row_id"], "offer_rev": offer_rev(x), "side": l["side"], "line": x.get("line"), "line_type": line_type_of(x), "pick_id": fc["pick_id"], "forecast_id": fc["id"],
+                 "match_slug": _slug_of(x), "match_id": x.get("match_id"), "match_key": event_id(x)[0], "nick": _nick(x), "prop": x.get("prop"), "scope": x.get("scope") or "12", "start_utc": x.get("start"),
+                 "model_version": x.get("graded_model"), "payload": _payload(x, l, r, e)}
+        elif l["sport"] == "lol":
+            f = _adapter("lol").receipt_fields(x, l, r, e)
+        else:
+            f = _adapter(l["sport"]).receipt_fields(x, l, l["sport"], r, e)
+        rid = "rc-" + hashlib.sha256(f"{member}|{key}|{l['row_id']}|{f['line']}|{l['side']}|{f['offer_rev']}".encode()).hexdigest()[:20]
+        receipts.append(dict(f, receipt_id=rid, member=member, slip_id=slip_id, leg_no=i, tracked_at=now, platform=key, scratch=scratch))
     slip = {"slip_id": slip_id, "member": member, "tracked_at": now, "platform": key, "entry_type": e.get("entry_type"), "sports": e.get("sports"),
             "rules_version": e.get("rules_version"), "checks": {"checked_at": res["checked_at"], "fails": res["fails"]}, "scratch": scratch}
     out = st.track(slip, receipts)
@@ -952,11 +1057,13 @@ def post_state(h, srv, q, member, scratch, name, n):
     if d is None or isinstance(d.get("rev"), bool) or not isinstance(d.get("rev"), int):
         return h.send(400, {"error": "bad state"})
     patch = {}
-    for k, kind in (("slip", dict), ("prefs", dict), ("views", list)):
+    for k, kind in (("slip", dict), ("prefs", dict), ("views", list), ("watch", list)):
         if k in d:
             if d[k] is not None and (not isinstance(d[k], kind) or not _shallow(d[k])):
                 return h.send(400, {"error": f"bad {k}"})
             patch[k] = d[k]
+    if len(patch.get("watch") or ()) > WATCH_MAX:
+        return h.send(400, {"error": f"a watchlist holds {WATCH_MAX} players"})
     if not patch:
         return h.send(400, {"error": "nothing to save"})
     if _limited(h, srv, "state", member, STATE_PER_MIN):
@@ -981,6 +1088,7 @@ def handle(h, srv, method, path, q, n=0):
             return h.send(404, {"error": "not found"})
         h.rfile.read(n)
         return h.send(403, {"error": "forbidden"})
+    _ST["srv"] = srv
     member, scratch, who = identity(h, q)
     if not member:
         if method == "POST":

@@ -79,7 +79,7 @@ def dashboard(con):
             bins[b][2] += u["hit"]
         out[k] = {"n": n, "series": len({u["sid"] for u in us}), "mae": round(sum(abs(u["err"]) for u in us) / n, 3), "bias": round(sum(u["err"] for u in us) / n, 3),
                   "brier": round(sum(u["brier"] for u in us) / n, 4), "logloss": round(sum(u["ll"] for u in us) / n, 4),
-                  "side_hit_rate": round(sum(u["side_hit"] for u in us) / n, 3),
+                  "side_hit_rate": round(sum(u["side_hit"] for u in us) / n, 3), "side_wins": sum(1 for u in us if u["side_hit"]),
                   "mean_p_side": round(sum(u["p_side"] for u in us) / n, 3),
                   "calibration": [{"bin": f"{b / 10:.1f}", "n": v[0], "predicted": round(v[1] / v[0], 3), "actual": round(v[2] / v[0], 3)}
                                   for b, v in sorted(bins.items())]}

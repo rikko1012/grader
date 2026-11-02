@@ -16,7 +16,7 @@
 
 <div id="app" class="app">
   <header class="top" id="top">
-    <a class="brand" href="#/research" aria-label="1Time Scout, research board">
+    <a class="brand" href="#/research" aria-label="1Time Scout, board">
       <span class="brand-mark" aria-hidden="true">1T</span>
       <span class="brand-word">1TIME SCOUT</span>
     </a>
@@ -34,7 +34,8 @@
 
   <nav class="nav" id="nav" aria-label="Workspace">
     <ul class="nav-list">
-      <li><a href="#/research" data-nav="research" title="Research"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sr">Research</span></a></li>
+      <li><a href="#/research" data-nav="research" title="Board"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sr">Board</span></a></li>
+      <li><a href="#/matches" data-nav="matches" title="Matches"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="sr">Matches</span></a></li>
       <li><a href="#/slips" data-nav="slips" title="Slips"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg><span class="sr">Slips</span></a></li>
       <li><a href="#/picks" data-nav="picks" title="My picks"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg><span class="sr">My picks</span></a></li>
       <li><a href="#/results" data-nav="results" title="Results"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="sr">Results</span></a></li>
@@ -44,7 +45,7 @@
   <main class="main" id="main" tabindex="-1">
     <div class="strip" id="session-strip" role="alert" hidden></div>
     <section class="view" id="view-research" aria-labelledby="board-h">
-      <h1 class="sr" id="board-h">Research board</h1>
+      <h1 class="sr" id="board-h">Board</h1>
       <div class="toolbar" id="toolbar">
         <div class="chips" id="chips" role="group" aria-label="Sport"></div>
         <div class="filter-row">
@@ -61,6 +62,7 @@
       </div>
     </section>
 
+    <section class="view view-page" id="view-matches" aria-labelledby="matches-h" hidden></section>
     <section class="view view-page" id="view-slips" aria-labelledby="slips-h" hidden></section>
     <section class="view view-page" id="view-picks" aria-labelledby="picks-h" hidden></section>
     <section class="view view-page" id="view-results" aria-labelledby="results-h" hidden></section>
@@ -76,7 +78,8 @@
   <button class="slip-fab" id="slip-fab" type="button" aria-haspopup="dialog"></button>
 
   <nav class="bottom" id="bottom" aria-label="Workspace, phone">
-    <a href="#/research" data-nav="research"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Research</span></a>
+    <a href="#/research" data-nav="research"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Board</span></a>
+    <a href="#/matches" data-nav="matches"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span>Matches</span></a>
     <a href="#/slips" data-nav="slips"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg><span>Slips</span></a>
     <a href="#/picks" data-nav="picks"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg><span>My picks</span></a>
     <a href="#/results" data-nav="results"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Results</span></a>

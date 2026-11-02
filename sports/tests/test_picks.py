@@ -186,3 +186,26 @@ def test_bad_spool_lines_are_counted_not_loaded(tmp_path):
     (d / "2026-10-24.jsonl").write_text('{"kind":"pick"}\nnot json\n{"kind":"pick","pick_id":"p1"', encoding="utf-8")
     c = picks.ingest(picks.connect())
     assert c == {"lines": 2, "picks": 0, "duplicates": 0, "bad": 2}  # the partial last line waits for its newline
+
+
+# ---- the check alone (research workspace): the same answer as track, and nothing is recorded
+def test_check_route_answers_like_track_and_spools_nothing(tw):
+    con, legs = tw
+    rid, f = legs["h1"]
+    before = picks.stats()["spooled"]
+    code, b = _call(_req("/api/sports/picks/check", {"picks": [_item(rid, f)]}))
+    assert code == 200 and b["results"][0]["ok"] and b["results"][0]["record_id"] == rid and b["results"][0]["forecast_id"] == f.forecast_id
+    assert picks.stats()["spooled"] == before                       # nothing queued, so nothing can reach picks.db
+    q = web.Request(path="/api/sports/picks/check", method="GET", query={"picks": json.dumps([_item(rid, f)])}, body=b"", member="m_owner", role="member")
+    assert _call(q)[1]["results"][0]["ok"]                          # GET too: the gateway's proxy mode forwards GET only
+
+
+def test_check_route_gives_tracks_refusals(tw):
+    con, legs = tw
+    rid, f = legs["h1"]
+    _, b = _call(_req("/api/sports/picks/check", {"picks": [_item(rid, f, shown={"p_over": 0.01, "p_under": 0.99, "p_push": 0.0})]}))
+    assert b["results"][0] == {"ok": False, "code": "display_mismatch", "text": "The chance shown differs from Scout's record - refresh", "record_id": rid, "side": "over"}
+    code, b = _call(_req("/api/sports/picks/check", {"picks": []}))
+    assert code == 400
+    q = web.Request(path="/api/sports/picks/check", method="GET", query={"picks": "not json"}, body=b"", member="m_owner", role="member")
+    assert _call(q)[0] == 400

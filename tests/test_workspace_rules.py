@@ -51,9 +51,9 @@ def test_published_refusal_outranks_not_published():
 
 
 def test_mixed_sports_by_platform():
-    legs = [leg("a", "T1", "e1"), leg("b", "T2", "e2", sport="nba", sample=True)]
+    legs = [leg("a", "T1", "e1"), leg("b", "T2", "e2", sport="nba")]
     pp, ud = R.entry_status("prizepicks", legs), R.entry_status("underdog", legs)
-    assert pp["status"] == "valid" and pp["ok"] and not pp["trackable"] and pp["track_note"] == "NBA legs are sample data."
+    assert pp["status"] == "valid" and pp["ok"] and pp["trackable"]
     assert any(r["rule"] == "mixed_sports" and r["status"] == "published" and r["source"] == R.PP_PICKS for r in pp["rules"])
     assert ud["status"] == "not_published" and not ud["ok"] and "CS2 and NBA" in ud["problems"][0]["text"]
 
@@ -153,7 +153,6 @@ def test_ev_flex_formula():
 
 @pytest.mark.parametrize("kw,gate,text", [
     ({"platform": "prizepicks"}, None, "PrizePicks shows lineup payouts only in its app"),
-    ({"legs": [ev_leg(i=0, sample=True, name="Delvane"), ev_leg(i=1)]}, None, "Delvane is sample data"),
     ({"legs": [ev_leg(i=i) for i in range(4)], "et": "flex"}, None, "two 4-pick flex payouts"),
     ({"legs": [ev_leg(i=0, multiplier=1.05), ev_leg(i=1)]}, None, "does not publish how multipliers combine"),
     ({"legs": [ev_leg(i=0, match="same"), ev_leg(i=1, match="same")]}, None, "no tested joint model"),
@@ -182,9 +181,9 @@ def test_no_reason_carries_an_internal_version_name():
 
 
 def test_ev_reasons_come_in_order():
-    legs = [ev_leg(i=0, match="same", multiplier=1.05, sample=True, name="x"), ev_leg(i=1, match="same")]
-    assert "sample data" in ev(legs)["reason"]
-    assert "multipliers" in ev([dict(l, sample=False) for l in legs])["reason"]
+    legs = [ev_leg(i=0, match="same", multiplier=1.05, on_side=False), ev_leg(i=1, match="same")]
+    assert "multipliers" in ev(legs)["reason"]
+    assert "joint model" in ev([dict(l, multiplier=1.0) for l in legs])["reason"]
 
 
 def test_ev_gate_is_not_read_until_the_step_that_needs_it():

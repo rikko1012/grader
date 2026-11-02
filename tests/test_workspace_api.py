@@ -177,7 +177,7 @@ def test_shared_body_is_never_served_before_the_gate(env, monkeypatch):
 # ---- /me /rules /results
 def test_me(env):
     st, doc = get(env, "me")
-    assert st == 200 and doc["sample_sports"] == ["lol", "nba", "nfl"] and doc["rules_version"] == workspace_rules.RULES_VERSION
+    assert st == 200 and doc["sports"] == {"cs2": True, "lol": False, "nba": False, "nfl": False} and doc["rules_version"] == workspace_rules.RULES_VERSION
     assert doc["member"].startswith("wm-") and "u1" not in doc["member"] and doc["scratch"] is False
 
 
@@ -530,24 +530,24 @@ def test_underdog_opposing_players_are_published_as_allowed(env):
     assert doc["entries"]["underdog"]["ok"]
 
 
-def sample_leg(book="underdog", sport="nba", team="PRM", player="Marcus Delvane"):
+def other_leg(book="underdog", sport="nba", team="Boston", player="Jay Brown"):
     return {"id": f"s-{sport}-{player}-{book}", "sport": sport, "book": book, "row_id": "pp-1001", "side": "over", "line": 25.5, "rev": "x", "shown_p": 0.54,
             "team": team, "player": player, "event": f"{sport}-e1"}
 
 
-def test_mixed_sports_prizepicks_is_valid_but_sample_legs_cannot_be_tracked(env):
+def test_a_leg_of_a_sport_this_member_does_not_see_cannot_be_tracked(env):
     r = records(env)
-    legs = [leg_of(r[("vargo", "prizepicks")]), sample_leg("prizepicks")]
+    legs = [leg_of(r[("vargo", "prizepicks")]), other_leg("prizepicks")]
     st, doc = check(env, legs)
     e = doc["entries"]["prizepicks"]
-    assert e["status"] == "valid" and e["rule_ok"] and not e["ok"] and not e["trackable"] and e["track_note"] == "NBA legs are sample data." and e["sports"] == ["cs2", "nba"]
-    assert doc["legs"][legs[1]["id"]]["sample"] is True
+    assert e["status"] == "valid" and e["rule_ok"] and not e["ok"] and not e["trackable"] and e["sports"] == ["cs2", "nba"]
+    assert [p["code"] for p in doc["legs"][legs[1]["id"]]["problems"]] == ["gone"]
     assert track(env, legs, key="prizepicks", entry_type="power")[0] == 409
 
 
 def test_mixed_sports_underdog_is_not_offered_and_says_why(env):
     r = records(env)
-    legs = [leg_of(r[("vargo", "underdog")]), sample_leg("underdog")]
+    legs = [leg_of(r[("vargo", "underdog")]), other_leg("underdog")]
     e = check(env, legs)[1]["entries"]["underdog"]
     assert e["status"] == "not_published" and "does not publish whether one entry can hold CS2 and NBA picks" in e["problems"][0]["text"]
 
@@ -559,7 +559,7 @@ def test_two_platforms_make_two_entries(env):
 
 
 def test_unknown_platform_is_not_offered(env):
-    legs = [sample_leg("fanduel"), sample_leg("fanduel", team="SFC", player="Theo Lind")]
+    legs = [other_leg("fanduel"), other_leg("fanduel", team="Miami", player="Theo Lind")]
     e = check(env, legs)[1]["entries"]["fanduel"]
     assert e["status"] == "not_published" and not e["ok"]
 
@@ -613,7 +613,7 @@ def test_an_idem_key_names_one_press_of_one_set_of_legs(env):
 
 def test_board_down_with_nothing_read_answers_503(env):
     env.board_ok = False
-    assert post(env, "recheck", {"idem": idem(), "legs": [sample_leg()]})[0] == 503
+    assert post(env, "recheck", {"idem": idem(), "legs": [other_leg(sport="cs2")]})[0] == 503
 
 
 # ---- tracking

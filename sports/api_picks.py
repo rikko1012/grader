@@ -3,6 +3,8 @@
   POST /api/sports/picks/track   {"picks": [{platform, record_id, side, forecast_id?, shown?, surface}]} (<= 8)
                                  live check per pick (bounded read-only store pool, 2 s budget) -> spooled, never
                                  written here; answer per pick {ok, pick_id} or {ok: false, code, text}
+  GET|POST /api/sports/picks/check  {"picks": [...]} or ?picks=<json>, the same shape as track: picks.check per pick and
+                                 nothing else (never spooled, nothing recorded), for a page that asks before it tracks
   GET  /api/sports/picks/mine    the member's own picks (picks.db read-only, newest first, <= 200) + results;
                                  ?league=nba|nfl filters; test records hidden (admin token: &include_test=1);
                                  record = W-L-P per league (no money)
@@ -14,6 +16,7 @@ research, plus a per-grade hit-rate table (by_grade); no EV / returns.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 
@@ -56,6 +59,33 @@ def track(req):
                     "tracked_at": rec["tracked_at"], "stake_units": 0, "test": why is not None,
                     **({} if queued else {"code": "busy", "text": "Pick tracking is busy - try again"})})
     return 200, {"version": picks.VERSION, "results": out, "stake_units": 0}
+
+
+def check(req):
+    """The live pick check alone: the same picks.check as track, on the same bounded pool. Writes nothing."""
+    if req.method == "POST":
+        body = req.json()
+        items = body.get("picks") if isinstance(body, dict) else None
+    else:
+        try:
+            items = json.loads((req.query or {}).get("picks") or "null")
+        except ValueError:
+            items = None
+    if not isinstance(items, list) or not 1 <= len(items) <= picks.MAX_PER_REQUEST or not all(isinstance(it, dict) for it in items):
+        return 400, {"error": "bad_request", "detail": f"1-{picks.MAX_PER_REQUEST} picks per request"}
+    out = []
+    with web.store_ro(budget_s=2) as con:
+        for it in items:
+            try:
+                rec = picks.check(con, it)
+            except picks.Refused as e:
+                out.append({"ok": False, "code": e.code, "text": e.text, "record_id": it.get("record_id"), "side": it.get("side")})
+                continue
+            except (ValueError, TypeError) as e:
+                return 400, {"error": "bad_request", "detail": str(e)[:160]}
+            out.append({"ok": True, "record_id": rec["record_id"], "side": rec["side"], "start_utc": rec["start_utc"], "offer_id": rec["offer_id"],
+                        "forecast_id": rec["forecast_id"], "forecast_at": rec["forecast_at"], "model_version": rec["model_version"]})
+    return 200, {"version": picks.VERSION, "results": out}
 
 
 def mine(req):

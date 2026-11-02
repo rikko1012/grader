@@ -594,6 +594,7 @@ caps over weeks unless the model jobs bound their reads (reported to the model /
 
 ### 13.6 Member pick tracking (pk-1, `sports/picks.py`) - UI and test picks
 
+- `/api/sports/picks/check` runs picks.check alone and writes nothing: the research workspace asks it before it tracks.
 - Routes `/api/sports/picks/track|mine` and `/api/sports/admin/picks` (no flag: live wherever this API is deployed);
   jobs `picks-ingest` (60 s) / `picks-settle` (hourly) under SPORTS_INGEST.
 - Page (`web/sports/app.js`, served by cs2-scout from `main`): "Pick Higher / Lower" (Underdog) / "Pick More / Less"

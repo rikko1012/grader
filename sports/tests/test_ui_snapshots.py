@@ -360,3 +360,21 @@ def test_board_rows_carry_one_team_tag_from_the_game(tmp_path):
     assert rows[traded]["tid"] == h.BOS and rows[traded]["tm"] == "BOS"
     assert names.team_abbr("nba", "UTAH") == "UTA" and names.team_abbr("nba", "uta") == "UTA"
     assert names.team_abbr("nfl", "WSH") == "WAS" and names.team_abbr("nfl", "NO") == "NO"
+
+
+def test_the_research_workspace_reads_these_names(built):
+    """workspace_sports.py reads the sports API over HTTP and cannot import this package, so the names it reads are held here."""
+    b = _load(built, "board.json")
+    assert {"version", "as_of", "built_at", "stats", "events", "injuries", "markets", "fc"} <= set(b)
+    m = b["markets"][0]
+    assert {"k", "e", "pid", "n", "pos", "tm", "tid", "st", "q", "mk"} <= set(m) and m["k"].rsplit("|", 1)[-1] == "full_game"
+    assert {"r", "p", "l", "o", "t", "g", "f"} <= set(m["q"][0]) and m["q"][0]["r"].startswith(f"offer:{m['q'][0]['p']}:")
+    ev = b["events"][m["e"]]
+    assert {"start_utc", "home", "away", "started", "locked"} <= set(ev) and {"team_id", "abbr", "name"} <= set(ev["home"])
+    assert {"m", "mu", "po", "pu", "pp", "at"} <= set(next(iter(b["fc"].values())))
+    row = next(iter(_load(built, "board_view.json")["rows"].values()))
+    assert all(len(x) == 8 for x in row["lines"].values())
+    g = json.loads(next((built["root"] / "history").glob("*.json")).read_text(encoding="utf-8"))["games"][0]
+    assert {"start_utc", "opponent", "participation", "values", "season", "home"} <= set(g)
+    pl = json.loads(next((built["root"] / "players").glob("*.json")).read_text(encoding="utf-8"))
+    assert {"position", "injury", "next_event", "factors"} <= set(pl) and {"stats", "context", "engine"} <= set(pl["factors"])

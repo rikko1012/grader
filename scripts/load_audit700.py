@@ -3,11 +3,14 @@ process, fixture upstreams only (no network, never production). Extends scripts/
 card (/api/grade), match compare, results, line check, veto and search routes, and records response bytes and
 compression, so per-request heavy work and uncompressed bodies show up.
 
-usage: python scripts/load_audit700.py <code_dir> [members=700] [workspace] [history=0]
+usage: python scripts/load_audit700.py <code_dir> [members=700] [workspace] [history=0] [allsports]
 "workspace" runs the research workspace API instead (board, line, recheck, track, mine, state, results) as one signed-in member
 per thread, on fixture rows backed by a seeded pick log, and fails loudly on a 5xx, a grade call, more than one board build
 per 5 s, or a lost receipt. history = settled receipts already on each member's account before the run starts: a first visit has
-none, a member after a month has a couple of hundred, and that is the case that fills read slots and caches.
+none, a member after a month has a couple of hundred, and that is the case that fills read slots and caches. "allsports" adds LoL,
+NBA and NFL to every member's visit: the LoL worker's files, and a stub sports service on a local port with a 240-market NBA board,
+reached through server.py's real hook and token path; each member also checks and tracks one NBA and one LoL entry and reads all
+four Results tabs.
 Stubs (load harness only, never in the server): cs2_scout.grade sleeps 80 ms and returns a ~60 KB card (a real card
 with ladder / recent maps / comparison is that size); match_compare sleeps 50 ms and returns ~25 KB; results_payload
 returns ~40 KB. Every member sends Accept-Encoding: gzip like a browser.
@@ -30,6 +33,7 @@ code = sys.argv[1]
 MEMBERS = int(sys.argv[2]) if len(sys.argv) > 2 else 700
 WORKSPACE = len(sys.argv) > 3 and sys.argv[3] == "workspace"
 HISTORY = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+ALLSPORTS = len(sys.argv) > 5 and sys.argv[5] == "allsports"
 sys.path.insert(0, code)
 os.chdir(code)
 tmp = tempfile.mkdtemp(dir=os.path.dirname(os.path.abspath(__file__)))
@@ -233,31 +237,61 @@ def workspace_run():
     for name, val in (("_RESULTS", {}), ("_INFLIGHT", {}), ("_GB", {})):
         setattr(server, name, val)
     server.hltv.recent_series = lambda *a, **k: []
+    other = None
+    if ALLSPORTS:
+        from tests.workspace_other_fixture import Lol, Sports, big_nba_board, leg as any_leg
+        sports_stub = Sports()
+        sports_stub.boards["nba"] = big_nba_board(240)
+        lol_fx = Lol(Path(tmp) / "lol_center")
+        os.environ.update(sports_stub.env())
+        server.LOL_CENTER = lol_fx.dir
+        server.lol_public = lambda: True
+        other = {"sports": sports_stub, "lol": lol_fx}
     workspace_api.reset()
     seeded = seed_history(workspace_api, HISTORY) if HISTORY else 0
 
+    tls = threading.local()
+
     def req(method, name, member, body=None):
+        """One request. allsports keeps one connection per member, as a browser does: 23 requests a member on a new connection each
+        would run a Windows machine out of client ports before the server is under any load."""
         t0 = time.time()
         data = json.dumps(body).encode() if body is not None else None
+        head = {"Cookie": f"{whop_auth.COOKIE}=good-{member}", "Accept-Encoding": "gzip", "Content-Type": "application/json"}
         for attempt in range(20):
-            c = http.client.HTTPConnection("127.0.0.1", port, timeout=120)
+            c = getattr(tls, "c", None) if ALLSPORTS else None
+            c = c or http.client.HTTPConnection("127.0.0.1", port, timeout=120)
             try:
-                c.request(method, api + name, body=data, headers={"Cookie": f"{whop_auth.COOKIE}=good-{member}", "Accept-Encoding": "gzip", "Content-Type": "application/json"})
+                c.request(method, api + name, body=data, headers=head)
+                r = c.getresponse()
+                raw = r.read()
                 break
-            except OSError:
+            except (OSError, http.client.HTTPException):
                 REFUSED[0] += 1
                 c.close()
+                tls.c = None
                 time.sleep(0.25 * (attempt + 1))
-        r = c.getresponse()
-        raw = r.read()
         enc = r.getheader("Content-Encoding") or ""
-        c.close()
+        if ALLSPORTS:
+            tls.c = c
+        else:
+            c.close()
         return r.status, time.time() - t0, len(raw), enc, raw
 
     st, _, _, _, raw = req("GET", "board", "warm")
     assert st == 200, st
     records = {r["player"]["name"]: r for r in json.loads(gzip.decompress(raw) if raw[:1] == bytes([0x1f]) else raw)["records"]}
     names = sorted(records)
+
+    def other_board(sport):
+        st, _, _, _, raw = req("GET", f"board?sport={sport}", "warm")
+        assert st == 200, (sport, st)
+        return json.loads(gzip.decompress(raw) if raw[:1] == bytes([0x1f]) else raw)["records"]
+
+    if ALLSPORTS:
+        nba = [r for r in other_board("nba") if r["offer"]["platform"] == "underdog"]
+        lol = [r for r in other_board("lol") if r["offer"]["platform"] == "underdog"]
+        other_board("nfl")
     start_boards, t_start = fx.boards, time.time()
 
     def member(i):
@@ -270,9 +304,20 @@ def workspace_run():
                  ("POST", "recheck", {"idem": f"check-{i:06d}", "legs": legs, "entry_types": {"underdog": "standard"}}),
                  ("POST", "track", {"idem": f"track-{i:06d}", "entry_key": "underdog", "entry_type": "standard", "legs": legs}),
                  ("GET", "mine", None), ("POST", "state", {"rev": 0, "slip": {"legs": legs, "types": {}}}), ("GET", "state", None), ("GET", "results", None)]
+        if ALLSPORTS:
+            n1, n2 = nba[i % 120], nba[(i % 120 + 121) % len(nba)]
+            l1, l2 = next(r for r in lol if r["player"]["name"] == "Harky"), next(r for r in lol if r["player"]["name"] == "Kratos")
+            nl, ll = [any_leg(n1, "over"), any_leg(n2, "under")], [any_leg(l1), any_leg(l2)]
+            steps += [("GET", "board?sport=lol", None), ("GET", "board?sport=nba", None), ("GET", "board?sport=nfl", None),
+                      ("GET", f"line?sport=nba&book=underdog&id={n1['offer']['offer_id']}", None), ("GET", f"line?sport=lol&book=underdog&id={l1['offer']['offer_id']}", None),
+                      ("POST", "recheck", {"idem": f"chkn-{i:06d}", "legs": nl, "entry_types": {"underdog": "standard"}}),
+                      ("POST", "track", {"idem": f"trkn-{i:06d}", "entry_key": "underdog", "entry_type": "standard", "legs": nl}),
+                      ("POST", "recheck", {"idem": f"chkl-{i:06d}", "legs": ll, "entry_types": {"underdog": "standard"}}),
+                      ("POST", "track", {"idem": f"trkl-{i:06d}", "entry_key": "underdog", "entry_type": "standard", "legs": ll}),
+                      ("GET", "results?sport=lol", None), ("GET", "results?sport=nba", None), ("GET", "results?sport=nfl", None), ("GET", "mine", None)]
         for method, name, body in steps:
             st, dt, n, enc, _ = req(method, name, who, body)
-            out.append((method + " " + name.split("?")[0], st, dt, n, enc))
+            out.append((method + " " + name.split("&")[0] if "sport=" in name else method + " " + name.split("?")[0], st, dt, n, enc))
         return out
 
     r0 = rss()
@@ -291,8 +336,10 @@ def workspace_run():
     rep = {"mode": "workspace", "members": MEMBERS, "requests": len(res), "wall_s": round(wall, 2), "connect_retries": REFUSED[0], "rss_before_after_peak_mb": [r0, r1],
            "errors_5xx": sum(1 for x in res if x[1] >= 500), "non_200": sum(1 for x in res if x[1] != 200), "p50_ms": pct(lat, .5), "p95_ms": pct(lat, .95), "p99_ms": pct(lat, .99),
            "board_builds": builds, "allowed_builds": int((time.time() - t_start) / 5) + 2, "grade_calls": fx.grades, "receipts": diag["counts"]["receipts"],
-           "expected_receipts": 2 * MEMBERS + seeded, "history_per_member": HISTORY, "settle_pass_s": round(settle_s, 3), "slips": diag["counts"]["slips"],
+           "expected_receipts": (6 if ALLSPORTS else 2) * MEMBERS + seeded, "history_per_member": HISTORY, "settle_pass_s": round(settle_s, 3), "slips": diag["counts"]["slips"],
            "states": diag["counts"]["member_state"], "routes": {}}
+    if other:
+        rep["sports_service_calls"] = other["sports"].calls
     for p in sorted({x[0] for x in res}):
         rows = [x for x in res if x[0] == p]
         codes = {}
@@ -303,6 +350,9 @@ def workspace_run():
     rep["pass"] = (rep["non_200"] == 0 and rep["grade_calls"] == 0 and rep["board_builds"] <= rep["allowed_builds"] and rep["receipts"] == rep["expected_receipts"])
     print("RESULT " + json.dumps(rep))
     workspace_api.reset()
+    if other:
+        other["sports"].close()
+        other["lol"].close()
     shutil.rmtree(tmp, ignore_errors=True)
     sys.exit(0 if rep["pass"] else 1)
 

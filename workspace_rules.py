@@ -1,4 +1,4 @@
-"""Research workspace: which entries a platform takes, and when EV can be shown. Pure functions, no I/O.
+"""Research workspace: which entries a platform takes across CS2, LoL, NBA and NFL, and when EV can be shown. Pure functions, no I/O.
 
 entry_status decides one entry at a time, per combination. platform_rules.entry_check is called unchanged for its published
 refusals; its always-on PrizePicks scoring-chart note is NOT read as "not valid" (it is attached to every entry, so reading
@@ -7,20 +7,25 @@ valid and the member is told that fact. Sources and page dates are in TABLE and 
 
 The Underdog table is a copy of sports/payouts.py (CS2 never imports sports; tests/test_workspace_rules.py reads that file
 and checks the two match). EV is workspace-only: never on a receipt, never on Results."""
+import re
+
 import results_view
 
 import platform_rules
 
-RULES_VERSION = "ws-rules-2026-11-02"
+RULES_VERSION = "ws-rules-2026-11-02-all"
 READ_AT = "2026-11-02"
 
 PP_PICKS = "https://www.prizepicks.com/help-center/player-picks"
 UD_PAYOUTS = "https://help.underdogsports.com/en/articles/13780101-pick-em-standard-flex-entry-payouts"
 UD_LINEUP = "https://app.underdogsports.com/rules/pick-em#lineup-restrictions"
 UD_CORRELATED = "https://help.underdogsports.com/en/articles/11010091-correlated-picks-how-stacking-players-affects-your-payout-multiplier"
+UD_TIES = "https://help.underdogsports.com/en/articles/10982402-what-happens-in-the-event-of-a-tie-voided-selection"
+PP_TIES = "https://www.prizepicks.com/help-center/dnps-reboots-and-ties"
 PP_PAGE = "2026-10-19"
 UD_PAYOUT_PAGE = "2026-09-25"
 UD_CORRELATED_PAGE = "2026-09-09"
+UD_TIES_PAGE = "2026-08-26"
 
 UD_STANDARD = {2: 3.5, 3: 6.5, 4: 12.0, 5: 20.0, 6: 35.0, 7: 65.0, 8: 120.0}
 UD_FLEX = {3: {0: 3.25, 1: 1.09}, 4: {0: 6.0, 1: 1.4}, 5: {0: 10.0, 1: 2.5}, 6: {0: 25.0, 1: 2.6, 2: 0.25},
@@ -31,6 +36,7 @@ EV_MIN_CHANCE = 0.57                    # Results cover 57% and up (results_view
 EV_MIN_MATCHES = 300
 EV_MAX_GAP = 0.03
 EV_MAX_AGE_H = 24
+EV_NOT_VALIDATED = {"lol": "LoL chances have no settled record at real lines yet.", "nba": "NBA chances are research estimates.", "nfl": "NFL chances are research estimates."}
 
 SPORT = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL"}
 LABEL = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
@@ -55,18 +61,18 @@ TABLE = {
                   "underdog": _rule(_PUBLISHED, "Required", UD_LINEUP, None, "This rules page shows no date.")},
     "same_player": {"label": "Same player twice",
                     "prizepicks": _rule(_PUBLISHED, "A player counts once per lineup, unless Stacks are available for that player", PP_PICKS, PP_PAGE,
-                                        "The CS2 boards Scout reads carry no Stacks, so Scout refuses a repeat."),
+                                        "The boards Scout reads carry no Stacks, so Scout refuses a repeat."),
                     "underdog": _rule(_PUBLISHED, "Same side refused", UD_LINEUP)},
     "both_sides": {"label": "Both sides of one prop",
                    "prizepicks": _rule(_PUBLISHED, "Refused by the same-player rule", PP_PICKS, PP_PAGE),
                    "underdog": _rule(_NOT, "Underdog publishes only the same-side example. Scout does not offer this")},
     "mixed_sports": {"label": "Mixed sports",
                      "prizepicks": _rule(_PUBLISHED, "Allowed for the most part: selections can include different sports, and some sports "
-                                                     "add their own limits", PP_PICKS, PP_PAGE, "CS2 chart specifics are in the PrizePicks app."),
+                                                     "add their own limits", PP_PICKS, PP_PAGE, "Each sport's own chart is in the PrizePicks app."),
                      "underdog": _rule(_NOT, "Underdog does not publish this. Its rules page, help search and Pick'em page "
                                              "were searched. Scout does not offer this")},
     "opposing_players": {"label": "Opposing players of one match",
-                         "prizepicks": _rule(_NOT, "The CS2 chart is in the PrizePicks app, and its MLB example shows such limits "
+                         "prizepicks": _rule(_NOT, "Each sport's chart is in the PrizePicks app, and its MLB example shows such limits "
                                                    "exist. Scout does not offer this"),
                          "underdog": _rule(_PUBLISHED, "Allowed. The payout may shift", UD_CORRELATED, UD_CORRELATED_PAGE)},
     "teammates_plus_other": {"label": "Teammates plus another team",
@@ -75,6 +81,12 @@ TABLE = {
     "goblins_demons": {"label": "Goblins and demons",
                        "prizepicks": _rule(_PUBLISHED, "Allowed in any number", PP_PICKS, PP_PAGE),
                        "underdog": _rule(_SCOUT, "Scout grades no Underdog alternate lines, so they never reach this board")},
+    "league_limits": {"label": "League limits",
+                      "prizepicks": _rule(_SCOUT, "CS2, LoL, NBA and NFL charts are in the PrizePicks app. Scout applies the published limits above"),
+                      "underdog": _rule(_PUBLISHED, "Lineup rules apply to every sport", UD_LINEUP, None, "This rules page shows no date.")},
+    "ties": {"label": "A pick that ties the line",
+             "prizepicks": _rule(_PUBLISHED, "Not correct and not incorrect: the payout drops as for a DNP", PP_TIES, PP_PAGE),
+             "underdog": _rule(_PUBLISHED, "Voided: the entry pays for the remaining picks", UD_TIES, UD_TIES_PAGE)},
     "two_platforms": {"label": "Two platforms in one entry",
                       "prizepicks": _rule(_SCOUT, "Scout splits picks into one entry per platform"),
                       "underdog": _rule(_SCOUT, "Scout splits picks into one entry per platform")},
@@ -101,7 +113,7 @@ def _norm(s):
 
 
 def _member_text(s):
-    return str(s).replace(" - ", ". ")
+    return re.sub(r"\b(?:lol|nba|nfl):", "", str(s).replace(" - ", ". "))     # a team key carries its sport; the member reads the team
 
 
 def _used(platform, *keys):
@@ -117,23 +129,17 @@ def _problem(code, text):
     return {"check": CHECK_COMBINATION, "code": code, "text": text}
 
 
-def _sample_note(legs):
-    sample = [SPORT.get(s, s) for s in _sports([l for l in legs if l.get("sample")])]
-    return f"{_names(sample)} legs are sample data." if sample else None
-
-
 def entry_status(platform, legs, entry_type=None):
-    """One entry on one platform. legs: [{sport, book, team, nick | player, side, event, sample}].
-    -> {platform, sports, entry_type, status, ok, trackable, problems, rules, track_note}. status: valid | refused |
-    not_published; ok means the rule checks pass, trackable also needs every leg to be real."""
+    """One entry on one platform. legs: [{sport, book, team, nick | player, side, event}]. A team carries its sport, so NBA and NFL
+    Dallas are two teams. -> {platform, sports, entry_type, status, ok, trackable, problems, rules}. status: valid | refused |
+    not_published; ok means the rule checks pass, and the caller narrows trackable to entries whose legs passed theirs."""
     legs = list(legs or [])
     sports = _sports(legs)
-    note = _sample_note(legs)
     p = platform_rules.platform_of(platform)
     if p is None:
         name = str(platform or "This platform")
         return {"platform": platform, "sports": sports, "entry_type": entry_type, "status": STATUS_NOT_PUBLISHED, "ok": False,
-                "trackable": False, "track_note": note, "rules": [], "rules_version": RULES_VERSION,
+                "trackable": False, "rules": [], "rules_version": RULES_VERSION,
                 "problems": [_problem(STATUS_NOT_PUBLISHED, f"{name} entry rules are not on file. Scout does not offer this entry.")]}
     label = LABEL[p]
     chk = platform_rules.entry_check([dict(l, book=p) for l in legs], p, entry_type)
@@ -142,6 +148,8 @@ def entry_status(platform, legs, entry_type=None):
     unpublished = []
     used = ["entry_size", "two_teams", "same_player"]
     books = {platform_rules.platform_of(l.get("book")) or str(l.get("book")) for l in legs if l.get("book")}
+    if any(s != "cs2" for s in sports):
+        used.append("league_limits")
     if books - {p}:
         used.append("two_platforms")
         refused.append(_problem("entry", "An entry is placed on one platform. Picks from another platform are on this entry."))
@@ -181,8 +189,8 @@ def entry_status(platform, legs, entry_type=None):
     problems = refused + unpublished
     status = STATUS_REFUSED if refused else STATUS_NOT_PUBLISHED if unpublished else STATUS_VALID
     ok = status == STATUS_VALID and bool(legs)
-    return {"platform": p, "sports": sports, "entry_type": et, "status": status, "ok": ok, "trackable": ok and note is None,
-            "track_note": note, "problems": problems, "rules": _used(p, *dict.fromkeys(used)), "rules_version": RULES_VERSION}
+    return {"platform": p, "sports": sports, "entry_type": et, "status": status, "ok": ok, "trackable": ok,
+            "problems": problems, "rules": _used(p, *dict.fromkeys(used)), "rules_version": RULES_VERSION}
 
 
 # ---------------------------------------------------------------------------------------------------------------- EV
@@ -220,24 +228,23 @@ def _pts(x):
 
 
 def ev_status(platform, entry_type, legs, gate, now_ts):
-    """EV for a pending slip, or the first reason it is absent, in the published order. legs: [{name, sample, sport, match,
-    line, multiplier, on_side, p, tag, prop, scope}]. gate: a callable returning gate_from_export's dict (or None), called
-    only when the entry reaches that step. -> {"available": False, "reason", "payout"?} or
-    {"available": True, "ev", "hit_chance", "payout"}."""
+    """EV for a pending slip, or the first reason it is absent, in the published order. legs: [{name, sport, match, line,
+    multiplier, on_side, p, tag, prop, scope}]. gate: a callable returning gate_from_export's dict (or None), called only when
+    the entry reaches that step. A chance outside CS2 has no validated record, so a verified payout is shown and EV is not.
+    -> {"available": False, "reason", "payout"?} or {"available": True, "ev", "hit_chance", "payout"}."""
     def no(reason, **extra):
         return dict({"available": False, "reason": reason}, **extra)
 
     if platform != "underdog":
         return no("PrizePicks shows lineup payouts only in its app.")
-    for l in legs:
-        if l.get("sample"):
-            return no(f"{l.get('name') or 'A leg'} is sample data.")
     n, et = len(legs), entry_type or "standard"
     if et == "flex" and n == 4:
         return no("Underdog's pages list two 4-pick flex payouts.")
     base = payout_multiple(et, n)
     if base is None:
         return no(f"Underdog lists no {et} payout for {n} picks.")
+    if any(l.get("multiplier") is None and l.get("sport") != "cs2" for l in legs):
+        return no("Underdog sent no payout for a pick on this entry.")
     if any(l.get("multiplier") != 1.0 for l in legs):
         return no("Underdog does not publish how multipliers combine.")
     matches = [l.get("match") for l in legs]
@@ -246,6 +253,9 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
     payout = {"multiple": base, "entry_type": et, "source": UD_PAYOUTS, "page_date": UD_PAYOUT_PAGE}
     if any(float(l.get("line") or 0).is_integer() for l in legs):
         return no("A whole-number line can push, and a push changes the payout tier.", payout=payout)
+    other = next((l["sport"] for l in legs if l.get("sport") in EV_NOT_VALIDATED), None)
+    if other:
+        return no(EV_NOT_VALIDATED[other], payout=payout)
     if any(not l.get("on_side") or l.get("p") is None for l in legs):
         return no("No saved chance for this side.", payout=payout)
     if any(l["p"] < EV_MIN_CHANCE for l in legs):
