@@ -199,6 +199,26 @@ for (const r of D.records) {
   }
   if (r.sport === "lol" && (h.l10 || h.l5 || h.recent.results)) bad.push(r.key + " LoL row with per-game history");
 }
+const letter = (p) => (p >= 0.8 ? "A+" : p >= 0.74 ? "A" : p >= 0.68 ? "A-" : p >= 0.63 ? "B+" : p >= 0.57 ? "B" : p >= 0.55 ? "B-" : null);
+const stake = (p) => (p >= 0.8 ? 3 : p >= 0.74 ? 2 : p >= 0.68 ? 1.5 : p >= 0.63 ? 1 : p >= 0.55 ? 0.5 : 0);
+for (const r of D.records) {
+  const s = r.scout;
+  if (s.hold || !s.side) continue;
+  if (s.grade !== letter(s.p_side)) bad.push(r.key + " shows " + s.grade + " at " + s.p_side);
+  if (s.units !== stake(s.p_side) && !s.stake_reason) bad.push(r.key + " stake " + s.units + " with no reason");
+  if (s.grade && !s.units && !s.stake_reason) bad.push(r.key + " graded 0U with no reason");
+}
+for (const row of new Set(D.records.map((r) => r.key))) {
+  const offers = D.records.filter((r) => r.key === row), c = offers[0].consensus;
+  if (c && c.n !== offers.filter((o) => o.offer.over.payout != null && o.offer.under.payout != null).length) bad.push(row + " consensus counts books not listed");
+}
+for (const id of new Set(D.receipts.map((r) => r.slip_id))) {
+  const legs = D.receipts.filter((r) => r.slip_id === id);
+  if (new Set(legs.map((r) => r.sport + r.platform + r.tracked_at)).size !== 1) bad.push(id + " mixes sport, platform or tracking time");
+  if (legs.length < D.platforms[legs[0].platform].min) bad.push(id + " is below the platform minimum");
+}
+for (const r of D.records) if (r.sport === "lol" && r.offer.seen_at > D.feeds.lol.at) bad.push(r.key + " seen after its stale feed");
+for (const tag of ["perf-", "lol-1", "-est-", "cm-", "Live model"]) if (JSON.stringify(D).includes(tag)) bad.push("real model name in the sample: " + tag);
 console.log(JSON.stringify({ bad, sports: [...sports].sort(), records: D.records.length, withdrawn: D.records.filter((r) => r.state.kind === "withdrawn").length,
   push: D.records.filter((r) => r.scout.p_push > 0).length, unknownPayout: D.records.filter((r) => r.offer.over.payout === null).length,
   corrections: D.receipts.filter((r) => r.timeline.some((t) => t.kind === "correction")).length, pushes: D.receipts.filter((r) => r.timeline.some((t) => t.result === "push")).length }));

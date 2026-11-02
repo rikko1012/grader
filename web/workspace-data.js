@@ -26,12 +26,12 @@ window.WORKSPACE_DATA = (function () {
   };
   var PERIODS = { map1: "Map 1", maps12: "Maps 1-2", maps13: "Maps 1-3", full_game: "Full game" };
   var VALIDATION = {
-    cs2: { kind: "live", label: "Live model", detail: "Tested on chronological results before release" },
-    lol: { kind: "live", label: "Live model", detail: "Tested on chronological results before release" },
+    cs2: { kind: "live", label: "Sample live row", detail: "Invented for this preview. No model produced this number." },
+    lol: { kind: "live", label: "Sample live row", detail: "Invented for this preview. No model produced this number." },
     nba: { kind: "research", label: "Research estimate", detail: "NBA grades are held until forward results clear review" },
     nfl: { kind: "research", label: "Research estimate", detail: "NFL grades are held until forward results clear review" }
   };
-  var MODELS = { cs2: "perf-cm2", lol: "lol-1f", nba: "nba-est-3", nfl: "nfl-est-2" };
+  var MODELS = { cs2: "sample-cs2", lol: "sample-lol", nba: "sample-nba", nfl: "sample-nfl" };
 
   /* ---- events ---- */
   var EVENTS = {};
@@ -106,17 +106,18 @@ window.WORKSPACE_DATA = (function () {
   };
 
   /* ---- offers ---- */
+  var FEED_AGE = { cs2: -2, lol: -31, nba: -2, nfl: -2 };     /* minutes since each feed last updated */
   var records = [], forecastScope = {}, seq = 1000;
   function o(platform, over, under, extra) { return Object.assign({ platform: platform, over: over, under: under }, extra || {}); }
 
   function prop(evId, key, stat, period, mean, sd, lines, opts) {
     opts = opts || {};
     var E = EVENTS[evId], P = PLAYERS[key], sport = E.sport;
-    var results = sport === "lol" ? null : series(seq, mean, sd, sport);
+    var results = sport === "lol" ? null : series(seq, mean, sd, sport).slice(0, opts.games || 20);
     lines.forEach(function (L) {
       L.offers.forEach(function (of) {
         seq++;
-        var meta = PLATFORMS[of.platform], rev = of.rev || 1;
+        var meta = PLATFORMS[of.platform], rev = of.rev || 1, seen = of.seen || FEED_AGE[sport];
         var offerId = meta.short.toLowerCase() + "-" + seq;
         var exact = sport === "nba" || sport === "nfl";
         var revision = exact
@@ -135,7 +136,7 @@ window.WORKSPACE_DATA = (function () {
             revision_kind: exact ? "exact" : "derived", line: L.line,
             over: { offered: of.over !== false, payout: of.over === false ? null : of.over },
             under: { offered: of.under !== false, payout: of.under === false ? null : of.under },
-            seen_at: at(of.seen || -2), checked_at: at(of.seen ? of.seen + 1 : -1), link: null,
+            seen_at: at(seen), checked_at: at(seen + 1), link: null,
             moved_from: of.moved_from, moved_at: of.moved_from != null ? at(-12) : undefined
           },
           scout: {
@@ -166,27 +167,27 @@ window.WORKSPACE_DATA = (function () {
 
   /* ---- CS2 ---- */
   prop("cs2-e1", "vargo", "kills", "maps12", 41, 7, [
-    { line: 38.5, side: "over", p: [0.6124, 0.3876], proj: 41.2, range: [33, 49.4], grade: "B+", units: 1.5,
+    { line: 38.5, side: "over", p: [0.6124, 0.3876], proj: 41.2, range: [33, 49.4], grade: "B", units: 0.5,
       offers: [o("prizepicks", null, null), o("underdog", 1.86, 1.94), o("thunderpick", 1.91, 1.87)] },
-    { line: 39.5, side: "over", p: [0.5712, 0.4288], proj: 41.2, range: [33, 49.4], offers: [o("underdog", 1.78, 2.02)] }
+    { line: 39.5, side: "over", p: [0.5712, 0.4288], proj: 41.2, range: [33, 49.4], grade: "B", units: 0.5, offers: [o("underdog", 1.78, 2.02)] }
   ]);
   prop("cs2-e1", "brandr", "kills", "maps12", 33, 6, [
-    { line: 34.5, side: "under", p: [0.4138, 0.5862], proj: 32.9, range: [25.8, 40.1], grade: "B", units: 1,
+    { line: 34.5, side: "under", p: [0.4138, 0.5862], proj: 32.9, range: [25.8, 40.1], grade: "B", units: 0.5,
       offers: [o("prizepicks", null, null), o("underdog", 1.92, 1.88)] }
   ]);
   prop("cs2-e1", "tessen", "hs", "map1", 7, 2, [
     { line: 7.5, side: "under", p: [0.4586, 0.5414], proj: 7.1, range: [4.4, 10], offers: [o("prizepicks", null, null)] }
   ]);
   prop("cs2-e2", "orlo", "kills", "map1", 18, 4, [
-    { line: 17.5, side: "over", p: [0.5571, 0.4429], proj: 18.4, range: [13.1, 23.9],
+    { line: 17.5, side: "over", p: [0.5571, 0.4429], proj: 18.4, range: [13.1, 23.9], grade: "B-", units: 0.5,
       offers: [o("prizepicks", null, false), o("underdog", 1.88, 1.92)] }
   ], { forecast_period: "maps12" });
   prop("cs2-e2", "raiko", "kills", "maps12", 36, 6, [
-    { line: 33.5, side: "over", p: [0.6601, 0.3399], proj: 37.3, range: [29.5, 45], grade: "A-", units: 0,
+    { line: 33.5, side: "over", p: [0.6601, 0.3399], proj: 37.3, range: [29.5, 45], grade: "B+", units: 0,
       stake_reason: "0U: under 5 maps in sample", offers: [o("prizepicks", null, null), o("underdog", 1.84, 1.96)] }
-  ]);
+  ], { games: 4 });
   prop("cs2-e2", "mika7", "kills", "maps12", 35, 6, [
-    { line: 36.5, side: "under", p: [0.4422, 0.5578], proj: 35.2, range: [27.4, 43],
+    { line: 36.5, side: "under", p: [0.4422, 0.5578], proj: 35.2, range: [27.4, 43], grade: "B-", units: 0.5,
       offers: [o("prizepicks", null, null, { state: { kind: "withdrawn", reason: "Withdrawn by PrizePicks", at: -9 } })] }
   ]);
   prop("cs2-e3", "sable", "kills", "maps12", 37, 6, [
@@ -194,18 +195,19 @@ window.WORKSPACE_DATA = (function () {
   ]);
 
   /* ---- LoL (no player ids, no game-by-game history, derived event ids; units are 0U) ---- */
+  var LOL_STAKE = "0U: LoL stakes are 0U";
   prop("lol-e1", "ashen", "kills", "maps12", 7.9, 2, [
-    { line: 7.5, side: "over", p: [0.6043, 0.3957], proj: 8.3, range: [4.9, 11.8], grade: "B", units: 0, age: 41,
+    { line: 7.5, side: "over", p: [0.6043, 0.3957], proj: 8.3, range: [4.9, 11.8], grade: "B", units: 0, stake_reason: LOL_STAKE, age: 41,
       offers: [o("prizepicks", null, null), o("underdog", 1.86, 1.94)] }
   ]);
   prop("lol-e1", "pell", "kills", "maps12", 6.7, 2, [
     { line: 6.5, side: "over", p: [0.5339, 0.4661], proj: 6.9, range: [3.5, 10.2], age: 41, offers: [o("underdog", 1.9, 1.9)] }
   ]);
   prop("lol-e1", "yuna", "assists", "maps12", 13, 3, [
-    { line: 13.5, side: "under", p: [0.4342, 0.5658], proj: 12.8, range: [8.6, 17.1], grade: "B-", units: 0, age: 41, offers: [o("prizepicks", null, null)] }
+    { line: 13.5, side: "under", p: [0.4342, 0.5658], proj: 12.8, range: [8.6, 17.1], grade: "B-", units: 0, stake_reason: LOL_STAKE, age: 41, offers: [o("prizepicks", null, null)] }
   ]);
   prop("lol-e2", "rook", "assists", "maps12", 10, 3, [
-    { line: 9.5, side: "over", p: [0.5611, 0.4389], proj: 10.4, range: [6.2, 14.7], age: 41, offers: [o("underdog", 1.83, 1.97)] }
+    { line: 9.5, side: "over", p: [0.5611, 0.4389], proj: 10.4, range: [6.2, 14.7], grade: "B-", units: 0, stake_reason: LOL_STAKE, age: 41, offers: [o("underdog", 1.83, 1.97)] }
   ]);
   prop("lol-e2", "drift", "deaths", "maps12", 4.4, 1.5, [
     { line: 4.5, side: "under", p: [0.4701, 0.5299], proj: 4.3, range: [2.1, 6.7], age: 41, offers: [o("prizepicks", null, null), o("underdog", null, null)] }
@@ -214,7 +216,7 @@ window.WORKSPACE_DATA = (function () {
   /* ---- NBA and NFL: grades held, shown as research estimates, never as letters ---- */
   prop("nba-e1", "delvane", "pts", "full_game", 26, 5, [
     { line: 24.5, side: "over", p: [0.5912, 0.4088], proj: 26.3, range: [19.4, 33.2],
-      consensus: { p_over: 0.5521, p_under: 0.4479, n: 4, edge_pts: 3.9 }, offers: [o("prizepicks", null, null, { rev: 2 })] },
+      offers: [o("prizepicks", null, null, { rev: 2 })] },
     { line: 25.5, side: "over", p: [0.5463, 0.4537], proj: 26.3, range: [19.4, 33.2],
       offers: [o("underdog", 1.81, 1.99, { rev: 3, moved_from: 24.5 }), o("fanduel", 1.87, 1.95)] }
   ]);
@@ -222,14 +224,14 @@ window.WORKSPACE_DATA = (function () {
     { line: 8.5, side: "under", p: [0.4479, 0.5521], proj: 8.1, range: [4.9, 11.3], offers: [o("prizepicks", null, null), o("underdog", 1.95, 1.85)] }
   ]);
   prop("nba-e2", "brandt", "pra", "full_game", 34, 6, [
-    { line: 33.5, side: "over", p: [0.5358, 0.4642], proj: 34.4, range: [26.3, 42.6], consensus: { p_over: 0.5102, p_under: 0.4898, n: 3, edge_pts: 2.6 },
+    { line: 33.5, side: "over", p: [0.5358, 0.4642], proj: 34.4, range: [26.3, 42.6], consensus: { p_over: 0.5013, p_under: 0.4987, n: 2, edge_pts: 3.5 },
       offers: [o("prizepicks", null, null), o("underdog", 1.9, 1.9), o("kalshi", 1.93, 1.95)] }
   ]);
   prop("nba-e2", "moon", "pts", "full_game", 18.5, 4, [
     { line: 18.5, side: null, p: [0.5031, 0.4969], proj: 18.6, range: [13, 24.2], offers: [o("underdog", 1.9, 1.9)] }
   ]);
   prop("nfl-e1", "hollis", "pass_yds", "full_game", 275, 42, [
-    { line: 264.5, side: "over", p: [0.5614, 0.4386], proj: 274.9, range: [221, 329.4], consensus: { p_over: 0.5288, p_under: 0.4712, n: 5, edge_pts: 3.3 },
+    { line: 264.5, side: "over", p: [0.5614, 0.4386], proj: 274.9, range: [221, 329.4], consensus: { p_over: 0.5051, p_under: 0.4949, n: 2, edge_pts: 5.6 },
       offers: [o("prizepicks", null, null), o("underdog", 1.88, 1.92), o("fanduel", 1.89, 1.93)] }
   ]);
   prop("nfl-e1", "marchand", "rec", "full_game", 5.2, 1.8, [
@@ -248,34 +250,44 @@ window.WORKSPACE_DATA = (function () {
 
   /* ---- sample receipts: append-only; settlement corrections are new entries, the first settlement stays ---- */
   var RECEIPTS = [
+    { id: "rc-5013", slip_id: "sl-219", sport: "nba", player: "Jonah Reyes", matchup: "Port Royal Mariners at Dunmore Pilots", stat_label: "Points", period_label: "Full game", platform: "underdog", platform_label: "Underdog", side: "under", line: 21.5, line_type: "standard",
+      offer_revision: "offer:underdog:ud-884:r1:a2f471", revision_kind: "exact", model_version: "sample-nba", forecast_id: "fc:nba:3bd910", forecast_at: at(-4380), displayed_p: 0.5522, tracked_at: at(-4310), final: 24,
+      timeline: [
+        { at: at(-4310), kind: "tracked", text: "Tracked Under 21.5 at 55.2%" }, { at: at(-4200), kind: "started", text: "Game started" },
+        { at: at(-4040), kind: "settled", result: "miss", text: "Settled: Miss. Final 24" }] },
     { id: "rc-5012", slip_id: "sl-219", sport: "nba", player: "Marcus Delvane", matchup: "Port Royal Mariners at Dunmore Pilots", stat_label: "Points", period_label: "Full game", platform: "underdog", platform_label: "Underdog", side: "over", line: 23.5, line_type: "standard",
-      offer_revision: "offer:underdog:ud-881:r2:7c1e0a", revision_kind: "exact", model_version: "nba-est-3", forecast_id: "fc:nba:9a41bd", forecast_at: at(-4380), displayed_p: 0.5833, tracked_at: at(-4310), final: 26,
+      offer_revision: "offer:underdog:ud-881:r2:7c1e0a", revision_kind: "exact", model_version: "sample-nba", forecast_id: "fc:nba:9a41bd", forecast_at: at(-4380), displayed_p: 0.5833, tracked_at: at(-4310), final: 26,
       timeline: [
         { at: at(-4310), kind: "tracked", text: "Tracked Over 23.5 at 58.3%" }, { at: at(-4200), kind: "started", text: "Game started" },
         { at: at(-4040), kind: "settled", result: "miss", text: "Settled: Miss. Final 23" },
         { at: at(-3700), kind: "correction", result: "hit", text: "Correction appended: league stat change, final 26. Settled: Hit" }] },
-    { id: "rc-5011", slip_id: "sl-219", sport: "nfl", player: "Dre Marchand", matchup: "Copper Basin Miners at Grand Pike", stat_label: "Receptions", period_label: "Full game", platform: "underdog", platform_label: "Underdog", side: "over", line: 5, line_type: "standard",
-      offer_revision: "offer:underdog:ud-873:r1:c30b12", revision_kind: "exact", model_version: "nfl-est-2", forecast_id: "fc:nfl:51ce07", forecast_at: at(-5800), displayed_p: 0.4912, tracked_at: at(-5760), final: 5,
+    { id: "rc-5011", slip_id: "sl-217", sport: "nfl", player: "Dre Marchand", matchup: "Copper Basin Miners at Grand Pike", stat_label: "Receptions", period_label: "Full game", platform: "underdog", platform_label: "Underdog", side: "over", line: 5, line_type: "standard",
+      offer_revision: "offer:underdog:ud-873:r1:c30b12", revision_kind: "exact", model_version: "sample-nfl", forecast_id: "fc:nfl:51ce07", forecast_at: at(-5800), displayed_p: 0.4912, tracked_at: at(-5760), final: 5,
       timeline: [
         { at: at(-5760), kind: "tracked", text: "Tracked Over 5 at 49.1%" }, { at: at(-5640), kind: "started", text: "Game started" },
         { at: at(-5430), kind: "settled", result: "push", text: "Settled: Push. Final 5, exactly on the line" }] },
+    { id: "rc-5010", slip_id: "sl-217", sport: "nfl", player: "Luca Thorne", matchup: "Grand Pike at Lakeshore Anchors", stat_label: "Rushing yards", period_label: "Full game", platform: "underdog", platform_label: "Underdog", side: "under", line: 68.5, line_type: "standard",
+      offer_revision: "offer:underdog:ud-870:r1:0e77c4", revision_kind: "exact", model_version: "sample-nfl", forecast_id: "fc:nfl:d0a2f6", forecast_at: at(-5800), displayed_p: 0.5461, tracked_at: at(-5760), final: 61,
+      timeline: [
+        { at: at(-5760), kind: "tracked", text: "Tracked Under 68.5 at 54.6%" }, { at: at(-5640), kind: "started", text: "Game started" },
+        { at: at(-5430), kind: "settled", result: "hit", text: "Settled: Hit. Final 61" }] },
     { id: "rc-5009", slip_id: "sl-214", sport: "cs2", player: "vargo", matchup: "Halcyon vs Solstice", stat_label: "Kills", period_label: "Maps 1-2", platform: "prizepicks", platform_label: "PrizePicks", side: "over", line: 37.5, line_type: "standard",
-      offer_revision: "derived:prizepicks:pp-771:e04a2f", revision_kind: "derived", model_version: "perf-cm2", forecast_id: null, forecast_at: at(-7300), displayed_p: 0.6241, tracked_at: at(-7260), final: 44,
+      offer_revision: "derived:prizepicks:pp-771:e04a2f", revision_kind: "derived", model_version: "sample-cs2", forecast_id: null, forecast_at: at(-7300), displayed_p: 0.6241, tracked_at: at(-7260), final: 44,
       timeline: [
         { at: at(-7260), kind: "tracked", text: "Tracked Over 37.5 at 62.4%" }, { at: at(-7200), kind: "started", text: "Match started" },
         { at: at(-7050), kind: "settled", result: "hit", text: "Settled: Hit. Final 44 on Maps 1-2" }] },
     { id: "rc-5008", slip_id: "sl-214", sport: "cs2", player: "brandr", matchup: "Norrland vs Ironwake", stat_label: "Kills", period_label: "Maps 1-2", platform: "prizepicks", platform_label: "PrizePicks", side: "under", line: 33.5, line_type: "standard",
-      offer_revision: "derived:prizepicks:pp-766:1fd390", revision_kind: "derived", model_version: "perf-cm2", forecast_id: null, forecast_at: at(-7320), displayed_p: 0.5688, tracked_at: at(-7260), final: 36,
+      offer_revision: "derived:prizepicks:pp-766:1fd390", revision_kind: "derived", model_version: "sample-cs2", forecast_id: null, forecast_at: at(-7320), displayed_p: 0.5688, tracked_at: at(-7260), final: 36,
       timeline: [
         { at: at(-7260), kind: "tracked", text: "Tracked Under 33.5 at 56.9%" }, { at: at(-7230), kind: "started", text: "Match started" },
         { at: at(-7040), kind: "settled", result: "miss", text: "Settled: Miss. Final 36 on Maps 1-2" }] },
     { id: "rc-5006", slip_id: "sl-208", sport: "lol", player: "Ashen", matchup: "Tidefall vs Greywatch", stat_label: "Kills", period_label: "Maps 1-2", platform: "underdog", platform_label: "Underdog", side: "over", line: 7.5, line_type: "standard",
-      offer_revision: "derived:underdog:ud-802:9b6611", revision_kind: "derived", model_version: "lol-1f", forecast_id: null, forecast_at: at(-10120), displayed_p: 0.5972, tracked_at: at(-10090), final: null,
+      offer_revision: "derived:underdog:ud-802:9b6611", revision_kind: "derived", model_version: "sample-lol", forecast_id: null, forecast_at: at(-10120), displayed_p: 0.5972, tracked_at: at(-10090), final: null,
       timeline: [
         { at: at(-10090), kind: "tracked", text: "Tracked Over 7.5 at 59.7%" },
-        { at: at(-10010), kind: "withdrawn", result: "void", text: "Withdrawn by Underdog before the start. Not counted in Results" }] },
+        { at: at(-10010), kind: "withdrawn", result: "void", text: "Withdrawn by Underdog before the start" }] },
     { id: "rc-5004", slip_id: "sl-208", sport: "lol", player: "Yuna", matchup: "Tidefall vs Greywatch", stat_label: "Assists", period_label: "Maps 1-2", platform: "underdog", platform_label: "Underdog", side: "under", line: 14.5, line_type: "standard",
-      offer_revision: "derived:underdog:ud-799:4dd2ac", revision_kind: "derived", model_version: "lol-1f", forecast_id: null, forecast_at: at(-10125), displayed_p: 0.5541, tracked_at: at(-10090), final: 12,
+      offer_revision: "derived:underdog:ud-799:4dd2ac", revision_kind: "derived", model_version: "sample-lol", forecast_id: null, forecast_at: at(-10125), displayed_p: 0.5541, tracked_at: at(-10090), final: 12,
       timeline: [
         { at: at(-10090), kind: "tracked", text: "Tracked Under 14.5 at 55.4%" }, { at: at(-9960), kind: "started", text: "Series started" },
         { at: at(-9780), kind: "settled", result: "hit", text: "Settled: Hit. Final 12 on Maps 1-2" }] }
@@ -283,14 +295,14 @@ window.WORKSPACE_DATA = (function () {
 
   /* ---- sample results: [sport, market, side, model version, hits, misses, pushes, mean stated chance] ---- */
   var RESULTS = [
-    ["cs2", "Kills", "over", "perf-cm2", 164, 151, 4, 0.588], ["cs2", "Kills", "under", "perf-cm2", 142, 118, 6, 0.571],
-    ["cs2", "Headshots", "over", "perf-cm2", 41, 44, 1, 0.562], ["cs2", "Headshots", "under", "perf-cm2", 52, 39, 2, 0.559],
-    ["lol", "Kills", "over", "lol-1f", 66, 61, 0, 0.574], ["lol", "Kills", "under", "lol-1f", 58, 47, 0, 0.553],
-    ["lol", "Assists", "under", "lol-1f", 37, 40, 0, 0.586], ["lol", "Assists", "over", "lol-1e", 22, 19, 0, 0.552],
-    ["nba", "Points", "over", "nba-est-3", 71, 69, 3, 0.566], ["nba", "Points", "under", "nba-est-3", 63, 54, 2, 0.549],
-    ["nba", "Rebounds", "under", "nba-est-3", 29, 24, 4, 0.541],
-    ["nfl", "Receptions", "over", "nfl-est-2", 14, 13, 6, 0.532], ["nfl", "Passing yards", "over", "nfl-est-2", 19, 17, 0, 0.552],
-    ["nfl", "Rushing yards", "under", "nfl-est-2", 16, 12, 0, 0.561]
+    ["cs2", "Kills", "over", "sample-cs2", 164, 151, 4, 0.588], ["cs2", "Kills", "under", "sample-cs2", 142, 118, 6, 0.571],
+    ["cs2", "Headshots", "over", "sample-cs2", 41, 44, 1, 0.562], ["cs2", "Headshots", "under", "sample-cs2", 52, 39, 2, 0.559],
+    ["lol", "Kills", "over", "sample-lol", 66, 61, 0, 0.574], ["lol", "Kills", "under", "sample-lol", 58, 47, 0, 0.553],
+    ["lol", "Assists", "under", "sample-lol", 37, 40, 0, 0.586], ["lol", "Assists", "over", "sample-lol-old", 22, 19, 0, 0.552],
+    ["nba", "Points", "over", "sample-nba", 71, 69, 3, 0.566], ["nba", "Points", "under", "sample-nba", 63, 54, 2, 0.549],
+    ["nba", "Rebounds", "under", "sample-nba", 29, 24, 4, 0.541],
+    ["nfl", "Receptions", "over", "sample-nfl", 14, 13, 6, 0.532], ["nfl", "Passing yards", "over", "sample-nfl", 19, 17, 0, 0.552],
+    ["nfl", "Rushing yards", "under", "sample-nfl", 16, 12, 0, 0.561]
   ];
 
   var PRESETS = [
@@ -310,7 +322,7 @@ window.WORKSPACE_DATA = (function () {
   return {
     now: NOW, sports: SPORTS, platforms: PLATFORMS, events: EVENTS, records: records, forecast_scope: forecastScope,
     context: CONTEXT, context_default: CONTEXT_DEFAULT, receipts: RECEIPTS, results: RESULTS, presets: PRESETS,
-    seed_slip: SEED_SLIP, feeds: { cs2: { kind: "ok", at: at(-1) }, lol: { kind: "stale", at: at(-31) }, nba: { kind: "ok", at: at(-2) }, nfl: { kind: "ok", at: at(-2) } },
+    seed_slip: SEED_SLIP, feeds: { cs2: { kind: "ok", at: at(FEED_AGE.cs2) }, lol: { kind: "stale", at: at(FEED_AGE.lol) }, nba: { kind: "ok", at: at(FEED_AGE.nba) }, nfl: { kind: "ok", at: at(FEED_AGE.nfl) } },
     recheck_ttl_min: 5, board_at: at(-1), results_at: at(-18), picks_at: at(-4)
   };
 })();
