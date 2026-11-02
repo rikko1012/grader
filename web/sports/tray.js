@@ -157,7 +157,7 @@
     el.innerHTML =
       '<button type="button" class="sw-tray-bar" data-tray-toggle aria-expanded="' + open + '" aria-controls="sw-tray-body">' +
         '<span class="sw-tray-bar-t"><b>' + esc(plural(legs.length, "pick")) + "</b> · " + esc(bookName(pf)) + " " + esc(lgU) +
-        (legs.length ? ' · <span class="' + (v.ok ? "sw-tray-ok" : "sw-tray-warn") + '">' + (v.ok ? "ready to check" : esc(plural(v.hints.length, "fix"))) + "</span>" : "") + "</span>" +
+        (legs.length ? ' · <span class="' + (v.ok ? "sw-tray-ok" : "sw-tray-warn") + '">' + (v.ok ? "ready to check" : esc(plural(v.hints.length, "issue"))) + "</span>" : "") + "</span>" +
         '<span class="sw-tray-bar-a">' + (open ? "Hide" : "Show") + "</span></button>" +
       '<div class="sw-tray-body" id="sw-tray-body">' +
         '<div class="sw-tray-head"><h2 class="sw-tray-h" tabindex="-1">' + esc(title) + '</h2><span class="sw-tray-n">' + esc(plural(legs.length, "pick")) +
