@@ -4235,9 +4235,20 @@ class Handler(BaseHTTPRequestHandler):
                                                 side=q.get("side") or None, opponent=q.get("opponent") or None)
                     # the slip lock rule (earlier of the platform's current start and the graded match's)
                     checked = slip_lock(lc_, q.get("start"), (q.get("ms") or "")[:40] or None, (q.get("lk") or "")[:40] or None)
-                    if checked.get("status") == "verified" and q.get("rid"):
+                    offer_id = q.get("rid")
+                    if checked.get("status") == "verified" and not offer_id:
+                        # Single-player cards have no saved board row id. Resolve
+                        # only the unique exact offer the existing check verified;
+                        # the adapter still joins its server-owned canonical IDs.
+                        ids = {str(r["id"]) for r in checked.get("rows", [])
+                               if r.get("id") and r.get("line") == float(q["line"])
+                               and r.get("side_offered") is True and not r.get("alt")
+                               and (r.get("odds_type") or "standard") == "standard"}
+                        if len(ids) == 1:
+                            offer_id = ids.pop()
+                    if checked.get("status") == "verified" and offer_id:
                         checked["line_advantages"] = slip_line_advantages([{
-                            "row_id": q["rid"], "book": book, "nick": q.get("player"),
+                            "row_id": offer_id, "book": book, "nick": q.get("player"),
                             "prop": q.get("prop", "kills"), "scope": q.get("maps", "12"),
                             "line": float(q["line"]), "side": q.get("side"), "player_id": q.get("pid")}])
                     return self.send(200, checked)
