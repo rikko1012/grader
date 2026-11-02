@@ -3909,12 +3909,14 @@ def landing_route(path):
     return False
 
 
-# Research workspace preview (stage one): a sample-data prototype, gated by Handler._workspace_on. Fixed names only -
-# web_file has no path guard, so a request path never reaches it. Nothing here reads a grade, forecast or stake.
+# Research workspace preview, gated by Handler._workspace_on. Fixed names only - web_file has no path guard, so a request
+# path never reaches it. Its API lives in workspace_api.py, imported on the first allowed request: it reads saved grades
+# and offers and never grades, logs a forecast or changes a stake.
 WORKSPACE_ROUTES = {"/preview/workspace": ("workspace.html", "text/html; charset=utf-8"),
                     "/preview/workspace/workspace.css": ("workspace.css", "text/css; charset=utf-8"),
                     "/preview/workspace/workspace.js": ("workspace.js", "text/javascript; charset=utf-8"),
                     "/preview/workspace/workspace-data.js": ("workspace-data.js", "text/javascript; charset=utf-8")}
+WORKSPACE_API = "/preview/workspace/api/"
 
 STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
 LAST_MEMBER = [0.0]     # last member request on /api/* (the board worker steps aside while members are active)
@@ -4119,6 +4121,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in WORKSPACE_ROUTES and self._workspace_on(q):    # not allowed = the unknown-route answer below
                 name, ctype = WORKSPACE_ROUTES[u.path]
                 return self.send_shared(("workspace", name), 200, web_file(name), ctype, keep=600)
+            if u.path.startswith(WORKSPACE_API) and self._workspace_on(q):
+                return self._workspace_api("GET", u.path, q)
             if u.path in ("/", "/index.html"):
                 if self._sports_on("/sports"):                          # sports nav link: SPORTS_UI only (else unchanged)
                     return self.send_shared(("page", "index", "sports"), 200, sports_nav(page()), "text/html; charset=utf-8", keep=600)
@@ -5401,6 +5405,11 @@ class Handler(BaseHTTPRequestHandler):
             token = (parse_qs(ref.query).get("token") or [None])[0]
         return self.authed(token) or self._sports_owner()
 
+    def _workspace_api(self, method, path, q, n=0):
+        """The one workspace API hook. This module is passed in: `import server` from there would load a second copy."""
+        import workspace_api
+        return workspace_api.handle(self, sys.modules[__name__], method, path, q, n)
+
     def _sports_route(self, u, q):
         """Sports answers through sports/gateway.py (standard library only). In the default SPORTS_API_MODE=service the
         sports API runs in its own process / Render service: this thread only mints a member token after the server-side
@@ -5454,6 +5463,8 @@ class Handler(BaseHTTPRequestHandler):
         if n > POST_MAX:
             self.close_connection = True              # the unread body would corrupt a kept-alive connection
             return self.send(413, {"error": f"body over {POST_MAX} bytes"})
+        if u.path.startswith(WORKSPACE_API) and self._workspace_on({k: v[0] for k, v in parse_qs(u.query).items()}):
+            return self._workspace_api("POST", u.path, {k: v[0] for k, v in parse_qs(u.query).items()}, n)
         if u.path == "/api/slip_log":
             # closeout2 copyval: the page's Copy slip waits for THIS answer and writes the clipboard only on {"ok": true}
             # (owner: validate first - a refused, failed or timed-out check leaves the clipboard untouched). One call

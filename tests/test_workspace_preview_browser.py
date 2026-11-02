@@ -1,51 +1,27 @@
-"""Research workspace preview in a real browser: the slip gate, receipts, results wording, focus and layout. Skipped where
-Playwright or Chromium is missing. The page is static here: these checks are about web/workspace*, not server.py."""
-import http.server
+"""The research workspace in a real browser against a local server.Handler with fixture data (tests/workspace_fixture.py): the full
+CS2 flow from research through settlement, two devices, real failure states, and focus and layout. Skipped where Playwright or
+Chromium is missing. Nothing here reaches a network or production data."""
 import json
 import threading
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from http.server import ThreadingHTTPServer
 
 import pytest
 
+import hltv
+import server
+import whop_auth
+import workspace_api
+from tests.workspace_fixture import Fixture, iso
+
 sync_api = pytest.importorskip("playwright.sync_api")
 
-WEB = Path(__file__).resolve().parent.parent / "web"
-FILES = {"/preview/workspace": ("workspace.html", "text/html; charset=utf-8"),
-         "/preview/workspace/workspace.css": ("workspace.css", "text/css"),
-         "/preview/workspace/workspace.js": ("workspace.js", "text/javascript"),
-         "/preview/workspace/workspace-data.js": ("workspace-data.js", "text/javascript")}
 DESK = {"width": 1440, "height": 900}
+TAB = {"width": 1024, "height": 768}
 PHONE = {"width": 390, "height": 844}
-VARGO = "cs2.cs2-e1.vargo.kills.maps12.38.5"
-RECHECK = '#rail-body [data-act="recheck"]'
-TRACK_PP = '#rail-body [data-act="track"][data-id="prizepicks|cs2"]'
+WIDE = {"width": 1920, "height": 1080}
 MIN = 60_000
-
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        f = FILES.get(self.path.split("?")[0])
-        if not f:
-            self.send_response(404)
-            self.end_headers()
-            return
-        body = (WEB / f[0]).read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", f[1])
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *a):
-        pass
-
-
-@pytest.fixture(scope="module")
-def url():
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{httpd.server_address[1]}/preview/workspace"
-    httpd.shutdown()
+NBA_ROW = "nba.nba-e2.brandt.pra.full_game.33.5"
 
 
 @pytest.fixture(scope="module")
@@ -60,48 +36,98 @@ def browser():
 
 
 @pytest.fixture
-def ctx(browser):
-    c = browser.new_context(viewport=DESK)
+def env(monkeypatch, tmp_path):
+    for k in ("SPORTS_UI_ALLOW", "REQUIRE_WHOP", "RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("SCOUT_WORKSPACE_PREVIEW", "1")
+    monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(whop_auth, "enabled", lambda: True)
+    monkeypatch.setattr(whop_auth, "session", lambda v: {"user": v[5:], "name": "Tester", "ok": True} if v and v.startswith("good-") else None)
+    for name, val in (("_RESULTS", {}), ("_INFLIGHT", {}), ("_ENC_LOCKS", {}), ("_RES_BYTES", [0, 0.0]), ("_MAP1_STATUS", [0.0, None]), ("BOARD", {})):
+        monkeypatch.setattr(server, name, val)
+    fx = Fixture(tmp_path)
+    fx.install(monkeypatch.setattr)
+    maps = []
+    for i in range(20):
+        val = 24 if i % 5 < 3 else 15                  # 6 of 10 over 38.5, the saved tally
+        for n in (1, 2):
+            maps.append({"match_id": f"hltv-{i}", "number": n, "date": f"2026-10-{28 - i:02d}", "kills": val, "headshots": 8, "opponent": f"Team{i}", "map": "Mirage"})
+    monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: maps)
+    workspace_api.reset()
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    httpd.daemon_threads = True
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    fx.url = f"http://127.0.0.1:{httpd.server_address[1]}/preview/workspace"
+    yield fx
+    httpd.shutdown()
+    httpd.server_close()
+    workspace_api.reset()
+
+
+def context(browser, env, size=DESK, user="u1"):
+    c = browser.new_context(viewport=size)
     c.route("https://fonts.*/**", lambda r: r.abort())
+    c.add_cookies([{"name": whop_auth.COOKIE, "value": f"good-{user}", "url": env.url}])
+    return c
+
+
+@pytest.fixture
+def ctx(browser, env):
+    c = context(browser, env)
     yield c
     c.close()
 
 
-def open_page(ctx, url, clock=False, path="", size=None):
+def open_page(ctx, env, path="", size=None, wait=True):
     p = ctx.new_page()
     p.errors = []
     p.on("pageerror", lambda e: p.errors.append(str(e)))
     if size:
         p.set_viewport_size(size)
-    if clock:
-        p.clock.install()
-    p.goto(url + path)
-    if clock:
-        p.clock.run_for(400)
-    else:
-        p.wait_for_timeout(350)
+    p.goto(env.url + path)
+    if wait:
+        p.wait_for_selector("#app[data-boot=done]", state="attached", timeout=15000)
     return p
 
 
-def recheck(p, clock=False, sel=RECHECK):
-    p.click(sel)
-    if clock:
-        p.clock.run_for(800)
-    else:
-        p.wait_for_timeout(750)
+def all_days(p):
+    p.evaluate("""() => { const e = document.getElementById('f-day'); e.value = 'all'; e.dispatchEvent(new Event('change', { bubbles: true })); }""")
 
 
-def force(p, state):
-    p.evaluate("""s => { const e = document.getElementById('force-state'); e.value = s; e.dispatchEvent(new Event('change', { bubbles: true })); }""", state)
+def chip(p, sport):
+    p.click(f'[data-act="chip"][data-id="{sport}"]')
 
 
-def stored(p, key):
-    return p.evaluate("k => JSON.parse(localStorage.getItem(k))", key)
+def refresh(p):
+    """What the page does on its 30 s timer and on coming back to the tab."""
+    p.evaluate("""() => window.dispatchEvent(new Event('focus'))""")
+
+
+def key_of(p, nick, book="underdog"):
+    return p.evaluate("""async ([n, b]) => { const r = await (await fetch('/preview/workspace/api/board')).json();
+      return r.records.find((x) => x.player.name === n && x.offer.platform === b).key; }""", [nick, book])
 
 
 def go(p, h):
     p.evaluate("h => { location.hash = h; }", h)
-    p.wait_for_timeout(60)
+    p.wait_for_timeout(80)
+
+
+def panel(p, nick, book="underdog"):
+    go(p, "#/research/p/" + key_of(p, nick, book).replace("%", "%25"))
+    p.wait_for_selector("#panel-name")
+    if p.locator(f'[data-act="p-book"][data-id="{book}"]').count():
+        p.locator(f'[data-act="p-book"][data-id="{book}"]').first.click()
+
+
+def add(p, nick, book="underdog"):
+    panel(p, nick, book)
+    p.click('[data-act="p-add"]')
+    p.wait_for_function("document.querySelector('[data-act=\"p-add\"]').textContent.includes('Remove')")
+
+
+def ready(p, scope="#rail-body"):
+    p.wait_for_function("s => /ready\\./.test(document.querySelector(s + ' .slip-status')?.textContent || '')", arg=scope)
 
 
 def active(p):
@@ -113,451 +139,719 @@ def enter(p, sel):
     p.keyboard.press("Enter")
 
 
-# ---- the slip gate
-def test_a_recheck_ages_on_screen_with_no_input(ctx, url):
-    p = open_page(ctx, url, clock=True)
-    recheck(p, clock=True)
-    assert p.is_enabled(TRACK_PP)
-    p.clock.run_for(6 * MIN)
-    assert "Last rechecked" in p.inner_text("#rail-body .slip-status") and p.is_disabled(TRACK_PP)
-    assert p.locator("#rail-body .leg-ok").count() == 0
+def state(env, user="u1"):
+    s = workspace_api.store()
+    return s.get_state(workspace_api.member_key("whop:" + user))
 
 
-def test_rows_and_slip_go_off_when_the_game_starts(ctx, url):
-    p = open_page(ctx, url, clock=True)
-    recheck(p, clock=True)
-    p.clock.run_for(70 * MIN)
-    row = p.locator(f'.row[data-row="{VARGO}"]')
-    assert "Game started" in row.inner_text() and row.locator(".add").is_disabled()
-    assert "in 55m" not in row.inner_text()
-    assert p.is_disabled(TRACK_PP)
-
-
-def test_track_and_copy_ask_again_at_the_click(ctx, url):
-    p = open_page(ctx, url, clock=True)
-    recheck(p, clock=True)
-    p.evaluate("""() => { const t = Date.now() + 70 * 60000; Date.now = () => t;
-      document.querySelector('#rail-body [data-act="copy"][data-id="prizepicks|cs2"]').click();
-      document.querySelector('#rail-body [data-act="track"][data-id="prizepicks|cs2"]').click(); }""")
-    p.clock.run_for(50)
-    assert stored(p, "ws:receipts:v1") in (None, [])
-    assert "Recheck before" in p.inner_text("body > .toast")
-
-
-def test_saved_pass_is_not_restored_over_a_stale_feed(ctx, url):
-    p = open_page(ctx, url)
-    p.fill("#search", "")
-    p.evaluate("""() => { document.querySelector('[data-act="retry-feed"]').click(); }""")
-    p.wait_for_timeout(800)
-    for key in ("lol.lol-e1.ashen.kills.maps12.7.5", "lol.lol-e1.pell.kills.maps12.6.5"):
-        go(p, "#/research/p/" + key)
-        p.wait_for_timeout(100)
-        p.evaluate("""() => { const b = [...document.querySelectorAll('.book-opt')].find(x => x.textContent === 'Underdog'); if (b) b.click(); }""")
-        p.click('[data-act="p-add"]')
-        go(p, "#/research")
-    recheck(p)
-    assert p.locator('#rail-body [data-act="track"][data-id="underdog|lol"]').is_enabled()
-    p.reload()
-    p.wait_for_timeout(350)
-    status = p.inner_text("#rail-body .slip-status")
-    assert "Changed since" in status and p.locator('#rail-body [data-act="track"][data-id="underdog|lol"]').is_disabled()
-    assert p.locator("#rail-body .leg-ok").count() == 0
-
-
-def test_outage_blocks_recheck_and_withdrawn_shows_no_pass(ctx, url):
-    p = open_page(ctx, url)
-    force(p, "unavailable")
-    before = stored(p, "ws:slip:v1")["check"]
-    p.locator(RECHECK).click(force=True)
-    p.wait_for_timeout(750)
-    assert stored(p, "ws:slip:v1")["check"] == before
-    assert p.get_attribute(RECHECK, "aria-disabled") == "true"
-    force(p, "ok")
-    recheck(p)
-    assert p.locator("#rail-body .leg-ok").count() == 2
-    force(p, "withdrawn")
-    assert p.locator("#rail-body .leg-ok").count() == 0
-    assert "withdrawn" in p.inner_text("#rail-body .slip-status") and p.is_disabled(TRACK_PP)
-
-
-def test_stale_with_no_recheck_claims_nothing(ctx, url):
-    p = open_page(ctx, url)
-    force(p, "stale")
-    text = p.inner_text("#rail-body")
-    assert "Not rechecked" in text and "Last rechecked" not in text and "Recheck last updated" not in text
-
-
-def test_forced_loading_has_a_retry_everywhere(ctx, url):
-    p = open_page(ctx, url)
-    force(p, "loading")
-    for sel in ("#board-list", "#rail-body"):
-        assert p.locator(f'{sel} [data-act="retry"]').count() == 1, sel
-
-
-# ---- receipts
-def test_two_tabs_never_erase_receipts(ctx, url):
-    a = open_page(ctx, url)
-    b = open_page(ctx, url)
-    go(b, "#/research/p/" + "nba.nba-e2.brandt.pra.full_game.33.5")
-    b.wait_for_timeout(50)
-    b.click('[data-act="p-add"]')
-    go(b, "#/research/p/" + "nba.nba-e1.lind.reb.full_game.8.5")
-    b.wait_for_timeout(50)
-    b.click('[data-act="p-add"]')
-    go(b, "#/research")
-    a.wait_for_timeout(100)
-    recheck(a)
-    a.click(TRACK_PP)
-    recheck(b)
-    b.click('#rail-body [data-act="track"][data-id="prizepicks|nba"]')
-    b.wait_for_timeout(100)
-    assert sorted(r["player"] for r in stored(a, "ws:receipts:v1")) == ["Cal Brandt", "Theo Lind", "brandr", "vargo"]
-    a.wait_for_timeout(100)
-    assert a.evaluate("document.querySelectorAll('#view-picks .pick-card').length") == 12
-
-
-def test_receipt_link_opens_from_any_filter(ctx, url):
-    p = open_page(ctx, url, path="#/picks")
-    p.click('[data-act="picks-filter"][data-id="pending"]')
-    go(p, "#/results")
-    p.locator('#view-results a[href="#/picks/rc-5012"]').click()
-    p.wait_for_timeout(100)
-    assert p.locator("#pick-rc-5012").is_visible()
-
-
-def test_withdrawn_is_not_settled(ctx, url):
-    p = open_page(ctx, url, path="#/picks")
-    p.click('[data-act="picks-filter"][data-id="settled"]')
-    assert "Ashen" not in p.inner_text("#view-picks") and "Yuna" in p.inner_text("#view-picks")
-
-
-# ---- slip content
-def test_leg_against_scout_names_the_side_of_its_chance(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/" + VARGO)
-    p.click('#rail-body [data-act="slip-clear"]')
-    p.click('[data-act="p-side"][data-id="under"]')
+# ---- the full path
+def test_full_cs2_flow_from_research_through_settlement(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    p.fill("#search", "vargo")
+    p.keyboard.press("Enter")
+    assert p.locator(".row").count() == 1
+    row = p.locator(".row").first
+    assert "61.2%" in row.inner_text() and "B Over" in row.inner_text() and "SAMPLE" not in row.inner_text()
+    row.locator(".row-open").click()
+    p.wait_for_selector("#panel .chart svg")
+    body = p.inner_text("#panel")
+    assert "Hit rate, last 10, Over" in body and "Forecast chance, Over" in body and "Market chance, Over" in body
     p.click('[data-act="p-add"]')
-    meta = p.inner_text("#rail-body .leg-meta")
-    assert "Scout side is Over. Under chance 38.8%" in meta
+    p.keyboard.press("Escape")
+    p.fill("#search", "")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    assert "1 of 1 entry ready" in p.inner_text("#rail-body .slip-status")
+    entry = p.inner_text("#rail-body .entry")
+    assert "Pays 3.5x if every pick hits" in entry and "EV:" in entry
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .tracked")
+    assert "2 picks tracked on Underdog" in p.inner_text("#rail-body .tracked")
+    p.click("#rail-body .tracked a")
+    p.wait_for_selector("#view-picks .pick-row")
+    text = p.inner_text("#view-picks")
+    assert "vargo Over 38.5" in text and "Pending" in text and "Underdog · Standard" in text and "0-0-0" in text
+    # settlement, as the pick log would record it
+    env.settle(env.by("vargo"), actual=44.0)
+    env.settle(env.by("orlo"), actual=20.0)
+    workspace_api.store().settle_once()
+    p.reload()
+    p.wait_for_selector("#view-picks .pick-row")
+    text = p.inner_text("#view-picks")
+    assert "Final 44, line 38.5" in text and "Final 20, line 33.5" in text and "1-1-0" in text and "Hit" in text and "Miss" in text
+    go(p, "#/results")
+    p.wait_for_function("document.getElementById('view-results').textContent.includes('Your tracked picks')")
+    res = p.inner_text("#view-results")
+    assert "Scout board record" in res and "Your tracked picks" in res and "Sample sports" in res and "1-1-0" in res
+    assert p.errors == []
 
 
-def test_research_footer_follows_the_slip(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/" + VARGO)
-    assert "On your slip" in p.inner_text(".p-foot")
-    p.click('#rail-body [aria-label="Remove vargo Over 38.5"]')
-    assert "On your slip" not in p.inner_text(".p-foot") and p.get_attribute('[data-act="p-add"]', "aria-disabled") is None
+def test_track_needs_no_page_math_the_server_recheck_decides(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    env.by("vargo").update(line=39.5, graded_line=39.5)         # the line moves between the check and the click
+    server._GB.clear()
+    server._RESULTS.clear()
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .problem")
+    text = p.inner_text("#rail-body")
+    assert "Line moved from 38.5 to 39.5" in text and "Use current offer" in text and p.locator("#rail-body .tracked").count() == 0
+    assert workspace_api.store().diagnostics()["counts"]["receipts"] == 0
+    env.relog(env.by("vargo"))                                  # the writer logs the regrade at the new line
+    server._GB.clear()
+    server._RESULTS.clear()
+    p.click('#rail-body [data-act="swap-leg"]')
+    p.wait_for_function("document.querySelector('#rail-body .leg-pick').textContent.includes('39.5')")
+    p.wait_for_function("document.querySelector('#rail-body .slip-status').textContent.includes('1 of 1 entry ready')")
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .tracked")
 
 
-def test_row_tick_sees_every_platform(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/" + VARGO)
+def test_auto_check_runs_on_open_and_on_change(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    p.keyboard.press("Escape")
+    ready(p)
+    assert "take 2-8 picks" in p.inner_text("#rail-body")      # one leg: the server's rule, with no press of a button
+    assert p.is_disabled('#rail-body [data-act="track"][data-id="underdog"]')
+
+
+def test_failing_entry_comes_first(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo", "prizepicks")
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    heads = p.locator("#rail-body .entry-head").all_inner_texts()
+    assert heads[0].startswith("PrizePicks") and heads[1].startswith("Underdog")
+
+
+def test_entry_type_changes_the_check(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    p.click('#rail-body [data-act="entry-type"][data-id="underdog:flex"]')
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes('flex entries take 3-8')")
+
+
+# ---- mixed slips
+def test_mixed_sports_by_platform(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    add(p, "vargo", "prizepicks")
+    go(p, "#/research/p/" + NBA_ROW)
+    p.wait_for_selector("#panel-name")
+    p.click('[data-act="p-book"][data-id="prizepicks"]')
+    p.click('[data-act="p-add"]')
+    p.keyboard.press("Escape")
+    ready(p)
+    entry = p.inner_text("#rail-body .entry")
+    assert "CS2 + NBA" in entry and "NBA legs are sample data." in entry and p.is_disabled('#rail-body [data-act="track"][data-id="prizepicks"]')
+    assert p.is_enabled('#rail-body [data-act="copy"][data-id="prizepicks"]')
     p.click('#rail-body [data-act="slip-clear"]')
+    add(p, "vargo")
+    go(p, "#/research/p/" + NBA_ROW)
+    p.wait_for_selector("#panel-name")
     p.click('[data-act="p-book"][data-id="underdog"]')
     p.click('[data-act="p-add"]')
-    go(p, "#/research")
-    add = p.locator(f'.row[data-row="{VARGO}"] .add')
-    assert add.get_attribute("aria-pressed") == "true" and "Underdog" in add.get_attribute("aria-label")
-    add.click()
-    assert stored(p, "ws:slip:v1")["legs"] == []
+    p.keyboard.press("Escape")
+    ready(p)
+    assert "Underdog does not publish whether one entry can hold CS2 and NBA picks" in p.inner_text("#rail-body .entry")
 
 
-def test_copy_failure_says_so(ctx, url):
-    p = open_page(ctx, url)
-    recheck(p)
-    p.evaluate("""() => { navigator.clipboard.writeText = () => Promise.reject(new Error('no')); document.execCommand = () => false; }""")
-    p.click('#rail-body [data-act="copy"][data-id="prizepicks|cs2"]')
-    p.wait_for_timeout(50)
-    assert "Copy failed" in p.inner_text("body > .toast")
+def test_rules_show_their_source(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo", "prizepicks")
+    add(p, "orlo", "prizepicks")
+    p.keyboard.press("Escape")
+    ready(p)
+    p.locator("#rail-body .entry details summary").first.click()
+    assert p.locator('#rail-body .entry a[href*="prizepicks.com/help-center/player-picks"]').count() >= 1
 
 
-def test_wrong_period_forecast_is_not_shown(ctx, url):
-    p = open_page(ctx, url)
-    p.select_option("#f-day", "all")
-    row = p.locator('.row[data-row="cs2.cs2-e2.orlo.kills.map1.17.5"]')
-    assert "Forecast covers Maps 1-2" in row.inner_text() and "55.7" not in row.inner_text() and row.locator(".add").is_disabled()
-    row.locator(".row-open").click()
+# ---- two devices
+def test_slip_and_views_follow_the_member_to_another_device(browser, env):
+    a_ctx, b_ctx = context(browser, env), context(browser, env, PHONE)
+    a = open_page(a_ctx, env)
+    add(a, "vargo")
+    a.wait_for_timeout(1000)                                    # the save is debounced
+    assert [l["player"] for l in state(env)["slip"]["legs"]] == ["vargo"]
+    b = open_page(b_ctx, env)
+    b.wait_for_function("document.getElementById('slip-fab').textContent.includes('1 pick')")
+    a_ctx.close()
+    b_ctx.close()
+
+
+def test_two_devices_editing_at_once_keep_both_legs(browser, env):
+    a_ctx, b_ctx = context(browser, env), context(browser, env)
+    a, b = open_page(a_ctx, env), open_page(b_ctx, env)
+    add(a, "vargo")
+    add(b, "orlo")                                              # b still holds rev 0
+    a.wait_for_timeout(1500)
+    legs = sorted(l["player"] for l in state(env)["slip"]["legs"])
+    assert legs == ["orlo", "vargo"]
+    b.wait_for_function("document.getElementById('rail-body').textContent.includes('2 picks')")
+    a_ctx.close()
+    b_ctx.close()
+
+
+def test_a_leg_removed_on_one_device_stays_removed(browser, env):
+    a_ctx, b_ctx = context(browser, env), context(browser, env)
+    a = open_page(a_ctx, env)
+    add(a, "vargo")
+    a.wait_for_timeout(1000)
+    b = open_page(b_ctx, env)                                   # b holds vargo at this revision
+    b.wait_for_function("document.getElementById('rail-body').textContent.includes('1 pick')")
+    a.click('#rail-body [aria-label="Remove vargo Over 38.5"]')
+    a.wait_for_timeout(1000)
+    add(b, "orlo")                                              # a stale save that still holds vargo
+    b.wait_for_timeout(1500)
+    assert [l["player"] for l in state(env)["slip"]["legs"]] == ["orlo"]
+    a_ctx.close()
+    b_ctx.close()
+
+
+def test_a_failed_first_state_read_recovers_and_keeps_the_visit(browser, env):
+    workspace_api.store().put_state(workspace_api.member_key("whop:u1"), 0, {"slip": None})
+    a_ctx = context(browser, env)
+    a = open_page(a_ctx, env)
+    add(a, "vargo")
+    a.wait_for_timeout(1000)
+    a_ctx.close()
+    b_ctx = context(browser, env)
+    b_ctx.route("**/preview/workspace/api/state", lambda r: r.abort())
+    b = open_page(b_ctx, env)
+    add(b, "orlo")
+    b.wait_for_timeout(1000)
+    assert [l["player"] for l in state(env)["slip"]["legs"]] == ["vargo"]    # nothing saved over the account's slip
+    b_ctx.unroute("**/preview/workspace/api/state")
+    refresh(b)
+    b.wait_for_timeout(1500)
+    assert sorted(l["player"] for l in state(env)["slip"]["legs"]) == ["orlo", "vargo"]
+    b_ctx.close()
+
+
+def test_other_members_see_nothing(browser, env):
+    a_ctx, b_ctx = context(browser, env, user="alice"), context(browser, env, user="bob")
+    a = open_page(a_ctx, env)
+    add(a, "vargo")
+    add(a, "orlo")
+    a.keyboard.press("Escape")
+    ready(a)
+    a.click('#rail-body [data-act="track"][data-id="underdog"]')
+    a.wait_for_selector("#rail-body .tracked")
+    b = open_page(b_ctx, env, path="#/picks")
+    b.wait_for_selector("#view-picks .rec-strip")
+    assert "vargo" not in b.inner_text("#view-picks")
+    a_ctx.close()
+    b_ctx.close()
+
+
+# ---- real failure states
+def test_board_down_never_falls_back_to_sample_cs2(ctx, env):
+    env.board_ok = False
+    p = open_page(ctx, env)
+    p.wait_for_selector("#board-list .state")
+    assert "CS2 board unavailable" in p.inner_text("#board-list")
+    assert p.evaluate("""() => WORKSPACE_DATA.records.every((r) => r.sport !== 'cs2') && WORKSPACE_DATA.receipts.every((r) => r.sport !== 'cs2')""")
+    env.board_ok = True
+    server._RESULTS.clear()
+    p.click('#board-list [data-act="retry-board"]')
+    p.wait_for_selector("#app .chip .n")
+    chip(p, "cs2")
+    all_days(p)
+    p.wait_for_function("document.getElementById('board-list').textContent.includes('vargo')")
+
+
+def test_lost_connection_keeps_the_last_copy_with_its_time(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    ctx.route("**/preview/workspace/api/board", lambda r: r.abort())
+    refresh(p)
+    p.wait_for_function("document.getElementById('feed-strips').textContent.includes('CS2 lines as of')")
+    assert "vargo" in p.inner_text("#board-list") and p.locator('#feed-strips [data-act="retry-board"]').count() == 1
+
+
+def test_check_outage_says_one_thing_and_keeps_track_off(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    ctx.route("**/preview/workspace/api/recheck", lambda r: r.abort())
+    p.click('#rail-body [data-act="check-now"]')
+    p.wait_for_function("document.querySelector('#rail-body .slip-status').textContent.includes('did not answer')")
+    assert p.is_disabled('#rail-body [data-act="track"][data-id="underdog"]') and p.locator('#rail-body [data-act="check-now"]').count() == 1
+    ctx.unroute("**/preview/workspace/api/recheck")
+    p.click('#rail-body [data-act="check-now"]')
+    ready(p)
+
+
+def test_busy_track_keeps_the_slip_and_the_retry_is_the_same_press(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    seen = []
+
+    def busy(route):
+        seen.append(json.loads(route.request.post_data)["idem"])
+        if len(seen) == 1:
+            route.fulfill(status=503, content_type="application/json", body='{"error":"busy"}')
+        else:
+            route.continue_()
+    ctx.route("**/preview/workspace/api/track", busy)
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_function("document.getElementById('toast').textContent.includes('Scout is busy')")
+    assert p.locator("#rail-body .leg").count() == 2
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .tracked")
+    assert seen[0] == seen[1]
+
+
+def test_picks_outage_shows_the_saved_copy(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .tracked")
+    p.wait_for_timeout(300)
+    ctx.route("**/preview/workspace/api/mine*", lambda r: r.abort())
+    refresh(p)
+    go(p, "#/picks")
+    p.wait_for_function("document.getElementById('view-picks').textContent.includes('Saved copy')")
+    assert "vargo Over 38.5" in p.inner_text("#view-picks")
+
+
+def test_skeleton_is_shaped_like_rows_and_has_no_retry_while_loading(ctx, env):
+    ctx.route("**/preview/workspace/api/board", lambda r: None)
+    p = open_page(ctx, env, wait=False)
+    p.wait_for_selector(".skel-row")
+    assert p.locator('#board-list [data-act="retry-board"]').count() == 0
+
+
+# ---- what a row says
+def test_last_ten_reads_for_the_side_shown(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    row = p.locator(".row", has_text="brandr").first
+    assert "4/10" in row.inner_text()                           # 6-4-0 at this line, shown for the Under
+    assert "6-4-0" not in row.inner_text()
+
+
+def test_book_columns_show_each_platforms_own_line(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    row = p.locator(".row", has_text="orlo").first
+    assert row.locator(".c-ud .bc").inner_text().startswith("O")
+    assert "34.5" in row.locator(".c-pp .bc.other").inner_text()
+    assert p.locator(f'.row[data-row="{NBA_ROW}"] .best').count() >= 1
+
+
+def test_sample_tag_is_on_sample_rows_only(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    assert p.locator('.row:has-text("vargo") .sample-tag').count() == 0
+    assert p.locator(f'.row[data-row="{NBA_ROW}"] .sample-tag').count() == 1
+
+
+def test_match_groups_and_other_lines(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    assert p.locator(".match-head", has_text="Halcyon vs Norrland").count() == 1
+    assert p.locator(".row.is-sub").count() >= 1                # the sample prop with two lines
+
+
+def test_sort_header_works(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    p.click('#board-head [data-act="sort"][data-id="chance"]')
+    assert p.locator(".match-head").count() == 0
+    first = p.locator(".row .pct").first.inner_text()
+    assert first == "61.2%"
+
+
+def test_decimal_odds_are_not_written_as_multipliers(ctx, env):
+    p = open_page(ctx, env, path="#/research/p/" + NBA_ROW + "/books")
+    p.wait_for_selector("#panel-name")
+    assert "1.93" in p.inner_text("#panel") and "1.93x" not in p.inner_text("#panel") and "1.90x" in p.inner_text("#panel")
+
+
+# ---- research panel
+@pytest.mark.parametrize("size", [DESK, TAB, PHONE])
+def test_chart_is_on_the_first_screen(ctx, env, size):
+    p = open_page(ctx, env, size=size)
+    panel(p, "vargo")
+    p.wait_for_selector("#panel .chart svg")
+    box = p.locator("#panel .chart").bounding_box()
+    assert box["y"] + box["height"] * 0.8 < size["height"]
+    assert p.locator("#panel .p-head").bounding_box()["height"] <= 130
+
+
+def test_chance_shows_once_above_the_fold(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    p.wait_for_selector("#panel .chart svg")
+    assert p.locator("#panel .hit-strip").inner_text().count("61.2%") == 1
+
+
+def test_next_and_previous_move_through_the_board(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    chip(p, "cs2")
+    p.locator(".row .row-open").first.click()
+    p.wait_for_selector("#panel-name")
+    one = p.inner_text("#panel-name")
+    p.keyboard.press("j")
     p.wait_for_timeout(100)
+    two = p.inner_text("#panel-name")
+    assert two != one
+    p.keyboard.press("k")
+    p.wait_for_timeout(100)
+    assert p.inner_text("#panel-name") == one
+    p.click('[data-act="p-next"]')
+    p.wait_for_timeout(100)
+    assert p.inner_text("#panel-name") == two
+
+
+def test_board_stays_live_beside_the_panel_when_there_is_room(ctx, env):
+    p = open_page(ctx, env, size=WIDE)
+    all_days(p)
+    chip(p, "cs2")
+    p.locator(".row .row-open").first.click()
+    p.wait_for_selector("#panel-name")
+    assert p.evaluate("document.getElementById('main').inert") is False and p.locator("#panel-scrim").is_hidden()
+    one = p.inner_text("#panel-name")
+    p.locator(".row .row-open").nth(1).click()
+    p.wait_for_timeout(150)
+    assert p.inner_text("#panel-name") != one and p.locator('.row[data-open="true"]').count() == 1
+
+
+def test_line_picker_and_remove_toggle(ctx, env):
+    p = open_page(ctx, env, path="#/research/p/nba.nba-e1.delvane.pts.full_game.24.5")
+    p.wait_for_selector(".line-pick")
+    p.click('[data-act="p-add"]')
+    assert "Remove from slip" in p.inner_text(".p-foot")
+    p.click('[data-act="p-add"]')
+    assert "Add Over 24.5" in p.inner_text(".p-foot") and p.locator("#rail-body .leg").count() == 0
+    p.locator(".line-pick button", has_text="25.5").click()
+    p.wait_for_timeout(100)
+    assert "Add Over 25.5" in p.inner_text(".p-foot")
+
+
+def test_history_tab_splits_by_map(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    p.wait_for_selector("#panel .chart svg")
+    p.click("#tab-history")
     body = p.inner_text("#panel")
-    assert "55.7" not in body and "No Map 1 forecast" in body
-    assert p.get_attribute('[data-act="p-add"]', "aria-disabled") == "true"
+    assert "By map, last 20 series" in body and "Mirage" in body and "Average per map" in body
 
 
-def test_sample_tag_is_visible_over_the_phone_panel_and_sheet(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/" + VARGO, size=PHONE)
-    assert p.locator("#panel .sample-tag").is_visible()
-    go(p, "#/research")
-    p.click("#slip-fab")
-    assert p.locator("#slip-dialog .sample-tag").is_visible()
+def test_line_move_is_shown(ctx, env):
+    p = open_page(ctx, env, path="#/research/p/nba.nba-e1.delvane.pts.full_game.25.5")
+    p.wait_for_selector("#panel-name")
+    p.click('[data-act="p-book"][data-id="underdog"]')
+    assert "Moved from 24.5" in p.inner_text("#panel .p-sub")
 
 
-# ---- results
-def test_results_filter_covers_the_tracked_list_and_settled_counts_pushes(ctx, url):
-    p = open_page(ctx, url, path="#/results")
-    p.select_option("#res-sport", "lol")
-    tracked = p.inner_text("#view-results .res-sec:last-of-type")
-    assert "Ashen" in tracked and "vargo" not in tracked and "Marcus Delvane" not in tracked
-    p.select_option("#res-sport", "all")
-    p.click('[data-act="group"][data-id="market"]')
-    first = p.locator("#view-results tbody tr").first
-    assert "CS2 Kills" in first.inner_text()
-    settled = {r.locator("td").first.inner_text(): r.locator('td[data-l="Settled"]').inner_text() for r in p.locator("#view-results tbody tr").all()}
-    assert settled["CS2 Kills"] == str(164 + 151 + 4 + 142 + 118 + 6)
+def test_a_slip_stops_at_the_servers_limit_with_a_reason(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    buttons = p.locator('.row .add[data-act="row-add"]')
+    for i in range(9):
+        buttons.nth(i).click()
+    assert p.locator("#rail-body .leg").count() == 8 and "A slip holds 8 picks" in p.inner_text("#toast")
+    ready(p)                                                    # eight legs still get an answer from the server
 
 
-def test_results_says_whose_picks_the_table_covers(ctx, url):
-    text = open_page(ctx, url, path="#/results").inner_text("#view-results")
-    assert "not added to this table" in text and "kept apart from the table above" in text
-    assert "Counts as a hit in your record" in text and "Not counted" in text and "\nCounted." not in text
+def test_off_side_has_no_invented_chance(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    p.click('[data-act="p-side"][data-id="under"]')
+    body = p.inner_text("#panel")
+    assert "38.8" not in body and "Scout saved a chance for Over only" in body
+    p.click('[data-act="p-add"]')
+    assert "Scout side is Over" in p.inner_text("#rail-body .leg-meta")
 
 
-def test_slip_page_is_the_only_slip_on_desktop(ctx, url):
-    p = open_page(ctx, url, path="#/slips")
-    assert not p.locator("#rail").is_visible() and p.locator("#view-slips .slip").is_visible()
-    tracked = p.inner_text("#view-slips .res-sec")
-    assert "Underdog · NBA" in tracked and "Underdog · NFL" in tracked
+def test_bars_stay_off_when_the_tally_does_not_match(ctx, env, monkeypatch):
+    monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: [])
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    p.wait_for_function("document.getElementById('panel').textContent.includes('6 over, 4 under, 0 push')")
+    assert p.locator("#panel .chart").count() == 0
 
 
-def test_consensus_only_counts_books_it_lists(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/nba.nba-e1.delvane.pts.full_game.24.5/books")
-    assert "Market at" not in p.inner_text("#panel")
-    go(p, "#/research/p/nba.nba-e2.brandt.pra.full_game.33.5/books")
+def test_line_leaving_the_board_says_so(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "orlo")
+    env.rows = [r for r in env.rows if r["nick"] != "orlo"]
+    server._GB.clear()
+    server._RESULTS.clear()
+    refresh(p)
+    p.wait_for_function("document.getElementById('panel').textContent.includes('This line left the board')")
+
+
+# ---- my picks and results
+def seed_receipts(p):
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .tracked")
+
+
+def test_receipt_shows_a_correction_below_the_first_result(ctx, env):
+    p = open_page(ctx, env)
+    seed_receipts(p)
+    env.settle(env.by("vargo"), actual=30.0)
+    workspace_api.store().settle_once()
+    env.settle(env.by("vargo"), actual=44.0)
+    workspace_api.store().settle_once()
+    p.reload()
+    go(p, "#/picks")
+    p.wait_for_selector("#view-picks .pick-row")
+    p.locator(".pick-row .pick-head", has_text="vargo").click()
+    body = p.inner_text("#view-picks")
+    assert "Settled: Miss. Final 30" in body and "Correction added. Settled: Hit. Final 44" in body and "Corrected" in body
+
+
+def test_void_reads_void_and_push_is_not_a_win(ctx, env):
+    p = open_page(ctx, env)
+    seed_receipts(p)
+    env.settle(env.by("vargo"), status="void", actual=None)
+    env.settle(env.by("orlo"), status="push", actual=33.5)
+    workspace_api.store().settle_once()
+    p.reload()
+    go(p, "#/picks")
+    p.wait_for_selector("#view-picks .pick-row")
+    text = p.inner_text("#view-picks")
+    assert "Void" in text and "Withdrawn" not in text and "Push" in text and "0-0-1" in text
+
+
+def test_ids_stay_folded_under_details(ctx, env):
+    p = open_page(ctx, env)
+    seed_receipts(p)
+    go(p, "#/picks")
+    p.wait_for_selector("#view-picks .pick-row")
+    p.locator(".pick-row .pick-head", has_text="vargo").click()
+    d = p.locator("#view-picks details.details")
+    assert d.count() == 1 and d.evaluate("e => e.open") is False
+
+
+def test_results_keeps_three_populations_apart(ctx, env):
+    p = open_page(ctx, env, path="#/results")
+    p.wait_for_function("document.getElementById('view-results').textContent.includes('Hit rate, settled picks')")
+    text = p.inner_text("#view-results")
+    assert "Forecast chance" in text and "Hit rate" in text and "Market chance" in text and "never added together" in text
+    assert "36-24" in text                                      # the fixture export
+    assert not p.locator("#rail").is_visible()
+    assert p.locator("#view-results thead").first.is_visible()
+
+
+@pytest.mark.parametrize("group", ["chance", "stat", "side", "version"])
+def test_results_groups(ctx, env, group):
+    p = open_page(ctx, env, path="#/results")
+    p.wait_for_selector('[data-act="group"]')
+    p.click(f'[data-act="group"][data-id="{group}"]')
+    assert p.locator("#view-results .res-sec.first tbody tr").count() >= 1
+
+
+def test_no_market_column_of_dashes_and_a_fifty_tick(ctx, env):
+    p = open_page(ctx, env, path="#/results")
+    p.wait_for_selector(".dumb .tick")
+    assert p.locator(".dumb .tick").count() >= 1
+
+
+def test_results_outage_is_stated(ctx, env):
+    ctx.route("**/preview/workspace/api/results", lambda r: r.abort())
+    p = open_page(ctx, env, path="#/results")
+    p.wait_for_function("document.getElementById('view-results').textContent.includes('Scout board record unavailable')")
+
+
+# ---- saved data is another writer's output
+def test_saved_markup_stays_text(ctx, env):
+    evil = "<img src=x onerror=window.__xss=1>"
+    s = workspace_api.store()
+    leg = {k: evil for k in ("id", "key", "row_id", "event_id", "event_label", "player", "player_key", "team", "stat", "stat_label", "period", "period_label", "platform_label", "rev", "shown_label")}
+    leg.update(sport="cs2", book="underdog", side="over", line=1.5, shown_p=0.5, added_at="2026-11-01T00:00:00+00:00")
+    s.put_state(workspace_api.member_key("whop:u1"), 0, {"slip": {"legs": [leg], "types": {}}, "views": [{"id": "v", "name": evil, "state": {"chip": "all", "f": {}}}]})
+    p = open_page(ctx, env)
+    p.wait_for_timeout(300)
+    p.click("#open-filters")
     p.wait_for_timeout(100)
-    assert "from Underdog, Kalshi" in p.inner_text("#panel")
+    assert p.evaluate("window.__xss") is None and p.locator("img[src=x]").count() == 0
 
 
-def test_stale_lol_never_carries_a_fresh_time(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/lol.lol-e1.ashen.kills.maps12.7.5/books")
-    now = p.evaluate("Date.now()")
-    seen = p.evaluate("""() => WORKSPACE_DATA.records.filter(r => r.sport === 'lol').map(r => r.offer.seen_at)""")
-    assert seen and all(now - p.evaluate("s => Date.parse(s)", s) >= 30 * MIN for s in seen)
-    go(p, "#/research")
-    p.click('[data-act="chip"][data-id="lol"]')
-    assert p.evaluate("""() => { const f = WORKSPACE_DATA.feeds.lol.at; return document.getElementById('board-meta').textContent.includes(new Date(f).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })); }""")
+@pytest.mark.parametrize("bad", [{"slip": {"legs": [{"id": 1}]}}, {"slip": {"legs": "x"}}, {"prefs": {"f": 3, "chip": "nope"}}, {"views": [{"id": "x"}]}])
+def test_bad_saved_state_still_boots(ctx, env, bad):
+    workspace_api.store().put_state(workspace_api.member_key("whop:u1"), 0, bad)
+    p = open_page(ctx, env)
+    assert p.locator(".row").count() > 3 and p.errors == []
+
+
+@pytest.mark.parametrize("bad", ["#/research/p/%E0%A4%A", "#/research/p/%"])
+def test_bad_link_still_boots(ctx, env, bad):
+    p = open_page(ctx, env, path=bad)
+    assert p.locator(".row").count() > 3 and p.errors == []
+
+
+def test_deep_link_to_a_cs2_line_opens_after_the_board_loads(ctx, env):
+    p0 = open_page(ctx, env)
+    k = key_of(p0, "vargo")
+    p0.close()
+    p = open_page(ctx, env, path="#/research/p/" + k.replace("%", "%25"))
+    p.wait_for_selector("#panel-name")
+    assert p.inner_text("#panel-name").lower() == "vargo"
 
 
 # ---- search and routing
-def test_search_from_another_view_shows_the_board_and_keeps_typing(ctx, url):
-    p = open_page(ctx, url, path="#/results")
+def test_search_from_another_view_shows_the_board_and_keeps_typing(ctx, env):
+    p = open_page(ctx, env, path="#/results")
     p.locator("#search").press_sequentially("vargo")
     p.wait_for_timeout(100)
-    assert p.locator("#view-research").is_visible() and p.locator(".row").count() == 2
+    assert p.locator("#view-research").is_visible()
     assert p.evaluate("document.activeElement.id") == "search" and p.input_value("#search") == "vargo"
 
 
-def test_phone_search_closes_by_touch_and_keyboard(ctx, url):
-    p = open_page(ctx, url, size=PHONE)
+def test_enter_in_search_lands_on_the_first_row(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    p.fill("#search", "brandr")
+    p.keyboard.press("Enter")
+    assert p.evaluate("document.activeElement.classList.contains('row-open')")
+
+
+def test_phone_search_closes_by_touch_and_keyboard(ctx, env):
+    p = open_page(ctx, env, size=PHONE)
     p.click("#search-toggle")
-    assert p.locator(".sample-tag").first.is_visible() and p.locator(".brand").is_visible()
-    box = p.locator("#search-toggle").bounding_box()
-    hit = p.evaluate("([x, y]) => document.elementFromPoint(x, y).closest('#search-toggle') !== null", [box["x"] + 20, box["y"] + 20])
-    assert hit
     p.keyboard.press("Escape")
     assert p.evaluate("document.activeElement.id") == "search-toggle"
     assert p.get_attribute("#search-toggle", "aria-expanded") == "false" and not p.locator("#search").is_visible()
 
 
-@pytest.mark.parametrize("bad", ["#/research/p/%E0%A4%A", "#/research/p/%"])
-def test_bad_link_still_boots(ctx, url, bad):
-    p = open_page(ctx, url, path=bad)
-    assert p.locator(".row").count() > 5 and p.errors == []
-
-
-@pytest.mark.parametrize("key,value", [
-    ("ws:slip:v1", "{}"), ("ws:slip:v1", '{"legs":[{"id":1}],"check":7}'), ("ws:slip:v1", "not json"),
-    ("ws:receipts:v1", '{"a":1}'), ("ws:receipts:v1", '[{"id":"x","timeline":[{"at":"nope"}]}]'),
-    ("ws:views:v1", '[{"id":"x"}]'), ("ws:views:v1", '[{"id":"x","name":"v","state":{"chip":"all","f":{"sort":"nope"}}}]')])
-def test_bad_saved_data_still_boots(ctx, url, key, value):
-    ctx.add_init_script(f"localStorage.setItem({json.dumps(key)}, {json.dumps(value)});")
-    p = open_page(ctx, url)
-    assert p.locator(".row").count() > 5 and p.errors == []
-
-
-def test_saved_markup_stays_text(ctx, url):
-    evil = "<img src=x onerror=window.__xss=1>"
-    p = open_page(ctx, url)
-    slip = stored(p, "ws:slip:v1")
-    slip["legs"][0]["player"] = evil
-    slip["legs"][0]["stat_label"] = evil
-    slip["check"] = {"at": p.evaluate("new Date().toISOString()"), "sig": ";".join(l["id"] for l in slip["legs"]), "unknown": 0, "fails": [0, 0, 0, 0, 0],
-                     "legs": {l["id"]: {"ok": False, "problems": [{"c": 1, "text": evil}]} for l in slip["legs"]},
-                     "entries": {"prizepicks|cs2": {"ok": False, "problems": [{"c": 3, "text": evil}]}, "underdog|nba": {"ok": False, "problems": []}}}
-    receipt = {"id": "x", "slip_id": "y", "sport": "cs2", "player": evil, "matchup": evil, "stat_label": evil, "period_label": evil, "platform": "underdog", "platform_label": evil,
-               "side": "over", "line": 1, "line_type": "standard", "offer_revision": evil, "revision_kind": "exact", "model_version": evil, "forecast_id": evil,
-               "forecast_at": "2026-01-01T00:00:00Z", "displayed_p": 0.5, "tracked_at": "2026-01-01T00:00:00Z", "final": None,
-               "timeline": [{"at": "2026-01-01T00:00:00Z", "kind": evil, "text": evil}]}
-    p.evaluate("""([s, r]) => { localStorage.setItem('ws:slip:v1', JSON.stringify(s)); localStorage.setItem('ws:receipts:v1', JSON.stringify([r])); }""", [slip, receipt])
-    p.reload()
-    p.wait_for_timeout(350)
-    go(p, "#/picks/x")
-    p.wait_for_timeout(200)
-    assert p.evaluate("window.__xss") is None and p.locator("img[src=x]").count() == 0
-    # a line that is not a number never reaches the page at all
-    slip["legs"][0]["line"] = evil
-    p.evaluate("s => localStorage.setItem('ws:slip:v1', JSON.stringify(s))", slip)
-    p.reload()
-    p.wait_for_timeout(350)
-    assert p.evaluate("window.__xss") is None and p.errors == []
-
-
 # ---- keyboard
-def test_sport_chip_keeps_focus(ctx, url):
-    p = open_page(ctx, url)
+def test_sport_chip_keeps_focus(ctx, env):
+    p = open_page(ctx, env)
     enter(p, '[data-fk="chip:nba"]')
     assert active(p) == "BUTTON:chip:nba"
 
 
-@pytest.mark.parametrize("size,sel", [(DESK, RECHECK), (DESK, '#view-slips [data-act="recheck"]')])
-def test_recheck_keeps_focus(ctx, url, size, sel):
-    p = open_page(ctx, url, size=size, path="#/slips" if "view-slips" in sel else "")
-    enter(p, sel)
-    p.wait_for_timeout(100)
-    assert active(p) == "BUTTON:recheck:"
-    assert p.evaluate("document.activeElement.closest('#view-slips,#rail-body').id") == ("view-slips" if "view-slips" in sel else "rail-body")
-    p.wait_for_timeout(750)
-    assert active(p) == "BUTTON:recheck:"
-
-
-def test_recheck_in_the_sheet_keeps_focus_and_shows_the_toast(ctx, url):
-    p = open_page(ctx, url, size=PHONE)
-    p.click("#slip-fab")
-    enter(p, '#sheet-body [data-act="recheck"]')
-    p.wait_for_timeout(800)
-    assert active(p) == "BUTTON:recheck:"
-    toast = p.locator("#slip-dialog .toast")
-    assert "Recheck done" in toast.inner_text() and toast.is_visible()
-
-
-@pytest.mark.parametrize("sel,want", [
-    ('[data-fk="view:p-nba"]', "BUTTON:view:p-nba"),
-    ('#rail-body .leg-x', "BUTTON:recheck:"),
-    ('#rail-body [data-act="slip-clear"]', "SPAN:slip-head")])
-def test_slip_and_view_actions_keep_focus(ctx, url, sel, want):
-    p = open_page(ctx, url)
-    enter(p, sel)
-    assert active(p) == want
-
-
-def test_add_in_panel_keeps_focus(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/cs2.cs2-e1.vargo.kills.maps12.39.5")
-    enter(p, '[data-act="p-add"]')
-    assert active(p) == "BUTTON:p-add:" and p.get_attribute('[data-act="p-add"]', "aria-disabled") == "true"
-
-
-def test_board_retry_and_reset_keep_focus(ctx, url):
-    p = open_page(ctx, url)
-    force(p, "unavailable")
-    enter(p, '#board-list [data-act="retry"]')
-    assert active(p) == "DIV:board-list"
-    p.wait_for_timeout(800)
-    assert active(p) == "DIV:board-list"
-    p.click("#account summary")
-    enter(p, "#reset-sample")
-    assert p.evaluate("document.activeElement.tagName") == "SUMMARY"
-
-
-def test_escape_returns_to_the_control_that_opened_the_panel(ctx, url):
-    p = open_page(ctx, url)
-    add = '.row[data-row="nba.nba-e2.moon.pts.full_game.18.5"] .add'
-    p.focus(add)
+def test_escape_returns_to_the_control_that_opened_the_panel(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    add_btn = '.row[data-row="nba.nba-e2.moon.pts.full_game.18.5"] .add'
+    p.focus(add_btn)
     p.keyboard.press("Enter")
     p.wait_for_timeout(100)
     p.keyboard.press("Escape")
-    p.wait_for_timeout(100)
+    p.wait_for_timeout(150)
     assert active(p) == "BUTTON:row-choose:nba.nba-e2.moon.pts.full_game.18.5"
 
 
-def test_phone_panel_is_modal_and_keeps_tab_inside(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/" + VARGO, size=PHONE)
+def test_phone_panel_is_modal_and_keeps_tab_inside(ctx, env):
+    p = open_page(ctx, env, size=PHONE)
+    panel(p, "vargo")
     assert p.get_attribute("#panel", "aria-modal") == "true"
-    for _ in range(45):
+    for _ in range(30):
         p.keyboard.press("Tab")
         assert p.evaluate("document.activeElement === document.body || !!document.activeElement.closest('#panel')")
-    p.set_viewport_size(DESK)
-    p.wait_for_timeout(200)
-    assert p.get_attribute("#panel", "aria-modal") == "false"
 
 
-def test_account_menu_leaves_on_escape_and_tab(ctx, url):
-    p = open_page(ctx, url)
-    p.click("#account summary")
-    p.keyboard.press("Escape")
-    assert p.evaluate("document.getElementById('account').open") is False and p.evaluate("document.activeElement.tagName") == "SUMMARY"
-    p.keyboard.press("Enter")
-    for _ in range(5):
-        p.keyboard.press("Tab")
-    assert p.evaluate("document.getElementById('account').open") is False
-
-
-def test_skip_link_keeps_the_view(ctx, url):
-    p = open_page(ctx, url, path="#/results")
+def test_skip_link_keeps_the_view(ctx, env):
+    p = open_page(ctx, env, path="#/results")
     p.keyboard.press("Tab")
     p.keyboard.press("Enter")
     assert p.locator("#view-results").is_visible() and "#/results" in p.url and active(p) == "H1:results-h"
 
 
-def test_focus_rings_show(ctx, url):
-    p = open_page(ctx, url, path="#/research/p/" + VARGO)
-    p.focus(".tab[aria-selected=true]")
-    p.keyboard.press("Tab")
-    assert p.evaluate("document.activeElement.id") == "p-body"
-    assert p.evaluate("getComputedStyle(document.activeElement).outlineStyle") == "solid"
-    go(p, "#/research/p/" + VARGO + "/history")
-    p.wait_for_timeout(100)
-    p.focus('[data-fk="hist-n:5"]')
-    p.keyboard.press("ArrowLeft")
-    p.keyboard.press("Tab")
-    p.keyboard.press("Shift+Tab")
-    for sel in ('[data-fk="hist-n:5"]', '[data-fk="hist-n:10"]', ".tab[aria-selected=true]"):
-        p.focus(sel)
-        p.keyboard.press("Shift+Tab")
-        p.keyboard.press("Tab")
-        assert p.evaluate("(() => { const c = getComputedStyle(document.activeElement); return c.outlineStyle === 'solid' && parseFloat(c.outlineOffset) < 0; })()"), sel
+def test_filter_drawer_controls(ctx, env):
+    p = open_page(ctx, env)
+    p.click("#open-filters")
+    assert p.locator("#filters-body .view-link").first.is_visible()
+    box = p.locator("#filters-dialog").bounding_box()
+    assert box["x"] + box["width"] == DESK["width"]
+    p.click('[data-act="f-set"][data-id="day:all"]')
+    assert p.inner_text("#filters-done").startswith("Show ")
+    p.click("#filters-done")
+    assert not p.locator("#filters-dialog").is_visible()
 
 
-# ---- naming
-def test_control_names_carry_what_they_act_on(ctx, url):
-    p = open_page(ctx, url)
-    p.select_option("#f-day", "all")
-    add = p.locator('.row[data-row="cs2.cs2-e3.sable.kills.maps12.36.5"] .add')
-    assert add.get_attribute("aria-label") == "sable: Game started"
-    assert "Scout" not in p.get_attribute('.row[data-row="nba.nba-e2.moon.pts.full_game.18.5"] .row-open', "aria-label")
-    pressed = p.locator(f'.row[data-row="{VARGO}"] .add')
-    assert pressed.get_attribute("aria-pressed") == "true" and pressed.get_attribute("aria-label").startswith("Add ")
-    assert "feed is behind" in p.get_attribute('[data-fk="chip:lol"]', "aria-label")
-    assert p.locator(".hist-n[aria-label], .nav-count[aria-label]").count() == 0
-    assert "Owner" in p.get_attribute("#account summary", "aria-label")
+def test_saved_view_goes_to_the_account(ctx, env):
+    p = open_page(ctx, env)
+    p.click("#open-filters")
+    p.fill("#view-name", "Mine")
+    p.click("#save-view button")
+    p.wait_for_timeout(1000)
+    assert [v["name"] for v in state(env)["views"]] == ["Mine"]
+
+
+def test_phone_filter_drawer_fills_the_width(ctx, env):
+    p = open_page(ctx, env, size=PHONE)
+    p.click("#open-filters")
+    box = p.locator("#filters-dialog").bounding_box()
+    assert box["x"] == 0 and box["width"] == PHONE["width"]
 
 
 # ---- layout and contrast
-@pytest.mark.parametrize("width", [761, 768, 800, 900, 960, 961, 1024, 1180, 1200, 1280, 1366, 1440])
-@pytest.mark.parametrize("group", ["sport", "market", "side", "version"])
-def test_results_never_scrolls_sideways(ctx, url, width, group):
-    p = open_page(ctx, url, path="#/results", size={"width": width, "height": 800})
-    p.click(f'[data-act="group"][data-id="{group}"]')
-    w = p.evaluate("(() => { const v = document.getElementById('view-results'); return [v.scrollWidth, v.clientWidth]; })()")
-    assert w[0] <= w[1]
+@pytest.mark.parametrize("width", [360, 390, 768, 1024, 1200, 1280, 1440, 1920])
+def test_no_page_scrolls_sideways(ctx, env, width):
+    p = open_page(ctx, env, size={"width": width, "height": 800})
+    all_days(p)
+    for h in ("#/research", "#/slips", "#/picks", "#/results"):
+        go(p, h)
+        w = p.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
+        assert w[0] <= w[1], (h, w)
+        over = p.evaluate("""() => [...document.querySelectorAll('#view-results,#view-picks,#view-slips,#board-list')].filter((v) => v.offsetParent && v.scrollWidth > v.clientWidth + 1).map((v) => v.id)""")
+        assert over == [], (h, over)
+
+
+@pytest.mark.parametrize("width", [1100, 1200, 1280, 1366])
+def test_results_table_keeps_its_header_on_normal_desktops(ctx, env, width):
+    p = open_page(ctx, env, path="#/results", size={"width": width, "height": 800})
+    p.wait_for_selector("#view-results .res-sec.first thead")
+    assert p.locator("#view-results .res-sec.first thead").is_visible()
 
 
 @pytest.mark.parametrize("width", [768, 900, 1180, 1280])
-def test_prop_identity_is_not_clipped(ctx, url, width):
-    p = open_page(ctx, url, size={"width": width, "height": 800})
-    p.select_option("#f-day", "all")
-    cut = p.evaluate("""() => [...document.querySelectorAll('.pl-sub, .c-line span, .pl-name')].filter(e => e.scrollWidth > e.clientWidth).map(e => e.textContent)""")
-    assert cut == []
+def test_chips_and_columns_do_not_collide(ctx, env, width):
+    p = open_page(ctx, env, size={"width": width, "height": 800})
+    all_days(p)
+    bad = p.evaluate("""() => { const out = [];
+      document.querySelectorAll('.row').forEach((r) => { const kids = [...r.children].filter((c) => c.tagName === 'DIV' && c.offsetParent);
+        for (let i = 1; i < kids.length; i++) { const a = kids[i - 1].getBoundingClientRect(), b = kids[i].getBoundingClientRect(); if (a.right > b.left + 1 && Math.abs(a.top - b.top) < 4) out.push(r.dataset.row); } });
+      return out; }""")
+    assert bad == []
 
 
-def test_phone_targets_are_44(ctx, url):
-    p = open_page(ctx, url, size=PHONE, path="#/research/p/" + VARGO)
+def test_phone_targets_are_44(ctx, env):
+    p = open_page(ctx, env, size=PHONE)
+    panel(p, "vargo")
     small = p.evaluate("""() => [...document.querySelectorAll('#panel button')].filter(b => b.offsetParent && b.getBoundingClientRect().height < 44).map(b => b.className)""")
     assert small == []
     go(p, "#/research")
     p.wait_for_timeout(100)
-    small = p.evaluate("""() => [...document.querySelectorAll('.add, .chip, .more-btn')].filter(b => b.offsetParent).filter(b => b.getBoundingClientRect().height < 44).map(b => b.className)""")
+    small = p.evaluate("""() => [...document.querySelectorAll('.add, .chip, .more-btn')].filter(b => b.offsetParent && b.getBoundingClientRect().height < 44).map(b => b.className)""")
     assert small == []
     assert p.evaluate("""() => { const lim = document.getElementById('slip-fab').getBoundingClientRect().top; return [...document.querySelectorAll('.row')].filter(r => r.getBoundingClientRect().bottom <= lim).length; }""") >= 6
-    go(p, "#/slips")
-    p.wait_for_timeout(100)
-    small = p.evaluate("""() => [...document.querySelectorAll('#view-slips button')].filter(b => b.offsetParent).filter(b => { const r = b.getBoundingClientRect(); return r.height < 44; }).map(b => b.className)""")
-    assert small == []
+
+
+def test_toast_never_covers_the_slip_action_on_a_phone(ctx, env):
+    p = open_page(ctx, env, size=PHONE)
+    assert p.evaluate("getComputedStyle(document.getElementById('toast')).top") != "auto"
 
 
 def luminance(rgb):
@@ -567,30 +861,64 @@ def luminance(rgb):
     return 0.2126 * ch(rgb[0]) + 0.7152 * ch(rgb[1]) + 0.0722 * ch(rgb[2])
 
 
-def test_off_and_stale_rows_keep_contrast(ctx, url):
-    p = open_page(ctx, url)
-    p.select_option("#f-day", "all")
-    force(p, "stale")
-    samples = p.evaluate("""() => {
-      const out = [];
-      document.querySelectorAll('.row.is-off, .row.is-stale').forEach((row) => {
-        row.querySelectorAll('.bk, .s-tag, .pl-sub, .pl-name, .c-line b, .c-line span, .hist-n, .sc-sub, .verdict, .g-letter, .g-est, .pct').forEach((e) => {
-          let o = 1, n = e; while (n && n !== row.parentElement) { o *= +getComputedStyle(n).opacity; n = n.parentElement; }
-          out.push([e.className, o, getComputedStyle(e).color]);
-        });
-      });
-      return out;
-    }""")
+def test_off_rows_keep_contrast(ctx, env):
+    past = iso(datetime.now(timezone.utc) + timedelta(minutes=1))
+    env.by("vargo").update(lock_at=past, start=past, match_start=past)
+    p = open_page(ctx, env)
+    all_days(p)
+    p.evaluate("""() => { document.querySelectorAll('.row').forEach((r) => r.classList.add('is-off')); }""")
+    samples = p.evaluate("""() => { const out = [];
+      document.querySelectorAll('.row.is-off').forEach((row) => row.querySelectorAll('.pl-sub, .pl-name, .c-line b, .hist-n, .bc').forEach((e) => {
+        let o = 1, n = e; while (n && n !== row.parentElement) { o *= +getComputedStyle(n).opacity; n = n.parentElement; } out.push([e.className, o, getComputedStyle(e).color]); }));
+      return out; }""")
     assert samples
     for name, opacity, colour in samples:
         rgb = [float(x) for x in colour[colour.index("(") + 1:-1].split(",")[:3]]
         assert (luminance([c * opacity for c in rgb]) + 0.05) / 0.05 >= 4.5, (name, colour, opacity)
 
 
-def test_no_runtime_errors_across_views(ctx, url):
-    p = open_page(ctx, url)
-    for h in ("#/slips", "#/picks", "#/results", "#/research/p/" + VARGO, "#/research"):
+def test_one_filled_gold_action_per_view(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    add(p, "vargo", "prizepicks")
+    add(p, "orlo", "prizepicks")
+    p.keyboard.press("Escape")
+    ready(p)
+    assert p.locator("#rail-body .btn-gold").count() == 1
+
+
+def test_no_demo_or_engineering_words_reach_the_page(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    for h in ("#/research", "#/slips", "#/picks", "#/results"):
         go(p, h)
-    for state in ("loading", "stale", "unavailable", "withdrawn", "ok"):
-        force(p, state)
+        p.wait_for_timeout(120)
+        text = p.evaluate("document.body.innerText")
+        for bad in ("Recheck", "Derived id", "Offer revision", "Invented for this preview", "EV stays hidden", "Saved in this browser", "sample-cs2", "Sample live row", "Withdrawn", "Unknown"):
+            assert bad not in text, (h, bad)
+
+
+def test_no_runtime_errors_across_views(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    for t in ("history", "books", "context", "overview"):
+        p.click(f'#tab-{t}')
+    for h in ("#/slips", "#/picks", "#/results", "#/research"):
+        go(p, h)
     assert p.errors == []
+
+
+def test_page_never_calls_the_grader(ctx, env):
+    seen = []
+    ctx.on("request", lambda r: seen.append(r.url))
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    assert not [u for u in seen if "/api/grade" in u or "/api/slip_log" in u] and env.grades == 0

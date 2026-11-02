@@ -1,6 +1,6 @@
 """Research workspace preview (/preview/workspace): off by default, on with SCOUT_WORKSPACE_PREVIEW or for the owner, its
-assets served only through fixed routes, and every existing page byte-identical with the route in place. The prototype is
-sample data only; the wording tests hold it to the owner's site rules."""
+assets served only through fixed routes, and every existing page byte-identical with the route in place. The wording tests
+hold it to the owner's site rules."""
 import http.client
 import json
 import re
@@ -180,17 +180,17 @@ const D = window.WORKSPACE_DATA, bad = [];
 const sports = new Set();
 for (const r of D.records) {
   sports.add(r.sport);
-  for (const k of ["sport", "event", "player", "market", "offer", "scout", "history", "state", "consensus"]) if (!(k in r)) bad.push("no " + k);
-  for (const k of ["id", "id_kind", "label", "competition", "start_utc", "lock_utc", "status"]) if (!(k in r.event)) bad.push("event " + k);
+  if (r.sample !== true) bad.push("not marked sample: " + r.key);
+  for (const k of ["sport", "event", "player", "market", "offer", "scout", "history", "state"]) if (!(k in r)) bad.push("no " + k);
+  for (const k of ["id", "id_kind", "label", "teams", "competition", "start_utc", "lock_utc", "status"]) if (!(k in r.event)) bad.push("event " + k);
   for (const k of ["id", "name", "team", "opponent", "role"]) if (!(k in r.player)) bad.push("player " + k);
   for (const k of ["stat", "stat_label", "period", "period_label", "line_type"]) if (!(k in r.market)) bad.push("market " + k);
-  for (const k of ["platform", "platform_label", "offer_id", "revision", "revision_kind", "line", "over", "under", "seen_at", "checked_at", "link"]) if (!(k in r.offer)) bad.push("offer " + k);
-  for (const k of ["side", "projection", "range80", "p_over", "p_under", "p_push", "p_side", "grade", "units", "hold", "model_version", "forecast_id", "forecast_at", "validation"]) if (!(k in r.scout)) bad.push("scout " + k);
-  for (const k of ["kind", "reason", "board_at", "retry_at"]) if (!(k in r.state)) bad.push("state " + k);
+  for (const k of ["platform", "platform_label", "offer_id", "revision", "revision_kind", "line", "over", "under", "seen_at"]) if (!(k in r.offer)) bad.push("offer " + k);
+  for (const k of ["side", "projection", "range80", "p_over", "p_under", "p_push", "p_side", "grade", "units", "hold", "model_version", "forecast_at", "validation"]) if (!(k in r.scout)) bad.push("scout " + k);
+  for (const k of ["kind", "reason"]) if (!(k in r.state)) bad.push("state " + k);
   const total = r.scout.p_over + r.scout.p_under + r.scout.p_push;
   if (Math.abs(total - 1) > 1e-9) bad.push(r.key + " chances sum to " + total);
   if (["nba", "nfl"].includes(r.sport) && (r.scout.grade || !r.scout.hold)) bad.push(r.key + " sports row with a letter or no hold");
-  if (r.offer.link) bad.push(r.key + " sample offer with a live link");
   const h = r.history;
   if (h.l10) {
     if (h.l10.over + h.l10.under + h.l10.push !== h.l10.n) bad.push(r.key + " L10 does not add up");
@@ -200,41 +200,28 @@ for (const r of D.records) {
   if (r.sport === "lol" && (h.l10 || h.l5 || h.recent.results)) bad.push(r.key + " LoL row with per-game history");
 }
 const letter = (p) => (p >= 0.8 ? "A+" : p >= 0.74 ? "A" : p >= 0.68 ? "A-" : p >= 0.63 ? "B+" : p >= 0.57 ? "B" : p >= 0.55 ? "B-" : null);
-const stake = (p) => (p >= 0.8 ? 3 : p >= 0.74 ? 2 : p >= 0.68 ? 1.5 : p >= 0.63 ? 1 : p >= 0.55 ? 0.5 : 0);
 for (const r of D.records) {
   const s = r.scout;
   if (s.hold || !s.side) continue;
   if (s.grade !== letter(s.p_side)) bad.push(r.key + " shows " + s.grade + " at " + s.p_side);
-  if (s.units !== stake(s.p_side) && !s.stake_reason) bad.push(r.key + " stake " + s.units + " with no reason");
   if (s.grade && !s.units && !s.stake_reason) bad.push(r.key + " graded 0U with no reason");
 }
-for (const row of new Set(D.records.map((r) => r.key))) {
-  const offers = D.records.filter((r) => r.key === row), c = offers[0].consensus;
-  if (c && c.n !== offers.filter((o) => o.offer.over.payout != null && o.offer.under.payout != null).length) bad.push(row + " consensus counts books not listed");
-}
-for (const id of new Set(D.receipts.map((r) => r.slip_id))) {
-  const legs = D.receipts.filter((r) => r.slip_id === id);
-  if (new Set(legs.map((r) => r.sport + r.platform + r.tracked_at)).size !== 1) bad.push(id + " mixes sport, platform or tracking time");
-  if (legs.length < D.platforms[legs[0].platform].min) bad.push(id + " is below the platform minimum");
-}
-for (const r of D.records) if (r.sport === "lol" && r.offer.seen_at > D.feeds.lol.at) bad.push(r.key + " seen after its stale feed");
 for (const tag of ["perf-", "lol-1", "-est-", "cm-", "Live model"]) if (JSON.stringify(D).includes(tag)) bad.push("real model name in the sample: " + tag);
-console.log(JSON.stringify({ bad, sports: [...sports].sort(), records: D.records.length, withdrawn: D.records.filter((r) => r.state.kind === "withdrawn").length,
-  push: D.records.filter((r) => r.scout.p_push > 0).length, unknownPayout: D.records.filter((r) => r.offer.over.payout === null).length,
-  corrections: D.receipts.filter((r) => r.timeline.some((t) => t.kind === "correction")).length, pushes: D.receipts.filter((r) => r.timeline.some((t) => t.result === "push")).length }));
+console.log(JSON.stringify({ bad, sports: [...sports].sort(), records: D.records.length, push: D.records.filter((r) => r.scout.p_push > 0).length,
+  corrections: D.receipts.filter((r) => r.timeline.some((t) => t.kind === "correction")).length, pushes: D.receipts.filter((r) => r.timeline.some((t) => t.result === "push")).length,
+  cs2: D.records.filter((r) => r.sport === "cs2").length + D.receipts.filter((r) => r.sport === "cs2").length + D.results.filter((r) => r[0] === "cs2").length }));
 """
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_sample_records_match_the_display_row_contract(tmp_path):
+def test_sample_records_are_lol_nba_nfl_only_and_match_the_display_row_contract(tmp_path):
     script = tmp_path / "check.js"
     script.write_text(NODE_CHECK, encoding="utf-8")
     out = subprocess.run(["node", str(script), str(WEB / "workspace-data.js")], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     r = json.loads(out.stdout)
-    assert r["bad"] == [] and r["sports"] == ["cs2", "lol", "nba", "nfl"]
-    assert r["records"] >= 30 and r["withdrawn"] >= 1 and r["push"] >= 1 and r["unknownPayout"] >= 1
-    assert r["corrections"] >= 1 and r["pushes"] >= 1
+    assert r["bad"] == [] and r["sports"] == ["lol", "nba", "nfl"] and r["cs2"] == 0
+    assert r["records"] >= 15 and r["push"] >= 1 and r["corrections"] >= 1 and r["pushes"] >= 1
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")

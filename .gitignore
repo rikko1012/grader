@@ -34,3 +34,6 @@ slips_recommended.jsonl
 
 # Local regression runs (including Windows socket-enabled runs).
 .test-tmp/
+
+# research workspace store (DATA_DIR on the server, the repo folder on a local run)
+workspace.db*

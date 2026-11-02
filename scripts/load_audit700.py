@@ -3,14 +3,19 @@ process, fixture upstreams only (no network, never production). Extends scripts/
 card (/api/grade), match compare, results, line check, veto and search routes, and records response bytes and
 compression, so per-request heavy work and uncompressed bodies show up.
 
-usage: python scripts/load_audit700.py <code_dir> [members=700]
+usage: python scripts/load_audit700.py <code_dir> [members=700] [workspace]
+"workspace" runs the research workspace API instead (board, line, recheck, track, mine, state, results) as one signed-in member
+per thread, on fixture rows backed by a seeded pick log, and fails loudly on a 5xx, a grade call, more than one board build
+per 5 s, or a lost receipt.
 Stubs (load harness only, never in the server): cs2_scout.grade sleeps 80 ms and returns a ~60 KB card (a real card
 with ladder / recent maps / comparison is that size); match_compare sleeps 50 ms and returns ~25 KB; results_payload
 returns ~40 KB. Every member sends Accept-Encoding: gzip like a browser.
 Prints one line: RESULT {json}."""
+import gzip
 import http.client
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -21,12 +26,15 @@ from pathlib import Path
 
 code = sys.argv[1]
 MEMBERS = int(sys.argv[2]) if len(sys.argv) > 2 else 700
+WORKSPACE = len(sys.argv) > 3 and sys.argv[3] == "workspace"
 sys.path.insert(0, code)
 os.chdir(code)
 tmp = tempfile.mkdtemp(dir=os.path.dirname(os.path.abspath(__file__)))
 os.environ["CS2_DATA_DIR"] = tmp
 for f in ("SPORTS_UI", "SPORTS_API", "SPORTS_INGEST", "SPORTS_TRAIN"):
     os.environ.pop(f, None)
+if WORKSPACE:
+    os.environ["SCOUT_WORKSPACE_PREVIEW"] = "1"
 
 import hltv_store  # noqa: E402
 hltv_store.DB_PATH = Path(tmp) / "hltv_store.db"
@@ -156,6 +164,96 @@ def rss():
         return None
 
 
+def pct(xs, q):
+    xs = sorted(xs)
+    return round(xs[min(len(xs) - 1, int(q * len(xs)))] * 1000, 1)
+
+
+def workspace_run():
+    """Every member loads the board, researches a line, checks and tracks a two-pick entry, reads the receipts and saves the slip."""
+    from datetime import datetime, timedelta, timezone
+    from tests.workspace_fixture import Fixture, iso, leg_of, row
+    import workspace_api
+    api = "/preview/workspace/api/"
+    fx = Fixture(tmp)
+    start = iso(datetime.now(timezone.utc) + timedelta(hours=4))
+    fx.rows = [row(f"11111111-0000-4000-8000-{m * 2 + k:012d}", "underdog", f"p{m}x{k}", f"T{m}a", f"T{m}b", 30.5, "More", round(0.58 + 0.01 * (m % 9), 3), 900 + m, start)
+               for m in range(30) for k in range(2)]
+    fx.install(setattr)
+    for name, val in (("_RESULTS", {}), ("_INFLIGHT", {}), ("_GB", {})):
+        setattr(server, name, val)
+    server.hltv.recent_series = lambda *a, **k: []
+    workspace_api.reset()
+
+    def req(method, name, member, body=None):
+        t0 = time.time()
+        data = json.dumps(body).encode() if body is not None else None
+        for attempt in range(20):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=120)
+            try:
+                c.request(method, api + name, body=data, headers={"Cookie": f"{whop_auth.COOKIE}=good-{member}", "Accept-Encoding": "gzip", "Content-Type": "application/json"})
+                break
+            except OSError:
+                REFUSED[0] += 1
+                c.close()
+                time.sleep(0.25 * (attempt + 1))
+        r = c.getresponse()
+        raw = r.read()
+        enc = r.getheader("Content-Encoding") or ""
+        c.close()
+        return r.status, time.time() - t0, len(raw), enc, raw
+
+    st, _, _, _, raw = req("GET", "board", "warm")
+    assert st == 200, st
+    records = {r["player"]["name"]: r for r in json.loads(gzip.decompress(raw) if raw[:1] == bytes([0x1f]) else raw)["records"]}
+    names = sorted(records)
+    start_boards, t_start = fx.boards, time.time()
+
+    def member(i):
+        who, out = f"u{i}", []
+        a, b = records[names[i % 30 * 2]], records[names[(i % 29 + 1 + i % 30) % 30 * 2]]
+        if a["event"]["id"] == b["event"]["id"]:
+            b = records[names[(i % 30 + 1) % 30 * 2]]
+        legs = [leg_of(a), leg_of(b)]
+        steps = [("GET", "me", None), ("GET", "board", None), ("GET", f"line?book=underdog&id={a['offer']['offer_id']}", None), ("GET", "state", None),
+                 ("POST", "recheck", {"idem": f"check-{i:06d}", "legs": legs, "entry_types": {"underdog": "standard"}}),
+                 ("POST", "track", {"idem": f"track-{i:06d}", "entry_key": "underdog", "entry_type": "standard", "legs": legs}),
+                 ("GET", "mine", None), ("POST", "state", {"rev": 0, "slip": {"legs": legs, "types": {}}}), ("GET", "state", None), ("GET", "results", None)]
+        for method, name, body in steps:
+            st, dt, n, enc, _ = req(method, name, who, body)
+            out.append((method + " " + name.split("?")[0], st, dt, n, enc))
+        return out
+
+    r0 = rss()
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=MEMBERS) as ex:
+        res = [x for r in ex.map(member, range(MEMBERS)) for x in r]
+    wall = time.time() - t0
+    r1 = rss()
+    builds = (fx.boards - start_boards) / 2                     # one build reads both platforms
+    store = workspace_api.store()
+    diag = store.diagnostics()
+    lat = [x[2] for x in res]
+    rep = {"mode": "workspace", "members": MEMBERS, "requests": len(res), "wall_s": round(wall, 2), "connect_retries": REFUSED[0], "rss_before_after_peak_mb": [r0, r1],
+           "errors_5xx": sum(1 for x in res if x[1] >= 500), "non_200": sum(1 for x in res if x[1] != 200), "p50_ms": pct(lat, .5), "p95_ms": pct(lat, .95), "p99_ms": pct(lat, .99),
+           "board_builds": builds, "allowed_builds": int((time.time() - t_start) / 5) + 2, "grade_calls": fx.grades, "receipts": diag["counts"]["receipts"],
+           "expected_receipts": 2 * MEMBERS, "slips": diag["counts"]["slips"], "states": diag["counts"]["member_state"], "routes": {}}
+    for p in sorted({x[0] for x in res}):
+        rows = [x for x in res if x[0] == p]
+        codes = {}
+        for x in rows:
+            codes[x[1]] = codes.get(x[1], 0) + 1
+        rep["routes"][p] = {"n": len(rows), "codes": codes, "p50_ms": pct([x[2] for x in rows], .5), "p99_ms": pct([x[2] for x in rows], .99),
+                            "avg_kb": round(sum(x[3] for x in rows) / len(rows) / 1e3, 1), "gzip_share": round(sum(1 for x in rows if x[4] == "gzip") / len(rows), 2)}
+    rep["pass"] = (rep["errors_5xx"] == 0 and rep["grade_calls"] == 0 and rep["board_builds"] <= rep["allowed_builds"] and rep["receipts"] == rep["expected_receipts"])
+    print("RESULT " + json.dumps(rep))
+    workspace_api.reset()
+    shutil.rmtree(tmp, ignore_errors=True)
+    sys.exit(0 if rep["pass"] else 1)
+
+
+if WORKSPACE:
+    workspace_run()
 for _ in range(10):
     call("/api/moneylines", "warm")
 r0 = rss()
@@ -164,11 +262,6 @@ with ThreadPoolExecutor(max_workers=MEMBERS) as ex:
     res = [x for r in ex.map(member, range(MEMBERS)) for x in r]
 wall = time.time() - t0
 r1 = rss()
-
-
-def pct(xs, q):
-    xs = sorted(xs)
-    return round(xs[min(len(xs) - 1, int(q * len(xs)))] * 1000, 1)
 
 
 lat = [x[2] for x in res]

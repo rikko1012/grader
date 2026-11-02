@@ -26,59 +26,34 @@
       <input id="search" type="search" placeholder="Search player, team, game" autocomplete="off" spellcheck="false">
       <kbd aria-hidden="true">/</kbd>
     </div>
-    <span class="sample-tag" title="Every player, team, line and result on this page is invented sample data.">SAMPLE DATA</span>
     <button class="icon-btn search-toggle" id="search-toggle" type="button" aria-label="Search" aria-expanded="false">
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
     </button>
-    <details class="account" id="account">
-      <summary aria-label="Owner account and preview tools"><span class="avatar" aria-hidden="true">OW</span><span class="account-name">Owner</span></summary>
-      <div class="account-menu">
-        <p class="menu-eyebrow">Preview tools</p>
-        <label class="field">
-          <span>Show every panel as</span>
-          <select id="force-state">
-            <option value="ok">Normal</option>
-            <option value="loading">Loading</option>
-            <option value="stale">Stale</option>
-            <option value="unavailable">Unavailable</option>
-            <option value="withdrawn">Withdrawn</option>
-          </select>
-        </label>
-        <button class="btn btn-quiet" id="reset-sample" type="button">Reset sample slip and picks</button>
-        <p class="menu-note">Your slip, tracked picks and saved views are kept in this browser (localStorage) for the prototype. Nothing is sent to the server.</p>
-      </div>
-    </details>
+    <p class="account" id="account"><span class="avatar" id="avatar" aria-hidden="true"></span><span class="account-name" id="account-name"></span></p>
   </header>
 
   <nav class="nav" id="nav" aria-label="Workspace">
     <ul class="nav-list">
-      <li><a href="#/research" data-nav="research"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Research</span></a></li>
-      <li><a href="#/slips" data-nav="slips"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg><span>Slips</span></a></li>
-      <li><a href="#/picks" data-nav="picks"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg><span>My picks</span></a></li>
-      <li><a href="#/results" data-nav="results"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Results</span></a></li>
+      <li><a href="#/research" data-nav="research" title="Research"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sr">Research</span></a></li>
+      <li><a href="#/slips" data-nav="slips" title="Slips"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg><span class="sr">Slips</span></a></li>
+      <li><a href="#/picks" data-nav="picks" title="My picks"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg><span class="sr">My picks</span></a></li>
+      <li><a href="#/results" data-nav="results" title="Results"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="sr">Results</span></a></li>
     </ul>
-    <section class="views-block" aria-labelledby="views-h">
-      <h2 id="views-h" class="eyebrow">Saved views</h2>
-      <ul class="views-list" id="views-side"></ul>
-    </section>
   </nav>
 
   <main class="main" id="main" tabindex="-1">
     <section class="view" id="view-research" aria-labelledby="board-h">
       <h1 class="sr" id="board-h">Research board</h1>
-      <div class="toolbar">
+      <div class="toolbar" id="toolbar">
         <div class="chips" id="chips" role="group" aria-label="Sport"></div>
         <div class="filter-row">
           <label class="pick"><span class="sr">Day</span><select id="f-day"></select></label>
-          <label class="pick"><span class="sr">Book</span><select id="f-book"></select></label>
           <label class="pick"><span class="sr">Market</span><select id="f-market"></select></label>
-          <button class="btn btn-quiet more-btn" id="open-filters" type="button"><span id="more-label">More filters</span></button>
+          <button class="btn btn-quiet more-btn" id="open-filters" type="button"><span id="more-label">Filters</span></button>
           <p class="board-meta" id="board-meta" aria-live="polite"></p>
         </div>
       </div>
-      <div class="board-head" aria-hidden="true">
-        <span>Player / matchup</span><span>Line</span><span>Scout</span><span>Last 10</span><span>Books</span><span></span>
-      </div>
+      <div class="board-head" id="board-head"></div>
       <div class="board-scroll" id="board-scroll">
         <div id="feed-strips"></div>
         <div id="board-list" tabindex="-1"></div>
@@ -113,13 +88,13 @@
     <button class="icon-btn" value="close" aria-label="Close filters"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </form>
   <div class="dialog-body" id="filters-body"></div>
+  <div class="dialog-foot"><button class="btn btn-gold btn-block" id="filters-done" type="button"></button></div>
   <div class="toast" data-toast role="status" aria-live="polite"></div>
 </dialog>
 
 <dialog class="sheet" id="slip-dialog" aria-labelledby="sheet-h">
   <form method="dialog" class="dialog-head">
     <h2 id="sheet-h" class="display">Your slip</h2>
-    <span class="sample-tag">SAMPLE DATA</span>
     <button class="icon-btn" value="close" aria-label="Close slip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </form>
   <div class="dialog-body" id="sheet-body"></div>
@@ -129,7 +104,7 @@
 <div class="toast" id="toast" data-toast role="status" aria-live="polite"></div>
 <div class="chart-tip" id="chart-tip" hidden></div>
 
-<noscript><p class="noscript">This preview needs JavaScript.</p></noscript>
+<noscript><p class="noscript">This page needs JavaScript.</p></noscript>
 <script src="/preview/workspace/workspace-data.js"></script>
 <script src="/preview/workspace/workspace.js"></script>
 </body>
