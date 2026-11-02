@@ -1618,10 +1618,22 @@ def test_owner_wording_rules_cover_server_text(bad):
 def test_model_hash_files_are_untouched():
     import subprocess
     files = ["grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py", "market_odds.py", "thunderpick.py", "pick_verdict.py",
-             "bo3.py", "roles.py", "polymarket.py", "oddspapi.py", "cm1.py", "cm2.py", "cm2_model.json", "picklog.py", "platform_rules.py", "results_view.py", "learning.py"]
+             "bo3.py", "roles.py", "polymarket.py", "oddspapi.py", "cm1.py", "cm2.py", "cm2_model.json", "picklog.py", "platform_rules.py", "learning.py"]
     if subprocess.run(["git", "cat-file", "-e", "4877218"], cwd=ROOT, capture_output=True).returncode != 0:
         pytest.skip("base commit not in this clone (shallow checkout)")
     assert subprocess.run(["git", "diff", "--exit-code", "--quiet", "4877218", "--", *files], cwd=ROOT).returncode == 0
+    # Results' scoring/selection rules stay frozen too. Only the bootstrap's
+    # implementation is optimized; exact seeded equivalence is exercised in
+    # test_results_readonly.py against the original expanded resampling.
+    baseline = subprocess.run(["git", "show", "4877218:results_view.py"], cwd=ROOT,
+                              capture_output=True, text=True, encoding="utf-8", check=True).stdout
+
+    def rules_only(source):
+        tree = ast.parse(source)
+        tree.body = [n for n in tree.body if not (isinstance(n, ast.FunctionDef) and n.name == "_ci")]
+        return ast.dump(tree)
+
+    assert rules_only((ROOT / "results_view.py").read_text(encoding="utf-8")) == rules_only(baseline)
 
 
 def test_a_mine_page_never_queues_behind_point_reads(tmp_path):

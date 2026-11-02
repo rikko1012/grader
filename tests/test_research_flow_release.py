@@ -41,10 +41,15 @@ def test_results_count_the_registered_pick_rule_with_pushes_apart():
         assert w not in text
 
 
-def test_results_payload_reads_the_stored_export(monkeypatch):
+def test_results_payload_reads_the_stored_export(monkeypatch, tmp_path):
+    import sqlite3
     import learning
-    monkeypatch.setattr(learning, "connect", lambda *a, **k: type("C", (), {"close": lambda self: None})())
-    monkeypatch.setattr(learning, "_meta", lambda con, k, d=None: {"rows": [_unit("m1", 0.62, 1)], "excluded": {}, "at": "x"} if k == "p1_units" else d)
+    path = tmp_path / "learning.db"
+    monkeypatch.setattr(learning, "DB_PATH", path)
+    with sqlite3.connect(path) as con:
+        con.execute("CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT)")
+        con.execute("INSERT INTO meta VALUES('p1_units', ?)",
+                    (json.dumps({"rows": [_unit("m1", 0.62, 1)], "excluded": {}, "at": "x"}),))
     assert server.results_payload()["picks"]["picks"] == 1
 
 
