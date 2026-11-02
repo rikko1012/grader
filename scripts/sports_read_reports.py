@@ -41,7 +41,7 @@ def get_json(url, headers):
 def collect(out, admin, fetch=get_json):
     if not admin:
         raise ValueError("Set ADMIN_TOKEN in the local process environment; do not paste it into chat.")
-    session = fetch(SCOUT + "/api/sports/token", {"X-Admin-Token": admin})
+    session = fetch(SCOUT + "/api/sports/token", {"X-Admin-Token": admin, "X-Load-Test": admin})
     token = session.get("token") if isinstance(session, dict) else None
     if not isinstance(token, str) or not token.startswith("st1."):
         raise ValueError("Scout did not issue a Sports token; check existing admin access and service configuration.")
@@ -83,3 +83,4 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
