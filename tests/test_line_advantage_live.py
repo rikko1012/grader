@@ -151,3 +151,23 @@ def test_advisory_expires_with_provider_observation_not_newer_ingestion():
     result = live.recommendations(legs, rows, feeds, now)
     assert len(result) == 1
     assert result[0]["expires_at"] == pytest.approx(now.timestamp() + 1)
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_http_card_without_board_id_resolves_only_unique_verified_offer(env, monkeypatch, duplicate):
+    _, legs, rows, feeds = world()
+    if duplicate:
+        feeds["underdog"]["rows"].append(dict(feeds["underdog"]["rows"][0], id="another-offer"))
+    monkeypatch.setattr(server, "_bs_rows", lambda: rows)
+    monkeypatch.setattr(server.underdog, "board", lambda **k: feeds["underdog"])
+    monkeypatch.setattr(server.prizepicks, "board", lambda **k: feeds["prizepicks"])
+    monkeypatch.setattr(server, "_SLIP_IDX", {})
+    q = urlencode(dict(player="Fixture", prop="kills", maps="12", line=28.5, team="Alpha",
+                       opponent="Beta", start=rows[0]["start"], side="More", book="underdog"))
+    st, d = call(env, "GET", "/api/line_check?" + q, member="alice")
+    assert st == 200
+    if duplicate:
+        assert not d.get("line_advantages")
+    else:
+        assert d["status"] == "verified"
+        assert d["line_advantages"][0]["line"] == 27.5

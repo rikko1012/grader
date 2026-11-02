@@ -142,6 +142,8 @@ CARDS = [f"/api/grade?player=p{i}&line={28.5 + i % 5}&prop=kills&maps=12&book=un
 COMPARES = [f"/api/match_compare?team_slug=&opp_slug=&team=T{m}a&opponent=T{m}b&start={START}&maps=12&book=underdog"
             for m in range(15)]
 LINE_QUERY = "&rid=r1&side=More&book=underdog&opponent=T0b" if LINE_ADVANTAGE_LOAD else ""
+if os.environ.get("LINE_ADVANTAGE_CARD") == "1":
+    LINE_QUERY = LINE_QUERY.replace("&rid=r1", "")
 OTHER = ["/api/results", f"/api/line_check?player=p1&prop=kills&maps=12&line=30.5&team=T0a&start={quote(START, safe='')}{LINE_QUERY}",
          "/api/veto?match=hltv:900", "/auth/me", "/api/search?q=s0", "/api/board?book=prizepicks"]
 
