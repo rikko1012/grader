@@ -1,55 +1,117 @@
-/* Shared presentation only. No data, authentication or grading behavior. */
-:root,body.sw{--bg:#0b1018;--panel:#131c29;--panel-2:#192536;--line:#2a384b;--line-2:#42516a;--text:#f2f5fa;--muted:#b7c2d3;--faint:#a4b1c5;--accent:#ffb56b;--accent-2:#ffd3a6}
-html{scroll-padding-top:100px;color-scheme:dark}
-body,body.sw{background:radial-gradient(ellipse at 65% 0,#20304755,transparent 650px),var(--bg);line-height:1.6}
-button,input,select{font:inherit}
-button,a,input,select,summary{touch-action:manipulation}
-:focus-visible,body.sw :focus-visible{outline:3px solid #ffd3a6!important;outline-offset:4px!important}
-.scout-skip{position:fixed;top:8px;left:12px;transform:translateY(-180%);z-index:1000;padding:12px 18px;border-radius:10px;background:#ffd3a6;color:#17202d;font-weight:700}
-.scout-skip:focus{transform:none}
-header,.sw .sw-top{min-height:72px;height:auto;gap:12px;background:#0b1018f5;border-bottom:1px solid var(--line);backdrop-filter:blur(16px);overflow:visible}
-header h1,.sw .sw-word{font:700 20px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.6px;text-transform:none}
-header h1 em{color:var(--accent-2)}
-.logo,.sw .sw-mark{width:34px;height:34px;border-radius:10px;background:#ffb56b}
-.sportsw,.sw .sw-products{border-radius:12px;background:#111b28;border-color:var(--line);padding:4px}
-.sportsw a,.sw .sw-products a{min-height:40px;border-radius:8px;padding:8px 14px;font-weight:600}
-.sportsw a.on,.sw .sw-products a.on{background:#ffb56b;color:#1b1712}
-.sw .sw-wrap,.ot-lol .wrap{max-width:1440px;padding:28px 28px 110px}
-.sw .sw-tabs{gap:16px;padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:24px}
-.sw .sw-views{gap:6px}
-.sw .sw-views a{border-radius:8px}
-.sw .sw-views a[aria-current=page]{background:#26364a;box-shadow:none;color:#ffd3a6}
-.sw .sw-seg{border-radius:10px}
-.sw .sw-h1,.ot-lol .intro h2{font-family:Inter,system-ui,sans-serif;letter-spacing:-.9px;line-height:1.2;font-size:clamp(26px,3vw,36px)}
-.sw .sw-eyebrow,.eyebrow{font-size:11px;letter-spacing:.12em}
-.sw .sw-card,.sw .sw-panel,.ot-lol .bar,.ot-lol .empty{border-color:var(--line);border-radius:16px;box-shadow:0 8px 28px #00000014}
-.sw input,.sw select,.ot-lol input[type=search],.ot-lol select{min-height:44px;border-color:var(--line-2);border-radius:9px;background:#0c1522}
-.sw .sw-muted,.muted,.sw .sw-help{color:var(--muted)}
-.sw .sw-banners{margin-bottom:20px}
-.sw .sw-banner{border-radius:10px}
-.sw .sw-foot{padding:24px 0;border-top:1px solid var(--line);margin-top:32px}
-.ot-lol .intro{margin:8px 0 24px;gap:20px}
-.ot-lol .bar{padding:18px;gap:12px}
-.ot-lol .feeds{line-height:1.8}
-.ot-lol .mcard{border-radius:14px;padding:18px}
-.ot-lol th{font-size:11px;color:var(--muted)}
-.ot-lol .sub,.ot-lol .offnote{font-size:12px}
-button:disabled{cursor:not-allowed}
-@media(max-width:760px){
- header,.sw .sw-top{flex-wrap:wrap;padding:12px 16px;gap:10px;min-height:68px}
- header h1,.sw .sw-word{font-size:17px}
- header .grow,.sw .sw-grow{display:none}
- #who,.sw .sw-who{margin-left:auto;max-width:100%;white-space:normal;font-size:12px}
- .sportsw a,.sw .sw-products a{min-height:40px;padding:8px 11px}
- .sw .sw-wrap,.ot-lol .wrap{padding:20px 16px 110px}
- .sw .sw-tabs{display:block;padding-bottom:14px;margin-bottom:18px}
- .sw .sw-views{flex-wrap:nowrap;overflow-x:auto;margin-top:12px;padding:3px 3px 8px;scrollbar-width:thin}
- .sw .sw-views a{flex:none;white-space:nowrap}
- .ot-lol .bar{gap:10px;padding:14px}
- .ot-lol .bar>select{flex:1 1 140px;min-width:0}
- .ot-lol .bar input[type=search]{max-width:none;flex-basis:100%}
- .ot-lol .intro h2,.sw .sw-h1{font-size:27px}
+/* Scout presentation system. Deliberately independent of forecasts and policy. */
+:root,body.sw{
+ --bg:#080808;--panel:#101010;--panel-2:#171717;--panel-3:#202020;
+ --line:#292929;--line-2:#454545;--text:#f2f1eb;--muted:#b4b3aa;--faint:#96968e;
+ --accent:#f5c842;--accent-2:#f5d77b;--display:'Outfit',system-ui,sans-serif;
+ --mono:'DM Mono',ui-monospace,monospace;--scout-gold:#f5c842;--scout-radius:10px;
+}
+html{color-scheme:dark;scroll-padding-top:88px}
+body,body.sw{background:var(--bg);color:var(--text);font-family:'Outfit',system-ui,sans-serif;line-height:1.5}
+body *,body *::before,body *::after{box-sizing:border-box}
+button,input,select{font:inherit}button,a,input,select,summary{touch-action:manipulation}
+:focus-visible,body.sw :focus-visible{outline:2px solid var(--accent)!important;outline-offset:4px!important}
+::selection{background:#f5c842;color:#080808}
+.scout-skip,.sw .sw-skip{position:fixed;left:16px;top:12px;transform:translateY(-180%);z-index:1000;padding:12px 18px;border-radius:6px;background:var(--accent);color:#080808;font-weight:700}
+.scout-skip:focus,.sw .sw-skip:focus{transform:none;left:16px;top:12px}
+/* A quiet, consistent masthead: branding, sport switch, account. */
+body header,.sw .sw-top{background:#080808f5;border-bottom:1px solid var(--line);min-height:72px;height:auto;gap:20px;backdrop-filter:blur(16px);overflow:visible}
+header h1,.sw .sw-word{font:600 21px/1 'Outfit',system-ui;letter-spacing:-.7px;text-transform:none}
+header h1 em,.sw .sw-word em{font-style:normal;color:var(--accent)}
+.logo,.sw .sw-mark{width:32px;height:32px;border-radius:6px;background:var(--accent);box-shadow:none}
+.sportsw,.sw .sw-products{background:#111;border:1px solid #303030;border-radius:7px;padding:3px;gap:3px}
+.sportsw a,.sw .sw-products a{font:500 13px 'Outfit',system-ui;min-height:38px;padding:8px 16px;border-radius:4px;color:var(--muted)}
+.sportsw a.on,.sw .sw-products a.on{background:#f5c842;color:#111;box-shadow:none}
+#who,.sw .sw-who{font-size:12px;color:var(--muted)}
+/* Typography: expressive titles, restrained supporting text, aligned figures. */
+.workspace-intro h2,.ot-lol .intro h2,.sw .sw-h1{font:400 clamp(36px,3.6vw,52px)/1.04 'Bebas Neue','Arial Narrow',sans-serif;letter-spacing:.02em;margin:8px 0 12px}
+.eyebrow,.sw .sw-eyebrow,.rail-label{font:400 10px/1.5 var(--mono);letter-spacing:.16em;color:var(--faint)}
+.workspace-intro p,.ot-lol .intro p,.sw .sw-sub{color:var(--muted);font-size:14px;line-height:1.65;max-width:65ch}
+.workspace-intro{padding:32px 0 24px;gap:24px}.workspace-tools button{background:#141414;border-color:var(--line);border-radius:6px;font-family:inherit;min-height:40px}
+.sw h2,.sw h3,.ot-lol h2,.ot-lol h3{font-family:var(--display)}
+/* Shared surfaces; no gradients or ornamental shadows. */
+.card,.mgroup,.brow2,.mcard,.ot-lol .bar,.ot-lol .empty,.sw .sw-panel,.sw .sw-card,.sw .sw-game,.sw .sw-state,.sw .sw-tb-wrap,.sw .sw-filters{background:var(--panel);border-color:var(--line);border-radius:var(--scout-radius);box-shadow:none}
+.herocard{background:var(--panel)!important;box-shadow:none!important}
+.sw .sw-game{padding:20px;gap:12px}.sw .sw-game a.sw-gamelink{font:600 19px var(--display)}
+.sw .sw-games{gap:16px;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))}
+.sw .sw-state{padding:64px 24px;border-style:dashed}.sw .sw-state h2{font-size:23px;margin-bottom:10px}
+.sw .sw-panel{padding:20px}.sw .sw-panel h3{font-family:var(--mono);font-size:10px;letter-spacing:.1em}
+.side,.stat,.ctcol,.ask,.slip,.sw .sw-side,.sw .sw-qcard{background:#141414;border-color:var(--line);box-shadow:none}
+/* Navigation uses position and one gold accent, not a wall of pills. */
+.scout-rail{background:#0c0c0c;border-right:1px solid var(--line)}
+.rail-brand{gap:10px}.rail-mark{background:var(--accent);color:#080808;border-radius:6px;font:700 16px var(--display)}
+.rail-word{font:600 23px var(--display);letter-spacing:-.6px}.rail-edition{font:10px var(--mono);letter-spacing:.14em;color:var(--faint)}
+.rail-link{border:1px solid transparent;border-radius:6px;font:500 14px var(--display);min-height:44px;margin:4px 0;color:var(--muted)}
+.rail-link.on{background:#f5c8420d;border-color:#f5c84225;color:var(--accent)}
+.rail-link:hover{background:#1b1b1b;color:var(--text)}.rail-bottom{border-top:1px solid var(--line);color:var(--faint)}
+.sw .sw-wrap{max-width:1600px;padding:32px 32px 100px}
+.sw .sw-tabs{gap:18px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:28px}
+.sw .sw-seg{border-color:var(--line-2);border-radius:6px;background:#101010}
+.sw .sw-seg button{font-size:13px;min-height:40px;padding:0 20px}
+.sw .sw-seg button[aria-pressed=true]{background:var(--accent);color:#111}
+.sw .sw-views a{border-radius:5px;font-size:13px;color:var(--muted);min-height:42px}
+.sw .sw-views a[aria-current=page]{background:#f5c8420d;color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
+/* Filters stay in the document flow; they never cover rows when navigating. */
+#board .bbar{position:static;box-shadow:none;background:#111;border-radius:8px;padding:16px;gap:10px;border-color:var(--line)}
+.bbar .seg,.ot-lol .bar,.sw .sw-field input,.sw .sw-field select{background:#111;border-color:var(--line)}
+.seg button,.chipbtn,.bbar button,.sw .sw-btn,.sw .sw-tb-exp,.sw .sw-tb-sort,.sw .sw-srcbtn{min-height:40px;border-radius:6px;font-family:inherit}
+input[type=search],select,.sw input,.sw select{min-height:42px;border:1px solid var(--line-2);border-radius:6px;background:#0b0b0b;color:var(--text)}
+.sw input[type=checkbox]{min-height:0}
+.seg button.on,.sw .sw-btn-primary{background:var(--accent);color:#111;border-color:var(--accent)}
+.sw .sw-btn{background:#1a1a1a;border-color:#414141}.sw .sw-btn-primary{background:var(--accent)}
+button:hover,.sw .sw-btn:hover{filter:brightness(1.12)}button:disabled{cursor:not-allowed;filter:none}
+.board-command{padding:0 0 12px;border-bottom:1px solid var(--line);margin-bottom:16px}
+/* Dense data is readable through alignment, not additional decoration. */
+.brow2{border-radius:7px;border-color:var(--line);padding:14px 16px;box-shadow:none}
+.brow2:hover,.sw .sw-tb-row:hover{background:#1b1b1b}
+.b2name,.sw .sw-tb-name{font-weight:600;letter-spacing:-.2px}
+.b2line,.sw .sw-line,.sw .sw-tb .num,td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sw .sw-tb th,.sw .sw-table th,th{background:#171717;color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.07em}
+.sw .sw-tb td,.sw .sw-table td{padding:12px 10px;border-color:#252525}
+.sw .sw-tb-sub-row td{background:#0d0d0d}.sw .sw-tb-player{min-width:180px}
+.sw .sw-tb-sub,.sw .sw-tb-note{line-height:1.6}.sw .sw-tb-head{border-radius:8px;background:#242424}
+.sw .sw-tb-wrap{scrollbar-color:#555 #101010}.sw .sw-tb-lean{border-radius:4px}
+.sw .sw-banner{border-radius:6px;padding:12px 16px;font-size:12px;line-height:1.6}
+.sw .sw-banner.info{background:#141414;border-color:var(--line)}
+.sw .sw-foot{border-top:1px solid var(--line);padding:24px 0;margin-top:40px;font-size:12px;color:var(--faint)}
+.ot-lol .wrap{max-width:1440px;padding:30px 32px 100px}.ot-lol .intro{margin:0 0 28px}.ot-lol .mcard{padding:20px;border-radius:10px}.ot-lol .bar{padding:16px}
+@media(min-width:1025px){
+ .sw .sw-tabs{position:fixed;left:0;top:72px;bottom:0;width:196px;background:#0c0c0c;border-right:1px solid var(--line);border-bottom:0;margin:0;padding:28px 16px;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;z-index:20}
+ .sw .sw-tabs::before{content:'WORKSPACE';font:10px var(--mono);letter-spacing:.16em;color:var(--faint);margin:0 10px 4px}
+ .sw .sw-views{display:flex;flex-direction:column;gap:4px;margin-top:8px}.sw .sw-views a{padding:0 14px;min-height:44px}
+ .sw .sw-views a[aria-current=page]{box-shadow:inset 2px 0 var(--accent)}
+ .sw .sw-wrap{margin-left:196px;max-width:none;padding:36px 32px 100px}.sw .sw-seg{align-self:flex-start;margin-left:8px}
+}
+@media(max-width:1024px){
+ .sw .sw-wrap,.ot-lol .wrap{padding:24px 20px 100px}.sw .sw-tabs{gap:12px}
+ .sw .sw-views{flex-wrap:nowrap;overflow:auto;width:100%;scrollbar-width:thin;padding-bottom:6px}.sw .sw-views a{flex:none;white-space:nowrap}
+}
+@media(max-width:640px){
+ body header,.sw .sw-top{padding:12px 16px;flex-wrap:wrap;gap:12px;min-height:72px}
+ header h1,.sw .sw-word{font-size:19px}.sw .sw-word em{display:inline!important}
+ header .grow,.sw .sw-grow{display:none}.sportsw a,.sw .sw-products a{padding:8px 12px;min-height:40px}
+ #who,.sw .sw-who{font-size:11px;margin-left:auto;white-space:normal}
+ .sw .sw-wrap,.ot-lol .wrap{padding:24px 16px 100px}.sw .sw-tabs{margin-bottom:24px;padding-bottom:12px}
+ .workspace-intro h2,.ot-lol .intro h2,.sw .sw-h1{font-size:36px}.workspace-intro{padding:24px 0 20px}
+ .sw .sw-tb td{padding:3px 0}.sw .sw-tb-group{border-radius:8px;padding:16px;margin-bottom:12px;background:var(--panel)}
+ .sw .sw-tb-player{padding-bottom:12px!important;min-width:0}.sw .sw-tb-row:not([hidden]){padding:12px 0;gap:6px 10px}
+ .sw .sw-panel{padding:16px}.sw .sw-state{padding:40px 18px}.sw .sw-games{grid-template-columns:minmax(0,1fr)}
+ .ot-lol .bar{gap:10px}.ot-lol .bar>select{flex:1 1 130px;min-width:0}.ot-lol input[type=search]{flex-basis:100%;max-width:none}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
-
-@media(max-width:760px){.sw .sw-word em{display:inline!important}.sw .sw-top{gap:8px}.sw .sw-brand{gap:7px}.sw .sw-products a{padding:8px 10px}}
+/* Reference patterns: Outlier's progressive disclosure, PowerPlay's restrained rows,
+   Pine's clear primary action, OddsJam's separated tool navigation. */
+#bbook button.on,#bbook button[data-v=all].on{background:#f5c842;color:#111;border-color:#f5c842}
+#bbook{padding-bottom:10px;gap:4px}#bbook button{min-height:40px;font-family:inherit;border-radius:5px}
+.filters-collapsed #bbook{flex:1 1 480px;border:0;padding-bottom:0}
+.filters-collapsed #bsearch{flex:1 1 200px}.filters-collapsed #bcount{flex:0 0 auto}
+.tplay,.ot-featured .brow2{background:#141414!important;border-color:var(--line)!important;box-shadow:none!important}
+.mgroup>summary{background:#161616;border-bottom:1px solid var(--line)}
+.mgroup>summary b{font:600 17px var(--display)}
+.tphead{padding:16px 0 12px}.tphead b{font:600 15px var(--display)}
+.b2meta,.b2ev{color:var(--muted)}.brow2 .gtag{background:#202020;border:1px solid #454545;box-shadow:none}
+.sw .sw-tb thead th{background:#151515}.sw .sw-tb th .sw-tb-sort{font:inherit}
+@media(max-width:640px){.filters-collapsed #bbook{flex-basis:100%}.filters-collapsed #bbook button{flex:1 1 auto;padding:8px 5px;font-size:11px}.filters-collapsed #bsearch{flex-basis:65%}}
+@media(max-width:640px){
+ .workspace-tools{display:flex!important;flex-wrap:wrap;gap:8px!important}.workspace-tools .tools-nav{display:flex;flex:1 1 100%;gap:8px}.workspace-tools .tools-nav a{flex:1;text-align:center;min-height:40px}.workspace-tools button{flex:1 1 120px;white-space:normal;padding:8px;font-size:12px}
+ header{column-gap:10px!important}header h1{font-size:18px}header .sportsw a{padding:7px 9px;font-size:12px}
+}
