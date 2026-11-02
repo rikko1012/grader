@@ -143,3 +143,11 @@ def test_studio_refuses_copy_if_original_moves_while_review_is_open(tmp_path):
       return {checks,copies,rebuild};
     })()""", ADVICE)
     assert out == {"checks": 2, "copies": 0, "rebuild": 1}
+
+
+def test_advisory_expires_with_provider_observation_not_newer_ingestion():
+    now, legs, rows, feeds = world()
+    feeds["prizepicks"]["at"] -= 599
+    result = live.recommendations(legs, rows, feeds, now)
+    assert len(result) == 1
+    assert result[0]["expires_at"] == pytest.approx(now.timestamp() + 1)

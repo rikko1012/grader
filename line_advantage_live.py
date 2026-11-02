@@ -44,8 +44,10 @@ def _quote(row, feed, now):
     observed = _time(feed.get("ingested_at") if book == "prizepicks" else feed.get("at"))
     # A recently ingested OLD scraper copy is not a fresh provider observation.
     provider = _time(feed.get("at"))
-    if not 0 <= (now-provider).total_seconds() <= 600:
+    if not 0 <= (now-provider).total_seconds() <= 600 or observed > now:
         return None
+    # The UI advisory must expire when the older evidence expires, too.
+    observed = min(observed, provider)
     start = _time(row.get("match_start") or row.get("start"))
     if min(start, _time(r.get("start"))) <= now or _time(r.get("start")) != _time(row.get("start")):
         return None
