@@ -30,7 +30,16 @@
 
   /* ---- requests ---- */
   class ApiError extends Error { constructor(status, doc) { super("api " + status); this.status = status; this.doc = doc; } }
-  async function api(path, body, keepalive) {
+  async function api(path, body, keepalive) {                     /* a read told to wait by a busy server tries again; a press never repeats here */
+    for (let i = 0; ; i++) {
+      try { return await apiOnce(path, body, keepalive); }
+      catch (e) {
+        if (body !== undefined || i >= 2 || !(e instanceof ApiError) || e.status !== 503 || !e.doc || e.doc.error !== "busy") throw e;
+        await new Promise((r) => setTimeout(r, 2000 + Math.random() * 1500));
+      }
+    }
+  }
+  async function apiOnce(path, body, keepalive) {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
     try {
       const r = await fetch(API + path, body === undefined ? { signal: ctl.signal } : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal, keepalive: !!keepalive });
