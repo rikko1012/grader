@@ -115,3 +115,32 @@ button:hover,.sw .sw-btn:hover{filter:brightness(1.12)}button:disabled{cursor:no
  .workspace-tools{display:flex!important;flex-wrap:wrap;gap:8px!important}.workspace-tools .tools-nav{display:flex;flex:1 1 100%;gap:8px}.workspace-tools .tools-nav a{flex:1;text-align:center;min-height:40px}.workspace-tools button{flex:1 1 120px;white-space:normal;padding:8px;font-size:12px}
  header{column-gap:10px!important}header h1{font-size:18px}header .sportsw a{padding:7px 9px;font-size:12px}
 }
+
+/* 1Time brand, last so it wins over every page's own colours: pure black, one gold accent, green only for hits. */
+:root,body.sw{--bg:#000;--panel:#0b0b0b;--panel-2:#111;--panel-3:#171717;--line:#1c1c1c;--line-2:#333;--muted:#a8a8a8;--faint:#8a8a8a;
+ --accent:#f5c842;--accent-2:#f5c842;--accent-glow:rgba(245,200,66,.22);--over:#3fd07a;--under:#ff5a5a;--up:#3fd07a;--dn:#ff5a5a}
+html body,html body.sw,.ss-body{background:#000!important}
+.logo,.sw .sw-mark,.rail-mark{display:grid;place-items:center;background:var(--accent)!important;color:#000;font:400 19px/1 'Bebas Neue','Arial Narrow',sans-serif;letter-spacing:.02em}
+.sw .sw-mark svg{display:none}.sw .sw-mark::after{content:'1T';font:400 19px/1 'Bebas Neue','Arial Narrow',sans-serif;color:#000}
+header h1,.sw .sw-word,.rail-word{font:400 26px/1 'Bebas Neue','Arial Narrow',sans-serif!important;letter-spacing:.04em}
+.gtag,.ot-lol .g,.sw .sw-tb-grade{font-family:'Bebas Neue','Arial Narrow',sans-serif!important;font-size:18px!important;letter-spacing:.03em;border-radius:4px!important}
+.brow2,.brow2:hover,.ot-featured .brow2,.mgroup>summary,.bbar,.tplay{background-image:none!important}
+.brow2,.ot-featured .brow2,.mgroup,.tplay,.card,.mcard{background:var(--panel)!important;border-color:var(--line)!important}
+.brow2:hover{background:#111!important;border-color:#f5c84255!important}
+.brow2 .g-a,.brow2 .g-ap,.brow2 .g-am{background:var(--accent);color:#000;border-color:var(--accent)}
+.brow2 .gtag:not(.g-a):not(.g-ap):not(.g-am){background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.crow-head{font:400 10px var(--mono);letter-spacing:.1em;color:var(--faint);padding-bottom:6px;border-bottom:1px solid var(--line)}
+.c-num,.b2line{font-family:var(--mono)}
+body header,.sw .sw-top{background:#000!important}
+.scout-rail{background:#050505!important}.rail-link.on{background:#f5c8420d!important;border-color:#f5c84225!important;color:var(--accent)!important}
+.workspace-intro h2,.ot-lol .intro h2,.sw .sw-h1{font:400 clamp(36px,3.6vw,52px)/1.04 'Bebas Neue','Arial Narrow',sans-serif!important;letter-spacing:.02em}
+.eyebrow,.rail-label,.sw .sw-eyebrow{color:var(--faint)!important}
+.sportsw,.sw .sw-products{background:#111!important;border:1px solid #303030!important}
+.sportsw a.on,.sw .sw-products a.on,#bbook button.on{background:#f5c842!important;color:#111!important;border-color:#f5c842!important;box-shadow:none!important}
+.workspace-tools button,#board .bbar{background:#0b0b0b!important;border-color:var(--line)!important}
+input,select{background:#0b0b0b!important;border-color:#333!important}
+header h1 em,.sw .sw-word em{color:var(--accent)!important}
+.bslip,.bcmp,.brow2 button{background:#141414!important;border-color:#333!important;color:var(--text)!important}
+.brow2,.ot-featured .brow2{box-shadow:none!important}
+.brow2 .g-a,.brow2 .g-ap,.brow2 .g-am{background:var(--accent)!important;color:#000!important;border-color:var(--accent)!important}
+.brow2 .gtag:not(.g-a):not(.g-ap):not(.g-am){background:transparent!important;color:var(--accent)!important;border:1px solid var(--accent)!important}
