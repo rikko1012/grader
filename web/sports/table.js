@@ -193,7 +193,11 @@
       return (a.player < b.player ? -1 : a.player > b.player ? 1 : 0) || (a.stat < b.stat ? -1 : a.stat > b.stat ? 1 : 0) || (a.line - b.line);
     };
   }
-  function sortRows(rows, key, dir) { return rows.slice().sort(cmp(key, dir)); }
+  // a board with no edge at all (every market held by its gate) has nothing to rank on: soonest games first
+  function sortRows(rows, key, dir) {
+    var useKey = (key || "edge") === "edge" && !rows.some(function (r) { return SORTS.edge.val(r) !== null; }) ? "start" : key;
+    return rows.slice().sort(cmp(useKey, useKey === key ? dir : null));
+  }
   // group a player's props (same player + game): groups ordered by their best row under the sort, rows inside too
   function groupRows(rows, key, dir) {
     var sorted = sortRows(rows, key, dir), by = {}, order = [];
