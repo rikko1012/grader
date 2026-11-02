@@ -1083,9 +1083,19 @@ _MAP1_STATUS = [0.0, None]                            # (time, results_view.map1
 
 
 def _p1_export():
+    # Member reads must not run learning.connect(): it initializes/migrates the
+    # schema and can wait on the learning worker's write transaction.
+    import sqlite3
     import learning
-    con = learning.connect()
+    path = Path(learning.DB_PATH)
+    if not path.exists():
+        return {}
+    con = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1)
+    con.row_factory = sqlite3.Row
     try:
+        # A first learning run may not have committed its schema/export yet.
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").fetchone():
+            return {}
         return learning._meta(con, "p1_units") or {}
     finally:
         con.close()
