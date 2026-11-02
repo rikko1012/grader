@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 
-from gradecore.line_advantage import QuoteEvidence, find_line_advantages
+from line_advantage import QuoteEvidence, find_line_advantages
 
 BOOKS = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
 

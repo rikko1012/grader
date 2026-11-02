@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from gradecore.line_advantage import QuoteEvidence, find_line_advantages
+from line_advantage import QuoteEvidence, find_line_advantages
 
 NOW = datetime(2026, 11, 2, 12, tzinfo=timezone.utc)
 TARGET = QuoteEvidence("cs2", "cs2", "hltv:1", "hltv-player:1", "kills", "12",
