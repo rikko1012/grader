@@ -8,6 +8,7 @@ Stubs (load harness only, never in the server): cs2_scout.grade sleeps 80 ms and
 with ladder / recent maps / comparison is that size); match_compare sleeps 50 ms and returns ~25 KB; results_payload
 returns ~40 KB. Every member sends Accept-Encoding: gzip like a browser.
 Prints one line: RESULT {json}."""
+import gzip
 import http.client
 import json
 import os
@@ -41,6 +42,15 @@ b = Boards(n_matches=30)
 server.board_payload = b.payload
 underdog.board = b.feed
 prizepicks.board = lambda now=None, wait=False: {"state": "ok", "at": time.time(), "rows": [], "error": None}
+# Opt-in fixtures exercise the real easier-line adapter and board cache.
+LINE_ADVANTAGE_LOAD = os.environ.get("LINE_ADVANTAGE_LOAD") == "1"
+ADVICE_RESPONSES = []
+if LINE_ADVANTAGE_LOAD:
+    pp_rows = [dict(r, id="pp:" + r["id"], book="prizepicks", line=29.5, graded_line=29.5,
+                    odds_type="standard", over_available=True, under_available=True) for r in b.rows]
+    server.board_payload = lambda book="underdog": dict(book=book, updated=time.time(), error=None,
+        rows=b.rows if book == "underdog" else pp_rows, version="TESTMODEL")
+    prizepicks.board = lambda **kw: dict(state="ok", at=time.time(), ingested_at=time.time(), rows=pp_rows, error=None)
 underdog.line_for = lambda *a, **k: None
 picklog.log_async = lambda *a, **k: None
 server.mark_warm = lambda *a: None
@@ -116,6 +126,10 @@ def call(path, member):
     r = c.getresponse()
     body = r.read()
     enc = r.getheader("Content-Encoding") or ""
+    if LINE_ADVANTAGE_LOAD and path.startswith("/api/line_check"):
+        payload = json.loads(gzip.decompress(body) if enc == "gzip" else body)
+        ADVICE_RESPONSES.append(payload.get("status") == "verified" and
+            any(x.get("line") == 29.5 and x.get("book") == "prizepicks" for x in payload.get("line_advantages", [])))
     c.close()
     return r.status, time.time() - t0, len(body), enc
 
@@ -124,7 +138,8 @@ m0 = b.rows[0]
 CARDS = [f"/api/grade?player=p{i}&line={28.5 + i % 5}&prop=kills&maps=12&book=underdog" for i in range(40)]
 COMPARES = [f"/api/match_compare?team_slug=&opp_slug=&team=T{m}a&opponent=T{m}b&start={START}&maps=12&book=underdog"
             for m in range(15)]
-OTHER = ["/api/results", f"/api/line_check?player=p1&prop=kills&maps=12&line=30.5&team=T0a&start={START}",
+LINE_QUERY = "&rid=r1&side=More&book=underdog&opponent=T0b" if LINE_ADVANTAGE_LOAD else ""
+OTHER = ["/api/results", f"/api/line_check?player=p1&prop=kills&maps=12&line=30.5&team=T0a&start={START}{LINE_QUERY}",
          "/api/veto?match=hltv:900", "/auth/me", "/api/search?q=s0", "/api/board?book=prizepicks"]
 
 
@@ -185,4 +200,8 @@ for p in sorted({x[0] for x in res}):
     rep["routes"][p] = {"n": len(rows), "codes": codes, "p50_ms": pct([x[2] for x in rows], .5),
                         "p99_ms": pct([x[2] for x in rows], .99), "avg_kb": round(sum(x[3] for x in rows) / len(rows) / 1e3, 1),
                         "gzip_share": round(sum(1 for x in rows if x[4] == "gzip") / len(rows), 2)}
+rep["line_advantage"] = {"enabled": LINE_ADVANTAGE_LOAD, "responses": len(ADVICE_RESPONSES),
+                         "correct": sum(ADVICE_RESPONSES)}
 print("RESULT " + json.dumps(rep))
+if rep["non_200"] or (LINE_ADVANTAGE_LOAD and (not ADVICE_RESPONSES or not all(ADVICE_RESPONSES))):
+    raise SystemExit(1)
