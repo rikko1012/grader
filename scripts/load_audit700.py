@@ -19,6 +19,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 
 code = sys.argv[1]
 MEMBERS = int(sys.argv[2]) if len(sys.argv) > 2 else 700
@@ -46,11 +47,13 @@ prizepicks.board = lambda now=None, wait=False: {"state": "ok", "at": time.time(
 LINE_ADVANTAGE_LOAD = os.environ.get("LINE_ADVANTAGE_LOAD") == "1"
 ADVICE_RESPONSES = []
 if LINE_ADVANTAGE_LOAD:
+    feed_at = time.time() - 1  # fixed cached observation, not a new read on every request
+    underdog.board = lambda **kw: dict(b.feed(), at=feed_at)
     pp_rows = [dict(r, id="pp:" + r["id"], book="prizepicks", line=29.5, graded_line=29.5,
                     odds_type="standard", over_available=True, under_available=True) for r in b.rows]
     server.board_payload = lambda book="underdog": dict(book=book, updated=time.time(), error=None,
         rows=b.rows if book == "underdog" else pp_rows, version="TESTMODEL")
-    prizepicks.board = lambda **kw: dict(state="ok", at=time.time(), ingested_at=time.time(), rows=pp_rows, error=None)
+    prizepicks.board = lambda **kw: dict(state="ok", at=feed_at, ingested_at=feed_at, rows=pp_rows, error=None)
 underdog.line_for = lambda *a, **k: None
 picklog.log_async = lambda *a, **k: None
 server.mark_warm = lambda *a: None
@@ -139,7 +142,7 @@ CARDS = [f"/api/grade?player=p{i}&line={28.5 + i % 5}&prop=kills&maps=12&book=un
 COMPARES = [f"/api/match_compare?team_slug=&opp_slug=&team=T{m}a&opponent=T{m}b&start={START}&maps=12&book=underdog"
             for m in range(15)]
 LINE_QUERY = "&rid=r1&side=More&book=underdog&opponent=T0b" if LINE_ADVANTAGE_LOAD else ""
-OTHER = ["/api/results", f"/api/line_check?player=p1&prop=kills&maps=12&line=30.5&team=T0a&start={START}{LINE_QUERY}",
+OTHER = ["/api/results", f"/api/line_check?player=p1&prop=kills&maps=12&line=30.5&team=T0a&start={quote(START, safe='')}{LINE_QUERY}",
          "/api/veto?match=hltv:900", "/auth/me", "/api/search?q=s0", "/api/board?book=prizepicks"]
 
 
