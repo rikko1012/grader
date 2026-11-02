@@ -285,4 +285,4 @@ def test_retention_window_leaves_room_under_the_cap(monkeypatch):
     assert m.RETAIN_DAYS <= 4
     assert (m.RETAIN_DAYS + 1) * daily_mb + kept_mb < 0.8 * moneyline.SNAPSHOT_MAX_MB
     now = datetime(2026, 10, 29, 13, 0, tzinfo=timezone.utc)
-    assert m.retain_from(now.timestamp()) == "2026-10-25"     # Oct 23-24 archivable now, not after Oct 31
+    assert m.retain_from(now.timestamp()) == "2026-10-26"     # Oct 23-25 archivable now, not after Oct 31

@@ -64,7 +64,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-test.txt
       - name: Sports regression checks (no provider credentials, no network)
-        run: python -m pytest sports/tests -q -p no:cacheprovider
+        run: python -m pytest sports/tests gradecore/tests -q -p no:cacheprovider
 
   full-history:
     if: github.event_name == 'workflow_dispatch'

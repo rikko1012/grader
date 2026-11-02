@@ -4736,9 +4736,9 @@ function drawResults() {
   const ci = P.observed_ci ? ` (95% range ${pc(P.observed_ci[0])}–${pc(P.observed_ci[1])}, resampling whole matches)` : "";
   el.innerHTML = `<div class="ot-summary res-head">
       <div class="ot-metric"><span>Picks</span><strong>${P.picks}</strong><small>in ${P.matches} matches</small></div>
-      <div class="ot-metric"><span>Won–lost</span><strong>${P.wins}–${P.losses}</strong><small>${P.pushes ? `incl. ${P.pushes} push${P.pushes === 1 ? "" : "es"} as won` : "a push counts as won"}</small></div>
+      <div class="ot-metric"><span>Won–lost</span><strong>${P.wins}–${P.losses}</strong><small>${P.pushes ? `${P.pushes} push${P.pushes === 1 ? "" : "es"} shown apart` : "no pushes"}</small></div>
       <div class="ot-metric"><span>Printed · won</span><strong>${pc(P.printed)} · ${pc(P.observed)}</strong><small>average chance shown · how often they won</small></div></div>
-    <p class="small">${esc(d.rule)}: won ${pc(P.observed)}${ci}, against an average printed chance of ${pc(P.printed)}. A push counts as won.</p>
+    <p class="small">${esc(d.rule)}: won ${pc(P.observed)}${ci}, against an average printed chance of ${pc(P.printed)}. Pushes are left out of the rate.</p>
     <h3 class="res-h">By stat and maps</h3>${tbl(d.by_stat, r => r.stat + " · " + r.scope, "Stat")}
     <h3 class="res-h">By printed chance</h3>${tbl(d.by_chance, r => r.band, "Chance")}
     <h3 class="res-h">By side</h3>${tbl(d.by_side, r => r.side, "Side")}

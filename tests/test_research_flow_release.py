@@ -241,15 +241,15 @@ def test_results_page_shows_wins_losses_and_pushes_without_returns(tmp_path):
     d = results_view.member_results({"rows": [_unit(f"m{i}", 0.62, i % 2) for i in range(8)], "excluded": {"push on the board line": 2}, "at": "2026-10-18T06:00:00+00:00",
                                      "pushes": [dict(_unit("m9", 0.30, 0), line=20), dict(_unit("m9", 0.52, 0), line=21)]}, B=100)
     out = run_page(tmp_path, """(() => { RES.data = INPUT; drawResults(); return $("#resultsout").innerHTML; })()""", d)
-    # owner 2026-10-18: a push on a pick counts as won (the 0.52 push was no pick); labelled as such
-    assert "5–4" in out and "incl. 1 push as won" in out and "A push counts as won." in out and "55.6%" in out
+    # owner brief 2026-11-02: pushes are reported apart (the 0.52 push was no pick) and never count as won
+    assert "4–4" in out and "1 push shown apart" in out and "Pushes are left out of the rate." in out and "50.0%" in out
     for w in ("profit", "ROI", "units", "return on"):
         assert w not in out
 
 
-def test_a_pushed_pick_counts_as_won_and_the_export_keeps_pushes_apart(tmp_path):
+def test_a_pushed_pick_is_reported_apart_and_the_export_keeps_pushes_apart(tmp_path):
     out = results_view.member_results({"rows": [_unit("m1", 0.62, 0)], "pushes": [dict(_unit("m2", 0.70, 0))], "excluded": {}}, B=50)
-    assert (out["picks"]["picks"], out["picks"]["wins"], out["picks"]["losses"], out["picks"]["pushes"]) == (2, 1, 1, 1)
+    assert (out["picks"]["picks"], out["picks"]["wins"], out["picks"]["losses"], out["picks"]["pushes"]) == (1, 0, 1, 1)
     import learning as L
     con = L.connect(tmp_path / "l.db")
     ex = L.p1_units_export(con)

@@ -129,6 +129,8 @@ const rows = [mkRow({pid: "a", player: "Ann", edge: 2, pLean: 0.6, stat: "points
               mkRow({pid: "c", player: "Cy", edge: null, start: "2026-10-23T22:00:00Z"})];
 assert.deepStrictEqual(R.sortRows(rows, "edge").map(x => x.edge), [9, 5, 2, null]);
 assert.deepStrictEqual(R.sortRows(rows, "edge", 1).map(x => x.edge), [2, 5, 9, null]);       // nulls last both ways
+const held = rows.map(x => Object.assign({}, x, {edge: null, sortKey: null}));   // every market held: soonest game first
+assert.deepStrictEqual(R.sortRows(held, "edge").map(x => x.player), R.sortRows(held, "start").map(x => x.player));
 assert.deepStrictEqual(R.sortRows(rows, "scout").map(x => x.pLean), [0.6, 0.55, 0.52, null]);
 assert.deepStrictEqual(R.sortRows(rows, "start").map(x => x.player)[0], "Cy");
 assert.deepStrictEqual(R.sortRows(rows, "player").map(x => x.player), ["Ann", "Ann", "Bob", "Cy"]);
