@@ -1,6 +1,7 @@
 /* Research workspace. CS2 comes only from /preview/workspace/api/*: a failure shows the last copy with its time, or says the
-   board is unavailable, and never falls back to sample records. LoL, NBA and NFL stay on labelled sample records
-   (window.WORKSPACE_DATA). The slip, tracked picks, preferences and saved views live on the member's account. */
+   board is unavailable, and never falls back to sample records. LoL, NBA and NFL are labelled sample records
+   (window.WORKSPACE_DATA), shown only when the owner turns them on: a member's board, picks and results are real data alone.
+   The slip, tracked picks, preferences and saved views live on the member's account. */
 (function () {
   "use strict";
   const D = window.WORKSPACE_DATA;
@@ -22,29 +23,30 @@
   const VIEWS = ["research", "slips", "picks", "results"];
   const DEFAULT_F = { day: "today", book: "all", market: "all", period: "all", side: "all", tier: "all", gapsOnly: false, hideOff: false, sort: "start" };
   const SORTS = ["start", "chance", "player"];
-  const BOARD_POLL = 30000, MINE_POLL = 60000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, LINE_KEEP = 15000, MAX_LEGS = 8;
+  const BOARD_POLL = 30000, MINE_POLL = 60000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, PREFS_DEBOUNCE = 2500, LINE_KEEP = 15000, MAX_LEGS = 8, DRAFT_MAX_MS = 86400000;
   const SCOPES = "#sheet-body,#rail-body,#view-slips,#view-picks,#view-results,#panel,#filters-body,#chips,#feed-strips,#board-list,#board-head";
   const STATUS = { hit: "Hit", miss: "Miss", push: "Push", void: "Void", pending: "Pending" };
   const CHECKS = ["Match not started", "Offer available and unchanged", "Forecast belongs to this match, line and maps", "Platform accepts this combination", "No duplicates or conflicts"];
 
   /* ---- requests ---- */
   class ApiError extends Error { constructor(status, doc) { super("api " + status); this.status = status; this.doc = doc; } }
-  async function api(path, body) {
+  async function api(path, body, keepalive) {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
     try {
-      const r = await fetch(API + path, body === undefined ? { signal: ctl.signal } : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal });
+      const r = await fetch(API + path, body === undefined ? { signal: ctl.signal } : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal, keepalive: !!keepalive });
       let doc = null;
       try { doc = await r.json(); } catch (e) { doc = null; }
-      if (!r.ok) throw new ApiError(r.status, doc);
+      if (!r.ok) {
+        if ([401, 403, 404].includes(r.status) && !path.startsWith("line")) sessionEnded();    /* every other route exists for a signed-in member */
+        throw new ApiError(r.status, doc);
+      }
       return doc;
     } finally { clearTimeout(t); }
   }
   const idem = () => Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
   function debounce(fn, ms) {
     let t = null;
-    const d = (...a) => { clearTimeout(t); t = setTimeout(() => { t = null; fn(...a); }, ms); };
-    d.flush = (...a) => { if (t !== null) { clearTimeout(t); t = null; fn(...a); } };
-    return d;
+    return (...a) => { clearTimeout(t); t = setTimeout(() => { t = null; fn(...a); }, ms); };
   }
 
   /* ---- saved data is another writer's output: only the shape the page renders gets through ---- */
@@ -55,7 +57,7 @@
   const LEG_TEXT = ["id", "key", "book", "row_id", "event_id", "event_label", "player", "player_key", "team", "stat", "stat_label", "period", "period_label", "platform_label", "rev", "shown_label"];
   function cleanLeg(l) {
     return isObj(l) && LEG_TEXT.every((k) => isStr(l[k])) && own(D.sports, l.sport) && own(D.platforms, l.book) && (l.side === "over" || l.side === "under") && isNum(l.line)
-      && (l.shown_p == null || isNum(l.shown_p)) && isStr(l.added_at) && Number.isFinite(Date.parse(l.added_at));
+      && (l.shown_p == null || isNum(l.shown_p)) && (l.read_rev == null || isStr(l.read_rev)) && isStr(l.added_at) && Number.isFinite(Date.parse(l.added_at));
   }
   function cleanView(v) {
     return isObj(v) && isStr(v.id) && isStr(v.name) && isObj(v.state) && isObj(v.state.f) && (v.state.q == null || isStr(v.state.q))
@@ -100,10 +102,11 @@
     cs2: { status: "loading", records: [], at: null, feeds: null, version: null, fails: 0 },
     panel: null, opener: null, openerSel: ".row-open", wanted: null, histN: 10, lines: {},
     slip: { legs: [], types: {} }, check: null, checkSig: "", checking: false, checkErr: null, tracked: null, trackIdem: {}, trackBusy: {}, sheetMark: null, searchJump: false,
-    rev: 0, stateReady: false, saveFail: false, views: [], syncedLegs: new Set(),
-    mine: { status: "loading", doc: null }, openPick: null, picksFilter: "all",
+    rev: 0, stateReady: false, saveFail: false, views: [], syncedLegs: new Set(), syncedViews: new Set(), savedDay: false, sample: false, signedOut: false, copyBusy: false,
+    mine: { status: "loading", doc: null, older: [], next: null }, openPick: null, picksFilter: "all",
     results: { status: "loading", doc: null }, group: "chance"
   };
+  const sampleOn = () => !!(S.sample && S.me && S.me.owner);
 
   /* ---- rows: one board row per exact prop and line. Offers at another line stay a separate row ---- */
   const rows = new Map();
@@ -111,7 +114,7 @@
   const propKey = (r) => [r.sport, r.event.id, r.player.key, r.market.stat, r.market.period].join(".");
   function rebuild() {
     rows.clear();
-    [...S.cs2.records, ...D.records].forEach((r) => {
+    [...S.cs2.records, ...(sampleOn() ? D.records : [])].forEach((r) => {
       if (!rows.has(r.key)) rows.set(r.key, { id: r.key, offers: [], siblings: [] });
       rows.get(r.key).offers.push(r);
     });
@@ -134,6 +137,7 @@
     return pool.find((o) => liveOffer(o) && slipOffer(o)) || pool.find(liveOffer) || pool[0] || row.lead;
   }
   const offerOf = (row, platform) => row.offers.find((o) => o.offer.platform === platform) || lead(row);
+  const lostBook = (row, P) => !row.offers.some((o) => o.offer.platform === P.platform);
   const rowFlag = (row) => (started(row.lead) ? "started" : "");
   const chanceOf = (rec, side) => (side === "under" ? rec.scout.p_under : side === "over" ? rec.scout.p_over : null);
   function verdict(rec, side) {
@@ -144,12 +148,15 @@
     if (s.grade) return { html: `<span class="verdict"><span class="g-letter">${esc(s.grade)}</span> ${cap(sd)}</span>`, text: `${s.grade} ${cap(sd)}` };
     return { html: `<span class="verdict">Lean ${cap(sd)}</span>`, text: `Lean ${cap(sd)}` };
   }
+  const decimalOf = (o, side) => {                              /* a decimal price, the one number two books can compare on */
+    const v = o.offer[side];
+    return D.platforms[o.offer.platform].kind === "decimal" ? v.payout : v.price;
+  };
   function priceText(o, side) {
-    const v = o.offer[side], kind = D.platforms[o.offer.platform].kind;
+    const v = o.offer[side], dec = decimalOf(o, side);
     if (!v.offered) return null;
-    if (kind === "decimal") return v.payout == null ? null : v.payout.toFixed(2);
-    if (kind === "multiplier") return v.payout == null ? null : v.payout.toFixed(2) + "x";
-    return v.payout != null && v.payout !== 1 ? v.payout.toFixed(2) + "x" : null;
+    if (dec != null) return dec.toFixed(2);
+    return v.payout != null && v.payout !== 1 ? v.payout.toFixed(2) + "x" : null;   /* a 1.00x multiplier is no price: it says nothing */
   }
   const lineLabel = (o) => (o.market.line_type !== "standard" ? cap(o.market.line_type) : "Standard");
 
@@ -157,15 +164,15 @@
   const legId = (r, side) => [r.sport, r.event.id, r.player.id || r.player.name, r.market.stat, r.market.period, r.offer.platform, side, r.offer.line].join("|");
   function makeLeg(r, side, addedAt) {
     return {
-      id: legId(r, side), key: r.key, sport: r.sport, book: r.offer.platform, row_id: r.offer.offer_id, side, line: r.offer.line, rev: r.offer.revision, shown_p: chanceOf(r, side),
+      id: legId(r, side), key: r.key, sport: r.sport, book: r.offer.platform, row_id: r.offer.offer_id, side, line: r.offer.line, rev: r.offer.revision, read_rev: r.scout.read_rev || null, shown_p: chanceOf(r, side),
       event_id: r.event.id, event_label: r.event.label, player: r.player.name, player_key: r.player.key, team: r.player.team, stat: r.market.stat, stat_label: r.market.stat_label,
       period: r.market.period, period_label: r.market.period_label, platform_label: r.offer.platform_label, shown_label: verdict(r, side).text, added_at: addedAt || new Date().toISOString()
     };
   }
-  const wireLeg = (l) => ({ id: l.id, sport: l.sport, book: l.book, row_id: l.row_id, side: l.side, line: l.line, rev: l.rev, shown_p: l.shown_p, team: l.team, player: l.player, event: l.event_id });
+  const wireLeg = (l) => ({ id: l.id, sport: l.sport, book: l.book, row_id: l.row_id, side: l.side, line: l.line, rev: l.rev, read_rev: l.read_rev, shown_p: l.shown_p, team: l.team, player: l.player, event: l.event_id });
   const rowLegs = (rec) => S.slip.legs.filter((l) => l.key === rec.key);                      /* this exact line, any platform */
   const legsFor = (rec) => rowLegs(rec).filter((l) => l.book === rec.offer.platform);
-  const sig = () => S.slip.legs.map((l) => l.id + ":" + l.rev).join(";") + "|" + JSON.stringify(S.slip.types);
+  const sig = () => S.slip.legs.map((l) => [l.id, l.rev, l.read_rev, l.shown_p].join(":")).join(";") + "|" + JSON.stringify(S.slip.types);
   function slipChanged() {
     S.check = S.checkSig === sig() ? S.check : null;
     S.tracked = null;
@@ -212,13 +219,14 @@
   }
 
   /* ---- the server check: on open, on every change, again when it ages. Nothing here decides a pass ---- */
+  const askCheck = () => api("recheck", { idem: idem(), legs: S.slip.legs.map(wireLeg), entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])) });
   async function runCheck() {
-    if (!S.slip.legs.length || S.checking) return;
+    if (!S.slip.legs.length || S.checking || S.signedOut) return;
     const before = sig();
     S.checking = true;
     renderSlips();
     try {
-      const doc = await api("recheck", { idem: idem(), legs: S.slip.legs.map(wireLeg), entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])) });
+      const doc = await askCheck();
       if (sig() === before) { S.check = doc; S.checkSig = before; S.checkErr = null; }
     } catch (e) {
       S.checkErr = e.status === 429 ? "limit" : "down";
@@ -230,6 +238,7 @@
   const scheduleCheck = debounce(runCheck, CHECK_DEBOUNCE);
   function slipPhase() {
     if (!S.slip.legs.length) return "empty";
+    if (S.signedOut) return "signedout";
     if (S.checking && !freshCheck()) return "running";
     if (S.checkErr) return "down";
     return freshCheck() ? "fresh" : "running";
@@ -251,10 +260,20 @@
     lines.push(`Checked ${clock(c.checked_at)}`);
     return lines.join("\n");
   }
-  async function copyEntry(key) {
-    const c = freshCheck(), e = entries().find((x) => x.key === key);
-    if (!e || !c || !c.entries[key] || !c.entries[key].ok) { say("This entry has not passed its checks."); return; }
-    const text = entryText(e), mark = focusMark();
+  async function copyEntry(key) {                               /* validate first: a refused, failed or timed-out check leaves the clipboard untouched */
+    const e = entries().find((x) => x.key === key), before = sig(), mark = focusMark();
+    if (!e || S.copyBusy) return;
+    S.copyBusy = true;
+    renderSlips();
+    let c = null;
+    try {
+      const doc = await askCheck();
+      if (sig() === before) { S.check = doc; S.checkSig = before; S.checkErr = null; c = doc.entries[key]; }
+    } catch (err) { c = null; }
+    S.copyBusy = false;
+    renderSlips(); renderBoard(); renderPanel();
+    if (!c || !c.ok) { focusBack(mark); say(`The check did not pass. Nothing from the ${e.label} entry is on your clipboard.`); return; }
+    const text = entryText(e);
     let ok = false;
     try { await navigator.clipboard.writeText(text); ok = true; } catch (err) {
       const t = document.createElement("textarea");
@@ -288,15 +307,19 @@
     } catch (err) {
       if (err.status === 409 && err.doc && err.doc.legs) { S.check = err.doc; S.checkSig = sig(); say("The check at Track found a change. Nothing was tracked."); }
       else if (err.status === 503) say("Scout is busy. Your slip is still here: press Track again.");
-      else say("Track did not finish. Your slip is still here.");
+      else if (!S.signedOut) say("Track did not finish. Your slip is still here.");
     }
     S.trackBusy[key] = false;
     renderSlips(); renderBoard(); renderPanel(); renderNav();
   }
 
-  /* ---- account: slip, preferences and views save to the member's account ---- */
-  function prefs() { return { chip: S.chip, f: S.f, group: S.group, histN: S.histN }; }
+  /* ---- account: slip, preferences and views save to the member's account ----
+     Every device merges three ways against the copy it last synced, so an add or a removal on either device stands. A save that
+     fails stays pending and tick sends it again; until the account has it, a local draft keeps the slip for this member. */
+  function prefs() { return { chip: S.chip, f: S.f, group: S.group, histN: S.histN, sample: S.sample }; }
   const pendingSave = { slip: false, prefs: false, views: false };
+  let saveGen = 0, saving = false;
+  const unsaved = () => pendingSave.slip || pendingSave.prefs || pendingSave.views;
   function statePatch() {
     const p = { rev: S.rev };
     if (pendingSave.slip) p.slip = { legs: S.slip.legs, types: S.slip.types };
@@ -305,51 +328,120 @@
     return p;
   }
   const legIds = (legs) => new Set(legs.map((l) => l.id));
-  function mergeLegs(theirs) {                                  /* three-way against the last synced slip: an add or a removal on either device stands */
-    const t = (theirs || []).filter(cleanLeg), tIds = legIds(t), mIds = legIds(S.slip.legs), base = S.syncedLegs;
+  function mergeLegs(theirs) {
+    const t = (theirs || []).filter(cleanLeg), tIds = legIds(t), base = S.syncedLegs;
     const keep = S.slip.legs.filter((l) => tIds.has(l.id) || !base.has(l.id));
+    const mIds = legIds(keep);
     t.forEach((l) => { if (!mIds.has(l.id) && !base.has(l.id)) keep.push(l); });
+    if (keep.length > MAX_LEGS) {                               /* the account's legs stay; what this device added stops at the limit */
+      const over = keep.length - MAX_LEGS;
+      keep.sort((a, b) => tIds.has(b.id) - tIds.has(a.id));
+      keep.length = MAX_LEGS;
+      say(`A slip holds ${MAX_LEGS} picks. ${plural(over, "pick")} from this device did not fit.`);
+    }
     S.slip.legs = keep;
     S.syncedLegs = tIds;
+    if (keep.length !== t.length || keep.some((l) => !tIds.has(l.id))) pendingSave.slip = true;
   }
-  async function pushState(again) {
-    if (!S.stateReady || !(pendingSave.slip || pendingSave.prefs || pendingSave.views)) return;
-    const had = Object.assign({}, pendingSave);
+  const viewIds = (list) => new Set(list.map((v) => v.id));
+  function mergeViews(theirs) {
+    const t = (theirs || []).filter(cleanView), tIds = viewIds(t), base = S.syncedViews;
+    const keep = S.views.filter((v) => tIds.has(v.id) || !base.has(v.id));
+    const mIds = viewIds(keep);
+    t.forEach((v) => { if (!mIds.has(v.id) && !base.has(v.id)) keep.push(v); });
+    S.views = keep;
+    S.syncedViews = tIds;
+    if (keep.length !== t.length || keep.some((v) => !tIds.has(v.id))) pendingSave.views = true;
+  }
+  function adoptRemote(doc) {                                   /* another device moved the account: this device takes its changes, always */
+    S.rev = doc.rev || 0;
+    if (doc.slip && Array.isArray(doc.slip.legs)) {
+      mergeLegs(doc.slip.legs);
+      if (isObj(doc.slip.types)) S.slip.types = Object.assign({}, doc.slip.types, pendingSave.slip ? S.slip.types : {});
+    }
+    if (Array.isArray(doc.views)) mergeViews(doc.views);
+    S.check = S.checkSig === sig() ? S.check : null;
+    renderSlips(); renderBoard(); renderPanel();
+    if ($("filters-dialog").open) renderFilters();
+    if (S.slip.legs.length) scheduleCheck();
+  }
+  async function pushState(retried, leaving) {
+    if (!S.stateReady || !unsaved() || saving || S.signedOut) return;
+    saving = true;
+    const had = Object.assign({}, pendingSave), gen = saveGen, sentLegs = legIds(S.slip.legs), sentViews = viewIds(S.views);
+    let conflict = false;
     try {
-      const doc = await api("state", statePatch());
+      const doc = await api("state", statePatch(), leaving);
       S.rev = doc.rev;
-      if (had.slip) S.syncedLegs = legIds(S.slip.legs);
-      Object.keys(had).forEach((k) => { if (had[k]) pendingSave[k] = false; });
+      if (had.slip) S.syncedLegs = sentLegs;
+      if (had.views) S.syncedViews = sentViews;
+      if (gen === saveGen) {                                    /* a change made during this request stays pending */
+        Object.keys(had).forEach((k) => { if (had[k]) pendingSave[k] = false; });
+        if (had.slip) clearDraft();
+      }
       S.saveFail = false;
     } catch (e) {
-      if (e.status === 409 && e.doc && !again) {
-        S.rev = e.doc.rev;
-        if (had.slip && e.doc.slip) { mergeLegs(e.doc.slip.legs); S.slip.types = Object.assign({}, e.doc.slip.types, S.slip.types); }
-        if (had.views && Array.isArray(e.doc.views)) { const m = new Set(S.views.map((v) => v.id)); e.doc.views.filter(cleanView).forEach((v) => { if (!m.has(v.id)) S.views.push(v); }); }
-        renderSlips(); renderBoard();
-        return pushState(true);
-      }
-      S.saveFail = true;
+      if (e.status === 409 && e.doc) {
+        adoptRemote(e.doc);
+        conflict = retried !== true;
+        S.saveFail = retried === true;
+      } else S.saveFail = true;                                 /* tick sends it again */
     }
+    saving = false;
+    if (conflict) return pushState(true);
+    if (unsaved() && !S.saveFail) saveSoon();
     renderSlips();
   }
-  const saveSoon = debounce(pushState, SAVE_DEBOUNCE);
-  function saveState(what) { Object.assign(pendingSave, what); saveSoon(); }
+  const saveSoon = debounce(pushState, SAVE_DEBOUNCE), prefsSoon = debounce(pushState, PREFS_DEBOUNCE);
+  function saveState(what) {
+    Object.assign(pendingSave, what);
+    saveGen++;
+    if (what.slip) saveDraft();
+    if (what.slip || what.views) saveSoon(); else prefsSoon();
+  }
+  async function syncState() {                                  /* picks up what another device saved */
+    if (!S.stateReady || unsaved() || saving || S.signedOut) return;
+    try {
+      const doc = await api("state");
+      if (!unsaved() && !saving && doc.rev !== S.rev) adoptRemote(doc);
+      if (unsaved()) saveSoon();
+    } catch (e) { /* the next poll asks again */ }
+  }
+  const draftKey = () => (S.me && S.me.member ? "scout-workspace-draft:" + S.me.member : null);
+  function saveDraft() {
+    const k = draftKey();
+    if (!k) return;
+    try { localStorage.setItem(k, JSON.stringify({ legs: S.slip.legs, types: S.slip.types, base: [...S.syncedLegs], at: Date.now() })); } catch (e) { /* the account copy still saves */ }
+  }
+  function clearDraft() {
+    const k = draftKey();
+    try { if (k) localStorage.removeItem(k); } catch (e) { /* nothing to clear */ }
+  }
+  function readDraft() {
+    const k = draftKey();
+    try {
+      const d = k ? JSON.parse(localStorage.getItem(k) || "null") : null;
+      return isObj(d) && Array.isArray(d.legs) && Array.isArray(d.base) && Date.now() - d.at < DRAFT_MAX_MS ? d : null;
+    } catch (e) { return null; }
+  }
   function applyState(doc) {
     S.rev = doc.rev || 0;
     S.stateReady = true;
     if (doc.slip && Array.isArray(doc.slip.legs)) {
-      S.slip = { legs: doc.slip.legs.filter(cleanLeg), types: isObj(doc.slip.types) ? doc.slip.types : {} };
+      S.slip = { legs: doc.slip.legs.filter(cleanLeg).slice(0, MAX_LEGS), types: isObj(doc.slip.types) ? doc.slip.types : {} };
       S.syncedLegs = legIds(S.slip.legs);
     }
     if (isObj(doc.prefs)) {
       const p = doc.prefs;
-      if (isObj(p.f)) { S.f = Object.assign({}, DEFAULT_F, p.f); if (!SORTS.includes(S.f.sort)) S.f.sort = "start"; S.activeView = null; }
+      if (isObj(p.f)) { S.f = Object.assign({}, DEFAULT_F, p.f); if (!SORTS.includes(S.f.sort)) S.f.sort = "start"; S.activeView = null; S.savedDay = true; }
+      if (p.sample === true) S.sample = true;
       if (p.chip === "all" || own(D.sports, p.chip)) S.chip = p.chip;
       if (["chance", "stat", "side", "version"].includes(p.group)) S.group = p.group;
       if ([5, 10, 20].includes(p.histN)) S.histN = p.histN;
     }
-    if (Array.isArray(doc.views)) S.views = doc.views.filter(cleanView);
+    if (Array.isArray(doc.views)) { S.views = doc.views.filter(cleanView); S.syncedViews = viewIds(S.views); }
+    if (!sampleOn() && S.chip !== "cs2") S.chip = "all";
+    rebuild();
   }
 
   async function loadState() {                                  /* a failed first read must not leave this visit unsaved */
@@ -357,14 +449,15 @@
     try {
       const doc = await api("state"), mine = S.slip.legs;
       applyState(doc);
-      if (mine.length) {
-        const theirs = S.slip.legs;
-        S.slip.legs = mine;
-        S.syncedLegs = new Set();
+      const draft = readDraft(), theirs = S.slip.legs;
+      if (mine.length || draft) {                               /* added before this read, or saved here and never reached the account */
+        S.syncedLegs = new Set(draft ? draft.base : []);
+        S.slip.legs = mine.length ? mine : draft.legs.filter(cleanLeg);
         mergeLegs(theirs);
-        saveState({ slip: true });
+        if (draft && isObj(draft.types)) S.slip.types = Object.assign({}, S.slip.types, draft.types);
       }
       S.saveFail = false;
+      if (unsaved()) saveSoon();
       renderSlips(); renderBoard();
       if (S.slip.legs.length) scheduleCheck();
     } catch (e) { S.saveFail = true; renderSlips(); }
@@ -385,9 +478,23 @@
     if (S.slip.legs.length && !S.checking) scheduleCheck();
   }
   async function loadMine() {
-    try { S.mine = { status: "ok", doc: await api("mine?limit=200") }; } catch (e) { S.mine = { status: S.mine.doc ? "stale" : "unavailable", doc: S.mine.doc }; }
+    try {
+      const doc = await api("mine"), same = S.mine.doc && S.mine.doc.rev === doc.rev;     /* older pages stay until the member's picks move */
+      S.mine = { status: "ok", doc, older: same ? S.mine.older : [], next: same ? S.mine.next : doc.next_before };
+    } catch (e) { S.mine = Object.assign({}, S.mine, { status: S.mine.doc ? "stale" : "unavailable" }); }
     renderPicks(); renderResults(); renderSlipsPage(); renderNav();
   }
+  async function loadOlder() {
+    if (!S.mine.next) return;
+    try {
+      const doc = await api(`mine?before=${encodeURIComponent(S.mine.next)}`);
+      S.mine.older.push(doc);
+      S.mine.next = doc.next_before;
+    } catch (e) { say("Older picks did not load. Press again in a moment."); }
+    renderPicks(); renderSlipsPage();
+  }
+  const mineReceipts = () => [S.mine.doc, ...S.mine.older].flatMap((d) => (d ? d.receipts : []));
+  const mineSlips = () => [S.mine.doc, ...S.mine.older].flatMap((d) => (d ? d.slips : []));
   async function loadResults() {
     try { S.results = { status: "ok", doc: await api("results") }; } catch (e) { S.results = { status: S.results.doc ? "stale" : "unavailable", doc: S.results.doc }; }
     renderResults();
@@ -458,10 +565,12 @@
   function paintChips() {
     const counts = { all: 0 };
     all.forEach((r) => { if (matches(r, true)) { counts.all++; counts[r.lead.sport] = (counts[r.lead.sport] || 0) + 1; } });
-    $("chips").innerHTML = [["all", "All"], ...Object.entries(D.sports)].map(([k, v]) => {
+    const list = sampleOn() ? [["all", "All"], ...Object.entries(D.sports)] : [["cs2", "CS2"]];         /* real data is one sport today */
+    $("chips").innerHTML = list.map(([k, v]) => {
       const n = counts[k] || 0, down = k === "cs2" && S.cs2.status !== "ok" && S.cs2.status !== "loading";
-      return `<button class="chip" type="button" aria-pressed="${S.chip === k}" aria-label="${esc(v)}, ${plural(n, "prop")}" ${act("chip", k)}>${esc(v)}${down ? '<span class="dot"></span>' : ""}<span class="n">${n}</span></button>`;
+      return `<button class="chip" type="button" aria-pressed="${!sampleOn() || S.chip === k}" aria-label="${esc(v)}, ${plural(n, "prop")}" ${act("chip", k)}>${esc(v)}${down ? '<span class="dot"></span>' : ""}<span class="n">${n}</span></button>`;
     }).join("");
+    $("chips").classList.toggle("scrolls", $("chips").scrollWidth > $("chips").clientWidth + 1);
     if (S.f.market !== "all" && !marketOpts().some(([v]) => v === S.f.market)) S.f.market = "all";
     options($("f-day"), dayOpts, S.f.day); options($("f-market"), marketOpts(), S.f.market);
     const phone = window.matchMedia("(max-width:760px)").matches;
@@ -471,7 +580,7 @@
   }
   function renderFeedStrips() {
     const c = S.cs2, show = S.chip === "all" || S.chip === "cs2", notes = [];
-    if (show && c.status === "stale") notes.push(`<div class="strip"><b>CS2 lines as of ${esc(when(c.at))}</b><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>`);
+    if (show && c.status === "stale" && !S.signedOut) notes.push(`<div class="strip"><b>CS2 lines as of ${esc(when(c.at))}</b><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>`);
     if (show && c.status === "ok" && c.feeds) {
       Object.entries(c.feeds).forEach(([k, f]) => {
         if (!["ok", "empty", "loading"].includes(f.state)) notes.push(`<div class="strip"><b>${esc(D.platforms[k].label)} lines as of ${f.at ? esc(when(f.at)) : "the last read"}</b></div>`);
@@ -493,9 +602,9 @@
     return `<div class="hist"><span class="meter" aria-hidden="true">${cells.join("")}</span><span class="hist-n"><span class="sr">Last ${t.n}: ${hits} for ${cap(side)}, ${t.push} push</span><span aria-hidden="true"><span class="l10-lab">L10 </span>${hits}/${t.n}</span></span></div>`;
   }
   function best(row, side) {                                    /* the best price of a side, only among prices that compare */
-    const offers = row.offers.filter((o) => o.offer[side].offered && o.offer[side].payout != null && D.platforms[o.offer.platform].kind === "decimal");
+    const offers = row.offers.filter((o) => o.offer[side].offered && decimalOf(o, side) != null);
     if (offers.length < 2) return null;
-    return offers.reduce((a, b) => (b.offer[side].payout > a.offer[side].payout ? b : a));
+    return offers.reduce((a, b) => (decimalOf(b, side) > decimalOf(a, side) ? b : a));
   }
   function priceBit(row, o, side) {
     const t = priceText(o, side), offered = o.offer[side].offered, top = best(row, side) === o;
@@ -536,7 +645,8 @@
     const sub2 = [est, s.projection != null ? `Proj ${esc(s.projection)}` : "", s.units ? `${esc(s.units)}U` : ""].filter(Boolean).join('<span class="sc-rest"> · </span>');
     const scout = flag ? '<span class="off-note">Match started</span>'
       : `<div class="sc-top"><b class="pct">${side ? pct(s.p_side) : "--"}</b>${v.html}</div><span class="sc-sub">${sub2}</span>`;
-    const name = sub ? `<span class="pl-name alt">Other line</span>` : `<span class="pl-name">${esc(rec.player.name)}</span><span class="pl-sub">${sampleTag}<span class="s-tag">${esc(D.sports[rec.sport])}</span>${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} · ${marketLabel}</span>`;
+    const sportTag = sampleOn() ? `<span class="s-tag">${esc(D.sports[rec.sport])}</span>` : "";
+    const name = sub ? `<span class="pl-name alt">Other line</span>` : `<span class="pl-name">${esc(rec.player.name)}</span><span class="pl-sub">${sampleTag}${sportTag}${marketLabel} · ${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""}</span>`;
     return `<li class="row${flag ? " is-off" : ""}${sub ? " is-sub" : ""}${inSlip ? " on-slip" : ""}" data-row="${esc(row.id)}" data-open="${S.panel && S.panel.id === row.id}">
       <button class="row-open" type="button" ${act("open", row.id)} aria-label="Research ${esc(rec.player.name)}, ${esc(rec.market.stat_label)} ${esc(rec.market.period_label)}, line ${esc(rec.offer.line)}, ${esc(read)}"></button>
       <div class="c-player">${name}</div>
@@ -570,6 +680,7 @@
     const wantCs2 = S.chip === "all" || S.chip === "cs2";
     if (c.status === "loading" && !all.length) { box.innerHTML = skeletonRows(10); return; }
     const list = visibleRows();
+    $("view-research").toggleAttribute("data-no-other", !list.some((r) => r.offers.some((o) => !["prizepicks", "underdog"].includes(o.offer.platform))));
     const down = wantCs2 && c.status === "unavailable" ? `<div class="state"><h3>CS2 board unavailable</h3><p>Scout could not read the board. Your slip and tracked picks are safe.</p><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>` : "";
     const loading = wantCs2 && c.status === "loading" ? skeletonRows(4) : "";
     $("board-meta").textContent = `${plural(list.length, "prop")}${c.at && wantCs2 ? ` · Updated ${clock(c.at)}` : ""}`;
@@ -582,27 +693,37 @@
   function viewItem(v, mine) {
     return `<li><button class="view-link" type="button" aria-pressed="${S.activeView === v.id}" ${act("view", v.id)}>${esc(v.name)}</button>${mine ? `<button class="view-del" type="button" aria-label="Delete view ${esc(v.name)}" ${act("view-del", v.id)}>${ICON.x}</button>` : ""}</li>`;
   }
+  const presets = () => D.presets.filter((v) => sampleOn() || v.state.chip === "all" || v.state.chip === "cs2");
   function applyView(id) {
-    const v = [...D.presets, ...S.views].find((x) => x.id === id);
+    const v = [...presets(), ...S.views].find((x) => x.id === id);
     if (!v) return;
-    S.f = Object.assign({}, DEFAULT_F, v.state.f); S.chip = v.state.chip; S.q = v.state.q || ""; $("search").value = S.q; S.activeView = id;
+    S.f = Object.assign({}, DEFAULT_F, v.state.f); S.chip = sampleOn() || v.state.chip === "cs2" ? v.state.chip : "all"; S.q = v.state.q || ""; $("search").value = S.q; S.activeView = id;
     if (S.view !== "research") location.hash = "#/research";
     saveState({ prefs: true });
     renderBoardAll();
     say(`View: ${v.name}`);
+  }
+  function setSample(on) {
+    S.sample = on;
+    if (!on && S.chip !== "cs2") S.chip = "all";
+    S.activeView = null;
+    saveState({ prefs: true });
+    rebuild();
+    renderBoardAll(); renderPicks(); renderResults();
   }
   function renderFilters() {
     const seg = (key, label, list) => `<div class="field"><span>${label}</span><div class="seg wide" role="group" aria-label="${label}">${list.map(([v, l]) => `<button type="button" aria-pressed="${S.f[key] === v}" ${act("f-set", key + ":" + v)}>${esc(l)}</button>`).join("")}</div></div>`;
     const sel = (key, label, list) => `<label class="field"><span>${label}</span><select data-f="${key}">${list.map(([v, l]) => `<option value="${esc(v)}"${S.f[key] === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
     const tog = (key, label) => `<label class="check"><input type="checkbox" data-f="${key}"${S.f[key] ? " checked" : ""}><span>${label}</span></label>`;
     keepFocus(() => {
-      $("filters-body").innerHTML = `<h3 class="eyebrow">Saved views</h3><ul class="views-list">${D.presets.map((v) => viewItem(v, false)).join("")}${S.views.map((v) => viewItem(v, true)).join("")}</ul>
+      $("filters-body").innerHTML = `<h3 class="eyebrow">Saved views</h3><ul class="views-list">${presets().map((v) => viewItem(v, false)).join("")}${S.views.map((v) => viewItem(v, true)).join("")}</ul>
         <form class="save-row" id="save-view"><label class="field"><span class="sr">View name</span><input type="text" id="view-name" maxlength="28" placeholder="Name this view"></label><button class="btn" type="submit">Save</button></form>
         ${seg("sort", "Sort", [["start", "Start"], ["chance", "Chance"], ["player", "Player"]])}${seg("day", "Day", dayOpts)}
         ${seg("side", "Scout side", [["all", "Both"], ["over", "Over"], ["under", "Under"]])}
         ${seg("tier", "Scout read", [["all", "All"], ["graded", "Graded"], ["lean", "Lean"], ["estimate", "Estimate"]])}
         ${seg("period", "Maps", [["all", "All"], ["map1", "Map 1"], ["maps12", "Maps 1-2"], ["maps13", "Maps 1-3"]])}
         ${sel("book", "Book", bookOpts())}${sel("market", "Market", marketOpts())}${tog("gapsOnly", "Books differ on the line")}${tog("hideOff", "Hide started")}
+        ${S.me && S.me.owner ? `<label class="check"><input type="checkbox" id="sample-on"${S.sample ? " checked" : ""}><span>Show sample sports</span></label>` : ""}
         <button class="btn btn-quiet" type="button" ${act("reset-filters")}>Reset filters</button>`;
     });
     $("filters-done").textContent = `Show ${plural(visibleRows().length, "prop")}`;
@@ -613,11 +734,14 @@
     const c = S.check;
     if (phase === "empty") return "";
     if (phase === "running") return "<b>Checking</b>";
+    if (phase === "signedout") return "<b>Your session ended.</b> Sign in to check this slip.";
     if (phase === "down") return S.checkErr === "limit" ? "<b>Too many checks this minute.</b> Scout will check again shortly." : "<b>The check did not answer.</b> Track and Copy stay off.";
     const vals = Object.values(c.entries), ready = vals.filter((e) => e.ok).length;
     return `<b>${ready} of ${plural(vals.length, "entry").replace("entrys", "entries")} ready.</b> Checked ${clock(c.checked_at)}.`;
   }
-  function renderLeg(l, phase) {
+  const openDetails = new Set();                                /* a timed repaint never closes what the member opened */
+  const det = (k) => `data-det="${esc(k)}"${openDetails.has(k) ? " open" : ""}`;
+  function renderLeg(l, phase, link) {
     const c = phase === "fresh" ? S.check.legs[l.id] : null;
     const problems = c && !c.ok ? `<div class="problems">${c.problems.map((p) => `<p class="problem">${esc(p.text)}${p.swap ? `<br><button class="btn" type="button" ${act("swap-leg", l.id)}>Use current offer</button>` : ""}${p.retry ? `<br><button class="btn" type="button" ${act("check-now")}>Check again</button>` : ""}</p>`).join("")}</div>` : "";
     const against = l.shown_label.startsWith("Scout side");
@@ -626,7 +750,7 @@
     return `<div class="leg${c && !c.ok ? " bad" : ""}">
       <span class="leg-name">${esc(l.player)}<span class="s-tag">${esc(D.sports[l.sport])}</span>${sample}</span>
       <span class="leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
-      <span class="leg-meta">${read}</span>
+      <span class="leg-meta">${read}${/^https:\/\//.test(link || "") ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">Open this line</a>` : ""}</span>
       <button class="leg-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" ${act("leg-remove", l.id)}>${ICON.x}</button>${problems}</div>`;
   }
   function typeSeg(e) {
@@ -643,7 +767,7 @@
   }
   function ruleList(c) {
     if (!c || !c.rules || !c.rules.length) return "";
-    return `<details class="checks"><summary>Platform rules checked</summary><ul>${c.rules.map((r) => `<li><span>${esc(r.label)}: ${esc(r.text)}.${r.source ? ` <a href="${esc(r.source)}" target="_blank" rel="noopener">Source</a>${r.page_date ? `, ${esc(shortDate(r.page_date))}` : ""}` : ""}</span></li>`).join("")}</ul></details>`;
+    return `<details class="checks" ${det("rules:" + c.platform)}><summary>Platform rules checked</summary><ul>${c.rules.map((r) => `<li><span>${esc(r.label)}: ${esc(r.text)}.${r.note ? ` ${esc(r.note)}` : ""}${r.source ? ` <a href="${esc(r.source)}" target="_blank" rel="noopener">Source</a>${r.page_date ? `, ${esc(shortDate(r.page_date))}` : ""}` : ""}</span></li>`).join("")}</ul></details>`;
   }
   let goldUsed = false;
   function primaryClass() { if (goldUsed) return "btn"; goldUsed = true; return "btn btn-gold"; }
@@ -656,23 +780,23 @@
     const sports = [...new Set(e.legs.map((l) => D.sports[l.sport]))].join(" + ");
     return `<section class="entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry">
       <header class="entry-head"><span>${esc(e.label)}<small>${esc(sports)} · ${plural(e.legs.length, "pick")}</small></span>${typeSeg(e)}</header>
-      ${e.legs.map((l) => renderLeg(l, phase)).join("")}
+      ${e.legs.map((l, i) => renderLeg(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null)).join("")}
       <div class="entry-foot">${entryP}${note}${moneyLines(c)}${ruleList(c)}${open}
-        <div class="entry-acts"><button class="${trackClass}" type="button" ${can && !busy ? "" : "disabled"} ${act("track", e.key)}>${busy ? "Tracking" : "Track"}</button><button class="btn" type="button" ${ready ? "" : "disabled"} ${act("copy", e.key)}>Copy</button></div>
+        <div class="entry-acts"><button class="${trackClass}" type="button" ${can && !busy ? "" : "disabled"} ${act("track", e.key)}>${busy ? "Tracking" : "Track"}</button><button class="btn" type="button" ${ready ? "" : "disabled"} ${act("copy", e.key)}>${S.copyBusy ? "Checking" : "Copy"}</button></div>
       </div></section>`;
   }
   function renderChecks(phase) {
     if (phase !== "fresh") return "";
     const c = S.check;
-    return `<details class="checks"><summary>Check details</summary><ul>${CHECKS.map((t, i) => `<li><span class="ck${c.fails[i] ? " no" : ""}">${c.fails[i] ? "Refused" : "Pass"}</span><span>${t}${c.fails[i] ? ` (${c.fails[i]})` : ""}</span></li>`).join("")}</ul></details>`;
+    return `<details class="checks" ${det("checks")}><summary>Check details</summary><ul>${CHECKS.map((t, i) => `<li><span class="ck${c.fails[i] ? " no" : ""}">${c.fails[i] ? "Refused" : "Pass"}</span><span>${t}${c.fails[i] ? ` (${c.fails[i]})` : ""}</span></li>`).join("")}</ul></details>`;
   }
   function slipHtml(mode) {
     const n = S.slip.legs.length, phase = slipPhase();
     const titleTag = mode === "rail" ? `<h2 id="rail-h">Your slip</h2>` : mode === "page" ? `<h2>Your slip</h2>` : "";
     const head = `<div class="slip-head">${titleTag}<span class="slip-count" tabindex="-1" data-slip-head data-fk="slip-head">${plural(n, "pick")}</span>${n ? `<button class="link-btn" type="button" ${act("slip-clear")}>Clear</button>` : ""}</div>`;
     const done = S.tracked ? `<div class="tracked"><b>${plural(S.tracked.n, "pick")} tracked on ${esc(S.tracked.label)}.</b> <a href="#/picks/${esc(S.tracked.receipt)}">View receipts</a></div>` : "";
-    if (!n) return `<div class="slip">${head}${done}<div class="empty"><p>Add a prop from the board to start a slip.</p></div></div>`;
     const saved = S.saveFail ? '<p class="slip-status">Your changes will save when the connection returns.</p>' : "";
+    if (!n) return `<div class="slip">${head}${done}${saved}<div class="empty"><p>Add a prop from the board to start a slip.</p></div></div>`;
     const retry = phase === "down" ? `<button class="link-btn" type="button" ${act("check-now")}>Retry</button>` : phase === "fresh" ? `<button class="link-btn" type="button" ${act("check-now")}>Check again</button>` : "";
     goldUsed = false;
     const body = phase === "running" && !S.check ? '<div class="skel-line"></div><div class="skel-line"></div>' : "";
@@ -719,6 +843,7 @@
       const n = S.slip.legs.length, c = freshCheck(), vals = c ? Object.values(c.entries) : [];
       const ready = vals.filter((e) => e.ok).length;
       $("slip-fab").textContent = `Slip · ${plural(n, "pick")}${vals.length ? ` · ${ready} of ${vals.length} ready` : ""}`;
+      $("slip-fab").hidden = !n || S.view === "slips";
       document.querySelectorAll("[data-mini-slip]").forEach((b) => { b.textContent = `Slip · ${n}`; });
       renderNav();
     });
@@ -727,16 +852,17 @@
   function renderSlipsPage() { keepFocus(paintSlipsPage); }
   const countsText = (c) => Object.entries(c || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${k === "void" ? "void" : k === "pending" ? "pending" : STATUS[k].toLowerCase()}`).join(" · ");
   function paintSlipsPage() {
-    const doc = S.mine.doc, past = doc ? doc.slips.map((t) => {
-      const legs = doc.receipts.filter((r) => r.slip_id === t.slip_id), first = legs[0];
+    const doc = S.mine.doc, receipts = mineReceipts(), past = doc ? mineSlips().map((t) => {
+      const legs = receipts.filter((r) => r.slip_id === t.slip_id), first = legs[0];
       return `<div class="pick-card"><a class="pick-head slip-link" href="#/picks/${esc(first ? first.id : "")}"><span><b>${esc((D.platforms[t.platform] || {}).label || t.platform)} · ${plural(t.legs, "pick")}</b><small>${esc(legs.map((l) => `${l.player} ${cap(l.side)} ${l.line}`).join(", "))}</small></span>
         <span class="slip-res"><span>${esc(countsText(t.counts))}</span><small>${esc(when(t.tracked_at))}</small></span></a></div>`;
     }).join("") : "";
     const none = S.mine.status === "unavailable" ? '<p class="ln-note">Tracked slips are unavailable right now.</p>' : S.mine.status === "loading" ? '<div class="skel-line"></div>' : '<p class="ln-note">No tracked slips yet.</p>';
     $("view-slips").innerHTML = `<div class="page-h"><div><h1 id="slips-h" tabindex="-1">Slips</h1><p>One tray across sports, split into one entry per platform.</p></div></div>
       <div class="slips-grid"><div class="slip-page">${slipHtml("page")}</div>
-      <div class="res-sec first"><h2>Tracked slips</h2>${past || none}</div></div>`;
+      <div class="res-sec first"><h2>Tracked slips</h2>${past || none}${olderBtn()}</div></div>`;
   }
+  const olderBtn = () => (S.mine.next ? `<button class="btn btn-quiet" type="button" ${act("mine-older")}>Show older picks</button>` : "");
   function renderNav() {
     const pending = S.mine.doc ? S.mine.doc.record.pending : 0;
     const counts = { slips: S.slip.legs.length, picks: pending };
@@ -817,14 +943,14 @@
   }
   function secDetails(rec) {
     const ln = rec.sample ? null : lineOf(rec).doc, f = ln && ln.forecast;
-    const kv = [["Model", rec.scout.model_version], ["Forecast saved", f ? when(f.logged_at) : when(rec.scout.forecast_at)], ...(f ? [["Saved chance", pct(f.p_saved)]] : []), ["Offer", rec.offer.revision]];
+    const kv = [["Model", rec.scout.model_version], ["Forecast saved", f ? when(f.logged_at) : when(rec.scout.forecast_at)], ...(f ? [["Saved chance", pct(f.p_saved)]] : [])];
     return `<details class="tbl details"><summary>Details</summary><dl class="kv">${kv.map(([k, val]) => `<div><dt>${k}</dt><dd>${esc(val)}</dd></div>`).join("")}</dl></details>`;
   }
   function priceCell(o, side) { return priceText(o, side) || (o.offer[side].offered ? esc(lineLabel(o)) : "Not offered"); }
   function bookTable(list, row) {
-    return `<table class="dt"><thead><tr><th style="width:34%">Book</th><th>Over</th><th>Under</th><th>Seen</th></tr></thead><tbody>${list.map((o) => {
+    return `<table class="dt"><thead><tr><th style="width:30%">Book</th><th>Over</th><th>Under</th><th>Updated</th></tr></thead><tbody>${list.map((o) => {
       const top = (sd) => row && best(row, sd) === o;
-      return `<tr><td>${esc(o.offer.platform_label)}</td><td class="num${top("over") ? " best" : ""}">${priceCell(o, "over")}</td><td class="num${top("under") ? " best" : ""}">${priceCell(o, "under")}</td><td>${o.offer.seen_at ? esc(clock(o.offer.seen_at)) : "--"}</td></tr>`;
+      return `<tr><td>${esc(o.offer.platform_label)}</td><td class="num${top("over") ? " best" : ""}">${priceCell(o, "over")}</td><td class="num${top("under") ? " best" : ""}">${priceCell(o, "under")}</td><td>${o.offer.seen_at ? esc(when(o.offer.seen_at)) : "--"}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
   function secBooks(row, rec) {
@@ -848,13 +974,18 @@
     const list = (ln.doc.context && ln.doc.context.rows) || [];
     return `<section class="sec" aria-label="Context"><div class="sec-h"><h3 class="eyebrow">Inputs saved with this forecast</h3></div>${list.length ? `<dl class="ctx-list">${list.map((r) => `<div><dt>${esc(r.label)}</dt><dd>${esc(r.value)}</dd></div>`).join("")}</dl>` : '<p class="ln-note">This forecast saved no context inputs.</p>'}</section>`;
   }
-  function panelNotice(rec) {
+  function panelNotice(row, rec) {
+    const P = S.panel;
+    if (lostBook(row, P)) {                                     /* a move on one book never swaps the book under the member */
+      const moved = row.siblings.find((r) => r.offers.some((o) => o.offer.platform === P.platform));
+      return `<div class="strip inset"><b>${esc(D.platforms[P.platform].label)} no longer lists ${esc(rec.offer.line)}. Showing ${esc(rec.offer.platform_label)}.</b>${moved ? `<button class="btn" type="button" ${act("p-line", moved.id)}>Open ${esc(moved.lead.offer.line)}</button>` : ""}</div>`;
+    }
     if (started(rec)) return `<div class="strip inset"><b>Match started at ${esc(when(rec.event.start_utc))}</b></div>`;
     if (held(rec)) return `<div class="strip inset"><b>The grade on this line is held</b></div>`;
     return "";
   }
   function panelBody(row, rec, side) {
-    const P = S.panel, top = panelNotice(rec);
+    const P = S.panel, top = panelNotice(row, rec);
     if (P.tab === "history") return top + secChart(rec, side, true) + secMaps(rec);
     if (P.tab === "books") return top + secBooks(row, rec);
     if (P.tab === "context") return top + secContext(rec);
@@ -869,7 +1000,10 @@
     if (!P) return;
     const row = rows.get(P.id);
     if (!row) {
-      keepFocus(() => { el.innerHTML = `<header class="p-head"><h2 class="p-name" id="panel-name" tabindex="-1">Line gone</h2><button class="icon-btn p-close" type="button" aria-label="Close research" ${act("p-close")}>${ICON.x}</button></header><div class="p-body"><div class="state bare"><h3>This line left the board</h3><p>The match started or the platform pulled the line.</p></div></div>`; });
+      const now = all.filter((r) => r.prop === P.prop).sort((a, b) => a.lead.offer.line - b.lead.offer.line);
+      const body = now.length ? `<h3>This line moved</h3><p>${esc(P.line)} is off the board. This prop now lists:</p><div class="book-pick">${now.map((r) => `<button class="book-opt" type="button" ${act("p-line", r.id)}>${esc(r.lead.offer.line)} on ${esc(r.offers.map((o) => o.offer.platform_label).join(" and "))}</button>`).join("")}</div>`
+        : "<h3>This line left the board</h3><p>The match started or the platform pulled the line.</p>";
+      keepFocus(() => { el.innerHTML = `<header class="p-head"><h2 class="p-name" id="panel-name" tabindex="-1">${now.length ? "Line moved" : "Line gone"}</h2><button class="icon-btn p-close" type="button" aria-label="Close research" ${act("p-close")}>${ICON.x}</button></header><div class="p-body"><div class="state bare">${body}</div></div>`; });
       return;
     }
     const rec = offerOf(row, P.platform), side = P.side;
@@ -882,7 +1016,7 @@
     const stepper = `<div class="p-step"><button class="icon-btn" type="button" ${nb.prev ? "" : "disabled"} aria-label="Previous prop" ${act("p-prev")}>${ICON.up}</button><button class="icon-btn" type="button" ${nb.next ? "" : "disabled"} aria-label="Next prop" ${act("p-next")}>${ICON.down}</button></div>`;
     keepFocus(() => {
       el.innerHTML = `<header class="p-head">
-        <div class="p-title"><h2 class="p-name" id="panel-name" tabindex="-1">${esc(rec.player.name)}</h2>${picker}<span class="p-stat">${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)}</span>${sample}</div>
+        <div class="p-title"><h2 class="p-name" id="panel-name" tabindex="-1">${esc(rec.player.name)}</h2>${picker}<span class="p-stat">${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)} · ${esc(rec.offer.platform_label)}</span>${sample}</div>
         <div class="p-ctrl">${stepper}<button class="icon-btn p-close" type="button" aria-label="Close research" ${act("p-close")}>${ICON.x}</button></div>
         <p class="p-sub">${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} · ${esc(rec.event.label)}${rec.event.competition ? " · " + esc(rec.event.competition) : ""} · ${started(rec) ? "Started" : "Starts"} ${esc(when(rec.event.start_utc))}${rec.event.best_of ? ` · BO${esc(rec.event.best_of)}` : ""}${rec.offer.moved_from != null ? ` · Moved from ${esc(rec.offer.moved_from)}` : ""}</p>
       </header>
@@ -890,7 +1024,7 @@
       <div class="p-body" id="p-body" role="tabpanel" aria-labelledby="tab-${P.tab}" tabindex="0">${panelBody(row, rec, side)}</div>
       <footer class="p-foot">${refusal && !inSlip ? `<p class="add-why" role="status">${esc(refusal)}</p>` : ""}
         <div class="p-foot-row"><button class="btn mini-slip" type="button" data-mini-slip ${act("open-sheet")}>Slip · ${S.slip.legs.length}</button>
-        <button class="btn btn-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} ${act("p-add")}>${inSlip ? "Remove from slip" : `Add ${cap(side)} ${esc(rec.offer.line)} to slip`}</button></div></footer>`;
+        <button class="btn btn-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} ${act("p-add")}>${inSlip ? "Remove from slip" : `Add ${cap(side)} ${esc(rec.offer.line)} on ${esc(rec.offer.platform_label)}`}</button></div></footer>`;
     });
     const nbody = el.querySelector(".p-body");
     if (nbody) nbody.scrollTop = scrollTop;
@@ -950,8 +1084,12 @@
   }
   function pickRow(r) {
     const st = r.status, open = S.openPick === r.id;
-    const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout grade", r.grade || "Lean"], ["Stake", `${r.units == null ? 0 : r.units}U`], ["Projection", r.projection == null ? "--" : r.projection], ["Book", r.platform_label]];
-    const ids = [["Offer", r.offer_revision], ["Forecast", r.forecast_id], ["Model", r.model_version], ["Tracked", stamp(r.tracked_at)], ["Receipt", r.id]];
+    const scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;      /* Scout's grade and stake belong to Scout's side, never to the member's */
+    const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", `${r.grade || "Lean"} ${scoutSide}`.trim()],
+      ["Scout stake", `${r.units == null ? 0 : r.units}U${scoutSide ? ` on ${scoutSide}` : ""}`], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
+      ["Projection", r.projection == null ? "--" : r.projection], ["Book", r.platform_label]];
+    const saved = r.forecast_p == null ? [] : [["Saved forecast", `${r.forecast_grade === "LEAN" || !r.forecast_grade ? "Lean" : r.forecast_grade} ${scoutSide} ${pct(r.forecast_p)}, ${r.forecast_units == null ? 0 : r.forecast_units}U`]];
+    const ids = [...saved, ["Offer", r.offer_revision], ["Forecast", r.forecast_id], ["Model", r.model_version], ["Tracked", stamp(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="pick-body" id="pick-${esc(r.id)}"><dl class="kv">${kv.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
       <h3 class="eyebrow" style="margin-top:14px">Timeline</h3>${timelineHtml(r)}
       <details class="tbl details"><summary>Details</summary><dl class="kv">${ids.map(([k, v]) => `<div><dt>${k}</dt><dd class="mono">${esc(v)}</dd></div>`).join("")}</dl></details></div>` : "";
@@ -972,18 +1110,18 @@
     if (!doc) inner = S.mine.status === "unavailable" ? `<div class="state"><h3>My picks unavailable</h3><p>Your receipts are saved. Scout could not read them just now.</p><button class="btn" type="button" ${act("retry-mine")}>Retry</button></div>` : Array.from({ length: 4 }, () => '<div class="skel-line tall"></div>').join("");
     else {
       const stale = S.mine.status === "stale" ? `<div class="strip inset"><b>Saved copy from ${esc(when(doc.as_of))}</b><button class="btn" type="button" ${act("retry-mine")}>Retry</button></div>` : "";
-      const groups = [];
-      doc.slips.forEach((t) => {
-        const legs = doc.receipts.filter((r) => r.slip_id === t.slip_id && picksShow(r));
+      const groups = [], receipts = mineReceipts();
+      mineSlips().forEach((t) => {
+        const legs = receipts.filter((r) => r.slip_id === t.slip_id && picksShow(r));
         if (legs.length) groups.push(`<section class="pick-card"><header class="slip-h"><b>${esc((D.platforms[t.platform] || {}).label || t.platform)}${t.entry_type ? ` · ${esc(cap(t.entry_type))}` : ""}</b><span>${esc(when(t.tracked_at))}</span><span>${esc(countsText(t.counts))}</span></header>${legs.map(pickRow).join("")}</section>`);
       });
-      inner = stale + summary(doc.record) + (groups.length ? groups.join("") : '<div class="empty"><p>No picks in this view.</p></div>');
+      inner = stale + summary(doc.record) + (groups.length ? groups.join("") : '<div class="empty"><p>No picks in this view.</p></div>') + olderBtn();
     }
-    const samples = `<details class="tbl sample-box"><summary>Sample receipts <span class="sample-tag">SAMPLE DATA</span></summary>${D.receipts.map((r) => `<div class="sample-rc"><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b> <span class="status ${r.status}">${STATUS[r.status]}</span>${timelineHtml(r)}</div>`).join("")}</details>`;
+    const samples = sampleOn() ? `<details class="tbl sample-box"><summary>Sample receipts <span class="sample-tag">SAMPLE DATA</span></summary>${D.receipts.map((r) => `<div class="sample-rc"><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b> <span class="status ${r.status}">${STATUS[r.status]}</span>${timelineHtml(r)}</div>`).join("")}</details>` : "";
     keepFocus(() => { box.innerHTML = head + inner + samples; });
   }
 
-  /* ---- render: results. Three populations, never totalled together ---- */
+  /* ---- render: results. Separate populations, never totalled together ---- */
   const GROUPS = { chance: ["by_chance", "band", "Chance band"], stat: ["by_stat", null, "Stat"], side: ["by_side", "side", "Side"], version: ["by_version", "version", "Version"] };
   function dumb(st, ob) {
     const X = (v) => Math.max(0, Math.min(100, (v - 0.4) / 0.3 * 100)), left = Math.min(X(ob), X(st)), width = Math.abs(X(ob) - X(st));
@@ -997,6 +1135,7 @@
     const seg = `<div class="seg" role="group" aria-label="Group results by">${Object.entries(GROUPS).map(([k, g]) => `<button type="button" aria-pressed="${S.group === k}" ${act("group", k)}>${g[2]}</button>`).join("")}</div>`;
     const R = S.results.doc;
     if (!R) return S.results.status === "unavailable" ? `<div class="state"><h3>Scout board record unavailable</h3><p>Scout could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
+    if (!R.picks || !R.picks.picks) return `<p class="ln-note">No settled picks meet this rule yet.</p><p class="ln-note">${esc(R.rule)}.</p><p class="ln-note">${esc(R.definition)}</p>`;
     const p = R.picks, g = GROUPS[S.group], rowsOut = (R[g[0]] || []).filter((x) => x.picks).map((x) => resRow(g[1] ? x[g[1]] : `${x.stat} ${x.scope}`, x)).join("");
     const ci = p.observed_ci ? `95% interval ${pct(p.observed_ci[0])} to ${pct(p.observed_ci[1])}, whole matches resampled.` : "";
     const stale = S.results.status === "stale" ? '<p class="ln-note">Saved copy.</p>' : "";
@@ -1025,10 +1164,10 @@
   }
   function renderResults() {
     const box = $("view-results");
-    const head = `<div class="page-h"><div><h1 id="results-h" tabindex="-1">Results</h1><p>Three separate records. They are never added together. A push is its own result: it is never a win.</p></div></div>`;
-    const inner = `<section class="res-sec first" aria-labelledby="res-board"><h2 id="res-board">Scout board record</h2><p class="ln-note">Every saved Scout forecast under the rule below, whoever tracked it.</p>${boardRecord()}</section>
+    const head = `<div class="page-h"><div><h1 id="results-h" tabindex="-1">Results</h1><p>Separate records. They are never added together. A push is its own result: it is never a win.</p></div></div>`;
+    const inner = `<section class="res-sec first" aria-labelledby="res-board"><h2 id="res-board">Scout board record</h2><p class="ln-note">Saved Scout forecasts that meet the rule and definition below, whoever tracked them.</p>${boardRecord()}</section>
       <section class="res-sec" aria-labelledby="res-mine"><h2 id="res-mine">Your tracked picks</h2>${yourRecord()}</section>
-      <section class="res-sec" aria-labelledby="res-sample"><h2 id="res-sample">Sample sports <span class="sample-tag">SAMPLE DATA</span></h2><p class="ln-note">LoL, NBA and NFL figures here are invented for this stage.</p>${sampleRecord()}</section>`;
+      ${sampleOn() ? `<section class="res-sec" aria-labelledby="res-sample"><h2 id="res-sample">Sample sports <span class="sample-tag">SAMPLE DATA</span></h2><p class="ln-note">LoL, NBA and NFL figures here are invented for this stage.</p>${sampleRecord()}</section>` : ""}`;
     keepFocus(() => { box.innerHTML = head + inner; });
   }
 
@@ -1074,8 +1213,8 @@
     }
     S.wanted = null;
     const first = !S.panel, same = S.panel && S.panel.id === id;
-    const rec = lead(row);
-    S.panel = { id, tab, side: same ? S.panel.side : rec.scout.side || "over", platform: same ? S.panel.platform : rec.offer.platform };
+    const rec = lead(row), keep = S.panel && row.offers.some((o) => o.offer.platform === S.panel.platform);   /* another line of a prop stays on its book */
+    S.panel = { id, tab, side: same ? S.panel.side : rec.scout.side || "over", platform: same || keep ? S.panel.platform : rec.offer.platform, prop: row.prop, line: rec.offer.line };
     if (!rec.offer[S.panel.side].offered) S.panel.side = S.panel.side === "over" ? "under" : "over";
     $("panel").hidden = false; $("panel-scrim").hidden = false;
     syncPanelRole();
@@ -1096,7 +1235,7 @@
     if (r.view === "picks") renderPicks();
     if (r.panel) openPanelUI(r.panel, r.tab); else closePanelUI();
     renderNav();
-    $("slip-fab").hidden = r.view === "slips";
+    $("slip-fab").hidden = r.view === "slips" || !S.slip.legs.length;
     const typing = S.searchJump;
     S.searchJump = false;
     if (changed && focusPage && !typing) { const h = document.querySelector(`#view-${r.view} h1`); if (h && r.view !== "research") h.focus(); else if (r.view === "research") $("board-list").focus({ preventScroll: true }); }
@@ -1138,6 +1277,7 @@
     "f-set"(v) { const i = v.indexOf(":"); setF(v.slice(0, i), v.slice(i + 1)); },
     "retry-board"() { loadBoard(); },
     "retry-mine"() { loadMine(); },
+    "mine-older"() { loadOlder(); },
     "retry-results"() { loadResults(); },
     "reset-filters"() { resetFilters(); },
     view: applyView,
@@ -1184,9 +1324,14 @@
   document.addEventListener("change", (e) => {
     const f = e.target.dataset ? e.target.dataset.f : null;
     if (f) { setF(f, e.target.type === "checkbox" ? e.target.checked : e.target.value); return; }
+    if (e.target.id === "sample-on") setSample(e.target.checked);
     if (e.target.id === "f-day") setF("day", e.target.value);
     if (e.target.id === "f-market") setF("market", e.target.value);
   });
+  document.addEventListener("toggle", (e) => {                     /* toggle does not bubble: this listens on the way down */
+    const k = e.target.dataset ? e.target.dataset.det : null;
+    if (k) { if (e.target.open) openDetails.add(k); else openDetails.delete(k); }
+  }, true);
   document.addEventListener("submit", (e) => {
     if (e.target.id !== "save-view") return;
     e.preventDefault();
@@ -1296,6 +1441,8 @@
     return [started(rec), addRefusal(rec, S.panel.side)].join("|");
   }
   function tick() {
+    if (S.signedOut) return;
+    if (S.saveFail) { if (S.stateReady) pushState(); else loadState(); }
     if (boardSig() !== T.board) { renderBoard(); if (S.f.hideOff) renderChips(); }
     if (S.slip.legs.length && !S.checking && !freshCheck() && !S.checkErr) scheduleCheck();
     if (S.slip.legs.length && !S.checking && S.checkErr === "limit") { S.checkErr = null; scheduleCheck(); }
@@ -1303,24 +1450,42 @@
     if (panelSig() !== T.panel) renderPanel();
   }
   setInterval(tick, 5000);
-  setInterval(() => { if (!document.hidden) loadBoard(); }, BOARD_POLL);
-  setInterval(() => { if (!document.hidden && S.mine.doc && S.mine.doc.record.pending) loadMine(); }, MINE_POLL);
-  function comeBack() { tick(); loadState(); loadBoard(); if (S.mine.doc) loadMine(); }
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) comeBack(); });
+  setInterval(() => { if (!document.hidden && !S.signedOut) { loadBoard(); syncState(); } }, BOARD_POLL);
+  setInterval(() => { if (!document.hidden && !S.signedOut && S.mine.doc && S.mine.doc.record.pending) loadMine(); }, MINE_POLL);
+  function comeBack() {
+    if (S.signedOut) return;
+    tick();
+    if (S.stateReady) syncState(); else loadState();
+    loadBoard();
+    if (S.mine.doc) loadMine();
+  }
+  function leaving() { if (unsaved()) pushState(false, true); }      /* keepalive: the request outlives the page, and the draft covers a refused one */
+  document.addEventListener("visibilitychange", () => { if (document.hidden) leaving(); else comeBack(); });
+  window.addEventListener("pagehide", leaving);
   window.addEventListener("focus", comeBack);
+
+  function sessionEnded() {
+    if (S.signedOut) return;
+    S.signedOut = true;
+    const box = $("session-strip");
+    box.innerHTML = '<b>Your session ended.</b><span class="t">Your slip stays on this device.</span><a class="btn" href="/auth/login">Sign in</a>';
+    box.hidden = false;
+    renderSlips(); renderFeedStrips();
+  }
 
   /* ---- start ---- */
   async function boot() {
     rebuild();
     renderHead(); renderChips(); renderBoard(); renderSlips(); renderPicks(); renderResults(); route(false);
-    const [me] = await Promise.allSettled([api("me"), loadState()]);
-    if (me.status === "fulfilled") {
-      S.me = me.value;
+    try {                                                       /* who this is comes first: it decides sample data and the draft */
+      S.me = await api("me");
       $("account-name").textContent = S.me.name || "Member";
       $("avatar").textContent = (S.me.name || "M").slice(0, 2).toUpperCase();
-    }
+    } catch (e) { S.me = null; }
+    await loadState();
     await loadBoard();
-    renderHead(); renderBoardAll(); renderSlips();
+    if (!S.savedDay && !visibleRows().length && all.length) { S.f.day = "all"; S.activeView = null; }    /* no props today: the first look is the next ones */
+    renderHead(); renderBoardAll(); renderSlips(); renderPicks(); renderResults();
     if (S.slip.legs.length) scheduleCheck();
     await Promise.allSettled([loadMine(), loadResults()]);
     $("app").dataset.boot = "done";

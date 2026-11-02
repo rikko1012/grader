@@ -6,8 +6,10 @@ own module in as `srv`. Imported on the first allowed request; with the preview 
 
 For 700 members at once: one board snapshot every 5 s over server.graded_board's single flight, shared by /board and every
 check; identical bytes keep the old object, so nothing is compressed twice. Forecast lookups, history and /line are shared per
-line with bounded read slots. /mine and /state live in their own byte-bounded cache keyed by the member's revision, never in
-server._RESULTS and never through server.encoded (its lock table is for a small fixed set of keys).
+line with bounded read slots. /mine and /state live in their own byte-bounded cache, never in server._RESULTS and never through
+server.encoded (its lock table is for a small fixed set of keys). That cache holds one entry per member and kind, checked against
+the revision in memory, so a hit reads no database and no member can push another's entry out with invented keys; only the
+newest /mine page is kept, and a read that reaches the database counts against a per-member limit.
 
 A leg is rebuilt from the snapshot on every check: client fields are compared, never trusted."""
 import gzip
@@ -38,31 +40,37 @@ OWNER_ID = "wm-owner-admin-token"
 CHECK_TTL_S = 300
 MAX_LEGS = 8
 STATE_MAX = 16 * 1024
-RECHECK_PER_MIN, TRACK_PER_MIN, STATE_PER_MIN = 40, 20, 30
+STATE_MAX_DEPTH = 12
+LINE_MAX = 100000
+RECHECK_PER_MIN, TRACK_PER_MIN, STATE_PER_MIN, MINE_PER_MIN = 40, 20, 30, 40
+MINE_PAGE = 50
 FORECAST_MAX_GAP = 0.01                 # picklog._unchanged skips a new row when the chance moved less than this
 DISPLAY_MAX_GAP = 5e-4
 FORECAST_TTL, PENDING_TTL = 20, 2
 PENDING_WINDOW_S = 180                  # a line graded this recently and not in the pick log yet is still being written
+SNAP_MAX_AGE_S = 30                     # a snapshot this old means the rebuild keeps failing: nothing is tracked on it
 LINE_TTL, HISTORY_TTL = 15, 600
-CONTEXT_KEYS = (("maps_played", "Maps in sample"), ("rating", "Rating"), ("kpr", "Kills per round"), ("kpr_last5", "Kills per round, last 5"),
-                ("adr", "Damage per round"), ("kast", "KAST"), ("hs_pct", "Headshot rate"), ("days_since_last_map", "Days since last map"),
-                ("recent_avg", "Recent average"), ("recent_median", "Recent median"), ("recent_n", "Recent matches"))
+CONTEXT_KEYS = (("maps_played", "Maps in sample"), ("rating", "Rating"), ("kpr", "Kills per round"),
+                ("kpr_last5", "Kills per round, last 10 matches, Maps 1-2"), ("adr", "Damage per round"), ("kast", "KAST"), ("hs_pct", "Headshot rate"),
+                ("days_since_last_map", "Days since last map"), ("recent_avg", "Recent average, Maps 1-2"), ("recent_median", "Recent median, Maps 1-2"),
+                ("recent_n", "Recent matches, Maps 1-2"))
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _LEG_ID_RE = re.compile(r"^[^\x00-\x1f]{1,300}$")
 _BEFORE_RE = re.compile(r"^[0-9T:.+\-Z]{10,40}$")
+_HLTV_SLUG_RE = re.compile(r"hltv-(\d+)")
 _FC_SLOTS = threading.BoundedSemaphore(8)
 _HIST_SLOTS = threading.BoundedSemaphore(3)
-_HITS = {"recheck": {}, "track": {}, "state": {}}
+_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}}
 _ST = {"store": None}
 _ST_LOCK = threading.Lock()
-_SNAP = {"at": 0.0, "body": None, "index": {}, "props": {}, "last": {}, "doc": None, "gen": 0}
+_SNAP = {"at": 0.0, "body": None, "index": {}, "props": {}, "last": {}, "doc": None, "gen": 0, "feeds": {}}
 
 
 class Lru:
-    """Newest-kept cache bounded by entries and by bytes."""
+    """Newest-kept cache bounded by entries and by bytes. An entry is (bytes, gzipped, etag, revision)."""
 
-    def __init__(self, n=1024, cap=16 * 1024 * 1024):
+    def __init__(self, n=4096, cap=16 * 1024 * 1024):
         self.n, self.cap, self.size, self.d, self.lock = n, cap, 0, OrderedDict(), threading.Lock()
 
     def get(self, k):
@@ -73,16 +81,15 @@ class Lru:
             return v
 
     def put(self, k, v):
-        sz = len(v[0]) + len(v[1] or b"")
         with self.lock:
             old = self.d.pop(k, None)
             if old is not None:
-                self.size -= len(old[0]) + len(old[1] or b"")
+                self.size -= len(old[0])
             self.d[k] = v
-            self.size += sz
+            self.size += len(v[0])
             while self.d and (len(self.d) > self.n or self.size > self.cap):
                 _, o = self.d.popitem(last=False)
-                self.size -= len(o[0]) + len(o[1] or b"")
+                self.size -= len(o[0])
 
     def clear(self):
         with self.lock:
@@ -120,7 +127,7 @@ def reset():
             _ST["store"].close()
         _ST["store"] = None
     _PRIVATE.clear()
-    _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0)
+    _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
     for d in _HITS.values():
         d.clear()
 
@@ -191,13 +198,28 @@ def _norm(s):
     return re.sub(r"[^a-z0-9]", "", str(s or "").lower())
 
 
+def _slug_of(x):
+    return x.get("settle_slug") or x.get("match_slug")
+
+
 def event_id(x):
+    """One match under any slug, by server.same_match's rule: the row's canonical id, or the id an HLTV fallback slug names."""
     if x.get("match_id"):
         return str(x["match_id"]), "canonical"
-    slug = x.get("settle_slug") or x.get("match_slug")
+    slug = _slug_of(x)
+    m = _HLTV_SLUG_RE.fullmatch(str(slug or ""))
+    if m:
+        return f"hltv:{m.group(1)}", "canonical"
     if slug:
         return str(slug), "derived"
     return "row-" + hashlib.sha256(f"{x.get('matchup')}|{x.get('start')}".encode()).hexdigest()[:12], "derived"
+
+
+def read_rev(x):
+    """The identity of Scout's read as the slip shows it: side, chance and letter. Stake is left out: the same-match cap moves it
+    whenever another row in the group changes, and the slip does not show it."""
+    fields = [_side(x), x.get("p"), x.get("model_grade") or x.get("grade")]
+    return "r-" + hashlib.sha256(json.dumps(fields, default=str).encode()).hexdigest()[:16]
 
 
 def _nick(x):
@@ -250,7 +272,7 @@ def record_of(x):
                       "over": {"offered": _offered(x, "over"), "payout": x.get("higher" if book == "underdog" else "mod_higher"), "price": x.get("price_higher")},
                       "under": {"offered": _offered(x, "under"), "payout": x.get("lower" if book == "underdog" else "mod_lower"), "price": x.get("price_lower")},
                       "moved_from": x.get("open_line") if moved else None, "moved_at": _iso(x.get("moved_at")) if moved else None},
-            "scout": {"side": side, "p_side": p, "p_over": p if side == "over" else None, "p_under": p if side == "under" else None, "p_push": _push(x),
+            "scout": {"side": side, "read_rev": read_rev(x), "p_side": p, "p_over": p if side == "over" else None, "p_under": p if side == "under" else None, "p_push": _push(x),
                       "projection": x.get("proj"), "range80": None, "grade": grade if grade in ("A+", "A", "A-", "B+", "B", "B-") else None, "units": x.get("units"),
                       "stake_reason": x.get("stake_reason") or x.get("cap_reason"), "hold": None, "model_version": x.get("graded_model"), "forecast_at": x.get("graded_at"),
                       "validation": {"kind": "live"}},
@@ -296,7 +318,7 @@ def _build(srv):
                       default=str, separators=(",", ":")).encode()
     if _SNAP["body"] == body:
         body = _SNAP["body"]                    # identical bytes: the same object, so nothing is compressed again
-    _SNAP.update(at=time.time(), body=body, index=index, props=props, gen=_SNAP["gen"] + 1)
+    _SNAP.update(at=time.time(), body=body, index=index, props=props, feeds=feeds, gen=_SNAP["gen"] + 1)
     return 200, body
 
 
@@ -319,8 +341,7 @@ def _fc_read(srv, x):
         try:
             pick = con.execute("SELECT id, status FROM picks WHERE match_slug = ? AND player_id = ? AND prop = ? AND COALESCE(scope, '12') = ? AND line = ? "
                                "AND COALESCE(line_type, 'standard') = ? AND COALESCE(book, 'underdog') = ? AND test IN (0, 2) ORDER BY id DESC LIMIT 1",
-                               (x.get("settle_slug") or x.get("match_slug"), x.get("player_id"), x.get("prop"), x.get("scope") or "12", x.get("line"),
-                                line_type_of(x), _book(x))).fetchone()
+                               (_slug_of(x), x.get("player_id"), x.get("prop"), x.get("scope") or "12", x.get("line"), line_type_of(x), _book(x))).fetchone()
             f = con.execute("SELECT id, logged_at, line, pick, p_pick, p_more, grade, units, model_version FROM forecasts WHERE pick_id = ? "
                             "ORDER BY id DESC LIMIT 1", (pick["id"],)).fetchone() if pick else None
         finally:
@@ -330,10 +351,13 @@ def _fc_read(srv, x):
     finally:
         _FC_SLOTS.release()
     if f is None:
-        ga = _ts(x.get("graded_at"))
-        pending = ga is not None and (datetime.now(timezone.utc) - ga).total_seconds() < PENDING_WINDOW_S
-        return (200, {"state": "pending"}, PENDING_TTL) if pending else (200, {"state": "none"}, PENDING_TTL)
-    return 200, {"state": "ok", "pick_id": pick["id"], **dict(f)}
+        return (200, {"state": "pending"}, PENDING_TTL) if _just_graded(x) else (200, {"state": "none"}, PENDING_TTL)
+    return 200, {"state": "ok", "pick_id": pick["id"], "pick_status": pick["status"], **dict(f)}
+
+
+def _just_graded(x):
+    ga = _ts(x.get("graded_at"))
+    return ga is not None and (datetime.now(timezone.utc) - ga).total_seconds() < PENDING_WINDOW_S
 
 
 def forecast_for(srv, x):
@@ -346,8 +370,20 @@ def _ts(s):
     return parse(s)
 
 
-def forecast_problem(srv, x, side, shown_p, fc, lock):
-    """None when the saved forecast belongs to this exact match, line and period and the board copy is the same forecast."""
+def _same_stake_and_grade(x, fc):
+    """The board copy carries this forecast's grade and stake. server._cap_same_result is the one step that moves them after the
+    forecast is logged: it cuts a stake, keeping the logged one in units_full, and can turn the row into a 0U Lean. Display gd-1 sits
+    apart in model_grade. Any other gap means the board and the forecast are different grades."""
+    capped = x.get("units_full") is not None
+    logged_units = x["units_full"] if capped else x.get("units")
+    if abs((logged_units or 0) - (fc.get("units") or 0)) > 1e-9:
+        return False
+    return fc.get("grade") == x.get("grade") or (capped and x.get("grade") == "LEAN" and not x.get("units"))
+
+
+def forecast_problem(srv, x, leg, fc, lock):
+    """None when the saved forecast belongs to this exact match, line and period, its pick is still open, the board copy is the
+    same forecast, and the leg shows what Scout says now: its side and chance change the pick the member is looking at."""
     def bad(code, text, **kw):
         return dict({"check": 2, "code": code, "text": text}, **kw)
     st = fc.get("state")
@@ -355,6 +391,8 @@ def forecast_problem(srv, x, side, shown_p, fc, lock):
         return bad("no_forecast", "No saved forecast for this line, so it cannot be tracked.")
     if st != "ok":
         return bad("forecast_pending", "The forecast for this line is still being saved.", retry=True)
+    if fc.get("pick_status") != "open":
+        return bad("pick_closed", "This line is closed in Scout's pick log, so it cannot be tracked.")
     logged, ok = _ts(fc.get("logged_at")), True
     try:
         same_line = float(fc["line"]) == float(x["line"]) == float(x["graded_line"])
@@ -362,10 +400,20 @@ def forecast_problem(srv, x, side, shown_p, fc, lock):
         same_line = False
     ok = (same_line and fc.get("pick") == x.get("side") and fc.get("model_version") == x.get("graded_model")
           and logged is not None and lock is not None and logged < lock
-          and x.get("p") is not None and fc.get("p_pick") is not None and abs(fc["p_pick"] - x["p"]) < FORECAST_MAX_GAP)
+          and x.get("p") is not None and fc.get("p_pick") is not None and abs(fc["p_pick"] - x["p"]) < FORECAST_MAX_GAP
+          and _same_stake_and_grade(x, fc))
     if not ok:
+        if _just_graded(x):                     # the regrade is on the board and its forecast is still in the writer's queue
+            return bad("forecast_pending", "The forecast for this line is still being saved.", retry=True)
         return bad("forecast_mismatch", "The saved forecast does not match this line.")
-    if side == _side(x) and (shown_p is None or abs(shown_p - x["p"]) > DISPLAY_MAX_GAP):
+    side, shown_p = leg["side"], leg.get("shown_p")
+    now_side = _side(x)
+    if leg.get("read_rev") != read_rev(x):
+        now = SIDE_WORD.get(now_side)
+        return bad("display_mismatch", f"Scout's read changed: now {now} {x['p'] * 100:.1f}%." if now else "Scout's read on this line changed.", swap=True)
+    if side == now_side and (shown_p is None or abs(shown_p - x["p"]) > DISPLAY_MAX_GAP):
+        return bad("display_mismatch", "The chance on your slip is out of date.", swap=True)
+    if side != now_side and shown_p is not None:
         return bad("display_mismatch", "The chance on your slip is out of date.", swap=True)
     return None
 
@@ -385,15 +433,18 @@ def _legs_of(d):
         if not isinstance(l.get("row_id"), str) or not _ID_RE.match(l["row_id"]):
             return None
         line, p = l.get("line"), l.get("shown_p")
-        if isinstance(line, bool) or not isinstance(line, (int, float)) or (p is not None and (isinstance(p, bool) or not isinstance(p, (int, float)))):
+        if isinstance(line, bool) or not isinstance(line, (int, float)) or not -LINE_MAX <= line <= LINE_MAX:    # also refuses 1e999 and NaN
             return None
-        if l.get("rev") is not None and (not isinstance(l["rev"], str) or len(l["rev"]) > 200):
+        if p is not None and (isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 <= p <= 1):
             return None
+        for k in ("rev", "read_rev"):
+            if l.get(k) is not None and (not isinstance(l[k], str) or len(l[k]) > 200):
+                return None
         for k in ("team", "player", "event"):
             if l.get(k) is not None and (not isinstance(l[k], str) or len(l[k]) > 120):
                 return None
         out.append(l)
-    return out
+    return out if len({l["id"] for l in out}) == len(out) else None
 
 
 def _feed_leg(x, side):
@@ -408,8 +459,9 @@ def _pr(check, code, text, **kw):
 
 def _current(x, fc):
     side = _side(x)
-    return {"row_id": str(x.get("id")), "line": x.get("line"), "rev": offer_rev(x), "scout_side": side, "p_side": x.get("p"), "forecast_id": fc.get("id"),
-            "forecast_at": fc.get("logged_at"), "model_version": x.get("graded_model"), "start_utc": x.get("start"), "lock_utc": x.get("lock_at")}
+    return {"row_id": str(x.get("id")), "line": x.get("line"), "rev": offer_rev(x), "read_rev": read_rev(x), "scout_side": side, "p_side": x.get("p"),
+            "forecast_id": fc.get("id"), "forecast_at": fc.get("logged_at"), "model_version": x.get("graded_model"), "start_utc": x.get("start"),
+            "lock_utc": x.get("lock_at")}
 
 
 def check_leg(srv, leg, snap, feeds, now):
@@ -421,6 +473,9 @@ def check_leg(srv, leg, snap, feeds, now):
     if x is None:
         return {"ok": False, "problems": [_pr(1, "gone", "This line is no longer on the board.")], "current": None}
     problems = []
+    feed = (snap.get("feeds") or {}).get(book) or {}
+    if feed.get("state") in ("failed", "stale") or now.timestamp() - snap["at"] > SNAP_MAX_AGE_S:
+        problems.append(_pr(1, "board_failed", f"Scout could not read the {label} board just now.", retry=True))
     lock = lock_time(x)
     if lock is None:
         problems.append(_pr(0, "start_unknown", "No start time on the feed for this line."))
@@ -439,7 +494,8 @@ def check_leg(srv, leg, snap, feeds, now):
         elif code == "side":
             problems.append(_pr(1, "side", f"{SIDE_WORD[side]} is not offered on {label}."))
         elif code in ("retry", "regrade"):
-            problems.append(_pr(1, "retry", "Scout could not check this line just now.", retry=True))
+            if not any(p["code"] == "board_failed" for p in problems):      # one outage, one sentence
+                problems.append(_pr(1, "retry", "Scout could not check this line just now.", retry=True))
         elif code == "moved" and not any(p["code"] == "moved" for p in problems):
             problems.append(_pr(1, "moved", str(c.get("reason") or "Line moved") + ".", swap=True))
         elif code == "gone":
@@ -449,7 +505,7 @@ def check_leg(srv, leg, snap, feeds, now):
     if x.get("hltv_retry"):
         problems.append(_pr(1, "grade_held", "The grade on this line is held until its data source answers.", retry=True))
     fc = forecast_for(srv, x)
-    fp = forecast_problem(srv, x, side, leg.get("shown_p"), fc, lock)
+    fp = forecast_problem(srv, x, leg, fc, lock)
     if fp:
         problems.append(fp)
     return {"ok": not problems, "problems": problems, "current": _current(x, fc), "_x": x, "_hit": hit, "_fc": fc}
@@ -460,7 +516,9 @@ def _n(x):
 
 
 def _same_prop(a, b):
-    return (a["nick"], a["prop"], a["scope"], a["match_slug"], a["platform"]) == (b["nick"], b["prop"], b["scope"], b["match_slug"], b["platform"])
+    """Same player, stat, maps and platform on one match. A row can carry a slug only, so a match is either of its two names."""
+    return ((a["nick"], a["prop"], a["scope"], a["platform"]) == (b["nick"], b["prop"], b["scope"], b["platform"])
+            and (a["match_key"] == b["match_key"] or a["match_slug"] == b["match_slug"]))
 
 
 def _dup_checks(legs, results, st, member):
@@ -470,7 +528,7 @@ def _dup_checks(legs, results, st, member):
         r = results[l["id"]]
         x = r.get("_x")
         if x is not None:
-            real.append((l, r, {"nick": _nick(x), "prop": x.get("prop"), "scope": x.get("scope") or "12", "match_slug": x.get("settle_slug") or x.get("match_slug"),
+            real.append((l, r, {"nick": _nick(x), "prop": x.get("prop"), "scope": x.get("scope") or "12", "match_slug": _slug_of(x), "match_key": event_id(x)[0],
                                 "platform": _book(x), "line": x.get("line"), "side": l["side"]}))
     for i, (l, r, a) in enumerate(real):
         for j, (l2, _, b) in enumerate(real):
@@ -478,7 +536,7 @@ def _dup_checks(legs, results, st, member):
                 same = a["line"] == b["line"] and a["side"] == b["side"]
                 text = "Duplicate of another leg on this entry." if same else f"Conflicts with {SIDE_WORD[b['side']]} {_n(b['line'])} on the same prop."
                 r["problems"].append(_pr(4, "duplicate" if same else "conflict", text))
-    tracked = st.tracked_for(member, [a["match_slug"] for _, _, a in real]) if real else []
+    tracked = st.tracked_for(member, [a["match_key"] for _, _, a in real], [a["match_slug"] for _, _, a in real]) if real else []
     for l, r, a in real:
         for t in tracked:
             if _same_prop(a, t):
@@ -491,6 +549,7 @@ def _dup_checks(legs, results, st, member):
 
 
 def _gate(srv):
+    """gate_from_export's answer, or None when the export cannot be read: ev_status names that, never a count of zero."""
     def compute():
         ex = srv._p1_export() or {}
         tags = {x.get("graded_model") for x in (_SNAP["index"] or {}).values()}
@@ -549,15 +608,16 @@ def run_check(srv, member, legs, entry_types, now=None):
             rule_legs.append({"sport": "cs2", "book": platform, "team": x.get("team_name") or x.get("team"), "nick": _nick(x), "side": l["side"],
                               "event": event_id(x)[0], "sample": False})
             mult = x.get("higher") if l["side"] == "over" else x.get("lower")
-            ev_legs.append({"name": _nick(x), "sample": False, "sport": "cs2", "match": x.get("settle_slug") or x.get("match_slug"), "line": x.get("line"),
-                            "multiplier": mult, "on_side": l["side"] == _side(x), "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"),
-                            "scope": x.get("scope") or "12"})
+            ev_legs.append({"name": _nick(x), "sample": False, "sport": "cs2", "match": event_id(x)[0], "line": x.get("line"), "multiplier": mult,
+                            "on_side": l["side"] == _side(x), "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"), "scope": x.get("scope") or "12"})
         et = (entry_types or {}).get(platform)
-        e = rules.entry_status(platform, rule_legs, et if isinstance(et, str) else None)
+        e = rules.entry_status(platform, rule_legs, et if isinstance(et, str) and len(et) <= 16 else None)
         legs_ok = all(results[l["id"]]["ok"] for l in ls)
-        e["rule_ok"], e["ok"] = e["ok"], e["ok"] and legs_ok
+        sample = any(results[l["id"]].get("sample") for l in ls)
+        e["rule_ok"] = e["ok"]                  # the platform takes this combination; ok also needs every leg real and passing
+        e["ok"] = e["rule_ok"] and legs_ok and not sample
         e["trackable"] = e["trackable"] and legs_ok
-        if e["ok"]:
+        if e["rule_ok"] and legs_ok:
             e["ev"] = rules.ev_status(e["platform"], e["entry_type"], ev_legs, gate, now.timestamp())
         else:
             e["ev"] = {"available": False, "reason": "This entry has not passed its checks."}
@@ -689,33 +749,48 @@ def _line_body(srv, book, rid):
 
 # ---------------------------------------------------------------------------------------------------------------- responses
 
-def _entry(body):
+def _entry(body, rev):
+    """(bytes, gzipped, etag, revision). A compressed body keeps only its compressed copy, which is what 700 members can afford."""
     etag = '"' + hashlib.blake2b(body, digest_size=12).hexdigest() + '"'
-    return body, (gzip.compress(body, 6, mtime=0) if len(body) >= 1024 else None), etag
+    return (gzip.compress(body, 6, mtime=0), True, etag, rev) if len(body) >= 1024 else (body, False, etag, rev)
 
 
 def _send_private(h, srv, ent):
-    body, gz, etag = ent
-    use = gz is not None and srv.accepts_gzip(h.headers.get("Accept-Encoding"))
+    data, gz, etag, _ = ent
+    use = gz and srv.accepts_gzip(h.headers.get("Accept-Encoding"))
     hdr = {"Cache-Control": srv.MEMBER_CACHE, "Vary": "Accept-Encoding", "ETag": etag[:-1] + '-gz"' if use else etag}
     if srv.etag_matches(h.headers.get("If-None-Match"), etag):
         return h.send(304, b"", "application/json", hdr)
     if use:
         hdr["Content-Encoding"] = "gzip"
-    return h.send(200, gz if use else body, "application/json", hdr)
+    return h.send(200, gzip.decompress(data) if gz and not use else data, "application/json", hdr)
 
 
 def _read_json(h, srv, n):
     raw = h.rfile.read(n)
     try:
         d = json.loads(raw, parse_constant=srv._no_json_constant)
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return None
     return d if isinstance(d, dict) else None
 
 
-def _limited(h, srv, bucket, member, limit, idem=None):
-    if srv.studio_rate_ok(member, idem, bucket=_HITS[bucket], limit=limit):
+def _shallow(v):
+    """No deeper than STATE_MAX_DEPTH. Saved state is read and written back whole, so it must never be too deep to encode."""
+    stack = [(v, 1)]
+    while stack:
+        x, depth = stack.pop()
+        if isinstance(x, (dict, list)):
+            if depth > STATE_MAX_DEPTH:
+                return False
+            stack.extend((y, depth + 1) for y in (x.values() if isinstance(x, dict) else x))
+    return True
+
+
+def _limited(h, srv, bucket, member, limit):
+    """Every call counts. A repeated idem key is not free here: only a press that already has receipts answers without work, and
+    that answer sits behind this limit too."""
+    if srv.studio_rate_ok(member, None, bucket=_HITS[bucket], limit=limit):
         return False
     h.send(429, {"error": f"Too many requests. The limit is {limit} a minute."})
     return True
@@ -723,7 +798,7 @@ def _limited(h, srv, bucket, member, limit, idem=None):
 
 def get_me(h, srv, q, member, scratch, name):
     return h.send(200, {"member": member, "name": name, "scratch": scratch, "sample_sports": list(SAMPLE_SPORTS), "rules_version": rules.RULES_VERSION,
-                        "owner": bool(scratch)})
+                        "owner": bool(scratch) or bool(h._sports_owner())})
 
 
 def get_board(h, srv, q, member, scratch, name):
@@ -749,16 +824,20 @@ def get_mine(h, srv, q, member, scratch, name):
     before = q.get("before") or None
     if before and not _BEFORE_RE.match(before):
         return h.send(400, {"error": "bad before"})
-    limit = srv.qint(q, "limit", 50, 1, wstore.PAGE_MAX)
+    limit = srv.qint(q, "limit", MINE_PAGE, 1, wstore.PAGE_MAX)
     st = store()
     rev = st.rev(member)
-    key = (member, "mine", rev, before, limit)
-    ent = _PRIVATE.get(key)
-    if ent is None:
-        doc = st.mine(member, before, limit)
-        doc.update(as_of=wstore.iso(), rev=rev)
-        ent = _entry(json.dumps(doc, default=str, separators=(",", ":")).encode())
-        _PRIVATE.put(key, ent)
+    newest = before is None and limit == MINE_PAGE      # the one page kept: a member can never fill the cache with other pages
+    ent = _PRIVATE.get((member, "mine")) if newest else None
+    if ent is not None and ent[3] == rev:
+        return _send_private(h, srv, ent)
+    if _limited(h, srv, "mine", member, MINE_PER_MIN):  # only a read that reaches the database counts
+        return None
+    doc = st.mine(member, before, limit)
+    doc.update(as_of=wstore.iso(), rev=rev)
+    ent = _entry(json.dumps(doc, default=str, separators=(",", ":")).encode(), rev)
+    if newest:
+        _PRIVATE.put((member, "mine"), ent)
     return _send_private(h, srv, ent)
 
 
@@ -770,11 +849,10 @@ def get_results(h, srv, q, member, scratch, name):
 def get_state(h, srv, q, member, scratch, name):
     st = store()
     rev = st.state_rev(member)
-    key = (member, "state", rev)
-    ent = _PRIVATE.get(key)
-    if ent is None:
-        ent = _entry(json.dumps(st.get_state(member), separators=(",", ":")).encode())
-        _PRIVATE.put(key, ent)
+    ent = _PRIVATE.get((member, "state"))
+    if ent is None or ent[3] != rev:
+        ent = _entry(json.dumps(st.get_state(member), separators=(",", ":")).encode(), rev)
+        _PRIVATE.put((member, "state"), ent)
     return _send_private(h, srv, ent)
 
 
@@ -794,7 +872,7 @@ def post_recheck(h, srv, q, member, scratch, name, n):
     idem = (d or {}).get("idem")
     if legs is None or not isinstance(idem, str) or not srv._IDEM_RE.match(idem):
         return h.send(400, {"error": "bad check"})
-    if _limited(h, srv, "recheck", member, RECHECK_PER_MIN, idem):
+    if _limited(h, srv, "recheck", member, RECHECK_PER_MIN):
         return None
     try:
         res = run_check(srv, member, legs, d.get("entry_types") if isinstance(d.get("entry_types"), dict) else {})
@@ -804,14 +882,18 @@ def post_recheck(h, srv, q, member, scratch, name, n):
 
 
 def _payload(x, leg, res, e):
+    """What the member saw, frozen. grade, units and stake_reason are Scout's for scout_side, whatever side the member took. The
+    forecast_* fields are the saved forecast itself, beside the board's copy: the same-match cap and display gd-1 can move the
+    board's after logging, and a receipt keeps both."""
     rec = record_of(x)
     fc = res["_fc"]
     return {"player": rec["player"]["name"], "team": rec["player"]["team"], "opponent": rec["player"]["opponent"], "matchup": rec["event"]["label"],
             "competition": rec["event"]["competition"], "stat_label": rec["market"]["stat_label"], "period_label": rec["market"]["period_label"],
-            "platform_label": rec["offer"]["platform_label"], "scout_side": rec["scout"]["side"],
+            "platform_label": rec["offer"]["platform_label"], "scout_side": rec["scout"]["side"], "on_side": leg["side"] == rec["scout"]["side"],
             "displayed_p": leg.get("shown_p") if leg["side"] == rec["scout"]["side"] else None, "grade": rec["scout"]["grade"], "units": rec["scout"]["units"],
             "stake_reason": rec["scout"]["stake_reason"], "projection": rec["scout"]["projection"], "forecast_p": fc.get("p_pick"), "forecast_at": fc.get("logged_at"),
-            "l10": rec["history"]["l10"], "feed_at": rec["offer"]["seen_at"], "rules_version": e.get("rules_version"), "entry_type": e.get("entry_type")}
+            "forecast_grade": fc.get("grade"), "forecast_units": fc.get("units"), "l10": rec["history"]["l10"], "feed_at": rec["offer"]["seen_at"],
+            "rules_version": e.get("rules_version"), "entry_type": e.get("entry_type")}
 
 
 def post_track(h, srv, q, member, scratch, name, n):
@@ -820,10 +902,11 @@ def post_track(h, srv, q, member, scratch, name, n):
     idem, key = (d or {}).get("idem"), (d or {}).get("entry_key")
     if legs is None or not isinstance(idem, str) or not srv._IDEM_RE.match(idem) or key not in BOOKS or any(l["book"] != key for l in legs):
         return h.send(400, {"error": "bad track"})
-    if _limited(h, srv, "track", member, TRACK_PER_MIN, idem):
+    if _limited(h, srv, "track", member, TRACK_PER_MIN):
         return None
     st = store()
-    slip_id = "sl-" + hashlib.sha256(f"{member}|{idem}".encode()).hexdigest()[:20]
+    legs_id = json.dumps([[l["row_id"], l["side"], l["line"]] for l in legs])
+    slip_id = "sl-" + hashlib.sha256(f"{member}|{idem}|{legs_id}".encode()).hexdigest()[:20]     # an idem key names one press of these legs
     prev = st.slip_receipts(member, slip_id)
     if prev:                                    # the same press again: the same receipts
         return h.send(200, {"ok": True, "slip_id": slip_id, "receipts": prev})
@@ -844,7 +927,7 @@ def post_track(h, srv, q, member, scratch, name, n):
         receipts.append({"receipt_id": "rc-" + hashlib.sha256(f"{member}|{key}|{l['row_id']}|{x.get('line')}|{l['side']}|{rev}".encode()).hexdigest()[:20],
                          "member": member, "slip_id": slip_id, "leg_no": i, "tracked_at": now, "sport": "cs2", "platform": key, "row_id": l["row_id"], "offer_rev": rev,
                          "side": l["side"], "line": x.get("line"), "line_type": line_type_of(x), "pick_id": fc["pick_id"], "forecast_id": fc["id"],
-                         "match_slug": x.get("settle_slug") or x.get("match_slug"), "match_id": x.get("match_id"), "nick": _nick(x), "prop": x.get("prop"),
+                         "match_slug": _slug_of(x), "match_id": x.get("match_id"), "match_key": event_id(x)[0], "nick": _nick(x), "prop": x.get("prop"),
                          "scope": x.get("scope") or "12", "start_utc": x.get("start"), "model_version": x.get("graded_model"), "scratch": scratch,
                          "payload": _payload(x, l, r, e)})
     slip = {"slip_id": slip_id, "member": member, "tracked_at": now, "platform": key, "entry_type": e.get("entry_type"), "sports": e.get("sports"),
@@ -871,7 +954,7 @@ def post_state(h, srv, q, member, scratch, name, n):
     patch = {}
     for k, kind in (("slip", dict), ("prefs", dict), ("views", list)):
         if k in d:
-            if d[k] is not None and not isinstance(d[k], kind):
+            if d[k] is not None and (not isinstance(d[k], kind) or not _shallow(d[k])):
                 return h.send(400, {"error": f"bad {k}"})
             patch[k] = d[k]
     if not patch:

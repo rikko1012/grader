@@ -145,6 +145,17 @@ class Fixture:
         con.commit()
         con.close()
 
+    def flip(self, r, p=0.58):
+        """Scout changes side at the same line: a new forecast row, the old one kept. The caller clears the 5 s board copies."""
+        import picklog
+        r.update(side="Less" if r["side"] == "More" else "More", p=p, graded_at=iso(datetime.now(timezone.utc)))
+        con = sqlite3.connect(picklog.DB, timeout=10)
+        con.execute("INSERT INTO forecasts(pick_id, kind, logged_at, match_start, line, pick, p_pick, p_more, grade, units, lambda, model_version, inputs) "
+                    "SELECT pick_id, 'update', ?, match_start, line, ?, ?, ?, grade, units, lambda, model_version, inputs FROM forecasts WHERE pick_id = ? ORDER BY id DESC LIMIT 1",
+                    (r["graded_at"], r["side"], p, p if r["side"] == "More" else 1 - p, self.pick_id(r)))
+        con.commit()
+        con.close()
+
     def pick_id(self, r):
         import picklog
         con = sqlite3.connect(picklog.DB, timeout=10)
@@ -171,5 +182,5 @@ def leg_of(record, side=None, shown=True):
     """The leg the page sends for one /board record."""
     side = side or record["scout"]["side"]
     return {"id": f"{record['key']}|{record['offer']['platform']}|{side}", "sport": "cs2", "book": record["offer"]["platform"], "row_id": record["offer"]["offer_id"],
-            "side": side, "line": record["offer"]["line"], "rev": record["offer"]["revision"],
+            "side": side, "line": record["offer"]["line"], "rev": record["offer"]["revision"], "read_rev": record["scout"]["read_rev"],
             "shown_p": record["scout"]["p_side"] if shown and side == record["scout"]["side"] else None}

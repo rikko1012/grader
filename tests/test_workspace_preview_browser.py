@@ -2,6 +2,7 @@
 CS2 flow from research through settlement, two devices, real failure states, and focus and layout. Skipped where Playwright or
 Chromium is missing. Nothing here reaches a network or production data."""
 import json
+import re
 import threading
 from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
@@ -10,9 +11,10 @@ import pytest
 
 import hltv
 import server
+import underdog
 import whop_auth
 import workspace_api
-from tests.workspace_fixture import Fixture, iso
+from tests.workspace_fixture import Fixture, iso, row
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
@@ -22,6 +24,7 @@ PHONE = {"width": 390, "height": 844}
 WIDE = {"width": 1920, "height": 1080}
 MIN = 60_000
 NBA_ROW = "nba.nba-e2.brandt.pra.full_game.33.5"
+OWNER = "the-owner"
 
 
 @pytest.fixture(scope="module")
@@ -78,6 +81,21 @@ def ctx(browser, env):
     c.close()
 
 
+@pytest.fixture
+def octx(browser, env, monkeypatch):
+    """The owner: the one account that can turn sample sports on."""
+    monkeypatch.setenv("SPORTS_UI_ALLOW", server.sports_allow_id(OWNER))
+    c = context(browser, env, user=OWNER)
+    yield c
+    c.close()
+
+
+def samples(p):
+    p.click("#open-filters")
+    p.check("#sample-on")
+    p.click("#filters-done")
+
+
 def open_page(ctx, env, path="", size=None, wait=True):
     p = ctx.new_page()
     p.errors = []
@@ -103,8 +121,18 @@ def refresh(p):
     p.evaluate("""() => window.dispatchEvent(new Event('focus'))""")
 
 
+def fresh():
+    server._GB.clear()
+    server._RESULTS.clear()
+
+
+def record_clipboard(p):
+    p.evaluate("""() => { window.__clip = []; navigator.clipboard.writeText = (t) => { window.__clip.push(t); return Promise.resolve(); }; }""")
+
+
 def key_of(p, nick, book="underdog"):
-    return p.evaluate("""async ([n, b]) => { const r = await (await fetch('/preview/workspace/api/board')).json();
+    return p.evaluate("""async ([n, b]) => { const res = await fetch('/preview/workspace/api/board'), r = await res.json();
+      if (!r.records) throw new Error('board answered ' + res.status + ' ' + JSON.stringify(r));
       return r.records.find((x) => x.player.name === n && x.offer.platform === b).key; }""", [nick, book])
 
 
@@ -184,7 +212,7 @@ def test_full_cs2_flow_from_research_through_settlement(ctx, env):
     go(p, "#/results")
     p.wait_for_function("document.getElementById('view-results').textContent.includes('Your tracked picks')")
     res = p.inner_text("#view-results")
-    assert "Scout board record" in res and "Your tracked picks" in res and "Sample sports" in res and "1-1-0" in res
+    assert "Scout board record" in res and "Your tracked picks" in res and "Sample sports" not in res and "1-1-0" in res
     assert p.errors == []
 
 
@@ -243,8 +271,9 @@ def test_entry_type_changes_the_check(ctx, env):
 
 
 # ---- mixed slips
-def test_mixed_sports_by_platform(ctx, env):
-    p = open_page(ctx, env)
+def test_mixed_sports_by_platform(octx, env):
+    p = open_page(octx, env)
+    samples(p)
     all_days(p)
     add(p, "vargo", "prizepicks")
     go(p, "#/research/p/" + NBA_ROW)
@@ -255,7 +284,7 @@ def test_mixed_sports_by_platform(ctx, env):
     ready(p)
     entry = p.inner_text("#rail-body .entry")
     assert "CS2 + NBA" in entry and "NBA legs are sample data." in entry and p.is_disabled('#rail-body [data-act="track"][data-id="prizepicks"]')
-    assert p.is_enabled('#rail-body [data-act="copy"][data-id="prizepicks"]')
+    assert p.is_disabled('#rail-body [data-act="copy"][data-id="prizepicks"]') and "0 of 1 entry ready" in p.inner_text("#rail-body .slip-status")
     p.click('#rail-body [data-act="slip-clear"]')
     add(p, "vargo")
     go(p, "#/research/p/" + NBA_ROW)
@@ -310,6 +339,7 @@ def test_a_leg_removed_on_one_device_stays_removed(browser, env):
     a.wait_for_timeout(1000)
     b = open_page(b_ctx, env)                                   # b holds vargo at this revision
     b.wait_for_function("document.getElementById('rail-body').textContent.includes('1 pick')")
+    a.keyboard.press("Escape")
     a.click('#rail-body [aria-label="Remove vargo Over 38.5"]')
     a.wait_for_timeout(1000)
     add(b, "orlo")                                              # a stale save that still holds vargo
@@ -456,18 +486,27 @@ def test_book_columns_show_each_platforms_own_line(ctx, env):
     row = p.locator(".row", has_text="orlo").first
     assert row.locator(".c-ud .bc").inner_text().startswith("O")
     assert "34.5" in row.locator(".c-pp .bc.other").inner_text()
+
+
+def test_best_price_is_marked_only_among_prices_that_compare(octx, env):
+    p = open_page(octx, env)
+    samples(p)
+    all_days(p)
     assert p.locator(f'.row[data-row="{NBA_ROW}"] .best').count() >= 1
+    assert p.locator('.row:has-text("vargo") .best').count() == 0              # one priced book: nothing to compare
 
 
-def test_sample_tag_is_on_sample_rows_only(ctx, env):
-    p = open_page(ctx, env)
+def test_sample_tag_is_on_sample_rows_only(octx, env):
+    p = open_page(octx, env)
+    samples(p)
     all_days(p)
     assert p.locator('.row:has-text("vargo") .sample-tag').count() == 0
     assert p.locator(f'.row[data-row="{NBA_ROW}"] .sample-tag').count() == 1
 
 
-def test_match_groups_and_other_lines(ctx, env):
-    p = open_page(ctx, env)
+def test_match_groups_and_other_lines(octx, env):
+    p = open_page(octx, env)
+    samples(p)
     all_days(p)
     assert p.locator(".match-head", has_text="Halcyon vs Norrland").count() == 1
     assert p.locator(".row.is-sub").count() >= 1                # the sample prop with two lines
@@ -482,8 +521,10 @@ def test_sort_header_works(ctx, env):
     assert first == "61.2%"
 
 
-def test_decimal_odds_are_not_written_as_multipliers(ctx, env):
-    p = open_page(ctx, env, path="#/research/p/" + NBA_ROW + "/books")
+def test_decimal_odds_are_not_written_as_multipliers(octx, env):
+    p = open_page(octx, env)
+    samples(p)
+    go(p, "#/research/p/" + NBA_ROW + "/books")
     p.wait_for_selector("#panel-name")
     assert "1.93" in p.inner_text("#panel") and "1.93x" not in p.inner_text("#panel") and "1.90x" in p.inner_text("#panel")
 
@@ -538,8 +579,10 @@ def test_board_stays_live_beside_the_panel_when_there_is_room(ctx, env):
     assert p.inner_text("#panel-name") != one and p.locator('.row[data-open="true"]').count() == 1
 
 
-def test_line_picker_and_remove_toggle(ctx, env):
-    p = open_page(ctx, env, path="#/research/p/nba.nba-e1.delvane.pts.full_game.24.5")
+def test_line_picker_and_remove_toggle(octx, env):
+    p = open_page(octx, env)
+    samples(p)
+    go(p, "#/research/p/nba.nba-e1.delvane.pts.full_game.24.5")
     p.wait_for_selector(".line-pick")
     p.click('[data-act="p-add"]')
     assert "Remove from slip" in p.inner_text(".p-foot")
@@ -559,15 +602,18 @@ def test_history_tab_splits_by_map(ctx, env):
     assert "By map, last 20 series" in body and "Mirage" in body and "Average per map" in body
 
 
-def test_line_move_is_shown(ctx, env):
-    p = open_page(ctx, env, path="#/research/p/nba.nba-e1.delvane.pts.full_game.25.5")
+def test_line_move_is_shown(octx, env):
+    p = open_page(octx, env)
+    samples(p)
+    go(p, "#/research/p/nba.nba-e1.delvane.pts.full_game.25.5")
     p.wait_for_selector("#panel-name")
     p.click('[data-act="p-book"][data-id="underdog"]')
     assert "Moved from 24.5" in p.inner_text("#panel .p-sub")
 
 
-def test_a_slip_stops_at_the_servers_limit_with_a_reason(ctx, env):
-    p = open_page(ctx, env)
+def test_a_slip_stops_at_the_servers_limit_with_a_reason(octx, env):
+    p = open_page(octx, env)
+    samples(p)
     all_days(p)
     buttons = p.locator('.row .add[data-act="row-add"]')
     for i in range(9):
@@ -652,7 +698,7 @@ def test_ids_stay_folded_under_details(ctx, env):
     assert d.count() == 1 and d.evaluate("e => e.open") is False
 
 
-def test_results_keeps_three_populations_apart(ctx, env):
+def test_results_keeps_each_population_apart(ctx, env):
     p = open_page(ctx, env, path="#/results")
     p.wait_for_function("document.getElementById('view-results').textContent.includes('Hit rate, settled picks')")
     text = p.inner_text("#view-results")
@@ -744,14 +790,16 @@ def test_phone_search_closes_by_touch_and_keyboard(ctx, env):
 
 
 # ---- keyboard
-def test_sport_chip_keeps_focus(ctx, env):
-    p = open_page(ctx, env)
+def test_sport_chip_keeps_focus(octx, env):
+    p = open_page(octx, env)
+    samples(p)
     enter(p, '[data-fk="chip:nba"]')
     assert active(p) == "BUTTON:chip:nba"
 
 
-def test_escape_returns_to_the_control_that_opened_the_panel(ctx, env):
-    p = open_page(ctx, env)
+def test_escape_returns_to_the_control_that_opened_the_panel(octx, env):
+    p = open_page(octx, env)
+    samples(p)
     all_days(p)
     add_btn = '.row[data-row="nba.nba-e2.moon.pts.full_game.18.5"] .add'
     p.focus(add_btn)
@@ -846,7 +894,7 @@ def test_phone_targets_are_44(ctx, env):
     p.wait_for_timeout(100)
     small = p.evaluate("""() => [...document.querySelectorAll('.add, .chip, .more-btn')].filter(b => b.offsetParent && b.getBoundingClientRect().height < 44).map(b => b.className)""")
     assert small == []
-    assert p.evaluate("""() => { const lim = document.getElementById('slip-fab').getBoundingClientRect().top; return [...document.querySelectorAll('.row')].filter(r => r.getBoundingClientRect().bottom <= lim).length; }""") >= 6
+    assert p.evaluate("""() => { const lim = document.getElementById('bottom').getBoundingClientRect().top; return [...document.querySelectorAll('.row')].filter(r => r.getBoundingClientRect().bottom <= lim).length; }""") >= 6
 
 
 def test_toast_never_covers_the_slip_action_on_a_phone(ctx, env):
@@ -922,3 +970,500 @@ def test_page_never_calls_the_grader(ctx, env):
     p.keyboard.press("Escape")
     ready(p)
     assert not [u for u in seen if "/api/grade" in u or "/api/slip_log" in u] and env.grades == 0
+
+
+# ---- regressions from the 91bf2bf review
+def test_a_member_sees_real_data_only(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    assert p.locator("#chips .chip").count() == 1 and "CS2" in p.inner_text("#chips")
+    for h in ("#/research", "#/slips", "#/picks", "#/results"):
+        go(p, h)
+        p.wait_for_timeout(100)
+        text = p.evaluate("document.body.innerText")
+        assert "SAMPLE DATA" not in text and "Sample sports" not in text and "Sample receipts" not in text, h
+    go(p, "#/research")
+    p.click("#open-filters")
+    assert p.locator("#sample-on").count() == 0 and "NBA points" not in p.inner_text("#filters-body")
+
+
+def test_a_forged_sample_pref_changes_nothing_for_a_member(ctx, env):
+    workspace_api.store().put_state(workspace_api.member_key("whop:u1"), 0, {"prefs": {"sample": True, "chip": "nba", "f": {"day": "all"}}})
+    p = open_page(ctx, env)
+    assert p.locator(".row").count() >= 5 and p.locator(".sample-tag").count() == 0
+    assert p.locator('.row:has-text("Delvane")').count() == 0
+
+
+def test_next_days_props_fill_a_first_visit_with_nothing_today(ctx, env):
+    late = iso(datetime.now(timezone.utc) + timedelta(hours=60))
+    for x in env.rows:
+        x.update(start=late, match_start=late, lock_at=late)
+    p = open_page(ctx, env)
+    assert p.locator(".row").count() >= 5 and "No props match" not in p.inner_text("#board-list")
+
+
+def test_the_owner_turns_sample_sports_on_and_the_choice_stays(octx, env):
+    p = open_page(octx, env)
+    assert p.locator(".sample-tag").count() == 0
+    samples(p)
+    assert p.locator("#chips .chip").count() == 5 and p.locator(".sample-tag").count() > 0
+    p.wait_for_timeout(2800)
+    p.reload()
+    p.wait_for_selector("#app[data-boot=done]", state="attached")
+    assert p.locator("#chips .chip").count() == 5
+
+
+def test_the_underdog_column_shows_its_real_prices(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    cell = p.locator(".row", has_text="vargo").first.locator(".c-ud .bc").inner_text()
+    assert "1.92" in cell and "1.88" in cell and "1.00x" not in p.inner_text("#board-list")
+    panel(p, "vargo")
+    p.wait_for_selector("#panel .chart svg")
+    assert "1.92" in p.inner_text('[data-act="p-side"][data-id="over"]')
+    p.click("#tab-books")
+    assert "1.92" in p.inner_text("#panel .dt") and "1.00x" not in p.inner_text("#panel")
+
+
+def test_a_failed_save_is_sent_again_without_a_click(ctx, env):
+    p = open_page(ctx, env)
+    failed = []
+
+    def once(route):
+        if route.request.method == "POST" and not failed:
+            failed.append(1)
+            route.abort()
+        else:
+            route.continue_()
+    ctx.route("**/preview/workspace/api/state", once)
+    add(p, "vargo")
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes('will save when the connection returns')")
+    assert not (state(env)["slip"] or {}).get("legs")
+    p.wait_for_function("!document.getElementById('rail-body').textContent.includes('will save when the connection returns')", timeout=9000)
+    assert [l["player"] for l in state(env)["slip"]["legs"]] == ["vargo"]
+
+
+def test_a_limit_hit_on_a_save_is_sent_again(ctx, env):
+    p = open_page(ctx, env)
+    hits = []
+
+    def busy(route):
+        if route.request.method == "POST" and len(hits) < 1:
+            hits.append(1)
+            route.fulfill(status=429, content_type="application/json", body='{"error":"Too many requests."}')
+        else:
+            route.continue_()
+    ctx.route("**/preview/workspace/api/state", busy)
+    add(p, "vargo")
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes('will save when the connection returns')")
+    p.wait_for_function("!document.getElementById('rail-body').textContent.includes('will save when the connection returns')", timeout=9000)
+    assert [l["player"] for l in state(env)["slip"]["legs"]] == ["vargo"]
+
+
+def test_a_change_made_while_a_save_is_running_is_saved_too(ctx, env):
+    p = open_page(ctx, env)
+    gate = []
+
+    def slow(route):
+        if route.request.method == "POST":
+            gate.append(route)
+            return
+        route.continue_()
+    ctx.route("**/preview/workspace/api/state", slow)
+    add(p, "vargo")
+    p.wait_for_timeout(1000)                                    # the first save is in flight, held here
+    assert len(gate) == 1
+    add(p, "orlo")
+    p.wait_for_timeout(1000)
+    ctx.unroute("**/preview/workspace/api/state")
+    gate[0].continue_()
+    p.wait_for_timeout(2000)
+    assert sorted(l["player"] for l in state(env)["slip"]["legs"]) == ["orlo", "vargo"]
+
+
+def test_a_leg_added_just_before_a_reload_is_still_there(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    p.click('[data-act="p-add"]')
+    p.reload()
+    p.wait_for_selector("#app[data-boot=done]", state="attached")
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes('1 pick')")
+    p.wait_for_timeout(1200)
+    assert [l["player"] for l in state(env)["slip"]["legs"]] == ["vargo"]
+
+
+def test_a_draft_stays_with_its_member(browser, env):
+    """Two members on one browser: what one left unsaved never lands on the other's slip, and it is waiting when they come back."""
+    c = context(browser, env, user="alice")
+    c.route("**/preview/workspace/api/state", lambda r: r.abort() if r.request.method == "POST" else r.continue_())
+    p = open_page(c, env)
+    panel(p, "vargo")
+    p.click('[data-act="p-add"]')
+    p.wait_for_timeout(1000)
+    assert not (state(env, "alice")["slip"] or {}).get("legs")
+    p.goto("about:blank")                                       # alice left, and her last save never arrived
+    c.unroute("**/preview/workspace/api/state")
+    c.add_cookies([{"name": whop_auth.COOKIE, "value": "good-bob", "url": env.url}])
+    p.goto(env.url)
+    p.wait_for_selector("#app[data-boot=done]", state="attached")
+    p.wait_for_timeout(1200)
+    assert "0 picks" in p.inner_text("#rail-body") and not (state(env, "bob")["slip"] or {}).get("legs")
+    p.goto("about:blank")
+    c.add_cookies([{"name": whop_auth.COOKIE, "value": "good-alice", "url": env.url}])
+    p.goto(env.url)
+    p.wait_for_selector("#app[data-boot=done]", state="attached")
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes('1 pick')")
+    p.wait_for_timeout(1200)
+    assert [l["player"] for l in state(env, "alice")["slip"]["legs"]] == ["vargo"]
+    c.close()
+
+
+def test_an_open_device_picks_up_another_devices_leg(browser, env):
+    a_ctx, b_ctx = context(browser, env), context(browser, env)
+    a, b = open_page(a_ctx, env), open_page(b_ctx, env)
+    add(a, "orlo")
+    a.wait_for_timeout(1200)
+    refresh(b)
+    b.wait_for_function("document.getElementById('rail-body').textContent.includes('1 pick')")
+    a_ctx.close()
+    b_ctx.close()
+
+
+def test_a_prefs_save_never_costs_another_devices_leg(browser, env):
+    a_ctx, b_ctx = context(browser, env), context(browser, env)
+    a, b = open_page(a_ctx, env), open_page(b_ctx, env)
+    add(b, "vargo")
+    b.wait_for_timeout(1200)                                    # b saved: rev moved, a does not know yet
+    assert [l["player"] for l in state(env)["slip"]["legs"]] == ["vargo"]
+    chip(a, "cs2")                                              # a saves preferences on the old rev
+    a.wait_for_timeout(3200)
+    add(a, "orlo")
+    a.wait_for_timeout(1200)
+    assert sorted(l["player"] for l in state(env)["slip"]["legs"]) == ["orlo", "vargo"]
+    add(b, "brandr")
+    b.wait_for_timeout(1500)
+    assert sorted(l["player"] for l in state(env)["slip"]["legs"]) == ["brandr", "orlo", "vargo"]
+    a_ctx.close()
+    b_ctx.close()
+
+
+def test_a_merge_stops_at_the_leg_limit_and_the_slip_keeps_working(browser, env):
+    s = env.by("vargo")["start"]
+    extra = [row(f"11111111-0000-4000-8000-00000000{100 + i:04d}", "underdog", f"xp{i}", f"T{i}a", f"T{i}b", 30.5, "More", 0.6, 950 + i, s) for i in range(10)]
+    env.rows.extend(extra)
+    env.seed(extra)
+    a_ctx, b_ctx = context(browser, env), context(browser, env)
+    a, b = open_page(a_ctx, env), open_page(b_ctx, env)
+    for i in range(5):
+        add(a, f"xp{i}")
+    a.wait_for_timeout(1200)
+    for i in range(5, 10):
+        add(b, f"xp{i}")
+    b.keyboard.press("Escape")
+    b.wait_for_function("document.getElementById('toast').textContent.includes('A slip holds 8 picks')")
+    b.wait_for_timeout(1500)
+    assert len(state(env)["slip"]["legs"]) == 8
+    ready(b)
+    assert "did not answer" not in b.inner_text("#rail-body") and b.is_enabled('#rail-body [data-act="track"][data-id="underdog"]')
+    a_ctx.close()
+    b_ctx.close()
+
+
+def test_a_deleted_view_stays_deleted(browser, env):
+    a_ctx, b_ctx = context(browser, env), context(browser, env)
+    a = open_page(a_ctx, env)
+    a.click("#open-filters")
+    a.fill("#view-name", "Mine")
+    a.click("#save-view button")
+    a.wait_for_timeout(1000)
+    a.click("#filters-done")
+    b = open_page(b_ctx, env)
+    add(b, "vargo")                                             # moves the rev while a still holds the old one
+    b.wait_for_timeout(1200)
+    a.click("#open-filters")
+    a.click('[aria-label="Delete view Mine"]')
+    a.wait_for_timeout(1500)
+    assert state(env)["views"] == []
+    a.wait_for_function("!document.getElementById('filters-body').textContent.includes('Mine')")
+    a_ctx.close()
+    b_ctx.close()
+
+
+def test_copy_asks_the_server_first_and_a_refusal_leaves_the_clipboard_alone(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    record_clipboard(p)
+    env.by("vargo").update(line=41.5, graded_line=41.5)
+    past = iso(datetime.now(timezone.utc) - timedelta(minutes=1))
+    env.by("orlo").update(start=past, lock_at=past, match_start=past)
+    fresh()
+    with p.expect_request("**/preview/workspace/api/recheck"):
+        p.click('#rail-body [data-act="copy"][data-id="underdog"]')
+    p.wait_for_function("document.getElementById('toast').textContent.includes('Nothing from the Underdog entry')")
+    assert p.evaluate("window.__clip") == []
+    assert "Line moved" in p.inner_text("#rail-body")
+
+
+def test_copy_writes_after_a_passing_check(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    record_clipboard(p)
+    with p.expect_request("**/preview/workspace/api/recheck"):
+        p.click('#rail-body [data-act="copy"][data-id="underdog"]')
+    p.wait_for_function("window.__clip.length === 1")
+    assert "vargo Over 38.5" in p.evaluate("window.__clip[0]")
+
+
+def test_copy_with_the_check_down_leaves_the_clipboard_alone(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    record_clipboard(p)
+    ctx.route("**/preview/workspace/api/recheck", lambda r: r.abort())
+    p.click('#rail-body [data-act="copy"][data-id="underdog"]')
+    p.wait_for_function("document.getElementById('toast').textContent.includes('Nothing from the Underdog entry')")
+    assert p.evaluate("window.__clip") == []
+
+
+def test_a_side_flip_reaches_the_slip_and_the_member_takes_it_knowingly(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    env.flip(env.by("vargo"))
+    fresh()
+    p.click('#rail-body [data-act="check-now"]')
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes(\"Scout's read changed: now Under 58.0%\")")
+    assert p.is_disabled('#rail-body [data-act="track"][data-id="underdog"]') and p.is_disabled('#rail-body [data-act="copy"][data-id="underdog"]')
+    p.click('#rail-body [data-act="swap-leg"]')
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes('Scout side is Under')")
+    ready(p)
+    assert "61.2%" not in p.inner_text("#rail-body .leg")
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .tracked")
+
+
+def test_a_receipt_against_scout_names_scouts_side(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    p.click('[data-act="p-side"][data-id="under"]')
+    p.click('[data-act="p-add"]')
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    p.click('#rail-body [data-act="track"][data-id="underdog"]')
+    p.wait_for_selector("#rail-body .tracked")
+    go(p, "#/picks")
+    p.wait_for_selector("#view-picks .pick-row")
+    p.locator(".pick-row .pick-head", has_text="vargo").click()
+    body = p.inner_text("#view-picks .pick-body")
+    assert "B Over" in body and "0.5U on Over" in body and "Under, against Scout" in body and "None saved for this side" in body
+
+
+def test_a_sample_leg_is_never_ready_and_never_copied(octx, env):
+    p = open_page(octx, env)
+    samples(p)
+    all_days(p)
+    go(p, "#/research/p/" + NBA_ROW)
+    p.wait_for_selector("#panel-name")
+    p.click('[data-act="p-book"][data-id="prizepicks"]')
+    p.click('[data-act="p-add"]')
+    add(p, "vargo", "prizepicks")
+    p.keyboard.press("Escape")
+    ready(p)
+    assert "0 of 1 entry ready" in p.inner_text("#rail-body .slip-status")
+    assert p.is_disabled('#rail-body [data-act="copy"][data-id="prizepicks"]') and p.is_disabled('#rail-body [data-act="track"][data-id="prizepicks"]')
+
+
+def test_research_never_changes_book_silently(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    assert "Underdog" in p.inner_text("#panel .p-stat") and "on Underdog" in p.inner_text(".p-foot")
+    env.by("vargo").update(line=39.5, graded_line=39.5)
+    env.relog(env.by("vargo"))
+    fresh()
+    refresh(p)
+    p.wait_for_function("document.getElementById('panel').textContent.includes('Underdog no longer lists 38.5. Showing PrizePicks.')")
+    assert "on PrizePicks" in p.inner_text(".p-foot") and "PrizePicks" in p.inner_text("#panel .p-stat")
+    p.locator('#panel .strip [data-act="p-line"]').click()
+    p.wait_for_function("document.querySelector('.p-foot').textContent.includes('Add Over 39.5 on Underdog')")
+
+
+def test_a_moved_line_is_reported_as_moved(ctx, env):
+    p = open_page(ctx, env)
+    panel(p, "orlo")
+    env.by("orlo").update(line=34.5, graded_line=34.5)
+    env.relog(env.by("orlo"))
+    fresh()
+    refresh(p)
+    p.wait_for_function("document.getElementById('panel').textContent.includes('This line moved')")
+    text = p.inner_text("#panel")
+    assert "33.5 is off the board" in text and "left the board" not in text
+    p.locator('#panel [data-act="p-line"]').first.click()
+    p.wait_for_function("document.querySelector('.p-foot').textContent.includes('34.5')")
+
+
+def test_an_ended_session_asks_for_sign_in_and_stops_retrying(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    ctx.clear_cookies()
+    p.click('#rail-body [data-act="check-now"]')
+    p.wait_for_selector("#session-strip:not([hidden])")
+    assert p.locator('#session-strip a[href="/auth/login"]').count() == 1
+    text = p.inner_text("#rail-body")
+    assert "Your session ended" in text and "did not answer" not in text and p.locator("#rail-body .leg").count() == 2
+    seen = []
+    p.on("request", lambda r: seen.append(r.url) if "/api/" in r.url else None)
+    refresh(p)
+    p.wait_for_timeout(300)
+    assert seen == []
+
+
+def test_open_check_details_stay_open_through_a_new_check(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    p.locator("#rail-body details.checks summary", has_text="Check details").click()
+    p.locator("#rail-body details.checks summary", has_text="Platform rules checked").click()
+    assert p.locator("#rail-body details[open]").count() == 2
+    p.click('#rail-body [data-act="check-now"]')
+    ready(p)
+    assert p.locator("#rail-body details[open]").count() == 2
+
+
+def test_every_disclosure_shows_it_opens(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    marks = p.evaluate("""() => [...document.querySelectorAll('#rail-body summary')].map((s) => getComputedStyle(s, '::before').borderBottomStyle)""")
+    assert marks and set(marks) == {"solid"}
+
+
+def test_a_line_updated_days_ago_shows_its_date(ctx, env):
+    env.by("vargo")["updated_at"] = iso(datetime.now(timezone.utc) - timedelta(days=3))
+    p = open_page(ctx, env)
+    panel(p, "vargo")
+    p.click("#tab-books")
+    assert re.search(r"[A-Z][a-z]{2} \d+, \d", p.locator("#panel .dt tbody tr").first.inner_text()) and "Updated" in p.inner_text("#panel .dt thead")
+
+
+def test_an_empty_export_says_so(ctx, env, monkeypatch):
+    monkeypatch.setattr(server, "_p1_export", lambda: {})
+    p = open_page(ctx, env, path="#/results")
+    p.wait_for_function("document.getElementById('view-results').textContent.includes('No settled picks meet this rule yet')")
+    assert "undefined" not in p.inner_text("#view-results")
+
+
+def test_the_phone_slip_bar_waits_for_a_pick(ctx, env):
+    p = open_page(ctx, env, size=PHONE)
+    assert p.locator("#slip-fab").is_hidden()
+    panel(p, "vargo")
+    p.click('[data-act="p-add"]')
+    p.keyboard.press("Escape")
+    p.wait_for_function("!document.getElementById('slip-fab').hidden")
+
+
+def test_phone_chips_that_do_not_fit_say_so(octx, env):
+    p = open_page(octx, env, size=PHONE)
+    samples(p)
+    assert p.evaluate("document.getElementById('chips').scrollWidth > document.getElementById('chips').clientWidth")
+    assert "scrolls" in p.get_attribute("#chips", "class")
+
+
+def test_each_underdog_leg_gets_its_own_link(ctx, env, monkeypatch):
+    monkeypatch.setattr(server, "PP_OPEN_LINK", True)
+    monkeypatch.setattr(underdog, "ud_ids", lambda rid: (rid,))
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    links = p.locator("#rail-body .leg-meta a")
+    assert links.count() == 2 and links.first.get_attribute("href").startswith("https://") and "Open Underdog" in p.inner_text("#rail-body .entry-foot")
+
+
+def test_no_internal_ids_on_a_members_panel_or_slip(ctx, env):
+    p = open_page(ctx, env)
+    add(p, "vargo")
+    add(p, "orlo")
+    p.keyboard.press("Escape")
+    ready(p)
+    assert "TESTMODEL" not in p.inner_text("#rail-body")
+    panel(p, "vargo")
+    p.wait_for_selector("#panel .chart svg")
+    assert "Offer" not in p.evaluate("document.querySelector('#panel details.details').textContent")
+
+
+def test_no_empty_other_books_column(ctx, env):
+    p = open_page(ctx, env)
+    all_days(p)
+    assert p.locator(".h-other").is_hidden() and p.locator(".row .c-other").first.is_hidden()
+
+
+def test_the_board_keeps_its_columns_beside_the_panel_at_a_normal_desktop(ctx, env):
+    p = open_page(ctx, env, size={"width": 1440, "height": 900})
+    all_days(p)
+    panel(p, "vargo")
+    assert p.locator("#rail").is_hidden() and p.locator("#view-research").evaluate("e => e.clientWidth") >= 800
+    r = p.locator(".row").first
+    assert r.locator(".c-hist").is_visible() and r.locator(".c-pp").is_visible() and r.locator(".c-ud").is_visible()
+    assert p.locator("#f-day").is_visible() and p.locator("#f-market").is_visible() and p.locator("[data-mini-slip]").is_visible()
+
+
+def test_the_rail_stays_when_there_is_room_for_all_three(ctx, env):
+    p = open_page(ctx, env, size=WIDE)
+    all_days(p)
+    panel(p, "vargo")
+    assert p.locator("#rail").is_visible() and p.locator(".row .c-hist").first.is_visible()
+
+
+def test_a_phone_row_keeps_its_stat_and_maps(ctx, env):
+    p = open_page(ctx, env, size=PHONE)
+    all_days(p)
+    assert p.locator(".row", has_text="sable").first.locator(".pl-sub").inner_text().startswith("Headshots · Map 1")
+
+
+def test_the_board_record_label_claims_only_what_it_counts(ctx, env):
+    p = open_page(ctx, env, path="#/results")
+    p.wait_for_function("document.getElementById('view-results').textContent.includes('Hit rate, settled picks')")
+    text = p.inner_text("#view-results")
+    assert "Every saved Scout forecast" not in text and "Saved Scout forecasts that meet the rule and definition below" in text
+
+
+def test_older_picks_load_on_request(ctx, env):
+    who = workspace_api.member_key("whop:u1")
+    s = workspace_api.store()
+    t0 = datetime.now(timezone.utc)
+    rows = [(f"rc-{i}", who, f"sl-{i // 4}", i % 4, iso(t0 - timedelta(seconds=i // 4)), "cs2", "underdog", "r", "d", "over", 30.5, "standard", 1, 1, "s", None, "k", f"n{i}", "kills", "12", None, None, 0,
+             json.dumps({"player": f"n{i}", "stat_label": "Kills", "period_label": "Maps 1-2", "matchup": "A vs B", "platform_label": "Underdog"})) for i in range(80)]
+    slips = sorted({(r[2], who, r[4], "underdog", "standard", "[\"cs2\"]", 4, "v", "{}", 0) for r in rows})
+
+    def op(con):
+        con.executemany("INSERT INTO receipts(receipt_id, member, slip_id, leg_no, tracked_at, sport, platform, row_id, offer_rev, side, line, line_type, pick_id, forecast_id, match_slug, match_id, "
+                        "match_key, nick, prop, scope, start_utc, model_version, scratch, payload) VALUES(" + ",".join("?" * 24) + ")", rows)
+        con.executemany("INSERT INTO slips(slip_id, member, tracked_at, platform, entry_type, sports, legs, rules_version, checks, scratch) VALUES(?,?,?,?,?,?,?,?,?,?)", slips)
+        s._bump(con, who)
+    s.submit(op, wait=30)
+    p = open_page(ctx, env, path="#/picks")
+    p.wait_for_selector("#view-picks .pick-row")
+    before = p.locator("#view-picks .pick-row").count()
+    assert before < 80
+    p.click('#view-picks [data-act="mine-older"]')
+    p.wait_for_function("document.querySelectorAll('#view-picks .pick-row').length === 80")
+    assert p.locator('#view-picks [data-act="mine-older"]').count() == 0 and p.errors == []

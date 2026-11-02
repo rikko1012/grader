@@ -42,8 +42,9 @@ def _rule(status, text, source=None, page_date=None, note=None):
     return {"status": status, "text": text, "source": source, "page_date": page_date, "read_at": READ_AT, "note": note}
 
 
-_PUBLISHED, _NOT = "published", "not_published"
-# one row per combination; status "published" means the platform states the answer on the page named
+_PUBLISHED, _NOT, _SCOUT = "published", "not_published", "scout"
+# one row per combination. "published": the platform states the answer on the page named, and every such row names that page.
+# "not_published": no page answers it. "scout": a limit of Scout's own, which no platform page states, so it carries no source.
 TABLE = {
     "entry_size": {"label": "Entry size",
                    "prizepicks": _rule(_PUBLISHED, "2 to 6 picks", PP_PICKS, PP_PAGE,
@@ -53,14 +54,15 @@ TABLE = {
                   "prizepicks": _rule(_PUBLISHED, "Required", PP_PICKS, PP_PAGE),
                   "underdog": _rule(_PUBLISHED, "Required", UD_LINEUP, None, "This rules page shows no date.")},
     "same_player": {"label": "Same player twice",
-                    "prizepicks": _rule(_PUBLISHED, "Refused. Stacks are not offered on the CS2 boards Scout reads", PP_PICKS, PP_PAGE),
+                    "prizepicks": _rule(_PUBLISHED, "A player counts once per lineup, unless Stacks are available for that player", PP_PICKS, PP_PAGE,
+                                        "The CS2 boards Scout reads carry no Stacks, so Scout refuses a repeat."),
                     "underdog": _rule(_PUBLISHED, "Same side refused", UD_LINEUP)},
     "both_sides": {"label": "Both sides of one prop",
                    "prizepicks": _rule(_PUBLISHED, "Refused by the same-player rule", PP_PICKS, PP_PAGE),
                    "underdog": _rule(_NOT, "Underdog publishes only the same-side example. Scout does not offer this")},
     "mixed_sports": {"label": "Mixed sports",
-                     "prizepicks": _rule(_PUBLISHED, "Allowed: selections can include different sports", PP_PICKS, PP_PAGE,
-                                         "CS2 chart specifics are in the PrizePicks app."),
+                     "prizepicks": _rule(_PUBLISHED, "Allowed for the most part: selections can include different sports, and some sports "
+                                                     "add their own limits", PP_PICKS, PP_PAGE, "CS2 chart specifics are in the PrizePicks app."),
                      "underdog": _rule(_NOT, "Underdog does not publish this. Its rules page, help search and Pick'em page "
                                              "were searched. Scout does not offer this")},
     "opposing_players": {"label": "Opposing players of one match",
@@ -72,10 +74,10 @@ TABLE = {
                              "underdog": _rule(_PUBLISHED, "Allowed", UD_LINEUP)},
     "goblins_demons": {"label": "Goblins and demons",
                        "prizepicks": _rule(_PUBLISHED, "Allowed in any number", PP_PICKS, PP_PAGE),
-                       "underdog": _rule(_PUBLISHED, "Alternate lines are not graded, so they never reach this board")},
+                       "underdog": _rule(_SCOUT, "Scout grades no Underdog alternate lines, so they never reach this board")},
     "two_platforms": {"label": "Two platforms in one entry",
-                      "prizepicks": _rule(_PUBLISHED, "Refused: an entry is placed on one platform"),
-                      "underdog": _rule(_PUBLISHED, "Refused: an entry is placed on one platform")},
+                      "prizepicks": _rule(_SCOUT, "Scout splits picks into one entry per platform"),
+                      "underdog": _rule(_SCOUT, "Scout splits picks into one entry per platform")},
 }
 
 
@@ -107,7 +109,7 @@ def _used(platform, *keys):
     for k in keys:
         r = TABLE[k][platform]
         out.append({"rule": k, "label": TABLE[k]["label"], "status": r["status"], "text": r["text"], "source": r["source"],
-                    "page_date": r["page_date"], "read_at": r["read_at"]})
+                    "page_date": r["page_date"], "read_at": r["read_at"], "note": r["note"]})
     return out
 
 
@@ -249,23 +251,25 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
     if any(l["p"] < EV_MIN_CHANCE for l in legs):
         return no("Results cover 57% and up.", payout=payout)
     g = gate() if callable(gate) else gate
-    cells = (g or {}).get("cells") or {}
+    if not g or g.get("at_ts") is None:             # a failed or empty read says nothing about how many matches have settled
+        return no("The results export is not available.", payout=payout)
+    cells = g.get("cells") or {}
     for l in legs:
         cell = cells.get(f"{l.get('tag')}|{l.get('prop')}|{l.get('scope')}") or {}
         have = cell.get("matches") or 0
         if have < EV_MIN_MATCHES:
-            return no(f"Version {l.get('tag')} has {have} of {EV_MIN_MATCHES} settled matches.", payout=payout)
+            return no(f"This model version has {have} of {EV_MIN_MATCHES} settled matches.", payout=payout)
     for l in legs:
         cell = cells[f"{l.get('tag')}|{l.get('prop')}|{l.get('scope')}"]
         b = band_of(cell, l["p"])
         if b is None or not b.get("ci"):
-            return no(f"No settled interval for {_pts(l['p'])} on version {l.get('tag')}.", payout=payout)
+            return no(f"No settled interval for {_pts(l['p'])} on this model version.", payout=payout)
         gap = abs(b["printed"] - b["observed"])
         if not b["ci"][0] <= b["printed"] <= b["ci"][1] or gap > EV_MAX_GAP:
             return no(f"Printed {_pts(b['printed'])}, won {_pts(b['observed'])}, a gap of {gap * 100:.1f} points.", payout=payout)
-    age_h = (now_ts - g["at_ts"]) / 3600 if g.get("at_ts") else None
-    if age_h is None or age_h >= EV_MAX_AGE_H or age_h < -1:    # a second or two ahead is this request's own clock
-        return no("The results export is not available." if age_h is None else f"The results export is {age_h:.0f} hours old.", payout=payout)
+    age_h = (now_ts - g["at_ts"]) / 3600
+    if age_h >= EV_MAX_AGE_H or age_h < -1:         # a second or two ahead is this request's own clock
+        return no(f"The results export is {age_h:.0f} hours old.", payout=payout)
     probs = [l["p"] for l in legs]
     hit = 1.0
     for p in probs:

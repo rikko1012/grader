@@ -3,10 +3,11 @@ process, fixture upstreams only (no network, never production). Extends scripts/
 card (/api/grade), match compare, results, line check, veto and search routes, and records response bytes and
 compression, so per-request heavy work and uncompressed bodies show up.
 
-usage: python scripts/load_audit700.py <code_dir> [members=700] [workspace]
+usage: python scripts/load_audit700.py <code_dir> [members=700] [workspace] [history=0]
 "workspace" runs the research workspace API instead (board, line, recheck, track, mine, state, results) as one signed-in member
 per thread, on fixture rows backed by a seeded pick log, and fails loudly on a 5xx, a grade call, more than one board build
-per 5 s, or a lost receipt.
+per 5 s, or a lost receipt. history = settled receipts already on each member's account before the run starts: a first visit has
+none, a member after a month has a couple of hundred, and that is the case that fills read slots and caches.
 Stubs (load harness only, never in the server): cs2_scout.grade sleeps 80 ms and returns a ~60 KB card (a real card
 with ladder / recent maps / comparison is that size); match_compare sleeps 50 ms and returns ~25 KB; results_payload
 returns ~40 KB. Every member sends Accept-Encoding: gzip like a browser.
@@ -27,6 +28,7 @@ from pathlib import Path
 code = sys.argv[1]
 MEMBERS = int(sys.argv[2]) if len(sys.argv) > 2 else 700
 WORKSPACE = len(sys.argv) > 3 and sys.argv[3] == "workspace"
+HISTORY = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 sys.path.insert(0, code)
 os.chdir(code)
 tmp = tempfile.mkdtemp(dir=os.path.dirname(os.path.abspath(__file__)))
@@ -169,6 +171,34 @@ def pct(xs, q):
     return round(xs[min(len(xs) - 1, int(q * len(xs)))] * 1000, 1)
 
 
+def seed_history(workspace_api, n):
+    """n settled receipts per member in four-leg slips, written straight to the tables the way a month of use leaves them."""
+    from datetime import datetime, timedelta, timezone
+    store = workspace_api.store()
+    payload = json.dumps({"player": "seeded", "team": "Halcyon Esports", "opponent": "Norrland Five", "matchup": "Halcyon Esports vs Norrland Five", "competition": "Meridian Cup Season 4",
+                          "stat_label": "Kills", "period_label": "Maps 1-2", "platform_label": "Underdog", "scout_side": "over", "on_side": True, "displayed_p": 0.612, "grade": "B", "units": 0.5,
+                          "stake_reason": None, "projection": 40.0, "forecast_p": 0.612, "forecast_at": "2026-10-01T10:00:00+00:00", "forecast_grade": "B", "forecast_units": 0.5,
+                          "l10": {"over": 6, "under": 4, "push": 0, "n": 10}, "feed_at": "2026-10-01T10:00:00+00:00", "rules_version": "ws-rules", "entry_type": "standard"}, separators=(",", ":"))
+    t0 = datetime.now(timezone.utc) - timedelta(days=30)
+    rows, setts, slips = [], [], []
+    for i in range(MEMBERS):
+        who = workspace_api.member_key(f"whop:u{i}")
+        for j in range(n):
+            rid, sid, ts = f"rc-h{i}-{j}", f"sl-h{i}-{j // 4}", (t0 + timedelta(minutes=j // 4 * 30)).isoformat(timespec="seconds")
+            rows.append((rid, who, sid, j % 4, ts, "cs2", "underdog", "r", "d", "over", 30.5, "standard", -1 - i, 1, f"h-{i}-{j // 4}", None, f"h-{i}-{j // 4}", f"n{j}", "kills", "12", ts, "SEED", 0, payload))
+            setts.append((rid, 1, "hit" if j % 2 else "miss", 33.0, "[1,2]", "hltv", ts, ts, None, None))
+            if j % 4 == 0:
+                slips.append((sid, who, ts, "underdog", "standard", '["cs2"]', 4, "v", "{}", 0))
+
+    def op(con):
+        con.executemany("INSERT INTO receipts(receipt_id, member, slip_id, leg_no, tracked_at, sport, platform, row_id, offer_rev, side, line, line_type, pick_id, forecast_id, match_slug, "
+                        "match_id, match_key, nick, prop, scope, start_utc, model_version, scratch, payload) VALUES(" + ",".join("?" * 24) + ")", rows)
+        con.executemany("INSERT INTO settlements(receipt_id, revision, result, actual, actual_maps, source, picklog_settled_at, recorded_at, supersedes, reason) VALUES(?,?,?,?,?,?,?,?,?,?)", setts)
+        con.executemany("INSERT INTO slips(slip_id, member, tracked_at, platform, entry_type, sports, legs, rules_version, checks, scratch) VALUES(?,?,?,?,?,?,?,?,?,?)", slips)
+    store.submit(op, wait=300)
+    return len(rows)
+
+
 def workspace_run():
     """Every member loads the board, researches a line, checks and tracks a two-pick entry, reads the receipts and saves the slip."""
     from datetime import datetime, timedelta, timezone
@@ -184,6 +214,7 @@ def workspace_run():
         setattr(server, name, val)
     server.hltv.recent_series = lambda *a, **k: []
     workspace_api.reset()
+    seeded = seed_history(workspace_api, HISTORY) if HISTORY else 0
 
     def req(method, name, member, body=None):
         t0 = time.time()
@@ -233,11 +264,15 @@ def workspace_run():
     builds = (fx.boards - start_boards) / 2                     # one build reads both platforms
     store = workspace_api.store()
     diag = store.diagnostics()
+    t_settle = time.time()
+    store.settle_once()
+    settle_s = time.time() - t_settle
     lat = [x[2] for x in res]
     rep = {"mode": "workspace", "members": MEMBERS, "requests": len(res), "wall_s": round(wall, 2), "connect_retries": REFUSED[0], "rss_before_after_peak_mb": [r0, r1],
            "errors_5xx": sum(1 for x in res if x[1] >= 500), "non_200": sum(1 for x in res if x[1] != 200), "p50_ms": pct(lat, .5), "p95_ms": pct(lat, .95), "p99_ms": pct(lat, .99),
            "board_builds": builds, "allowed_builds": int((time.time() - t_start) / 5) + 2, "grade_calls": fx.grades, "receipts": diag["counts"]["receipts"],
-           "expected_receipts": 2 * MEMBERS, "slips": diag["counts"]["slips"], "states": diag["counts"]["member_state"], "routes": {}}
+           "expected_receipts": 2 * MEMBERS + seeded, "history_per_member": HISTORY, "settle_pass_s": round(settle_s, 3), "slips": diag["counts"]["slips"],
+           "states": diag["counts"]["member_state"], "routes": {}}
     for p in sorted({x[0] for x in res}):
         rows = [x for x in res if x[0] == p]
         codes = {}

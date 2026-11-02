@@ -7,10 +7,12 @@ import re
 import sqlite3
 import threading
 import time
+import zlib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -186,7 +188,7 @@ def test_rules_carry_a_source_and_date_for_each_combination(env):
     assert {"entry_size", "two_teams", "same_player", "both_sides", "mixed_sports", "opposing_players", "goblins_demons", "two_platforms"} <= keys
     for r in doc["rules"]:
         for p in ("prizepicks", "underdog"):
-            assert r[p]["read_at"] == "2026-11-02" and r[p]["status"] in ("published", "not_published")
+            assert r[p]["read_at"] == "2026-11-02" and r[p]["status"] in ("published", "not_published", "scout")
     by = {r["key"]: r for r in doc["rules"]}
     assert by["mixed_sports"]["prizepicks"]["status"] == "published" and by["mixed_sports"]["underdog"]["status"] == "not_published"
     assert by["opposing_players"]["prizepicks"]["status"] == "not_published" and by["opposing_players"]["underdog"]["status"] == "published"
@@ -538,7 +540,7 @@ def test_mixed_sports_prizepicks_is_valid_but_sample_legs_cannot_be_tracked(env)
     legs = [leg_of(r[("vargo", "prizepicks")]), sample_leg("prizepicks")]
     st, doc = check(env, legs)
     e = doc["entries"]["prizepicks"]
-    assert e["status"] == "valid" and e["ok"] and not e["trackable"] and e["track_note"] == "NBA legs are sample data." and e["sports"] == ["cs2", "nba"]
+    assert e["status"] == "valid" and e["rule_ok"] and not e["ok"] and not e["trackable"] and e["track_note"] == "NBA legs are sample data." and e["sports"] == ["cs2", "nba"]
     assert doc["legs"][legs[1]["id"]]["sample"] is True
     assert track(env, legs, key="prizepicks", entry_type="power")[0] == 409
 
@@ -574,14 +576,39 @@ def test_too_many_legs(env):
     assert post(env, "recheck", {"idem": idem(), "legs": legs})[0] == 400
 
 
-def test_recheck_rate_limit_and_retry_is_free(env):
+def test_recheck_rate_limit(env):
     legs = pair(env)
-    i = idem()
-    for _ in range(3):
-        assert post(env, "recheck", {"idem": i, "legs": legs})[0] == 200
-    for _ in range(workspace_api.RECHECK_PER_MIN - 1):
+    for _ in range(workspace_api.RECHECK_PER_MIN):
         assert post(env, "recheck", {"idem": idem(), "legs": legs})[0] == 200
     assert post(env, "recheck", {"idem": idem(), "legs": legs})[0] == 429
+
+
+def test_repeating_an_idem_key_buys_no_extra_checks(env):
+    """A check is the expensive thing, and a member chooses the key: reusing one with any legs costs the same as a new one."""
+    legs = pair(env)
+    i = idem()
+    for k in range(workspace_api.RECHECK_PER_MIN):
+        assert post(env, "recheck", {"idem": i, "legs": [dict(legs[0], line=38.5 + k * 0.001), legs[1]]})[0] == 200
+    assert post(env, "recheck", {"idem": i, "legs": legs})[0] == 429
+
+
+def test_refused_tracks_with_one_idem_key_reach_the_limit(env):
+    legs = pair(env)
+    legs[0]["rev"] = "d-stale"
+    i = idem()
+    out = [track(env, legs, i=i)[0] for _ in range(workspace_api.TRACK_PER_MIN + 1)]
+    assert out[:-1] == [409] * workspace_api.TRACK_PER_MIN and out[-1] == 429
+
+
+def test_an_idem_key_names_one_press_of_one_set_of_legs(env):
+    """The same key with other legs is another press: it can never answer with the first press's receipts."""
+    r = records(env)
+    i = idem()
+    a, b = [leg_of(r[("vargo", "underdog")]), leg_of(r[("orlo", "underdog")])], [leg_of(r[("brandr", "underdog")]), leg_of(r[("raiko", "underdog")])]
+    one = track(env, a, i=i)
+    two = track(env, b, i=i)
+    assert one[0] == two[0] == 200 and one[1]["slip_id"] != two[1]["slip_id"]
+    assert get(env, "mine")[1]["record"]["picks"] == 4
 
 
 def test_board_down_with_nothing_read_answers_503(env):
@@ -794,17 +821,52 @@ def test_one_platforms_settlement_never_settles_another_platforms_leg(env):
     assert {x["platform"]: x["status"] for x in rows} == {"underdog": "hit", "prizepicks": "pending"}
 
 
-def test_open_held_and_outage_write_nothing_and_a_reopen_keeps_the_result(env, tmp_path):
+def test_open_and_held_write_nothing_before_a_first_result(env, tmp_path):
     tracked(env)
     assert settle(env)["first"] == 0
     env.settle(env.by("vargo"), actual=44.0, review=True)  # held for review
     assert settle(env)["first"] == 0 and status_of(env, "vargo")["status"] == "pending"
+    assert sqlite3.connect(tmp_path / "workspace.db").execute("SELECT COUNT(*) FROM settlements").fetchone()[0] == 0
     env.settle(env.by("vargo"), actual=44.0)
     assert settle(env)["first"] == 1
-    env.settle(env.by("vargo"), status="open", actual=None)
-    out = settle(env)
-    assert out["corrected"] == 0 and out["first"] == 0 and status_of(env, "vargo")["status"] == "hit"
-    assert sqlite3.connect(tmp_path / "workspace.db").execute("SELECT COUNT(*) FROM settlements").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("how,text", [("open", "reopened this result"), ("review", "holding this result for review")])
+def test_a_hold_or_reopen_takes_the_result_back_and_the_receipt_shows_every_step(env, tmp_path, how, text):
+    """The pick log treats these as unresolved, so the receipt and the record do: appended, the first result stays readable."""
+    tracked(env)
+    env.settle(env.by("vargo"), actual=44.0)
+    settle(env)
+    assert get(env, "mine")[1]["record"]["hit"] == 1
+    if how == "open":
+        env.settle(env.by("vargo"), status="open", actual=None)
+    else:
+        env.settle(env.by("vargo"), actual=44.0, review=True)
+    assert settle(env)["corrected"] == 1
+    v = status_of(env, "vargo")
+    rec = get(env, "mine")[1]["record"]
+    assert v["status"] == "pending" and v["final"] is None and v["corrected"] is True and rec["hit"] == 0 and rec["pending"] == 2
+    assert [t["kind"] for t in v["timeline"]] == ["tracked", "settled", "correction"] and text in v["timeline"][-1]["text"] and "Settled: Hit" in v["timeline"][1]["text"]
+    assert settle(env)["corrected"] == 0                # still held: nothing new to add
+    env.settle(env.by("vargo"), actual=44.0)
+    assert settle(env)["corrected"] == 1
+    v = status_of(env, "vargo")
+    assert v["status"] == "hit" and [t["kind"] for t in v["timeline"]] == ["tracked", "settled", "correction", "correction"]
+    rows = sqlite3.connect(tmp_path / "workspace.db").execute("SELECT revision, result, supersedes FROM settlements ORDER BY revision").fetchall()
+    assert rows == [(1, "hit", None), (2, "reopened", 1), (3, "hit", 2)]
+
+
+def test_a_missing_pick_row_keeps_the_last_result(env, tmp_path):
+    """No row to read is not an answer about the pick: this is the outage case, and the result stays."""
+    import picklog
+    tracked(env)
+    env.settle(env.by("vargo"), actual=44.0)
+    settle(env)
+    con = sqlite3.connect(picklog.DB)
+    con.execute("DELETE FROM picks WHERE id = ?", (env.pick_id(env.by("vargo")),))
+    con.commit()
+    con.close()
+    assert settle(env)["corrected"] == 0 and status_of(env, "vargo")["status"] == "hit"
 
 
 def test_transient_pick_log_failure_never_settles(env, monkeypatch, tmp_path):
@@ -851,7 +913,7 @@ def test_only_cs2_can_be_stored(env, tmp_path):
     con = sqlite3.connect(tmp_path / "workspace.db")
     with pytest.raises(sqlite3.IntegrityError):
         con.execute("INSERT INTO receipts(receipt_id, member, slip_id, leg_no, tracked_at, sport, platform, row_id, offer_rev, side, line, line_type, pick_id, forecast_id, "
-                    "match_slug, nick, prop, scope, payload) VALUES('a','m','s',0,'t','nba','underdog','r','o','over',1,'standard',1,1,'m','n','kills','12','{}')")
+                    "match_slug, match_key, nick, prop, scope, payload) VALUES('a','m','s',0,'t','nba','underdog','r','o','over',1,'standard',1,1,'m','k','n','kills','12','{}')")
 
 
 def test_slug_switch_keeps_the_receipt_on_its_own_row_and_tells_the_owner(env):
@@ -933,10 +995,20 @@ def test_mine_never_carries_ev_or_returns(env):
 def test_private_cache_is_bounded_by_bytes_and_entries():
     c = workspace_api.Lru(n=3, cap=100)
     for i in range(5):
-        c.put(i, (b"x" * 10, None, "e"))
+        c.put(i, (b"x" * 10, False, "e", 1))
     assert len(c.d) == 3 and c.get(0) is None and c.get(4) is not None
-    c.put("big", (b"x" * 90, b"y" * 5, "e"))
+    c.put("big", (b"x" * 95, False, "e", 1))
     assert c.size <= 100
+
+
+def test_seven_hundred_members_with_full_pages_fit_the_cache():
+    """One /mine and one /state entry each, at the size a 50-receipt page compresses to."""
+    c = workspace_api.Lru()
+    page = workspace_api._entry(json.dumps([{"player": f"p{i}", "line": i, "timeline": [{"text": "Tracked Over 38.5 at 61.2%"}] * 3, "x": "y" * 200} for i in range(50)]).encode(), 1)
+    for m in range(700):
+        c.put((f"m{m}", "mine"), page)
+        c.put((f"m{m}", "state"), page)
+    assert len(c.d) == 1400 and page[1] is True
 
 
 # ---- open links and EV through the route
@@ -980,9 +1052,21 @@ def test_ev_shows_only_when_every_gate_passes_and_never_on_a_receipt(env, monkey
 def test_ev_reason_comes_through_the_route(env):
     legs = pair(env)
     e = check(env, legs)[1]["entries"]["underdog"]
-    assert e["ev"]["available"] is False and "of 300 settled matches" in e["ev"]["reason"] and e["ev"]["payout"]["multiple"] == 3.5
+    assert e["ev"]["available"] is False and "This model version has" in e["ev"]["reason"] and "of 300 settled matches" in e["ev"]["reason"]
+    assert MODEL not in e["ev"]["reason"] and e["ev"]["payout"]["multiple"] == 3.5
     p = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
     assert p["ev"] == {"available": False, "reason": "PrizePicks shows lineup payouts only in its app."}
+
+
+def test_a_failed_export_read_is_named_as_that(env, monkeypatch):
+    monkeypatch.setattr(server, "_p1_export", lambda: (_ for _ in ()).throw(RuntimeError("learning db locked")))
+    e = check(env, pair(env))[1]["entries"]["underdog"]
+    assert e["ev"]["available"] is False and e["ev"]["reason"] == "The results export is not available." and e["ev"]["payout"]["multiple"] == 3.5
+
+
+def test_an_empty_export_is_named_as_that(env, monkeypatch):
+    monkeypatch.setattr(server, "_p1_export", lambda: {})
+    assert check(env, pair(env))[1]["entries"]["underdog"]["ev"]["reason"] == "The results export is not available."
 
 
 def test_gate_is_read_once_and_only_when_an_entry_reaches_it(env, monkeypatch):
@@ -995,6 +1079,507 @@ def test_gate_is_read_once_and_only_when_an_entry_reaches_it(env, monkeypatch):
     check(env, legs)
     check(env, legs)
     assert calls == [1]
+
+
+# ---- regressions from the 91bf2bf review
+def test_a_scout_side_flip_at_the_same_line_is_refused_until_the_member_takes_the_new_read(env):
+    legs = pair(env)
+    env.flip(env.by("vargo"))
+    fresh()
+    st, doc = check(env, legs)
+    p = next(a for a in doc["legs"][legs[0]["id"]]["problems"] if a["code"] == "display_mismatch")
+    assert p["swap"] is True and "now Under 58.0%" in p["text"] and not doc["entries"]["underdog"]["ok"]
+    assert doc["legs"][legs[0]["id"]]["current"]["scout_side"] == "under"
+    assert track(env, legs)[0] == 409
+    assert get(env, "mine")[1]["record"]["picks"] == 0
+    r = records(env)
+    took = [leg_of(r[("vargo", "underdog")], side="over"), legs[1]]             # the member keeps Over, knowing Scout moved
+    assert track(env, took)[0] == 200
+    v = status_of(env, "vargo")
+    assert v["side"] == "over" and v["scout_side"] == "under" and v["on_side"] is False and v["displayed_p"] is None
+
+
+def test_a_chance_shown_for_a_side_scout_left_is_refused(env):
+    legs = pair(env)
+    r = records(env)
+    legs[0] = dict(leg_of(r[("vargo", "underdog")], side="under"), shown_p=0.388)
+    assert "display_mismatch" in codes(check(env, legs)[1], legs[0])
+
+
+def test_a_leg_with_no_read_is_refused(env):
+    legs = pair(env)
+    del legs[0]["read_rev"]
+    assert "display_mismatch" in codes(check(env, legs)[1], legs[0])
+
+
+def test_a_stake_moved_by_the_same_match_cap_does_not_ask_for_a_new_read(env):
+    x = env.by("vargo")
+    legs = pair(env)
+    x.update(units=0.25, units_full=0.5, cap_n=5)
+    fresh()
+    assert check(env, legs)[1]["legs"][legs[0]["id"]]["ok"]
+
+
+def test_a_failed_board_read_stops_check_and_track(env):
+    legs = pair(env)
+    env.board_ok = False
+    fresh()
+    doc = check(env, legs)[1]
+    p = next(a for a in doc["legs"][legs[0]["id"]]["problems"] if a["code"] == "board_failed")
+    assert p["retry"] is True and not doc["entries"]["underdog"]["ok"]
+    assert track(env, legs)[0] == 409
+    assert get(env, "mine")[1]["record"]["picks"] == 0
+    env.board_ok = True
+    fresh()
+    assert check(env, legs)[1]["entries"]["underdog"]["ok"]
+
+
+def test_one_failed_book_leaves_the_other_books_legs_alone(env):
+    legs = pair(env, "prizepicks")
+    real = env.payload
+
+    def half(book="underdog"):
+        if book == "underdog":
+            raise RuntimeError("underdog board down")
+        return real(book)
+    server.board_payload = half
+    fresh()
+    assert check(env, legs)[1]["entries"]["prizepicks"]["ok"]
+
+
+def test_a_snapshot_that_stopped_rebuilding_is_never_tracked_on(env):
+    legs = pair(env)
+    assert check(env, legs)[1]["entries"]["underdog"]["ok"]
+    workspace_api._SNAP["at"] -= workspace_api.SNAP_MAX_AGE_S + 5
+    server._GB.clear()
+    server._RESULTS[("ws_board",)] = (time.time(), 200, b"{}") + tuple(server._RESULTS.get(("ws_board",), ())[3:])
+    assert "board_failed" in codes(check(env, legs)[1], legs[0])
+
+
+@pytest.mark.parametrize("status,actual", [("void", None), ("settled", 44.0), ("push", 38.5)])
+def test_a_closed_pick_cannot_be_tracked(env, status, actual):
+    legs = pair(env)
+    env.settle(env.by("vargo"), status=status, actual=actual)
+    server._RESULTS.clear()
+    doc = check(env, legs)[1]
+    assert "pick_closed" in codes(doc, legs[0]) and not doc["entries"]["underdog"]["ok"]
+    assert track(env, legs)[0] == 409
+
+
+def _saved(env, x, **kw):
+    import picklog
+    con = sqlite3.connect(picklog.DB, timeout=10)
+    for k, v in kw.items():
+        con.execute(f"UPDATE forecasts SET {k} = ? WHERE pick_id = ?", (v, env.pick_id(x)))
+    con.commit()
+    con.close()
+    server._RESULTS.clear()
+
+
+@pytest.mark.parametrize("kw", [{"grade": "LEAN"}, {"units": 0.0}, {"grade": "LEAN", "units": 0.0}, {"units": 1.0}])
+def test_a_board_grade_or_stake_the_forecast_never_saved_is_refused(env, kw):
+    x = env.by("vargo")
+    x["graded_at"] = iso(datetime.now(timezone.utc) - timedelta(hours=1))
+    legs = pair(env)
+    _saved(env, x, **kw)
+    doc = check(env, legs)[1]
+    assert "forecast_mismatch" in codes(doc, legs[0])
+    assert track(env, legs)[0] == 409
+
+
+def test_a_regrade_still_in_the_writers_queue_says_retry(env):
+    x = env.by("vargo")
+    legs = pair(env)
+    x["graded_at"] = iso(datetime.now(timezone.utc) - timedelta(seconds=20))
+    _saved(env, x, units=1.0)
+    fresh()
+    p = next(a for a in check(env, legs)[1]["legs"][legs[0]["id"]]["problems"] if a["code"] == "forecast_pending")
+    assert p["retry"] is True
+
+
+def test_the_same_match_cap_is_an_allowed_gap_and_the_receipt_keeps_both(env):
+    x = env.by("vargo")
+    legs = pair(env)
+    x.update(units=0.25, units_full=0.5, cap_n=5)
+    fresh()
+    assert track(env, legs)[0] == 200
+    v = status_of(env, "vargo")
+    assert v["units"] == 0.25 and v["forecast_units"] == 0.5 and v["forecast_grade"] == "B" and v["forecast_p"] == x["p"]
+
+
+def test_the_cap_turning_a_row_into_a_zero_stake_lean_is_an_allowed_gap(env):
+    x = env.by("vargo")
+    legs = pair(env)
+    x.update(units=0.0, units_full=0.5, cap_n=9, grade="LEAN")                  # model_grade stays: display gd-1
+    fresh()
+    assert check(env, legs)[1]["legs"][legs[0]["id"]]["ok"]
+    assert track(env, legs)[0] == 200
+    v = status_of(env, "vargo")
+    assert v["grade"] == "B" and v["units"] == 0.0 and v["forecast_grade"] == "B" and v["forecast_units"] == 0.5
+
+
+def test_a_capped_row_whose_saved_stake_is_not_the_uncapped_one_is_refused(env):
+    x = env.by("vargo")
+    x["graded_at"] = iso(datetime.now(timezone.utc) - timedelta(hours=1))
+    legs = pair(env)
+    x.update(units=0.25, units_full=1.0, cap_n=5)
+    fresh()
+    assert "forecast_mismatch" in codes(check(env, legs)[1], legs[0])
+
+
+def test_a_receipt_against_scouts_side_says_whose_grade_it_is(env):
+    r = records(env)
+    assert track(env, [leg_of(r[("vargo", "underdog")], side="under"), leg_of(r[("orlo", "underdog")])])[0] == 200
+    v = status_of(env, "vargo")
+    assert v["on_side"] is False and v["scout_side"] == "over" and v["side"] == "under" and v["grade"] == "B" and v["displayed_p"] is None
+
+
+def renamed(env, x, slug, new_id, **kw):
+    """The same line after the slug switch: same canonical match, a new row id, slug and pick."""
+    import picklog
+    x.update(settle_slug=slug, match_slug=slug, id=new_id, **kw)
+    con = sqlite3.connect(picklog.DB, timeout=10)
+    env.seed_row(con, x)
+    con.commit()
+    con.close()
+    fresh()
+
+
+def test_the_same_prop_under_two_slugs_is_one_prop(env):
+    legs = pair(env)
+    assert track(env, legs)[0] == 200
+    renamed(env, env.by("vargo"), "halcyon-vs-norrland", "11111111-0000-4000-8000-0000000000aa")
+    r = records(env)
+    a, b = leg_of(r[("vargo", "underdog")]), leg_of(r[("raiko", "underdog")])
+    st, doc = check(env, [a, b])
+    assert "duplicate_tracked" in codes(doc, a) and not doc["entries"]["underdog"]["ok"]
+    assert track(env, [a, b])[0] == 409
+    rec = get(env, "mine")[1]["record"]
+    assert rec["picks"] == 2 and rec["matches"] == 2
+
+
+def test_the_opposite_side_under_a_new_slug_is_a_conflict(env):
+    legs = pair(env)
+    assert track(env, legs)[0] == 200
+    renamed(env, env.by("vargo"), "halcyon-vs-norrland", "11111111-0000-4000-8000-0000000000aa")
+    r = records(env)
+    flipped = leg_of(r[("vargo", "underdog")], side="under")
+    assert "conflict_tracked" in codes(check(env, [flipped, leg_of(r[("raiko", "underdog")])])[1], flipped)
+
+
+def test_the_writer_refuses_a_slip_it_cannot_write_whole(env):
+    """The check can pass on a stale read: the writer's own test is what keeps a slip from ending up with fewer receipts than legs."""
+    s = workspace_api.store()
+    legs = pair(env)
+    assert track(env, legs)[0] == 200
+    mine = get(env, "mine")[1]["receipts"]
+    rid, who = mine[0]["id"], workspace_api.member_key("whop:u1")
+    row = dict(receipt_id=rid, member=who, slip_id="sl-new", leg_no=0, tracked_at=iso(datetime.now(timezone.utc)), sport="cs2", platform="underdog", row_id="r2", offer_rev="d",
+               side="over", line=1.5, line_type="standard", pick_id=1, forecast_id=1, match_slug="other-slug", match_key="hltv:777", nick="someone-else", prop="kills", scope="12",
+               payload={})
+    other = dict(row, receipt_id="rc-fresh", leg_no=1, nick="third")
+    out = s.track({"slip_id": "sl-new", "member": who, "tracked_at": row["tracked_at"], "platform": "underdog", "sports": ["cs2"]}, [row, other])
+    assert out["ok"] is False and out["duplicate"][0]["receipt_id"] == rid
+    assert s.slip_receipts(who, "sl-new") == [] and s.diagnostics()["counts"]["slips"] == 1
+
+
+def test_a_slug_only_row_and_a_canonical_row_are_one_match_for_the_opposing_rule_and_ev(env, monkeypatch):
+    gate = {"at_ts": time.time(), "cells": {f"{MODEL}|kills|12": {"matches": 300, "bands": [{"lo": 0.57, "hi": 0.70, "printed": 0.6, "observed": 0.6, "ci": [0.55, 0.65]}]}}}
+    monkeypatch.setattr(workspace_api, "_gate", lambda srv: gate)
+    a = env.by("vargo")
+    a.update(settle_slug="hltv-900", match_slug=None, match_id=None)
+    con = sqlite3.connect(__import__("picklog").DB, timeout=10)
+    env.seed_row(con, a, slug="hltv-900")
+    con.commit()
+    con.close()
+    r = records(env)
+    assert r[("vargo", "underdog")]["event"]["id"] == r[("brandr", "underdog")]["event"]["id"] == "hltv:900"
+    ud = check(env, [leg_of(r[("vargo", "underdog")]), leg_of(r[("brandr", "underdog")])])[1]["entries"]["underdog"]
+    assert ud["ev"]["available"] is False and "share a match" in ud["ev"]["reason"]
+
+
+def test_a_failed_void_time_costs_one_note_and_never_a_settlement(env):
+    import picklog
+    tracked(env)
+    r = records(env)
+    assert track(env, [leg_of(r[("brandr", "underdog")]), leg_of(r[("raiko", "underdog")])], user="u2")[0] == 200
+    env.settle(env.by("vargo"), actual=44.0)
+    env.settle(env.by("brandr"), status="void", actual=None)
+    con = sqlite3.connect(picklog.DB, timeout=10)
+    con.execute("UPDATE picks SET match_start = 'TBD' WHERE id = ?", (env.pick_id(env.by("brandr")),))
+    con.commit()
+    con.close()
+    out = settle(env)
+    assert out["first"] == 2 and status_of(env, "vargo")["status"] == "hit"
+    assert next(x for x in get(env, "mine", user="u2")[1]["receipts"] if x["player"] == "brandr")["status"] == "void"
+
+
+def test_diagnostics_failing_after_the_writes_lose_no_settlement(env, monkeypatch):
+    tracked(env)
+    env.settle(env.by("vargo"), status="void", actual=None)
+    s = workspace_api.store()
+    monkeypatch.setattr(s, "_void_siblings", lambda voids: (_ for _ in ()).throw(sqlite3.OperationalError("database is locked")))
+    assert settle(env)["first"] == 1 and status_of(env, "vargo")["status"] == "void"
+
+
+def test_one_bad_pick_row_costs_that_row_only(env, monkeypatch):
+    import slip_batches
+    tracked(env)
+    env.settle(env.by("vargo"), actual=44.0)
+    env.settle(env.by("orlo"), actual=20.0)
+    real = slip_batches.leg_result_from_picks
+
+    def bad(picks):
+        f = real(picks)
+        return (lambda leg: (_ for _ in ()).throw(TypeError("bad total"))) if picks[0]["player"] == "orlo" else f
+    monkeypatch.setattr(slip_batches, "leg_result_from_picks", bad)
+    out = settle(env)
+    assert out["first"] == 1 and out["skipped"] == 1 and status_of(env, "vargo")["status"] == "hit"
+
+
+def many(s, n, pick_id, base, who="wm-other", cols=None):
+    """n receipts on one pick, newest at base, written straight to the table the way volume would leave it."""
+    rows = [(f"rc-v{pick_id}-{i}", who, f"sl-v{pick_id}-{i}", 0, base, "cs2", "underdog", "r", "d", "over", 30.5, "standard", pick_id, 1, "s", None, "k", f"n{i}", "kills", "12", None, None, 0, "{}")
+            for i in range(n)]
+
+    def op(con):
+        con.executemany("INSERT INTO receipts(receipt_id, member, slip_id, leg_no, tracked_at, sport, platform, row_id, offer_rev, side, line, line_type, pick_id, forecast_id, match_slug, "
+                        "match_id, match_key, nick, prop, scope, start_utc, model_version, scratch, payload) VALUES(" + ",".join("?" * 24) + ")", rows)
+        con.execute("INSERT INTO pick_watch(pick_id, mark, active, last_tracked) VALUES(?, NULL, 1, ?) ON CONFLICT(pick_id) DO NOTHING", (pick_id, base))
+    s.submit(op, wait=60)
+
+
+def test_an_older_receipt_settles_under_any_number_of_newer_ones(env):
+    tracked(env)
+    env.settle(env.by("vargo"), actual=44.0)
+    s = workspace_api.store()
+    many(s, 5001, env.pick_id(env.by("brandr")), iso(datetime.now(timezone.utc) + timedelta(seconds=2)))
+    out = s.settle_once()
+    assert out["first"] == 1 and status_of(env, "vargo")["status"] == "hit"
+
+
+def test_every_pick_gets_its_turn_when_the_list_is_longer_than_a_pass(env, monkeypatch):
+    r = records(env)
+    assert track(env, [leg_of(r[(n, "underdog")]) for n in ("vargo", "orlo", "brandr", "raiko")][:2])[0] == 200
+    assert track(env, [leg_of(r[(n, "underdog")]) for n in ("brandr", "raiko")])[0] == 200
+    for n in ("vargo", "orlo", "brandr", "raiko"):
+        env.settle(env.by(n), actual=44.0)
+    monkeypatch.setattr(workspace_store, "SETTLE_PICKS", 1)
+    first = sum(settle(env)["first"] for _ in range(5))
+    assert first == 4 and {x["status"] for x in get(env, "mine")[1]["receipts"]} <= {"hit", "miss"}
+
+
+def test_a_correction_reaches_a_finished_pick_when_its_turn_comes(env, monkeypatch):
+    tracked(env)
+    env.settle(env.by("vargo"), actual=30.0)
+    env.settle(env.by("orlo"), actual=20.0)
+    settle(env)
+    assert status_of(env, "vargo")["status"] == "miss"
+    monkeypatch.setattr(workspace_store, "SETTLE_PICKS", 1)
+    env.settle(env.by("vargo"), actual=44.0)
+    for _ in range(3):
+        settle(env)
+    assert status_of(env, "vargo")["status"] == "hit"
+
+
+def test_an_unchanged_pick_costs_no_receipt_read(env):
+    tracked(env)
+    assert settle(env)["seen"] == 2                     # the first look at each pick
+    assert settle(env)["seen"] == 0                     # nothing moved: a pass reads marks only
+    env.settle(env.by("vargo"), actual=44.0)
+    assert settle(env)["seen"] == 1                     # one pick moved: only its receipt is read
+    assert settle(env)["seen"] == 0
+
+
+def test_a_receipt_tracked_on_a_finished_pick_is_still_read(env):
+    """The closed-pick check reads a 20 s copy, so this can happen once. The pick's old mark must not hide the new receipt."""
+    s = workspace_api.store()
+    tracked(env)
+    x = env.by("vargo")
+    env.settle(x, actual=44.0)
+    settle(env)
+    pid = env.pick_id(x)
+    who = workspace_api.member_key("whop:late")
+    row = dict(receipt_id="rc-late", member=who, slip_id="sl-late", leg_no=0, tracked_at=iso(datetime.now(timezone.utc) + timedelta(seconds=1)), sport="cs2", platform="underdog", row_id="r",
+               offer_rev="d", side="over", line=38.5, line_type="standard", pick_id=pid, forecast_id=1, match_slug="slug-900", match_key="hltv:900", nick="vargo", prop="kills", scope="12", payload={})
+    assert s.track({"slip_id": "sl-late", "member": who, "tracked_at": row["tracked_at"], "platform": "underdog", "sports": ["cs2"]}, [row])["ok"]
+    assert s.settle_once()["first"] == 1
+    assert get(env, "mine", user="late")[1]["receipts"][0]["status"] == "hit"
+
+
+def test_a_pick_past_its_window_leaves_the_list(env):
+    s = workspace_api.store()
+    tracked(env)
+    assert s.diagnostics()["counts"]["pick_watch"] == 2
+    s.settle_once(datetime.now(timezone.utc) + timedelta(days=61))
+    assert s.diagnostics()["counts"]["pick_watch"] == 0
+
+
+def test_a_cached_page_reads_no_database(env, monkeypatch):
+    tracked(env)
+    assert get(env, "mine")[0] == 200 and get(env, "state")[0] == 200
+    s = workspace_api.store()
+
+    def no_read(*a, **k):
+        raise AssertionError("a cache hit must not read the database")
+    monkeypatch.setattr(s, "reader", no_read)
+    assert get(env, "mine")[0] == 200 and get(env, "state")[0] == 200
+
+
+def test_a_revision_moves_the_moment_its_commit_lands(env):
+    who = workspace_api.member_key("whop:u1")
+    s = workspace_api.store()
+    assert s.rev(who) == 0
+    tracked(env)
+    assert s.rev(who) == 1 and get(env, "mine")[1]["record"]["picks"] == 2
+    env.settle(env.by("vargo"), actual=44.0)
+    settle(env)
+    assert s.rev(who) == 2 and status_of(env, "vargo")["status"] == "hit"
+    assert s.state_rev(who) == 0
+    assert post(env, "state", {"rev": 0, "prefs": {"a": 1}})[1] == {"rev": 1}
+    assert s.state_rev(who) == 1 and get(env, "state")[1]["prefs"] == {"a": 1}
+
+
+def test_a_failed_operation_leaves_no_revision_behind(env):
+    who = workspace_api.member_key("whop:u1")
+    s = workspace_api.store()
+
+    def bad(con):
+        s._bump(con, who)
+        raise sqlite3.IntegrityError("no")
+    with pytest.raises(sqlite3.IntegrityError):
+        s.submit(bad)
+    assert s.rev(who) == 0
+
+
+def test_mine_pages_hold_track_slots_open(env):
+    """Page reads run at most PAGE_SLOTS at once, so point reads never wait behind a crowd of pages."""
+    s = workspace_api.store()
+    for _ in range(workspace_store.PAGE_SLOTS):
+        assert s._pages.acquire(timeout=1)
+    try:
+        t0 = time.time()
+        assert s.slip_receipts("m", "s") == [] and s.tracked_for("m", ["k"], ["s"]) == [] and time.time() - t0 < 0.5
+    finally:
+        for _ in range(workspace_store.PAGE_SLOTS):
+            s._pages.release()
+
+
+def test_a_page_with_no_slot_answers_busy(env, monkeypatch):
+    s = workspace_api.store()
+    monkeypatch.setattr(workspace_store, "PAGE_WAIT", 0.01)
+    for _ in range(workspace_store.PAGE_SLOTS):
+        s._pages.acquire()
+    try:
+        assert get(env, "mine") == (503, {"error": "busy"})
+    finally:
+        for _ in range(workspace_store.PAGE_SLOTS):
+            s._pages.release()
+
+
+def test_history_never_costs_a_page_more_than_a_page(env):
+    s = workspace_api.store()
+    who = workspace_api.member_key("whop:u1")
+    many(s, 300, 1, iso(datetime.now(timezone.utc)), who=who)
+    st, doc = get(env, "mine")
+    assert st == 200 and doc["record"]["picks"] == 300 and doc["record"]["pending"] == 300
+    assert len(doc["receipts"]) <= workspace_api.MINE_PAGE + workspace_store.PAGE_SPILL + 1
+
+
+def test_older_pages_walk_the_whole_history_once(env):
+    s = workspace_api.store()
+    who = workspace_api.member_key("whop:u1")
+    t0 = datetime.now(timezone.utc)
+    for i in range(30):
+        many(s, 4, i + 10, iso(t0 - timedelta(seconds=i)), who=who)
+    doc, seen, pages = get(env, "mine")[1], [], 0
+    while True:
+        seen += [r["id"] for r in doc["receipts"]]
+        pages += 1
+        if not doc["next_before"]:
+            break
+        doc = get(env, "mine?before=" + quote(doc["next_before"]))[1]
+    assert len(seen) == len(set(seen)) == 120 and pages == 3
+
+
+def test_one_member_cannot_flood_mine_or_empty_anothers_cache(env):
+    assert get(env, "mine", user="victim")[0] == 200
+    victim = (workspace_api.member_key("whop:victim"), "mine")
+    codes_ = [get(env, f"mine?before=2026-01-01T00:00:{i % 60:02d}.{i:06d}", user="flood")[0] for i in range(workspace_api.MINE_PER_MIN + 5)]
+    assert codes_.count(429) == 5 and set(codes_) == {200, 429}
+    assert victim in workspace_api._PRIVATE.d and len(workspace_api._PRIVATE.d) == 1
+
+
+def test_a_member_holds_one_cache_entry_per_kind(env):
+    for k in range(5):
+        assert post(env, "state", {"rev": k, "prefs": {"n": k}})[0] == 200
+        assert get(env, "state")[1]["rev"] == k + 1
+    assert get(env, "mine?limit=7")[0] == 200
+    assert len(workspace_api._PRIVATE.d) == 1
+
+
+def test_a_client_with_no_gzip_gets_the_same_page(env):
+    workspace_api._PRIVATE.clear()
+    s = workspace_api.store()
+    many(s, 60, 1, iso(datetime.now(timezone.utc)), who=workspace_api.member_key("whop:u1"))
+    a = get(env, "mine")
+    b = get(env, "mine")
+    assert a == b and a[0] == 200 and len(a[1]["receipts"]) >= 50
+
+
+@pytest.mark.parametrize("field,value", [("line", 10 ** 400), ("line", -10 ** 400), ("shown_p", 10 ** 400), ("line", 1e6), ("shown_p", 1.5), ("shown_p", -0.1)])
+def test_crafted_numbers_are_refused_as_bad_requests(env, field, value):
+    legs = pair(env)
+    legs[0][field] = value
+    assert post(env, "recheck", {"idem": idem(), "legs": legs})[0] == 400
+
+
+def test_an_infinite_number_is_a_bad_request(env):
+    legs = pair(env)
+    raw = json.dumps({"idem": idem(), "legs": legs}).replace('"line": 38.5', '"line": 1e999', 1).encode()
+    assert post(env, "recheck", raw)[0] == 400
+
+
+def test_deep_nesting_is_a_bad_request(env):
+    assert post(env, "recheck", b'{"idem":"idem-ok-12345","legs":' + b"[" * 9000 + b"]" * 9000 + b"}")[0] == 400
+    assert post(env, "state", b'{"rev":0,"prefs":' + b"[" * 8100 + b"]" * 8100 + b"}")[0] == 400
+    deep = {}
+    for _ in range(workspace_api.STATE_MAX_DEPTH + 1):
+        deep = {"a": deep}
+    assert post(env, "state", {"rev": 0, "prefs": deep})[0] == 400
+    assert post(env, "state", {"rev": 0, "prefs": {"chip": "all", "f": {"sort": "start"}}})[0] == 200
+
+
+def test_two_legs_with_one_id_are_a_bad_request(env):
+    legs = pair(env)
+    legs[1]["id"] = legs[0]["id"]
+    assert post(env, "recheck", {"idem": idem(), "legs": legs})[0] == 400
+
+
+def test_context_labels_say_what_the_saved_input_is(env, monkeypatch):
+    import picklog
+    x = env.by("vargo")
+    blob = zlib.compress(json.dumps({"kpr_last5": 0.7, "recent_avg": 40.1, "recent_median": 39.0, "recent_n": 10}).encode())
+    con = sqlite3.connect(picklog.DB, timeout=10)
+    con.execute("UPDATE forecasts SET inputs = ? WHERE pick_id = ?", (blob, env.pick_id(x)))
+    con.commit()
+    con.close()
+    monkeypatch.setattr(server.hltv, "recent_series", lambda *a, **k: [])
+    labels = {r["key"]: r["label"] for r in get(env, f"line?book=underdog&id={x['id']}")[1]["context"]["rows"]}
+    assert labels == {"kpr_last5": "Kills per round, last 10 matches, Maps 1-2", "recent_avg": "Recent average, Maps 1-2", "recent_median": "Recent median, Maps 1-2",
+                      "recent_n": "Recent matches, Maps 1-2"}
+
+
+def test_rules_used_carry_their_note(env):
+    e = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
+    same = next(r for r in e["rules"] if r["rule"] == "same_player")
+    assert "Stacks" in same["text"] and "carry no Stacks" in same["note"] and same["source"] == workspace_rules.PP_PICKS
+
+
+def test_me_says_owner_for_the_allow_list_and_never_for_a_member(env, monkeypatch):
+    assert get(env, "me")[1]["owner"] is False
+    monkeypatch.setenv("SPORTS_UI_ALLOW", server.sports_allow_id("boss"))
+    assert get(env, "me", user="boss")[1]["owner"] is True and get(env, "me")[1]["owner"] is False
 
 
 # ---- what this code may not do

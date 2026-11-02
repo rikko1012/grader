@@ -87,9 +87,21 @@ def test_every_rule_row_has_a_source_or_says_why():
     for k, v in R.TABLE.items():
         for p in ("prizepicks", "underdog"):
             r = v[p]
-            assert r["read_at"] == R.READ_AT and r["status"] in ("published", "not_published") and r["text"]
+            assert r["read_at"] == R.READ_AT and r["status"] in ("published", "not_published", "scout") and r["text"]
             if r["status"] == "not_published":
                 assert "Scout does not offer" in r["text"], k
+            if r["status"] == "published":
+                assert r["source"], (k, p)                  # "published" means a page says so, and the row names the page
+            if r["status"] == "scout":
+                assert r["source"] is None and "Scout" in r["text"], (k, p)
+
+
+def test_rows_say_no_more_than_their_page():
+    """The PrizePicks page: "unless Stacks are available", and "for the most part" on combinations. Scout's own reading is a note."""
+    same = R.TABLE["same_player"]["prizepicks"]
+    assert "unless Stacks are available" in same["text"] and "carry no Stacks" in same["note"]
+    assert "for the most part" in R.TABLE["mixed_sports"]["prizepicks"]["text"].lower()
+    assert R.TABLE["goblins_demons"]["underdog"]["status"] == "scout" and R.TABLE["two_platforms"]["prizepicks"]["status"] == "scout"
 
 
 def test_payout_copy_equals_the_sports_table():
@@ -148,7 +160,7 @@ def test_ev_flex_formula():
     ({"legs": [ev_leg(i=0, line=30.0), ev_leg(i=1)]}, None, "changes the payout tier"),
     ({"legs": [ev_leg(i=0, on_side=False), ev_leg(i=1)]}, None, "No saved chance for this side"),
     ({"legs": [ev_leg(i=0, p=0.56), ev_leg(i=1)]}, None, "Results cover 57% and up"),
-    ({}, good_gate(matches=120), "Version T has 120 of 300 settled matches"),
+    ({}, good_gate(matches=120), "This model version has 120 of 300 settled matches"),
     ({}, good_gate(observed=0.55, ci=(0.52, 0.58)), "Printed 60.0%, won 55.0%"),
     ({}, good_gate(printed=0.64, observed=0.60, ci=(0.58, 0.66)), "a gap of 4.0 points"),
     ({}, good_gate(age_h=30), "The results export is 30 hours old"),
@@ -156,6 +168,17 @@ def test_ev_flex_formula():
 def test_ev_reason_row(kw, gate, text):
     out = ev(gate=gate, **kw)
     assert out["available"] is False and text in out["reason"]
+
+
+@pytest.mark.parametrize("gate", [lambda: None, lambda: {"at_ts": None, "cells": {}}])
+def test_a_read_that_failed_is_never_reported_as_a_count(gate):
+    out = R.ev_status("underdog", "standard", legs2(), gate, NOW)
+    assert out["available"] is False and out["reason"] == "The results export is not available." and out["payout"]["multiple"] == 3.5
+
+
+def test_no_reason_carries_an_internal_version_name():
+    assert "tag" not in R.ev_status("underdog", "standard", legs2(tag="SECRET"), lambda: {"at_ts": NOW, "cells": {}}, NOW)["reason"]
+    assert "SECRET" not in R.ev_status("underdog", "standard", legs2(tag="SECRET"), lambda: {"at_ts": NOW, "cells": {}}, NOW)["reason"]
 
 
 def test_ev_reasons_come_in_order():
