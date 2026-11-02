@@ -327,6 +327,15 @@ def settle_stages():
         return None
 
 
+def sheets_stages():
+    """The sheets job's steps: this run (finished false after a kill names the step) and the last finished run."""
+    from . import config
+    try:
+        return json.loads((config.DATA_DIR / "sheets_stages.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -338,7 +347,7 @@ def ops():
             "scheduler_alive": bool(_SCHED["thread"] and _SCHED["thread"].is_alive()) if _SCHED["thread"] else None,
             "prebuilt": prebuilt_state(),
             "board_builds": board_builds(),
-            "settle_stages": settle_stages(),
+            "settle_stages": settle_stages(), "sheets_stages": sheets_stages(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 

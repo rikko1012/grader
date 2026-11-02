@@ -166,8 +166,8 @@ def default_jobs():
                                      league=x, locks=(f"snapshots:{x}",)) for x in lg},
         # locks (2026-10-31): a heavy job without them runs alone, so the other slot sat empty and sheets / settle / history
         # waited 50 min. sheets reads the store read-only and writes only its own files; 420 s because a partner slows it
-        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=420 if std else 300,
-                       flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3, locks=("sheets",)),   # 67 / 126 / 26 MB measured (synthetic 400-player league)
+        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=600 if std else 300,
+                       flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3, locks=("sheets",)),   # 388 s on 2026-11-02, killed twice at 420; 67 / 126 / 26 MB measured (synthetic 400-player league)
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
@@ -595,7 +595,8 @@ class Scheduler:
                     with _LOCK:
                         STATS["timeouts"] += 1
                         STATS["recent_timeouts"] = (STATS["recent_timeouts"] + [
-                            {"job": name, "at": t, "ran_s": round(t - t0, 1)}])[-10:]   # last_exit is gone after the next run
+                            {"job": name, "at": t, "ran_s": round(t - t0, 1),
+                             "peak_rss_mb": st.get("last_peak_rss_mb")}])[-10:]   # last_exit is gone after the next run
                     del self.running[name]
                     self._finish(name, "timeout", t - t0)
                 continue

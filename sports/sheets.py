@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -264,6 +265,46 @@ def build(league, now=None, base=None):
             "consistent": len(cons), "sizes": sizes, "build_s": round(time.time() - t0, 2)}
 
 
+class Stages:
+    """The run's steps on disk after EACH step, so a killed run still names the step it died in (admin ops):
+    `current` is this run (finished false after a kill), `last_ok` the last run that finished."""
+
+    def __init__(self, path):
+        self.path, self.t0, self.steps = path, time.time(), []
+        try:
+            self.last_ok = json.loads(path.read_text(encoding="utf-8")).get("last_ok")
+        except (OSError, ValueError):
+            self.last_ok = None
+        self.started = now_utc()
+
+    def _save(self, step, finished):
+        cur = {"started_at": self.started, "step": step, "finished": finished, "ran_s": round(time.time() - self.t0, 1),
+               "steps": self.steps, "rss_mb": _rss_mb()}
+        doc = {"current": cur, "last_ok": cur if finished else self.last_ok}
+        try:
+            self.path.write_text(json.dumps(doc), encoding="utf-8")
+        except OSError:
+            pass
+
+    def run(self, name, fn):
+        self._save(name, False)
+        t = time.time()
+        out = fn()
+        self.steps = self.steps + [[name, round(time.time() - t, 1), _rss_mb()]]
+        return out
+
+    def done(self):
+        self._save(None, True)
+
+
+def _rss_mb():
+    try:
+        with open("/proc/self/statm") as fh:
+            return round(int(fh.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 1e6, 1)
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m sports.sheets")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -275,19 +316,23 @@ def main(argv=None):
     a = p.parse_args(argv)
     from . import flags
     flags.require("SPORTS_INGEST")
+    from . import config
+    st = Stages(config.DATA_DIR / "sheets_stages.json")
     out = {}
     for lg in a.leagues:
         if lg not in snapshots.LEAGUES:
             raise SystemExit(f"league {lg}: nba or nfl")
         if a.only in (None, "sheets"):
-            out[lg] = build(lg, now=a.now)
+            out[lg] = st.run(f"sheets:{lg}", lambda lg=lg: build(lg, now=a.now))
     if a.only in (None, "without", "results"):
         from . import results_public, store, without
         with store.opened(read_only=True) as con:
             if a.only in (None, "without"):
-                out["without"] = {lg: without.build_if_stale(con, lg, force=a.force) for lg in a.leagues}
+                out["without"] = {lg: st.run(f"without:{lg}", lambda lg=lg: without.build_if_stale(con, lg, force=a.force))
+                                  for lg in a.leagues}
             if a.only in (None, "results"):
-                out["results"] = results_public.build_if_stale(con, force=a.force)
+                out["results"] = st.run("results", lambda: results_public.build_if_stale(con, force=a.force))
+    st.done()
     print(json.dumps(out, indent=1, default=str))
     return out
 
