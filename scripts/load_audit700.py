@@ -111,7 +111,8 @@ def fake_results():
                        for i in range(10)]}
 
 
-server.results_payload = fake_results
+if not WORKSPACE:
+    server.results_payload = fake_results
 import hltv  # noqa: E402
 hltv.search_players = lambda q, n=8: [{"slug": "s0und", "nick": "s0und", "name": "A B", "country": "DK", "image": None}]
 server.BO3 = None                                       # never BO3.gg from a load test (no network)
@@ -299,7 +300,7 @@ def workspace_run():
             codes[x[1]] = codes.get(x[1], 0) + 1
         rep["routes"][p] = {"n": len(rows), "codes": codes, "p50_ms": pct([x[2] for x in rows], .5), "p99_ms": pct([x[2] for x in rows], .99),
                             "avg_kb": round(sum(x[3] for x in rows) / len(rows) / 1e3, 1), "gzip_share": round(sum(1 for x in rows if x[4] == "gzip") / len(rows), 2)}
-    rep["pass"] = (rep["errors_5xx"] == 0 and rep["grade_calls"] == 0 and rep["board_builds"] <= rep["allowed_builds"] and rep["receipts"] == rep["expected_receipts"])
+    rep["pass"] = (rep["non_200"] == 0 and rep["grade_calls"] == 0 and rep["board_builds"] <= rep["allowed_builds"] and rep["receipts"] == rep["expected_receipts"])
     print("RESULT " + json.dumps(rep))
     workspace_api.reset()
     shutil.rmtree(tmp, ignore_errors=True)

@@ -25,13 +25,19 @@ def _ci(picks, B, seed):
     g = collections.defaultdict(list)
     for x in picks:
         g[x["match"]].append(x["win"])
-    ks = list(g)
+    # Resample the same matches with the same seed, but carry their totals.
+    # Expanding every pick on every draw needlessly multiplies request work.
+    ks = [(sum(wins), len(wins)) for wins in g.values()]
     if len(ks) < 5:
         return None
     rnd, v = random.Random(seed), []
     for _ in range(B):
-        s = [w for k in (rnd.choice(ks) for _ in ks) for w in g[k]]
-        v.append(sum(s) / len(s))
+        wins = count = 0
+        for _ in ks:
+            w, n = rnd.choice(ks)
+            wins += w
+            count += n
+        v.append(wins / count)
     v.sort()
     return [round(v[int(.025 * B)], 4), round(v[int(.975 * B) - 1], 4)]
 
