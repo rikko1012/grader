@@ -1622,3 +1622,19 @@ def test_model_hash_files_are_untouched():
     if subprocess.run(["git", "cat-file", "-e", "4877218"], cwd=ROOT, capture_output=True).returncode != 0:
         pytest.skip("base commit not in this clone (shallow checkout)")
     assert subprocess.run(["git", "diff", "--exit-code", "--quiet", "4877218", "--", *files], cwd=ROOT).returncode == 0
+
+
+def test_a_mine_page_never_queues_behind_point_reads(tmp_path):
+    # final check 2026-11-02: 700 members, 200 receipts each: a page holding its slot still timed out on a read slot (503)
+    import workspace_store as ws
+    st = ws.Store(tmp_path / "w.db")
+    held = [st._open() for _ in range(ws.READ_SLOTS)]
+    st._n_readers = ws.READ_SLOTS
+    try:
+        t0 = time.time()
+        assert st.mine("m" * 16)["receipts"] == []
+        assert time.time() - t0 < ws.READ_WAIT
+    finally:
+        for con in held:
+            con.close()
+        st.close()

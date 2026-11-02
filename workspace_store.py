@@ -113,6 +113,7 @@ class Store:
         self._lock = threading.Lock()
         self._n_readers = 0
         self._pages = threading.BoundedSemaphore(PAGE_SLOTS)
+        self._page_cons = []
         self._revs = OrderedDict()              # ("rev" | "state", member) -> revision, set by the writer after each commit
         self._rev_lock = threading.Lock()
         self._op_revs = {}                      # the running operation's revisions: writer thread only
@@ -154,6 +155,10 @@ class Store:
         for th in (self._writer, self._settler):
             if th is not None and th.is_alive():
                 th.join(timeout=3)
+        with self._lock:
+            for con in self._page_cons:
+                con.close()
+            self._page_cons.clear()
         while True:
             try:
                 self._readers.get_nowait().close()
@@ -257,6 +262,20 @@ class Store:
             yield con
         finally:
             self._readers.put(con)
+
+    @contextmanager
+    def page_reader(self):
+        """A /mine page's own connection (one per page slot): a page that holds its slot never queues behind point reads."""
+        with self._lock:
+            con = self._page_cons.pop() if self._page_cons else None
+        if con is None:
+            con = self._open()
+            con.execute("PRAGMA query_only=ON")
+        try:
+            yield con
+        finally:
+            with self._lock:
+                self._page_cons.append(con)
 
     # ---- revisions: what keys a member's cached page. A cache hit reads no database.
     def _bump(self, con, member):
@@ -378,7 +397,7 @@ class Store:
         if not self._pages.acquire(timeout=PAGE_WAIT):
             raise Busy("no page slot")
         try:
-            with self.reader() as con:
+            with self.page_reader() as con:
                 light = con.execute(LIGHT_SQL, (member, RECORD_SCAN + 1)).fetchall()
                 sql, args = "SELECT * FROM receipts WHERE member = ?", [member]
                 if before:
