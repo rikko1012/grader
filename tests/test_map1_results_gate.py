@@ -33,13 +33,13 @@ def test_count_is_staked_settled_map1_units_once_each():
 def test_map1_hidden_below_500_with_totals_recomputed():
     out = results_view.member_results(_export(499 - 1), B=50)     # 498 scored + 1 push = 499 staked
     P = out["picks"]
-    # only Maps 1-2: 6 won + the pushed 0.65 pick counted as won; no Map 1 loss anywhere in the totals
-    assert (P["picks"], P["wins"], P["losses"], P["pushes"]) == (7, 7, 0, 1)
-    assert P["printed"] == round((6 * 0.62 + 0.65) / 7, 4)
+    # only Maps 1-2: 6 won, the pushed 0.65 pick reported apart; no Map 1 loss anywhere in the totals
+    assert (P["picks"], P["wins"], P["losses"], P["pushes"]) == (6, 6, 0, 1)
+    assert P["printed"] == 0.62
     assert out["lines"]["settled"] == 6 and out["lines"]["matches"] == 6 and out["lines"]["pushes"] == 1
     assert all(r["scope"] != "Map 1" for r in out["by_stat"])
-    assert sum(r["picks"] for r in out["by_side"]) == 7 and sum(r["picks"] for r in out["by_chance"]) == 7
-    assert sum(r["picks"] for r in out["by_version"]) == 7
+    assert sum(r["picks"] for r in out["by_side"]) == 6 and sum(r["picks"] for r in out["by_chance"]) == 6
+    assert sum(r["picks"] for r in out["by_version"]) == 6
     assert "Map 1 lines are not included." in out["definition"]
     assert "units" not in json.dumps(out).lower()             # the member view never names stakes
 
@@ -47,15 +47,15 @@ def test_map1_hidden_below_500_with_totals_recomputed():
 def test_map1_shown_at_500():
     out = results_view.member_results(_export(499), B=50)         # 499 scored + 1 staked push = 500
     P = out["picks"]
-    assert (P["picks"], P["wins"], P["losses"], P["pushes"]) == (7 + 500, 7 + 1, 499, 2)
-    assert ("Kills", "Map 1", 500) in {(r["stat"], r["scope"], r["picks"]) for r in out["by_stat"]}
+    assert (P["picks"], P["wins"], P["losses"], P["pushes"]) == (6 + 499, 6, 499, 2)
+    assert ("Kills", "Map 1", 499) in {(r["stat"], r["scope"], r["picks"]) for r in out["by_stat"]}
     assert out["lines"]["settled"] == 6 + 499 and out["lines"]["pushes"] == 2
     assert "Map 1" not in out["definition"]
 
 
 def test_unstaked_map1_rows_do_not_open_the_gate():
     out = results_view.member_results(_export(0, map1_unstaked=800), B=20)
-    assert all(r["scope"] != "Map 1" for r in out["by_stat"]) and out["picks"]["picks"] == 7
+    assert all(r["scope"] != "Map 1" for r in out["by_stat"]) and out["picks"]["picks"] == 6
 
 
 def test_payload_hides_and_admin_diagnostics_keep_the_count(monkeypatch):
