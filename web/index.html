@@ -834,6 +834,8 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
 @media(max-width:1150px){.ctbtn{left:96px}}
 @media(max-width:760px){.ctbtn{left:14px;bottom:82px}.bcmpt{display:none}#cttray{padding:0}#ctbody{width:100%;max-height:100dvh;height:100dvh;border-radius:0;border:0;padding:0 12px 90px}
   .ctgrid{grid-auto-flow:row;grid-template-columns:minmax(0,1fr);grid-auto-columns:auto;overflow:visible}.ctverdict{padding:13px}.ctverdict h3{font-size:18px}.ctf{grid-template-columns:minmax(96px,38%) minmax(0,1fr);gap:8px;align-items:baseline}}
+.line-advantage{display:block;margin-top:8px;padding:9px 11px;border-left:2px solid #648fff;background:rgba(100,143,255,.08);border-radius:4px;font-size:12px;line-height:1.5}
+.line-advantage button{margin-top:6px;min-height:32px}.line-advantage small{display:block;color:var(--muted,#aaa)}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/scout-ui.css?v=3">
@@ -1741,7 +1743,7 @@ const slipKeyRow = r => [String(r.nick || r.player).toLowerCase(), +r.line, r.pr
 async function lineCheck(x, book) {
   try {
     const qs = new URLSearchParams({player: x.p, prop: x.t, maps: x.sc || "12", line: x.l, team: x.tm || "", start: x.st || "", ms: x.ms || "", lk: x.lk || "", pid: x.pid || "",
-                                    book: book || x.bk || "underdog", lt: x.lt || "standard", side: x.s || "", opponent: x.vs || ""});
+                                    book: book || x.bk || "underdog", lt: x.lt || "standard", side: x.s || "", opponent: x.vs || "", rid: x.rid || ""});
     const r = await fetch("/api/line_check?" + qs);
     return r.ok ? await r.json() : {status: "failed", note: "Couldn't reach the server to check this line"};
   } catch { return {status: "failed", note: "Couldn't reach the server to check this line"}; }
@@ -1838,7 +1840,43 @@ function staleNow(x) { return {status: "stale", at: Date.now(), note: ""}; }
 const FEED_NOTE = "The platform's line feed is not fresh right now – refresh before copying";
 function checkNow(c, as) {
   const st = as || (c.status === "stale" ? "failed" : LOCKED_RX.test(c.note || "") && c.status !== "verified" ? "started" : c.status);
-  return Object.assign({status: st, note: c.status === "stale" ? c.note || FEED_NOTE : c.note || "", at: Date.now(), new_line: c.new_line}, c.status === "stale" ? {feed: 1} : {});
+  return Object.assign({status: st, note: c.status === "stale" ? c.note || FEED_NOTE : c.note || "", at: Date.now(), new_line: c.new_line,
+    line_advantages: st === "verified" && Array.isArray(c.line_advantages) ? c.line_advantages : []}, c.status === "stale" ? {feed: 1} : {});
+}
+// Threshold comparison only. A different platform has different entry terms;
+// reviewing always requests that line's own card and never edits the slip.
+function freshAdvantages(items) {
+  return (Array.isArray(items) ? items : []).filter(a => a && ["underdog", "prizepicks"].includes(a.book)
+    && ["over", "under"].includes(a.side) && Number.isFinite(a.line) && Number.isFinite(a.original_line)
+    && (a.side === "over" ? a.line < a.original_line : a.line > a.original_line)
+    && Number.isFinite(a.expires_at) && a.expires_at * 1000 > Date.now() && a.review);
+}
+function advantageText(a) {
+  return `${a.side === "over" ? "Lower Over" : "Higher Under"} line: ${a.line} at ${bookName(a.book)}. Selected: ${a.original_line}.`;
+}
+function lineAdvantageHtml(items) {
+  return freshAdvantages(items).map(a => `<span class="line-advantage"><b>${esc(advantageText(a))}</b><small>Same player, game and maps. Compare entry terms.</small>
+    <button type="button" class="chipbtn" data-line-review="${esc(JSON.stringify(a.review))}">Review ${esc(bookName(a.book))} offer</button></span>`).join("");
+}
+function reviewLineAdvantage(r) {
+  if (!r || !["underdog", "prizepicks"].includes(r.book) || !["kills", "hs"].includes(r.prop)
+      || !["1", "12", "123"].includes(r.scope) || !Number.isFinite(r.line)) return;
+  if (innerWidth < 1180) $("#slip").hidden = true;
+  gradeNow(r.player, String(r.line), r.prop, "standard", r.scope, true,
+    {team: r.team, opponent: r.opponent, book: r.book, start: r.start, side: r.side});
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-line-review]"); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  try { reviewLineAdvantage(JSON.parse(b.dataset.lineReview)); } catch {}
+});
+async function reviewLineAdvantages(items) {
+  const rows = freshAdvantages(items); if (!rows.length) return true;
+  const choice = await ask("An easier line is available", rows.map(a => `<p><b>${esc(a.nick)}</b> · ${esc(advantageText(a))}</p>`).join("")
+    + "<p>Platform payouts and entry rules differ. Your slip stays unchanged; reviewing opens a fresh card for the other line.</p>",
+    [{k: "review", label: "Review first offer", primary: true}, {k: "keep", label: "Keep original slip"}]);
+  if (choice === "review") reviewLineAdvantage(rows[0].review);
+  return choice === "keep";
 }
 function openSlip() { $("#slip").hidden = false; drawSlip(); recheckSlip(); }
 // re-check every leg's live offer; records it in leg.now (the original selection in leg.orig is never touched)
@@ -1910,7 +1948,7 @@ function legRow(x, i, pins) {
   const meta = [lean ? "Lean" : esc(x.g) + (x.u != null && !(+x.u > 0) ? " · 0U" + (x.sr ? " — " + esc(x.sr) : "") : ""), chance(x.pc || 0, x.t) + pushTag(x.l, x.model_outcomes),
                 x.vs ? "vs " + esc(x.vs) : "", st ? "" : legStartTxt(x)].filter(Boolean).join(" · ");
   return `<div class="leg${st ? " started" : ""}"><span><b>${esc(x.p)}</b> ${lean ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${ltTag(x.lt)}${legState(x, i)}
-      <span class="lmeta muted small">${meta}</span></span>
+      <span class="lmeta muted small">${meta}</span>${!st && x.now?.status === "verified" ? lineAdvantageHtml(x.now.line_advantages) : ""}</span>
       ${pins && x.rid && x.bk && !st ? `<button type="button" class="lpin" data-pinleg="${i}" title="Build Studio slips around this pick">Build around</button>` : ""}${udLegOpen(x, st)}
       <button type="button" class="x" data-rmleg="${i}" title="Remove" aria-label="Remove ${esc(x.p)}">✕</button></div>`;
 }
@@ -2101,6 +2139,8 @@ function slipClick(e) {
       await ask("Add another pick", "<div>Entries need at least 2 picks.</div>", [{k: "review", label: "Review slip", primary: true}]);
       return;
     }
+    if (!await reviewLineAdvantages(s.flatMap(x => x.now?.status === "verified" ? x.now.line_advantages || [] : []))) return;
+    if (JSON.stringify(store.get("cs2s_slip", [])) !== JSON.stringify(s)) return toast("Your slip changed – check it again before copying.");
     // closeout2 copyval (owner): the checks above are the fast first pass; the SERVER's check decides. The clipboard is
     // written only after its explicit OK - a refusal, a failure or a timeout copies nothing and names the reason.
     const text = `${s.length}-pick ${bookName(slipBook(s)) || "custom"} slip\n` + s.map(x => `${x.p} ${isLeanV({grade: x.g}) ? `Lean ${sideTxt(x.s)}` : sideTxt(x.s).toUpperCase()} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}${x.lt && x.lt !== "standard" ? " " + x.lt : ""} · ${isLeanV({grade: x.g}) ? "Lean" : x.g + (x.u != null && !(+x.u > 0) ? " · 0U" : "")} · ${((x.pc || 0) * 100).toFixed(1)}%`).join("\n");
@@ -3406,7 +3446,7 @@ async function studioBuild(newBatch, why, replace) {
   } catch (e) { $("#st-status").textContent = `Couldn't build (${e.message})`; }
   finally { STUDIO.busy = false; $("#st-build").disabled = $("#st-new").disabled = false; }
 }
-async function studioVerify(id, btn, open) {
+async function studioVerify(id, btn, open, reviewed) {
   const lab0 = btn.textContent;
   btn.disabled = true; btn.textContent = "Checking every line…";
   // each Underdog leg's own line link comes only from THIS verify's OK (2026-10-29 review: a throw / 429 / refusal / a
@@ -3416,6 +3456,15 @@ async function studioVerify(id, btn, open) {
   try {
     const {status, d} = await studioCall("POST", "/api/slip_studio/verify", {slip: id, idem: rid()});
     if (status !== 200) throw new Error(d.error || "HTTP " + status);
+    const advantages = d.ok ? freshAdvantages(d.line_advantages) : [];
+    const signature = JSON.stringify(advantages.map(a => [a.leg, a.book, a.row_id, a.original_line, a.line]));
+    if (advantages.length && reviewed !== signature) {
+      const keep = await reviewLineAdvantages(advantages);
+      btn.disabled = false; btn.textContent = lab0;
+      if (!keep) return;
+      // The modal may have been open for minutes: verify again before any copy.
+      return studioVerify(id, btn, open, signature);
+    }
     const udl = PPL.on && d.ok && d.book === "underdog" && Array.isArray(d.legs_open) ? d.legs_open.map(u => udLinkOk(u) ? u : null) : null;
     if (d.ok && open) {                        // PP_OPEN_LINK: the server's verify passed - open only its own link
       const url = d.book === "prizepicks" ? d.pp_url : d.book === "underdog" ? d.open_url : null;

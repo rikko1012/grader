@@ -1700,6 +1700,25 @@ def admin_ud_tails_page(token):
             f"<h3>Newest Underdog Studio slips</h3><table border=1 cellpadding=4><tr><th>Slip id</th><th>Legs</th></tr>{recent}</table></body>")
 
 
+def slip_line_advantages(legs):
+    """Read-only easier-line suggestions, from cached CS2 boards. No grade writes,
+    provider requests, implicit platform switch, or relaxation of copy checks."""
+    try:
+        import line_advantage_live
+        rows = _bs_rows()
+        wanted = {(l.get("book"), l.get("row_id")) for l in legs
+                  if isinstance(l.get("book"), str) and isinstance(l.get("row_id"), str)}
+        identities = {(r.get("player_id"), r.get("match_id"), r.get("prop"), r.get("scope"))
+                      for r in rows if (r.get("book"), r.get("id")) in wanted}
+        if not identities:
+            return []
+        selected = [r for r in rows if (r.get("player_id"), r.get("match_id"), r.get("prop"), r.get("scope")) in identities]
+        feeds = {bk: _slip_feed(bk)[0] for bk in ("underdog", "prizepicks")}
+        return line_advantage_live.recommendations(legs, selected, feeds, datetime.now(timezone.utc))
+    except Exception:
+        return []                           # missing comparison never means "best line"
+
+
 def slip_check(d, link=False):
     """Every rule a copied slip must pass on the server BEFORE the page writes it to the clipboard (closeout2 copyval,
     owner: validation first, the clipboard only on the server's OK): each leg (slip_leg_check incl. the lock rule), one
@@ -4215,7 +4234,13 @@ class Handler(BaseHTTPRequestHandler):
                                                 book=book, odds_type=q.get("lt") or "standard",
                                                 side=q.get("side") or None, opponent=q.get("opponent") or None)
                     # the slip lock rule (earlier of the platform's current start and the graded match's)
-                    return self.send(200, slip_lock(lc_, q.get("start"), (q.get("ms") or "")[:40] or None, (q.get("lk") or "")[:40] or None))
+                    checked = slip_lock(lc_, q.get("start"), (q.get("ms") or "")[:40] or None, (q.get("lk") or "")[:40] or None)
+                    if checked.get("status") == "verified" and q.get("rid"):
+                        checked["line_advantages"] = slip_line_advantages([{
+                            "row_id": q["rid"], "book": book, "nick": q.get("player"),
+                            "prop": q.get("prop", "kills"), "scope": q.get("maps", "12"),
+                            "line": float(q["line"]), "side": q.get("side"), "player_id": q.get("pid")}])
+                    return self.send(200, checked)
                 except Exception:
                     return self.send(200, comparison.line_check(None, "", "", "", failed=True, book=book))
             if u.path == "/api/grade":
@@ -5173,6 +5198,8 @@ class Handler(BaseHTTPRequestHandler):
             pass
         out = dict(v, slip_id=rec["slip_id"], batch_id=rec["batch_id"], book=book,
                    copy_text=sb.copy_text(rec) if v["ok"] else None)
+        if v["ok"]:
+            out["line_advantages"] = slip_line_advantages(rec.get("legs") or [])
         if PP_OPEN_LINK and v["ok"]:
             out.update(studio_open_link(rec, feed))
         return self.send(200, out)
