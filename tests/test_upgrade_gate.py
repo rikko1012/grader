@@ -110,6 +110,8 @@ def test_flag_off_assets_and_api_are_the_unknown_route_answer(env):
     before = get(env.base, "/no/such/route", "good-u1")
     assert get(env.base, "/upgrade/upgrade.js", "good-u1")[0] == before[0] == 404
     assert get(env.base, "/upgrade/upgrade.css", "good-u1")[0] == 404
+    for path in ("/upgrade/hub.js", "/upgrade/hub.css"):
+        assert get(env.base, path, "good-u1")[0] == 404
     for route in ("board", "me", "hits", "stated"):
         st, body, _ = get(env.base, "/api/upgrade/" + route, "good-u1")
         assert st == 404 and b"upgrade" not in body or st in (401, 403)
@@ -124,6 +126,9 @@ def test_a_member_gets_the_upgrade_only_with_the_flag(env, monkeypatch):
     st, body, hdr = get(env.base, "/upgrade/upgrade.js", "good-u1")
     assert st == 200 and b"/api/upgrade/" in body and hdr["Content-Type"].startswith("text/javascript")
     assert get(env.base, "/upgrade/upgrade.css", "good-u1")[0] == 200
+    for path in ("/upgrade/hub.js", "/upgrade/hub.css"):
+        assert get(env.base, path, "good-u1")[0] == 200
+        assert get(env.base, path)[0] == 404
     assert json.loads(get(env.base, "/api/upgrade/me", "good-u1")[1])["sports"]["cs2"] is True
 
 
