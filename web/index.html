@@ -2611,7 +2611,7 @@ function drawBoard() {
   const rowHtml = (r, showMatch) => {
     const nick = r.nick || r.player, gone = sideGone(r), lab = !r.side ? "…" : r.state === "SCOUT" || gone ? "–" : mGrade(r) === "LEAN" ? "L" : mGrade(r);
     const ltl = !r.side ? "Still grading" : r.state === "SCOUT" ? "No match scheduled" : mGrade(r) === "LEAN" ? "Lean – 0 units" : `Grade ${mGrade(r)}${+r.units > 0 ? "" : " – 0 units"}`;
-    const ds = (r.dstat || [])[0] === "ok" ? null : dsOf(r), team = r.team_name || r.team, opp = r.opp_name || r.opponent;   // a clean row shows no badge
+    const ds = dsOf(r), team = r.team_name || r.team, opp = r.opp_name || r.opponent;
     const bl = blKey(r), wOpen = WHY_OPEN.has(bl);
     const pick = boardPickHtml(r), stake = boardStakeHtml(r);
     const meta = [r.graded_at ? `graded ${agoTxt(r.graded_at)}` : "", r.alt && r.book !== "prizepicks" ? `alt payout ${r.higher ?? "–"}x/${r.lower ?? "–"}x` : "",
@@ -2903,7 +2903,7 @@ function filtersLabel() {
   b.textContent = closed ? `Filters${n ? ` (${n} active)` : ""}` : "Hide filters"; b.setAttribute("aria-expanded", String(!closed));
 }
 $("#scout-filters").onclick = () => { $("#board").classList.toggle("filters-collapsed"); filtersLabel(); };
-$("#board").classList.add("filters-collapsed"); // Progressive disclosure: search/book stay visible; active filters remain counted.
+try { if (matchMedia("(max-width:760px)").matches) $("#board").classList.add("filters-collapsed"); } catch {}
 filtersLabel();
 $("#bsearch").oninput = drawBoard;
 $("#bgrade").onchange = drawBoard; $("#bchance").onchange = drawBoard;
