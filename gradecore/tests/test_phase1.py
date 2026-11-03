@@ -494,7 +494,7 @@ def test_offer_labels_explain_a_missing_letter():
 
 def test_grade_carries_the_policy_version():
     from gradecore import GRADE_POLICY_VERSION
-    assert policy.grade(0.6, "underdog").policy == GRADE_POLICY_VERSION == "gp-1"
+    assert policy.grade(0.6, "underdog").policy == GRADE_POLICY_VERSION == "gp-2"
 
 
 # --------------------------------------------------------------------------------------------- scorecard
@@ -503,7 +503,8 @@ def _rows(n, hit=0.6, p=0.6, per_match=1, be=None, stat=None):
     out = []
     for i in range(n):
         win = int((i + 1) * hit + 1e-9) > int(i * hit + 1e-9)
-        r = {"p": p, "status": "win" if win else "loss", "match_key": f"m{i // per_match}"}
+        r = {"p": p, "status": "win" if win else "loss", "match_key": f"m{i // per_match}",
+             "side": "over" if (i // 50) % 2 else "under"}
         if be:
             r["break_even"] = be
         if stat:
@@ -776,10 +777,11 @@ def test_snapshot_lists_all_four(state_file):
 
 # ----------------------------------------------------------------------------------------- the whole path
 def test_one_leg_through_the_core():
+    from gradecore.VERSION import GRADE_POLICY_VERSION
     p = blend.blend(0.70, devig.worst_case((1.8, 2.05), 0)[0], 0.8)
     a = calibrate.fit(*_overstated(6000))
     g = policy.grade(calibrate.apply(a, p), "underdog")
-    assert 0.5 < g.break_even < 0.6 and g.letter in ("Lean", "B", "B+", "A-") and g.policy == "gp-1"
+    assert 0.5 < g.break_even < 0.6 and g.letter in ("Lean", "B", "B+", "A-") and g.policy == GRADE_POLICY_VERSION
 
 
 def test_core_uses_only_numpy_and_the_standard_library():

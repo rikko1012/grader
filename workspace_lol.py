@@ -355,7 +355,7 @@ def check_leg(srv, leg, now):
                         "start_utc": x["start"], "lock_utc": x["start"]},
             "_x": x, "_ident": {"nick": x["pkey"], "prop": x["stat"], "scope": x["period"], "match_slug": x["eid"], "match_key": x["eid"], "platform": book, "line": x["line"], "side": side},
             "_rule": {"sport": "lol", "book": book, "team": f"lol:{x['team']}" if x["team"] else "", "nick": x["name"], "side": side, "event": x["eid"]},
-            "_ev": {"name": x["name"], "sport": "lol", "match": x["eid"], "line": x["line"], "multiplier": mult, "on_side": side == x["side"], "p": p, "tag": x["model"], "prop": x["stat"], "scope": x["period"]}}
+            "_ev": {"name": x["name"], "sport": "lol", "match": x["eid"], "line": x["line"], "multiplier": mult, "on_side": side == x["side"], "p": p, "tag": x["model"], "prop": x["stat"], "scope": x["period"], "line_type": x['lt']}}
 
 
 def payload(x, leg, res, e):
@@ -490,7 +490,7 @@ def results(srv):
     stat = [_group(k[5:].replace("_", " ").title(), v) for k, v in sorted(metrics.items()) if k.startswith("stat ")]
     grade = [_group(k[6:], v) for k, v in sorted(metrics.items()) if k.startswith("grade ")]
     role = [_group(k[5:], v) for k, v in sorted(metrics.items()) if k.startswith("role ") and k[5:] not in ("None", "")]
-    return {"sport": "lol", "label": "LoL forecast record", "as_of": doc.get("at"),
+    return {"sport": "lol", "label": "LoL forecast record", "as_of": doc.get("at"), 'calendar':doc.get('calendar'),
             "population": "Saved pre-match LoL forecasts on lines that offered Scout's side, each scored on official game stats. Letters carry 0 units.",
             "rule": "One result per platform, market and line. Hit rate is results for Scout's side over graded results. Pushes stay apart, voids and lines with no settled rule stay out.",
             "totals": {"picks": main.get("n") or 0, "wins": main.get("side_wins"), "losses": None if main.get("side_wins") is None else (main.get("n") or 0) - main["side_wins"], "pushes": st.get("push", 0) if cohort else None, "observed": main.get("side_hit_rate"),

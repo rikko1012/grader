@@ -239,6 +239,8 @@ def test_stated_observed_counts_the_member_results_picks():
     base, d = results_view.member_results(ex, B=0), results_stated.stated_observed(ex)
     assert d["totals"]["picks"] == base["picks"]["picks"] == 7 and d["totals"]["wins"] == base["picks"]["wins"]
     assert d["totals"]["pushes"] == base["picks"]["pushes"] == 1
+    assert sum(x['decided'] for x in d['calendar']['days'])==7
+    assert d['calendar']['missing_dates']==1
     assert d["rule"] == base["rule"]
     assert sum(x["picks"] for x in d["by_letter"]) == 7 and sum(x["picks"] for x in d["by_market"]) == 7
     assert sum(x["pushes"] for x in d["by_letter"]) == 1 and sum(x["pushes"] for x in d["by_market"]) == 1

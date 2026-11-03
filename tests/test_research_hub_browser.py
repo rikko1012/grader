@@ -2,6 +2,7 @@
 import json
 import time
 import pytest
+import server
 from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE
 
 
@@ -21,6 +22,89 @@ def hub(ctx, env, size=None):
     p.wait_for_selector('#hub-rows tr', timeout=30000)
     p.wait_for_function("document.querySelector('#hub-sports').textContent.includes('NFL')")
     return p
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_owner_grade_comparison_four_sports_and_paging(ctx,env,monkeypatch,size):
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setattr(server.Handler, '_sports_owner', lambda self: True)
+    p = ctx.new_page()
+    p.set_viewport_size(size)
+    seen=[]
+    def report(route):
+        from urllib.parse import urlsplit,parse_qs
+        q=parse_qs(urlsplit(route.request.url).query)
+        sport=q['sport'][0];seen.append((sport,q.get('before')))
+        route.fulfill(json={'sport':sport,'started_at':'2026-11-03T12:00:00Z','next_before':None if q.get('before') else 8,
+          'rows':[{'player':'<unsafe>','event':'fixture-event','stat':'kills','line':20.5,'period':'full','book':'prizepicks',
+                   'old_letter':'B','old_p':.62,'at':'2026-11-03T12:01:00Z','policy':'gp-1',
+                   'sides':{'over':{'raw':.63,'blended':.61,'p':.55,'market':.59,'blend_weight':.5,'calibration':'isotonic',
+                         'grade':{'band':'B','break_even':.5345,'reasons':['<unsafe> gate']}},'under':{'p':.45,'grade':{'band':None}}}}]})
+    p.route('**/api/upgrade/grade-review?*',report)
+    p.goto(env.url+'/#/tools')
+    p.wait_for_selector('[data-hub="grade-review"]')
+    for sport in ('cs2','lol','nba','nfl'):
+        p.locator('[data-hub="grade-review"][data-id="'+sport+'"]').first.click()
+        p.wait_for_selector('#hub-grade-review table')
+        assert '<unsafe>' in p.locator('#hub-grade-review').inner_text()
+        assert p.locator('#hub-grade-review unsafe').count()==0
+        p.locator('#hub-grade-review summary').first.click()
+        assert 'Raw model 63.0%' in p.locator('#hub-grade-review').inner_text()
+        assert 'isotonic' in p.locator('#hub-grade-review').inner_text()
+        assert '<unsafe> gate' in p.locator('#hub-grade-review').inner_text()
+        assert p.locator('#hub-grade-review unsafe').count()==0
+        p.locator('#hub-grade-review [data-before]').click()
+        p.wait_for_function("!document.querySelector('#hub-grade-review [data-before]')")
+    assert len(seen)==8
+    assert seen[-1]==('nfl',['8'])
+    no_h_scroll(p)
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
+    from gradecore.calendar import daily_record
+    p=ctx.new_page();p.set_viewport_size(size)
+    doc={'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'win'},
+                                  {'at':'2026-11-02T12:00:00Z','status':'push'}],
+                                 '2026-11-03T12:00:00Z','Fixture date · UTC')}
+    p.route('**/api/upgrade/stated',lambda r:r.fulfill(json=doc))
+    p.route('**/api/upgrade/results?*',lambda r:r.fulfill(json=doc))
+    p.goto(env.url+'/#scout/record')
+    p.wait_for_selector('.h-record-calendar')
+    assert p.locator('.h-record-calendar').count()==4
+    assert p.locator('.h-calendar-grid summary').count()==120
+    p.locator('.h-calendar-grid summary[aria-label^="2026-11-02"]').first.click()
+    assert '1 wins · 0 losses · 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
+    assert 'Accuracy only, not profit.' in p.locator('#hub-record-body').inner_text()
+    no_h_scroll(p)
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_public_record_four_sports_retry_and_safe_text(ctx,env,monkeypatch,size):
+    monkeypatch.setenv('SCOUT_PUBLIC_RECORD','1')
+    p=ctx.new_page();p.set_viewport_size(size)
+    from gradecore.calendar import daily_record
+    failures=[True]
+    def report(route):
+        if failures[0]:
+            failures[0]=False
+            return route.fulfill(status=503,json={'error':'unavailable'})
+        route.fulfill(json={'totals':{'wins':2,'losses':1,'pushes':1,'observed':2/3,'printed':.6},
+            'population':'<unsafe> fixture population','rule':'Only saved pregame forecasts',
+            'bands':[{'name':'B','wins':2,'losses':1,'observed':2/3,'printed':.6}],
+            'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'push'}],
+                '2026-11-03T12:00:00Z','Fixture date · UTC')})
+    p.route('**/api/record?*',report)
+    p.goto(env.url+'/record')
+    p.wait_for_selector('#retry');p.locator('#retry').click()
+    for sport in ('cs2','lol','nba','nfl'):
+        p.locator('[data-sport='+sport+']').click()
+        p.wait_for_function('(s)=>document.querySelector("#record h2")?.textContent.toLowerCase()===s',arg=sport)
+        assert '66.7%' in p.locator('#record').inner_text()
+        assert p.locator('#record unsafe').count()==0
+        assert p.locator('.calendar summary').count()==30
+        no_h_scroll(p)
+    p.screenshot(path=f'.record-{size["width"]}.png',full_page=True)
 
 
 def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env):
@@ -76,6 +160,7 @@ def test_four_sport_prizepicks_slip_syncs_to_second_browser_context(ctx, env, br
 def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
     p=hub(ctx, env)
     p.locator('#hub-q').fill('vargo')
+    p.locator('#hub-minGrade').select_option('B-')
     p.locator('[data-hub=save-view]').click()
     p.locator('#hub-save-name').fill('My CS2 research')
     p.locator('#hub-save-confirm').click()
@@ -89,6 +174,7 @@ def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
     p.wait_for_selector('#hub-rows tr')
     p.locator('#hub-views').select_option('0')
     assert p.locator('#hub-q').input_value()=='vargo'
+    assert p.locator('#hub-minGrade').input_value()=='B-'
     p.locator('.h-sidebar [data-id=alerts]').click()
     assert 'Vargo line updates' in p.locator('#hub-alerts-body').inner_text()
     assert 'No email or push' in p.locator('#hub-alerts-body').inner_text()
@@ -303,6 +389,10 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
     assert p.locator('#hub-studio-body .u-leg').count()==4
     p.locator('#hub-studio-body [data-u=check]').click()
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
+    assert 'Base all-hit payout' in p.locator('#hub-studio-body').inner_text()
+    p.locator('#hub-studio-body summary',has_text='Published payout tiers').click()
+    assert '4 of 4 correct: 10× entry fee' in p.locator('#hub-studio-body').inner_text()
+    assert 'final payout for your exact lineup' in p.locator('#hub-studio-body').inner_text()
     assert not p.errors
 
 

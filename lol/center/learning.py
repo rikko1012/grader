@@ -35,6 +35,7 @@ def dashboard(con):
     series = set()
     player_props = set()
     units = []
+    calendar_rows=[]
     from .forecast import shown, side_offered
     for r in rows:
         r = dict(r)
@@ -42,6 +43,9 @@ def dashboard(con):
         status[r["st"]] += 1
         if sh["side_offered"] == 1:
             offered_status[r["st"]] += 1
+            if r['st'] in ('graded','push'):
+                calendar_rows.append({'at':r.get('series_start'),'status':'push' if r['st']=='push' else
+                    'win' if bool(r['over_hit']) == (sh['side']=='over') else 'loss'})
         if r["st"] != "graded":
             continue
         series.add(r["sid"])
@@ -98,7 +102,8 @@ def dashboard(con):
                                                    "WHERE forecast_at < series_start)").fetchone()[0],
               "distinct_matches": con.execute("SELECT COUNT(DISTINCT sid) FROM lol_forecasts WHERE forecast_at < series_start").fetchone()[0],
               "graded_offered_props": graded, "graded_matches": len(series), "graded_distinct_player_props": len(player_props)}
-    return {"at": store.now_iso(), "settled_by_status": dict(status), "counts": counts, "metrics": out,
+    from gradecore.calendar import daily_record
+    return {"at": store.now_iso(), 'calendar':daily_record(calendar_rows,store.now_iso(),'Series start date · UTC'), "settled_by_status": dict(status), "counts": counts, "metrics": out,
             "offered_side": {"version": 1, "settled_by_status": dict(offered_status),
                              "metrics": {k.removeprefix("offered cohort "): v for k, v in out.items() if k.startswith("offered cohort ")}},
             "series_grouped_95ci": {"all": _grouped_ci(units), "offered_side_only": _grouped_ci([u for u in units if u["offered"]])},

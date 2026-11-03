@@ -1045,6 +1045,11 @@ def build(con, league, now=None, base=None, history=True, results=True):
     manifest["build_s"] = round(time.time() - t0, 2)
     manifest["build_rss_mb"] = mem
     manifest["build_stage_s"] = stage_s
+    if os.getenv('SCOUT_MARKET_TOOLS') == '1':
+        from . import market_tools
+        # No rule-equivalence registry or validated candidate is inferred from
+        # a display grade. Until those pass, the feed exposes exclusions only.
+        _write(root / 'market_tools.json', market_tools.build(offers, now))
     _write(root / "manifest.json", manifest)
     return {"league": league, **manifest["counts"], "player_files": n_players, "sizes": sizes,
             "build_s": manifest["build_s"]}

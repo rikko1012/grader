@@ -474,7 +474,10 @@ def test_prizepicks_takes_a_mixed_entry_with_its_source(env):
     assert e["status"] == "valid" and e["ok"] and e["trackable"] and e["sports"] == ["lol", "nba"]
     keys = {r["rule"]: r for r in e["rules"]}
     assert keys["mixed_sports"]["source"].startswith("https://www.prizepicks.com") and "for the most part" in keys["mixed_sports"]["text"].lower() and "league_limits" in keys
-    assert e["ev"] == {"available": False, "reason": "PrizePicks shows lineup payouts only in its app."}
+    assert e['ev']['available'] is False
+    assert e['ev']['payout']['reference_only'] is True
+    assert e['ev']['payout']['multiple']==3.0
+    assert 'final payout' in e['ev']['reason']
 
 
 def test_underdog_says_why_a_mixed_entry_is_not_offered(env):

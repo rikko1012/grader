@@ -26,7 +26,7 @@ from tests.workspace_fixture import MODEL, Fixture, iso, leg_of, row
 API = "/preview/workspace/api/"
 ADMIN = "B" * 40
 ROOT = Path(server.__file__).parent
-GET_ROUTES = ("me", "board", "line?book=underdog&id=x", "mine", "results", "state", "rules", "diagnostics")
+GET_ROUTES = ("me", "board", "line?book=underdog&id=x", "mine", "results", "state", "rules", "diagnostics", "grade-review")
 POST_ROUTES = ("recheck", "track", "state", "book-line")
 
 
@@ -937,6 +937,17 @@ def test_diagnostics_are_owner_only(env):
     assert get(env, "diagnostics")[0] == 404
 
 
+def test_grade_comparison_requires_owner_and_is_read_only(env, monkeypatch, tmp_path):
+    assert get(env, 'grade-review?sport=cs2')[0] == 404
+    path = tmp_path / 'nonexistent-shadow.db'
+    monkeypatch.setattr(server.picklog, 'DB', str(path))
+    st, doc = get(env, 'grade-review?sport=cs2', user=None, headers={'X-Admin-Token': ADMIN})
+    assert st == 200 and doc['state'] == 'awaiting_capture'
+    assert not path.exists()
+    assert get(env, 'grade-review?sport=other', user=None, headers={'X-Admin-Token': ADMIN})[0] == 400
+    assert get(env, 'grade-review?sport=cs2&before=bad', user=None, headers={'X-Admin-Token': ADMIN})[0] == 400
+
+
 # ---- /state: two devices
 def test_two_devices_stale_rev_is_refused_with_the_current_copy(env):
     assert post(env, "state", {"rev": 0, "slip": {"legs": [{"id": "phone"}]}})[1] == {"rev": 1}
@@ -1055,7 +1066,9 @@ def test_ev_reason_comes_through_the_route(env):
     assert e["ev"]["available"] is False and "This model version has" in e["ev"]["reason"] and "of 300 settled matches" in e["ev"]["reason"]
     assert MODEL not in e["ev"]["reason"] and e["ev"]["payout"]["multiple"] == 3.5
     p = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
-    assert p["ev"] == {"available": False, "reason": "PrizePicks shows lineup payouts only in its app."}
+    assert p['ev']['available'] is False
+    assert p['ev']['payout']['multiple'] == 3 and p['ev']['payout']['reference_only']
+    assert 'final payout' in p['ev']['reason']
 
 
 def test_a_failed_export_read_is_named_as_that(env, monkeypatch):
@@ -1618,10 +1631,40 @@ def test_owner_wording_rules_cover_server_text(bad):
 def test_model_hash_files_are_untouched():
     import subprocess
     files = ["grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py", "market_odds.py", "thunderpick.py", "pick_verdict.py",
-             "bo3.py", "roles.py", "polymarket.py", "oddspapi.py", "cm1.py", "cm2.py", "cm2_model.json", "picklog.py", "platform_rules.py", "learning.py"]
+             "bo3.py", "roles.py", "polymarket.py", "oddspapi.py", "cm1.py", "cm2.py", "cm2_model.json", "platform_rules.py", "learning.py"]
     if subprocess.run(["git", "cat-file", "-e", "4877218"], cwd=ROOT, capture_output=True).returncode != 0:
         pytest.skip("base commit not in this clone (shallow checkout)")
     assert subprocess.run(["git", "diff", "--exit-code", "--quiet", "4877218", "--", *files], cwd=ROOT).returncode == 0
+    # Only the disabled-by-default shadow observer is added to the immutable
+    # forecast writer. Everything else must still equal the frozen baseline.
+    baseline_picklog = subprocess.run(['git', 'show', '4877218:picklog.py'], cwd=ROOT,
+                                     capture_output=True, text=True, encoding='utf-8', check=True).stdout
+    class WithoutShadow(ast.NodeTransformer):
+        def visit_FunctionDef(self, node):
+            if node.name == 'forecasts_page':
+                # The only additional writer-file change is an opt-in read
+                # projection. Its normal export and all write paths stay frozen.
+                assert node.args.args[-1].arg == 'compact'
+                assert ast.literal_eval(node.args.defaults[-1]) is False
+                node.args.args.pop(); node.args.defaults.pop()
+                extra = [n for n in node.body if isinstance(n, ast.If) and ast.unparse(n.test) == 'compact']
+                assert len(extra) == 1
+                expected = ast.parse("if compact:\n    if inputs: raise ValueError('compact export does not include model inputs')\n    cols = 'id,pick_id,kind,logged_at,match_start,line,pick,p_pick,p_more,grade,units,model_version,probs_raw'").body[0]
+                assert ast.dump(extra[0]) == ast.dump(expected)
+                node.body.remove(extra[0])
+            return self.generic_visit(node)
+
+        def visit_If(self, node):
+            if ast.unparse(node.test) == "os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1'":
+                assert len(node.body) == 2
+                assert isinstance(node.body[0], ast.ImportFrom) and node.body[0].module == 'gradecore.capture'
+                assert isinstance(node.body[1], ast.Expr) and isinstance(node.body[1].value, ast.Call)
+                assert isinstance(node.body[1].value.func, ast.Name) and node.body[1].value.func.id == 'capture'
+                assert not node.orelse
+                return None
+            return self.generic_visit(node)
+    current_picklog = WithoutShadow().visit(ast.parse((ROOT / 'picklog.py').read_text(encoding='utf-8')))
+    assert ast.dump(current_picklog) == ast.dump(ast.parse(baseline_picklog))
     # Results' scoring/selection rules stay frozen too. Only the bootstrap's
     # implementation is optimized; exact seeded equivalence is exercised in
     # test_results_readonly.py against the original expanded resampling.

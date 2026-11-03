@@ -39,9 +39,26 @@ def test_core_imports_no_sport_code():
             assert not (_imports(p) & banned), p.name
 
 
-def test_no_live_code_reads_the_skeleton_yet():
+def test_only_explicit_forecast_capture_boundaries_import_core():
+    allowed = {'picklog.py', 'lol/center/forecast.py', 'sports/model/forward.py', 'sports/market_tools.py',
+               'workspace_api.py', 'sports/api_model.py'}
+    reporting = {'results_stated.py', 'lol/center/learning.py', 'sports/results_public.py'}
     for p in list(ROOT.glob("*.py")) + list((ROOT / "sports").rglob("*.py")) + list((ROOT / "lol").rglob("*.py")):
-        assert "gradecore" not in _imports(p), p.name
+        if 'tests' in p.parts:
+            continue
+        if 'gradecore' in _imports(p):
+            if p.relative_to(ROOT).as_posix() in reporting:
+                # Shared calendar formatting cannot introduce live grading.
+                nodes = [n for n in ast.walk(ast.parse(p.read_text(encoding='utf-8')))
+                         if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore.calendar' and
+                                     [a.name for a in n.names] == ['daily_record'] for n in nodes)
+                assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names)
+                               for n in ast.walk(ast.parse(p.read_text(encoding='utf-8'))))
+                continue
+            assert p.relative_to(ROOT).as_posix() in allowed, p.name
+            if p.name not in ('market_tools.py', 'workspace_api.py', 'api_model.py'):
+                assert 'SCOUT_GRADECORE_SHADOW' in p.read_text(encoding='utf-8'), p.name
 
 
 def test_registry_holds_one_adapter_per_sport():

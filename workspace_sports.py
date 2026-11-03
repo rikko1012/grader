@@ -744,7 +744,7 @@ def results(srv, lg):
     by_band = [{"name": b.get("band"), "picks": b.get("n") or 0, "wins": b.get("wins"), "losses": b.get("losses"), "pushes": b.get("pushes"), "printed": b.get("stated"), "observed": b.get("hit_rate")} for b in d.get("bands") or [] if b.get("n")]
     by_stat = [_line(k, v.get("leans") or {}, None, v.get("games")) for k, v in sorted((d.get("stats") or {}).items()) if (v.get("leans") or {}).get("n")]
     hh = next((h for h in (d.get("head_to_head") or {}).get("rows") or [] if h.get("stat") == "all"), None)
-    return {"sport": lg, "label": f"{lg.upper()} research record", "as_of": doc.get("as_of"),
+    return {"sport": lg, "label": f"{lg.upper()} research record", "as_of": doc.get("as_of"), 'calendar':d.get('calendar'),
             "population": "Saved forward Scout forecasts with a lean, each scored at its own line from the final box score. These are research estimates, with grades held.",
             "rule": "Over when its chance of Over is above 50% and its projection is above the line, Under mirrored. Hit rate is wins over wins plus losses. Pushes stay apart, voids and unresolved props stay out.",
             "totals": {"picks": leans.get("n") or 0, "wins": leans.get("wins"), "losses": leans.get("losses"), "pushes": leans.get("pushes"), "observed": leans.get("hit_rate"), "ci": leans.get("hit_rate_ci95"),

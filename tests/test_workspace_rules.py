@@ -152,7 +152,7 @@ def test_ev_flex_formula():
 
 
 @pytest.mark.parametrize("kw,gate,text", [
-    ({"platform": "prizepicks"}, None, "PrizePicks shows lineup payouts only in its app"),
+    ({"platform": "prizepicks"}, None, "PrizePicks confirms the final payout"),
     ({"legs": [ev_leg(i=i) for i in range(4)], "et": "flex"}, None, "two 4-pick flex payouts"),
     ({"legs": [ev_leg(i=0, multiplier=1.05), ev_leg(i=1)]}, None, "does not publish how multipliers combine"),
     ({"legs": [ev_leg(i=0, match="same"), ev_leg(i=1, match="same")]}, None, "no tested joint model"),

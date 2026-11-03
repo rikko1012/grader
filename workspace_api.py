@@ -556,7 +556,7 @@ def check_leg(srv, leg, snap, feeds, now):
             "_ident": {"nick": _nick(x), "prop": x.get("prop"), "scope": x.get("scope") or "12", "match_slug": _slug_of(x), "match_key": event_id(x)[0], "platform": _book(x), "line": x.get("line"), "side": side},
             "_rule": {"sport": "cs2", "book": book, "team": x.get("team_name") or x.get("team"), "nick": _nick(x), "side": side, "event": event_id(x)[0]},
             "_ev": {"name": _nick(x), "sport": "cs2", "match": event_id(x)[0], "line": x.get("line"), "multiplier": x.get("higher") if side == "over" else x.get("lower"), "on_side": side == _side(x),
-                    "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"), "scope": x.get("scope") or "12"}}
+                    "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"), "scope": x.get("scope") or "12", "line_type": line_type_of(x)}}
 
 
 def _n(x):
@@ -858,9 +858,52 @@ def _limited(h, srv, bucket, member, limit):
 
 
 def get_me(h, srv, q, member, scratch, name):
+    import workspace_alerts
     return h.send(200, {"member": member, "name": name, "scratch": scratch, "sports": access(h, srv, q), "rules_version": rules.RULES_VERSION,
                         "owner": bool(scratch) or bool(h._sports_owner()),
-                        "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1", "book_links": bool(srv.PP_OPEN_LINK)}})
+                        "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1",
+                                     "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
+                                     "background_alerts": bool(workspace_alerts.configured()),
+                                     "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK)}})
+
+
+def get_market_tools(h, srv, q, member, scratch, name):
+    if os.getenv('SCOUT_MARKET_TOOLS')!='1':return h.send(404,{'error':'not found'})
+    allowed=access(h,srv,q)
+    import workspace_sports
+    out={}
+    for league in ('nba','nfl'):
+        if not allowed.get(league):continue
+        def read(lg=league):
+            try:return 200,workspace_sports.call(srv,'/api/sports/market-tools',{'league':lg})[0]
+            except workspace_sports.Down:return 503,{'state':'unavailable','error':'Market feed unavailable','ev':[],'arbitrage':[]}
+        out[league]=srv.shared(('ws_market_tools',league),read,ttl=30)[1]
+    return h.send(200,{'leagues':out,'supported_sports':['nba','nfl']})
+
+
+def get_alert_delivery(h, srv, q, member, scratch, name):
+    import workspace_alerts
+    return h.send(200,workspace_alerts.subscription(data_dir(),member))
+
+
+def post_alert_delivery(h, srv, q, member, scratch, name, n):
+    if n>2048:
+        h.rfile.read(n)
+        return h.send(413,{'error':'request too large'})
+    d=_read_json(h,srv,n)
+    if not d or not isinstance(d.get('enabled'),bool):return h.send(400,{'error':'enabled must be true or false'})
+    if _limited(h,srv,'state',member,STATE_PER_MIN):return None
+    sess=h.member() or {}
+    if d['enabled'] and (scratch or not sess.get('ok') or not sess.get('user')):
+        return h.send(403,{'error':'Sign in with Whop to enable personal notifications.'})
+    import workspace_alerts
+    try:
+        out=workspace_alerts.subscription(data_dir(),member,d['enabled'],sess.get('user'),
+                                         [s for s,on in access(h,srv,q).items() if on])
+    except ValueError:
+        return h.send(503,{'error':'Whop push is not configured yet.'})
+    workspace_alerts.start(srv)
+    return h.send(200,out)
 
 
 def _sport_q(h, srv, q):
@@ -1025,6 +1068,43 @@ def get_diagnostics(h, srv, q, member, scratch, name):
     return h.send(200, store().diagnostics())
 
 
+def get_grade_review(h, srv, q, member, scratch, name):
+    if not (_token_in_use(h, q) or h._sports_owner()):
+        return h.send(404, {'error': 'not found'})
+    sport = q.get('sport', 'cs2')
+    if sport not in SPORTS:
+        return h.send(400, {'error': 'unknown sport'})
+    try:
+        before = int(q['before']) if q.get('before') else None
+        if sport in ('cs2', 'lol'):
+            from gradecore.reporting import comparisons
+            path = Path(srv.LOL_CENTER) / 'lol.db' if sport == 'lol' else Path(srv.picklog.DB)
+            doc = comparisons(path, sport, before=before)
+        else:
+            import urllib.request
+            from urllib.parse import urlencode
+            base = os.getenv('SPORTS_API_BASE', '').rstrip('/')
+            token = os.getenv('ADMIN_TOKEN', '')
+            if not base.startswith('https://') or not token:
+                return h.send(503, {'error': 'Sports report connection unavailable'})
+            query = {'league': sport}
+            if before is not None: query['before'] = before
+            request = urllib.request.Request(base + '/api/sports/admin/model/gradecore-comparison?' + urlencode(query),
+                                             headers={'X-Admin-Token': token})
+            # Never forward credentials through redirects.
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, *args, **kwargs): return None
+            with urllib.request.build_opener(NoRedirect()).open(request, timeout=5) as response:
+                raw = response.read(512001)
+                if len(raw) > 512000: raise ValueError('response exceeds budget')
+                doc = json.loads(raw)
+        return h.send(200, doc)
+    except ValueError:
+        return h.send(400, {'error': 'invalid report request'})
+    except Exception:
+        return h.send(503, {'error': 'Comparison report unavailable'})
+
+
 def post_recheck(h, srv, q, member, scratch, name, n):
     d = _read_json(h, srv, n)
     legs = _legs_of(d) if d else None
@@ -1158,8 +1238,10 @@ def post_state(h, srv, q, member, scratch, name, n):
 
 
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
-       "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated}
-POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "book-line": post_book_line}
+       "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
+       "market-tools":get_market_tools, "grade-review":get_grade_review}
+POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
+        "book-line":post_book_line}
 
 
 def handle(h, srv, method, path, q, n=0, prefix=None):

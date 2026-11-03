@@ -1,4 +1,4 @@
-"""Grade policy gp-1, the same for every sport (brief 3.4): p_cal -> letter, EV against break-even, stake, reasons.
+"""Shared candidate grade policy: p_cal -> letter, EV against break-even, stake, reasons.
 
 - Letter from p_cal, and only when ev > 0: otherwise Lean. There is always a side.
 - ev = p_cal / break-even - 1. No known break-even (goblin / demon / promo with no multiplier, a book with no verified

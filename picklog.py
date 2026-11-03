@@ -596,6 +596,9 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
                  row.get("sample_maps"), row.get("model_version"), _shadow(row, extra.get("vm1")), gi, extra.get("probs_raw"), extra.get("data_rev"),
                  extra.get("odds_source"), extra.get("odds_policy"), extra.get("mapping_rev"), extra.get("odds_sig"),
                  extra.get("git_commit"), extra.get("quote")))
+    if os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1':
+        from gradecore.capture import capture
+        capture(con, 'cs2', row, extra, con.execute('SELECT last_insert_rowid()').fetchone()[0])
     _record_mapping(con, extra.get("mapping_rev"))
     return True
 
@@ -2258,7 +2261,7 @@ def rule_pending_page(after_id=0, limit=None):
 PAGE_MAX = {False: 2000, True: 500}     # rows per page without / with decoded grader inputs (~4 KB / ~20 KB a row)
 
 
-def forecasts_page(after_id=0, cutoff_id=None, limit=None, inputs=False):
+def forecasts_page(after_id=0, cutoff_id=None, limit=None, inputs=False, compact=False):
     """Bounded export of the forecast history (2026-10-14: the full export of ~25k rows, ~95 MB, restarted production).
     Keyset pagination on the primary key: rows with after_id < id <= cutoff_id, ascending, at most `limit` (capped by
     PAGE_MAX). The cutoff is fixed by the first call (the current max id) and passed back unchanged, so rows appended while
@@ -2269,6 +2272,9 @@ def forecasts_page(after_id=0, cutoff_id=None, limit=None, inputs=False):
     limit = max(1, min(int(limit or cap), cap))
     after_id = max(0, int(after_id or 0))
     cols = "*" if inputs else ", ".join(c for c in _forecast_cols() if c != "inputs") + ", inputs IS NOT NULL AS has_inputs"
+    if compact:
+        if inputs: raise ValueError('compact export does not include model inputs')
+        cols = 'id,pick_id,kind,logged_at,match_start,line,pick,p_pick,p_more,grade,units,model_version,probs_raw'
     with _LOCK:
         con = _db()
         try:

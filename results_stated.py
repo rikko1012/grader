@@ -17,20 +17,23 @@ def stated_observed(export, map1_min=MAP1_RESULTS_MIN_STAKED):
 
     def market(r):
         return f"{STAT.get(r.get('prop'), r.get('prop'))} {SCOPE.get(r.get('scope') or '12', r.get('scope'))}"
-    picks, pushed = [], []
+    picks, pushed, calendar_rows = [], [], []
     for r in rows:
         p = r.get("p")
         if p is None or r.get("over") not in (0, 1) or max(p, 1 - p) < RULE:
             continue
         side_p = max(p, 1 - p)
         picks.append({"match": r["match"], "printed": side_p, "win": int(r["over"] if p >= 0.5 else 1 - r["over"]), "letter": grade_from_p(side_p), "market": market(r)})
+        calendar_rows.append({'at':r.get('start'),'status':'win' if picks[-1]['win'] else 'loss'})
     for r in pushes_in:
         p = r.get("p")
         if p is not None and max(p, 1 - p) >= RULE:
             pushed.append({"letter": grade_from_p(max(p, 1 - p)), "market": market(r)})
+            calendar_rows.append({'at':r.get('start'),'status':'push'})
 
     def group(key, names):
         return [dict(_line([x for x in picks if x[key] == k]), name=k, pushes=sum(1 for x in pushed if x[key] == k)) for k in names]
     letters = [k for k in LETTERS if any(x["letter"] == k for x in picks + pushed)]
-    return {"as_of": (export or {}).get("at"), "rule": f"The favoured side when its printed chance was {round(RULE * 100)}% or more",
+    from gradecore.calendar import daily_record
+    return {"as_of": (export or {}).get("at"), 'calendar':daily_record(calendar_rows,(export or {}).get('at'),'Match start date · UTC'), "rule": f"The favoured side when its printed chance was {round(RULE * 100)}% or more",
             "totals": dict(_line(picks), pushes=len(pushed)), "by_letter": group("letter", letters), "by_market": group("market", sorted({x["market"] for x in picks + pushed}))}

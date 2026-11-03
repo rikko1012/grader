@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -389,6 +390,9 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             for name, fcx, polx, pmfx, inp in written:
                 store.assert_known_before(scon, fcx.input_snapshot_ids, forecast_at)
                 res = store.put(scon, fcx)
+                if name == 'sm-1' and os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1':
+                    from gradecore.capture import capture
+                    capture(scon, 'sports', fcx, o, events[o.event_id].start_utc if o.event_id in events else None)
                 if res["status"] == "inserted":
                     icon.execute("INSERT OR IGNORE INTO inputs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                                  (fcx.forecast_id, name, league, mk, rid, art["sha"], forecast_at,

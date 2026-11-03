@@ -82,6 +82,21 @@ def test_new_filters_are_explicit_and_do_not_invent_movement(ctx, env):
     assert not p.errors
 
 
+def test_saved_filters_keep_freshness_and_grade_after_reload(ctx,env):
+    from tests.test_research_hub_browser import saved_state
+    p=start(ctx,env)
+    p.locator('#hub-freshOnly').click()
+    p.locator('#hub-minGrade').select_option('B')
+    p.locator('[data-hub=save-view]').click()
+    p.locator('#hub-save-name').fill('Fresh B and above')
+    p.locator('#hub-save-confirm').click()
+    saved_state(p,lambda d:len((d.get('prefs') or {}).get('researchHub',{}).get('views',[]))==1)
+    p.reload();p.wait_for_selector('#hub-rows tr')
+    p.locator('#hub-views').select_option('0')
+    assert p.locator('#hub-freshOnly').get_attribute('aria-pressed')=='true'
+    assert p.locator('#hub-minGrade').input_value()=='B'
+
+
 def test_share_card_requires_checked_entry_and_does_not_track(ctx, env, tmp_path):
     p = start(ctx, env)
     p.locator('#hub-sports [data-id=cs2]').click()

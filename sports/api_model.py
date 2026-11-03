@@ -97,6 +97,27 @@ def model(req):
 
 def admin_model(req):
     rest = (req.rest or "").strip("/")
+    if rest == 'gradecore-comparison':
+        from gradecore.reporting import comparisons
+        league = _league(req.query or {})
+        if not league:
+            return 400, {'error': 'league must be nba or nfl'}
+        try:
+            return 200, comparisons(config.DATA_DIR / 'canonical.db', league,
+                                    before=req.query.get('before'))
+        except ValueError:
+            return 400, {'error': 'invalid cursor'}
+    if rest == 'gradecore-export':
+        league = _league(req.query or {})
+        if not league:
+            return 400, {'error':'league must be nba or nfl'}
+        path = _dir() / ('gradecore_export_' + league + '.json')
+        try:
+            if path.stat().st_size > 32 * 1024 * 1024:
+                return 503, {'error':'export_exceeds_download_budget'}
+        except FileNotFoundError:
+            return 503, {'error':'gradecore_export_not_built'}
+        return 200, _load(path.name)
     if rest == "gradecheck":
         return admin_gradecheck(req)
     if rest != "learning":

@@ -12,8 +12,9 @@ import re
 import results_view
 
 import platform_rules
+import payout_reference
 
-RULES_VERSION = "ws-rules-2026-11-02-all"
+RULES_VERSION = "ws-rules-2026-11-03-reference"
 READ_AT = "2026-11-02"
 
 PP_PICKS = "https://www.prizepicks.com/help-center/player-picks"
@@ -235,8 +236,14 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
     def no(reason, **extra):
         return dict({"available": False, "reason": reason}, **extra)
 
-    if platform != "underdog":
-        return no("PrizePicks shows lineup payouts only in its app.")
+    if platform == 'prizepicks':
+        reference = payout_reference.prizepicks(entry_type or 'power', len(legs))
+        if any(str(l.get('line_type') or l.get('variant') or 'standard').lower() not in ('standard','normal') for l in legs):
+            return no('Special-line payouts are set on the PrizePicks lineup screen.')
+        return no('Published base rate. PrizePicks confirms the final payout for your exact lineup; promotions, special lines and combinations can change it.',
+                  **({'payout': reference} if reference else {}))
+    if platform != 'underdog':
+        return no('No verified payout reference for this platform.')
     n, et = len(legs), entry_type or "standard"
     if et == "flex" and n == 4:
         return no("Underdog's pages list two 4-pick flex payouts.")
