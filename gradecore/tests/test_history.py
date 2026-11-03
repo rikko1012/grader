@@ -15,7 +15,9 @@ def test_cs2_uses_latest_prelock_raw_forecast_and_its_selected_side():
     push=dict(pick,status='push',actual=20.5)
     assert cs2([f],[push],'v')[0][0]['status']=='push'
     assert cs2([dict(f,probs_raw=None)],[pick],'v')[0]==[]
-    assert cs2([f],[dict(pick,test=2)],'v')[0]==[]
+    assert cs2([f],[dict(pick,test=2)],'v')[0][0]['status']=='win'
+    assert cs2([f],[dict(pick,test=1)],'v')[0]==[]
+    assert cs2([f],[dict(pick,test=99)],'v')[0]==[]
 
 
 def test_lol_latest_correction_and_unplayable_side_are_not_ignored():

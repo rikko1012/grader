@@ -20,7 +20,9 @@ def cs2(forecasts, picks, model_version):
             if f.get('model_version') != model_version:
                 excluded['other_model'] += 1; continue
             p = lookup.get(str(f['pick_id']))
-            if not p or p.get('test') or p.get('status') not in ('settled', 'push', 'void'):
+            # picklog: 0=member, 1=owner/load test, 2=automatic real board.
+            # A truthiness check would discard the board's actual forecasts.
+            if not p or p.get('test',0) not in (0,2,None) or p.get('status') not in ('settled', 'push', 'void'):
                 excluded['not_real_settled_pick'] += 1; continue
             at, start, settled = map(timestamp, (f['logged_at'], f['match_start'], p['settled_at']))
             if (start-at).total_seconds() < 1800 or settled < start:
