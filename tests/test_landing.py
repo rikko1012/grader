@@ -69,6 +69,7 @@ def before(monkeypatch, port, path, headers=None):
 @pytest.mark.parametrize("path", PAGES)
 @pytest.mark.parametrize("ok", [True, False])
 def test_signed_in_pages_are_byte_identical(srv, monkeypatch, path, ok):
+    monkeypatch.setenv("SCOUT_UPGRADE", "off")      # the page upgrade has its own gate (tests/test_upgrade_gate.py)
     st, h, body = get(srv, path, cookie(ok))
     st0, h0, body0 = before(monkeypatch, srv, path, cookie(ok))
     assert (st, body) == (st0, body0) and h.get("etag") == h0.get("etag")
