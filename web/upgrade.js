@@ -618,12 +618,32 @@
     clearTimeout(toastT);
     toastT = setTimeout(() => t.classList.remove("on"), 3200);
   }
+  /* desktop: dock the tray button in the page's own top bar (re-docked when a page redraws its header); phone: bottom corner */
+  function dockTray() {
+    const wide = matchMedia("(min-width:1025px)");
+    const place = () => {
+      const btn = $("u-tray-btn"), head = document.querySelector("header.sw-top") || document.querySelector("body header");
+      if (!btn) return;
+      if (wide.matches && head) {
+        if (btn.parentNode !== head) head.appendChild(btn);
+        btn.classList.add("u-docked");
+      } else {
+        if (btn.parentNode !== document.body) document.body.appendChild(btn);
+        btn.classList.remove("u-docked");
+      }
+    };
+    place();
+    wide.addEventListener("change", place);
+    const head = document.querySelector("header.sw-top");
+    if (head) new MutationObserver(() => { if (wide.matches && !head.contains($("u-tray-btn"))) place(); }).observe(head, { childList: true });
+  }
   function mountShell() {
     document.body.insertAdjacentHTML("beforeend", `<button class="u-tray-btn" id="u-tray-btn" type="button" aria-haspopup="dialog">Slip tray · 0</button>
       <dialog class="u-dialog u-right" id="u-drawer" aria-labelledby="u-drawer-title"></dialog>
       <dialog class="u-dialog u-right" id="u-tray" aria-labelledby="u-tray-title"><div class="u-d-head"><div><h2 id="u-tray-title">Slip tray</h2><p>One account slip across CS2, LoL and Sports. Your other slips stay where they are.</p></div><button class="u-x" type="button" aria-label="Close slip tray" data-u="tclose">${X_ICON}</button></div><div class="u-tabs" id="u-tray-tabs" role="tablist" aria-label="Slip tray sections"></div><div class="u-d-body" id="u-tray-body" tabindex="0"></div><div class="u-toast" role="status" aria-live="polite"></div></dialog>
       <div class="u-toast" id="u-toast" role="status" aria-live="polite"></div>`);
     $("u-tray-btn").addEventListener("click", () => openTray());
+    dockTray();
     document.addEventListener("click", guard((e) => {
       const t = e.target.closest("[data-u]");
       if (t && !t.disabled && t.getAttribute("aria-disabled") !== "true" && ACT[t.dataset.u]) {
