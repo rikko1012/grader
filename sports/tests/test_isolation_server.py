@@ -188,6 +188,7 @@ def test_rollback_is_flags_off_even_with_the_service_configured(tmp_path):
 def test_esports_pages_are_byte_identical_with_sports_ui_off_and_get_one_link_with_it_on(monkeypatch):
     import server
     H = _handler()
+    monkeypatch.setenv("SCOUT_UPGRADE", "off")      # the page upgrade has its own gate (tests/test_upgrade_gate.py)
     monkeypatch.setattr(server, "lol_public", lambda: True)
     raw = {"/": server.page(), "/lol": server.web_file("lol.html")}
 
