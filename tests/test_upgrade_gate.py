@@ -43,6 +43,7 @@ def get(base, path, cookie=None, headers=None):
 def env(monkeypatch, tmp_path):
     for k in ("SPORTS_UI", "SPORTS_API", "SPORTS_UI_ALLOW", "SCOUT_UPGRADE", "SCOUT_WORKSPACE_PREVIEW", "REQUIRE_WHOP", "RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME"):
         monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("SCOUT_UPGRADE", "owner")      # 2026-11-03: unset = every member; these tests pin the owner-only gate
     monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(server, "ADMIN_TOKEN", "owner-token")
     monkeypatch.setattr(server, "lol_public", lambda: True)
@@ -124,6 +125,12 @@ def test_a_member_gets_the_upgrade_only_with_the_flag(env, monkeypatch):
     assert st == 200 and b"/api/upgrade/" in body and hdr["Content-Type"].startswith("text/javascript")
     assert get(env.base, "/upgrade/upgrade.css", "good-u1")[0] == 200
     assert json.loads(get(env.base, "/api/upgrade/me", "good-u1")[1])["sports"]["cs2"] is True
+
+
+def test_unset_flag_means_every_paid_member(env, monkeypatch):
+    monkeypatch.delenv("SCOUT_UPGRADE", raising=False)      # owner 2026-11-03: "make it live"
+    st, body, _ = get(env.base, "/", "good-u1")
+    assert st == 200 and MARK_JS in body
 
 
 def test_signed_out_visitors_keep_the_landing_page(env, monkeypatch):

@@ -5499,13 +5499,13 @@ class Handler(BaseHTTPRequestHandler):
         return workspace_api.handle(self, sys.modules[__name__], method, path, q, n, prefix)
 
     def _upgrade_on(self, q):
-        """The upgraded member pages. SCOUT_UPGRADE on: every member who passes the paid check. Unset (the default): the owner only,
-        by the admin token (?token=, X-Admin-Token, or a same-origin Referer from a page opened with it, since the page's scripts
+        """The upgraded member pages. SCOUT_UPGRADE unset or on (owner 2026-11-03: "make it live"): every member who passes the paid
+        check. SCOUT_UPGRADE=owner: the owner only, by the admin token (?token=, X-Admin-Token, or a same-origin Referer from a page opened with it, since the page's scripts
         and styles carry no token) or the SPORTS_UI_ALLOW allow list. SCOUT_UPGRADE=off: nobody."""
         flag = os.environ.get("SCOUT_UPGRADE", "").strip().lower()
         if flag in ("0", "false", "no", "off"):
             return False
-        if flag in ("1", "true", "yes", "on") and self.allowed():
+        if flag in ("", "1", "true", "yes", "on") and self.allowed():
             return True
         token = q.get("token")
         if not token and self.headers.get("Referer"):

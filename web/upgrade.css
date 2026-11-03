@@ -104,7 +104,8 @@ html[data-upgrade] .ot-lol .overview{background:var(--u-panel);border:1px solid 
 html[data-upgrade] .ot-lol .overview strong{font-size:18px}
 
 /* slip tray button */
-html[data-upgrade] .u-tray-btn{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;min-height:42px;padding:8px 16px;border:1px solid var(--u-gold);border-radius:6px;background:#0c0c0c;color:var(--u-gold);font:600 13px 'Outfit',system-ui;cursor:pointer;box-shadow:0 8px 22px #000b}
+html[data-upgrade] body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+html[data-upgrade] .u-tray-btn{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;min-height:42px;padding:8px 16px;border:1px solid var(--u-gold);border-radius:6px;background:#0c0c0c;color:var(--u-gold);font:600 13px 'Outfit',system-ui;cursor:pointer;box-shadow:0 8px 22px #000b}
 html[data-upgrade] .u-tray-btn:hover{background:var(--u-gold);color:#111}
 
 /* drawers: one edge on a desk, the whole screen on a phone */
