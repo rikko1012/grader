@@ -80,6 +80,10 @@ def test_build_loop_keeps_settling_and_writing_the_board_when_forecasts_fail(con
     monkeypatch.setattr(match, "link_open_markets", lambda c: calls.append("links") or {})
     monkeypatch.setattr(forecast, "run", lambda c, **k: (_ for _ in ()).throw(TypeError("bad offer")))
     monkeypatch.setattr(forecast, "settle_all", lambda c: calls.append("settle") or {})
+    # This loop test stops at sleep; subprocess.wait also uses time.sleep on Linux.
+    # Keep the independently tested daily fitter out of this forecast-failure test,
+    # regardless of UTC hour or calibration files from another test.
+    monkeypatch.setattr(worker, "lc1_autofit", lambda c: None)
     monkeypatch.setattr(forecast, "board", lambda c: calls.append("board") or {"rows": []})
     monkeypatch.setattr(slips, "member_summary", lambda c: {})
     monkeypatch.setattr(slips, "build", lambda *a, **k: {})
