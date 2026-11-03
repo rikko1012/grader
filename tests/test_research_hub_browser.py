@@ -122,6 +122,29 @@ def test_quote_refresh_failure_is_explicit_and_cannot_add(ctx, env):
     assert not p.errors
 
 
+def test_unoffered_scout_side_opens_side_choice_instead_of_dead_add(ctx, env):
+    p = hub(ctx, env)
+
+    def one_sided(route):
+        response = route.fetch()
+        d = response.json()
+        for record in d['records']:
+            side = record['scout'].get('side')
+            if side and record['offer']['platform'] == 'prizepicks':
+                record['offer'][side]['offered'] = False
+        route.fulfill(response=response, json=d)
+
+    p.route('**/api/upgrade/board', one_sided)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-book').select_option('prizepicks')
+    p.locator('.h-tools [data-hub=refresh]').click()
+    p.wait_for_selector('#hub-rows .h-add[aria-label^="Choose a side"]', timeout=10000)
+    p.locator('#hub-rows .h-add').first.click()
+    p.wait_for_selector('#u-drawer[open]', timeout=10000)
+    assert p.locator('#hub-slip-count').inner_text() == '0'
+    assert not p.errors
+
+
 def test_malformed_saved_filters_cannot_break_the_board(ctx, env):
     p=hub(ctx, env)
     p.evaluate("""async () => {
