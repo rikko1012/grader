@@ -109,7 +109,8 @@ def test_a_line_that_moves_back_is_the_latest_revision(db):
 
 
 def test_forecasts_are_immutable(db):
-    f = h.forecast()
+    rid = store.put(db, h.offer(line=20.0))["record_id"]
+    f = h.forecast(offer_snapshot_ids=(rid,))
     assert store.put(db, f)["status"] == "inserted"
     assert store.put(db, f)["status"] == "duplicate"
     fields = {k: v for k, v in f.to_dict().items() if k != "kind"}

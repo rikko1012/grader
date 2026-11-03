@@ -49,13 +49,13 @@ def seed_store(con):
     store.put(con, ev)
     store.put(con, h.stat(pid=KAT, part="pts", value=None, participation="did_not_play",
                           observed_at="2026-10-23T05:00:00Z", eid=ev.event_id))
-    store.put(con, h.offer(oid="pp:1", line=20.5))
+    pp = store.put(con, h.offer(oid="pp:1", line=20.5))["record_id"]
     store.put(con, h.offer(platform="underdog", oid="ud:1", line=20.5,
                            sides=(SideQuote("over", True, "payout_multiplier", multiplier=1.03),
                                   SideQuote("under", True, "payout_multiplier", multiplier=0.97))))
     store.put(con, h.kalshi_rung(20.5, 0.55, 0.58, player_id=KAT))
     store.put(con, h.offer(oid="pp:2", line=19.5, variant="goblin"))
-    store.put(con, h.forecast(line=20.5, p_over=0.6131, p_under=0.3869, p_push=0.0, p_over_given_no_push=None,
+    store.put(con, h.forecast(offer_snapshot_ids=(pp,), line=20.5, p_over=0.6131, p_under=0.3869, p_push=0.0, p_over_given_no_push=None,
                               p_under_given_no_push=None, projection_mean=22.37, model_version="sharp-2"))
     store.put(con, ContextSnapshot(league="nba", kind="injury", subject_id=KAT, event_id=None, status="questionable",
                                    present="yes", detail="Knee", observed_at=h.T0, known_at=h.T0,

@@ -315,6 +315,17 @@ def put(con, rec, known_at=None, commit=True) -> dict:
 
 
 def _put(con, rec, known_at):
+    if isinstance(rec, Forecast):
+        # The old sharp-1 importer preserves unlinked historical research verbatim.
+        # It cannot produce member grades or stakes; all canonical forecasts must
+        # resolve their exact revisions, including offers now in the archive.
+        legacy = (rec.model_version == "sharp-1" and rec.research_only
+                  and rec.grade is None and rec.stake_units is None
+                  and "legacy_sharp1_import" in rec.reason_codes
+                  and bool(rec.offer_snapshot_ids)
+                  and all(str(rid).startswith("legacy:") for rid in rec.offer_snapshot_ids))
+        if not legacy:
+            rec.validate_offers({rid: get(con, rid) for rid in rec.offer_snapshot_ids})
     source, source_key = rec.identity()
     h = rec.content_hash()
     known = known_at or getattr(rec, "known_at", None) or getattr(rec, "observed_at", None) or \
