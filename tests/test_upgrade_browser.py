@@ -356,10 +356,16 @@ def test_lol_row_opens_its_card_and_research_opens_the_drawer(ctx, env):
 def test_lol_results_tab_shows_stated_and_observed(ctx, env):
     p = lol_board(ctx, env)
     p.locator("#v [data-u=lol-results]").click()
-    p.wait_for_selector(".u-lol-results .u-res-tbl", timeout=10000)
-    text = p.locator(".u-lol-results").inner_text()
-    for word in ("BY LETTER", "BY MARKET", "STATED", "OBSERVED", "SAMPLE", "PUSHES"):
-        assert word in text.upper(), word
+    # The board's background refresh can replace this panel between two reads.
+    # Check the complete result in one browser turn, retrying until it is ready.
+    # A missing section still fails; seeing an earlier table is not sufficient.
+    p.wait_for_function("""() => {
+      const panel = document.querySelector('.u-lol-results');
+      const text = panel?.innerText.toUpperCase() || '';
+      return !!panel?.querySelector('.u-res-tbl') &&
+        ['BY LETTER', 'BY MARKET', 'STATED', 'OBSERVED', 'SAMPLE', 'PUSHES']
+          .every(word => text.includes(word));
+    }""", timeout=10000)
     shot(p, "lol-results")
     assert p.locator("#app > .bar").is_hidden() and p.locator(".u-rows").count() == 0
     p.locator("#v button[data-v=board]").click()
