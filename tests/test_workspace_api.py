@@ -1640,6 +1640,20 @@ def test_model_hash_files_are_untouched():
     baseline_picklog = subprocess.run(['git', 'show', '4877218:picklog.py'], cwd=ROOT,
                                      capture_output=True, text=True, encoding='utf-8', check=True).stdout
     class WithoutShadow(ast.NodeTransformer):
+        def visit_FunctionDef(self, node):
+            if node.name == 'forecasts_page':
+                # The only additional writer-file change is an opt-in read
+                # projection. Its normal export and all write paths stay frozen.
+                assert node.args.args[-1].arg == 'compact'
+                assert ast.literal_eval(node.args.defaults[-1]) is False
+                node.args.args.pop(); node.args.defaults.pop()
+                extra = [n for n in node.body if isinstance(n, ast.If) and ast.unparse(n.test) == 'compact']
+                assert len(extra) == 1
+                expected = ast.parse("if compact:\n    if inputs: raise ValueError('compact export does not include model inputs')\n    cols = 'id,pick_id,kind,logged_at,match_start,line,pick,p_pick,p_more,grade,units,model_version,probs_raw'").body[0]
+                assert ast.dump(extra[0]) == ast.dump(expected)
+                node.body.remove(extra[0])
+            return self.generic_visit(node)
+
         def visit_If(self, node):
             if ast.unparse(node.test) == "os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1'":
                 assert len(node.body) == 2
