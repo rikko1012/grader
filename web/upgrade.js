@@ -528,7 +528,7 @@
     return `<div class="u-sec-h"><h3>By map, last ${res.length} series</h3></div><table class="u-tbl"><thead><tr><th scope="col">Map</th><th scope="col">Played</th><th scope="col">Average per map</th></tr></thead><tbody>${[...by.entries()].sort((a, b) => b[1].n - a[1].n).map(([name, e]) => `<tr><td>${esc(name)}</td><td>${e.n}</td><td>${(e.t / e.n).toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
   }
   function forecastHtml(rec, side) {
-    const s = rec.scout, p = chanceOf(rec, side), val = s.validation || {}, off = s.side && side !== s.side && p == null, stake = s.hold ? "None" : `${s.units == null ? 0 : s.units}U`;
+    const s = rec.scout, p = chanceOf(rec, side), val = s.validation || {}, off = s.side && side !== s.side && p == null, stake = `${s.hold || s.units == null ? 0 : s.units}U`;
     return `<div class="u-forecast"><div class="u-fc-num">${off ? "--" : pct(p)}</div><div><p>${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}</p><p><b>${esc(verdictText(rec, side))}</b> · Stake ${esc(stake)}</p></div>${val.label ? `<span class="u-tag">${esc(val.label)}</span>` : ""}</div>${s.range80 ? `<p class="u-dim">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${s.stake_reason ? `<p class="u-dim">${esc(s.stake_reason)}</p>` : ""}${val.detail ? `<p class="u-dim">${esc(val.detail)}</p>` : ""}`;
   }
   function sidesHtml(rec, side) {
@@ -590,14 +590,26 @@
     const res = seriesOf();
     if (res) box.querySelectorAll("[data-chart]").forEach((el) => { el.innerHTML = chartSvg(res.slice(0, +el.dataset.n), rec.offer.line, side, Math.max(240, Math.round(el.clientWidth))); });
   }
+  async function researchDoc(rec) {
+    const k = [rec.sport, rec.offer.platform, rec.offer.offer_id, rec.offer.revision, rec.scout.read_rev].join('|'), had = R.lines[k];
+    if (had && Date.now() - had.at < 15000) return had.doc;
+    const doc = await api(`line?${rec.sport === "cs2" ? "" : "sport=" + rec.sport + "&"}book=${encodeURIComponent(rec.offer.platform)}&id=${encodeURIComponent(rec.offer.offer_id)}`);
+    // A refresh may return a different revision. Never chart/add it as the selected offer.
+    const now = doc.record;
+    if (!now || now.sport !== rec.sport || propKey(now) !== propKey(rec) || now.offer.platform !== rec.offer.platform
+      || now.offer.offer_id !== rec.offer.offer_id || now.offer.revision !== rec.offer.revision || now.offer.line !== rec.offer.line
+      || now.scout.read_rev !== rec.scout.read_rev) throw new Error('offer_changed');
+    R.lines[k] = {doc, at: Date.now()};
+    const keys = Object.keys(R.lines);
+    keys.slice(0, Math.max(0, keys.length - 32)).forEach(x => delete R.lines[x]);
+    return doc;
+  }
   async function loadLine() {
-    const rec = P.rec, seq = ++P.seq, k = offerKey(rec.offer.platform, rec.offer.offer_id), had = R.lines[k];
-    if (had && Date.now() - had.at < 15000) { P.doc = had.doc; P.state = "ok"; paintDrawer(); return; }
+    const rec = P.rec, seq = ++P.seq;
     P.doc = null; P.state = "loading";
     paintDrawer();
     try {
-      const doc = await api(`line?${rec.sport === "cs2" ? "" : "sport=" + rec.sport + "&"}book=${encodeURIComponent(rec.offer.platform)}&id=${encodeURIComponent(rec.offer.offer_id)}`);
-      R.lines[k] = { doc, at: Date.now() };
+      const doc = await researchDoc(rec);
       if (seq === P.seq) { P.doc = doc; P.state = "ok"; }
     } catch (e) { if (seq === P.seq) P.state = "unavailable"; }
     if (seq === P.seq) paintDrawer();
@@ -1034,7 +1046,7 @@
     try {
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
-        research, addLeg, onSlip, slipTab, openTray, loadMine, resultsInto, say, chanceOf, verdictText });
+        research, researchDoc, chartSvg, addLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     await loadState();
     paintTray();

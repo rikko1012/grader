@@ -790,7 +790,7 @@
       }
       function sync() {
         if (onlyEvent) return;
-        var p = {}; ["book", "stat", "side", "q", "ev"].forEach(function (k) { if (f[k] && f[k] !== DEFAULT_FILTERS[k]) p[k] = f[k]; });
+        var p = {lg: state.lg}; ["book", "stat", "side", "q", "ev"].forEach(function (k) { if (f[k] && f[k] !== DEFAULT_FILTERS[k]) p[k] = f[k]; });
         if (f.more) p.more = "1";
         setHashParams(p); saveFilters();
       }

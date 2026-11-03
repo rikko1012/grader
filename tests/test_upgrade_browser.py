@@ -128,20 +128,22 @@ def shot(p, name):
 
 
 def cs2_board(ctx, env, size=None):
-    p = open_page(ctx, env, "/#board", size)
+    # Legacy specialist tools remain available through an explicit classic route.
+    # The default member workspace is covered by test_research_hub_browser.
+    p = open_page(ctx, env, "/?view=classic#board", size)
     p.wait_for_selector("#boardout .brow2.crow .u-hits", timeout=20000)
     p.wait_for_selector("#boardout .u-books .u-bk b", timeout=20000)
     return p
 
 
 def lol_board(ctx, env, size=None):
-    p = open_page(ctx, env, "/lol", size)
+    p = open_page(ctx, env, "/lol?view=classic", size)
     p.wait_for_selector(".u-rows .u-lol", timeout=20000)
     return p
 
 
 def nba_board(ctx, env, size=None):
-    p = open_page(ctx, env, "/sports#/board", size)
+    p = open_page(ctx, env, "/sports?view=classic#/board", size)
     p.wait_for_selector("tr.sw-tb-row .u-add", timeout=20000)
     p.wait_for_selector(".u-books .u-bk b", timeout=20000)
     return p
