@@ -32,3 +32,8 @@ def test_lol_latest_correction_and_unplayable_side_are_not_ignored():
     assert lol([dict(f,side_offered=0)],[s],'v','a')[0]==[]
     assert lol([f],[dict(correction,status='rule_unverified')],'v','a')[0]==[]
     assert lol([f],[s],'v','other')[0]==[]
+    production=dict(f,scope='123',market_key='pp:10|kills|standard|p')
+    result=dict(s,scope='maps_1_2_3',unit_key='underdog|pp:10|kills|standard|p|20.5')
+    assert lol([production],[result],'v','a')[0][0]['status']=='win'
+    assert lol([production],[dict(result,scope='maps_1_2')],'v','a')[0]==[]
+    assert lol([production],[dict(result,unit_key='underdog|other|20.5')],'v','a')[0]==[]

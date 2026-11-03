@@ -61,7 +61,17 @@ def cs2(forecasts, picks, model_version):
 
 def lol(forecasts, settlements, model_version, artifact_version):
     settled, chosen, excluded = {}, {}, Counter()
-    def key(r): return tuple(r[k] for k in ('platform','sid','pid','stat','scope','line'))
+    def identity(r):
+        scope = {'1':'maps_1', '12':'maps_1_2', '123':'maps_1_2_3',
+                 '1234':'maps_1_2_3_4', '12345':'maps_1_2_3_4_5'}.get(r['scope'],r['scope'])
+        return tuple(r[k] for k in ('platform','sid','pid','stat')) + (scope,r['line'])
+    def key(r):
+        # Match the serving worker's immutable settlement unit, including the
+        # market/variant identifier. Forecast scopes use '123', settlements
+        # use 'maps_1_2_3'; identity is checked separately after the join.
+        if r.get('unit_key'): return r['unit_key']
+        if r.get('market_key'): return r['platform']+'|'+r['market_key']+'|'+str(float(r['line']))
+        return identity(r)
     for r in settlements:
         try:
             k = key(r)
@@ -76,6 +86,8 @@ def lol(forecasts, settlements, model_version, artifact_version):
             k = key(f); s = settled.get(k)
             if not s:
                 excluded['not_settled'] += 1; continue
+            if identity(f) != identity(s):
+                excluded['settlement_identity_mismatch'] += 1; continue
             if s.get('status') not in ('graded', 'push', 'void'):
                 excluded['unverified_or_pending_result'] += 1; continue
             at,start,done = map(timestamp,(f['forecast_at'],f['series_start'],s['settled_at']))
