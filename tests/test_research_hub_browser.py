@@ -120,6 +120,22 @@ def test_quote_refresh_failure_is_explicit_and_cannot_add(ctx, env):
     assert not p.errors
 
 
+def test_malformed_saved_filters_cannot_break_the_board(ctx, env):
+    p=hub(ctx, env)
+    p.evaluate("""async () => {
+      const s=await (await fetch('/api/upgrade/state')).json();
+      const bad={name:'Recovered view',filters:{q:{bad:true},sport:123,side:[],book:null,watched:'false'}};
+      const r=await fetch('/api/upgrade/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rev:s.rev,prefs:{researchHub:{views:[bad],alerts:[bad],watch:[null,{}]}}})});
+      if(!r.ok)throw Error('Fixture preference write failed');
+    }""")
+    p.reload()
+    p.wait_for_selector('#hub-rows tr')
+    p.locator('#hub-views').select_option('0')
+    assert p.locator('#hub-q').input_value()==''
+    assert p.locator('#hub-rows tr').count()>0
+    assert not p.errors
+
+
 def test_successful_response_with_stale_source_is_not_presented_as_current(ctx, env):
     def stale(route):
         response=route.fetch()

@@ -118,9 +118,16 @@ export function mount(C) {
   async function loadPreferences() {
     try {
       const p=(await api('state')).prefs?.researchHub||{};
-      H.views=Array.isArray(p.views)?p.views.filter(v=>v&&typeof v.name==='string'&&v.filters).slice(0,12):[];
+      const clean = values => !Array.isArray(values)?[]:values.filter(v=>v&&typeof v.name==='string'&&v.filters&&typeof v.filters==='object').slice(0,12).map((v,i)=>{
+        const f=v.filters;
+        return {id:typeof v.id==='string'?v.id.slice(0,100):'saved-'+i,name:v.name.slice(0,80),filters:{
+          sport:['all',...allowed()].includes(f.sport)?f.sport:'all',book:['all','prizepicks','underdog'].includes(f.book)?f.book:'all',
+          q:typeof f.q==='string'?f.q.slice(0,100):'',side:['all','over','under'].includes(f.side)?f.side:'all',
+          sort:['start','player','chance'].includes(f.sort)?f.sort:'start',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
+      });
+      H.views=clean(p.views);
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
-      H.alerts=Array.isArray(p.alerts)?p.alerts.filter(v=>v&&typeof v.name==='string'&&v.filters).slice(0,12):[];
+      H.alerts=clean(p.alerts);
     } catch(e) {H.saveError=true;}
   }
   function checkAlerts() {
