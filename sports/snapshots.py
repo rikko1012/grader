@@ -1467,6 +1467,40 @@ def _boot_ci(groups, stat_fn, reps=400, seed=7):
     return [_r(vals[int(0.025 * (len(vals) - 1))], 4), _r(vals[int(0.975 * (len(vals) - 1))], 4)]
 
 
+def _boot_mean_ci(groups, field, absolute=False, reps=400, seed=7):
+    """Same whole-game weighted mean bootstrap without copying every sampled prop.
+
+    Game totals and counts are sufficient for these five mean statistics. Keep
+    group order, random draws, null exclusions and quantiles identical to _boot_ci.
+    Temporary memory depends on games, not the number of historical forecasts.
+    """
+    if len(groups) < 2:
+        return None
+    totals = []
+    for group in groups:
+        total, count = 0.0, 0
+        for row in group:
+            value = row.get(field)
+            if value is not None:
+                total += abs(value) if absolute else value
+                count += 1
+        totals.append((total, count))
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(reps):
+        total, count = 0.0, 0
+        for _ in groups:
+            value, n = totals[rng.randrange(len(totals))]
+            total += value
+            count += n
+        if count:
+            vals.append(total / count)
+    if not vals:
+        return None
+    vals.sort()
+    return [_r(vals[int(0.025 * (len(vals) - 1))], 4), _r(vals[int(0.975 * (len(vals) - 1))], 4)]
+
+
 def settled_forecast_links(con, setts):
     """(platform, offer_id) -> [forecast_id] for every stored forecast made on an offer that has a settlement, plus
     {forecast_id: Forecast}. THE link between forecasts and settlements (fresh 2026-10-24, owner audit bug 2): the
@@ -1490,6 +1524,7 @@ def settled_forecast_links(con, setts):
         rows = con.execute(f"SELECT record_id, payload FROM records WHERE kind='forecast' AND event_id IN "
                            f"({','.join('?' * len(part))})", part).fetchall()
         dec = [(r["record_id"], from_dict(store._unpack(r["payload"]))) for r in rows]
+        del rows  # Do not retain packed payloads alongside all decoded forecasts.
         orids = sorted({o for _, fc in dec for o in (fc.offer_snapshot_ids or ())})
         ident = {}
         for j in range(0, len(orids), 500):
@@ -1597,15 +1632,15 @@ def results_from_rows(rows, base_meta):
             "settled": len(rr), "games": len(g),
             "void": sum(1 for r in rows if r["model_version"] == mv and r["status"] == "void"),
             "pushes": sum(1 for r in rr if r["outcome"] == "push"),
-            "projection": {"n": len(errs), "mae": _r(mae(rr), 4), "mae_ci": _boot_ci(g, mae),
-                           "bias": _r(bias(rr), 4), "bias_ci": _boot_ci(g, bias)},
-            "probability": {"n": len(rr), "brier": _r(mb(rr), 5), "brier_ci": _boot_ci(g, mb),
-                            "log_loss": _r(ml(rr), 5), "log_loss_ci": _boot_ci(g, ml),
-                            "brier_binary": _r(mbb(rr), 5), "brier_binary_ci": _boot_ci(g, mbb),
+            "projection": {"n": len(errs), "mae": _r(mae(rr), 4), "mae_ci": _boot_mean_ci(g, "error", absolute=True),
+                           "bias": _r(bias(rr), 4), "bias_ci": _boot_mean_ci(g, "error")},
+            "probability": {"n": len(rr), "brier": _r(mb(rr), 5), "brier_ci": _boot_mean_ci(g, "brier"),
+                            "log_loss": _r(ml(rr), 5), "log_loss_ci": _boot_mean_ci(g, "log_loss"),
+                            "brier_binary": _r(mbb(rr), 5), "brier_binary_ci": _boot_mean_ci(g, "brier_binary"),
                             "brier_binary_n": sum(1 for r in rr if r.get("brier_binary") is not None)},
             "returns": {"recorded": sum(len(r["payouts"]) for r in rows if r["model_version"] == mv)}}
     from . import results_public as rp
-    hh = rp.head_to_head([{**r, "model": r["model_version"]} for r in rows])
+    hh = rp.head_to_head(rows)
     return {**base_meta, "rows": rows[:2000], "total_rows": len(rows), "summary": summary,
             "head_to_head": {"version": rp.HH_VERSION, "method": rp.HH_METHOD, "rows": hh},
             "method": {"brier": "three-outcome Brier (over / under / push) on the forecast's unconditional chances: "
