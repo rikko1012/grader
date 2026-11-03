@@ -46,3 +46,13 @@ def test_limit_refuses_partial_feed_and_route_default_off(monkeypatch):
     assert build([item('a'),item('b')],NOW,limit=1)['state']=='unavailable'
     monkeypatch.delenv('SCOUT_MARKET_TOOLS',raising=False)
     assert view(NS(query={'league':'nba'}))[0]==404
+
+
+def test_recent_poll_cannot_make_stale_provider_quote_positive_ev():
+    a=item('a')
+    a[1].source_updated_at='2026-11-03T11:00:00Z'
+    p={'validated':True,'offer_revision':'id','identity':['nba','nba:event','nba:p','points','full_game',20.5],
+       'p_over':.6,'p_under':.4,'model_version':'tested'}
+    d=build([a],NOW,{'id':p},{'a|reviewed-1':'same'})
+    assert not d['ev']
+    assert d['excluded']['Provider quote older than two minutes or future dated']==1

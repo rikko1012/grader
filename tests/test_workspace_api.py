@@ -1066,7 +1066,9 @@ def test_ev_reason_comes_through_the_route(env):
     assert e["ev"]["available"] is False and "This model version has" in e["ev"]["reason"] and "of 300 settled matches" in e["ev"]["reason"]
     assert MODEL not in e["ev"]["reason"] and e["ev"]["payout"]["multiple"] == 3.5
     p = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
-    assert p["ev"] == {"available": False, "reason": "PrizePicks shows lineup payouts only in its app."}
+    assert p['ev']['available'] is False
+    assert p['ev']['payout']['multiple'] == 3 and p['ev']['payout']['reference_only']
+    assert 'final payout' in p['ev']['reason']
 
 
 def test_a_failed_export_read_is_named_as_that(env, monkeypatch):

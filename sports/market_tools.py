@@ -37,6 +37,8 @@ def build(items, now, validated=None, rules=None, limit=20000):
         source=meta.get('last_source_updated_at') or o.source_updated_at
         if not source:
             excluded['Provider timestamp unavailable']+=1;continue
+        if not 0 <= ts-parse_utc(source).timestamp() <= 120:
+            excluded['Provider quote older than two minutes or future dated']+=1;continue
         for side in o.sides:
             if not side.offered or side.price is None:continue
             try:

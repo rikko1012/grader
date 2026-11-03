@@ -38,7 +38,8 @@ def test_owner_grade_comparison_four_sports_and_paging(ctx,env,monkeypatch,size)
         route.fulfill(json={'sport':sport,'started_at':'2026-11-03T12:00:00Z','next_before':None if q.get('before') else 8,
           'rows':[{'player':'<unsafe>','event':'fixture-event','stat':'kills','line':20.5,'period':'full','book':'prizepicks',
                    'old_letter':'B','old_p':.62,'at':'2026-11-03T12:01:00Z','policy':'gp-1',
-                   'sides':{'over':{'p':.55,'grade':{'band':'B'}},'under':{'p':.45,'grade':{'band':None}}}}]})
+                   'sides':{'over':{'raw':.63,'blended':.61,'p':.55,'market':.59,'blend_weight':.5,'calibration':'isotonic',
+                         'grade':{'band':'B','break_even':.5345,'reasons':['<unsafe> gate']}},'under':{'p':.45,'grade':{'band':None}}}}]})
     p.route('**/api/upgrade/grade-review?*',report)
     p.goto(env.url+'/#/tools')
     p.wait_for_selector('[data-hub="grade-review"]')
@@ -46,6 +47,11 @@ def test_owner_grade_comparison_four_sports_and_paging(ctx,env,monkeypatch,size)
         p.locator('[data-hub="grade-review"][data-id="'+sport+'"]').first.click()
         p.wait_for_selector('#hub-grade-review table')
         assert '<unsafe>' in p.locator('#hub-grade-review').inner_text()
+        assert p.locator('#hub-grade-review unsafe').count()==0
+        p.locator('#hub-grade-review summary').first.click()
+        assert 'Raw model 63.0%' in p.locator('#hub-grade-review').inner_text()
+        assert 'isotonic' in p.locator('#hub-grade-review').inner_text()
+        assert '<unsafe> gate' in p.locator('#hub-grade-review').inner_text()
         assert p.locator('#hub-grade-review unsafe').count()==0
         p.locator('#hub-grade-review [data-before]').click()
         p.wait_for_function("!document.querySelector('#hub-grade-review [data-before]')")
@@ -334,6 +340,10 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
     assert p.locator('#hub-studio-body .u-leg').count()==4
     p.locator('#hub-studio-body [data-u=check]').click()
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
+    assert 'Base all-hit payout' in p.locator('#hub-studio-body').inner_text()
+    p.locator('#hub-studio-body summary',has_text='Published payout tiers').click()
+    assert '4 of 4 correct: 10× entry fee' in p.locator('#hub-studio-body').inner_text()
+    assert 'final payout for your exact lineup' in p.locator('#hub-studio-body').inner_text()
     assert not p.errors
 
 

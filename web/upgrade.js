@@ -541,9 +541,10 @@
     const open = c && c.open && safeBookLink(c.open.url,e.platform) ? `<button class="u-btn u-gold" data-u="open-entry" data-id="${esc(e.key)}">${esc(c.open.label)}</button>` : "";
     const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
     const ev = c && c.ev;
-    const values = (ev?.payout ? metric(esc(ev.payout.multiple)+'×','All-hit payout') : '')
+    const values = (ev?.payout ? metric(esc(ev.payout.multiple)+'×',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
-    const math = `${values?`<div class="u-slip-metrics">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>`;
+    const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}× entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';
+    const math = `${values?`<div class="u-slip-metrics">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
     return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
       ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}

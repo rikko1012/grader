@@ -556,7 +556,7 @@ def check_leg(srv, leg, snap, feeds, now):
             "_ident": {"nick": _nick(x), "prop": x.get("prop"), "scope": x.get("scope") or "12", "match_slug": _slug_of(x), "match_key": event_id(x)[0], "platform": _book(x), "line": x.get("line"), "side": side},
             "_rule": {"sport": "cs2", "book": book, "team": x.get("team_name") or x.get("team"), "nick": _nick(x), "side": side, "event": event_id(x)[0]},
             "_ev": {"name": _nick(x), "sport": "cs2", "match": event_id(x)[0], "line": x.get("line"), "multiplier": x.get("higher") if side == "over" else x.get("lower"), "on_side": side == _side(x),
-                    "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"), "scope": x.get("scope") or "12"}}
+                    "p": x.get("p"), "tag": x.get("graded_model"), "prop": x.get("prop"), "scope": x.get("scope") or "12", "line_type": line_type_of(x)}}
 
 
 def _n(x):

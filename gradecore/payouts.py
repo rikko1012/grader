@@ -3,8 +3,9 @@ numbers, same maths); the tables now sit in CONFIG so a book or entry type is da
 
 UNDERDOG - published base payouts, read 2026-10-23 from UD_SOURCE; payouts include the returned entry fee. How several
   modifiers combine is NOT stated: payout = base x product(modifiers) is an ASSUMPTION (MODIFIER_RULE).
-PRIZEPICKS - payout tables are in-app only: the entries are None and every PrizePicks break-even is unknown until a
-  verified table is supplied (load_config). Nothing here invents one.
+PRIZEPICKS - published standard reference rates live in payout_reference.py. The actual lineup payout can differ.
+  CONFIG entries remain None until a verified applicable payout is supplied (load_config); a reference alone does not
+  authorize an EV, stake or settlement calculation for an individual contest.
 
 Break-even per pick (equal chance p on every pick, all modifiers 1.0):
   standard n-pick:  p^n * B_n = 1           ->  p* = B_n ** (-1/n)
@@ -32,7 +33,7 @@ UD_FLEX = {                                         # losses -> payout multiple 
     8: {0: 80.0, 1: 3.0, 2: 1.0},
 }
 MODIFIER_RULE = "assumed: entry payout = base x product of pick modifiers (Underdog does not publish the combination)"
-PP_STATUS = "unverified: PrizePicks payout tables are in-app only"
+PP_STATUS = "Published base rates available; actual applicable lineup payout must be verified"
 
 CONFIG = {
     "underdog": {"default_entry": "standard", "entries": {"standard": UD_STANDARD, "flex": UD_FLEX},

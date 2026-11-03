@@ -355,7 +355,7 @@ def check_leg(srv, leg, now):
                         "start_utc": x["start"], "lock_utc": x["start"]},
             "_x": x, "_ident": {"nick": x["pkey"], "prop": x["stat"], "scope": x["period"], "match_slug": x["eid"], "match_key": x["eid"], "platform": book, "line": x["line"], "side": side},
             "_rule": {"sport": "lol", "book": book, "team": f"lol:{x['team']}" if x["team"] else "", "nick": x["name"], "side": side, "event": x["eid"]},
-            "_ev": {"name": x["name"], "sport": "lol", "match": x["eid"], "line": x["line"], "multiplier": mult, "on_side": side == x["side"], "p": p, "tag": x["model"], "prop": x["stat"], "scope": x["period"]}}
+            "_ev": {"name": x["name"], "sport": "lol", "match": x["eid"], "line": x["line"], "multiplier": mult, "on_side": side == x["side"], "p": p, "tag": x["model"], "prop": x["stat"], "scope": x["period"], "line_type": x['lt']}}
 
 
 def payload(x, leg, res, e):
