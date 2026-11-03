@@ -1,12 +1,12 @@
 /* Upgraded member pages. Loaded only behind Handler._upgrade_on, and scoped to html[data-upgrade] so nothing here can reach a page
    the gate did not mark. Shared charcoal, white and blue tokens preserve the original layout. */
 html[data-upgrade]{--u-bg:#101215;--u-panel:#171b20;--u-panel2:#20262e;--u-line:#2b323c;--u-line2:#435165;--u-text:#f4f6fa;--u-muted:#b3becb;--u-faint:#98a5b5;--u-gold:#8bb9ff;--u-good:#7fd6a4;--u-bad:#ff8a8a;--u-mono:'DM Mono',ui-monospace,monospace}
-html[data-upgrade] .u-dialog{color:var(--u-text);background:var(--u-panel);border:1px solid var(--u-line2);border-radius:14px;padding:24px;width:min(520px,calc(100vw - 32px));max-height:85vh;overflow:auto;box-sizing:border-box}
-html[data-upgrade] .u-dialog::backdrop{background:#060a11b8}
-html[data-upgrade] .u-dialog form{display:flex;justify-content:flex-end}
-html[data-upgrade] .u-dialog h2{font-size:23px;margin:0 0 16px}
-html[data-upgrade] .u-dialog p{color:var(--u-muted);line-height:1.6;overflow-wrap:anywhere}
-html[data-upgrade] .u-dialog a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none;white-space:normal}
+html[data-upgrade] .u-book-dialog{position:fixed;inset:0;margin:auto;height:fit-content;color:var(--u-text);background:var(--u-panel);border:1px solid var(--u-line2);border-radius:14px;padding:24px;width:min(520px,calc(100vw - 32px));max-height:85vh;overflow:auto;box-sizing:border-box}
+html[data-upgrade] .u-book-dialog::backdrop{background:#060a11b8}
+html[data-upgrade] .u-book-dialog form{position:absolute;right:12px;top:12px;display:flex;width:auto;margin:0;padding:0;border:0;background:transparent;box-shadow:none}
+html[data-upgrade] .u-book-dialog h2{font-size:23px;margin:0 36px 16px 0;overflow-wrap:anywhere}
+html[data-upgrade] .u-book-dialog p{color:var(--u-muted);line-height:1.6;overflow-wrap:anywhere}
+html[data-upgrade] .u-book-dialog a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none;white-space:normal}
 html[data-upgrade],html[data-upgrade] body.sw{--bg:#101215;--panel:#171b20;--panel-2:#20262e;--panel-3:#252d37;--line:#2b323c;--line-2:#435165;--text:#f4f6fa;--muted:#b3becb;--faint:#98a5b5;--accent:#8bb9ff;--accent-2:#b5d3ff;--accent-glow:#77adff26}
 html[data-upgrade] body,html[data-upgrade] body.sw,html[data-upgrade] .ss-body{background:#101215!important}
 html[data-upgrade] body header,html[data-upgrade] .sw .sw-top{background:#101215!important}
