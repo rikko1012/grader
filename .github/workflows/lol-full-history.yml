@@ -1,6 +1,7 @@
 # PR checks are offline. The long source collection is manual and publishes raw
 # records to Scout's inbox; only Scout's canonical exporter writes serving history.
-name: Scout validation and manual LoL history
+name: Scout release validation
+run-name: "${{ github.event_name == 'workflow_dispatch' && 'Manual LoL history collection' || 'Scout release checks' }} · ${{ github.head_ref || github.ref_name }}"
 
 on:
   push:
