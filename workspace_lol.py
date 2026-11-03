@@ -465,7 +465,7 @@ def line_doc(srv, book, rid):
 
 def _group(name, m):
     return {"name": name, "picks": m.get("n") or 0, "wins": m.get("side_wins"), "losses": None if m.get("side_wins") is None else (m.get("n") or 0) - m["side_wins"], "pushes": None,
-            "printed": m.get("mean_p_side"), "observed": m.get("side_hit_rate"), "matches": m.get("series")}
+            "printed": m.get("mean_displayed_p_side"), "observed": m.get("side_hit_rate"), "matches": m.get("series")}
 
 
 def results(srv):
@@ -475,9 +475,11 @@ def results(srv):
         doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         raise Down("learning.json") from None
-    metrics = doc.get("metrics") or {}
-    main = metrics.get("side offered") or metrics.get("all") or {}
-    st = doc.get("settled_by_status") or {}
+    cohort = doc.get("offered_side") or {}
+    metrics = cohort.get("metrics") or {}
+    # Older snapshots have no offered-only breakdowns/status counts. Never substitute the all-lines population.
+    main = metrics.get("all") or (doc.get("metrics") or {}).get("side offered") or {}
+    st = cohort.get("settled_by_status") or {}
     ci = ((doc.get("series_grouped_95ci") or {}).get("offered_side_only") or {}).get("side_hit") or {}
     stat = [_group(k[5:].replace("_", " ").title(), v) for k, v in sorted(metrics.items()) if k.startswith("stat ")]
     grade = [_group(k[6:], v) for k, v in sorted(metrics.items()) if k.startswith("grade ")]
@@ -485,6 +487,6 @@ def results(srv):
     return {"sport": "lol", "label": "LoL forecast record", "as_of": doc.get("at"),
             "population": "Saved pre-match LoL forecasts on lines that offered Scout's side, each scored on official game stats. Letters carry 0 units.",
             "rule": "One result per platform, market and line. Hit rate is results for Scout's side over graded results. Pushes stay apart, voids and lines with no settled rule stay out.",
-            "totals": {"picks": main.get("n") or 0, "wins": main.get("side_wins"), "losses": None if main.get("side_wins") is None else (main.get("n") or 0) - main["side_wins"], "pushes": st.get("push", 0), "observed": main.get("side_hit_rate"),
-                       "ci": [ci["lo95"], ci["hi95"]] if ci.get("lo95") is not None else None, "printed": main.get("mean_p_side"), "matches": main.get("series"), "void": (st.get("void") or 0) + (st.get("dnp") or 0), "match_word": "series"},
+            "totals": {"picks": main.get("n") or 0, "wins": main.get("side_wins"), "losses": None if main.get("side_wins") is None else (main.get("n") or 0) - main["side_wins"], "pushes": st.get("push", 0) if cohort else None, "observed": main.get("side_hit_rate"),
+                       "ci": [ci["lo95"], ci["hi95"]] if ci.get("lo95") is not None else None, "printed": main.get("mean_displayed_p_side"), "matches": main.get("series"), "void": (st.get("void") or 0) + (st.get("dnp") or 0) if cohort else None, "match_word": "series"},
             "groups": {"chance": grade, "stat": stat, "role": role}, "gate": None, "market": None}

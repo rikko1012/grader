@@ -331,10 +331,14 @@ class Lol:
         self.con.commit()
 
     def learning(self):
-        m = {"n": 120, "series": 40, "mae": 3.0, "bias": 0.1, "brier": 0.24, "logloss": 0.67, "side_hit_rate": 0.558, "side_wins": 67, "mean_p_side": 0.571, "calibration": []}
+        m = {"n": 120, "series": 40, "mae": 3.0, "bias": 0.1, "brier": 0.24, "logloss": 0.67, "side_hit_rate": 0.558, "side_wins": 67, "mean_p_side": 0.601, "mean_displayed_p_side": 0.571, "calibration": []}
         doc = {"at": iso(datetime.now(timezone.utc)), "settled_by_status": {"graded": 130, "push": 6, "void": 2, "dnp": 1}, "counts": {},
                "metrics": {"all": dict(m, n=130, side_wins=72), "side offered": m, "stat kills": dict(m, n=80, side_wins=46), "stat assists": dict(m, n=40, side_wins=21), "grade B": dict(m, n=50, side_wins=29), "role Mid": dict(m, n=30, side_wins=18)},
                "series_grouped_95ci": {"offered_side_only": {"side_hit": {"mean": 0.558, "lo95": 0.49, "hi95": 0.62}}}}
+        doc["offered_side"] = {"version": 1, "settled_by_status": {"graded": 120, "push": 6, "void": 2, "dnp": 1},
+                               "metrics": {"all": m, **{k: v for k, v in doc["metrics"].items() if k.startswith(("stat ", "grade ", "role "))}}}
+        doc["metrics"]["grade B"] = dict(m, n=999, side_wins=900)
+        doc["settled_by_status"]["push"] = 99
         (self.dir / "learning.json").write_text(json.dumps(doc), encoding="utf-8")
 
     def close(self):

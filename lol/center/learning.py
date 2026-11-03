@@ -30,19 +30,22 @@ def dashboard(con):
         "lv.unit_key = f.platform || '|' || f.market_key || '|' || f.line "
         "JOIN lol_settlements s ON s.unit_key = lv.unit_key AND s.version = lv.v").fetchall()
     status = defaultdict(int)
+    offered_status = defaultdict(int)
     groups = defaultdict(list)
     series = set()
     player_props = set()
     units = []
     from .forecast import shown, side_offered
     for r in rows:
+        r = dict(r)
+        sh = shown(r)
         status[r["st"]] += 1
+        if sh["side_offered"] == 1:
+            offered_status[r["st"]] += 1
         if r["st"] != "graded":
             continue
         series.add(r["sid"])
         player_props.add((r["sid"], r["pid"], r["stat"], r["scope"]))
-        r = dict(r)
-        sh = shown(r)                         # the chance members saw (lc-1 when the record carries it, else raw)
         hit = float(r["over_hit"])
 
         def unit(po, pu, side, offered):
@@ -50,7 +53,7 @@ def dashboard(con):
             return {"err": r["lambda"] - r["actual"], "brier": (p - hit) ** 2,
                     "ll": -(hit * math.log(max(p, 1e-6)) + (1 - hit) * math.log(max(1 - p, 1e-6))), "p": p, "hit": hit,
                     "side_hit": (hit == 1.0) if side == "over" else (hit == 0.0), "p_side": p if side == "over" else 1 - p,
-                    "sid": r["sid"], "offered": offered}
+                    "printed": po if side == "over" else pu, "sid": r["sid"], "offered": offered}
         u = unit(sh["p_over"], sh["p_under"], sh["side"], sh["side_offered"] == 1)
         units.append(u)
         for key in ("all", f"stat {r['stat']}", f"scope {r['scope']}", f"platform {r['platform']}", f"role {r['role']}",
@@ -59,6 +62,8 @@ def dashboard(con):
                     "side offered" if u["offered"] else "side not offered",
                     f"chance shown {sh['cal'] or 'raw'}"):
             groups[key].append(u)
+            if u["offered"]:
+                groups["offered cohort " + key].append(u)
         # the raw model chance on the same props (before lc-1), kept apart so both can be read side by side
         rw = sh["raw"]
         roff = side_offered(r["platform"], json.loads(r["sides"] or "{}"), rw["side"]) is True
@@ -81,6 +86,7 @@ def dashboard(con):
                   "brier": round(sum(u["brier"] for u in us) / n, 4), "logloss": round(sum(u["ll"] for u in us) / n, 4),
                   "side_hit_rate": round(sum(u["side_hit"] for u in us) / n, 3), "side_wins": sum(1 for u in us if u["side_hit"]),
                   "mean_p_side": round(sum(u["p_side"] for u in us) / n, 3),
+                  "mean_displayed_p_side": round(sum(u["printed"] for u in us) / n, 3),
                   "calibration": [{"bin": f"{b / 10:.1f}", "n": v[0], "predicted": round(v[1] / v[0], 3), "actual": round(v[2] / v[0], 3)}
                                   for b, v in sorted(bins.items())]}
     graded = len(groups.get("all", []))
@@ -93,6 +99,8 @@ def dashboard(con):
               "distinct_matches": con.execute("SELECT COUNT(DISTINCT sid) FROM lol_forecasts WHERE forecast_at < series_start").fetchone()[0],
               "graded_offered_props": graded, "graded_matches": len(series), "graded_distinct_player_props": len(player_props)}
     return {"at": store.now_iso(), "settled_by_status": dict(status), "counts": counts, "metrics": out,
+            "offered_side": {"version": 1, "settled_by_status": dict(offered_status),
+                             "metrics": {k.removeprefix("offered cohort "): v for k, v in out.items() if k.startswith("offered cohort ")}},
             "series_grouped_95ci": {"all": _grouped_ci(units), "offered_side_only": _grouped_ci([u for u in units if u["offered"]])},
             "evidence": {"graded_player_markets": len(player_props), "series": len(series), "required": REQUIRED,
                          "unit": "distinct series/player/stat/scope, independent of book or alternate line",
