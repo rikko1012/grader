@@ -416,3 +416,28 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
  #hub-studio-body .u-leg-index{left:16px;top:21px}
  #hub-studio-body .u-entry-h,#hub-studio-body .u-entry-foot{padding:16px}
 }
+
+/* Batch generation: a compact configuration rail and independently reviewable lineups. */
+#hub-generated,.h-working-draft{min-width:0}
+.h-batch-head{display:flex;justify-content:space-between;gap:16px;align-items:start;margin-bottom:12px}
+#u-hub .h-batch-head h2{font-size:25px;margin:6px 0}
+.h-batch-head p,.h-batch-note,.h-working-draft>p{font-size:12px;line-height:1.6;color:#a9b7cb}
+.h-batch-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:20px 0 36px}
+.h-generated-card{min-width:0;border:1px solid #344255;border-radius:8px;background:#141b24;overflow:hidden}
+.h-generated-card>header{padding:18px 18px 14px;border-bottom:1px solid #303c4c}
+.h-generated-card>header>span{display:block;color:#8eb9ff;font:11px monospace;letter-spacing:1px;margin-bottom:8px}
+.h-generated-card>header>strong{display:block;font-size:16px;text-transform:capitalize}
+.h-generated-card small{display:block;color:#a1b1c6;font-size:11px;line-height:1.5;margin-top:5px;overflow-wrap:anywhere}
+.h-batch-range{display:flex;justify-content:space-between;gap:12px;padding:12px 18px;background:#1b2737;font-size:11px;color:#b8c8df}
+.h-batch-range b{display:block;color:#f1f5fc;font-size:14px;margin-top:3px}
+.h-generated-card ol{list-style:none;margin:0;padding:0}
+.h-generated-card li{display:flex;gap:12px;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #2b3747}
+.h-generated-card li>div{min-width:0;flex:1}.h-generated-card li>div>strong{font-size:15px}.h-generated-card li>div>span{display:block;margin-top:8px;line-height:1.5;font-size:12px;text-transform:capitalize}
+.h-generated-card li>b{white-space:nowrap;color:#bfd6fc;font:14px monospace;padding-top:2px}
+.h-generated-card footer{padding:16px 18px}
+#u-hub .h-generated-card footer button{width:100%;min-height:42px;background:#223e68;border:1px solid #4778bd;color:#f4f8ff;white-space:normal;font-size:12px}
+.h-working-draft{border-top:1px solid #39485b;padding-top:24px}
+#u-hub .h-generator-controls select{width:100%;min-width:0;max-width:100%;font-size:12px;padding-right:20px}
+@media(min-width:1101px){#hub-generated{grid-column:2;grid-row:2}.h-working-draft{grid-column:2;grid-row:3}#hub-studio-section .h-studio-explain{grid-row:4}#hub-studio-section .h-generator{position:static}}
+@media(max-width:1350px){.h-batch-grid{grid-template-columns:minmax(0,1fr)}}
+@media(min-width:700px) and (max-width:1100px){.h-batch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

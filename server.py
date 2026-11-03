@@ -5572,9 +5572,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.studio_post(u.path, n)
         # 2026-10-13 audit: the body was read before any check, as long as the client said (a 10 GB Content-Length was
         # read into memory). Every body here is small: over POST_MAX it is refused unread, members-only before reading.
-        if n > POST_MAX:
+        # Saved lineup batches contain up to twelve slips. All other routes keep
+        # their existing small-body limit; state still authenticates before read.
+        post_limit = 128 * 1024 if u.path in (WORKSPACE_API + "state", UPGRADE_API + "state") else POST_MAX
+        if n > post_limit:
             self.close_connection = True              # the unread body would corrupt a kept-alive connection
-            return self.send(413, {"error": f"body over {POST_MAX} bytes"})
+            return self.send(413, {"error": f"body over {post_limit} bytes"})
         if u.path.startswith(WORKSPACE_API) and self._workspace_on({k: v[0] for k, v in parse_qs(u.query).items()}):
             return self._workspace_api("POST", u.path, {k: v[0] for k, v in parse_qs(u.query).items()}, n)
         if u.path.startswith(UPGRADE_API) and self._upgrade_on({k: v[0] for k, v in parse_qs(u.query).items()}):

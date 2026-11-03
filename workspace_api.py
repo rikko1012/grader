@@ -1105,18 +1105,28 @@ def post_track(h, srv, q, member, scratch, name, n):
 
 
 def post_state(h, srv, q, member, scratch, name, n):
-    if n > STATE_MAX:
+    if n > 128 * 1024:
         h.rfile.read(n)
-        return h.send(413, {"error": f"state over {STATE_MAX} bytes"})
+        return h.send(413, {"error": "saved batch over 131072 bytes"})
     d = _read_json(h, srv, n)
     if d is None or isinstance(d.get("rev"), bool) or not isinstance(d.get("rev"), int):
         return h.send(400, {"error": "bad state"})
     patch = {}
-    for k, kind in (("slip", dict), ("prefs", dict), ("views", list), ("watch", list)):
+    for k, kind in (("slip", dict), ("prefs", dict), ("views", list), ("watch", list), ("studio", dict)):
         if k in d:
             if d[k] is not None and (not isinstance(d[k], kind) or not _shallow(d[k])):
                 return h.send(400, {"error": f"bad {k}"})
             patch[k] = d[k]
+    ordinary = {k: v for k, v in patch.items() if k != "studio"}
+    if len(json.dumps(ordinary).encode()) > STATE_MAX:
+        return h.send(413, {"error": "saved preferences or draft too large"})
+    studio = patch.get("studio")
+    if studio is not None:
+        slips = studio.get("slips")
+        if (studio.get("version") != 1 or not isinstance(slips, list) or len(slips) > 12
+                or any(not isinstance(s, dict) or not isinstance(s.get("legs"), list)
+                       or not 2 <= len(s["legs"]) <= 8 for s in slips)):
+            return h.send(400, {"error": "bad studio batch"})
     if len(patch.get("watch") or ()) > WATCH_MAX:
         return h.send(400, {"error": f"a watchlist holds {WATCH_MAX} players"})
     if not patch:

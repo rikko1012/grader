@@ -336,26 +336,30 @@ def test_single_prop_and_shared_legacy_filter_links_do_not_get_hidden(ctx,env):
     assert p.locator('#u-hub').is_hidden()
     assert p.url.endswith('#one')
 
-def test_generator_checks_and_saves_current_mixed_sport_picks(ctx, env, browser):
+def test_generator_saves_eight_distinct_balanced_slips_without_replacing_draft(ctx, env, browser):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('#hub-generate').click()
-    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.length > 0", timeout=30000)
-    message = p.locator('#hub-generation-status').inner_text()
-    assert 'generated and rechecked' in message, message
-    state = saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
-    legs = state['slip']['legs']
-    assert len({(l['sport'], l['event_id']) for l in legs}) == 2
-    assert all(l['book'] == 'prizepicks' and l['read_rev'] for l in legs)
-    assert p.locator('#hub-studio-body .u-leg').count() == 2
-    # Repeat at the same total must preserve the existing draft, not duplicate/replace it.
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
+    state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 8)
+    slips = state['studio']['slips']
+    assert not (state.get('slip') or {}).get('legs')
+    assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
+    assert all(len(s['legs']) == 2 for s in slips)
+    assert all(.55 <= l['shown_p'] <= .65 for s in slips for l in s['legs'])
+    assert all(len({(l['sport'], l['event_id']) for l in s['legs']}) == 2 for s in slips)
+    assert p.locator('.h-generated-card').count() == 8
+    p.locator('[data-hub=use-generated]').first.click()
+    saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
+    before = saved_state(p, lambda d: bool(d.get('slip')))['slip']
     p.locator('#hub-generate').click()
-    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('already has')")
-    assert saved_state(p, lambda d: bool(d.get('slip')))['slip']['legs'] == legs
+    p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
+    assert saved_state(p, lambda d: bool(d.get('studio')))['slip'] == before
     c = context(browser, env)
     try:
         q = open_page(c, env, '/#slips')
-        q.wait_for_selector('#hub-studio-body .u-leg', timeout=20000)
+        q.wait_for_selector('.h-generated-card', timeout=20000)
+        assert q.locator('.h-generated-card').count() == 8
         assert q.locator('#hub-studio-body .u-leg').count() == 2
     finally:
         c.close()
@@ -379,8 +383,10 @@ def test_studio_controls_and_entry_contents_fit_their_boxes(ctx, env, width):
     p.goto(env.url + '/#slips')
     p.wait_for_selector('#hub-generate')
     p.locator('#hub-generate').click()
-    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.length > 0",timeout=30000)
-    assert 'generated and rechecked' in p.locator('#hub-generation-status').inner_text()
+    p.wait_for_function("!document.querySelector('#hub-generate').disabled",timeout=30000)
+    assert 'slips generated and rechecked' in p.locator('#hub-generation-status').inner_text()
+    p.locator('[data-hub=use-generated]').first.click()
+    p.wait_for_selector('#hub-studio-body .u-leg')
     failures = p.evaluate('''() => [...document.querySelectorAll('#hub-studio-section .h-generator-controls, #hub-studio-section .u-entry-h, #hub-studio-section .u-leg, #hub-studio-section .u-slip-metrics')].flatMap(parent => {
       const b=parent.getBoundingClientRect();
       return [...parent.children].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&(r.left<b.left-1||r.right>b.right+1)}).map(el=>el.className||el.tagName);
@@ -407,10 +413,68 @@ def test_underdog_generation_uses_one_sport_with_enough_games(ctx, env):
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('#hub-generation-book').select_option('underdog')
     p.locator('#hub-generate').click()
-    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.length > 0", timeout=30000)
-    assert 'generated and rechecked' in p.locator('#hub-generation-status').inner_text()
-    state = saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
-    legs = state['slip']['legs']
+    p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
+    assert 'slips generated and rechecked' in p.locator('#hub-generation-status').inner_text()
+    state = saved_state(p, lambda d: bool((d.get('studio') or {}).get('slips')))
+    legs = state['studio']['slips'][0]['legs']
     assert len({l['sport'] for l in legs}) == 1
     assert len({l['event_id'] for l in legs}) == 2
     assert all(l['book'] == 'underdog' for l in legs)
+
+def test_batch_mixed_sports_and_stale_candidate_refusal(ctx, env):
+    p = hub(ctx, env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('#hub-generation-slips').select_option('4')
+    p.locator('#hub-generation-mix').select_option('mixed')
+    p.locator('#hub-generate').click()
+    p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
+    state = saved_state(p, lambda d: bool(d.get('studio')))
+    assert len(state['studio']['slips']) == 4
+    assert all(len({l['sport'] for l in s['legs']}) >= 2 for s in state['studio']['slips'])
+    # A line may move after generation; opening must recheck and preserve the draft on failure.
+    p.route('**/api/upgrade/recheck', lambda r: r.fulfill(status=200, content_type='application/json', body=json.dumps({'legs':{},'entries':{}})))
+    p.locator('[data-hub=use-generated]').first.click()
+    p.wait_for_function("document.querySelector('#hub-batch-message-0').textContent.length > 0")
+    assert p.locator('#hub-studio-body .u-leg').count() == 0
+    assert not p.errors
+
+
+def test_batch_shortfall_is_explicit_and_controls_match_platform(ctx, env):
+    p = hub(ctx, env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('#hub-generation-target').select_option('80')
+    p.locator('#hub-generation-tolerance').select_option('3')
+    p.locator('#hub-generate').click()
+    p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
+    assert 'eligible props' in p.locator('#hub-generation-status').inner_text()
+    assert p.locator('.h-generated-card').count() == 0
+    p.locator('#hub-generation-book').select_option('underdog')
+    p.locator('#hub-generation-type').select_option('flex')
+    assert p.locator('#hub-generation-count').input_value() == '3'
+    assert p.locator('#hub-generation-count option[value="2"]').get_attribute('disabled') is not None
+    p.locator('#hub-generation-count').select_option('6')
+    p.locator('#hub-generation-book').select_option('prizepicks')
+    assert p.locator('#hub-generation-count').input_value() == '6'
+    assert p.locator('#hub-generation-count option').all_text_contents() == ['2 picks', '3 picks', '4 picks', '5 picks', '6 picks']
+    assert not p.errors
+
+@pytest.mark.parametrize('size', [2,3,4,5,6])
+def test_eight_lineups_each_have_requested_number_of_picks(ctx, env, size):
+    from tests.workspace_fixture import row
+    start = env.rows[0]['start']
+    env.rows[:] = [row(f'pp:{9000+i}', 'prizepicks', f'BatchPlayer{i}', f'Team{i}', f'Other{i}', 20.5, 'More', .60+i/10000, 2000+i, start) for i in range(16)]
+    env.seed()
+    p = hub(ctx, env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    for sport in ('lol','nba','nfl'):
+        p.locator(f'#hub-generation-sports input[value={sport}]').uncheck()
+    p.locator('#hub-generation-count').select_option(str(size))
+    p.locator('#hub-generate').click()
+    p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
+    assert 'slips generated' in p.locator('#hub-generation-status').inner_text(), p.locator('#hub-generation-status').inner_text()
+    state = saved_state(p, lambda d: bool(d.get('studio')))
+    slips = state['studio']['slips']
+    assert len(slips) == 8, p.locator('#hub-generation-status').inner_text()
+    assert all(len(s['legs']) == size for s in slips)
+    assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
+    assert not p.errors
