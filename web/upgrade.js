@@ -437,6 +437,42 @@
     paintTray();
   }
 
+  function removeStarted() {
+    if (!R.me?.features?.workspace_v2 || !T.ready || T.saving || T.checking) return;
+    // Remove only a positively identified, currently loaded event. A missing row
+    // may be a feed outage, so it is left for the authoritative server recheck.
+    const gone = T.legs.filter(l => {
+      const r = R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
+      return r && r.event.id === l.event_id && started(r);
+    });
+    if (!gone.length) return;
+    const ids = new Set(gone.map(l=>l.id));
+    T.legs = T.legs.filter(l=>!ids.has(l.id));
+    slipChanged();
+    say(`Removed ${gone.length} started ${gone.length===1?'leg':'legs'}: ${gone.map(l=>l.player).join(', ')}.`);
+  }
+
+  async function shareSlip() {
+    const check=freshCheck(), list=entries();
+    if (!R.me?.features?.workspace_v2 || !check || T.pending || T.saving || T.saveFail || list.length!==1 || !check.entries[list[0].key]?.ok)
+      return say('Save and recheck one platform entry before making its share card.');
+    const legs=list[0].legs;
+    const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=330+legs.length*140;
+    const g=canvas.getContext('2d');
+    g.fillStyle='#10151d';g.fillRect(0,0,canvas.width,canvas.height);
+    g.fillStyle='#77adff';g.fillRect(0,0,canvas.width,8);
+    const text=(value,y,size,color='#f4f7fc')=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>960)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'…',60,y);};
+    text('1TIME SCOUT',74,34);text(`${list[0].label} · ${legs.length} picks · ${typeOf(list[0])}`,126,25,'#bbcee8');
+    text('RESEARCH LINEUP · NOT A PLACED BET',166,18,'#94a7bf');
+    legs.forEach((l,i)=>{const y=220+i*140;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27);text(`${cap(l.side)} ${l.line} ${l.stat_label} · ${l.period_label}`,y+53,24,'#c5dbfb');text(l.event_label,y+86,18,'#99acc4');});
+    text(`Lines checked ${when(check.checked_at)}. Recheck in the app before use.`,canvas.height-65,18,'#aebed1');
+    text('No stake, combined win chance or return is implied.',canvas.height-32,17,'#aebed1');
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    if(!blob)return say('The share image could not be created. Try again.');
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='1Time-Scout-lineup.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    say('Share card downloaded. Nothing was posted or placed.');
+  }
+
   function keepFocus(box, fn) {                                   /* a repaint never drops the keyboard user */
     const a = document.activeElement, inside = a && a !== box && box.contains(a);
     const u = inside && a.dataset ? a.dataset.u : null, id = inside && a.dataset ? a.dataset.id : null;
@@ -743,6 +779,7 @@
     window.addEventListener("pagehide", () => { if (T.pending) pushState(false, true); });
     setInterval(guard(() => {
       if (document.hidden) return;
+      removeStarted();
       if (T.saveFail) { if (T.ready) pushState(); else loadState(); }
       if (T.legs.length && !T.checking && !freshCheck() && T.checkErr !== "down") { T.checkErr = null; scheduleCheck(); }
     }), 5000);
@@ -1115,7 +1152,7 @@
     try {
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
-        research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText });
+        research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     await loadState();
     paintTray();

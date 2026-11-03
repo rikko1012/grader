@@ -243,6 +243,7 @@ def build_forecast(o, rid, forecast_at, model_version, artifact_version, pmf, lo
     dec = 1 - pp
     med = float(dists.quantile(pmf[None, :], ks.astype(float), 0.5)[0])
     fc = Forecast.build(
+        offers={rid: o},
         forecast_at=forecast_at, league=o.league, event_id=o.event_id, player_id=o.player_id,
         player_key=o.player_key, stat=o.stat, scope=o.scope, line=o.line, offer_snapshot_ids=(rid,),
         input_snapshot_ids=tuple(input_ids), model_version=model_version, artifact_version=artifact_version,
@@ -465,6 +466,7 @@ def _market_forecast(o, rid, forecast_at, name, po, pu, pp, input_ids, used, mcf
     sides = o.offered_sides()
     chosen = max(sides, key=lambda s: po if s == "over" else pu) if sides else None
     return Forecast.build(
+        offers={rid: o},
         forecast_at=forecast_at, league=o.league, event_id=o.event_id, player_id=o.player_id, player_key=o.player_key,
         stat=o.stat, scope=o.scope, line=o.line, offer_snapshot_ids=(rid,), input_snapshot_ids=tuple(input_ids),
         model_version=name, artifact_version=f"mc-1:{mcfg.get('sha')}", data_version="quotes",

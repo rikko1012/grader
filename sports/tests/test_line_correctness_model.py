@@ -219,9 +219,11 @@ def test_c12_an_unchanged_book_quote_is_as_fresh_as_its_newest_source_time():
 def test_c11_the_store_rule_covers_every_forecast_writer():
     """sharp-2 (worker forecast), forward, legacy import: one forecast per input key, whoever writes it."""
     con = store.connect()
-    f1 = h.forecast(forecast_at="2026-10-23T20:00:00Z")
-    f2 = h.forecast(forecast_at="2026-10-23T20:30:00Z")                    # same inputs, later run
-    f3 = h.forecast(forecast_at="2026-10-23T20:30:00Z", offer_snapshot_ids=("offer:y",))   # a new revision
+    rid = store.put(con, h.offer(line=20.0))["record_id"]
+    f1 = h.forecast(forecast_at="2026-10-23T20:00:00Z", offer_snapshot_ids=(rid,))
+    f2 = h.forecast(forecast_at="2026-10-23T20:30:00Z", offer_snapshot_ids=(rid,))
+    next_rid = store.put(con, h.offer(line=21.0))["record_id"]
+    f3 = h.forecast(forecast_at="2026-10-23T20:30:00Z", line=21.0, offer_snapshot_ids=(next_rid,))
     assert store.put(con, f1)["status"] == "inserted"
     r2 = store.put(con, f2)
     assert r2["status"] == "unchanged" and r2["record_id"] == f1.forecast_id

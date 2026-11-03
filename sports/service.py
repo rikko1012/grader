@@ -465,7 +465,7 @@ class Handler(BaseHTTPRequestHandler):
                 STATS["forbidden_origin"] += 1
             return self._send(403, {"error": "origin_not_allowed"})
         if u.path == "/api/sports/health":
-            return self._send(200, {"ok": not _STATE["draining"], "version": VERSION,
+            return self._send(200, {"ok": not _STATE["draining"], "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40], "version": VERSION,
                                     "store_ready": web.store.db_path().exists()}, headers=cors)
         claims, why = None, "missing"
         tok = authtoken.bearer(self.headers.get("Authorization"))

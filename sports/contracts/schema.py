@@ -541,11 +541,31 @@ class Forecast(_Record):
         return ("forecast", self.forecast_id)
 
     @classmethod
-    def build(cls, **kw):
+    def build(cls, *, offers=None, **kw):
         """Fills forecast_id from the content (deterministic)."""
         kw.setdefault("forecast_id", "")
         tmp = cls(**kw)
+        if offers is not None:
+            tmp.validate_offers(offers)
         return cls(**{**kw, "forecast_id": "fc-" + tmp.content_hash()[:24]})
+
+    def validate_offers(self, offers):
+        """Bind to exact saved revisions, never to whichever line is current now.
+
+        Used by producers before hashing and by storage inside its write transaction.
+        Inputs from other markets belong in input_snapshot_ids, not offer_snapshot_ids.
+        """
+        if not self.offer_snapshot_ids:
+            raise ContractError("forecast requires an offer revision")
+        for rid in self.offer_snapshot_ids:
+            offer = offers.get(rid)
+            if not isinstance(offer, OfferSnapshot):
+                raise ContractError("forecast offer revision is missing or is not an offer")
+            for name in ("event_id", "league", "scope", "player_id", "player_key", "stat", "line"):
+                if getattr(self, name) != getattr(offer, name):
+                    raise ContractError(f"forecast offer identity mismatch: {name}")
+            if not set(self.sides_available).issubset(offer.offered_sides()):
+                raise ContractError("forecast includes a side not offered by its revision")
 
     def validate(self):
         e = (_enum(self, "league", LEAGUES) + _enum(self, "scope", SCOPES)

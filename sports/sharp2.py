@@ -111,6 +111,7 @@ def forecast(offer, offer_rid, rungs, event, forecast_at):
     codes.append("between_rungs" if len(use) == 2 else ("same_line" if best[1] == offer.line else "one_sided_shift"))
     a, b = fair.shape_params(fam, offer.stat, spec["shape"])
     fc = Forecast.build(
+        offers={offer_rid: offer},
         forecast_at=forecast_at, league=offer.league, event_id=offer.event_id, player_id=offer.player_id,
         player_key=offer.player_key, stat=offer.stat, scope=offer.scope, line=offer.line,
         offer_snapshot_ids=(offer_rid,), input_snapshot_ids=tuple(g[0] for g in use), model_version=MODEL_VERSION,

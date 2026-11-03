@@ -857,7 +857,8 @@ def _limited(h, srv, bucket, member, limit):
 
 def get_me(h, srv, q, member, scratch, name):
     return h.send(200, {"member": member, "name": name, "scratch": scratch, "sports": access(h, srv, q), "rules_version": rules.RULES_VERSION,
-                        "owner": bool(scratch) or bool(h._sports_owner())})
+                        "owner": bool(scratch) or bool(h._sports_owner()),
+                        "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1"}})
 
 
 def _sport_q(h, srv, q):

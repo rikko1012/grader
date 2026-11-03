@@ -103,7 +103,9 @@ def built(tmp_path):
     store.put(con, h.stat(part="pts", value=25.0, eid="nba:espn:501", observed_at=h.T0))
     # a settled earlier forecast for the results ledger
     store.put(con, h.event(eid="nba:espn:501", home=h.NY, away=h.BOS, start="2026-10-21T23:30:00Z", status="final"))
-    old = h.forecast(event_id="nba:espn:501", line=22.5, model_version="sharp-2", offer_snapshot_ids=("offer:old",),
+    old_rid = store.put(con, h.offer(oid="pp:old", event_id="nba:espn:501", line=22.5,
+                                   availability="removed", observed_at="2026-10-21T20:00:00Z"))["record_id"]
+    old = h.forecast(event_id="nba:espn:501", line=22.5, model_version="sharp-2", offer_snapshot_ids=(old_rid,),
                      forecast_at="2026-10-21T20:00:00Z", projection_mean=21.0, p_over=0.4, p_under=0.6, p_push=0.0,
                      p_over_given_no_push=0.4, p_under_given_no_push=0.6, chosen_side=None)
     store.put(con, old)

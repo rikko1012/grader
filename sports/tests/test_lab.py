@@ -188,7 +188,8 @@ def test_lab_routes_are_admin_only_and_never_touch_production(history):
     assert _req("/api/sports/admin/lab/overview", role="member")[0] == 403
     assert _req("/api/sports/admin/lab/overview", role=None)[0] == 401
     con = store.connect()
-    store.put(con, h.forecast())
+    rid = store.put(con, h.offer(line=20.0))["record_id"]
+    store.put(con, h.forecast(offer_snapshot_ids=(rid,)))
     before = store.counts(con)
     con.close()
     hist_mtime = history.stat().st_mtime_ns
