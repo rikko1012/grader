@@ -4041,6 +4041,27 @@ def qdates(q, max_days=31):
 CLIENT_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, TimeoutError)
 
 
+
+from health_snapshot import HealthSnapshot
+_HEALTH_SNAPSHOT = HealthSnapshot()
+
+
+def _health_diagnostics():
+    # These diagnostics can wait on SQLite, Postgres or a directory scan.
+    # Render liveness must not wait for them. Freshness is explicit in the response.
+    return {"ok": True, "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40], "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS, "warm_start": WARM_START,
+                                       "whop_signin": {"on": whop_auth.enabled(), "recent_errors": whop_auth.LAST_ERRORS[-3:]},
+                                       "memory_mb": memory_mb(), "threads": threading.active_count(),
+                                       "hltv": _hltv_status(public=True),
+                                       "memory": _memory_report(),
+                                       "caches": {"results": len(_RESULTS), "contexts": len(cs2_scout._CONTEXT),
+                                                  "scoreboards": len(bo3._MEM), "expiring": len(bo3._TMEM)},
+                                       "traffic": {"requests": STATS["requests"], "errors_5xx": STATS["errors_5xx"],
+                                                   "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
+                                                   "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
+                                       "storage": dict(storage_cached(), **STORAGE), "ops": ops_checks()}
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"      # keep-alive: browsers/Railway's proxy reuse connections
     timeout = 30                       # idle keep-alive connections are closed after 30 s
@@ -4176,17 +4197,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/scout-ui.css":
                 return self.send_shared(("asset", "scout-ui"), 200, web_file("scout-ui.css"), "text/css; charset=utf-8", keep=600)
             if u.path == "/health":
-                return self.send(200, {"ok": True, "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40], "faceit_key": bool(faceit_key()), "preload": PRELOAD_STATUS, "warm_start": WARM_START,
-                                       "whop_signin": {"on": whop_auth.enabled(), "recent_errors": whop_auth.LAST_ERRORS[-3:]},
-                                       "memory_mb": memory_mb(), "threads": threading.active_count(),
-                                       "hltv": _hltv_status(public=True),
-                                       "memory": _memory_report(),
-                                       "caches": {"results": len(_RESULTS), "contexts": len(cs2_scout._CONTEXT),
-                                                  "scoreboards": len(bo3._MEM), "expiring": len(bo3._TMEM)},
-                                       "traffic": {"requests": STATS["requests"], "errors_5xx": STATS["errors_5xx"],
-                                                   "avg_server_ms": round(STATS["ms_total"] / max(STATS["requests"], 1), 1),
-                                                   "since": datetime.fromtimestamp(STATS["since"], timezone.utc).isoformat(timespec="seconds")},
-                                       "storage": dict(storage_cached(), **STORAGE), "ops": ops_checks()})
+                return self.send(200, {**_HEALTH_SNAPSHOT.read(_health_diagnostics), "ok": True,
+                                       "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40]})
             if u.path in LANDING_PATHS and landing_route(u.path) and self.signed_out():     # signed-out visitors only
                 return self.send_shared(("page", "landing"), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
