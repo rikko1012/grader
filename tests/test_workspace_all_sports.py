@@ -199,6 +199,10 @@ def test_held_grades_never_become_letters_or_stakes(env):
     for lg in ("nba", "nfl"):
         st, doc = get(env, f"board?sport={lg}")
         for r in doc["records"]:
+            if r["player"]["name"] == "Reed Lean":
+                assert r["scout"]["grade"] == "B" and r["scout"]["units"] == 0
+                assert r["scout"]["hold"] is None and r["scout"]["validation"]["kind"] == "research"
+                continue
             assert r["scout"]["grade"] is None and r["scout"]["units"] is None and r["scout"]["hold"]["label"] == "Research estimate", r["key"]
     assert "not validated" not in json.dumps(doc)
 
@@ -898,3 +902,50 @@ def test_the_store_takes_only_the_four_sports(tmp_path):
     finally:
         con.close()
         s.close()
+
+def test_released_letter_is_identical_in_board_research_and_receipt(env):
+    r = recs(env, 'nba')[('Reed Lean', 'prizepicks')]
+    assert r['scout']['grade'] == 'B'
+    code, research = get(env, f"line?sport=nba&book=prizepicks&id={r['offer']['offer_id']}")
+    assert code == 200 and research['record']['scout']['grade'] == 'B'
+    assert all(b['grade'] == 'B' for b in research['books'])
+    code, result = track(env, [leg(r, 'over'), leg(recs(env, 'nba')[('Karl Anders', 'prizepicks')], 'under')], 'prizepicks')
+    assert code == 200, result
+    receipt = next(x for x in mine(env)['receipts'] if x['player'] == 'Reed Lean')
+    assert receipt['grade'] == 'B' and receipt['forecast_grade'] == 'B'
+    assert receipt['units'] == 0 and receipt['research'] is True
+
+
+def test_released_letter_does_not_follow_member_to_opposite_side(env):
+    r = recs(env, 'nba')[('Reed Lean', 'prizepicks')]
+    code, result = track(env, [leg(r, 'under'), leg(recs(env, 'nba')[('Karl Anders', 'prizepicks')], 'under')], 'prizepicks')
+    assert code == 200, result
+    assert next(x for x in mine(env)['receipts'] if x['player'] == 'Reed Lean')['grade'] is None
+
+
+def test_read_revision_changes_with_published_letter_not_stake_release():
+    sc = {'po': .58, 'pu': .42}
+    old = workspace_sports.read_rev('over', sc, None)
+    new = workspace_sports.read_rev('over', sc, None, 'B')
+    assert old != new
+    assert new != workspace_sports.read_rev('over', sc, None, 'A')
+
+
+def test_player_context_includes_long_windows_and_all_engine_groups(env):
+    player = env.sports.players['nba:player:espn:301']
+    player['factors']['stats'][0]['windows'] += [{'window': 'L20', 'mean': 19.7, 'n': 20}, {'window': 'Season', 'mean': 20.2, 'n': 45}]
+    player['factors']['engine']['rows'] += [{'group': 'Usage', 'label': 'Touches per game', 'value': 57.4}, {'group': 'Pace', 'label': 'Team possessions', 'value': 101.2}]
+    r = recs(env, 'nba')[('Karl Anders', 'underdog')]
+    code, d = get(env, f"line?sport=nba&book=underdog&id={r['offer']['offer_id']}")
+    assert code == 200
+    facts = {v['label']: v['value'] for v in d['context']['rows']}
+    assert facts['Points, L20'] == 19.7 and facts['Points, Season'] == 20.2
+    assert facts['Touches per game'] == 57.4 and facts['Team possessions'] == 101.2
+
+def test_sports_board_reads_prebuilt_l20_at_the_exact_line(env):
+    doc, view = env.sports.boards['nba']
+    for row in view['rows'].values():
+        row['lines20'] = {'20.5': [11, 8, 1, 20]}
+    r = recs(env, 'nba')[('Karl Anders', 'underdog')]
+    assert r['history']['l20'] == {'over': 11, 'under': 8, 'push': 1, 'n': 20}
+    assert recs(env, 'nba')[('Jay Brown', 'underdog')]['history']['l20'] is None

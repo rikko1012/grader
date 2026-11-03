@@ -64,8 +64,9 @@ def test_four_sport_prizepicks_slip_syncs_to_second_browser_context(ctx, env, br
         q = hub(c, env)
         q.wait_for_function("document.querySelector('#hub-slip-count').textContent === '4'")
         assert 'NBA' in q.locator('#hub-slip-content').inner_text()
-        q.locator('#hub-slip-content [data-u=check]').click()
-        q.wait_for_selector('#hub-slip-content .u-status b:has-text("ready")', timeout=20000)
+        q.locator('.h-sidebar [data-id=studio]').click()
+        q.locator('#hub-studio-body [data-u=check]').click()
+        q.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")', timeout=20000)
         assert not q.errors
     finally:
         c.close()
@@ -257,9 +258,10 @@ def test_tracked_picks_have_a_page_with_sport_status_filters_and_receipts(ctx,en
     for name in ('vargo','orlo'):
         p.locator('#hub-q').fill(name)
         p.locator('#hub-rows .h-add:not([disabled])').first.click()
-    p.wait_for_selector('#hub-slip-content [data-u=track]:not([disabled])',timeout=20000)
-    p.locator('#hub-slip-content [data-u=track]').click()
-    p.wait_for_selector('#hub-slip-content .u-note.good')
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.wait_for_selector('#hub-studio-body [data-u=track]:not([disabled])',timeout=20000)
+    p.locator('#hub-studio-body [data-u=track]').click()
+    p.wait_for_selector('#hub-studio-body .u-note.good')
     p.locator('.h-sidebar [data-id=picks]').click()
     p.wait_for_selector('#hub-picks-body .u-pick')
     assert p.locator('#hub-picks-body .u-pick').count()==2
@@ -333,3 +335,82 @@ def test_single_prop_and_shared_legacy_filter_links_do_not_get_hidden(ctx,env):
     p.wait_for_selector('#f',timeout=20000)
     assert p.locator('#u-hub').is_hidden()
     assert p.url.endswith('#one')
+
+def test_generator_checks_and_saves_current_mixed_sport_picks(ctx, env, browser):
+    p = hub(ctx, env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('#hub-generate').click()
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.length > 0", timeout=30000)
+    message = p.locator('#hub-generation-status').inner_text()
+    assert 'generated and rechecked' in message, message
+    state = saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
+    legs = state['slip']['legs']
+    assert len({(l['sport'], l['event_id']) for l in legs}) == 2
+    assert all(l['book'] == 'prizepicks' and l['read_rev'] for l in legs)
+    assert p.locator('#hub-studio-body .u-leg').count() == 2
+    # Repeat at the same total must preserve the existing draft, not duplicate/replace it.
+    p.locator('#hub-generate').click()
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('already has')")
+    assert saved_state(p, lambda d: bool(d.get('slip')))['slip']['legs'] == legs
+    c = context(browser, env)
+    try:
+        q = open_page(c, env, '/#slips')
+        q.wait_for_selector('#hub-studio-body .u-leg', timeout=20000)
+        assert q.locator('#hub-studio-body .u-leg').count() == 2
+    finally:
+        c.close()
+    assert not p.errors
+
+
+def test_generator_refuses_server_failure_without_overwriting_draft(ctx, env):
+    p = hub(ctx, env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.route('**/api/upgrade/recheck', lambda route: route.fulfill(status=503, content_type='application/json', body='{"error":"busy"}'))
+    p.locator('#hub-generate').click()
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('draft was kept')", timeout=20000)
+    assert p.locator('#hub-studio-body .u-leg').count() == 0
+    assert not p.errors
+
+
+@pytest.mark.parametrize('width', [360, 390, 768, 1024, 1440, 1920])
+def test_studio_controls_and_entry_contents_fit_their_boxes(ctx, env, width):
+    p = hub(ctx, env, {'width':width,'height':900})
+    p.screenshot(path=f'.fit-board-{width}.png')
+    p.goto(env.url + '/#slips')
+    p.wait_for_selector('#hub-generate')
+    p.locator('#hub-generate').click()
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.length > 0",timeout=30000)
+    assert 'generated and rechecked' in p.locator('#hub-generation-status').inner_text()
+    failures = p.evaluate('''() => [...document.querySelectorAll('#hub-studio-section .h-generator-controls, #hub-studio-section .u-entry-h, #hub-studio-section .u-leg, #hub-studio-section .u-slip-metrics')].flatMap(parent => {
+      const b=parent.getBoundingClientRect();
+      return [...parent.children].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&(r.left<b.left-1||r.right>b.right+1)}).map(el=>el.className||el.tagName);
+    })''')
+    assert failures == [], failures
+    no_h_scroll(p)
+    p.screenshot(path=f'.fit-studio-{width}.png')
+    assert not p.errors
+
+
+def test_inline_prop_displays_available_player_stats(ctx, env):
+    p = hub(ctx, env)
+    p.locator('#hub-sports [data-id=nba]').click()
+    p.locator('#hub-q').fill('Karl Anders')
+    p.locator('#hub-rows .h-player').first.click()
+    p.wait_for_selector('.h-stat-library dl',timeout=15000)
+    facts = p.locator('.h-stat-library').inner_text()
+    assert 'Points, L5' in facts and '21.4' in facts
+    assert 'Points allowed per game to C' in facts and '24.1' in facts
+    assert 'Days since last game' in facts
+
+def test_underdog_generation_uses_one_sport_with_enough_games(ctx, env):
+    p = hub(ctx, env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('#hub-generation-book').select_option('underdog')
+    p.locator('#hub-generate').click()
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.length > 0", timeout=30000)
+    assert 'generated and rechecked' in p.locator('#hub-generation-status').inner_text()
+    state = saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
+    legs = state['slip']['legs']
+    assert len({l['sport'] for l in legs}) == 1
+    assert len({l['event_id'] for l in legs}) == 2
+    assert all(l['book'] == 'underdog' for l in legs)
