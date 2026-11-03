@@ -1,6 +1,6 @@
 # PR checks are offline. The long source collection is manual and publishes raw
 # records to Scout's inbox; only Scout's canonical exporter writes serving history.
-name: lol-full-history
+name: Scout validation and manual LoL history
 
 on:
   push:
@@ -50,7 +50,15 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-test.txt
       - name: LoL and CS2 regression checks (no provider credentials)
-        run: python -m pytest lol/tests tests -q -p no:cacheprovider
+        run: python -m pytest lol/tests tests -q -p no:cacheprovider --junitxml=test-results/esports.xml
+      - name: Preserve test results even when checks fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esports-test-results-${{ github.run_attempt }}
+          path: test-results/esports.xml
+          if-no-files-found: warn
+          retention-days: 14
 
   # Sports (NFL/NBA) runs as its own job: a sports failure is visible on its own and never blocks or changes the
   # esports job above, which the manual full-history collection depends on (sports/INTEGRATION_MANIFEST.md).
@@ -64,7 +72,15 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-test.txt
       - name: Sports regression checks (no provider credentials, no network)
-        run: python -m pytest sports/tests gradecore/tests -q -p no:cacheprovider
+        run: python -m pytest sports/tests gradecore/tests -q -p no:cacheprovider --junitxml=test-results/sports.xml
+      - name: Preserve test results even when checks fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sports-test-results-${{ github.run_attempt }}
+          path: test-results/sports.xml
+          if-no-files-found: warn
+          retention-days: 14
 
   member-browser-tests:
     runs-on: ubuntu-latest
@@ -77,7 +93,15 @@ jobs:
       - run: pip install -r requirements-test.txt playwright==1.63.0
       - run: python -m playwright install --with-deps chromium
       - name: Original pages and four-sport research flows (isolated fixtures)
-        run: python -m pytest tests/test_upgrade_browser.py tests/test_research_hub_browser.py tests/test_workspace_v2_browser.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_upgrade_browser.py tests/test_research_hub_browser.py tests/test_workspace_v2_browser.py -q -p no:cacheprovider --junitxml=test-results/browser.xml
+      - name: Preserve test results even when checks fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results-${{ github.run_attempt }}
+          path: test-results/browser.xml
+          if-no-files-found: warn
+          retention-days: 14
 
   full-history:
     if: github.event_name == 'workflow_dispatch'
