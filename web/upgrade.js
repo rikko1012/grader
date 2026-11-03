@@ -285,52 +285,69 @@
   }
   // Generate from published forecasts only. The server remains the authority for
   // identity, freshness, permissions, duplicate picks and platform rules.
-  async function generateSlip(records, platform, target) {
-    const before = sig(), existing = T.legs.filter(l => l.book === platform);
-    const need = target - existing.length;
-    if (need <= 0) throw new Error(`Your ${PLATFORMS[platform].label} entry already has ${existing.length} picks. Increase the total or remove a pick.`);
-    if (T.legs.length + need > MAX_LEGS) throw new Error(`Your account draft can hold ${MAX_LEGS} picks. Remove a pick first.`);
-    const excluded = new Set(), fixedEvents = new Set(existing.map(l => l.sport + '|' + l.event_id));
-    const fixedPlayers = new Set(existing.map(l => l.sport + '|' + l.player_key));
-    const pool = records.filter(r => r.offer.platform === platform && r.scout.side && r.scout.grade && !r.scout.hold
-      && isNum(chanceOf(r, r.scout.side)) && !addRefusal(r, r.scout.side) && !onSlip(r))
-      .sort((a,b) => chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side) || a.key.localeCompare(b.key));
-    const types = Object.fromEntries(entries().map(e => [e.platform, typeOf(e)]));
-    if (!types[platform]) types[platform] = PLATFORMS[platform].types[0][0];
-    let failure = '';
-    for (let attempt=0; attempt<3; attempt++) {
-      const events = new Set(fixedEvents), players = new Set(fixedPlayers), selected = [];
-      // Underdog combinations use one sport until mixed-sport support is verified.
-      const available = pool.filter(r => !excluded.has(legId(r,r.scout.side))
-        && !events.has(r.sport+'|'+r.event.id) && !players.has(r.sport+'|'+r.player.key));
-      let udSport = platform === 'underdog' ? existing[0]?.sport : null;
-      if(platform==='underdog' && !udSport) {
-        // A lone high-ranked NFL game must not prevent a valid two-game CS2 entry.
-        udSport=available.find(r=>new Set(available.filter(x=>x.sport===r.sport).map(x=>x.event.id)).size>=need)?.sport;
+  async function generateBatch(records, opts, progress) {
+    const {platform, count, size, entryType, mode, target, tolerance, mix, games} = opts;
+    if (!PLATFORMS[platform] || !Number.isInteger(count) || count<1 || count>12 || !Number.isInteger(size) || size<2 || size>6)
+      throw new Error('Choose 1–12 slips and 2–6 picks per slip.');
+    if (platform==='prizepicks' && size>6) throw new Error('PrizePicks supports up to 6 picks per entry.');
+    if (platform==='underdog' && entryType==='flex' && size<3) throw new Error('Underdog Flex needs at least 3 picks.');
+    if (platform==='underdog' && mix==='mixed') throw new Error('Mixed-sport generation is currently supported on PrizePicks. Choose PrizePicks or a single sport.');
+    if (!PLATFORMS[platform].types.some(t=>t[0]===entryType)) throw new Error('Choose a supported entry type.');
+    const pool=records.filter(r=>r.offer.platform===platform && !started(r) && r.state.kind==='ok' && r.scout.grade && !r.scout.hold
+      && r.scout.side && r.offer[r.scout.side]?.offered && isNum(chanceOf(r,r.scout.side))
+      && (mode!=='balanced'||Math.abs(chanceOf(r,r.scout.side)*100-target)<=tolerance+1e-8))
+      .sort((a,b)=>chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)||a.key.localeCompare(b.key));
+    if(pool.length<size) throw new Error(`Only ${pool.length} eligible props match these settings. Widen the chance range or include more sports.`);
+    const picked=[], signatures=new Set(), exposure=new Map(), rejected=new Set();
+    let checked=0, lastProblem='', examined=0;
+    // Bounded search, diversified by player exposure. Each successful candidate is
+    // independently checked; no combination's probability is inferred by multiplication.
+    for(let round=0;round<3 && picked.length<count;round++) {
+      for(const anchor of pool) {
+        if(picked.length>=count || checked>=24 || examined>=240) break;
+        examined++;
+        const aid=legId(anchor,anchor.scout.side);if(rejected.has(aid))continue;
+        const chosen=[anchor], ev=new Set([anchor.sport+'|'+anchor.event.id]), players=new Set([anchor.sport+'|'+anchor.player.key]);
+        const ranked=pool.filter(r=>r!==anchor&&!rejected.has(legId(r,r.scout.side))).sort((a,b)=>{
+          const use=(r)=>exposure.get(r.sport+'|'+r.player.key)||0;
+          return use(a)-use(b) || (mode==='balanced'?Math.abs(chanceOf(a,a.scout.side)-chanceOf(anchor,anchor.scout.side))-Math.abs(chanceOf(b,b.scout.side)-chanceOf(anchor,anchor.scout.side)):chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)) || a.key.localeCompare(b.key);
+        });
+        // A small rotation explores alternate combinations when the top candidate was already emitted.
+        if(round) ranked.push(...ranked.splice(0,Math.min(round,ranked.length)));
+        if(mix==='mixed') ranked.sort((a,b)=>(a.sport===anchor.sport)-(b.sport===anchor.sport));
+        for(const r of ranked) {
+          const e=r.sport+'|'+r.event.id,p=r.sport+'|'+r.player.key;
+          if((games!=='stacks'&&ev.has(e))||players.has(p)||((platform==='underdog'||mix==='single')&&r.sport!==anchor.sport))continue;
+          if(platform==='prizepicks'&&chosen.some(x=>x.sport===r.sport&&x.event.id===r.event.id&&x.player.team!==r.player.team))continue;
+          chosen.push(r);ev.add(e);players.add(p);if(chosen.length===size)break;
+        }
+        if(chosen.length!==size || (mix==='mixed'&&new Set(chosen.map(r=>r.sport)).size<2))continue;
+        const legs=chosen.map(r=>makeLeg(r,r.scout.side)), signature=legs.map(l=>l.id).sort().join('\n');
+        if(signatures.has(signature))continue;signatures.add(signature);checked++;
+        progress?.(`Checking slip ${picked.length+1} of ${count}…`);
+        let doc;
+        try {doc=await api('recheck',{idem:idem(),legs:legs.map(wireLeg),entry_types:{[platform]:entryType}});}
+        catch(e){if(!picked.length)throw e;lastProblem='The server could not finish checking more combinations.';return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,note:lastProblem};}
+        const bad=legs.filter(l=>!doc.legs?.[l.id]?.ok);
+        if(bad.length){bad.forEach(l=>rejected.add(l.id));lastProblem=doc.legs?.[bad[0].id]?.problems?.[0]?.text||'Some current offers failed recheck.';continue;}
+        if(!doc.entries?.[platform]?.ok){lastProblem=doc.entries?.[platform]?.problems?.[0]?.text||'A combination failed its platform rules.';continue;}
+        picked.push({id:idem(),legs,checked_at:new Date().toISOString(),entry_type:entryType,platform});
+        legs.forEach(l=>{const k=l.sport+'|'+l.player_key;exposure.set(k,(exposure.get(k)||0)+1);});
       }
-      for (const r of available) {
-        const event = r.sport+'|'+r.event.id, player = r.sport+'|'+r.player.key;
-        if (excluded.has(legId(r,r.scout.side)) || events.has(event) || players.has(player) || (udSport && r.sport!==udSport)) continue;
-        selected.push(makeLeg(r,r.scout.side)); events.add(event); players.add(player);
-        if(platform==='underdog')udSport=r.sport;
-        if(selected.length===need)break;
-      }
-      if(selected.length!==need) throw new Error(failure || `Only ${selected.length} additional eligible picks from different games are available. Choose fewer picks or more sports.`);
-      const proposed = [...T.legs,...selected];
-      const doc = await api('recheck',{idem:idem(),legs:proposed.map(wireLeg),entry_types:types});
-      if(sig()!==before) throw new Error('Your draft changed during generation. Generate again to use the current draft.');
-      const bad = selected.filter(l => !doc.legs[l.id]?.ok);
-      if(bad.length) {
-        for(const l of bad)excluded.add(l.id);
-        failure = doc.legs[bad[0].id]?.problems?.[0]?.text || 'Current offers did not pass recheck. Refresh and try again.';
-        continue;
-      }
-      if(!doc.entries[platform]?.ok) throw new Error(doc.entries[platform]?.problems?.[0]?.text || 'This entry did not pass its platform rules. Your draft was kept.');
-      T.legs=proposed; T.types[platform]=types[platform]; slipChanged();
-      T.check=doc; T.checkSig=sig(); T.checkErr=null; paintTray();
-      return selected.length;
     }
-    throw new Error(failure || 'No current combination passed recheck. Your draft was kept.');
+    return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,
+      note:picked.length<count?lastProblem||'The bounded search found fewer distinct checked combinations with these settings. Widen the chance range, include more sports, or reduce picks per slip.':''};
+  }
+  async function useGenerated(slip) {
+    if(!slip||!Array.isArray(slip.legs)||slip.legs.some(l=>!cleanLeg(l)))throw new Error('This saved lineup is invalid. Generate again.');
+    const before=sig(), proposed=[...T.legs.filter(l=>l.book!==slip.platform),...slip.legs];
+    if(proposed.length>MAX_LEGS)throw new Error('Your other platform entry leaves too little room. Remove picks there first.');
+    const types={...T.types,[slip.platform]:slip.entry_type};
+    const doc=await api('recheck',{idem:idem(),legs:proposed.map(wireLeg),entry_types:types});
+    if(sig()!==before)throw new Error('Your working draft changed. Review it and try again.');
+    const bad=slip.legs.find(l=>!doc.legs?.[l.id]?.ok);
+    if(bad||!doc.entries?.[slip.platform]?.ok)throw new Error(bad?doc.legs[bad.id]?.problems?.[0]?.text||'A line changed. Generate again.':doc.entries[slip.platform]?.problems?.[0]?.text||'This entry no longer passes recheck.');
+    T.legs=proposed;T.types=types;slipChanged();T.check=doc;T.checkSig=sig();T.checkErr=null;paintTray();
   }
   function removeLeg(id) { T.legs = T.legs.filter((l) => l.id !== id); slipChanged(); }
   const onSlip = (rec) => T.legs.some((l) => l.sport === rec.sport && l.key === rec.key && l.book === rec.offer.platform);
@@ -1098,7 +1115,7 @@
     try {
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
-        research, researchDoc, chartSvg, addLeg, generateSlip, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText });
+        research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     await loadState();
     paintTray();

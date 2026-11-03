@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS slips(
   slip_id TEXT PRIMARY KEY, member TEXT NOT NULL, tracked_at TEXT NOT NULL, platform TEXT NOT NULL, entry_type TEXT, sports TEXT NOT NULL,
   legs INTEGER NOT NULL, rules_version TEXT, checks TEXT, scratch INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS slips_member ON slips(member, tracked_at DESC);
-CREATE TABLE IF NOT EXISTS member_state(member TEXT PRIMARY KEY, rev INTEGER NOT NULL, updated_at TEXT NOT NULL, slip TEXT, prefs TEXT, views TEXT, watch TEXT);
+CREATE TABLE IF NOT EXISTS member_state(member TEXT PRIMARY KEY, rev INTEGER NOT NULL, updated_at TEXT NOT NULL, slip TEXT, prefs TEXT, views TEXT, watch TEXT, studio TEXT);
 CREATE TABLE IF NOT EXISTS member_rev(member TEXT PRIMARY KEY, rev INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pick_watch(pick_id INTEGER PRIMARY KEY, mark TEXT, active INTEGER NOT NULL DEFAULT 1, last_tracked TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS pick_watch_active ON pick_watch(active, pick_id);
@@ -162,6 +162,8 @@ class Store:
         cols = [r[1] for r in con.execute("PRAGMA table_info(member_state)")]
         if cols and "watch" not in cols:
             con.execute("ALTER TABLE member_state ADD COLUMN watch TEXT")
+        if cols and "studio" not in cols:
+            con.execute("ALTER TABLE member_state ADD COLUMN studio TEXT")
         row = con.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'receipts'").fetchone()
         if row is None or "'lol'" in row["sql"]:
             return
@@ -411,30 +413,31 @@ class Store:
     # ---- member state: the working draft. A stale rev is refused with the current copy; the page merges.
     def get_state(self, member):
         with self.reader() as con:
-            r = con.execute("SELECT rev, slip, prefs, views, watch FROM member_state WHERE member = ?", (member,)).fetchone()
+            r = con.execute("SELECT rev, slip, prefs, views, watch, studio FROM member_state WHERE member = ?", (member,)).fetchone()
         return self._state(r)
 
     @staticmethod
     def _state(r):
         if r is None:
-            return {"rev": 0, "slip": None, "prefs": None, "views": None, "watch": None}
+            return {"rev": 0, "slip": None, "prefs": None, "views": None, "watch": None, "studio": None}
         return {"rev": r["rev"], "slip": json.loads(r["slip"]) if r["slip"] else None, "prefs": json.loads(r["prefs"]) if r["prefs"] else None,
-                "views": json.loads(r["views"]) if r["views"] else None, "watch": json.loads(r["watch"]) if r["watch"] else None}
+                "views": json.loads(r["views"]) if r["views"] else None, "watch": json.loads(r["watch"]) if r["watch"] else None,
+                "studio": json.loads(r["studio"]) if r["studio"] else None}
 
     def put_state(self, member, rev, patch):
         """patch: any of slip, prefs, views, watch. -> {"ok": True, "rev"} or {"ok": False, "state": current}."""
         def op(con):
-            cur = con.execute("SELECT rev, slip, prefs, views, watch FROM member_state WHERE member = ?", (member,)).fetchone()
+            cur = con.execute("SELECT rev, slip, prefs, views, watch, studio FROM member_state WHERE member = ?", (member,)).fetchone()
             have = cur["rev"] if cur else 0
             if rev != have:
                 return {"ok": False, "state": self._state(cur)}
-            keep = {k: (cur[k] if cur else None) for k in ("slip", "prefs", "views", "watch")}
+            keep = {k: (cur[k] if cur else None) for k in ("slip", "prefs", "views", "watch", "studio")}
             for k in keep:
                 if k in patch:
                     keep[k] = json.dumps(patch[k], separators=(",", ":")) if patch[k] is not None else None
-            con.execute("INSERT INTO member_state(member, rev, updated_at, slip, prefs, views, watch) VALUES(?,?,?,?,?,?,?) "
+            con.execute("INSERT INTO member_state(member, rev, updated_at, slip, prefs, views, watch, studio) VALUES(?,?,?,?,?,?,?,?) "
                         "ON CONFLICT(member) DO UPDATE SET rev = excluded.rev, updated_at = excluded.updated_at, slip = excluded.slip, "
-                        "prefs = excluded.prefs, views = excluded.views, watch = excluded.watch", (member, have + 1, iso(), keep["slip"], keep["prefs"], keep["views"], keep["watch"]))
+                        "prefs = excluded.prefs, views = excluded.views, watch = excluded.watch, studio = excluded.studio", (member, have + 1, iso(), keep["slip"], keep["prefs"], keep["views"], keep["watch"], keep["studio"]))
             self._op_revs[("state", member)] = have + 1
             return {"ok": True, "rev": have + 1}
         return self.submit(op)

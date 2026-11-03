@@ -797,6 +797,18 @@ def test_watchlist_saves_to_the_account(env):
     assert call(env, "POST", "state", {"rev": 1, "watch": [{"id": "x"}] * 101})[0] == 400
 
 
+def test_studio_batches_preserve_drafts_and_reject_oversized_shapes(env):
+    draft = {"legs": [], "types": {"prizepicks": "power"}}
+    assert call(env, "POST", "state", {"rev": 0, "slip": draft})[0] == 200
+    batch = {"version": 1, "slips": [{"legs": [{"id": "a"}, {"id": "b"}]}] * 8}
+    assert call(env, "POST", "state", {"rev": 1, "studio": batch})[0] == 200
+    state = get(env, "state")[1]
+    assert state["studio"] == batch and state["slip"] == draft
+    assert call(env, "POST", "state", {"rev": 1, "studio": None})[0] == 409
+    assert call(env, "POST", "state", {"rev": 2, "studio": {"version": 1, "slips": batch["slips"] * 2}})[0] == 400
+    assert call(env, "POST", "state", {"rev": 2, "prefs": {"large": "x" * 17000}})[0] == 413
+
+
 NEW = ("workspace_lol.py", "workspace_sports.py")
 
 

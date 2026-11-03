@@ -7,7 +7,7 @@ export function mount(C) {
   const $ = id => document.getElementById(id);
   const H = {sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
-    page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false};
+    page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false, batch:null, batchSaved:false};
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
   const key = r => [r.sport,r.offer.platform,r.offer.offer_id].join('|');
   const playerKey = r => r.sport+'|'+r.player.key;
@@ -145,7 +145,11 @@ export function mount(C) {
   }
   async function loadPreferences() {
     try {
-      const p=(await api('state')).prefs?.researchHub||{};
+      const state=await api('state'), p=state.prefs?.researchHub||{};
+      if(state.studio?.version===1 && Array.isArray(state.studio.slips)) {
+        const slips=state.studio.slips.slice(0,12).filter(s=>s&&C.PLATFORMS[s.platform]&&C.PLATFORMS[s.platform].types.some(t=>t[0]===s.entry_type)&&Array.isArray(s.legs)&&s.legs.length>=2&&s.legs.length<=8&&s.legs.every(C.cleanLeg));
+        H.batch={...state.studio,slips};H.batchSaved=true;paintBatch();
+      }
       const clean = values => !Array.isArray(values)?[]:values.filter(v=>v&&typeof v.name==='string'&&v.filters&&typeof v.filters==='object').slice(0,12).map((v,i)=>{
         const f=v.filters;
         return {id:typeof v.id==='string'?v.id.slice(0,100):'saved-'+i,name:v.name.slice(0,80),filters:{
@@ -242,7 +246,7 @@ export function mount(C) {
     if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side.</p><button data-hub="section" data-id="board">Browse player props</button></div>';
     if(u)box.querySelector(`[data-u="${CSS.escape(u)}"]${id==null?'':`[data-id="${CSS.escape(id)}"]`}`)?.focus({preventScroll:true});
     $('hub-studio-sync').textContent=T.saveFail?'Not yet synced. Your changes remain on this device.':T.pending||T.saving?'Saving your changes…':'Saved to your account · available on your other devices';
-    $('hub-studio-summary').textContent=`${T.legs.length} picks · ${new Set(T.legs.map(l=>l.sport)).size} sports · ${new Set(T.legs.map(l=>l.book)).size} ${new Set(T.legs.map(l=>l.book)).size===1?'platform':'platforms'}`;
+    if($('hub-studio-summary'))$('hub-studio-summary').textContent=`${T.legs.length} picks · ${new Set(T.legs.map(l=>l.sport)).size} sports · ${new Set(T.legs.map(l=>l.book)).size} ${new Set(T.legs.map(l=>l.book)).size===1?'platform':'platforms'}`;
   }
   async function generate() {
     if(H.generating)return;
@@ -255,11 +259,55 @@ export function mount(C) {
       await Promise.allSettled(sports.map(s=>C.loadBoard(s,true)));
       H.records=allowed().flatMap(s=>[...R.boards[s].recs.values()]);
       const pool=H.records.filter(r=>sports.includes(r.sport)&&!unavailableReason(r)&&!C.started(r));
-      const n=await C.generateSlip(pool,$('hub-generation-book').value,Number($('hub-generation-count').value));
-      status.textContent=`${n} picks generated and rechecked. Your draft is saved below; review it before tracking.`;
-      refreshSlip();
+      const options={platform:$('hub-generation-book').value,count:Number($('hub-generation-slips').value),size:Number($('hub-generation-count').value),entryType:$('hub-generation-type').value,
+        mode:$('hub-generation-mode').value,target:Number($('hub-generation-target').value),tolerance:Number($('hub-generation-tolerance').value),mix:$('hub-generation-mix').value,games:$('hub-generation-games').value,sports};
+      const batch=await C.generateBatch(pool,options,text=>{status.textContent=text;});
+      if(!batch.slips.length)throw new Error(batch.note||'No combinations passed recheck. Widen your settings.');
+      H.batch=batch;H.batchSaved=false;paintBatch();
+      await saveBatch();
+      status.textContent=`${batch.slips.length} of ${options.count} slips generated and rechecked. ${batch.note||'Review them below; your working draft is unchanged.'}`;
     } catch(e){status.textContent=e.status?'Could not verify current offers. Your draft was kept. Try again.':e.message;}
-    finally{H.generating=false;button.disabled=false;button.textContent='Generate slip';}
+    finally{H.generating=false;button.disabled=false;button.textContent='Generate slips';}
+  }
+  async function saveBatch() {
+    try {
+      for(let attempt=0;attempt<3;attempt++) {
+        const state=await api('state');
+        try {await api('state',{rev:state.rev,studio:H.batch});H.batchSaved=true;break;}
+        catch(e){if(e.status!==409||attempt===2)throw e;}
+      }
+    } catch(e){H.batchSaved=false;}
+    paintBatch();
+  }
+  function paintBatch() {
+    const box=$('hub-generated');if(!box)return;
+    const b=H.batch, slips=b?.slips||[];
+    if(!slips.length){box.innerHTML='<div class="h-empty"><h3>Your generated slips appear here</h3><p>Choose how many slips and how many picks per slip. Your working draft stays separate.</p></div>';return;}
+    const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
+    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Chances are the model’s published estimates for individual props, not a combined slip win probability. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
+      const ps=s.legs.map(l=>l.shown_p).filter(num),avg=ps.reduce((a,b)=>a+b,0)/ps.length;
+      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header><div class="h-batch-range"><span>Prop chances <b>${pct(Math.min(...ps))}–${pct(Math.max(...ps))}</b></span><span>Average <b>${pct(avg)}</b></span></div><ol>${s.legs.map(l=>`<li><div><strong>${esc(l.player)}</strong><small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span><small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace working '+esc(C.PLATFORMS[s.platform].label)+' entry':'Open in working draft'}</button><small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
+    }).join('')}</div>`;
+  }
+  async function useGenerated(id) {
+    const s=H.batch?.slips?.[Number(id)];if(!s||H.usingBatch)return;
+    H.usingBatch=true;
+    try {await C.useGenerated(s);refreshSlip();paintBatch();$('hub-batch-message-'+id).textContent='Rechecked and opened in your working draft below.';}
+    catch(e){$('hub-batch-message-'+id).textContent=e.status?'Could not recheck this slip. Your draft was kept.':e.message;}
+    finally{H.usingBatch=false;}
+  }
+  function generatorHtml() {
+    return `<section class="h-generator" aria-label="Generate slips"><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your batch</h2><p>Separate slips, balanced around the prop chances you choose.</p><fieldset id="hub-generation-sports"><legend>Eligible sports</legend>${allowed().map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls">
+      <label>Platform<select id="hub-generation-book"><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label>
+      <label>Entry type<select id="hub-generation-type"><option value="power">Power</option><option value="flex">Flex</option></select></label>
+      <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} slips</option>`).join('')}</select></label>
+      <label>Picks per slip<select id="hub-generation-count">${[2,3,4,5,6].map(n=>`<option value="${n}">${n} picks</option>`).join('')}</select></label>
+      <label>Selection style<select id="hub-generation-mode"><option value="balanced">Balanced</option><option value="ranked">Highest chance</option></select></label>
+      <label>Sport mix<select id="hub-generation-mix"><option value="any">Any mix</option><option value="mixed">Mixed sports</option><option value="single">One sport</option></select></label>
+      <label>Target prop chance<select id="hub-generation-target">${[50,55,60,65,70,75,80].map(n=>`<option value="${n}" ${n===60?'selected':''}>${n}%</option>`).join('')}</select></label>
+      <label>Allowed range<select id="hub-generation-tolerance"><option value="3">±3 points</option><option value="5" selected>±5 points</option><option value="10">±10 points</option></select></label>
+      <label>Game selection<select id="hub-generation-games"><option value="spread">No stacks</option><option value="stacks">Allow stacks</option></select></label>
+      <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Each slip has distinct players. No stacks uses one player per game; Allow stacks permits supported same-game combinations, whose results can be correlated. The batch varies players to spread exposure; slips may share picks. Balanced mode keeps every prop inside your target range. Current published estimates are not calibrated equally across sports. No return or combined win probability is promised. Each candidate passes the server’s platform and freshness checks.</p></details></section>`;
   }
   async function showRecord() {
     const seq=++H.seq, sport=$('hub-record-sport').value;
@@ -284,7 +332,7 @@ export function mount(C) {
     for(const n of ['board','studio','record','alerts','picks']) {$('hub-'+n+'-section').hidden=n!==name; document.querySelectorAll(`[data-hub="section"][data-id="${n}"]`).forEach(b=>b.setAttribute('aria-current',n===name?'page':'false'));}
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('hub-title').textContent=({record:'Performance record',picks:'My picks',alerts:'Line alerts',studio:'Slip Studio'})[name]||'Player props';
-    if(name==='board')paintBoard();else if(name==='studio')paintStudio();else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else paintAlerts();
+    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else paintAlerts();
   }
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
@@ -311,7 +359,7 @@ export function mount(C) {
   }
   const rec = id => H.records.find(r=>key(r)===id);
   const actions={
-    generate,
+    generate, 'use-generated':useGenerated, 'save-batch':saveBatch,
     'player-market'(id){H.stat='all';H.game='all';H.q='';H.side='all';H.onlyDiff=false;H.watched=false;H.expanded=null;const r=rec(id);if(!r)return;H.page=Math.max(0,Math.floor(rows().findIndex(x=>key(x)===id)/40));expand(id);},
     filters(){const open=$('hub-board-section').classList.toggle('filters-open');$('hub-filters-toggle').setAttribute('aria-expanded',String(open));},
     section, sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;section('board');}, game(id){H.game=id;H.page=0;paintBoard();},page(id){H.page+=Number(id);paintBoard();$('hub-table').scrollIntoView({block:'start'});},
@@ -335,7 +383,7 @@ export function mount(C) {
       <section id="hub-board-section"><div id="hub-sports" class="h-sports" role="group" aria-label="Sport filter"></div><div id="hub-games" class="h-games" role="group" aria-label="Matchup filter"></div><div class="h-tools"><label class="h-search"><span>Search</span><input id="hub-q" type="search" placeholder="Player, team or game" aria-label="Search all sports"></label><label>Platform<select id="hub-book"><option value="all">All platforms</option><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label><label>Market<select id="hub-stat"><option value="all">All markets</option></select></label><label>Side<select id="hub-side"><option value="all">Both sides</option><option value="over">Over</option><option value="under">Under</option></select></label><label>Sort<select id="hub-sort"><option value="start">Starting soon</option><option value="player">Player name</option><option value="chance">Stated chance</option></select></label><button data-hub="refresh" aria-label="Refresh all boards">↻</button></div>
       <div class="h-quick"><button id="hub-diff" data-hub="diff" aria-pressed="false">Lines differ</button><button id="hub-watch" data-hub="watched" aria-pressed="false">★ Watchlist</button><select id="hub-views" aria-label="Saved research views"><option>Saved views</option></select><button data-hub="save-view">Save view</button><button data-hub="save-alert">Alert me</button></div><div id="hub-health" class="h-health" role="status"></div>
       <div class="h-table-title"><h2>Available lines</h2><span id="hub-count"></span><small>History is measured against the displayed line</small></div><div class="h-table-wrap"><table id="hub-table" class="h-table"><thead><tr><th><span class="u-sr">Watch</span></th><th>Player / matchup</th><th>Market</th><th>Line</th><th>Proj.</th><th>Scout side</th><th>L5</th><th>L10</th><th>L20</th><th>Compare</th><th>Scout grade</th><th><span class="u-sr">Add to slip</span></th></tr></thead><tbody id="hub-rows"></tbody></table><p id="hub-empty" class="h-empty">Loading the available boards…</p></div><div id="hub-pagination" class="h-pagination"></div></section>
-      <section id="hub-studio-section" hidden><div class="h-studio-intro"><div><h2>Build across sports. Keep every line.</h2><p>CS2, LoL, NBA and NFL in one account draft. Each platform gets its own entry and its own rule check.</p><span id="hub-studio-sync" class="h-sync"></span></div><button data-hub="section" data-id="board">+ Add player props</button></div><section class="h-generator" aria-label="Generate a slip"><div class="h-generator-heading"><div><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your lineup</h2></div><span id="hub-studio-summary"></span></div><p>Build from current graded picks, ranked by their published chance. One player per game; your existing picks stay in place.</p><fieldset id="hub-generation-sports"><legend>Include sports</legend>${allowed().map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls"><label>Platform<select id="hub-generation-book"><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label><label>Total picks<select id="hub-generation-count">${[2,3,4,5,6].map(n=>`<option value="${n}">${n} picks</option>`).join('')}</select></label><button id="hub-generate" data-hub="generate">Generate slip</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How picks are selected</summary><p>Only available model-side offers with a published grade are eligible. Generation refreshes each board and checks the chosen entry on the server before saving. PrizePicks can combine supported sports; Underdog uses one sport. This ranks existing forecasts and does not claim optimal or guaranteed returns.</p></details></section><div id="hub-studio-body"></div><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt; it does not place a bet. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">View tracked picks →</button></div></section><section id="hub-picks-section" hidden><div class="h-section-head"><div><h2>Your picks, with receipts.</h2><p>The line and forecast saved when you tracked. Settled at that line; pushes stay separate.</p></div><div class="h-pick-filters"><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status"><option value="all">All outcomes</option><option value="pending">Pending</option><option value="hit">Won</option><option value="miss">Lost</option><option value="push">Pushed</option><option value="void">Void</option></select></label></div></div><div id="hub-picks-body"></div></section><section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section><section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>
+      <section id="hub-studio-section" hidden><div class="h-studio-intro"><div><h2>Build across sports. Keep every line.</h2><p>CS2, LoL, NBA and NFL in one account draft. Each platform gets its own entry and its own rule check.</p><span id="hub-studio-sync" class="h-sync"></span></div><button data-hub="section" data-id="board">+ Add player props</button></div>${generatorHtml()}<section id="hub-generated" aria-label="Generated slips"></section><section class="h-working-draft"><h2>Your working draft</h2><p>Open one generated slip here to review, track or copy. Your other generated slips stay saved above.</p><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt; it does not place a bet. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">View tracked picks →</button></div></section><section id="hub-picks-section" hidden><div class="h-section-head"><div><h2>Your picks, with receipts.</h2><p>The line and forecast saved when you tracked. Settled at that line; pushes stay separate.</p></div><div class="h-pick-filters"><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status"><option value="all">All outcomes</option><option value="pending">Pending</option><option value="hit">Won</option><option value="miss">Lost</option><option value="push">Pushed</option><option value="void">Void</option></select></label></div></div><div id="hub-picks-body"></div></section><section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section><section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>
     </div><aside class="h-slip" aria-label="Saved cross-sport slip"><header><div><span class="h-eyebrow">YOUR LINEUP</span><h2>Slip builder <span id="hub-slip-count">0</span></h2></div><button data-hub="receipts" title="View tracked picks">Receipts ↗</button></header><p id="hub-save-status" class="h-sync" aria-live="polite">Saved to your account</p><div id="hub-slip-content" tabindex="-1"></div><footer>One entry per platform. Rechecked against current offers before tracking.</footer></aside>
     <button class="h-mobile-slip" data-hub="tray">Open saved slip</button></section>
     <dialog id="hub-save-dialog" class="h-save u-dialog" aria-labelledby="hub-save-title"><form method="dialog"><h2 id="hub-save-title">Save view</h2><label>Name<input id="hub-save-name" maxlength="48" required autocomplete="off"></label><p>Saved to your account. Alerts run while the research screen is open.</p><div><button value="cancel" formnovalidate>Cancel</button><button id="hub-save-confirm" value="save">Save</button></div></form></dialog>`);
@@ -355,6 +403,17 @@ export function mount(C) {
   for(const f of ['q','book','side','sort','stat']) $('hub-'+f).addEventListener(f==='q'?'input':'change',()=>{H[f]=$('hub-'+f).value;H.page=0;paintBoard();});
   $('hub-views').addEventListener('change',()=>{const i=$('hub-views').value;if(i==='')return;const v=H.views[Number(i)];if(v){for(const k of filterKeys) if(k in v.filters)H[k]=v.filters[k];H.page=0;paintBoard();}});
   $('hub-record-sport').addEventListener('change',showRecord);
+  function generationControls() {
+    const p=$('hub-generation-book').value,old=$('hub-generation-type').value;
+    $('hub-generation-type').innerHTML=C.PLATFORMS[p].types.map(([v,label])=>`<option value="${v}">${label}</option>`).join('');
+    if(C.PLATFORMS[p].types.some(t=>t[0]===old))$('hub-generation-type').value=old;
+    for(const o of $('hub-generation-count').options)o.disabled=(p==='prizepicks'&&Number(o.value)>6)||(p==='underdog'&&$('hub-generation-type').value==='flex'&&Number(o.value)<3);
+    if($('hub-generation-count').selectedOptions[0]?.disabled)$('hub-generation-count').value=p==='prizepicks'?'6':'3';
+    const ranked=$('hub-generation-mode').value==='ranked';
+    $('hub-generation-target').disabled=ranked;$('hub-generation-tolerance').disabled=ranked;
+  }
+  for(const id of ['book','type','mode'])$('hub-generation-'+id).addEventListener('change',generationControls);
+  generationControls();
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});
   window.addEventListener('hashchange',route);
