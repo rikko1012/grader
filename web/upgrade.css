@@ -124,6 +124,7 @@ html[data-upgrade] .sw .sw-tb-stat .u-res-btn,html[data-upgrade] .sw .sw-tb-stat
   html[data-upgrade] .sw .sw-tb-who>div{min-width:0}
   html[data-upgrade] .sw .sw-tb-line{white-space:normal}
   html[data-upgrade] .sw .sw-tb-book{display:block}
+  html[data-upgrade] .sw .sw-tb-conf,html[data-upgrade] .sw .sw-tb-research{white-space:normal;overflow-wrap:anywhere}
   html[data-upgrade] .sw .sw-tb-stat .u-row-acts{flex-wrap:wrap}
   html[data-upgrade] .sw .sw-tb .sw-grade-tag,html[data-upgrade] .sw .sw-tb .sw-grade-nv{white-space:normal}
 }

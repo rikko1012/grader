@@ -372,7 +372,10 @@ def test_sports_board_keeps_its_table_and_adds_books_and_research(ctx, env):
     for word in ("PLAYER", "STAT", "LINE", "BOOK", "LEAN", "SCOUT", "MARKET", "EDGE", "L10", "L5", "CONF"):
         assert word in head, word
     assert p.locator("tr.sw-tb-row .u-bk").count() >= 2
-    assert p.evaluate("document.querySelector('.sw-tb-wrap').scrollWidth <= document.querySelector('.sw-tb-wrap').clientWidth + 1")
+    assert p.evaluate("document.querySelector('.sw-tb-wrap').scrollWidth <= document.querySelector('.sw-tb-wrap').clientWidth + 1"), p.evaluate("""() => {
+      const box=document.querySelector('.sw-tb-wrap'), right=box.getBoundingClientRect().right;
+      return {width:box.clientWidth,scroll:box.scrollWidth,outside:[...box.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>right+1).slice(0,20).map(e=>({tag:e.tagName,cls:e.className,width:e.getBoundingClientRect().width,text:e.textContent.slice(0,100)}))};
+    }""")
     shot(p, "sports-board")
     p.locator("tr.sw-tb-row .u-res-btn").first.click()
     p.wait_for_selector("#u-drawer[open] .u-tiles")

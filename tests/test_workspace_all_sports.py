@@ -760,6 +760,7 @@ def test_lol_legacy_results_never_substitute_unplayable_groups_or_statuses(env):
     assert all(not g for g in report["groups"].values())
     del doc["metrics"]["side offered"]
     path.write_text(json.dumps(doc))
+    server._RESULTS.clear()
     assert get(env, "results?sport=lol")[1]["totals"]["wins"] is None
 
 
