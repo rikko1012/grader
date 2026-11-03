@@ -100,6 +100,8 @@ def test_responsive_record_loading_keyboard_and_no_overflow(ctx, env, size):
     p.wait_for_selector('.h-record-card',timeout=30000)
     assert 'Actual hit rate' in p.locator('#hub-record-body').inner_text()
     assert p.locator('.h-record-card').count()==4
+    assert '112 decided picks' in p.locator('#hub-record-body').inner_text()
+    assert '116 decided picks' not in p.locator('#hub-record-body').inner_text()
     assert 'Different sport cohorts stay separate' in p.locator('#hub-record-section').inner_text()
     no_h_scroll(p)
     p.locator('#hub-record-sport').select_option('cs2')
