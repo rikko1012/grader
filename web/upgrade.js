@@ -432,11 +432,11 @@
     const vals = Object.values(T.check.entries), ready = vals.filter((e) => e.ok).length;
     return `<b>${ready} of ${vals.length} ${vals.length === 1 ? "entry" : "entries"} ready.</b> Checked ${clock(T.check.checked_at)}.`;
   }
-  function legHtml(l, phase, link) {
+  function legHtml(l, phase, link, position) {
     const c = phase === "fresh" ? T.check.legs[l.id] : null;
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
     const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
-    return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
+    return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
       <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
       <span class="u-leg-meta">${read}${/^https:\/\//.test(link || "") ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">Open this line</a>` : ""}</span>
       <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${problems}</div>`;
@@ -454,7 +454,7 @@
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
     const math = `${values?`<div class="u-slip-metrics">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>`;
     return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
-      ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null)).join("")}
+      ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}
         <div class="u-acts"><button class="u-btn${!open && can ? " u-gold" : ""}" type="button" ${can && !busy ? "" : "disabled"} data-u="track" data-id="${esc(e.key)}">${busy ? "Tracking" : "Track"}</button><button class="u-btn" type="button" ${ready ? "" : "disabled"} data-u="copy" data-id="${esc(e.key)}">${T.copyBusy ? "Checking" : "Copy"}</button></div></div></section>`;
   }
