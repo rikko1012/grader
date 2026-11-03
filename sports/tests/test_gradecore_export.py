@@ -42,6 +42,17 @@ def test_export_refuses_truncation(monkeypatch):
     with pytest.raises(ValueError,match='limit exceeded'):gradecore_export.export(config.DATA_DIR,'nba')
 
 
+def test_export_uses_saved_display_chance_not_raw_or_current_calibration():
+    from sports.model import shown
+    world()
+    row=gradecore_export.export(config.DATA_DIR,'nba')['rows'][0]
+    assert row['published_p'] is None
+    shown.record('nba',[(row['forecast_id'],'points',20,{'po':.61,'pu':.34,'pp':.05,'v':'frozen-cal'})],row['forecast_at'])
+    result=gradecore_export.export(config.DATA_DIR,'nba')['rows'][0]
+    assert result['published_p']==.61
+    assert result['p']==pytest.approx(.5/.95)
+
+
 def test_admin_export_reads_only_known_snapshot_name():
     req=lambda league:SimpleNamespace(rest='gradecore-export',query={'league':league})
     assert api_model.admin_model(req('../../secrets'))[0]==400

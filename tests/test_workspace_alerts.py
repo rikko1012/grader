@@ -92,3 +92,13 @@ def test_deferred_withdrawn_revision_is_not_sent(tmp_path,monkeypatch):
     for rows,t in [([row()],1000),([row('2')],2000),([row('3')],2100),([],2900)]:
         a.tick(tmp_path,lambda m:state,rows,lambda u:True,send,now=t)
     assert len(sent)==1
+
+
+def test_minimum_grade_uses_published_unheld_letter():
+    r=row();r['scout']['grade']='A-'
+    assert a.match(r,{'minGrade':'B+'},[],[r],1000)
+    assert not a.match(r,{'minGrade':'A'},[],[r],1000)
+    assert not a.match(r,{'minGrade':'invalid'},[],[r],1000)
+    r['scout']['hold']='Accuracy review'
+    assert not a.match(r,{'minGrade':'B'},[],[r],1000)
+    assert a.match(r,{'minGrade':'all'},[],[r],1000)

@@ -69,6 +69,11 @@ def match(r,f,watch,rows,now):
         from datetime import datetime
         start=datetime.fromisoformat(r['event']['start_utc'].replace('Z','+00:00')).timestamp()
         if start<=now or r['state']['kind'] not in ('fresh','ok','ready','live'):return False
+        minimum=f.get('minGrade','all')
+        if minimum!='all':
+            order=('B-','B','B+','A-','A','A+')
+            grade=r['scout'].get('grade')
+            if minimum not in order or grade not in order or r['scout'].get('hold') or order.index(grade)<order.index(minimum):return False
         for k,v in (('sport',r['sport']),('book',r['offer']['platform']),('side',r['scout']['side']),
                     ('stat',r['sport']+'|'+r['market']['stat']),('game',r['sport']+'|'+r['event']['id'])):
             if f.get(k,'all') not in ('all',v):return False

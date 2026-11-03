@@ -113,6 +113,7 @@ def test_four_sport_prizepicks_slip_syncs_to_second_browser_context(ctx, env, br
 def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
     p=hub(ctx, env)
     p.locator('#hub-q').fill('vargo')
+    p.locator('#hub-minGrade').select_option('B-')
     p.locator('[data-hub=save-view]').click()
     p.locator('#hub-save-name').fill('My CS2 research')
     p.locator('#hub-save-confirm').click()
@@ -126,6 +127,7 @@ def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
     p.wait_for_selector('#hub-rows tr')
     p.locator('#hub-views').select_option('0')
     assert p.locator('#hub-q').input_value()=='vargo'
+    assert p.locator('#hub-minGrade').input_value()=='B-'
     p.locator('.h-sidebar [data-id=alerts]').click()
     assert 'Vargo line updates' in p.locator('#hub-alerts-body').inner_text()
     assert 'No email or push' in p.locator('#hub-alerts-body').inner_text()

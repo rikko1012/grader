@@ -21,6 +21,12 @@ def export(data_dir, league, model_version='sm-1'):
     root = Path(data_dir)
     learning = sqlite3.connect('file:' + (root/'model/learning.db').as_posix() + '?mode=ro', uri=True)
     canonical = sqlite3.connect('file:' + (root/'canonical.db').as_posix() + '?mode=ro', uri=True)
+    shown_path = root/'model/shown.db'
+    shown = sqlite3.connect(shown_path.resolve().as_uri()+'?mode=ro', uri=True) if shown_path.exists() else None
+    if shown:
+        shown.row_factory = sqlite3.Row
+        shown.execute('PRAGMA query_only=ON')
+        shown.execute('BEGIN')
     learning.row_factory = canonical.row_factory = sqlite3.Row
     learning.execute('BEGIN')
     canonical.execute('BEGIN')
@@ -58,18 +64,25 @@ def export(data_dir, league, model_version='sm-1'):
             side = fc.chosen_side
             if side not in ('over','under'):
                 skip('no_selected_side'); continue
+            published = None
+            if shown:
+                sh = shown.execute('SELECT * FROM shown WHERE forecast_id=?',(fc.forecast_id,)).fetchone()
+                if sh and (sh['league'],sh['stat'],sh['line']) == (league,fc.stat,fc.line):
+                    if (parse_utc(event.start_utc)-parse_utc(sh['shown_at'])).total_seconds() >= 1800:
+                        published = sh['p_'+side]
             key = (fc.event_id,fc.player_id,fc.stat,fc.scope,fc.line,r['platform'])
             selected[key] = {'forecast_id':fc.forecast_id,'sport':league,'model_version':model_version,
                              'artifact_version':fc.artifact_version,
                              'probability_stage':'saved_model_before_board_calibration',
                              'match_key':fc.event_id,'player_id':fc.player_id,'market':fc.stat,
                              'scope':fc.scope,'line':fc.line,'book':r['platform'],'side':side,
-                             'p':getattr(fc,'p_'+side)/dec,'market_p':None,
+                             'p':getattr(fc,'p_'+side)/dec,'market_p':None,'published_p':published,
                              'status':r['outcome'] if r['outcome'] in ('push','void') else 'win' if r['outcome']==side else 'loss',
                              'forecast_at':fc.forecast_at,'start_at':event.start_utc,'settled_at':r['settled_at'],
                              'settlement_id':r['settlement_id']}
     finally:
         learning.close(); canonical.close()
+        if shown: shown.close()
     return {'schema':'gradecore-export-1','built_at':now_utc(),'sport':league,'model_version':model_version,
             'population':'last saved sm-1 forecast >=30 minutes before start per event/player/stat/period/line/book',
             'scanned':scanned,'excluded':excluded,'rows':list(selected.values())}
