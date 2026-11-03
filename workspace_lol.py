@@ -251,7 +251,7 @@ def _build(srv):
               "line": x.get("line"), "stat": x.get("stat"), "scope": x.get("scope"), "scope_digits": "".join(str(n) for n in PERIOD.get(x.get("scope"), ("", "", ()))[2]), "period": rec["market"]["period"], "platform": x.get("platform"), "start": x.get("start"), "checked": x.get("line_checked"),
               "over": rec["offer"]["over"]["offered"], "under": rec["offer"]["under"]["offered"], "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "po": x.get("p_over"), "pu": x.get("p_under"), "side": rec["scout"]["side"],
               "model": x.get("model_version"), "at": x.get("forecast_at"), "name": x.get("player") or "", "team": x.get("team") or "", "pkey": rec["player"]["key"], "lt": rec["market"]["line_type"], "ud": x.get("ud_app_link"),
-              "eid": rec["event"]["id"], "member": {k: x.get(k) for k in RESEARCH_KEYS}}
+              "eid": rec["event"]["id"], "projection_id": r.get("line_id"), "member": {k: x.get(k) for k in RESEARCH_KEYS}}
         index[(x.get("platform"), x.get("key"))] = ix
         props.setdefault((ix["eid"], ix["pkey"], ix["stat"], ix["period"]), []).append((x.get("platform"), x.get("key")))
     at = member.get("at")
@@ -377,6 +377,12 @@ def receipt_fields(x, leg, res, e):
 
 def entry_link(x, side):
     return x.get("ud")
+
+
+def entry_projection(x, side):
+    if x.get('platform')!='prizepicks':return None
+    return {'book':'prizepicks','projection_id':x.get('projection_id'),'side':side,
+            'line':x.get('line'),'odds_type':x.get('lt')}
 
 
 # ---------------------------------------------------------------------------------------------------------------- settlement

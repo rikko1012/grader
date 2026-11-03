@@ -100,3 +100,30 @@ def test_share_card_requires_checked_entry_and_does_not_track(ctx, env, tmp_path
     data = p.evaluate("fetch('/api/upgrade/mine').then(r=>r.json())")
     assert data['receipts'] == []
     assert not p.errors
+
+
+def test_classic_book_link_rechecks_without_tracking(ctx, env, monkeypatch):
+    import server
+    monkeypatch.setattr(server, 'PP_OPEN_LINK', True)
+    p = start(ctx, env)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-book').select_option('prizepicks')
+    for name in ('vargo', 'orlo'):
+        p.locator('#hub-q').fill(name)
+        p.locator('#hub-rows .h-add:not([disabled])').first.click()
+    p.evaluate("location.hash='/slips'")
+    p.wait_for_function("document.querySelector('#hub-studio-body').textContent.includes('1 of 1 entry ready')")
+    p.locator('[data-u=open-entry]').first.click()
+    box = p.locator('#u-book-open')
+    box.wait_for(state='visible')
+    href = box.locator('a').first.get_attribute('href')
+    assert href.startswith('https://app.prizepicks.com/board?projections=')
+    assert len(href.split('projections=')[1].split(',')) == 2
+    assert p.evaluate("fetch('/api/upgrade/mine').then(r=>r.json())")['receipts'] == []
+    box.locator('button').click()
+    # A click must contact the server again, not reuse the earlier checked URL.
+    p.route('**/api/upgrade/recheck', lambda r: r.fulfill(status=503, content_type='application/json', body='{"error":"offline"}'))
+    p.locator('[data-u=open-entry]').first.click()
+    p.wait_for_timeout(300)
+    assert not box.is_visible()
+    assert not p.errors
