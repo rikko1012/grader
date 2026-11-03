@@ -68,6 +68,7 @@ export function mount(C) {
   }
   function row(r) {
     const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r));
+    const choose=!side||!r.offer[side]?.offered;
     const alternatives=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform);
     const state=unavailableReason(r), unavailable=!!state;
     const label=s.hold?'Research':s.grade||'Lean';
@@ -78,7 +79,7 @@ export function mount(C) {
       <td>${cell(r,5)}</td><td>${cell(r,10)}</td><td>${cell(r,20)}</td>
       <td><button class="h-book" data-hub="expand" data-id="${k}">${alternatives.length?`${alternatives.length} other ${alternatives.length===1?'line':'lines'}`:'Research'}${different(r)?'<i>Lines differ</i>':''}</button></td>
       <td><span class="h-grade ${s.hold?'held':''}">${esc(label)}</span><small title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small>${unavailable?`<small class="h-warning">${esc(state)}</small>`:''}</td>
-      <td><button class="h-add ${on||!side?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':!side?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':!side?'Choose':'+'}</button></td></tr>${H.expanded===key(r)?'<tr class="h-detail-row"><td colspan="12"><div id="hub-detail" aria-live="polite"></div></td></tr>':''}`;
+      <td><button class="h-add ${on||choose?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':choose?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':choose?'Choose':'+'}</button></td></tr>${H.expanded===key(r)?'<tr class="h-detail-row"><td colspan="12"><div id="hub-detail" aria-live="polite"></div></td></tr>':''}`;
   }
   function paintBoard() {
     if(!isOpen()||H.section!=='board') return;
@@ -294,7 +295,7 @@ export function mount(C) {
     'detail-add'(){const r=rec(H.detail);if(!r||H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;if(C.onSlip(r))return C.openTray();C.addLeg(r,H.histSide);refreshSlip();},
     research(id){const r=rec(id);if(r)C.research(r);else C.say('This offer is no longer on the board. Refresh to see current lines.');},
     books(id){const r=rec(id);if(r)C.research(r,'books');},
-    add(id){const r=rec(id);if(!r)return;if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return C.openTray();if(!r.scout.side)return C.research(r);C.addLeg(r,r.scout.side);refreshSlip();},
+    add(id){const r=rec(id);if(!r)return;if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return C.openTray();if(!r.scout.side||!r.offer[r.scout.side]?.offered)return C.research(r);C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
     refresh(){H.detailSeq++;H.expanded=null;H.detail=null;load(true);}, tray(){section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},

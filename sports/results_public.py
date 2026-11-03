@@ -423,9 +423,10 @@ def head_to_head(rows):
     -> [{"scout", "market", "stat", "pairs", "pushes", "games", "scout_brier", ..., "diff": {...}}] (stat "all" first)."""
     newest = {}
     for r in rows:
-        if r.get("status") not in ("settled", "void") or not r.get("model"):
+        model = r.get("model") or r.get("model_version")
+        if r.get("status") not in ("settled", "void") or not model:
             continue
-        k = (r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3), r["model"])
+        k = (r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3), model)
         if k not in newest or (r.get("forecast_at") or "") > (newest[k].get("forecast_at") or ""):
             newest[k] = r
     by_key = defaultdict(dict)
