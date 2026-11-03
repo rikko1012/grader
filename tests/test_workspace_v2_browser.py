@@ -18,7 +18,11 @@ def start(ctx, env, path='/#/board', width=1440):
 
 
 def test_game_route_uses_live_fixture_records_and_scoped_board(ctx, env):
-    p = start(ctx, env, '/#/games')
+    p = start(ctx, env)
+    p.locator('#hub-q').fill('not-a-player')
+    p.locator('#hub-watch').click()
+    p.locator('#hub-soonOnly').click()
+    p.evaluate("location.hash='/games'")
     try:
         p.wait_for_selector('.h-game-card')
     except Exception:
