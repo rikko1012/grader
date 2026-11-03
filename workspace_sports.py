@@ -5,8 +5,8 @@ Handler._sports_route, with a stand-in for the request: in proxy and inprocess m
 default service mode it answers not_here and names the sports service, and the read goes there with a token minted by the same
 hook. The token stays in this process: it is never logged and never reaches a page.
 
-Held grades stay held: a record carries no letter and no stake, only the research estimate and the chance the sports board shows
-at that line. What the chance is, and whether the row has a lean, are read from the row (web/sports/table.js does the same).
+Letters, chances and leans come from the published sports row. Held rows stay held; released research letters carry no
+staking recommendation. This adapter never upgrades the model's validation status or derives a letter from a probability.
 
 For 700 members: one snapshot per league every BOARD_TTL s, single flight, revalidated by ETag so an unchanged board costs one
 small request per part and no parse. A live pick check is shared per exact leg for CHECK_TTL s behind CHECK_SLOTS. The index keeps
@@ -307,8 +307,9 @@ def offer_rev(q):
     return "d-" + _hash(q.get("r"), q.get("l"), q.get("v"), q.get("o"), q.get("m"), q.get("d"))
 
 
-def read_rev(lean, sc, hold):
-    return "r-" + _hash(lean, None if not sc else sc["po"], None if not sc else sc["pu"], hold)
+def read_rev(lean, sc, hold, grade=None):
+    fields = (lean, None if not sc else sc["po"], None if not sc else sc["pu"], hold)
+    return "r-" + _hash(*(fields + (grade,) if grade is not None else fields))
 
 
 def _side_prices(q, i):
@@ -332,6 +333,14 @@ def record_of(lg, doc, m, q, view):
     mkc = market_at(m.get("mk"), q)
     lean, held = lean_and_hold(m, q, sc, mkc)
     held = None if held is None else held or HOLD_DETAIL.format(LG=lg.upper())
+    # Letters are published by Sports, never reconstructed from probabilities here.
+    # The owner's containment override may release research letters; it does not
+    # validate the model or release stakes. Sanity/market holds still win.
+    signal = q.get("x") or {}
+    grade = signal.get("gr") if held is None and lean and signal.get("v") == "cf-2" else None
+    if grade not in ("A", "B", "C", "Lean"):
+        grade = None
+    hold = None if grade else {"label": HOLD_LABEL, "reason": held or HOLD_DETAIL.format(LG=lg.upper())}
     line = q.get("l")
     v = view.get(m.get("k")) or {}
     a = (v.get("lines") or {}).get(line_key(line)) if line is not None else None
@@ -346,11 +355,12 @@ def record_of(lg, doc, m, q, view):
            "market": {"stat": m.get("st"), "stat_label": (doc.get("stats") or {}).get(m.get("st"), m.get("st")), "period": scope, "period_label": period_label, "line_type": "standard"},
            "offer": {"platform": p, "platform_label": book_label(p), "offer_id": rid, "revision": offer_rev(q), "revision_kind": "exact", "line": line, "seen_at": q.get("t"),
                      "over": _side_prices(q, 0), "under": _side_prices(q, 1), "moved_from": None, "moved_at": None},
-           "scout": {"side": lean, "read_rev": read_rev(lean, sc, held), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
-                     "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": None, "units": None, "stake_reason": None,
-                     "hold": {"label": HOLD_LABEL, "reason": held or HOLD_DETAIL.format(LG=lg.upper())}, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
-                     "validation": {"kind": "research", "label": HOLD_LABEL, "detail": held or HOLD_DETAIL.format(LG=lg.upper())}},
-           "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": None, "avg": None, "recent": None},
+           "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
+                     "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
+                     "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
+                     "validation": {"kind": "research", "label": "Research grade" if grade else HOLD_LABEL,
+                                    "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else held or HOLD_DETAIL.format(LG=lg.upper())}},
+           "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None},
            "market_chance": {"p_over": mkc["po"], "p_under": mkc["pu"], "sources": mkc.get("n")} if mkc else None,
            "state": {"kind": "ok", "reason": None}}
     x = {"r": q.get("r"), "p": p, "l": line, "o": q.get("o"), "m": q.get("m"), "g": q.get("g"), "ud": q.get("ud"), "fid": sc.get("fid") if sc else None, "po": sc["po"] if sc else None,
@@ -537,13 +547,15 @@ def check_leg(srv, leg, lg, now):
 
 
 def payload(x, leg, res, e):
-    """What the member saw, frozen. A held grade stays held here too: no letter, no stake."""
+    """Freeze the displayed research letter only on its published side; never release stakes."""
     rec = json.loads(x["rec"])
     p_shown = x["po"] if leg["side"] == "over" else x["pu"]
+    grade = rec["scout"].get("grade") if leg["side"] == x["lean"] else None
     return {"player": rec["player"]["name"], "team": rec["player"]["team"], "opponent": rec["player"]["opponent"], "matchup": rec["event"]["label"], "competition": rec["event"]["competition"],
             "stat_label": rec["market"]["stat_label"], "period_label": rec["market"]["period_label"], "platform_label": rec["offer"]["platform_label"], "scout_side": x["lean"], "on_side": leg["side"] == x["lean"],
-            "displayed_p": p_shown, "grade": None, "units": None, "stake_reason": None, "research": True, "hold": rec["scout"]["hold"]["label"], "projection": x["mu"], "forecast_p": p_shown,
-            "forecast_at": x["at"], "forecast_grade": None, "forecast_units": None, "l10": rec["history"]["l10"], "feed_at": rec["offer"]["seen_at"], "rules_version": e.get("rules_version"), "entry_type": e.get("entry_type")}
+            "displayed_p": p_shown, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
+            "research": True, "hold": (rec["scout"].get("hold") or {}).get("label"), "projection": x["mu"], "forecast_p": p_shown,
+            "forecast_at": x["at"], "forecast_grade": grade, "forecast_units": 0 if grade else None, "l10": rec["history"]["l10"], "feed_at": rec["offer"]["seen_at"], "rules_version": e.get("rules_version"), "entry_type": e.get("entry_type")}
 
 
 def receipt_fields(x, leg, lg, res, e):
@@ -649,12 +661,12 @@ def context_of(x, player, lg):
             add(c.get("label"), c.get("value"))
     for s in (player or {}).get("stats") or []:
         for w in s.get("windows") or []:
-            if w.get("window") in ("L5", "L10") and w.get("mean") is not None:
+            if w.get("window") and w.get("mean") is not None:
                 add(f"{s.get('label')}, {w['window']}", w["mean"])
     for r in ((player or {}).get("engine") or {}).get("rows") or []:
-        if str(r.get("group") or "") in ("Defensive matchup", "Matchup") and r.get("value") is not None:
+        if r.get("label") and r.get("value") is not None:
             add(r.get("label"), r.get("value"))
-    return {"rows": rows[:24]}
+    return {"rows": rows[:200]}
 
 
 def line_doc(srv, lg, book, rid):
@@ -673,7 +685,7 @@ def line_doc(srv, lg, book, rid):
         if o is not None:
             r = json.loads(o["rec"])
             books.append({"platform": bk, "platform_label": r["offer"]["platform_label"], "row_id": i, "key": r["key"], "line": o["l"], "line_type": "standard", "over": r["offer"]["over"], "under": r["offer"]["under"],
-                          "seen_at": r["offer"]["seen_at"], "scout_side": o["lean"], "p_side": r["scout"]["p_side"], "grade": None})
+                          "seen_at": r["offer"]["seen_at"], "scout_side": o["lean"], "p_side": r["scout"]["p_side"], "grade": r["scout"]["grade"]})
     same, other = x.get("books") or ([], [])
     mk = rec.get("market_chance")
     forecast = {"id": x["fid"], "logged_at": x["at"], "model_version": x["model"], "p_saved": None} if x["fid"] else None

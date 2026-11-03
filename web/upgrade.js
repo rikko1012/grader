@@ -283,6 +283,49 @@
     say(`Added ${rec.player.name} ${cap(side)} ${rec.offer.line} to your account slip`);
     return true;
   }
+  // Generate from published forecasts only. The server remains the authority for
+  // identity, freshness, permissions, duplicate picks and platform rules.
+  async function generateSlip(records, platform, target) {
+    const before = sig(), existing = T.legs.filter(l => l.book === platform);
+    const need = target - existing.length;
+    if (need <= 0) throw new Error(`Your ${PLATFORMS[platform].label} entry already has ${existing.length} picks. Increase the total or remove a pick.`);
+    if (T.legs.length + need > MAX_LEGS) throw new Error(`Your account draft can hold ${MAX_LEGS} picks. Remove a pick first.`);
+    const excluded = new Set(), fixedEvents = new Set(existing.map(l => l.sport + '|' + l.event_id));
+    const fixedPlayers = new Set(existing.map(l => l.sport + '|' + l.player_key));
+    const pool = records.filter(r => r.offer.platform === platform && r.scout.side && r.scout.grade && !r.scout.hold
+      && isNum(chanceOf(r, r.scout.side)) && !addRefusal(r, r.scout.side) && !onSlip(r))
+      .sort((a,b) => chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side) || a.key.localeCompare(b.key));
+    const types = Object.fromEntries(entries().map(e => [e.platform, typeOf(e)]));
+    if (!types[platform]) types[platform] = PLATFORMS[platform].types[0][0];
+    let failure = '';
+    for (let attempt=0; attempt<3; attempt++) {
+      const events = new Set(fixedEvents), players = new Set(fixedPlayers), selected = [];
+      // Underdog combinations use one sport until mixed-sport support is verified.
+      let udSport = platform === 'underdog' ? existing[0]?.sport : null;
+      for (const r of pool) {
+        const event = r.sport+'|'+r.event.id, player = r.sport+'|'+r.player.key;
+        if (excluded.has(legId(r,r.scout.side)) || events.has(event) || players.has(player) || (udSport && r.sport!==udSport)) continue;
+        selected.push(makeLeg(r,r.scout.side)); events.add(event); players.add(player);
+        if(platform==='underdog')udSport=r.sport;
+        if(selected.length===need)break;
+      }
+      if(selected.length!==need) throw new Error(failure || `Only ${selected.length} additional eligible picks from different games are available. Choose fewer picks or more sports.`);
+      const proposed = [...T.legs,...selected];
+      const doc = await api('recheck',{idem:idem(),legs:proposed.map(wireLeg),entry_types:types});
+      if(sig()!==before) throw new Error('Your draft changed during generation. Generate again to use the current draft.');
+      const bad = selected.filter(l => !doc.legs[l.id]?.ok);
+      if(bad.length) {
+        for(const l of bad)excluded.add(l.id);
+        failure = doc.legs[bad[0].id]?.problems?.[0]?.text || 'Current offers did not pass recheck. Refresh and try again.';
+        continue;
+      }
+      if(!doc.entries[platform]?.ok) throw new Error(doc.entries[platform]?.problems?.[0]?.text || 'This entry did not pass its platform rules. Your draft was kept.');
+      T.legs=proposed; T.types[platform]=types[platform]; slipChanged();
+      T.check=doc; T.checkSig=sig(); T.checkErr=null; paintTray();
+      return selected.length;
+    }
+    throw new Error(failure || 'No current combination passed recheck. Your draft was kept.');
+  }
   function removeLeg(id) { T.legs = T.legs.filter((l) => l.id !== id); slipChanged(); }
   const onSlip = (rec) => T.legs.some((l) => l.sport === rec.sport && l.key === rec.key && l.book === rec.offer.platform);
 
@@ -407,7 +450,9 @@
     const open = c && c.open ? `<a class="u-btn u-gold" href="${esc(c.open.url)}" target="_blank" rel="noopener">${esc(c.open.label)}</a>` : "";
     const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
     const ev = c && c.ev;
-    const math = `<div class="u-slip-metrics">${metric(ev && ev.payout ? esc(ev.payout.multiple) + '×' : '—', 'All-hit payout')}${metric(ev && ev.available ? pct(ev.hit_chance) : '—', 'Win chance')}${metric(ev && ev.available ? pct(ev.ev) : '—', 'Expected return')}</div><p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>`;
+    const values = (ev?.payout ? metric(esc(ev.payout.multiple)+'×','All-hit payout') : '')
+      + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
+    const math = `${values?`<div class="u-slip-metrics">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>`;
     return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
       ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}
@@ -425,7 +470,7 @@
   const countsText = (c) => Object.entries(c || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${STATUS[k] ? STATUS[k].toLowerCase() : k}`).join(" · ");
   function receiptHtml(r) {
     const st = r.status, open = T.openPick === r.id, scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;
-    const read = r.research ? `${r.hold || "Research estimate"} ${scoutSide}`.trim() : `${r.grade || "Lean"} ${scoutSide}`.trim();
+    const read = `${r.grade || r.hold || (r.research ? "Research estimate" : "Lean")} ${scoutSide}`.trim();
     const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
       ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label], ["Tracked", when(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="u-pick-body"><dl class="u-kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><ol class="u-time">${(r.timeline || []).map((t) => `<li><time>${esc(when(t.at))}</time>${esc(t.text)}</li>`).join("")}</ol></div>` : "";
@@ -528,8 +573,9 @@
     return `<div class="u-sec-h"><h3>By map, last ${res.length} series</h3></div><table class="u-tbl"><thead><tr><th scope="col">Map</th><th scope="col">Played</th><th scope="col">Average per map</th></tr></thead><tbody>${[...by.entries()].sort((a, b) => b[1].n - a[1].n).map(([name, e]) => `<tr><td>${esc(name)}</td><td>${e.n}</td><td>${(e.t / e.n).toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
   }
   function forecastHtml(rec, side) {
-    const s = rec.scout, p = chanceOf(rec, side), val = s.validation || {}, off = s.side && side !== s.side && p == null, stake = `${s.hold || s.units == null ? 0 : s.units}U`;
-    return `<div class="u-forecast"><div class="u-fc-num">${off ? "--" : pct(p)}</div><div><p>${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}</p><p><b>${esc(verdictText(rec, side))}</b> · Stake ${esc(stake)}</p></div>${val.label ? `<span class="u-tag">${esc(val.label)}</span>` : ""}</div>${s.range80 ? `<p class="u-dim">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${s.stake_reason ? `<p class="u-dim">${esc(s.stake_reason)}</p>` : ""}${val.detail ? `<p class="u-dim">${esc(val.detail)}</p>` : ""}`;
+    const s = rec.scout, p = chanceOf(rec, side), val = s.validation || {}, off = s.side && side !== s.side && p == null;
+    const stake = !s.hold && s.units > 0 ? ` · Stake ${esc(s.units)}U` : '';
+    return `<div class="u-forecast"><div class="u-fc-num">${off ? "--" : pct(p)}</div><div><p>${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}</p><p><b>${esc(verdictText(rec, side))}</b>${stake}</p></div></div>${s.range80 ? `<p class="u-dim">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${val.detail || s.stake_reason ? `<details class="u-det"><summary>Grade methodology</summary><p>${esc(val.detail || s.stake_reason)}</p></details>` : ""}`;
   }
   function sidesHtml(rec, side) {
     const b = (sd) => {
@@ -1046,7 +1092,7 @@
     try {
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
-        research, researchDoc, chartSvg, addLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText });
+        research, researchDoc, chartSvg, addLeg, generateSlip, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     await loadState();
     paintTray();

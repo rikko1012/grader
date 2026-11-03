@@ -270,10 +270,10 @@ def test_slip_tray_recheck_track_receipt_record(ctx, env):
     p.wait_for_selector("#u-tray .u-status b:has-text('ready')", timeout=15000)
     p.wait_for_selector("#u-tray [data-u=track]:not([disabled])", timeout=15000)
     text = p.locator("#u-tray").inner_text()
-    assert "All-hit payout" in text and "Expected return" in text
-    # Current validation failures keep probability/return figures absent, not fabricated from leg chances.
-    assert p.locator('#u-tray .u-slip-metrics>div').nth(1).locator('b').inner_text() == '—'
-    assert p.locator('#u-tray .u-slip-metrics>div').nth(2).locator('b').inner_text() == '—'
+    assert "All-hit payout" in text and "Expected return" not in text
+    # Show the verified payout, without empty metric boxes or invented probability/return figures.
+    assert p.locator('#u-tray .u-slip-metrics>div').count() == 1
+    assert p.locator('#u-tray .u-slip-metrics b').inner_text() != '—'
     p.locator("#u-tray [data-u=track]").first.click()
     p.wait_for_selector("#u-tray .u-note.good", timeout=15000)
     p.locator("#u-tray .u-note.good [data-u=tab]").click()

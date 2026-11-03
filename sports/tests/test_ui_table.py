@@ -32,6 +32,8 @@ def test_hit_counts_are_strict_with_pushes_apart():
     # last 10 played: 25 20 21 20 18 30 12 20 22 19 ; last 5: 25 20 21 20 18
     assert s["lines"]["20"] == [4, 3, 3, 10, 2, 1, 2, 5]
     assert s["lines"]["20.5"] == [4, 6, 0, 10, 2, 3, 0, 5]
+    assert s["lines20"]["20"] == [5, 3, 3, 11]
+    assert s["lines20"]["20.5"] == [5, 6, 0, 11]
     assert s["played"] == 11 and s["seasons10"] == [2027] and s["to10"] == "2026-10-20"
     assert board_view.line_key(4.0) == "4" and board_view.line_key(18.5) == "18.5"
 

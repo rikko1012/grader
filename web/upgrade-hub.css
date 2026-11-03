@@ -205,3 +205,132 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
  .h-studio-intro{display:block;padding-top:8px}.h-studio-intro h2{font-size:19px}.h-studio-intro>button{margin-top:15px;width:100%}
  #hub-studio-body .u-entry-h,#hub-studio-body .u-entry-foot{padding:13px}#hub-studio-body .u-leg{padding:15px 35px 15px 13px}
 }
+/* Member fit: a readable board, one sport switcher, and a full-width studio. */
+#u-hub{font-size:14px}
+#u-hub .h-sport-nav,#u-hub .h-sport-nav-label{display:none}
+#u-hub .h-sidebar{padding-top:28px}
+#u-hub .h-sidebar nav button,#u-hub .h-sidebar nav a{font-size:14px;min-height:46px}
+#u-hub .h-center{padding-inline:24px}
+#u-hub .h-top{margin-bottom:18px}
+#u-hub .h-table-title{flex-wrap:wrap}
+#u-hub .h-tools{flex-wrap:wrap}
+#u-hub .h-tools label{font-size:11px}
+#u-hub .h-tools .h-search{min-width:180px}
+#u-hub .h-tools select,#u-hub .h-tools input{font-size:13px}
+#u-hub .h-table{table-layout:fixed;width:100%}
+#u-hub .h-table>thead th{font-size:11px;white-space:normal}
+#u-hub .h-table>thead th:nth-child(1){width:3%}
+#u-hub .h-table>thead th:nth-child(2){width:23%}
+#u-hub .h-table>thead th:nth-child(3){width:13%}
+#u-hub .h-table>thead th:nth-child(4){width:9%}
+#u-hub .h-table>thead th:nth-child(5){width:6%}
+#u-hub .h-table>thead th:nth-child(6){width:8%}
+#u-hub .h-table>thead th:nth-child(7),#u-hub .h-table>thead th:nth-child(8),#u-hub .h-table>thead th:nth-child(9){width:5%}
+#u-hub .h-table>thead th:nth-child(10){width:10%}
+#u-hub .h-table>thead th:nth-child(11){width:8%}
+#u-hub .h-table>thead th:nth-child(12){width:5%}
+#u-hub .h-table tr[data-record]>td{padding:14px 6px;font-size:13px;overflow-wrap:anywhere;min-width:0}
+#u-hub .h-table tr[data-record] small{font-size:11px;white-space:normal}
+#u-hub .h-player{min-width:0;max-width:100%;gap:8px}
+#u-hub .h-player>span{min-width:0}
+#u-hub .h-player b{font-size:14px;white-space:normal;overflow-wrap:anywhere}
+#u-hub .h-avatar{flex:0 0 30px}
+#u-hub .h-match{font-size:11px;white-space:normal}
+#u-hub .h-hit{font-size:13px}
+#u-hub .h-book{max-width:100%;white-space:normal;font-size:11px}
+#u-hub .h-add{min-width:0;max-width:100%;padding:5px;font-size:11px}
+#u-hub .h-grade{font-size:13px}
+#u-hub .h-health details{border:0;background:transparent;padding:6px 0;font-size:12px}
+#u-hub .h-generator{padding:24px;background:#171d26;border:1px solid #38475c;border-top:3px solid #4389ff;border-radius:10px;margin-bottom:26px}
+.h-generator-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+#u-hub .h-generator h2{font-size:26px;margin-top:5px}
+.h-generator-heading>span{font-size:12px;color:#b1c4dd}
+#u-hub .h-generator p{font-size:13px;line-height:1.7;max-width:780px}
+#hub-generation-sports{border:0;margin:18px 0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+#hub-generation-sports legend{font-size:12px;margin-bottom:8px;color:#c1cee0}
+#hub-generation-sports label{display:flex;align-items:center;gap:8px;border:1px solid #3d4c61;border-radius:6px;padding:9px 14px;cursor:pointer}
+#hub-generation-sports label:has(input:checked){background:#183255;border-color:#568ee0;color:#e4efff}
+#u-hub #hub-generation-sports input{width:16px;height:16px;min-height:0;padding:0;accent-color:#5496ff}
+.h-generator-controls{display:grid;grid-template-columns:minmax(140px,1fr) minmax(110px,.6fr) minmax(160px,1fr);gap:12px;align-items:end;max-width:750px}
+.h-generator-controls label{display:grid;gap:6px;min-width:0;font-size:12px}
+.h-generator-controls select{width:100%;min-width:0}
+#u-hub #hub-generate{background:#347ff0;border-color:#347ff0;color:white;font-weight:600;min-height:43px}
+.h-generator details{font-size:12px;color:#b3c5dc;margin-top:10px}
+.h-generator summary{cursor:pointer;min-height:30px}
+#hub-generation-status:empty{display:none}
+#hub-generation-status:not(:empty){padding:12px;border-left:2px solid #5898ff;background:#202e41;color:#e0ecfd}
+#u-hub .u-entry,#u-hub .u-entry-h,#u-hub .u-entry-foot,#u-hub .u-leg{min-width:0;max-width:100%;overflow-wrap:anywhere}
+#u-hub .u-entry-h{flex-wrap:wrap;gap:12px}
+#u-hub .u-entry-h>span{min-width:0;flex:1 1 140px}
+#u-hub .u-entry-h small{white-space:normal;line-height:1.6}
+#u-hub .u-seg{flex-wrap:wrap;max-width:100%;gap:4px}
+#u-hub .u-seg button{white-space:normal;min-width:0}
+#u-hub .u-slip-metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+#u-hub .u-slip-metrics>div{min-width:0;overflow-wrap:anywhere}
+#u-hub .u-slip-metrics b{font-size:21px}
+#u-hub .u-slip-metrics span{font-size:11px;white-space:normal;line-height:1.5}
+#u-hub .u-acts{flex-wrap:wrap}
+#u-hub .u-leg-name,#u-hub .u-leg-pick,#u-hub .u-leg-meta{white-space:normal;overflow-wrap:anywhere}
+#hub-studio-body .u-leg-pick{font-size:14px;line-height:1.7}
+#hub-studio-body .u-leg-meta{font-size:12px;line-height:1.7}
+#u-hub .h-detail-head{flex-wrap:wrap}
+.h-player-markets{display:flex;gap:8px;flex-wrap:wrap;padding:4px 18px 16px}
+#u-hub .h-player-markets button{font-size:12px;white-space:normal;max-width:100%}
+.h-player-markets small{display:block;margin-top:3px}
+.h-stat-library{margin:0 18px 20px;border-top:1px solid #38465a;padding-top:16px}
+.h-stat-library summary{cursor:pointer;font-size:15px;font-weight:600;min-height:32px}
+.h-stat-library summary span{font-size:12px;font-weight:400;color:#aebed3;margin-left:8px}
+.h-stat-library dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:0 24px;margin:8px 0}
+.h-stat-library dl>div{min-width:0;border-bottom:1px solid #2c394b;padding:12px 0}
+.h-stat-library dt{font-size:12px;line-height:1.5;color:#aebed3;overflow-wrap:anywhere}
+.h-stat-library dd{margin:6px 0 0;font-size:16px;color:#f4f7fb;overflow-wrap:anywhere}
+@media(min-width:641px) and (max-width:1650px){
+ .scout-hub{grid-template-columns:172px minmax(0,1fr)}
+ .h-slip{display:none}.h-mobile-slip{display:block}.h-center{padding-bottom:95px}
+}
+@media(min-width:641px) and (max-width:1100px){
+ #u-hub .h-center{padding-inline:16px}
+ #u-hub .h-avatar{display:none}
+ #u-hub .h-table>thead th:nth-child(5),#u-hub .h-table tr[data-record]>td:nth-child(5),#u-hub .h-table>thead th:nth-child(7),#u-hub .h-table tr[data-record]>td:nth-child(7),#u-hub .h-table>thead th:nth-child(9),#u-hub .h-table tr[data-record]>td:nth-child(9){display:none}
+ #u-hub .h-table>thead th:nth-child(2){width:28%}
+ #u-hub .h-table>thead th:nth-child(3){width:16%}
+ #u-hub .h-table>thead th:nth-child(4){width:11%}
+ #u-hub .h-table>thead th:nth-child(8){width:8%}
+ #u-hub .h-table>thead th:nth-child(12){width:8%}
+ #u-hub .h-table tr[data-record]>td{padding:12px 4px;font-size:12px}
+}
+@media(max-width:800px){
+ .scout-hub,.scout-hub.h-studio-mode{grid-template-columns:minmax(0,1fr)}
+ #u-hub .h-sidebar{display:none}.h-nav-mobile{display:flex;flex-wrap:wrap}.h-tools-menu{display:block}
+}
+@media(max-width:640px){
+ #u-hub .h-center{padding:14px 12px 100px}
+ #u-hub .h-tools{display:grid}
+ #u-hub .h-tools .h-search{min-width:0}
+ #u-hub .h-table tr[data-record]>td{padding:0}
+ #u-hub .h-table tr[data-record] small{font-size:11px}
+ #u-hub .h-generator{padding:16px}
+ .h-generator-controls{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ #hub-generate{grid-column:1/-1}
+ #hub-generation-sports{gap:6px}
+ #hub-generation-sports label{padding:8px 10px}
+ #u-hub .h-table-title>small{display:none}
+ #u-hub .h-sports{gap:8px}
+ #u-hub .h-sports button{padding:8px 4px}
+ #u-hub .h-sports span{margin-left:4px}
+ .h-studio-intro{margin-bottom:18px}
+ #u-hub .h-table .h-detail-row td{padding:0}
+ .h-player-markets{padding-inline:12px}
+ .h-stat-library{margin-inline:12px}
+}
+#u-hub .h-studio-intro{padding:0 0 14px;margin-bottom:16px;align-items:center}
+#u-hub .h-studio-intro h2,#u-hub .h-studio-intro p{display:none}
+#u-hub .h-studio-intro>button{margin:0;align-self:auto}
+#u-hub .h-studio-intro .h-sync{font-size:12px}
+@media(max-width:640px){
+ #u-hub .h-studio-intro{display:flex;flex-wrap:wrap;gap:10px}
+ #u-hub .h-studio-intro>button{width:auto;font-size:12px}
+ #u-hub .h-generator{padding:14px}
+ #u-hub .h-generator h2{font-size:22px}
+ #u-hub .h-generator>p:first-of-type{font-size:12px;line-height:1.5}
+}

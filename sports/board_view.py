@@ -165,10 +165,13 @@ def row_summary(stat, lines, games):
     pv = played_values(games, stat)
     vals = [x[0] for x in pv]
     w10 = pv[:10]
-    out = {"lines": {}, "played": len(pv), "seasons10": sorted({x[1] for x in w10 if x[1] is not None}),
+    out = {"lines": {}, "lines20": {}, "played": len(pv), "seasons10": sorted({x[1] for x in w10 if x[1] is not None}),
            "from10": w10[-1][2] if w10 else None, "to10": w10[0][2] if w10 else None, "sd10": _sd(vals[:10])}
     for ln in sorted({float(x) for x in lines if x is not None}):
         out["lines"][line_key(ln)] = hit_counts(vals, ln, 10) + hit_counts(vals, ln, 5)
+        # Additive field: existing consumers keep the eight-value L10/L5 contract.
+        # Compute once in the snapshot job, never one player fetch per member row.
+        out["lines20"][line_key(ln)] = hit_counts(vals, ln, 20)
     return out
 
 
