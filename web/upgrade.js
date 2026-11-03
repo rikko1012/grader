@@ -109,7 +109,7 @@
   }
   const siblings = (rec) => (R.boards[rec.sport].props.get(propKey(rec)) || [rec]);
   const tallies = (rec) => {
-    const h = rec.history || {}, more = rec.sport === "cs2" ? R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)] || {} : {};
+    const h = rec.history || {}, saved = rec.sport === "cs2" ? R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)] || {} : {}, more = saved.line === rec.offer.line ? saved : {};
     return { l5: h.l5 || more.l5 || null, l10: h.l10 || null, l20: h.l20 || more.l20 || null };
   };
 
@@ -876,7 +876,7 @@
     return `<span class="u-hc${rate >= 0.6 ? " up" : ""}" title="${esc(`Last ${t.n} at this line: ${hits} for ${cap(side)}, ${t.push} push`)}"><i>L${n}</i><b>${hits}/${t.n}</b></span>`;
   }
   function hitsHtml(rec, side) {
-    const t = rec ? tallies(rec) : {}, sd = side || (rec && rec.scout.side) || "over", windows = rec && (rec.sport === "nba" || rec.sport === "nfl") && !t.l20 ? [5, 10] : [5, 10, 20];
+    const t = rec ? tallies(rec) : {}, sd = side || (rec && rec.scout.side) || "over", windows = [5, 10, 20];
     return `<div class="u-hits"><span class="u-sr">Hit rate at this line for ${cap(sd)}</span>${windows.map((n) => hitCell(n, t["l" + n], sd)).join("")}</div>`;
   }
   function booksCell(rec) {

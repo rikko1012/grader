@@ -157,7 +157,7 @@ def reset():
         _ST["sports"] = False
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
-    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL)
+    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={})
     for d in _HITS.values():
         d.clear()
     for name in ("workspace_lol", "workspace_sports"):
@@ -1010,7 +1010,7 @@ def get_state(h, srv, q, member, scratch, name):
 def _tally_of(ser, line, n):
     """Over, under and push at this line over the newest n results, the same count the research panel makes from the same rows."""
     s = ser[:n]
-    if len(s) < min(n, 5) or (n == 20 and len(s) <= 10):
+    if not s:
         return None
     return {"over": sum(g["value"] > line for g in s), "under": sum(g["value"] < line for g in s), "push": sum(g["value"] == line for g in s), "n": len(s)}
 
@@ -1020,19 +1020,29 @@ def _hits_doc(srv, snap):
     they reproduce the saved L10. One pass at a time, HITS_BUDGET_S at most, one history slot at a time: a member never waits on
     it, later passes go on from what the earlier ones left in the shared history cache, and rows it has not reached show L10."""
     d = _HITS_DOC
-    if d["body"] is not None and time.time() - d["at"] < d["ttl"]:
+    items = list(snap['index'].items())
+    key = tuple((book, rid, x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push')) for (book, rid), x in items)
+    if d.get('key') == key and d["body"] is not None and time.time() - d["at"] < d["ttl"]:
         return d["body"]
     if not d["lock"].acquire(blocking=False):
         return d["body"] or b'{"rows":{},"complete":false}'
     try:
-        t0, rows, complete = time.time(), {}, True
-        for (book, rid), x in list(snap["index"].items()):
-            if time.time() - t0 > HITS_BUDGET_S:
+        if d.get('key') != key:
+            d.update(key=key, cursor=0, rows={})
+        t0, rows, complete = time.time(), dict(d.get('rows', {})), True
+        start = d.get('cursor', 0)
+        for i in range(start, len(items)):
+            (book, rid), x = items[i]
+            if i > start and time.time() - t0 > HITS_BUDGET_S:
                 complete = False
+                d['cursor'] = i
                 break
             ser = _history(srv, x)
             if ser:
-                rows[f"{book}|{rid}"] = {"l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
+                rows[f"{book}|{rid}"] = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
+        if complete:
+            d['cursor'] = 0
+        d['rows'] = rows
         body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
         if d["body"] == body:
             body = d["body"]                    # identical bytes: the same object, so nothing is compressed again

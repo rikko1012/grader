@@ -16,6 +16,41 @@ def start(ctx, env, path='/#/board', width=1440):
     p.wait_for_function("document.querySelector('#hub-sports').textContent.includes('NFL')")
     return p
 
+@pytest.mark.parametrize('width',[390,1440])
+def test_history_visible_without_model_side(ctx,env,width):
+    def patch(route):
+        response=route.fetch()
+        doc=response.json()
+        for rec in doc.get('records',[]):
+            rec['scout']['side']=None
+            rec['history']={k:{'over':3,'under':1,'push':1,'n':5} for k in ('l5','l10','l20')}
+        route.fulfill(response=response,json=doc)
+    ctx.route('**/api/upgrade/board?*',patch)
+    p=start(ctx,env,width=width)
+    p.wait_for_selector('#hub-rows .h-hit-both')
+    assert 'O 3/5' in p.locator('#hub-rows .h-hit-both').first.inner_text().replace('\n',' ')
+    assert 'U 1/5' in p.locator('#hub-rows .h-hit-both').first.inner_text().replace('\n',' ')
+    no_h_scroll(p)
+    assert not p.errors
+
+@pytest.mark.parametrize('width',[390,1440])
+def test_player_props_are_collapsed_and_expand_without_losing_research(ctx,env,width):
+    p=start(ctx,env,width=width)
+    p.locator('#hub-q').fill('vargo')
+    p.wait_for_selector('#hub-rows .h-prop-toggle')
+    initial=p.locator('#hub-rows tr[data-record]').count()
+    toggle=p.locator('#hub-rows .h-prop-toggle').first
+    assert toggle.get_attribute('aria-expanded')=='false'
+    toggle.click()
+    assert p.locator('#hub-rows tr[data-record]').count()>initial
+    p.locator('#hub-rows .h-player').last.click()
+    p.wait_for_selector('#hub-detail .h-history-controls')
+    p.locator('#hub-rows .h-prop-toggle').first.click()
+    assert p.locator('#hub-rows tr[data-record]').count()==initial
+    assert p.locator('#hub-detail').count()==0
+    no_h_scroll(p)
+    assert not p.errors
+
 
 def test_game_route_uses_live_fixture_records_and_scoped_board(ctx, env):
     p = start(ctx, env)

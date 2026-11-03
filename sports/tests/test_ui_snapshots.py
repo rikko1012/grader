@@ -18,6 +18,22 @@ KAT = "nba:player:espn:3134907"
 BRUNSON = "nba:player:espn:3934672"
 WEB = Path(__file__).resolve().parents[2] / "web" / "sports"
 
+def test_history_keeps_periods_separate_and_excludes_unfinished_stats():
+    from dataclasses import replace
+    con=store.connect()
+    store.put(con,h.event(status='final'))
+    store.put(con,h.stat(value=30))
+    store.put(con,replace(h.stat(value=4),scope='q1',includes_overtime='no'))
+    store.put(con,replace(h.stat(value=12),scope='first_half',includes_overtime='no'))
+    store.put(con,replace(h.stat(part='ast',value=8),final=False))
+    con.commit()
+    games=snapshots.player_games(con,'nba',KAT,'2026-10-25T00:00:00Z',{})
+    assert games[0]['values']['points']==30
+    assert games[0]['period_values']['q1']['points']==4
+    assert games[0]['period_values']['first_half']['points']==12
+    assert 'assists' not in games[0]['values']
+    con.close()
+
 
 def test_latest_stream_does_not_decode_the_whole_offer_history(monkeypatch):
     con = store.connect()

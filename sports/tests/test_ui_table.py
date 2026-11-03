@@ -100,3 +100,14 @@ def test_stream_writer_is_valid_json_and_cleans_up(tmp_path):
     del w2                                                                  # a failed build: tmp removed, old file kept
     import gc; gc.collect()
     assert [x.name for x in tmp_path.iterdir()] == ["board_view.json"] and json.loads(p.read_text())["version"] == "x"
+
+def test_period_history_uses_matching_results_not_full_game():
+    games=[{'participation':'played','values':{'points':30},
+            'period_values':{'q1':{'points':4},'first_half':{'points':12}},
+            'season':2026,'start_utc':'2026-11-01T00:00:00Z'}]
+    rows=[{'key':s,'scope':s,'stat':'points','quotes':[{'line':10}]} for s in ('full_game','q1','first_half','q2')]
+    result=board_view.player_rows(rows,games)
+    assert result['full_game']['lines']['10'][:4]==[1,0,0,1]
+    assert result['q1']['lines']['10'][:4]==[0,1,0,1]
+    assert result['first_half']['lines20']['10']==[1,0,0,1]
+    assert 'q2' not in result
