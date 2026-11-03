@@ -5718,6 +5718,8 @@ if __name__ == "__main__":
     threading.Thread(target=lambda: __import__("learning").forever(), daemon=True, name="learning").start()
     # LoL data center: one supervised low-priority child process (line archive + Leaguepedia); not released to members
     threading.Thread(target=lol_center_supervise, daemon=True, name="lol-center").start()
+    import workspace_alerts
+    workspace_alerts.start(sys.modules[__name__])
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:

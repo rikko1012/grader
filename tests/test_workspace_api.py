@@ -27,7 +27,7 @@ API = "/preview/workspace/api/"
 ADMIN = "B" * 40
 ROOT = Path(server.__file__).parent
 GET_ROUTES = ("me", "board", "line?book=underdog&id=x", "mine", "results", "state", "rules", "diagnostics")
-POST_ROUTES = ("recheck", "track", "state")
+POST_ROUTES = ("recheck", "track", "state", "book-line")
 
 
 @pytest.fixture

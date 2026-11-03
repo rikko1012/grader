@@ -382,6 +382,38 @@
     slipChanged();
     say(`Now ${cap(l.side)} ${cur.offer.line} at the current offer.`);
   }
+  function safeBookLink(url,book){
+    if(typeof url!=='string'||url.length>5000)return false;
+    if(book==='prizepicks')return /^https:\/\/app\.prizepicks\.com\/board\?projections=\d{1,15}-[ou]-\d+(?:\.\d+)?(?:,\d{1,15}-[ou]-\d+(?:\.\d+)?){1,5}$/.test(url);
+    return url==='https://app.underdogsports.com/pick-em/higher-lower/all/home'||
+      /^https:\/\/underdogfantasy\.onelink\.me\/vgwg\?af_force_deeplink=true&af_dp=underdogfantasy%3A%2F%2Fmarket-details%2F[0-9a-f-]{36}(?:&af_web_dp=https%3A%2F%2Fapp\.underdogsports\.com%2Fpick-em%2Fhigher-lower%2Fall%2Ffeatured%3Fmatch_id%3D\d{1,12}%26match_type%3DGame)?$/.test(url);
+  }
+  function openLine(rec,side){
+    if(rec&&rec.offer.platform==='underdog')return openBookLeg(makeLeg(rec,side));
+  }
+  async function openBookLeg(l){
+    if(!l||l.book!=='underdog')return;
+    try{
+      const d=await api('book-line',{legs:[wireLeg(l)]});
+      if(!safeBookLink(d.url,'underdog'))throw Error('invalid link');
+      let box=$('u-book-line');if(!box){box=document.createElement('dialog');box.id='u-book-line';box.className='u-book-dialog';box.setAttribute('aria-label','Open book line');document.body.appendChild(box);}
+      box.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book link">×</button></form><h2>${esc(l.player)}</h2><p>${cap(l.side)} ${esc(l.line)} ${esc(l.stat_label)} · ${esc(l.period_label)}</p><p>Choose the side in Underdog. This opens the market; it does not place a pick.</p><a class="u-btn u-gold" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Underdog</a>`;box.showModal();
+    }catch(e){say(e.message||'The current line could not be opened. Refresh and try again.');}
+  }
+  async function openGenerated(slip){
+    if(!slip||T.openBusy)return;
+    T.openBusy=true;
+    try{
+      const doc=await api('recheck',{idem:idem(),legs:slip.legs.map(wireLeg),entry_types:{[slip.platform]:slip.entry_type}});
+      const e=doc.entries?.[slip.platform];
+      if(!e?.ok||!e.open||!safeBookLink(e.open.url,slip.platform))return say('These picks could not be opened. Recheck the current lines; no picks were sent.');
+      let dialog=$('u-book-open');
+      if(!dialog){dialog=document.createElement('dialog');dialog.id='u-book-open';dialog.className='u-book-dialog';dialog.setAttribute('aria-label','Open checked slip');document.body.appendChild(dialog);}
+      dialog.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book links">×</button></form><h2>${esc(e.open.label)}</h2><p>${slip.platform==='prizepicks'?'Your checked selections open in PrizePicks. Confirm its current lines before submitting.':'Underdog opens each market separately. Select Higher or Lower in the app; this does not prefill or place an entry.'}</p><a class="u-btn u-gold" href="${esc(e.open.url)}" target="_blank" rel="noopener noreferrer">${esc(e.open.label)}</a>${(e.open.legs||[]).map((url,i)=>safeBookLink(url,slip.platform)?`<p><a class="u-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(slip.legs[i]?.player||'Pick '+(i+1))} · ${esc(slip.legs[i]?.side)} ${esc(slip.legs[i]?.line)}</a></p>`:'').join('')}`;
+      dialog.showModal();
+    }catch(e){say('The line check failed. No book was opened. Try again.');}
+    finally{T.openBusy=false;}
+  }
   function entryText(e) {
     const lines = [`${e.label} entry`];
     e.legs.forEach((l, i) => lines.push(`${i + 1}. ${l.player} ${cap(l.side)} ${l.line} ${l.stat_label}, ${l.period_label} (${l.event_label})`));
@@ -497,7 +529,7 @@
     const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
     return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
       <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
-      <span class="u-leg-meta">${read}${/^https:\/\//.test(link || "") ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">Open this line</a>` : ""}</span>
+      <span class="u-leg-meta">${read}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
       <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${problems}</div>`;
   }
   function entryHtml(e, phase) {
@@ -506,7 +538,7 @@
     const seg = `<div class="u-seg" role="group" aria-label="${esc(e.label)} entry type">${types.map(([v, l]) => `<button type="button" aria-pressed="${cur === v}" data-u="etype" data-id="${esc(e.platform + ":" + v)}">${l}</button>`).join("")}</div>`;
     const entryP = c && c.problems.length ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}</p>`).join("")}</div>` : "";
     const rules = c && c.rules && c.rules.length ? `<details class="u-det" ${det("rules:" + c.platform)}><summary>Platform rules checked</summary><ul>${c.rules.map((r) => `<li>${esc(r.label)}: ${esc(r.text)}.${r.note ? ` ${esc(r.note)}` : ""}${r.source ? ` <a href="${esc(r.source)}" target="_blank" rel="noopener">Source</a>${r.page_date ? `, ${esc(shortDate(r.page_date))}` : ""}` : ""}</li>`).join("")}</ul></details>` : "";
-    const open = c && c.open ? `<a class="u-btn u-gold" href="${esc(c.open.url)}" target="_blank" rel="noopener">${esc(c.open.label)}</a>` : "";
+    const open = c && c.open && safeBookLink(c.open.url,e.platform) ? `<button class="u-btn u-gold" data-u="open-entry" data-id="${esc(e.key)}">${esc(c.open.label)}</button>` : "";
     const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
     const ev = c && c.ev;
     const values = (ev?.payout ? metric(esc(ev.payout.multiple)+'×','All-hit payout') : '')
@@ -690,7 +722,7 @@
     const scroll = $("u-drawer-body") ? $("u-drawer-body").scrollTop : 0;
     keepFocus(box, () => { box.innerHTML = `<div class="u-d-head"><div><h2 id="u-drawer-title">${esc(rec.player.name)}</h2>${picker}<p>${esc(SPORTS[rec.sport])} · ${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)} · ${esc(rec.offer.platform_label)}</p><p>${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} · ${esc(rec.event.label)}${rec.event.competition ? " · " + esc(rec.event.competition) : ""} · ${esc(when(rec.event.start_utc))}${rec.event.best_of ? ` · BO${esc(rec.event.best_of)}` : ""}${rec.offer.moved_from != null ? ` · Moved from ${esc(rec.offer.moved_from)}` : ""}</p></div><button class="u-x" type="button" aria-label="Close research" data-u="pclose">${X_ICON}</button></div>
       <div class="u-tabs" role="tablist" aria-label="Research sections">${tabs}</div><div class="u-d-body" id="u-drawer-body" tabindex="0">${note}${body}</div>
-      <div class="u-d-foot">${refusal && !inSlip ? `<p class="u-dim" role="status">${esc(refusal)}</p>` : ""}<div class="u-acts"><button class="u-btn" type="button" data-u="tray">Slip tray · ${T.legs.length}</button><button class="u-btn u-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} data-u="padd">${inSlip ? "Remove from slip tray" : `Add ${cap(side)} ${esc(rec.offer.line)} on ${esc(rec.offer.platform_label)}`}</button></div></div>`; });
+      <div class="u-d-foot">${refusal && !inSlip ? `<p class="u-dim" role="status">${esc(refusal)}</p>` : ""}<div class="u-acts">${R.me.features?.book_links&&rec.offer.platform==='underdog'&&!refusal?'<button class="u-btn" type="button" data-u="open-line">Open in Underdog</button>':''}<button class="u-btn" type="button" data-u="tray">Slip tray · ${T.legs.length}</button><button class="u-btn u-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} data-u="padd">${inSlip ? "Remove from slip tray" : `Add ${cap(side)} ${esc(rec.offer.line)} on ${esc(rec.offer.platform_label)}`}</button></div></div>`; });
     $("u-drawer-body").scrollTop = scroll;
     const res = seriesOf();
     if (res) box.querySelectorAll("[data-chart]").forEach((el) => { el.innerHTML = chartSvg(res.slice(0, +el.dataset.n), rec.offer.line, side, Math.max(240, Math.round(el.clientWidth))); });
@@ -811,6 +843,9 @@
     etype(v) { const i = v.indexOf(":"); T.types[v.slice(0, i)] = v.slice(i + 1); slipChanged(); },
     track: trackEntry,
     copy: copyEntry,
+    'open-line':()=>openLine(P.rec,P.side),
+    'open-leg':id=>openBookLeg(T.legs.find(l=>l.id===id)),
+    'open-entry':key=>{const e=entries().find(x=>x.key===key);if(e)openGenerated({platform:e.platform,entry_type:typeOf(e),legs:e.legs});},
     pick(id) { T.openPick = T.openPick === id ? null : id; paintTray(); },
     ptab(id) { P.tab = id; paintDrawer(); $("u-drawer-body").scrollTop = 0; },
     pside(sd) { P.side = sd; paintDrawer(); },
@@ -1152,7 +1187,7 @@
     try {
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
-        research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
+        research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     await loadState();
     paintTray();

@@ -622,8 +622,12 @@ def run(con, db=None, now=None, market=None):
                         "flags", "slip_eligible", "slip_reasons", "grade", "grade_label", "units_policy", "units", "stake_restriction",
                         "cal_version", "cal_p_over", "cal_p_under", "cal_p_push")
                 vals = [json.dumps(rec[c], default=str) if c in ("sides", "inputs", "flags", "slip_reasons") else rec[c] for c in cols]
-                con.execute(f"INSERT INTO lol_forecasts (forecast_at, state_sha, {', '.join(cols)}) VALUES (?, ?, {', '.join('?' * len(cols))})",
-                            [store.now_iso(), sha] + vals)
+                saved_at = store.now_iso()
+                cursor = con.execute(f"INSERT INTO lol_forecasts (forecast_at, state_sha, {', '.join(cols)}) VALUES (?, ?, {', '.join('?' * len(cols))})",
+                            [saved_at, sha] + vals)
+                if os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1':
+                    from gradecore.capture import capture
+                    capture(con, 'lol', rec, cursor.lastrowid, saved_at)
                 counts["saved"] = counts.get("saved", 0) + 1
             except Exception as e:      # noqa: BLE001
                 k = f"error: {type(e).__name__}"

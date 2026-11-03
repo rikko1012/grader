@@ -39,9 +39,15 @@ def test_core_imports_no_sport_code():
             assert not (_imports(p) & banned), p.name
 
 
-def test_no_live_code_reads_the_skeleton_yet():
+def test_only_explicit_forecast_capture_boundaries_import_core():
+    allowed = {'picklog.py', 'lol/center/forecast.py', 'sports/model/forward.py', 'sports/market_tools.py'}
     for p in list(ROOT.glob("*.py")) + list((ROOT / "sports").rglob("*.py")) + list((ROOT / "lol").rglob("*.py")):
-        assert "gradecore" not in _imports(p), p.name
+        if 'tests' in p.parts:
+            continue
+        if 'gradecore' in _imports(p):
+            assert p.relative_to(ROOT).as_posix() in allowed, p.name
+            if p.name != 'market_tools.py':
+                assert 'SCOUT_GRADECORE_SHADOW' in p.read_text(encoding='utf-8'), p.name
 
 
 def test_registry_holds_one_adapter_per_sport():

@@ -165,6 +165,7 @@ export function mount(C) {
       H.views=clean(p.views);
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
       H.alerts=clean(p.alerts);
+      if(R.me.features?.background_alerts)H.delivery=await api('alert-delivery');
     } catch(e) {H.saveError=true;}
   }
   function checkAlerts() {
@@ -182,7 +183,9 @@ export function mount(C) {
     if(!isOpen()) return;
     $('hub-alert-count').textContent=H.notices.length?String(H.notices.length):'';
     if(H.section!=='alerts') return;
-    $('hub-alerts-body').innerHTML=`<h2>Follow the lines that matter.</h2><p>Saved-filter alerts run while this research screen is open. They flag new matching offers and revisions—not guaranteed value. No email or push delivery is enabled.</p>
+    $('hub-alerts-body').innerHTML=`<h2>Follow the lines that matter.</h2><p>Saved filters flag new matching offers and revisions. Always recheck the line before building a slip.</p>
+      ${R.me.features?.background_alerts?`<div class="h-alert"><div><b>Whop notifications</b><p>${H.delivery?.enabled?'Enabled for this account, including when Scout is closed.':'Opt in to personal Whop notifications while Scout is closed. Uses your Whop account for delivery; consent expires after 30 days.'}</p>${H.delivery?.status?.startsWith('delivery_')?'<p class="h-warning">The last delivery could not be confirmed. In-page alerts still work.</p>':''}</div><button data-hub="toggle-delivery" ${H.deliveryBusy?'disabled':''}>${H.delivery?.enabled?'Turn off':'Enable Whop alerts'}</button></div>`:'<p>In-page alerts are active while this screen is open. Background delivery is not enabled.</p>'}
+      ${H.deliveryError?`<p class="h-warning" role="status">${esc(H.deliveryError)}</p>`:''}
       ${H.saveError?'<p class="h-warning">Preferences have not synced. <button data-hub="save-retry">Retry save</button></p>':''}
       <h3>Your alerts</h3>${H.alerts.length?H.alerts.map((a,i)=>`<div class="h-alert"><b>${esc(a.name)}</b><span>${esc(a.filters.sport==='all'?'All sports':SPORTS[a.filters.sport]||a.filters.sport)} · ${esc(a.filters.book)}</span><button data-hub="delete-alert" data-id="${i}">Remove</button></div>`).join(''):'<p>No alerts yet. Set your board filters and choose “Alert me”.</p>'}
       <h3>This visit</h3>${H.notices.length?H.notices.map(n=>`<button class="h-notice" data-hub="research" data-id="${esc(n.id)}"><b>${esc(n.name)}</b><span>${esc(n.text)}</span><small>${esc(n.view)} · ${new Date(n.at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</small></button>`).join(''):'<p>New matches will appear here after the next refresh. The first load establishes your baseline.</p>'}`;
@@ -234,7 +237,7 @@ export function mount(C) {
       ${H.detailState==='loading'?'<p class="h-detail-loading">Loading this player’s saved results…</p>':H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`:series.length?`<div class="h-history-chart" role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}">${C.chartSvg(series,line,side,560)}</div><details class="h-history-table"><summary>View dates and results</summary><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${g.value===line?'Push':g.value>line?'Over':'Under'}</td></tr>`).join('')}</tbody></table></details>`:'<p class="h-detail-loading">Game-by-game results are not available for this market. Any hit count above comes from its saved board summary.</p>'}
       <p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p></section>
       <section class="h-line-shop"><div class="h-shop-head"><h3>Compare lines</h3><small>Same event · stat · period</small></div><table><thead><tr><th>Platform / line</th><th>Over</th><th>Under</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td></tr>`).join('')}</tbody></table><p>Choose a line to recalculate its historical results. A lower Over line or higher Under line can help, but payouts and availability also matter.</p>
-      <div class="h-detail-action"><span>${r.scout.hold?'Research estimate':esc(C.verdictText(r,side))} · ${pct(C.chanceOf(r,side))}</span><button data-hub="detail-add" ${eligible?'':'disabled'}>${C.onSlip(r)?'Review saved slip':`Add ${side==='over'?'Over':'Under'} ${esc(line)} · ${esc(r.offer.platform_label)}`}</button>${!r.offer[side].offered?'<small>This side is not offered on the selected platform.</small>':''}</div></section></div>
+      <div class="h-detail-action"><span>${r.scout.hold?'Research estimate':esc(C.verdictText(r,side))} · ${pct(C.chanceOf(r,side))}</span><button data-hub="detail-add" ${eligible?'':'disabled'}>${C.onSlip(r)?'Review saved slip':`Add ${side==='over'?'Over':'Under'} ${esc(line)} · ${esc(r.offer.platform_label)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}${!r.offer[side].offered?'<small>This side is not offered on the selected platform.</small>':''}</div></section></div>
       ${facts.length?`<details class="h-stat-library" open><summary>Player stats & matchup <span>${facts.length} available measures</span></summary><dl>${facts.map(f=>`<div><dt>${esc(f.label)}</dt><dd>${esc(typeof f.value==='object'?JSON.stringify(f.value):f.value)}</dd></div>`).join('')}</dl></details>`:''}`;
     restoreFocus();
   }
@@ -294,7 +297,7 @@ export function mount(C) {
     const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
     box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Chances are the model’s published estimates for individual props, not a combined slip win probability. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
       const ps=s.legs.map(l=>l.shown_p).filter(num),avg=ps.reduce((a,b)=>a+b,0)/ps.length;
-      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header><div class="h-batch-range"><span>Prop chances <b>${pct(Math.min(...ps))}–${pct(Math.max(...ps))}</b></span><span>Average <b>${pct(avg)}</b></span></div><ol>${s.legs.map(l=>`<li><div><strong>${esc(l.player)}</strong><small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span><small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace working '+esc(C.PLATFORMS[s.platform].label)+' entry':'Open in working draft'}</button><small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
+      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header><div class="h-batch-range"><span>Prop chances <b>${pct(Math.min(...ps))}–${pct(Math.max(...ps))}</b></span><span>Average <b>${pct(avg)}</b></span></div><ol>${s.legs.map(l=>`<li><div><strong>${esc(l.player)}</strong><small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span><small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace working '+esc(C.PLATFORMS[s.platform].label)+' entry':'Open in working draft'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
     }).join('')}</div>`;
   }
   async function useGenerated(id) {
@@ -344,6 +347,23 @@ export function mount(C) {
   function paintTools() {
     $('hub-tools-body').innerHTML=`<div class="h-tool-grid"><article><span class="h-eyebrow">MARKETS</span><h2>Moneylines</h2><p>Compare available game markets in the existing moneyline workspace.</p><a href="/?view=classic#moneylines">Open moneylines →</a></article><article><span class="h-eyebrow">RESEARCH</span><h2>Single prop grader</h2><p>Inspect a player and line with the existing grading tools.</p><a href="/?view=classic#one">Open grader →</a></article><article><span class="h-eyebrow">SAVED FILTERS</span><h2>Line alerts</h2><p>Watch for new matches to your saved filters while this page is open.</p><button data-hub="section" data-id="alerts">Manage alerts →</button></article><article><span class="h-eyebrow">EXPLAIN A PROP</span><h2>Ask the Genie</h2><p>Open player research from the Board and use its Genie tab. Answers stay attached to the selected prop.</p><button data-hub="section" data-id="board">Choose a player →</button></article></div>`;
   }
+  function marketHTML(){
+    if(H.marketLoading)return '<p role="status">Checking current quotes…</p>';
+    if(H.marketError)return `<p class="h-warning">${esc(H.marketError)} Use Refresh prices to retry.</p>`;
+    if(!H.marketDoc)return '<p>Choose Refresh prices to read the latest verified market snapshot.</p>';
+    return Object.entries(H.marketDoc.leagues||{}).map(([sport,d])=>{
+      const stale=!d.as_of||Date.now()-Date.parse(d.as_of)>120000;
+      if(d.state!=='ready'||stale)return `<article><h3>${esc(SPORTS[sport])}</h3><p class="h-warning">${stale?'Feed stale — last update '+age(d.as_of):'Market feed unavailable'}. Opportunity actions are disabled.</p></article>`;
+      const fmt=x=>num(x)?(x*100).toFixed(1)+'%':'—';
+      const quote=q=>`${esc(q.book)} · ${esc(q.player_id)} · ${esc(q.side)} ${esc(q.line)} ${esc(q.stat)} · ${esc(q.period)} · ${Number(q.decimal_odds).toFixed(2)}`;
+      return `<article><h3>${esc(SPORTS[sport])} <small>${age(d.as_of)}</small></h3><h4>Positive expected value</h4>${d.ev?.length?d.ev.map(x=>`<div class="h-alert"><b>${quote(x.quote)}</b><span>Chance ${fmt(x.p)} · EV ${fmt(x.ev)}${x.wide_market?' · Wide market':''}</span></div>`).join(''):'<p>No verified positive-EV offers right now.</p>'}<h4>Two-book price comparisons</h4>${d.arbitrage?.length?d.arbitrage.map(x=>`<div class="h-alert"><div>${x.legs.map((q,i)=>`<p>${quote(q)} · stake share ${fmt(x.stake_shares[i])}</p>`).join('')}</div><b>Quoted return ${fmt(x.quoted_return)}</b></div>`).join(''):'<p>No compatible fresh arbitrage quotes right now.</p>'}<details><summary>Why quotes were excluded</summary>${Object.entries(d.excluded||{}).map(([reason,n])=>`<p>${esc(reason)}: ${Number(n)}</p>`).join('')}</details></article>`;
+    }).join('')||'<p>No supported market feeds are available to this account.</p>';
+  }
+  function paintMarkets(){
+    if(!R.me.features?.market_tools||H.section!=='tools')return;
+    if(!$('hub-market-results'))$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2>EV &amp; arbitrage</h2><p>Exact lines, periods and settlement rules. No bet placement or guaranteed profit.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><div id="hub-market-results" aria-live="polite"></div></section>`);
+    $('hub-market-results').innerHTML=marketHTML();
+  }
   function installV2() {
     if(!V2)return;
     $('u-hub').classList.add('h-v2');
@@ -365,7 +385,7 @@ export function mount(C) {
     for(const n of ['board','studio','record','alerts','picks',...(V2?['games','tools']:[])]) {$('hub-'+n+'-section').hidden=n!==name; document.querySelectorAll(`[data-hub="section"][data-id="${n}"]`).forEach(b=>b.setAttribute('aria-current',n===name?'page':'false'));}
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('hub-title').textContent=({games:'Games',tools:'Research tools',record:'Performance record',picks:'My picks',alerts:'Line alerts',studio:'Slip Studio'})[name]||'Player props';
-    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();if(V2)C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='games')paintGames();else if(name==='tools')paintTools();else paintAlerts();
+    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();if(V2)C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='games')paintGames();else if(name==='tools'){paintTools();paintMarkets();}else paintAlerts();
   }
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
@@ -396,7 +416,7 @@ export function mount(C) {
     'share-card'(){C.shareSlip();},
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
     'game-board'(id){H.game=id;H.sport='all';H.book='all';H.stat='all';H.side='all';H.q='';H.onlyDiff=false;H.watched=false;H.freshOnly=false;H.soonOnly=false;H.movedOnly=false;H.page=0;section('board');},
-    generate, 'use-generated':useGenerated, 'save-batch':saveBatch,
+    generate, 'use-generated':useGenerated, 'open-generated':i=>C.openGenerated(H.batch?.slips?.[Number(i)]), 'open-line':()=>C.openLine(rec(H.detail),H.histSide), 'save-batch':saveBatch,
     'player-market'(id){H.stat='all';H.game='all';H.q='';H.side='all';H.onlyDiff=false;H.watched=false;H.expanded=null;const r=rec(id);if(!r)return;H.page=Math.max(0,Math.floor(rows().findIndex(x=>key(x)===id)/40));expand(id);},
     filters(){const open=$('hub-board-section').classList.toggle('filters-open');$('hub-filters-toggle').setAttribute('aria-expanded',String(open));},
     section, sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;section('board');}, game(id){H.game=id;H.page=0;paintBoard();},page(id){H.page+=Number(id);paintBoard();$('hub-table').scrollIntoView({block:'start'});},
@@ -409,6 +429,17 @@ export function mount(C) {
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
     refresh(){H.detailSeq++;H.expanded=null;H.detail=null;load(true);}, tray(){section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
     'save-view'(){openSave('view');}, 'save-alert'(){openSave('alert');}, 'save-retry':savePreferences,
+    async 'refresh-markets'(){
+      H.marketLoading=true;H.marketError=null;paintMarkets();
+      try{H.marketDoc=await api('market-tools');}catch(e){H.marketError=e.message||'Prices could not be loaded.';}
+      finally{H.marketLoading=false;paintMarkets();}
+    },
+    async 'toggle-delivery'(){
+      H.deliveryBusy=true;H.deliveryError=null;paintAlerts();
+      try{H.delivery=await api('alert-delivery',{enabled:!H.delivery?.enabled});}
+      catch(e){H.deliveryError=e.message||'Could not update delivery. Try again.';}
+      finally{H.deliveryBusy=false;paintAlerts();}
+    },
     'delete-alert'(i){const a=H.alerts.splice(Number(i),1)[0];if(a)H.seen.delete(a.id);savePreferences();paintAlerts();},
     'record-retry':showRecord,
   };

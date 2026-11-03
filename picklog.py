@@ -596,6 +596,9 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
                  row.get("sample_maps"), row.get("model_version"), _shadow(row, extra.get("vm1")), gi, extra.get("probs_raw"), extra.get("data_rev"),
                  extra.get("odds_source"), extra.get("odds_policy"), extra.get("mapping_rev"), extra.get("odds_sig"),
                  extra.get("git_commit"), extra.get("quote")))
+    if os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1':
+        from gradecore.capture import capture
+        capture(con, 'cs2', row, extra, con.execute('SELECT last_insert_rowid()').fetchone()[0])
     _record_mapping(con, extra.get("mapping_rev"))
     return True
 
