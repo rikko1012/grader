@@ -396,7 +396,7 @@
     try{
       const d=await api('book-line',{legs:[wireLeg(l)]});
       if(!safeBookLink(d.url,'underdog'))throw Error('invalid link');
-      let box=$('u-book-line');if(!box){box=document.createElement('dialog');box.id='u-book-line';box.className='u-dialog';document.body.appendChild(box);}
+      let box=$('u-book-line');if(!box){box=document.createElement('dialog');box.id='u-book-line';box.className='u-book-dialog';document.body.appendChild(box);}
       box.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book link">×</button></form><h2>${esc(l.player)}</h2><p>${cap(l.side)} ${esc(l.line)} ${esc(l.stat_label)} · ${esc(l.period_label)}</p><p>Choose the side in Underdog. This opens the market; it does not place a pick.</p><a class="u-btn u-gold" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Underdog</a>`;box.showModal();
     }catch(e){say(e.message||'The current line could not be opened. Refresh and try again.');}
   }
@@ -408,7 +408,7 @@
       const e=doc.entries?.[slip.platform];
       if(!e?.ok||!e.open||!safeBookLink(e.open.url,slip.platform))return say('These picks could not be opened. Recheck the current lines; no picks were sent.');
       let dialog=$('u-book-open');
-      if(!dialog){dialog=document.createElement('dialog');dialog.id='u-book-open';dialog.className='u-dialog';document.body.appendChild(dialog);}
+      if(!dialog){dialog=document.createElement('dialog');dialog.id='u-book-open';dialog.className='u-book-dialog';document.body.appendChild(dialog);}
       dialog.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book links">×</button></form><h2>${esc(e.open.label)}</h2><p>${slip.platform==='prizepicks'?'Your checked selections open in PrizePicks. Confirm its current lines before submitting.':'Underdog opens each market separately. Select Higher or Lower in the app; this does not prefill or place an entry.'}</p><a class="u-btn u-gold" href="${esc(e.open.url)}" target="_blank" rel="noopener noreferrer">${esc(e.open.label)}</a>${(e.open.legs||[]).map((url,i)=>safeBookLink(url,slip.platform)?`<p><a class="u-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(slip.legs[i]?.player||'Pick '+(i+1))} · ${esc(slip.legs[i]?.side)} ${esc(slip.legs[i]?.line)}</a></p>`:'').join('')}`;
       dialog.showModal();
     }catch(e){say('The line check failed. No book was opened. Try again.');}

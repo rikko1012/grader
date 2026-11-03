@@ -119,6 +119,13 @@ def test_classic_book_link_rechecks_without_tracking(ctx, env, monkeypatch):
     href = box.locator('a').first.get_attribute('href')
     assert href.startswith('https://app.prizepicks.com/board?projections=')
     assert len(href.split('projections=')[1].split(',')) == 2
+    for width in (390, 1440):
+        p.set_viewport_size({'width':width,'height':900})
+        bounds = box.bounding_box()
+        assert bounds['width'] <= min(520, width-32) + 1
+        assert bounds['height'] < 450
+        assert box.locator('a').first.bounding_box()['height'] < 100
+        no_h_scroll(p)
     assert p.evaluate("fetch('/api/upgrade/mine').then(r=>r.json())")['receipts'] == []
     box.locator('button').click()
     # A click must contact the server again, not reuse the earlier checked URL.
