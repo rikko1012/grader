@@ -31,7 +31,9 @@ def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env)
     p.locator('#hub-q').fill('vargo')
     assert p.locator('#hub-rows tr').count() >= 2
     assert 'orlo' not in p.locator('#hub-rows').inner_text()
-    p.locator('#hub-rows [data-hub=research]').first.click()
+    p.locator('#hub-rows .h-player').first.click()
+    p.wait_for_selector('#hub-detail .h-history-chart svg', timeout=15000)
+    p.locator('#hub-detail [data-hub=research]').click()
     p.wait_for_selector('#u-drawer .u-chart svg', timeout=15000)
     assert 'past results at this line' in p.locator('#u-drawer').inner_text().lower()
     p.locator('[data-u=pclose]').click()
@@ -160,3 +162,151 @@ def test_phone_keeps_filters_available_without_covering_first_prop(ctx, env):
     p.locator('#hub-filters-toggle').click()
     assert all(x.startswith(('cs2|prizepicks|','lol|prizepicks|','nba|prizepicks|','nfl|prizepicks|')) for x in p.locator('#hub-rows tr').evaluate_all('(rows)=>rows.map(r=>r.dataset.record)'))
     no_h_scroll(p)
+
+
+@pytest.mark.parametrize('path,sport',[('/', 'cs2'),('/#board','cs2'),('/lol','lol'),('/sports#/board?lg=nba','nba'),('/sports#/board?lg=nfl','nfl')])
+def test_new_workspace_is_the_default_for_existing_member_board_urls(ctx,env,path,sport):
+    p=open_page(ctx,env,path)
+    p.wait_for_selector('#hub-rows tr[data-record]',timeout=20000)
+    assert p.locator('#u-hub').is_visible()
+    assert p.locator('#hub-sports [data-id='+sport+']').get_attribute('aria-pressed')=='true', (p.url,p.locator('#hub-title').inner_text(),p.locator('#hub-sports').inner_text(),p.errors)
+    assert all(x.startswith(sport+'|') for x in p.locator('#hub-rows tr[data-record]').evaluate_all('(rows)=>rows.map(r=>r.dataset.record)'))
+    assert not p.errors
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_inline_history_line_selection_side_and_keyboard(ctx,env,size):
+    p=hub(ctx,env,size)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-q').fill('vargo')
+    p.locator('#hub-rows .h-player').first.click()
+    p.wait_for_selector('#hub-detail .h-history-chart svg')
+    initial=p.locator('#hub-detail .h-history-summary').inner_text()
+    assert '6/10' in initial and '38.5' in initial
+    win=p.locator('#hub-detail [data-hub=history-window][data-id="5"]')
+    win.focus();p.keyboard.press('Enter')
+    assert p.evaluate('document.activeElement.dataset.id')=='5'
+    assert '3/5' in p.locator('#hub-detail .h-history-summary').inner_text()
+    p.locator('#hub-detail [data-hub=history-side][data-id=under]').click()
+    assert '2/5' in p.locator('#hub-detail .h-history-summary').inner_text()
+    p.locator('#hub-detail [data-hub=detail-line]').filter(has_text='34.5').click()
+    p.wait_for_function("document.querySelector('#hub-detail .h-history-chart')?.getAttribute('aria-label').includes('34.5')")
+    assert 'Add Under 34.5' in p.locator('#hub-detail [data-hub=detail-add]').inner_text()
+    assert not p.locator('#hub-detail [data-hub=detail-add]').is_disabled()
+    p.locator('#hub-detail .h-history-table summary').click()
+    assert p.locator('#hub-detail .h-history-table tbody tr').count()==5
+    no_h_scroll(p)
+    assert not p.errors
+
+
+def test_inline_research_refuses_a_changed_revision(ctx,env):
+    p=hub(ctx,env)
+    def moved(route):
+        response=route.fetch();d=response.json()
+        d['record']['offer']['revision']='a-new-revision'
+        route.fulfill(response=response,json=d)
+    p.route('**/api/upgrade/line?*',moved)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-rows .h-player').first.click()
+    p.wait_for_selector('#hub-detail .h-warning')
+    assert p.locator('#hub-detail [data-hub=detail-add]').is_disabled()
+    assert p.locator('#hub-detail .h-history-chart').count()==0
+    assert not p.errors
+
+
+def test_matchup_and_market_filters_reset_cleanly_when_switching_sport(ctx,env):
+    p=hub(ctx,env)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-games [data-hub=game]').filter(has_text='Kestrel').click()
+    assert 'vargo' not in p.locator('#hub-rows').inner_text()
+    p.locator('#hub-stat').select_option(label='Headshots')
+    p.locator('#hub-sports [data-id=nba]').click()
+    assert p.locator('#hub-stat').input_value()=='all'
+    assert p.locator('#hub-games [data-id=all]').get_attribute('aria-pressed')=='true'
+    assert p.locator('#hub-rows tr[data-record]').count()>0
+    assert not p.errors
+
+
+def test_tracked_picks_have_a_page_with_sport_status_filters_and_receipts(ctx,env):
+    p=hub(ctx,env)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-book').select_option('underdog')
+    for name in ('vargo','orlo'):
+        p.locator('#hub-q').fill(name)
+        p.locator('#hub-rows .h-add:not([disabled])').first.click()
+    p.wait_for_selector('#hub-slip-content [data-u=track]:not([disabled])',timeout=20000)
+    p.locator('#hub-slip-content [data-u=track]').click()
+    p.wait_for_selector('#hub-slip-content .u-note.good')
+    p.locator('.h-sidebar [data-id=picks]').click()
+    p.wait_for_selector('#hub-picks-body .u-pick')
+    assert p.locator('#hub-picks-body .u-pick').count()==2
+    p.locator('#hub-picks-body .u-pick button').first.click()
+    assert 'Chance you saw' in p.locator('#hub-picks-body').inner_text()
+    p.locator('#hub-pick-status').select_option('hit')
+    assert 'No picks in this view' in p.locator('#hub-picks-body').inner_text()
+    p.locator('#hub-pick-status').select_option('all')
+    p.locator('#hub-pick-sport').select_option('nba')
+    assert p.locator('#hub-picks-body .u-pick').count()==0
+    p.locator('#hub-pick-sport').select_option('cs2')
+    assert p.locator('#hub-picks-body .u-pick').count()==2
+    assert not p.errors
+
+
+def test_phone_keeps_specialist_tools_in_a_real_menu(ctx,env):
+    p=hub(ctx,env,PHONE)
+    p.locator('.h-tools-menu summary').click()
+    assert p.locator('.h-tools-menu a').filter(has_text='Moneylines').is_visible()
+    assert p.locator('.h-tools-menu a').filter(has_text='Single prop grader').is_visible()
+    no_h_scroll(p)
+
+
+@pytest.mark.parametrize('path',['/#slips','/sports#/slips?lg=nfl','/lol#scout/studio'])
+def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,path):
+    p=hub(ctx,env)
+    p.locator('#hub-book').select_option('prizepicks')
+    for sport in ('cs2','lol','nba','nfl'):
+        p.locator('#hub-sports [data-id='+sport+']').click()
+        p.locator('#hub-rows .h-add:not([disabled])').first.click()
+        if p.locator('#u-drawer').is_visible():
+            p.locator('#u-drawer [data-u=pside][data-id=over]').click()
+            p.locator('#u-drawer [data-u=padd]').click()
+            p.locator('#u-drawer [data-u=pclose]').click()
+    saved_state(p,lambda d:len((d.get('slip')or{}).get('legs',[]))==4)
+    p.goto(env.url+path)
+    p.wait_for_selector('#hub-studio-body .u-entry',timeout=20000)
+    assert p.locator('#hub-title').inner_text()=='Slip Studio'
+    assert p.locator('#hub-studio-body .u-leg').count()==4
+    p.locator('#hub-studio-body [data-u=check]').click()
+    p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
+    assert not p.errors
+
+
+def test_workspace_navigation_back_reload_and_platform_bookmarks(ctx,env):
+    p=open_page(ctx,env,'/#board/prizepicks')
+    p.wait_for_selector('#hub-rows tr[data-record]')
+    assert p.locator('#hub-book').input_value()=='prizepicks'
+    p.locator('#hub-sports [data-id=nfl]').click()
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.go_back()
+    p.wait_for_selector('#hub-board-section:not([hidden])')
+    assert p.locator('#hub-sports [data-id=nfl]').get_attribute('aria-pressed')=='true'
+    p.reload()
+    p.wait_for_selector('#hub-rows tr[data-record]')
+    assert p.locator('#hub-sports [data-id=nfl]').get_attribute('aria-pressed')=='true'
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.keyboard.press('/')
+    assert p.locator('#hub-q').evaluate('(el)=>el===document.activeElement')
+    p.locator('#hub-q').fill('A/B')
+    assert p.locator('#hub-q').input_value()=='A/B'
+    assert not p.errors
+
+
+def test_single_prop_and_shared_legacy_filter_links_do_not_get_hidden(ctx,env):
+    p=open_page(ctx,env,'/?bv=1&b=underdog#board/underdog')
+    p.wait_for_selector('#boardout .brow2',timeout=20000)
+    assert p.locator('#u-hub').is_hidden()
+    assert 'view=classic' in p.url
+    p.goto(env.url+'/?p=vargo&l=38.5&t=kills')
+    p.wait_for_selector('#f',timeout=20000)
+    assert p.locator('#u-hub').is_hidden()
+    assert p.url.endswith('#one')

@@ -3590,10 +3590,10 @@ $("#studio").addEventListener("change", e => {
 (() => { const q = new URLSearchParams(location.search);
   if (q.get("bv") === "1") {                           // a shared board view (Copy link): its filters, then the board it names
     const v = viewFromParams(q, location.hash);
-    try { history.replaceState(null, "", location.pathname + `#${v.r}/${v.bk}`); } catch {}
+    try { history.replaceState(null, "", location.pathname + `?view=classic#${v.r}/${v.bk}`); } catch {} // shared legacy filters must retain their original controls
     setTimeout(() => applyView(v, true), 0);
   } else if (q.get("p") && q.get("l")) {
-    try { history.replaceState(null, "", location.pathname); } catch {}   // a refresh later = the start page
+    try { history.replaceState(null, "", location.pathname + '#one'); } catch {}   // keep the single-prop tool visible when the member workspace is the default
     const sc = ["12", "123", "1"].includes(q.get("sc")) ? q.get("sc") : "12", bk = ["underdog", "prizepicks"].includes(q.get("bk")) ? q.get("bk") : null;
     const c = q.get("tm") || q.get("vs") || bk ? {team: q.get("tm") || null, opponent: q.get("vs") || null, start: q.get("st") || null, book: bk} : null;
     setTimeout(() => gradeNow(q.get("p"), q.get("l"), q.get("t") === "hs" ? "hs" : "kills", q.get("lt") || "standard", sc, false, c), 0);
