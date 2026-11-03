@@ -366,7 +366,7 @@ def record_of(lg, doc, m, q, view):
     x = {"r": q.get("r"), "p": p, "l": line, "o": q.get("o"), "m": q.get("m"), "g": q.get("g"), "ud": q.get("ud"), "fid": sc.get("fid") if sc else None, "po": sc["po"] if sc else None,
          "pu": sc["pu"] if sc else None, "pp": sc["pp"] if sc else None, "mu": sc.get("mu") if sc else None, "model": sc.get("model") if sc else None, "at": sc.get("at") if sc else None,
          "lean": lean, "start": ev.get("start_utc"), "started": bool(ev.get("started") or ev.get("locked")), "e": m.get("e"), "pid": m.get("pid"), "name": m.get("n") or "", "team": team, "st": m.get("st"),
-         "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey}
+         "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey, "variant":q.get('v')}
     return rec, x
 
 
@@ -568,6 +568,12 @@ def receipt_fields(x, leg, lg, res, e):
 
 def entry_link(x, side):
     return x.get("ud")
+
+
+def entry_projection(x, side):
+    if x.get('p')!='prizepicks':return None
+    return {'book':'prizepicks','projection_id':offer_id(x.get('r'),'prizepicks'),'side':side,
+            'line':x.get('l'),'odds_type':x.get('variant')}
 
 
 # ---------------------------------------------------------------------------------------------------------------- settlement

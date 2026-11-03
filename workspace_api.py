@@ -615,9 +615,11 @@ def _open_link(srv, platform, entry_legs, results):
     if not srv.PP_OPEN_LINK:
         return None
     if platform == "prizepicks":
-        if any(l["sport"] != "cs2" for l in entry_legs):        # the lineup link is built from the CS2 feed's own projection ids
-            return None
-        pl = [srv._pp_leg(_feed_leg(results[l["id"]]["_x"], l["side"]), results[l["id"]].get("_hit")) for l in entry_legs]
+        # All IDs come from freshly checked server rows. No projection ID from
+        # the browser is trusted, and every sport uses Classic's exact builder.
+        pl = [srv._pp_leg(_feed_leg(results[l["id"]]["_x"], l["side"]), results[l["id"]].get("_hit"))
+              if l['sport']=='cs2' else _adapter(l['sport']).entry_projection(results[l['id']]['_x'],l['side'])
+              for l in entry_legs]
         if any(p is None for p in pl):
             return None
         url, _why = srv.pplink.pp_link(pl)
@@ -858,7 +860,7 @@ def _limited(h, srv, bucket, member, limit):
 def get_me(h, srv, q, member, scratch, name):
     return h.send(200, {"member": member, "name": name, "scratch": scratch, "sports": access(h, srv, q), "rules_version": rules.RULES_VERSION,
                         "owner": bool(scratch) or bool(h._sports_owner()),
-                        "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1"}})
+                        "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1", "book_links": bool(srv.PP_OPEN_LINK)}})
 
 
 def _sport_q(h, srv, q):
@@ -1038,6 +1040,21 @@ def post_recheck(h, srv, q, member, scratch, name, n):
     return h.send(200, public_check(res))
 
 
+def post_book_line(h, srv, q, member, scratch, name, n):
+    d=_read_json(h,srv,n)
+    legs=_legs_of(d) if d else None
+    if not srv.PP_OPEN_LINK:return h.send(404,{'error':'not found'})
+    if not legs or len(legs)!=1 or legs[0]['book']!='underdog':
+        return h.send(400,{'error':'Use a checked 2–6 pick entry for PrizePicks.'})
+    if _limited(h,srv,'recheck',member,RECHECK_PER_MIN):return None
+    l=legs[0]
+    result=_check_one(srv,l,snapshot(srv) if l['sport']=='cs2' else None,{},datetime.now(timezone.utc),access(h,srv,q))
+    if not result.get('ok'):return h.send(409,{'error':'This line changed, started or could not be verified. Refresh it first.'})
+    url=srv.ud_row_link(l['row_id']) if l['sport']=='cs2' else _adapter(l['sport']).entry_link(result['_x'],l['side'])
+    if not srv.pplink.ud_link_ok(url):return h.send(409,{'error':'The provider did not supply a verified link for this market.'})
+    return h.send(200,{'url':url,'label':'Open in Underdog'})
+
+
 def _payload(x, leg, res, e):
     """What the member saw, frozen. grade, units and stake_reason are Scout's for scout_side, whatever side the member took. The
     forecast_* fields are the saved forecast itself, beside the board's copy: the same-match cap and display gd-1 can move the
@@ -1142,7 +1159,7 @@ def post_state(h, srv, q, member, scratch, name, n):
 
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated}
-POST = {"recheck": post_recheck, "track": post_track, "state": post_state}
+POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "book-line": post_book_line}
 
 
 def handle(h, srv, method, path, q, n=0, prefix=None):
