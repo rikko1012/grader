@@ -102,3 +102,15 @@ def test_minimum_grade_uses_published_unheld_letter():
     r['scout']['hold']='Accuracy review'
     assert not a.match(r,{'minGrade':'B'},[],[r],1000)
     assert a.match(r,{'minGrade':'all'},[],[r],1000)
+
+
+def test_line_difference_index_keeps_event_period_and_book_boundaries():
+    import copy
+    base=row(); other=copy.deepcopy(base)
+    other['offer'].update(platform='prizepicks',line=21.5)
+    wrong=copy.deepcopy(other); wrong['event']['id']='different-event'
+    period=copy.deepcopy(other); period['market']['scope']='1'
+    same=copy.deepcopy(other); same['offer']['line']=20.5
+    for candidates,expected in [([base],False),([base,wrong,period,same],False),([base,other],True)]:
+        index=a._different_lines(candidates)
+        assert a.match(base,{'onlyDiff':True},[],[],1000,index) is expected

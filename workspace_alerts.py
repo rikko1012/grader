@@ -64,7 +64,26 @@ def subscription(root,member,enabled=None,destination=None,sports=(),now=None):
                 'status':r['status'] if r else 'off'}
 
 
-def match(r,f,watch,rows,now):
+def _market_key(r):
+    return (r['sport'],r['event']['id'],r['player']['key'],json.dumps(r['market'],sort_keys=True))
+
+
+def _different_lines(rows):
+    """Index once per worker tick, rather than scan the board for every member/row."""
+    groups={}
+    for r in rows:
+        try: groups.setdefault(_market_key(r),{}).setdefault(r['offer']['platform'],set()).add(r['offer']['line'])
+        except (KeyError,TypeError,ValueError): continue
+    out=set()
+    for key,books in groups.items():
+        for book,lines in books.items():
+            other=set().union(*(v for b,v in books.items() if b!=book))
+            for line in lines:
+                if other-{line}: out.add((key,book,line))
+    return out
+
+
+def match(r,f,watch,rows,now,differences=None):
     try:
         from datetime import datetime
         start=datetime.fromisoformat(r['event']['start_utc'].replace('Z','+00:00')).timestamp()
@@ -80,9 +99,9 @@ def match(r,f,watch,rows,now):
         if f.get('soonOnly') and start-now>3600:return False
         if f.get('movedOnly') and r['offer'].get('moved_from') is None:return False
         if f.get('watched') and r['sport']+'|'+r['player']['key'] not in watch:return False
-        if f.get('onlyDiff') and not any(x['sport']==r['sport'] and x['event']['id']==r['event']['id']
-            and x['player']['key']==r['player']['key'] and x['market']==r['market']
-            and x['offer']['platform']!=r['offer']['platform'] and x['offer']['line']!=r['offer']['line'] for x in rows):return False
+        if f.get('onlyDiff'):
+            differences=_different_lines(rows) if differences is None else differences
+            if (_market_key(r),r['offer']['platform'],r['offer']['line']) not in differences:return False
         text=' '.join(str(x or '') for x in (r['player']['name'],r['player'].get('team'),r['event'].get('label'),r['market']['stat_label']))
         return str(f.get('q') or '').lower() in text.lower()
     except (KeyError,TypeError,ValueError):return False
@@ -102,6 +121,7 @@ def deliver(destination,title,content,session=None):
 
 def tick(root,state_for,rows,access,send=deliver,now=None,after=''):
     now=time.time() if now is None else now
+    differences=_different_lines(rows)
     stats={'scanned':0,'queued':0,'cursor':''}
     with connect(root) as db:
         expired=[r[0] for r in db.execute('SELECT member FROM subscriptions WHERE expires_at<=?',(now,))]
@@ -121,7 +141,7 @@ def tick(root,state_for,rows,access,send=deliver,now=None,after=''):
                 # A changed rule establishes a fresh baseline, never a flood.
                 rid=hashlib.sha256(json.dumps(rule,sort_keys=True).encode()).hexdigest()
                 baseline=db.execute('SELECT 1 FROM baselines WHERE member=? AND rule=?',(m,rid)).fetchone()
-                found=[r for r in available if match(r,rule['filters'],prefs.get('watch') or [],available,now)]
+                found=[r for r in available if match(r,rule['filters'],prefs.get('watch') or [],available,now,differences)]
                 for r in found:
                     rev=hashlib.sha256(json.dumps([r['sport'],r['offer']['platform'],r['offer']['offer_id'],r['offer']['revision']]).encode()).hexdigest()
                     seen=db.execute('SELECT 1 FROM seen WHERE member=? AND rule=? AND revision=?',(m,rid,rev)).fetchone()
