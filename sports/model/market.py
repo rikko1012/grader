@@ -81,6 +81,11 @@ def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0, last_source
         return None, "quote observed after the start"
     if seen > forecast_at:
         return None, "quote observed after forecast time"
+    # A malformed/future original source timestamp must not produce a negative
+    # age and make an old price eligible. Later metadata sightings are separately
+    # filtered below; they may still leave a valid earlier original timestamp.
+    if q.source_updated_at and parse_utc(q.source_updated_at) > parse_utc(forecast_at):
+        return None, "source time after forecast time"
     if q.platform == "kalshi":
         ok, why = sharp2.eligible_rung(q, event, forecast_at, last_seen)
         if not ok:
