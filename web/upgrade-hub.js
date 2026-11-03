@@ -4,16 +4,17 @@
 export function mount(C) {
   const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);
   const {api, R, T, SPORTS, esc, pct, when} = C;
+  const V2 = R.me.features?.workspace_v2 === true;
   const $ = id => document.getElementById(id);
-  const H = {sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false,
+  const H = {sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
     page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false, batch:null, batchSaved:false};
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
   const key = r => [r.sport,r.offer.platform,r.offer.offer_id].join('|');
   const playerKey = r => r.sport+'|'+r.player.key;
   const num = n => typeof n === 'number' && Number.isFinite(n);
-  const filters = () => ({sport:H.sport,book:H.book,q:H.q,side:H.side,sort:H.sort,stat:H.stat,game:H.game,onlyDiff:H.onlyDiff,watched:H.watched});
-  const filterKeys = ['sport','book','q','side','sort','stat','game','onlyDiff','watched'];
+  const filters = () => ({sport:H.sport,book:H.book,q:H.q,side:H.side,sort:H.sort,stat:H.stat,game:H.game,onlyDiff:H.onlyDiff,watched:H.watched,freshOnly:H.freshOnly,soonOnly:H.soonOnly,movedOnly:H.movedOnly});
+  const filterKeys = ['sport','book','q','side','sort','stat','game','onlyDiff','watched','freshOnly','soonOnly','movedOnly'];
   const gameKey = r => r.sport+'|'+r.event.id;
   const statKey = r => r.sport+'|'+r.market.stat;
   const isOpen = () => !$('u-hub').hidden;
@@ -37,6 +38,9 @@ export function mount(C) {
       && (!f.stat||f.stat==='all'||statKey(r)===f.stat) && (!f.game||f.game==='all'||gameKey(r)===f.game)
       && (f.side==='all'||r.scout.side===f.side) && (!f.onlyDiff||different(r))
       && (!f.watched||H.watch.includes(playerKey(r)))
+      && (!f.freshOnly||!unavailableReason(r))
+      && (!f.movedOnly||r.offer.moved_from!=null)
+      && (!f.soonOnly||(Date.parse(r.event.start_utc)>Date.now()&&Date.parse(r.event.start_utc)-Date.now()<=3600000))
       && (!f.q||[r.player.name,r.player.team,r.event.label,r.market.stat_label].join(' ').toLowerCase().includes(f.q.toLowerCase()));
   }
   function rows() {
@@ -50,6 +54,7 @@ export function mount(C) {
     for(const n of ['book','side','sort','q']) $('hub-'+n).value=H[n];
     $('hub-diff').setAttribute('aria-pressed',String(H.onlyDiff));
     $('hub-watch').setAttribute('aria-pressed',String(H.watched));
+    if(V2)for(const f of ['freshOnly','soonOnly','movedOnly'])$('hub-'+f).setAttribute('aria-pressed',String(H[f]));
     $('hub-sports').innerHTML=['all',...allowed()].map(s=>`<button type="button" data-hub="sport" data-id="${s}" aria-pressed="${H.sport===s}">${s==='all'?'All sports':SPORTS[s]}<span>${H.records.filter(r=>!C.started(r)&&(s==='all'||r.sport===s)).length}</span></button>`).join('');
     const sportRows=H.records.filter(r=>!C.started(r)&&(H.sport==='all'||r.sport===H.sport));
     const markets=[...new Map(sportRows.map(r=>[statKey(r),r.market.stat_label+(H.sport==='all'?' · '+SPORTS[r.sport]:'')])).entries()];
@@ -64,7 +69,7 @@ export function mount(C) {
     const t=C.tallies(r)['l'+n], side=r.scout.side;
     if(!t||!side||!t.n) return `<span class="h-hit empty" title="No comparable history">—</span>`;
     const hit=side==='over'?t.over:t.under, rate=hit/t.n;
-    return `<span class="h-hit ${rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${Math.round(rate*100)}%" title="${hit} hits, ${t.push||0} pushes in ${t.n}; historical results at this line">${hit}<small>/${t.n}</small></span>`;
+    return `<span class="h-hit ${V2?'h-tone-'+Math.min(6,Math.floor(rate*7)):rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${Math.round(rate*100)}%" title="${hit} hits, ${t.push||0} pushes in ${t.n}; historical results at this line">${hit}<small>/${t.n}</small></span>`;
   }
   function row(r) {
     const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r));
@@ -91,7 +96,7 @@ export function mount(C) {
     const issues=allowed().filter(s=>R.boards[s].error);
     const stale=allowed().flatMap(s=>Object.entries(R.boards[s].feeds||{}).filter(([,f])=>f.state!=='ok').map(([p,f])=>SPORTS[s]+' '+(C.PLATFORMS[p]?.label||p)+': '+(f.state||'unavailable')));
     const held= [...new Set(list.filter(r=>r.scout.hold).map(r=>SPORTS[r.sport]))];
-    $('hub-health').innerHTML=(issues.length?`<p class="h-warning">${issues.map(s=>SPORTS[s]).join(', ')} could not refresh. Saved rows are labelled and cannot be added here. <button data-hub="refresh">Retry</button></p>`:'')
+    $('hub-health').innerHTML=(V2&&held.length?`<p>${esc(held.join(' / '))}: official grades are held by the accuracy check. History and lines remain available for research.</p>`:'')+(issues.length?`<p class="h-warning">${issues.map(s=>SPORTS[s]).join(', ')} could not refresh. Saved rows are labelled and cannot be added here. <button data-hub="refresh">Retry</button></p>`:'')
       +(stale.length?`<details class="h-warning"><summary>${stale.length} ${stale.length===1?'source needs':'sources need'} a fresh update</summary><p>${esc(stale.join(' · '))}. Affected offers cannot be added until the source recovers.</p></details>`:'')
       +(list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About Sports grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Performance record for stated chances and actual results.</p></details>`:'');
     $('hub-rows').innerHTML=list.slice(H.page*size,(H.page+1)*size).map(row).join('');
@@ -124,7 +129,7 @@ export function mount(C) {
     H.records=allowed().flatMap(s=>[...R.boards[s].recs.values()]);
     const current=rec(H.detail),shown=H.detailDoc?.record;
     if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;}
-    H.loading=false; paintBoard(); checkAlerts();
+    H.loading=false; paintBoard(); checkAlerts(); if(V2&&H.section==='games')paintGames();
     if(allowed().includes('cs2')) { await C.loadHits(); paintBoard(); }
   }
   async function savePreferences() {
@@ -207,6 +212,8 @@ export function mount(C) {
     const series=(doc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN);
     const over=series.filter(g=>g.value>line).length,under=series.filter(g=>g.value<line).length,push=series.filter(g=>g.value===line).length;
     const tally=series.length?{n:series.length,over,under,push}:C.tallies(r)['l'+H.histN];
+    const sortedValues=series.map(g=>g.value).sort((a,b)=>a-b), middle=Math.floor(sortedValues.length/2);
+    const median=sortedValues.length?(sortedValues.length%2?sortedValues[middle]:(sortedValues[middle-1]+sortedValues[middle])/2):null;
     const count=tally?(side==='over'?tally.over:tally.under):null;
     const eligible=H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
     const quotes=C.siblings(r), quoteText=(q,sd)=>{
@@ -223,7 +230,7 @@ export function mount(C) {
     box.innerHTML=`<div class="h-detail-head"><div><h3>${esc(r.player.name)} <span>${esc(r.market.stat_label)}</span></h3><p>${esc(r.market.period_label)} · ${esc(r.event.label)}</p></div><button data-hub="research" data-id="${esc(key(r))}">Full player research ↗</button></div>
       ${playerMarkets.length>1?`<nav class="h-player-markets" aria-label="Player markets">${playerMarkets.map(x=>`<button data-hub="player-market" data-id="${esc(key(x))}" aria-pressed="${key(x)===key(r)}">${esc(x.market.stat_label)} <b>${esc(x.offer.line)}</b><small>${esc(x.market.period_label)}</small></button>`).join('')}</nav>`:''}
       <div class="h-detail-grid"><section class="h-history-panel"><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sd==='over'?'Over':'Under'} ${esc(line)}</button>`).join('')}</div><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div>
-      <div class="h-history-summary"><div><b>${tally?`${count}<em>/${tally.n}</em>`:'—'}</b><span>Past results ${side} ${esc(line)}${tally?.push?` · ${tally.push} pushes`:''}</span></div><div><b>${series.length?(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1):'—'}</b><span>Average · ${series.length||'no'} games loaded</span></div><div><b>${num(r.scout.projection)?r.scout.projection.toFixed(1):'—'}</b><span>Saved projection</span></div></div>
+      <div class="h-history-summary"><div><b>${tally?`${count}<em>/${tally.n}</em>`:'—'}</b><span>Past results ${side} ${esc(line)}${tally?.push?` · ${tally.push} pushes`:''}</span></div><div><b>${series.length?(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1):'—'}</b><span>Average · ${series.length||'no'} games loaded</span></div><div><b>${num(r.scout.projection)?r.scout.projection.toFixed(1):'—'}</b><span>Saved projection</span></div>${V2?`<div><b>${median==null?'—':median.toFixed(1)}</b><span>Median · same ${series.length} games</span></div>`:''}</div>
       ${H.detailState==='loading'?'<p class="h-detail-loading">Loading this player’s saved results…</p>':H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`:series.length?`<div class="h-history-chart" role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}">${C.chartSvg(series,line,side,560)}</div><details class="h-history-table"><summary>View dates and results</summary><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${g.value===line?'Push':g.value>line?'Over':'Under'}</td></tr>`).join('')}</tbody></table></details>`:'<p class="h-detail-loading">Game-by-game results are not available for this market. Any hit count above comes from its saved board summary.</p>'}
       <p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p></section>
       <section class="h-line-shop"><div class="h-shop-head"><h3>Compare lines</h3><small>Same event · stat · period</small></div><table><thead><tr><th>Platform / line</th><th>Over</th><th>Under</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td></tr>`).join('')}</tbody></table><p>Choose a line to recalculate its historical results. A lower Over line or higher Under line can help, but payouts and availability also matter.</p>
@@ -245,6 +252,7 @@ export function mount(C) {
     box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks"','data-hub="receipts"');
     if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side.</p><button data-hub="section" data-id="board">Browse player props</button></div>';
     if(u)box.querySelector(`[data-u="${CSS.escape(u)}"]${id==null?'':`[data-id="${CSS.escape(id)}"]`}`)?.focus({preventScroll:true});
+    if(V2&&$('hub-slip-history'))$('hub-slip-history').innerHTML=C.picksTab();
     $('hub-studio-sync').textContent=T.saveFail?'Not yet synced. Your changes remain on this device.':T.pending||T.saving?'Saving your changes…':'Saved to your account · available on your other devices';
     if($('hub-studio-summary'))$('hub-studio-summary').textContent=`${T.legs.length} picks · ${new Set(T.legs.map(l=>l.sport)).size} sports · ${new Set(T.legs.map(l=>l.book)).size} ${new Set(T.legs.map(l=>l.book)).size===1?'platform':'platforms'}`;
   }
@@ -325,24 +333,50 @@ export function mount(C) {
         <footer>${num(t.wins)&&num(t.losses)?t.wins+t.losses:'—'} decided picks · ${t.matches??'—'} ${esc(t.match_word||'matches')} · Updated ${esc(d.as_of?when(d.as_of):'time unavailable')}${t.ci?` · 95% interval ${pct(t.ci[0])}–${pct(t.ci[1])}`:''}</footer></article>`;
     }).join('');
   }
+
+  function paintGames() {
+    const box=$('hub-games-body');if(!box||H.section!=='games')return;
+    const games=new Map();
+    H.records.filter(r=>!C.started(r)).forEach(r=>{const k=gameKey(r);if(!games.has(k))games.set(k,[]);games.get(k).push(r);});
+    const ordered=[...games.entries()].sort((a,b)=>Date.parse(a[1][0].event.start_utc)-Date.parse(b[1][0].event.start_utc));
+    box.innerHTML=ordered.length?ordered.map(([k,rs])=>{const r=rs[0],players=new Set(rs.map(x=>x.player.key)),markets=new Set(rs.map(x=>x.market.stat)),books=new Set(rs.map(x=>x.offer.platform_label));return `<article class="h-game-card"><header><span class="h-eyebrow">${esc(SPORTS[r.sport])}</span><time>${esc(when(r.event.start_utc))}</time></header><h2>${esc(r.event.label)}</h2><p>${players.size} players · ${markets.size} markets · ${rs.length} lines</p><div class="h-game-books">${[...books].map(b=>`<span>${esc(b)}</span>`).join('')}</div><button data-hub="game-board" data-id="${esc(k)}">Research matchup <span aria-hidden="true">→</span></button></article>`;}).join(''):`<div class="h-empty"><h2>${H.loading?'Loading games…':'No upcoming games'}</h2><p>${H.loading?'Reading your available boards.':'Refresh the boards to check the latest slate.'}</p><button data-hub="refresh">Refresh boards</button></div>`;
+  }
+  function paintTools() {
+    $('hub-tools-body').innerHTML=`<div class="h-tool-grid"><article><span class="h-eyebrow">MARKETS</span><h2>Moneylines</h2><p>Compare available game markets in the existing moneyline workspace.</p><a href="/?view=classic#moneylines">Open moneylines →</a></article><article><span class="h-eyebrow">RESEARCH</span><h2>Single prop grader</h2><p>Inspect a player and line with the existing grading tools.</p><a href="/?view=classic#one">Open grader →</a></article><article><span class="h-eyebrow">SAVED FILTERS</span><h2>Line alerts</h2><p>Watch for new matches to your saved filters while this page is open.</p><button data-hub="section" data-id="alerts">Manage alerts →</button></article><article><span class="h-eyebrow">EXPLAIN A PROP</span><h2>Ask the Genie</h2><p>Open player research from the Board and use its Genie tab. Answers stay attached to the selected prop.</p><button data-hub="section" data-id="board">Choose a player →</button></article></div>`;
+  }
+  function installV2() {
+    if(!V2)return;
+    $('u-hub').classList.add('h-v2');
+    const nav=[['board','Board'],['games','Games'],['studio','Slips'],['record','Results'],['tools','Tools']];
+    const html=nav.map(([id,label])=>`<button data-hub="section" data-id="${id}">${label}</button>`).join('');
+    document.querySelector('.h-sidebar nav[aria-label="Research hub"]').innerHTML=html;
+    document.querySelector('.h-sidebar [data-id="tools"]').insertAdjacentHTML('beforeend','<span id="hub-alert-count" aria-label="New filter matches"></span>');
+    document.querySelector('.h-nav-mobile').innerHTML=html;
+    $('hub-board-section').insertAdjacentHTML('afterend','<section id="hub-games-section" hidden><div class="h-section-head"><div><h2>The upcoming slate</h2><p>Every available sport. Research a matchup without losing your slip.</p></div></div><div id="hub-games-body" class="h-game-grid"></div></section><section id="hub-tools-section" hidden><div class="h-section-head"><h2>Your research toolkit</h2></div><div id="hub-tools-body"></div></section>');
+    document.querySelector('.h-quick').insertAdjacentHTML('afterbegin',[['freshOnly','Current only'],['soonOnly','Starts within 1h'],['movedOnly','Line moved']].map(([f,label])=>`<button id="hub-${f}" data-hub="quick" data-id="${f}" aria-pressed="false">${label}</button>`).join(''));
+    $('hub-studio-section').insertAdjacentHTML('beforeend','<section class="h-tracked-slips"><header><div><span class="h-eyebrow">YOUR RECORD</span><h2>Tracked slips</h2><p>Exact saved lines, grouped by entry. Each leg keeps its settlement receipt.</p></div><button data-hub="receipts">Filter individual picks →</button></header><div id="hub-slip-history"></div></section>');
+    document.querySelector('.h-working-draft>p').insertAdjacentHTML('afterend','<button data-hub="share-card">Download lineup image</button>');
+  }
+
   function section(name,navigate=true) {
-    if(!['board','studio','record','alerts','picks'].includes(name))name='board';
+    if(!['board','studio','record','alerts','picks',...(V2?['games','tools']:[])].includes(name))name='board';
     H.section=name;
-    if(navigate){const hash='#scout/'+name+(name==='board'?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
-    for(const n of ['board','studio','record','alerts','picks']) {$('hub-'+n+'-section').hidden=n!==name; document.querySelectorAll(`[data-hub="section"][data-id="${n}"]`).forEach(b=>b.setAttribute('aria-current',n===name?'page':'false'));}
+    if(navigate){const hash=(V2?'#/'+({studio:'slips',record:'results'}[name]||name):'#scout/'+name)+(name==='board'?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
+    for(const n of ['board','studio','record','alerts','picks',...(V2?['games','tools']:[])]) {$('hub-'+n+'-section').hidden=n!==name; document.querySelectorAll(`[data-hub="section"][data-id="${n}"]`).forEach(b=>b.setAttribute('aria-current',n===name?'page':'false'));}
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
-    $('hub-title').textContent=({record:'Performance record',picks:'My picks',alerts:'Line alerts',studio:'Slip Studio'})[name]||'Player props';
-    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else paintAlerts();
+    $('hub-title').textContent=({games:'Games',tools:'Research tools',record:'Performance record',picks:'My picks',alerts:'Line alerts',studio:'Slip Studio'})[name]||'Player props';
+    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();if(V2)C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='games')paintGames();else if(name==='tools')paintTools();else paintAlerts();
   }
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
     const csBoard=/^#board(?:\/(?:all|prizepicks|underdog))?$/.test(location.hash);
+    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|tools|picks|alerts)(?:\?(.*))?$/);
     const scout=location.hash.match(/^#scout\/(board|studio|picks|record|alerts)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
     const mainBoard=location.pathname==='/lol'&&!location.hash || location.pathname==='/sports'&&(!location.hash||location.hash.startsWith('#/board')) || location.pathname==='/'&&(!location.hash||csBoard);
-    const open=location.hash==='#all-sports'||!!scout||(!classic&&(mainBoard||slips));
+    const open=location.hash==='#all-sports'||!!scout||!!modern||(!classic&&(mainBoard||slips));
     if(open&&H.routeHash!==location.pathname+location.hash){
       H.routeHash=location.pathname+location.hash;
-      H.sport=scout?(new URLSearchParams(scout[2]||'').get('sport')||H.sport):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
+      H.sport=modern?(new URLSearchParams(modern[2]||'').get('sport')||H.sport):scout?(new URLSearchParams(scout[2]||'').get('sport')||H.sport):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
       if(!allowed().includes(H.sport))H.sport='all';
       const routeBook=location.hash.split('/')[1];
       if(csBoard&&['all','prizepicks','underdog'].includes(routeBook))H.book=routeBook;
@@ -355,10 +389,13 @@ export function mount(C) {
       if(open&&!node.inert){node.dataset.hubInert='1';node.inert=true;}
       if(!open&&node.dataset.hubInert){node.inert=false;delete node.dataset.hubInert;}
     }
-    if(open) {section(scout?scout[1]:slips?'studio':'board',false);syncFields();paintBoard();refreshSlip();load();}
+    if(open) {section(modern?({slips:'studio',results:'record'}[modern[1]]||modern[1]):scout?scout[1]:slips?'studio':'board',false);syncFields();paintBoard();refreshSlip();load();}
   }
   const rec = id => H.records.find(r=>key(r)===id);
   const actions={
+    'share-card'(){C.shareSlip();},
+    quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
+    'game-board'(id){H.game=id;H.sport='all';H.stat='all';H.q='';H.page=0;section('board');},
     generate, 'use-generated':useGenerated, 'save-batch':saveBatch,
     'player-market'(id){H.stat='all';H.game='all';H.q='';H.side='all';H.onlyDiff=false;H.watched=false;H.expanded=null;const r=rec(id);if(!r)return;H.page=Math.max(0,Math.floor(rows().findIndex(x=>key(x)===id)/40));expand(id);},
     filters(){const open=$('hub-board-section').classList.toggle('filters-open');$('hub-filters-toggle').setAttribute('aria-expanded',String(open));},
@@ -390,6 +427,7 @@ export function mount(C) {
   const entry=document.createElement('a');entry.href='#all-sports';entry.className='h-entry';entry.textContent='All sports research';
   $('hub-board-section').querySelector('.h-tools>button').insertAdjacentHTML('beforebegin','<button class="h-filter-toggle" id="hub-filters-toggle" data-hub="filters" aria-expanded="false" aria-label="Filters and saved views">Filters</button>');
   $('hub-board-section').insertAdjacentHTML('beforebegin','<nav class="h-nav-mobile" aria-label="Research sections"><button data-hub="section" data-id="board">Props</button><button data-hub="section" data-id="studio">Slip Studio</button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Results</button><button data-hub="section" data-id="alerts">Alerts</button></nav>');
+  installV2();
   const entryHost=document.querySelector('.workspace-tools')||document.querySelector('.sw-tabs')||document.querySelector('.ot-lol .bar')||document.querySelector('body header');
   if(entryHost) entryHost.appendChild(entry); else document.body.prepend(entry);
   $('hub-save-dialog').addEventListener('close',()=>{
