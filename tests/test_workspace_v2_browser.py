@@ -39,13 +39,14 @@ def test_game_route_uses_live_fixture_records_and_scoped_board(ctx, env):
     assert not p.errors
 
 
-@pytest.mark.parametrize('width', [360, 390, 640, 1024, 1440])
+@pytest.mark.parametrize('width', [360, 390, 640, 1024, 1025, 1100, 1440])
 def test_all_routes_fit_and_preserve_original_tools(ctx, env, width):
     p = start(ctx, env, width=width)
     for route, section in [('games','games'),('slips','studio'),('results','record'),('tools','tools')]:
         p.evaluate('(h)=>{location.hash=h}', '/'+route)
         p.wait_for_selector('#hub-'+section+'-section:not([hidden])')
         no_h_scroll(p)
+        assert p.locator('.h-center').bounding_box()['y'] < 100
         if os.environ.get('WORKSPACE_V2_SHOTS'):
             dest = Path(os.environ['WORKSPACE_V2_SHOTS'])
             dest.mkdir(parents=True, exist_ok=True)
