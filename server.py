@@ -3947,6 +3947,33 @@ WORKSPACE_ROUTES = {"/preview/workspace": ("workspace.html", "text/html; charset
                     "/preview/workspace/workspace-data.js": ("workspace-data.js", "text/javascript; charset=utf-8")}
 WORKSPACE_API = "/preview/workspace/api/"
 
+# Upgraded member pages, gated by Handler._upgrade_on (SCOUT_UPGRADE, default off). The pages stay at their own routes and the
+# files on disk are never edited: the gate adds one stylesheet and one script to the bytes it sends. Off, nothing below runs and
+# the page bytes are the file's (tests/test_upgrade_gate.py). The API is the workspace's, on its own prefix and its own gate.
+UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf-8"),
+                  "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8")}
+UPGRADE_API = "/api/upgrade/"
+_UPGRADE_MEMO = {}                                      # (id(page bytes), name) -> (page bytes, upgraded page)
+
+
+def upgrade_page(body, name):
+    """The upgraded copy of a member page. Memoised per page OBJECT, as sports_nav is: send_shared caches the ETag + gzip by body
+    identity, so a fresh copy per request would recompress the page every time."""
+    hit = _UPGRADE_MEMO.get((id(body), name))
+    if hit is not None and hit[0] is body:
+        return hit[1]
+    head, tail = b'<link rel="stylesheet" href="/upgrade/upgrade.css">', f'<script src="/upgrade/upgrade.js" data-page="{name}"></script>'.encode()
+    i, j = body.rfind(b"</head>"), body.rfind(b"</body>")
+    out = body
+    if 0 <= i < j:                                      # a page without its markers goes out as it is
+        out = body[:i] + head + body[i:j] + tail + body[j:]
+        out = out.replace(b"<html ", f'<html data-upgrade="{name}" '.encode(), 1)
+    if len(_UPGRADE_MEMO) > 16:                         # a handful of pages; old versions drop when a file changes
+        _UPGRADE_MEMO.clear()
+    _UPGRADE_MEMO[(id(body), name)] = (body, out)
+    return out
+
+
 STATS = {"requests": 0, "ms_total": 0.0, "since": time.time(), "errors_5xx": 0}
 LAST_MEMBER = [0.0]     # last member request on /api/* (the board worker steps aside while members are active)
 _BUSY_RE = re.compile(r"cannot connect|connection|timed? ?out|timeout|getaddrinfo|temporar|unreachable|\b50[234]\b", re.I)
@@ -4152,13 +4179,26 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(("workspace", name), 200, web_file(name), ctype, keep=600)
             if u.path.startswith(WORKSPACE_API) and self._workspace_on(q):
                 return self._workspace_api("GET", u.path, q)
+            if u.path in UPGRADE_ROUTES and self._upgrade_on(q):        # not allowed = the unknown-route answer below
+                name, ctype = UPGRADE_ROUTES[u.path]
+                return self.send_shared(("upgrade", name), 200, web_file(name), ctype, keep=600)
+            if u.path.startswith(UPGRADE_API) and self._upgrade_on(q):
+                return self._workspace_api("GET", u.path, q, prefix=UPGRADE_API)
             if u.path in ("/", "/index.html"):
                 if self._sports_on("/sports"):                          # sports nav link: SPORTS_UI only (else unchanged)
+                    if self._upgrade_on(q):
+                        return self.send_shared(("page", "index", "sports", "upgrade"), 200, upgrade_page(sports_nav(page()), "cs2"), "text/html; charset=utf-8", keep=600)
                     return self.send_shared(("page", "index", "sports"), 200, sports_nav(page()), "text/html; charset=utf-8", keep=600)
+                if self._upgrade_on(q):
+                    return self.send_shared(("page", "index", "upgrade"), 200, upgrade_page(page(), "cs2"), "text/html; charset=utf-8", keep=600)
                 return self.send_shared(("page", "index"), 200, page(), "text/html; charset=utf-8", keep=600)
             if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
                 if self._sports_on("/sports"):
+                    if self._upgrade_on(q):
+                        return self.send_shared(("page", "lol", "sports", "upgrade"), 200, upgrade_page(sports_nav(web_file("lol.html")), "lol"), "text/html; charset=utf-8", keep=600)
                     return self.send_shared(("page", "lol", "sports"), 200, sports_nav(web_file("lol.html")), "text/html; charset=utf-8", keep=600)
+                if self._upgrade_on(q):
+                    return self.send_shared(("page", "lol", "upgrade"), 200, upgrade_page(web_file("lol.html"), "lol"), "text/html; charset=utf-8", keep=600)
                 return self.send_shared(("page", "lol"), 200, web_file("lol.html"), "text/html; charset=utf-8", keep=600)
             if u.path == "/api/lol/board" and lol_public():
                 if not self.allowed():
@@ -5453,10 +5493,30 @@ class Handler(BaseHTTPRequestHandler):
             token = (parse_qs(ref.query).get("token") or [None])[0]
         return self.authed(token) or self._sports_owner()
 
-    def _workspace_api(self, method, path, q, n=0):
+    def _workspace_api(self, method, path, q, n=0, prefix=WORKSPACE_API):
         """The one workspace API hook. This module is passed in: `import server` from there would load a second copy."""
         import workspace_api
-        return workspace_api.handle(self, sys.modules[__name__], method, path, q, n)
+        return workspace_api.handle(self, sys.modules[__name__], method, path, q, n, prefix)
+
+    def _upgrade_on(self, q):
+        """The upgraded member pages. SCOUT_UPGRADE on: every member who passes the paid check. Unset (the default): the owner only,
+        by the admin token (?token=, X-Admin-Token, or a same-origin Referer from a page opened with it, since the page's scripts
+        and styles carry no token) or the SPORTS_UI_ALLOW allow list. SCOUT_UPGRADE=off: nobody."""
+        flag = os.environ.get("SCOUT_UPGRADE", "").strip().lower()
+        if flag in ("0", "false", "no", "off"):
+            return False
+        if flag in ("1", "true", "yes", "on") and self.allowed():
+            return True
+        token = q.get("token")
+        if not token and self.headers.get("Referer"):
+            ref = urlparse(self.headers.get("Referer"))
+            if ref.path in ("/", "/index.html", "/lol", "/sports", "/sports/", "/sports/results"):
+                token = (parse_qs(ref.query).get("token") or [None])[0]
+        if self.authed(token):
+            return True
+        allow = {x.strip().lower() for x in os.environ.get("SPORTS_UI_ALLOW", "").split(",") if x.strip()}
+        user = whop_auth.cookie_user(self.cookie(whop_auth.COOKIE)) if allow else None      # read from the signed cookie: a member off the
+        return bool(user) and sports_allow_id(user) in allow and self._sports_owner()       # list never reaches Whop on a page load
 
     def _sports_route(self, u, q):
         """Sports answers through sports/gateway.py (standard library only). In the default SPORTS_API_MODE=service the
@@ -5471,6 +5531,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:                          # noqa: BLE001 - sports must not break esports
             sys.stderr.write(f"  sports route failed: {type(e).__name__}: {str(e)[:200]}\n")
             return self.send(503, {"error": "sports_unavailable"})
+        if code == 200 and u.path in ("/sports", "/sports/", "/sports/results") and self._upgrade_on(q):
+            body = upgrade_page(body, "sports-results" if u.path == "/sports/results" else "sports")
         return self.send(code, body, ctype, hdrs)
 
     def authed(self, token):
@@ -5513,6 +5575,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(413, {"error": f"body over {POST_MAX} bytes"})
         if u.path.startswith(WORKSPACE_API) and self._workspace_on({k: v[0] for k, v in parse_qs(u.query).items()}):
             return self._workspace_api("POST", u.path, {k: v[0] for k, v in parse_qs(u.query).items()}, n)
+        if u.path.startswith(UPGRADE_API) and self._upgrade_on({k: v[0] for k, v in parse_qs(u.query).items()}):
+            return self._workspace_api("POST", u.path, {k: v[0] for k, v in parse_qs(u.query).items()}, n, prefix=UPGRADE_API)
         if u.path == "/api/slip_log":
             # closeout2 copyval: the page's Copy slip waits for THIS answer and writes the clipboard only on {"ok": true}
             # (owner: validate first - a refused, failed or timed-out check leaves the clipboard untouched). One call

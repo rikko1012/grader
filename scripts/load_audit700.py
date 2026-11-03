@@ -4,6 +4,7 @@ card (/api/grade), match compare, results, line check, veto and search routes, a
 compression, so per-request heavy work and uncompressed bodies show up.
 
 usage: python scripts/load_audit700.py <code_dir> [members=700] [workspace] [history=0] [allsports]
+With UPGRADE_LOAD=1 in the environment, "workspace" runs the same visit through the upgraded pages' own gate and prefix (SCOUT_UPGRADE, /api/upgrade/) and adds the page, its script and stylesheet, and the hit-rate and stated reads.
 "workspace" runs the research workspace API instead (board, line, recheck, track, mine, state, results) as one signed-in member
 per thread, on fixture rows backed by a seeded pick log, and fails loudly on a 5xx, a grade call, more than one board build
 per 5 s, or a lost receipt. history = settled receipts already on each member's account before the run starts: a first visit has
@@ -34,6 +35,7 @@ MEMBERS = int(sys.argv[2]) if len(sys.argv) > 2 else 700
 WORKSPACE = len(sys.argv) > 3 and sys.argv[3] == "workspace"
 HISTORY = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 ALLSPORTS = len(sys.argv) > 5 and sys.argv[5] == "allsports"
+UPGRADE = os.environ.get("UPGRADE_LOAD") == "1"
 sys.path.insert(0, code)
 os.chdir(code)
 tmp = tempfile.mkdtemp(dir=os.path.dirname(os.path.abspath(__file__)))
@@ -41,7 +43,7 @@ os.environ["CS2_DATA_DIR"] = tmp
 for f in ("SPORTS_UI", "SPORTS_API", "SPORTS_INGEST", "SPORTS_TRAIN"):
     os.environ.pop(f, None)
 if WORKSPACE:
-    os.environ["SCOUT_WORKSPACE_PREVIEW"] = "1"
+    os.environ["SCOUT_UPGRADE" if UPGRADE else "SCOUT_WORKSPACE_PREVIEW"] = "1"
 
 import hltv_store  # noqa: E402
 hltv_store.DB_PATH = Path(tmp) / "hltv_store.db"
@@ -228,7 +230,7 @@ def workspace_run():
     from datetime import datetime, timedelta, timezone
     from tests.workspace_fixture import Fixture, iso, leg_of, row
     import workspace_api
-    api = "/preview/workspace/api/"
+    api = "/api/upgrade/" if UPGRADE else "/preview/workspace/api/"
     fx = Fixture(tmp)
     start = iso(datetime.now(timezone.utc) + timedelta(hours=4))
     fx.rows = [row(f"11111111-0000-4000-8000-{m * 2 + k:012d}", "underdog", f"p{m}x{k}", f"T{m}a", f"T{m}b", 30.5, "More", round(0.58 + 0.01 * (m % 9), 3), 900 + m, start)
@@ -236,7 +238,12 @@ def workspace_run():
     fx.install(setattr)
     for name, val in (("_RESULTS", {}), ("_INFLIGHT", {}), ("_GB", {})):
         setattr(server, name, val)
-    server.hltv.recent_series = lambda *a, **k: []
+    def slow_series(*a, **k):                                   # one HLTV read, for the shared L5 and L20 pass
+        time.sleep(0.01 if UPGRADE else 0)
+        return []
+    server.hltv.recent_series = slow_series
+    if UPGRADE:
+        whop_auth.cookie_valid = lambda v: bool(v and v.startswith("good-"))
     other = None
     if ALLSPORTS:
         from tests.workspace_other_fixture import Lol, Sports, big_nba_board, leg as any_leg
@@ -262,7 +269,7 @@ def workspace_run():
             c = getattr(tls, "c", None) if ALLSPORTS else None
             c = c or http.client.HTTPConnection("127.0.0.1", port, timeout=120)
             try:
-                c.request(method, api + name, body=data, headers=head)
+                c.request(method, name if name.startswith("/") else api + name, body=data, headers=head)
                 r = c.getresponse()
                 raw = r.read()
                 break
@@ -315,6 +322,8 @@ def workspace_run():
                       ("POST", "recheck", {"idem": f"chkl-{i:06d}", "legs": ll, "entry_types": {"underdog": "standard"}}),
                       ("POST", "track", {"idem": f"trkl-{i:06d}", "entry_key": "underdog", "entry_type": "standard", "legs": ll}),
                       ("GET", "results?sport=lol", None), ("GET", "results?sport=nba", None), ("GET", "results?sport=nfl", None), ("GET", "mine", None)]
+        if UPGRADE:
+            steps = [("GET", "/", None), ("GET", "/upgrade/upgrade.js", None), ("GET", "/upgrade/upgrade.css", None)] + steps + [("GET", "hits", None), ("GET", "stated", None)]
         for method, name, body in steps:
             st, dt, n, enc, _ = req(method, name, who, body)
             out.append((method + " " + name.split("&")[0] if "sport=" in name else method + " " + name.split("?")[0], st, dt, n, enc))

@@ -701,6 +701,16 @@ def _line(name, leans, stated=None, games=None):
     return {"name": name, "picks": n, "wins": leans.get("wins"), "losses": leans.get("losses"), "pushes": leans.get("pushes"), "observed": leans.get("hit_rate"), "printed": stated, "matches": games}
 
 
+def _letters(d):
+    """The research grades the page's own Results show: none while the league is contained or the grades are withheld. The public file
+    keeps no stated chance per letter, so that cell stays empty."""
+    grades = d.get("grades") or {}
+    if (d.get("model_gate") or {}).get("contained") or grades.get("withheld"):
+        return []
+    return [{"name": g.get("grade"), "picks": g.get("n") or 0, "wins": g.get("wins"), "losses": g.get("losses"), "pushes": g.get("pushes"), "observed": g.get("hit_rate"), "printed": None}
+            for g in grades.get("rows") or [] if g.get("n")]
+
+
 def results(srv, lg):
     """The sports Results file for one league. Not ready or down raises Down: the page says so, and never shows a zero for it."""
     st, doc = _public(srv)
@@ -721,5 +731,5 @@ def results(srv, lg):
             "rule": "Over when its chance of Over is above 50% and its projection is above the line, Under mirrored. Hit rate is wins over wins plus losses. Pushes stay apart, voids and unresolved props stay out.",
             "totals": {"picks": leans.get("n") or 0, "wins": leans.get("wins"), "losses": leans.get("losses"), "pushes": leans.get("pushes"), "observed": leans.get("hit_rate"), "ci": leans.get("hit_rate_ci95"),
                        "printed": stated, "matches": d.get("games"), "void": d.get("void"), "match_word": "games"},
-            "groups": {"chance": by_band, "stat": by_stat}, "gate": (d.get("gate") or {}).get("text"),
+            "groups": {"chance": by_band, "stat": by_stat}, "letters": _letters(d), "gate": (d.get("gate") or {}).get("text"),
             "market": {"pairs": hh.get("pairs"), "games": hh.get("games"), "scout_brier": hh.get("scout_brier"), "market_brier": hh.get("market_brier"), "market": hh.get("market")} if hh else None}

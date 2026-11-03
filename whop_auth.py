@@ -318,6 +318,12 @@ def cookie_valid(cookie_value):
     return bool(s) and time.time() <= s.get("exp", 0)
 
 
+def cookie_user(cookie_value):
+    """The user a signed, unexpired session cookie names, or None. No Whop call: it says who, never whether they have paid."""
+    s = _unsign(cookie_value)
+    return s.get("u") if s and time.time() <= s.get("exp", 0) else None
+
+
 def session(cookie_value):
     """-> {'user', 'name', 'ok'} for a valid session cookie, else None. Re-checks access every RECHECK_H hours.
     After a CLEAR answer from Whop newer than the cookie's own check, 'renew' = (new cookie value, max-age s) carrying

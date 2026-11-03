@@ -42,6 +42,7 @@ STAT_COL = {"kills": "kills", "hs": "headshots"}
 SIDE_WORD = {"over": "Over", "under": "Under"}
 LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
 OWNER_ID = "wm-owner-admin-token"
+TOKEN_PAGES = ("/preview/workspace", "/", "/index.html", "/lol", "/sports", "/sports/", "/sports/results")     # the pages that call this API
 CHECK_TTL_S = 300
 MAX_LEGS = 8
 STATE_MAX = 16 * 1024
@@ -72,6 +73,8 @@ _HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}}
 _ST = {"store": None}
 _ST_LOCK = threading.Lock()
 _SNAP = {"at": 0.0, "body": None, "index": {}, "props": {}, "last": {}, "doc": None, "gen": 0, "feeds": {}}
+HITS_TTL, HITS_FILL_TTL, HITS_BUDGET_S = 60, 20, 1.0
+_HITS_DOC = {"body": None, "at": 0.0, "ttl": HITS_TTL, "lock": threading.Lock()}
 
 
 class Lru:
@@ -154,6 +157,7 @@ def reset():
         _ST["sports"] = False
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
+    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL)
     for d in _HITS.values():
         d.clear()
     for name in ("workspace_lol", "workspace_sports"):
@@ -181,7 +185,7 @@ def access(h, srv, q):
 def _token_in_use(h, q):
     token = q.get("token")
     ref = urlparse(h.headers.get("Referer") or "")
-    if not token and ref.path == "/preview/workspace":
+    if not token and ref.path in TOKEN_PAGES:
         token = (parse_qs(ref.query).get("token") or [None])[0]
     return h.authed(token)
 
@@ -957,6 +961,57 @@ def get_state(h, srv, q, member, scratch, name):
     return _send_private(h, srv, ent)
 
 
+def _tally_of(ser, line, n):
+    """Over, under and push at this line over the newest n results, the same count the research panel makes from the same rows."""
+    s = ser[:n]
+    if len(s) < min(n, 5) or (n == 20 and len(s) <= 10):
+        return None
+    return {"over": sum(g["value"] > line for g in s), "under": sum(g["value"] < line for g in s), "push": sum(g["value"] == line for g in s), "n": len(s)}
+
+
+def _hits_doc(srv, snap):
+    """L5 and L20 of the CS2 board. A board row only carries L10, so the rest comes from the same HLTV rows /line reads, only when
+    they reproduce the saved L10. One pass at a time, HITS_BUDGET_S at most, one history slot at a time: a member never waits on
+    it, later passes go on from what the earlier ones left in the shared history cache, and rows it has not reached show L10."""
+    d = _HITS_DOC
+    if d["body"] is not None and time.time() - d["at"] < d["ttl"]:
+        return d["body"]
+    if not d["lock"].acquire(blocking=False):
+        return d["body"] or b'{"rows":{},"complete":false}'
+    try:
+        t0, rows, complete = time.time(), {}, True
+        for (book, rid), x in list(snap["index"].items()):
+            if time.time() - t0 > HITS_BUDGET_S:
+                complete = False
+                break
+            ser = _history(srv, x)
+            if ser:
+                rows[f"{book}|{rid}"] = {"l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
+        body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
+        if d["body"] == body:
+            body = d["body"]                    # identical bytes: the same object, so nothing is compressed again
+        d.update(body=body, at=time.time(), ttl=HITS_TTL if complete else HITS_FILL_TTL)
+        return body
+    finally:
+        d["lock"].release()
+
+
+def get_hits(h, srv, q, member, scratch, name):
+    snap = snapshot(srv)
+    if snap is None:
+        return h.send(503, {"error": "board_unavailable"})
+    return h.send_shared(("ws_hits",), 200, _hits_doc(srv, snap), keep=60)
+
+
+def get_stated(h, srv, q, member, scratch, name):
+    """CS2 stated against observed, by letter and by market, from the same stored export as Results."""
+    def compute():
+        import results_stated
+        return 200, json.dumps(results_stated.stated_observed(srv._p1_export()), default=str, separators=(",", ":")).encode()
+    st_, body = srv.shared(("ws_stated",), compute, ttl=300)
+    return h.send_shared(("ws_stated",), st_, body, keep=300)
+
+
 def get_rules(h, srv, q, member, scratch, name):
     return h.send(200, rules.rules_payload())
 
@@ -1075,13 +1130,13 @@ def post_state(h, srv, q, member, scratch, name, n):
 
 
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
-       "diagnostics": get_diagnostics}
+       "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state}
 
 
-def handle(h, srv, method, path, q, n=0):
-    """Every /preview/workspace/api/* route. The caller has already passed Handler._workspace_on."""
-    name = path[len(srv.WORKSPACE_API):]
+def handle(h, srv, method, path, q, n=0, prefix=None):
+    """Every workspace API route, under /preview/workspace/api/ or /api/upgrade/. The caller has already passed that prefix's gate."""
+    name = path[len(prefix or srv.WORKSPACE_API):]
     fn = (GET if method == "GET" else POST).get(name)
     if fn is None:
         if method == "GET":
