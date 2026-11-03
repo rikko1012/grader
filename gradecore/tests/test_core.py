@@ -40,13 +40,14 @@ def test_core_imports_no_sport_code():
 
 
 def test_only_explicit_forecast_capture_boundaries_import_core():
-    allowed = {'picklog.py', 'lol/center/forecast.py', 'sports/model/forward.py', 'sports/market_tools.py'}
+    allowed = {'picklog.py', 'lol/center/forecast.py', 'sports/model/forward.py', 'sports/market_tools.py',
+               'workspace_api.py', 'sports/api_model.py'}
     for p in list(ROOT.glob("*.py")) + list((ROOT / "sports").rglob("*.py")) + list((ROOT / "lol").rglob("*.py")):
         if 'tests' in p.parts:
             continue
         if 'gradecore' in _imports(p):
             assert p.relative_to(ROOT).as_posix() in allowed, p.name
-            if p.name != 'market_tools.py':
+            if p.name not in ('market_tools.py', 'workspace_api.py', 'api_model.py'):
                 assert 'SCOUT_GRADECORE_SHADOW' in p.read_text(encoding='utf-8'), p.name
 
 

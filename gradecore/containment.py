@@ -21,11 +21,12 @@ from pathlib import Path
 
 from . import scorecard
 
-VERSION = "ct-2"
+VERSION = "ct-3"
 SPORTS = ("cs2", "lol", "nba", "nfl")
 ENV = {"cs2": "SCOUT_CONTAIN_CS2", "lol": "SCOUT_CONTAIN_LOL", "nba": "SPORTS_CONTAIN_NBA", "nfl": "SPORTS_CONTAIN_NFL"}
 MIN_LEGS = 300
 MAX_GAP = 0.025
+MIN_SIDE_LEGS = 60
 STAT_CONTAIN_N = 60             # A9 5: a stat this large with a hit interval wholly under 50% is contained alone
 LOG_MAX = 400
 CHECK_S = 30.0
@@ -149,7 +150,20 @@ def verdict(rows, min_legs=MIN_LEGS, max_gap=MAX_GAP):
         return {**v, "verdict": "contain", "why": f"stated and hit rate differ by more than {max_gap:.3f}"}
     if lo is None or lo <= 0:
         return {**v, "verdict": "contain", "why": "EV interval does not sit above 0"}
-    return {**v, "verdict": "release", "why": "both conditions hold"}
+    sides = {}
+    for side in ('over', 'under'):
+        legs = [r for r in w if r.get('side') == side]
+        sc_side = scorecard.score(legs)
+        sides[side] = {'n': len(legs), 'gap': sc_side.get('gap')}
+    v['sides'] = sides
+    if any(s['n'] < MIN_SIDE_LEGS for s in sides.values()):
+        return {**v, 'verdict': 'contain', 'side_balance_pass': False,
+                'why': f'needs at least {MIN_SIDE_LEGS} decided picks on each side in the latest window'}
+    if any(abs(s['gap']) > max_gap for s in sides.values()):
+        return {**v, 'verdict': 'contain', 'side_balance_pass': False,
+                'why': 'Over or Under calibration exceeds the allowed gap'}
+    return {**v, "verdict": "release", 'side_balance_pass': True,
+            "why": "aggregate and both side calibration checks pass, with positive EV interval"}
 
 
 def decide(before, verdict_text):

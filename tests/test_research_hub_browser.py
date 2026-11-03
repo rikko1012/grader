@@ -2,6 +2,7 @@
 import json
 import time
 import pytest
+import server
 from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE
 
 
@@ -21,6 +22,36 @@ def hub(ctx, env, size=None):
     p.wait_for_selector('#hub-rows tr', timeout=30000)
     p.wait_for_function("document.querySelector('#hub-sports').textContent.includes('NFL')")
     return p
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_owner_grade_comparison_four_sports_and_paging(ctx,env,monkeypatch,size):
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setattr(server.Handler, '_sports_owner', lambda self: True)
+    p = ctx.new_page()
+    p.set_viewport_size(size)
+    seen=[]
+    def report(route):
+        from urllib.parse import urlsplit,parse_qs
+        q=parse_qs(urlsplit(route.request.url).query)
+        sport=q['sport'][0];seen.append((sport,q.get('before')))
+        route.fulfill(json={'sport':sport,'started_at':'2026-11-03T12:00:00Z','next_before':None if q.get('before') else 8,
+          'rows':[{'player':'<unsafe>','event':'fixture-event','stat':'kills','line':20.5,'period':'full','book':'prizepicks',
+                   'old_letter':'B','old_p':.62,'at':'2026-11-03T12:01:00Z','policy':'gp-1',
+                   'sides':{'over':{'p':.55,'grade':{'band':'B'}},'under':{'p':.45,'grade':{'band':None}}}}]})
+    p.route('**/api/upgrade/grade-review?*',report)
+    p.goto(env.url+'/#/tools')
+    p.wait_for_selector('[data-hub="grade-review"]')
+    for sport in ('cs2','lol','nba','nfl'):
+        p.locator('[data-hub="grade-review"][data-id="'+sport+'"]').first.click()
+        p.wait_for_selector('#hub-grade-review table')
+        assert '<unsafe>' in p.locator('#hub-grade-review').inner_text()
+        assert p.locator('#hub-grade-review unsafe').count()==0
+        p.locator('#hub-grade-review [data-before]').click()
+        p.wait_for_function("!document.querySelector('#hub-grade-review [data-before]')")
+    assert len(seen)==8
+    assert seen[-1]==('nfl',['8'])
+    no_h_scroll(p)
 
 
 def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env):

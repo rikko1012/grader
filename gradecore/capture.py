@@ -41,6 +41,7 @@ def capture(con, kind, *args):
         con.execute('SAVEPOINT gradecore_capture'); active=True
         con.execute('CREATE TABLE IF NOT EXISTS gradecore_shadow (id TEXT PRIMARY KEY, sport TEXT NOT NULL, '
                     'forecast_id TEXT NOT NULL, forecast_at TEXT NOT NULL, captured_at TEXT NOT NULL, payload TEXT NOT NULL)')
+        con.execute('CREATE INDEX IF NOT EXISTS gradecore_shadow_sport ON gradecore_shadow(sport)')
         for verb in ('UPDATE','DELETE'):
             con.execute(f"CREATE TRIGGER IF NOT EXISTS gradecore_no_{verb.lower()} BEFORE {verb} ON gradecore_shadow "
                         "BEGIN SELECT RAISE(ABORT, 'gradecore shadow is append-only'); END")

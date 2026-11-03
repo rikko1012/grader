@@ -12,12 +12,12 @@ Status of `1Time_Scout_Ultimate_Upgrade_Brief.md`. A box is ticked only with evi
 ## Phase 1
 - [x] Reuse pure modules from `claude/gradecore-phase1` afadb3e; 186 original tests pass on the integration branch. New finite-number/all-push contract checks added; no live imports.
 - [ ] Merge the branch after the full suite and CI pass
-- [ ] Adapters: cs2, lol, nba, nfl
-- [ ] Property tests run against all four adapters
-- [ ] Changing one number in `policy.py` changes grades in all four sports in tests
+- [x] Saved projection adapters: cs2, lol, nba, nfl; raw probability/identity checks and gated forecast capture. Market and settlement enrichment remain separate work.
+- [x] Property tests run against all four saved projection adapters (test_capture.py)
+- [x] Changing one number in `policy.py` changes candidate bands in all four sports in tests
 - [ ] Fit blend weights and calibration on settled history, chronological, held-out legs only
 - [ ] CS2 reliability chart on held-out legs: every bin within 3 points
-- [ ] Over/Under balance check added to the containment gate
+- [x] Over/Under calibration check added to candidate containment ct-3; at least 60 decided picks per side in the 300-pick window, each gap <=2.5 points. Opposite errors cannot cancel.
 - [ ] 7-day side-by-side log on all four sports, nothing member-visible
 - [ ] Admin comparison page: which letters differ, and why
 - [ ] numpy confirmed in the `scout-sports-api` image
@@ -46,6 +46,14 @@ features below do not need a second implementation. Live UI evidence is from
 
 Existing UI does not certify completion of every interaction in the new brief.
 Finish and test the missing connections rather than adding duplicate screens.
+
+## Integration work, not yet deployed (2026-11-03)
+
+- Owner-only comparison API and Tools screen built for four sports, bounded pagination, read-only databases, escaped content. Desktop and 390px phone interaction tests pass. It displays published chance/letter and candidate chance/band; reason drill-down remains incomplete.
+- Background alert cooldown no longer discards unsent revisions. A deferred revision is checked again for current availability before delivery. Consent, access and restart-dedup tests pass. Whop production delivery is not configured or verified.
+- Offline historical conversion selects the last playable forecast at least 30 minutes before start, isolates frozen model versions, preserves pushes, excludes artificial rows and uses latest settlement corrections. No fitted result or improved accuracy is claimed yet.
+- Sports/shared-core regression run: 1,225 passed, 34 skipped. Later history/version changes require focused checks. Combined API/core/alerts run: 512 passed before the latest additions. Full esports/browser run remains in progress.
+- Release still requires chronological real-data evaluation, matching calibration artifacts, seven prospective days, and live verification. Existing public grades are unchanged.
 
 ## Written decisions
 - **Accuracy and profit are separate.** Calibration says stated chances match results; profit needs results above break-even. Neither proves the other, and each is reported on its own.

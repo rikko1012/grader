@@ -103,6 +103,7 @@ def tick(root,state_for,rows,access,send=deliver,now=None,after=''):
         for m in expired:
             for table in ('subscriptions','seen','baselines'):db.execute(f'DELETE FROM {table} WHERE member=?',(m,))
         subs=db.execute('SELECT * FROM subscriptions WHERE member>? ORDER BY member LIMIT 100',(after,)).fetchall()
+        db.commit()
         for sub in subs:
             m=sub['member']; stats['scanned']+=1; stats['cursor']=m
             if not access(sub['destination']):continue
@@ -119,10 +120,15 @@ def tick(root,state_for,rows,access,send=deliver,now=None,after=''):
                 for r in found:
                     rev=hashlib.sha256(json.dumps([r['sport'],r['offer']['platform'],r['offer']['offer_id'],r['offer']['revision']]).encode()).hexdigest()
                     seen=db.execute('SELECT 1 FROM seen WHERE member=? AND rule=? AND revision=?',(m,rid,rev)).fetchone()
-                    if not seen and baseline and now-sub['last_sent']>=900:
+                    if not seen and baseline and now-sub['last_sent']<900:
+                        # Leave the current revision eligible for the next tick.
+                        # Re-evaluating it then also drops withdrawn/started props.
+                        continue
+                    if not seen and baseline:
                         notices.append((rule.get('name','Saved filter'),r))
                     db.execute('INSERT OR IGNORE INTO seen VALUES(?,?,?,?)',(m,rid,rev,now))
                 db.execute('INSERT OR IGNORE INTO baselines VALUES(?,?)',(m,rid))
+            db.commit()
             if notices:
                 # Persist dedup before sending. Ambiguous network failures must
                 # not repeat a message after restart.
@@ -134,6 +140,7 @@ def tick(root,state_for,rows,access,send=deliver,now=None,after=''):
                 try:status=send(sub['destination'],'Scout · '+str(label),text)
                 except Exception:status='delivery_unknown'
                 db.execute('UPDATE subscriptions SET status=? WHERE member=?',(status,m))
+                db.commit()
                 stats['queued']+=status=='queued'
         db.execute('DELETE FROM seen WHERE at<?',(now-7*86400,))
     return stats

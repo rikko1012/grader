@@ -72,3 +72,23 @@ def test_delivery_is_targeted_and_no_redirects(monkeypatch):
         status_code=200
         def json(self):return {'success':True}
     assert a.deliver('user_only','title','content',Session())=='queued'
+
+
+def test_cooldown_defers_current_revision_instead_of_losing_it(tmp_path,monkeypatch):
+    state,sent,send=setup(tmp_path,monkeypatch)
+    def tick(rows,t):return a.tick(tmp_path,lambda m:state,rows,lambda u:True,send,now=t)
+    tick([row()],1000)
+    tick([row('2')],2000)
+    tick([row('3')],2100)
+    assert len(sent)==1
+    tick([row('3')],2900)
+    assert len(sent)==2
+    tick([row('3')],4000)
+    assert len(sent)==2
+
+
+def test_deferred_withdrawn_revision_is_not_sent(tmp_path,monkeypatch):
+    state,sent,send=setup(tmp_path,monkeypatch)
+    for rows,t in [([row()],1000),([row('2')],2000),([row('3')],2100),([],2900)]:
+        a.tick(tmp_path,lambda m:state,rows,lambda u:True,send,now=t)
+    assert len(sent)==1

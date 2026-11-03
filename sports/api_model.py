@@ -97,6 +97,16 @@ def model(req):
 
 def admin_model(req):
     rest = (req.rest or "").strip("/")
+    if rest == 'gradecore-comparison':
+        from gradecore.reporting import comparisons
+        league = _league(req.query or {})
+        if not league:
+            return 400, {'error': 'league must be nba or nfl'}
+        try:
+            return 200, comparisons(config.DATA_DIR / 'canonical.db', league,
+                                    before=req.query.get('before'))
+        except ValueError:
+            return 400, {'error': 'invalid cursor'}
     if rest == 'gradecore-export':
         league = _league(req.query or {})
         if not league:
