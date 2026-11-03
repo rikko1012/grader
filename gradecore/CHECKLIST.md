@@ -51,5 +51,5 @@ Finish and test the missing connections rather than adding duplicate screens.
 - **Accuracy and profit are separate.** Calibration says stated chances match results; profit needs results above break-even. Neither proves the other, and each is reported on its own.
 - **Coverage is reported with accuracy.** Every grade change shows the accuracy change and how many letters changed. Fewer grades is not an accuracy gain.
 - **Unknown payouts stay unknown.** No letter, EV or stake without a verified payout. Goblin/demon and PrizePicks stay unrated until a table is verified.
-- **Market width stays off.** Brief 3.1 and section 2 disagree. Width changes no blend weight until both directions are tested on held-out legs. A wide market can still cap a stake through `gates`. `blend.py` on the branch still shrinks toward the market and must be set off before the merge.
+- **Width direction in the new brief:** shrink toward the market as width grows. The reused `blend.py` implements that direction. It remains disconnected from live grades until chronological fitting and held-out comparison pass; a wide market can separately cap a stake through `gates`.
 - **No official NBA/NFL announcement** while the daily check fails.
