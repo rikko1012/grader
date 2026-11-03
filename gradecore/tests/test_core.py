@@ -64,3 +64,24 @@ def test_chances_must_add_up_and_no_push_rescales():
 
 def test_version_is_set():
     assert GRADE_POLICY_VERSION
+
+
+@pytest.mark.parametrize('bad', [float('nan'), float('inf'), float('-inf'), True, None, '0.5', -0.1, 1.1])
+@pytest.mark.parametrize('field', ['p_over', 'p_under', 'p_push'])
+def test_predictions_reject_non_probabilities(field, bad):
+    kw = dict(p_over=.5, p_under=.4, p_push=.1)
+    kw[field] = bad
+    with pytest.raises(ValueError):
+        contracts.Prediction(**kw)
+
+
+def test_certain_push_has_no_conditional_chance():
+    p = contracts.Prediction(0, 0, 1)
+    assert p.p_over_given_no_push is None
+    assert p.p_under_given_no_push is None
+
+
+@pytest.mark.parametrize('bad', [float('nan'), float('inf'), True, 'unknown'])
+def test_projection_must_be_finite_or_explicitly_absent(bad):
+    with pytest.raises(ValueError):
+        contracts.Prediction(.6, .4, projection=bad)

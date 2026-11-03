@@ -46,13 +46,14 @@ def test_storage_refuses_wrong_forecast_without_writing(field, value):
         con.close()
 
 
-def test_creation_checks_the_supplied_offer_and_preserves_hash():
+@pytest.mark.parametrize('field,value', [('event_id', 'nba:espn:999'), ('league', 'nfl'), ('scope', 'q1')])
+def test_creation_checks_the_supplied_offer_and_preserves_hash(field, value):
     o = w.offer('audit1', 'T1', 1)
     fc = w.forecast('revision1', o)
     kw = {k: v for k, v in fc.__dict__.items() if k != 'forecast_id'}
     assert Forecast.build(offers={'revision1': o}, **kw) == fc
-    with pytest.raises(ContractError, match='event_id'):
-        Forecast.build(offers={'revision1': replace(o, event_id='nba:espn:999')}, **kw)
+    with pytest.raises(ContractError, match=field):
+        Forecast.build(offers={'revision1': replace(o, **{field: value})}, **kw)
 
 
 def test_storage_keeps_historical_revision_and_quarantines_bad_batch():

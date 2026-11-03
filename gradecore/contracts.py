@@ -1,5 +1,6 @@
 """The shapes every sport adapter speaks. Chances follow sports/contracts Forecast: unconditional p_over / p_under / p_push."""
 from dataclasses import dataclass, field
+import math
 
 
 @dataclass(frozen=True)
@@ -26,16 +27,25 @@ class Prediction:
     reason_codes: tuple = ()
 
     def __post_init__(self):
-        if min(self.p_over, self.p_under, self.p_push) < 0 or abs(self.p_over + self.p_under + self.p_push - 1) > 1e-6:
+        probabilities = (self.p_over, self.p_under, self.p_push)
+        if any(isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p)
+               or not 0 <= p <= 1 for p in probabilities):
+            raise ValueError("chances must be finite numbers between 0 and 1")
+        if abs(sum(probabilities) - 1) > 1e-6:
             raise ValueError("chances must be non-negative and sum to 1")
+        if self.projection is not None and (isinstance(self.projection, bool)
+                or not isinstance(self.projection, (int, float)) or not math.isfinite(self.projection)):
+            raise ValueError("projection must be a finite number or None")
 
     @property
     def p_over_given_no_push(self):
-        return self.p_over / (self.p_over + self.p_under)
+        decided = self.p_over + self.p_under
+        return self.p_over / decided if decided else None
 
     @property
     def p_under_given_no_push(self):
-        return self.p_under / (self.p_over + self.p_under)
+        decided = self.p_over + self.p_under
+        return self.p_under / decided if decided else None
 
 
 @dataclass(frozen=True)

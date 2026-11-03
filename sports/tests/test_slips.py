@@ -348,7 +348,7 @@ def test_build_is_deterministic():
 
 
 # ===================================================================== pool: policy exclusions from the store
-def test_pool_policy_exclusions(con):
+def test_pool_policy_exclusions(con, monkeypatch):
     good = w.world(con, [("g1", "H1", 1, "over", 0.6), ("g2", "A2", 2, "under", 0.6)])
     # held stake / no grade / research / no forecast / side not offered / team unknown / stale / started
     w.put_leg(con, w.offer("held", "H3", 3), stake=0.0)
@@ -357,7 +357,14 @@ def test_pool_policy_exclusions(con):
     store.put(con, w.offer("nofc", "H3", 3))
     one = w.offer("oneside", "H3", 3, sides=("over",))      # defence in depth: a forecast that names an unlisted side
     rid = store.put(con, one)["record_id"]
-    store.put(con, w.forecast(rid, w.offer("oneside", "H3", 3), side="under"))
+    from sports.contracts import Forecast, ContractError
+    invalid = w.forecast(rid, w.offer("oneside", "H3", 3), side="under")
+    with pytest.raises(ContractError, match="side not offered"):
+        store.put(con, invalid)
+    # Also exercise the pool's protection against a pre-guard legacy record.
+    with monkeypatch.context() as old_writer:
+        old_writer.setattr(Forecast, "validate_offers", lambda *args: None)
+        store.put(con, invalid)
     w.put_leg(con, w.offer("noteam", None, 3))
     w.put_leg(con, w.offer("stale", "H3", 3, observed_at="2026-10-23T19:00:00Z"), forecast_at="2026-10-23T19:00:00Z")
     store.put(con, w.ev(4, start="2026-10-23T20:01:00Z"))
