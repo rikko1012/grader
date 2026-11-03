@@ -301,8 +301,14 @@
     for (let attempt=0; attempt<3; attempt++) {
       const events = new Set(fixedEvents), players = new Set(fixedPlayers), selected = [];
       // Underdog combinations use one sport until mixed-sport support is verified.
+      const available = pool.filter(r => !excluded.has(legId(r,r.scout.side))
+        && !events.has(r.sport+'|'+r.event.id) && !players.has(r.sport+'|'+r.player.key));
       let udSport = platform === 'underdog' ? existing[0]?.sport : null;
-      for (const r of pool) {
+      if(platform==='underdog' && !udSport) {
+        // A lone high-ranked NFL game must not prevent a valid two-game CS2 entry.
+        udSport=available.find(r=>new Set(available.filter(x=>x.sport===r.sport).map(x=>x.event.id)).size>=need)?.sport;
+      }
+      for (const r of available) {
         const event = r.sport+'|'+r.event.id, player = r.sport+'|'+r.player.key;
         if (excluded.has(legId(r,r.scout.side)) || events.has(event) || players.has(player) || (udSport && r.sport!==udSport)) continue;
         selected.push(makeLeg(r,r.scout.side)); events.add(event); players.add(player);

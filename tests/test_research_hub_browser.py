@@ -401,3 +401,16 @@ def test_inline_prop_displays_available_player_stats(ctx, env):
     assert 'Points, L5' in facts and '21.4' in facts
     assert 'Points allowed per game to C' in facts and '24.1' in facts
     assert 'Days since last game' in facts
+
+def test_underdog_generation_uses_one_sport_with_enough_games(ctx, env):
+    p = hub(ctx, env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('#hub-generation-book').select_option('underdog')
+    p.locator('#hub-generate').click()
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.length > 0", timeout=30000)
+    assert 'generated and rechecked' in p.locator('#hub-generation-status').inner_text()
+    state = saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
+    legs = state['slip']['legs']
+    assert len({l['sport'] for l in legs}) == 1
+    assert len({l['event_id'] for l in legs}) == 2
+    assert all(l['book'] == 'underdog' for l in legs)
