@@ -77,7 +77,7 @@ jobs:
       - run: pip install -r requirements-test.txt playwright==1.63.0
       - run: python -m playwright install --with-deps chromium
       - name: Original pages and four-sport research flows (isolated fixtures)
-        run: python -m pytest tests/test_upgrade_browser.py tests/test_research_hub_browser.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_upgrade_browser.py tests/test_research_hub_browser.py tests/test_workspace_v2_browser.py -q -p no:cacheprovider
 
   full-history:
     if: github.event_name == 'workflow_dispatch'
