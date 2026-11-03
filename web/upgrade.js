@@ -8,6 +8,7 @@
   "use strict";
   const PAGE = (document.currentScript && document.currentScript.dataset.page) || document.documentElement.dataset.upgrade || "";
   const API = "/api/upgrade/";
+  let HUB = null;
   const TOKEN = new URLSearchParams(location.search).get("token");   /* the owner's own link: the API takes it as a header, never in a URL */
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -94,8 +95,8 @@
           props.get(k).push(r);
         });
         props.forEach((l) => l.sort((a, b2) => a.offer.line - b2.offer.line));
-        Object.assign(b, { at: Date.now(), recs, props, keys });
-      } catch (e) { b.at = Date.now() - BOARD_KEEP + 10000; }     /* a failed read is not asked again for 10 s: the page keeps working */
+        Object.assign(b, { at: Date.now(), recs, props, keys, feeds: doc.feeds || {}, error: false });
+      } catch (e) { b.error = true; b.at = Date.now() - BOARD_KEEP + 10000; }     /* stale rows stay labelled, never silently current */
       b.busy = null;
       return b;
     })();
@@ -404,9 +405,12 @@
     const entryP = c && c.problems.length ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}</p>`).join("")}</div>` : "";
     const rules = c && c.rules && c.rules.length ? `<details class="u-det" ${det("rules:" + c.platform)}><summary>Platform rules checked</summary><ul>${c.rules.map((r) => `<li>${esc(r.label)}: ${esc(r.text)}.${r.note ? ` ${esc(r.note)}` : ""}${r.source ? ` <a href="${esc(r.source)}" target="_blank" rel="noopener">Source</a>${r.page_date ? `, ${esc(shortDate(r.page_date))}` : ""}` : ""}</li>`).join("")}</ul></details>` : "";
     const open = c && c.open ? `<a class="u-btn u-gold" href="${esc(c.open.url)}" target="_blank" rel="noopener">${esc(c.open.label)}</a>` : "";
+    const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
+    const ev = c && c.ev;
+    const math = `<div class="u-slip-metrics">${metric(ev && ev.payout ? esc(ev.payout.multiple) + '×' : '—', 'All-hit payout')}${metric(ev && ev.available ? pct(ev.hit_chance) : '—', 'Win chance')}${metric(ev && ev.available ? pct(ev.ev) : '—', 'Expected return')}</div><p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>`;
     return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
       ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null)).join("")}
-      <div class="u-entry-foot">${entryP}${rules}${open}
+      <div class="u-entry-foot">${math}${entryP}${rules}${open}
         <div class="u-acts"><button class="u-btn${!open && can ? " u-gold" : ""}" type="button" ${can && !busy ? "" : "disabled"} data-u="track" data-id="${esc(e.key)}">${busy ? "Tracking" : "Track"}</button><button class="u-btn" type="button" ${ready ? "" : "disabled"} data-u="copy" data-id="${esc(e.key)}">${T.copyBusy ? "Checking" : "Copy"}</button></div></div></section>`;
   }
   function slipTab() {
@@ -445,6 +449,7 @@
       <p class="u-dim">${esc(r.rule)} ${esc(r.scope)}.</p>${[...(d.by_sport || []), ...(d.by_platform || [])].length ? `<table class="u-tbl"><thead><tr><th scope="col">Group</th><th scope="col">Hit-miss-push</th><th scope="col">Hit rate</th></tr></thead><tbody>${[...(d.by_sport || []), ...(d.by_platform || [])].map(row).join("")}</tbody></table>` : ""}`;
   }
   function paintTray() {
+    if (HUB) HUB.refreshSlip();
     const btn = $("u-tray-btn");
     if (!btn) return;
     const n = T.legs.length, c = freshCheck(), vals = c ? Object.values(c.entries) : [], ready = vals.filter((e) => e.ok).length;
@@ -560,12 +565,20 @@
     const list = (P.doc.context && P.doc.context.rows) || [], drivers = (P.doc.context && P.doc.context.drivers) || [];
     return `<div class="u-sec-h"><h3>${rec.sport === "cs2" ? "Inputs saved with this forecast" : "Context"}</h3></div>${list.length ? `<dl class="u-kv">${list.map((r) => `<div><dt>${esc(r.label)}</dt><dd>${esc(r.value)}</dd></div>`).join("")}</dl>` : `<p class="u-dim">${rec.sport === "cs2" ? "This forecast saved no context inputs." : "No context is on file for this line."}</p>`}${drivers.length ? `<div class="u-sec-h"><h3>What moved this forecast</h3></div><ul class="u-list">${drivers.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}`;
   }
+  function genieHtml(rec) {
+    const doc=P.doc, s=rec.scout, side=P.side, t=tallyOf(rec,10), list=siblings(rec), other=list.filter(r=>r.offer.platform!==rec.offer.platform);
+    return `<div class="u-genie"><span class="u-tag">Scout evidence guide</span><h3>What would you like to check?</h3><p class="u-dim">Answers use this offer's saved forecast and research data. No invented stats, web guesses or new predictions.</p>
+      <details class="u-det" open><summary>What supports this pick?</summary><p>${esc(rec.player.name)} has a saved projection of ${s.projection==null?'unavailable':esc(tenth(s.projection))} for ${esc(rec.market.period_label)} ${esc(rec.market.stat_label)}. ${chanceOf(rec,side)==null?'No probability was saved for the selected side.':`The saved chance for ${cap(side)} ${esc(rec.offer.line)} is ${pct(chanceOf(rec,side))}.`} ${s.hold?'This is a research estimate; the validation gate has not released official grades.':''}</p>${doc&&doc.forecast?`<p class="u-dim">Forecast ${esc(doc.forecast.id||'ID unavailable')} · model ${esc(doc.forecast.model_version||s.model_version||'unavailable')}</p>`:''}</details>
+      <details class="u-det"><summary>How often did this line hit?</summary><p>${t?`${side==='under'?t.under:t.over} of the last ${t.n} comparable results hit ${cap(side)} at today's line of ${esc(rec.offer.line)}; ${t.push||0} pushed. This is historical frequency, not a forecast.`:'Comparable past-game results are not available for this line.'}</p><button class="u-link" data-u="ptab" data-id="history">Inspect each result</button></details>
+      <details class="u-det"><summary>Is there a better line elsewhere?</summary><p>${other.length?other.slice(0,8).map(r=>`${esc(r.offer.platform_label)} lists ${esc(r.offer.line)} (${esc(r.market.line_type)}), seen ${esc(when(r.offer.seen_at))}.`).join(' '):'No other platform offer is available for this exact event, player, stat and period.'}</p><p class="u-dim">Different lines and payout types are not interchangeable. Compare the actual offer before adding it.</p><button class="u-link" data-u="ptab" data-id="books">Compare sources</button></details>
+      <details class="u-det"><summary>What should I verify before tracking?</summary><p>Confirm ${esc(rec.market.period_label)}, the ${esc(rec.offer.platform_label)} line and offered side, the start time, and any player context. Scout rechecks the exact revision when you track. ${esc(s.stake_reason||'Saved probabilities can be wrong; the performance record shows their measured accuracy.')}</p><button class="u-link" data-u="ptab" data-id="context">View saved context</button></details></div>`;
+  }
   function paintDrawer() {
     const box = $("u-drawer"), rec = P.rec;
     if (!box.open || !rec) return;
-    const side = P.side, body = P.tab === "history" ? chartHtml(rec, side, true) + mapsHtml() : P.tab === "books" ? booksHtml(rec) : P.tab === "context" ? contextHtml(rec)
+    const side = P.side, body = P.tab === "genie" ? genieHtml(rec) : P.tab === "history" ? chartHtml(rec, side, true) + mapsHtml() : P.tab === "books" ? booksHtml(rec) : P.tab === "context" ? contextHtml(rec)
       : tilesHtml(rec, side) + chartHtml(rec, side, false) + forecastHtml(rec, side) + sidesHtml(rec, side);
-    const tabs = ["overview", "history", "books", "context"].map((t) => `<button type="button" role="tab" aria-selected="${P.tab === t}" data-u="ptab" data-id="${t}">${cap(t)}</button>`).join("");
+    const tabs = ["overview", "history", "books", "context", "genie"].map((t) => `<button type="button" role="tab" aria-selected="${P.tab === t}" data-u="ptab" data-id="${t}">${t==='genie'?'Ask the Genie':cap(t)}</button>`).join("");
     const lines = siblings(rec), distinct = [...new Map(lines.map((o) => [o.offer.line, o])).values()];
     const picker = distinct.length > 1 ? `<span class="u-lines" role="group" aria-label="Lines on this prop">${distinct.map((o) => `<button type="button" aria-pressed="${o.offer.line === rec.offer.line}" data-u="pline" data-id="${esc(offerKey(o.offer.platform, o.offer.offer_id))}">${esc(o.offer.line)}</button>`).join("")}</span>` : `<b class="u-line">${esc(rec.offer.line)}</b>`;
     const refusal = addRefusal(rec, side), inSlip = T.legs.find((l) => l.id === legId(rec, side)), note = started(rec) ? `<p class="u-note">${esc(startWord(rec))} at ${esc(when(rec.event.start_utc))}</p>` : "";
@@ -599,7 +612,7 @@
   /* ---- feedback + shell ---- */
   let toastT;
   function say(msg) {
-    const box = document.querySelector("dialog[open].u-dialog"), t = box ? box.querySelector(".u-toast") : $("u-toast");
+    const box = document.querySelector("dialog[open].u-dialog"), t = (box && box.querySelector(".u-toast")) || $("u-toast");
     document.querySelectorAll(".u-toast").forEach((x) => { x.textContent = ""; x.classList.remove("on"); });
     t.textContent = msg; t.classList.add("on");
     clearTimeout(toastT);
@@ -1018,6 +1031,11 @@
     (PAGE === "cs2" ? hookCs2 : PAGE === "lol" ? hookLol : hookSports)();     /* on before the first await: a draw in the meantime is not missed */
     try { R.me = await api("me"); } catch (e) { R.me = null; }
     if (!R.me) { $("u-tray-btn").hidden = true; return; }        /* not a member the API knows: the page stays as it is */
+    try {
+      const hub = await import("/upgrade/hub.js");
+      HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
+        research, addLeg, onSlip, slipTab, openTray, loadMine, resultsInto, say, chanceOf, verdictText });
+    } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     await loadState();
     paintTray();
     if (PAGE === "cs2") startCs2();

@@ -1,6 +1,19 @@
 /* Upgraded member pages. Loaded only behind Handler._upgrade_on, and scoped to html[data-upgrade] so nothing here can reach a page
-   the gate did not mark. The tokens are scout-ui.css's own: 1Time black and gold. */
-html[data-upgrade]{--u-bg:#080808;--u-panel:#101010;--u-panel2:#171717;--u-line:#292929;--u-line2:#454545;--u-text:#f2f1eb;--u-muted:#b4b3aa;--u-faint:#96968e;--u-gold:#f5c842;--u-good:#7fd6a4;--u-bad:#ff8a8a;--u-mono:'DM Mono',ui-monospace,monospace}
+   the gate did not mark. Shared charcoal, white and blue tokens preserve the original layout. */
+html[data-upgrade]{--u-bg:#101215;--u-panel:#171b20;--u-panel2:#20262e;--u-line:#2b323c;--u-line2:#435165;--u-text:#f4f6fa;--u-muted:#b3becb;--u-faint:#98a5b5;--u-gold:#8bb9ff;--u-good:#7fd6a4;--u-bad:#ff8a8a;--u-mono:'DM Mono',ui-monospace,monospace}
+html[data-upgrade],html[data-upgrade] body.sw{--bg:#101215;--panel:#171b20;--panel-2:#20262e;--panel-3:#252d37;--line:#2b323c;--line-2:#435165;--text:#f4f6fa;--muted:#b3becb;--faint:#98a5b5;--accent:#8bb9ff;--accent-2:#b5d3ff;--accent-glow:#77adff26}
+html[data-upgrade] body,html[data-upgrade] body.sw,html[data-upgrade] .ss-body{background:#101215!important}
+html[data-upgrade] body header,html[data-upgrade] .sw .sw-top{background:#101215!important}
+html[data-upgrade] .scout-rail{background:#121519!important;border-color:#2b323c}
+html[data-upgrade] .rail-link.on{background:#203047!important;border-color:#3d5a7e!important;color:#cfe1ff!important}
+html[data-upgrade] .sportsw a.on,html[data-upgrade] .sw .sw-products a.on,html[data-upgrade] #bbook button.on{background:#8bb9ff!important;border-color:#8bb9ff!important;color:#101a29!important}
+html[data-upgrade] header h1,html[data-upgrade] .sw .sw-word,html[data-upgrade] .rail-word{font:650 20px/1.2 'Outfit',system-ui!important;letter-spacing:-.025em}
+html[data-upgrade] body .workspace-intro h2,html[data-upgrade] body.ot-lol .intro h2,html[data-upgrade] .sw .sw-h1{font-family:'Outfit',system-ui!important;font-weight:600!important;line-height:1.2!important;letter-spacing:-.035em}
+html[data-upgrade] .gtag,html[data-upgrade] .ot-lol .g,html[data-upgrade] .sw .sw-tb-grade{font-family:var(--u-mono)!important;font-size:13px!important;letter-spacing:0}
+html[data-upgrade] input,html[data-upgrade] select{background:#171b20!important;border-color:#36404d!important;color:#eef2f8}
+html[data-upgrade] input:focus-visible,html[data-upgrade] select:focus-visible{outline:2px solid #8bb9ff!important;box-shadow:0 0 0 2px #77adff22!important;outline-offset:2px}
+html[data-upgrade] .brow2:hover{background:#20262e!important;border-color:#435165!important}
+@media(max-width:760px){html[data-upgrade] .workspace-tools{flex-direction:row!important;align-items:stretch}html[data-upgrade] .workspace-tools .h-entry{flex:1 1 130px;white-space:normal}html[data-upgrade] .workspace-tools button{min-height:40px}}
 html[data-upgrade] .u-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 html[data-upgrade] .u-rows [hidden],html[data-upgrade] .u-alts[hidden],html[data-upgrade] .ot-lol #app [hidden]{display:none!important}
 
@@ -99,6 +112,22 @@ html[data-upgrade] .sw .sw-tb-stat .u-row-acts{display:flex;flex-wrap:nowrap;gap
 html[data-upgrade] .sw .sw-filters button,html[data-upgrade] .sw .sw-filters select,html[data-upgrade] .sw .sw-filters input:not([type=checkbox]){min-height:34px;font-size:12.5px}
 html[data-upgrade] .sw .sw-filters .sw-field{margin:0}
 html[data-upgrade] .sw .sw-tb-stat .u-res-btn,html[data-upgrade] .sw .sw-tb-stat .u-add{min-height:28px;padding:2px 7px;font-size:11px}
+@media(min-width:761px){
+  html[data-upgrade] .sw .sw-tb{table-layout:fixed}
+  html[data-upgrade] .sw .sw-tb th,html[data-upgrade] .sw .sw-tb td{padding-left:6px;padding-right:6px;overflow-wrap:anywhere}
+  html[data-upgrade] .sw .sw-tb thead th{white-space:normal;letter-spacing:0;font-size:10.5px}
+  html[data-upgrade] .sw .sw-tb thead th:first-child{width:20%}
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(2){width:14%}
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(3){width:14%}
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(4){width:14%}
+  html[data-upgrade] .sw .sw-tb-player{min-width:0}
+  html[data-upgrade] .sw .sw-tb-who>div{min-width:0}
+  html[data-upgrade] .sw .sw-tb-line{white-space:normal}
+  html[data-upgrade] .sw .sw-tb-book{display:block}
+  html[data-upgrade] .sw .sw-tb-conf,html[data-upgrade] .sw .sw-tb-research{white-space:normal;overflow-wrap:anywhere}
+  html[data-upgrade] .sw .sw-tb-stat .u-row-acts{flex-wrap:wrap}
+  html[data-upgrade] .sw .sw-tb .sw-grade-tag,html[data-upgrade] .sw .sw-tb .sw-grade-nv{white-space:normal}
+}
 html[data-upgrade] .sw .sw-field label{margin-bottom:2px}
 html[data-upgrade] .ot-lol .overview{background:var(--u-panel);border:1px solid var(--u-line);border-radius:6px}
 html[data-upgrade] .ot-lol .overview strong{font-size:18px}
@@ -237,6 +266,12 @@ html[data-upgrade] .u-d-bar{height:2px;margin-top:-1px;background:var(--u-line2)
 html[data-upgrade] .u-d-st,html[data-upgrade] .u-d-ob{width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%}
 html[data-upgrade] .u-d-st{border:1px solid var(--u-gold)}
 html[data-upgrade] .u-d-ob{background:var(--u-gold)}
+html[data-upgrade] .u-slip-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0 0 8px}
+html[data-upgrade] .u-slip-metrics>div{padding:9px 6px;background:var(--u-panel2);border:1px solid var(--u-line);border-radius:5px}
+html[data-upgrade] .u-slip-metrics b{display:block;font:500 17px var(--u-mono);color:var(--u-text)}
+html[data-upgrade] .u-slip-metrics span{display:block;font-size:9px;color:var(--u-muted);margin-top:4px}
+html[data-upgrade] .u-genie .u-det{border:1px solid var(--u-line);border-radius:7px;padding:12px;margin:12px 0;line-height:1.8}
+html[data-upgrade] .u-genie summary{font-size:14px;font-weight:500}
 
 @media(max-width:1366px){
   html[data-upgrade] #boardout .crow-head,html[data-upgrade] #boardout .brow2.crow,html[data-upgrade] .u-row{grid-template-columns:36px minmax(128px,1.2fr) 44px 44px minmax(110px,.9fr) 126px minmax(110px,.9fr) 178px}

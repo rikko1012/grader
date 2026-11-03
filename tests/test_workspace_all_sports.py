@@ -741,6 +741,27 @@ def test_lol_results_are_its_learning_file_with_pushes_apart(env):
     t = doc["totals"]
     assert t["wins"] == 67 and t["losses"] == 53 and t["pushes"] == 6 and t["observed"] == 0.558 and t["printed"] == 0.571 and t["ci"] == [0.49, 0.62] and t["matches"] == 40 and t["void"] == 3
     assert [g["name"] for g in doc["groups"]["stat"]] == ["Assists", "Kills"] and doc["groups"]["chance"][0]["name"] == "B"
+    assert doc["groups"]["chance"][0]["picks"] == 50
+    assert doc["groups"]["chance"][0]["printed"] == 0.571
+
+
+def test_lol_legacy_results_never_substitute_unplayable_groups_or_statuses(env):
+    path = env.lol.dir / "learning.json"
+    doc = json.loads(path.read_text())
+    del doc["offered_side"]
+    doc["metrics"]["side offered"].pop("mean_displayed_p_side")
+    path.write_text(json.dumps(doc))
+    st, report = get(env, "results?sport=lol")
+    assert st == 200
+    assert report["totals"]["picks"] == 120
+    assert report["totals"]["pushes"] is None
+    assert report["totals"]["void"] is None
+    assert report["totals"]["printed"] is None
+    assert all(not g for g in report["groups"].values())
+    del doc["metrics"]["side offered"]
+    path.write_text(json.dumps(doc))
+    server._RESULTS.clear()
+    assert get(env, "results?sport=lol")[1]["totals"]["wins"] is None
 
 
 def test_sports_results_are_the_public_file_with_stated_and_observed_apart(env):

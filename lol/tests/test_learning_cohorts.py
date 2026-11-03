@@ -23,6 +23,26 @@ def test_evidence_deduplicates_book_lines_and_splits_model_versions(con, tmp_pat
     assert d['metrics']['model test-next']['n'] == 1
     assert d['metrics']['side not offered']['n'] == 1
     assert 'model test-next offered picks printed 60%+' not in d['metrics']
+    offered = d['offered_side']
+    assert offered['metrics']['all']['n'] == 1
+    assert offered['settled_by_status']['graded'] == 1
+    assert 'model test-next' not in offered['metrics']
+    assert sum(v['n'] for k, v in offered['metrics'].items() if k.startswith('stat ')) == 1
+    con.execute("UPDATE lol_settlements SET status='push' WHERE unit_key LIKE 'prizepicks|other-book-line|%'")
+    con.commit()
+    updated = learning.dashboard(con)
+    assert updated['settled_by_status']['push'] == 1
+    assert updated['offered_side']['settled_by_status'].get('push', 0) == 0
+
+
+def test_member_printed_chance_is_not_no_push_probability(con, tmp_path, monkeypatch):
+    settle_fixture(con, tmp_path, monkeypatch)
+    con.execute("UPDATE lol_forecasts SET p_over=.6, p_under=.3, p_push=.1, cal_version=NULL, sides=?",
+                ('{"higher":{"status":"active","offered":true}}',))
+    con.commit()
+    m = learning.dashboard(con)['offered_side']['metrics']['all']
+    assert m['mean_p_side'] == .667
+    assert m['mean_displayed_p_side'] == .6
 
 
 def test_server_recheck_rejects_stale_quote_even_if_market_remains_open(con, tmp_path, monkeypatch):

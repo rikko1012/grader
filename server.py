@@ -3951,6 +3951,8 @@ WORKSPACE_API = "/preview/workspace/api/"
 # files on disk are never edited: the gate adds one stylesheet and one script to the bytes it sends. Off, nothing below runs and
 # the page bytes are the file's (tests/test_upgrade_gate.py). The API is the workspace's, on its own prefix and its own gate.
 UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf-8"),
+                  "/upgrade/hub.js": ("upgrade-hub.js", "text/javascript; charset=utf-8"),
+                  "/upgrade/hub.css": ("upgrade-hub.css", "text/css; charset=utf-8"),
                   "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8")}
 UPGRADE_API = "/api/upgrade/"
 _UPGRADE_MEMO = {}                                      # (id(page bytes), name) -> (page bytes, upgraded page)
