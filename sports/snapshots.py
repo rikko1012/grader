@@ -560,9 +560,12 @@ def player_games(con, league, pid, before, teams, ev_cache=None):
                    index="records_player")
     by_ev = defaultdict(dict)
     for rid, obs, _ in rows:
-        cur = by_ev[obs.event_id].get(obs.stat)
+        if not obs.final:
+            continue
+        stat_key = (obs.scope, obs.stat)
+        cur = by_ev[obs.event_id].get(stat_key)
         if cur is None or (obs.source == "espn" and cur[1].source != "espn"):  # box score beats the game log
-            by_ev[obs.event_id][obs.stat] = (rid, obs)
+            by_ev[obs.event_id][stat_key] = (rid, obs)
     mems = defaultdict(list)
     for rid, m, _ in _latest(con, "membership", "player_id = ?", [pid], before):
         mems[m.player_id].append(m)
@@ -578,9 +581,18 @@ def player_games(con, league, pid, before, teams, ev_cache=None):
                                                                                          ev.away_team_id)), None)
         home = None if team is None else team == ev.home_team_id
         opp = None if team is None else (ev.away_team_id if home else ev.home_team_id)
+        scoped_stats = stats
+        stats = {stat: value for (scope, stat), value in scoped_stats.items() if scope == 'full_game'}
+        period_values = {}
+        for period in {scope for scope, stat in scoped_stats if scope != 'full_game'}:
+            period_parts = {stat: value[1].value for (scope, stat), value in scoped_stats.items()
+                            if scope == period and value[1].participation == 'played'}
+            period_values[period] = {mk: sum(period_parts[p] for p in spec['parts'])
+                                    for mk, spec in markets.MARKETS[fam].items()
+                                    if all(period_parts.get(p) is not None for p in spec['parts'])}
         parts = {s: v[1].value for s, v in stats.items()}
         part_ids = {s: v[0] for s, v in stats.items()}
-        played = next(iter(stats.values()))[1].participation
+        played = next(iter(stats.values()))[1].participation if stats else 'unknown'
         values = {}
         for mk, spec in markets.MARKETS[fam].items():
             if played == "did_not_play":
@@ -590,9 +602,9 @@ def player_games(con, league, pid, before, teams, ev_cache=None):
         games.append({"event_id": eid, "event_record_id": erid, "start_utc": ev.start_utc, "season": ev.season,
                       "season_type": ev.season_type, "team": _team_view(teams, team) if team else None,
                       "opponent": _team_view(teams, opp) if opp else None, "home": home, "participation": played,
-                      "parts": parts, "values": values, "record_ids": part_ids,
-                      "source": sorted({v[1].source for v in stats.values()}),
-                      "observed_at": max(v[1].observed_at for v in stats.values())})
+                      "parts": parts, "values": values, "period_values": period_values, "record_ids": part_ids,
+                      "source": sorted({v[1].source for v in scoped_stats.values()}),
+                      "observed_at": max(v[1].observed_at for v in scoped_stats.values())})
     games.sort(key=lambda g: g["start_utc"], reverse=True)
     return games[:MAX_GAMES]
 

@@ -185,11 +185,14 @@ def player_rows(rows, games):
     """Board rows of ONE player (snapshots markets_rows values) + his games -> {market key: summary}."""
     out = {}
     for r in rows:
-        # History contains full-game totals, not period-specific observations.
-        if r.get("scope", "full_game") != "full_game":
+        scope = r.get('scope', 'full_game')
+        history = games if scope == 'full_game' else [
+            dict(g, values=g['period_values'][scope], participation='played')
+            for g in games if (g.get('period_values') or {}).get(scope)]
+        if scope != 'full_game' and not history:
             continue
         lines = [q.get("line") for q in r.get("quotes", []) + r.get("kalshi", [])]
-        out[r["key"]] = row_summary(r["stat"], lines, games)
+        out[r["key"]] = row_summary(r["stat"], lines, history)
     return out
 
 

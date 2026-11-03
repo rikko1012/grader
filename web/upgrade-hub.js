@@ -70,18 +70,21 @@ export function mount(C) {
   }
   function cell(r,n) {
     const t=C.tallies(r)['l'+n], side=r.scout.side;
-    if(!t||!side||!t.n) return `<span class="h-hit empty" title="No comparable history">—</span>`;
+    if(!t||!t.n) return `<span class="h-hit empty" title="No matching completed-game history for this period">—</span>`;
+    if(!side) return `<span class="h-hit h-hit-both" title="Last ${t.n} results at this line: ${t.over} Over, ${t.under} Under, ${t.push||0} pushes. Historical counts, not a recommendation."><span>O <b>${t.over}</b><small>/${t.n}</small></span><span>U <b>${t.under}</b><small>/${t.n}</small></span></span>`;
     const hit=side==='over'?t.over:t.under, rate=hit/t.n;
     return `<span class="h-hit ${V2?'h-tone-'+Math.min(6,Math.floor(rate*7)):rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${Math.round(rate*100)}%" title="${hit} hits, ${t.push||0} pushes in ${t.n}; historical results at this line">${hit}<small>/${t.n}</small></span>`;
   }
-  function row(r) {
+  const openPlayers = new Set();
+  const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
+  function row(r, group=null) {
     const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r));
     const choose=!side||!r.offer[side]?.offered;
     const alternatives=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform);
     const state=unavailableReason(r), unavailable=!!state;
     const label=s.hold?'Research':s.grade||'Lean';
     return `<tr data-record="${k}" class="${H.expanded===key(r)?'is-expanded':''}"><td><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
-      <td><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${H.expanded===key(r)}"><span class="h-avatar">${esc(r.player.name.slice(0,2).toUpperCase())}</span><span><b>${esc(r.player.name)}</b><small>${esc(r.player.team)} <i>${SPORTS[r.sport]}</i></small></span><span class="h-chevron" aria-hidden="true">${H.expanded===key(r)?'−':'+'}</span></button><div class="h-match">${esc(r.event.label)} · ${esc(when(r.event.start_utc))}</div></td>
+      <td><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${H.expanded===key(r)}"><span class="h-avatar">${esc(r.player.name.slice(0,2).toUpperCase())}</span><span><b>${esc(r.player.name)}</b><small>${esc(r.player.team)} <i>${SPORTS[r.sport]}</i></small></span><span class="h-chevron" aria-hidden="true">${H.expanded===key(r)?'−':'+'}</span></button><div class="h-match">${esc(r.event.label)} · ${esc(when(r.event.start_utc))}</div>${group?.length>1?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(boardPlayerKey(r))}" aria-expanded="${openPlayers.has(boardPlayerKey(r))}">${openPlayers.has(boardPlayerKey(r))?'Hide':'View'} ${group.length} props <span>${esc([...new Set(group.map(x=>x.market.period_label))].join(' · '))}</span></button>`:''}</td>
       <td><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></td><td class="h-number"><b>${esc(r.offer.line)}</b><small>${esc(r.offer.platform_label)}</small></td>
       <td class="h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td><b>${side?side==='over'?'Over':'Under':'No side'}</b><small>${pct(s.p_side)}</small></td>
       <td>${cell(r,5)}</td><td>${cell(r,10)}</td><td>${cell(r,20)}</td>
@@ -93,20 +96,22 @@ export function mount(C) {
     if(!isOpen()||H.section!=='board') return;
     const restoreFocus=focusAfter($('hub-board-section'));
     syncFields();
-    const list=rows(), size=40, pages=Math.max(1,Math.ceil(list.length/size));
+    const list=rows(), grouped=new Map();
+    for(const r of list){const k=boardPlayerKey(r);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r);}
+    const players=[...grouped.values()],size=40,pages=Math.max(1,Math.ceil(players.length/size));
     H.page=Math.min(H.page,pages-1);
-    $('hub-count').textContent=`${list.length.toLocaleString()} upcoming lines`;
+    $('hub-count').textContent=`${players.length.toLocaleString()} players · ${list.length.toLocaleString()} upcoming lines`;
     const issues=allowed().filter(s=>R.boards[s].error);
     const stale=allowed().flatMap(s=>Object.entries(R.boards[s].feeds||{}).filter(([,f])=>f.state!=='ok').map(([p,f])=>SPORTS[s]+' '+(C.PLATFORMS[p]?.label||p)+': '+(f.state||'unavailable')));
     const held= [...new Set(list.filter(r=>r.scout.hold).map(r=>SPORTS[r.sport]))];
     $('hub-health').innerHTML=(V2&&held.length?`<p>${esc(held.join(' / '))}: official grades are held by the accuracy check. History and lines remain available for research.</p>`:'')+(issues.length?`<p class="h-warning">${issues.map(s=>SPORTS[s]).join(', ')} could not refresh. Saved rows are labelled and cannot be added here. <button data-hub="refresh">Retry</button></p>`:'')
       +(stale.length?`<details class="h-warning"><summary>${stale.length} ${stale.length===1?'source needs':'sources need'} a fresh update</summary><p>${esc(stale.join(' · '))}. Affected offers cannot be added until the source recovers.</p></details>`:'')
       +(list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About Sports grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Performance record for stated chances and actual results.</p></details>`:'');
-    $('hub-rows').innerHTML=list.slice(H.page*size,(H.page+1)*size).map(row).join('');
+    $('hub-rows').innerHTML=players.slice(H.page*size,(H.page+1)*size).map(group=>row(group[0],group)+(openPlayers.has(boardPlayerKey(group[0]))?group.slice(1).map(r=>row(r)).join(''):'')).join('');
     paintDetail();
     $('hub-empty').hidden=list.length>0;
     $('hub-empty').textContent=H.loading?'Loading the available boards…':H.records.length?'No lines match these filters. Try another sport, book or player.':'No upcoming lines are available. Refresh to check again.';
-    $('hub-pagination').innerHTML=`<span>${list.length?H.page*size+1:0}–${Math.min((H.page+1)*size,list.length)} of ${list.length}</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
+    $('hub-pagination').innerHTML=`<span>${players.length?H.page*size+1:0}–${Math.min((H.page+1)*size,players.length)} of ${players.length} players</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
     $('hub-views').innerHTML='<option value="">Saved views</option>'+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
     restoreFocus();
   }
@@ -443,6 +448,7 @@ export function mount(C) {
     'player-market'(id){H.stat='all';H.game='all';H.q='';H.side='all';H.onlyDiff=false;H.watched=false;H.expanded=null;const r=rec(id);if(!r)return;H.page=Math.max(0,Math.floor(rows().findIndex(x=>key(x)===id)/40));expand(id);},
     filters(){const open=$('hub-board-section').classList.toggle('filters-open');$('hub-filters-toggle').setAttribute('aria-expanded',String(open));},
     section, sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;section('board');}, game(id){H.game=id;H.page=0;paintBoard();},page(id){H.page+=Number(id);paintBoard();$('hub-table').scrollIntoView({block:'start'});},
+    'player-props'(id){if(openPlayers.has(id)){openPlayers.delete(id);H.expanded=null;H.detail=null;H.detailSeq++;}else openPlayers.add(id);paintBoard();},
     expand,'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id;paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
     'detail-add'(){const r=rec(H.detail);if(!r||H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;if(C.onSlip(r))return C.openTray();C.addLeg(r,H.histSide);refreshSlip();},
     research(id){const r=rec(id);if(r)C.research(r);else C.say('This offer is no longer on the board. Refresh to see current lines.');},

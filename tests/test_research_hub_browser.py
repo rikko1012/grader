@@ -113,6 +113,8 @@ def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env)
     assert all(p.locator('#hub-rows tr[data-record^='+s+']').count() for s in ('cs2','lol','nba','nfl'))
     assert 'SAMPLE' not in p.locator('#u-hub').inner_text()
     p.locator('#hub-q').fill('vargo')
+    assert p.locator('#hub-rows tr').count() == 1
+    p.locator('#hub-rows .h-prop-toggle').click()
     assert p.locator('#hub-rows tr').count() >= 2
     assert 'orlo' not in p.locator('#hub-rows').inner_text()
     p.locator('#hub-rows .h-player').first.click()
