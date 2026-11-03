@@ -196,6 +196,22 @@ def test_page_size_is_capped_and_inputs_decode(db):
     assert len(pg["rows"]) == 700 and "inputs" not in pg["rows"][0] and pg["rows"][0]["has_inputs"] is True
 
 
+def test_compact_pages_preserve_forecast_values_and_fixed_boundary(db):
+    _fill(5)
+    full = picklog.forecasts_page(limit=3)
+    compact = picklog.forecasts_page(limit=3, compact=True)
+    assert compact['cutoff_id'] == full['cutoff_id'] == 5
+    assert compact['next_after'] == full['next_after'] == 3
+    for a, b in zip(full['rows'], compact['rows']):
+        assert {k:a[k] for k in ('id','pick_id','line','p_more','logged_at')} == {k:b[k] for k in ('id','pick_id','line','p_more','logged_at')}
+        assert not {'inputs','shadow','quote'} & b.keys()
+    assert len(json.dumps(compact)) < len(json.dumps(full))
+    tail = picklog.forecasts_page(after_id=3, cutoff_id=5, compact=True)
+    assert [r['id'] for r in tail['rows']] == [4,5] and tail['done']
+    with pytest.raises(ValueError):
+        picklog.forecasts_page(inputs=True, compact=True)
+
+
 def test_memory_of_one_page_does_not_grow_with_the_table(db):
     _fill(200)
     tracemalloc.start()

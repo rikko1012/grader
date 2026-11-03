@@ -4158,6 +4158,21 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if u.path in ('/record','/record.js','/api/record'):
+                if os.environ.get('SCOUT_PUBLIC_RECORD') != '1':
+                    return self.send(404, {'error':'not found'})
+                if u.path != '/api/record':
+                    name,ctype=('record.html','text/html; charset=utf-8') if u.path=='/record' else ('record.js','text/javascript; charset=utf-8')
+                    return self.send_shared(('public_record_asset',name),200,web_file(name),ctype,keep=600)
+                sport=q.get('sport','cs2')
+                if sport not in ('cs2','lol','nba','nfl'):
+                    return self.send(400,{'error':'unsupported sport'})
+                def record_read():
+                    import public_record
+                    try:return 200,json.dumps(public_record.read(sys.modules[__name__],sport),allow_nan=False).encode()
+                    except Exception:return 503,b'{"error":"record_unavailable"}'
+                status,body=shared(('public_record',sport),record_read,ttl=300)
+                return self.send_shared(('public_record',sport),status,body,keep=300)
             if u.path == "/scout-ui.css":
                 return self.send_shared(("asset", "scout-ui"), 200, web_file("scout-ui.css"), "text/css; charset=utf-8", keep=600)
             if u.path == "/health":
@@ -4463,7 +4478,7 @@ class Handler(BaseHTTPRequestHandler):
                 # bounded, cursor-paginated export (the unbounded one above restarted production on 2026-10-14)
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
                 return self.send(200, picklog.forecasts_page(after_id=num("after") or 0, cutoff_id=num("cutoff"),
-                                                             limit=num("limit"), inputs=q.get("inputs") == "1"))
+                                                             limit=num("limit"), inputs=q.get("inputs") == "1" and q.get('compact')!='1', compact=q.get('compact')=='1'))
             if u.path == "/admin/rule_pending.json" and self.authed(q.get("token")):
                 # 2026-10-23 closeout: open picks held pending by an unpublished platform rule (bounded page, read-only)
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None

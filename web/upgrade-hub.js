@@ -324,20 +324,24 @@ export function mount(C) {
       <label>Game selection<select id="hub-generation-games"><option value="spread">No stacks</option><option value="stacks">Allow stacks</option></select></label>
       <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Each slip has distinct players. No stacks uses one player per game; Allow stacks permits supported same-game combinations, whose results can be correlated. The batch varies players to spread exposure; slips may share picks. Balanced mode keeps every prop inside your target range. Current published estimates are not calibrated equally across sports. No return or combined win probability is promised. Each candidate passes the server’s platform and freshness checks.</p></details></section>`;
   }
+  function calendarHTML(doc){
+    if(!doc?.days?.length)return '<p class="h-muted">Daily history will appear after the next Results update.</p>';
+    return `<section class="h-record-calendar" aria-label="30-day accuracy calendar"><header><h3>Last 30 days</h3><span>${esc(doc.basis)}</span></header><div class="h-calendar-grid">${doc.days.map(d=>`<details class="${d.decided?'has-results':''}"><summary aria-label="${esc(d.date)}: ${d.wins} wins, ${d.losses} losses, ${d.pushes} pushes"><time>${esc(d.date.slice(5))}</time><b>${num(d.hit_rate)?Math.round(d.hit_rate*100)+'%':'—'}</b><small>${d.decided} decided</small></summary><p>${d.wins} wins · ${d.losses} losses · ${d.pushes} pushes</p></details>`).join('')}</div><p>Accuracy only, not profit. ${doc.missing_dates?`${Number(doc.missing_dates)} records have no saved date and are excluded from this calendar.`:'Pushes are listed separately.'}</p></section>`;
+  }
   async function showRecord() {
     const seq=++H.seq, sport=$('hub-record-sport').value;
     $('hub-record-body').innerHTML='<p class="h-empty">Loading the saved record…</p>';
     const sports=sport==='all'?allowed():[sport];
     const docs=await Promise.allSettled(sports.map(s=>api(s==='cs2'?'stated':'results?sport='+s)));
     if(seq!==H.seq||H.section!=='record') return;
-    $('hub-record-body').innerHTML=docs.map((res,i)=>{
+    $('hub-record-body').innerHTML=(R.me.features?.public_record?'<p><a href="/record" target="_blank" rel="noopener">Open the shareable public record ↗</a></p>':'')+docs.map((res,i)=>{
       const s=sports[i];
       if(res.status!=='fulfilled') return `<article class="h-record-card"><h2>${SPORTS[s]}</h2><p>Record unavailable. <button data-hub="record-retry">Retry</button></p></article>`;
       const d=res.value,t=d.totals||{},bands=s==='cs2'?d.by_letter:d.groups?.chance;
       return `<article class="h-record-card"><header><h2>${SPORTS[s]}</h2><span>${s==='nba'||s==='nfl'?'Research forecasts':'Saved forecasts'}</span></header><div class="h-score"><div><b>${t.wins??'—'}<em> / </em>${t.losses??'—'}</b><span>Wins / losses · ${t.pushes??'—'} pushes separately</span></div><div><b>${pct(t.observed)}</b><span>Actual hit rate</span></div><div><b>${pct(t.printed)}</b><span>Average stated chance</span></div></div>
         <p>${esc(d.population||d.rule||'')}</p>${d.population?`<details><summary>Counting rule</summary><p>${esc(d.rule)}</p></details>`:''}
         ${bands?.length?`<div class="h-reliability"><div class="h-rel-head"><span>Tier / sample</span><span>Stated ○ · Actual ●</span></div>${bands.map(b=>`<div class="h-rel-row"><span><b>${esc(b.name)}</b><small>${b.picks??0} picks</small></span><div class="h-rel-scale">${num(b.printed)?`<i class="stated" style="left:${Math.max(0,Math.min(100,b.printed*100))}%"></i>`:''}${num(b.observed)?`<i class="actual" style="left:${Math.max(0,Math.min(100,b.observed*100))}%"></i>`:''}</div><span>${pct(b.printed)} / ${pct(b.observed)}</span></div>`).join('')}<p class="h-axis">0%<span>50%</span>100%</p></div>`:''}
-        <footer>${num(t.wins)&&num(t.losses)?t.wins+t.losses:'—'} decided picks · ${t.matches??'—'} ${esc(t.match_word||'matches')} · Updated ${esc(d.as_of?when(d.as_of):'time unavailable')}${t.ci?` · 95% interval ${pct(t.ci[0])}–${pct(t.ci[1])}`:''}</footer></article>`;
+        ${calendarHTML(d.calendar)}<footer>${num(t.wins)&&num(t.losses)?t.wins+t.losses:'—'} decided picks · ${t.matches??'—'} ${esc(t.match_word||'matches')} · Updated ${esc(d.as_of?when(d.as_of):'time unavailable')}${t.ci?` · 95% interval ${pct(t.ci[0])}–${pct(t.ci[1])}`:''}</footer></article>`;
     }).join('');
   }
 

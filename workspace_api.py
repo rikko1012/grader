@@ -862,6 +862,7 @@ def get_me(h, srv, q, member, scratch, name):
     return h.send(200, {"member": member, "name": name, "scratch": scratch, "sports": access(h, srv, q), "rules_version": rules.RULES_VERSION,
                         "owner": bool(scratch) or bool(h._sports_owner()),
                         "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1",
+                                     "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
                                      "background_alerts": bool(workspace_alerts.configured()),
                                      "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK)}})
 

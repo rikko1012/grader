@@ -60,6 +60,53 @@ def test_owner_grade_comparison_four_sports_and_paging(ctx,env,monkeypatch,size)
     no_h_scroll(p)
 
 
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
+    from gradecore.calendar import daily_record
+    p=ctx.new_page();p.set_viewport_size(size)
+    doc={'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'win'},
+                                  {'at':'2026-11-02T12:00:00Z','status':'push'}],
+                                 '2026-11-03T12:00:00Z','Fixture date · UTC')}
+    p.route('**/api/upgrade/stated',lambda r:r.fulfill(json=doc))
+    p.route('**/api/upgrade/results?*',lambda r:r.fulfill(json=doc))
+    p.goto(env.url+'/#scout/record')
+    p.wait_for_selector('.h-record-calendar')
+    assert p.locator('.h-record-calendar').count()==4
+    assert p.locator('.h-calendar-grid summary').count()==120
+    p.locator('.h-calendar-grid summary[aria-label^="2026-11-02"]').first.click()
+    assert '1 wins · 0 losses · 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
+    assert 'Accuracy only, not profit.' in p.locator('#hub-record-body').inner_text()
+    no_h_scroll(p)
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_public_record_four_sports_retry_and_safe_text(ctx,env,monkeypatch,size):
+    monkeypatch.setenv('SCOUT_PUBLIC_RECORD','1')
+    p=ctx.new_page();p.set_viewport_size(size)
+    from gradecore.calendar import daily_record
+    failures=[True]
+    def report(route):
+        if failures[0]:
+            failures[0]=False
+            return route.fulfill(status=503,json={'error':'unavailable'})
+        route.fulfill(json={'totals':{'wins':2,'losses':1,'pushes':1,'observed':2/3,'printed':.6},
+            'population':'<unsafe> fixture population','rule':'Only saved pregame forecasts',
+            'bands':[{'name':'B','wins':2,'losses':1,'observed':2/3,'printed':.6}],
+            'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'push'}],
+                '2026-11-03T12:00:00Z','Fixture date · UTC')})
+    p.route('**/api/record?*',report)
+    p.goto(env.url+'/record')
+    p.wait_for_selector('#retry');p.locator('#retry').click()
+    for sport in ('cs2','lol','nba','nfl'):
+        p.locator('[data-sport='+sport+']').click()
+        p.wait_for_function('(s)=>document.querySelector("#record h2")?.textContent.toLowerCase()===s',arg=sport)
+        assert '66.7%' in p.locator('#record').inner_text()
+        assert p.locator('#record unsafe').count()==0
+        assert p.locator('.calendar summary').count()==30
+        no_h_scroll(p)
+    p.screenshot(path=f'.record-{size["width"]}.png',full_page=True)
+
+
 def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env):
     p = hub(ctx, env)
     p.wait_for_function("document.querySelectorAll('#hub-rows tr[data-record^=nba]').length > 0")
