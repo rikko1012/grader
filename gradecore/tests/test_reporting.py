@@ -25,7 +25,7 @@ def test_comparisons_are_bounded_readonly_and_sport_isolated(tmp_path, monkeypat
 
 
 def test_release_requires_all_evidence_and_actual_seven_days():
-    historical = {'historical_gate_pass': True, 'candidate': {'reliability': [{'gap': .01}]}}
+    historical = {'historical_gate_pass': True, 'baseline_stage': 'published', 'candidate': {'reliability': [{'gap': .01}]}}
     prospective = {'started_at': '2026-11-01T00:00:00Z', 'unique_forecasts': 500,
                    'delta_ci': [-.03, -.001], 'side_balance_pass': True}
     assert not readiness(historical, prospective, '2026-11-07T23:59:59Z')['eligible']

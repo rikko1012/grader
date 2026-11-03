@@ -8,6 +8,8 @@ def readiness(historical, prospective, now):
     reasons = []
     if not historical.get('historical_gate_pass'):
         reasons.append('Held-out log-loss improvement has not passed')
+    if historical.get('baseline_stage') != 'published':
+        reasons.append('Comparison against saved published chances is incomplete')
     bins = historical.get('candidate', {}).get('reliability', [])
     if not bins or any(not isinstance(b.get('gap'), (int, float)) or
                        not math.isfinite(b['gap']) or abs(b['gap']) > .03 for b in bins):

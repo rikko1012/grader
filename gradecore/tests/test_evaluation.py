@@ -49,3 +49,9 @@ def test_heldout_labels_cannot_change_artifacts_and_release_always_requires_revi
     assert not b['comparison']['nba']['historical_gate_pass']
     assert not a['release_allowed']
     assert not a['comparison']['nba']['release_allowed']
+    published=evaluate([{**r,'published_p':.5} for r in fit+cal+test],
+                       '2026-02-01T00:00:00Z','2026-03-01T00:00:00Z',reps=40)
+    assert published['artifacts']==a['artifacts']
+    assert published['comparison']['nba']['baseline_stage']=='published'
+    assert published['comparison']['nba']['old']['stated']==.5
+    assert a['comparison']['nba']['baseline_stage']=='raw_projection'

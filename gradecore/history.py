@@ -45,6 +45,7 @@ def cs2(forecasts, picks, model_version):
             row = dict(forecast_id=str(f['id']), sport='cs2', match_key=p['match_slug'], market=p['prop'],
                        player_id=p['slug'], scope=p['scope'], line=f['line'], book=p['book'], side=side,
                        p=raw[side]/(raw['over']+raw['under']), market_p=None, status=status,
+                       published_p=f.get('p_pick'),
                        model_version=model_version, artifact_version=model_version,
                        probability_stage='raw_distribution_rounded_4dp', forecast_at=f['logged_at'],
                        start_at=f['match_start'], settled_at=p['settled_at'])
@@ -96,6 +97,7 @@ def lol(forecasts, settlements, model_version, artifact_version):
             row=dict(forecast_id=str(f['id']),sport='lol',match_key=str(f['sid']),market=f['stat'],
                      player_id=str(f['pid']),scope=f['scope'],line=f['line'],book=f['platform'],side=side,
                      p=f['p_'+side]/dec,market_p=None,status=status,model_version=model_version,
+                     published_p=f.get('cal_p_'+side),
                      artifact_version=artifact_version,probability_stage='raw_distribution_rounded_4dp',
                      forecast_at=f['forecast_at'],start_at=f['series_start'],settled_at=s['settled_at'])
             old=chosen.get(k)

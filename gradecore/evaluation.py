@@ -38,9 +38,9 @@ def validate(rows):
         if r['sport'] in versions and versions[r['sport']] != cohort:
             raise ValueError('select one model version, fitted artifact and probability stage per sport')
         versions[r['sport']] = cohort
-        for name in ('p', 'market_p'):
+        for name in ('p', 'market_p', 'published_p'):
             p = r.get(name)
-            if p is None and name == 'market_p':
+            if p is None and name in ('market_p','published_p'):
                 continue
             if isinstance(p, bool) or not isinstance(p, (float, int)) or not math.isfinite(p) or not 0 <= p <= 1:
                 raise ValueError('invalid probability')
@@ -100,12 +100,18 @@ def evaluate(rows, fit_end, calibration_end, min_test=500, reps=2000):
         doc['artifact_version'] = source_rows[0]['artifact_version'] if source_rows else None
         old = [r for r in parts['test'] if r['sport'] == sport]
         new = [{**r, 'p': calibrate.apply(calibrate.lookup(doc, r['market'], r['side']), probability(r))} for r in old]
+        # Fit only raw forecasts, but compare with what members saw when those
+        # immutable published chances exist for the complete test cohort.
+        published = bool(old) and all(r.get('published_p') is not None for r in old)
+        if published:
+            old = [{**r, 'p': r['published_p']} for r in old]
         ds = [(o, n) for o, n in zip(old, new) if o['status'] in ('win', 'loss')]
         diffs = [scorecard.log_loss([n['p']], [o['status'] == 'win']) -
                  scorecard.log_loss([o['p']], [o['status'] == 'win']) for o, n in ds]
         mean, lo, hi = scorecard.cluster_ci(diffs, [sport + ':' + o['match_key'] for o, _ in ds], reps=reps)
         events = len({o['match_key'] for o, _ in ds})
         comparisons[sport] = {'old': scorecard.score(old, reps=reps), 'candidate': scorecard.score(new, reps=reps),
+                              'baseline_stage': 'published' if published else 'raw_projection',
                               'log_loss_delta': mean, 'delta_ci': [lo, hi], 'events': events,
                               'unique_forecasts': len({o['forecast_id'] for o, _ in ds}),
                               'historical_gate_pass': len({o['forecast_id'] for o, _ in ds}) >= max(500, min_test) and events >= 2 and hi is not None and hi < 0,
