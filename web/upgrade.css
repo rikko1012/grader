@@ -107,6 +107,8 @@ html[data-upgrade] .ot-lol .overview strong{font-size:18px}
 html[data-upgrade] body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
 html[data-upgrade] .u-tray-btn{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;min-height:42px;padding:8px 16px;border:1px solid var(--u-gold);border-radius:6px;background:#0c0c0c;color:var(--u-gold);font:600 13px 'Outfit',system-ui;cursor:pointer;box-shadow:0 8px 22px #000b}
 html[data-upgrade] .u-tray-btn:hover{background:var(--u-gold);color:#111}
+/* desktop: the tray button lives in the page's own top bar, so it never covers a row or a column header */
+html[data-upgrade] .u-tray-btn.u-docked{position:static;right:auto;bottom:auto;transform:none;box-shadow:none;margin-left:10px;min-height:36px;flex:none;order:99}
 
 /* drawers: one edge on a desk, the whole screen on a phone */
 html[data-upgrade] .u-dialog{position:fixed;inset:0 0 0 auto;margin:0;width:min(560px,100vw);max-width:100vw;height:100dvh;max-height:none;padding:0;border:0;border-left:1px solid var(--u-line2);background:#0c0c0c;color:var(--u-text);overflow:hidden;font:400 14px/1.5 'Outfit',system-ui}
@@ -236,7 +238,7 @@ html[data-upgrade] .u-d-st,html[data-upgrade] .u-d-ob{width:9px;height:9px;margi
 html[data-upgrade] .u-d-st{border:1px solid var(--u-gold)}
 html[data-upgrade] .u-d-ob{background:var(--u-gold)}
 
-@media(max-width:1240px){
+@media(max-width:1366px){
   html[data-upgrade] #boardout .crow-head,html[data-upgrade] #boardout .brow2.crow,html[data-upgrade] .u-row{grid-template-columns:36px minmax(128px,1.2fr) 44px 44px minmax(110px,.9fr) 126px minmax(110px,.9fr) 178px}
   html[data-upgrade] #boardout .crow-head span:nth-child(3),html[data-upgrade] #boardout .crow .c-mkt,html[data-upgrade] #boardout .crow-head span:nth-child(9),html[data-upgrade] #boardout .crow .c-stake{display:none}
   html[data-upgrade] .u-row .u-mkt,html[data-upgrade] .u-row .u-stake,html[data-upgrade] .u-row.u-head span:nth-child(3),html[data-upgrade] .u-row.u-head span:nth-child(9){display:none}
