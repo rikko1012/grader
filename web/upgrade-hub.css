@@ -560,8 +560,8 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 .h-pcell{display:flex;align-items:flex-start;gap:10px;min-width:0}
 #u-hub .h-avatar{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;margin-top:1px;border-radius:50%;border:1px solid #3a4555;background:#1d242e;color:#dfe7f2;font:600 10px 'DM Mono',monospace}
 .h-pinfo{min-width:0;flex:1}
-#u-hub #hub-table .h-player{display:flex;align-items:baseline;gap:8px;width:100%;min-width:0;padding:0;border:0;background:none;text-align:left;color:#f2f6fb}
-#u-hub #hub-table .h-player b{font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+#u-hub #hub-table .h-player{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;min-width:0;padding:0;border:0;background:none;text-align:left;color:#f2f6fb}
+#u-hub #hub-table .h-player b{font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;flex:0 0 auto;max-width:100%;overflow-wrap:anywhere}   /* owner 2026-11-04: the name is never cut; the team wraps under it */
 #u-hub #hub-table .h-player small{display:inline-flex;align-items:center;gap:6px;margin:0;font-size:11px;color:#97a6b9;flex:0 1 auto;min-width:0}
 #u-hub #hub-table .h-player small i{font:normal 9px 'DM Mono',monospace;color:#bcc9da;border:1px solid #39465a;border-radius:3px;padding:0 4px;line-height:14px}
 #u-hub #hub-table .h-player:hover b,#u-hub #hub-table tr[data-record]:hover .h-player b{color:#cfe1ff}
@@ -772,3 +772,5 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
  #u-hub .h-card-links button{flex:1}
  .h-tile>b{font-size:19px}
 }
+/* owner 2026-11-04 "make it fit better": an empty slip panel collapses on desktop and the board takes its width; adding a leg brings it back */
+@media(min-width:1101px){#u-hub.h-slip-empty:not(.h-studio-mode) .h-slip{display:none!important}#u-hub.h-slip-empty:not(.h-studio-mode) .h-center{grid-column:2/-1}}

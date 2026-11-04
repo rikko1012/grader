@@ -162,6 +162,7 @@ export function mount(C) {
     box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks"','data-hub="receipts"'); box.scrollTop=top;
     if(u) (box.querySelector(`[data-u="${CSS.escape(u)}"]${id!=null?`[data-id="${CSS.escape(id)}"]`:''}`)||box).focus({preventScroll:true});
     $('hub-slip-count').textContent=String(T.legs.length);
+    $('u-hub').classList.toggle('h-slip-empty',!T.legs.length&&!T.tracked);      // owner 2026-11-04: an empty slip gives its space to the board
     $('hub-save-status').textContent=T.saveFail?'Waiting to sync':T.pending||T.saving?'Saving…':'Saved to your account';
     if(!T.legs.length&&!T.tracked) box.innerHTML='<div class="h-empty-slip"><span class="h-slip-glyph" aria-hidden="true">+</span><h3>Start with a player prop</h3><p>Add a side from any sport. Your lineup stays here as you research.</p><div><span>1 &nbsp; Choose your legs</span><span>2 &nbsp; Recheck current lines</span><span>3 &nbsp; Track your picks</span></div><small>Different platforms become separate entries.</small></div>';
     $('u-hub').querySelector('.h-mobile-slip').textContent=`Slip builder · ${T.legs.length} ${T.legs.length===1?'leg':'legs'}`;
