@@ -200,13 +200,14 @@ def test_responsive_record_loading_keyboard_and_no_overflow(ctx, env, size):
     assert not p.errors
 
 
-def test_quote_refresh_failure_is_explicit_and_cannot_add(ctx, env):
+def test_quote_refresh_failure_hides_the_lines_and_cannot_add(ctx, env):
+    # owner rules (audit 2026-11-04): a failed refresh hides the lines, never labels them
     p=hub(ctx, env)
     p.locator('#hub-sports [data-id=cs2]').click()
     p.route('**/api/upgrade/board',lambda r:r.fulfill(status=503,content_type='application/json',body='{"error":"board_unavailable"}'))
     p.locator('.h-tools [data-hub=refresh]').click()
-    p.wait_for_selector('#hub-health .h-warning')
-    assert 'could not refresh' in p.locator('#hub-health').inner_text()
+    p.wait_for_function("!document.querySelector('#hub-rows .h-add')")
+    assert 'could not refresh' not in p.locator('#hub-health').inner_text()
     assert p.locator('#hub-rows .h-add:not([disabled])').count()==0
     assert not p.errors
 
@@ -261,8 +262,8 @@ def test_successful_response_with_stale_source_is_not_presented_as_current(ctx, 
     p.route('**/api/upgrade/board',stale)
     p.locator('#hub-sports [data-id=cs2]').click()
     p.locator('.h-tools [data-hub=refresh]').click()
-    p.wait_for_selector('#hub-health details.h-warning')
-    assert p.locator('#hub-rows .h-add:not([disabled])').count()==0
+    p.wait_for_function("!document.querySelector('#hub-rows .h-add')")      # stale lines are left off, never labelled
+    assert p.locator('#hub-rows .h-add:not([disabled])').count()==0 and 'stale' not in p.locator('#hub-health').inner_text().lower()
 
 
 def test_phone_keeps_filters_available_without_covering_first_prop(ctx, env):
@@ -391,10 +392,8 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
     assert p.locator('#hub-studio-body .u-leg').count()==4
     p.locator('#hub-studio-body [data-u=check]').click()
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
-    assert 'Base all-hit payout' in p.locator('#hub-studio-body').inner_text()
-    p.locator('#hub-studio-body summary',has_text='Published payout tiers').click()
-    assert '4 of 4 correct: 10× entry fee' in p.locator('#hub-studio-body').inner_text()
-    assert 'final payout for your exact lineup' in p.locator('#hub-studio-body').inner_text()
+    assert 'PrizePicks shows lineup payouts only in its app.' in p.locator('#hub-studio-body').inner_text()      # unknown payouts stay unknown
+    assert 'Published payout tiers' not in p.locator('#hub-studio-body').inner_text()
     assert not p.errors
 
 

@@ -37,3 +37,7 @@ slips_recommended.jsonl
 
 # research workspace store (DATA_DIR on the server, the repo folder on a local run)
 workspace.db*
+
+# browser test screenshots written to the repo root (tests/test_research_hub_browser.py)
+/.fit-*.png
+/.record-*.png

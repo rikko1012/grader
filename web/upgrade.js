@@ -124,7 +124,7 @@
     if (!sd) return "No lean";
     if (s.side && sd !== s.side) return `Scout side is ${cap(s.side)}`;
     if (s.hold) return `Research estimate ${cap(sd)}`;
-    if (s.grade) return `${s.grade} ${cap(sd)}`;
+    if (s.grade) return `${s.grade} ${cap(sd)}${rec.sport === "nba" || rec.sport === "nfl" ? " · Research grade" : ""}`;      /* as classic sports */
     return `Lean ${cap(sd)}`;
   }
   const decimalOf = (o, side) => { const v = o.offer[side]; return (PLATFORMS[o.offer.platform] || {}).kind === "decimal" ? v.payout : v.price; };
@@ -499,7 +499,7 @@
     g.fillStyle='#77adff';g.fillRect(0,0,canvas.width,8);
     const text=(value,y,size,color='#f4f7fc')=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>960)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'…',60,y);};
     text('1TIME SCOUT',74,34);text(`${list[0].label} · ${legs.length} picks · ${typeOf(list[0])}`,126,25,'#bbcee8');
-    text('RESEARCH LINEUP · NOT A PLACED BET',166,18,'#94a7bf');
+    text('RESEARCH LINEUP',166,18,'#94a7bf');
     legs.forEach((l,i)=>{const y=220+i*140;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27);text(`${cap(l.side)} ${l.line} ${l.stat_label} · ${l.period_label}`,y+53,24,'#c5dbfb');text(l.event_label,y+86,18,'#99acc4');});
     text(`Lines checked ${when(check.checked_at)}. Recheck in the app before use.`,canvas.height-65,18,'#aebed1');
     text('No stake, combined win chance or return is implied.',canvas.height-32,17,'#aebed1');

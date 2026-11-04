@@ -240,8 +240,7 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
         reference = payout_reference.prizepicks(entry_type or 'power', len(legs))
         if any(str(l.get('line_type') or l.get('variant') or 'standard').lower() not in ('standard','normal') for l in legs):
             return no('Special-line payouts are set on the PrizePicks lineup screen.')
-        return no('Published base rate. PrizePicks confirms the final payout for your exact lineup; promotions, special lines and combinations can change it.',
-                  **({'payout': reference} if reference else {}))
+        return no('PrizePicks shows lineup payouts only in its app.')      # owner rule: unknown payouts stay unknown (audit 2026-11-04)
     if platform != 'underdog':
         return no('No verified payout reference for this platform.')
     n, et = len(legs), entry_type or "standard"

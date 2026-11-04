@@ -47,7 +47,8 @@ export function mount(C) {
       && (!f.q||[r.player.name,r.player.team,r.event.label,r.market.stat_label].join(' ').toLowerCase().includes(f.q.toLowerCase()));
   }
   function rows() {
-    return H.records.filter(r=>!C.started(r)&&matches(r)).sort((a,b)=> {
+    // owner rules (no unsure labels; transient failures hide the line): a row whose source is stale, failed or held is left off, never labelled
+    return H.records.filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r)).sort((a,b)=> {
       if(H.sort==='chance') return (b.scout.p_side??-1)-(a.scout.p_side??-1);
       if(H.sort==='player') return a.player.name.localeCompare(b.player.name);
       return Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc)||a.player.name.localeCompare(b.player.name);
@@ -88,14 +89,14 @@ export function mount(C) {
     const choose=!side||!r.offer[side]?.offered;
     const alternatives=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform);
     const state=unavailableReason(r), unavailable=!!state;
-    const label=s.hold?'Research':s.grade||'Lean';
+    const label=s.hold?'Research':s.grade?(['nba','nfl'].includes(r.sport)?s.grade+' · Research grade':s.grade):'Lean';      // classic sports: every letter says Research grade
     return `<tr data-record="${k}" class="${H.expanded===key(r)?'is-expanded':''}"><td><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${H.expanded===key(r)}"><span class="h-avatar">${esc(r.player.name.slice(0,2).toUpperCase())}</span><span><b>${esc(r.player.name)}</b><small>${esc(r.player.team)} <i>${SPORTS[r.sport]}</i></small></span><span class="h-chevron" aria-hidden="true">${H.expanded===key(r)?'−':'+'}</span></button><div class="h-match">${esc(r.event.label)} · ${esc(when(r.event.start_utc))}</div>${group?.length>1?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(boardPlayerKey(r))}" aria-expanded="${openPlayers.has(boardPlayerKey(r))}">${openPlayers.has(boardPlayerKey(r))?'Hide':'View'} ${group.length} props <span>${esc([...new Set(group.map(x=>x.market.period_label))].join(' · '))}</span></button>`:''}</td>
       <td><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></td><td class="h-number"><b>${esc(r.offer.line)}</b><small>${esc(r.offer.platform_label)}</small></td>
       <td class="h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td>${sideCell(r)}</td>
       <td>${cell(r,5)}</td><td>${cell(r,10)}</td><td>${cell(r,20)}</td>
       <td><button class="h-book" data-hub="expand" data-id="${k}">${alternatives.length?`${alternatives.length} other ${alternatives.length===1?'line':'lines'}`:'Research'}${different(r)?'<i>Lines differ</i>':''}</button></td>
-      <td><span class="h-grade ${s.hold?'held':''}">${esc(label)}</span><small title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small>${unavailable?`<small class="h-warning">${esc(state)}</small>`:''}</td>
+      <td><span class="h-grade ${s.hold?'held':''}">${esc(label)}</span><small title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small></td>
       <td><button class="h-add ${on||choose?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':choose?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':choose?'Side':'+'}</button></td></tr>${H.expanded===key(r)?'<tr class="h-detail-row"><td colspan="12"><div id="hub-detail" aria-live="polite"></div></td></tr>':''}`;
   }
   function paintBoard() {
@@ -107,11 +108,7 @@ export function mount(C) {
     const players=[...grouped.values()],size=40,pages=Math.max(1,Math.ceil(players.length/size));
     H.page=Math.min(H.page,pages-1);
     $('hub-count').textContent=`${players.length.toLocaleString()} players · ${list.length.toLocaleString()} upcoming lines`;
-    const issues=allowed().filter(s=>R.boards[s].error);
-    const stale=allowed().flatMap(s=>Object.entries(R.boards[s].feeds||{}).filter(([,f])=>f.state!=='ok').map(([p,f])=>SPORTS[s]+' '+(C.PLATFORMS[p]?.label||p)+': '+(f.state||'unavailable')));
-    $('hub-health').innerHTML=(issues.length?`<p class="h-warning">${issues.map(s=>SPORTS[s]).join(', ')} could not refresh. Saved rows are labelled and cannot be added here. <button data-hub="refresh">Retry</button></p>`:'')
-      +(stale.length?`<details class="h-warning"><summary>${stale.length} ${stale.length===1?'source needs':'sources need'} a fresh update</summary><p>${esc(stale.join(' · '))}. Affected offers cannot be added until the source recovers.</p></details>`:'')
-      +(list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About Sports grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Performance record for stated chances and actual results.</p></details>`:'');
+    $('hub-health').innerHTML=(list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About Sports grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Performance record for stated chances and actual results.</p></details>`:'');
     $('hub-rows').innerHTML=players.slice(H.page*size,(H.page+1)*size).map(group=>row(group[0],group)+(openPlayers.has(boardPlayerKey(group[0]))?group.slice(1).map(r=>row(r)).join(''):'')).join('');
     paintDetail();
     $('hub-empty').hidden=list.length>0;
@@ -406,7 +403,7 @@ export function mount(C) {
   }
   function paintMarkets(){
     if(!R.me.features?.market_tools||H.section!=='tools')return;
-    if(!$('hub-market-results'))$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2>EV &amp; arbitrage</h2><p>Exact lines, periods and settlement rules. No bet placement or guaranteed profit.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><div id="hub-market-results" aria-live="polite"></div></section>`);
+    if(!$('hub-market-results'))$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2>EV &amp; arbitrage</h2><p>Exact lines, periods and settlement rules. </p></div><button data-hub="refresh-markets">Refresh prices</button></div><div id="hub-market-results" aria-live="polite"></div></section>`);
     $('hub-market-results').innerHTML=marketHTML();
   }
   function installV2() {
