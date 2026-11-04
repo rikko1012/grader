@@ -497,6 +497,11 @@ def pick_row(res, verdict, test=False):
                        "gi": {k: (dict(gi[k]) if isinstance(gi.get(k), dict) else gi.get(k)) for k in ("prop", "line", "scope", "bo", "perf")}}
     except Exception:
         row["_vm1"] = None
+    try:   # vm-2 shadow (HLTV map chances x per-map kills, research/map_chances): inputs only here; the writer thread reads
+        import vm2   # (outside the pick-log lock) and computes it for a forecast row it appends - never a grade input
+        row["_vm2"] = vm2.inputs_of(res, g, gi, match_id=(row.get("_vm1") or {}).get("match_id"))
+    except Exception:
+        row["_vm2"] = None
     return row
 
 
@@ -535,7 +540,7 @@ def data_revision():
     return (_REV["rev"] or "matches=?") + f";records_input=full;perf_input={pin}"
 
 
-def _shadow(row, vm1_in=None):
+def _shadow(row, vm1_in=None, vm2_x=None):
     try:
         sh = (json.loads(row.get("factors") or "{}") or {}).get("shadow")
     except (ValueError, TypeError):
@@ -548,7 +553,26 @@ def _shadow(row, vm1_in=None):
             ent = {"A1": {"eligible": None, "reason": "shadow failed", "error": type(e).__name__},
                    "C0": {"eligible": None, "reason": "shadow failed", "error": type(e).__name__}}
         sh = dict(sh or {}, vm1=ent)
+    if vm2_x is not None:           # vm-2 shadow (HLTV map chances; arm vm-2 + control C0-pooled): arithmetic on the prefetched reads
+        try:
+            import vm2
+            ent = vm2.shadow(vm2_x.get("in"), vm2_x.get("pre"), logged_at=row.get("logged_at"))
+        except Exception as e:     # noqa: BLE001 - a shadow never stops the pick log
+            ent = {"eligible": None, "reason": "shadow failed", "error": type(e).__name__}
+        sh = dict(sh or {}, vm2=ent)
     return json.dumps(sh, default=str)
+
+
+def _vm2_prefetch(vm2_in):
+    """vm-2's two cached HLTV reads for one row, done BEFORE the pick-log lock is taken (a slow database never holds the
+    lock). None when the row carries no vm-2 inputs. Never raises."""
+    if vm2_in is None:
+        return None
+    try:
+        import vm2
+        return {"in": vm2_in, "pre": vm2.prefetch(vm2_in)}
+    except Exception as e:         # noqa: BLE001
+        return {"in": vm2_in, "pre": {"error": f"{type(e).__name__}"}}
 
 
 def _unchanged(last, row, extra):
@@ -593,7 +617,7 @@ def _forecast(con, pid, row, kind, gi=None, extra=None):
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, kind, row["logged_at"], row.get("match_start"), row["line"], row["pick"], row["p_pick"],
                  row.get("p_more"), row["grade"], row["units"], row.get("lambda"), row.get("p_win"), row.get("rec_hit"),
-                 row.get("sample_maps"), row.get("model_version"), _shadow(row, extra.get("vm1")), gi, extra.get("probs_raw"), extra.get("data_rev"),
+                 row.get("sample_maps"), row.get("model_version"), _shadow(row, extra.get("vm1"), extra.get("vm2")), gi, extra.get("probs_raw"), extra.get("data_rev"),
                  extra.get("odds_source"), extra.get("odds_policy"), extra.get("mapping_rev"), extra.get("odds_sig"),
                  extra.get("git_commit"), extra.get("quote")))
     if os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1':
@@ -701,7 +725,8 @@ def write_row(row):
     fh = row.pop("_fh1", None)                      # fh-1 shadow record - shadow_forecasts only
     pstart = row.pop("_platform_start", None)       # the platform's listed start - schedule_obs only
     vm1_in = row.pop("_vm1", None)                  # vm-1 shadow inputs - forecasts.shadow only
-    extra = {"vm1": vm1_in, "probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
+    vm2_x = _vm2_prefetch(row.pop("_vm2", None))    # vm-2 shadow inputs + its HLTV reads (outside the lock) - forecasts.shadow only
+    extra = {"vm1": vm1_in, "vm2": vm2_x, "probs_raw": row.pop("_probs", None), "data_rev": data_revision(), "odds_source": row.pop("_odds_src", None),
              "odds_sig": row.pop("_odds_sig", None), "odds_policy": row.pop("_odds_policy", None),
              "mapping_rev": row.pop("_mapping_rev", None), "quote": row.pop("_quote", None),
              "git_commit": os.environ.get("RENDER_GIT_COMMIT") or None}    # the deployed commit (Render sets it)

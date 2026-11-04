@@ -1636,10 +1636,54 @@ def test_model_hash_files_are_untouched():
     assert subprocess.run(["git", "diff", "--exit-code", "--quiet", "4877218", "--", *files], cwd=ROOT).returncode == 0
     # Only the disabled-by-default shadow observer is added to the immutable
     # forecast writer. Everything else must still equal the frozen baseline.
+    # 2026-11-04: plus the vm-2 shadow (research/map_chances/REGISTER.md) - exactly the blocks below, compared node for
+    # node: its inputs on the pick row, its two reads before the lock, and shadow["vm2"] on the appended forecast row.
     baseline_picklog = subprocess.run(['git', 'show', '4877218:picklog.py'], cwd=ROOT,
                                      capture_output=True, text=True, encoding='utf-8', check=True).stdout
+    vm2_pick_row = ('try:\n    import vm2\n    row["_vm2"] = vm2.inputs_of(res, g, gi, match_id=(row.get("_vm1") or {}).get("match_id"))\n'
+                    'except Exception:\n    row["_vm2"] = None')
+    vm2_shadow_if = ('if vm2_x is not None:\n    try:\n        import vm2\n'
+                     '        ent = vm2.shadow(vm2_x.get("in"), vm2_x.get("pre"), logged_at=row.get("logged_at"))\n'
+                     '    except Exception as e:\n        ent = {"eligible": None, "reason": "shadow failed", "error": type(e).__name__}\n'
+                     '    sh = dict(sh or {}, vm2=ent)')
+    vm2_prefetch = ('def _vm2_prefetch(vm2_in):\n    if vm2_in is None:\n        return None\n    try:\n        import vm2\n'
+                    '        return {"in": vm2_in, "pre": vm2.prefetch(vm2_in)}\n    except Exception as e:\n'
+                    '        return {"in": vm2_in, "pre": {"error": f"{type(e).__name__}"}}')
+
+    def no_doc(fn):
+        if fn.body and isinstance(fn.body[0], ast.Expr) and isinstance(fn.body[0].value, ast.Constant) and isinstance(fn.body[0].value.value, str):
+            fn.body = fn.body[1:]
+        return fn
+
     class WithoutShadow(ast.NodeTransformer):
         def visit_FunctionDef(self, node):
+            if node.name == '_vm2_prefetch':
+                assert ast.dump(no_doc(node)) == ast.dump(ast.parse(vm2_prefetch).body[0])
+                return None
+            if node.name == 'pick_row':
+                blk = [n for n in node.body if isinstance(n, ast.Try) and 'vm2' in ast.unparse(n)]
+                assert len(blk) == 1 and ast.dump(blk[0]) == ast.dump(ast.parse(vm2_pick_row).body[0])
+                node.body.remove(blk[0])
+            if node.name == '_shadow':
+                assert node.args.args[-1].arg == 'vm2_x' and ast.literal_eval(node.args.defaults[-1]) is None
+                node.args.args.pop(); node.args.defaults.pop()
+                blk = [n for n in node.body if isinstance(n, ast.If) and ast.unparse(n.test) == 'vm2_x is not None']
+                assert len(blk) == 1 and ast.dump(blk[0]) == ast.dump(ast.parse(vm2_shadow_if).body[0])
+                node.body.remove(blk[0])
+            if node.name == '_forecast':
+                calls = [n for n in ast.walk(node) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_shadow']
+                assert len(calls) == 1 and ast.unparse(calls[0].args[-1]) == "extra.get('vm2')"
+                calls[0].args.pop()
+            if node.name == 'write_row':
+                asg = [n for n in node.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == 'vm2_x']
+                assert len(asg) == 1 and ast.unparse(asg[0].value) == "_vm2_prefetch(row.pop('_vm2', None))"
+                node.body.remove(asg[0])
+                ext = [n for n in node.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == 'extra']
+                assert len(ext) == 1
+                keys = [ast.literal_eval(k) for k in ext[0].value.keys]
+                assert keys.count('vm2') == 1 and ast.unparse(ext[0].value.values[keys.index('vm2')]) == 'vm2_x'
+                i = keys.index('vm2')
+                ext[0].value.keys.pop(i); ext[0].value.values.pop(i)
             if node.name == 'forecasts_page':
                 # The only additional writer-file change is an opt-in read
                 # projection. Its normal export and all write paths stay frozen.

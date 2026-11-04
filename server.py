@@ -798,6 +798,17 @@ def card_veto(res):
         return None
 
 
+def card_map_chances(res):
+    """The card's "HLTV map chances" block (mapchances: display only, weight 0 - never a grade input): hltv_mapchances'
+    cached answer for the match (one query per match per 3 minutes, single flight, shared by every member; the card waits at most
+    0.5 s for a refresh). None = no block."""
+    try:
+        import mapchances
+        return mapchances.for_card(res)
+    except Exception:
+        return None
+
+
 def veto_body(match_id):
     """/api/veto: the stored panel of one canonical match id (memory only), shared by every member for VETO_TTL s."""
     try:
@@ -1108,6 +1119,16 @@ def results_payload():
     ex = _p1_export()
     _MAP1_STATUS[:] = [time.time(), results_view.map1_status(ex)]
     return results_view.member_results(ex)
+
+
+def map_chance_check_status():
+    """Admin diagnostics: HLTV's last pre-start map chances vs the maps played, hit rate per match (mapchances, cached
+    5 minutes; never a grade input)."""
+    try:
+        import mapchances
+        return mapchances.report_cached()
+    except Exception:
+        return None
 
 
 def map1_results_status():
@@ -4423,7 +4444,7 @@ class Handler(BaseHTTPRequestHandler):
                     stale = not _DIAG.get("at") or time.time() - _DIAG["at"] > 600 or (q.get("fresh") and _DIAG["at"] <= asked)
                     if stale:
                         _DIAG.update(data=diagnostics.build_from_log(picklog, slip_batches.read()), at=time.time())
-                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status()))
+                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status()))
             if u.path in ("/content-book", "/content-book.md"):
                 # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
                 # on every load from verified saved forecasts (posts.drafts). Admin token, or CONTENT_BOOK_KEY - a separate
@@ -5485,6 +5506,7 @@ class Handler(BaseHTTPRequestHandler):
                     res["hltv_outage"] = {"rows": [], "causes": cs_, "odds_note": None, "unavailable": True}
                 withhold_temporary(res)
             res["veto"] = card_veto(res)                 # map veto panel: the background's stored answer (display only)
+            res["map_chances"] = card_map_chances(res)   # HLTV map chances (display only, weight 0; after the pick log)
             t0 = time.time()
             body = json.dumps(public(res), default=str).encode()
             tm["json"] = round(time.time() - t0, 2)

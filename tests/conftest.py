@@ -25,6 +25,15 @@ def private_hltv_store(monkeypatch, tmp_path):
     monkeypatch.setattr(hltv_store, "_LAST", {})
 
 
+@pytest.fixture(autouse=True)
+def private_map_chance_check(monkeypatch, tmp_path):
+    """The HLTV map-chances check (mapchances.py, run by the veto-serve background thread) writes to the test's own folder,
+    never to the repo root (a server-start test can let that thread run)."""
+    import mapchances
+    monkeypatch.setattr(mapchances, "CHECK_DB", tmp_path / "map_chance_check.db")
+    monkeypatch.setattr(mapchances, "_DB_INIT", [None])
+
+
 def pin_clock(monkeypatch, at, modules):
     """Run a test as if the wall clock read `at` (it keeps ticking from there). For tests built on market data recorded at a
     fixed moment: without this they fail once the recorded matches have started (2026-10-12 review)."""

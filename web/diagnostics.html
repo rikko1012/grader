@@ -62,8 +62,10 @@ function draw() {
   const rows = (D.cohorts[cohort].summary || []).filter(f);
   const ex = Object.entries(D.exclusions || {}).map(([k, v]) => `${esc(k)}: ${v}`).join(" · ");
   const m1 = D.map1_results || {};   // owner 2026-10-25: Map 1 stays off member Results until it has the threshold of settled staked units
+  const mc = D.map_chance_check || {};   // 2026-11-04: HLTV's last pre-start map chances vs the maps played (mapchances.py; never a grade input)
   $("#out").innerHTML = `<div class="small muted">Excluded: ${ex}</div>
     <div class="small" id="map1res">Map 1 on member Results: ${m1.staked_settled ?? "–"} of ${m1.threshold ?? 500} settled staked P1 units · ${m1.shown_on_member_results ? "shown" : "hidden"} (admin diagnostics always include Map 1)</div>
+    <div class="small" id="mapchancecheck">HLTV map chances check: ${mc.settled ?? 0} settled matches · played maps in HLTV's top k per match ${pc(mc.hit_rate_mean)}${mc.hit_rate_ci95 ? ` (95% by match ${pc(mc.hit_rate_ci95[0])}–${pc(mc.hit_rate_ci95[1])})` : ""} · n likeliest = n played ${pc(mc.top_n_hit_share)} · likeliest veto's Map 1 ${pc(mc.map1_hit_rate)} (${mc.map1_n ?? 0}) <span class="muted">(last pre-start snapshot vs match_maps; display data, weight 0)</span></div>
     <h2>Summary</h2><div class="scroll"><table><thead><tr><th>Cohort / stat / maps / version</th><th>Lines</th><th>Matches</th><th>Hit</th><th>95% (by match)</th><th>Predicted</th><th>Log loss</th>
       <th>Proj. MAE</th><th>Bias</th><th>Bias 95%</th><th>In own 80%</th><th>Rounds bias</th><th>Top grades hit / pred.</th></tr></thead><tbody>
     ${rows.map(s => `<tr><td>${esc(s.source)} · ${esc(s.prop)} · ${esc(s.scope)} · ${esc(s.version)}</td><td>${s.n}</td><td>${s.matches}</td><td>${pc(s.hit_rate)}</td>

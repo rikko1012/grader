@@ -1020,6 +1020,22 @@ function vetoPanel(v, opt) {
   if ((v.facts || []).length) h += `<ul class="veto-facts">${v.facts.map(f => `<li>${esc(f)}</li>`).join("")}</ul>`;
   return h + `</div>`;
 }
+// HLTV map chances (HLTV's simulated vetoes, read by hltv.py; display only - weight 0 in the grade, mapchances.py). Each
+// map's chance to be played at all (a BO3 adds up to ~300%) and the likeliest simulated veto. No projection = no block.
+function mapChancesPanel(m) {
+  if (!m || !(m.maps || []).length) return "";
+  let h = `<div class="veto mchance"><div class="veto-head"><b>HLTV map chances</b>`
+    + (m.at ? `<span class="small muted">Updated ${esc(clockTxt(m.at))} · ${esc(agoTxt(m.at))}</span>` : "") + `</div>`
+    + `<div class="veto-chips">` + m.maps.map(x => `<span class="veto-chip">${esc(x.name)} <b>${esc(x.pct)}%</b></span>`).join("") + `</div>`;
+  const lv = m.veto;
+  if (lv && (lv.maps || []).length) {
+    h += `<div class="veto-lab">Likeliest veto${lv.pct != null ? ` · ${esc(lv.pct)}% of HLTV's simulations` : ""}</div><div class="veto-chips">`
+      + lv.maps.map(x => `<span class="veto-chip">${esc(x.slot)} <b>${esc(x.name)}</b></span>`).join("") + `</div>`;
+    if ((lv.steps || []).length) h += `<div class="small muted" style="margin-top:4px">${lv.steps.map(s => s.action === "leftover"
+      ? `${esc(s.map)} left over` : `${s.team ? esc(s.team) + " " : ""}${esc(s.action)} ${esc(s.map)}`).join(" · ")}</div>`;
+  }
+  return h + `<div class="small muted" style="margin-top:6px">Weight in the grade: 0. ${esc(m.note || "The grade does not use HLTV map chances yet.")}</div></div>`;
+}
 const num = (x, d = 2) => x == null ? "–" : Number(x).toFixed(d);
 // kills chances are capped at 78% (caps.kills_chance): a capped chance says so wherever it shows - same number, labelled
 const KCAP = 0.78;
@@ -3885,6 +3901,7 @@ function render(d) {
       : "Not announced yet – using his all-maps stats"}</span></div>`;
   // map veto (veto-1 replaces the old Likely Map 1 / Map 2 lines; display only - the grade does not use predicted maps)
   if (nm && d.veto) h += vetoPanel(d.veto, {slots: sc === "1" ? ["Map 1", "Map"] : null});
+  if (nm && d.map_chances) h += mapChancesPanel(d.map_chances);    // HLTV map chances: display only, weight 0
   if (!nm) h += `<div class="muted">No upcoming match found for ${esc(pb.current_team || "this player's team")} yet.</div>`;
   if (d.match_note) h += `<div class="small" style="margin-top:6px;color:var(--warn)">${esc(d.match_note)}</div>`;
   if (d.schedule_heads_up) h += `<div class="small" style="margin-top:6px;color:var(--warn)">HLTV heads-up: ${esc(d.schedule_heads_up)}</div>`;

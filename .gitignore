@@ -38,6 +38,9 @@ slips_recommended.jsonl
 # research workspace store (DATA_DIR on the server, the repo folder on a local run)
 workspace.db*
 
+# HLTV map-chances check (mapchances.py; DATA_DIR on the server, the repo folder on a local run)
+map_chance_check.db*
+
 # browser test screenshots written to the repo root (tests/test_research_hub_browser.py)
 /.fit-*.png
 /.record-*.png

@@ -1,0 +1,34 @@
+{
+ "chance_sum_tol": 4,
+ "kills_cap": 0.78,
+ "maps_in_prop": {
+  "1": 1,
+  "12": 2,
+  "123": 3
+ },
+ "maps_in_format": {
+  "bo1": 1,
+  "bo3": 3,
+  "bo5": 5
+ },
+ "meta": {
+  "frozen": "2026-11-04, before any vm-2 entry or result exists (research/map_chances/REGISTER.md); excluded from the hash",
+  "source": "owner brief scout-map-chances-brief.md (hltv-scraper d5d583c), items 2-3"
+ },
+ "min_maps_on_map": 5,
+ "min_maps_total": 10,
+ "rules": {
+  "a_m": "the player's kills per map on map m: map_player_stats k, sideid 0 (total), joined to match_maps (matchid, mapstatsid) and maps, over maps of matches dated in [match day - window_days, match day); a map with fewer than min_maps_on_map such maps uses his overall per-map average over the same window",
+  "chance": "kills: one normal at the projection with the live spread (sd = c x sqrt(max(projection, 1)), c = live sd / sqrt(max(live lambda, 1))), the live cut rule, P(Over | no push), capped to [1 - kills_cap, kills_cap]; HS: the kills pmf at the kills projection with the live kills spread (perf.kills_c), beta-binomial HS (kappa 100) at the live HS per kill, P(Over | no push), uncapped",
+  "control": "C0-pooled = the same arithmetic at his overall per-map average over the same window x maps in the prop (no map weighting)",
+  "map1": "Map 1 props: a_m of the likeliest simulated veto's (rank 1) first map in step order whose action is picked or leftover",
+  "snapshot": "map_chances (the scraper's latest read) only when every row was updated before the earlier of the forecast's match start and HLTV's listed start; map_chances_history is never read",
+  "weighting": "Maps 1-2 / Maps 1-3 props: sum over every map HLTV lists for the match of chance_m x a_m / sum of chance_m, times maps in the prop"
+ },
+ "sources": [
+  "perf-2",
+  "perf-2-bo3",
+  "perf-cm2"
+ ],
+ "window_days": 180
+}

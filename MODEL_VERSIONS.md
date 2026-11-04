@@ -1,5 +1,40 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## vm-2 — HLTV map chances: display at weight 0 + registered shadow (branch claude/vm2-map-chances, 2026-11-04; NOT deployed; CS2 model tag unchanged: `3007c59b74`; no grade change)
+
+Registered in research/map_chances/REGISTER.md BEFORE any vm-2 entry or result existed (the scraper's tables started
+2026-11-04 ~18:13 UTC; 18 upcoming matches, none finished, at registration). No grade, chance, stake, projection, threshold
+or frozen constant changes on any member path; `use_predicted_maps` stays False; vm-1 / veto-1 are untouched.
+- **Model tag unchanged (`3007c59b74`, from the committed blobs as Render builds them):** no file picklog.MODEL_VERSION
+  hashes was edited. The reader lives in hltv_mapchances.py, on hltv.py's own read path (hltv.dsn, the pooled read-only
+  connection with its breaker and 5 s statement timeout, hltv.single_flight), because hltv.py is hashed and frozen since
+  4877218 (tests/test_workspace_api.py::test_model_hash_files_are_untouched). That guard now also lists the vm-2 additions
+  to picklog.py node for node (as it lists the gradecore observer); every other part of the writer is still compared
+  with the frozen baseline.
+- **Reader (hltv_mapchances.py):** `map_chances_snapshot(match)` / `map_chances(match, start)` - ONE bounded statement per
+  match (map_chances + simulated_vetoes + simulated_veto_steps + map_chances_status + upcoming_matches, each on its matchid
+  key), cached 3 min, single flight (700 concurrent callers = 1 query, tested), a failed read kept 30 s and never a number;
+  `map_chances` returns only a snapshot updated BEFORE the earlier of the forecast's and HLTV's start, with its capture time.
+  `map_chances_display` (member paths) waits at most 0.5 s and otherwise shows the last good answer (<= 30 min) or nothing.
+  `player_map_kills(player, day, 180)` - one aggregate query (map_player_stats sideid 0 x match_maps x maps x
+  match_overview), cached 30 min per player + day. map_chances_history is never read.
+- **Shadow vm-2 (`vm-2-37ec7435b0`, vm2.py + vm2_params.json; code sha logged):** brief weighting - kills per map =
+  sum(chance_m x a_m) / sum(chance_m) x maps in the prop (a_m = 180-day per-map kills, thin maps < 5 -> overall average);
+  Map 1 = the likeliest simulated veto's first pick (its step chance logged); control C0-pooled = overall average x maps;
+  chance by the vm-1 / rm-1 arithmetic with the live spread. Logged as forecasts.shadow["vm2"] on every appended CS2
+  forecast row; the two reads run in the writer thread BEFORE the pick-log lock; a missing / late snapshot or a failed read
+  logs an ineligible entry with its reason (tested: the live row is identical with the shadow on, failing or off).
+- **Registered test:** P1 board units, vm-2 vs live and vs C0-pooled per cell, match-clustered bootstrap (10,000), one look
+  at 300 settled forward matches; calibration (log-loss vs C0 and vs live, Brier, favoured-side gaps) and selection
+  (favoured-side hit difference vs live and vs C0) judged separately; promotion only with the owner's approval.
+- **Display (weight 0):** classic CS2 card (map / veto section) and research hub card: "HLTV map chances" per map %, the
+  likeliest veto, "Weight in the grade: 0. The grade does not use HLTV map chances yet."; no block without a projection.
+- **Prospective check (admin diagnostics, independent of vm-2):** mapchances.py records each match's last pre-start
+  snapshot and, after the match, scores it against match_maps (played maps in HLTV's top k per match, n likeliest vs n
+  played, likeliest veto's Map 1); /admin/diagnostics(.json) `map_chance_check`.
+- **Rollback:** revert the branch's commit (no flag needed: nothing reads vm-2 or the display block for a grade).
+  Tests: tests/test_vm2_map_chances.py.
+
 ## sr-gates-1 — stake-rule tests, nothing passed (branch grade/cs2-stakes, 2026-10-28; CS2 model tag unchanged; no model change)
 
 Registered in research/cs2_grade_1028/REGISTER.md (section sr-gates-1, commit c22fea1) before scoring. The cohorts were seen in

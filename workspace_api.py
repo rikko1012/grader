@@ -835,7 +835,17 @@ def _line_body(srv, book, rid):
         ctx = {"rows": full["stats"] + (ctx or {}).get("rows", [])}
     return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser},
                  "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
-                 "books": books, "context": ctx, "market": _market(x)}
+                 "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x)}
+
+
+def _map_chances(x):
+    """HLTV map chances for the row's match (display only, weight 0 - never a grade input): hltv_mapchances.map_chances_display, the
+    same cached answer as the classic card (waits at most 0.5 s). None = no block."""
+    try:
+        import mapchances
+        return mapchances.for_match(x.get("match_id"))
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------------------------------------------- responses

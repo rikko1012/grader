@@ -306,6 +306,15 @@ export function mount(C) {
     const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN);
     if(list.length)el.innerHTML=C.chartSvg(list,r.offer.line,H.histSide,Math.max(260,Math.round(el.clientWidth)||560));
   }
+  /* HLTV map chances (owner 2026-11-04, as on the classic CS2 card): each map's chance to be played and the likeliest simulated
+     veto; display only, weight 0 in the grade. No projection for the match = no block. */
+  function mapChancesHtml(m) {
+    if(!m||!(m.maps||[]).length)return '';
+    const lv=m.veto;
+    return `<section class="h-mapchances"><div class="h-sec-head"><h4>HLTV map chances</h4><small>${m.at?`Updated ${esc(when(m.at))}`:''}</small></div><ul class="h-mc-maps">${m.maps.map(x=>`<li>${esc(x.name)} <b>${esc(x.pct)}%</b></li>`).join('')}</ul>
+      ${lv&&(lv.maps||[]).length?`<p class="h-history-note">Likeliest veto${lv.pct!=null?` (${esc(lv.pct)}% of HLTV's simulations)`:''}: ${lv.maps.map(x=>`${esc(x.slot)} ${esc(x.name)}`).join(' · ')}</p>`:''}
+      <p class="h-history-note">Weight in the grade: 0. ${esc(m.note||'The grade does not use HLTV map chances yet.')}</p></section>`;
+  }
   function paintDetail() {
     const box=$('hub-detail'),r=rec(H.detail);if(!box||!r)return;
     const restoreFocus=focusAfter(box);
@@ -345,6 +354,7 @@ export function mount(C) {
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p></section>
         ${h2hHtml(doc?.h2h,line,side)}</div>
       ${statsHtml(r,doc,all)}
+      ${r.sport==='cs2'?mapChancesHtml(doc?.map_chances):''}
       <section class="h-line-shop"><div class="h-sec-head"><h4>Compare lines</h4><small>Same event · stat · period</small></div><div class="h-shop-grid"><div class="h-scroll-x"><table><thead><tr><th>Platform / line</th><th>Over</th><th>Under</th><th>Scout</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td></tr>`).join('')}</tbody></table></div>
         <div class="h-detail-action"><p>Choose a line to recount its past results. A lower Over line or a higher Under line can help; payouts and availability also matter.</p><span>${s.hold?'Research estimate':esc(C.verdictText(r,side))} · ${pct(chance)}</span><button data-hub="detail-add" ${eligible?'':'disabled'}>${C.onSlip(r)?'Review saved slip':`Add ${sideWord(side)} ${esc(line)} · ${esc(r.offer.platform_label)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}${!r.offer[side].offered?'<small>This side is not offered on the selected platform.</small>':''}</div></div></section>`;
     drawChart();

@@ -774,3 +774,8 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 }
 /* owner 2026-11-04 "make it fit better": an empty slip panel collapses on desktop and the board takes its width; adding a leg brings it back */
 @media(min-width:1101px){#u-hub.h-slip-empty:not(.h-studio-mode) .h-slip{display:none!important}#u-hub.h-slip-empty:not(.h-studio-mode) .h-center{grid-column:2/-1}}
+/* HLTV map chances on the CS2 card (2026-11-04; display only, weight 0): one chip per map, the likeliest veto as a note */
+.h-mapchances{margin-top:18px;padding-top:14px;border-top:1px solid #29323f;min-width:0}
+.h-mc-maps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;padding:0;list-style:none}
+.h-mc-maps li{display:inline-flex;gap:6px;align-items:baseline;padding:5px 10px;border:1px solid #2a3544;border-radius:7px;background:#141a22;font-size:12.5px;color:#c9d4e2;white-space:nowrap}
+.h-mc-maps li b{font:600 13px 'DM Mono',monospace;font-variant-numeric:tabular-nums;color:#f1f5fa}

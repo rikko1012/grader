@@ -1473,6 +1473,11 @@ def loop_once(now=None):
         save_baselines(now)
     except Exception:
         traceback.print_exc()
+    try:                                      # HLTV map chances vs the maps played (admin diagnostics; every 15 min, bounded)
+        import mapchances
+        mapchances.maybe_run()
+    except Exception:
+        traceback.print_exc()
     return c
 
 
