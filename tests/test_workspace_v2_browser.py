@@ -28,9 +28,12 @@ def test_history_visible_without_model_side(ctx,env,width):
     ctx.route('**/api/upgrade/board?*',patch)
     p=start(ctx,env,width=width)
     p.wait_for_selector('#hub-rows .h-hit-both')
+    assert 'No side' not in p.locator('#hub-rows').inner_text()
+    assert p.locator('#hub-rows .h-direction-options').count()>0
     assert 'O 3/5' in p.locator('#hub-rows .h-hit-both').first.inner_text().replace('\n',' ')
     assert 'U 1/5' in p.locator('#hub-rows .h-hit-both').first.inner_text().replace('\n',' ')
     no_h_scroll(p)
+    p.screenshot(path=f'.side-cards-{width}.png',full_page=True)
     assert not p.errors
 
 @pytest.mark.parametrize('width',[390,1440])
