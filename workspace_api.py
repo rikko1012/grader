@@ -731,7 +731,7 @@ def _history(srv, x, full=False):
     """Game-by-game results from the HLTV tables, only when they reproduce the saved L10 tally. Three Postgres slots: a member
     who cannot get one within 0.5 s sees the saved tally alone."""
     n, over, push = x.get("l10_n"), x.get("l10_over"), x.get("l10_push") or 0
-    if not n or over is None:
+    if not full and (not n or over is None):
         return None
     nick, team, prop, scope = _nick(x), x.get("team_name") or x.get("team"), x.get("prop"), x.get("scope") or "12"
     stat = STAT_COL.get(prop)
@@ -832,11 +832,11 @@ def _line_body(srv, book, rid):
     if fc.get("state") == "ok":
         forecast = {"id": fc.get("id"), "logged_at": fc.get("logged_at"), "model_version": fc.get("model_version"), "p_saved": fc.get("p_pick")}
     ser = _history(srv, x)
-    full = (_history(srv, x, full=True) or {}) if ser else {}           # the cached year: one read serves both
+    full = _history(srv, x, full=True) or {}           # the cached year (one read serves both); H2H and stats do not need the chart's L10 check
     if full.get("stats"):
         ctx = {"rows": full["stats"] + (ctx or {}).get("rows", [])}
     return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser},
-                 "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if ser else None,
+                 "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
                  "books": books, "context": ctx, "market": _market(x)}
 
 
