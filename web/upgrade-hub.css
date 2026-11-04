@@ -483,8 +483,8 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 #u-hub .h-direction>b{font-size:14px;font-weight:650;color:#f4f7fc;white-space:nowrap}
 #u-hub .h-direction>span{font:12px 'DM Mono',monospace;color:#a9bdd7}
 #u-hub .h-direction-options{display:grid;gap:5px;font-size:11px;color:#9baabd;line-height:1.5}
-#u-hub .h-direction-options>span{display:flex;justify-content:space-between;gap:8px}
-#u-hub .h-direction-options b{color:#e6edf7;font:500 11px 'DM Mono',monospace;white-space:nowrap}
+#u-hub .h-direction-options>span{display:flex;justify-content:space-between;gap:4px;white-space:nowrap;font-size:10px}
+#u-hub .h-direction-options b{color:#e6edf7;font:500 10px 'DM Mono',monospace;white-space:nowrap}
 #u-hub .h-table tr[data-record] .h-hit.h-hit-both small{font-size:9px;white-space:nowrap;overflow-wrap:normal}
 #u-hub .h-hit.h-hit-both>span{white-space:nowrap;overflow-wrap:normal}
 #u-hub .h-table .h-side-reason{font-size:10px;color:#8ab6ff;min-height:28px;line-height:1.4;white-space:normal}
