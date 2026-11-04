@@ -711,19 +711,17 @@ def _map_stats(maps):
     rows = sorted((r for r in maps if r.get("kills") is not None and r.get("rounds")), key=lambda r: str(r.get("date") or ""), reverse=True)
     if not rows:
         return None
-    rounds = sum(r["rounds"] for r in rows)
     hs = [r for r in rows if r.get("headshots") is not None]
     won = [r for r in rows if r.get("won") is not None]
     last = rows[:20]
-    out = [{"label": "Maps played, last 12 months", "value": len(rows)},
-           {"label": "Kills per round", "value": round(sum(r["kills"] for r in rows) / rounds, 3)},
-           {"label": "Kills per map", "value": round(sum(r["kills"] for r in rows) / len(rows), 1)},
-           {"label": "Kills per map, last 20 maps", "value": round(sum(r["kills"] for r in last) / len(last), 1)}]
-    if hs and sum(r["kills"] for r in hs):
-        out.append({"label": "Headshot share", "value": f"{100 * sum(r['headshots'] for r in hs) / sum(r['kills'] for r in hs):.1f}%"})
-        out.append({"label": "Headshots per map", "value": round(sum(r["headshots"] for r in hs) / len(hs), 1)})
+    g = "Last 12 months (HLTV)"
+    out = [{"label": "Maps played", "value": len(rows), "group": g},
+           {"label": "Kills per map", "value": round(sum(r["kills"] for r in rows) / len(rows), 1), "group": g},
+           {"label": "Kills per map, last 20 maps", "value": round(sum(r["kills"] for r in last) / len(last), 1), "group": g}]
+    if hs:
+        out.append({"label": "Headshots per map", "value": round(sum(r["headshots"] for r in hs) / len(hs), 1), "group": g})
     if won:
-        out.append({"label": "Maps won", "value": f"{sum(1 for r in won if r['won'])} of {len(won)}"})
+        out.append({"label": "Maps won", "value": f"{sum(1 for r in won if r['won'])} of {len(won)}", "group": g})
     return out
 
 
@@ -804,7 +802,7 @@ def _context(srv, fc):
     for k, label in CONTEXT_KEYS:
         v = gi.get(k) if isinstance(gi, dict) else None
         if isinstance(v, (int, float)) and not isinstance(v, bool):
-            out.append({"key": k, "label": label, "value": round(v, 3)})
+            out.append({"key": k, "label": label, "value": round(v, 3), "group": "Saved with this forecast"})
     return {"rows": out}
 
 
@@ -831,8 +829,8 @@ def _line_body(srv, book, rid):
     forecast = None
     if fc.get("state") == "ok":
         forecast = {"id": fc.get("id"), "logged_at": fc.get("logged_at"), "model_version": fc.get("model_version"), "p_saved": fc.get("p_pick")}
-    ser = _history(srv, x)
-    full = _history(srv, x, full=True) or {}           # the cached year (one read serves both); H2H and stats do not need the chart's L10 check
+    ser = _history(srv, x)                             # the chart: only when it reproduces the saved L10
+    full = _history(srv, x, full=True) or {}           # the cached year (one read serves both): H2H and stats
     if full.get("stats"):
         ctx = {"rows": full["stats"] + (ctx or {}).get("rows", [])}
     return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser},
@@ -1069,7 +1067,9 @@ def _hits_doc(srv, snap):
                 complete = False
                 d['cursor'] = i
                 break
-            ser = _history(srv, x)
+            # owner 2026-11-04: L5 is never empty when L10 is shown, and L20 counts the games he has (e.g. 14/17), so the newest
+            # HLTV results count even when they do not reproduce the saved L10 exactly
+            ser = (_history(srv, x, full=True) or {}).get("ser")
             if ser:
                 rows[f"{book}|{rid}"] = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
         if complete:

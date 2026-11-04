@@ -23,6 +23,6 @@ def test_cs2_map_stats_read_the_rows_already_fetched():
             {"date": "2026-10-29", "kills": 10, "headshots": None, "rounds": 20, "won": False},
             {"date": "2026-10-28", "kills": None, "headshots": None, "rounds": 20, "won": True}]
     rows = {r["label"]: r["value"] for r in workspace_api._map_stats(maps)}
-    assert rows["Maps played, last 12 months"] == 2 and rows["Kills per round"] == 0.75 and rows["Kills per map"] == 15.0
-    assert rows["Headshot share"] == "50.0%" and rows["Maps won"] == "1 of 2"
+    assert rows["Maps played"] == 2 and rows["Kills per map"] == 15.0 and rows["Headshots per map"] == 10.0 and rows["Maps won"] == "1 of 2"
+    assert "Kills per round" not in rows and "Headshot share" not in rows        # the saved inputs already carry those
     assert workspace_api._map_stats([]) is None

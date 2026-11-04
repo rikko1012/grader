@@ -658,9 +658,9 @@ def series_of(hist, stat):
 def context_of(x, player, lg):
     rows = []
 
-    def add(label, value):
+    def add(label, value, group="Matchup"):
         if value not in (None, "", []):
-            rows.append({"label": label, "value": value})
+            rows.append({"label": label, "value": value, "group": group})
     add("Position", (player or {}).get("position"))
     rec = json.loads(x["rec"])
     add("Opponent", rec["player"]["opponent"])
@@ -679,10 +679,10 @@ def context_of(x, player, lg):
     for s in (player or {}).get("stats") or []:
         for w in s.get("windows") or []:
             if w.get("window") and w.get("mean") is not None:
-                add(f"{s.get('label')}, {w['window']}", w["mean"])
+                add(f"{s.get('label')}, {w['window']}", w["mean"], "Averages")
     for r in ((player or {}).get("engine") or {}).get("rows") or []:
         if r.get("label") and r.get("value") is not None:
-            add(r.get("label"), r.get("value"))
+            add(r.get("label"), r.get("value"), "Model inputs")
     return {"rows": rows[:200]}
 
 

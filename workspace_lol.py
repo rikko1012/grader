@@ -433,7 +433,8 @@ def context_of(member_row):
 
     def add(label, value):
         if value not in (None, "", []):
-            rows.append({"label": label, "value": value})
+            grp = "Form" if label.startswith(("Recent", "Maps counted")) else "Model" if label.startswith(("Median", "Team win", "Driver")) else "Matchup"
+            rows.append({"label": label, "value": value, "group": grp})
     add("Role", member_row.get("role"))
     add("Opponent", member_row.get("opponent"))
     add("Competition", member_row.get("event"))
