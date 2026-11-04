@@ -11,7 +11,7 @@ def test_budgeted_hits_resume_and_invalidate_changed_lines(monkeypatch):
     api.reset()
     monkeypatch.setattr(api,'HITS_BUDGET_S',-1)
     monkeypatch.setattr(api,'HITS_FILL_TTL',0)
-    monkeypatch.setattr(api,'_history',lambda *args:[{'value':4},{'value':5},{'value':6}])
+    monkeypatch.setattr(api,'_history',lambda *args,full=False:{'ser':[{'value':4},{'value':5},{'value':6}]} if full else [{'value':4},{'value':5},{'value':6}])
     snap={'index':{('prizepicks',str(i)):{'line':5} for i in range(3)}}
     for n in range(1,4):
         doc=json.loads(api._hits_doc(None,snap))

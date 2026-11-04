@@ -289,10 +289,12 @@ def test_hits_add_l5_and_l20_only_when_the_rows_reproduce_the_saved_l10(env, mon
     assert "underdog|11111111-0000-4000-8000-000000000003" not in d["rows"] or d["rows"]
 
 
-def test_hits_leave_out_a_row_whose_rows_disagree_with_the_saved_l10(env, monkeypatch):
+def test_hits_count_the_newest_results_even_when_they_disagree_with_the_saved_l10(env, monkeypatch):
+    # owner 2026-11-04: L5 is never empty when L10 is shown; the card's chart still keeps the saved-L10 check
     monkeypatch.setenv("SCOUT_UPGRADE", "1")
     monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: series([10] * 20))
-    assert json.loads(get(env.base, "/api/upgrade/hits", "good-u1")[1])["rows"] == {}
+    rows = json.loads(get(env.base, "/api/upgrade/hits", "good-u1")[1])["rows"]
+    assert rows and all(r["l5"]["n"] == 5 and r["l20"]["n"] == 20 for r in rows.values())
 
 
 def test_hits_never_make_a_member_wait_and_stop_at_the_budget(env, monkeypatch):
