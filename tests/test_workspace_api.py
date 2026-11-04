@@ -1067,8 +1067,7 @@ def test_ev_reason_comes_through_the_route(env):
     assert MODEL not in e["ev"]["reason"] and e["ev"]["payout"]["multiple"] == 3.5
     p = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
     assert p['ev']['available'] is False
-    assert p['ev']['payout']['multiple'] == 3 and p['ev']['payout']['reference_only']
-    assert 'final payout' in p['ev']['reason']
+    assert 'payout' not in p['ev'] and 'only in its app' in p['ev']['reason']      # unknown payouts stay unknown
 
 
 def test_a_failed_export_read_is_named_as_that(env, monkeypatch):

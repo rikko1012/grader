@@ -475,9 +475,7 @@ def test_prizepicks_takes_a_mixed_entry_with_its_source(env):
     keys = {r["rule"]: r for r in e["rules"]}
     assert keys["mixed_sports"]["source"].startswith("https://www.prizepicks.com") and "for the most part" in keys["mixed_sports"]["text"].lower() and "league_limits" in keys
     assert e['ev']['available'] is False
-    assert e['ev']['payout']['reference_only'] is True
-    assert e['ev']['payout']['multiple']==3.0
-    assert 'final payout' in e['ev']['reason']
+    assert 'payout' not in e['ev'] and 'only in its app' in e['ev']['reason']      # unknown payouts stay unknown
 
 
 def test_underdog_says_why_a_mixed_entry_is_not_offered(env):
