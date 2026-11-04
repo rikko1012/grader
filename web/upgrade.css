@@ -49,11 +49,11 @@ html[data-upgrade] .ot-lol .bar .seg button,html[data-upgrade] .ot-lol .bar sele
 html[data-upgrade] .sw .sw-filters{padding:10px 12px;gap:8px;margin-bottom:10px}
 
 /* CS2 rows: the page's grid plus Hit rate and Books */
-html[data-upgrade] #boardout .crow-head,html[data-upgrade] #boardout .brow2.crow{grid-template-columns:36px minmax(120px,1.1fr) minmax(96px,.7fr) 42px 42px minmax(96px,.7fr) 122px minmax(150px,1.15fr) 70px 186px;gap:6px 10px}
-html[data-upgrade] #boardout .crow-head{position:static;padding:0 12px 4px;font:400 10px/1.4 var(--u-mono);letter-spacing:.08em;color:var(--u-faint)}
-html[data-upgrade] #boardout .crow-head span:nth-child(4),html[data-upgrade] #boardout .crow-head span:nth-child(5){text-align:right}
-html[data-upgrade] #boardout .brow2.crow{padding:8px 12px;border-radius:6px;background:var(--u-panel);border-color:var(--u-line)}
-html[data-upgrade] #boardout .brow2.crow:hover{background:var(--u-panel2);border-color:var(--u-line2)}
+html[data-upgrade] #boardout .crow-head[data-u],html[data-upgrade] #boardout .brow2.crow.u-decorated{grid-template-columns:36px minmax(120px,1.1fr) minmax(96px,.7fr) 42px 42px minmax(96px,.7fr) 122px minmax(150px,1.15fr) 70px 186px;gap:6px 10px}
+html[data-upgrade] #boardout .crow-head[data-u]{position:static;padding:0 12px 4px;font:400 10px/1.4 var(--u-mono);letter-spacing:.08em;color:var(--u-faint)}
+html[data-upgrade] #boardout .crow-head[data-u] span:nth-child(4),html[data-upgrade] #boardout .crow-head[data-u] span:nth-child(5){text-align:right}
+html[data-upgrade] #boardout .brow2.crow.u-decorated{padding:8px 12px;border-radius:6px;background:var(--u-panel);border-color:var(--u-line)}
+html[data-upgrade] #boardout .brow2.crow.u-decorated:hover{background:var(--u-panel2);border-color:var(--u-line2)}
 html[data-upgrade] #boardout .crow .c-num{text-align:right;font-family:var(--u-mono)}
 html[data-upgrade] #boardout .crow .c-num b{color:var(--u-text)}
 html[data-upgrade] #boardout .crow .c-stake{font-size:11.5px}
@@ -280,14 +280,14 @@ html[data-upgrade] .u-genie .u-det{border:1px solid var(--u-line);border-radius:
 html[data-upgrade] .u-genie summary{font-size:14px;font-weight:500}
 
 @media(max-width:1366px){
-  html[data-upgrade] #boardout .crow-head,html[data-upgrade] #boardout .brow2.crow,html[data-upgrade] .u-row{grid-template-columns:36px minmax(128px,1.2fr) 44px 44px minmax(110px,.9fr) 126px minmax(110px,.9fr) 178px}
-  html[data-upgrade] #boardout .crow-head span:nth-child(3),html[data-upgrade] #boardout .crow .c-mkt,html[data-upgrade] #boardout .crow-head span:nth-child(9),html[data-upgrade] #boardout .crow .c-stake{display:none}
+  html[data-upgrade] #boardout .crow-head[data-u],html[data-upgrade] #boardout .brow2.crow.u-decorated,html[data-upgrade] .u-row{grid-template-columns:36px minmax(128px,1.2fr) 44px 44px minmax(110px,.9fr) 126px minmax(110px,.9fr) 178px}
+  html[data-upgrade] #boardout .crow-head[data-u] span:nth-child(3),html[data-upgrade] #boardout .crow .c-mkt,html[data-upgrade] #boardout .crow-head[data-u] span:nth-child(9),html[data-upgrade] #boardout .crow .c-stake{display:none}
   html[data-upgrade] .u-row .u-mkt,html[data-upgrade] .u-row .u-stake,html[data-upgrade] .u-row.u-head span:nth-child(3),html[data-upgrade] .u-row.u-head span:nth-child(9){display:none}
 }
 @media(max-width:1000px){
   html[data-upgrade] .u-row.u-head{display:none}
-  html[data-upgrade] #boardout .brow2.crow,html[data-upgrade] .u-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;position:relative;padding:10px 12px 10px 54px}
-  html[data-upgrade] #boardout .brow2.crow>.gtag,html[data-upgrade] .u-row>.u-g{position:absolute;left:10px;top:10px}
+  html[data-upgrade] #boardout .brow2.crow.u-decorated,html[data-upgrade] .u-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;position:relative;padding:10px 12px 10px 54px}
+  html[data-upgrade] #boardout .brow2.crow.u-decorated>.gtag,html[data-upgrade] .u-row>.u-g{position:absolute;left:10px;top:10px}
   html[data-upgrade] #boardout .crow .c-mkt,html[data-upgrade] .u-row .u-mkt{display:block;flex:1 1 100%;order:3}
   html[data-upgrade] #boardout .crow .c-stake,html[data-upgrade] .u-row .u-stake{display:block;flex:0 0 auto;order:6}
   html[data-upgrade] #boardout .crow .c-who,html[data-upgrade] .u-who{flex:1 1 100%;order:1}
@@ -307,4 +307,12 @@ html[data-upgrade] .u-genie summary{font-size:14px;font-weight:500}
   html[data-upgrade] .u-toast{bottom:130px}
   html[data-upgrade] .u-res{padding:12px}
   html[data-upgrade] .bbar{padding:8px;margin:0 0 8px}
+}
+
+/* Enhanced Classic rows must fit the original, narrower content column. */
+@media(min-width:1101px){
+html[data-upgrade] #boardout .crow-head[data-u],html[data-upgrade] #boardout .brow2.crow.u-decorated{grid-template-columns:36px minmax(95px,1.2fr) minmax(80px,.8fr) 42px 42px minmax(88px,.8fr) 122px minmax(80px,1fr) 48px;gap:6px 8px}
+html[data-upgrade] #boardout .crow-head[data-u] span:last-child{display:none}
+html[data-upgrade] #boardout .crow .c-act{grid-column:2/-1;justify-content:flex-start;max-width:none}
+html[data-upgrade] #boardout .crow>*{min-width:0;overflow-wrap:anywhere}
 }

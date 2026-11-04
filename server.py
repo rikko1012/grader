@@ -1222,8 +1222,8 @@ def awp_role(nick, g, hs_pct, team=None):
 SAME_RESULT_CAP = 3.0   # units (on the 0.5-3U scale), all bets that need the same team to do well / badly in one match
 
 
-SIDE_GONE = "Unavailable—side no longer offered"      # a kept (stale) grade whose side the feed dropped
-SIDE_NOT_OFFERED = "Unavailable—side not offered"     # a current grade leaning to a side the feed does not offer
+SIDE_GONE = "Unavailableâ€”side no longer offered"      # a kept (stale) grade whose side the feed dropped
+SIDE_NOT_OFFERED = "Unavailableâ€”side not offered"     # a current grade leaning to a side the feed does not offer
 
 
 def side_unavailable(r):
@@ -3692,22 +3692,22 @@ def card_odds_info(res):
                       + "; the market-quality stake rule also applies")
     if mq == "SOFT":
         out["stake_rule"] = _soft_text("", src, od.get("book"), cap) if src in ("thunderpick", "oddspapi") else SOFT_TEXT_THIN
-        out["stake_pill"] = (f"Bookmaker price · max {cap:g}U" if src in ("thunderpick", "oddspapi")
-                             else f"Thin betting market · max {cap:g}U")
+        out["stake_pill"] = (f"Bookmaker price Â· max {cap:g}U" if src in ("thunderpick", "oddspapi")
+                             else f"Thin betting market Â· max {cap:g}U")
     elif mq in ("NONE", "NO MARKET"):
         out["stake_rule"] = "No betting market for this match - unit size limited"
-        out["stake_pill"] = f"No betting market · max {cap:g}U"
+        out["stake_pill"] = f"No betting market Â· max {cap:g}U"
     else:
         out["stake_rule"] = out["stake_pill"] = None
     if not src:
         out["match_note"] = ("No betting market found for this match - stake capped at "
                              f"{cap:g}U; {'the projection does not use odds' if perf else 'the older model grades the match as even'}")
-        out["tile_note"] = "no market – stake capped" if perf else "no market – graded as even"
+        out["tile_note"] = "no market â€“ stake capped" if perf else "no market â€“ graded as even"
     else:
         out["match_note"] = None
-        out["tile_note"] = (f"{label}{' (margin removed)' if src == 'thunderpick' else ''} · context"
+        out["tile_note"] = (f"{label}{' (margin removed)' if src == 'thunderpick' else ''} Â· context"
                             f"{' + stake cap' if mq not in (None, 'HARD') else ''}; not in the projection"
-                            if perf else f"{label} · in the projection")
+                            if perf else f"{label} Â· in the projection")
     # the price ACTUALLY used - Thunderpick or a fallback - with our retrieval time and its age when graded, and whether
     # the selected odds changed this grade (2026-10-14 owner: a source label alone is not projection integration)
     if src:
@@ -3720,7 +3720,7 @@ def card_odds_info(res):
     mpb = (g.get("detail") or {}).get("map_prob_basis")
     kind = _map_basis_kind(mpb, maps)
     feeds = (" They feed the match simulation's map scenarios"
-             + (" and the Maps 1–3 'map 3 played' chance - not the projection" if perf
+             + (" and the Maps 1â€“3 'map 3 played' chance - not the projection" if perf
                 else " and the older model's projection") + ".")
     if src and kind != "source":
         basis = _map_basis_words(mpb, nm.get("bo"))
@@ -3965,7 +3965,7 @@ def upgrade_page(body, name):
     if hit is not None and hit[0] is body:
         return hit[1]
     # Runs in the head, before the original board can paint. Classic keeps its
-    # own CSS and renderers; a failed workspace load always releases the page.
+    # tools and renderers; a failed workspace load always releases the page.
     head = br'''<style>
 html.scout-boot body{visibility:hidden!important}
 html.scout-boot{background:#101215}
@@ -3975,9 +3975,8 @@ html.scout-boot::after{content:"Loading your workspace...";position:fixed;inset:
 const root=document.documentElement,q=new URLSearchParams(location.search);
 window.scoutClassic=q.get('view')==='classic'||q.has('slip')||q.has('p')||q.get('bv')==='1';
 window.scoutBootDone=function(){root.classList.remove('scout-boot');clearTimeout(window.scoutBootTimer);};
-if(window.scoutClassic){root.removeAttribute('data-upgrade');return;}
 const h=location.hash;
-if(root.dataset.upgrade!=='sports-results'&&(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|tools|picks|alerts))/.test(h))){
+if(!window.scoutClassic&&root.dataset.upgrade!=='sports-results'&&(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|tools|picks|alerts))/.test(h))){
 root.classList.add('scout-boot');window.scoutBootTimer=setTimeout(window.scoutBootDone,8000);
 }
 window.scoutStylesReady=Promise.all(['/upgrade/upgrade.css','/upgrade/hub.css'].map(href=>new Promise(resolve=>{
@@ -5731,15 +5730,15 @@ table{{border-collapse:collapse;margin:8px 0 20px}}td,th{{border:1px solid #252e
 th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252e3f}}.k{{color:#8b95a8}}
 .scroll{{overflow-x:auto}}</style>
 <h2>Phase 10 - real lines</h2>
-<p><span class=k>Logged</span> {r['total']} · <span class=k>open</span> {r['open']} · <span class=k>settled</span> {r['settled']}
- · <span class=k>void</span> {r['void']} · <span class=k>hit rate</span> {'' if r['hit_rate_all'] is None else f"{r['hit_rate_all']:.1%}"}
- · <span class=k>CLV avg</span> {r['clv_avg']} ({r['clv_n']} lines, {'' if r['clv_positive'] is None else f"{r['clv_positive']:.0%} positive"})
- · <span class=k>units net (flat ±1, not payout-adjusted)</span> {r['units_net_flat']}</p>
+<p><span class=k>Logged</span> {r['total']} Â· <span class=k>open</span> {r['open']} Â· <span class=k>settled</span> {r['settled']}
+ Â· <span class=k>void</span> {r['void']} Â· <span class=k>hit rate</span> {'' if r['hit_rate_all'] is None else f"{r['hit_rate_all']:.1%}"}
+ Â· <span class=k>CLV avg</span> {r['clv_avg']} ({r['clv_n']} lines, {'' if r['clv_positive'] is None else f"{r['clv_positive']:.0%} positive"})
+ Â· <span class=k>units net (flat Â±1, not payout-adjusted)</span> {r['units_net_flat']}</p>
 <p>Hit rate uses {r.get('scored', r['settled'])} records with a known outcome. Calibration tables use {r.get('calibration_scored', r['settled'])} records with both an outcome and a valid saved probability. Missing outcomes: {r.get('missing_outcome', 0)}; missing/invalid probabilities: {r.get('missing_probability', 0)}. All records remain in the log.</p>
 <h3>Printed % vs actual (settled)</h3>{table(pct(r['by_printed_pct']), ['bucket', 'n', 'printed', 'actual'])}
 <h3>By units</h3>{table(pct(r['by_units']), ['bucket', 'n', 'printed', 'actual'])}
 <h3>Picks (newest first) - enter Underdog's closing line for CLV</h3><div class=scroll><table>
-<tr><th>#</th><th>logged</th><th>player</th><th>vs</th><th>line</th><th>pick</th><th>λ</th><th>market</th><th>last10</th>
+<tr><th>#</th><th>logged</th><th>player</th><th>vs</th><th>line</th><th>pick</th><th>Î»</th><th>market</th><th>last10</th>
 <th>status</th><th>actual</th><th>result</th><th>closing</th><th>CLV</th><th>asks</th></tr>{''.join(picks)}</table></div>"""
         return self.send(200, page.encode(), "text/html; charset=utf-8")
 

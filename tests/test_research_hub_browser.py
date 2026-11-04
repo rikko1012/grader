@@ -66,7 +66,7 @@ def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
     p=ctx.new_page();p.set_viewport_size(size)
     doc={'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'win'},
                                   {'at':'2026-11-02T12:00:00Z','status':'push'}],
-                                 '2026-11-03T12:00:00Z','Fixture date · UTC')}
+                                 '2026-11-03T12:00:00Z','Fixture date Â· UTC')}
     p.route('**/api/upgrade/stated',lambda r:r.fulfill(json=doc))
     p.route('**/api/upgrade/results?*',lambda r:r.fulfill(json=doc))
     p.goto(env.url+'/#scout/record')
@@ -74,7 +74,7 @@ def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
     assert p.locator('.h-record-calendar').count()==4
     assert p.locator('.h-calendar-grid summary').count()==120
     p.locator('.h-calendar-grid summary[aria-label^="2026-11-02"]').first.click()
-    assert '1 wins · 0 losses · 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
+    assert '1 wins Â· 0 losses Â· 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
     assert 'Accuracy only, not profit.' in p.locator('#hub-record-body').inner_text()
     no_h_scroll(p)
 
@@ -93,7 +93,7 @@ def test_public_record_four_sports_retry_and_safe_text(ctx,env,monkeypatch,size)
             'population':'<unsafe> fixture population','rule':'Only saved pregame forecasts',
             'bands':[{'name':'B','wins':2,'losses':1,'observed':2/3,'printed':.6}],
             'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'push'}],
-                '2026-11-03T12:00:00Z','Fixture date · UTC')})
+                '2026-11-03T12:00:00Z','Fixture date Â· UTC')})
     p.route('**/api/record?*',report)
     p.goto(env.url+'/record')
     p.wait_for_selector('#retry');p.locator('#retry').click()
@@ -393,7 +393,7 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
     assert 'Base all-hit payout' in p.locator('#hub-studio-body').inner_text()
     p.locator('#hub-studio-body summary',has_text='Published payout tiers').click()
-    assert '4 of 4 correct: 10× entry fee' in p.locator('#hub-studio-body').inner_text()
+    assert '4 of 4 correct: 10Ã— entry fee' in p.locator('#hub-studio-body').inner_text()
     assert 'final payout for your exact lineup' in p.locator('#hub-studio-body').inner_text()
     assert not p.errors
 
@@ -623,11 +623,13 @@ def test_workspace_boot_hides_classic_while_account_loads(ctx, env, monkeypatch,
 
 @pytest.mark.parametrize('path', ['/?view=classic#board', '/lol?view=classic', '/sports?view=classic#/board'])
 @pytest.mark.parametrize('size', [DESK, PHONE])
-def test_classic_keeps_original_layout_without_upgrade_mutations(ctx, env, path, size):
+def test_classic_keeps_tools_and_does_not_reopen_workspace(ctx, env, path, size):
     p = open_page(ctx, env, path, size)
-    assert p.locator('html').get_attribute('data-upgrade') is None
-    assert p.locator('link[href^="/upgrade/"]').count() == 0
-    assert p.locator('#u-hub, #u-tray-btn').count() == 0
+    p.wait_for_selector('#u-tray-btn')
+    assert p.locator('#u-hub').is_hidden()
+    if path.startswith('/?'):
+        p.wait_for_selector('#boardout .u-decorated .u-hits', timeout=20000)
+        assert p.locator('#boardout .u-decorated').first.evaluate('(el)=>el.scrollWidth<=el.clientWidth+2')
     assert not p.locator('html').evaluate("el=>el.classList.contains('scout-boot')")
     assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'
     assert p.locator('[data-hub-inert]').count() == 0

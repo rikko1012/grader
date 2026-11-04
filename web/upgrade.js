@@ -288,7 +288,7 @@
   async function generateBatch(records, opts, progress) {
     const {platform, count, size, entryType, mode, target, tolerance, mix, games} = opts;
     if (!PLATFORMS[platform] || !Number.isInteger(count) || count<1 || count>12 || !Number.isInteger(size) || size<2 || size>6)
-      throw new Error('Choose 1–12 slips and 2–6 picks per slip.');
+      throw new Error('Choose 1â€“12 slips and 2â€“6 picks per slip.');
     if (platform==='prizepicks' && size>6) throw new Error('PrizePicks supports up to 6 picks per entry.');
     if (platform==='underdog' && entryType==='flex' && size<3) throw new Error('Underdog Flex needs at least 3 picks.');
     if (platform==='underdog' && mix==='mixed') throw new Error('Mixed-sport generation is currently supported on PrizePicks. Choose PrizePicks or a single sport.');
@@ -327,7 +327,7 @@
         if(chosen.length!==size || (mix==='mixed'&&new Set(chosen.map(r=>r.sport)).size<2))continue;
         const legs=chosen.map(r=>makeLeg(r,r.scout.side)), signature=legs.map(l=>l.id).sort().join('\n');
         if(signatures.has(signature))continue;signatures.add(signature);checked++;
-        progress?.(`Checking slip ${picked.length+1} of ${count}…`);
+        progress?.(`Checking slip ${picked.length+1} of ${count}â€¦`);
         let doc;
         try {doc=await api('recheck',{idem:idem(),legs:legs.map(wireLeg),entry_types:{[platform]:entryType}});}
         catch(e){if(!picked.length)throw e;lastProblem='The server could not finish checking more combinations.';return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,note:lastProblem};}
@@ -401,7 +401,7 @@
       const d=await api('book-line',{legs:[wireLeg(l)]});
       if(!safeBookLink(d.url,'underdog'))throw Error('invalid link');
       let box=$('u-book-line');if(!box){box=document.createElement('dialog');box.id='u-book-line';box.className='u-book-dialog';box.setAttribute('aria-label','Open book line');document.body.appendChild(box);}
-      box.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book link">×</button></form><h2>${esc(l.player)}</h2><p>${cap(l.side)} ${esc(l.line)} ${esc(l.stat_label)} · ${esc(l.period_label)}</p><p>Choose the side in Underdog. This opens the market; it does not place a pick.</p><a class="u-btn u-gold" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Underdog</a>`;box.showModal();
+      box.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book link">Ã—</button></form><h2>${esc(l.player)}</h2><p>${cap(l.side)} ${esc(l.line)} ${esc(l.stat_label)} Â· ${esc(l.period_label)}</p><p>Choose the side in Underdog. This opens the market; it does not place a pick.</p><a class="u-btn u-gold" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Underdog</a>`;box.showModal();
     }catch(e){say(e.message||'The current line could not be opened. Refresh and try again.');}
   }
   async function openGenerated(slip){
@@ -413,7 +413,7 @@
       if(!e?.ok||!e.open||!safeBookLink(e.open.url,slip.platform))return say('These picks could not be opened. Recheck the current lines; no picks were sent.');
       let dialog=$('u-book-open');
       if(!dialog){dialog=document.createElement('dialog');dialog.id='u-book-open';dialog.className='u-book-dialog';dialog.setAttribute('aria-label','Open checked slip');document.body.appendChild(dialog);}
-      dialog.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book links">×</button></form><h2>${esc(e.open.label)}</h2><p>${slip.platform==='prizepicks'?'Your checked selections open in PrizePicks. Confirm its current lines before submitting.':'Underdog opens each market separately. Select Higher or Lower in the app; this does not prefill or place an entry.'}</p><a class="u-btn u-gold" href="${esc(e.open.url)}" target="_blank" rel="noopener noreferrer">${esc(e.open.label)}</a>${(e.open.legs||[]).map((url,i)=>safeBookLink(url,slip.platform)?`<p><a class="u-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(slip.legs[i]?.player||'Pick '+(i+1))} · ${esc(slip.legs[i]?.side)} ${esc(slip.legs[i]?.line)}</a></p>`:'').join('')}`;
+      dialog.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book links">Ã—</button></form><h2>${esc(e.open.label)}</h2><p>${slip.platform==='prizepicks'?'Your checked selections open in PrizePicks. Confirm its current lines before submitting.':'Underdog opens each market separately. Select Higher or Lower in the app; this does not prefill or place an entry.'}</p><a class="u-btn u-gold" href="${esc(e.open.url)}" target="_blank" rel="noopener noreferrer">${esc(e.open.label)}</a>${(e.open.legs||[]).map((url,i)=>safeBookLink(url,slip.platform)?`<p><a class="u-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(slip.legs[i]?.player||'Pick '+(i+1))} Â· ${esc(slip.legs[i]?.side)} ${esc(slip.legs[i]?.line)}</a></p>`:'').join('')}`;
       dialog.showModal();
     }catch(e){say('The line check failed. No book was opened. Try again.');}
     finally{T.openBusy=false;}
@@ -497,10 +497,10 @@
     const g=canvas.getContext('2d');
     g.fillStyle='#10151d';g.fillRect(0,0,canvas.width,canvas.height);
     g.fillStyle='#77adff';g.fillRect(0,0,canvas.width,8);
-    const text=(value,y,size,color='#f4f7fc')=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>960)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'…',60,y);};
-    text('1TIME SCOUT',74,34);text(`${list[0].label} · ${legs.length} picks · ${typeOf(list[0])}`,126,25,'#bbcee8');
-    text('RESEARCH LINEUP · NOT A PLACED BET',166,18,'#94a7bf');
-    legs.forEach((l,i)=>{const y=220+i*140;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27);text(`${cap(l.side)} ${l.line} ${l.stat_label} · ${l.period_label}`,y+53,24,'#c5dbfb');text(l.event_label,y+86,18,'#99acc4');});
+    const text=(value,y,size,color='#f4f7fc')=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>960)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'â€¦',60,y);};
+    text('1TIME SCOUT',74,34);text(`${list[0].label} Â· ${legs.length} picks Â· ${typeOf(list[0])}`,126,25,'#bbcee8');
+    text('RESEARCH LINEUP Â· NOT A PLACED BET',166,18,'#94a7bf');
+    legs.forEach((l,i)=>{const y=220+i*140;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27);text(`${cap(l.side)} ${l.line} ${l.stat_label} Â· ${l.period_label}`,y+53,24,'#c5dbfb');text(l.event_label,y+86,18,'#99acc4');});
     text(`Lines checked ${when(check.checked_at)}. Recheck in the app before use.`,canvas.height-65,18,'#aebed1');
     text('No stake, combined win chance or return is implied.',canvas.height-32,17,'#aebed1');
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
@@ -532,8 +532,8 @@
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
     const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
     return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
-      <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
-      <span class="u-leg-meta">${read}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
+      <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} Â· ${esc(l.period_label)}</span>
+      <span class="u-leg-meta">${read}${safeBookLink(link,l.book) ? ` Â· <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
       <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${problems}</div>`;
   }
   function entryHtml(e, phase) {
@@ -545,11 +545,11 @@
     const open = c && c.open && safeBookLink(c.open.url,e.platform) ? `<button class="u-btn u-gold" data-u="open-entry" data-id="${esc(e.key)}">${esc(c.open.label)}</button>` : "";
     const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
     const ev = c && c.ev;
-    const values = (ev?.payout ? metric(esc(ev.payout.multiple)+'×',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
+    const values = (ev?.payout ? metric(esc(ev.payout.multiple)+'Ã—',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
-    const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}× entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';
+    const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}Ã— entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';
     const math = `${values?`<div class="u-slip-metrics">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
-    return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
+    return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} Â· ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
       ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}
         <div class="u-acts"><button class="u-btn${!open && can ? " u-gold" : ""}" type="button" ${can && !busy ? "" : "disabled"} data-u="track" data-id="${esc(e.key)}">${busy ? "Tracking" : "Track"}</button><button class="u-btn" type="button" ${ready ? "" : "disabled"} data-u="copy" data-id="${esc(e.key)}">${T.copyBusy ? "Checking" : "Copy"}</button></div></div></section>`;
@@ -563,14 +563,14 @@
     const checks = phase === "fresh" ? `<details class="u-det" ${det("checks")}><summary>Check details</summary><ul>${CHECKS.map((t, i) => `<li><b class="${T.check.fails[i] ? "no" : "yes"}">${T.check.fails[i] ? "Refused" : "Pass"}</b> ${t}${T.check.fails[i] ? ` (${esc(T.check.fails[i])})` : ""}</li>`).join("")}</ul></details>` : "";
     return `${done}<div class="u-status"><p>${statusLine(phase)} ${retry}</p><button class="u-link" type="button" data-u="clear">Clear</button></div>${saved}${checks}${entries().map((e) => entryHtml(e, phase)).join("")}`;
   }
-  const countsText = (c) => Object.entries(c || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${STATUS[k] ? STATUS[k].toLowerCase() : k}`).join(" · ");
+  const countsText = (c) => Object.entries(c || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${STATUS[k] ? STATUS[k].toLowerCase() : k}`).join(" Â· ");
   function receiptHtml(r) {
     const st = r.status, open = T.openPick === r.id, scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;
     const read = `${r.grade || r.hold || (r.research ? "Research estimate" : "Lean")} ${scoutSide}`.trim();
     const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
       ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label], ["Tracked", when(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="u-pick-body"><dl class="u-kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><ol class="u-time">${(r.timeline || []).map((t) => `<li><time>${esc(when(t.at))}</time>${esc(t.text)}</li>`).join("")}</ol></div>` : "";
-    return `<article class="u-pick"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}"><span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)} · ${esc(r.matchup)}</small></span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
+    return `<article class="u-pick"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}"><span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} Â· ${esc(r.stat_label)} Â· ${esc(r.period_label)} Â· ${esc(r.matchup)}</small></span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
   }
   function picksTab() {
     const d = T.mine;
@@ -578,7 +578,7 @@
     if (!d.receipts.length) return '<p class="u-empty">No tracked picks yet.</p>';
     return d.slips.map((t) => {
       const legs = d.receipts.filter((r) => r.slip_id === t.slip_id);
-      return legs.length ? `<section class="u-slipcard"><div class="u-slip-h"><b>${esc((PLATFORMS[t.platform] || {}).label || t.platform)}${t.entry_type ? ` · ${esc(cap(t.entry_type))}` : ""}</b><span>${esc(when(t.tracked_at))}</span><span>${esc(countsText(t.counts))}</span></div>${legs.map(receiptHtml).join("")}</section>` : "";
+      return legs.length ? `<section class="u-slipcard"><div class="u-slip-h"><b>${esc((PLATFORMS[t.platform] || {}).label || t.platform)}${t.entry_type ? ` Â· ${esc(cap(t.entry_type))}` : ""}</b><span>${esc(when(t.tracked_at))}</span><span>${esc(countsText(t.counts))}</span></div>${legs.map(receiptHtml).join("")}</section>` : "";
     }).join("");
   }
   function recordTab() {
@@ -594,11 +594,11 @@
     const btn = $("u-tray-btn");
     if (!btn) return;
     const n = T.legs.length, c = freshCheck(), vals = c ? Object.values(c.entries) : [], ready = vals.filter((e) => e.ok).length;
-    btn.textContent = `Slip tray · ${n}${vals.length ? ` · ${ready} of ${vals.length} ready` : ""}`;
+    btn.textContent = `Slip tray Â· ${n}${vals.length ? ` Â· ${ready} of ${vals.length} ready` : ""}`;
     const box = $("u-tray");
     if (!box.open) return;
     const body = $("u-tray-body"), top = body.scrollTop;
-    const tabs = [["slip", `Slip · ${n}`], ["picks", "Receipts"], ["record", "Record"]];
+    const tabs = [["slip", `Slip Â· ${n}`], ["picks", "Receipts"], ["record", "Record"]];
     keepFocus(box, () => {
       $("u-tray-tabs").innerHTML = tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${T.tab === k}" data-u="tab" data-id="${k}">${esc(l)}</button>`).join("");
       body.innerHTML = T.tab === "slip" ? slipTab() : T.tab === "picks" ? picksTab() : recordTab();
@@ -670,7 +670,7 @@
   }
   function forecastHtml(rec, side) {
     const s = rec.scout, p = chanceOf(rec, side), val = s.validation || {}, off = s.side && side !== s.side && p == null;
-    const stake = !s.hold && s.units > 0 ? ` · Stake ${esc(s.units)}U` : '';
+    const stake = !s.hold && s.units > 0 ? ` Â· Stake ${esc(s.units)}U` : '';
     return `<div class="u-forecast"><div class="u-fc-num">${off ? "--" : pct(p)}</div><div><p>${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}</p><p><b>${esc(verdictText(rec, side))}</b>${stake}</p></div></div>${s.range80 ? `<p class="u-dim">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${val.detail || s.stake_reason ? `<details class="u-det"><summary>Grade methodology</summary><p>${esc(val.detail || s.stake_reason)}</p></details>` : ""}`;
   }
   function sidesHtml(rec, side) {
@@ -710,7 +710,7 @@
   function genieHtml(rec) {
     const doc=P.doc, s=rec.scout, side=P.side, t=tallyOf(rec,10), list=siblings(rec), other=list.filter(r=>r.offer.platform!==rec.offer.platform);
     return `<div class="u-genie"><span class="u-tag">Scout evidence guide</span><h3>What would you like to check?</h3><p class="u-dim">Answers use this offer's saved forecast and research data. No invented stats, web guesses or new predictions.</p>
-      <details class="u-det" open><summary>What supports this pick?</summary><p>${esc(rec.player.name)} has a saved projection of ${s.projection==null?'unavailable':esc(tenth(s.projection))} for ${esc(rec.market.period_label)} ${esc(rec.market.stat_label)}. ${chanceOf(rec,side)==null?'No probability was saved for the selected side.':`The saved chance for ${cap(side)} ${esc(rec.offer.line)} is ${pct(chanceOf(rec,side))}.`} ${s.hold?'This is a research estimate; the validation gate has not released official grades.':''}</p>${doc&&doc.forecast?`<p class="u-dim">Forecast ${esc(doc.forecast.id||'ID unavailable')} · model ${esc(doc.forecast.model_version||s.model_version||'unavailable')}</p>`:''}</details>
+      <details class="u-det" open><summary>What supports this pick?</summary><p>${esc(rec.player.name)} has a saved projection of ${s.projection==null?'unavailable':esc(tenth(s.projection))} for ${esc(rec.market.period_label)} ${esc(rec.market.stat_label)}. ${chanceOf(rec,side)==null?'No probability was saved for the selected side.':`The saved chance for ${cap(side)} ${esc(rec.offer.line)} is ${pct(chanceOf(rec,side))}.`} ${s.hold?'This is a research estimate; the validation gate has not released official grades.':''}</p>${doc&&doc.forecast?`<p class="u-dim">Forecast ${esc(doc.forecast.id||'ID unavailable')} Â· model ${esc(doc.forecast.model_version||s.model_version||'unavailable')}</p>`:''}</details>
       <details class="u-det"><summary>How often did this line hit?</summary><p>${t?`${side==='under'?t.under:t.over} of the last ${t.n} comparable results hit ${cap(side)} at today's line of ${esc(rec.offer.line)}; ${t.push||0} pushed. This is historical frequency, not a forecast.`:'Comparable past-game results are not available for this line.'}</p><button class="u-link" data-u="ptab" data-id="history">Inspect each result</button></details>
       <details class="u-det"><summary>Is there a better line elsewhere?</summary><p>${other.length?other.slice(0,8).map(r=>`${esc(r.offer.platform_label)} lists ${esc(r.offer.line)} (${esc(r.market.line_type)}), seen ${esc(when(r.offer.seen_at))}.`).join(' '):'No other platform offer is available for this exact event, player, stat and period.'}</p><p class="u-dim">Different lines and payout types are not interchangeable. Compare the actual offer before adding it.</p><button class="u-link" data-u="ptab" data-id="books">Compare sources</button></details>
       <details class="u-det"><summary>What should I verify before tracking?</summary><p>Confirm ${esc(rec.market.period_label)}, the ${esc(rec.offer.platform_label)} line and offered side, the start time, and any player context. Scout rechecks the exact revision when you track. ${esc(s.stake_reason||'Saved probabilities can be wrong; the performance record shows their measured accuracy.')}</p><button class="u-link" data-u="ptab" data-id="context">View saved context</button></details></div>`;
@@ -725,9 +725,9 @@
     const picker = distinct.length > 1 ? `<span class="u-lines" role="group" aria-label="Lines on this prop">${distinct.map((o) => `<button type="button" aria-pressed="${o.offer.line === rec.offer.line}" data-u="pline" data-id="${esc(offerKey(o.offer.platform, o.offer.offer_id))}">${esc(o.offer.line)}</button>`).join("")}</span>` : `<b class="u-line">${esc(rec.offer.line)}</b>`;
     const refusal = addRefusal(rec, side), inSlip = T.legs.find((l) => l.id === legId(rec, side)), note = started(rec) ? `<p class="u-note">${esc(startWord(rec))} at ${esc(when(rec.event.start_utc))}</p>` : "";
     const scroll = $("u-drawer-body") ? $("u-drawer-body").scrollTop : 0;
-    keepFocus(box, () => { box.innerHTML = `<div class="u-d-head"><div><h2 id="u-drawer-title">${esc(rec.player.name)}</h2>${picker}<p>${esc(SPORTS[rec.sport])} · ${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)} · ${esc(rec.offer.platform_label)}</p><p>${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} · ${esc(rec.event.label)}${rec.event.competition ? " · " + esc(rec.event.competition) : ""} · ${esc(when(rec.event.start_utc))}${rec.event.best_of ? ` · BO${esc(rec.event.best_of)}` : ""}${rec.offer.moved_from != null ? ` · Moved from ${esc(rec.offer.moved_from)}` : ""}</p></div><button class="u-x" type="button" aria-label="Close research" data-u="pclose">${X_ICON}</button></div>
+    keepFocus(box, () => { box.innerHTML = `<div class="u-d-head"><div><h2 id="u-drawer-title">${esc(rec.player.name)}</h2>${picker}<p>${esc(SPORTS[rec.sport])} Â· ${esc(rec.market.stat_label)} Â· ${esc(rec.market.period_label)} Â· ${esc(rec.offer.platform_label)}</p><p>${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} Â· ${esc(rec.event.label)}${rec.event.competition ? " Â· " + esc(rec.event.competition) : ""} Â· ${esc(when(rec.event.start_utc))}${rec.event.best_of ? ` Â· BO${esc(rec.event.best_of)}` : ""}${rec.offer.moved_from != null ? ` Â· Moved from ${esc(rec.offer.moved_from)}` : ""}</p></div><button class="u-x" type="button" aria-label="Close research" data-u="pclose">${X_ICON}</button></div>
       <div class="u-tabs" role="tablist" aria-label="Research sections">${tabs}</div><div class="u-d-body" id="u-drawer-body" tabindex="0">${note}${body}</div>
-      <div class="u-d-foot">${refusal && !inSlip ? `<p class="u-dim" role="status">${esc(refusal)}</p>` : ""}<div class="u-acts">${R.me.features?.book_links&&rec.offer.platform==='underdog'&&!refusal?'<button class="u-btn" type="button" data-u="open-line">Open in Underdog</button>':''}<button class="u-btn" type="button" data-u="tray">Slip tray · ${T.legs.length}</button><button class="u-btn u-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} data-u="padd">${inSlip ? "Remove from slip tray" : `Add ${cap(side)} ${esc(rec.offer.line)} on ${esc(rec.offer.platform_label)}`}</button></div></div>`; });
+      <div class="u-d-foot">${refusal && !inSlip ? `<p class="u-dim" role="status">${esc(refusal)}</p>` : ""}<div class="u-acts">${R.me.features?.book_links&&rec.offer.platform==='underdog'&&!refusal?'<button class="u-btn" type="button" data-u="open-line">Open in Underdog</button>':''}<button class="u-btn" type="button" data-u="tray">Slip tray Â· ${T.legs.length}</button><button class="u-btn u-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} data-u="padd">${inSlip ? "Remove from slip tray" : `Add ${cap(side)} ${esc(rec.offer.line)} on ${esc(rec.offer.platform_label)}`}</button></div></div>`; });
     $("u-drawer-body").scrollTop = scroll;
     const res = seriesOf();
     if (res) box.querySelectorAll("[data-chart]").forEach((el) => { el.innerHTML = chartSvg(res.slice(0, +el.dataset.n), rec.offer.line, side, Math.max(240, Math.round(el.clientWidth))); });
@@ -792,7 +792,7 @@
     if (head) new MutationObserver(() => { if (wide.matches && !head.contains($("u-tray-btn"))) place(); }).observe(head, { childList: true });
   }
   function mountShell() {
-    document.body.insertAdjacentHTML("beforeend", `<button class="u-tray-btn" id="u-tray-btn" type="button" aria-haspopup="dialog">Slip tray · 0</button>
+    document.body.insertAdjacentHTML("beforeend", `<button class="u-tray-btn" id="u-tray-btn" type="button" aria-haspopup="dialog">Slip tray Â· 0</button>
       <dialog class="u-dialog u-right" id="u-drawer" aria-labelledby="u-drawer-title"></dialog>
       <dialog class="u-dialog u-right" id="u-tray" aria-labelledby="u-tray-title"><div class="u-d-head"><div><h2 id="u-tray-title">Slip tray</h2><p>One account slip across CS2, LoL and Sports. Your other slips stay where they are.</p></div><button class="u-x" type="button" aria-label="Close slip tray" data-u="tclose">${X_ICON}</button></div><div class="u-tabs" id="u-tray-tabs" role="tablist" aria-label="Slip tray sections"></div><div class="u-d-body" id="u-tray-body" tabindex="0"></div><div class="u-toast" role="status" aria-live="polite"></div></dialog>
       <div class="u-toast" id="u-toast" role="status" aria-live="polite"></div>`);
@@ -908,7 +908,7 @@
         if (head && !head.dataset.u) {
           head.dataset.u = "1";
           head.setAttribute("aria-hidden", "false");
-          head.innerHTML = "<span>Grade</span><span>Player</span><span>Market</span><span>Line</span><span>Proj</span><span>Pick · chance</span><span>Hit rate</span><span>Books</span><span>Stake</span><span></span>";
+          head.innerHTML = "<span>Grade</span><span>Player</span><span>Market</span><span>Line</span><span>Proj</span><span>Pick Â· chance</span><span>Hit rate</span><span>Books</span><span>Stake</span><span></span>";
         }
         const groups = new Map();
         [...list.querySelectorAll(".brow2.crow[data-bl]")].forEach((el) => {
@@ -923,6 +923,7 @@
       });
     },
     cells(el, r, rec) {
+      el.classList.add("u-decorated");
       const side = r.side === "Less" ? "under" : r.side === "More" ? "over" : null;
       let hit = el.querySelector(":scope > .u-hits-c"), books = el.querySelector(":scope > .u-books-c");
       if (!hit) {
@@ -933,7 +934,7 @@
         if (act) act.insertAdjacentHTML("afterbegin", `<span class="u-row-acts"></span>`);
       }
       const meta = el.querySelector(":scope > .c-meta");
-      if (meta && /^graded [^·]*$/.test(meta.textContent.trim())) { el.title = meta.textContent.trim(); meta.hidden = true; }
+      if (meta && /^graded [^Â·]*$/.test(meta.textContent.trim())) { el.title = meta.textContent.trim(); meta.hidden = true; }
       hit.innerHTML = rec ? hitsHtml(rec, side) : CS2.savedHits(r, side);
       books.innerHTML = booksCell(rec);
       const acts = el.querySelector(":scope > .c-act .u-row-acts");
@@ -975,16 +976,16 @@
     const pick = !x.pick_offered ? `<span class="u-dim">${esc(x.pick_side || "No pick")}${x.pick_side ? " not offered" : ""}</span>` : `${lean ? "Lean " : ""}${esc(x.pick_side)} <b>${pct(p)}</b>`;
     return `<div class="u-row u-lol${sub ? " u-sub" : ""}" data-k="${esc(x.key)}" tabindex="0" role="button" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}">
       <span class="u-g${lean ? " lean" : ""}">${esc(lean ? "L" : letter)}</span>
-      <div class="u-who"><b>${esc(x.player)}</b><small>${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} vs ${esc(x.opponent || "")}</small><small>${esc(new Date(x.start).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }))}</small>${alts || ""}</div>
-      <div class="u-mkt">${esc(x.stat_name)}<small>${esc(x.scope)} · ${esc(x.platform_label)}${x.line_type !== "Standard" ? " · " + esc(x.line_type) : ""}</small></div>
+      <div class="u-who"><b>${esc(x.player)}</b><small>${esc(x.team || "")}${x.role ? " Â· " + esc(x.role) : ""} vs ${esc(x.opponent || "")}</small><small>${esc(new Date(x.start).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }))}</small>${alts || ""}</div>
+      <div class="u-mkt">${esc(x.stat_name)}<small>${esc(x.scope)} Â· ${esc(x.platform_label)}${x.line_type !== "Standard" ? " Â· " + esc(x.line_type) : ""}</small></div>
       <div class="u-num"><span class="u-k">Line</span><b>${esc(x.line)}</b></div><div class="u-num"><span class="u-k">Proj</span>${x.projection == null ? "--" : Number(x.projection).toFixed(1)}</div>
-      <div class="u-pick-c">${pick}</div>${hitsHtml(rec, side)}${booksCell(rec)}<div class="u-stake">${esc(letter || "--")} · ${esc(x.units)}U</div>
+      <div class="u-pick-c">${pick}</div>${hitsHtml(rec, side)}${booksCell(rec)}<div class="u-stake">${esc(letter || "--")} Â· ${esc(x.units)}U</div>
       <div class="u-act">${researchBtn()}${trayBtn(rec)}${typeof ctBtnHtml === "function" ? ctBtnHtml(x) : ""}</div></div>`;
   }
   function lolRows() {
     const shown = rows().slice(0, visibleLimit), groups = new Map();
     shown.forEach((x) => { const k = [matchKey(x), x.player, x.stat, x.scope].join("|"); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x); });
-    const head = '<div class="u-row u-head"><span>Grade</span><span>Player</span><span>Market</span><span>Line</span><span>Proj</span><span>Pick · chance</span><span>Hit rate</span><span>Books</span><span>Stake</span><span></span></div>';
+    const head = '<div class="u-row u-head"><span>Grade</span><span>Player</span><span>Market</span><span>Line</span><span>Proj</span><span>Pick Â· chance</span><span>Hit rate</span><span>Books</span><span>Stake</span><span></span></div>';
     return `<div class="u-rows">${head}${[...groups.entries()].map(([k, g]) => {
       const id = "u-alt-" + hash(k), open = ALTS.has(k), more = g.length - 1;
       return lolRow(g[0], false, more ? altButton(k, id, more, open) : "") + (more ? `<div class="u-alts" id="${id}"${open ? "" : " hidden"}>${g.slice(1).map((x) => lolRow(x, true)).join("")}</div>` : "");
@@ -1183,7 +1184,6 @@
     resultsInto(boxes[1], "nfl", "NFL stated and observed");
   }
   async function start() {
-    if (window.scoutClassic) return;
     document.documentElement.classList.add("scout-upgrade");
     if (PAGE === "sports-results") { startSportsResults(); return; }
     mountShell();
