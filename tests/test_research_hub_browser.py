@@ -602,3 +602,41 @@ def test_no_repeat_props_across_generated_batch(ctx,env,size,available):
     assert p.locator('#hub-generation-repeats').input_value()=='none'
     no_h_scroll(p)
     assert not p.errors
+
+
+@pytest.mark.parametrize('path', ['/', '/lol', '/sports#/board'])
+def test_workspace_boot_hides_classic_while_account_loads(ctx, env, monkeypatch, path):
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    p = ctx.new_page()
+    pending = []
+    p.route('**/api/upgrade/me', lambda route: pending.append(route))
+    p.goto(env.url + path)
+    p.wait_for_function("document.documentElement.classList.contains('scout-boot')")
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'hidden'
+    assert pending
+    pending[0].continue_()
+    p.wait_for_selector('#u-hub:not([hidden])')
+    p.wait_for_function("!document.documentElement.classList.contains('scout-boot')")
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'
+    no_h_scroll(p)
+
+
+@pytest.mark.parametrize('path', ['/?view=classic#board', '/lol?view=classic', '/sports?view=classic#/board'])
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_classic_keeps_original_layout_without_upgrade_mutations(ctx, env, path, size):
+    p = open_page(ctx, env, path, size)
+    assert p.locator('html').get_attribute('data-upgrade') is None
+    assert p.locator('link[href^="/upgrade/"]').count() == 0
+    assert p.locator('#u-hub, #u-tray-btn').count() == 0
+    assert not p.locator('html').evaluate("el=>el.classList.contains('scout-boot')")
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'
+    assert p.locator('[data-hub-inert]').count() == 0
+    no_h_scroll(p)
+
+
+def test_failed_workspace_script_restores_classic(ctx, env):
+    p = ctx.new_page()
+    p.route('**/upgrade/upgrade.js', lambda r: r.abort())
+    p.goto(env.url + '/')
+    p.wait_for_function("!document.documentElement.classList.contains('scout-boot')", timeout=12000)
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'

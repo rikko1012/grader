@@ -1183,22 +1183,25 @@
     resultsInto(boxes[1], "nfl", "NFL stated and observed");
   }
   async function start() {
+    if (window.scoutClassic) return;
     document.documentElement.classList.add("scout-upgrade");
     if (PAGE === "sports-results") { startSportsResults(); return; }
     mountShell();
     (PAGE === "cs2" ? hookCs2 : PAGE === "lol" ? hookLol : hookSports)();     /* on before the first await: a draw in the meantime is not missed */
     try { R.me = await api("me"); } catch (e) { R.me = null; }
-    if (!R.me) { $("u-tray-btn").hidden = true; return; }        /* not a member the API knows: the page stays as it is */
+    if (!R.me) { $("u-tray-btn").hidden = true; window.scoutBootDone?.(); return; }        /* not a member the API knows: the page stays as it is */
     try {
+      await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
         research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
+    window.scoutBootDone?.();
     await loadState();
     paintTray();
     if (PAGE === "cs2") startCs2();
     else if (PAGE === "lol") startLol();
     else if (PAGE === "sports") startSports();
   }
-  guard(start)();
+  start().catch(() => { window.scoutBootDone?.(); console.warn("Workspace unavailable; original tools remain available"); });
 })();

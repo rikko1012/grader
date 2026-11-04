@@ -2,7 +2,7 @@
  * No grades or prices are calculated here. The original pages and their tools stay intact.
  */
 export function mount(C) {
-  const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);
+  if(!document.querySelector('link[href="/upgrade/hub.css"]')){const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);}
   const {api, R, T, SPORTS, esc, pct, when} = C;
   const V2 = R.me.features?.workspace_v2 === true;
   const $ = id => document.getElementById(id);
@@ -428,7 +428,7 @@ export function mount(C) {
     const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|tools|picks|alerts)(?:\?(.*))?$/);
     const scout=location.hash.match(/^#scout\/(board|studio|picks|record|alerts)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
     const mainBoard=location.pathname==='/lol'&&!location.hash || location.pathname==='/sports'&&(!location.hash||location.hash.startsWith('#/board')) || location.pathname==='/'&&(!location.hash||csBoard);
-    const open=location.hash==='#all-sports'||!!scout||!!modern||(!classic&&(mainBoard||slips));
+    const open=!classic&&(location.hash==='#all-sports'||!!scout||!!modern||mainBoard||slips);
     if(open&&H.routeHash!==location.pathname+location.hash){
       H.routeHash=location.pathname+location.hash;
       H.sport=modern?(new URLSearchParams(modern[2]||'').get('sport')||H.sport):scout?(new URLSearchParams(scout[2]||'').get('sport')||H.sport):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
@@ -530,6 +530,7 @@ export function mount(C) {
     e.preventDefault();e.stopImmediatePropagation();section('board');$('hub-q').focus();
   },true);
   setInterval(()=>{if(isOpen()&&!document.hidden)load(true);},60000);
+  route();
   loadPreferences().then(()=>{route();});
   return {refreshSlip};
 }
