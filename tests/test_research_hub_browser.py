@@ -66,7 +66,7 @@ def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
     p=ctx.new_page();p.set_viewport_size(size)
     doc={'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'win'},
                                   {'at':'2026-11-02T12:00:00Z','status':'push'}],
-                                 '2026-11-03T12:00:00Z','Fixture date Â· UTC')}
+                                 '2026-11-03T12:00:00Z','Fixture date · UTC')}
     p.route('**/api/upgrade/stated',lambda r:r.fulfill(json=doc))
     p.route('**/api/upgrade/results?*',lambda r:r.fulfill(json=doc))
     p.goto(env.url+'/#scout/record')
@@ -74,7 +74,7 @@ def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
     assert p.locator('.h-record-calendar').count()==4
     assert p.locator('.h-calendar-grid summary').count()==120
     p.locator('.h-calendar-grid summary[aria-label^="2026-11-02"]').first.click()
-    assert '1 wins Â· 0 losses Â· 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
+    assert '1 wins · 0 losses · 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
     assert 'Accuracy only, not profit.' in p.locator('#hub-record-body').inner_text()
     no_h_scroll(p)
 
@@ -93,7 +93,7 @@ def test_public_record_four_sports_retry_and_safe_text(ctx,env,monkeypatch,size)
             'population':'<unsafe> fixture population','rule':'Only saved pregame forecasts',
             'bands':[{'name':'B','wins':2,'losses':1,'observed':2/3,'printed':.6}],
             'calendar':daily_record([{'at':'2026-11-02T12:00:00Z','status':'push'}],
-                '2026-11-03T12:00:00Z','Fixture date Â· UTC')})
+                '2026-11-03T12:00:00Z','Fixture date · UTC')})
     p.route('**/api/record?*',report)
     p.goto(env.url+'/record')
     p.wait_for_selector('#retry');p.locator('#retry').click()
@@ -393,7 +393,7 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
     assert 'Base all-hit payout' in p.locator('#hub-studio-body').inner_text()
     p.locator('#hub-studio-body summary',has_text='Published payout tiers').click()
-    assert '4 of 4 correct: 10Ã— entry fee' in p.locator('#hub-studio-body').inner_text()
+    assert '4 of 4 correct: 10× entry fee' in p.locator('#hub-studio-body').inner_text()
     assert 'final payout for your exact lineup' in p.locator('#hub-studio-body').inner_text()
     assert not p.errors
 

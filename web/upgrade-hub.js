@@ -531,6 +531,6 @@ export function mount(C) {
   },true);
   setInterval(()=>{if(isOpen()&&!document.hidden)load(true);},60000);
   route();
-  loadPreferences().then(()=>{route();});
+  loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts')paintAlerts();});
   return {refreshSlip};
 }
