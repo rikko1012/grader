@@ -166,14 +166,41 @@ def consensus_at(target, books, league, exclude=None):
     return {"po": round(po, 4), "pu": round(pu, 4), "pp": round(pp, 4), "n": len(used), "used": used}
 
 
-def row_view(targets, items, event, now, league, dnp):
+FALLBACK_FLAG = "SPORTS_MARKET_FALLBACK"
+
+
+def fallback_on(env=None):
+    """SPORTS_MARKET_FALLBACK (default off, owner on): write the display-only books fallback into the snapshot."""
+    import os
+    return ((os.environ if env is None else env).get(FALLBACK_FLAG) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def fallback_at(books, line):
+    """Display-only Market-column fallback for a row whose consensus is None (every book failed the frozen 15-minute
+    rule): the listed books' OWN readings (devig / mid) at exactly `line`, equal-weight mean of log-odds, with the
+    oldest observation age. -> {po, pu, n, l, books, age, why} or None. It is a label for a stale cell - never a lean,
+    edge, gap, confidence or sort input (board_view.market_at / table.js marketAt read `c` and `at` only)."""
+    import math
+    use = [b for b in books if b.get("kind") in ("devig", "mid") and b.get("c") is not None and b.get("l") == line
+           and 0.0 < float(b["c"]) < 1.0]
+    if not use:
+        return None
+    logits = [math.log(float(b["c"]) / (1.0 - float(b["c"]))) for b in use]
+    p = 1.0 / (1.0 + math.exp(-sum(logits) / len(logits)))
+    ages = [b["age"] for b in use if isinstance(b.get("age"), (int, float))]
+    return {"po": round(p, 4), "pu": round(1.0 - p, 4), "n": len(use), "l": line, "books": sorted(b["p"] for b in use),
+            "age": max(ages) if ages else None, "why": "no book passed the 15-minute rule; books' own prices, display only"}
+
+
+def row_view(targets, items, event, now, league, dnp, fallback=False):
     """One board row. targets: [(rid, OfferSnapshot)] ordinary quotes on the row (pick'em + books, the lines a member
     can act on); items: every offer of the row's market incl. Kalshi rungs. -> compact dict:
       l   headline line (first pick'em line, else the first book line)
       c   headline consensus {po, pu, pp, n, used} at l, or None
       bk  per-book list (book_list)
       at  {record_id: consensus excluding that quote's own platform, at its line} for every target quote whose value
-          differs from `c` (absent = same as the headline)"""
+          differs from `c` (absent = same as the headline)
+      fb  only with fallback=True (SPORTS_MARKET_FALLBACK) and c None: fallback_at(books, l) when it exists"""
     if not targets:
         return None
     pick = [t for t in targets if t[1].platform in TARGET_BOARDS] or targets
@@ -191,5 +218,10 @@ def row_view(targets, items, event, now, league, dnp):
     slim = [{k: (round(v, 4) if isinstance(v, float) else v) for k, v in b.items() if k not in ("rid", "pc")}
             for b in books]
     # `at` keeps only quotes whose market chance differs from the headline (the UI falls back to `c`): size
-    return {"l": head.line, "hp": head.platform, "c": head_c, "bk": slim,
-            "at": {rid: v for rid, v in at.items() if v != head_c}}
+    out = {"l": head.line, "hp": head.platform, "c": head_c, "bk": slim,
+           "at": {rid: v for rid, v in at.items() if v != head_c}}
+    if fallback and head_c is None:
+        fb = fallback_at(slim, head.line)
+        if fb:
+            out["fb"] = fb
+    return out

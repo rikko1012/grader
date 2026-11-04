@@ -118,6 +118,10 @@
              fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION,
              held: held ? held.t : null, heldCode: held ? held.b : null};
     if (q.p === "underdog" && typeof q.ud === "string" && UD_LINK_RE.test(q.ud)) r.ud = q.ud;
+    // SPORTS_MARKET_FALLBACK (snapshot mk.fb, display only): the books' own readings at this exact line when none passed
+    // the frozen 15-minute rule. Shown in the Market cell as a stale fallback; never a lean, edge, gap or sort input.
+    var fb = m.mk && m.mk.fb;
+    r.marketFallback = !mkc && fb && fb.n > 0 && nn(fb.po) && fb.l === q.l ? fb : null;
     if (sc && lean) r.pLean = lean === "over" ? sc.po : sc.pu;
     if (sc && mkc && !held) {
       r.gapPts = 100 * (sc.po - mkc.po);
@@ -193,9 +197,16 @@
       return (a.player < b.player ? -1 : a.player > b.player ? 1 : 0) || (a.stat < b.stat ? -1 : a.stat > b.stat ? 1 : 0) || (a.line - b.line);
     };
   }
-  // a board with no edge at all (every market held by its gate) has nothing to rank on: soonest games first
+  // a board with no edge at all (every market held by its gate) has nothing to rank on: soonest games first. The sort
+  // IN EFFECT is what the header arrow / aria-sort and the phone "Sort by" select show (audit P2, 2026-11-04: an Edge
+  // arrow over a start-time order was a misleading indicator); the saved preference stays "edge" and resumes when an
+  // edge appears.
+  function effectiveSort(rows, key) {
+    var k = SORTS[key] ? key : "edge";
+    return k === "edge" && !rows.some(function (r) { return SORTS.edge.val(r) !== null; }) ? "start" : k;
+  }
   function sortRows(rows, key, dir) {
-    var useKey = (key || "edge") === "edge" && !rows.some(function (r) { return SORTS.edge.val(r) !== null; }) ? "start" : key;
+    var useKey = effectiveSort(rows, key);
     return rows.slice().sort(cmp(useKey, useKey === key ? dir : null));
   }
   // group a player's props (same player + game): groups ordered by their best row under the sort, rows inside too
@@ -220,7 +231,7 @@
 
   var api = {VERSION: VERSION, CONF_VERSION: CONF_VERSION, GAP_PTS: GAP_PTS, scoutAt: scoutAt, marketAt: marketAt,
              leanOf: leanOf, leanWithMarket: leanWithMarket, hitAt: hitAt, confidence: confidence, propRow: propRow, hitRate: hitRate,
-             primaryQuote: primaryQuote, started: started, SORTS: SORTS, sortRows: sortRows, groupRows: groupRows,
+             primaryQuote: primaryQuote, started: started, SORTS: SORTS, sortRows: sortRows, effectiveSort: effectiveSort, groupRows: groupRows,
              edgeText: edgeText, hitText: hitText, seasonLabel: seasonLabel, headshotUrl: headshotUrl, logoUrl: logoUrl,
              espnId: espnId};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
@@ -295,14 +306,17 @@
       '<td class="sw-tb-leanc" data-label="Lean">' + leanBadge(r) + (r.gap ? '<span class="sw-tb-gap" title="Scout and the market differ by ' + Math.abs(r.gapPts).toFixed(1) + ' points at this line">Model vs market gap</span>' : "") + "</td>" +
       '<td class="sw-tb-scout num" data-label="Scout">' + (sc ? '<span class="sw-tb-mu"' + (sc.via === "forecast" ? ' data-fc="' + esc(sc.fid) + '" data-fcside="mean"' : "") + ">" + (sc.mu !== null ? S.num(sc.mu, 1) : "—") + "</span> " +
         '<span class="sw-p over">O ' + S.pct0(sc.po) + '</span> <span class="sw-p under">U ' + S.pct0(sc.pu) + "</span>" : "—") + "</td>" +
-      '<td class="sw-tb-mkt num" data-label="Market">' + (mk ? '<span title="Market estimate, ' + mk.n + (mk.n === 1 ? " book" : " books") + ' at this line">' + (r.lean ? (r.lean === "over" ? "O " : "U ") + S.pct0(r.mLean) : "O " + S.pct0(mk.po)) + "</span>" : "—") + "</td>" +
+      '<td class="sw-tb-mkt num" data-label="Market">' + (mk ? '<span title="Market estimate, ' + mk.n + (mk.n === 1 ? " book" : " books") + ' at this line">' + (r.lean ? (r.lean === "over" ? "O " : "U ") + S.pct0(r.mLean) : "O " + S.pct0(mk.po)) + "</span>" :
+        r.marketFallback ? '<span class="sw-tb-note warn" data-fallback="' + r.marketFallback.n + '" title="Books fallback (display only): ' + r.marketFallback.n + (r.marketFallback.n === 1 ? " book" : " books") + " priced this line but none passed the 15-minute rule" + (nn(r.marketFallback.age) ? ", oldest " + Math.round(r.marketFallback.age / 60) + " min" : "") + '. Not used for lean or edge.">O ' + S.pct0(r.marketFallback.po) + " · books, stale</span>" : "—") + "</td>" +
       '<td class="sw-tb-edge num' + (nn(r.edge) ? (r.edge > 0 ? " pos" : r.edge < 0 ? " neg" : "") : "") + '" data-label="Edge (pts)" data-edge="' + (nn(r.edge) ? r.edge.toFixed(4) : "") + '">' + edgeText(r.edge) + "</td>" +
       '<td class="sw-tb-hit num" data-label="L10" data-hit="' + (h ? [h.l10.o, h.l10.u, h.l10.p, h.l10.n].join(",") : "") + '"' + (seasons ? ' title="Last 10 span ' + esc(seasons) + '"' : "") + ">" + hitText(h && h.l10) + (seasons ? '<span class="sw-tb-note">' + esc(seasons) + "</span>" : "") + "</td>" +
       '<td class="sw-tb-hit5 num" data-label="L5">' + hitText(h && h.l5) + "</td>" +
       '<td class="sw-tb-conf num" data-label="Confidence">' + (r.conf ? '<span class="sw-tb-confn" title="' + esc(r.conf.why.join("; ")) + '">' + r.conf.score + '<span class="sw-faint">/5</span></span> <span class="sw-tb-research">Research</span>' : "—") + "</td></tr>";
   }
   function html(opts, st) {
-    var rows = build(opts), groups = groupRows(rows, st.sort, st.dir), lg = opts.lg;
+    var rows = build(opts), eff = effectiveSort(rows, st.sort), groups = groupRows(rows, st.sort, st.dir), lg = opts.lg;
+    st.effective = eff;                                           // read by sortBar() (drawn after the table)
+    var hs = {sort: eff, dir: eff === st.sort ? st.dir : null};  // header state = the sort in effect, not the saved key
     if (!groups.length) return "";
     var shown = groups.slice(0, opts.limit || groups.length);
     var body = shown.map(function (g) {
@@ -319,15 +333,18 @@
       var rest = g.rows.slice(1).map(function (r) { return rowHtml(r, opts, " sw-tb-sub-row").replace(/(<tr[^>]*)>/, "$1" + (open ? "" : " hidden") + ">"); }).join("");
       return '<tbody class="sw-tb-group" id="' + gid + '" data-group="' + esc(g.id) + '">' + first_ + rest + "</tbody>";
     }).join("");
-    return '<div class="sw-tb-wrap"><table class="sw-tb" aria-label="Prop board"><caption class="sw-sr">Prop board: one row per player, other stats expand. Edge is in probability points, not expected value.</caption><thead><tr>' +
-      th("player", "Player", st, "sw-tb-player-h") + '<th scope="col">Stat</th><th scope="col" class="num">Line · book</th><th scope="col">Lean</th>' +
-      th("scout", "Scout", st, "num") + '<th scope="col" class="num">Market</th>' + th("edge", "Edge (pts)", st, "num") + th("l10", "L10", st, "num") +
+    return '<div class="sw-tb-wrap">' + (eff !== st.sort ? '<p class="sw-small sw-tb-sortnote" role="status" data-sort-effective="' + eff + '">No edge on this board: sorted by start time, soonest first.</p>' : "") +
+      '<table class="sw-tb" aria-label="Prop board"><caption class="sw-sr">Prop board: one row per player, other stats expand. Edge is in probability points, not expected value.</caption><thead><tr>' +
+      th("player", "Player", hs, "sw-tb-player-h") + '<th scope="col">Stat</th><th scope="col" class="num">Line · book</th><th scope="col">Lean</th>' +
+      th("scout", "Scout", hs, "num") + '<th scope="col" class="num">Market</th>' + th("edge", "Edge (pts)", hs, "num") + th("l10", "L10", hs, "num") +
       '<th scope="col" class="num">L5</th><th scope="col" class="num">Conf.</th></tr></thead>' + body + "</table></div>" +
       (groups.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-tb-more">Show ' + Math.min(opts.page || 60, groups.length - shown.length) + " more players (" + (groups.length - shown.length) + " left)</button></p>" : "");
   }
   function sortBar(st) {                                          // phones: the header is hidden, so sorting is a select
+    var cur = st.effective || st.sort;                            // the sort in effect (html() sets st.effective)
     return '<div class="sw-field sw-tb-sortbar"><label for="sw-tb-sortsel">Sort by</label><select id="sw-tb-sortsel">' +
-      Object.keys(SORTS).map(function (k) { return '<option value="' + k + '"' + (st.sort === k ? " selected" : "") + ">" + esc(SORTS[k].label) + "</option>"; }).join("") + "</select></div>";
+      Object.keys(SORTS).map(function (k) { return '<option value="' + k + '"' + (cur === k ? " selected" : "") + ">" + esc(SORTS[k].label) + "</option>"; }).join("") + "</select>" +
+      (st.effective && st.effective !== st.sort ? '<span class="sw-small sw-tb-sortnote">No edge on this board: start time</span>' : "") + "</div>";
   }
   function state() {
     var p = prefs();

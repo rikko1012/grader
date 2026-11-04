@@ -90,6 +90,41 @@ def rss_mb():
         return None
 
 
+# ------------------------------------------------------------------------------- security headers (switches, off = none)
+# Same contract as server.py csp_headers (duplicated on purpose: this process imports no root module): SCOUT_CSP unset / "0"
+# = no header, "report" = Content-Security-Policy-Report-Only, "1" = enforced; frame-ancestors from SCOUT_FRAME_ANCESTORS
+# (Whop frames the member pages, so never an X-Frame-Options header); SCOUT_HSTS=1 adds Strict-Transport-Security. This
+# service answers JSON to the member page on another origin, so the default policy is the strict API shape.
+CSP_MODES = {"1": "Content-Security-Policy", "true": "Content-Security-Policy", "on": "Content-Security-Policy",
+             "yes": "Content-Security-Policy", "report": "Content-Security-Policy-Report-Only"}
+CSP_FRAME_ANCESTORS_DEFAULT = "'self' https://whop.com https://*.whop.com"
+CSP_POLICY_DEFAULT = "default-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+
+
+def _csp_list(value, default=""):
+    items = (value or "").replace(",", " ").split()
+    return " ".join(items) if items else default
+
+
+def csp_headers(env=None):
+    """-> [(header, value), ...] the SCOUT_CSP / SCOUT_HSTS switches ask for; [] with both off."""
+    env = os.environ if env is None else env
+    out = []
+    name = CSP_MODES.get((env.get("SCOUT_CSP") or "").strip().lower())
+    if name:
+        policy = _csp_list(env.get("SCOUT_CSP_POLICY")) or CSP_POLICY_DEFAULT
+        if "frame-ancestors" not in policy:
+            policy += "; frame-ancestors " + _csp_list(env.get("SCOUT_FRAME_ANCESTORS"), CSP_FRAME_ANCESTORS_DEFAULT)
+        report = _csp_list(env.get("SCOUT_CSP_REPORT_URI"))
+        if report and "report-uri" not in policy:
+            policy += "; report-uri " + report
+        out.append((name, policy))
+    if (env.get("SCOUT_HSTS") or "").strip().lower() in ("1", "true", "on", "yes"):
+        age = (env.get("SCOUT_HSTS_MAX_AGE") or "").strip()
+        out.append(("Strict-Transport-Security", "max-age=" + (age if age.isdigit() else "31536000")))
+    return out
+
+
 # ------------------------------------------------------------------------------- shared encoded bodies (gzip + ETag)
 GZIP_MIN = 1024
 ENC_MAX_ENTRIES = 32
@@ -419,6 +454,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", cache)
             self.send_header("X-Content-Type-Options", "nosniff")
+            for k, v in csp_headers():                  # SCOUT_CSP / SCOUT_HSTS switches: off = nothing added here
+                self.send_header(k, v)
             for k, v in (headers or {}).items():
                 self.send_header(k, v)
             if _STATE["draining"]:

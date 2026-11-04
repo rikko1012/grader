@@ -35,6 +35,19 @@ or frozen constant changes on any member path; `use_predicted_maps` stays False;
 - **Rollback:** revert the branch's commit (no flag needed: nothing reads vm-2 or the display block for a grade).
   Tests: tests/test_vm2_map_chances.py.
 
+## Shared grading core gp-2 (gradecore) — the out-of-sample rule for any new grading model (2026-11-04; shadow only, no model change)
+
+A shared-core candidate (`gradecore/evaluation.py evaluate`, `gradecore/release.py readiness`) may replace live grades in any
+sport only after ALL of: log loss on at least 500 settled held-out legs (chronological fit / calibration / test split, whole
+events purged at the boundaries, the saved published chances as the baseline), with a game-clustered 95% bootstrap interval
+of the log-loss change that does not cross zero; every held-out reliability bin within 3 points; seven prospective days of
+side-by-side logging (`SCOUT_GRADECORE_SHADOW=1`, append-only `gradecore_shadow`) with at least 500 settled prospective
+forecasts and Over/Under balance passing; and the owner's approval. A failed or incomplete experiment produces a report, never
+new grades; `release_allowed` is False on every artifact the core writes (`python -m gradecore evaluate | reliability`, folder
+`SCOUT_GRADECORE_ARTIFACTS`). 2026-11-04 status: adapters read the market quote saved with each forecast and the saved
+settlement (shadow + admin comparison only); no fitted artifact exists; the only offline CS2 copy (picks.db of 2026-10-11)
+predates raw-distribution logging, so the CS2 held-out reliability report has 0 eligible rows (gradecore/reports/).
+
 ## sr-gates-1 — stake-rule tests, nothing passed (branch grade/cs2-stakes, 2026-10-28; CS2 model tag unchanged; no model change)
 
 Registered in research/cs2_grade_1028/REGISTER.md (section sr-gates-1, commit c22fea1) before scoring. The cohorts were seen in

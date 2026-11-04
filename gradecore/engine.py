@@ -24,6 +24,9 @@ def assess(adapter, offer, artifact=None):
     facts.add(gates.UNVALIDATED)
     out = {'policy': GRADE_POLICY_VERSION, 'sport': offer.sport,
            'event_id': offer.event_id, 'raw': asdict(prediction), 'sides': {},
+           # the saved market quote the shadow used (None = graded on the model alone); shown in the admin comparison
+           'market': None if market is None else {'p_over': market.p_over, 'p_under': market.p_under,
+                                                  'source': market.source, 'width': market.width, 'age_s': market.age_s},
            'release_allowed': False}
     weight = blend.weight(artifact.get('blend_weights'), offer.sport, offer.stat)
     for side in ('over', 'under'):

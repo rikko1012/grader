@@ -1,5 +1,13 @@
 > Integration correction: use the EXISTING 5 GB disk ($8.25/month base), not the historical 10 GB sizing proposal below. No enlargement is approved. SPORTS_STORE_MAX_MB=4000 counts the entire data directory; SPORTS_WORKER_MAX_MB=310 is RSS and SPORTS_WORKER_MAX_VM_MB=320 is virtual memory for measured ingestion/settlement jobs. Keep SPORTS_TRAIN=0 until model-job virtual memory is measured. See RETENTION.md for the short measured runway; proposed larger sizes below are planning scenarios only.
 
+> **Current Render resources (as recorded 2026-11-04; the Render dashboard is the source of truth, check it before
+> changing a cap):** `scout-sports-api` web service, plan `Standard` (2 GB RAM / 1 CPU, since 2026-10-25), Docker
+> `./Dockerfile.sports`, one persistent disk `scout-sports-data` **5 GB** at `/sports-data` (the worker children run
+> inside this one service, section 10); the esports service `cs2-scout` keeps its own disk `/data`, and the HLTV
+> database is the separate `hltv-db` Postgres (render-db-storage note: 2.9 GB after the 2026-10-16 archive move).
+> Any "100 GB disk" or "Starter" figure in an older audit or in sections 1-13 below describes a measurement or a
+> proposal, not the current resources.
+
 # Scout Sports - operational runbook
 
 (Sections 1-2 were committed BEFORE any load run; the results and the rest of the runbook follow below.)
@@ -176,6 +184,20 @@ own drain-and-restart ceiling; 400 + 1200 = 1600 of 2048 MB). DELETE any `SPORTS
 (`SPORTS_JOB_INGEST_EVERY_S`, `SPORTS_JOB_INGEST_KALSHI_EVERY_S`, `SPORTS_JOB_UI_SNAPSHOTS_EVERY_S`,
 `SPORTS_JOB_PREBUILT_EVERY_S`): an explicit interval pins that job and switches its game-day cadence off.
 
+**Security headers (2026-11-04, both services, all off by default; owner switches them on).** `SCOUT_CSP` unset / `0`
+= no Content-Security-Policy header (today's behaviour); `report` = `Content-Security-Policy-Report-Only` (switch this on
+first and read the browser console / `SCOUT_CSP_REPORT_URI` for a week); `1` = enforced. `SCOUT_FRAME_ANCESTORS`
+(space / comma list, default `'self' https://whop.com https://*.whop.com`) is the `frame-ancestors` directive on both
+services - Whop keeps framing the member pages, and no X-Frame-Options header is ever sent. The esports default policy
+keeps the pages' inline scripts / styles, Google Fonts, ESPN images and, in service mode, `SPORTS_API_BASE` in
+`connect-src` (`SCOUT_CSP_CONNECT` adds origins; `SCOUT_CSP_POLICY` replaces the whole policy, used as written); the
+sports service default is the strict API shape (`default-src 'none'`). `SCOUT_HSTS=1` adds `Strict-Transport-Security`
+(`SCOUT_HSTS_MAX_AGE`, default 31536000): Render terminates TLS at its edge and does not add HSTS for the app. The
+switches are read per response (no deploy to change them); bodies never change. Display switch of the same release:
+`SPORTS_MARKET_FALLBACK=1` lets the snapshot build write `mk.fb` (the books' own stale readings for the Market column
+only; never a lean / edge / sort input). Tests: tests/test_csp_headers.py, sports/tests/test_csp_headers.py,
+sports/tests/test_market_fallback.py.
+
 Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `scripts/load_sports_jobs.py`; results in
 `sports/research/results/starter_2026-10-24/`). Memory of the store-reading jobs grows with the data (see 13.4).
 
@@ -236,7 +258,8 @@ esports-only (auto-synced - a service declared there would be created and billed
 1. **scout-sports-api -> Settings**: Branch = the branch / commit the coordinator names for staging; **Dockerfile
    path** `./Dockerfile.sports`; **Docker Command** `python -m sports.service`; **Health Check Path**
    `/api/sports/health`; **Auto-Deploy** `No`.
-2. **Instance type**: `Starter` (512 MB, 0.5 CPU) - section 13.1 for the memory budget.
+2. **Instance type**: `Standard` (2 GB / 1 CPU) is the current plan (2026-10-25, "Plan-aware sizing" above); the
+   `Starter` (512 MB, 0.5 CPU) figures in section 13.1 are the original measurements, not the current plan.
 3. **Disks**: `scout-sports-data`, mount `/sports-data`, **5 GB** (existing approved disk; section 13.3; enlargement needs owner approval).
 4. **Environment**: every key in `deploy/render.sports-api.yaml` with its value. Secrets (already set by the owner or to
    be set there, never in git): `SPORTS_TOKEN_SECRET` (the same value as cs2-scout), `ADMIN_TOKEN` (same as

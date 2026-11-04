@@ -848,7 +848,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
         elif row["team"]:
             row["team"] = team_abbr(league, row["team"])
         mv = market_view.row_view(row_targets.get(row["key"], []), row_items.get(row["key"], []),
-                                  events[row["event_id"]][1], now, league, dnp)
+                                  events[row["event_id"]][1], now, league, dnp, fallback=market_view.fallback_on())
         row["market"] = mv
         scout_line_reads(row, forecasts)
         for q in row["quotes"]:                          # THE Scout-chance definition (sports/scout_chance.py)
@@ -941,7 +941,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                 "store_schema_level": _schema_level(con), "contracts": "sc-1",
                 "capabilities": capabilities.CAPABILITY_VERSION, "models": model_list,
                 "model_preference": list(models_pref()), "platforms": {k: dict(v) for k, v in platform_seen.items()},
-                "market_view": {"version": market_view.DISPLAY_VERSION, **mv_stats,
+                "market_view": {"version": market_view.DISPLAY_VERSION, **mv_stats, "fallback": market_view.fallback_on(),
                                 "rule": "mc-1 rule (sports/model/market.py quote_prob filters + equal-weight log-odds "
                                         "per source, nearest line moved with dispersion.json); target platform excluded",
                                 "sources": "every verified source: kalshi, polymarket, oddsapi:<book>, fanduel, "

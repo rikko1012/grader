@@ -392,7 +392,9 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                 res = store.put(scon, fcx)
                 if name == 'sm-1' and os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1':
                     from gradecore.capture import capture
-                    capture(scon, 'sports', fcx, o, events[o.event_id].start_utc if o.event_id in events else None)
+                    # the mc-1 consensus written in this same run is the saved market quote of the shadow (flag on only)
+                    mc = next((w[1] for w in written if w[0] == market.VERSION_CONSENSUS), None)
+                    capture(scon, 'sports', fcx, o, events[o.event_id].start_utc if o.event_id in events else None, mc)
                 if res["status"] == "inserted":
                     icon.execute("INSERT OR IGNORE INTO inputs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                                  (fcx.forecast_id, name, league, mk, rid, art["sha"], forecast_at,

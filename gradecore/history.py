@@ -5,6 +5,7 @@ player stats or use a later grade as if it had been available before the game.
 """
 import json
 from collections import Counter
+from . import adapters
 from .evaluation import timestamp
 
 
@@ -35,18 +36,23 @@ def cs2(forecasts, picks, model_version):
             values = [raw[k] for k in ('over','under','push')]
             if any(isinstance(x,bool) or not isinstance(x,(int,float)) or not 0 <= x <= 1 for x in values) or abs(sum(values)-1) > .0002:
                 excluded['invalid_raw_probability'] += 1; continue
-            side = {'More':'over','Less':'under','Over':'over','Under':'under','over':'over','under':'under'}.get(f['pick'])
+            side = adapters.SIDES.get(f['pick'])
             if not side or raw['over'] + raw['under'] <= 0:
                 excluded['no_selected_decided_side'] += 1; continue
-            if p['status'] == 'void': status = 'void'
-            elif not isinstance(p.get('actual'),(int,float)):
+            # the same settlement rule as the shadow adapters (void stays void; actual == line is a push, never a win)
+            result = adapters.settlement_of(p['status'], p.get('actual'), f['line'], side)
+            if result is None:
                 excluded['missing_actual'] += 1; continue
-            elif p['actual'] == f['line']: status = 'push'
-            else: status = 'win' if ((p['actual'] > f['line']) == (side == 'over')) else 'loss'
+            status = result.status
+            # the quote saved WITH the forecast (full export rows carry forecasts.quote; compact pages do not):
+            # Underdog's two decimal prices, observed at or before the forecast, else no market for this row
+            quote, observed = adapters.cs2_quote(f.get('quote'), p.get('book'), f['logged_at'])
             key = tuple(p[k] for k in ('match_slug','slug','prop','scope','book')) + (f['line'],)
             row = dict(forecast_id=str(f['id']), sport='cs2', match_key=p['match_slug'], market=p['prop'],
                        player_id=p['slug'], scope=p['scope'], line=f['line'], book=p['book'], side=side,
-                       p=raw[side]/(raw['over']+raw['under']), market_p=None, status=status,
+                       p=raw[side]/(raw['over']+raw['under']),
+                       market_p=getattr(quote, 'p_' + side) if quote else None, market_at=observed if quote else None,
+                       market_source=quote.source if quote else None, status=status,
                        published_p=f.get('p_pick'),
                        model_version=model_version, artifact_version=model_version,
                        probability_stage='raw_distribution_rounded_4dp', forecast_at=f['logged_at'],
@@ -108,9 +114,12 @@ def lol(forecasts, settlements, model_version, artifact_version):
                 status='win' if bool(s['over_hit']) == (side == 'over') else 'loss'
             else:
                 excluded['missing_result'] += 1; continue
+            quote, observed = adapters.lol_quote(f, f['forecast_at'])      # Underdog decimal prices saved with the row
             row=dict(forecast_id=str(f['id']),sport='lol',match_key=str(f['sid']),market=f['stat'],
                      player_id=str(f['pid']),scope=f['scope'],line=f['line'],book=f['platform'],side=side,
-                     p=f['p_'+side]/dec,market_p=None,status=status,model_version=model_version,
+                     p=f['p_'+side]/dec,market_p=getattr(quote,'p_'+side) if quote else None,
+                     market_at=observed if quote else None,market_source=quote.source if quote else None,
+                     status=status,model_version=model_version,
                      published_p=f.get('cal_p_'+side),
                      artifact_version=artifact_version,probability_stage='raw_distribution_rounded_4dp',
                      forecast_at=f['forecast_at'],start_at=f['series_start'],settled_at=s['settled_at'])

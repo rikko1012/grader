@@ -293,3 +293,26 @@ def test_slash_focuses_the_search_box(browser):
     assert page.locator(".sw-tb-row:not([hidden])").count() == 1
     assert not errors, errors
     ctx.close()
+
+
+def test_sort_indicator_and_phone_select_follow_the_sort_in_effect():
+    """Audit P2 (2026-11-04): a board with no edge is ordered by start time, so the Edge header must not carry the arrow /
+    aria-sort and the phone "Sort by" select must show the order in effect. Semantics: sports/tests/ui_table_test.js."""
+    js = (WEB / "table.js").read_text(encoding="utf-8")
+    assert "function effectiveSort(rows, key)" in js and "effectiveSort: effectiveSort" in js
+    assert 'th("edge", "Edge (pts)", hs, "num")' in js and 'th("player", "Player", hs, "sw-tb-player-h")' in js
+    assert "st.effective = eff" in js and "var cur = st.effective || st.sort" in js
+    assert "sorted by start time, soonest first" in js
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    html_at, bar_at = app.index("window.SportsTable.html("), app.index("window.SportsTable.sortBar(TB)")
+    assert html_at < bar_at                                # the select is drawn after the table knows the sort in effect
+
+
+def test_market_fallback_cell_is_display_only_and_behind_its_switch():
+    js = (WEB / "table.js").read_text(encoding="utf-8")
+    assert "r.marketFallback = !mkc && fb && fb.n > 0" in js and 'data-fallback="' in js
+    assert "Not used for lean or edge" in js and "books, stale" in js
+    mv = (WEB.parents[1] / "sports" / "market_view.py").read_text(encoding="utf-8")
+    assert 'FALLBACK_FLAG = "SPORTS_MARKET_FALLBACK"' in mv and "if fallback and head_c is None" in mv
+    bv = (WEB.parents[1] / "sports" / "board_view.py").read_text(encoding="utf-8")
+    assert '"fb"' not in bv and "fallback" not in bv       # the board signal never reads the fallback

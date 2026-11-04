@@ -34,6 +34,7 @@ def comparisons(path, sport, before=None, limit=100):
                     'stat': offer['stat'], 'period': offer['scope'], 'line': offer['line'], 'book': offer['book'],
                     'old_letter': item.get('old_letter'), 'old_p': item.get('old_p'),
                     'sides': sides, 'policy': item['candidate']['policy'],
+                    'market': item['candidate'].get('market'),      # the saved quote used, or None (model alone)
                     'artifact_hash': item['artifact_hash']})
     return {'sport': sport, 'rows': out, 'state': 'capturing' if out else 'awaiting_capture',
             'started_at': first[0] if first else None,

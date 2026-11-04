@@ -128,6 +128,14 @@ two-line rows - no sideways scroll at 360 px. Started games are never listed (th
 from the snapshot when present, else `start_utc <= now`). Books without a usable price are not shown (stats.js
 `quoteShown`).
 
+Sort indicator (2026-11-04, audit P2): a board where no row has an edge (every market held by its gate) is ordered by
+start time, soonest first; the header arrow / `aria-sort` and the phone "Sort by" select then show that order
+(`effectiveSort`, a `sw-tb-sortnote` line says so) and the saved preference stays "edge" until an edge appears. Market
+column fallback behind `SPORTS_MARKET_FALLBACK` (snapshot `mk.fb`, written by the worker only when the consensus is
+None): the listed books' own readings at exactly the headline line, equal-weight log-odds, labelled "books, stale" with
+the oldest age in the title. It is a label for an otherwise empty cell - never a lean, edge, gap, confidence or sort
+input (`board_view.market_at` / `marketAt` read `c` and `at` only).
+
 **Shared row helper - reuse it, do not re-implement it:** `SportsRows.propRow(market, offer, {fc, view, now})`
 (web/sports/table.js; `require()`-able in node) and, server side, `sports/board_view.py` (`row_summary`,
 `hit_counts`, file `board_view.json`, `GET /api/sports/board?league=..&part=view`). Sheets (PrizePicks / Underdog /

@@ -767,13 +767,15 @@
         var pb = document.getElementById("sw-prefbook");
         if (pb) pb.onchange = function () { setPrefBook(pb.value); draw(); };
         var vbar = document.getElementById("sw-tb-bar");
-        if (vbar) vbar.innerHTML = window.SportsTable.viewToggle(TB) + (TB.view === "table" ? window.SportsTable.sortBar(TB) : "");
         if (TB.view === "table") {
           body.innerHTML = window.SportsTable.html({lg: state.lg, B: B, rows: rows, pref: prefBook(), href: marketHref, bookName: bookName,
             now: nowMs, limit: state.boardShown, page: BOARD_PAGE}, TB);
+          // after html(): the phone "Sort by" select shows the sort in effect (start time when no row has an edge)
+          if (vbar) vbar.innerHTML = window.SportsTable.viewToggle(TB) + window.SportsTable.sortBar(TB);
           var tm = document.getElementById("sw-tb-more");
           if (tm) tm.onclick = function () { state.boardShown += BOARD_PAGE; draw(); };
         } else {
+          if (vbar) vbar.innerHTML = window.SportsTable.viewToggle(TB);
           var shown = rows.slice(0, state.boardShown);
           body.innerHTML = boardCards(shown, B) +
             (rows.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-showmore">Show ' + Math.min(BOARD_PAGE, rows.length - shown.length) + " more (" + (rows.length - shown.length) + " left)</button></p>" : "");

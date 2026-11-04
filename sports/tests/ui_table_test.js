@@ -177,4 +177,71 @@ if (process.argv[3]) {
   assert.ok(checked > 0, "no hit rate checked");
   console.log("history cross-check " + checked);
 }
+
+// ------------------------------------------------------------------ sort indicator follows the sort IN EFFECT (audit P2)
+// A board where no row has an edge is ordered by start time; the Edge header must not carry the arrow / aria-sort then,
+// and the phone "Sort by" select must show the start-time order. The saved preference stays "edge".
+const p2Held = {k: "k2", pid: "nba:player:espn:2", n: "B Player", tm: "NY", st: "points", e: "ev1", ev, mk: null, nv: "held",
+                q: [{r: "r-h", p: "prizepicks", l: 10.5, o: [1, 1], t: T, f: "f1"}], kn: []};
+const p2HeldRow = R.propRow(p2Held, p2Held.q[0], {fc, view, now: NOW});
+const p2EdgeRow = R.propRow(m, m.q[0], {fc, view, now: NOW});                   // m (above) has an edge
+assert.strictEqual(p2HeldRow.lean, null);
+assert.strictEqual(p2HeldRow.edge, null);
+assert.ok(p2EdgeRow.edge > 0);
+assert.strictEqual(R.effectiveSort([p2HeldRow], "edge"), "start");
+assert.strictEqual(R.effectiveSort([p2HeldRow], "player"), "player");
+assert.strictEqual(R.effectiveSort([p2HeldRow], undefined), "start");
+assert.strictEqual(R.effectiveSort([p2EdgeRow], "edge"), "edge");
+assert.strictEqual(R.effectiveSort([p2HeldRow, p2EdgeRow], "edge"), "edge");
+assert.deepStrictEqual(R.sortRows([p2HeldRow, p2EdgeRow], "edge").map(function (x) { return x.key; }), ["k1", "k2"]);
+
+// the DOM half runs in a sandbox without `module`: html() / sortBar() with no document access
+const p2Vm = require("vm");
+const p2Sandbox = {SportsStats: S, console: console, CSS: {escape: function (s) { return s; }}};
+p2Sandbox.window = p2Sandbox;
+p2Vm.runInNewContext(fs.readFileSync(path.join(dir, "table.js"), "utf8"), p2Sandbox);
+const p2TB = p2Sandbox.SportsTable;
+const p2Opts = {lg: "nba", B: {fc: fc, view: view, stats: {}}, rows: [p2Held], pref: null, href: function () { return "#x"; },
+                bookName: function (b) { return b; }, now: NOW};
+const p2StNo = {view: "table", sort: "edge", dir: null, open: {}};
+const p2HtmlNo = p2TB.html(p2Opts, p2StNo);
+assert.strictEqual(p2StNo.effective, "start");
+assert.strictEqual(p2StNo.sort, "edge");                                        // the preference is not rewritten
+assert.ok(!/aria-sort/.test(p2HtmlNo), "no header may claim a sort when the board is ordered by start time");
+assert.ok(!/Edge \(pts\) <span/.test(p2HtmlNo), "no Edge arrow over a start-time order");
+assert.ok(/data-sort-effective="start"/.test(p2HtmlNo) && /sorted by start time/.test(p2HtmlNo));
+const p2BarNo = p2TB.sortBar(p2StNo);
+assert.ok(/<option value="start" selected>/.test(p2BarNo) && !/<option value="edge" selected>/.test(p2BarNo), p2BarNo);
+assert.ok(/sw-tb-sortnote/.test(p2BarNo));
+const p2StYes = {view: "table", sort: "edge", dir: null, open: {}};
+const p2HtmlYes = p2TB.html(Object.assign({}, p2Opts, {rows: [m, p2Held]}), p2StYes);
+assert.strictEqual(p2StYes.effective, "edge");
+assert.ok(/<th scope="col" class="num" aria-sort="descending"><button type="button" class="sw-tb-sort" data-tsort="edge">Edge \(pts\) <span aria-hidden="true">▼<\/span>/.test(p2HtmlYes), p2HtmlYes.slice(0, 900));
+assert.ok(!/sw-tb-sortnote/.test(p2HtmlYes) && !/aria-sort="descending"><button type="button" class="sw-tb-sort" data-tsort="player"/.test(p2HtmlYes));
+const p2BarYes = p2TB.sortBar(p2StYes);
+assert.ok(/<option value="edge" selected>/.test(p2BarYes) && !/sw-tb-sortnote/.test(p2BarYes));
+const p2StPlayer = {view: "table", sort: "player", dir: null, open: {}};
+assert.ok(/aria-sort="ascending"><button type="button" class="sw-tb-sort" data-tsort="player"/.test(p2TB.html(p2Opts, p2StPlayer)));
+
+// ------------------------------------------------------------------ SPORTS_MARKET_FALLBACK: Market cell only, display only
+const p2Fb = {po: 0.58, pu: 0.42, n: 2, l: 10.5, books: ["betrivers", "fanduel"], age: 1500};
+const p2WithFb = Object.assign({}, p2Held, {k: "k3", nv: null, mk: {l: 10.5, hp: "prizepicks", c: null, bk: [], at: {}, fb: p2Fb}});
+const p2NoFb = Object.assign({}, p2WithFb, {mk: {l: 10.5, hp: "prizepicks", c: null, bk: [], at: {}}});
+const p2A = R.propRow(p2WithFb, p2WithFb.q[0], {fc, view, now: NOW}), p2B = R.propRow(p2NoFb, p2NoFb.q[0], {fc, view, now: NOW});
+assert.deepStrictEqual(p2A.marketFallback, p2Fb);
+assert.strictEqual(p2B.marketFallback, null);
+["lean", "pLean", "edge", "market", "mLean", "gap", "gapPts", "sortKey", "conf"].forEach(function (k) {
+  assert.deepStrictEqual(p2A[k], p2B[k], k + " must not change with the fallback");
+});
+assert.strictEqual(p2A.market, null);                                            // never a market chance for the signal
+const p2HtmlFb = p2TB.html(Object.assign({}, p2Opts, {rows: [p2WithFb]}), {view: "table", sort: "edge", dir: null, open: {}});
+assert.ok(/data-fallback="2"[^>]*>O 58\.0% · books, stale<\/span>/.test(p2HtmlFb), p2HtmlFb.slice(0, 1200));
+assert.ok(/Not used for lean or edge/.test(p2HtmlFb));
+const p2HtmlNoFb = p2TB.html(Object.assign({}, p2Opts, {rows: [p2NoFb]}), {view: "table", sort: "edge", dir: null, open: {}});
+assert.ok(!/data-fallback/.test(p2HtmlNoFb) && /data-label="Market">—<\/td>/.test(p2HtmlNoFb));
+// a real market chance wins over the fallback; a fallback at another line is not shown
+const p2RealMk = Object.assign({}, p2WithFb, {mk: {l: 10.5, hp: "prizepicks", c: {po: 0.55, pu: 0.45, pp: 0, n: 3, used: []}, bk: [], at: {}, fb: p2Fb}});
+assert.strictEqual(R.propRow(p2RealMk, p2RealMk.q[0], {fc, view, now: NOW}).marketFallback, null);
+const p2OtherLine = Object.assign({}, p2WithFb, {mk: {l: 11.5, hp: "prizepicks", c: null, bk: [], at: {}, fb: Object.assign({}, p2Fb, {l: 11.5})}});
+assert.strictEqual(R.propRow(p2OtherLine, p2OtherLine.q[0], {fc, view, now: NOW}).marketFallback, null);
 console.log("ok");

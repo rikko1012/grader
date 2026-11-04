@@ -269,6 +269,56 @@ GZIP_MIN = 1024                                       # smaller bodies go as the
 MEMBER_CACHE = "private, no-cache"                    # the browser keeps a private copy and must re-check it every time
 _ENC_LOCKS, _ENC_GUARD = {}, threading.Lock()
 
+# Content-Security-Policy behind SCOUT_CSP (unset / "0" = no header at all, "report" = Content-Security-Policy-Report-Only,
+# "1" = enforced), read per response so a Render env change applies without a deploy (audit 2026-10-26 P2: CSP with explicit
+# frame-ancestors for Whop). The pages carry inline <script> / <style> and style attributes, Google Fonts, ESPN images and,
+# in SPORTS_API_MODE=service, the sports API origin, so the policy keeps those. Whop frames the member pages: they stay
+# frameable through frame-ancestors (SCOUT_FRAME_ANCESTORS, a space / comma list; default below) - never an X-Frame-Options
+# header. SCOUT_HSTS=1 adds Strict-Transport-Security (Render terminates TLS at its edge and does not add the header for
+# the app). Bodies never change; flags off = the exact headers of before.
+CSP_MODES = {"1": "Content-Security-Policy", "true": "Content-Security-Policy", "on": "Content-Security-Policy",
+             "yes": "Content-Security-Policy", "report": "Content-Security-Policy-Report-Only"}
+CSP_FRAME_ANCESTORS_DEFAULT = "'self' https://whop.com https://*.whop.com"
+CSP_POLICY_DEFAULT = ("default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                      "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; "
+                      "object-src 'none'; base-uri 'self'; form-action 'self'")
+
+
+def _csp_list(value, default=""):
+    """A space / comma separated env value as one space-joined header token list (newlines can never reach a header)."""
+    items = (value or "").replace(",", " ").split()
+    return " ".join(items) if items else default
+
+
+def csp_headers(env=None):
+    """-> [(header, value), ...] the SCOUT_CSP / SCOUT_HSTS switches ask for; [] with both off."""
+    env = os.environ if env is None else env
+    out = []
+    name = CSP_MODES.get((env.get("SCOUT_CSP") or "").strip().lower())
+    if name:
+        custom = _csp_list(env.get("SCOUT_CSP_POLICY"))      # the owner's own policy is used as written
+        policy = custom or CSP_POLICY_DEFAULT
+        if not custom:                                       # default policy: the browser talks to self + the sports API
+            connect = ["'self'"]
+            api = (env.get("SPORTS_API_BASE") or "").strip().rstrip("/")
+            if api.startswith("https://"):
+                connect.append(api)
+            extra = _csp_list(env.get("SCOUT_CSP_CONNECT"))
+            if extra:
+                connect.append(extra)
+            policy += "; connect-src " + " ".join(connect)
+        if "frame-ancestors" not in policy:
+            policy += "; frame-ancestors " + _csp_list(env.get("SCOUT_FRAME_ANCESTORS"), CSP_FRAME_ANCESTORS_DEFAULT)
+        report = _csp_list(env.get("SCOUT_CSP_REPORT_URI"))
+        if report and "report-uri" not in policy:
+            policy += "; report-uri " + report
+        out.append((name, policy))
+    if (env.get("SCOUT_HSTS") or "").strip().lower() in ("1", "true", "on", "yes"):
+        age = (env.get("SCOUT_HSTS_MAX_AGE") or "").strip()
+        out.append(("Strict-Transport-Security", "max-age=" + (age if age.isdigit() else "31536000")))
+    return out
+
 
 def encoded(key, body, keep=60):
     """(etag, gzip bytes or None) for `body` - computed once per body object under `key` (single flight: callers arriving
@@ -4139,6 +4189,8 @@ class Handler(BaseHTTPRequestHandler):
         # header on purpose: Whop shows the member pages inside its app frame.
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
+        for k, v in csp_headers():                     # SCOUT_CSP / SCOUT_HSTS switches: off = nothing added here
+            self.send_header(k, v)
         for k, v in headers.items():
             self.send_header(k, v)
         renew, self._renew = getattr(self, "_renew", None), None
