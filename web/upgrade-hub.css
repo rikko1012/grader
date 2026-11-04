@@ -535,3 +535,6 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
  #u-hub .h-table .h-prop-toggle{font-size:12px;margin-top:8px;padding:0}
  #u-hub .h-table tr[data-record].is-expanded{border-color:#6389bf;background:#1b2533}
 }
+.h-h2h{margin:0 18px 20px;border-top:1px solid #38465a;padding-top:16px}.h-h2h h3{font-size:15px;margin:0 0 10px}
+.h-h2h-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}.h-h2h-table th,.h-h2h-table td{text-align:left;padding:6px 8px;border-bottom:1px solid #2c394b}
+@media(max-width:640px){.h-h2h{margin-inline:12px}}

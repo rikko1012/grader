@@ -13,6 +13,7 @@ small request per part and no parse. A live pick check is shared per exact leg f
 each record as bytes: at most MAX_RECORDS records per league are held."""
 import gzip
 import hashlib
+import workspace_h2h
 import json
 import re
 import threading
@@ -708,6 +709,7 @@ def line_doc(srv, lg, book, rid):
     tally = rec["history"]["l10"]
     avg = round(sum(s["value"] for s in series[:10]) / len(series[:10]), 1) if series else None
     return 200, {"record": rec, "forecast": forecast, "history": {"tally": tally, "avg": avg, "series": series[:20] if series else None}, "books": books, "market_books": {"same": same, "other": other},
+                 "h2h": workspace_h2h.h2h(series, rec["player"]["opponent"], x["l"]) if series else None,
                  "context": context_of(x, player, lg),
                  "market": {"available": True, "p_over": mk["p_over"], "p_under": mk["p_under"], "source": f"{mk['sources']} market sources at this line"} if mk else {"available": False, "reason": "No market price at this exact line."}}
 

@@ -30,6 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import workspace_h2h
 import workspace_rules as rules
 import workspace_store as wstore
 
@@ -704,7 +705,29 @@ def public_check(res):
 
 # ---------------------------------------------------------------------------------------------------------------- /line
 
-def _history(srv, x):
+def _map_stats(maps):
+    """Player stats over his HLTV maps in the last year (every map, not only Maps 1-2 pairs): display only, read from the rows the
+    history already fetched, so no extra query."""
+    rows = sorted((r for r in maps if r.get("kills") is not None and r.get("rounds")), key=lambda r: str(r.get("date") or ""), reverse=True)
+    if not rows:
+        return None
+    rounds = sum(r["rounds"] for r in rows)
+    hs = [r for r in rows if r.get("headshots") is not None]
+    won = [r for r in rows if r.get("won") is not None]
+    last = rows[:20]
+    out = [{"label": "Maps played, last 12 months", "value": len(rows)},
+           {"label": "Kills per round", "value": round(sum(r["kills"] for r in rows) / rounds, 3)},
+           {"label": "Kills per map", "value": round(sum(r["kills"] for r in rows) / len(rows), 1)},
+           {"label": "Kills per map, last 20 maps", "value": round(sum(r["kills"] for r in last) / len(last), 1)}]
+    if hs and sum(r["kills"] for r in hs):
+        out.append({"label": "Headshot share", "value": f"{100 * sum(r['headshots'] for r in hs) / sum(r['kills'] for r in hs):.1f}%"})
+        out.append({"label": "Headshots per map", "value": round(sum(r["headshots"] for r in hs) / len(hs), 1)})
+    if won:
+        out.append({"label": "Maps won", "value": f"{sum(1 for r in won if r['won'])} of {len(won)}"})
+    return out
+
+
+def _history(srv, x, full=False):
     """Game-by-game results from the HLTV tables, only when they reproduce the saved L10 tally. Three Postgres slots: a member
     who cannot get one within 0.5 s sees the saved tally alone."""
     n, over, push = x.get("l10_n"), x.get("l10_over"), x.get("l10_push") or 0
@@ -725,8 +748,9 @@ def _history(srv, x):
                 ser = [{"date": s["date"], "opponent": s.get("opponent"), "value": s["total"], "maps": s.get("maps") or [], "values": s.get("values") or []}
                        for s in srv.records._series(rows, stat)]
             else:
-                by = {}
+                by, maps = {}, []
                 for r in srv.hltv.recent_series(nick, team, since):
+                    maps.append(r)
                     if r.get("number") in ((1,) if scope == "1" else (1, 2)):
                         by.setdefault(r["match_id"], []).append(r)
                 need = 1 if scope == "1" else 2
@@ -734,13 +758,16 @@ def _history(srv, x):
                         "values": [y[stat] for y in m]}
                        for m in by.values() if len(m) == need and all(y.get(stat) is not None for y in m)]
             ser.sort(key=lambda s: s["date"], reverse=True)
-            return 200, ser[:20]
+            return 200, {"ser": ser, "stats": _map_stats(maps) if scope != "123" else None}
         except Exception:
             return 200, None, 1
         finally:
             _HIST_SLOTS.release()
     line = x.get("line")
-    ser = srv.shared(("ws_hist", _norm(nick), _norm(team), prop, scope), compute, ttl=HISTORY_TTL)[1]
+    doc = srv.shared(("ws_hist", _norm(nick), _norm(team), prop, scope), compute, ttl=HISTORY_TTL)[1]
+    if full:
+        return doc
+    ser = (doc or {}).get("ser", [])[:20]
     if not ser:
         return None
     last = ser[:n + push]
@@ -804,7 +831,12 @@ def _line_body(srv, book, rid):
     forecast = None
     if fc.get("state") == "ok":
         forecast = {"id": fc.get("id"), "logged_at": fc.get("logged_at"), "model_version": fc.get("model_version"), "p_saved": fc.get("p_pick")}
-    return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": _history(srv, x)},
+    ser = _history(srv, x)
+    full = (_history(srv, x, full=True) or {}) if ser else {}           # the cached year: one read serves both
+    if full.get("stats"):
+        ctx = {"rows": full["stats"] + (ctx or {}).get("rows", [])}
+    return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser},
+                 "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if ser else None,
                  "books": books, "context": ctx, "market": _market(x)}
 
 

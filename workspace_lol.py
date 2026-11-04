@@ -8,6 +8,7 @@ One snapshot per board.json write, single flight. Past games are read once per s
 behind one connection. Settlement is the LoL worker's own lol_settlements row for the receipt's platform, market and line: this
 module only says which side of it the member took. LoL letters carry 0 units, and a stake is never shown as anything else."""
 import hashlib
+import workspace_h2h
 import json
 import re
 import sqlite3
@@ -464,6 +465,7 @@ def line_doc(srv, book, rid):
                           "seen_at": r["offer"]["seen_at"], "scout_side": o["side"], "p_side": r["scout"]["p_side"], "grade": r["scout"]["grade"]})
     forecast = {"id": x["fid"], "logged_at": x["at"], "model_version": x["model"], "p_saved": rec["scout"]["p_side"]} if x["fid"] else None
     return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": values[:20] or None}, "books": books, "market_books": None,
+                 "h2h": workspace_h2h.h2h(values, rec["player"]["opponent"], x["line"]),
                  "context": context_of(x["member"]), "market": {"available": False, "reason": "LoL lines carry no market price."}}
 
 

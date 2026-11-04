@@ -223,6 +223,15 @@ export function mount(C) {
     } catch(e){if(seq!==H.detailSeq)return;H.detailState='error';}
     paintDetail();
   }
+  /* head-to-head vs tonight's opponent at tonight's line (owner 2026-11-04: as on the classic CS2 card); past results, not a chance */
+  function h2hHtml(hh,line,side) {
+    if(!hh||!hh.opponent)return '';
+    if(!hh.n)return `<section class="h-h2h"><h3>Head-to-head vs ${esc(hh.opponent)}</h3><p class="h-history-note">No past meetings with ${esc(hh.opponent)} in this player's saved results.</p></section>`;
+    const hit=side==='over'?hh.over:hh.under;
+    return `<section class="h-h2h"><h3>Head-to-head vs ${esc(hh.opponent)}</h3><div class="h-history-summary"><div><b>${hit}<em>/${hh.n}</em></b><span>${side==='over'?'Over':'Under'} ${esc(line)} vs ${esc(hh.opponent)}${hh.push?` · ${hh.push} pushes`:''}</span></div><div><b>${num(hh.avg)?hh.avg.toFixed(1):'—'}</b><span>Average in ${hh.n} meeting${hh.n===1?'':'s'}</span></div></div>
+      <table class="h-h2h-table"><thead><tr><th>Date</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${hh.series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.value)}</td><td>${g.value===line?'Push':g.value>line?'Over':'Under'}</td></tr>`).join('')}</tbody></table>
+      <p class="h-history-note">Past meetings at today's line. Not a predicted chance.</p></section>`;
+  }
   function paintDetail() {
     const box=$('hub-detail'),r=rec(H.detail);if(!box||!r)return;
     const restoreFocus=focusAfter(box);
@@ -253,6 +262,7 @@ export function mount(C) {
       <p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p></section>
       <section class="h-line-shop"><div class="h-shop-head"><h3>Compare lines</h3><small>Same event · stat · period</small></div><table><thead><tr><th>Platform / line</th><th>Over</th><th>Under</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td></tr>`).join('')}</tbody></table><p>Choose a line to recalculate its historical results. A lower Over line or higher Under line can help, but payouts and availability also matter.</p>
       <div class="h-detail-action"><span>${r.scout.hold?'Research estimate':esc(C.verdictText(r,side))} · ${pct(C.chanceOf(r,side))}</span><button data-hub="detail-add" ${eligible?'':'disabled'}>${C.onSlip(r)?'Review saved slip':`Add ${side==='over'?'Over':'Under'} ${esc(line)} · ${esc(r.offer.platform_label)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}${!r.offer[side].offered?'<small>This side is not offered on the selected platform.</small>':''}</div></section></div>
+      ${h2hHtml(doc?.h2h,line,side)}
       ${facts.length?`<details class="h-stat-library" open><summary>Player stats & matchup <span>${facts.length} available measures</span></summary><dl>${facts.map(f=>`<div><dt>${esc(f.label)}</dt><dd>${esc(typeof f.value==='object'?JSON.stringify(f.value):f.value)}</dd></div>`).join('')}</dl></details>`:''}`;
     restoreFocus();
   }
