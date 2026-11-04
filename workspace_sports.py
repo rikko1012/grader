@@ -340,7 +340,17 @@ def record_of(lg, doc, m, q, view):
     grade = signal.get("gr") if held is None and lean and signal.get("v") == "cf-2" else None
     if grade not in ("A", "B", "C", "Lean"):
         grade = None
-    hold = None if grade else {"label": HOLD_LABEL, "reason": held or HOLD_DETAIL.format(LG=lg.upper())}
+    if held is not None:
+        reason = held
+    elif not sc:
+        reason = "A matching forecast is not available for this line yet."
+    elif not lean and mkc and lean_of(sc, q.get("l")):
+        reason = "The market already prices the model's preferred side at least as highly."
+    elif not lean:
+        reason = "The forecast does not give a clear direction at this line."
+    else:
+        reason = "A published grade is not available for this forecast yet."
+    hold = None if grade else {"label": HOLD_LABEL, "reason": reason}
     line = q.get("l")
     v = view.get(m.get("k")) or {}
     a = (v.get("lines") or {}).get(line_key(line)) if line is not None else None
@@ -359,7 +369,7 @@ def record_of(lg, doc, m, q, view):
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
                      "validation": {"kind": "research", "label": "Research grade" if grade else HOLD_LABEL,
-                                    "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else held or HOLD_DETAIL.format(LG=lg.upper())}},
+                                    "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else reason}},
            "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None},
            "market_chance": {"p_over": mkc["po"], "p_under": mkc["pu"], "sources": mkc.get("n")} if mkc else None,
            "state": {"kind": "ok", "reason": None}}

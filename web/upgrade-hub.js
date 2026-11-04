@@ -77,6 +77,12 @@ export function mount(C) {
   }
   const openPlayers = new Set();
   const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
+  function sideCell(r) {
+    const s=r.scout;
+    if(s.side) return `<div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div>`;
+    const probabilities=num(s.p_over)&&num(s.p_under);
+    return `<div class="h-direction-options" aria-label="Model probabilities, no recommendation">${probabilities?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div><button class="h-side-reason" data-hub="expand" data-id="${esc(key(r))}" title="${esc(s.hold?.reason||'No recommendation published for this line')}">${probabilities?'Compare sides':'View details'} ↗</button>`;
+  }
   function row(r, group=null) {
     const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r));
     const choose=!side||!r.offer[side]?.offered;
@@ -86,7 +92,7 @@ export function mount(C) {
     return `<tr data-record="${k}" class="${H.expanded===key(r)?'is-expanded':''}"><td><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${H.expanded===key(r)}"><span class="h-avatar">${esc(r.player.name.slice(0,2).toUpperCase())}</span><span><b>${esc(r.player.name)}</b><small>${esc(r.player.team)} <i>${SPORTS[r.sport]}</i></small></span><span class="h-chevron" aria-hidden="true">${H.expanded===key(r)?'−':'+'}</span></button><div class="h-match">${esc(r.event.label)} · ${esc(when(r.event.start_utc))}</div>${group?.length>1?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(boardPlayerKey(r))}" aria-expanded="${openPlayers.has(boardPlayerKey(r))}">${openPlayers.has(boardPlayerKey(r))?'Hide':'View'} ${group.length} props <span>${esc([...new Set(group.map(x=>x.market.period_label))].join(' · '))}</span></button>`:''}</td>
       <td><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></td><td class="h-number"><b>${esc(r.offer.line)}</b><small>${esc(r.offer.platform_label)}</small></td>
-      <td class="h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td><b>${side?side==='over'?'Over':'Under':'No side'}</b><small>${pct(s.p_side)}</small></td>
+      <td class="h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td>${sideCell(r)}</td>
       <td>${cell(r,5)}</td><td>${cell(r,10)}</td><td>${cell(r,20)}</td>
       <td><button class="h-book" data-hub="expand" data-id="${k}">${alternatives.length?`${alternatives.length} other ${alternatives.length===1?'line':'lines'}`:'Research'}${different(r)?'<i>Lines differ</i>':''}</button></td>
       <td><span class="h-grade ${s.hold?'held':''}">${esc(label)}</span><small title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small>${unavailable?`<small class="h-warning">${esc(state)}</small>`:''}</td>
@@ -103,8 +109,7 @@ export function mount(C) {
     $('hub-count').textContent=`${players.length.toLocaleString()} players · ${list.length.toLocaleString()} upcoming lines`;
     const issues=allowed().filter(s=>R.boards[s].error);
     const stale=allowed().flatMap(s=>Object.entries(R.boards[s].feeds||{}).filter(([,f])=>f.state!=='ok').map(([p,f])=>SPORTS[s]+' '+(C.PLATFORMS[p]?.label||p)+': '+(f.state||'unavailable')));
-    const held= [...new Set(list.filter(r=>r.scout.hold).map(r=>SPORTS[r.sport]))];
-    $('hub-health').innerHTML=(V2&&held.length?`<p>${esc(held.join(' / '))}: official grades are held by the accuracy check. History and lines remain available for research.</p>`:'')+(issues.length?`<p class="h-warning">${issues.map(s=>SPORTS[s]).join(', ')} could not refresh. Saved rows are labelled and cannot be added here. <button data-hub="refresh">Retry</button></p>`:'')
+    $('hub-health').innerHTML=(issues.length?`<p class="h-warning">${issues.map(s=>SPORTS[s]).join(', ')} could not refresh. Saved rows are labelled and cannot be added here. <button data-hub="refresh">Retry</button></p>`:'')
       +(stale.length?`<details class="h-warning"><summary>${stale.length} ${stale.length===1?'source needs':'sources need'} a fresh update</summary><p>${esc(stale.join(' · '))}. Affected offers cannot be added until the source recovers.</p></details>`:'')
       +(list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About Sports grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Performance record for stated chances and actual results.</p></details>`:'');
     $('hub-rows').innerHTML=players.slice(H.page*size,(H.page+1)*size).map(group=>row(group[0],group)+(openPlayers.has(boardPlayerKey(group[0]))?group.slice(1).map(r=>row(r)).join(''):'')).join('');
