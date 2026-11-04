@@ -84,20 +84,10 @@ def env(monkeypatch, tmp_path):
     fx.lol.close()
 
 
-def cors(route):
-    """The page reaches the stub sports service across origins, as it does the real one, and the stub sends no CORS headers."""
-    allow = {"access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "GET, POST, OPTIONS"}
-    if route.request.method == "OPTIONS":
-        return route.fulfill(status=204, headers=allow)
-    r = route.fetch()
-    return route.fulfill(response=r, headers={**r.headers, **allow})
-
-
 def context(browser, env, size=DESK, user=OWNER):
     c = browser.new_context(viewport=size)
     c.route("https://fonts.*/**", lambda r: r.abort())
     c.route("https://a.espncdn.com/**", lambda r: r.abort())
-    c.route(env.sports.base + "/**", cors)
     c.add_cookies([{"name": whop_auth.COOKIE, "value": f"good-{user}", "url": env.url}])
     return c
 
@@ -106,7 +96,6 @@ def context(browser, env, size=DESK, user=OWNER):
 def ctx(browser, env):
     c = context(browser, env)
     yield c
-    c.unroute_all(behavior="wait")  # finish fixture proxy replies before disposing their responses
     c.close()
 
 

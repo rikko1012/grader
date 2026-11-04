@@ -177,6 +177,19 @@ class Sports:
             def log_message(self, *a):
                 pass
 
+            def end_headers(self):
+                # This isolated local fixture is called directly by browser tests.
+                # Native CORS avoids an asynchronous route.fetch/fulfill proxy at teardown.
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Headers", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                super().end_headers()
+
+            def do_OPTIONS(self):
+                self.send_response(204)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
             def reply(self, code, doc, extra=None):
                 body = json.dumps(doc).encode()
                 self.send_response(code)
