@@ -69,12 +69,20 @@ export function mount(C) {
     if(H.section==='board')$('hub-title').textContent=H.sport==='all'?'Player props':SPORTS[H.sport]+' player props';
     document.querySelectorAll('.h-sidebar [data-hub="sport"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===H.sport&&H.section==='board'?'page':'false'));
   }
+  /* ---- board rows: one compact, aligned line per player (owner 2026-11-04: "more organized like classic but better") ---- */
+  const sideWord = sd => sd==='over'?'Over':'Under';
+  const countOf = (t,sd) => sd==='over'?t.over:t.under;
+  const fewNote = (t,n) => t.n<n?`<small class="h-few">${t.n} ${t.n===1?'game':'games'}</small>`:'';
   function cell(r,n) {
     const t=C.tallies(r)['l'+n], side=r.scout.side;
-    if(!t||!t.n) return `<span class="h-hit empty" title="No matching completed-game history for this period">—</span>`;
-    if(!side) return `<span class="h-hit h-hit-both" title="Last ${t.n} results at this line: ${t.over} Over, ${t.under} Under, ${t.push||0} pushes. Historical counts, not a recommendation."><span>O <b>${t.over}</b><small>/${t.n}</small></span><span>U <b>${t.under}</b><small>/${t.n}</small></span></span>`;
-    const hit=side==='over'?t.over:t.under, rate=hit/t.n;
-    return `<span class="h-hit ${V2?'h-tone-'+Math.min(6,Math.floor(rate*7)):rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${Math.round(rate*100)}%" title="${hit} hits, ${t.push||0} pushes in ${t.n}; historical results at this line">${hit}<small>/${t.n}</small></span>`;
+    if(!t||!t.n) {
+      // the shared CS2 pass has not reached this row yet: a quiet placeholder that fills in when it arrives
+      if(n!==10&&C.hitsPending(r)) return `<span class="h-hit h-hit-wait" role="img" aria-label="L${n} loading"></span>`;
+      return `<span class="h-hit empty" title="No completed results at this line">—</span>`;
+    }
+    if(!side) return `<span class="h-hit h-hit-both" title="Last ${t.n} results at this line: ${t.over} Over, ${t.under} Under, ${t.push||0} pushes. Historical counts, not a recommendation."><span>O <b>${t.over}</b><small>/${t.n}</small></span><span>U <b>${t.under}</b><small>/${t.n}</small></span></span>${fewNote(t,n)}`;
+    const hit=countOf(t,side), rate=hit/t.n;
+    return `<span class="h-hit ${V2?'h-tone-'+Math.min(6,Math.floor(rate*7)):rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${rate.toFixed(3)}" title="${hit} ${sideWord(side)} of the last ${t.n} at this line, ${t.push||0} pushes">${hit}<small>/${t.n}</small></span>${fewNote(t,n)}`;
   }
   const openPlayers = new Set();
   const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
@@ -82,22 +90,51 @@ export function mount(C) {
     const s=r.scout;
     if(s.side) return `<div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div>`;
     const probabilities=num(s.p_over)&&num(s.p_under);
-    return `<div class="h-direction-options" aria-label="Model probabilities, no recommendation">${probabilities?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div><button class="h-side-reason" data-hub="expand" data-id="${esc(key(r))}" title="${esc(s.hold?.reason||'No recommendation published for this line')}">${probabilities?'Compare sides':'View details'} ↗</button>`;
+    return `<div class="h-direction-options" aria-label="Model probabilities, no recommendation">${probabilities?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div><button class="h-side-reason" data-hub="expand" data-id="${esc(key(r))}" title="${esc(s.hold?.reason||'No recommendation published for this line')}">${probabilities?'Compare sides':'View details'}</button>`;
   }
+  /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters say Research grade */
+  function gradeChip(r) {
+    const s=r.scout;
+    if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
+    if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>${['nba','nfl'].includes(r.sport)?'<small class="h-grade-tag">Research grade</small>':''}`;
+    if(s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span>`;
+    return '';
+  }
+  function priceSummary(q) {
+    const o=C.priceText(q,'over'), u=C.priceText(q,'under');
+    if(o||u) return [o&&'O '+o,u&&'U '+u].filter(Boolean).join(' · ');
+    return C.lineLabel(q)+' line';
+  }
+  /* the real alternatives for this prop: other books and other lines, or this book's own prices when it is the only one */
+  function compareCell(r) {
+    const all=C.siblings(r), others=all.filter(x=>key(x)!==key(r));
+    const lines=[...new Set(all.map(x=>x.offer.line))].sort((a,b)=>a-b), books=new Set(all.map(x=>x.offer.platform));
+    let main, sub;
+    if(!others.length) { main=`${r.offer.platform_label} only`; sub=priceSummary(r); }
+    else {
+      main=lines.length>1?`${lines.length} lines · ${lines[0]}–${lines[lines.length-1]}`:`${books.size} books at ${lines[0]}`;
+      sub=others.slice(0,2).map(x=>`${x.offer.platform_label} ${x.offer.line}${x.market.line_type!=='standard'?' '+C.lineLabel(x):''}`).join(' · ')+(others.length>2?` · +${others.length-2}`:'');
+    }
+    return `<button class="h-compare${different(r)?' differ':''}" data-hub="books" data-id="${esc(key(r))}" aria-label="Compare books and lines for ${esc(r.player.name)}: ${esc(main)}, ${esc(sub)}"><b>${esc(main)}</b><small>${esc(sub)}</small></button>`;
+  }
+  const initials = name => esc(String(name||'').replace(/[^\p{L}\p{N}]/gu,'').slice(0,2).toUpperCase()||'?');
   function row(r, group=null) {
-    const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r));
+    const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r);
     const choose=!side||!r.offer[side]?.offered;
-    const alternatives=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform);
-    const state=unavailableReason(r), unavailable=!!state;
-    const label=s.hold?'Research':s.grade?(['nba','nfl'].includes(r.sport)?s.grade+' · Research grade':s.grade):'Lean';      // classic sports: every letter says Research grade
-    return `<tr data-record="${k}" class="${H.expanded===key(r)?'is-expanded':''}"><td><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
-      <td><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${H.expanded===key(r)}"><span class="h-avatar">${esc(r.player.name.slice(0,2).toUpperCase())}</span><span><b>${esc(r.player.name)}</b><small>${esc(r.player.team)} <i>${SPORTS[r.sport]}</i></small></span><span class="h-chevron" aria-hidden="true">${H.expanded===key(r)?'−':'+'}</span></button><div class="h-match">${esc(r.event.label)} · ${esc(when(r.event.start_utc))}</div>${group?.length>1?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(boardPlayerKey(r))}" aria-expanded="${openPlayers.has(boardPlayerKey(r))}">${openPlayers.has(boardPlayerKey(r))?'Hide':'View'} ${group.length} props <span>${esc([...new Set(group.map(x=>x.market.period_label))].join(' · '))}</span></button>`:''}</td>
-      <td><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></td><td class="h-number"><b>${esc(r.offer.line)}</b><small>${esc(r.offer.platform_label)}</small></td>
-      <td class="h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td>${sideCell(r)}</td>
-      <td>${cell(r,5)}</td><td>${cell(r,10)}</td><td>${cell(r,20)}</td>
-      <td><button class="h-book" data-hub="expand" data-id="${k}">${alternatives.length?`${alternatives.length} other ${alternatives.length===1?'line':'lines'}`:'Research'}${different(r)?'<i>Lines differ</i>':''}</button></td>
-      <td><span class="h-grade ${s.hold?'held':''}">${esc(label)}</span><small title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small></td>
-      <td><button class="h-add ${on||choose?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':choose?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':choose?'Side':'+'}</button></td></tr>${H.expanded===key(r)?'<tr class="h-detail-row"><td colspan="12"><div id="hub-detail" aria-live="polite"></div></td></tr>':''}`;
+    const unavailable=!!unavailableReason(r);
+    const bk=boardPlayerKey(r), propsOpen=openPlayers.has(bk);
+    const toggle=group?.length>1?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(bk)}" aria-expanded="${propsOpen}" title="${esc(group.map(x=>x.market.stat_label+' '+x.offer.line+' · '+x.market.period_label).join('\n'))}">${propsOpen?'Hide':'View'} ${group.length} props<span aria-hidden="true">${propsOpen?'▴':'▾'}</span></button>`:'';
+    const match=`${r.event.label} · ${when(r.event.start_utc)}`;
+    return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="${open?'is-expanded':''}${group?'':' is-sub'}">
+      <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
+      <td class="h-c-player"><div class="h-pcell"><span class="h-avatar" aria-hidden="true">${initials(r.player.name)}</span><div class="h-pinfo"><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${open}"><b>${esc(r.player.name)}</b><small>${esc(r.player.team)}<i>${SPORTS[r.sport]}</i></small></button><div class="h-match" title="${esc(match)}">${esc(match)}</div>${toggle}</div></div></td>
+      <td class="h-c-market"><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></td>
+      <td class="h-c-line h-number"><b>${esc(r.offer.line)}</b><small>${esc(r.offer.platform_label)}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
+      <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td class="h-c-side">${sideCell(r)}</td>
+      <td class="h-c-l5">${cell(r,5)}</td><td class="h-c-l10">${cell(r,10)}</td><td class="h-c-l20">${cell(r,20)}</td>
+      <td class="h-c-compare">${compareCell(r)}</td>
+      <td class="h-c-grade"><div class="h-grade-cell">${gradeChip(r)}<small class="h-seen" title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small></div></td>
+      <td class="h-c-add"><button class="h-add ${on||choose?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':choose?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':choose?'Side':'+'}</button></td></tr>${open?'<tr class="h-detail-row"><td colspan="12"><div id="hub-detail" class="h-card" aria-live="polite"></div></td></tr>':''}`;
   }
   function paintBoard() {
     if(!isOpen()||H.section!=='board') return;
@@ -140,7 +177,12 @@ export function mount(C) {
     const current=rec(H.detail),shown=H.detailDoc?.record;
     if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;}
     H.loading=false; paintBoard(); checkAlerts(); if(V2&&H.section==='games')paintGames();
-    if(allowed().includes('cs2')) { await C.loadHits(); paintBoard(); }
+    if(allowed().includes('cs2')) { await C.loadHits(); paintBoard(); pollHits(); }
+  }
+  function pollHits() {
+    clearTimeout(H.hitsTimer);
+    if(C.R.hitsComplete||!allowed().includes('cs2'))return;
+    H.hitsTimer=setTimeout(async()=>{if(isOpen()&&!document.hidden){await C.loadHits();if(H.section==='board')paintBoard();}pollHits();},10500);
   }
   async function savePreferences() {
     if(H.saveBusy) {H.saveAgain=true;return;}
@@ -220,47 +262,91 @@ export function mount(C) {
     } catch(e){if(seq!==H.detailSeq)return;H.detailState='error';}
     paintDetail();
   }
+  /* ---- the player card, in classic's order: headline numbers, the chart, head-to-head, grouped stats, then the lines and the add ---- */
+  const atLine = (v,line) => v===line?'Push':v>line?'Over':'Under';
+  const tallyOf = (list,line) => ({n:list.length,over:list.filter(g=>g.value>line).length,under:list.filter(g=>g.value<line).length,push:list.filter(g=>g.value===line).length});
+  /* a window from the loaded games when they cover it, else the board's own count (the newest results, n may be below the window) */
+  function windowTally(r,all,n) {
+    const list=all.slice(0,n), saved=C.tallies(r)['l'+n];
+    if(list.length&&(list.length>=n||!saved||!saved.n))return tallyOf(list,r.offer.line);
+    return saved&&saved.n?saved:null;
+  }
   /* head-to-head vs tonight's opponent at tonight's line (owner 2026-11-04: as on the classic CS2 card); past results, not a chance */
   function h2hHtml(hh,line,side) {
     if(!hh||!hh.opponent)return '';
-    if(!hh.n)return `<section class="h-h2h"><h3>Head-to-head vs ${esc(hh.opponent)}</h3><p class="h-history-note">No past meetings with ${esc(hh.opponent)} in this player's saved results.</p></section>`;
-    const hit=side==='over'?hh.over:hh.under;
-    return `<section class="h-h2h"><h3>Head-to-head vs ${esc(hh.opponent)}</h3><div class="h-history-summary"><div><b>${hit}<em>/${hh.n}</em></b><span>${side==='over'?'Over':'Under'} ${esc(line)} vs ${esc(hh.opponent)}${hh.push?` · ${hh.push} pushes`:''}</span></div><div><b>${num(hh.avg)?hh.avg.toFixed(1):'—'}</b><span>Average in ${hh.n} meeting${hh.n===1?'':'s'}</span></div></div>
-      <table class="h-h2h-table"><thead><tr><th>Date</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${hh.series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.value)}</td><td>${g.value===line?'Push':g.value>line?'Over':'Under'}</td></tr>`).join('')}</tbody></table>
+    const head=`<div class="h-sec-head"><h4>Head-to-head vs ${esc(hh.opponent)}</h4></div>`;
+    if(!hh.n)return `<section class="h-h2h">${head}<p class="h-history-note">No past meetings with ${esc(hh.opponent)} in this player's saved results.</p></section>`;
+    return `<section class="h-h2h">${head}<div class="h-mini-tiles"><div><b>${countOf(hh,side)}<em>/${hh.n}</em></b><span>${sideWord(side)} ${esc(line)}${hh.push?` · ${hh.push} ${hh.push===1?'push':'pushes'}`:''}</span></div><div><b>${num(hh.avg)?hh.avg.toFixed(1):'—'}</b><span>Average in ${hh.n} ${hh.n===1?'meeting':'meetings'}</span></div></div>
+      <table class="h-h2h-table"><thead><tr><th>Date</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${hh.series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table>
       <p class="h-history-note">Past meetings at today's line. Not a predicted chance.</p></section>`;
+  }
+  const factText = v => typeof v==='object'?JSON.stringify(v):String(v);
+  /* every saved measure under its own heading (context rows carry a group); nothing is computed here except the map split of loaded games */
+  function statsHtml(r,doc,all) {
+    const rows=(doc?.context?.rows||[]).filter(f=>f.label&&f.value!=null), groups=new Map();
+    for(const f of rows){const g=typeof f.group==='string'&&f.group?f.group:'More measures';if(!groups.has(g))groups.set(g,[]);groups.get(g).push(f);}
+    const block=(title,body,cls='')=>`<section class="h-stat-group${cls}"><h5>${esc(title)}</h5>${body}</section>`;
+    const blocks=[...groups].map(([g,list])=>block(g,`<dl>${list.map(f=>`<div><dt>${esc(f.label)}</dt><dd>${esc(factText(f.value))}</dd></div>`).join('')}</dl>`));
+    const maps=new Map();
+    all.forEach(g=>(g.maps||[]).forEach((name,i)=>{if(!name||!g.values||!num(g.values[i]))return;const e=maps.get(name)||{n:0,t:0};e.n++;e.t+=g.values[i];maps.set(name,e);}));
+    if(maps.size)blocks.push(block(`By map · last ${all.length} ${all.length===1?'series':'series'}`,`<dl>${[...maps].sort((a,b)=>b[1].n-a[1].n).map(([name,e])=>`<div><dt>${esc(name)} <small>${e.n} played</small></dt><dd>${(e.t/e.n).toFixed(1)}</dd></div>`).join('')}</dl>`));
+    const drivers=(doc?.context?.drivers||[]).filter(Boolean);
+    if(drivers.length)blocks.push(block('What moved this forecast',`<ul>${drivers.map(d=>`<li>${esc(factText(d))}</li>`).join('')}</ul>`));
+    const s=r.scout, method=s.validation?.detail||s.stake_reason, notes=[];
+    if(Array.isArray(s.range80))notes.push(`<div><dt>80% range</dt><dd>${esc(s.range80[0])} to ${esc(s.range80[1])}</dd></div>`);
+    if(doc?.forecast?.model_version||s.model_version)notes.push(`<div><dt>Model</dt><dd>${esc(doc?.forecast?.model_version||s.model_version)}</dd></div>`);
+    if(notes.length||method)blocks.push(block('Forecast',`${notes.length?`<dl>${notes.join('')}</dl>`:''}${method?`<p>${esc(method)}</p>`:''}`));
+    if(!blocks.length)return '';
+    return `<section class="h-stat-library"><div class="h-sec-head"><h4>Player stats</h4><small>${rows.length} ${rows.length===1?'measure':'measures'}${groups.size?' · '+groups.size+' '+(groups.size===1?'group':'groups'):''}</small></div><div class="h-stat-groups">${blocks.join('')}</div></section>`;
+  }
+  function drawChart() {
+    const box=$('hub-detail'), el=box?.querySelector('[data-hub-chart]'), r=rec(H.detail);
+    if(!el||!r)return;
+    const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN);
+    if(list.length)el.innerHTML=C.chartSvg(list,r.offer.line,H.histSide,Math.max(260,Math.round(el.clientWidth)||560));
   }
   function paintDetail() {
     const box=$('hub-detail'),r=rec(H.detail);if(!box||!r)return;
     const restoreFocus=focusAfter(box);
-    const side=H.histSide, line=r.offer.line, doc=H.detailDoc;
-    const series=(doc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN);
-    const over=series.filter(g=>g.value>line).length,under=series.filter(g=>g.value<line).length,push=series.filter(g=>g.value===line).length;
-    const tally=series.length?{n:series.length,over,under,push}:C.tallies(r)['l'+H.histN];
-    const sortedValues=series.map(g=>g.value).sort((a,b)=>a-b), middle=Math.floor(sortedValues.length/2);
-    const median=sortedValues.length?(sortedValues.length%2?sortedValues[middle]:(sortedValues[middle-1]+sortedValues[middle])/2):null;
-    const count=tally?(side==='over'?tally.over:tally.under):null;
+    const side=H.histSide, line=r.offer.line, doc=H.detailDoc, s=r.scout;
+    const all=(doc?.history?.series||[]).filter(g=>num(g.value)), series=all.slice(0,H.histN);
+    const sorted=series.map(g=>g.value).sort((a,b)=>a-b), mid=Math.floor(sorted.length/2);
+    const median=sorted.length?(sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2):null;
     const eligible=H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
     const quotes=C.siblings(r), quoteText=(q,sd)=>{
       const o=q.offer[sd];
-      if(!o.offered)return 'Unavailable';
+      if(!o.offered)return 'Not offered';
       const kind=C.PLATFORMS[q.offer.platform]?.kind;
       if(kind==='decimal')return num(o.payout)?o.payout.toFixed(2):'Odds unavailable';
       if(num(o.price))return o.price.toFixed(2);
       if(num(o.payout)&&o.payout!==1)return o.payout.toFixed(2)+'× modifier';
-      return q.market.line_type==='standard'?'Standard':q.market.line_type;
+      return q.market.line_type==='standard'?'Standard':C.lineLabel(q);
     };
-    const facts=(doc?.context?.rows||[]).filter(f=>f.label && f.value!=null);
     const playerMarkets=[...new Map(H.records.filter(x=>x.sport===r.sport&&x.player.key===r.player.key&&x.event.id===r.event.id&&x.offer.platform===r.offer.platform).map(x=>[x.market.stat+'|'+x.market.period,x])).values()];
-    box.innerHTML=`<div class="h-detail-head"><div><h3>${esc(r.player.name)} <span>${esc(r.market.stat_label)}</span></h3><p>${esc(r.market.period_label)} · ${esc(r.event.label)}</p></div><button data-hub="research" data-id="${esc(key(r))}">Full player research ↗</button></div>
+    const chance=C.chanceOf(r,side), market=doc?.market?.available?(side==='under'?doc.market.p_under:doc.market.p_over):null;
+    const tile=(value,label,extra='',cls='')=>`<div class="h-tile${cls}"><b>${value}</b><span>${label}</span>${extra}</div>`;
+    const hitTiles=[5,10,20].map(n=>{
+      const t=windowTally(r,all,n), pending=!t&&n!==10&&C.hitsPending(r);
+      return tile(t?`${countOf(t,side)}<em>/${t.n}</em>`:pending?'<i class="h-hit-wait" aria-hidden="true"></i>':'—',`L${n} · ${sideWord(side)} ${esc(line)}`,t&&t.n<n?`<small>${t.n} ${t.n===1?'game':'games'}${t.push?` · ${t.push} ${t.push===1?'push':'pushes'}`:''}</small>`:t?.push?`<small>${t.push} ${t.push===1?'push':'pushes'}</small>`:'',H.histN===n?' is-window':'');
+    }).join('');
+    const pick=s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:'';
+    const chart=H.detailState==='loading'?'<p class="h-detail-loading">Loading this player’s saved results…</p>'
+      :H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`
+      :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span></div><details class="h-history-table"><summary>View dates and results</summary><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table></details>`
+      :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
+    box.innerHTML=`<div class="h-card-head"><div class="h-card-id"><h3>${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${esc(r.player.team)} · ${esc(r.event.label)}${r.event.competition?` · ${esc(r.event.competition)}`:''} · ${esc(when(r.event.start_utc))} · ${esc(r.offer.platform_label)} ${esc(line)}${r.offer.moved_from!=null?` · moved from ${esc(r.offer.moved_from)}`:''}</p></div>
+      <div class="h-card-links"><button data-hub="drawer" data-id="books">Books &amp; prices ↗</button><button data-hub="drawer" data-id="genie">Ask the Genie ↗</button></div></div>
       ${playerMarkets.length>1?`<nav class="h-player-markets" aria-label="Player markets">${playerMarkets.map(x=>`<button data-hub="player-market" data-id="${esc(key(x))}" aria-pressed="${key(x)===key(r)}">${esc(x.market.stat_label)} <b>${esc(x.offer.line)}</b><small>${esc(x.market.period_label)}</small></button>`).join('')}</nav>`:''}
-      <div class="h-detail-grid"><section class="h-history-panel"><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sd==='over'?'Over':'Under'} ${esc(line)}</button>`).join('')}</div><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div>
-      <div class="h-history-summary"><div><b>${tally?`${count}<em>/${tally.n}</em>`:'—'}</b><span>Past results ${side} ${esc(line)}${tally?.push?` · ${tally.push} pushes`:''}</span></div><div><b>${series.length?(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1):'—'}</b><span>Average · ${series.length||'no'} games loaded</span></div><div><b>${num(r.scout.projection)?r.scout.projection.toFixed(1):'—'}</b><span>Saved projection</span></div>${V2?`<div><b>${median==null?'—':median.toFixed(1)}</b><span>Median · same ${series.length} games</span></div>`:''}</div>
-      ${H.detailState==='loading'?'<p class="h-detail-loading">Loading this player’s saved results…</p>':H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`:series.length?`<div class="h-history-chart" role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}">${C.chartSvg(series,line,side,560)}</div><details class="h-history-table"><summary>View dates and results</summary><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${g.value===line?'Push':g.value>line?'Over':'Under'}</td></tr>`).join('')}</tbody></table></details>`:'<p class="h-detail-loading">Game-by-game results are not available for this market. Any hit count above comes from its saved board summary.</p>'}
-      <p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p></section>
-      <section class="h-line-shop"><div class="h-shop-head"><h3>Compare lines</h3><small>Same event · stat · period</small></div><table><thead><tr><th>Platform / line</th><th>Over</th><th>Under</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td></tr>`).join('')}</tbody></table><p>Choose a line to recalculate its historical results. A lower Over line or higher Under line can help, but payouts and availability also matter.</p>
-      <div class="h-detail-action"><span>${r.scout.hold?'Research estimate':esc(C.verdictText(r,side))} · ${pct(C.chanceOf(r,side))}</span><button data-hub="detail-add" ${eligible?'':'disabled'}>${C.onSlip(r)?'Review saved slip':`Add ${side==='over'?'Over':'Under'} ${esc(line)} · ${esc(r.offer.platform_label)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}${!r.offer[side].offered?'<small>This side is not offered on the selected platform.</small>':''}</div></section></div>
-      ${h2hHtml(doc?.h2h,line,side)}
-      ${facts.length?`<details class="h-stat-library" open><summary>Player stats & matchup <span>${facts.length} available measures</span></summary><dl>${facts.map(f=>`<div><dt>${esc(f.label)}</dt><dd>${esc(typeof f.value==='object'?JSON.stringify(f.value):f.value)}</dd></div>`).join('')}</dl></details>`:''}`;
+      <div class="h-card-top"><div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)} ${esc(line)}</button>`).join('')}</div>
+        <div class="h-history-summary">${hitTiles}${tile(num(s.projection)?esc(s.projection.toFixed(1)):'—','Saved projection')}${tile(chance==null?'—':pct(chance),`Forecast chance · ${sideWord(side)} ${esc(line)}`,pick?`<div class="h-tile-pick">${pick}</div>`:'',' is-chance')}${market!=null?tile(pct(market),`Market chance · ${esc(doc.market.source||'market')}`):''}</div></div>
+      <div class="h-card-grid${doc?.h2h?.opponent?'':' single'}"><section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
+        ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
+        ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p></section>
+        ${h2hHtml(doc?.h2h,line,side)}</div>
+      ${statsHtml(r,doc,all)}
+      <section class="h-line-shop"><div class="h-sec-head"><h4>Compare lines</h4><small>Same event · stat · period</small></div><div class="h-shop-grid"><div class="h-scroll-x"><table><thead><tr><th>Platform / line</th><th>Over</th><th>Under</th><th>Scout</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td></tr>`).join('')}</tbody></table></div>
+        <div class="h-detail-action"><p>Choose a line to recount its past results. A lower Over line or a higher Under line can help; payouts and availability also matter.</p><span>${s.hold?'Research estimate':esc(C.verdictText(r,side))} · ${pct(chance)}</span><button data-hub="detail-add" ${eligible?'':'disabled'}>${C.onSlip(r)?'Review saved slip':`Add ${sideWord(side)} ${esc(line)} · ${esc(r.offer.platform_label)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}${!r.offer[side].offered?'<small>This side is not offered on the selected platform.</small>':''}</div></div></section>`;
+    drawChart();
     restoreFocus();
   }
   function paintPicks() {
@@ -466,7 +552,9 @@ export function mount(C) {
     expand,'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id;paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
     'detail-add'(){const r=rec(H.detail);if(!r||H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;if(C.onSlip(r))return C.openTray();C.addLeg(r,H.histSide);refreshSlip();},
     research(id){const r=rec(id);if(r)C.research(r);else C.say('This offer is no longer on the board. Refresh to see current lines.');},
-    books(id){const r=rec(id);if(r)C.research(r,'books');},
+    // the card already shows the overview, history and stats, so its drawer keeps only what the card does not
+    books(id){const r=rec(id);if(r)C.research(r,'books',['books','genie']);},
+    drawer(tab){const r=rec(H.detail);if(r)C.research(r,tab==='genie'?'genie':'books',['books','genie'],H.histSide);},
     add(id){const r=rec(id);if(!r)return;if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return C.openTray();if(!r.scout.side||!r.offer[r.scout.side]?.offered)return C.research(r);C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
@@ -494,7 +582,7 @@ export function mount(C) {
     <div class="h-center"><header class="h-top"><div><span class="h-eyebrow">1TIME SCOUT / RESEARCH</span><h1 id="hub-title">Player props</h1></div><div class="h-top-actions"><details class="h-tools-menu"><summary>More tools</summary><nav><a href="/?view=classic#moneylines">Moneylines</a><a href="/?view=classic#one">Single prop grader</a><a href="/?view=classic#matches">Match research</a><button data-hub="close">Classic board</button></nav></details><button data-hub="close" class="h-classic">Classic board ↗</button></div></header>
       <section id="hub-board-section"><div id="hub-sports" class="h-sports" role="group" aria-label="Sport filter"></div><div id="hub-games" class="h-games" role="group" aria-label="Matchup filter"></div><div class="h-tools"><label class="h-search"><span>Search</span><input id="hub-q" type="search" placeholder="Player, team or game" aria-label="Search all sports"></label><label>Platform<select id="hub-book"><option value="all">All platforms</option><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label><label>Market<select id="hub-stat"><option value="all">All markets</option></select></label><label>Side<select id="hub-side"><option value="all">Both sides</option><option value="over">Over</option><option value="under">Under</option></select></label><label>Sort<select id="hub-sort"><option value="start">Starting soon</option><option value="player">Player name</option><option value="chance">Stated chance</option></select></label><button data-hub="refresh" aria-label="Refresh all boards">↻</button></div>
       <div class="h-quick"><label>Minimum grade<select id="hub-minGrade"><option value="all">Any grade</option>${gradeOrder.slice().reverse().map(g=>`<option value="${g}">${g} or higher</option>`).join('')}</select></label><button id="hub-diff" data-hub="diff" aria-pressed="false">Lines differ</button><button id="hub-watch" data-hub="watched" aria-pressed="false">★ Watchlist</button><select id="hub-views" aria-label="Saved research views"><option>Saved views</option></select><button data-hub="save-view">Save view</button><button data-hub="save-alert">Alert me</button></div><div id="hub-health" class="h-health" role="status"></div>
-      <div class="h-table-title"><h2>Available lines</h2><span id="hub-count"></span><small>History is measured against the displayed line</small></div><div class="h-table-wrap"><table id="hub-table" class="h-table"><thead><tr><th><span class="u-sr">Watch</span></th><th>Player / matchup</th><th>Market</th><th>Line</th><th>Proj.</th><th>Scout side</th><th>L5</th><th>L10</th><th>L20</th><th>Compare</th><th>Scout grade</th><th><span class="u-sr">Add to slip</span></th></tr></thead><tbody id="hub-rows"></tbody></table><p id="hub-empty" class="h-empty">Loading the available boards…</p></div><div id="hub-pagination" class="h-pagination"></div></section>
+      <div class="h-table-title"><h2>Available lines</h2><span id="hub-count"></span><small>History is measured against the displayed line</small></div><div class="h-table-wrap"><table id="hub-table" class="h-table"><thead><tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player">Player / matchup</th><th class="h-c-market">Market</th><th class="h-c-line">Line</th><th class="h-c-proj">Proj.</th><th class="h-c-side">Scout side</th><th class="h-c-l5">L5</th><th class="h-c-l10">L10</th><th class="h-c-l20">L20</th><th class="h-c-compare">Compare</th><th class="h-c-grade">Scout grade</th><th class="h-c-add"><span class="u-sr">Add to slip</span></th></tr></thead><tbody id="hub-rows"></tbody></table><p id="hub-empty" class="h-empty">Loading the available boards…</p></div><div id="hub-pagination" class="h-pagination"></div></section>
       <section id="hub-studio-section" hidden><div class="h-studio-intro"><div><h2>Build across sports. Keep every line.</h2><p>CS2, LoL, NBA and NFL in one account draft. Each platform gets its own entry and its own rule check.</p><span id="hub-studio-sync" class="h-sync"></span></div><button data-hub="section" data-id="board">+ Add player props</button></div>${generatorHtml()}<section id="hub-generated" aria-label="Generated slips"></section><section class="h-working-draft"><h2>Your working draft</h2><p>Open one generated slip here to review, track or copy. Your other generated slips stay saved above.</p><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt; it does not place a bet. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">View tracked picks →</button></div></section><section id="hub-picks-section" hidden><div class="h-section-head"><div><h2>Your picks, with receipts.</h2><p>The line and forecast saved when you tracked. Settled at that line; pushes stay separate.</p></div><div class="h-pick-filters"><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status"><option value="all">All outcomes</option><option value="pending">Pending</option><option value="hit">Won</option><option value="miss">Lost</option><option value="push">Pushed</option><option value="void">Void</option></select></label></div></div><div id="hub-picks-body"></div></section><section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section><section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>
     </div><aside class="h-slip" aria-label="Saved cross-sport slip"><header><div><span class="h-eyebrow">YOUR LINEUP</span><h2>Slip builder <span id="hub-slip-count">0</span></h2></div><button data-hub="receipts" title="View tracked picks">Receipts ↗</button></header><p id="hub-save-status" class="h-sync" aria-live="polite">Saved to your account</p><div id="hub-slip-content" tabindex="-1"></div><footer>One entry per platform. Rechecked against current offers before tracking.</footer></aside>
     <button class="h-mobile-slip" data-hub="tray">Open saved slip</button></section>
@@ -512,7 +600,8 @@ export function mount(C) {
     if(H.saveKind==='alert'){H.alerts=[...H.alerts,v].slice(-12);checkAlerts();}else H.views=[...H.views,v].slice(-12);
     savePreferences();paintBoard();C.say(H.saveKind==='alert'?'Filter alert added for this research screen.':'Research view saved.');
   });
-  $('u-hub').addEventListener('click',e=>{const b=e.target.closest('[data-hub]');if(b&&!b.disabled){e.preventDefault();actions[b.dataset.hub]?.(b.dataset.id,b);}});
+  $('u-hub').addEventListener('click',e=>{const b=e.target.closest('[data-hub]');if(!b||b.disabled)return;if(b.tagName==='TR'&&String(getSelection()||'').trim())return;e.preventDefault();actions[b.dataset.hub]?.(b.dataset.id,b);});
+  let chartWidth=0;window.addEventListener('resize',()=>{const el=document.querySelector('#hub-detail [data-hub-chart]');if(el&&Math.abs(el.clientWidth-chartWidth)>24){chartWidth=el.clientWidth;drawChart();}});
   for(const f of ['q','book','side','sort','stat']) $('hub-'+f).addEventListener(f==='q'?'input':'change',()=>{H[f]=$('hub-'+f).value;H.page=0;paintBoard();});
   $('hub-minGrade').addEventListener('change',()=>{H.minGrade=$('hub-minGrade').value;H.page=0;paintBoard();});
   $('hub-views').addEventListener('change',()=>{const i=$('hub-views').value;if(i==='')return;const v=H.views[Number(i)];if(v){H.minGrade='all';for(const k of filterKeys) if(k in v.filters)H[k]=v.filters[k];H.page=0;paintBoard();}});

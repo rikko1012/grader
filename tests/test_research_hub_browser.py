@@ -119,9 +119,13 @@ def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env)
     assert 'orlo' not in p.locator('#hub-rows').inner_text()
     p.locator('#hub-rows .h-player').first.click()
     p.wait_for_selector('#hub-detail .h-history-chart svg', timeout=15000)
-    p.locator('#hub-detail [data-hub=research]').click()
-    p.wait_for_selector('#u-drawer .u-chart svg', timeout=15000)
-    assert 'past results at this line' in p.locator('#u-drawer').inner_text().lower()
+    # the card shows the overview, history and stats; its drawer keeps only what the card does not (books, the Genie)
+    p.locator('#hub-detail [data-hub=drawer][data-id=books]').click()
+    p.wait_for_selector('#u-drawer[open] .u-tbl', timeout=15000)
+    assert p.locator('#u-drawer [role=tab]').all_inner_texts() == ['Books', 'Ask the Genie']
+    assert p.locator('#u-drawer .u-chart').count() == 0
+    p.locator('#u-drawer [data-u=ptab][data-id=genie]').click()
+    assert 'What would you like to check?' in p.locator('#u-drawer').inner_text()
     p.locator('[data-u=pclose]').click()
     p.locator('.h-classic').click()
     assert p.locator('#u-hub').is_hidden()
@@ -498,6 +502,58 @@ def test_inline_prop_displays_available_player_stats(ctx, env):
     assert 'Points, L5' in facts and '21.4' in facts
     assert 'Points allowed per game to C' in facts and '24.1' in facts
     assert 'Days since last game' in facts
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, size):
+    """L5/L20 use the newest results (n below the window shows its real count), wait quietly for the shared pass,
+    letters are chips, the compare column summarises the real alternatives, the card groups its stats."""
+    first = [True]
+
+    def hits(route):
+        response = route.fetch()
+        d = response.json()
+        rows = d['rows']
+        if first[0]:
+            first[0] = False
+            d = {'rows': {}, 'complete': False}           # the shared pass has not reached any row yet
+        else:
+            for k, v in rows.items():
+                v['l20'] = {'over': 7, 'under': 2, 'push': 0, 'n': 9}
+            d['complete'] = True
+        route.fulfill(response=response, json=d)
+    p = ctx.new_page()
+    p.errors = []
+    p.on('pageerror', lambda e: p.errors.append(str(e)))
+    p.set_viewport_size(size)
+    p.route('**/api/upgrade/hits', hits)
+    p.goto(env.url + '/#all-sports')
+    p.wait_for_selector('#hub-rows tr[data-record]', timeout=30000)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-q').fill('vargo')
+    row = p.locator('#hub-rows tr[data-record]').first
+    p.wait_for_selector('#hub-rows .h-c-l5 .h-hit-wait')
+    assert row.locator('.h-c-l5').inner_text().strip() == ''          # a placeholder, never a dash
+    assert row.locator('.h-c-l10 .h-hit').inner_text().replace('\n', '') == '6/10'
+    p.wait_for_function("!document.querySelector('#hub-rows .h-hit-wait')", timeout=20000)
+    assert row.locator('.h-c-l20 .h-hit').text_content() == '7/9'
+    assert row.locator('.h-c-l20 .h-few').text_content() == '9 games'
+    assert '—' not in row.locator('.h-c-l5').inner_text()
+    assert row.locator('.h-grade.h-grade-b').inner_text() == 'B'
+    assert row.locator('.h-chevron').count() == 0
+    assert row.locator('.h-prop-toggle').inner_text().startswith('View 4 props')
+    compare = row.locator('.h-compare').inner_text()
+    assert '3 lines · 34.5–42.5' in compare and 'PrizePicks 34.5' in compare, compare
+    p.locator('#hub-sports [data-id=nba]').click()
+    p.locator('#hub-q').fill('Karl Anders')
+    nba = p.locator('#hub-rows tr[data-record]').first
+    assert nba.locator('.h-grade').count() == 0 and 'Research estimate' in nba.locator('.h-c-grade').inner_text()
+    nba.locator('.h-player').click()
+    p.wait_for_selector('#hub-detail .h-stat-group h5', timeout=15000)
+    heads = p.locator('#hub-detail .h-stat-group h5').all_inner_texts()
+    assert {'MATCHUP', 'AVERAGES', 'MODEL INPUTS'} <= {h.upper() for h in heads}, heads
+    no_h_scroll(p)
+    assert not p.errors
+
 
 def test_underdog_generation_uses_one_sport_with_enough_games(ctx, env):
     p = hub(ctx, env)

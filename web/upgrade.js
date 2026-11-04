@@ -32,7 +32,7 @@
   };
   const STATUS = { hit: "Hit", miss: "Miss", push: "Push", void: "Void", pending: "Pending" };
   const CHECKS = ["Game not started", "Offer available and unchanged", "Forecast belongs to this event, line and period", "Platform accepts this combination", "No duplicates or conflicts"];
-  const MAX_LEGS = 8, BOARD_KEEP = 45000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, DRAFT_MAX_MS = 86400000;
+  const MAX_LEGS = 8, BOARD_KEEP = 45000, HITS_RETRY = 10000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, DRAFT_MAX_MS = 86400000;
 
   /* ---- requests ---- */
   class ApiError extends Error { constructor(status, doc) { super("api " + status); this.status = status; this.doc = doc; } }
@@ -72,7 +72,7 @@
 
   /* ---- saved records: the workspace board of each sport. One copy per sport, read at most once per BOARD_KEEP ---- */
   const R = {
-    me: null, hits: {}, hitsAt: 0, lines: {},
+    me: null, hits: {}, hitsAt: 0, hitsComplete: false, lines: {},
     boards: Object.fromEntries(Object.keys(SPORTS).map((k) => [k, { at: 0, busy: null, recs: new Map(), props: new Map(), keys: new Map() }]))
   };
   const offerKey = (book, id) => book + "|" + id;
@@ -103,10 +103,16 @@
     return b.busy;
   }
   async function loadHits() {                                     /* CS2 only: a board row carries L10, the shared pass adds L5 and L20 */
-    if (Date.now() - R.hitsAt < BOARD_KEEP) return;
+    if (Date.now() - R.hitsAt < (R.hitsComplete ? BOARD_KEEP : HITS_RETRY)) return;
     R.hitsAt = Date.now();
-    try { R.hits = (await api("hits")).rows || {}; } catch (e) { /* the row keeps its L10 */ }
+    try { const d = await api("hits"); R.hits = d.rows || {}; R.hitsComplete = d.complete !== false; } catch (e) { R.hitsComplete = true; /* the row keeps its L10 */ }
   }
+  /* the shared pass has not reached this CS2 row yet (it fills a slice per request): a quiet placeholder, never a dash */
+  const hitsPending = (rec) => {
+    if (rec.sport !== "cs2") return false;
+    const saved = R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)];
+    return (!R.hitsAt || !R.hitsComplete) && !(saved && saved.line === rec.offer.line);
+  };
   const siblings = (rec) => (R.boards[rec.sport].props.get(propKey(rec)) || [rec]);
   const tallies = (rec) => {
     const h = rec.history || {}, saved = rec.sport === "cs2" ? R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)] || {} : {}, more = saved.line === rec.offer.line ? saved : {};
@@ -615,7 +621,7 @@
   }
 
   /* ---- research drawer ---- */
-  const P = { rec: null, doc: null, state: "idle", tab: "overview", side: "over", histN: 10, seq: 0 };
+  const P = { rec: null, doc: null, state: "idle", tab: "overview", side: "over", histN: 10, seq: 0, only: null };
   const seriesOf = () => (P.doc && P.doc.history ? P.doc.history.series : null);
   function tallyOf(rec, n) {                                      /* past games at this line when they are here, else the board's own count */
     const res = seriesOf(), line = rec.offer.line, saved = tallies(rec)["l" + n];
@@ -626,16 +632,20 @@
   }
   function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
   function chartSvg(results, line, side, w) {
-    const data = results.slice().reverse(), h = 170, m = { l: 30, r: 6, t: 22, b: 24 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
+    /* opponent names in full where they fit; otherwise angled, so a name is never cut to "benche" */
+    const names = results.map((d) => String(d.opponent || "")), longest = Math.max(0, ...names.map((x) => Math.min(x.length, 14)));
+    const slot0 = (w - 36) / Math.max(1, results.length), angled = longest * 6.2 > slot0 - 4;
+    const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 170, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 24 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
     const vals = data.map((d) => d.value), top = Math.max(line, ...vals, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
-    const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = Math.ceil(44 / slot);
+    const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
+    const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
     let out = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`;
     for (let t = 0; t <= top; t += step) out += `<line class="grid" x1="${m.l}" x2="${w - m.r}" y1="${y(t)}" y2="${y(t)}"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${Math.round(t * 10) / 10}</text>`;
     data.forEach((d, i) => {
       const x = m.l + slot * i + (slot - bw) / 2, yv = y(d.value), push = d.value === line, over = d.value > line, cls = push ? "b-push" : (side === "over" ? over : !over) ? "b-hit" : "b-miss";
       out += `<rect class="${cls}" x="${x}" y="${yv}" width="${bw}" height="${Math.max(base - yv, 1)}" rx="3"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${d.value}`)}</title></rect>`;
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
-      if ((data.length - 1 - i) % every === 0) out += `<text x="${x + bw / 2}" y="${h - 8}" text-anchor="middle">${esc(String(d.opponent || "").slice(0, 6))}</text>`;
+      if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 8}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>`;
     });
     return out + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${y(line)}" y2="${y(line)}"/><text class="line-lab" x="${w - m.r}" y="${m.t - 10}" text-anchor="end">Line ${esc(line)}</text></svg>`;
   }
@@ -721,7 +731,7 @@
     if (!box.open || !rec) return;
     const side = P.side, body = P.tab === "genie" ? genieHtml(rec) : P.tab === "history" ? chartHtml(rec, side, true) + mapsHtml() : P.tab === "books" ? booksHtml(rec) : P.tab === "context" ? contextHtml(rec)
       : tilesHtml(rec, side) + chartHtml(rec, side, false) + forecastHtml(rec, side) + sidesHtml(rec, side);
-    const tabs = ["overview", "history", "books", "context", "genie"].map((t) => `<button type="button" role="tab" aria-selected="${P.tab === t}" data-u="ptab" data-id="${t}">${t==='genie'?'Ask the Genie':cap(t)}</button>`).join("");
+    const tabs = (P.only || ["overview", "history", "books", "context", "genie"]).map((t) => `<button type="button" role="tab" aria-selected="${P.tab === t}" data-u="ptab" data-id="${t}">${t==='genie'?'Ask the Genie':cap(t)}</button>`).join("");
     const lines = siblings(rec), distinct = [...new Map(lines.map((o) => [o.offer.line, o])).values()];
     const picker = distinct.length > 1 ? `<span class="u-lines" role="group" aria-label="Lines on this prop">${distinct.map((o) => `<button type="button" aria-pressed="${o.offer.line === rec.offer.line}" data-u="pline" data-id="${esc(offerKey(o.offer.platform, o.offer.offer_id))}">${esc(o.offer.line)}</button>`).join("")}</span>` : `<b class="u-line">${esc(rec.offer.line)}</b>`;
     const refusal = addRefusal(rec, side), inSlip = T.legs.find((l) => l.id === legId(rec, side)), note = started(rec) ? `<p class="u-note">${esc(startWord(rec))} at ${esc(when(rec.event.start_utc))}</p>` : "";
@@ -757,8 +767,10 @@
     } catch (e) { if (seq === P.seq) P.state = "unavailable"; }
     if (seq === P.seq) paintDrawer();
   }
-  function research(rec, tab) {
-    P.rec = rec; P.tab = tab || "overview"; P.side = rec.scout.side || "over";
+  /* only: the tabs to show. The Research hub card already shows the overview, history and context, so its drawer keeps the rest */
+  function research(rec, tab, only, side) {
+    P.only = Array.isArray(only) && only.length ? only : null;
+    P.rec = rec; P.tab = tab || (P.only ? P.only[0] : "overview"); P.side = side || rec.scout.side || "over";
     if (!rec.offer[P.side].offered) P.side = P.side === "over" ? "under" : "over";
     if (!$("u-drawer").open) $("u-drawer").showModal();
     loadLine();
@@ -853,9 +865,9 @@
     'open-leg':id=>openBookLeg(T.legs.find(l=>l.id===id)),
     'open-entry':key=>{const e=entries().find(x=>x.key===key);if(e)openGenerated({platform:e.platform,entry_type:typeOf(e),legs:e.legs});},
     pick(id) { T.openPick = T.openPick === id ? null : id; paintTray(); },
-    ptab(id) { P.tab = id; paintDrawer(); $("u-drawer-body").scrollTop = 0; },
+    ptab(id) { if (P.only && !P.only.includes(id)) { $("u-drawer").close(); return; } P.tab = id; paintDrawer(); $("u-drawer-body").scrollTop = 0; },
     pside(sd) { P.side = sd; paintDrawer(); },
-    pline(k) { const r = R.boards[P.rec.sport].recs.get(k); if (r) research(r, P.tab); },
+    pline(k) { const r = R.boards[P.rec.sport].recs.get(k); if (r) research(r, P.tab, P.only, P.side); },
     hist(n) { P.histN = +n; paintDrawer(); },
     padd() {
       const rec = P.rec, on = T.legs.find((l) => l.id === legId(rec, P.side));
@@ -1194,7 +1206,7 @@
     try {
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
-      HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
+      HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
         research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
