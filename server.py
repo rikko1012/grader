@@ -3964,7 +3964,27 @@ def upgrade_page(body, name):
     hit = _UPGRADE_MEMO.get((id(body), name))
     if hit is not None and hit[0] is body:
         return hit[1]
-    head, tail = b'<link rel="stylesheet" href="/upgrade/upgrade.css">', f'<script src="/upgrade/upgrade.js" data-page="{name}"></script>'.encode()
+    # Runs in the head, before the original board can paint. Classic keeps its
+    # tools and renderers; a failed workspace load always releases the page.
+    head = br'''<style>
+html.scout-boot body{visibility:hidden!important}
+html.scout-boot{background:#101215}
+html.scout-boot::after{content:"Loading your workspace...";position:fixed;inset:0;display:grid;place-items:center;color:#b3becb;font:500 16px system-ui}
+</style><script>
+(function(){
+const root=document.documentElement,q=new URLSearchParams(location.search);
+window.scoutClassic=q.get('view')==='classic'||q.has('slip')||q.has('p')||q.get('bv')==='1';
+window.scoutBootDone=function(){root.classList.remove('scout-boot');clearTimeout(window.scoutBootTimer);};
+const h=location.hash;
+if(!window.scoutClassic&&root.dataset.upgrade!=='sports-results'&&(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|tools|picks|alerts))/.test(h))){
+root.classList.add('scout-boot');window.scoutBootTimer=setTimeout(window.scoutBootDone,8000);
+}
+window.scoutStylesReady=Promise.all(['/upgrade/upgrade.css','/upgrade/hub.css'].map(href=>new Promise(resolve=>{
+const link=document.createElement('link');link.rel='stylesheet';link.href=href;link.onload=link.onerror=resolve;document.head.appendChild(link);
+})));
+})();
+</script>'''
+    tail = f'<script src="/upgrade/upgrade.js" data-page="{name}"></script>'.encode()
     i, j = body.rfind(b"</head>"), body.rfind(b"</body>")
     out = body
     if 0 <= i < j:                                      # a page without its markers goes out as it is

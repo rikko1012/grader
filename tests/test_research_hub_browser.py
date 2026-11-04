@@ -570,3 +570,75 @@ def test_eight_lineups_each_have_requested_number_of_picks(ctx, env, size):
     assert all(len(s['legs']) == size for s in slips)
     assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
     assert not p.errors
+
+
+@pytest.mark.parametrize('size,available', [(2,16),(6,48),(2,6)])
+def test_no_repeat_props_across_generated_batch(ctx,env,size,available):
+    from tests.workspace_fixture import row
+    start=env.rows[0]['start']
+    env.rows[:]=[row(f'pp:{9800+i}', 'prizepicks', f'UniquePlayer{i}', f'Team{i}', f'Other{i}',20.5,'More',.60+i/10000,3000+i,start) for i in range(available)]
+    # Another offer/line for the same prop must not evade the batch restriction.
+    env.rows.append(row('pp:9999','prizepicks','UniquePlayer0','Team0','Other0',21.5,'More',.60,3000,start))
+    env.seed()
+    p=hub(ctx,env)
+    p.locator('.h-sidebar [data-id=studio]').click()
+    for sport in ('lol','nba','nfl'):
+        p.locator(f'#hub-generation-sports input[value={sport}]').uncheck()
+    p.locator('#hub-generation-count').select_option(str(size))
+    p.locator('#hub-generation-repeats').select_option('none')
+    p.locator('#hub-generate').click()
+    p.wait_for_function("!document.querySelector('#hub-generate').disabled",timeout=30000)
+    state=saved_state(p,lambda d:bool(d.get('studio')))
+    batch=state['studio']; legs=[l for s in batch['slips'] for l in s['legs']]
+    identities=[(l['sport'],l['event_id'],l['player_key'],l['stat'],l['period']) for l in legs]
+    assert len(identities)==len(set(identities))
+    assert len(batch['slips'])==min(8,available//size)
+    assert all(len(s['legs'])==size for s in batch['slips'])
+    assert batch['options']['noRepeatProps'] is True
+    if available<size*8:
+        assert 'No props were repeated' in p.locator('#hub-generation-status').inner_text()
+    p.reload();p.wait_for_selector('.h-generated-card')
+    assert 'No repeat props' in p.locator('#hub-generated').inner_text()
+    assert p.locator('#hub-generation-repeats').input_value()=='none'
+    no_h_scroll(p)
+    assert not p.errors
+
+
+@pytest.mark.parametrize('path', ['/', '/lol', '/sports#/board'])
+def test_workspace_boot_hides_classic_while_account_loads(ctx, env, monkeypatch, path):
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    p = ctx.new_page()
+    pending = []
+    p.route('**/api/upgrade/me', lambda route: pending.append(route))
+    p.goto(env.url + path)
+    p.wait_for_function("document.documentElement.classList.contains('scout-boot')")
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'hidden'
+    assert pending
+    pending[0].continue_()
+    p.wait_for_selector('#u-hub:not([hidden])')
+    p.wait_for_function("!document.documentElement.classList.contains('scout-boot')")
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'
+    no_h_scroll(p)
+
+
+@pytest.mark.parametrize('path', ['/?view=classic#board', '/lol?view=classic', '/sports?view=classic#/board'])
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_classic_keeps_tools_and_does_not_reopen_workspace(ctx, env, path, size):
+    p = open_page(ctx, env, path, size)
+    p.wait_for_selector('#u-tray-btn')
+    assert p.locator('#u-hub').is_hidden()
+    if path.startswith('/?'):
+        p.wait_for_selector('#boardout .u-decorated .u-hits', timeout=20000)
+        assert p.locator('#boardout .u-decorated').first.evaluate('(el)=>el.scrollWidth<=el.clientWidth+2')
+    assert not p.locator('html').evaluate("el=>el.classList.contains('scout-boot')")
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'
+    assert p.locator('[data-hub-inert]').count() == 0
+    no_h_scroll(p)
+
+
+def test_failed_workspace_script_restores_classic(ctx, env):
+    p = ctx.new_page()
+    p.route('**/upgrade/upgrade.js', lambda r: r.abort())
+    p.goto(env.url + '/')
+    p.wait_for_function("!document.documentElement.classList.contains('scout-boot')", timeout=12000)
+    assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'

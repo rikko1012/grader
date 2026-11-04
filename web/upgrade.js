@@ -298,7 +298,10 @@
       && (mode!=='balanced'||Math.abs(chanceOf(r,r.scout.side)*100-target)<=tolerance+1e-8))
       .sort((a,b)=>chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)||a.key.localeCompare(b.key));
     if(pool.length<size) throw new Error(`Only ${pool.length} eligible props match these settings. Widen the chance range or include more sports.`);
-    const picked=[], signatures=new Set(), exposure=new Map(), rejected=new Set();
+    const picked=[], signatures=new Set(), exposure=new Map(), rejected=new Set(), usedProps=new Set();
+    // Alternate lines, offer revisions and sides still belong to the same prop.
+    const propKey=r=>JSON.stringify([r.sport,r.event.id,r.player.key,r.market.stat,r.market.period]);
+    const unused=r=>!opts.noRepeatProps||!usedProps.has(propKey(r));
     let checked=0, lastProblem='', examined=0;
     // Bounded search, diversified by player exposure. Each successful candidate is
     // independently checked; no combination's probability is inferred by multiplication.
@@ -306,9 +309,9 @@
       for(const anchor of pool) {
         if(picked.length>=count || checked>=24 || examined>=240) break;
         examined++;
-        const aid=legId(anchor,anchor.scout.side);if(rejected.has(aid))continue;
+        const aid=legId(anchor,anchor.scout.side);if(rejected.has(aid)||!unused(anchor))continue;
         const chosen=[anchor], ev=new Set([anchor.sport+'|'+anchor.event.id]), players=new Set([anchor.sport+'|'+anchor.player.key]);
-        const ranked=pool.filter(r=>r!==anchor&&!rejected.has(legId(r,r.scout.side))).sort((a,b)=>{
+        const ranked=pool.filter(r=>r!==anchor&&unused(r)&&!rejected.has(legId(r,r.scout.side))).sort((a,b)=>{
           const use=(r)=>exposure.get(r.sport+'|'+r.player.key)||0;
           return use(a)-use(b) || (mode==='balanced'?Math.abs(chanceOf(a,a.scout.side)-chanceOf(anchor,anchor.scout.side))-Math.abs(chanceOf(b,b.scout.side)-chanceOf(anchor,anchor.scout.side)):chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)) || a.key.localeCompare(b.key);
         });
@@ -332,11 +335,12 @@
         if(bad.length){bad.forEach(l=>rejected.add(l.id));lastProblem=doc.legs?.[bad[0].id]?.problems?.[0]?.text||'Some current offers failed recheck.';continue;}
         if(!doc.entries?.[platform]?.ok){lastProblem=doc.entries?.[platform]?.problems?.[0]?.text||'A combination failed its platform rules.';continue;}
         picked.push({id:idem(),legs,checked_at:new Date().toISOString(),entry_type:entryType,platform});
+        chosen.forEach(r=>usedProps.add(propKey(r)));
         legs.forEach(l=>{const k=l.sport+'|'+l.player_key;exposure.set(k,(exposure.get(k)||0)+1);});
       }
     }
     return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,
-      note:picked.length<count?lastProblem||'The bounded search found fewer distinct checked combinations with these settings. Widen the chance range, include more sports, or reduce picks per slip.':''};
+      note:picked.length<count?lastProblem||(opts.noRepeatProps?'Not enough unused eligible props could form more valid slips. No props were repeated. Include more sports, widen the chance range, or request fewer slips.':'The bounded search found fewer distinct checked combinations with these settings. Widen the chance range, include more sports, or reduce picks per slip.') :''};
   }
   async function useGenerated(slip) {
     if(!slip||!Array.isArray(slip.legs)||slip.legs.some(l=>!cleanLeg(l)))throw new Error('This saved lineup is invalid. Generate again.');
@@ -919,6 +923,7 @@
       });
     },
     cells(el, r, rec) {
+      el.classList.add("u-decorated");
       const side = r.side === "Less" ? "under" : r.side === "More" ? "over" : null;
       let hit = el.querySelector(":scope > .u-hits-c"), books = el.querySelector(":scope > .u-books-c");
       if (!hit) {
@@ -1184,17 +1189,19 @@
     mountShell();
     (PAGE === "cs2" ? hookCs2 : PAGE === "lol" ? hookLol : hookSports)();     /* on before the first await: a draw in the meantime is not missed */
     try { R.me = await api("me"); } catch (e) { R.me = null; }
-    if (!R.me) { $("u-tray-btn").hidden = true; return; }        /* not a member the API knows: the page stays as it is */
+    if (!R.me) { $("u-tray-btn").hidden = true; window.scoutBootDone?.(); return; }        /* not a member the API knows: the page stays as it is */
     try {
+      await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, tallies, siblings, started,
         research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
+    window.scoutBootDone?.();
     await loadState();
     paintTray();
     if (PAGE === "cs2") startCs2();
     else if (PAGE === "lol") startLol();
     else if (PAGE === "sports") startSports();
   }
-  guard(start)();
+  start().catch(() => { window.scoutBootDone?.(); console.warn("Workspace unavailable; original tools remain available"); });
 })();
