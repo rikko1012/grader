@@ -106,6 +106,7 @@ def context(browser, env, size=DESK, user=OWNER):
 def ctx(browser, env):
     c = context(browser, env)
     yield c
+    c.unroute_all(behavior="wait")  # finish fixture proxy replies before disposing their responses
     c.close()
 
 
