@@ -332,7 +332,7 @@ def test_ui_tokens_off_leaves_the_upgraded_pages_and_hub_css_as_they_were(env, m
     st, body, _ = get(env.base, "/upgrade/hub.css", "good-u1")
     assert st == 200 and body == (ROOT / "web" / "upgrade-hub.css").read_bytes()
     assert get(env.base, "/upgrade/tokens.css", "good-u1")[0] == before[0] == 404
-    assert json.loads(get(env.base, "/api/upgrade/me", "good-u1")[1])["features"]["ui_tokens"] is False
+    assert "ui_tokens" not in json.loads(get(env.base, "/api/upgrade/me", "good-u1")[1])["features"]   # flag off: no key at all
 
 
 def test_ui_tokens_on_adds_only_the_token_sheet_and_its_mark(env, monkeypatch):
@@ -378,3 +378,12 @@ def test_ui_token_sheet_is_the_classic_palette_scoped_with_three_breakpoints():
     selectors = [s.strip() for block in re.findall(r"([^{}]+)\{[^{}]*\}", re.sub(r"@media\([^)]*\)\{", "", body)) for s in top_level(block)]
     assert selectors and all(s.startswith("html[data-ui-tokens]") for s in selectors if s), [s for s in selectors if not s.startswith("html[data-ui-tokens]")]
     assert "min-height:40px" in css and ".h-skip" in css and ".h-account" in css
+
+
+
+def test_member_pages_carry_no_does_not_place_line():
+    """Owner rule (review 2026-11-04): no 'does not place a pick' / 'not a bet' style line on any member page."""
+    import re
+    for name in ("upgrade.js", "upgrade-hub.js", "record.html", "record.js"):
+        text = (ROOT / "web" / name).read_text(encoding="utf-8").lower()
+        assert not re.search(r"does not place|not a bet placement|not financial advice|not betting advice", text), name

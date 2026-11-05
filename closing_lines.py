@@ -288,6 +288,12 @@ def _hltv_key(mid):
     return f"hltv:{m.group(1)}" if m else s or None
 
 
+def is_stale(c):
+    """The saved line's last pre-lock sighting came more than STALE_S before lock (the diagnostics' stale rule)."""
+    lk, ls = _ts(c.get("lock_utc")), _ts(c.get("last_seen_at"))
+    return lk is not None and ls is not None and lk - ls > STALE_S
+
+
 def l10_vs_closing(ser, mids, closing_rows, window=10, platform_label=None):
     """The newest `window` results, each against the closing line saved for that match. None when no game has one."""
     if not ser or not mids or not closing_rows:
@@ -295,8 +301,8 @@ def l10_vs_closing(ser, mids, closing_rows, window=10, platform_label=None):
     by = {}
     for c in closing_rows:
         k = _hltv_key(c.get("event_id"))
-        if k and k not in by and _num(c.get("line")) is not None:
-            by[k] = c["line"]
+        if k and k not in by and _num(c.get("line")) is not None and not is_stale(c):
+            by[k] = c["line"]          # a closing line last seen more than STALE_S before lock is left off, never labelled
     games, over, under, push = [], 0, 0, 0
     for s, mid in list(zip(ser, mids))[:window]:
         cl = by.get(_hltv_key(mid))
@@ -363,8 +369,7 @@ def clv_report(picks_reader, now=None, days=REPORT_DAYS):
     out["closing_saved"] = len(crow)
     idx = {}
     for c in crow:
-        lk, ls = _ts(c["lock_utc"]), _ts(c["last_seen_at"])
-        stale = lk is not None and ls is not None and lk - ls > STALE_S
+        stale = is_stale(c)
         out["closing_stale"] += int(stale)
         base = (c["book"], c["player_key"], c["prop"], str(c["scope"]), c["line_type"])
         for m in {c.get("match_slug"), c.get("settle_slug")} - {None, ""}:
@@ -373,10 +378,13 @@ def clv_report(picks_reader, now=None, days=REPORT_DAYS):
         if st is not None:
             idx.setdefault(base + ("start", int(st // 60)), (c, stale))
     pcon = picks_reader()
+    q = ("SELECT id, book, player, prop, scope, line_type, match_slug, match_start, line, pick, units, test{} FROM picks "
+         "WHERE match_start >= ? AND (test IS NULL OR test != 1) ORDER BY id DESC LIMIT ?")
     try:
-        picks = [dict(r) for r in pcon.execute(
-            "SELECT id, book, player, prop, scope, line_type, match_slug, match_start, line, pick, units, test FROM picks "
-            "WHERE match_start >= ? AND (test IS NULL OR test != 1) ORDER BY id DESC LIMIT ?", (since, REPORT_PICKS_MAX))]
+        try:
+            picks = [dict(r) for r in pcon.execute(q.format(", on_board"), (since, REPORT_PICKS_MAX))]
+        except sqlite3.OperationalError:          # a pick log from before picklog's on_board column
+            picks = [dict(r) for r in pcon.execute(q.format(""), (since, REPORT_PICKS_MAX))]
     finally:
         pcon.close()
     groups = {}
@@ -399,7 +407,8 @@ def clv_report(picks_reader, now=None, days=REPORT_DAYS):
         v = _clv(float(p["line"]), float(c["line"]), p.get("pick"))
         if v is None:
             continue
-        gname = "board" if p.get("test") == 2 else "member"
+        # board provenance survives a member opening the line (picklog resets test 2 -> 0 then; on_board keeps it)
+        gname = "board" if p.get("test") == 2 or (p.get("on_board") or 0) in (1, 2) else "member"
         g = groups.setdefault((gname, p["book"]), {"by_match": {}, "staked": {}, "lean": {}, "pos": 0, "zero": 0, "neg": 0, "stale": 0})
         mk = c.get("event_id") or p.get("match_slug")
         g["by_match"].setdefault(mk, []).append(v)

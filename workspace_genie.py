@@ -166,6 +166,14 @@ def _verdict(rec, side):
     return f"Lean {_cap(sd)}"
 
 
+def _read(rec, side, where=""):
+    """One sentence naming Scout's read. Asked about the other side: Scout's own side, said plainly."""
+    s = rec.get("scout") or {}
+    if s.get("side") and side and side != s.get("side"):
+        return f"Scout's side{where} is {_cap(s['side'])}, not {_cap(side)}."
+    return f"Scout's read{where} is {_verdict(rec, side)}."
+
+
 def _chance(rec, side):
     s = rec.get("scout") or {}
     return s.get("p_under") if side == "under" else s.get("p_over") if side == "over" else None
@@ -202,7 +210,7 @@ def _say(topic, doc, side, q):
     book = offer.get("platform_label") or offer.get("platform") or "this book"
     p = _chance(rec, side)
     if topic == "pick":
-        out = [f"Scout's read on {book} {line} is {_verdict(rec, side)}."]
+        out = [_read(rec, side, f" on {book} {line}")]
         if _num(p):
             out.append(f"The saved chance for {_cap(side)} {line} is {_pct(p)}.")
         return out
@@ -218,7 +226,7 @@ def _say(topic, doc, side, q):
             out.append(f"The saved push chance is {_pct(s['p_push'])}; a push is not a win.")
         return out
     if topic == "grade":
-        out = [f"Scout's read is {_verdict(rec, side)}."]
+        out = [_read(rec, side)]
         if _num(s.get("units")) and not s.get("hold"):
             out.append(f"The stake is {_tenth(s['units'])}U.")
         if s.get("stake_reason"):
@@ -291,6 +299,6 @@ def answer(doc, question, side):
     for t in topics:
         said.extend(_say(t, doc, side, question))
     kept, removed = verify(said, allowed_numbers(doc))
-    if not kept:
-        kept = ["That part of this line's data could not be checked, so it is not shown."]
+    if not kept:                    # nothing survived the number check: the help text, free (no status line, no charge)
+        return {"sentences": [HELP], "topics": topics, "matched": False, "removed_numbers": removed, "suggestions": list(SUGGESTIONS)}
     return {"sentences": kept, "topics": topics, "matched": True, "removed_numbers": removed}

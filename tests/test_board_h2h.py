@@ -129,6 +129,14 @@ def test_board_flag_on_columns_countdown_edge_and_tones(ctx, env, monkeypatch, s
     maps = [{"match_id": f"hltv-{i}", "number": n, "date": f"2026-10-{28 - i:02d}", "kills": 24 if i % 5 < 3 else 15, "headshots": 8,
              "opponent": "Norrland" if i % 2 == 0 else f"Team{i}", "map": "Mirage"} for i in range(20) for n in (1, 2)]
     monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: maps)
+
+    def passing_gate(srv):            # every fixture CS2 cell passes the slip's settled-results check (review 2026-11-04)
+        import time as _t
+        workspace_api.snapshot(srv)
+        keys = {f"{x.get('graded_model')}|{x.get('prop')}|{x.get('scope') or '12'}" for x in (workspace_api._SNAP["index"] or {}).values()}
+        band = {"lo": 0.0, "hi": 1.0, "printed": 0.6, "observed": 0.6, "ci": [0.5, 0.7], "picks": 400}
+        return {"at_ts": _t.time() - 60, "cells": {k: {"matches": 400, "bands": [band]} for k in keys}}
+    monkeypatch.setattr(workspace_api, "_gate", passing_gate)
     workspace_api.reset(); workspace_lol.reset(); workspace_sports.reset()
     p = _hub(ctx, env, size)
     if size is DESK:
@@ -152,10 +160,11 @@ def test_board_flag_on_columns_countdown_edge_and_tones(ctx, env, monkeypatch, s
         r = rows.nth(i)
         rid = r.get_attribute('data-record')
         edge = r.locator('td.h-c-edge .h-edge')
-        if '|prizepicks|' in rid:
-            assert edge.inner_text() == '—'
+        if '|prizepicks|' in rid or not rid.startswith('cs2|'):
+            assert edge.inner_text() == '—', rid                                 # LoL / NBA / NFL never: the slip refuses their EV
     ud = p.locator('#hub-rows tr[data-record*="|underdog|"] td.h-c-edge .h-edge:not(.empty)')
     assert ud.count() >= 1 and 'break-even' in ud.first.get_attribute('title') and ud.first.inner_text().endswith('pts')
+    assert p.locator('#hub-rows tr[data-record]:not([data-record^="cs2|"]) td.h-c-edge .h-edge:not(.empty)').count() == 0
     assert p.locator('#hub-rows .h-hit:not(.empty):not(.h-hit-wait):not(.h-hit-both)').count() == \
         p.locator('#hub-rows .h-hit[class*="h-tone-"]').count()                              # every sided cell takes one of the 7 tones
     p.locator('#hub-rows .h-player').first.click()
@@ -183,3 +192,30 @@ def test_current_lines_only_empty_state_counts_each_reason(ctx, env, monkeypatch
     assert int(started.replace(',', '')) >= n
     no_h_scroll(p)
     assert p.errors == []
+
+
+
+# ---------------------------------------------------------------------------------------------------- review 2026-11-04 fixes
+def test_board_edge_cells_come_from_the_slip_gate_and_never_break_me(env, monkeypatch):
+    """The Edge column reads the bands the slip's EV check passes (rules.edge_cells), keyed like the hub row (tag|stat|period)."""
+    monkeypatch.setenv("SCOUT_BOARD_H2H", "1")
+    import time as _t
+    gate = {"at_ts": _t.time() - 600, "cells": {"T|kills|12": {"matches": 320, "bands": [
+        {"lo": 0.6, "hi": 0.65, "printed": 0.62, "observed": 0.61, "ci": [0.58, 0.66], "picks": 320},
+        {"lo": 0.65, "hi": 0.7, "printed": 0.67, "observed": 0.6, "ci": [0.55, 0.65], "picks": 320}]},
+        "T|kills|1": {"matches": 100, "bands": [{"lo": 0.6, "hi": 0.65, "printed": 0.62, "observed": 0.62, "ci": None, "picks": 10}]}}}
+    monkeypatch.setattr(workspace_api, "_gate", lambda srv: gate)
+    f = _me(env.url)["features"]["board_h2h"]
+    assert f["edge_cells"] == {"T|kills|maps12": [[0.6, 0.65]]} and f["min_chance"] == 0.57
+    monkeypatch.setattr(workspace_api, "_gate", lambda srv: 1 / 0)
+    assert _me(env.url)["features"]["board_h2h"]["edge_cells"] == {}            # a failed read: no edge anywhere
+
+
+def test_hub_edge_cell_requires_the_slip_gate_and_the_empty_state_names_no_status():
+    from pathlib import Path
+    js = (Path(workspace_api.__file__).resolve().parent / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
+    body = js[js.index("function edgeOk(r)"):js.index("/* start countdown")]
+    assert "r.sport!=='cs2'" in body and "Number.isInteger(+r.offer.line)" in body and "COLS?.edge_cells" in body and "||!edgeOk(r))" in body
+    empty = js[js.index("function emptyReasons()"):js.index("function installCols()")]
+    for banned in ("Board refresh failed", "Source not updated", "'Held'", "unavailableReason"):
+        assert banned not in empty

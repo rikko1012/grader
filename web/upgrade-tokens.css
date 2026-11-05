@@ -39,14 +39,24 @@ html[data-ui-tokens] #u-hub .h-card-links button,html[data-ui-tokens] #u-hub .h-
 html[data-ui-tokens] #u-hub :is(#hub-generate,.h-detail-action button:not([data-hub=open-line]),.h-game-card>button),
 html[data-ui-tokens] #u-hub .h-slip .u-btn.u-gold,html[data-ui-tokens] #hub-studio-body :is(.u-btn.u-gold,.u-acts .u-gold),
 html[data-ui-tokens] .h-mobile-slip{background:var(--u-gold)!important;border-color:var(--u-gold)!important;color:var(--u-ink)!important}
-html[data-ui-tokens][data-upgrade] .h-entry{background:#f5c84214;border-color:#f5c84266;color:var(--u-gold,#f5c842)}
+/* the entry chip takes the page's own accent: gold in the hub, the classic pages' blue on those pages (never mixed) */
+html[data-ui-tokens][data-upgrade] .h-entry{background:color-mix(in srgb,var(--u-gold,#f5c842) 8%,transparent);border-color:color-mix(in srgb,var(--u-gold,#f5c842) 40%,transparent);color:var(--u-gold,#f5c842)}
 html[data-ui-tokens] .h-rel-scale i{border-color:#f5c842}
 html[data-ui-tokens] .h-rel-scale .actual{background:#f5c842}
 html[data-ui-tokens] .h-history-chart .line-mark{stroke:#f5d77b}
 html[data-ui-tokens] .h-history-chart .line-lab{fill:#f5d77b}
 html[data-ui-tokens] .h-legend .line{border-top-color:#f5d77b}
 
+/* The open prop card on the same tokens (hub.css keeps its navy rows, tiles and blue selections only with the flag off) */
+html[data-ui-tokens] #u-hub #hub-table>tbody>tr[data-record]:hover>td{background:var(--u-panel2)}
+html[data-ui-tokens] #u-hub #hub-table>tbody>tr[data-record].is-expanded>td{background:var(--u-panel)}
+html[data-ui-tokens] #u-hub .h-segment button[aria-pressed=true]{background:var(--u-gold);color:var(--u-ink)}
+html[data-ui-tokens] #u-hub :is(.h-tile,.h-mini-tiles>div){background:var(--u-panel2);border-color:var(--u-line)}
+html[data-ui-tokens] #u-hub .h-card summary{color:var(--u-gold2)}
+
 /* Touch targets: nothing interactive under 40px in the hub */
+html[data-ui-tokens] #u-hub #hub-detail :is(button,summary,select,input,a[href]){min-height:40px!important}
+html[data-ui-tokens] #u-hub #hub-detail .h-line-shop td:first-child button{min-height:40px!important}
 html[data-ui-tokens] #u-hub :is(button,select,input,summary,.h-sidebar nav a,.h-tools-menu a){min-height:40px}
 html[data-ui-tokens] #u-hub :is(.h-quick button,.h-quick select,.h-sidebar-foot button,.h-prop-toggle,.h-pagination button){min-height:40px}
 html[data-ui-tokens] #u-hub #hub-table .h-star{min-width:40px;min-height:40px}

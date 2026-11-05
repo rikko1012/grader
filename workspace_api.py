@@ -939,16 +939,28 @@ def get_me(h, srv, q, member, scratch, name):
                                      "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
                                      "background_alerts": bool(workspace_alerts.configured()),
                                      "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK),
-                                     "ui_tokens": os.getenv('SCOUT_UI_TOKENS', '').strip()=='1',
+                                     **({"ui_tokens": True} if os.getenv('SCOUT_UI_TOKENS', '').strip() == '1' else {}),
                                      **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {}),
-                                     **({"board_h2h": _board_columns()} if workspace_h2h.board_enabled() else {})}})
+                                     **({"board_h2h": _board_columns(srv)} if workspace_h2h.board_enabled() else {})}})
 
 
-def _board_columns():
+def _board_columns(srv=None):
     """SCOUT_BOARD_H2H: the break-even the board's Edge column compares with. Underdog standard 2-pick at a 1.0x pick only, from the
-    gradecore payout table; any other book, entry or multiplier has no published per-pick break-even here, so it shows no edge."""
+    gradecore payout table; any other book, entry or multiplier has no published per-pick break-even here, so it shows no edge.
+    edge_cells: the CS2 model-version x stat x period chance bands that pass the slip's settled-results check
+    (rules.edge_cells, keyed tag|stat|period like the hub row); the board shows an edge only inside them, so it never shows
+    an edge the slip refuses. LoL, NBA and NFL never get one (rules.EV_NOT_VALIDATED). Any failure: no cells, no edge."""
     from gradecore import payouts
-    return {"ud_standard_break_even": payouts.break_even("underdog", "standard", 2), "entry": "Underdog standard 2-pick"}
+    cells = {}
+    if srv is not None:
+        try:
+            for k, bands in rules.edge_cells(_gate(srv), time.time()).items():
+                tag, prop, scope = k.rsplit("|", 2)
+                cells[f"{tag}|{prop}|{SCOPE.get(scope, (scope,))[0]}"] = bands
+        except Exception:
+            cells = {}
+    return {"ud_standard_break_even": payouts.break_even("underdog", "standard", 2), "entry": "Underdog standard 2-pick",
+            "edge_cells": cells, "min_chance": rules.EV_MIN_CHANCE}
 
 
 def get_market_tools(h, srv, q, member, scratch, name):

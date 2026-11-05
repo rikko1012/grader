@@ -102,6 +102,7 @@ def test_public_record_four_sports_retry_and_safe_text(ctx,env,monkeypatch,size)
         p.wait_for_function('(s)=>document.querySelector("#record h2")?.textContent.toLowerCase()===s',arg=sport)
         assert '66.7%' in p.locator('#record').inner_text()
         assert p.locator('#record unsafe').count()==0
+        assert p.locator('#record .counts').count()==0 and p.locator('#record .rel-chart').count()==0   # no reliability answer: as before
         assert p.locator('.calendar summary').count()==30
         no_h_scroll(p)
     p.screenshot(path=f'.record-{size["width"]}.png',full_page=True)
@@ -429,8 +430,8 @@ def test_studio_slip_header_only_with_its_flag(ctx,env,monkeypatch,flag,size):
     p.wait_for_selector('#hub-studio-body [data-u=track]:not([disabled])',timeout=20000)
     body=p.locator('#hub-studio-body')
     if flag=='1':
-        assert body.locator('.u-slip-metrics.u-slip-head>div').count()==4 and body.locator('.u-leg-ev').count()==2
-        assert 'Quarter-Kelly of bankroll' in body.inner_text()
+        assert body.locator('.u-slip-metrics.u-slip-head>div').count()==3 and body.locator('.u-leg-ev').count()==2
+        assert 'Kelly' not in body.inner_text()
     else:
         assert body.locator('.u-slip-head').count()==0 and body.locator('.u-leg-ev').count()==0 and 'Quarter-Kelly' not in body.inner_text()
     no_h_scroll(p)

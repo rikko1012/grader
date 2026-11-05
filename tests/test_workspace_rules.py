@@ -232,12 +232,12 @@ def test_leg_ev_is_push_adjusted_and_a_push_is_never_a_win():
     assert R.leg_ev(0.5, 2.0, p_push=0.1) == pytest.approx(0.1)     # the push returns the stake only
 
 
-def test_slip_header_standard_matches_ev_and_gives_quarter_kelly_and_leg_ev():
+def test_slip_header_standard_matches_ev_and_gives_leg_ev_without_a_second_stake():
     out = ev()
     h = R.slip_header(out, "standard", legs2(), GS.evaluate)
     assert h["payout_multiple"] == 3.5 and h["p_all_win"] == 0.36 and h["pushes"] == "excluded"
     assert h["expected_return"] == pytest.approx(out["ev"], abs=1e-4) == pytest.approx(0.26, abs=1e-4)
-    assert h["quarter_kelly"] == pytest.approx((0.36 * 2.5 - 0.64) / 2.5 / 4, abs=1e-4)
+    assert "quarter_kelly" not in h and not any("kelly" in k for k in h)   # review 2026-11-04: one stake per line
     assert h["leg_price"] == pytest.approx(3.5 ** 0.5, abs=1e-4)
     assert [x["ev"] for x in h["legs"]] == [round(0.6 * 3.5 ** 0.5 - 1, 4)] * 2 and [x["line"] for x in h["legs"]] == [30.5, 31.5]
     assert "independent" in h["basis"]
@@ -271,3 +271,26 @@ def test_slip_header_refuses_a_second_number_and_an_unpriced_push():
     assert R.slip_header(dict(out, payout=dict(out["payout"], multiple=3.0)), "standard", legs2(), GS.evaluate) is None
     assert R.header_payout("standard", 2)(("win", "push")) is None and R.header_payout("flex", 4) is None
     assert R.header_payout("standard", 2)(("win", "loss")) == 0.0
+
+
+
+# ---- review 2026-11-04: the board's Edge column never shows an edge the slip's EV check refuses
+@pytest.mark.parametrize("leg_kw,gate", [
+    ({}, None), ({"p": 0.61}, None), ({"line": 30.0}, None), ({"on_side": False}, None), ({"p": 0.56}, None),
+    ({"sport": "lol"}, None), ({"sport": "nba"}, None), ({"sport": "nfl"}, None), ({"multiplier": 1.05}, None),
+    ({"tag": "OTHER"}, None), ({"prop": "headshots"}, None), ({"p": 0.66}, None),
+    ({}, good_gate(matches=120)), ({"p": 0.61}, good_gate(observed=0.55, ci=(0.52, 0.58))),
+    ({"p": 0.61}, good_gate(printed=0.64, observed=0.60, ci=(0.58, 0.66))), ({}, good_gate(age_h=30)),
+    ({}, {"at_ts": None, "cells": {}}),
+])
+def test_board_edge_shows_exactly_where_the_slip_ev_check_passes(leg_kw, gate):
+    g = good_gate() if gate is None else gate
+    one = ev_leg(i=0, **leg_kw)
+    slip = R.ev_status("underdog", "standard", [one, ev_leg(i=1, p=0.585)], g, NOW)
+    assert R.leg_edge_ok(one, R.edge_cells(g, NOW)) is bool(slip["available"]), (leg_kw, slip)
+
+
+def test_edge_cells_are_empty_without_a_fresh_export():
+    assert R.edge_cells(None, NOW) == {} and R.edge_cells(lambda: None, NOW) == {}
+    assert R.edge_cells(good_gate(age_h=30), NOW) == {}
+    assert R.edge_cells(good_gate(), NOW) == {"T|kills|12": [[0.57, 0.6], [0.6, 0.65]]}

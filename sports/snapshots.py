@@ -965,7 +965,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
                 "store_schema_level": _schema_level(con), "contracts": "sc-1",
                 "capabilities": capabilities.CAPABILITY_VERSION, "models": model_list,
                 "model_preference": list(models_pref()), "platforms": {k: dict(v) for k, v in platform_seen.items()},
-                "market_view": {"version": market_view.DISPLAY_VERSION, **mv_stats, "fallback": market_view.fallback_on(),
+                "market_view": {"version": market_view.DISPLAY_VERSION, **mv_stats,
+                                **({"fallback": True} if market_view.fallback_on() else {}),    # flag off: the key is absent
                                 "rule": "mc-1 rule (sports/model/market.py quote_prob filters + equal-weight log-odds "
                                         "per source, nearest line moved with dispersion.json); target platform excluded",
                                 "sources": "every verified source: kalshi, polymarket, oddsapi:<book>, fanduel, "

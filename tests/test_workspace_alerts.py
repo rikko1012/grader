@@ -127,10 +127,24 @@ def test_prop_path_is_the_hub_row_key_encoded_or_the_alerts_list():
 
 
 def test_flag_on_delivery_links_to_the_first_matching_prop(tmp_path,monkeypatch):
+    monkeypatch.setenv('SCOUT_ALERT_DEEPLINK','1')
     state,sent,send=setup(tmp_path,monkeypatch)
     a.tick(tmp_path,lambda m:state,[row()],lambda u:True,send,now=1000)
     a.tick(tmp_path,lambda m:state,[row('2')],lambda u:True,send,now=2000)
     assert len(sent)==1 and sent[0][3]=='/?#scout/board?sport=cs2&open=cs2%7Cunderdog%7Co'
+
+
+def test_deeplink_flag_off_alerts_keep_the_alerts_list_link(tmp_path,monkeypatch):
+    """Review 2026-11-04: the prop deep link changed every live SCOUT_BACKGROUND_ALERTS message with no flag of its own.
+    Off: send is called exactly as before (no rest_path), so deliver uses the alerts list."""
+    monkeypatch.delenv('SCOUT_ALERT_DEEPLINK',raising=False)
+    state,sent,send=setup(tmp_path,monkeypatch)
+    a.tick(tmp_path,lambda m:state,[row()],lambda u:True,send,now=1000)
+    a.tick(tmp_path,lambda m:state,[row('2')],lambda u:True,send,now=2000)
+    assert len(sent)==1 and len(sent[0])==3                                   # no rest_path passed
+    def old_send(destination,title,content):sent.append(('old',));return 'queued'   # the original three-argument sender
+    a.tick(tmp_path,lambda m:state,[row('3')],lambda u:True,old_send,now=3000)
+    assert sent[-1]==('old',)
 
 
 def test_deliver_sends_the_prop_link_and_refuses_foreign_paths(monkeypatch):

@@ -407,7 +407,7 @@
       const d=await api('book-line',{legs:[wireLeg(l)]});
       if(!safeBookLink(d.url,'underdog'))throw Error('invalid link');
       let box=$('u-book-line');if(!box){box=document.createElement('dialog');box.id='u-book-line';box.className='u-book-dialog';box.setAttribute('aria-label','Open book line');document.body.appendChild(box);}
-      box.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book link">×</button></form><h2>${esc(l.player)}</h2><p>${cap(l.side)} ${esc(l.line)} ${esc(l.stat_label)} · ${esc(l.period_label)}</p><p>Choose the side in Underdog. This opens the market; it does not place a pick.</p><a class="u-btn u-gold" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Underdog</a>`;box.showModal();
+      box.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book link">×</button></form><h2>${esc(l.player)}</h2><p>${cap(l.side)} ${esc(l.line)} ${esc(l.stat_label)} · ${esc(l.period_label)}</p><p>Choose the side in Underdog.</p><a class="u-btn u-gold" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Underdog</a>`;box.showModal();
     }catch(e){say(e.message||'The current line could not be opened. Refresh and try again.');}
   }
   async function openGenerated(slip){
@@ -552,7 +552,7 @@
     const open = c && c.open && safeBookLink(c.open.url,e.platform) ? `<button class="u-btn u-gold" data-u="open-entry" data-id="${esc(e.key)}">${esc(c.open.label)}</button>` : "";
     const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
     const ev = c && c.ev, head = ev?.available && ev.header ? ev.header : null;   /* SCOUT_SLIP_HEADER: present only from the server */
-    const values = head ? metric(esc(head.payout_multiple)+'×','All-hit payout')+metric(pct(head.p_all_win),'All picks win, pushes excluded')+metric(pct(head.expected_return),'Expected return')+metric(pct(head.quarter_kelly),'Quarter-Kelly of bankroll')
+    const values = head ? metric(esc(head.payout_multiple)+'×','All-hit payout')+metric(pct(head.p_all_win),'All picks win, pushes excluded')+metric(pct(head.expected_return),'Expected return')
       : (ev?.payout ? metric(esc(ev.payout.multiple)+'×',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
     const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}× entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';

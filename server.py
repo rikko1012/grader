@@ -1208,6 +1208,7 @@ def board_payload(book="underdog"):
     b = prizepicks.board() if book == "prizepicks" else underdog.board()
     now = datetime.now(timezone.utc)
     rows = []
+    moved = [] if os.environ.get("SCOUT_CLOSING_LINES") == "1" else None
     from slip_builder import lock_time, lock_iso
     for r in b["rows"]:
         if _started(r.get("start"), now):
@@ -1219,8 +1220,10 @@ def board_payload(book="underdog"):
         if not g.get("side"):
             continue                                  # not graded yet: never shown
         if g.get("graded_line") is not None and (r.get("line") is None or float(g["graded_line"]) != float(r["line"])):
+            _closing_moved(moved, r, g, book)
             continue                                  # the line moved: graded afresh within seconds, never shown with the old grade
         if side_opened(g, r):
+            _closing_moved(moved, r, g, book)
             continue                                  # graded before the Under was offered: regraded first, never shown meanwhile
         rows.append(dict(r, **{k: g.get(k) for k in ("grade", "side", "p", "units", "proj", "reason", "graded_at", "model_outcomes",
                                                      "nick", "state", "edge", "l10_over", "l10_n", "l10_push", "l10_avg",
@@ -1255,6 +1258,8 @@ def board_payload(book="underdog"):
         cut = x.get("cap_n") if (x.get("units_full") or 0) > (x.get("units") or 0) else None   # the cap cut THIS row (0.5U floor)
         x["cap_reason"] = cap_reason_text(cg if (x.get("units") or 0) > 0 else [], cut)
         x["flagged"] = bool((x.get("dstat") or ["ok"])[0] in ("verify", "limited") or x.pop("warn", False))
+    if moved is not None:
+        _CL_MOVED[book] = moved               # closing lines only (never in the payload): the feed's line while a regrade is due
     # feed errors / sources reach members in words only - no host, port, driver or URL text (2026-10-13 audit)
     out = {"book": book, "updated": b["at"], "error": member_source_note(b["error"]), "rows": rows, "total": len(b["rows"]),
            "version": picklog.MODEL_VERSION}
@@ -2949,6 +2954,27 @@ def graded_board(book, max_age=5.0):
     return hit[1]
 
 
+_CL_MOVED = {}                                                # book -> graded rows whose feed line moved (latest board build)
+_CL_ID_KEYS = ("nick", "team_name", "opp_name", "match_slug", "settle_slug", "match_start")
+
+
+def _closing_moved(moved, r, g, book):
+    """SCOUT_CLOSING_LINES only: a graded row hidden while its moved line is regraded still reports the platform's CURRENT
+    line to the closing-line store (a late move is never saved as the old line). Never shown, never graded."""
+    if moved is None:
+        return
+    try:
+        from slip_builder import lock_iso
+        x = dict(r, **{k: g.get(k) for k in _CL_ID_KEYS})
+        x["book"] = x.get("book") or book
+        x["scope"] = r.get("scope") or "12"
+        x["match_id"] = _row_match_id(x)
+        x["lock_at"] = lock_iso(x)
+        moved.append(x)
+    except Exception:
+        pass
+
+
 def _closing_observe(book, payload):
     """SCOUT_CLOSING_LINES (owner flag, default off): each fresh board copy's pre-lock lines; the last one before lock is saved
     once (closing_lines.py, append-only). Display / diagnostics data only, never a grade input; never breaks the board."""
@@ -2956,7 +2982,7 @@ def _closing_observe(book, payload):
         return
     try:
         import closing_lines
-        closing_lines.observe(book, (payload or {}).get("rows") or [])
+        closing_lines.observe(book, list((payload or {}).get("rows") or []) + list(_CL_MOVED.get(book) or []))
     except Exception:
         pass
 
@@ -4340,7 +4366,8 @@ class Handler(BaseHTTPRequestHandler):
                     import public_record
                     try:return 200,json.dumps(public_record.read(sys.modules[__name__],sport),allow_nan=False).encode()
                     except Exception:return 503,b'{"error":"record_unavailable"}'
-                key=('public_record',sport,os.environ.get('SCOUT_RECORD_STATUS')=='1',os.environ.get('SCOUT_PUBLIC_RECORD_SLIPS')=='1')
+                key=('public_record',sport,os.environ.get('SCOUT_RECORD_STATUS')=='1',os.environ.get('SCOUT_PUBLIC_RECORD_SLIPS')=='1',
+                     os.environ.get('SCOUT_RECORD_RELIABILITY')=='1')
                 status,body=shared(key,record_read,ttl=300)
                 return self.send_shared(key,status,body,keep=300)
             if u.path == "/scout-ui.css":

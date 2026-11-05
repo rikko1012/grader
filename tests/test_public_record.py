@@ -49,12 +49,12 @@ def test_sanitize_passes_ci_bins_and_labelled_counts_and_nothing_else():
     doc={'totals':{'wins':5,'losses':2,'pushes':1,'void':3,'matches':4,'match_word':'series','ci':[0.4,0.9]},
          'groups':{'chance':[{'name':'60-65%','wins':1,'losses':1,'ci':[0.1,float('nan')]},{'name':'65%+','wins':2,'losses':0,'ci':{'lo95':0.5,'hi95':1.0}}]},
          'reliability':[{'lo':0.55,'hi':0.6,'n':3,'stated':0.58,'hit':0.66,'ci':[0.2,0.9],'secret':'x'},{'n':0}]}
-    r=public_record.sanitize(doc,'lol')
+    r=public_record.sanitize(doc,'lol',rich=True)
     assert r['totals']['ci']==[0.4,0.9] and r['totals']['void']==3 and r['totals']['match_word']=='series'
     assert r['bands'][0]['ci'] is None and r['bands'][1]['ci']==[0.5,1.0]
     assert r['reliability']==[{'lo':0.55,'hi':0.6,'n':3,'stated':0.58,'hit':0.66,'ci':[0.2,0.9]}]
     assert 'status' not in r and 'slips_tab' not in r
-    assert public_record.sanitize({'totals':{'match_word':'<b>'}},'nba')['totals']['match_word']=='matches'
+    assert public_record.sanitize({'totals':{'match_word':'<b>'}},'nba',rich=True)['totals']['match_word']=='matches'
     on=public_record.sanitize({},'nba',status={'letters':'held','text':'NBA letters are held.','x':1},slips_tab=True)
     assert on['status']=={'letters':'held','text':'NBA letters are held.'} and on['slips_tab'] is True
 
@@ -68,7 +68,7 @@ def test_cs2_bins_and_tier_ranges_come_from_the_member_results_picks():
     assert sum(b['n'] for b in doc['reliability'])==len(picks)==base['totals']['picks']==7
     assert all(round(b['hi']-b['lo'],6)==0.05 for b in doc['reliability'])
     lo,hi=doc['totals']['ci'];assert 0<=lo<=base['totals']['observed']<=hi<=1
-    r=public_record.sanitize(doc,'cs2')
+    r=public_record.sanitize(doc,'cs2',rich=True)
     assert r['reliability'] and r['totals']['ci']==[round(lo,4),round(hi,4)]
 
 
@@ -78,7 +78,7 @@ def test_letter_status_reads_the_sports_containment_snapshot(monkeypatch):
     monkeypatch.setattr(workspace_sports,'_public',lambda srv:(200,pub))
     assert public_record.letter_status(None,'nba')['letters']=='held'
     assert 'research estimates' in public_record.letter_status(None,'nba')['text']
-    assert public_record.letter_status(None,'nfl')=={'letters':'live','text':'NFL letters are live on the board.'}
+    assert public_record.letter_status(None,'nfl') is None         # not held: the board decides per row (cf-2), so no league-wide "live"
     assert public_record.letter_status(None,'cs2')['letters']=='live' and public_record.letter_status(None,'lol')['letters']=='live'
     monkeypatch.setattr(workspace_sports,'_public',lambda srv:(503,{'error':'down'}))
     assert public_record.letter_status(None,'nba') is None                       # unknown stays unshown
@@ -152,3 +152,42 @@ def test_record_slips_flag_on_serves_anonymised_counts(env,monkeypatch,tmp_path)
     d=json.loads(body)
     assert status==200 and d['sport']=='cs2' and d['all_hit']==1 and d['missed']==1 and d['push_or_void']==1
     assert 'private' not in body.decode()
+
+
+
+# ---------------------------------------------------------------------------------- review 2026-11-04 fixes
+BASE_KEYS={'sport','as_of','population','rule','totals','bands','calendar'}
+from pathlib import Path  # noqa: E402
+ROOT=Path(public_record.__file__).resolve().parent
+
+
+def test_reliability_flag_off_keeps_the_record_answer_keys_exactly_as_before(env,monkeypatch):
+    """The ranges, bins, voids and match word were added with no flag of their own; off, /api/record has the old keys only."""
+    for k in FLAGS+('SCOUT_RECORD_RELIABILITY',):monkeypatch.delenv(k,raising=False)
+    monkeypatch.setenv('SCOUT_PUBLIC_RECORD','1')
+    server._RESULTS.clear()
+    st,body,_=get(env.base,'/api/record?sport=cs2')
+    d=json.loads(body)
+    assert st==200 and set(d)==BASE_KEYS and set(d['totals'])==set(public_record.BASE_METRICS)
+    assert all(set(b)==set(public_record.BASE_METRICS)|{'name'} for b in d['bands'])
+    off=public_record.sanitize({'totals':{'wins':1,'void':2,'ci':[0.1,0.9],'match_word':'series'},'reliability':[{'n':3,'lo':.5,'hi':.55}]},'lol')
+    assert set(off)==BASE_KEYS and set(off['totals'])==set(public_record.BASE_METRICS)
+    monkeypatch.setenv('SCOUT_RECORD_RELIABILITY','1')
+    server._RESULTS.clear()
+    on=json.loads(get(env.base,'/api/record?sport=cs2')[1])
+    assert 'reliability' in on and {'ci','void','match_word'}<=set(on['totals'])
+
+
+def test_a_range_failure_never_takes_the_cs2_record_down(monkeypatch):
+    import gradecore.scorecard as sc
+    monkeypatch.setattr(sc,'cluster_ci',lambda *a,**k:1/0)
+    doc=public_record._cs2(types.SimpleNamespace(_p1_export=_p1))
+    assert doc==results_stated.stated_observed(_p1())                 # the plain record, no ranges
+    monkeypatch.setenv('SCOUT_RECORD_RELIABILITY','1')
+    r=public_record.read(types.SimpleNamespace(_p1_export=_p1),'cs2')
+    assert r['totals']['wins'] is not None and r['reliability']==[] and r['totals']['ci'] is None
+
+
+def test_record_page_shows_the_labelled_counts_only_with_the_reliability_answer():
+    js=(ROOT/'web'/'record.js').read_text(encoding='utf-8')
+    assert "rich=Array.isArray(d.reliability)" in js and "${rich?counts(" in js

@@ -294,6 +294,43 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
     return {"available": True, "ev": round(ev, 4), "hit_chance": round(hit, 4), "payout": payout}
 
 
+def edge_cells(gate, now_ts):
+    """SCOUT_BOARD_H2H Edge column: per tag|prop|scope, the chance bands [lo, hi) a single CS2 leg passes in ev_status's
+    settled-results gate (match count, interval, printed-vs-won gap, export age). Empty when the export is missing or old,
+    so the board shows an edge only where the slip check would show EV."""
+    g = gate() if callable(gate) else gate
+    if not g or g.get("at_ts") is None:
+        return {}
+    age_h = (now_ts - g["at_ts"]) / 3600
+    if age_h >= EV_MAX_AGE_H or age_h < -1:
+        return {}
+    out = {}
+    for k, cell in (g.get("cells") or {}).items():
+        if (cell.get("matches") or 0) < EV_MIN_MATCHES:
+            continue
+        ok = [[b["lo"], b["hi"]] for b in cell.get("bands") or []
+              if b.get("ci") and b["ci"][0] <= b["printed"] <= b["ci"][1] and abs(b["printed"] - b["observed"]) <= EV_MAX_GAP]
+        if ok:
+            out[k] = ok
+    return out
+
+
+def leg_edge_ok(leg, cells):
+    """The board-side mirror of ev_status's per-leg steps: CS2 only, a half-point line (no push), a saved chance on the
+    shown side at EV_MIN_CHANCE or more, a 1.0x pick, and a chance band that passed edge_cells."""
+    if leg.get("sport") != "cs2" or leg.get("sport") in EV_NOT_VALIDATED:
+        return False
+    try:
+        if float(leg.get("line")).is_integer():
+            return False
+    except (TypeError, ValueError):
+        return False
+    p = leg.get("p")
+    if not leg.get("on_side") or p is None or p < EV_MIN_CHANCE or leg.get("multiplier") != 1.0:
+        return False
+    return any(lo <= p < hi for lo, hi in cells.get(f"{leg.get('tag')}|{leg.get('prop')}|{leg.get('scope')}") or ())
+
+
 def gate_from_export(export, tags, at_ts=None, B=500, min_matches=EV_MIN_MATCHES):
     """What ev_status needs from the stored P1 export, for the given model tags only: settled matches per exact tag x stat x
     maps on the Results pick rule, and each chance band's printed chance, hit rate and match-grouped interval. The interval is
@@ -356,8 +393,9 @@ def header_payout(entry_type, n):
 
 
 def slip_header(ev, entry_type, legs, evaluate):
-    """-> {payout_multiple, p_all_win, expected_return, quarter_kelly, basis, legs?} or None. legs: ev_status's legs, in entry
-    order. Per-leg EV is given for a standard entry only: its per-pick price is the all-hit multiple's n-th root."""
+    """-> {payout_multiple, p_all_win, expected_return, basis, legs?} or None. legs: ev_status's legs, in entry
+    order. Per-leg EV is given for a standard entry only: its per-pick price is the all-hit multiple's n-th root.
+    No bankroll fraction (quarter-Kelly) is passed on: one stake per line, the grade's units (owner rule, review 2026-11-04)."""
     if not isinstance(ev, dict) or not ev.get("available") or not ev.get("payout"):
         return None
     et, legs = entry_type or "standard", list(legs or ())
@@ -379,8 +417,7 @@ def slip_header(ev, entry_type, legs, evaluate):
     if abs(out["net_ev"] - ev["ev"]) > 5e-4:        # two routes to one number: a mismatch shows nothing, never a third figure
         return None
     head = {"payout_multiple": ev["payout"]["multiple"], "entry_type": et, "p_all_win": round(out["p_all_win"], 4),
-            "pushes": "excluded", "expected_return": round(out["net_ev"], 4),
-            "quarter_kelly": round(out["quarter_kelly_fraction"], 4), "basis": out.get("basis")}
+            "pushes": "excluded", "expected_return": round(out["net_ev"], 4), "basis": out.get("basis")}
     if et == "standard":
         price = ev["payout"]["multiple"] ** (1.0 / n)
         head["leg_price"] = round(price, 4)

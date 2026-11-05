@@ -104,11 +104,17 @@ export function mount(C) {
     const hit=countOf(t,side), rate=hit/t.n;
     return `<span class="h-hit h-tone-${Math.min(6,Math.floor(rate*7))}" style="--hit:${rate.toFixed(3)}" title="${esc(`${hit} ${sideWord(side)} ${what(t.n)} at this line, ${t.push||0} pushes`)}">${hit}<small>/${t.n}</small></span>`;
   }
-  /* Edge vs break-even: Underdog standard lines at a 1.0x pick only (gradecore payout table); every other line shows no edge */
+  /* Edge vs break-even: Underdog standard lines at a 1.0x pick only (gradecore payout table), and only where the slip's EV check
+     would pass this pick (server rules.edge_cells: CS2, half-point line, settled chance band); every other line shows no edge */
+  function edgeOk(r) {
+    const s=r.scout, bands=(COLS?.edge_cells||{})[`${s.model_version}|${r.market.stat}|${r.market.period}`];
+    if(r.sport!=='cs2'||!Array.isArray(bands)||!num(s.p_side)||s.p_side<(COLS?.min_chance??1)||!num(+r.offer.line)||Number.isInteger(+r.offer.line))return false;
+    return bands.some(b=>Array.isArray(b)&&s.p_side>=b[0]&&s.p_side<b[1]);
+  }
   function edgeCell(r) {
     const s=r.scout, be=COLS?.ud_standard_break_even, mult=s.side?r.offer[s.side]?.payout:null;
-    if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||s.hold||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9)
-      return '<span class="h-edge empty" title="Edge is shown for Underdog standard lines only">—</span>';
+    if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||s.hold||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9||!edgeOk(r))
+      return '<span class="h-edge empty" title="Edge is shown for Underdog standard lines the slip check prices">—</span>';
     const d=(s.p_side-be)*100;
     return `<span class="h-edge ${d>0?'positive':d<0?'negative':''}" title="${esc(`Scout chance ${pct(s.p_side)} against the ${(be*100).toFixed(1)}% break-even of an ${COLS.entry||'Underdog standard'} entry`)}"><b>${d>0?'+':d<0?'−':''}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
   }
@@ -180,7 +186,7 @@ export function mount(C) {
     const counts=new Map();
     for(const r of H.records){
       if(!matches(r,{...H,freshOnly:false}))continue;
-      const why=C.started(r)?'Started':(()=>{const u=unavailableReason(r);return !u?null:u==='Refresh failed'?'Board refresh failed':/^Source /.test(u)?'Source not updated':'Held';})();
+      const why=C.started(r)?'Started':null;       // owner rule: a failed, stale or held line is left off, never labelled
       if(why)counts.set(why,(counts.get(why)||0)+1);
     }
     if(!counts.size)return null;
@@ -608,7 +614,7 @@ export function mount(C) {
       const arb=(d.arbitrage||[]).filter(x=>(x.legs||[]).some(q=>mtKeep(sport,q))).sort((a,b)=>f.sort==='fresh'?newest(b)-newest(a):(b.quoted_return??0)-(a.quoted_return??0));
       const evTable=ev.length?table(head(['Chance','EV']),ev.map(x=>{const q=x.quote||{};return `<tr><td>${esc(q.player_id)}<small>${esc(q.stat)} · ${esc(q.period)}</small></td><td>${esc(q.book)}</td><td>${sideText(q)}</td><td class="h-num">${odds(q.decimal_odds)}</td><td class="h-num">${fmt(x.p)}</td><td class="h-num">${fmt(x.ev)}</td><td class="h-num">${ageText(q)} ${flags(q,x)}</td></tr>`;}).join('')):'<p>No verified positive-EV offers match these filters.</p>';
       const arbTable=arb.length?table(head(['Stake share','Quoted return']),arb.map(x=>(x.legs||[]).map((q,i)=>`<tr${i?' class="h-arb-leg"':''}><td>${i?'':esc(q.player_id)+`<small>${esc(q.stat)} · ${esc(q.period)}</small>`}</td><td>${esc(q.book)}</td><td>${sideText(q)}</td><td class="h-num">${odds(q.decimal_odds)}</td><td class="h-num">${fmt(x.stake_shares?.[i])}</td><td class="h-num">${i?'':fmt(x.quoted_return)}</td><td class="h-num">${ageText(q)} ${flags(q)}</td></tr>`).join('')).join('')):'<p>No compatible fresh arbitrage quotes match these filters.</p>';
-      return `<article><h3>${esc(SPORTS[sport])} <small>${age(d.as_of)} · ${ev.length} of ${(d.ev||[]).length} EV · ${arb.length} of ${(d.arbitrage||[]).length} comparisons</small></h3><h4>Positive expected value</h4>${evTable}<h4>Two-book price comparisons</h4>${arbTable}<details><summary>Why quotes were excluded</summary>${Object.entries(d.excluded||{}).map(([reason,n])=>`<p>${esc(reason)}: ${Number(n)}</p>`).join('')}</details></article>`;
+      return `<article><h3>${esc(SPORTS[sport])} <small>${age(d.as_of)} · ${ev.length} of ${(d.ev||[]).length} EV · ${arb.length} of ${(d.arbitrage||[]).length} comparisons</small></h3><h4>Positive expected value</h4>${evTable}<h4>Two-book price comparisons</h4>${arbTable}${Object.keys(d.excluded||{}).length?`<details><summary>Why quotes were excluded</summary>${Object.entries(d.excluded).map(([reason,n])=>`<p>${esc(reason)}: ${Number(n)}</p>`).join('')}</details>`:''}</article>`;
     }).join('');
     return out||'<p>No supported market feeds are available to this account.</p>';
   }
@@ -749,6 +755,8 @@ export function mount(C) {
     const acct=document.querySelector('#u-hub .h-account');
     acct.addEventListener('click',e=>{if(e.target.closest('nav'))acct.open=false;});
     acct.addEventListener('keydown',e=>{if(e.key==='Escape'&&acct.open){acct.open=false;acct.querySelector('summary').focus();}});
+    document.addEventListener('pointerdown',e=>{if(acct.open&&!acct.contains(e.target))acct.open=false;});    /* a click outside closes it */
+    document.addEventListener('focusin',e=>{if(acct.open&&!acct.contains(e.target))acct.open=false;});
   }
   const entryHost=document.querySelector('.workspace-tools')||document.querySelector('.sw-tabs')||document.querySelector('.ot-lol .bar')||document.querySelector('body header');
   if(entryHost) entryHost.appendChild(entry); else document.body.prepend(entry);

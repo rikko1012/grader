@@ -108,6 +108,11 @@ def match(r,f,watch,rows,now,differences=None):
 
 
 ALERTS_PATH='/?#/alerts'
+DEEPLINK_FLAG='SCOUT_ALERT_DEEPLINK'        # owner flag, default off: off = every alert links to the alerts list, as before
+
+
+def deeplink_on():
+    return os.environ.get(DEEPLINK_FLAG)=='1'
 
 
 def prop_path(r):
@@ -179,7 +184,8 @@ def tick(root,state_for,rows,access,send=deliver,now=None,after=''):
                 label,r=notices[0]
                 more=len(notices)-1                          # audit 2026-11-04: every new match is marked seen, so the message names them all
                 text=f"{label}: {r['player']['name']} · {r['offer']['line']} {r['market']['stat_label']} · {r['offer']['platform']}"+(f", plus {more} more matching line{'s' if more>1 else ''}" if more else '')+". Recheck the current line in Scout."
-                try:status=send(sub['destination'],'Scout · '+str(label),text,rest_path=prop_path(r))
+                try:status=(send(sub['destination'],'Scout · '+str(label),text,rest_path=prop_path(r)) if deeplink_on()
+                            else send(sub['destination'],'Scout · '+str(label),text))
                 except Exception:status='delivery_unknown'
                 db.execute('UPDATE subscriptions SET status=? WHERE member=?',(status,m))
                 db.commit()

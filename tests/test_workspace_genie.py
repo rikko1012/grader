@@ -74,6 +74,27 @@ def test_wording_rules_lean_held_push_and_no_hedge_lines():
         assert banned.lower() not in text.lower()
 
 
+def test_asking_the_other_side_names_scouts_side_in_one_plain_sentence():
+    """Review 2026-11-04: 'Scout's read on Underdog 30.5 is Scout side is Under.' Now one sentence, both topics."""
+    doc = json.loads(json.dumps(DOC))
+    doc["record"]["scout"].update(side="under", p_under=0.58, p_over=None, grade="B")
+    pick = genie.answer(doc, "should I take the over?", "over")["sentences"]
+    assert pick[0] == "Scout's side on Underdog 38.5 is Under, not Over."
+    grade = genie.answer(doc, "why this grade?", "over")["sentences"]
+    assert grade[0] == "Scout's side is Under, not Over."
+    text = " ".join(pick + grade)
+    assert "is Scout side" not in text and "read is Scout" not in text
+    assert genie.answer(doc, "should I take the under?", "under")["sentences"][0] == "Scout's read on Underdog 38.5 is B Under."
+
+
+def test_nothing_checked_returns_the_help_text_free_never_a_status_line(monkeypatch):
+    """Review 2026-11-04: an all-removed answer said 'could not be checked' (a status line) and still used a question."""
+    monkeypatch.setattr(genie, "verify", lambda said, allowed: ([], len(said)))
+    out = genie.answer(DOC, "What is the projection?", "over")
+    assert out["sentences"] == [genie.HELP] and out["matched"] is False and out["removed_numbers"] == 1
+    assert "could not be checked" not in " ".join(out["sentences"])
+
+
 def test_unmatched_question_gets_help_and_no_charge():
     out = genie.answer(DOC, "tell me a joke", "over")
     assert not out["matched"] and out["sentences"] == [genie.HELP]

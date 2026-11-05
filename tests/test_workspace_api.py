@@ -1078,8 +1078,7 @@ def test_slip_header_flag_on_adds_gradecore_payout_chance_return_kelly_and_leg_e
     hit = 0.612 * 0.598
     assert h["payout_multiple"] == 3.5 and h["pushes"] == "excluded" and h["p_all_win"] == pytest.approx(hit, abs=1e-4)
     assert h["expected_return"] == pytest.approx(hit * 3.5 - 1, abs=1e-3) == pytest.approx(ev["ev"], abs=1e-3)
-    kelly = (hit * 3.5 - 1) / 2.5                    # binary bet: f* = (b p - q) / b with b = 2.5 net
-    assert h["quarter_kelly"] == pytest.approx(kelly / 4, abs=1e-4)
+    assert "quarter_kelly" not in h                  # one stake per line: no bankroll fraction reaches a member
     assert sorted(round(x["ev"], 3) for x in h["legs"]) == sorted(round(p * 3.5 ** 0.5 - 1, 3) for p in (0.612, 0.598))
     assert [x["index"] for x in h["legs"]] == [0, 1] and h["leg_price"] == pytest.approx(3.5 ** 0.5, abs=1e-4)
     assert ev["hit_chance"] == round(hit, 4) and ev["payout"]["multiple"] == 3.5     # the flag-off fields are unchanged

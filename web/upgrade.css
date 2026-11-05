@@ -281,7 +281,7 @@ html[data-upgrade] .u-slip-head>div{min-width:0;overflow-wrap:anywhere}
 html[data-upgrade] .u-leg-ev{font-family:var(--u-mono);color:var(--u-text)}
 html[data-upgrade] .u-genie .u-det{border:1px solid var(--u-line);border-radius:7px;padding:12px;margin:12px 0;line-height:1.8}
 html[data-upgrade] .u-genie summary{font-size:14px;font-weight:500}
-html[data-upgrade] .u-ask{border:1px solid var(--u-line);border-radius:7px;padding:12px;margin:0 0 12px}
+html[data-upgrade] .u-ask{display:block;grid-template-columns:none;gap:0;background:transparent;border:1px solid var(--u-line);border-radius:7px;padding:12px;margin:0 0 12px}
 html[data-upgrade] .u-ask label{display:block;font-size:14px;font-weight:500;color:var(--u-text);margin-bottom:8px}
 html[data-upgrade] .u-ask-row{display:flex;gap:8px;min-width:0}
 html[data-upgrade] .u-ask-row input{flex:1;min-width:0;min-height:40px;padding:6px 10px;border:1px solid var(--u-line2);border-radius:5px;background:#141414;color:var(--u-text);font:inherit;font-size:14px}

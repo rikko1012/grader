@@ -339,3 +339,18 @@ def test_display_freshness_is_observed_age_but_registered_mc1_keeps_source_time(
     assert p is None and why == "older than 15 min"
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert "freshness: \"observed age" in app
+
+
+
+def test_manifest_has_no_fallback_key_with_the_switch_off(built, monkeypatch):
+    """Review 2026-11-04: market_view.fallback: false was added to every manifest with SPORTS_MARKET_FALLBACK unset."""
+    monkeypatch.delenv(market_view.FALLBACK_FLAG, raising=False)
+    con = store.connect()
+    snapshots.build(con, "nba", now="2026-10-23T21:00:00Z")
+    con.close()
+    assert "fallback" not in _load(built, "manifest.json")["market_view"]
+    monkeypatch.setenv(market_view.FALLBACK_FLAG, "1")
+    con = store.connect()
+    snapshots.build(con, "nba", now="2026-10-23T21:00:00Z")
+    con.close()
+    assert _load(built, "manifest.json")["market_view"]["fallback"] is True

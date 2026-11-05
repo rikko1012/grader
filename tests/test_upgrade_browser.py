@@ -298,8 +298,8 @@ def test_slip_header_in_the_tray_only_with_its_flag(ctx, env, monkeypatch, flag)
     p.wait_for_selector("#u-tray .u-slip-metrics>div", timeout=15000)
     text = p.locator("#u-tray").inner_text()
     if flag == "1":
-        assert p.locator("#u-tray .u-slip-metrics.u-slip-head>div").count() == 4
-        assert "Quarter-Kelly of bankroll" in text and "pushes excluded" in text and "Expected return" in text
+        assert p.locator("#u-tray .u-slip-metrics.u-slip-head>div").count() == 3
+        assert "Kelly" not in text and "pushes excluded" in text and "Expected return" in text
         assert p.locator("#u-tray .u-leg-ev").count() == 2
         boxes = p.evaluate("[...document.querySelectorAll('#u-tray .u-slip-head>div')].map(d=>d.getBoundingClientRect().height)")
         assert min(boxes) > 0
@@ -548,6 +548,10 @@ def test_genie_flag_on_answers_with_checked_numbers_and_a_daily_count(browser, e
         p = cs2_board(c, env)
         open_genie(p)
         assert p.locator("#u-ask-q").count() == 1 and p.locator("label[for=u-ask-q]").inner_text() == "Ask about this line"
+        # review 2026-11-04: the page-wide form{display:grid} squeezed the box into a 96-220px column (input 37px wide at 390)
+        lay = p.evaluate("""() => { const f = document.getElementById('u-ask'), i = document.getElementById('u-ask-q');
+          return {display: getComputedStyle(f).display, form: f.getBoundingClientRect().width, input: i.getBoundingClientRect().width}; }""")
+        assert lay["display"] == "block" and lay["input"] >= lay["form"] * 0.45, lay
         p.locator("#u-ask-q").fill("How often did this line hit?")
         p.locator("#u-ask-q").press("Enter")
         p.wait_for_selector("#u-ask-out p", timeout=15000)

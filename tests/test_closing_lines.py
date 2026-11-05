@@ -309,3 +309,52 @@ def test_closing_store_never_imports_lol_or_sports():
     src = (ROOT / "closing_lines.py").read_text(encoding="utf-8")
     for bad in ("import lol", "from lol", "import sports", "from sports", "import grader", "import picklog", "import cs2_scout"):
         assert bad not in src
+
+
+# ---------------------------------------------------------------------------------------------------- review 2026-11-04 fixes
+def test_a_late_move_hidden_while_it_is_regraded_still_reaches_the_store(data, monkeypatch):
+    """Graded at 20.5, the feed moves to 21.5 before lock and the row leaves the graded board until it is regraded: the store
+    must hold 21.5 (the platform's line), never the old 20.5. The member payload is unchanged (the row stays hidden)."""
+    monkeypatch.setenv(cl.FLAG, "1")
+    start = datetime.now(timezone.utc) + timedelta(hours=2)
+    raw = {"id": "u-late", "nick": "vargo", "player": "vargo", "prop": "kills", "scope": "12", "line": 21.5, "start": start.isoformat(),
+           "higher": 1.0, "lower": 1.0, "alt": False}
+    monkeypatch.setattr(server.underdog, "board", lambda wait=False: {"at": time.time(), "error": None, "rows": [dict(raw)]})
+    monkeypatch.setitem(server.BOARD, "u-late", {"side": "More", "grade": "B", "graded_line": 20.5, "nick": "vargo", "match_slug": "hltv-901",
+                                                  "settle_slug": "hltv-901", "match_start": start.isoformat()})
+    monkeypatch.setattr(server, "_CL_MOVED", {})
+    out = server.board_payload("underdog")
+    assert [r for r in out["rows"] if r.get("id") == "u-late"] == []                # hidden from members as before
+    (m,) = server._CL_MOVED["underdog"]
+    assert m["line"] == 21.5 and m["lock_at"] and "grade" not in m and "p" not in m
+    cl.observe("underdog", [dict(raw, line=20.5, match_id=m["match_id"], match_slug="hltv-901", lock_at=m["lock_at"])], now=time.time() - 60)
+    server._closing_observe("underdog", out)
+    cl.flush(now=start.timestamp() + 1)
+    (r,) = saved(data)
+    assert r["line"] == 21.5 and r["first_line"] == 20.5 and r["observations"] == 2
+    monkeypatch.delenv(cl.FLAG)
+    server._CL_MOVED.clear()
+    server.board_payload("underdog")
+    assert server._CL_MOVED == {}                                                    # flag off: nothing collected
+
+
+def test_drawer_leaves_off_a_closing_line_last_seen_long_before_lock():
+    """Review 2026-11-04: a 3-hour-old sighting was shown as 'saved at lock'. Stale rows are left off the drawer, never labelled."""
+    ser = [{"date": "2026-10-20", "opponent": "T0", "value": 45}, {"date": "2026-10-19", "opponent": "T1", "value": 20}]
+    mids = ["hltv-0", "hltv-1"]
+    fresh = {"event_id": "hltv:0", "line": 40.5, "lock_utc": iso(T0), "last_seen_at": iso(T0 - 120)}
+    stale = {"event_id": "hltv:1", "line": 30.5, "lock_utc": iso(T0), "last_seen_at": iso(T0 - 3 * 3600)}
+    out = cl.l10_vs_closing(ser, mids, [fresh, stale])
+    assert out["n"] == 1 and out["games"][0]["closing"] == 40.5
+    assert cl.l10_vs_closing(ser, mids, [stale]) is None
+    assert cl.is_stale(stale) and not cl.is_stale(fresh) and not cl.is_stale({"event_id": "x", "line": 1})
+
+
+def test_clv_report_keeps_a_board_line_a_member_opened_in_the_board_group(picks):
+    """picklog resets test 2 -> 0 when a member opens a board line; on_board keeps the provenance (review 2026-11-04)."""
+    con = picklog._db()
+    con.execute("UPDATE picks SET test = 0, on_board = 1 WHERE id = 1")
+    con.commit()
+    con.close()
+    g = {(x["group"], x["book"]): x for x in cl.clv_report(picklog._read_db)["groups"]}
+    assert g[("board", "underdog")]["n"] == 4 and ("member", "underdog") not in g

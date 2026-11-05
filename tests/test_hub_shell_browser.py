@@ -79,6 +79,63 @@ def test_ui_tokens_on_classic_palette_skip_link_account_and_targets(browser, env
         c.close()
 
 
+DETAIL_SMALL = SMALL_TARGETS.replace("#u-hub button,#u-hub select,#u-hub input,#u-hub summary,#u-hub .h-sidebar nav a",
+                                     "#hub-detail button,#hub-detail select,#hub-detail input,#hub-detail summary")
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_ui_tokens_on_open_prop_card_targets_colours_and_account_outside_click(browser, env, monkeypatch, size):
+    """Review 2026-11-04: with the flag on the open card kept 26-34px controls, navy rows / tiles and blue selections, and the
+    account menu stayed open after a click outside it."""
+    monkeypatch.setenv('SCOUT_UI_TOKENS', '1')
+    c = context(browser, env, size)
+    try:
+        p = hub(c, env, size)
+        p.wait_for_function("getComputedStyle(document.getElementById('u-hub')).backgroundColor==='rgb(8, 8, 8)'")
+        p.locator('#hub-rows .h-player').first.click()
+        p.wait_for_selector('#hub-detail .h-history-controls', timeout=20000)
+        small = p.evaluate(DETAIL_SMALL)
+        assert small == [], small
+        col = p.evaluate("""() => { const td = document.querySelector('#hub-rows tr.is-expanded>td'), sel = document.querySelector('#hub-detail .h-segment button[aria-pressed=true]'),
+              tile = document.querySelector('#hub-detail .h-tile, #hub-detail .h-mini-tiles>div');
+          return {row: getComputedStyle(td).backgroundColor, sel: sel && getComputedStyle(sel).backgroundColor, tile: tile && getComputedStyle(tile).backgroundColor}; }""")
+        navy = {'rgb(24, 34, 47)', 'rgb(41, 67, 98)', 'rgb(22, 29, 39)'}
+        assert not navy & set(col.values()), col
+        assert col['sel'] == 'rgb(245, 200, 66)'
+        no_h_scroll(p)
+        summary = p.locator('#u-hub .h-account > summary')
+        summary.click()
+        assert p.locator('#u-hub .h-account').evaluate("d => d.open") is True
+        p.mouse.click(5, (size['height'] if isinstance(size, dict) else 800) - 5)
+        assert p.locator('#u-hub .h-account').evaluate("d => d.open") is False
+        summary.click()
+        p.locator('#u-hub .h-account nav a[href="/auth/logout"]').focus()
+        assert p.locator('#u-hub .h-account').evaluate("d => d.open") is True            # focus inside keeps it open
+        assert not p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize('path', ['/sports?view=classic#/board', '/lol?view=classic', '/?view=classic#board'])
+def test_ui_tokens_on_classic_entry_chip_is_one_colour(browser, env, monkeypatch, path):
+    monkeypatch.setenv('SCOUT_UI_TOKENS', '1')
+    c = context(browser, env, DESK)
+    try:
+        p = open_page(c, env, path, DESK)
+        p.wait_for_selector('.h-entry', timeout=30000)
+        st = p.evaluate("""() => { const e = document.querySelector('.h-entry'), s = getComputedStyle(e), g = getComputedStyle(e).getPropertyValue('--u-gold').trim();
+          return {color: s.color, border: s.borderTopColor, bg: s.backgroundColor}; }""")
+        def rgb(s):                      # 'rgb(r, g, b)' / 'rgba(...)' or color-mix's 'color(srgb r g b / a)'
+            inner = s[s.index('(') + 1:s.rindex(')')].split('/')[0]
+            if s.startswith('color('):
+                return tuple(round(float(x) * 255) for x in inner.split()[1:4])
+            return tuple(round(float(x)) for x in inner.replace(',', ' ').split()[:3])
+        assert rgb(st['color']) == rgb(st['border']) == rgb(st['bg']), st         # one hue: text, border and tint agree
+        assert not p.errors
+    finally:
+        c.close()
+
+
 # ---------------------------------------------------------------------------------------------------------------- SCOUT_MARKET_TOOLS
 
 def market_doc():
@@ -127,6 +184,9 @@ def test_market_tools_board_style_filters_flags_and_density(browser, env, monkey
         p.locator('[data-hub="refresh-markets"]').click()
         p.wait_for_selector('#hub-market-filters .h-market-filters')
         assert market_rows(p) == 5                                  # 3 EV rows + one two-leg comparison
+        # review 2026-11-04: a league with nothing excluded (NFL) has no empty "Why quotes were excluded" section
+        why = p.locator('#hub-market-results article details', has_text='Why quotes were excluded')
+        assert why.count() == 1 and 'Quote older than two minutes: 3' in why.first.text_content()
         text = p.locator('#hub-market-results').text_content()
         assert 'Wide market' in text and 'Stale quote' in text and 'Quoted return' in text and '3.2%' in text
         assert 'guaranteed' not in text.lower()
