@@ -638,8 +638,54 @@ export function mount(C) {
   function drawChart() {
     const box=$('hub-detail'), el=box?.querySelector('[data-hub-chart]'), r=rec(H.detail);
     if(!el||!r)return;
-    const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN);
+    const lh=H.detailDoc?.history?.line_history, cm=new Map((lh?.closing_marks||[]).map(m=>[m.date+'|'+m.opponent,m.closing]));
+    const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN).map(g=>cm.has(g.date+'|'+g.opponent)?{...g,closing:cm.get(g.date+'|'+g.opponent)}:g);
     if(list.length)el.innerHTML=C.chartSvg(list,r.offer.line,H.histSide,Math.max(260,Math.round(el.clientWidth)||560));
+    const lel=box.querySelector('[data-hub-lh]');
+    if(lel&&lh)lel.innerHTML=lhSvg(lh,Math.max(260,Math.round(lel.clientWidth)||560));
+  }
+  /* SCOUT_LINE_HISTORY (lh-1, default off): every app's line for this prop over time, from Scout's own stored moves. Times are the
+     member's own clock; each point's detail is on hover. Nothing here is a grade input. */
+  const lhTime=iso=>new Date(iso).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const LH_ZONE=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch{return '';}})();
+  function lhSvg(lh,w) {
+    const apps=lh.apps||[], pts=apps.flatMap(a=>a.points), lines=pts.map(p=>p.line).filter(num);
+    if(!lines.length)return '';
+    const ts=pts.map(p=>Date.parse(p.at)).filter(Number.isFinite), t1=Math.max(...ts,Date.parse(lh.as_of)||0), t0=Math.min(...ts)<t1?Math.min(...ts):t1-3600e3;
+    const lo=Math.min(...lines), hi=Math.max(...lines), pad=Math.max(.5,(hi-lo)*.15), y0=lo-pad, y1=hi+pad;
+    const h=150, m={l:34,r:10,t:12,b:24}, pw=w-m.l-m.r, ph=h-m.t-m.b, X=t=>m.l+(t-t0)/(t1-t0)*pw, Y=v=>m.t+ph-(v-y0)/(y1-y0)*ph;
+    const ticks=[...new Set(lines)].sort((a,b)=>a-b), shown=ticks.length<=5?ticks:[lo,(lo+hi)/2,hi].map(v=>Math.round(v*2)/2);
+    let out=`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`;
+    shown.forEach(v=>{out+=`<line class="grid" x1="${m.l}" x2="${w-m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${m.l-6}" y="${Y(v)+3.5}" text-anchor="end">${esc(v)}</text>`;});
+    out+=`<text x="${m.l}" y="${h-6}">${esc(lhTime(new Date(t0).toISOString()))}</text><text x="${w-m.r}" y="${h-6}" text-anchor="end">${esc(lhTime(new Date(t1).toISOString()))}</text>`;
+    apps.forEach((a,i)=>{
+      let d='', open=false;
+      a.points.forEach(p=>{
+        const x=X(Date.parse(p.at));
+        if(!num(p.line)){if(open)d+=`H${x}`;open=false;return;}
+        d+=open?`H${x}V${Y(p.line)}`:`M${x},${Y(p.line)}`;open=true;
+      });
+      if(open)d+=`H${X(t1)}`;
+      out+=`<path class="lh-path lh-c${i%4}" d="${d}"/>`;
+      a.points.forEach(p=>{
+        const x=X(Date.parse(p.at)), y=num(p.line)?Y(p.line):m.t+ph, pay=num(p.higher)||num(p.lower)?` · payouts ${num(p.higher)?p.higher+'x more':''}${num(p.higher)&&num(p.lower)?', ':''}${num(p.lower)?p.lower+'x less':''}`:'';
+        out+=`<g class="lh-pt lh-c${i%4}"><circle class="lh-dot" cx="${x}" cy="${y}" r="3.2"/><circle class="lh-hit" cx="${x}" cy="${y}" r="9"><title>${esc(`${a.label} ${lhWord(p)} · ${lhTime(p.at)}${pay}`)}</title></circle></g>`;
+      });
+    });
+    return out+'</svg>';
+  }
+  function lhWord(p) {
+    return p.kind==='pulled'?'pulled':p.kind==='seen'?`on the board at ${p.line}`:p.kind==='open'?`opened at ${p.line}`:p.kind==='payout'?`payout changed at ${p.line}`:`moved to ${p.line}`;
+  }
+  function lineHistHtml(lh) {
+    if(!lh)return '';
+    const apps=lh.apps||[], moves=apps.reduce((n,a)=>n+a.moves,0);
+    const rows=apps.flatMap(a=>a.points.map(p=>({a,p}))).sort((x,y)=>Date.parse(y.p.at)-Date.parse(x.p.at));
+    const chart=apps.length?`<div class="h-lh-chart" data-hub-lh role="img" aria-label="Line history for ${apps.length} ${apps.length===1?'app':'apps'}, ${moves} ${moves===1?'move':'moves'}"></div>
+      <div class="h-legend h-lh-legend">${apps.map((a,i)=>`<span><i class="lh-c${i%4}"></i>${esc(a.label)} ${esc(a.current)}</span>`).join('')}${(lh.closing_marks||[]).length?'<span><i class="lh-close"></i>Closing line (bars above)</span>':''}</div>`:'';
+    const table=rows.length?`<details class="h-history-table h-lh-table"><summary>Every move (${rows.length})</summary><div class="h-scroll-x"><table><thead><tr><th>Time</th><th>App</th><th>Line</th><th>Change</th></tr></thead><tbody>${rows.map(({a,p})=>`<tr><td><time datetime="${esc(p.at)}">${esc(lhTime(p.at))}</time></td><td>${esc(a.label)}</td><td>${num(p.line)?esc(p.line):'—'}</td><td>${esc(lhWord(p))}</td></tr>`).join('')}</tbody></table></div></details>`:'';
+    const closes=(lh.closing_marks||[]).length?`<p class="h-history-note">Closing lines on ${esc(lh.closing_platform)}: the white tick on each bar is the line that game closed at.${num(lh.avg_closing_l10)?` Average closing line, last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'}: <b>${esc(lh.avg_closing_l10)}</b>.`:''}</p>`:'';
+    return `<section class="h-lh"><div class="h-sec-head"><h4>Line history</h4><small>${apps.length} ${apps.length===1?'app':'apps'} · ${moves} ${moves===1?'move':'moves'}${LH_ZONE?` · times in ${esc(LH_ZONE)}`:''}</small></div>${chart}${closes}${table}</section>`;
   }
   /* HLTV map chances (owner 2026-11-04, as on the classic CS2 card): each map's chance to be played and the likeliest simulated
      veto; display only, weight 0 in the grade. No projection for the match = no block. */
@@ -691,10 +737,12 @@ export function mount(C) {
       :H.detailState==='error'?''
       :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span></div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table></div></details>`
       :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
-    return `<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}</div>
+    const lh=doc?.history?.line_history, avgClose=num(lh?.avg_closing_l10)?tile(esc(lh.avg_closing_l10),'Avg closing line',`<small>last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'} · ${esc(lh.closing_platform)}</small>`,' is-closing'):'';
+    return `<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
       <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
+      ${lineHistHtml(doc?.history?.line_history)}
       ${h2hHtml(hh,line,side)}${P('report')&&!r.extra?'<p class="h-report-row"><button class="h-link" data-hub="report-open">Report a problem with this line</button></p>':''}`;
   }
   /* Lines: the card's Compare lines and the old drawer's Books table in one place: every book and line for this prop, its prices,

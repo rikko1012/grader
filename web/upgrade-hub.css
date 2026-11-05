@@ -1129,3 +1129,12 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 #u-hub .h-generator-controls .h-goblin-rule{grid-column:1/-1}
 #u-hub .h-generator-controls .h-goblin-rule select{max-width:280px}
 #u-hub .h-goblin-rule small{color:var(--u-muted);font-size:12px;line-height:1.4}
+/* SCOUT_LINE_HISTORY (lh-1): one line per app over time, closing-line ticks on the past-results bars */
+.h-lh{margin-top:14px}.h-lh-chart{width:100%}.h-lh-chart svg{display:block;width:100%;height:auto}
+.h-lh-chart .grid{stroke:#263241;stroke-width:1}.h-lh-chart text{font:10px 'DM Mono',monospace;fill:#9aabc1}
+.h-lh-chart .lh-path{fill:none;stroke-width:2}.h-lh-chart .lh-hit{fill:transparent;cursor:help}.h-lh-chart .lh-pt:hover .lh-dot{r:5}
+.lh-path.lh-c0{stroke:#7fa8ff}.lh-path.lh-c1{stroke:#c69cf2}.lh-path.lh-c2{stroke:#6fd0c3}.lh-path.lh-c3{stroke:#e39d6c}
+.lh-pt.lh-c0 .lh-dot{fill:#7fa8ff}.lh-pt.lh-c1 .lh-dot{fill:#c69cf2}.lh-pt.lh-c2 .lh-dot{fill:#6fd0c3}.lh-pt.lh-c3 .lh-dot{fill:#e39d6c}
+.h-lh-legend i.lh-c0{background:#7fa8ff}.h-lh-legend i.lh-c1{background:#c69cf2}.h-lh-legend i.lh-c2{background:#6fd0c3}.h-lh-legend i.lh-c3{background:#e39d6c}
+.h-lh-legend i.lh-close{height:0;border-top:2px solid #eef3fa;border-radius:0;vertical-align:3px}
+.h-history-chart .close-mark{stroke:#eef3fa;stroke-width:2.5;stroke-linecap:round}

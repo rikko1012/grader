@@ -943,6 +943,8 @@ def _line_body(srv, book, rid):
     closing = _closing(srv, x, full) if os.environ.get("SCOUT_CLOSING_LINES") == "1" else None
     if closing:
         hist["closing"] = closing                      # SCOUT_CLOSING_LINES: only when a past game has a saved closing line
+    if os.environ.get("SCOUT_LINE_HISTORY") == "1":     # lh-1 (workspace_linehist.py): every app's moves + closing markers, display only
+        _line_history(srv, x, prop_key, full, hist)
     return 200, {"record": rec, "forecast": forecast, "history": hist,
                  "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
                  "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved)}
@@ -961,6 +963,24 @@ def _closing(srv, x, full):
         return cl.l10_vs_closing(full["ser"], full["mids"], rows or [], platform_label=LABEL.get(_book(x), _book(x)))
     except Exception:
         return None
+
+
+def _line_history(srv, x, prop_key, full, hist):
+    """SCOUT_LINE_HISTORY: the card's line history (one line per app) and closing markers. Never breaks /line."""
+    try:
+        import workspace_linehist
+        import closing_lines as cl
+        sib = [_SNAP["index"].get(k) for k in _SNAP["props"].get(prop_key, [])]
+        args = (cl.norm(_nick(x)), x.get("prop"), str(x.get("scope") or "12"), _book(x), line_type_of(x))
+        lh = workspace_linehist.block(srv, x, sib, full, args)
+        if lh:
+            hist["line_history"] = lh
+        if "closing" not in hist:                      # L10 vs closing beside L10 vs current, from saved closing lines
+            c = _closing(srv, x, full)
+            if c:
+                hist["closing"] = c
+    except Exception:
+        pass
 
 
 def _map_chances(x, saved=None):

@@ -741,7 +741,7 @@
     const slot0 = (w - 36) / Math.max(1, results.length), angled = flat * 6.2 > slot0 - 4;
     const longest = angled ? Math.max(0, ...results.map((d, i) => Math.min(names[i].length, 14) + (dates[i] ? dates[i].length + 3 : 0))) : flat;
     const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 184, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 38 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
-    const vals = data.map((d) => d.value), top = Math.max(line, ...vals, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
+    const vals = data.map((d) => d.value), closes = data.map((d) => d.closing).filter((c) => typeof c === "number"), top = Math.max(line, ...vals, ...closes, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
     const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
     const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
     let out = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`;
@@ -750,6 +750,7 @@
       const x = m.l + slot * i + (slot - bw) / 2, yv = y(d.value), push = d.value === line, over = d.value > line, cls = push ? "b-push" : (side === "over" ? over : !over) ? "b-hit" : "b-miss";
       out += `<rect class="${cls}" x="${x}" y="${yv}" width="${bw}" height="${Math.max(base - yv, 1)}" rx="3"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${d.value}`)}</title></rect>`;
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
+      if (typeof d.closing === "number") out += `<line class="close-mark" x1="${x - 3}" x2="${x + bw + 3}" y1="${y(d.closing)}" y2="${y(d.closing)}"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: closed at ${d.closing}, finished ${d.value}`)}</title></line>`;   /* lh-1: the line this game closed at */
       const day = dateOf(d);
       if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")) + (day ? " · " + day : ""))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 21}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>${day ? `<text class="date" x="${x + bw / 2}" y="${h - 7}" text-anchor="middle">${esc(day)}</text>` : ""}`;
     });
