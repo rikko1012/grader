@@ -19,7 +19,8 @@ def start(ctx, env, path='/#/board', width=1440):
 @pytest.mark.parametrize('width',[390,1440])
 def test_history_visible_without_model_side(ctx,env,width):
     def patch(route):
-        response=route.fetch()
+        h=dict(route.request.headers);h.pop('if-none-match',None)
+        response=route.fetch(headers=h)
         doc=response.json()
         for rec in doc.get('records',[]):
             rec['scout']['side']=None
@@ -30,8 +31,8 @@ def test_history_visible_without_model_side(ctx,env,width):
     p.wait_for_selector('#hub-rows .h-hit-both')
     assert 'No side' not in p.locator('#hub-rows').inner_text()
     assert p.locator('#hub-rows .h-direction-options').count()>0
-    assert 'O 3/5' in p.locator('#hub-rows .h-hit-both').first.inner_text().replace('\n',' ')
-    assert 'U 1/5' in p.locator('#hub-rows .h-hit-both').first.inner_text().replace('\n',' ')
+    both = p.locator('#hub-rows .h-hit-both').first          # no side: both counts, no side picked for the member
+    assert both.inner_text() == '3-1' and both.get_attribute('title').startswith('3 Over, 1 Under, 1 pushes of the last 5')
     no_h_scroll(p)
     p.screenshot(path=f'.side-cards-{width}.png',full_page=True)
     assert not p.errors
@@ -48,9 +49,11 @@ def test_player_props_are_collapsed_and_expand_without_losing_research(ctx,env,w
     assert p.locator('#hub-rows tr[data-record]').count()>initial
     p.locator('#hub-rows .h-player').last.click()
     p.wait_for_selector('#hub-detail .h-history-controls')
+    if width < 1101:                                           # phone: the card is a full-screen sheet; Back returns to the board
+        p.locator('#hub-detail [data-hub=card-close]').click()
     p.locator('#hub-rows .h-prop-toggle').first.click()
     assert p.locator('#hub-rows tr[data-record]').count()==initial
-    assert p.locator('#hub-detail').count()==0
+    assert p.locator('#hub-card').is_hidden()
     no_h_scroll(p)
     assert not p.errors
 
@@ -58,31 +61,34 @@ def test_player_props_are_collapsed_and_expand_without_losing_research(ctx,env,w
 def test_game_route_uses_live_fixture_records_and_scoped_board(ctx, env):
     p = start(ctx, env)
     p.locator('#hub-q').fill('not-a-player')
+    p.locator('#hub-filters-toggle').click()
     p.locator('#hub-watch').click()
     p.locator('#hub-soonOnly').click()
     p.evaluate("location.hash='/games'")
-    try:
-        p.wait_for_selector('.h-game-card')
-    except Exception:
-        print(p.url, p.errors, p.locator('#hub-games-section').inner_text(), p.locator('#hub-title').inner_text())
-        raise
+    # By game is a view of the board: it keeps the board's filters and says how many games they hide
+    p.wait_for_selector('#hub-games-body:not([hidden]) .h-empty')
+    assert 'hidden by filters' in p.locator('#hub-games-body').inner_text()
+    p.locator('#hub-games-body [data-hub=clear-filters]').click()
+    p.wait_for_selector('.h-game-card')
+    assert p.locator('#hub-board-section').is_visible() and p.locator('#hub-board-section [data-hub=view][data-id=games]').get_attribute('aria-pressed')=='true'
     card = p.locator('.h-game-card').first
     event = card.locator('h2').inner_text()
     card.locator('button').click()
     assert '#/board' in p.url
     p.wait_for_selector('#hub-rows tr[data-record]')
-    assert all(event in x for x in p.locator('#hub-rows .h-match').all_text_contents())
+    assert p.locator('#hub-rows .h-match').all_text_contents() == [event]       # one game header: the board filtered to that game
+    assert p.locator('#hub-rows [data-hub=game]').get_attribute('aria-pressed') == 'true'
     p.go_back()
-    p.wait_for_selector('#hub-games-section:not([hidden])')
+    p.wait_for_selector('#hub-games-body:not([hidden])')
     assert not p.errors
 
 
 @pytest.mark.parametrize('width', [360, 390, 640, 1024, 1025, 1100, 1440])
 def test_all_routes_fit_and_preserve_original_tools(ctx, env, width):
     p = start(ctx, env, width=width)
-    for route, section in [('games','games'),('slips','studio'),('results','record'),('tools','tools')]:
+    for route, sel in [('games','#hub-games-body'),('slips','#hub-studio-section'),('results','#hub-record-section'),('tools','#hub-tools-section')]:
         p.evaluate('(h)=>{location.hash=h}', '/'+route)
-        p.wait_for_selector('#hub-'+section+'-section:not([hidden])')
+        p.wait_for_selector(sel+':not([hidden])')
         no_h_scroll(p)
         assert p.locator('.h-center').bounding_box()['y'] < 100
         if os.environ.get('WORKSPACE_V2_SHOTS'):
@@ -102,6 +108,7 @@ def test_history_median_and_saved_slips_not_fabricated(ctx, env):
     p.wait_for_selector('#hub-detail .h-history-chart')
     assert 'Median' in p.locator('#hub-detail').inner_text()
     p.evaluate("location.hash='/slips'")
+    p.locator('[role=tab][data-hub=studio-tab][data-id=tracked]').click()
     p.wait_for_selector('#hub-slip-history')
     p.wait_for_function("document.querySelector('#hub-slip-history').textContent.includes('No tracked picks')")
     assert not p.errors
@@ -110,6 +117,7 @@ def test_history_median_and_saved_slips_not_fabricated(ctx, env):
 def test_new_filters_are_explicit_and_do_not_invent_movement(ctx, env):
     p = start(ctx, env)
     p.wait_for_selector('#hub-rows tr[data-record]')
+    p.locator('#hub-filters-toggle').click()
     p.locator('#hub-movedOnly').click()
     assert p.locator('#hub-movedOnly').get_attribute('aria-pressed') == 'true'
     # Whether populated or empty, the route and source state remain usable.
@@ -123,13 +131,16 @@ def test_new_filters_are_explicit_and_do_not_invent_movement(ctx, env):
 def test_saved_filters_keep_freshness_and_grade_after_reload(ctx,env):
     from tests.test_research_hub_browser import saved_state
     p=start(ctx,env)
+    p.locator('#hub-filters-toggle').click()
     p.locator('#hub-freshOnly').click()
     p.locator('#hub-minGrade').select_option('B')
+    p.locator('#hub-views-toggle').click()
     p.locator('[data-hub=save-view]').click()
     p.locator('#hub-save-name').fill('Fresh B and above')
     p.locator('#hub-save-confirm').click()
     saved_state(p,lambda d:len((d.get('prefs') or {}).get('researchHub',{}).get('views',[]))==1)
     p.reload();p.wait_for_selector('#hub-rows tr')
+    p.locator('#hub-views-toggle').click()
     p.locator('#hub-views').select_option('0')
     assert p.locator('#hub-freshOnly').get_attribute('aria-pressed')=='true'
     assert p.locator('#hub-minGrade').input_value()=='B'
@@ -138,7 +149,7 @@ def test_saved_filters_keep_freshness_and_grade_after_reload(ctx,env):
 def test_share_card_requires_checked_entry_and_does_not_track(ctx, env, tmp_path):
     p = start(ctx, env)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-book').select_option('prizepicks')
+    p.locator('#hub-platform [data-id=prizepicks]').click()
     for name in ('vargo', 'orlo'):
         p.locator('#hub-q').fill(name)
         p.locator('#hub-rows .h-add:not([disabled])').first.click()
@@ -160,7 +171,7 @@ def test_classic_book_link_rechecks_without_tracking(ctx, env, monkeypatch):
     monkeypatch.setattr(server, 'PP_OPEN_LINK', True)
     p = start(ctx, env)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-book').select_option('prizepicks')
+    p.locator('#hub-platform [data-id=prizepicks]').click()
     for name in ('vargo', 'orlo'):
         p.locator('#hub-q').fill(name)
         p.locator('#hub-rows .h-add:not([disabled])').first.click()

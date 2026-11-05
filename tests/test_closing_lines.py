@@ -295,9 +295,9 @@ def test_report_is_cached_and_a_failure_is_stated(picks, monkeypatch):
 def test_drawer_and_diagnostics_render_only_with_data_and_no_hedge_or_return_words():
     hub = (ROOT / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
     i = hub.index("/* L10 vs closing (SCOUT_CLOSING_LINES)")
-    body = hub[i:hub.index("const pick=", i)]
+    body = hub[i:hub.index("const chart=", i)]
     assert "cl?.n?tile(" in body and "const closingTable=cl?.n?" in body and "L10 vs closing" in body
-    assert "${hitTiles}${closingTile}" in hub and "${closingTable}</section>" in hub
+    assert "${hitTiles}${h2hTile}${seasonTile}${closingTile}" in hub and "${closingTable}</section>" in hub
     assert not any(h in body.lower() for h in HEDGE + FORBIDDEN)
     page = (ROOT / "web" / "diagnostics.html").read_text(encoding="utf-8")
     fn = page[page.index("function clvHtml()"):page.index("function fwdHs()")]

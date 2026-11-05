@@ -268,12 +268,6 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 .h-studio-explain h3{font-size:14px;margin:0}
 .h-studio-explain p{font-size:12px;line-height:1.8}
 .h-studio-explain button{font-size:12px;background:none;color:#b8d4fa}
-@media(min-width:1101px) and (max-width:1250px){
- .scout-hub{grid-template-columns:154px minmax(0,1fr)}
- .h-slip{display:none}
- .h-mobile-slip{display:block}
- .h-center{padding-bottom:95px}
-}
 @media(max-width:1100px){
  .scout-hub{grid-template-columns:minmax(0,1fr)}
  .h-center{padding:17px 13px 105px}
@@ -356,12 +350,6 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 #u-hub .u-leg-name,#u-hub .u-leg-pick,#u-hub .u-leg-meta{white-space:normal;overflow-wrap:anywhere}
 #hub-studio-body .u-leg-pick{font-size:14px;line-height:1.7}
 #hub-studio-body .u-leg-meta{font-size:12px;line-height:1.7}
-@media(min-width:1101px) and (max-width:1650px){
- .scout-hub{grid-template-columns:172px minmax(0,1fr)}
- .h-slip{display:none}
- .h-mobile-slip{display:block}
- .h-center{padding-bottom:95px}
-}
 @media(max-width:800px){
  .scout-hub,.scout-hub.h-studio-mode{grid-template-columns:minmax(0,1fr)}
  #u-hub .h-sidebar{display:none}
@@ -485,14 +473,6 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
  .h-batch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 /* V2 keeps the member's familiar palette and table, with dedicated task routes. */
-@media(min-width:1025px){
- #u-hub.h-v2:not(.h-studio-mode){grid-template-columns:160px minmax(0,1fr) 280px}
- #u-hub.h-v2.h-studio-mode{grid-template-columns:160px minmax(0,1fr)}
- #u-hub.h-v2:not(.h-studio-mode) .h-slip{display:flex}
- #u-hub.h-v2:not(.h-studio-mode) .h-mobile-slip{display:none}
- #u-hub.h-v2 .h-sidebar{display:flex}
- #u-hub.h-v2 .h-nav-mobile{display:none}
-}
 #u-hub.h-v2 .h-game-grid,#u-hub.h-v2 .h-tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 #u-hub.h-v2 .h-game-card,#u-hub.h-v2 .h-tool-grid>article{min-width:0;padding:24px;background:#161c24;border:1px solid #303d4e;border-radius:12px;display:flex;flex-direction:column;align-items:stretch}
 #u-hub.h-v2 .h-game-card>header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 0 20px}
@@ -710,12 +690,10 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 #u-hub .h-detail-action button:disabled{background:#2a3442;border-color:#2a3442;color:#8796a9}
 /* narrower desktop: tighter cells, the card stacks */
 @media(min-width:1101px) and (max-width:1400px){
- #u-hub.h-v2:not(.h-studio-mode){grid-template-columns:150px minmax(0,1fr) 250px}
  #u-hub .h-center{padding-inline:16px}
  #u-hub #hub-table>tbody>tr[data-record]>td,#u-hub #hub-table>thead>tr>th{padding-inline:4px}
  #u-hub #hub-table .h-c-watch{width:26px}#u-hub #hub-table .h-c-add{width:40px}
  #u-hub .h-hit.h-hit-wait{width:38px}
- #u-hub #hub-table .h-c-player{width:19%}#u-hub #hub-table .h-c-compare{width:17%}
  #u-hub #hub-table .h-compare{padding-inline:6px}
  #u-hub .h-avatar{display:none}
  #u-hub .h-hit{min-width:38px;padding-inline:3px;font-size:11.5px}
@@ -772,8 +750,6 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
  #u-hub .h-card-links button{flex:1}
  .h-tile>b{font-size:19px}
 }
-/* owner 2026-11-04 "make it fit better": an empty slip panel collapses on desktop and the board takes its width; adding a leg brings it back */
-@media(min-width:1101px){#u-hub.h-slip-empty:not(.h-studio-mode) .h-slip{display:none!important}#u-hub.h-slip-empty:not(.h-studio-mode) .h-center{grid-column:2/-1}}
 /* HLTV map chances on the CS2 card (2026-11-04; display only, weight 0): one chip per map, the likeliest veto as a note */
 .h-mapchances{margin-top:18px;padding-top:14px;border-top:1px solid #29323f;min-width:0}
 .h-mc-maps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;padding:0;list-style:none}
@@ -787,10 +763,6 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 #u-hub.h-cols .h-hit.h-tone-4{background:#233a38;color:#b9dfd3}
 #u-hub.h-cols .h-hit.h-tone-5{background:#204438;color:#b1e7cb}
 #u-hub.h-cols .h-hit.h-tone-6{background:#18553d;color:#c5ffdf}
-@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-player{width:17%}#u-hub.h-cols #hub-table .h-c-market{width:8%}#u-hub.h-cols #hub-table .h-c-line{width:7%}}
-@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-proj{width:4.5%}#u-hub.h-cols #hub-table .h-c-side{width:8%}#u-hub.h-cols #hub-table .h-c-edge{width:5.5%}}
-@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-l5,#u-hub.h-cols #hub-table .h-c-l10,#u-hub.h-cols #hub-table .h-c-l20,#u-hub.h-cols #hub-table .h-c-h2h,#u-hub.h-cols #hub-table .h-c-season{width:5%}}
-@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-compare{width:12%}#u-hub.h-cols #hub-table .h-c-grade{width:8.5%}}
 #u-hub.h-cols #hub-table>thead>tr>th.h-c-h2h,#u-hub.h-cols #hub-table>thead>tr>th.h-c-season,#u-hub.h-cols #hub-table>thead>tr>th.h-c-edge,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-edge{text-align:center}
 #u-hub.h-cols #hub-table>thead>tr>th small{display:block;font-size:9px;letter-spacing:.04em;color:#8d9db1;margin-top:2px}
 #u-hub.h-cols .h-edge{display:inline-flex;align-items:baseline;gap:3px;font:600 12.5px 'DM Mono',monospace;font-variant-numeric:tabular-nums;color:#d2dbe7;white-space:nowrap}
@@ -803,7 +775,6 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 #u-hub.h-cols .h-empty-reasons{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
 #u-hub.h-cols .h-empty-reasons>span{padding:4px 10px;border:1px solid #2f3b4c;border-radius:999px;font-size:12px;color:#c9d4e2}
 @media(min-width:1101px) and (max-width:1400px){
- #u-hub.h-cols #hub-table .h-c-player{width:16%}#u-hub.h-cols #hub-table .h-c-compare{width:12%}
  #u-hub.h-cols .h-hit{min-width:34px;font-size:11px}
 }
 @media(max-width:1100px){
@@ -815,3 +786,333 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
  #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h:before,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season:before{display:block;margin-bottom:4px;font:500 9.5px 'DM Mono',monospace;letter-spacing:.06em;color:#8d9db1}
  #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h:before{content:'H2H'}#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season:before{content:'SEASON'}
 }
+/* ==== 2026-11-05 structure review. One toolbar row, compact rows under game header rows, ONE player card (a right panel on desktop,
+   a full-screen sheet on phone), a slip column that keeps its width, a bottom tab bar on phone. Layout only: every colour, font and
+   the blue theme above are unchanged; the gold design (SCOUT_UI_TOKENS) stays its own sheet. ==== */
+#u-hub{--side-w:160px;--slip-w:280px}
+@media(min-width:1101px) and (max-width:1400px){#u-hub{--side-w:136px;--slip-w:244px}}
+@media(min-width:1101px){
+ #u-hub.scout-hub{grid-template-columns:var(--side-w) minmax(0,1fr) var(--slip-w)}
+ #u-hub.scout-hub.h-studio-mode{grid-template-columns:var(--side-w) minmax(0,1fr)}
+ #u-hub .h-sidebar{display:flex}
+ #u-hub.scout-hub:not(.h-studio-mode) .h-slip{display:flex}
+ #u-hub.scout-hub.h-studio-mode .h-slip{display:none}
+ #u-hub .h-tabbar,#u-hub .h-more-sheet{display:none!important}
+ #u-hub .h-center{padding:12px 20px 40px}
+}
+@media(min-width:1101px) and (max-width:1400px){#u-hub .h-center{padding-inline:12px}#u-hub .h-sidebar{padding-inline:8px}#u-hub .h-sidebar nav button{font-size:13px}}
+#u-hub .h-sidebar nav{gap:2px}
+#u-hub .h-sidebar nav button{min-height:44px}
+#u-hub .h-sidebar-foot button{min-height:40px;font-size:12px}
+/* the board's page heading stays for screen readers and the skip link; the toolbar is the first thing on screen */
+#u-hub.h-board-mode .h-top{position:absolute;width:1px;height:1px;min-height:0;margin:0;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal;margin:0 0 8px}
+#u-hub .h-top{margin-bottom:12px;min-height:0}
+#u-hub .u-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+#u-hub summary{min-height:40px;padding-block:10px;line-height:20px;box-sizing:border-box}
+#u-hub .h-link{border:0;background:none;color:#8ab6ff;padding:0 6px;min-height:40px;font-size:12px}
+#u-hub .h-count-badge{display:inline-block;min-width:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:#26374e;color:#b9d6ff;font:500 11px/18px 'DM Mono',monospace;text-align:center}
+#u-hub .h-count-badge:empty{display:none}
+/* one toolbar: sport tabs, search, platform, Filters (n), Views, refresh */
+#u-hub .h-toolbar{display:flex;align-items:center;gap:8px;margin:0 0 6px;min-width:0}
+#u-hub .h-toolbar .h-sports{display:flex;gap:2px;flex:0 1 auto;min-width:0;margin:0;border:0;overflow-x:auto;scrollbar-width:none}
+#u-hub .h-toolbar .h-sports::-webkit-scrollbar{display:none}
+#u-hub .h-toolbar .h-sports button{min-height:40px;padding:0 9px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent!important;color:#aebaca;font-size:13px;white-space:nowrap}
+#u-hub .h-toolbar .h-sports button[aria-pressed=true]{border-bottom-color:#77adff;color:#f4f7fc}
+#u-hub .h-toolbar .h-sports span{display:inline;margin-left:5px;padding:1px 5px;border-radius:4px;background:#232a34;font:10px 'DM Mono',monospace;opacity:.8}
+#u-hub .h-toolbar .h-search{flex:1 1 150px;min-width:110px}
+#u-hub .h-toolbar .h-search input{width:100%;min-width:0;min-height:40px;font-size:13px}
+#u-hub .h-platform{flex:none}
+#u-hub .h-platform button{min-width:42px;min-height:40px;padding:0 9px;font-size:12px}
+#u-hub .h-pop-wrap{position:relative;flex:none}
+#u-hub .h-toolbar .h-filter-toggle,#u-hub #hub-views-toggle{display:inline-flex;align-items:center;gap:4px;min-height:40px;padding:0 11px;font-size:12px;white-space:nowrap}
+#u-hub .h-refresh{flex:none;width:40px;min-height:40px;padding:0}
+#u-hub .h-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:30;display:grid;gap:12px;width:min(430px,calc(100vw - 32px));padding:14px;background:#1b212b;border:1px solid #455164;border-radius:8px;box-shadow:0 10px 30px #0008}
+#u-hub .h-pop.h-pop-end{left:auto;right:0;width:min(290px,calc(100vw - 32px))}
+#u-hub .h-pop-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#u-hub .h-pop label{display:grid;gap:4px;font-size:11px;color:#a8b7ca;min-width:0}
+#u-hub .h-pop select{width:100%;max-width:none;min-height:40px;font-size:13px}
+#u-hub .h-pop .h-quick{display:flex;flex-wrap:wrap;gap:6px;margin:0}
+#u-hub .h-pop .h-quick button,#u-hub.h-v2 .h-pop .h-quick button{min-height:40px;font-size:12px;border-radius:5px}
+#u-hub .h-pop-foot{display:flex;justify-content:space-between;gap:8px}
+#u-hub .h-pop>button{min-height:40px;text-align:left;font-size:13px}
+#u-hub .h-health{margin:0 0 4px}
+#u-hub .h-health details{padding:0 10px}
+/* the count line: players and lines, Clear filters when any is on, List | By game */
+#u-hub .h-table-title{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;margin:0 0 4px;min-height:40px}
+#u-hub .h-table-title>span{margin:0;font:11.5px 'DM Mono',monospace;color:#9daabb;white-space:nowrap}
+#u-hub .h-viewmode{margin-left:auto}
+#u-hub .h-viewmode button{min-height:40px;padding:0 12px;font-size:12px}
+#hub-board-section.h-by-game .h-table-wrap{display:none}
+#u-hub .h-empty{display:grid;gap:10px;justify-items:center;text-align:center}
+#u-hub .h-empty-title{font-size:14px;color:#e8eef6}
+#u-hub .h-empty button{min-height:40px}
+#u-hub .h-empty-acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#u-hub .h-pagination button{min-height:40px}
+/* compact rows: 56-64px, columns in reading order */
+#u-hub #hub-table>thead>tr>th{top:-12px;padding:7px 6px;font-size:10px}
+#u-hub #hub-table .h-c-watch{width:44px}#u-hub #hub-table .h-c-player{width:auto}#u-hub #hub-table .h-c-market{width:12%}
+#u-hub #hub-table .h-c-line{width:72px}#u-hub #hub-table .h-c-proj{width:48px}#u-hub #hub-table .h-c-scout{width:112px}
+#u-hub #hub-table .h-c-hits{width:120px}#u-hub.h-cols #hub-table .h-c-hits{width:180px}#u-hub #hub-table .h-c-edge{width:68px}
+#u-hub #hub-table>thead>tr>th.h-c-edge small{display:block;margin:0;font-size:8px;letter-spacing:0;white-space:nowrap}
+#u-hub #hub-table .h-c-compare{width:80px}#u-hub #hub-table .h-c-add{width:84px}
+@media(min-width:1101px) and (max-width:1400px){
+ #u-hub #hub-table .h-c-watch{width:40px}#u-hub #hub-table .h-c-line{width:66px}#u-hub #hub-table .h-c-proj{width:44px}#u-hub #hub-table .h-c-scout{width:100px}
+ #u-hub #hub-table .h-c-market{width:12%}#u-hub.h-cols #hub-table .h-c-hits{width:168px}#u-hub #hub-table .h-c-hits{width:110px}#u-hub #hub-table .h-c-edge{width:64px}
+ #u-hub #hub-table .h-c-compare{width:72px}#u-hub #hub-table .h-c-add{width:76px}
+}
+/* the optional Edge column steps aside on the narrowest desktop so the player name keeps its width (it returns from 1281px) */
+@media(min-width:1101px) and (max-width:1280px){#u-hub #hub-table .h-c-edge{display:none}}
+/* a narrow desktop gives the player name the watch column's width; the star stays on the card */
+@media(min-width:1101px) and (max-width:1280px){#u-hub #hub-table .h-c-watch{width:0;padding:0!important;border:0}#u-hub #hub-table .h-c-watch>*{display:none}#u-hub .h-toolbar .h-sports span{display:none}#u-hub .h-toolbar .h-sports button{padding:0 7px}}
+#u-hub #hub-table>tbody>tr[data-record]>td{height:56px;padding:4px 6px;vertical-align:middle;overflow:hidden}
+#u-hub #hub-table .h-star{display:grid;place-items:center;width:40px;height:40px;padding:0}
+#u-hub #hub-table .h-player{display:grid;gap:1px;width:100%;min-height:40px;align-content:center}
+#u-hub #hub-table .h-player b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#u-hub #hub-table .h-player small{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#u-hub #hub-table .h-player small i{flex:none}
+#u-hub .h-mcell{display:flex;align-items:center;gap:6px;min-width:0}
+#u-hub .h-mcell>div{min-width:0;flex:1}
+#u-hub #hub-table .h-prop-toggle{flex:none;display:grid;place-items:center;min-width:40px;height:40px;margin:0;padding:0 6px;border-radius:999px;font:600 12px 'DM Mono',monospace}
+#u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>b{font-size:16px}
+#u-hub #hub-table>tbody>tr[data-record]>td.h-c-line small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#u-hub .h-scout{display:grid;gap:3px;min-width:0}
+#u-hub .h-scout .h-direction{flex-direction:row;align-items:baseline;gap:6px;white-space:nowrap}
+#u-hub .h-scout .h-direction>span{font-size:12px}
+#u-hub .h-scout-grade{display:flex;align-items:center;gap:5px;min-width:0;white-space:nowrap}
+#u-hub .h-scout-grade .h-grade{height:22px;min-width:28px;font-size:12px}
+#u-hub .h-scout-grade .h-grade-text{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#u-hub #hub-table .h-scout-grade .h-grade-tag{font-size:10px}
+#u-hub .h-scout .h-direction-options{display:grid;gap:1px;font-size:11px}
+/* the hit strip: L5 L10 L20 (H2H SZN), one shaded cell each, counts in the tooltip */
+#u-hub .h-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;min-width:0}
+#u-hub .h-strip-head span{text-align:center;cursor:help}
+#u-hub .h-strip-cell{display:block;min-width:0}
+#u-hub .h-strip .h-hit{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;height:28px;padding:0 2px 3px;font-size:11.5px;border-radius:4px}
+#u-hub .h-strip .h-hit.h-hit-wait{width:100%;height:28px}
+#u-hub .h-strip .h-hit.h-few{outline:1px dashed #5d6e86;outline-offset:-2px}
+#u-hub .h-strip .h-hit.h-hit-both{display:flex;font-size:11px;background:#202a36}
+#u-hub .h-hit.h-tone-0{background:#48272c;color:#ffd2d7}
+#u-hub .h-hit.h-tone-1{background:#3b292e;color:#f1c3c9}
+#u-hub .h-hit.h-tone-2{background:#302c33;color:#d4c5d0}
+#u-hub .h-hit.h-tone-3{background:#283342;color:#d2deef}
+#u-hub .h-hit.h-tone-4{background:#233a38;color:#b9dfd3}
+#u-hub .h-hit.h-tone-5{background:#204438;color:#b1e7cb}
+#u-hub .h-hit.h-tone-6{background:#18553d;color:#c5ffdf}
+#u-hub #hub-table .h-compare{min-height:40px;padding:3px 7px;align-content:center}
+#u-hub #hub-table .h-compare small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#u-hub #hub-table .h-add{width:100%;height:40px;font-size:13px;font-weight:600;white-space:nowrap}
+#u-hub #hub-table .h-add.selected{font-size:12px}
+#u-hub #hub-table .h-add.is-on{background:#243e5e;border-color:#4b74a6;color:#d6e7ff;font-size:12px}
+#u-hub .h-edge{display:inline-flex;align-items:baseline;gap:3px;font:600 12.5px 'DM Mono',monospace;color:#d2dbe7;white-space:nowrap}
+#u-hub #hub-table .h-edge small{display:inline;margin:0;font-size:10px;color:inherit;opacity:.75}
+#u-hub .h-edge.positive{color:#b1e7cb}#u-hub .h-edge.empty{color:#7d8ea6}
+#u-hub .h-sort-note:empty{display:none}
+#u-hub .h-sort-note{font-size:11.5px;color:#c9d4e2}
+/* game header rows: matchup, sport, start and countdown once per game; a click shows only that game */
+#u-hub #hub-table>tbody>tr.h-game-row>td{padding:4px 0 2px;border:0;background:transparent}
+#u-hub #hub-table .h-game-head{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:0 10px;border:1px solid #232b36;border-radius:6px;background:#141a22;color:#dce5f1;text-align:left;font-size:12px;cursor:pointer}
+#u-hub #hub-table .h-game-head:hover{background:#1b2533}
+#u-hub #hub-table .h-game-head[aria-pressed=true]{background:#203450;border-color:#518ade}
+#u-hub .h-game-head b{flex:0 1 auto;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#eef3fa}
+#u-hub .h-game-head span{flex:0 1 auto;min-width:0;color:#93a3b7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#u-hub .h-game-head small{flex:none;color:#8696aa;font:10.5px 'DM Mono',monospace}
+#u-hub .h-game-head em{flex:none;margin-left:auto;font-style:normal;color:#8ab6ff;white-space:nowrap}
+#u-hub .h-countdown{flex:none;display:inline-block;padding:1px 7px;border:1px solid #2f3b4c;border-radius:999px;font:500 10.5px 'DM Mono',monospace;color:#b7c6da;white-space:nowrap}
+#u-hub .h-countdown.soon{border-color:#8a6a2a;color:#f5c842}
+/* By game: the slate as cards inside the board */
+#u-hub .h-game-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px;margin-top:6px}
+#u-hub .h-game-card{min-width:0;padding:18px;background:#161c24;border:1px solid #303d4e;border-radius:10px;display:flex;flex-direction:column}
+#u-hub .h-game-card>header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:0 0 12px;flex-wrap:wrap}
+#u-hub .h-game-card time{color:#aabbce;font-size:11px}
+#u-hub .h-game-card h2{font-size:18px;line-height:1.3;overflow-wrap:anywhere}
+#u-hub .h-game-card p{font-size:12px}
+#u-hub .h-game-books{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px}
+#u-hub .h-game-books span{font-size:10px;color:#c8d7e9;border:1px solid #35465b;border-radius:4px;padding:4px 7px}
+#u-hub .h-game-card>button{display:flex;justify-content:space-between;margin-top:auto;min-height:40px;background:#20344e;border-color:#4775aa;color:#dbeaff}
+/* ONE player card: a right panel beside the slip column on desktop */
+#u-hub .h-card-panel{position:fixed;top:0;bottom:0;right:var(--slip-w);z-index:20;width:min(600px,calc(100vw - var(--side-w) - var(--slip-w) - 180px));display:flex;flex-direction:column;background:#11161d;border-left:1px solid #3a5272;box-shadow:-14px 0 34px #0008}
+#u-hub.h-studio-mode .h-card-panel{right:0}
+#u-hub .h-card{display:flex;flex-direction:column;height:100%;min-height:0;padding:0;font-size:13px}
+#u-hub .h-card button,#u-hub .h-card select{min-height:40px}
+#u-hub .h-card .h-segment button,#u-hub .h-card .h-history-controls .h-segment button{min-height:40px}
+#u-hub .h-card .h-card-head{flex:none;display:flex;align-items:flex-start;gap:10px;flex-wrap:nowrap;padding:12px 16px 6px}
+#u-hub .h-card .h-back{flex:none;padding:0 12px;border:1px solid #3e526c;background:#141c27;color:#b7d3fc}
+#u-hub .h-card .h-card-id{flex:1;min-width:0}
+#u-hub .h-card-head h3{font-size:17px;outline:0}
+#u-hub .h-card-head p{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+#u-hub .h-card .h-star{flex:none;width:40px;padding:0;font-size:17px;border:0;background:none;color:#7d8ea6}
+#u-hub .h-card .h-star[aria-pressed=true]{color:#8bb9ff}
+#u-hub .h-card .h-player-markets{flex:none;flex-wrap:nowrap;overflow-x:auto;margin:4px 0 0;padding:0 16px 4px;scrollbar-width:thin}
+#u-hub .h-card .h-player-markets button{flex:none}
+#u-hub .h-decision{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:8px 16px;padding:10px 12px;border:1px solid #2f4562;border-radius:8px;background:#161d27}
+#u-hub .h-dec-line{display:flex;align-items:center;gap:6px;min-width:0}
+#u-hub .h-dec-line span{font-size:11px;color:#93a3b7}
+#u-hub .h-dec-line select{max-width:200px;font-size:13px}
+#u-hub .h-decision .h-side-toggle button{min-width:68px;font-size:13px}
+#u-hub .h-dec-chance{display:flex;align-items:center;gap:8px;min-width:0}
+#u-hub .h-dec-chance>b{font:600 20px 'DM Mono',monospace;color:#9cc4ff;letter-spacing:-.02em}
+#u-hub .h-dec-pick{display:flex;align-items:center;gap:5px}
+#u-hub .h-dec-proj{display:grid;line-height:1.15}
+#u-hub .h-dec-proj b{font:600 15px 'DM Mono',monospace;color:#f2f7ff}
+#u-hub .h-dec-proj span{font-size:10.5px;color:#93a3b7}
+#u-hub .h-dec-act{display:flex;gap:8px;margin-left:auto}
+#u-hub .h-card .h-dec-add{padding:0 14px;font-size:13px;font-weight:600;border-color:#85b5fa;background:#85b5fa;color:#0d1c30;white-space:nowrap}
+#u-hub .h-card .h-dec-add.is-on{background:#243e5e;border-color:#4b74a6;color:#d6e7ff}
+#u-hub .h-card .h-dec-add:disabled{background:#2a3442;border-color:#2a3442;color:#8796a9}
+#u-hub .h-card .h-dec-act [data-hub=open-line]{background:transparent;color:#b7d3fc;border-color:#3e526c}
+#u-hub .h-dec-note{flex-basis:100%;font-size:11px;color:#edb968}
+#u-hub .h-card-tabs{flex:none;display:flex;gap:2px;padding:0 16px;border-bottom:1px solid #2e3540;overflow-x:auto}
+#u-hub .h-card .h-card-tabs button{flex:none;padding:0 14px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:#aebaca;font-size:13px}
+#u-hub .h-card .h-card-tabs button[aria-selected=true]{border-bottom-color:#77adff;color:#f4f7fc}
+#u-hub .h-card-body{flex:1;min-height:0;overflow:auto;padding:14px 16px 28px;outline:0}
+#u-hub .h-card-body>section,#u-hub .h-card-body>.h-history-summary{margin-bottom:16px}
+#u-hub .h-card-body .h-history-summary{grid-template-columns:repeat(auto-fit,minmax(104px,1fr))}
+#u-hub .h-card-body .h-h2h,#u-hub .h-card-body .h-stat-library,#u-hub .h-card-body .h-mapchances{margin-top:16px;padding-top:12px;border-top:1px solid #29323f}
+#u-hub .h-card-body .h-stat-library:first-child{margin-top:0;padding-top:0;border:0}
+#u-hub .h-card-body .h-line-shop{margin:0;padding:0;border:0}
+#u-hub .h-card .h-line-shop td:first-child button{min-height:40px}
+#u-hub .h-card summary{min-height:40px;padding-block:10px;line-height:20px}
+@media(min-width:1101px){html[data-ui-tokens] #u-hub .h-card-panel{top:76px}}
+#u-hub .h-full-research{margin:0 0 12px}
+#u-hub .h-full-research a{display:inline-flex;align-items:center;min-height:40px;color:#a9cdff;text-decoration:none}
+#u-hub .h-ask{display:grid;gap:8px;margin-bottom:14px}
+#u-hub .h-ask label{font-size:12px;color:#c9d4e2}
+#u-hub .h-ask-row{display:flex;gap:8px}
+#u-hub .h-ask-row input{flex:1;min-width:0;min-height:40px}
+#u-hub .h-ask-sugg{display:flex;flex-wrap:wrap;gap:6px}
+#u-hub .h-ask-sugg button{font-size:12px}
+#u-hub .h-ask-out p{margin:4px 0;color:#dbe4ef;font-size:13px;line-height:1.55}
+#u-hub .h-guide h5{margin:12px 0 2px;font-size:12px;color:#c9d4e2}
+#u-hub .h-guide p{margin:0;font-size:12px;line-height:1.6}
+#u-hub .h-guide .h-link{min-height:40px;padding:0 4px}
+/* the slip column: same width empty or full, so a first add never squeezes the board */
+#u-hub .h-slip>header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 4px}
+#u-hub .h-slip>header h2{margin:0;font-size:16px}
+#u-hub .h-slip>header button{min-height:40px;padding:0 6px;border:0;background:transparent;color:#8ab6ff;font-size:12px}
+#u-hub .h-sync:empty{display:none}
+#u-hub .h-slip .h-sync{margin:0 14px 8px}
+#u-hub #hub-slip-content{padding:0 12px 14px}
+#u-hub .h-empty-slip{padding:6px 2px;text-align:left}
+#u-hub .h-empty-slip p{margin:0 0 6px;font-size:12px;line-height:1.6}
+#u-hub .h-empty-slip small{font-size:11px;color:#91a5c0}
+#u-hub .h-slip .u-seg button,#u-hub .u-seg button{min-height:40px}
+#u-hub .u-leg .u-x{width:40px;height:40px;right:4px;top:4px}
+#u-hub .u-leg{padding-right:46px}
+#u-hub .u-btn,#u-hub .u-link{min-height:40px}
+#u-hub .u-progress{margin:0;font-size:12px;color:#b3becb}
+#u-hub .u-entry.building{border-color:#2f4562}
+#u-hub .h-flash{animation:h-flash 1.6s ease-out}
+@keyframes h-flash{0%{box-shadow:inset 0 0 0 2px #77adff;background:#1d2e45}100%{box-shadow:inset 0 0 0 2px transparent}}
+/* Slips page: My slip (n) | Auto-build | Tracked */
+#u-hub #hub-studio-section{display:block;max-width:1040px;margin:0 auto}
+#u-hub #hub-studio-section .h-generator{position:static;padding:0 0 18px;border:0}
+#u-hub .h-studio-tabs{display:flex;gap:2px;margin:0 0 14px;border-bottom:1px solid #2e3540;overflow-x:auto}
+#u-hub .h-studio-tabs button{flex:none;min-height:44px;padding:0 16px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:#aebaca;font-size:14px}
+#u-hub .h-studio-tabs button[aria-selected=true]{border-bottom-color:#77adff;color:#f4f7fc}
+#u-hub .h-studio-intro{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 12px;margin:0 0 12px;border-bottom:1px solid #303b4b}
+#u-hub .h-studio-intro>button{min-height:40px}
+#u-hub .h-working-draft{border:0;padding:0}
+#u-hub .h-tracked-slips{border:0;padding:0;margin:0;min-width:0}
+#u-hub .h-tracked-slips>header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:0 0 14px;flex-wrap:wrap}
+#u-hub .h-tracked-slips p{font-size:12px}
+/* My picks: pending, then settled, grouped by slip */
+#u-hub .h-pick-summary{display:block;margin:0 0 14px;padding:0 0 12px;border-bottom:1px solid #354052;font-size:13px;color:#c9d4e2}
+#u-hub .h-pick-summary b{display:inline;margin:0;font:600 15px 'DM Mono',monospace;color:#edf4fe}
+#u-hub .h-picks-part>h3{margin:18px 0 8px;font-size:15px}
+#u-hub .h-picks-part>h3 span{margin-left:8px;font-size:11px;font-weight:400;color:#9eb1ca}
+#u-hub .h-picks-group{margin:0 0 12px;border:1px solid #2e3a4a;border-radius:8px;overflow:hidden;background:#141a22}
+#u-hub .h-picks-group>header{display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap;padding:10px 12px;background:#18202b}
+#u-hub .h-picks-group h4{margin:0;font-size:13px;color:#eef3fa}
+#u-hub .h-picks-group>header span{font-size:11.5px;color:#9eb1ca}
+#u-hub .h-picks-group .u-pick button{min-height:44px}
+#u-hub .h-picks-foot{margin-top:12px}
+#u-hub .h-pick-filters select{min-height:40px}
+/* Record: a run of days without a decided pick folds into one tile */
+#u-hub .h-calendar-grid{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+#u-hub .h-cal-gap{display:grid;align-content:center;justify-items:center;gap:2px;min-height:76px;padding:8px 4px;border:1px dashed #29313d;border-radius:8px;text-align:center}
+#u-hub .h-cal-gap time{font-size:11px;color:#a9b5c4}
+#u-hub .h-cal-gap small{font-size:10px;color:#7f8fa4}
+/* Tools: the single index */
+#u-hub .h-tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:14px}
+#u-hub .h-tool-grid>article{min-width:0;padding:20px;background:#161c24;border:1px solid #303d4e;border-radius:12px;display:flex;flex-direction:column}
+#u-hub .h-tool-grid h2{margin:10px 0 4px}
+#u-hub .h-tool-grid p{font-size:12px;line-height:1.7}
+#u-hub .h-tool-links{display:grid;gap:2px;margin-top:auto}
+#u-hub .h-tool-links a{display:flex;align-items:center;min-height:40px;color:#a9cdff;text-decoration:none}
+#u-hub .h-tools-alerts{margin-top:22px;padding-top:16px;border-top:1px solid #303b4b}
+#u-hub .h-tools-alerts h3{font-size:14px;margin:14px 0 6px}
+#u-hub .h-alert button,#u-hub .h-notice{min-height:40px}
+/* phone and tablet: a bottom tab bar, two-line cards, the card as a full-screen sheet */
+#u-hub .h-tabbar{display:none}
+@media(max-width:1100px){
+ #u-hub.scout-hub,#u-hub.scout-hub.h-studio-mode{grid-template-columns:minmax(0,1fr)}
+ #u-hub .h-sidebar,#u-hub .h-slip{display:none}
+ #u-hub .h-center{padding:10px 12px calc(84px + env(safe-area-inset-bottom))}
+ #u-hub .h-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:25;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:4px 4px calc(4px + env(safe-area-inset-bottom));background:#0d1015;border-top:1px solid #2b323c}
+ #u-hub .h-tabbar button{display:flex;align-items:center;justify-content:center;gap:2px;min-height:48px;padding:0 2px;border:0;border-radius:6px;background:transparent;color:#aebaca;font-size:12px;white-space:nowrap}
+ #u-hub .h-tabbar button[aria-current=page]{color:#dceaff;box-shadow:inset 0 2px #76aaf3;background:#141c27}
+ #u-hub .h-tabbar .h-count-badge{margin-left:3px}
+ #u-hub .h-more-sheet{position:fixed;left:8px;right:8px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:26;display:grid;gap:2px;max-height:70vh;overflow:auto;padding:8px;background:#1b212b;border:1px solid #455164;border-radius:10px;box-shadow:0 -8px 30px #0008}
+ #u-hub .h-more-sheet>*{display:flex;align-items:center;min-height:44px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:#dae4f2;text-align:left;text-decoration:none;font-size:14px}
+ html.hub-open .u-toast{bottom:calc(76px + env(safe-area-inset-bottom))}
+ #u-hub .h-toolbar{flex-wrap:wrap;gap:6px}
+ #u-hub .h-toolbar .h-sports{flex:1 1 100%;order:0}
+ #u-hub .h-toolbar .h-search{flex:1 1 calc(100% - 52px);order:1;min-width:0}
+ #u-hub .h-toolbar .h-refresh{order:2}
+ #u-hub .h-toolbar .h-platform{order:3;flex:1 1 auto;display:flex}
+ #u-hub .h-toolbar .h-platform button{flex:1}
+ #u-hub .h-toolbar .h-pop-wrap{order:4}
+ #u-hub .h-toolbar .h-pop-wrap:last-of-type .h-pop{left:auto;right:0}
+ #u-hub .h-pop{position:fixed;top:auto;left:8px;right:8px;bottom:calc(64px + env(safe-area-inset-bottom));width:auto;max-height:70vh;overflow:auto;z-index:30}
+ #u-hub .h-pop.h-pop-end{left:8px;right:8px;width:auto}
+ #u-hub .h-table-title{margin-top:2px}
+ #u-hub #hub-table>tbody>tr[data-record],#u-hub.h-cols #hub-table>tbody>tr[data-record]{grid-template-columns:minmax(0,1fr) minmax(0,.62fr) minmax(0,1.38fr) 80px;grid-template-areas:"player player market watch" "line scout scout add" "proj hits hits compare";gap:4px 8px;padding:6px 10px;margin-bottom:8px;align-items:center}
+ #u-hub #hub-table.h-has-edge>tbody>tr[data-record]{grid-template-columns:minmax(0,1fr) minmax(0,.62fr) minmax(0,.9fr) 56px 80px;grid-template-areas:"player player market market watch" "line scout scout scout add" "proj hits hits edge compare"}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-watch{justify-self:end}
+ #u-hub #hub-table .h-scout{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-proj{align-self:end}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-proj:before{content:'PROJ';margin-bottom:1px;font-size:9px}
+ #u-hub #hub-table>tbody>tr[data-record]>td,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td{width:auto;height:auto;padding:0;overflow:visible}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-scout{grid-area:scout;min-width:0}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-hits{grid-area:hits;min-width:0}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-edge{grid-area:edge;align-self:center;text-align:center}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-edge:before{content:none}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>b{font-size:18px}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-proj{font-size:14px}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market{min-width:0}
+ #u-hub #hub-table .h-player b{font-size:15px}
+ #u-hub #hub-table .h-add{height:40px;font-size:13px}
+ #u-hub #hub-table .h-strip .h-hit{height:26px;font-size:11px}
+ #u-hub #hub-table .h-strip-cell:before{content:attr(data-label);display:block;margin-bottom:1px;font:500 9px 'DM Mono',monospace;letter-spacing:.04em;color:#8d9db1;text-align:center}
+ #u-hub #hub-table .h-compare{min-height:40px}
+ #u-hub #hub-table>tbody>tr.h-game-row{display:block;grid-column:1/-1}
+ #u-hub #hub-table>tbody>tr.h-game-row>td{display:block;padding:4px 0 6px}
+ #u-hub .h-game-head span,#u-hub .h-game-head small{display:none}
+ #u-hub .h-card-panel{inset:0;right:0;width:auto;z-index:40;border:0;box-shadow:none}
+ #u-hub .h-card .h-card-head{padding:10px 12px 4px}
+ #u-hub .h-card .h-player-markets{padding:0 12px 4px}
+ #u-hub .h-decision{margin:6px 12px;padding:8px 10px;gap:8px}
+ #u-hub .h-dec-line{flex:1 1 100%}
+ #u-hub .h-dec-line select{flex:1;max-width:none}
+ #u-hub .h-dec-act{flex:1 1 100%;margin-left:0}
+ #u-hub .h-card .h-dec-add{flex:1}
+ #u-hub .h-card-tabs{padding:0 12px}
+ #u-hub .h-card-body{padding:12px 12px 24px}
+}
+@media(min-width:700px) and (max-width:1100px){
+ #u-hub #hub-table>tbody>tr.h-game-row{grid-column:1/-1}
+}
+@media(max-width:420px){
+ #u-hub .h-toolbar .h-sports button{padding:0 7px;font-size:12px}
+ #u-hub .h-toolbar .h-sports span{margin-left:3px}
+ #u-hub .h-platform button{min-width:40px;padding:0 6px}
+ #u-hub .h-toolbar .h-filter-toggle,#u-hub #hub-views-toggle{padding:0 9px}
+ #u-hub .h-tabbar button{font-size:11px}
+}
+/* audit 2026-11-04: the source-updates banner, dates under the chart's opponent names, 40px targets on the record links */
+#u-hub .h-sources:empty{display:none}
+#u-hub .h-sources p{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;margin:0 0 6px;padding:2px 10px;border-left:2px solid #8a704b;background:#171e27;font-size:12px;line-height:1.5;color:#c9d4e2}
+#u-hub .h-sources button{min-height:40px;padding:0 12px;font-size:12px}
+#u-hub .h-history-chart text.date{fill:#7f8fa4;font-size:9.5px}
+#u-hub #hub-record-body a,#u-hub .h-record-card a{display:inline-flex;align-items:center;min-height:40px}

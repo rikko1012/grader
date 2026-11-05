@@ -67,12 +67,12 @@ def test_ui_tokens_on_classic_palette_skip_link_account_and_targets(browser, env
         p.locator('#u-hub .h-account nav [data-id="picks"]').click()
         assert p.locator('#u-hub .h-account').evaluate("d => d.open") is False
         assert not p.locator('#hub-picks-section').is_hidden()
-        p.locator('#u-hub .h-nav-mobile [data-id="board"], #u-hub .h-sidebar [data-id="board"]').locator('visible=true').first.click()
+        p.locator('#u-hub .h-tabbar [data-id="board"], #u-hub .h-sidebar [data-id="board"]').locator('visible=true').first.click()
         p.wait_for_selector('#hub-rows tr')
         small = p.evaluate(SMALL_TARGETS)
         assert small == [], small
         sidebar = p.locator('#u-hub .h-sidebar').is_visible()
-        assert sidebar is (size['width'] >= 1025)                                   # three breakpoints: the shell keeps its rail to 1025px
+        assert sidebar is (size['width'] >= 1101)                                   # the rail on desktop; the bottom tab bar below 1101px
         no_h_scroll(p)
         assert not p.errors
     finally:
@@ -103,6 +103,8 @@ def test_ui_tokens_on_open_prop_card_targets_colours_and_account_outside_click(b
         assert not navy & set(col.values()), col
         assert col['sel'] == 'rgb(245, 200, 66)'
         no_h_scroll(p)
+        p.keyboard.press('Escape')                          # 2026-11-05: the card is a panel / full-screen sheet; Escape returns to the board
+        assert p.locator('#hub-card').is_hidden()
         summary = p.locator('#u-hub .h-account > summary')
         summary.click()
         assert p.locator('#u-hub .h-account').evaluate("d => d.open") is True

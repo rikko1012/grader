@@ -13,8 +13,11 @@ export function mount(C) {
   const $ = id => document.getElementById(id);
   const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
-    page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false, batch:null, batchSaved:false};
+    page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false, batch:null, batchSaved:false,
+    cardTab:'overview', view:'list', studioTab:'slip'};
   H.pendingOpen=null;
+  const CARD_TABS=[['overview','Overview'],['lines','Lines'],['stats','Stats'],['ask','Ask']];
+  const DESKTOP=matchMedia('(min-width:1101px)');
   H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',sort:'ev',dense:false};
   try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
@@ -30,6 +33,7 @@ export function mount(C) {
   const isOpen = () => !$('u-hub').hidden;
   const focusAfter = container => {
     const el=document.activeElement;
+    if(container?.contains(el)&&el.id&&!el.dataset.hub)return ()=>{const now=document.getElementById(el.id);if(now&&now!==document.activeElement)now.focus({preventScroll:true});};
     if(!container?.contains(el)||!el.dataset.hub)return ()=>{};
     const action=el.dataset.hub,id=el.dataset.id;
     return ()=>container.querySelector(`[data-hub="${CSS.escape(action)}"]${id==null?'':`[data-id="${CSS.escape(id)}"]`}`)?.focus({preventScroll:true});
@@ -56,69 +60,83 @@ export function mount(C) {
   }
   function rows() {
     // owner rules (no unsure labels; transient failures hide the line): a row whose source is stale, failed or held is left off, never labelled
-    return H.records.filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r)).sort((a,b)=> {
-      if(H.sort==='chance') return (b.scout.p_side??-1)-(a.scout.p_side??-1);
-      if(H.sort==='player') return a.player.name.localeCompare(b.player.name);
-      return Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc)||a.player.name.localeCompare(b.player.name);
+    // games stay together: start time, then the game, then the player (a game header row opens each run)
+    // never sort by an empty column: with no edge on any shown line, Edge sorting falls back to start time and the sort control says so
+    const list=H.records.filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r));
+    H.sortFallback=H.sort==='edge'&&!list.some(r=>edgeValue(r)!=null);
+    H.sortBy=H.sortFallback?'start':H.sort;
+    const byStart=(a,b)=>Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc)||gameKey(a).localeCompare(gameKey(b))||a.player.name.localeCompare(b.player.name);
+    return list.sort((a,b)=> {
+      if(H.sortBy==='chance') return (b.scout.p_side??-1)-(a.scout.p_side??-1);
+      if(H.sortBy==='player') return a.player.name.localeCompare(b.player.name);
+      if(H.sortBy==='edge'){const x=edgeValue(a),y=edgeValue(b);return x==null&&y==null?byStart(a,b):x==null?1:y==null?-1:y-x||byStart(a,b);}
+      return byStart(a,b);
     });
   }
+  /* the filters that live in the Filters pop-over; the count on its button. Search, sport and platform are on the toolbar itself */
+  const activeFilters = () => [H.stat!=='all',H.side!=='all',H.minGrade!=='all',H.onlyDiff,H.watched,H.freshOnly,H.soonOnly,H.movedOnly,H.game!=='all'].filter(Boolean).length;
+  const BOOK_SHORT={prizepicks:'PP',underdog:'UD'};
   function syncFields() {
-    for(const n of ['book','side','sort','q','minGrade']) $('hub-'+n).value=H[n];
+    for(const n of ['side','sort','q','minGrade']) $('hub-'+n).value=H[n];
+    $('hub-platform').querySelectorAll('[data-hub="book"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===H.book)));
     $('hub-diff').setAttribute('aria-pressed',String(H.onlyDiff));
     $('hub-watch').setAttribute('aria-pressed',String(H.watched));
     if(V2)for(const f of ['freshOnly','soonOnly','movedOnly'])$('hub-'+f).setAttribute('aria-pressed',String(H[f]));
-    $('hub-sports').innerHTML=['all',...allowed()].map(s=>`<button type="button" data-hub="sport" data-id="${s}" aria-pressed="${H.sport===s}">${s==='all'?'All sports':SPORTS[s]}<span>${H.records.filter(r=>!C.started(r)&&(s==='all'||r.sport===s)).length}</span></button>`).join('');
+    const read=s=>s==='all'?allowed().every(x=>R.boards[x]?.at):!!R.boards[s]?.at;
+    $('hub-sports').innerHTML=['all',...allowed()].map(s=>`<button type="button" data-hub="sport" data-id="${s}" aria-pressed="${H.sport===s}">${s==='all'?'All':SPORTS[s]}${read(s)?`<span>${H.records.filter(r=>!C.started(r)&&(s==='all'||r.sport===s)).length}</span>`:''}</button>`).join('');
     const sportRows=H.records.filter(r=>!C.started(r)&&(H.sport==='all'||r.sport===H.sport));
     const markets=[...new Map(sportRows.map(r=>[statKey(r),r.market.stat_label+(H.sport==='all'?' · '+SPORTS[r.sport]:'')])).entries()];
     $('hub-stat').innerHTML='<option value="all">All markets</option>'+markets.sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
     $('hub-stat').value=H.stat;
-    const games=[...new Map(sportRows.map(r=>[gameKey(r),r])).values()].sort((a,b)=>Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc));
-    $('hub-games').innerHTML=`<button data-hub="game" data-id="all" aria-pressed="${H.game==='all'}"><b>All matchups</b><small>${games.length} upcoming</small></button>`+games.slice(0,30).map(r=>`<button data-hub="game" data-id="${esc(gameKey(r))}" aria-pressed="${H.game===gameKey(r)}"><b>${esc(r.event.label)}</b><small>${SPORTS[r.sport]} · ${esc(when(r.event.start_utc))}</small></button>`).join('');
+    const n=activeFilters();
+    $('hub-filter-n').textContent=n?String(n):'';
+    $('hub-filters-toggle').setAttribute('aria-label',n?`Filters, ${n} on`:'Filters');
     if(H.section==='board')$('hub-title').textContent=H.sport==='all'?'Player props':SPORTS[H.sport]+' player props';
-    document.querySelectorAll('.h-sidebar [data-hub="sport"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===H.sport&&H.section==='board'?'page':'false'));
   }
-  /* ---- board rows: one compact, aligned line per player (owner 2026-11-04: "more organized like classic but better") ---- */
+  /* ---- board rows (2026-11-05 structure review): one compact line per prop. Player, market (+N more props), line with its book and
+     seen time, projection, ONE Scout cell, ONE hit strip, compare, add. The matchup and the countdown sit on the game header row. ---- */
   const sideWord = sd => sd==='over'?'Over':'Under';
   const countOf = (t,sd) => sd==='over'?t.over:t.under;
-  const fewNote = (t,n) => t.n<n?`<small class="h-few">${t.n} ${t.n===1?'game':'games'}</small>`:'';
-  function cell(r,n) {
-    const t=C.tallies(r)['l'+n], side=r.scout.side;
+  const STRIP = [['l5','L5'],['l10','L10'],['l20','L20'],...(COLS?[['h2h','H2H'],['season','SZN']]:[])];
+  const STRIP_TITLE = {l5:'Last 5 results at this line',l10:'Last 10 results at this line',l20:'Last 20 results at this line',h2h:"Past meetings with tonight's opponent, at this line",season:"This season's results, at this line"};
+  const currentLines = () => H.records.filter(r=>!C.started(r)&&!unavailableReason(r));
+  /* one hit-strip cell: the rate on the cell, the exact counts in its tooltip; a window with fewer games than its size says so there */
+  function stripCell(r,w,label) {
+    const t=C.tallies(r)[w], side=r.scout.side, opp=r.player.opponent||'this opponent';
+    const what=n=>w==='h2h'?`of the last ${n} ${n===1?'meeting':'meetings'} with ${opp}`:w==='season'?`of ${n} ${t?.season?t.season+' ':''}season ${n===1?'result':'results'}`:`of the last ${n} at this line`;
     if(!t||!t.n) {
       // the shared CS2 pass has not reached this row yet: a quiet placeholder that fills in when it arrives
-      if(n!==10&&C.hitsPending(r)) return `<span class="h-hit h-hit-wait" role="img" aria-label="L${n} loading"></span>`;
-      return `<span class="h-hit empty" title="No completed results at this line">—</span>`;
+      if(w!=='l10'&&C.hitsPending(r)) return `<span class="h-hit h-hit-wait" role="img" aria-label="${label} loading"></span>`;
+      const none=w==='h2h'?`No past meetings with ${opp} at this line`:w==='season'?'No completed results this season at this line':'No completed results at this line';
+      return `<span class="h-hit empty" title="${esc(none)}" aria-label="${label}: ${esc(none)}">—</span>`;
     }
-    if(!side) return `<span class="h-hit h-hit-both" title="Last ${t.n} results at this line: ${t.over} Over, ${t.under} Under, ${t.push||0} pushes. Historical counts, not a recommendation."><span>O <b>${t.over}</b><small>/${t.n}</small></span><span>U <b>${t.under}</b><small>/${t.n}</small></span></span>${fewNote(t,n)}`;
-    const hit=countOf(t,side), rate=hit/t.n;
-    return `<span class="h-hit ${V2||COLS?'h-tone-'+Math.min(6,Math.floor(rate*7)):rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${rate.toFixed(3)}" title="${hit} ${sideWord(side)} of the last ${t.n} at this line, ${t.push||0} pushes">${hit}<small>/${t.n}</small></span>${fewNote(t,n)}`;
-  }
-  /* SCOUT_BOARD_H2H: H2H (meetings with tonight's opponent) and Season, counted at the displayed line like L5/L10/L20 */
-  function extraCell(r,which) {
-    const t=C.tallies(r)[which], side=r.scout.side, opp=r.player.opponent||'this opponent';
-    const what=which==='h2h'?(n=>`of the last ${n} ${n===1?'meeting':'meetings'} with ${opp}`):(n=>`of ${n} ${t?.season?t.season+' ':''}season ${n===1?'result':'results'}`);
-    if(!t||!t.n) {
-      if(C.hitsPending(r)) return `<span class="h-hit h-hit-wait" role="img" aria-label="${which==='h2h'?'H2H':'Season'} loading"></span>`;
-      return `<span class="h-hit empty" title="${esc(which==='h2h'?'No past meetings with '+opp+' at this line':'No completed results this season at this line')}">—</span>`;
+    const few=w[0]==='l'&&t.n<Number(w.slice(1))?` (${t.n} ${t.n===1?'game':'games'} on file)`:'';
+    if(!side) {
+      const text=`${t.over} Over, ${t.under} Under, ${t.push||0} pushes ${what(t.n)}${few}`;
+      return `<span class="h-hit h-hit-both" title="${esc(text)}" aria-label="${label}: ${esc(text)}">${t.over}-${t.under}</span>`;
     }
-    if(!side) return `<span class="h-hit h-hit-both" title="${esc(`${t.over} Over, ${t.under} Under, ${t.push||0} pushes ${what(t.n)} at this line. Historical counts, not a recommendation.`)}"><span>O <b>${t.over}</b><small>/${t.n}</small></span><span>U <b>${t.under}</b><small>/${t.n}</small></span></span>`;
-    const hit=countOf(t,side), rate=hit/t.n;
-    return `<span class="h-hit h-tone-${Math.min(6,Math.floor(rate*7))}" style="--hit:${rate.toFixed(3)}" title="${esc(`${hit} ${sideWord(side)} ${what(t.n)} at this line, ${t.push||0} pushes`)}">${hit}<small>/${t.n}</small></span>`;
+    const hit=countOf(t,side), rate=hit/t.n, text=`${hit} ${sideWord(side)} ${what(t.n)}, ${t.push||0} pushes${few}`;
+    return `<span class="h-hit h-tone-${Math.min(6,Math.floor(rate*7))}${few?' h-few':''}" style="--hit:${rate.toFixed(3)}" title="${esc(text)}" aria-label="${label}: ${esc(text)}">${Math.round(rate*100)}%</span>`;
   }
-  /* Edge vs break-even: Underdog standard lines at a 1.0x pick only (gradecore payout table), and only where the slip's EV check
-     would pass this pick (server rules.edge_cells: CS2, half-point line, settled chance band); every other line shows no edge */
-  function edgeOk(r) {
-    const s=r.scout, bands=(COLS?.edge_cells||{})[`${s.model_version}|${r.market.stat}|${r.market.period}`];
-    if(r.sport!=='cs2'||!Array.isArray(bands)||!num(s.p_side)||s.p_side<(COLS?.min_chance??1)||!num(+r.offer.line)||Number.isInteger(+r.offer.line))return false;
-    return bands.some(b=>Array.isArray(b)&&s.p_side>=b[0]&&s.p_side<b[1]);
-  }
-  function edgeCell(r) {
+  const stripHtml = r => `<div class="h-strip">${STRIP.map(([w,l])=>`<span class="h-strip-cell h-s-${w}" data-label="${l}">${stripCell(r,w,l)}</span>`).join('')}</div>`;
+  /* Edge vs break-even (owner 2026-11-05): the row's current Scout chance minus the platform's published per-pick break-even.
+     Underdog standard at a 1.0x pick: the gradecore payout table (gradecore/payouts.py, Underdog's published payouts, the server sends
+     the value and its source). PrizePicks and goblin / demon lines publish no fixed per-pick payout here: their cell stays empty.
+     A fact about the chance against the payout, not a grade: a held or contained letter does not change it. */
+  function edgeValue(r) {
     const s=r.scout, be=COLS?.ud_standard_break_even, mult=s.side?r.offer[s.side]?.payout:null;
-    if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||s.hold||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9||!edgeOk(r))
-      return '<span class="h-edge empty" title="Edge is shown for Underdog standard lines the slip check prices">—</span>';
-    const d=(s.p_side-be)*100;
-    return `<span class="h-edge ${d>0?'positive':d<0?'negative':''}" title="${esc(`Scout chance ${pct(s.p_side)} against the ${(be*100).toFixed(1)}% break-even of an ${COLS.entry||'Underdog standard'} entry`)}"><b>${d>0?'+':d<0?'−':''}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
+    if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9)
+      return null;
+    return (s.p_side-be)*100;
   }
-  /* start countdown in the Player cell; the ticker below keeps it current between board refreshes */
+  const EDGE_WHY=()=>`Scout chance minus the per-pick break-even of an ${COLS?.entry||'Underdog standard 2-pick'} entry`+(num(COLS?.ud_standard_break_even)?` (${(COLS.ud_standard_break_even*100).toFixed(1)}%`+(COLS?.source?`, from Underdog's published payouts${COLS.read_at?' read '+COLS.read_at:''}`:'')+')':'')+', in points. PrizePicks and goblin or demon lines publish no fixed per-pick payout, so their cells stay empty.';
+  function edgeCell(r) {
+    const d=edgeValue(r);
+    if(d==null)return `<span class="h-edge empty" title="${esc(r.offer.platform==='underdog'?'No fixed per-pick payout is published for this line type':'No fixed per-pick payout is published for this platform')}">—</span>`;
+    const be=COLS.ud_standard_break_even;
+    return `<span class="h-edge${d>0?' positive':''}" title="${esc(`Scout chance ${pct(r.scout.p_side)} against the ${(be*100).toFixed(1)}% break-even of an ${COLS.entry||'Underdog standard'} entry`)}"><b>${d>0?'+':d<0?'−':'±'}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
+  }
+  /* start countdown on the game header row and the card; the ticker below keeps it current between board refreshes */
   function countdown(at) {
     const ms=Date.parse(at)-Date.now();
     if(!Number.isFinite(ms)) return '';
@@ -127,15 +145,8 @@ export function mount(C) {
     return 'in '+(d?`${d}d ${h}h`:h?`${h}h ${String(mm).padStart(2,'0')}m`:`${Math.max(1,mm)}m`);
   }
   const countdownHtml = r => `<span class="h-countdown${Date.parse(r.event.start_utc)-Date.now()<=3600000?' soon':''}" data-start="${esc(r.event.start_utc)}">${esc(countdown(r.event.start_utc))}</span>`;
-  const COL_COUNT = COLS?15:12;
   const openPlayers = new Set();
   const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
-  function sideCell(r) {
-    const s=r.scout;
-    if(s.side) return `<div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div>`;
-    const probabilities=num(s.p_over)&&num(s.p_under);
-    return `<div class="h-direction-options" aria-label="Model probabilities, no recommendation">${probabilities?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div><button class="h-side-reason" data-hub="expand" data-id="${esc(key(r))}" title="${esc(s.hold?.reason||'No recommendation published for this line')}">${probabilities?'Compare sides':'View details'}</button>`;
-  }
   /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters say Research grade */
   function gradeChip(r) {
     const s=r.scout;
@@ -144,62 +155,90 @@ export function mount(C) {
     if(s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span>`;
     return '';
   }
+  /* ONE Scout cell: side, chance and the letter (or Lean Over/Under) together. No published side = both chances, no side shown */
+  function scoutCell(r) {
+    const s=r.scout;
+    if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}</div></div>`;
+    const both=num(s.p_over)&&num(s.p_under);
+    return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
+  }
   function priceSummary(q) {
     const o=C.priceText(q,'over'), u=C.priceText(q,'under');
     if(o||u) return [o&&'O '+o,u&&'U '+u].filter(Boolean).join(' · ');
     return C.lineLabel(q)+' line';
   }
-  /* the real alternatives for this prop: other books and other lines, or this book's own prices when it is the only one */
+  /* the real alternatives for this prop (other books, other lines) as one small button; the detail is in its tooltip and the card's Lines tab */
   function compareCell(r) {
     const all=C.siblings(r), others=all.filter(x=>key(x)!==key(r));
     const lines=[...new Set(all.map(x=>x.offer.line))].sort((a,b)=>a-b), books=new Set(all.map(x=>x.offer.platform));
-    let main, sub;
-    if(!others.length) { main=`${r.offer.platform_label} only`; sub=priceSummary(r); }
+    let main, sub, full;
+    if(!others.length) { main=`${BOOK_SHORT[r.offer.platform]||r.offer.platform_label} only`; sub=priceSummary(r); full=`${r.offer.platform_label} only · ${sub}`; }
     else {
-      main=lines.length>1?`${lines.length} lines · ${lines[0]}–${lines[lines.length-1]}`:`${books.size} books at ${lines[0]}`;
-      sub=others.slice(0,2).map(x=>`${x.offer.platform_label} ${x.offer.line}${x.market.line_type!=='standard'?' '+C.lineLabel(x):''}`).join(' · ')+(others.length>2?` · +${others.length-2}`:'');
+      main=lines.length>1?`${lines.length} lines`:`${books.size} books`;
+      sub=lines.length>1?`${lines[0]}–${lines[lines.length-1]}`:`at ${lines[0]}`;
+      full=`${main} · ${sub} · `+others.map(x=>`${x.offer.platform_label} ${x.offer.line}${x.market.line_type!=='standard'?' '+C.lineLabel(x):''}`).join(' · ');
     }
-    return `<button class="h-compare${different(r)?' differ':''}" data-hub="books" data-id="${esc(key(r))}" aria-label="Compare books and lines for ${esc(r.player.name)}: ${esc(main)}, ${esc(sub)}"><b>${esc(main)}</b><small>${esc(sub)}</small></button>`;
+    return `<button class="h-compare${different(r)?' differ':''}" data-hub="books" data-id="${esc(key(r))}" title="${esc(full)}" aria-label="Compare books and lines for ${esc(r.player.name)}: ${esc(full)}"><b>${esc(main)}</b><small>${esc(sub)}</small></button>`;
   }
-  const initials = name => esc(String(name||'').replace(/[^\p{L}\p{N}]/gu,'').slice(0,2).toUpperCase()||'?');
   function row(r, group=null) {
-    const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r);
+    const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r)||H.detail===key(r);
     const choose=!side||!r.offer[side]?.offered;
     const unavailable=!!unavailableReason(r);
-    const bk=boardPlayerKey(r), propsOpen=openPlayers.has(bk);
-    const toggle=group?.length>1?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(bk)}" aria-expanded="${propsOpen}" title="${esc(group.map(x=>x.market.stat_label+' '+x.offer.line+' · '+x.market.period_label).join('\n'))}">${propsOpen?'Hide':'View'} ${group.length} props<span aria-hidden="true">${propsOpen?'▴':'▾'}</span></button>`:'';
-    const match=`${r.event.label} · ${when(r.event.start_utc)}`;
-    return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="${open?'is-expanded':''}${group?'':' is-sub'}">
-      <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
-      <td class="h-c-player"><div class="h-pcell"><span class="h-avatar" aria-hidden="true">${initials(r.player.name)}</span><div class="h-pinfo"><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${open}"><b>${esc(r.player.name)}</b><small>${esc(r.player.team)}<i>${SPORTS[r.sport]}</i></small></button><div class="h-match" title="${esc(match)}">${esc(match)}</div>${COLS?countdownHtml(r):''}${toggle}</div></div></td>
-      <td class="h-c-market"><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></td>
-      <td class="h-c-line h-number"><b>${esc(r.offer.line)}</b><small>${esc(r.offer.platform_label)}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
-      <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td class="h-c-side">${sideCell(r)}</td>${COLS?`<td class="h-c-edge h-number">${edgeCell(r)}</td>`:''}
-      <td class="h-c-l5">${cell(r,5)}</td><td class="h-c-l10">${cell(r,10)}</td><td class="h-c-l20">${cell(r,20)}</td>${COLS?`<td class="h-c-h2h">${extraCell(r,'h2h')}</td><td class="h-c-season">${extraCell(r,'season')}</td>`:''}
+    const bk=boardPlayerKey(r), propsOpen=openPlayers.has(bk), more=group?.length>1?group.length-1:0;
+    const toggle=more?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(bk)}" aria-expanded="${propsOpen}" aria-label="${propsOpen?'Hide':'Show'} ${more} more ${more===1?'prop':'props'} for ${esc(r.player.name)}" title="${esc(group.slice(1).map(x=>x.market.stat_label+' '+x.offer.line+' · '+x.market.period_label).join('\n'))}">${propsOpen?'−':'+'}${more}</button>`:'';
+    // the matchup sits on the game header row; without headers (another sort) the row names the opponent itself
+    const vs=H.sortBy!=='start'&&r.player.opponent?` vs ${r.player.opponent}`:'', name=esc(r.player.name);
+    const add=on?['On slip ✓',`On slip: show ${name} in the slip`]:choose?['Side',`Choose a side for ${name}`]:['+ Add',`Add ${name} ${sideWord(side)} ${esc(r.offer.line)} to slip`];
+    return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group?'':' is-sub'}">
+      <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
+      <td class="h-c-player"><button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${esc(r.player.team)}${esc(vs)}<i>${SPORTS[r.sport]}</i></small></button></td>
+      <td class="h-c-market"><div class="h-mcell"><div><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></div>${toggle}</div></td>
+      <td class="h-c-line h-number"><b>${esc(r.offer.line)}</b><small title="${esc(`${r.offer.platform_label} · offer revision first observed ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago',''))}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
+      <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
+      <td class="h-c-scout">${scoutCell(r)}</td>
+      <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}</td>`:''}
       <td class="h-c-compare">${compareCell(r)}</td>
-      <td class="h-c-grade"><div class="h-grade-cell">${gradeChip(r)}<small class="h-seen" title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small></div></td>
-      <td class="h-c-add"><button class="h-add ${on||choose?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':choose?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':choose?'Side':'+'}</button></td></tr>${open?'<tr class="h-detail-row"><td colspan="'+COL_COUNT+'"><div id="hub-detail" class="h-card" aria-live="polite"></div></td></tr>':''}`;
+      <td class="h-c-add"><button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button></td></tr>`;
   }
-  /* SCOUT_BOARD_H2H: "Current lines only" — when no current line is left, say how many lines matching these filters were left
-     off and why (the board itself still never shows a stale or failed row) */
-  function emptyReasons() {
-    const counts=new Map();
-    for(const r of H.records){
-      if(!matches(r,{...H,freshOnly:false}))continue;
-      const why=C.started(r)?'Started':null;       // owner rule: a failed, stale or held line is left off, never labelled
-      if(why)counts.set(why,(counts.get(why)||0)+1);
+  /* the game header row: matchup, sport, start and countdown once per game; a click shows only that game (and back) */
+  function gameRow(r,list,cols) {
+    const g=gameKey(r), on=H.game===g, books=[...new Set(list.filter(x=>gameKey(x)===g).map(x=>BOOK_SHORT[x.offer.platform]||x.offer.platform_label))].join(', ');
+    return `<tr class="h-game-row" data-game="${esc(g)}"><td colspan="${cols}"><button class="h-game-head" data-hub="game" data-id="${esc(g)}" aria-pressed="${on}" aria-label="${esc((on?'Show all games, now showing ':'Show only ')+r.event.label)}"><b class="h-match">${esc(r.event.label)}</b><span>${esc(SPORTS[r.sport])}${r.event.competition?' · '+esc(r.event.competition):''} · ${esc(when(r.event.start_utc))}</span>${countdownHtml(r)}<small>${esc(books)}</small><em>${on?'All games ✕':'This game →'}</em></button></td></tr>`;
+  }
+  function headHtml(showEdge) {
+    return `<tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player">Player</th><th class="h-c-market">Market</th><th class="h-c-line">Line</th><th class="h-c-proj">Proj.</th><th class="h-c-scout">Scout</th>`
+      +`<th class="h-c-hits"><span class="h-strip h-strip-head">${STRIP.map(([w,l])=>`<span title="${esc(STRIP_TITLE[w])}">${l}</span>`).join('')}</span></th>`
+      +(showEdge?`<th class="h-c-edge" title="${esc(EDGE_WHY())}">Edge <small>vs break-even</small></th>`:'')
+      +'<th class="h-c-compare">Compare</th><th class="h-c-add"><span class="u-sr">Add to slip</span></th></tr>';
+  }
+  /* audit 2026-11-04: one plain banner when a source feeding the visible sport(s) is behind: its feed is not current, or its newest
+     offer was seen more than 2 hours ago. It names the source and how long since it updated; its lines stay off the board. */
+  const SOURCE_MAX_MS=7200000;
+  function sourcesHtml() {
+    const out=[];
+    for(const s of visibleSports()) {
+      const b=R.boards[s];if(!b?.at)continue;
+      if(b.error){out.push(`${SPORTS[s]}: the last refresh did not complete`);continue;}
+      for(const [p,f] of Object.entries(b.feeds||{})) {
+        const recs=[...b.recs.values()].filter(r=>r.offer.platform===p), newest=Math.max(0,...recs.map(r=>Date.parse(r.offer.seen_at)||0));
+        const old=newest>0&&Date.now()-newest>SOURCE_MAX_MS;
+        if((f?.state||'ok')==='ok'&&!old)continue;
+        const at=Date.parse(f?.at)||newest||0, label=C.PLATFORMS[p]?.label||p;
+        out.push(`${SPORTS[s]} · ${label} ${at?'last updated '+age(new Date(at).toISOString()).toLowerCase():'has sent no update'}`);
+      }
     }
-    if(!counts.size)return null;
-    const total=[...counts.values()].reduce((a,b)=>a+b,0);
-    return `<b class="h-empty-title">Current lines only</b><span>No current line matches these filters. ${total.toLocaleString()} ${total===1?'line was':'lines were'} left off:</span><span class="h-empty-reasons">${[...counts.entries()].sort((a,b)=>b[1]-a[1]).map(([w,n])=>`<span data-reason="${esc(w)}">${esc(w)} <b>${n.toLocaleString()}</b></span>`).join('')}</span>`;
+    return out.length?`<p><b>Source updates:</b> ${out.map(esc).join(' · ')}. <button data-hub="refresh">Refresh</button></p>`:'';
+  }
+  /* an empty board says only what the member can act on: how many current lines the filters hide (with Clear filters), or that no
+     current line exists (with Refresh). Owner rule: a failed, stale or held line is left off, never labelled. */
+  function emptyReasons() {
+    const hidden=currentLines().filter(r=>(H.sport==='all'||r.sport===H.sport)&&!matches(r)).length;
+    if(hidden)return `<b class="h-empty-title">${hidden.toLocaleString()} ${hidden===1?'line':'lines'} hidden by filters</b><button data-hub="clear-filters">Clear filters</button>`;
+    return '<b class="h-empty-title">No current lines</b><button data-hub="refresh">Refresh</button>';
   }
   function installCols() {
-    if(!COLS)return;
-    $('u-hub').classList.add('h-cols');
-    const head=$('hub-table').tHead.rows[0];
-    head.querySelector('.h-c-side').insertAdjacentHTML('afterend','<th class="h-c-edge" title="Scout chance minus the per-pick break-even. Underdog standard lines only.">Edge <small>vs break-even</small></th>');
-    head.querySelector('.h-c-l20').insertAdjacentHTML('afterend','<th class="h-c-h2h" title="Past meetings with tonight\'s opponent, at this line">H2H</th><th class="h-c-season" title="This season\'s results, at this line">Season</th>');
-    setInterval(()=>{if(!isOpen()||document.hidden)return;document.querySelectorAll('#hub-rows .h-countdown[data-start]').forEach(el=>{const t=countdown(el.dataset.start);if(el.textContent!==t)el.textContent=t;el.classList.toggle('soon',Date.parse(el.dataset.start)-Date.now()<=3600000);});},30000);
+    if(COLS)$('u-hub').classList.add('h-cols');
+    setInterval(()=>{if(!isOpen()||document.hidden)return;document.querySelectorAll('#u-hub .h-countdown[data-start]').forEach(el=>{const t=countdown(el.dataset.start);if(el.textContent!==t)el.textContent=t;el.classList.toggle('soon',Date.parse(el.dataset.start)-Date.now()<=3600000);});},30000);
   }
   function paintBoard() {
     if(!isOpen()||H.section!=='board') return;
@@ -209,15 +248,30 @@ export function mount(C) {
     for(const r of list){const k=boardPlayerKey(r);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r);}
     const players=[...grouped.values()],size=40,pages=Math.max(1,Math.ceil(players.length/size));
     H.page=Math.min(H.page,pages-1);
-    $('hub-count').textContent=`${players.length.toLocaleString()} players · ${list.length.toLocaleString()} upcoming lines`;
-    $('hub-health').innerHTML=(list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About Sports grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Performance record for stated chances and actual results.</p></details>`:'');
-    $('hub-rows').innerHTML=players.slice(H.page*size,(H.page+1)*size).map(group=>row(group[0],group)+(openPlayers.has(boardPlayerKey(group[0]))?group.slice(1).map(r=>row(r)).join(''):'')).join('');
-    paintDetail();
-    $('hub-empty').hidden=list.length>0;
-    const why=COLS&&!list.length&&!H.loading?emptyReasons():null;
-    if(why)$('hub-empty').innerHTML=why;else $('hub-empty').textContent=H.loading?'Loading the available boards…':H.records.length?'No lines match these filters. Try another sport, book or player.':'No upcoming lines are available. Refresh to check again.';
-    $('hub-pagination').innerHTML=`<span>${players.length?H.page*size+1:0}–${Math.min((H.page+1)*size,players.length)} of ${players.length} players</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
-    $('hub-views').innerHTML='<option value="">Saved views</option>'+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
+    const page=players.slice(H.page*size,(H.page+1)*size);
+    H.showEdge=!!COLS&&page.some(g=>(openPlayers.has(boardPlayerKey(g[0]))?g:[g[0]]).some(r=>edgeValue(r)!=null));
+    $('hub-table').tHead.innerHTML=headHtml(H.showEdge);$('hub-table').classList.toggle('h-has-edge',H.showEdge);
+    const cols=9+(H.showEdge?1:0), headers=H.sortBy==='start';
+    $('hub-sort-note').textContent=H.sortFallback?'No line on screen has an edge, so the board is sorted by start time.':'';
+    let last=null;
+    $('hub-rows').innerHTML=page.map(group=>{const r=group[0],g=gameKey(r),head=headers&&g!==last?gameRow(r,list,cols):'';last=g;
+      return head+row(r,group)+(openPlayers.has(boardPlayerKey(r))?group.slice(1).map(x=>row(x)).join(''):'');}).join('');
+    $('hub-count').textContent=`${players.length.toLocaleString()} players · ${list.length.toLocaleString()} lines`;
+    $('hub-clear').hidden=!activeFilters()&&H.book==='all'&&!H.q;
+    $('hub-sources').innerHTML=H.loading?$('hub-sources').innerHTML:sourcesHtml();
+    // the Sports grades note belongs to the NBA and NFL boards only
+    $('hub-health').innerHTML=(['nba','nfl'].includes(H.sport)&&list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About ${esc(SPORTS[H.sport])} grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Record for stated chances and actual results.</p></details>`:'');
+    const games=H.view==='games';
+    $('hub-board-section').classList.toggle('h-by-game',games);
+    $('hub-board-section').querySelectorAll('[data-hub="view"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===(games?'games':'list'))));
+    $('hub-games-body').hidden=!games;
+    if(games)paintGames(list);
+    $('hub-empty').hidden=games||list.length>0;
+    if(H.loading)$('hub-empty').textContent='Loading the available boards…';
+    else if(!list.length)$('hub-empty').innerHTML=emptyReasons();
+    $('hub-pagination').innerHTML=games||!players.length?'':`<span>${H.page*size+1}–${Math.min((H.page+1)*size,players.length)} of ${players.length} players</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
+    $('hub-views').innerHTML='<option value="">Choose a saved view</option>'+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
+    paintStrip();
     restoreFocus();
   }
   function refreshSlip() {
@@ -225,30 +279,39 @@ export function mount(C) {
     const box=$('hub-slip-content'), top=box.scrollTop;
     // Repainting retains focus by action identity, including while an asynchronous recheck finishes.
     const a=document.activeElement, u=box.contains(a)?a.dataset.u:null, id=u?a.dataset.id:null;
-    box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks"','data-hub="receipts"'); box.scrollTop=top;
+    const empty=!T.legs.length&&!T.tracked;
+    box.innerHTML=empty?'<div class="h-empty-slip"><p><b>No picks yet.</b> Add a side from any board. It stays here while you research.</p><small>Each platform becomes its own entry.</small></div>'
+      :C.slipTab().replace('data-u="tab" data-id="picks">View receipts','data-hub="receipts">View in My picks');
+    box.scrollTop=top;
     if(u) (box.querySelector(`[data-u="${CSS.escape(u)}"]${id!=null?`[data-id="${CSS.escape(id)}"]`:''}`)||box).focus({preventScroll:true});
-    $('hub-slip-count').textContent=String(T.legs.length);
-    $('u-hub').classList.toggle('h-slip-empty',!T.legs.length&&!T.tracked);      // owner 2026-11-04: an empty slip gives its space to the board
-    $('hub-save-status').textContent=T.saveFail?'Waiting to sync':T.pending||T.saving?'Saving…':'Saved to your account';
-    if(!T.legs.length&&!T.tracked) box.innerHTML='<div class="h-empty-slip"><span class="h-slip-glyph" aria-hidden="true">+</span><h3>Start with a player prop</h3><p>Add a side from any sport. Your lineup stays here as you research.</p><div><span>1 &nbsp; Choose your legs</span><span>2 &nbsp; Recheck current lines</span><span>3 &nbsp; Track your picks</span></div><small>Different platforms become separate entries.</small></div>';
-    $('u-hub').querySelector('.h-mobile-slip').textContent=`Slip builder · ${T.legs.length} ${T.legs.length===1?'leg':'legs'}`;
+    const n=String(T.legs.length);
+    $('hub-slip-count').textContent=n;$('hub-tab-slip-n').textContent=n;$('hub-studio-tab-n').textContent=n;
+    $('hub-tab-slip').setAttribute('aria-label',`Slip, ${n} ${n==='1'?'pick':'picks'}`);
+    // owner 2026-11-05 (structure review): the slip column keeps its width when empty, so a first add never squeezes the board
+    $('u-hub').classList.toggle('h-slip-empty',empty);
+    $('hub-save-status').textContent=empty?'':T.saveFail?'Waiting to sync':T.pending||T.saving?'Saving…':'Saved to your account';
     paintBoard();
     if(H.section==='picks')paintPicks();
     if(H.section==='studio')paintStudio();
   }
-  async function load(force=false) {
-    if(H.loading) return;
+  /* audit 2026-11-04 (polling): read only the sport(s) on screen. Another sport's board is read when its tab opens; the minute
+     refresh runs only while the board is on screen and the page is visible; the browser revalidates each read with its ETag (304). */
+  const visibleSports = () => H.sport==='all'?allowed():allowed().filter(s=>s===H.sport);
+  async function load(force=false, sports=visibleSports()) {
+    if(H.loading){H.queued=[...new Set([...(H.queued||[]),...sports])];H.queuedForce=H.queuedForce||force;return;}
     H.loading=true; paintBoard();
-    await Promise.allSettled(allowed().map(s=>C.loadBoard(s,force)));
+    await Promise.allSettled(sports.map(s=>C.loadBoard(s,force)));
+    H.lastLoad=Date.now();
     H.records=allowed().flatMap(s=>[...R.boards[s].recs.values()]);
     const current=rec(H.detail),shown=H.detailDoc?.record;
-    if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;}
-    H.loading=false; paintBoard(); checkAlerts(); if(V2&&H.section==='games')paintGames();
+    if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;paintDetail();}
+    H.loading=false; paintBoard(); checkAlerts();
     openPending();
-    if(allowed().includes('cs2')) { await C.loadHits(); paintBoard(); pollHits(); }
+    if(sports.includes('cs2')) { await C.loadHits(); paintBoard(); pollHits(); }
+    if(H.queued){const next=H.queued.filter(x=>visibleSports().includes(x)),f=H.queuedForce;H.queued=null;H.queuedForce=false;if(next.length)load(f,next);}
   }
   // SCOUT_BACKGROUND_ALERTS deep link (workspace_alerts.prop_path): #scout/board?sport=..&open=<sport|platform|offer_id>
-  // opens that prop's row on the board once the boards are read. A prop that is gone or not current says so; nothing is guessed.
+  // opens that prop's card once the boards are read. A prop that is gone or not current says so; nothing is guessed.
   function openPending() {
     const id=H.pendingOpen;if(!id||!isOpen())return;
     H.pendingOpen=null;
@@ -256,18 +319,18 @@ export function mount(C) {
     if(clean!==location.hash){history.replaceState(null,'',location.pathname+location.search+clean);H.routeHash=location.pathname+location.hash;}
     const r=rec(id);
     if(!r||unavailableReason(r)||C.started(r)){C.say('This offer is no longer on the board. Refresh to see current lines.');return;}
-    Object.assign(H,{sport:allowed().includes(r.sport)?r.sport:'all',book:'all',stat:'all',game:'all',q:'',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,expanded:null,detail:null});
+    Object.assign(H,{sport:allowed().includes(r.sport)?r.sport:'all',book:'all',stat:'all',game:'all',q:'',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,view:'list',expanded:null,detail:null});
     if(H.section!=='board')section('board',false);
     syncFields();
     const players=[...new Set(rows().map(boardPlayerKey))];
     H.page=Math.max(0,Math.floor(players.indexOf(boardPlayerKey(r))/40));
     openPlayers.add(boardPlayerKey(r));
-    expand(id).then(()=>{const tr=document.querySelector(`#hub-rows tr[data-record="${CSS.escape(id)}"]`);tr?.scrollIntoView({block:'center'});tr?.focus?.({preventScroll:true});});
+    openCard(id).then(()=>{document.querySelector(`#hub-rows tr[data-record="${CSS.escape(id)}"]`)?.scrollIntoView({block:'center'});});
   }
   function pollHits() {
     clearTimeout(H.hitsTimer);
-    if(C.R.hitsComplete||!allowed().includes('cs2'))return;
-    H.hitsTimer=setTimeout(async()=>{if(isOpen()&&!document.hidden){await C.loadHits();if(H.section==='board')paintBoard();}pollHits();},10500);
+    if(C.R.hitsComplete||!visibleSports().includes('cs2'))return;
+    H.hitsTimer=setTimeout(async()=>{if(isOpen()&&!document.hidden&&visibleSports().includes('cs2')){await C.loadHits();if(H.section==='board')paintBoard();}pollHits();},10500);
   }
   async function savePreferences() {
     if(H.saveBusy) {H.saveAgain=true;return;}
@@ -299,7 +362,7 @@ export function mount(C) {
           minGrade:gradeOrder.includes(f.minGrade)?f.minGrade:'all',freshOnly:f.freshOnly===true,soonOnly:f.soonOnly===true,movedOnly:f.movedOnly===true,
           sport:['all',...allowed()].includes(f.sport)?f.sport:'all',book:['all','prizepicks','underdog'].includes(f.book)?f.book:'all',
           q:typeof f.q==='string'?f.q.slice(0,100):'',side:['all','over','under'].includes(f.side)?f.side:'all',
-          sort:['start','player','chance'].includes(f.sort)?f.sort:'start',stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
+          sort:['start','player','chance','edge'].includes(f.sort)?f.sort:'start',stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
       });
       H.views=clean(p.views);
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
@@ -318,28 +381,52 @@ export function mount(C) {
     }
     H.notices=H.notices.slice(0,30); paintAlerts();
   }
-  function paintAlerts() {
-    if(!isOpen()) return;
-    $('hub-alert-count').textContent=H.notices.length?String(H.notices.length):'';
-    if(H.section!=='alerts') return;
-    $('hub-alerts-body').innerHTML=`<h2>Follow the lines that matter.</h2><p>Saved filters flag new matching offers and revisions. Always recheck the line before building a slip.</p>
-      ${R.me.features?.background_alerts?`<div class="h-alert"><div><b>Whop notifications</b><p>${H.delivery?.enabled?'Enabled for this account, including when Scout is closed.':'Opt in to personal Whop notifications while Scout is closed. Uses your Whop account for delivery; consent expires after 30 days.'}</p>${H.delivery?.status?.startsWith('delivery_')?'<p class="h-warning">The last delivery could not be confirmed. In-page alerts still work.</p>':''}</div><button data-hub="toggle-delivery" ${H.deliveryBusy?'disabled':''}>${H.delivery?.enabled?'Turn off':'Enable Whop alerts'}</button></div>`:'<p>In-page alerts are active while this screen is open. No email or push notifications are enabled.</p>'}
-      ${H.deliveryError?`<p class="h-warning" role="status">${esc(H.deliveryError)}</p>`:''}
+  /* line alerts: one body, shown on the Tools page (managed right there) and on its own #/alerts route */
+  function alertsHtml(full) {
+    return `${full?'<h2>Follow the lines that matter.</h2><p>Saved filters flag new matching offers and revisions. Always recheck the line before building a slip.</p>':'<div class="h-sec-head"><h3>Line alerts</h3><button data-hub="section" data-id="alerts">Alert settings →</button></div>'}
+      ${full?(R.me.features?.background_alerts?`<div class="h-alert"><div><b>Whop notifications</b><p>${H.delivery?.enabled?'Enabled for this account, including when Scout is closed.':'Opt in to personal Whop notifications while Scout is closed. Uses your Whop account for delivery; consent expires after 30 days.'}</p>${H.delivery?.status?.startsWith('delivery_')?'<p class="h-warning">The last delivery could not be confirmed. In-page alerts still work.</p>':''}</div><button data-hub="toggle-delivery" ${H.deliveryBusy?'disabled':''}>${H.delivery?.enabled?'Turn off':'Enable Whop alerts'}</button></div>`:'<p>In-page alerts are active while this screen is open. No email or push notifications are enabled.</p>'):''}
+      ${full&&H.deliveryError?`<p class="h-warning" role="status">${esc(H.deliveryError)}</p>`:''}
       ${H.saveError?'<p class="h-warning">Preferences have not synced. <button data-hub="save-retry">Retry save</button></p>':''}
-      <h3>Your alerts</h3>${H.alerts.length?H.alerts.map((a,i)=>`<div class="h-alert"><b>${esc(a.name)}</b><span>${esc(a.filters.sport==='all'?'All sports':SPORTS[a.filters.sport]||a.filters.sport)} · ${esc(a.filters.book)}</span><button data-hub="delete-alert" data-id="${i}">Remove</button></div>`).join(''):'<p>No alerts yet. Set your board filters and choose “Alert me”.</p>'}
+      <h3>Your alerts</h3>${H.alerts.length?H.alerts.map((a,i)=>`<div class="h-alert"><b>${esc(a.name)}</b><span>${esc(a.filters.sport==='all'?'All sports':SPORTS[a.filters.sport]||a.filters.sport)} · ${esc(a.filters.book)}</span><button data-hub="delete-alert" data-id="${i}">Remove</button></div>`).join(''):'<p>No alerts yet. Set your board filters, then choose Views › Alert me.</p>'}
       <h3>This visit</h3>${H.notices.length?H.notices.map(n=>`<button class="h-notice" data-hub="research" data-id="${esc(n.id)}"><b>${esc(n.name)}</b><span>${esc(n.text)}</span><small>${esc(n.view)} · ${new Date(n.at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</small></button>`).join(''):'<p>New matches will appear here after the next refresh. The first load establishes your baseline.</p>'}`;
   }
-  async function expand(id) {
-    if(H.expanded===id){H.expanded=null;H.detail=null;H.detailSeq++;paintBoard();return;}
-    const r=rec(id);if(!r)return;
-    H.expanded=id;H.histN=10;H.histSide=r.scout.side||(r.offer.over.offered?'over':'under');
-    await selectDetail(id);
+  function paintAlerts() {
+    if(!isOpen()) return;
+    for(const id of ['hub-alert-count','hub-alert-count-m'])$(id).textContent=H.notices.length?String(H.notices.length):'';
+    if(H.section==='alerts')$('hub-alerts-body').innerHTML=alertsHtml(true);
+    if(H.section==='tools'&&$('hub-tools-alerts'))$('hub-tools-alerts').innerHTML=alertsHtml(false);
+  }
+  /* ---- the player card: ONE component for every entry point (row, Side, Compare, alerts, Genie). A right panel on desktop that
+     leaves the board and the slip column where they are; a full-screen sheet with Back on phone. The decision strip (line and book,
+     Over/Under, chance, letter or Lean, projection, Add) is pinned above four tabs: Overview, Lines, Stats, Ask. ---- */
+  const cardOpen = () => !$('hub-card').hidden;
+  function openCard(id,tab='overview') {
+    const r=rec(id);if(!r)return Promise.resolve();
+    const same=cardOpen()&&H.expanded===id;
+    H.cardTab=CARD_TABS.some(t=>t[0]===tab)?tab:'overview';
+    if(same){paintDetail();return Promise.resolve();}
+    if(!cardOpen())H.cardFrom=document.activeElement;
+    const sd=r.scout.side;
+    H.expanded=id;H.histN=10;H.histSide=sd&&r.offer[sd]?.offered?sd:r.offer.over.offered?'over':r.offer.under.offered?'under':(sd||'over');
+    $('hub-card').hidden=false;$('u-hub').classList.add('h-card-open');
+    const done=selectDetail(id);
+    $('hub-card-title')?.focus({preventScroll:true});
+    return done;
+  }
+  function closeCard(restore=true) {
+    const id=H.expanded;
+    H.expanded=null;H.detail=null;H.detailDoc=null;H.detailSeq++;
+    $('hub-card').hidden=true;$('u-hub').classList.remove('h-card-open');$('hub-detail').innerHTML='';
+    paintBoard();
+    if(!restore)return;
+    const back=id&&document.querySelector(`#hub-rows .h-player[data-id="${CSS.escape(id)}"]`);
+    (back||(H.cardFrom?.isConnected?H.cardFrom:null)||$('hub-q')).focus({preventScroll:true});
   }
   async function selectDetail(id) {
     const r=rec(id), parent=rec(H.expanded);
     if(!r||!parent||!C.siblings(parent).some(x=>key(x)===id))return;
     H.detail=id;H.detailDoc=null;H.detailState='loading';
-    const seq=++H.detailSeq;paintBoard();
+    const seq=++H.detailSeq;paintBoard();paintDetail();
     try {
       const doc=await C.researchDoc(r);
       if(seq!==H.detailSeq)return;
@@ -347,7 +434,7 @@ export function mount(C) {
     } catch(e){if(seq!==H.detailSeq)return;H.detailState='error';}
     paintDetail();
   }
-  /* ---- the player card, in classic's order: headline numbers, the chart, head-to-head, grouped stats, then the lines and the add ---- */
+  /* card helpers: windows, head-to-head, grouped stats, the chart, HLTV map chances */
   const atLine = (v,line) => v===line?'Push':v>line?'Over':'Under';
   const tallyOf = (list,line) => ({n:list.length,over:list.filter(g=>g.value>line).length,under:list.filter(g=>g.value<line).length,push:list.filter(g=>g.value===line).length});
   /* a window from the loaded games when they cover it, else the board's own count (the newest results, n may be below the window) */
@@ -399,15 +486,50 @@ export function mount(C) {
       ${lv&&(lv.maps||[]).length?`<p class="h-history-note">Likeliest veto${lv.pct!=null?` (${esc(lv.pct)}% of HLTV's simulations)`:''}: ${lv.maps.map(x=>`${esc(x.slot)} ${esc(x.name)}`).join(' · ')}</p>`:''}
       <p class="h-history-note">Weight in the grade: 0. ${esc(m.note||'The grade does not use HLTV map chances yet.')}</p></section>`;
   }
-  function paintDetail() {
-    const box=$('hub-detail'),r=rec(H.detail);if(!box||!r)return;
-    const restoreFocus=focusAfter(box);
-    const side=H.histSide, line=r.offer.line, doc=H.detailDoc, s=r.scout;
+  function decisionHtml(r) {
+    const side=H.histSide, line=r.offer.line, s=r.scout, quotes=C.siblings(r), on=C.onSlip(r);
+    const eligible=H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
+    const chance=C.chanceOf(r,side);
+    const pick=s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:s.hold?'<span class="h-grade-text">Research estimate</span>':'';
+    const opt=q=>`<option value="${esc(key(q))}"${key(q)===key(r)?' selected':''}>${esc(q.offer.platform_label)} ${esc(q.offer.line)}${q.market.line_type!=='standard'?' · '+esc(C.lineLabel(q)):''}</option>`;
+    return `<label class="h-dec-line"><span>Line</span><select id="hub-card-line" aria-label="Line and book">${quotes.map(opt).join('')}</select></label>
+      <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
+      <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}</div>
+      <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>
+      <div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>
+      ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
+  }
+  function overviewHtml(r) {
+    const side=H.histSide, line=r.offer.line, doc=H.detailDoc;
     const all=(doc?.history?.series||[]).filter(g=>num(g.value)), series=all.slice(0,H.histN);
     const sorted=series.map(g=>g.value).sort((a,b)=>a-b), mid=Math.floor(sorted.length/2);
     const median=sorted.length?(sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2):null;
-    const eligible=H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
-    const quotes=C.siblings(r), quoteText=(q,sd)=>{
+    const tile=(value,label,extra='',cls='')=>`<div class="h-tile${cls}"><b>${value}</b><span>${label}</span>${extra}</div>`;
+    const hitTiles=[5,10,20].map(n=>{
+      const t=windowTally(r,all,n), pending=!t&&n!==10&&C.hitsPending(r);
+      return tile(t?`${countOf(t,side)}<em>/${t.n}</em>`:pending?'<i class="h-hit-wait" aria-hidden="true"></i>':'—',`L${n} · ${sideWord(side)} ${esc(line)}`,t&&t.n<n?`<small>${t.n} ${t.n===1?'game':'games'}${t.push?` · ${t.push} ${t.push===1?'push':'pushes'}`:''}</small>`:t?.push?`<small>${t.push} ${t.push===1?'push':'pushes'}</small>`:'',H.histN===n?' is-window':'');
+    }).join('');
+    const hh=doc?.h2h, h2hTile=hh?.opponent&&hh.n?tile(`${countOf(hh,side)}<em>/${hh.n}</em>`,`H2H vs ${esc(hh.opponent)} · ${sideWord(side)}`):'';
+    const se=COLS?C.tallies(r).season:null, seasonTile=se?.n?tile(`${countOf(se,side)}<em>/${se.n}</em>`,`Season · ${sideWord(side)} ${esc(line)}`):'';
+    /* L10 vs closing (SCOUT_CLOSING_LINES): only when the server sent past games with a closing line saved at lock */
+    const cl=doc?.history?.closing, clCount=cl?.n?(side==='under'?cl.under:cl.over):null;
+    const closingTile=cl?.n?tile(`${clCount}<em>/${cl.n}</em>`,`L10 vs closing · ${sideWord(side)}`,`<small>${cl.n} ${cl.n===1?'game':'games'} with a closing line${cl.push?` · ${cl.push} ${cl.push===1?'push':'pushes'}`:''}</small>`,' is-closing'):'';
+    const closingTable=cl?.n?`<details class="h-history-table h-closing-table"><summary>L10 vs closing lines${cl.platform_label?` · ${esc(cl.platform_label)}`:''}</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Closing line</th><th>At closing</th></tr></thead><tbody>${(cl.games||[]).map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${esc(g.closing)}</td><td class="h-at-${esc(String(g.at).toLowerCase())}">${esc(g.at)}</td></tr>`).join('')}</tbody></table></div></details>`:'';
+    const chart=H.detailState==='loading'?'<p class="h-detail-loading">Loading this player’s saved results…</p>'
+      :H.detailState==='error'?''
+      :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span></div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table></div></details>`
+      :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
+    return `<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}</div>
+      <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
+        ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
+        ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
+      ${h2hHtml(hh,line,side)}`;
+  }
+  /* Lines: the card's Compare lines and the old drawer's Books table in one place: every book and line for this prop, its prices,
+     the Scout read, when the offer was seen; then the market books and the market chance when the server has them */
+  function linesHtml(r) {
+    const doc=H.detailDoc, quotes=C.siblings(r);
+    const quoteText=(q,sd)=>{
       const o=q.offer[sd];
       if(!o.offered)return 'Not offered';
       const kind=C.PLATFORMS[q.offer.platform]?.kind;
@@ -416,55 +538,142 @@ export function mount(C) {
       if(num(o.payout)&&o.payout!==1)return o.payout.toFixed(2)+'× modifier';
       return q.market.line_type==='standard'?'Standard':C.lineLabel(q);
     };
-    const playerMarkets=[...new Map(H.records.filter(x=>x.sport===r.sport&&x.player.key===r.player.key&&x.event.id===r.event.id&&x.offer.platform===r.offer.platform).map(x=>[x.market.stat+'|'+x.market.period,x])).values()];
-    const chance=C.chanceOf(r,side), market=doc?.market?.available?(side==='under'?doc.market.p_under:doc.market.p_over):null;
-    const tile=(value,label,extra='',cls='')=>`<div class="h-tile${cls}"><b>${value}</b><span>${label}</span>${extra}</div>`;
-    const hitTiles=[5,10,20].map(n=>{
-      const t=windowTally(r,all,n), pending=!t&&n!==10&&C.hitsPending(r);
-      return tile(t?`${countOf(t,side)}<em>/${t.n}</em>`:pending?'<i class="h-hit-wait" aria-hidden="true"></i>':'—',`L${n} · ${sideWord(side)} ${esc(line)}`,t&&t.n<n?`<small>${t.n} ${t.n===1?'game':'games'}${t.push?` · ${t.push} ${t.push===1?'push':'pushes'}`:''}</small>`:t?.push?`<small>${t.push} ${t.push===1?'push':'pushes'}</small>`:'',H.histN===n?' is-window':'');
-    }).join('');
-    /* L10 vs closing (SCOUT_CLOSING_LINES): only when the server sent past games with a closing line saved at lock */
-    const cl=doc?.history?.closing, clCount=cl?.n?(side==='under'?cl.under:cl.over):null;
-    const closingTile=cl?.n?tile(`${clCount}<em>/${cl.n}</em>`,`L10 vs closing · ${sideWord(side)}`,`<small>${cl.n} ${cl.n===1?'game':'games'} with a closing line${cl.push?` · ${cl.push} ${cl.push===1?'push':'pushes'}`:''}</small>`,' is-closing'):'';
-    const closingTable=cl?.n?`<details class="h-history-table h-closing-table"><summary>L10 vs closing lines${cl.platform_label?` · ${esc(cl.platform_label)}`:''}</summary><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Closing line</th><th>At closing</th></tr></thead><tbody>${(cl.games||[]).map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${esc(g.closing)}</td><td class="h-at-${esc(String(g.at).toLowerCase())}">${esc(g.at)}</td></tr>`).join('')}</tbody></table></details>`:'';
-    const pick=s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:'';
-    const chart=H.detailState==='loading'?'<p class="h-detail-loading">Loading this player’s saved results…</p>'
-      :H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`
-      :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span></div><details class="h-history-table"><summary>View dates and results</summary><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table></details>`
-      :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
-    box.innerHTML=`<div class="h-card-head"><div class="h-card-id"><h3>${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${esc(r.player.team)} · ${esc(r.event.label)}${r.event.competition?` · ${esc(r.event.competition)}`:''} · ${esc(when(r.event.start_utc))} · ${esc(r.offer.platform_label)} ${esc(line)}${r.offer.moved_from!=null?` · moved from ${esc(r.offer.moved_from)}`:''}</p></div>
-      <div class="h-card-links"><button data-hub="drawer" data-id="books">Books &amp; prices ↗</button><button data-hub="drawer" data-id="genie">Ask the Genie ↗</button></div></div>
-      ${playerMarkets.length>1?`<nav class="h-player-markets" aria-label="Player markets">${playerMarkets.map(x=>`<button data-hub="player-market" data-id="${esc(key(x))}" aria-pressed="${key(x)===key(r)}">${esc(x.market.stat_label)} <b>${esc(x.offer.line)}</b><small>${esc(x.market.period_label)}</small></button>`).join('')}</nav>`:''}
-      <div class="h-card-top"><div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)} ${esc(line)}</button>`).join('')}</div>
-        <div class="h-history-summary">${hitTiles}${closingTile}${tile(num(s.projection)?esc(s.projection.toFixed(1)):'—','Saved projection')}${tile(chance==null?'—':pct(chance),`Forecast chance · ${sideWord(side)} ${esc(line)}`,pick?`<div class="h-tile-pick">${pick}</div>`:'',' is-chance')}${market!=null?tile(pct(market),`Market chance · ${esc(doc.market.source||'market')}`):''}</div></div>
-      <div class="h-card-grid${doc?.h2h?.opponent?'':' single'}"><section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
-        ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
-        ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
-        ${h2hHtml(doc?.h2h,line,side)}</div>
-      ${statsHtml(r,doc,all)}
-      ${r.sport==='cs2'?mapChancesHtml(doc?.map_chances):''}
-      <section class="h-line-shop"><div class="h-sec-head"><h4>Compare lines</h4><small>Same event · stat · period</small></div><div class="h-shop-grid"><div class="h-scroll-x"><table><thead><tr><th>Platform / line</th><th>Over</th><th>Under</th><th>Scout</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td></tr>`).join('')}</tbody></table></div>
-        <div class="h-detail-action"><p>Choose a line to recount its past results. A lower Over line or a higher Under line can help; payouts and availability also matter.</p><span>${s.hold?'Research estimate':esc(C.verdictText(r,side))} · ${pct(chance)}</span><button data-hub="detail-add" ${eligible?'':'disabled'}>${C.onSlip(r)?'Review saved slip':`Add ${sideWord(side)} ${esc(line)} · ${esc(r.offer.platform_label)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}${!r.offer[side].offered?'<small>This side is not offered on the selected platform.</small>':''}</div></div></section>`;
-    drawChart();
+    const mb=doc?.market_books, extra=mb?(mb.same||[]).filter(b=>!quotes.some(q=>q.offer.platform===b.platform&&q.offer.line===r.offer.line)):[], other=mb?.other||[];
+    const price=v=>v==null?'—':esc(v);
+    const mrow=(b,showLine)=>`<tr><td>${esc(b.platform_label)}${showLine?` <small>${esc(b.line)}</small>`:''}</td><td>${price(b.over)}</td><td>${price(b.under)}</td><td>${num(b.chance)?pct(b.chance):'—'}</td></tr>`;
+    const market=doc?.market?(doc.market.available?`<p class="h-history-note">Market chance from ${esc(doc.market.source||'the market')}: Over ${pct(doc.market.p_over)}, Under ${pct(doc.market.p_under)}.</p>`:doc.market.reason?`<p class="h-history-note">${esc(doc.market.reason)}</p>`:''):'';
+    return `<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}</tbody></table></div>
+      <p class="h-history-note">Choose a line to recount its past results. Each line is its own pick with its own forecast; payouts and availability differ.</p>
+      ${extra.length||other.length?`<div class="h-sec-head"><h4>Market books</h4></div><div class="h-scroll-x"><table><thead><tr><th>Book</th><th>Over</th><th>Under</th><th>Its chance</th></tr></thead><tbody>${extra.map(b=>mrow(b,false)).join('')}${other.map(b=>mrow(b,true)).join('')}</tbody></table></div>`:''}${market}</section>`;
+  }
+  function statsTabHtml(r) {
+    const doc=H.detailDoc, all=(doc?.history?.series||[]).filter(g=>num(g.value));
+    const full=['nba','nfl'].includes(r.sport)&&r.player.id!=null?`<p class="h-full-research"><a href="${esc(`/sports?view=classic#/player/${encodeURIComponent(r.player.id)}?lg=${r.sport}&stat=${encodeURIComponent(r.market.stat)}`)}" target="_blank" rel="noopener">Full player research ↗</a></p>`:'';
+    if(H.detailState==='loading')return full+'<p class="h-detail-loading">Loading this player’s saved stats…</p>';
+    const body=statsHtml(r,doc,all)+(r.sport==='cs2'?mapChancesHtml(doc?.map_chances):'');
+    return full+(body||'<p class="h-detail-loading">No saved stats are on file for this player and market.</p>');
+  }
+  /* Ask: the Genie (SCOUT_GENIE) answers one question about this line from its own payload, every number checked by the server;
+     the evidence guide sits folded underneath (open when the Genie is off) */
+  const G={key:null,q:'',busy:false,ans:null,err:null,quota:null};
+  const SUGGEST=['What is the projection?','How often did this line hit?','What is the head-to-head?','Is there a better line elsewhere?'];
+  function askHtml(r) {
+    const side=H.histSide, k=key(r)+'|'+r.offer.revision+'|'+side;
+    if(G.key!==k)Object.assign(G,{key:k,ans:null,err:null});
+    const genie=R.me.features?.genie===true, s=r.scout, t=C.tallies(r).l10, other=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform), chance=C.chanceOf(r,side);
+    const out=G.busy?'<p class="h-detail-loading">Checking this line’s saved numbers…</p>':G.err?`<p>${esc(G.err)}</p>`:G.ans?G.ans.map(x=>`<p>${esc(x)}</p>`).join(''):'';
+    const form=genie?`<form class="h-ask" id="hub-ask" novalidate><label for="hub-ask-q">Ask about this line</label><div class="h-ask-row"><input id="hub-ask-q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button type="submit"${G.busy?' aria-disabled="true"':''}>Ask</button></div>
+      <div class="h-ask-sugg" role="group" aria-label="Suggested questions">${SUGGEST.map(x=>`<button type="button" data-hub="genie-ask" data-id="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+      <div class="h-ask-out" id="hub-ask-out" role="status" aria-live="polite">${out}</div>${G.quota?`<p class="h-history-note">${Number(G.quota.remaining_questions)} of ${Number(G.quota.questions_limit)} questions left today.</p>`:''}</form>`:'';
+    return `${form}<details class="h-guide"${genie?'':' open'}><summary>Scout evidence guide</summary><p class="h-history-note">Answers use this offer's saved forecast and research data only.</p>
+      <h5>What supports this pick?</h5><p>${esc(r.player.name)} has a saved projection of ${num(s.projection)?esc(s.projection.toFixed(1)):'unavailable'} for ${esc(r.market.period_label)} ${esc(r.market.stat_label)}. ${chance==null?'No probability was saved for the selected side.':`The saved chance for ${sideWord(side)} ${esc(r.offer.line)} is ${pct(chance)}.`}${s.hold?' This is a research estimate; the validation gate has not released official grades.':''}</p>
+      <h5>How often did this line hit?</h5><p>${t?.n?`${countOf(t,side)} of the last ${t.n} results hit ${sideWord(side)} at today's line of ${esc(r.offer.line)}; ${t.push||0} pushed.`:'Comparable past-game results are not available for this line.'} <button class="h-link" data-hub="card-tab" data-id="overview">See each result</button></p>
+      <h5>Is there a better line elsewhere?</h5><p>${other.length?other.slice(0,8).map(x=>`${esc(x.offer.platform_label)} lists ${esc(x.offer.line)} (${esc(x.market.line_type)}), seen ${esc(when(x.offer.seen_at))}.`).join(' '):'No other platform offer is available for this exact event, player, stat and period.'} <button class="h-link" data-hub="card-tab" data-id="lines">Compare lines</button></p>
+      <h5>What should I verify before tracking?</h5><p>Confirm ${esc(r.market.period_label)}, the ${esc(r.offer.platform_label)} line and offered side, the start time, and any player context. Scout rechecks the exact revision when you track.${s.stake_reason?' '+esc(s.stake_reason):''} <button class="h-link" data-hub="card-tab" data-id="stats">See saved stats</button></p></details>`;
+  }
+  async function genieAsk(text) {
+    const r=rec(H.detail);if(!r||G.busy)return;
+    const box=$('hub-ask-q'), q=(text||(box?box.value:'')||'').trim();
+    G.q=q;
+    if(!q){G.err='Type a question about this line first.';paintBody();return;}
+    const k=G.key;
+    Object.assign(G,{busy:true,err:null,ans:null});paintBody();
+    try {
+      const d=await api('genie',{sport:r.sport,book:r.offer.platform,id:r.offer.offer_id,revision:r.offer.revision,side:H.histSide,question:q});
+      if(G.key!==k)return;
+      G.ans=Array.isArray(d.sentences)?d.sentences:[];G.quota=d.quota||null;
+    } catch(e) {
+      if(G.key!==k)return;
+      const c=e.status||0;
+      if(c===429&&e.doc?.quota)G.quota=e.doc.quota;
+      G.err=c===429?(e.doc?.error==='daily_limit_reached'?"You have used today's questions. They reset at midnight UTC.":'Too many questions in a minute. Try again shortly.')
+        :c===409?'This line changed. Reopen it to ask about the current offer.':c===413?'Keep the question under 300 characters.':'The Genie is unavailable right now.';
+    } finally {if(G.key===k){G.busy=false;paintBody();}}
+  }
+  function tabHtml(r) {
+    const warn=H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`:'';
+    return warn+(H.cardTab==='lines'?linesHtml(r):H.cardTab==='stats'?statsTabHtml(r):H.cardTab==='ask'?askHtml(r):overviewHtml(r));
+  }
+  function paintDetail() {
+    const box=$('hub-detail'),r=rec(H.detail);if(!box||!r||!cardOpen())return;
+    const restoreFocus=focusAfter(box), body=$('hub-card-body'), top=body?body.scrollTop:0, wasTab=box.dataset.tab, wasId=box.dataset.id;
+    const playerMarkets=[...new Map(H.records.filter(x=>x.sport===r.sport&&x.player.key===r.player.key&&x.event.id===r.event.id&&x.offer.platform===r.offer.platform&&!C.started(x)).map(x=>[x.market.stat+'|'+x.market.period,x])).values()];
+    const watched=H.watch.includes(playerKey(r));
+    box.innerHTML=`<header class="h-card-head"><button class="h-back" data-hub="card-close" aria-label="Back to the board"><span aria-hidden="true">←</span> Back</button>
+        <div class="h-card-id"><h3 id="hub-card-title" tabindex="-1">${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${esc(r.player.team)} · ${esc(r.event.label)}${r.event.competition?` · ${esc(r.event.competition)}`:''} · ${esc(when(r.event.start_utc))} ${countdownHtml(r)}${r.offer.moved_from!=null?` · moved from ${esc(r.offer.moved_from)}`:''}</p></div>
+        <button class="h-star" data-hub="watch" data-id="${esc(key(r))}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></header>
+      ${playerMarkets.length>1?`<nav class="h-player-markets" aria-label="Player markets">${playerMarkets.map(x=>`<button data-hub="player-market" data-id="${esc(key(x))}" aria-pressed="${x.market.stat===r.market.stat&&x.market.period===r.market.period}">${esc(x.market.stat_label)} <b>${esc(x.offer.line)}</b><small>${esc(x.market.period_label)}</small></button>`).join('')}</nav>`:''}
+      <div class="h-decision" id="hub-decision" role="group" aria-label="Your pick">${decisionHtml(r)}</div>
+      <div class="h-card-tabs" role="tablist" aria-label="Player research">${CARD_TABS.map(([t,l])=>`<button role="tab" id="hub-tab-${t}" data-hub="card-tab" data-id="${t}" aria-selected="${H.cardTab===t}" aria-controls="hub-card-body" tabindex="${H.cardTab===t?0:-1}">${l}</button>`).join('')}</div>
+      <div class="h-card-body" id="hub-card-body" role="tabpanel" aria-labelledby="hub-tab-${H.cardTab}" tabindex="0">${tabHtml(r)}</div>`;
+    box.dataset.tab=H.cardTab;box.dataset.id=H.detail;
+    if(wasTab===H.cardTab&&wasId===H.detail)$('hub-card-body').scrollTop=top;
+    if(H.cardTab==='overview')drawChart();
     restoreFocus();
   }
+  function paintStrip() {
+    const el=$('hub-decision'), r=rec(H.detail);
+    if(!el||!r||!cardOpen())return;
+    const restore=focusAfter(el);el.innerHTML=decisionHtml(r);restore();
+  }
+  function paintBody() {
+    const el=$('hub-card-body'), r=rec(H.detail);
+    if(!el||!r||!cardOpen())return;
+    const restore=focusAfter(el), had=document.activeElement?.id==='hub-ask-q';
+    el.innerHTML=tabHtml(r);
+    if(H.cardTab==='overview')drawChart();
+    restore();if(had)$('hub-ask-q')?.focus({preventScroll:true});
+  }
+  /* "On slip ✓" shows where the pick is: the slip column on desktop, the Slip tab on phone. Remove lives in the slip itself. */
+  function revealSlip(r) {
+    const leg=T.legs.find(l=>l.key===r.key&&l.book===r.offer.platform);
+    if(!DESKTOP.matches||H.section==='studio'){if(cardOpen())closeCard(false);H.studioTab='slip';section('studio');}
+    const box=H.section==='studio'?$('hub-studio-body'):$('hub-slip-content');
+    const el=leg&&box?.querySelector(`[data-u="leg-x"][data-id="${CSS.escape(leg.id)}"]`)?.closest('.u-leg');
+    if(el){el.scrollIntoView({block:'nearest'});el.classList.add('h-flash');setTimeout(()=>el.classList.remove('h-flash'),1600);}
+    C.say(`${r.player.name} is on your slip.`);
+  }
+  /* My picks: the member's own tracked receipts, pending first, then settled, grouped by the slip they were tracked on.
+     Won and lost are counted together; pushes and voids are counted apart. No units, no returns. */
   function paintPicks() {
     const box=$('hub-picks-body');if(!box||H.section!=='picks')return;
-    if(!T.mine){box.innerHTML=C.picksTab();return;}
-    const all=T.mine.receipts||[], list=all.filter(r=>(H.pickSport==='all'||r.sport===H.pickSport)&&(H.pickStatus==='all'||r.status===H.pickStatus));
-    const hits=list.filter(r=>r.status==='hit').length,miss=list.filter(r=>r.status==='miss').length,push=list.filter(r=>r.status==='push').length;
-    box.innerHTML=`<div class="h-pick-summary"><span><b>${list.length}</b> tracked picks</span><span><b>${hits}–${miss}</b> wins / losses</span><span><b>${push}</b> pushes</span><span><b>${hits+miss?pct(hits/(hits+miss)):'—'}</b> hit rate</span></div>
-      ${list.length?Object.keys(C.PLATFORMS).map(p=>{const rows=list.filter(r=>r.platform===p||r.book===p||r.platform_label===C.PLATFORMS[p].label);return rows.length?`<section class="h-picks-group"><h3>${esc(C.PLATFORMS[p].label)} <span>${rows.length} picks</span></h3>${rows.map(C.receiptHtml).join('')}</section>`:'';}).join(''):'<div class="h-empty"><h3>No picks in this view</h3><p>Recheck a slip and track it to save the exact line and forecast you saw.</p><button data-hub="section" data-id="board">Find a player prop</button></div>'}`;
+    const filters=$('hub-picks-section').querySelector('.h-pick-filters');
+    if(!T.mine){filters.hidden=true;box.innerHTML=C.picksTab();return;}
+    const all=T.mine.receipts||[];
+    filters.hidden=!all.length;
+    if(!all.length){box.innerHTML='<div class="h-empty"><h3>No tracked picks yet</h3><p>Track a slip to save the exact line and chance you saw. Each pick settles here.</p><button data-hub="section" data-id="board">Find a player prop</button></div>';return;}
+    const list=all.filter(r=>(H.pickSport==='all'||r.sport===H.pickSport)&&(H.pickStatus==='all'||r.status===H.pickStatus));
+    if(!list.length){box.innerHTML='<div class="h-empty"><h3>No picks in this view</h3><p>Change the sport or outcome above to see your other tracked picks.</p><button data-hub="pick-clear">Show all picks</button></div>';return;}
+    const n=st=>list.filter(r=>r.status===st).length, won=n('hit'),lost=n('miss'),push=n('push'),voids=n('void'),pending=n('pending');
+    const parts=[won+lost?`<b>${won}–${lost}</b> won–lost`:'',push?`${push} ${push===1?'push':'pushes'} counted apart`:'',voids?`${voids} void`:'',pending?`${pending} pending`:''].filter(Boolean);
+    const slips=T.mine.slips||[], ids=new Set(slips.map(t=>t.slip_id));
+    const groups=slips.map(t=>({t,legs:list.filter(r=>r.slip_id===t.slip_id)})).filter(g=>g.legs.length);
+    const loose=list.filter(r=>!ids.has(r.slip_id));
+    if(loose.length)groups.push({t:null,legs:loose});
+    const card=({t,legs})=>{
+      const c=st=>legs.filter(r=>r.status===st).length, bits=[c('hit')&&`${c('hit')} won`,c('miss')&&`${c('miss')} lost`,c('push')&&`${c('push')} ${c('push')===1?'push':'pushes'}`,c('void')&&`${c('void')} void`,c('pending')&&`${c('pending')} pending`].filter(Boolean).join(' · ');
+      const head=t?`${esc((C.PLATFORMS[t.platform]||{}).label||t.platform)}${t.entry_type?` · ${esc(String(t.entry_type).replace(/^./,x=>x.toUpperCase()))}`:''}`:'Other tracked picks';
+      return `<section class="h-picks-group"><header><h4>${head}</h4><span>${t?`Tracked ${esc(when(t.tracked_at))} · `:''}${esc(bits)}</span></header>${legs.map(C.receiptHtml).join('')}</section>`;
+    };
+    const open=groups.filter(g=>g.legs.some(r=>r.status==='pending')), done=groups.filter(g=>!g.legs.some(r=>r.status==='pending'));
+    box.innerHTML=`<p class="h-pick-summary">Your tracked picks: ${parts.join(' · ')}</p>
+      ${open.length?`<section class="h-picks-part"><h3>Pending <span>${open.length} ${open.length===1?'slip':'slips'}</span></h3>${open.map(card).join('')}</section>`:''}
+      ${done.length?`<section class="h-picks-part"><h3>Settled <span>${done.length} ${done.length===1?'slip':'slips'}</span></h3>${done.map(card).join('')}</section>`:''}
+      <p class="h-picks-foot"><button class="h-link" data-hub="section" data-id="record">The model's record →</button></p>`;
   }
+  /* Slips page: three tabs. My slip (the working draft) is the default; Auto-build holds the generator; Tracked holds past slips */
   function paintStudio() {
     const box=$('hub-studio-body');if(!box||H.section!=='studio')return;
+    const sec=$('hub-studio-section');
+    sec.querySelectorAll('[data-hub="studio-tab"]').forEach(b=>{const on=b.dataset.id===H.studioTab;b.setAttribute('aria-selected',String(on));b.tabIndex=on?0:-1;});
+    sec.querySelectorAll('[data-studio-panel]').forEach(p=>{p.hidden=p.dataset.studioPanel!==H.studioTab;});
     const a=document.activeElement,u=box.contains(a)?a.dataset.u:null,id=u?a.dataset.id:null;
-    box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks"','data-hub="receipts"');
-    if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side.</p><button data-hub="section" data-id="board">Browse player props</button></div>';
+    box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks">View receipts','data-hub="receipts">View in My picks');
+    if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side. Or let Auto-build make slips for you.</p><div class="h-empty-acts"><button data-hub="section" data-id="board">Browse player props</button><button data-hub="studio-tab" data-id="build">Auto-build slips</button></div></div>';
     if(u)box.querySelector(`[data-u="${CSS.escape(u)}"]${id==null?'':`[data-id="${CSS.escape(id)}"]`}`)?.focus({preventScroll:true});
-    if(V2&&$('hub-slip-history'))$('hub-slip-history').innerHTML=C.picksTab();
+    if($('hub-slip-history'))$('hub-slip-history').innerHTML=C.picksTab();
+    $('hub-studio-tab-n').textContent=String(T.legs.length);
     $('hub-studio-sync').textContent=T.saveFail?'Not yet synced. Your changes remain on this device.':T.pending||T.saving?'Saving your changes…':'Saved to your account · available on your other devices';
-    if($('hub-studio-summary'))$('hub-studio-summary').textContent=`${T.legs.length} picks · ${new Set(T.legs.map(l=>l.sport)).size} sports · ${new Set(T.legs.map(l=>l.book)).size} ${new Set(T.legs.map(l=>l.book)).size===1?'platform':'platforms'}`;
   }
   async function generate() {
     if(H.generating)return;
@@ -483,7 +692,7 @@ export function mount(C) {
       if(!batch.slips.length)throw new Error(batch.note||'No combinations passed recheck. Widen your settings.');
       H.batch=batch;H.batchSaved=false;paintBatch();
       await saveBatch();
-      status.textContent=`${batch.slips.length} of ${options.count} slips generated and rechecked. ${batch.note||'Review them below; your working draft is unchanged.'}`;
+      status.textContent=`${batch.slips.length} of ${options.count} slips generated and rechecked. ${batch.note||'Review them below; your slip is unchanged.'}`;
     } catch(e){status.textContent=e.status?'Could not verify current offers. Your draft was kept. Try again.':e.message;}
     finally{H.generating=false;button.disabled=false;button.textContent='Generate slips';}
   }
@@ -500,17 +709,17 @@ export function mount(C) {
   function paintBatch() {
     const box=$('hub-generated');if(!box)return;
     const b=H.batch, slips=b?.slips||[];
-    if(!slips.length){box.innerHTML='<div class="h-empty"><h3>Your generated slips appear here</h3><p>Choose how many slips and how many picks per slip. Your working draft stays separate.</p></div>';return;}
+    if(!slips.length){box.innerHTML='<div class="h-empty"><h3>Your generated slips appear here</h3><p>Choose how many slips and how many picks per slip. Your slip stays separate.</p></div>';return;}
     const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
     box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Chances are the model’s published estimates for individual props, not a combined slip win probability. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
       const ps=s.legs.map(l=>l.shown_p).filter(num),avg=ps.reduce((a,b)=>a+b,0)/ps.length;
-      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header><div class="h-batch-range"><span>Prop chances <b>${pct(Math.min(...ps))}–${pct(Math.max(...ps))}</b></span><span>Average <b>${pct(avg)}</b></span></div><ol>${s.legs.map(l=>`<li><div><strong>${esc(l.player)}</strong><small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span><small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace working '+esc(C.PLATFORMS[s.platform].label)+' entry':'Open in working draft'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
+      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header><div class="h-batch-range"><span>Prop chances <b>${pct(Math.min(...ps))}–${pct(Math.max(...ps))}</b></span><span>Average <b>${pct(avg)}</b></span></div><ol>${s.legs.map(l=>`<li><div><strong>${esc(l.player)}</strong><small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span><small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace the '+esc(C.PLATFORMS[s.platform].label)+' entry in My slip':'Open in My slip'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
     }).join('')}</div>`;
   }
   async function useGenerated(id) {
     const s=H.batch?.slips?.[Number(id)];if(!s||H.usingBatch)return;
     H.usingBatch=true;
-    try {await C.useGenerated(s);refreshSlip();paintBatch();$('hub-batch-message-'+id).textContent='Rechecked and opened in your working draft below.';}
+    try {await C.useGenerated(s);paintBatch();$('hub-batch-message-'+id).textContent='Rechecked and opened in My slip.';H.studioTab='slip';refreshSlip();C.say('Rechecked and opened in My slip.');}
     catch(e){$('hub-batch-message-'+id).textContent=e.status?'Could not recheck this slip. Your draft was kept.':e.message;}
     finally{H.usingBatch=false;}
   }
@@ -528,9 +737,19 @@ export function mount(C) {
       <label>Prop reuse<select id="hub-generation-repeats"><option value="allow">Allow across slips</option><option value="none">No repeat props</option></select></label>
       <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Each slip has distinct players. No stacks uses one player per game; Allow stacks permits supported same-game combinations, whose results can be correlated. No repeat props uses each player / game / stat / period only once across the batch, including alternate lines. Different stats or periods for that player can still appear. When repeats are allowed, slips may share picks. Balanced mode keeps every prop inside your target range. Current published estimates are not calibrated equally across sports. No return or combined win probability is promised. Each candidate passes the server’s platform and freshness checks.</p></details></section>`;
   }
+  /* 30 days of the record; a run of days with no decided pick folds into one quiet tile instead of a wall of dashes */
   function calendarHTML(doc){
-    if(!doc?.days?.length)return '<p class="h-muted">Daily history will appear after the next Results update.</p>';
-    return `<section class="h-record-calendar" aria-label="30-day accuracy calendar"><header><h3>Last 30 days</h3><span>${esc(doc.basis)}</span></header><div class="h-calendar-grid">${doc.days.map(d=>`<details class="${d.decided?'has-results':''}"><summary aria-label="${esc(d.date)}: ${d.wins} wins, ${d.losses} losses, ${d.pushes} pushes"><time>${esc(d.date.slice(5))}</time><b>${num(d.hit_rate)?Math.round(d.hit_rate*100)+'%':'—'}</b><small>${d.decided} decided</small></summary><p>${d.wins} wins · ${d.losses} losses · ${d.pushes} pushes</p></details>`).join('')}</div><p>Accuracy only, not profit. ${doc.missing_dates?`${Number(doc.missing_dates)} records have no saved date and are excluded from this calendar.`:'Pushes are listed separately.'}</p></section>`;
+    if(!doc?.days?.length)return '<p class="h-muted">Daily history will appear after the next Record update.</p>';
+    const out=[];let run=[];
+    const flush=()=>{if(!run.length)return;const a=run[0].date.slice(5),b=run[run.length-1].date.slice(5);
+      out.push(`<div class="h-cal-gap" role="note" aria-label="${esc(`${run[0].date}${run.length>1?' to '+run[run.length-1].date:''}: no decided picks`)}"><time>${esc(a)}${run.length>1?' – '+esc(b):''}</time><small>${run.length>1?`${run.length} days · `:''}none decided</small></div>`);run=[];};
+    for(const d of doc.days){
+      if(!d.decided&&!d.wins&&!d.losses&&!d.pushes){run.push(d);continue;}
+      flush();
+      out.push(`<details class="${d.decided?'has-results':''}"><summary aria-label="${esc(d.date)}: ${d.wins} wins, ${d.losses} losses, ${d.pushes} pushes"><time>${esc(d.date.slice(5))}</time><b>${num(d.hit_rate)?Math.round(d.hit_rate*100)+'%':'—'}</b><small>${d.decided} decided</small></summary><p>${d.wins} wins · ${d.losses} losses · ${d.pushes} pushes</p></details>`);
+    }
+    flush();
+    return `<section class="h-record-calendar" aria-label="30-day accuracy calendar"><header><h3>Last 30 days</h3><span>${esc(doc.basis)}</span></header><div class="h-calendar-grid">${out.join('')}</div><p>Accuracy only, not profit. ${doc.missing_dates?`${Number(doc.missing_dates)} records have no saved date and are excluded from this calendar.`:'Pushes are listed separately.'}</p></section>`;
   }
   async function showRecord() {
     const seq=++H.seq, sport=$('hub-record-sport').value;
@@ -549,15 +768,30 @@ export function mount(C) {
     }).join('');
   }
 
-  function paintGames() {
-    const box=$('hub-games-body');if(!box||H.section!=='games')return;
+  /* By game: the board's own view of the slate (#/games). It reads the board's current filters; a game opens the list filtered to it */
+  function paintGames(list=rows()) {
+    const box=$('hub-games-body');if(!box)return;
     const games=new Map();
-    H.records.filter(r=>!C.started(r)).forEach(r=>{const k=gameKey(r);if(!games.has(k))games.set(k,[]);games.get(k).push(r);});
+    list.forEach(r=>{const k=gameKey(r);if(!games.has(k))games.set(k,[]);games.get(k).push(r);});
     const ordered=[...games.entries()].sort((a,b)=>Date.parse(a[1][0].event.start_utc)-Date.parse(b[1][0].event.start_utc));
-    box.innerHTML=ordered.length?ordered.map(([k,rs])=>{const r=rs[0],players=new Set(rs.map(x=>x.player.key)),markets=new Set(rs.map(x=>x.market.stat)),books=new Set(rs.map(x=>x.offer.platform_label));return `<article class="h-game-card"><header><span class="h-eyebrow">${esc(SPORTS[r.sport])}</span><time>${esc(when(r.event.start_utc))}</time></header><h2>${esc(r.event.label)}</h2><p>${players.size} players · ${markets.size} markets · ${rs.length} lines</p><div class="h-game-books">${[...books].map(b=>`<span>${esc(b)}</span>`).join('')}</div><button data-hub="game-board" data-id="${esc(k)}">Research matchup <span aria-hidden="true">→</span></button></article>`;}).join(''):`<div class="h-empty"><h2>${H.loading?'Loading games…':'No upcoming games'}</h2><p>${H.loading?'Reading your available boards.':'Refresh the boards to check the latest slate.'}</p><button data-hub="refresh">Refresh boards</button></div>`;
+    const hidden=!ordered.length&&!H.loading?new Set(currentLines().filter(r=>H.sport==='all'||r.sport===H.sport).map(gameKey)).size:0;
+    box.innerHTML=ordered.length?ordered.map(([k,rs])=>{const r=rs[0],players=new Set(rs.map(x=>x.player.key)),markets=new Set(rs.map(x=>x.market.stat)),books=new Set(rs.map(x=>x.offer.platform_label));return `<article class="h-game-card"><header><span class="h-eyebrow">${esc(SPORTS[r.sport])}${r.event.competition?' · '+esc(r.event.competition):''}</span><time>${esc(when(r.event.start_utc))} ${countdownHtml(r)}</time></header><h2>${esc(r.event.label)}</h2><p>${players.size} players · ${markets.size} markets · ${rs.length} lines</p><div class="h-game-books">${[...books].map(b=>`<span>${esc(b)}</span>`).join('')}</div><button data-hub="game-board" data-id="${esc(k)}">Show this game's props <span aria-hidden="true">→</span></button></article>`;}).join('')
+      :H.loading?'<div class="h-empty"><b class="h-empty-title">Loading games…</b></div>'
+      :hidden?`<div class="h-empty"><b class="h-empty-title">${hidden} ${hidden===1?'game':'games'} hidden by filters</b><button data-hub="clear-filters">Clear filters</button></div>`
+      :'<div class="h-empty"><b class="h-empty-title">No upcoming games</b><button data-hub="refresh">Refresh</button></div>';
   }
+  /* Tools: the one index of everything that is not the board. Line alerts are managed right here. */
   function paintTools() {
-    $('hub-tools-body').innerHTML=`<div class="h-tool-grid"><article><span class="h-eyebrow">MARKETS</span><h2>Moneylines</h2><p>Compare available game markets in the existing moneyline workspace.</p><a href="/?view=classic#moneylines">Open moneylines →</a></article><article><span class="h-eyebrow">RESEARCH</span><h2>Single prop grader</h2><p>Inspect a player and line with the existing grading tools.</p><a href="/?view=classic#one">Open grader →</a></article><article><span class="h-eyebrow">SAVED FILTERS</span><h2>Line alerts</h2><p>Watch for new matches to your saved filters while this page is open.</p><button data-hub="section" data-id="alerts">Manage alerts →</button></article><article><span class="h-eyebrow">EXPLAIN A PROP</span><h2>Ask the Genie</h2><p>Open player research from the Board and use its Genie tab. Answers stay attached to the selected prop.</p><button data-hub="section" data-id="board">Choose a player →</button></article></div>`;
+    const sports=allowed(), card=(eye,title,text,links)=>`<article><span class="h-eyebrow">${eye}</span><h2>${title}</h2><p>${text}</p><div class="h-tool-links">${links}</div></article>`;
+    const a=(href,label)=>`<a href="${esc(href)}">${esc(label)} <span aria-hidden="true">↗</span></a>`;
+    const leagues=['nba','nfl'].filter(s=>sports.includes(s));
+    const classic=[sports.includes('cs2')&&a('/?view=classic#board','CS2 classic board'),sports.includes('lol')&&a('/lol?view=classic','LoL classic board'),leagues.length&&a('/sports?view=classic#/board','NBA / NFL classic board')].filter(Boolean).join('');
+    $('hub-tools-body').innerHTML=`<div class="h-tool-grid">${card('MARKETS','Moneylines','Compare available game markets in the moneyline workspace.',a('/?view=classic#moneylines','Open moneylines'))}
+      ${card('RESEARCH','Single prop grader','Inspect a player and line with the grading tools.',a('/?view=classic#one','Open grader'))}
+      ${card('RESEARCH','Match research','Team and map research for an upcoming CS2 match.',a('/?view=classic#matches','Open match research'))}
+      ${leagues.length?card('NBA · NFL','Sheets and Compare','Stat sheets, player comparison and with/without splits from the sports pages.',leagues.map(l=>a(`/sports?view=classic#/sheets?lg=${l}`,`${SPORTS[l]} sheets`)+a(`/sports?view=classic#/compare?lg=${l}`,`${SPORTS[l]} compare`)).join('')):''}
+      ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}</div>
+      <section class="h-tools-alerts" id="hub-tools-alerts" aria-label="Line alerts"></section>`;
     if(R.me.owner)$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">OWNER REVIEW</span><h2>Grading comparison</h2><p>Published chances beside the candidate grader, from saved forecast revisions.</p></div></div><div class="h-game-books">${['cs2','lol','nba','nfl'].map(s=>`<button data-hub="grade-review" data-id="${s}">${SPORTS[s]}</button>`).join('')}</div><div id="hub-grade-review" aria-live="polite"><p>Select a sport to inspect its comparison log.</p></div></section>`);
   }
   function gradeSteps(side){
@@ -645,31 +879,33 @@ export function mount(C) {
   function installV2() {
     if(!V2)return;
     $('u-hub').classList.add('h-v2');
-    const nav=[['board','Board'],['games','Games'],['studio','Slips'],['record','Results'],['tools','Tools']];
-    const html=nav.map(([id,label])=>`<button data-hub="section" data-id="${id}">${label}</button>`).join('');
-    document.querySelector('.h-sidebar nav[aria-label="Research hub"]').innerHTML=html;
-    document.querySelector('.h-sidebar [data-id="tools"]').insertAdjacentHTML('beforeend','<span id="hub-alert-count" aria-label="New filter matches"></span>');
-    document.querySelector('.h-nav-mobile').innerHTML=html;
-    $('hub-board-section').insertAdjacentHTML('afterend','<section id="hub-games-section" hidden><div class="h-section-head"><div><h2>The upcoming slate</h2><p>Every available sport. Research a matchup without losing your slip.</p></div></div><div id="hub-games-body" class="h-game-grid"></div></section><section id="hub-tools-section" hidden><div class="h-section-head"><h2>Your research toolkit</h2></div><div id="hub-tools-body"></div></section>');
-    document.querySelector('.h-quick').insertAdjacentHTML('afterbegin',[['freshOnly','Current only'],['soonOnly','Starts within 1h'],['movedOnly','Line moved']].map(([f,label])=>`<button id="hub-${f}" data-hub="quick" data-id="${f}" aria-pressed="false">${label}</button>`).join(''));
-    $('hub-studio-section').insertAdjacentHTML('beforeend','<section class="h-tracked-slips"><header><div><span class="h-eyebrow">YOUR RECORD</span><h2>Tracked slips</h2><p>Exact saved lines, grouped by entry. Each leg keeps its settlement receipt.</p></div><button data-hub="receipts">Filter individual picks →</button></header><div id="hub-slip-history"></div></section>');
-    document.querySelector('.h-working-draft>p').insertAdjacentHTML('afterend','<button data-hub="share-card">Download lineup image</button>');
+    document.querySelector('#hub-filter-pop .h-quick').insertAdjacentHTML('afterbegin',[['freshOnly','Current only'],['soonOnly','Starts within 1h'],['movedOnly','Line moved']].map(([f,label])=>`<button id="hub-${f}" data-hub="quick" data-id="${f}" aria-pressed="false">${label}</button>`).join(''));
+    document.querySelector('#hub-studio-section .h-studio-intro').insertAdjacentHTML('beforeend','<button data-hub="share-card">Download lineup image</button>');
   }
 
+  const SECTIONS=['board','studio','record','alerts','picks','tools'];
+  const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:'Line alerts',studio:'Slips'};
   function section(name,navigate=true) {
-    if(!['board','studio','record','alerts','picks',...(V2?['games','tools']:[])].includes(name))name='board';
+    if(name==='games'){H.view='games';name='board';}
+    if(!SECTIONS.includes(name))name='board';
+    if(name!=='board'&&cardOpen())closeCard(false);
+    togglePop(null);
     H.section=name;
-    if(navigate){const hash=(V2?'#/'+({studio:'slips',record:'results'}[name]||name):'#scout/'+name)+(name==='board'?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
-    for(const n of ['board','studio','record','alerts','picks',...(V2?['games','tools']:[])]) {$('hub-'+n+'-section').hidden=n!==name; document.querySelectorAll(`[data-hub="section"][data-id="${n}"]`).forEach(b=>b.setAttribute('aria-current',n===name?'page':'false'));}
+    const games=name==='board'&&H.view==='games';
+    if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
+    for(const n of SECTIONS)$('hub-'+n+'-section').hidden=n!==name;
+    const here=name==='alerts'?'tools':name;
+    document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
-    $('hub-title').textContent=({games:'Games',tools:'Research tools',record:'Performance record',picks:'My picks',alerts:'Line alerts',studio:'Slip Studio'})[name]||'Player props';
-    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();if(V2)C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='games')paintGames();else if(name==='tools'){paintTools();paintMarkets();}else paintAlerts();
+    $('u-hub').classList.toggle('h-board-mode',name==='board');
+    $('hub-title').textContent=TITLES[name]||'Player props';
+    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else paintAlerts();
   }
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
     const csBoard=/^#board(?:\/(?:all|prizepicks|underdog))?$/.test(location.hash);
-    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|tools|picks|alerts)(?:\?(.*))?$/);
-    const scout=location.hash.match(/^#scout\/(board|studio|picks|record|alerts)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
+    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|record|tools|picks|alerts)(?:\?(.*))?$/);
+    const scout=location.hash.match(/^#scout\/(board|games|studio|picks|record|alerts|tools)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
     const mainBoard=location.pathname==='/lol'&&!location.hash || location.pathname==='/sports'&&(!location.hash||location.hash.startsWith('#/board')) || location.pathname==='/'&&(!location.hash||csBoard);
     const open=!classic&&(location.hash==='#all-sports'||!!scout||!!modern||mainBoard||slips);
     if(open&&H.routeHash!==location.pathname+location.hash){
@@ -680,6 +916,8 @@ export function mount(C) {
       if(deep&&deep.length<=300)H.pendingOpen=deep;
       const routeBook=location.hash.split('/')[1];
       if(csBoard&&['all','prizepicks','underdog'].includes(routeBook))H.book=routeBook;
+      const tab=new URLSearchParams((modern?modern[2]:scout?scout[2]:location.hash.split('?')[1])||'').get('tab');
+      if(['slip','build','tracked'].includes(tab))H.studioTab=tab;
       H.stat='all';H.game='all';H.page=0;
     }
     $('u-hub').hidden=!open; document.documentElement.classList.toggle('hub-open',open);
@@ -689,29 +927,51 @@ export function mount(C) {
       if(open&&!node.inert){node.dataset.hubInert='1';node.inert=true;}
       if(!open&&node.dataset.hubInert){node.inert=false;delete node.dataset.hubInert;}
     }
-    if(open) {section(modern?({slips:'studio',results:'record'}[modern[1]]||modern[1]):scout?scout[1]:slips?'studio':'board',false);syncFields();paintBoard();refreshSlip();load();}
+    if(!open)return;
+    const target=modern?({slips:'studio',results:'record'}[modern[1]]||modern[1]):scout?scout[1]:slips?'studio':'board';
+    if(target==='board')H.view='list';
+    section(target,false);syncFields();paintBoard();refreshSlip();load();
   }
+  /* the Filters and Views pop-overs and the phone's More sheet: one open at a time; a click outside or Escape closes it */
+  const POPS={filter:['hub-filters-toggle','hub-filter-pop'],views:['hub-views-toggle','hub-views-pop'],more:['hub-more-toggle','hub-more']};
+  function togglePop(which) {
+    for(const [w,[btn,pop]] of Object.entries(POPS)){const open=w===which&&$(pop).hidden;$(pop).hidden=!open;$(btn).setAttribute('aria-expanded',String(open));}
+  }
+  const openPop = () => Object.entries(POPS).find(([,[,pop]])=>!$(pop).hidden)?.[0]||null;
   const rec = id => H.records.find(r=>key(r)===id);
   const actions={
     'share-card'(){C.shareSlip();},
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
-    'game-board'(id){H.game=id;H.minGrade='all';H.sport='all';H.book='all';H.stat='all';H.side='all';H.q='';H.onlyDiff=false;H.watched=false;H.freshOnly=false;H.soonOnly=false;H.movedOnly=false;H.page=0;section('board');},
+    // By game keeps the board's filters: the games listed are the ones those filters show
+    'game-board'(id){H.game=id;H.view='list';H.page=0;section('board');$('hub-center').scrollTop=0;},
     generate, 'use-generated':useGenerated, 'open-generated':i=>C.openGenerated(H.batch?.slips?.[Number(i)]), 'open-line':()=>C.openLine(rec(H.detail),H.histSide), 'save-batch':saveBatch,
-    'player-market'(id){H.stat='all';H.game='all';H.q='';H.side='all';H.onlyDiff=false;H.watched=false;H.expanded=null;const r=rec(id);if(!r)return;H.page=Math.max(0,Math.floor(rows().findIndex(x=>key(x)===id)/40));expand(id);},
-    filters(){const open=$('hub-board-section').classList.toggle('filters-open');$('hub-filters-toggle').setAttribute('aria-expanded',String(open));},
-    section, sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;section('board');}, game(id){H.game=id;H.page=0;paintBoard();},page(id){H.page+=Number(id);paintBoard();$('hub-table').scrollIntoView({block:'start'});},
-    'player-props'(id){if(openPlayers.has(id)){openPlayers.delete(id);H.expanded=null;H.detail=null;H.detailSeq++;}else openPlayers.add(id);paintBoard();},
-    expand,'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id;paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
-    'detail-add'(){const r=rec(H.detail);if(!r||H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;if(C.onSlip(r))return C.openTray();C.addLeg(r,H.histSide);refreshSlip();},
-    research(id){const r=rec(id);if(r)C.research(r);else C.say('This offer is no longer on the board. Refresh to see current lines.');},
-    // the card already shows the overview, history and stats, so its drawer keeps only what the card does not
-    books(id){const r=rec(id);if(r)C.research(r,'books',['books','genie']);},
-    drawer(tab){const r=rec(H.detail);if(r)C.research(r,tab==='genie'?'genie':'books',['books','genie'],H.histSide);},
-    add(id){const r=rec(id);if(!r)return;if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return C.openTray();if(!r.scout.side||!r.offer[r.scout.side]?.offered)return C.research(r);C.addLeg(r,r.scout.side);refreshSlip();},
-    watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();},
+    'player-market'(id){if(rec(id))openCard(id,H.cardTab);},
+    filters(){togglePop('filter');}, 'views-menu'(){togglePop('views');}, more(){togglePop('more');},
+    book(id){if(!['all','prizepicks','underdog'].includes(id))return;H.book=id;H.page=0;paintBoard();},
+    'clear-filters'(){Object.assign(H,{book:'all',q:'',stat:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,game:'all',page:0});paintBoard();},
+    view(id){H.view=id==='games'?'games':'list';H.page=0;section('board');},
+    section(id){if(id==='board')H.view='list';if(id==='studio')H.studioTab='slip';section(id);},
+    'studio-open'(id){H.studioTab=['slip','build','tracked'].includes(id)?id:'slip';section('studio');},
+    'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();sectionFocus('studio-tab',id);},
+    sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;H.view==='games'?section('games'):section('board');load(false);},
+    game(id){H.game=H.game===id?'all':id;H.page=0;paintBoard();document.querySelector(`#hub-rows [data-hub="game"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});},
+    page(id){H.page+=Number(id);paintBoard();$('hub-table').scrollIntoView({block:'start'});},
+    'player-props'(id){const open=rec(H.expanded);if(openPlayers.has(id)){openPlayers.delete(id);if(cardOpen()&&open&&boardPlayerKey(open)===id)closeCard(false);}else openPlayers.add(id);paintBoard();},
+    expand(id){if(cardOpen()&&H.expanded===id)closeCard();else openCard(id,'overview');},
+    'card-close'(){closeCard();},
+    'card-tab'(id){if(!CARD_TABS.some(t=>t[0]===id))return;H.cardTab=id;paintDetail();$('hub-card-body').scrollTop=0;$('hub-tab-'+id)?.focus({preventScroll:true});},
+    'genie-ask'(q){genieAsk(q);},
+    'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id==='under'?'under':'over';paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
+    'detail-add'(){const r=rec(H.detail);if(!r)return;if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;C.addLeg(r,H.histSide);refreshSlip();},
+    // alert notices open the same card as the board
+    research(id){const r=rec(id);if(!r)return C.say('This offer is no longer on the board. Refresh to see current lines.');if(H.section!=='board')section('board');openCard(id);},
+    books(id){if(rec(id))openCard(id,'lines');},
+    add(id){const r=rec(id);if(!r)return;if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
+    watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
-    refresh(){H.detailSeq++;H.expanded=null;H.detail=null;load(true);}, tray(){section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
-    'save-view'(){openSave('view');}, 'save-alert'(){openSave('alert');}, 'save-retry':savePreferences,
+    refresh(){H.detailSeq++;if(cardOpen())closeCard(false);load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
+    'save-view'(){togglePop(null);openSave('view');}, 'save-alert'(){togglePop(null);openSave('alert');}, 'save-retry':savePreferences,
+    'pick-clear'(){H.pickSport='all';H.pickStatus='all';$('hub-pick-sport').value='all';$('hub-pick-status').value='all';paintPicks();},
     'grade-review'(id,el){showGradeReview(id,el?.dataset.before);},
     skip(){$('hub-title').focus();},
     'market-density'(){H.mt.dense=!H.mt.dense;try{localStorage.setItem('scout-market-density',H.mt.dense?'compact':'comfortable');}catch(e){}$('hub-mt-dense')?.setAttribute('aria-pressed',String(H.mt.dense));paintMarketResults();},
@@ -729,21 +989,49 @@ export function mount(C) {
     'delete-alert'(i){const a=H.alerts.splice(Number(i),1)[0];if(a)H.seen.delete(a.id);savePreferences();paintAlerts();},
     'record-retry':showRecord,
   };
+  const sectionFocus=(action,id)=>document.querySelector(`#u-hub [data-hub="${action}"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
   const PAGE_BACK=location.pathname==='/sports'?'#/board':location.pathname==='/lol'?'':'#board';
   function openSave(kind) {H.saveKind=kind;$('hub-save-title').textContent=kind==='alert'?'Alert on these filters':'Save this research view';$('hub-save-name').value='';$('hub-save-dialog').showModal();$('hub-save-name').focus();}
+  const NAV=[['board','Board'],['studio','Slips'],['picks','My picks'],['record','Record'],['tools','Tools']];
+  const pickStatus=[['all','All outcomes'],['pending','Pending'],['hit','Won'],['miss','Lost'],['push','Pushed'],['void','Void']];
   document.body.insertAdjacentHTML('beforeend',`<section id="u-hub" class="scout-hub" aria-label="All sports research" hidden>
-    <aside class="h-sidebar"><a class="h-brand" href="/"><span>1T</span><b>1TIME <em>SCOUT</em></b></a><p class="h-nav-label h-sport-nav-label">PLAYER PROPS</p><nav class="h-sport-nav" aria-label="Sports boards">${['all',...allowed()].map(s=>`<button data-hub="sport" data-id="${s}"><span class="h-nav-icon">${s==='all'?'◈':s==='cs2'?'CS':s==='lol'?'LoL':s==='nba'?'NBA':'NFL'}</span>${s==='all'?'All sports':SPORTS[s]}</button>`).join('')}</nav><p class="h-nav-label">YOUR RESEARCH</p><nav aria-label="Research hub"><button data-hub="section" data-id="board">Player props</button><button data-hub="section" data-id="studio">Slip Studio</button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Performance record</button><button data-hub="section" data-id="alerts">Line alerts <span id="hub-alert-count"></span></button></nav><p class="h-nav-label">MORE TOOLS</p><nav aria-label="Original boards"><a href="/?view=classic#moneylines">Moneylines <span>↗</span></a><a href="/?view=classic#one">Single prop grader <span>↗</span></a><a href="/?view=classic#matches">Match research <span>↗</span></a></nav><div class="h-sidebar-foot"><b>Your boards, connected.</b><p>One saved slip across CS2, LoL, NBA and NFL.</p><button data-hub="close">Classic board ↗</button></div></aside>
-    <div class="h-center"><header class="h-top"><div><span class="h-eyebrow">1TIME SCOUT / RESEARCH</span><h1 id="hub-title">Player props</h1></div><div class="h-top-actions"><details class="h-tools-menu"><summary>More tools</summary><nav><a href="/?view=classic#moneylines">Moneylines</a><a href="/?view=classic#one">Single prop grader</a><a href="/?view=classic#matches">Match research</a><button data-hub="close">Classic board</button></nav></details><button data-hub="close" class="h-classic">Classic board ↗</button></div></header>
-      <section id="hub-board-section"><div id="hub-sports" class="h-sports" role="group" aria-label="Sport filter"></div><div id="hub-games" class="h-games" role="group" aria-label="Matchup filter"></div><div class="h-tools"><label class="h-search"><span>Search</span><input id="hub-q" type="search" placeholder="Player, team or game" aria-label="Search all sports"></label><label>Platform<select id="hub-book"><option value="all">All platforms</option><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label><label>Market<select id="hub-stat"><option value="all">All markets</option></select></label><label>Side<select id="hub-side"><option value="all">Both sides</option><option value="over">Over</option><option value="under">Under</option></select></label><label>Sort<select id="hub-sort"><option value="start">Starting soon</option><option value="player">Player name</option><option value="chance">Stated chance</option></select></label><button data-hub="refresh" aria-label="Refresh all boards">↻</button></div>
-      <div class="h-quick"><label>Minimum grade<select id="hub-minGrade"><option value="all">Any grade</option>${gradeOrder.slice().reverse().map(g=>`<option value="${g}">${g} or higher</option>`).join('')}</select></label><button id="hub-diff" data-hub="diff" aria-pressed="false">Lines differ</button><button id="hub-watch" data-hub="watched" aria-pressed="false">★ Watchlist</button><select id="hub-views" aria-label="Saved research views"><option>Saved views</option></select><button data-hub="save-view">Save view</button><button data-hub="save-alert">Alert me</button></div><div id="hub-health" class="h-health" role="status"></div>
-      <div class="h-table-title"><h2>Available lines</h2><span id="hub-count"></span><small>History is measured against the displayed line</small></div><div class="h-table-wrap"><table id="hub-table" class="h-table"><thead><tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player">Player / matchup</th><th class="h-c-market">Market</th><th class="h-c-line">Line</th><th class="h-c-proj">Proj.</th><th class="h-c-side">Scout side</th><th class="h-c-l5">L5</th><th class="h-c-l10">L10</th><th class="h-c-l20">L20</th><th class="h-c-compare">Compare</th><th class="h-c-grade">Scout grade</th><th class="h-c-add"><span class="u-sr">Add to slip</span></th></tr></thead><tbody id="hub-rows"></tbody></table><p id="hub-empty" class="h-empty">Loading the available boards…</p></div><div id="hub-pagination" class="h-pagination"></div></section>
-      <section id="hub-studio-section" hidden><div class="h-studio-intro"><div><h2>Build across sports. Keep every line.</h2><p>CS2, LoL, NBA and NFL in one account draft. Each platform gets its own entry and its own rule check.</p><span id="hub-studio-sync" class="h-sync"></span></div><button data-hub="section" data-id="board">+ Add player props</button></div>${generatorHtml()}<section id="hub-generated" aria-label="Generated slips"></section><section class="h-working-draft"><h2>Your working draft</h2><p>Open one generated slip here to review, track or copy. Your other generated slips stay saved above.</p><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt of the line and forecast you chose. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">View tracked picks →</button></div></section><section id="hub-picks-section" hidden><div class="h-section-head"><div><h2>Your picks, with receipts.</h2><p>The line and forecast saved when you tracked. Settled at that line; pushes stay separate.</p></div><div class="h-pick-filters"><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status"><option value="all">All outcomes</option><option value="pending">Pending</option><option value="hit">Won</option><option value="miss">Lost</option><option value="push">Pushed</option><option value="void">Void</option></select></label></div></div><div id="hub-picks-body"></div></section><section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section><section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>
-    </div><aside class="h-slip" aria-label="Saved cross-sport slip"><header><div><span class="h-eyebrow">YOUR LINEUP</span><h2>Slip builder <span id="hub-slip-count">0</span></h2></div><button data-hub="receipts" title="View tracked picks">Receipts ↗</button></header><p id="hub-save-status" class="h-sync" aria-live="polite">Saved to your account</p><div id="hub-slip-content" tabindex="-1"></div><footer>One entry per platform. Rechecked against current offers before tracking.</footer></aside>
-    <button class="h-mobile-slip" data-hub="tray">Open saved slip</button></section>
+    <aside class="h-sidebar"><a class="h-brand" href="/"><span>1T</span><b>1TIME <em>SCOUT</em></b></a><nav aria-label="Research hub">${NAV.map(([id,label])=>`<button data-hub="section" data-id="${id}">${label}${id==='tools'?' <span id="hub-alert-count" aria-label="New filter matches"></span>':''}</button>`).join('')}</nav><div class="h-sidebar-foot"><button data-hub="close">Classic board ↗</button></div></aside>
+    <div class="h-center" id="hub-center"><header class="h-top"><div><span class="h-eyebrow">1TIME SCOUT / RESEARCH</span><h1 id="hub-title">Player props</h1></div><div class="h-top-actions"></div></header>
+      <section id="hub-board-section">
+        <div class="h-toolbar" aria-label="Board controls" role="group">
+          <div id="hub-sports" class="h-sports" role="group" aria-label="Sport"></div>
+          <label class="h-search"><span class="u-sr">Search</span><input id="hub-q" type="search" placeholder="Search player, team or game" aria-label="Search all sports"></label>
+          <div id="hub-platform" class="h-segment h-platform" role="group" aria-label="Platform"><button data-hub="book" data-id="all" aria-pressed="true">All</button><button data-hub="book" data-id="prizepicks" aria-pressed="false" aria-label="PrizePicks (PP)" title="PrizePicks">PP</button><button data-hub="book" data-id="underdog" aria-pressed="false" aria-label="Underdog (UD)" title="Underdog">UD</button></div>
+          <div class="h-pop-wrap"><button id="hub-filters-toggle" class="h-filter-toggle" data-hub="filters" aria-expanded="false" aria-controls="hub-filter-pop">Filters<span id="hub-filter-n" class="h-count-badge"></span></button>
+            <div id="hub-filter-pop" class="h-pop" role="group" aria-label="Filters and sort" hidden>
+              <div class="h-pop-grid"><label>Market<select id="hub-stat"><option value="all">All markets</option></select></label><label>Side<select id="hub-side"><option value="all">Both sides</option><option value="over">Over</option><option value="under">Under</option></select></label>
+                <label>Minimum grade<select id="hub-minGrade"><option value="all">Any grade</option>${gradeOrder.slice().reverse().map(g=>`<option value="${g}">${g} or higher</option>`).join('')}</select></label><label>Sort<select id="hub-sort"><option value="start">Starting soon</option><option value="player">Player name</option><option value="chance">Stated chance</option>${COLS?'<option value="edge">Edge vs break-even</option>':''}</select></label></div><small id="hub-sort-note" class="h-sort-note" role="status"></small>
+              <div class="h-quick"><button id="hub-diff" data-hub="diff" aria-pressed="false">Lines differ</button><button id="hub-watch" data-hub="watched" aria-pressed="false">★ Watchlist</button></div>
+              <div class="h-pop-foot"><button data-hub="clear-filters">Clear filters</button><button data-hub="filters">Done</button></div></div></div>
+          <div class="h-pop-wrap"><button id="hub-views-toggle" data-hub="views-menu" aria-expanded="false" aria-controls="hub-views-pop">Views <span aria-hidden="true">▾</span></button>
+            <div id="hub-views-pop" class="h-pop h-pop-end" role="group" aria-label="Saved views and alerts" hidden><label>Saved views<select id="hub-views"><option value="">Choose a saved view</option></select></label><button data-hub="save-view">Save this view</button><button data-hub="save-alert">Alert me on these filters</button><button data-hub="section" data-id="tools">Manage alerts →</button></div></div>
+          <button class="h-refresh" data-hub="refresh" aria-label="Refresh all boards" title="Refresh">↻</button>
+        </div>
+        <div id="hub-sources" class="h-sources" role="status"></div><div id="hub-health" class="h-health" role="status"></div>
+        <div class="h-table-title"><h2 class="u-sr">Available lines</h2><span id="hub-count"></span><button id="hub-clear" class="h-link" data-hub="clear-filters" hidden>Clear filters</button><div class="h-segment h-viewmode" role="group" aria-label="Board view"><button data-hub="view" data-id="list" aria-pressed="true">List</button><button data-hub="view" data-id="games" aria-pressed="false">By game</button></div></div>
+        <div class="h-table-wrap"><table id="hub-table" class="h-table"><thead></thead><tbody id="hub-rows"></tbody></table><div id="hub-empty" class="h-empty" role="status">Loading the available boards…</div></div>
+        <div id="hub-games-body" class="h-game-grid" hidden></div>
+        <div id="hub-pagination" class="h-pagination"></div></section>
+      <section id="hub-studio-section" hidden>
+        <div class="h-studio-tabs" role="tablist" aria-label="Slips"><button role="tab" data-hub="studio-tab" data-id="slip" aria-selected="true">My slip <span id="hub-studio-tab-n" class="h-count-badge">0</span></button><button role="tab" data-hub="studio-tab" data-id="build" aria-selected="false" tabindex="-1">Auto-build</button><button role="tab" data-hub="studio-tab" data-id="tracked" aria-selected="false" tabindex="-1">Tracked</button></div>
+        <div data-studio-panel="slip" role="tabpanel" aria-label="My slip"><div class="h-studio-intro"><span id="hub-studio-sync" class="h-sync"></span><button data-hub="section" data-id="board">+ Add player props</button></div><section class="h-working-draft" aria-label="My slip"><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt of the line and forecast you chose. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">My picks →</button></div></div>
+        <div data-studio-panel="build" role="tabpanel" aria-label="Auto-build" hidden>${generatorHtml()}<section id="hub-generated" aria-label="Generated slips"></section></div>
+        <div data-studio-panel="tracked" role="tabpanel" aria-label="Tracked" hidden><section class="h-tracked-slips"><header><div><h2>Tracked slips</h2><p>Exact saved lines, grouped by entry. Each leg keeps its settlement receipt.</p></div><button data-hub="receipts">My picks →</button></header><div id="hub-slip-history"></div></section></div></section>
+      <section id="hub-picks-section" hidden><div class="h-section-head"><div><p>Your tracked picks, with the line and chance saved when you tracked. Each settles at that line; pushes are counted apart.</p></div><div class="h-pick-filters" hidden><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status">${pickStatus.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label></div></div><div id="hub-picks-body"></div></section>
+      <section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section>
+      <section id="hub-tools-section" hidden><div class="h-section-head"><div><p>Every research tool outside the board, in one place.</p></div></div><div id="hub-tools-body"></div></section>
+      <section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>
+    </div><aside class="h-slip" aria-label="Slip"><header><h2>Slip <span id="hub-slip-count">0</span></h2><button data-hub="receipts">My picks →</button></header><p id="hub-save-status" class="h-sync" aria-live="polite"></p><div id="hub-slip-content" tabindex="-1"></div><footer>One entry per platform. Rechecked against current offers before tracking.</footer></aside>
+    <nav class="h-tabbar" aria-label="Sections"><button data-hub="section" data-id="board">Board</button><button id="hub-tab-slip" data-hub="section" data-id="studio">Slip <span id="hub-tab-slip-n" class="h-count-badge">0</span></button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Record</button><button id="hub-more-toggle" data-hub="more" aria-expanded="false" aria-controls="hub-more">More <span id="hub-alert-count-m" class="h-count-badge" aria-label="New filter matches"></span></button></nav>
+    <div id="hub-more" class="h-more-sheet" role="group" aria-label="More" hidden><button data-hub="view" data-id="games">By game</button><button data-hub="section" data-id="tools">Tools</button><button data-hub="section" data-id="alerts">Line alerts</button><button data-hub="studio-open" data-id="build">Auto-build slips</button><button data-hub="studio-open" data-id="tracked">Tracked slips</button><a href="/?view=classic#moneylines">Moneylines ↗</a><a href="/?view=classic#one">Single prop grader ↗</a><a href="/?view=classic#matches">Match research ↗</a><button data-hub="close">Classic board ↗</button></div>
+    <aside id="hub-card" class="h-card-panel" role="dialog" aria-modal="false" aria-labelledby="hub-card-title" hidden><div id="hub-detail" class="h-card"></div></aside></section>
     <dialog id="hub-save-dialog" class="h-save u-dialog" aria-labelledby="hub-save-title"><form method="dialog"><h2 id="hub-save-title">Save view</h2><label>Name<input id="hub-save-name" maxlength="48" required autocomplete="off"></label><p>Saved to your account. Alerts run while the research screen is open.</p><div><button value="cancel" formnovalidate>Cancel</button><button id="hub-save-confirm" value="save">Save</button></div></form></dialog>`);
   const entry=document.createElement('a');entry.href='#all-sports';entry.className='h-entry';entry.textContent='All sports research';
-  $('hub-board-section').querySelector('.h-tools>button').insertAdjacentHTML('beforebegin','<button class="h-filter-toggle" id="hub-filters-toggle" data-hub="filters" aria-expanded="false" aria-label="Filters and saved views">Filters</button>');
-  $('hub-board-section').insertAdjacentHTML('beforebegin','<nav class="h-nav-mobile" aria-label="Research sections"><button data-hub="section" data-id="board">Props</button><button data-hub="section" data-id="studio">Slip Studio</button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Results</button><button data-hub="section" data-id="alerts">Alerts</button></nav>');
   installV2();
   installCols();
   if(TOKENS){
@@ -751,7 +1039,7 @@ export function mount(C) {
     $('u-hub').insertAdjacentHTML('afterbegin','<a class="h-skip" href="#hub-title" data-hub="skip" style="position:fixed;top:-80px;left:16px">Skip to content</a>');
     $('hub-title').tabIndex=-1;
     const who=String(R.me.name||'').trim(),initial=(who[0]||'A').toUpperCase();
-    document.querySelector('#u-hub .h-top-actions').insertAdjacentHTML('afterbegin',`<details class="h-account"><summary aria-label="${esc('Account'+(who?': '+who:''))}"><i aria-hidden="true">${esc(initial)}</i><span>${esc(who||'Account')}</span></summary><nav aria-label="Account"><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="alerts">Line alerts</button><button data-hub="close">Classic board</button><a href="/auth/logout">Sign out</a></nav></details>`);
+    document.querySelector('#u-hub .h-top-actions').insertAdjacentHTML('afterbegin',`<details class="h-account"><summary aria-label="${esc('Account'+(who?': '+who:''))}"><i aria-hidden="true">${esc(initial)}</i><span>${esc(who||'Account')}</span></summary><nav aria-label="Account"><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="tools">Line alerts</button><button data-hub="close">Classic board</button><a href="/auth/logout">Sign out</a></nav></details>`);
     const acct=document.querySelector('#u-hub .h-account');
     acct.addEventListener('click',e=>{if(e.target.closest('nav'))acct.open=false;});
     acct.addEventListener('keydown',e=>{if(e.key==='Escape'&&acct.open){acct.open=false;acct.querySelector('summary').focus();}});
@@ -767,9 +1055,21 @@ export function mount(C) {
     if(H.saveKind==='alert'){H.alerts=[...H.alerts,v].slice(-12);checkAlerts();}else H.views=[...H.views,v].slice(-12);
     savePreferences();paintBoard();C.say(H.saveKind==='alert'?'Filter alert added for this research screen.':'Research view saved.');
   });
-  $('u-hub').addEventListener('click',e=>{const b=e.target.closest('[data-hub]');if(!b||b.disabled)return;if(b.tagName==='TR'&&String(getSelection()||'').trim())return;e.preventDefault();actions[b.dataset.hub]?.(b.dataset.id,b);});
+  $('u-hub').addEventListener('click',e=>{
+    const b=e.target.closest('[data-hub]');if(!b||b.disabled)return;
+    if(b.tagName==='TR'&&String(getSelection()||'').trim())return;
+    e.preventDefault();
+    const inMore=!!b.closest('#hub-more');
+    actions[b.dataset.hub]?.(b.dataset.id,b);
+    if(inMore)togglePop(null);
+  });
+  $('hub-more').addEventListener('click',e=>{if(e.target.closest('a'))togglePop(null);});
+  $('u-hub').addEventListener('change',e=>{if(e.target.id==='hub-card-line'&&rec(e.target.value))selectDetail(e.target.value);});
+  $('u-hub').addEventListener('submit',e=>{if(e.target.id==='hub-ask'){e.preventDefault();genieAsk();}});
+  $('u-hub').addEventListener('input',e=>{if(e.target.id==='hub-ask-q')G.q=e.target.value;});
+  document.addEventListener('pointerdown',e=>{if(isOpen()&&openPop()&&!e.target.closest('.h-pop-wrap,#hub-more,#hub-more-toggle'))togglePop(null);});
   let chartWidth=0;window.addEventListener('resize',()=>{const el=document.querySelector('#hub-detail [data-hub-chart]');if(el&&Math.abs(el.clientWidth-chartWidth)>24){chartWidth=el.clientWidth;drawChart();}});
-  for(const f of ['q','book','side','sort','stat']) $('hub-'+f).addEventListener(f==='q'?'input':'change',()=>{H[f]=$('hub-'+f).value;H.page=0;paintBoard();});
+  for(const f of ['q','side','sort','stat']) $('hub-'+f).addEventListener(f==='q'?'input':'change',()=>{H[f]=$('hub-'+f).value;H.page=0;paintBoard();});
   $('hub-minGrade').addEventListener('change',()=>{H.minGrade=$('hub-minGrade').value;H.page=0;paintBoard();});
   $('hub-views').addEventListener('change',()=>{const i=$('hub-views').value;if(i==='')return;const v=H.views[Number(i)];if(v){H.minGrade='all';for(const k of filterKeys) if(k in v.filters)H[k]=v.filters[k];H.page=0;paintBoard();}});
   $('hub-record-sport').addEventListener('change',showRecord);
@@ -789,11 +1089,24 @@ export function mount(C) {
   window.addEventListener('hashchange',route);
   window.addEventListener('popstate',route);
   window.addEventListener('keydown',e=>{
-    if(!isOpen()||e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey||document.querySelector('dialog[open]')||e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
-    e.preventDefault();e.stopImmediatePropagation();section('board');$('hub-q').focus();
+    if(!isOpen())return;
+    if(e.key==='Escape'&&!document.querySelector('dialog[open]')){
+      const pop=openPop();
+      if(pop){togglePop(null);$(POPS[pop][0]).focus({preventScroll:true});e.preventDefault();return;}
+      if(cardOpen()){closeCard();e.preventDefault();return;}
+    }
+    // arrow keys move between the card's tabs and the Slips page tabs, as tabs do
+    if((e.key==='ArrowRight'||e.key==='ArrowLeft')&&e.target.matches?.('[role="tab"][data-hub]')){
+      const list=[...e.target.parentElement.querySelectorAll('[role="tab"][data-hub]')],i=list.indexOf(e.target),next=list[(i+(e.key==='ArrowRight'?1:list.length-1))%list.length];
+      if(next){e.preventDefault();actions[next.dataset.hub]?.(next.dataset.id,next);}
+      return;
+    }
+    if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey||document.querySelector('dialog[open]')||e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
+    e.preventDefault();e.stopImmediatePropagation();if(cardOpen())closeCard(false);H.view='list';section('board');$('hub-q').focus();
   },true);
-  setInterval(()=>{if(isOpen()&&!document.hidden)load(true);},60000);
+  setInterval(()=>{if(isOpen()&&!document.hidden&&H.section==='board')load(true);},60000);
+  document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='board'&&Date.now()-(H.lastLoad||0)>60000)load(true);});
   route();
-  loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts')paintAlerts();});
+  loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts'||H.section==='tools')paintAlerts();});
   return {refreshSlip};
 }

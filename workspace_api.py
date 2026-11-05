@@ -960,6 +960,7 @@ def _board_columns(srv=None):
         except Exception:
             cells = {}
     return {"ud_standard_break_even": payouts.break_even("underdog", "standard", 2), "entry": "Underdog standard 2-pick",
+            "source": payouts.UD_SOURCE, "read_at": payouts.UD_READ_AT,
             "edge_cells": cells, "min_chance": rules.EV_MIN_CHANCE}
 
 

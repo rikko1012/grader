@@ -78,13 +78,34 @@
   const offerKey = (book, id) => book + "|" + id;
   const propKey = (r) => [r.event.id, r.player.key, r.market.stat, r.market.period].join("|");
   const sportKey = (ev, pkey, stat, period, line, book) => [ev, pkey, stat, period, Number(line), book].join("|");
+  /* a board read sends back the ETag of the copy it holds: an unchanged board answers 304 with no body (audit 2026-11-04, polling).
+     Its own path, so a 304 is never an error and the browser cache never adds a second copy. A busy server is retried as api() does. */
+  async function boardRead(path, etag) {
+    for (let i = 0; ; i++) {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000), headers = Object.assign(TOKEN ? { "X-Admin-Token": TOKEN } : {}, etag ? { "If-None-Match": etag } : {});
+      try {
+        const r = await fetch(API + path, { signal: ctl.signal, credentials: "same-origin", headers, cache: "no-store" });
+        if (r.status === 304 && etag) return { same: true };
+        let doc = null;
+        try { doc = await r.json(); } catch (e) { doc = null; }
+        if (!r.ok) throw new ApiError(r.status, doc);
+        return { doc, etag: r.headers.get("ETag") };
+      } catch (e) {
+        if (i >= 2 || !(e instanceof ApiError) || e.status !== 503 || !e.doc || e.doc.error !== "busy") throw e;
+        await new Promise((res) => setTimeout(res, 2000 + Math.random() * 1500));
+      } finally { clearTimeout(t); }
+    }
+  }
   async function loadBoard(sport, force) {
     const b = R.boards[sport];
     if (b.busy) return b.busy;
     if (!force && Date.now() - b.at < BOARD_KEEP) return b;
     b.busy = (async () => {
       try {
-        const doc = await api(sport === "cs2" ? "board" : "board?sport=" + sport);
+        const read = await boardRead(sport === "cs2" ? "board" : "board?sport=" + sport, b.at && !b.error ? b.etag : null);
+        if (read.same) { Object.assign(b, { at: Date.now(), error: false }); b.busy = null; return b; }
+        const doc = read.doc;
+        b.etag = read.etag;
         Object.entries(doc.platforms || {}).forEach(([p, v]) => { if (!own(PLATFORMS, p)) PLATFORMS[p] = v; });
         const recs = new Map(), props = new Map(), keys = new Map();
         (doc.records || []).forEach((r) => {
@@ -286,7 +307,7 @@
     if (T.legs.some((l) => l.id === id)) return true;
     T.legs.push(makeLeg(rec, side));
     slipChanged();
-    say(`Added ${rec.player.name} ${cap(side)} ${rec.offer.line} to your account slip`);
+    say(`Added ${rec.player.name} ${cap(side)} ${rec.offer.line} to your slip`);
     return true;
   }
   // Generate from published forecasts only. The server remains the authority for
@@ -543,11 +564,24 @@
       <span class="u-leg-meta">${read}${evText}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
       <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${problems}</div>`;
   }
+  /* an entry that only needs more picks is in progress, not refused: its size and two-team rules read as the next step, in
+     neutral text; red stays for real conflicts. null = at least one problem is a real conflict (or a leg did not pass). */
+  function progressOf(e, c) {
+    if (!c || c.ok || !c.problems.length || !e.legs.every((l) => T.check.legs[l.id] && T.check.legs[l.id].ok)) return null;
+    const out = [];
+    for (const p of c.problems) {
+      const size = /entries take (\d+)-(\d+) picks \(this one has (\d+)\)/.exec(p.text || "");
+      if (size && +size[3] < +size[1]) { const n = +size[1] - +size[3]; out.push(`Add ${n} more ${n === 1 ? "pick" : "picks"}`); continue; }
+      if (/^All picks are from one team/.test(p.text || "")) { out.push("Add 1 pick from another team"); continue; }
+      return null;
+    }
+    return out;
+  }
   function entryHtml(e, phase) {
     const c = phase === "fresh" ? T.check.entries[e.key] : null, ready = !!(c && c.ok), can = !!(c && c.trackable), busy = !!T.trackBusy[e.key];
-    const types = PLATFORMS[e.platform].types, cur = typeOf(e);
+    const types = PLATFORMS[e.platform].types, cur = typeOf(e), prog = progressOf(e, c);
     const seg = `<div class="u-seg" role="group" aria-label="${esc(e.label)} entry type">${types.map(([v, l]) => `<button type="button" aria-pressed="${cur === v}" data-u="etype" data-id="${esc(e.platform + ":" + v)}">${l}</button>`).join("")}</div>`;
-    const entryP = c && c.problems.length ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}</p>`).join("")}</div>` : "";
+    const entryP = prog ? `<p class="u-progress">${esc(prog.join(" · "))}</p>` : c && c.problems.length ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}</p>`).join("")}</div>` : "";
     const rules = c && c.rules && c.rules.length ? `<details class="u-det" ${det("rules:" + c.platform)}><summary>Platform rules checked</summary><ul>${c.rules.map((r) => `<li>${esc(r.label)}: ${esc(r.text)}.${r.note ? ` ${esc(r.note)}` : ""}${r.source ? ` <a href="${esc(r.source)}" target="_blank" rel="noopener">Source</a>${r.page_date ? `, ${esc(shortDate(r.page_date))}` : ""}` : ""}</li>`).join("")}</ul></details>` : "";
     const open = c && c.open && safeBookLink(c.open.url,e.platform) ? `<button class="u-btn u-gold" data-u="open-entry" data-id="${esc(e.key)}">${esc(c.open.label)}</button>` : "";
     const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
@@ -556,8 +590,8 @@
       : (ev?.payout ? metric(esc(ev.payout.multiple)+'×',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
     const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}× entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';
-    const math = `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
-    return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
+    const math = prog ? "" : `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
+    return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok && !prog ? " refused" : ""}${prog ? " building" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
       ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1, head && head.legs ? head.legs[i] : null)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}
         <div class="u-acts"><button class="u-btn${!open && can ? " u-gold" : ""}" type="button" ${can && !busy ? "" : "disabled"} data-u="track" data-id="${esc(e.key)}">${busy ? "Tracking" : "Track"}</button><button class="u-btn" type="button" ${ready ? "" : "disabled"} data-u="copy" data-id="${esc(e.key)}">${T.copyBusy ? "Checking" : "Copy"}</button></div></div></section>`;
@@ -634,10 +668,14 @@
   }
   function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
   function chartSvg(results, line, side, w) {
-    /* opponent names in full where they fit; otherwise angled, so a name is never cut to "benche" */
-    const names = results.map((d) => String(d.opponent || "")), longest = Math.max(0, ...names.map((x) => Math.min(x.length, 14)));
-    const slot0 = (w - 36) / Math.max(1, results.length), angled = longest * 6.2 > slot0 - 4;
-    const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 170, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 24 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
+    /* opponent names in full where they fit, each game's date under its name (audit 2026-11-04); otherwise angled as one
+       "name · date" label, so a name is never cut to "benche" */
+    const dateOf = (d) => (d.date ? shortDate(String(d.date)) : "");
+    const names = results.map((d) => String(d.opponent || "")), dates = results.map(dateOf);
+    const flat = Math.max(0, ...names.map((x) => Math.min(x.length, 14)), ...dates.map((x) => x.length));
+    const slot0 = (w - 36) / Math.max(1, results.length), angled = flat * 6.2 > slot0 - 4;
+    const longest = angled ? Math.max(0, ...results.map((d, i) => Math.min(names[i].length, 14) + (dates[i] ? dates[i].length + 3 : 0))) : flat;
+    const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 184, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 38 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
     const vals = data.map((d) => d.value), top = Math.max(line, ...vals, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
     const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
     const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
@@ -647,7 +685,8 @@
       const x = m.l + slot * i + (slot - bw) / 2, yv = y(d.value), push = d.value === line, over = d.value > line, cls = push ? "b-push" : (side === "over" ? over : !over) ? "b-hit" : "b-miss";
       out += `<rect class="${cls}" x="${x}" y="${yv}" width="${bw}" height="${Math.max(base - yv, 1)}" rx="3"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${d.value}`)}</title></rect>`;
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
-      if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 8}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>`;
+      const day = dateOf(d);
+      if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")) + (day ? " · " + day : ""))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 21}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>${day ? `<text class="date" x="${x + bw / 2}" y="${h - 7}" text-anchor="middle">${esc(day)}</text>` : ""}`;
     });
     return out + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${y(line)}" y2="${y(line)}"/><text class="line-lab" x="${w - m.r}" y="${m.t - 10}" text-anchor="end">Line ${esc(line)}</text></svg>`;
   }
@@ -891,7 +930,7 @@
     pclose() { $("u-drawer").close(); },
     tab(id) { T.tab = id; if (id !== "slip") loadMine(); paintTray(); },
     check() { T.checkErr = null; T.check = null; runCheck(); },
-    clear() { T.legs = []; slipChanged(); say("Slip tray cleared"); },
+    clear() { T.legs = []; slipChanged(); say(HUB && !$("u-hub").hidden ? "Slip cleared" : "Slip tray cleared"); },
     swap: swapLeg,
     "leg-x": removeLeg,
     etype(v) { const i = v.indexOf(":"); T.types[v.slice(0, i)] = v.slice(i + 1); slipChanged(); },
