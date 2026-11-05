@@ -486,3 +486,51 @@ def test_phone_pages_have_no_sideways_scroll(browser, env):
         shot(q, "sports-results")
     finally:
         c.close()
+
+
+# ---- SCOUT_GENIE: the drawer's Ask the Genie tab
+
+def open_genie(p):
+    p.locator("#boardout .brow2.crow").filter(has_text="vargo").first.locator(".u-res-btn").click()
+    p.wait_for_selector("#u-drawer[open] .u-tiles")
+    p.wait_for_function("!document.querySelector('#u-drawer .u-skel')", timeout=15000)
+    p.locator("#u-drawer .u-tabs [data-id=genie]").click()
+    p.wait_for_selector("#u-drawer .u-genie")
+
+
+def test_genie_flag_off_keeps_the_evidence_guide_alone(ctx, env, monkeypatch):
+    monkeypatch.delenv("SCOUT_GENIE", raising=False)
+    p = cs2_board(ctx, env)
+    open_genie(p)
+    assert p.locator("#u-ask").count() == 0 and "Scout evidence guide" in p.locator("#u-drawer").inner_text()
+    assert not p.errors
+
+
+@pytest.mark.parametrize("size", (DESK, PHONE))
+def test_genie_flag_on_answers_with_checked_numbers_and_a_daily_count(browser, env, monkeypatch, size):
+    monkeypatch.setenv("SCOUT_GENIE", "1")
+    monkeypatch.setenv("SCOUT_GENIE_DAILY", "5")
+    c = context(browser, env, size)
+    try:
+        p = cs2_board(c, env)
+        open_genie(p)
+        assert p.locator("#u-ask-q").count() == 1 and p.locator("label[for=u-ask-q]").inner_text() == "Ask about this line"
+        p.locator("#u-ask-q").fill("How often did this line hit?")
+        p.locator("#u-ask-q").press("Enter")
+        p.wait_for_selector("#u-ask-out p", timeout=15000)
+        out = p.locator("#u-ask-out").inner_text()
+        assert "of the last 10 results went" in out and "4 of 5 questions left today" in p.locator("#u-ask").inner_text()
+        assert p.evaluate("document.activeElement.id") == "u-ask-q"
+        p.locator("#u-ask [data-u=genie-ask][data-id='What is the projection?']").click()
+        p.wait_for_function("document.querySelector('#u-ask').innerText.includes('3 of 5')", timeout=15000)
+        assert "saved projection" in p.locator("#u-ask-out").inner_text()
+        small = p.evaluate("""() => [...document.querySelectorAll('#u-ask button, #u-ask input')].filter(e => e.getBoundingClientRect().height < 40).length""")
+        assert small == 0
+        if size == PHONE:
+            no_h_scroll(p)
+        assert p.locator("#u-ask-out").get_attribute("aria-live") == "polite"
+        text = p.locator("#u-drawer").inner_text().lower()
+        assert "financial advice" not in text and "not betting" not in text
+        assert not p.errors
+    finally:
+        c.close()

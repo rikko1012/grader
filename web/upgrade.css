@@ -278,6 +278,15 @@ html[data-upgrade] .u-slip-metrics b{display:block;font:500 17px var(--u-mono);c
 html[data-upgrade] .u-slip-metrics span{display:block;font-size:9px;color:var(--u-muted);margin-top:4px}
 html[data-upgrade] .u-genie .u-det{border:1px solid var(--u-line);border-radius:7px;padding:12px;margin:12px 0;line-height:1.8}
 html[data-upgrade] .u-genie summary{font-size:14px;font-weight:500}
+html[data-upgrade] .u-ask{border:1px solid var(--u-line);border-radius:7px;padding:12px;margin:0 0 12px}
+html[data-upgrade] .u-ask label{display:block;font-size:14px;font-weight:500;color:var(--u-text);margin-bottom:8px}
+html[data-upgrade] .u-ask-row{display:flex;gap:8px;min-width:0}
+html[data-upgrade] .u-ask-row input{flex:1;min-width:0;min-height:40px;padding:6px 10px;border:1px solid var(--u-line2);border-radius:5px;background:#141414;color:var(--u-text);font:inherit;font-size:14px}
+html[data-upgrade] .u-ask-row input:focus-visible{outline:2px solid var(--u-gold);outline-offset:1px}
+html[data-upgrade] .u-ask-row .u-btn.u-gold{flex:0 0 auto}
+html[data-upgrade] .u-ask-sugg{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+html[data-upgrade] .u-ask-sugg .u-btn{font-size:12.5px;white-space:normal;text-align:left}
+html[data-upgrade] .u-ask-out p{margin:8px 0 0;line-height:1.6;overflow-wrap:anywhere}
 
 @media(max-width:1366px){
   html[data-upgrade] #boardout .crow-head[data-u],html[data-upgrade] #boardout .brow2.crow.u-decorated,html[data-upgrade] .u-row{grid-template-columns:36px minmax(128px,1.2fr) 44px 44px minmax(110px,.9fr) 126px minmax(110px,.9fr) 178px}
