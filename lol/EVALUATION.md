@@ -925,3 +925,40 @@ assists:underdog 273: live 62.9 / 50.2, lc-1 59.8 / 54.2, -0.0420 (-0.114, +0.02
 settle, once per UTC day from 06:00, child process, single BLAS thread, 900 s timeout); a dry run on the fresh pull wrote all three
 markets OFF (child peak working set 37.9 MB on Windows; 47.6 MB on a 4,800-row synthetic record in the test) and the second run
 logged "skip". Admin: `/admin/lol/learning.json` -> `lc1`; admin LoL page tab "Calibration (lc-1)". Switch `LOL_CAL_AUTOFIT=0`.
+
+## lp-1 (2026-11-05): projection candidates for the cross-region gap - research only, NOTHING changes live
+
+Owner, 2026-11-05: fix the projections, not the chances (no shrink layer, no forced balance, no fewer grades). Code: `lol/lp1.py`
+(candidates), `lol/lp1_eval.py` (harness), `lol/tests/test_lp1.py`; report `lol/eval/lp1_walkforward_2026-11-05.json`. Inputs were
+the read-only exports pulled the same day (12-month history, 129,515 player-games; the settled record, 1,795 graded props on 38
+series, Oct 17 - Nov 4, 97% Worlds 2026). Not imported by the live forecast (a test checks it).
+
+Diagnosis (before the candidates): lol/elo.py has no league term (corr 0.20 with the market at Worlds); a player's domestic rate is
+carried abroad unchanged (non-LCK/LPL players vs LCK/LPL ran 0.68-0.70 of projection). The spread is not too narrow (realized /
+predicted variance 0.72).
+
+Candidates (each a change to the projected distribution; the chance read off the same NB): LE (league-aware Elo p_win in the
+strength factor), G (lambda x exp(g dL), g refit daily on earlier cross-league history, 0.40 on every forward day), MKT (Polymarket
+game price as p_win where saved), DISP (NB size per scope refit on cross-league history), TEMPO (same-event pace, K picked daily on
+earlier international targets), SHR (cross-region shrinkage toward the role prior), and the COMBO the history gate picks (a component
+enters only when its history walk-forward increment CI is above 0: LE+G both stats, TEMPO kills only).
+
+History walk-forward (international events since 2026-03, 4,332 player-games / 433 matches, game-1 NB log score vs the lol-1
+replica, per game): LE+G kills +0.0140 [+0.0077, +0.0204], assists +0.0218 [+0.0098, +0.0335]; same-league control 0.0000. TEMPO
+increment kills +0.0018 [+0.0006, +0.0030], assists 0.0000; SHR increment not above 0; DISP refit worse than the live sizes.
+
+Forward record (live vs candidate on the same rows; CI clustered by series; pass = log-loss CI < 0, |stated - hit| <= 2.5 overall,
+Over and Under, Over share not > 5 pts further from the data's Over rate (41.4%) than live's (34.4%), graded >= 90% of live 1,339):
+
+| candidate | log loss (diff CI) | all stated/hit | Over | Under | Over share | graded (hit) | verdict |
+|---|---|---|---|---|---|---|---|
+| live | 0.6886 | 63.8 / 57.2 | 60.6 / 48.0 | 65.5 / 62.0 | 34.4% | 1,339 (59.3%) | - |
+| LE+G | 0.6570 [-0.061, -0.004] | 61.6 / 61.1 | 59.0 / 54.3 | 62.8 / 64.0 | 29.5% | 1,268 (64.0%) | fails Over (+4.6) |
+| LE+G+MKT | 0.6555 [-0.066, -0.003] | 61.4 / 61.1 | 58.6 / 54.4 | 62.6 / 63.8 | 28.9% | 1,264 (64.1%) | fails Over (+4.2), Over share |
+| COMBO (history-gated) | 0.6600 [-0.057, -0.001] | 63.5 / 61.3 | 57.7 / 56.7 | 65.0 / 62.5 | 20.3% | 1,369 (63.2%) | fails Under (+2.5), Over share |
+| LE+G+TEMPO / +DISP / +SHR, LE, DISP alone | see the report | | | | | | all fail |
+
+Decision: no candidate passes the full rule, so nothing is promoted. LE+G is the best-supported fix (independent history evidence,
+calibration gap +6.6 -> +0.5, log loss and Brier better with CIs below 0, graded hit 59.3% -> 64.0%) and fails only the Over gap
+(+4.6, CI [-3.1, +12.6]); it is the candidate to run as a forward shadow on the next international event. The forward record was
+also used to discover the cross-region gap, so its numbers are retrospective; the history walk-forward is the independent evidence.
