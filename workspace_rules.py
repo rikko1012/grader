@@ -322,3 +322,67 @@ def gate_from_export(export, tags, at_ts=None, B=500, min_matches=EV_MIN_MATCHES
                               "ci": results_view._ci(sub, B, 7) if matches >= min_matches else None})
         cells[k] = {"matches": matches, "bands": bands}
     return {"at": (export or {}).get("at"), "at_ts": at_ts, "cells": cells}
+
+
+# ------------------------------------------------------------------------------------------- slip header (SCOUT_SLIP_HEADER)
+# The tray / Studio header from gradecore/slip.py, built only on an entry ev_status already answered available=True: a verified
+# Underdog payout AND chances that passed the settled-results gate. Anything else returns None and the header fields stay
+# absent. workspace_api reads the flag and injects gradecore.slip.evaluate, so this module still imports no gradecore code.
+
+SLIP_HEADER_FLAG = "SCOUT_SLIP_HEADER"
+
+
+def slip_header_on(env):
+    return str((env or {}).get(SLIP_HEADER_FLAG) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def leg_ev(p_win, decimal, p_push=0.0):
+    """EV = p_cal x decimal_odds - 1, push-adjusted: a push returns the stake, never a win."""
+    return p_win * decimal + p_push - 1.0
+
+
+def header_payout(entry_type, n):
+    """payout(outcomes) -> the published gross multiple, or None where no page states it. Any push: Underdog re-prices the
+    entry on the remaining picks, which ev_status never lets through, so the header refuses rather than guess."""
+    if entry_type == "standard":
+        base = UD_STANDARD.get(n)
+        if base is None:
+            return None
+        return lambda results: None if "push" in results else (base if all(x == "win" for x in results) else 0.0)
+    if entry_type == "flex" and n in UD_FLEX_LISTED:
+        tab = UD_FLEX[n]
+        return lambda results: None if "push" in results else tab.get(sum(x == "loss" for x in results), 0.0)
+    return None
+
+
+def slip_header(ev, entry_type, legs, evaluate):
+    """-> {payout_multiple, p_all_win, expected_return, quarter_kelly, basis, legs?} or None. legs: ev_status's legs, in entry
+    order. Per-leg EV is given for a standard entry only: its per-pick price is the all-hit multiple's n-th root."""
+    if not isinstance(ev, dict) or not ev.get("available") or not ev.get("payout"):
+        return None
+    et, legs = entry_type or "standard", list(legs or ())
+    n = len(legs)
+    payout = header_payout(et, n)
+    if payout is None or ev["payout"].get("multiple") != payout_multiple(et, n):
+        return None
+    slip_legs = []
+    for l in legs:
+        p = l.get("p")
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 < p < 1 or l.get("match") is None:
+            return None
+        slip_legs.append({"sport": l.get("sport") or "cs2", "book": "underdog", "player_id": str(l.get("name") or ""),
+                          "match_key": str(l["match"]), "offer_revision": str(l.get("line")),
+                          "p_win": float(p), "p_loss": 1.0 - float(p), "p_push": 0.0})
+    out = evaluate(slip_legs, payout)
+    if not out.get("available") or out.get("net_ev") is None or out.get("quarter_kelly_fraction") is None:
+        return None
+    if abs(out["net_ev"] - ev["ev"]) > 5e-4:        # two routes to one number: a mismatch shows nothing, never a third figure
+        return None
+    head = {"payout_multiple": ev["payout"]["multiple"], "entry_type": et, "p_all_win": round(out["p_all_win"], 4),
+            "pushes": "excluded", "expected_return": round(out["net_ev"], 4),
+            "quarter_kelly": round(out["quarter_kelly_fraction"], 4), "basis": out.get("basis")}
+    if et == "standard":
+        price = ev["payout"]["multiple"] ** (1.0 / n)
+        head["leg_price"] = round(price, 4)
+        head["legs"] = [{"index": i, "line": l.get("line"), "ev": round(leg_ev(l["p"], price), 4)} for i, l in enumerate(legs)]
+    return head

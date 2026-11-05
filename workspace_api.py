@@ -604,6 +604,16 @@ def _gate(srv):
         return None
 
 
+def _slip_header(ev, entry_type, ev_legs):
+    """SCOUT_SLIP_HEADER (default off): gradecore/slip.py's payout / P(all) / expected return / quarter-Kelly for an entry whose
+    EV is already available. Any failure leaves the header out; the entry, its checks and its EV are unchanged either way."""
+    try:
+        from gradecore import slip as gslip         # imported only with the flag on: a flag-off process never loads it
+        return rules.slip_header(ev, entry_type, ev_legs, gslip.evaluate)
+    except Exception:
+        return None
+
+
 def _adapter(sport):
     if sport == "lol":
         import workspace_lol
@@ -681,6 +691,10 @@ def run_check(srv, member, legs, entry_types, now=None, allowed=None):
         e["trackable"] = e["trackable"] and legs_ok
         if e["rule_ok"] and legs_ok:
             e["ev"] = rules.ev_status(e["platform"], e["entry_type"], ev_legs, gate, now.timestamp())
+            if e["ev"].get("available") and rules.slip_header_on(os.environ):
+                head = _slip_header(e["ev"], e["entry_type"], ev_legs)
+                if head:
+                    e["ev"]["header"] = head
         else:
             e["ev"] = {"available": False, "reason": "This entry has not passed its checks."}
         if e["trackable"]:

@@ -370,6 +370,31 @@ def test_tracked_picks_have_a_page_with_sport_status_filters_and_receipts(ctx,en
     assert not p.errors
 
 
+@pytest.mark.parametrize('flag,size',[('0',DESK),('1',DESK),('1',PHONE)])
+def test_studio_slip_header_only_with_its_flag(ctx,env,monkeypatch,flag,size):
+    from tests.test_upgrade_browser import _calibrated_export
+    monkeypatch.setenv('SCOUT_SLIP_HEADER',flag)
+    monkeypatch.setattr(server,'_p1_export',_calibrated_export)
+    p=hub(ctx,env)
+    p.locator('#hub-sports [data-id=cs2]').click()
+    p.locator('#hub-book').select_option('underdog')
+    for name in ('vargo','orlo'):
+        p.locator('#hub-q').fill(name)
+        p.locator('#hub-rows .h-add:not([disabled])').first.click()
+    saved_state(p,lambda d:len((d.get('slip')or{}).get('legs',[]))==2)
+    p.set_viewport_size(size)                       # the draft is built on desktop; the phone reads the same account draft
+    p.goto(env.url+'/#slips')
+    p.wait_for_selector('#hub-studio-body [data-u=track]:not([disabled])',timeout=20000)
+    body=p.locator('#hub-studio-body')
+    if flag=='1':
+        assert body.locator('.u-slip-metrics.u-slip-head>div').count()==4 and body.locator('.u-leg-ev').count()==2
+        assert 'Quarter-Kelly of bankroll' in body.inner_text()
+    else:
+        assert body.locator('.u-slip-head').count()==0 and body.locator('.u-leg-ev').count()==0 and 'Quarter-Kelly' not in body.inner_text()
+    no_h_scroll(p)
+    assert not p.errors
+
+
 def test_phone_keeps_specialist_tools_in_a_real_menu(ctx,env):
     p=hub(ctx,env,PHONE)
     p.locator('.h-tools-menu summary').click()

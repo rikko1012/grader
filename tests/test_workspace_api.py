@@ -1060,6 +1060,48 @@ def test_ev_shows_only_when_every_gate_passes_and_never_on_a_receipt(env, monkey
     assert '"ev"' not in json.dumps(get(env, "mine")[1]) and '"ev"' not in json.dumps(get(env, "results")[1])
 
 
+# ---- SCOUT_SLIP_HEADER (default off): gradecore/slip.py header only on an available EV
+def test_slip_header_flag_off_sends_the_exact_ev_of_before(env, monkeypatch):
+    monkeypatch.delenv("SCOUT_SLIP_HEADER", raising=False)
+    monkeypatch.setattr(server, "_p1_export", calibrated_export)
+    ev = check(env, pair(env))[1]["entries"]["underdog"]["ev"]
+    assert ev["available"] is True and set(ev) == {"available", "ev", "hit_chance", "payout"} and "header" not in json.dumps(ev)
+    monkeypatch.setenv("SCOUT_SLIP_HEADER", "0")
+    assert "header" not in check(env, pair(env))[1]["entries"]["underdog"]["ev"]
+
+
+def test_slip_header_flag_on_adds_gradecore_payout_chance_return_kelly_and_leg_ev(env, monkeypatch):
+    monkeypatch.setenv("SCOUT_SLIP_HEADER", "1")
+    monkeypatch.setattr(server, "_p1_export", calibrated_export)
+    ev = check(env, pair(env))[1]["entries"]["underdog"]["ev"]
+    h = ev["header"]
+    hit = 0.612 * 0.598
+    assert h["payout_multiple"] == 3.5 and h["pushes"] == "excluded" and h["p_all_win"] == pytest.approx(hit, abs=1e-4)
+    assert h["expected_return"] == pytest.approx(hit * 3.5 - 1, abs=1e-3) == pytest.approx(ev["ev"], abs=1e-3)
+    kelly = (hit * 3.5 - 1) / 2.5                    # binary bet: f* = (b p - q) / b with b = 2.5 net
+    assert h["quarter_kelly"] == pytest.approx(kelly / 4, abs=1e-4)
+    assert sorted(round(x["ev"], 3) for x in h["legs"]) == sorted(round(p * 3.5 ** 0.5 - 1, 3) for p in (0.612, 0.598))
+    assert [x["index"] for x in h["legs"]] == [0, 1] and h["leg_price"] == pytest.approx(3.5 ** 0.5, abs=1e-4)
+    assert ev["hit_chance"] == round(hit, 4) and ev["payout"]["multiple"] == 3.5     # the flag-off fields are unchanged
+    assert '"header"' not in json.dumps(get(env, "mine")[1])
+
+
+def test_slip_header_flag_on_stays_absent_without_a_verified_payout_and_validated_chances(env, monkeypatch):
+    monkeypatch.setenv("SCOUT_SLIP_HEADER", "1")
+    ud = check(env, pair(env))[1]["entries"]["underdog"]["ev"]           # 0 settled matches: chances not validated
+    assert ud["available"] is False and "header" not in ud and ud["payout"]["multiple"] == 3.5
+    pp = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]["ev"]    # payout unknown stays unknown
+    assert pp["available"] is False and "header" not in pp and "payout" not in pp
+
+
+def test_slip_header_failure_leaves_the_entry_unchanged(env, monkeypatch):
+    monkeypatch.setenv("SCOUT_SLIP_HEADER", "1")
+    monkeypatch.setattr(server, "_p1_export", calibrated_export)
+    monkeypatch.setattr(workspace_rules, "slip_header", lambda *a: (_ for _ in ()).throw(RuntimeError("boom")))
+    e = check(env, pair(env))[1]["entries"]["underdog"]
+    assert e["ok"] and e["ev"]["available"] is True and "header" not in e["ev"]
+
+
 def test_ev_reason_comes_through_the_route(env):
     legs = pair(env)
     e = check(env, legs)[1]["entries"]["underdog"]
