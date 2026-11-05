@@ -66,10 +66,22 @@ def state(sport):
     st = gc.state(sport)
     if st["source"] == "env":
         return {"contained": True, "stats": [], "source": "owner"}
+    if _calibration_held(sport):
+        return {"contained": True, "stats": [], "source": "calibration"}
     if not enabled():
         return {"contained": False, "stats": [], "source": "flag off"}
     return {"contained": bool(st["contained"]), "stats": list(st.get("stats") or []),
             "source": "check" if st["source"] == "file" else "default"}
+
+
+def _calibration_held(sport):
+    """ec-1 (gradecore/chance_cal.py): a game whose calibrated chances failed their held-out test keeps the calibrated chance
+    but holds its letters - independent of SCOUT_LETTER_CONTAINMENT (owner 2026-11-05). Never raises."""
+    try:
+        from gradecore import chance_cal
+        return chance_cal.held(sport)
+    except Exception:                                   # noqa: BLE001 - unreadable = nothing held by this source
+        return False
 
 
 def held(st, stat=None):
@@ -289,7 +301,7 @@ def compute(srv):
     """{sport: (rows, error)} from each source; a source that cannot be read gives (None, error)."""
     out = {}
     try:
-        out["cs2"] = (cs2_legs(srv._p1_export()), None)
+        out["cs2"] = (cs2_legs(getattr(srv, "_p1_export_printed", srv._p1_export)()), None)   # ec-1: printed chances
     except Exception as e:                              # noqa: BLE001
         out["cs2"] = (None, f"{type(e).__name__}: {str(e)[:160]}")
     try:

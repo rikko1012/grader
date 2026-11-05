@@ -273,12 +273,13 @@ def test_diagnostics_endpoint_has_clv_only_with_the_flag(site, picks, monkeypatc
     monkeypatch.setattr(server, "map_chance_check_status", lambda: None)
     monkeypatch.setattr(server, "map1_results_status", lambda: None)
     monkeypatch.setattr(server.letter_containment, "snapshot", lambda: {"version": "lc-1"})     # admin view, its own tests
+    monkeypatch.setattr(server.esports_cal, "status", lambda: {"version": "ec-1"})               # admin view, its own tests
     on = site_get("/admin/diagnostics.json", headers={"X-Admin-Token": "tok123"}).body()
     assert on["closing_lines"]["groups"] and on["closing_lines"]["version"] == cl.VERSION
     monkeypatch.delenv(cl.FLAG)
     off = site_get("/admin/diagnostics.json", headers={"X-Admin-Token": "tok123"}).body()
     assert "closing_lines" not in off and off == {"cohorts": {}, "n": 1, "map1_results": None, "map_chance_check": None,
-                                              "letter_containment": {"version": "lc-1"}}
+                                              "letter_containment": {"version": "lc-1"}, "chance_calibration": {"version": "ec-1"}}
 
 
 def test_report_is_cached_and_a_failure_is_stated(picks, monkeypatch):

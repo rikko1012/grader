@@ -263,12 +263,16 @@ def shown(f):
     from .. import cal
     raw = (f.get("p_over"), f.get("p_under"), f.get("p_push") or 0.0)
     v = f.get("cal_version")
-    if v and cal.enabled() and f.get("cal_p_over") is not None and f.get("cal_p_under") is not None:
+    if v and cal.version_enabled(v) and f.get("cal_p_over") is not None and f.get("cal_p_under") is not None:
         po, pu, pp = f["cal_p_over"], f["cal_p_under"], f.get("cal_p_push") or 0.0
     else:
         (po, pu, pp), v = raw, None
     po, pu = float(po or 0.0), float(pu or 0.0)
     side = "over" if po >= pu else "under"
+    if v and str(v).startswith("ec-1") and abs(po - pu) < 1e-3:
+        # ec-1 never flips the model's side: a calibrated chance at its 50% floor stays on the side the raw chance picked
+        side = f["model_side"] if f.get("model_side") in ("over", "under") else (
+            "over" if float(raw[0] or 0) >= float(raw[1] or 0) else "under")
     if v is None and not f.get("cal_version") and f.get("model_side") in ("over", "under") and abs(po - pu) < 1e-3:
         # A15 audit: the record stores the chance rounded to 4 places; at an exact tie after rounding the side chosen
         # on the unrounded chance at save time is the side (record 1703: saved "Lean Under", re-read as "Lean Over")
@@ -294,6 +298,17 @@ def shown(f):
             "side_offered": None if off is None else int(bool(off)), "grade": grade,
             "grade_label": f"Lean {side.title()}" if grade == "Lean" else grade, "units_policy": units_policy, "cal": v,
             "raw": {"p_over": raw[0], "p_under": raw[1], "p_push": raw[2], "side": rside, "grade": rgrade}}
+
+
+def _ec1_status():
+    """ec-1 (gradecore/chance_cal.py) as the LoL board reports it: switch, artifact tag, LoL letters live / held."""
+    try:
+        from gradecore import chance_cal
+        obj = chance_cal.load()
+        d = ((obj or {}).get("games") or {}).get("lol") or {}
+        return {"enabled": chance_cal.enabled(), "tag": chance_cal.tag(obj), "letters": d.get("letters"), "why": d.get("why")}
+    except Exception as e:                               # noqa: BLE001 - the board never fails on this block
+        return {"error": f"{type(e).__name__}"}
 
 
 def forecast_one(con, h, offer, link, now=None, market=None):
@@ -380,8 +395,9 @@ def forecast_one(con, h, offer, link, now=None, market=None):
     po, pu, push = round(po, 4), round(pu, 4), round(push, 4)
     ca = cal.adjust({"stat": stat, "platform": offer["platform"], "line": offer["line"], "lambda": round(lam_shown, 4),
                      "nb_size": pj["nb_size"], "sides": offer.get("sides"), "odds_type": offer.get("odds_type"), "scope": scope,
-                     "p_over": po, "p_under": pu, "p_push": push})
+                     "p_over": po, "p_under": pu, "p_push": push, "model_side": "over" if po_x >= pu_x else "under"})
     sh = shown({"platform": offer["platform"], "sides": offer.get("sides"), "p_over": po_x, "p_under": pu_x, "p_push": push,
+                "model_side": "over" if po_x >= pu_x else "under",
                 "cal_version": ca and ca["v"], "cal_p_over": ca and ca["po"], "cal_p_under": ca and ca["pu"],
                 "cal_p_push": ca and ca["pp"]})
     side, offered, grade, units_policy = sh["side"], sh["side_offered"], sh["grade"], sh["units_policy"]
@@ -410,7 +426,8 @@ def forecast_one(con, h, offer, link, now=None, market=None):
     rec["inputs"]["team_win"] = team_win(p_win, offer, start, market)
     if ca:
         rec["inputs"]["calibration"] = {"version": ca["v"], "weights": ca["src"], "raw_side": sh["raw"]["side"],
-                                        "raw_grade": sh["raw"]["grade"], "register": cal.REGISTER}
+                                        "raw_grade": sh["raw"]["grade"],
+                                        "register": "gradecore/chance_cal.py (ec-1)" if str(ca["v"]).startswith("ec-1") else cal.REGISTER}
     if mix:
         rec["inputs"]["lambda_3_games"] = round(pj["lambda"], 4)
         rec["inputs"]["p_3_games"] = round(mix[0][0], 4)
@@ -756,7 +773,7 @@ def board(con, now=None):
     return {"at": store.now_iso(), "released_to_members": False, "feeds": feeds,
             "calibration": {"version": cal.VERSION, "enabled": cal.enabled(), "weights": csrc, "sha": (cw or {}).get("sha"),
                             "on": sorted(k for k, p in ((cw or {}).get("params") or {}).items() if p.get("on")),
-                            "register": cal.REGISTER},
+                            "register": cal.REGISTER, "ec1": _ec1_status()},
             "grades": "model grades from the published bands; stakes held at 0U until validated at real lines",
             "rows": rows, "match_tables": list(tables.values()), "settled_recent": settled,
             "counts": {"offers": len(rows), "with_forecast": sum(1 for x in rows if x["forecast"]),

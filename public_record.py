@@ -84,7 +84,7 @@ def _cs2(srv):
     """The member Results letters on the same P1 picks, plus each tier's and the total's match-resampled 95% range and
     the 5-point reliability bins (gradecore.scorecard: whole matches resampled, 2,000 draws, seed 7)."""
     import results_stated
-    export=srv._p1_export()
+    export=getattr(srv,'_p1_export_printed',srv._p1_export)()   # ec-1: the chance members were shown
     doc=results_stated.stated_observed(export)
     try:
         return _cs2_ranges(doc,export)
@@ -149,7 +149,7 @@ def read(srv,sport):
             doc=_cs2(srv)
         else:
             import results_stated
-            doc=results_stated.stated_observed(srv._p1_export())
+            doc=results_stated.stated_observed(getattr(srv,'_p1_export_printed',srv._p1_export)())
     elif sport=='lol':
         import workspace_lol
         doc=workspace_lol.results(srv)

@@ -330,6 +330,7 @@ def record_of(x):
                       "under": {"offered": _offered(x, "under"), "payout": x.get("lower" if book == "underdog" else "mod_lower"), "price": x.get("price_lower")},
                       "moved_from": x.get("open_line") if moved else None, "moved_at": _iso(x.get("moved_at")) if moved else None},
             "scout": {"side": side, "read_rev": read_rev(x), "p_side": p, "p_over": p if side == "over" else None, "p_under": p if side == "under" else None, "p_push": _push(x),
+                      **({"p_raw": x["p_raw"]} if x.get("cal_v") and x.get("p_raw") is not None else {}),
                       "projection": x.get("proj"), "range80": None, "grade": grade if grade in ("A+", "A", "A-", "B+", "B", "B-") else None,
                       "units": 0.0 if held else x.get("units"),
                       "stake_reason": None if held else x.get("stake_reason") or x.get("cap_reason"), "hold": None, "model_version": x.get("graded_model"), "forecast_at": x.get("graded_at"),
@@ -432,6 +433,8 @@ def _same_stake_and_grade(x, fc):
     """The board copy carries this forecast's grade and stake. server._cap_same_result is the one step that moves them after the
     forecast is logged: it cuts a stake, keeping the logged one in units_full, and can turn the row into a 0U Lean. Display gd-1 sits
     apart in model_grade. Any other gap means the board and the forecast are different grades."""
+    if x.get("cal_v"):                          # ec-1: the board prints the calibrated grade / stake; the log keeps the model's own
+        return abs((x.get("units_raw") or 0) - (fc.get("units") or 0)) <= 1e-9 and fc.get("grade") == x.get("grade_raw")
     capped = x.get("units_full") is not None
     logged_units = x["units_full"] if capped else x.get("units")
     if abs((logged_units or 0) - (fc.get("units") or 0)) > 1e-9:
@@ -458,7 +461,7 @@ def forecast_problem(srv, x, leg, fc, lock):
         same_line = False
     ok = (same_line and fc.get("pick") == x.get("side") and fc.get("model_version") == x.get("graded_model")
           and logged is not None and lock is not None and logged < lock
-          and x.get("p") is not None and fc.get("p_pick") is not None and abs(fc["p_pick"] - x["p"]) < FORECAST_MAX_GAP
+          and x.get("p") is not None and fc.get("p_pick") is not None and abs(fc["p_pick"] - x.get("p_raw", x["p"])) < FORECAST_MAX_GAP
           and _same_stake_and_grade(x, fc))
     if not ok:
         if _just_graded(x):                     # the regrade is on the board and its forecast is still in the writer's queue
@@ -607,7 +610,7 @@ def _dup_checks(legs, results, st, member):
 def _gate(srv):
     """gate_from_export's answer, or None when the export cannot be read: ev_status names that, never a count of zero."""
     def compute():
-        ex = srv._p1_export() or {}
+        ex = getattr(srv, "_p1_export_printed", srv._p1_export)() or {}      # ec-1: bands at the printed chance
         tags = {x.get("graded_model") for x in (_SNAP["index"] or {}).values()}
         at = _ts(ex.get("at")) if ex.get("at") else None
         return 200, rules.gate_from_export(ex, tags, at.timestamp() if at else None)
@@ -1253,7 +1256,7 @@ def get_stated(h, srv, q, member, scratch, name):
     """CS2 stated against observed, by letter and by market, from the same stored export as Results."""
     def compute():
         import results_stated
-        return 200, json.dumps(results_stated.stated_observed(srv._p1_export()), default=str, separators=(",", ":")).encode()
+        return 200, json.dumps(results_stated.stated_observed(getattr(srv, "_p1_export_printed", srv._p1_export)()), default=str, separators=(",", ":")).encode()
     st_, body = srv.shared(("ws_stated",), compute, ttl=300)
     return h.send_shared(("ws_stated",), st_, body, keep=300)
 
