@@ -161,10 +161,22 @@ def _resolve(league):
     return st
 
 
+def pc_held(league):
+    """REGISTER A10 (pc-1): True when the printed-chance calibration in use failed its held-out test for this league -
+    letters stay held there (the printed chance is still the calibrated one). It can only contain, never release."""
+    try:
+        from .model import chance_cal
+        return chance_cal.letters_held(league)
+    except Exception:                                   # noqa: BLE001 - never breaks the board
+        return False
+
+
 def contained(league, stat):
-    """THE containment rule for one market (A9a 4)."""
+    """THE containment rule for one market (A9a 4, plus A10: a failed pc-1 held-out test holds the league)."""
     if not league:
         return False
+    if pc_held(league):                                 # pc-1: a league whose held-out calibration test failed
+        return True
     st = league_state(league)
     if st["source"] != "legacy":
         return bool(st["contained"]) or stat in st["stats"]
@@ -178,7 +190,9 @@ def snapshot():
     leagues = {lg: league_state(lg) for lg in LEAGUES}
     return {"version": VERSION, "source": src, "updated_at": (obj or {}).get("updated_at"), "leagues": leagues,
             "env": {f"SPORTS_CONTAIN_{lg.upper()}": os.environ.get(f"SPORTS_CONTAIN_{lg.upper()}") for lg in LEAGUES},
-            "env_rule": ENV_RULE, "letters": {lg: letters_word(leagues[lg], lg) for lg in LEAGUES},
+            "env_rule": ENV_RULE, "letters": {lg: ("contained" if pc_held(lg) else letters_word(leagues[lg], lg))
+                                              for lg in LEAGUES},
+            "pc1_held": {lg: pc_held(lg) for lg in LEAGUES},
             "env_requests": {lg: {"name": f"SPORTS_CONTAIN_{lg.upper()}", "value": os.environ.get(f"SPORTS_CONTAIN_{lg.upper()}"),
                                   "asked": leagues[lg].get("env_asked"), "applied": bool(leagues[lg].get("env_applied"))}
                              for lg in LEAGUES}}

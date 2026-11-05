@@ -705,3 +705,40 @@ verbatim on the service, once a day. Nothing in the A9 5 rule itself (numbers, s
    n 2,216) and failed NBA (64.5% vs 55.3%, n 4,773); members saw NFL "A" letters on 70% chances.
 3. Reported in `gradecheck.json` (`leagues.<lg>.guards.containment.env_asked / env_applied`) and the admin view
    (`containment.env_requests`, `containment.letters`). No band, gate, chance or logged forecast changes.
+
+## Amendment A10 - pc-1: the printed NBA / NFL chance is the calibrated chance (owner decision 2026-11-05)
+
+Owner, 2026-11-05: "we're grading every prop on the board these props will never hit 60% printed chance" -> CALIBRATE.
+This supersedes the older "never lower percentages" rule for NBA / NFL. Still forbidden: an untested cut, raising
+stakes to compensate, forcing Over / Under balance.
+
+1. **Form** (`sports/model/chance_cal.py`). z = logit of the saved sm-1 P(Over | no push); spec `platt`
+   q = sigmoid(a + b z) or `split` q = sigmoid(a + b_over max(z, 0) + b_under min(z, 0)); optional per-stat
+   parameters penalised toward the league fit. Printed: P(Over) = (1 - pp) q, P(Under) = (1 - pp)(1 - q), push mass
+   unchanged.
+2. **Data.** gradecore-export-1 (`sports/model/gradecore_export.py`): the last saved sm-1 forecast >= 30 min before
+   the start per event / player / stat / period / line / book, settled win / loss (push / void dropped), read through
+   the read-only admin route. Game-day = start - 10 h.
+3. **Chronology.** Spec chosen on an inner split of the fit window only (its last 2 game-days); the chosen spec fitted
+   on the whole fit window and scored once on the held-out window (game-days >= 2026-11-01). Served parameters = the
+   same spec refitted on every exported row; the held-out verdict travels with them.
+4. **Pass rule per league** (held-out window): calibrated log loss below raw with the game-clustered 95% interval of
+   the difference entirely below 0; |stated - hit| <= 3 pts on the chosen side overall; for Over-leaning and
+   Under-leaning rows separately, |stated - hit| <= 3 pts or the stated chance inside the hit interval.
+5. **Letters.** Letters come only from the printed (calibrated) chance with the sports-gp-1 thresholds; rows under
+   C stay "Lean Over / Under". A league that FAILED (4) keeps its letters held (`containment.contained` -> True, the
+   existing contained wording) while its printed chance is still calibrated. A league that passed keeps the A9a 4
+   containment rule (release only from the daily verdict). The daily grade check scores the pc-1 chance walk-forward
+   (refit per game-day on props settled before that day's first forecast, >= 300 decided rows), so its verdict judges
+   the chance members see.
+6. **Serving.** Default ON with the committed `sports/model/artifacts/chance_cal_pc1.json`;
+   `<SPORTS_DATA_DIR>/model/chance_cal.json` overrides it (a Shell refit: `python -m sports.model.chance_cal fit`);
+   `SPORTS_CHANCE_CAL=0` turns it off (cal-mi-1 / raw as before). pc-1 supersedes cal-mi-1 for display while on.
+   Applies to sm-1 views (own forecast and line reads); mi-1 is not in the fitted population and is not changed.
+   The forecast record keeps the raw chance; `ca.raw` and `model/shown.db` keep raw beside the printed chance.
+7. **First fit (2026-11-05, export built 2026-11-03 23:07 UTC).** NBA: fit 2026-10-24..10-31 (6,447), test
+   11-01..11-02 (2,118, 19 games), spec platt; log loss 0.7015 -> 0.6885, difference [-0.0279, +0.0017] -> FAIL
+   (letters held). NFL: fit 10-25..10-29 (1,550), test 11-01..11-02 (2,248, 13 games), spec platt; log loss 0.7315
+   -> 0.6891, difference [-0.0778, -0.0098], in-the-large and both sides pass -> PASS (letters follow A9a 4). Full
+   tables: `sports/research/pc1_heldout_2026-11-05.json`. The pass rule in 4 was written after an exploratory
+   league-level look at the same held-out window (point estimates only); it was not changed after the run.

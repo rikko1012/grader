@@ -1219,6 +1219,16 @@ def write_cal_index(root, base_meta, board_rows):
     summary = {"version": cal.VERSION, "enabled": cal.enabled(), "weights": src, "sha": (obj or {}).get("sha"),
                "markets_on": sorted(k for k, p in ((obj or {}).get("params") or {}).items() if p.get("on")),
                "quotes": len(idx), "with_market": sum(1 for v in idx.values() if v.get("mode") == "M")}
+    try:                                                 # pc-1 (REGISTER A10): the printed-chance calibration in use
+        from .model import chance_cal
+        pobj, psrc = chance_cal.load()
+        lg = base_meta.get("league")
+        summary["pc1"] = {"version": chance_cal.VERSION, "enabled": chance_cal.enabled(), "weights": psrc,
+                          "sha": (pobj or {}).get("sha"),
+                          "letters": (((pobj or {}).get("leagues") or {}).get(lg) or {}).get("letters"),
+                          "quotes": sum(1 for v in idx.values() if v.get("mode") == "P")}
+    except Exception as e:                              # noqa: BLE001 - never breaks the snapshot
+        summary["pc1_error"] = type(e).__name__
     # A9a 6: persist the shown (calibrated) chance beside the offer's OWN forecast (a line read's chance belongs to
     # another line's record, so it is never stored); first write wins; never breaks the snapshot
     items = [(q["cal"].get("f"), r.get("stat"), q.get("line"), q["cal"]) for r in board_rows

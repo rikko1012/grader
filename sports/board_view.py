@@ -407,11 +407,21 @@ CAL_MODELS = ("sm-1",)                                 # mi-1 already uses the m
 
 
 def calibrated(league, stat, po, pu, pp, model, mkc):
-    """THE displayed Scout chance at one quote: cal-mi-1 (sports/model/cal.py adjust) of an sm-1 view with the mv-1
-    market chance at that quote, or None (off: SPORTS_CAL_MI=0 / market switched off / other model) -> the raw chance
-    is shown. Every surface (board, compare, sheets, slips, tracked picks) reads the quote's `ca` written from this."""
+    """THE displayed Scout chance at one quote. pc-1 (sports/model/chance_cal.py, owner decision 2026-11-05) first:
+    every NBA / NFL sm-1 view (own forecast or line read) prints its chronologically fitted, held-out-tested calibrated
+    chance; it supersedes cal-mi-1 for display while on. SPORTS_CHANCE_CAL=0 (or no valid pc-1 parameters) -> the
+    previous rule: cal-mi-1 (sports/model/cal.py adjust) with the mv-1 market chance at that quote, or None (raw
+    chance shown). Every surface (board, cards, compare, sheets, slips, tracked picks, EV) reads the quote's `ca`
+    written from this; the raw chance stays in the immutable forecast record and in ca["raw"]."""
     if model not in CAL_MODELS or po is None or pu is None:
         return None
+    try:
+        from .model import chance_cal
+        ca = chance_cal.adjust(league, stat, po, pu, pp)
+        if ca:
+            return ca
+    except Exception:                                   # noqa: BLE001 - a calibration error never breaks a snapshot
+        pass
     try:
         from .model import cal
         return cal.adjust(league, stat, po, pu, pp, mkc)

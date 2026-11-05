@@ -301,7 +301,8 @@ def check(con, item, now=None):
             "grade_policy_version": fc.grade_policy_version if fc else None,
             "forecast_at": fc.forecast_at if fc else None, "research_only": bool(fc.research_only) if fc else None,
             "validation_state": _validation_state(fc) if fc else None, "displayed": displayed,
-            "displayed_source": ("cal-mi-1" if fc and ca else "scout_forecast") if fc else None,
+            "displayed_source": ((str(ca.get("v") or "cal-mi-1").split(":")[0]) if fc and ca else "scout_forecast")
+            if fc else None,
             **({"calibration": {"v": ca["v"], "mode": ca["mode"], "raw": ca["raw"]}} if fc and ca else {}), "stake_units": 0, "grade_shown": shown_grade,
             "grade_rule": GRADE_RULE if shown_grade else None,
             **({"grade_not_recorded": mismatch} if mismatch else {})}
