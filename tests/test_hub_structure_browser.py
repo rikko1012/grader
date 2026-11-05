@@ -250,7 +250,7 @@ def test_empty_board_names_hidden_lines_and_tools_is_the_single_index(ctx, env):
     assert 'No lines match' not in empty.inner_text()
     p.locator('.h-sidebar [data-id=tools]').click()
     tools = p.locator('#hub-tools-body').inner_text()
-    for want in ('Moneylines', 'Single prop grader', 'Match research', 'Sheets and Compare', 'Classic boards', 'Your alerts'):
+    for want in ('Moneylines', 'Single prop grader', 'Match research', 'Sheets and Compare', 'Classic boards', 'Your saved filters'):
         assert want in tools, want
     assert 'Ask the Genie' not in tools and p.locator('.h-sidebar').inner_text().count('Moneylines') == 0
     assert p.locator('#hub-tools-body a[href="/sports?view=classic#/sheets?lg=nba"]').count() == 1
