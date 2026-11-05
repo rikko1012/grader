@@ -53,6 +53,10 @@ def _num(v):
 def model_released(sport, stat):
     """True only when gradecore containment's state file releases this sport and stat."""
     try:
+        if sport in ("cs2", "lol"):
+            import letter_containment as lc       # lc-1: a held letter is never a calibrated chance
+            if lc.contained(sport, stat):
+                return False
         from gradecore import containment
         lg = sport if sport in ("nba", "nfl") else None
         st = containment.state(sport, lg)

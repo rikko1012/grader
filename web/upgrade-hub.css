@@ -981,7 +981,8 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 @media(min-width:1101px){html[data-ui-tokens] #u-hub .h-card-panel{top:76px}}
 #u-hub .h-full-research{margin:0 0 12px}
 #u-hub .h-full-research a{display:inline-flex;align-items:center;min-height:40px;color:#a9cdff;text-decoration:none}
-#u-hub .h-ask{display:grid;gap:8px;margin-bottom:14px}
+#u-hub .h-ask{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin-bottom:14px}
+#u-hub .h-ask>*{min-width:0}
 #u-hub .h-ask label{font-size:12px;color:#c9d4e2}
 #u-hub .h-ask-row{display:flex;gap:8px}
 #u-hub .h-ask-row input{flex:1;min-width:0;min-height:40px}

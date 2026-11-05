@@ -126,6 +126,10 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
                       "hold": None, "model_version": base["scout"].get("model_version"), "forecast_at": None, "validation": base["scout"].get("validation")}
         r["history"] = {"l5": None, "l10": None, "l20": None, "avg": None, "recent": None}
         r["market_chance"] = None
+    if sport in ("cs2", "lol") and r["scout"].get("grade"):
+        import letter_containment as lc               # lc-1: a held letter is never shown on an extra book's line either
+        if lc.contained(sport, m.get("stat")):
+            r["scout"].update(grade=None, letter_held=True, units=None)
     r["state"] = {"kind": "ok", "reason": None}
     r["extra"] = {"provider": pid, "kind": kind, "same_line_as": base["offer"]["platform_label"] if same else None}
     return r

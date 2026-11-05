@@ -202,3 +202,44 @@ def test_http_flag_on_lines_match_the_board_and_never_change_it(env, monkeypatch
     server._RESULTS.clear()
     st_, doc = get(env, "book-board?sport=cs2&book=sleeper")
     assert doc["records"] == [] and doc["feed"]["state"] == "stale"
+
+
+# ---------------------------------------------------------------------------------------------------- lc-1 letter containment
+
+def test_extra_line_never_shows_a_held_letter(monkeypatch):
+    """A same-line extra-book row copies the board's read; while CS2 letters are held it carries no letter, ever."""
+    import letter_containment as lc
+    monkeypatch.setattr(lc, "contained", lambda sport, stat=None: sport == "cs2")
+    args = ({"offered": True, "payout": 1.8}, {"offered": True, "payout": 1.76}, None, 1.0, "k")
+    r = wb.derive("sleeper", "Sleeper", "pickem", "cs2", [rec()], 38.5, *args)
+    assert r["scout"]["grade"] is None and r["scout"]["letter_held"] is True and r["scout"]["units"] is None
+    assert r["scout"]["p_side"] == 0.61 and r["scout"]["side"] == "over"                 # the chance and the Lean side stay
+    held = rec()
+    held["scout"].update(grade=None, units=0.0, letter_held=True)                         # what record_of sends while held
+    r = wb.derive("sleeper", "Sleeper", "pickem", "cs2", [held], 38.5, *args)
+    assert r["scout"]["grade"] is None and r["scout"]["letter_held"] is True
+    monkeypatch.setattr(lc, "contained", lambda sport, stat=None: False)
+    assert wb.derive("sleeper", "Sleeper", "pickem", "cs2", [rec()], 38.5, *args)["scout"]["grade"] == "B+"
+
+
+def test_held_letter_is_never_a_calibrated_chance_for_ev(monkeypatch):
+    import letter_containment as lc
+    import workspace_markets as wm
+    monkeypatch.setattr(lc, "contained", lambda sport, stat=None: True)
+    assert wm.model_released("cs2", "kills") is False and wm.model_released("lol", "kills") is False
+
+
+def test_extra_lines_never_enter_the_slip_generator_pool(env, monkeypatch):
+    """Both generators read the pick'em boards only: the server's from the shared snapshots, the hub's from H.records."""
+    monkeypatch.setenv("SCOUT_BOOK_SLEEPER", "1")
+    now = time.time()
+    bp.state("sleeper").update(at=now, offers=[{"provider": "sleeper", "book": "sleeper", "sport": "cs2", "raw_stat": "kills_maps_1_2", "stat": "kills",
+                                                "period": "maps12", "subject_id": "7", "player": "vargo", "player_norm": "vargo", "team": "Halcyon",
+                                                "team_norm": "halcyon", "game_id": "g", "line": 38.5, "source_at": now, "observed_at": now,
+                                                "over": {"offered": True, "payout": 1.8, "price": None}, "under": {"offered": True, "payout": 1.76, "price": None}}])
+    assert get(env, "book-board?sport=cs2&book=sleeper")[1]["records"]
+    st, doc = get(env, "generate?platform=underdog&type=standard&slips=4&picks=2&sports=cs2")
+    assert st == 200 and "sleeper" not in json.dumps(doc).lower()
+    from pathlib import Path
+    js = (Path(wb.__file__).parent / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
+    assert "const pool=H.records.filter(" in js and "H.extraRecs.filter(" not in js.split("const pool=")[1][:200]

@@ -141,6 +141,9 @@ def test_genie_persona_intro(browser, env, monkeypatch, size, persona):
         p.wait_for_selector('#hub-card:not([hidden]) [data-hub="card-tab"][data-id="ask"]', timeout=20000)
         p.locator('[data-hub="card-tab"][data-id="ask"]').click()
         p.wait_for_selector('#hub-ask')
+        # the question box spans the card (a classic-page form rule had squeezed it to a few characters at 390)
+        q_w, card_w = p.evaluate("[document.getElementById('hub-ask-q').getBoundingClientRect().width, document.getElementById('hub-card-body').getBoundingClientRect().width]")
+        assert q_w >= 0.55 * card_w, (q_w, card_w)
         intro = p.locator('#hub-card .h-genie-intro').filter(has_text='Ask the Genie')
         assert intro.count() == (1 if persona else 0)
         if persona:
