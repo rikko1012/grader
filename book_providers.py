@@ -1,7 +1,7 @@
 """Extra book providers (Phase 4): a sport-neutral registry, ONE background poller for direct feeds, and a health record per source.
 
 Config, rules and payouts: book_providers.json (each rule with its source; what no source states stays unknown).
-Flags: one per provider (SCOUT_BOOK_SLEEPER, SCOUT_BOOK_FANDUEL, SCOUT_BOOK_BETRIVERS, SCOUT_BOOK_ODDSAPI), all default off.
+Flags: one per provider (SCOUT_BOOK_SLEEPER, SCOUT_BOOK_FANDUEL, SCOUT_BOOK_BETRIVERS, SCOUT_BOOK_ODDSAPI); the running server turns on the three that need no key (server.DEFAULT_ON), Render "0" turns one off.
 Off, nothing here runs: no thread, no request, no file.
 
 Direct feeds (today: Sleeper) are polled by one daemon thread, never by a member request, so 700 members at once cost nothing

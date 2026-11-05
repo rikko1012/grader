@@ -5975,7 +5975,10 @@ def unsubscribe_page(member, token, confirm=False):
 # load test, so the running server turns them ON unless Render says otherwise ("0"/"off" = off). Set only when the process runs as
 # the server, never on import, so tests keep their explicit flag-off checks. SCOUT_UI_TOKENS (gold design) stays off: owner keeps the blue.
 DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBLIC_RECORD", "SCOUT_PUBLIC_RECORD_SLIPS",
-              "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK")
+              "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK",
+              # Phase 4, no keys needed (owner: "why do i have to turn them on in render")
+              "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
+              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE")
 
 
 def apply_default_flags(env=os.environ):
