@@ -30,6 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import board_parity
 import letter_containment as lc
 import slip_quality as sq
 import workspace_h2h
@@ -72,7 +73,7 @@ _BEFORE_RE = re.compile(r"^[0-9T:.+\-Z]{10,40}$")
 _HLTV_SLUG_RE = re.compile(r"hltv-(\d+)")
 _FC_SLOTS = threading.BoundedSemaphore(8)
 _HIST_SLOTS = threading.BoundedSemaphore(3)
-_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}, "genie": {}, "generate": {}, "advice": {}}
+_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}, "genie": {}, "generate": {}, "advice": {}, "report": {}}
 _ST = {"store": None}
 _ST_LOCK = threading.Lock()
 _SNAP = {"at": 0.0, "body": None, "index": {}, "props": {}, "last": {}, "doc": None, "gen": 0, "feeds": {}}
@@ -368,7 +369,7 @@ def _build(srv):
     records, index, props = [], {}, {}
     for bk, p in docs.items():
         for x in (p or {}).get("rows") or []:
-            rec = record_of(x)
+            rec = board_parity.attach(record_of(x))      # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
             records.append(rec)
             index[(_book(x), str(x.get("id")))] = x
             props.setdefault((rec["event"]["id"], rec["player"]["key"], x.get("prop"), x.get("scope") or "12"), []).append((_book(x), str(x.get("id"))))
@@ -1002,7 +1003,7 @@ def get_me(h, srv, q, member, scratch, name):
                                      **({"ui_tokens": True} if os.getenv('SCOUT_UI_TOKENS', '').strip() == '1' else {}),
                                      **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {}),
                                      **({"genie_persona": True} if os.environ.get("SCOUT_GENIE") == "1" and os.environ.get("SCOUT_GENIE_PERSONA") == "1" else {}),
-                                     **_extra_books(),
+                                     **_extra_books(), **board_parity.features(),
                                      **({"board_h2h": _board_columns(srv)} if workspace_h2h.board_enabled() else {})}})
 
 
@@ -1814,12 +1815,47 @@ def post_genie(h, srv, q, member, scratch, name, n):
     return h.send(200, dict(out, quota=quota, key=rec.get("key"), side=side))
 
 
+def _record_for(h, srv, sport, book, rid):
+    """The board's current display record for one line, or None (not on the board now, or not this member's sport)."""
+    if _sport_q(h, srv, {"sport": sport}) is None:
+        return None
+    if sport == "cs2":
+        snap = snapshot(srv)
+        x = snap["index"].get((book, rid)) if snap else None
+        return record_of(x) if x is not None else None
+    mod = _adapter(sport)
+    snap = mod.snapshot(srv) if sport == "lol" else mod.snapshot(srv, sport)
+    ix = snap["index"].get((book, rid)) if snap else None
+    return json.loads(ix["rec"]) if ix and ix.get("rec") else None
+
+
+def post_report_problem(h, srv, q, member, scratch, name, n):
+    """SCOUT_PARITY_REPORT: a member's "Report a problem" on one board line -> data_issues in the workspace store. Rate limited;
+    the line must be on the board now. Nothing on the board changes: the owner reviews the rows."""
+    if not board_parity.on("report"):
+        h.rfile.read(n)
+        return h.send(403, {"error": "forbidden"})
+    if n > 4096:
+        h.rfile.read(n)
+        return h.send(413, {"error": "request too large"})
+    f, err = board_parity.clean_report(_read_json(h, srv, n))
+    if err:
+        return h.send(400, {"error": err})
+    if _limited(h, srv, "report", member, board_parity.REPORT_PER_MIN):
+        return None
+    rec = _record_for(h, srv, f["sport"], f["platform"], f["offer_id"])
+    if rec is None:
+        return h.send(404, {"error": "This line is no longer on the board."})
+    out = board_parity.save_report(store(), member, scratch, f, rec, wstore.iso())
+    return h.send(200, {"ok": True, "duplicate": out["duplicate"]})
+
+
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
        "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
        "book-lines": get_book_lines}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
-        "book-line":post_book_line, "slip-advice": post_slip_advice}
+        "book-line":post_book_line, "slip-advice": post_slip_advice, "report-problem": post_report_problem}
 
 
 GENIE = {"GET": get_genie, "POST": post_genie}       # SCOUT_GENIE=1 only: off, "genie" is the unknown-route answer

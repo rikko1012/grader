@@ -7,6 +7,7 @@ stay on the server and never reach a page), and lol.db read-only for past games 
 One snapshot per board.json write, single flight. Past games are read once per snapshot, one indexed read per player on the board,
 behind one connection. Settlement is the LoL worker's own lol_settlements row for the receipt's platform, market and line: this
 module only says which side of it the member took. LoL letters carry 0 units, and a stake is never shown as anything else."""
+import board_parity
 import hashlib
 import letter_containment
 import workspace_h2h
@@ -250,7 +251,7 @@ def _build(srv):
             continue
         pid = canon.get(r["link"].get("pid"), r["link"].get("pid"))
         values = series_values(series.get(pid), x.get("stat"), x.get("scope"))
-        rec = record_of(x, r, values)
+        rec = board_parity.attach(record_of(x, r, values))     # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
         records.append(rec)
         ix = {"rec": json.dumps(rec, default=str, separators=(",", ":")).encode(), "market_key": r["market_key"], "sid": r["link"].get("sid"), "pid": pid, "raw_pid": r["link"].get("pid"), "fid": r["fid"], "fc_line": r["fc_line"],
               "line": x.get("line"), "stat": x.get("stat"), "scope": x.get("scope"), "scope_digits": "".join(str(n) for n in PERIOD.get(x.get("scope"), ("", "", ()))[2]), "period": rec["market"]["period"], "platform": x.get("platform"), "start": x.get("start"), "checked": x.get("line_checked"),
