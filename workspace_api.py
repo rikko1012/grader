@@ -70,7 +70,7 @@ _BEFORE_RE = re.compile(r"^[0-9T:.+\-Z]{10,40}$")
 _HLTV_SLUG_RE = re.compile(r"hltv-(\d+)")
 _FC_SLOTS = threading.BoundedSemaphore(8)
 _HIST_SLOTS = threading.BoundedSemaphore(3)
-_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}}
+_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}, "genie": {}}
 _ST = {"store": None}
 _ST_LOCK = threading.Lock()
 _SNAP = {"at": 0.0, "body": None, "index": {}, "props": {}, "last": {}, "doc": None, "gen": 0, "feeds": {}}
@@ -161,7 +161,7 @@ def reset():
     _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={})
     for d in _HITS.values():
         d.clear()
-    for name in ("workspace_lol", "workspace_sports"):
+    for name in ("workspace_lol", "workspace_sports", "workspace_genie"):
         mod = sys.modules.get(name)
         if mod is not None:
             mod.reset()
@@ -918,7 +918,8 @@ def get_me(h, srv, q, member, scratch, name):
                         "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1",
                                      "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
                                      "background_alerts": bool(workspace_alerts.configured()),
-                                     "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK)}})
+                                     "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK),
+                                     **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {})}})
 
 
 def get_market_tools(h, srv, q, member, scratch, name):
@@ -983,31 +984,39 @@ def get_board(h, srv, q, member, scratch, name):
     return h.send_shared(("ws_board", sport), 200, snap["body"], keep=60)
 
 
-def get_line(h, srv, q, member, scratch, name):
+def _line_shared(h, srv, q):
+    """(status, body bytes) of one /line read from the shared single-flight copy, or None when this member cannot see it."""
     book, rid, sport = q.get("book"), q.get("id"), _sport_q(h, srv, q)
-    if sport is None or not book or len(book) > 40 or not rid or not _ID_RE.match(rid):
-        return h.send(404, {"error": "not found"})
+    if sport is None or not isinstance(book, str) or not book or len(book) > 40 or not isinstance(rid, str) or not rid or not _ID_RE.match(rid):
+        return None
     if sport == "cs2":
         if book not in BOOKS or snapshot(srv) is None or (book, rid) not in _SNAP["index"]:
-            return h.send(404, {"error": "not found"})
+            return None
         fn = lambda: _line_body(srv, book, rid)
     elif sport == "lol":
         mod = _adapter("lol")
         snap = mod.snapshot(srv)
         if snap is None or (book, rid) not in snap["index"]:
-            return h.send(404, {"error": "not found"})
+            return None
         fn = lambda: mod.line_doc(srv, book, rid)
     else:
         mod = _adapter(sport)
         snap = mod.snapshot(srv, sport)
         if snap is None or (book, rid) not in snap["index"]:
-            return h.send(404, {"error": "not found"})
+            return None
         fn = lambda: mod.line_doc(srv, sport, book, rid)
 
     def compute():
         st, doc = fn()
         return st, json.dumps(doc, default=str, separators=(",", ":")).encode()
-    st, body = srv.shared(("ws_line", sport, book, rid), compute, ttl=LINE_TTL)
+    return srv.shared(("ws_line", sport, book, rid), compute, ttl=LINE_TTL)
+
+
+def get_line(h, srv, q, member, scratch, name):
+    got = _line_shared(h, srv, q)
+    if got is None:
+        return h.send(404, {"error": "not found"})
+    st, body = got
     return h.send(st, body)
 
 
@@ -1303,6 +1312,51 @@ def post_state(h, srv, q, member, scratch, name, n):
     return h.send(200, {"rev": out["rev"]})
 
 
+def get_genie(h, srv, q, member, scratch, name):
+    import workspace_genie
+    return h.send(200, {"quota": workspace_genie.quota(data_dir(), member), "suggestions": list(workspace_genie.SUGGESTIONS)})
+
+
+def post_genie(h, srv, q, member, scratch, name, n):
+    """One payload-grounded question about one line (workspace_genie). Charged to the member's daily cap only when answered."""
+    import workspace_genie as genie
+    if n > 4096:
+        h.rfile.read(n)
+        return h.send(413, {"error": "request too large"})
+    d = _read_json(h, srv, n)
+    if not d:
+        return h.send(400, {"error": "body must be a JSON object"})
+    question, side = d.get("question"), d.get("side")
+    if not isinstance(question, str) or not question.strip():
+        return h.send(400, {"error": "question must be text"})
+    if len(question) > genie.QUESTION_MAX:
+        return h.send(413, {"error": "question_too_long", "max": genie.QUESTION_MAX})
+    if side not in ("over", "under"):
+        return h.send(400, {"error": "side must be over or under"})
+    if _limited(h, srv, "genie", member, genie.PER_MIN):
+        return None
+    qq = dict(q, sport=d.get("sport") or "cs2", book=d.get("book"), id=d.get("id"))
+    got = _line_shared(h, srv, qq)
+    if got is None or got[0] != 200:
+        return h.send(404 if got is None or got[0] == 404 else 503, {"error": "not found" if got is None or got[0] == 404 else "line_unavailable"})
+    doc = json.loads(got[1])
+    rec = doc.get("record") or {}
+    rev = d.get("revision")
+    if rev is not None and rev != (rec.get("offer") or {}).get("revision"):
+        return h.send(409, {"error": "offer_changed"})
+    out = genie.answer(doc, question.strip(), side)
+    if out["matched"]:
+        try:
+            ok, quota = genie.reserve(data_dir(), member)
+        except genie.sqlite3.Error:
+            return h.send(503, {"error": "busy"}, headers={"Retry-After": "2"})
+        if not ok:
+            return h.send(429, {"error": "daily_limit_reached", "quota": quota})
+    else:
+        quota = genie.quota(data_dir(), member)
+    return h.send(200, dict(out, quota=quota, key=rec.get("key"), side=side))
+
+
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
        "market-tools":get_market_tools, "grade-review":get_grade_review}
@@ -1310,10 +1364,15 @@ POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "aler
         "book-line":post_book_line}
 
 
+GENIE = {"GET": get_genie, "POST": post_genie}       # SCOUT_GENIE=1 only: off, "genie" is the unknown-route answer
+
+
 def handle(h, srv, method, path, q, n=0, prefix=None):
     """Every workspace API route, under /preview/workspace/api/ or /api/upgrade/. The caller has already passed that prefix's gate."""
     name = path[len(prefix or srv.WORKSPACE_API):]
     fn = (GET if method == "GET" else POST).get(name)
+    if fn is None and name == "genie" and os.environ.get("SCOUT_GENIE") == "1":
+        fn = GENIE["GET" if method == "GET" else "POST"]
     if fn is None:
         if method == "GET":
             return h.send(404, {"error": "not found"})

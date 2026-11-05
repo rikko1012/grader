@@ -520,7 +520,7 @@
     const u = inside && a.dataset ? a.dataset.u : null, id = inside && a.dataset ? a.dataset.id : null;
     fn();
     if (!inside || a.isConnected) return;
-    const sel = u ? `[data-u="${CSS.escape(u)}"]` + (id != null ? `[data-id="${CSS.escape(id)}"]` : "") : ".u-x";
+    const sel = u ? `[data-u="${CSS.escape(u)}"]` + (id != null ? `[data-id="${CSS.escape(id)}"]` : "") : a.id === "u-ask-q" ? "#u-ask-q" : ".u-x";
     (box.querySelector(sel) || box.querySelector(".u-x") || box).focus({ preventScroll: true });
   }
 
@@ -720,9 +720,41 @@
     const h2h = !hh || !hh.opponent ? "" : `<div class="u-sec-h"><h3>Head-to-head vs ${esc(hh.opponent)}</h3></div>${hh.n ? `<dl class="u-kv"><div><dt>Over ${esc(ln)}</dt><dd>${hh.over} of ${hh.n}</dd></div><div><dt>Under ${esc(ln)}</dt><dd>${hh.under} of ${hh.n}</dd></div><div><dt>Average</dt><dd>${hh.avg == null ? "—" : esc(hh.avg)}</dd></div>${hh.series.map((g) => `<div><dt>${esc(g.date)}</dt><dd>${esc(g.value)} · ${g.value === ln ? "Push" : g.value > ln ? "Over" : "Under"}</dd></div>`).join("")}</dl><p class="u-dim">Past meetings at today's line. Not a predicted chance.</p>` : `<p class="u-dim">No past meetings with ${esc(hh.opponent)} in this player's saved results.</p>`}`;
     return `${h2h}<div class="u-sec-h"><h3>${rec.sport === "cs2" ? "Player stats and saved inputs" : "Context"}</h3></div>${list.length ? `<dl class="u-kv">${list.map((r) => `<div><dt>${esc(r.label)}</dt><dd>${esc(r.value)}</dd></div>`).join("")}</dl>` : `<p class="u-dim">${rec.sport === "cs2" ? "This forecast saved no context inputs." : "No context is on file for this line."}</p>`}${drivers.length ? `<div class="u-sec-h"><h3>What moved this forecast</h3></div><ul class="u-list">${drivers.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}`;
   }
+  /* SCOUT_GENIE (features.genie, owner switch): one question about this line, answered by the server from this line's payload only,
+     every number checked there; a daily cap per member. Off, the tab is the evidence guide alone, unchanged. */
+  const G = { key: null, q: "", busy: false, ans: null, err: null, quota: null };
+  function askHtml(rec) {
+    const k = rec.key + "|" + rec.offer.platform + "|" + P.side;
+    if (G.key !== k) Object.assign(G, { key: k, ans: null, err: null });
+    const left = G.quota ? `<p class="u-dim">${G.quota.remaining_questions} of ${G.quota.questions_limit} questions left today.</p>` : "";
+    const sugg = ["What is the projection?", "How often did this line hit?", "What is the head-to-head?", "Is there a better line elsewhere?"];
+    const out = G.busy ? '<div class="u-skel"></div>' : G.err ? `<p>${esc(G.err)}</p>` : G.ans ? G.ans.map((x) => `<p>${esc(x)}</p>`).join("") : "";
+    return `<form class="u-ask" id="u-ask" novalidate><label for="u-ask-q">Ask about this line</label><div class="u-ask-row"><input id="u-ask-q" name="q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button class="u-btn u-gold" type="submit" data-u="genie-ask"${G.busy ? ' aria-disabled="true"' : ""}>Ask</button></div>
+      <div class="u-ask-sugg" role="group" aria-label="Suggested questions">${sugg.map((x) => `<button class="u-btn" type="button" data-u="genie-ask" data-id="${esc(x)}">${esc(x)}</button>`).join("")}</div>
+      <div class="u-ask-out" id="u-ask-out" role="status" aria-live="polite">${out}</div>${left}</form>`;
+  }
+  async function genieAsk(text) {
+    const rec = P.rec, box = $("u-ask-q"), q = (text || (box ? box.value : "") || "").trim();
+    if (!rec || G.busy) return;
+    G.q = q;
+    if (!q) { G.err = "Type a question about this line first."; paintDrawer(); return; }
+    const k = G.key;
+    Object.assign(G, { busy: true, err: null, ans: null }); paintDrawer();
+    try {
+      const d = await api("genie", { sport: rec.sport, book: rec.offer.platform, id: rec.offer.offer_id, revision: rec.offer.revision, side: P.side, question: q });
+      if (G.key !== k) return;
+      G.ans = d.sentences; G.quota = d.quota;
+    } catch (e) {
+      if (G.key !== k) return;
+      const c = e instanceof ApiError ? e.status : 0;
+      if (c === 429 && e.doc && e.doc.quota) G.quota = e.doc.quota;
+      G.err = c === 429 ? (e.doc && e.doc.error === "daily_limit_reached" ? "You have used today's questions. They reset at midnight UTC." : "Too many questions in a minute. Try again shortly.")
+        : c === 409 ? "This line changed. Reopen it to ask about the current offer." : c === 413 ? "Keep the question under 300 characters." : "The Genie is unavailable right now.";
+    } finally { if (G.key === k) { G.busy = false; paintDrawer(); } }
+  }
   function genieHtml(rec) {
     const doc=P.doc, s=rec.scout, side=P.side, t=tallyOf(rec,10), list=siblings(rec), other=list.filter(r=>r.offer.platform!==rec.offer.platform);
-    return `<div class="u-genie"><span class="u-tag">Scout evidence guide</span><h3>What would you like to check?</h3><p class="u-dim">Answers use this offer's saved forecast and research data. No invented stats, web guesses or new predictions.</p>
+    return `${R.me?.features?.genie ? askHtml(rec) : ""}<div class="u-genie"><span class="u-tag">Scout evidence guide</span><h3>What would you like to check?</h3><p class="u-dim">Answers use this offer's saved forecast and research data. No invented stats, web guesses or new predictions.</p>
       <details class="u-det" open><summary>What supports this pick?</summary><p>${esc(rec.player.name)} has a saved projection of ${s.projection==null?'unavailable':esc(tenth(s.projection))} for ${esc(rec.market.period_label)} ${esc(rec.market.stat_label)}. ${chanceOf(rec,side)==null?'No probability was saved for the selected side.':`The saved chance for ${cap(side)} ${esc(rec.offer.line)} is ${pct(chanceOf(rec,side))}.`} ${s.hold?'This is a research estimate; the validation gate has not released official grades.':''}</p>${doc&&doc.forecast?`<p class="u-dim">Forecast ${esc(doc.forecast.id||'ID unavailable')} · model ${esc(doc.forecast.model_version||s.model_version||'unavailable')}</p>`:''}</details>
       <details class="u-det"><summary>How often did this line hit?</summary><p>${t?`${side==='under'?t.under:t.over} of the last ${t.n} comparable results hit ${cap(side)} at today's line of ${esc(rec.offer.line)}; ${t.push||0} pushed. This is historical frequency, not a forecast.`:'Comparable past-game results are not available for this line.'}</p><button class="u-link" data-u="ptab" data-id="history">Inspect each result</button></details>
       <details class="u-det"><summary>Is there a better line elsewhere?</summary><p>${other.length?other.slice(0,8).map(r=>`${esc(r.offer.platform_label)} lists ${esc(r.offer.line)} (${esc(r.market.line_type)}), seen ${esc(when(r.offer.seen_at))}.`).join(' '):'No other platform offer is available for this exact event, player, stat and period.'}</p><p class="u-dim">Different lines and payout types are not interchangeable. Compare the actual offer before adding it.</p><button class="u-link" data-u="ptab" data-id="books">Compare sources</button></details>
@@ -823,6 +855,8 @@
       }
       if (e.target.classList && e.target.classList.contains("u-dialog")) e.target.close();    /* a click on the backdrop */
     }), true);
+    document.addEventListener("submit", (e) => { if (e.target && e.target.id === "u-ask") { e.preventDefault(); guard(() => genieAsk())(); } }, true);
+    document.addEventListener("input", (e) => { if (e.target && e.target.id === "u-ask-q") G.q = e.target.value; }, true);
     document.addEventListener("toggle", (e) => {
       const k = e.target.dataset ? e.target.dataset.det : null;
       if (k) { if (e.target.open) T.open.add(k); else T.open.delete(k); }
@@ -864,6 +898,7 @@
     track: trackEntry,
     copy: copyEntry,
     'open-line':()=>openLine(P.rec,P.side),
+    "genie-ask": (q) => genieAsk(q),
     'open-leg':id=>openBookLeg(T.legs.find(l=>l.id===id)),
     'open-entry':key=>{const e=entries().find(x=>x.key===key);if(e)openGenerated({platform:e.platform,entry_type:typeOf(e),legs:e.legs});},
     pick(id) { T.openPick = T.openPick === id ? null : id; paintTray(); },
