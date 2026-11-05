@@ -4026,13 +4026,21 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
                   "/upgrade/hub.css": ("upgrade-hub.css", "text/css; charset=utf-8"),
                   "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8")}
 UPGRADE_API = "/api/upgrade/"
-_UPGRADE_MEMO = {}                                      # (id(page bytes), name) -> (page bytes, upgraded page)
+_UPGRADE_MEMO = {}                                      # (id(page bytes), name, tokens) -> (page bytes, upgraded page)
+UI_TOKENS_ROUTE = "/upgrade/tokens.css"                 # SCOUT_UI_TOKENS=1 only; off = the unknown-route answer
+
+
+def ui_tokens_on():
+    """SCOUT_UI_TOKENS (default off): the hub on the classic 1Time tokens via its own stylesheet. Off, upgrade_page and hub.css are
+    byte for byte what they were."""
+    return os.environ.get("SCOUT_UI_TOKENS", "").strip() == "1"
 
 
 def upgrade_page(body, name):
     """The upgraded copy of a member page. Memoised per page OBJECT, as sports_nav is: send_shared caches the ETag + gzip by body
     identity, so a fresh copy per request would recompress the page every time."""
-    hit = _UPGRADE_MEMO.get((id(body), name))
+    tokens = ui_tokens_on()
+    hit = _UPGRADE_MEMO.get((id(body), name, tokens))
     if hit is not None and hit[0] is body:
         return hit[1]
     # Runs in the head, before the original board can paint. Classic keeps its
@@ -4056,14 +4064,19 @@ const link=document.createElement('link');link.rel='stylesheet';link.href=href;l
 })();
 </script>'''
     tail = f'<script src="/upgrade/upgrade.js" data-page="{name}"></script>'.encode()
+    mark = f'<html data-upgrade="{name}" '
+    if tokens:                                          # flag on only: the token sheet joins the two hub sheets, nothing else moves
+        head = head.replace(b"html.scout-boot{background:#101215}", b"html.scout-boot{background:#080808}", 1)
+        head = head.replace(b"['/upgrade/upgrade.css','/upgrade/hub.css']", b"['/upgrade/upgrade.css','/upgrade/hub.css','" + UI_TOKENS_ROUTE.encode() + b"']", 1)
+        mark += 'data-ui-tokens="1" '
     i, j = body.rfind(b"</head>"), body.rfind(b"</body>")
     out = body
     if 0 <= i < j:                                      # a page without its markers goes out as it is
         out = body[:i] + head + body[i:j] + tail + body[j:]
-        out = out.replace(b"<html ", f'<html data-upgrade="{name}" '.encode(), 1)
+        out = out.replace(b"<html ", mark.encode(), 1)
     if len(_UPGRADE_MEMO) > 16:                         # a handful of pages; old versions drop when a file changes
         _UPGRADE_MEMO.clear()
-    _UPGRADE_MEMO[(id(body), name)] = (body, out)
+    _UPGRADE_MEMO[(id(body), name, tokens)] = (body, out)
     return out
 
 
@@ -4304,6 +4317,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in UPGRADE_ROUTES and self._upgrade_on(q):        # not allowed = the unknown-route answer below
                 name, ctype = UPGRADE_ROUTES[u.path]
                 return self.send_shared(("upgrade", name), 200, web_file(name), ctype, keep=600)
+            if u.path == UI_TOKENS_ROUTE and ui_tokens_on() and self._upgrade_on(q):    # SCOUT_UI_TOKENS only
+                return self.send_shared(("upgrade", "upgrade-tokens.css"), 200, web_file("upgrade-tokens.css"), "text/css; charset=utf-8", keep=600)
             if u.path.startswith(UPGRADE_API) and self._upgrade_on(q):
                 return self._workspace_api("GET", u.path, q, prefix=UPGRADE_API)
             if u.path in ("/", "/index.html"):

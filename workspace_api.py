@@ -904,7 +904,8 @@ def get_me(h, srv, q, member, scratch, name):
                         "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1",
                                      "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
                                      "background_alerts": bool(workspace_alerts.configured()),
-                                     "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK)}})
+                                     "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK),
+                                     "ui_tokens": os.getenv('SCOUT_UI_TOKENS', '').strip()=='1'}})
 
 
 def get_market_tools(h, srv, q, member, scratch, name):

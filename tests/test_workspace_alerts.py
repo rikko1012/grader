@@ -15,7 +15,7 @@ def setup(tmp_path,monkeypatch):
     a.subscription(tmp_path,'member',True,'user_test',['cs2'],now=1000)
     state={'prefs':{'researchHub':{'alerts':[{'name':'Kills','filters':{'sport':'cs2','book':'underdog'}}]}}}
     sent=[]
-    def send(*args):sent.append(args);return 'queued'
+    def send(*args,**kw):sent.append(args+((kw.get('rest_path'),) if kw else ()));return 'queued'
     return state,sent,send
 
 
@@ -46,7 +46,7 @@ def test_filter_change_baselines_and_ambiguous_delivery_is_not_retried(tmp_path,
     state['prefs']['researchHub']['alerts'][0]['filters']['side']='over'
     a.tick(tmp_path,lambda m:state,[row('2')],lambda u:True,send,now=2000)
     assert not sent
-    def failed(*args):sent.append(args);raise TimeoutError()
+    def failed(*args,**kw):sent.append(args);raise TimeoutError()
     a.tick(tmp_path,lambda m:state,[row('3')],lambda u:True,failed,now=3000)
     a.tick(tmp_path,lambda m:state,[row('3')],lambda u:True,send,now=5000)
     assert len(sent)==1
@@ -114,3 +114,44 @@ def test_line_difference_index_keeps_event_period_and_book_boundaries():
     for candidates,expected in [([base],False),([base,wrong,period,same],False),([base,other],True)]:
         index=a._different_lines(candidates)
         assert a.match(base,{'onlyDiff':True},[],[],1000,index) is expected
+
+
+# ---- SCOUT_BACKGROUND_ALERTS deep link: the alert opens the prop it names
+
+def test_prop_path_is_the_hub_row_key_encoded_or_the_alerts_list():
+    assert a.prop_path(row())=='/?#scout/board?sport=cs2&open=cs2%7Cunderdog%7Co'
+    odd=row();odd['offer']['offer_id']='a&b=c#d e'
+    assert a.prop_path(odd)=='/?#scout/board?sport=cs2&open=cs2%7Cunderdog%7Ca%26b%3Dc%23d%20e'
+    for broken in ({}, {'sport':'cs2'}, dict(row(),offer={'platform':'underdog','offer_id':''})):
+        assert a.prop_path(broken)==a.ALERTS_PATH=='/?#/alerts'
+
+
+def test_flag_on_delivery_links_to_the_first_matching_prop(tmp_path,monkeypatch):
+    state,sent,send=setup(tmp_path,monkeypatch)
+    a.tick(tmp_path,lambda m:state,[row()],lambda u:True,send,now=1000)
+    a.tick(tmp_path,lambda m:state,[row('2')],lambda u:True,send,now=2000)
+    assert len(sent)==1 and sent[0][3]=='/?#scout/board?sport=cs2&open=cs2%7Cunderdog%7Co'
+
+
+def test_deliver_sends_the_prop_link_and_refuses_foreign_paths(monkeypatch):
+    monkeypatch.setenv('WHOP_API_KEY','private');monkeypatch.setenv('WHOP_NOTIFICATION_EXPERIENCE_ID','exp_test')
+    seen=[]
+    class Session:
+        status_code=200
+        def post(self,url,**kw):seen.append(kw['json']['rest_path']);return self
+        def json(self):return {'success':True}
+    assert a.deliver('user_x','t','c',Session(),rest_path=a.prop_path(row()))=='queued'
+    assert a.deliver('user_x','t','c',Session())=='queued'
+    for bad in ('https://evil.example/','//evil.example','/?#'+'x'*500,None):
+        a.deliver('user_x','t','c',Session(),rest_path=bad)
+    assert seen==[a.prop_path(row()),'/?#/alerts']+['/?#/alerts']*4
+
+
+def test_flag_off_nothing_is_configured_sent_or_started(tmp_path,monkeypatch):
+    monkeypatch.delenv('SCOUT_BACKGROUND_ALERTS',raising=False)
+    monkeypatch.setenv('WHOP_API_KEY','test');monkeypatch.setenv('WHOP_NOTIFICATION_EXPERIENCE_ID','exp_test')
+    assert not a.configured()
+    import pytest
+    with pytest.raises(ValueError):a.subscription(tmp_path,'member',True,'user_test',['cs2'],now=1000)
+    a.start(None)                                   # returns before touching srv
+    assert a._THREAD is None or not a._THREAD.is_alive()
