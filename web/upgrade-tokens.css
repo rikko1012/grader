@@ -1,0 +1,101 @@
+/* SCOUT_UI_TOKENS (default off). The research hub on the classic 1Time tokens: gold #f5c842 on near-black, Outfit body,
+   Bebas Neue display, DM Mono numbers (the fonts every member page already loads). Served only when the flag is on and every rule is
+   scoped to html[data-ui-tokens], so hub.css and the flag-off pages keep their exact bytes. Three breakpoints: phone <=640px,
+   tablet 641-1024px, desktop >=1025px. Targets >=40px; the skip link and account control live inside #u-hub. */
+html[data-ui-tokens] .scout-hub,html[data-ui-tokens].hub-open .u-dialog,html[data-ui-tokens].hub-open .u-toast{
+ --u-gold:#f5c842;--u-gold2:#f5d77b;--u-bg:#080808;--u-panel:#101010;--u-panel2:#171717;--u-panel3:#202020;--u-line:#292929;--u-line2:#454545;
+ --u-text:#f2f1eb;--u-muted:#b4b3aa;--u-faint:#96968e;--u-ink:#080808;
+ --u-body:'Outfit',system-ui,sans-serif;--u-display:'Bebas Neue','Outfit',system-ui,sans-serif;--u-mono:'DM Mono',ui-monospace,monospace}
+html[data-ui-tokens].scout-boot{background:#080808}
+html[data-ui-tokens] #u-hub{background:var(--u-bg);color:var(--u-text);font-family:var(--u-body)}
+html[data-ui-tokens] #u-hub h1{font-family:var(--u-display)!important;font-weight:400!important;letter-spacing:.02em!important;font-size:38px!important;line-height:1.05}
+html[data-ui-tokens] #u-hub h2{font-family:var(--u-display);font-weight:400;letter-spacing:.02em;font-size:26px;line-height:1.1}
+html[data-ui-tokens] #u-hub h3,html[data-ui-tokens] #u-hub h4{font-family:var(--u-body);font-weight:600;letter-spacing:0}
+html[data-ui-tokens] #u-hub .h-eyebrow,html[data-ui-tokens] #u-hub .h-nav-label{color:var(--u-gold);font-family:var(--u-mono);letter-spacing:.08em}
+html[data-ui-tokens] #u-hub :is(td,.h-tile>b,.h-mini-tiles b,#hub-count,.h-market-table td){font-variant-numeric:tabular-nums}
+html[data-ui-tokens] #u-hub #hub-table :is(.h-c-line,.h-c-proj,.h-c-l5,.h-c-l10,.h-c-l20),html[data-ui-tokens] #u-hub .h-market-table .h-num{font-family:var(--u-mono)}
+html[data-ui-tokens] #u-hub :is(.h-tile>b,.h-mini-tiles b){color:var(--u-text);font-family:var(--u-mono)}
+
+/* Surfaces and controls */
+html[data-ui-tokens] #u-hub .h-sidebar{background:var(--u-bg);border-color:var(--u-line)}
+html[data-ui-tokens] #u-hub .h-brand>span{background:var(--u-gold);color:var(--u-ink)}
+html[data-ui-tokens] #u-hub .h-brand em{color:var(--u-gold)}
+html[data-ui-tokens] .scout-hub :is(button,select,input),html[data-ui-tokens] .h-save :is(button,input){background:var(--u-panel2);border-color:var(--u-line2);color:var(--u-text);min-height:40px}
+html[data-ui-tokens] #u-hub :is(input,select){background:var(--u-panel2)!important;border-color:var(--u-line2)!important}
+html[data-ui-tokens] #u-hub :is(input,select):focus{border-color:var(--u-gold)!important;box-shadow:0 0 0 2px #f5c84222;outline:2px solid var(--u-gold)}
+html[data-ui-tokens] .scout-hub :is(button,a,input,select,summary,[tabindex]):focus-visible{outline:2px solid var(--u-gold)!important;outline-offset:3px}
+html[data-ui-tokens] .scout-hub :is(button,a):hover{color:var(--u-text);background:var(--u-panel3)}
+html[data-ui-tokens] #u-hub :is(.h-tools,.h-tile,.h-record-card,.h-game-card,.h-market-tools,.h-alert){border-color:var(--u-line)}
+html[data-ui-tokens] #u-hub .h-sidebar nav :is(button,a){color:var(--u-muted)}
+html[data-ui-tokens] #u-hub .h-sidebar nav button[aria-current=page]{background:#f5c8420d;color:var(--u-gold);box-shadow:inset 2px 0 var(--u-gold)}
+html[data-ui-tokens] #u-hub .h-sidebar nav button[aria-current=page] .h-nav-icon{color:var(--u-gold);border-color:#f5c84266}
+html[data-ui-tokens] #u-hub :is(.h-sports,.h-games,.h-game-books) button[aria-pressed=true],html[data-ui-tokens] #u-hub .h-quick button[aria-pressed=true],html[data-ui-tokens] #u-hub .h-market-filters button[aria-pressed=true]{border-color:var(--u-gold);color:var(--u-gold)}
+html[data-ui-tokens] #u-hub #hub-table .h-star[aria-pressed=true]{color:var(--u-gold)}
+html[data-ui-tokens] #u-hub #hub-table .h-player:hover b,html[data-ui-tokens] #u-hub #hub-table tr[data-record]:hover .h-player b{color:var(--u-gold2)}
+html[data-ui-tokens] #u-hub #hub-table>tbody>tr.h-detail-row>td{background:var(--u-panel);border-bottom-color:#5c4c17;box-shadow:inset 3px 0 var(--u-gold)}
+html[data-ui-tokens] #u-hub .h-line-shop tr.is-selected td:first-child{box-shadow:inset 2px 0 var(--u-gold)}
+html[data-ui-tokens] #u-hub .h-card-links button,html[data-ui-tokens] #u-hub .h-detail-action button[data-hub=open-line]{background:transparent;border-color:var(--u-line2);color:var(--u-gold2)}
+/* One accent for the primary action, as on the classic pages */
+html[data-ui-tokens] #u-hub :is(#hub-generate,.h-detail-action button:not([data-hub=open-line]),.h-game-card>button),
+html[data-ui-tokens] #u-hub .h-slip .u-btn.u-gold,html[data-ui-tokens] #hub-studio-body :is(.u-btn.u-gold,.u-acts .u-gold),
+html[data-ui-tokens] .h-mobile-slip{background:var(--u-gold)!important;border-color:var(--u-gold)!important;color:var(--u-ink)!important}
+html[data-ui-tokens][data-upgrade] .h-entry{background:#f5c84214;border-color:#f5c84266;color:var(--u-gold,#f5c842)}
+html[data-ui-tokens] .h-rel-scale i{border-color:#f5c842}
+html[data-ui-tokens] .h-rel-scale .actual{background:#f5c842}
+html[data-ui-tokens] .h-history-chart .line-mark{stroke:#f5d77b}
+html[data-ui-tokens] .h-history-chart .line-lab{fill:#f5d77b}
+html[data-ui-tokens] .h-legend .line{border-top-color:#f5d77b}
+
+/* Touch targets: nothing interactive under 40px in the hub */
+html[data-ui-tokens] #u-hub :is(button,select,input,summary,.h-sidebar nav a,.h-tools-menu a){min-height:40px}
+html[data-ui-tokens] #u-hub :is(.h-quick button,.h-quick select,.h-sidebar-foot button,.h-prop-toggle,.h-pagination button){min-height:40px}
+html[data-ui-tokens] #u-hub #hub-table .h-star{min-width:40px;min-height:40px}
+html[data-ui-tokens] #u-hub #hub-table .h-player{min-height:40px;align-content:center}
+html[data-ui-tokens] #u-hub #hub-table .h-side-reason{display:inline-flex;align-items:center;min-height:40px;padding:0;color:var(--u-gold2)}
+html[data-ui-tokens] #u-hub #hub-table .h-prop-toggle{min-height:40px;padding:6px 12px;border-color:#f5c84266;background:#f5c8420d;color:var(--u-gold2)}
+html[data-ui-tokens] #u-hub #hub-table .h-prop-toggle:is(:hover,[aria-expanded=true]){background:#f5c8421f;border-color:var(--u-gold);color:var(--u-text)}
+html[data-ui-tokens] #u-hub #hub-table .h-add{min-width:40px;min-height:40px;border-color:#f5c84266;background:var(--u-panel2);color:var(--u-gold)}
+html[data-ui-tokens] #u-hub #hub-table .h-add:hover:not(:disabled),html[data-ui-tokens] #u-hub #hub-table .h-add.selected{background:var(--u-gold);border-color:var(--u-gold);color:var(--u-ink)}
+html[data-ui-tokens][data-upgrade] .h-entry{min-height:40px;display:inline-flex;align-items:center}
+/* the compact filter row (hub.css switches to it at 1100px) gets 40px+ columns; a flex row ignores this */
+html[data-ui-tokens] #u-hub .h-tools{grid-template-columns:minmax(0,1fr) 72px 44px}
+
+/* Skip link and account control */
+html[data-ui-tokens] #u-hub .h-skip{position:fixed;left:16px;top:-80px;z-index:130;display:inline-flex;align-items:center;min-height:44px;padding:10px 18px;border-radius:6px;background:var(--u-gold);color:var(--u-ink);font-weight:700;text-decoration:none}
+html[data-ui-tokens] #u-hub .h-skip:focus{top:12px!important}
+html[data-ui-tokens] #u-hub .h-account{position:relative}
+html[data-ui-tokens] #u-hub .h-account>summary{display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 12px 6px 6px;border:1px solid var(--u-line2);border-radius:20px;cursor:pointer;list-style:none;color:var(--u-text);font-size:12px;max-width:220px}
+html[data-ui-tokens] #u-hub .h-account>summary::-webkit-details-marker{display:none}
+html[data-ui-tokens] #u-hub .h-account>summary i{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;background:var(--u-gold);color:var(--u-ink);font:700 12px var(--u-body);font-style:normal}
+html[data-ui-tokens] #u-hub .h-account>summary span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+html[data-ui-tokens] #u-hub .h-account nav{position:absolute;right:0;top:48px;z-index:20;display:grid;gap:2px;min-width:200px;padding:8px;background:var(--u-panel2);border:1px solid var(--u-line2);border-radius:8px;box-shadow:0 10px 30px #000a}
+html[data-ui-tokens] #u-hub .h-account nav :is(a,button){display:flex;align-items:center;width:100%;min-height:44px;padding:10px 12px;border:0;background:none;color:var(--u-text);text-align:left;text-decoration:none;font-size:13px}
+
+/* Market tools: Board-style filter row and two densities */
+html[data-ui-tokens] #u-hub .h-market-filters{background:var(--u-panel);border:1px solid var(--u-line)}
+
+/* Desktop >=1025px: the shell keeps its sidebar down to 1025px; the slip rail column is as wide as the rail when hub.css shows it, else 0 */
+@media(min-width:1025px){
+ html[data-ui-tokens] #u-hub.scout-hub{grid-template-columns:184px minmax(0,1fr) auto}
+ html[data-ui-tokens] #u-hub .h-slip{width:300px}
+ html[data-ui-tokens] #u-hub .h-sidebar{display:flex}
+ html[data-ui-tokens] #u-hub .h-nav-mobile{display:none}
+ html[data-ui-tokens] #u-hub .h-center{padding:24px 24px 90px}
+}
+/* Tablet 641-1024px */
+@media(max-width:1024px){
+ html[data-ui-tokens] #u-hub h1{font-size:32px!important}
+ html[data-ui-tokens] #u-hub h2{font-size:23px}
+ html[data-ui-tokens] #u-hub .h-center{padding:18px 16px 120px}
+ html[data-ui-tokens] #u-hub .h-top-actions{gap:8px}
+}
+/* Phone <=640px */
+@media(max-width:640px){
+ html[data-ui-tokens] #u-hub h1{font-size:28px!important}
+ html[data-ui-tokens] #u-hub h2{font-size:21px}
+ html[data-ui-tokens] #u-hub .h-center{padding:14px 16px 135px}
+ html[data-ui-tokens] #u-hub .h-account>summary span{display:none}
+ html[data-ui-tokens] #u-hub .h-account>summary{padding:6px}
+ html[data-ui-tokens] #u-hub .h-market-filters{grid-template-columns:1fr 1fr}
+ html[data-ui-tokens] #u-hub .h-market-filters .h-search{grid-column:1/-1}
+}

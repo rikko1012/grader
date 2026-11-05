@@ -7,10 +7,16 @@ export function mount(C) {
   const V2 = R.me.features?.workspace_v2 === true;
   // SCOUT_BOARD_H2H (default off): H2H + Season columns, 7-tone cells, start countdown, Edge vs the Underdog standard break-even
   const COLS = R.me.features?.board_h2h && typeof R.me.features.board_h2h === 'object' ? R.me.features.board_h2h : null;
+  // SCOUT_UI_TOKENS (default off): classic 1Time tokens from their own sheet, a skip link and an account control. Off = nothing here runs.
+  const TOKENS = R.me.features?.ui_tokens === true;
+  if(TOKENS){document.documentElement.dataset.uiTokens='1';if(!document.querySelector('link[href="/upgrade/tokens.css"]')){const t=document.createElement('link');t.rel='stylesheet';t.href='/upgrade/tokens.css';document.head.appendChild(t);}}
   const $ = id => document.getElementById(id);
   const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
     page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false, batch:null, batchSaved:false};
+  H.pendingOpen=null;
+  H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',sort:'ev',dense:false};
+  try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
   const key = r => [r.sport,r.offer.platform,r.offer.offer_id].join('|');
   const playerKey = r => r.sport+'|'+r.player.key;
@@ -232,7 +238,25 @@ export function mount(C) {
     const current=rec(H.detail),shown=H.detailDoc?.record;
     if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;}
     H.loading=false; paintBoard(); checkAlerts(); if(V2&&H.section==='games')paintGames();
+    openPending();
     if(allowed().includes('cs2')) { await C.loadHits(); paintBoard(); pollHits(); }
+  }
+  // SCOUT_BACKGROUND_ALERTS deep link (workspace_alerts.prop_path): #scout/board?sport=..&open=<sport|platform|offer_id>
+  // opens that prop's row on the board once the boards are read. A prop that is gone or not current says so; nothing is guessed.
+  function openPending() {
+    const id=H.pendingOpen;if(!id||!isOpen())return;
+    H.pendingOpen=null;
+    const clean=location.hash.replace(/([?&])open=[^&]*(&|$)/,(m,a,b)=>b?a:'').replace(/[?&]$/,'');
+    if(clean!==location.hash){history.replaceState(null,'',location.pathname+location.search+clean);H.routeHash=location.pathname+location.hash;}
+    const r=rec(id);
+    if(!r||unavailableReason(r)||C.started(r)){C.say('This offer is no longer on the board. Refresh to see current lines.');return;}
+    Object.assign(H,{sport:allowed().includes(r.sport)?r.sport:'all',book:'all',stat:'all',game:'all',q:'',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,expanded:null,detail:null});
+    if(H.section!=='board')section('board',false);
+    syncFields();
+    const players=[...new Set(rows().map(boardPlayerKey))];
+    H.page=Math.max(0,Math.floor(players.indexOf(boardPlayerKey(r))/40));
+    openPlayers.add(boardPlayerKey(r));
+    expand(id).then(()=>{const tr=document.querySelector(`#hub-rows tr[data-record="${CSS.escape(id)}"]`);tr?.scrollIntoView({block:'center'});tr?.focus?.({preventScroll:true});});
   }
   function pollHits() {
     clearTimeout(H.hitsTimer);
@@ -544,22 +568,73 @@ export function mount(C) {
       box.innerHTML=`<p><b>${esc(SPORTS[sport])}</b> · ${d.started_at?'Capturing since '+esc(when(d.started_at)):'No comparisons captured yet'}. Candidate grades do not change published picks.</p>${d.rows?.length?`<div class="h-table-wrap"><table class="h-table"><thead><tr><th>Player / event</th><th>Market / line</th><th>Published</th><th>Candidate Over</th><th>Candidate Under</th><th>Saved</th></tr></thead><tbody>${d.rows.map(r=>`<tr><td>${esc(r.player)}<small>${esc(r.event)}</small></td><td>${esc(r.stat)} ${esc(r.line)}<small>${esc(r.period)} · ${esc(r.book)}</small></td><td>${esc(r.old_letter||'No letter')}<small>${pct(r.old_p)}</small></td>${['over','under'].map(s=>`<td>${pct(r.sides?.[s]?.p)}<small>${esc(r.sides?.[s]?.grade?.band||'No band')}</small>${gradeSteps(r.sides?.[s])}</td>`).join('')}<td>${esc(when(r.at))}<small>${esc(r.policy)}</small></td></tr>`).join('')}</tbody></table></div>`:'<p>New forecasts appear here after shadow capture is enabled and the next forecast job completes.</p>'}${d.next_before?`<button data-hub="grade-review" data-id="${esc(sport)}" data-before="${Number(d.next_before)}">Older comparisons →</button>`:''}`;
     }catch(e){if(request===H.gradeReviewRequest&&box.isConnected)box.textContent='Comparison unavailable. Select the sport again to retry.';}
   }
+  // SCOUT_MARKET_TOOLS: one Board-style filter row (league, book, side, search, minimum EV, sort) and two densities over the
+  // server's verified snapshot. Filters only hide rows; every number is the server's (gradecore/market_tools.py).
+  const mtAge=q=>num(q?.source_at)?Math.max(0,Date.now()/1000-q.source_at):null;
+  const mtFlags=(q,x)=>[x?.wide_market?'Wide market':null,q?.liquid===false?'Thin quote':null,(mtAge(q)??Infinity)>120?'Stale quote':null].filter(Boolean);
+  const mtText=q=>[q.player_id,q.stat,q.period,q.book].join(' ').toLowerCase();
+  function mtKeep(sport,q){
+    const f=H.mt;
+    return (f.league==='all'||f.league===sport)&&(f.book==='all'||q.book===f.book)&&(f.side==='all'||q.side===f.side)&&(!f.q||mtText(q).includes(f.q.toLowerCase()));
+  }
+  function marketFilters(){
+    const leagues=Object.keys(H.marketDoc?.leagues||{}),books=new Set();
+    for(const d of Object.values(H.marketDoc?.leagues||{})){for(const x of d.ev||[])books.add(x.quote?.book);for(const x of d.arbitrage||[])for(const q of x.legs||[])books.add(q.book);}
+    const opt=(v,label,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(label)}</option>`;
+    const f=H.mt;
+    return `<div class="h-market-filters" role="group" aria-label="Price filters"><label class="h-search"><span>Search</span><input id="hub-mt-q" type="search" value="${esc(f.q)}" placeholder="Player, market or book" aria-label="Search prices"></label>`
+      +`<label>League<select id="hub-mt-league">${opt('all','All leagues',f.league)}${leagues.map(l=>opt(l,SPORTS[l]||l,f.league)).join('')}</select></label>`
+      +`<label>Book<select id="hub-mt-book">${opt('all','All books',f.book)}${[...books].filter(Boolean).sort().map(b=>opt(b,b,f.book)).join('')}</select></label>`
+      +`<label>Side<select id="hub-mt-side">${opt('all','Both sides',f.side)}${opt('over','Over',f.side)}${opt('under','Under',f.side)}</select></label>`
+      +`<label>Minimum EV<select id="hub-mt-minEv">${[['0','Any positive'],['0.01','1% or more'],['0.02','2% or more'],['0.05','5% or more']].map(([v,l])=>opt(v,l,f.minEv)).join('')}</select></label>`
+      +`<label>Sort<select id="hub-mt-sort">${[['ev','Highest EV'],['chance','Highest chance'],['fresh','Newest quote']].map(([v,l])=>opt(v,l,f.sort)).join('')}</select></label>`
+      +`<button type="button" id="hub-mt-dense" data-hub="market-density" aria-pressed="${f.dense}">Compact rows</button></div>`;
+  }
   function marketHTML(){
     if(H.marketLoading)return '<p role="status">Checking current quotes…</p>';
     if(H.marketError)return `<p class="h-warning">${esc(H.marketError)} Use Refresh prices to retry.</p>`;
     if(!H.marketDoc)return '<p>Choose Refresh prices to read the latest verified market snapshot.</p>';
-    return Object.entries(H.marketDoc.leagues||{}).map(([sport,d])=>{
+    const f=H.mt,fmt=x=>num(x)?(x*100).toFixed(1)+'%':'—',odds=x=>num(Number(x))?Number(x).toFixed(2):'—';
+    const ageText=q=>{const t=mtAge(q);return t==null?'—':t<60?Math.round(t)+'s':Math.floor(t/60)+'m';};
+    const flags=(q,x)=>mtFlags(q,x).map(t=>`<span class="h-flag">${esc(t)}</span>`).join(' ');
+    const sideText=q=>(q.side==='over'?'Over':q.side==='under'?'Under':esc(q.side))+' '+esc(q.line);
+    const head=last=>`<thead><tr><th>Player / market</th><th>Book</th><th>Side / line</th><th>Odds</th><th>${last[0]}</th><th>${last[1]}</th><th>Quote age</th></tr></thead>`;
+    const table=(h,body)=>`<div class="h-table-wrap"><table class="h-table h-market-table${f.dense?' is-compact':''}">${h}<tbody>${body}</tbody></table></div>`;
+    const out=Object.entries(H.marketDoc.leagues||{}).filter(([sport])=>f.league==='all'||f.league===sport).map(([sport,d])=>{
       const stale=!d.as_of||Date.now()-Date.parse(d.as_of)>120000;
       if(d.state!=='ready'||stale)return `<article><h3>${esc(SPORTS[sport])}</h3><p class="h-warning">${stale?'Feed stale — last update '+age(d.as_of):'Market feed unavailable'}. Opportunity actions are disabled.</p></article>`;
-      const fmt=x=>num(x)?(x*100).toFixed(1)+'%':'—';
-      const quote=q=>`${esc(q.book)} · ${esc(q.player_id)} · ${esc(q.side)} ${esc(q.line)} ${esc(q.stat)} · ${esc(q.period)} · ${Number(q.decimal_odds).toFixed(2)}`;
-      return `<article><h3>${esc(SPORTS[sport])} <small>${age(d.as_of)}</small></h3><h4>Positive expected value</h4>${d.ev?.length?d.ev.map(x=>`<div class="h-alert"><b>${quote(x.quote)}</b><span>Chance ${fmt(x.p)} · EV ${fmt(x.ev)}${x.wide_market?' · Wide market':''}</span></div>`).join(''):'<p>No verified positive-EV offers right now.</p>'}<h4>Two-book price comparisons</h4>${d.arbitrage?.length?d.arbitrage.map(x=>`<div class="h-alert"><div>${x.legs.map((q,i)=>`<p>${quote(q)} · stake share ${fmt(x.stake_shares[i])}</p>`).join('')}</div><b>Quoted return ${fmt(x.quoted_return)}</b></div>`).join(''):'<p>No compatible fresh arbitrage quotes right now.</p>'}<details><summary>Why quotes were excluded</summary>${Object.entries(d.excluded||{}).map(([reason,n])=>`<p>${esc(reason)}: ${Number(n)}</p>`).join('')}</details></article>`;
-    }).join('')||'<p>No supported market feeds are available to this account.</p>';
+      const newest=x=>Math.max(0,...(x.legs||[]).map(q=>q.source_at||0));
+      const ev=(d.ev||[]).filter(x=>mtKeep(sport,x.quote||{})&&num(x.ev)&&x.ev>=Number(f.minEv)).sort((a,b)=>f.sort==='chance'?(b.p??0)-(a.p??0):f.sort==='fresh'?(b.quote?.source_at??0)-(a.quote?.source_at??0):b.ev-a.ev);
+      const arb=(d.arbitrage||[]).filter(x=>(x.legs||[]).some(q=>mtKeep(sport,q))).sort((a,b)=>f.sort==='fresh'?newest(b)-newest(a):(b.quoted_return??0)-(a.quoted_return??0));
+      const evTable=ev.length?table(head(['Chance','EV']),ev.map(x=>{const q=x.quote||{};return `<tr><td>${esc(q.player_id)}<small>${esc(q.stat)} · ${esc(q.period)}</small></td><td>${esc(q.book)}</td><td>${sideText(q)}</td><td class="h-num">${odds(q.decimal_odds)}</td><td class="h-num">${fmt(x.p)}</td><td class="h-num">${fmt(x.ev)}</td><td class="h-num">${ageText(q)} ${flags(q,x)}</td></tr>`;}).join('')):'<p>No verified positive-EV offers match these filters.</p>';
+      const arbTable=arb.length?table(head(['Stake share','Quoted return']),arb.map(x=>(x.legs||[]).map((q,i)=>`<tr${i?' class="h-arb-leg"':''}><td>${i?'':esc(q.player_id)+`<small>${esc(q.stat)} · ${esc(q.period)}</small>`}</td><td>${esc(q.book)}</td><td>${sideText(q)}</td><td class="h-num">${odds(q.decimal_odds)}</td><td class="h-num">${fmt(x.stake_shares?.[i])}</td><td class="h-num">${i?'':fmt(x.quoted_return)}</td><td class="h-num">${ageText(q)} ${flags(q)}</td></tr>`).join('')).join('')):'<p>No compatible fresh arbitrage quotes match these filters.</p>';
+      return `<article><h3>${esc(SPORTS[sport])} <small>${age(d.as_of)} · ${ev.length} of ${(d.ev||[]).length} EV · ${arb.length} of ${(d.arbitrage||[]).length} comparisons</small></h3><h4>Positive expected value</h4>${evTable}<h4>Two-book price comparisons</h4>${arbTable}<details><summary>Why quotes were excluded</summary>${Object.entries(d.excluded||{}).map(([reason,n])=>`<p>${esc(reason)}: ${Number(n)}</p>`).join('')}</details></article>`;
+    }).join('');
+    return out||'<p>No supported market feeds are available to this account.</p>';
   }
+  const MT_CSS='#u-hub .h-market-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding:12px;margin:0 0 14px;border:1px solid var(--u-line);border-radius:9px;background:var(--u-panel)}'
+    +'#u-hub .h-market-filters label{display:grid;gap:4px;flex:1 1 130px;min-width:0;font-size:10px;color:var(--u-muted)}#u-hub .h-market-filters .h-search{flex:2 1 220px}'
+    +'#u-hub .h-market-filters :is(input,select){width:100%;min-height:40px}#u-hub .h-market-filters>button{flex:0 0 auto;min-height:40px}'
+    +'#u-hub .h-market-tools .h-table-wrap{overflow-x:auto;margin:6px 0 14px}#u-hub .h-market-table{width:100%;min-width:640px;border-collapse:collapse}'
+    +'#u-hub .h-market-table .h-num{white-space:nowrap}#u-hub .h-market-table tr.h-arb-leg td{border-top:0}'
+    +'#u-hub .h-market-table.is-compact :is(td,th){padding-top:4px;padding-bottom:4px;font-size:12px}#u-hub .h-market-table.is-compact small{display:inline;margin-left:6px}'
+    +'#u-hub .h-flag{display:inline-block;margin-left:4px;padding:1px 6px;border:1px solid #8a704b;border-radius:4px;font-size:10px;color:#edb968;white-space:nowrap}';
+  function paintMarketResults(){const box=$('hub-market-results');if(box)box.innerHTML=marketHTML();}
   function paintMarkets(){
     if(!R.me.features?.market_tools||H.section!=='tools')return;
-    if(!$('hub-market-results'))$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2>EV &amp; arbitrage</h2><p>Exact lines, periods and settlement rules. </p></div><button data-hub="refresh-markets">Refresh prices</button></div><div id="hub-market-results" aria-live="polite"></div></section>`);
-    $('hub-market-results').innerHTML=marketHTML();
+    if(!$('hub-market-results')){
+      // flag-on styles travel with the flag-on markup, so hub.css keeps its bytes
+      if(!$('hub-mt-style'))document.head.insertAdjacentHTML('beforeend',`<style id="hub-mt-style">${MT_CSS}</style>`);
+      $('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2>EV &amp; arbitrage</h2><p>Exact lines, periods and settlement rules. </p></div><button data-hub="refresh-markets">Refresh prices</button></div><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
+      const box=$('hub-market-filters');
+      const read=e=>{const id=(e.target.id||'').replace('hub-mt-','');if(!(id in H.mt)||id==='dense')return;H.mt[id]=e.target.value;paintMarketResults();};
+      box.addEventListener('input',e=>{if(e.target.id==='hub-mt-q')read(e);});
+      box.addEventListener('change',e=>{if(e.target.id!=='hub-mt-q')read(e);});
+    }
+    const box=$('hub-market-filters'),had=box.contains(document.activeElement)?document.activeElement.id:null;
+    box.innerHTML=H.marketDoc&&!H.marketLoading?marketFilters():'';
+    if(had)$(had)?.focus({preventScroll:true});
+    paintMarketResults();
   }
   function installV2() {
     if(!V2)return;
@@ -595,6 +670,8 @@ export function mount(C) {
       H.routeHash=location.pathname+location.hash;
       H.sport=modern?(new URLSearchParams(modern[2]||'').get('sport')||H.sport):scout?(new URLSearchParams(scout[2]||'').get('sport')||H.sport):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
       if(!allowed().includes(H.sport))H.sport='all';
+      const deep=R.me.features?.background_alerts?new URLSearchParams((modern?modern[2]:scout?scout[2]:'')||'').get('open'):null;
+      if(deep&&deep.length<=300)H.pendingOpen=deep;
       const routeBook=location.hash.split('/')[1];
       if(csBoard&&['all','prizepicks','underdog'].includes(routeBook))H.book=routeBook;
       H.stat='all';H.game='all';H.page=0;
@@ -630,6 +707,8 @@ export function mount(C) {
     refresh(){H.detailSeq++;H.expanded=null;H.detail=null;load(true);}, tray(){section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
     'save-view'(){openSave('view');}, 'save-alert'(){openSave('alert');}, 'save-retry':savePreferences,
     'grade-review'(id,el){showGradeReview(id,el?.dataset.before);},
+    skip(){$('hub-title').focus();},
+    'market-density'(){H.mt.dense=!H.mt.dense;try{localStorage.setItem('scout-market-density',H.mt.dense?'compact':'comfortable');}catch(e){}$('hub-mt-dense')?.setAttribute('aria-pressed',String(H.mt.dense));paintMarketResults();},
     async 'refresh-markets'(){
       H.marketLoading=true;H.marketError=null;paintMarkets();
       try{H.marketDoc=await api('market-tools');}catch(e){H.marketError=e.message||'Prices could not be loaded.';}
@@ -661,6 +740,16 @@ export function mount(C) {
   $('hub-board-section').insertAdjacentHTML('beforebegin','<nav class="h-nav-mobile" aria-label="Research sections"><button data-hub="section" data-id="board">Props</button><button data-hub="section" data-id="studio">Slip Studio</button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Results</button><button data-hub="section" data-id="alerts">Alerts</button></nav>');
   installV2();
   installCols();
+  if(TOKENS){
+    // Skip link first in the hub (the classic page's own is inert under it) and one named account control in the top bar.
+    $('u-hub').insertAdjacentHTML('afterbegin','<a class="h-skip" href="#hub-title" data-hub="skip" style="position:fixed;top:-80px;left:16px">Skip to content</a>');
+    $('hub-title').tabIndex=-1;
+    const who=String(R.me.name||'').trim(),initial=(who[0]||'A').toUpperCase();
+    document.querySelector('#u-hub .h-top-actions').insertAdjacentHTML('afterbegin',`<details class="h-account"><summary aria-label="${esc('Account'+(who?': '+who:''))}"><i aria-hidden="true">${esc(initial)}</i><span>${esc(who||'Account')}</span></summary><nav aria-label="Account"><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="alerts">Line alerts</button><button data-hub="close">Classic board</button><a href="/auth/logout">Sign out</a></nav></details>`);
+    const acct=document.querySelector('#u-hub .h-account');
+    acct.addEventListener('click',e=>{if(e.target.closest('nav'))acct.open=false;});
+    acct.addEventListener('keydown',e=>{if(e.key==='Escape'&&acct.open){acct.open=false;acct.querySelector('summary').focus();}});
+  }
   const entryHost=document.querySelector('.workspace-tools')||document.querySelector('.sw-tabs')||document.querySelector('.ot-lol .bar')||document.querySelector('body header');
   if(entryHost) entryHost.appendChild(entry); else document.body.prepend(entry);
   $('hub-save-dialog').addEventListener('close',()=>{

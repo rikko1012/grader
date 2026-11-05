@@ -939,6 +939,7 @@ def get_me(h, srv, q, member, scratch, name):
                                      "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
                                      "background_alerts": bool(workspace_alerts.configured()),
                                      "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK),
+                                     "ui_tokens": os.getenv('SCOUT_UI_TOKENS', '').strip()=='1',
                                      **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {}),
                                      **({"board_h2h": _board_columns()} if workspace_h2h.board_enabled() else {})}})
 

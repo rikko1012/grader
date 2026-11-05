@@ -314,3 +314,67 @@ def test_hits_never_make_a_member_wait_and_stop_at_the_budget(env, monkeypatch):
         workspace_api._HITS_DOC["at"] = 0
         assert get(env.base, "/api/upgrade/hits", "good-u1")[0] == 200
         assert time.time() - t0 < 1
+
+
+# ---------------------------------------------------------------------------------------------------------------- SCOUT_UI_TOKENS
+
+TOKENS_CSS = b"/upgrade/tokens.css"
+
+
+def test_ui_tokens_off_leaves_the_upgraded_pages_and_hub_css_as_they_were(env, monkeypatch):
+    monkeypatch.setenv("SCOUT_UPGRADE", "1")
+    monkeypatch.delenv("SCOUT_UI_TOKENS", raising=False)
+    before = get(env.base, "/no/such/route", "good-u1")
+    for path in ("/", "/lol"):
+        st, body, _ = get(env.base, path, "good-u1")
+        assert st == 200 and TOKENS_CSS not in body and b"data-ui-tokens" not in body
+        assert b"['/upgrade/upgrade.css','/upgrade/hub.css']" in body and b"html.scout-boot{background:#101215}" in body
+    st, body, _ = get(env.base, "/upgrade/hub.css", "good-u1")
+    assert st == 200 and body == (ROOT / "web" / "upgrade-hub.css").read_bytes()
+    assert get(env.base, "/upgrade/tokens.css", "good-u1")[0] == before[0] == 404
+    assert json.loads(get(env.base, "/api/upgrade/me", "good-u1")[1])["features"]["ui_tokens"] is False
+
+
+def test_ui_tokens_on_adds_only_the_token_sheet_and_its_mark(env, monkeypatch):
+    monkeypatch.setenv("SCOUT_UPGRADE", "1")
+    monkeypatch.delenv("SCOUT_UI_TOKENS", raising=False)
+    off = {p: get(env.base, p, "good-u1")[1] for p in ("/", "/lol")}
+    monkeypatch.setenv("SCOUT_UI_TOKENS", "1")
+    for path, name in (("/", "cs2"), ("/lol", "lol")):
+        st, body, _ = get(env.base, path, "good-u1")
+        assert st == 200 and TOKENS_CSS in body and f'data-upgrade="{name}" data-ui-tokens="1" '.encode() in body
+        undo = (body.replace(b",'/upgrade/tokens.css']", b"]", 1).replace(b' data-ui-tokens="1"', b"", 1)
+                .replace(b"html.scout-boot{background:#080808}", b"html.scout-boot{background:#101215}", 1))
+        assert undo == off[path], path                  # the three flag-on changes and nothing else
+    st, body, hdr = get(env.base, "/upgrade/tokens.css", "good-u1")
+    assert st == 200 and hdr["Content-Type"].startswith("text/css") and body == (ROOT / "web" / "upgrade-tokens.css").read_bytes()
+    assert get(env.base, "/upgrade/tokens.css")[0] == 404                       # signed out: the unknown-route answer
+    assert get(env.base, "/upgrade/hub.css", "good-u1")[1] == (ROOT / "web" / "upgrade-hub.css").read_bytes()
+    assert json.loads(get(env.base, "/api/upgrade/me", "good-u1")[1])["features"]["ui_tokens"] is True
+    monkeypatch.setenv("SCOUT_UPGRADE", "off")                                   # the upgrade gate still decides first
+    assert get(env.base, "/upgrade/tokens.css", "good-u1")[0] == 404
+
+
+def test_ui_token_sheet_is_the_classic_palette_scoped_with_three_breakpoints():
+    import re
+    css = (ROOT / "web" / "upgrade-tokens.css").read_text(encoding="utf-8")
+    classic = (ROOT / "web" / "scout-ui.css").read_text(encoding="utf-8")
+    for token in ("#f5c842", "#080808", "#101010", "#171717", "#292929", "#454545", "#f2f1eb", "#b4b3aa", "#96968e"):
+        assert token in css and token in classic, token        # the existing 1Time tokens, no new palette
+    for font in ("'Bebas Neue'", "'Outfit'", "'DM Mono'"):
+        assert font in css
+    assert "Inter" not in css and "#77adff" not in css
+    assert sorted(set(re.findall(r"@media\(([^)]*)\)", css))) == ["max-width:1024px", "max-width:640px", "min-width:1025px"]
+    body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    def top_level(block):                                       # split on commas outside :is(...)
+        out, depth, cur = [], 0, ""
+        for ch in block:
+            depth += ch == "(" or -(ch == ")")
+            if ch == "," and depth == 0:
+                out.append(cur); cur = ""
+            else:
+                cur += ch
+        return out + [cur]
+    selectors = [s.strip() for block in re.findall(r"([^{}]+)\{[^{}]*\}", re.sub(r"@media\([^)]*\)\{", "", body)) for s in top_level(block)]
+    assert selectors and all(s.startswith("html[data-ui-tokens]") for s in selectors if s), [s for s in selectors if not s.startswith("html[data-ui-tokens]")]
+    assert "min-height:40px" in css and ".h-skip" in css and ".h-account" in css

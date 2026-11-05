@@ -107,13 +107,29 @@ def match(r,f,watch,rows,now,differences=None):
     except (KeyError,TypeError,ValueError):return False
 
 
-def deliver(destination,title,content,session=None):
+ALERTS_PATH='/?#/alerts'
+
+
+def prop_path(r):
+    """The deep link from an alert to the prop it names: the hub opens that sport's board with the row expanded
+    (web/upgrade-hub.js openPending). The key is the hub's own row key, sport|platform|offer_id, percent-encoded.
+    Anything missing -> the alerts list, never a guessed prop."""
+    from urllib.parse import quote
+    try:
+        sport,book,offer=str(r['sport']),str(r['offer']['platform']),str(r['offer']['offer_id'])
+    except (KeyError,TypeError):return ALERTS_PATH
+    if not (sport and book and offer):return ALERTS_PATH
+    return '/?#scout/board?sport='+quote(sport,safe='')+'&open='+quote(sport+'|'+book+'|'+offer,safe='')
+
+
+def deliver(destination,title,content,session=None,rest_path=ALERTS_PATH):
     import requests
     sender=session or requests
+    path=rest_path if isinstance(rest_path,str) and rest_path.startswith('/?#') and len(rest_path)<=400 else ALERTS_PATH
     response=sender.post('https://api.whop.com/api/v1/notifications',timeout=10,allow_redirects=False,
         headers={'Authorization':'Bearer '+os.environ['WHOP_API_KEY']},json={
             'experience_id':os.environ['WHOP_NOTIFICATION_EXPERIENCE_ID'],'user_ids':[destination],
-            'title':title[:100],'content':content[:500],'rest_path':'/?#/alerts'})
+            'title':title[:100],'content':content[:500],'rest_path':path})
     # Never log the response or token. An uncertain result is not blindly resent.
     if response.status_code==200 and response.json().get('success') is True:return 'queued'
     return 'delivery_refused' if response.status_code in (401,403,404) else 'delivery_failed'
@@ -163,7 +179,7 @@ def tick(root,state_for,rows,access,send=deliver,now=None,after=''):
                 label,r=notices[0]
                 more=len(notices)-1                          # audit 2026-11-04: every new match is marked seen, so the message names them all
                 text=f"{label}: {r['player']['name']} · {r['offer']['line']} {r['market']['stat_label']} · {r['offer']['platform']}"+(f", plus {more} more matching line{'s' if more>1 else ''}" if more else '')+". Recheck the current line in Scout."
-                try:status=send(sub['destination'],'Scout · '+str(label),text)
+                try:status=send(sub['destination'],'Scout · '+str(label),text,rest_path=prop_path(r))
                 except Exception:status='delivery_unknown'
                 db.execute('UPDATE subscriptions SET status=? WHERE member=?',(status,m))
                 db.commit()
