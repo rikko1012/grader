@@ -327,7 +327,7 @@ def problems(legs, platform, entry_type=None, same_match=False):
 # ---------------------------------------------------------------------------------------------------------------- search
 
 LINE_RULES = ("no_goblins", "one_goblin", "standard", "all")
-LINE_RULE_DEFAULT = "no_goblins"
+LINE_RULE_DEFAULT = "no_goblins"      # the member routes' default (workspace_api._gen_opts / post_slip_advice); the library default stays "all"
 
 
 def line_ok(l, lines):
@@ -441,11 +441,12 @@ def why_line(legs, pool_size, first, reused):
 
 def build(legs, opts):
     """One batch from a ranked pool. opts: {platform, entry_type, count, size, mix: any|mixed|single, same_match: bool,
-    no_repeat: bool, lines: no_goblins|one_goblin|standard|all (missing = no_goblins)}. -> {slips, shortage, search}."""
+    no_repeat: bool, lines: no_goblins|one_goblin|standard|all (missing = all, so the frozen research scripts reproduce;
+    the member routes always pass the member's rule)}. -> {slips, shortage, search}."""
     platform, et = opts["platform"], opts.get("entry_type")
     size, count = int(opts["size"]), int(opts["count"])
     mix, same_match, no_repeat = opts.get("mix") or "any", bool(opts.get("same_match")), bool(opts.get("no_repeat"))
-    lines = opts.get("lines") or LINE_RULE_DEFAULT
+    lines = opts.get("lines") or "all"
     cap = max_goblins(lines)
     cands = [l for l in legs if l["book"] == platform and line_ok(l, lines)]
     used_prop, used_player, taken, slips, nodes, exact = {}, {}, set(), [], 0, True
@@ -499,11 +500,12 @@ def _brief(l):
             "band": band_text(l["band"], l["sport"], l["line_type"]) if not l["research"] else "Research estimate"}
 
 
-def advise(slip, legs_by_key, ranked, entry_type=None, lines=LINE_RULE_DEFAULT):
+def advise(slip, legs_by_key, ranked, entry_type=None, lines="all"):
     """slip: [{sport, book, row_id, side, player, team, event, stat, period}] in the member's order (never reordered).
     legs_by_key: every pool leg by key (all platforms); ranked: pool legs best first. -> [{key, notes, in_pool, rank?, band?,
     replacement?}] one per leg, same order. lines: the member's goblin rule for what Scout suggests; a leg the member chose is never
-    flagged for its line type."""
+    flagged for its line type. Each slip leg may carry line_type (the route reads it from the board), so a goblin the member added
+    that is not in the pool still counts toward "at most 1 goblin"."""
     out = []
     who = lambda x: x.get("player_key") or x.get("player")
     for i, s in enumerate(slip):

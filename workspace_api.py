@@ -162,6 +162,8 @@ def reset():
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
     _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={})
     _SLIP_POOL.clear()
+    _BOOK_LINES_GOOD.clear()
+    _LINE_TYPE_CACHE.clear()
     for d in _HITS.values():
         d.clear()
     for name in ("workspace_lol", "workspace_sports", "workspace_genie", "workspace_books"):
@@ -1046,42 +1048,57 @@ def get_book_board(h, srv, q, member, scratch, name):
 BOOK_LINES_TTL = 30
 
 
-def _book_lines(srv):
-    """{as_of, books: {pid: {sport: lines}}} for every enabled extra book on every sport it lists, counted from the same shared
-    book-board build members read (workspace_books.board, single flight, TTL 30 s), so this adds no provider request. A stale,
-    failing or backed-off feed has no records, so it counts 0 and the book is hidden, never labelled."""
+BOOK_LINES_KEEP_S = 600                               # a last good count stands in for a blipped feed this long, then it is left out
+_BOOK_LINES_GOOD = {}                                 # (pid, sport) -> (count, epoch) - the last count read from a healthy feed
+
+
+def _book_lines(srv, sports):
+    """{as_of, books: {pid: {sport: open lines}}} for every enabled extra book on each of these sports it lists, counted from the same
+    shared book-board build members read (workspace_books.board, single flight, TTL 30 s; the count is noted beside the build, so
+    nothing is parsed twice), so this adds no provider request. Only lines whose match has not started count (the board's own rule).
+    A failed build or an unhealthy feed is unknown, never 0 (transient-failure rule): the last good count stands in for up to
+    BOOK_LINES_KEEP_S, otherwise that book and sport are left out and the hub keeps what it had. One shared build per sport set."""
     import book_providers
     import workspace_books
 
     def compute():
-        out = {}
+        out, now = {}, time.time()
         for pid in book_providers.enabled_ids():
             for sport in book_providers.providers()[pid]["sports"]:
+                if sport not in sports:
+                    continue
                 try:
-                    st, body = workspace_books.board(srv, sport, pid)
-                    n = len(json.loads(body).get("records") or []) if st == 200 else 0
+                    n = workspace_books.open_lines(srv, sport, pid, now)
                 except Exception:                          # noqa: BLE001 - one book failing never hides the others
-                    n = 0
-                out.setdefault(pid, {})[sport] = n
+                    n = None
+                if n is not None:
+                    _BOOK_LINES_GOOD[(pid, sport)] = (n, now)
+                else:
+                    g = _BOOK_LINES_GOOD.get((pid, sport))
+                    n = g[0] if g and now - g[1] <= BOOK_LINES_KEEP_S else None
+                if n is not None:
+                    out.setdefault(pid, {})[sport] = n
         return 200, json.dumps({"as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"), "books": out}, separators=(",", ":")).encode()
-    return srv.shared(("ws_book_lines",), compute, ttl=BOOK_LINES_TTL)
+    return srv.shared(("ws_book_lines", tuple(sports)), compute, ttl=BOOK_LINES_TTL)
 
 
 def get_book_lines(h, srv, q, member, scratch, name):
     """Which extra books have lines on which of this member's sports right now: the hub's book toggle shows a book on a sport tab
-    only when it has lines there (owner 2026-11-05: no FanDuel / BetRivers on the CS2 or LoL tab). One shared build for everyone,
-    cut to the member's sports; books and sports with no lines are left out. Every provider off = the unknown-route answer."""
+    only when it has lines there (owner 2026-11-05: no FanDuel / BetRivers on the CS2 or LoL tab). Built only for the sports this
+    member sees (one shared build per sport set). A count of 0 is a real answer from a healthy feed; a book or sport left out is
+    unknown right now. Every provider off = the unknown-route answer."""
     import book_providers
     if not book_providers.enabled_ids():
         return h.send(404, {"error": "not found"})
     book_providers.start(data_dir())
+    allowed = access(h, srv, q)
+    sports = tuple(s for s in SPORTS if allowed.get(s))
     try:
-        st, body = _book_lines(srv)
+        st, body = _book_lines(srv, sports)
         doc = json.loads(body)
     except Exception:
         return h.send(503, {"error": "Book lines unavailable"})
-    allowed = access(h, srv, q)
-    books = {pid: {s: n for s, n in v.items() if allowed.get(s) and isinstance(n, int) and n > 0} for pid, v in (doc.get("books") or {}).items()}
+    books = {pid: {s: n for s, n in v.items() if s in sports and isinstance(n, int) and n >= 0} for pid, v in (doc.get("books") or {}).items()}
     return h.send(200, {"as_of": doc.get("as_of"), "books": {pid: v for pid, v in books.items() if v}})
 
 
@@ -1550,6 +1567,33 @@ def _advice_legs(d):
     return legs
 
 
+_LINE_TYPES = ("standard", "goblin", "demon")
+_LINE_TYPE_CACHE = {}
+
+
+def _line_types(srv, sport):
+    """{(platform, offer_id): line_type} from the sport's shared board, rebuilt once per board build (same parse workspace_books
+    reads). The adder needs it for slip legs outside Scout's pool, so a goblin the member added still counts toward "at most 1 goblin"."""
+    try:
+        import workspace_books
+        recs, s = workspace_books.records(srv, sport)
+    except Exception:                                  # noqa: BLE001 - a board blip falls back to the leg's own line_type
+        return {}
+    if recs is None:
+        return {}
+    c = _LINE_TYPE_CACHE.get(sport)
+    if c and c[0] is recs:
+        return c[1]
+    out = {}
+    for r in recs:
+        o, m = r.get("offer") or {}, r.get("market") or {}
+        lt = m.get("line_type")
+        if lt in _LINE_TYPES and o.get("platform") and o.get("offer_id"):
+            out[(o["platform"], str(o["offer_id"]))] = lt
+    _LINE_TYPE_CACHE[sport] = (recs, out)
+    return out
+
+
 def post_slip_advice(h, srv, q, member, scratch, name, n):
     """The adder: per leg of the member's slip (in its order), same-player / same-match / conflict facts, the band record, and the
     best replacement on the same platform that fits the other legs. Reads the shared pools only; never changes the slip."""
@@ -1567,8 +1611,11 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
             pool_legs += [x for x in got[0] if not x["research"] and ((sq._ts(x["start"]) or now) - now).total_seconds() >= sq.LEAD_S]
     pool_legs = _ranked(pool_legs)
     by_key = {l["key"]: l for l in pool_legs}
+    types = {s: _line_types(srv, s) for s in {l["sport"] for l in legs}}
     slip = [{"id": l["id"], "sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "player": l.get("player"),
-             "player_key": l.get("player_key"), "team": l.get("team"), "event": l.get("event"), "stat": l.get("stat"), "period": l.get("period")} for l in legs]
+             "player_key": l.get("player_key"), "team": l.get("team"), "event": l.get("event"), "stat": l.get("stat"), "period": l.get("period"),
+             "line_type": types[l["sport"]].get((l["book"], l["row_id"])) or (l.get("line_type") if l.get("line_type") in _LINE_TYPES else "standard")}
+            for l in legs]
     et = d.get("entry_types") if isinstance(d.get("entry_types"), dict) else {}
     lines = d.get("lines") if d.get("lines") is not None else sq.LINE_RULE_DEFAULT
     if lines not in sq.LINE_RULES:

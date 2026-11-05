@@ -239,13 +239,14 @@ def test_market_tools_ev_and_arbitrage_sheet(browser, env, monkeypatch, size):
         assert arb_heads == ['Pick', 'Bet 1', 'Bet 2', 'Either way you get', 'Checked']
         text = p.locator('#hub-market-results').inner_text()
         assert '+$6.40' in text and '+$5.00' in text and '+$1.40' in text            # expected per $100, best first
-        assert 'Alpha +110' in text and '(2.10)' in text                              # American price with the decimal beside it
+        assert 'Alpha +110' in text and '(2.10)' not in text                          # American price only: no unexplained decimal
         assert '50.0%' in text and '47.6%' in text                                    # fair chance vs the chance the price needs
         assert '$48.67' in text and '$51.33' in text and '$101.24 back' in text and '(+$1.24)' in text
-        assert 'This book’s prices carry a big cut' in text
+        assert 'big cut' not in text and 'not a sure win' not in text and 'Prices move fast' not in text   # no hedge lines
         assert ('Gamma pays -111 on Over 24.5, which needs a 52.6% chance to break even. The fair chance is 56.0%, so over many bets '
                 'like this you would average about +$6.40 per $100.') in text                  # the worked example uses the best row
-        assert 'Beta Under 24.5 +105 (2.05)' in text and 'Put $48.67 on Over at +108 and $51.33 on Under at +105' in text
+        assert 'Beta Under 24.5 +105' in text and '(2.05)' not in text
+        assert ('Put $48.67 on Over at Alpha +108 and $51.33 on Under at Beta +105: either result pays about $101.24 for $100.00 staked.') in text
         for word in JARGON:
             assert word not in text, word
         assert p.locator('#hub-market-results .h-flag, details.h-mt-flagged, details.h-mt-owner').count() == 0
@@ -253,7 +254,10 @@ def test_market_tools_ev_and_arbitrage_sheet(browser, env, monkeypatch, size):
         # the stake box only scales the server's numbers
         p.locator('#hub-mt-stake').fill('250')
         p.wait_for_function("document.querySelector('#hub-market-results').innerText.includes('$253.10 back')")
-        assert '$121.6' in p.locator('#hub-market-results').inner_text() and p.evaluate("document.activeElement.id") == 'hub-mt-stake'
+        t250 = p.locator('#hub-market-results').inner_text()
+        assert '$121.6' in t250 and p.evaluate("document.activeElement.id") == 'hub-mt-stake'
+        assert 'for $250.00 staked' in t250 and 'pays about $253.10' in t250 and 'for $100.00 staked' not in t250   # the example follows the box
+        assert t250.count('$121.67') == 2 and t250.count('$128.32') == 2
         # filters: Search, Sport and Book on the bar; the rest under More filters
         p.locator('#hub-mt-book').select_option('gamma')
         assert 'Nfl Back' in p.locator('#hub-market-results').inner_text() and 'Nba Guard' not in p.locator('#hub-market-results').inner_text()
@@ -266,7 +270,11 @@ def test_market_tools_ev_and_arbitrage_sheet(browser, env, monkeypatch, size):
         p.locator('#hub-mt-fresh').select_option('120')
         assert 'Nba Wing' not in p.locator('#hub-market-results').inner_text() and 'Nba Guard' in p.locator('#hub-market-results').inner_text()
         p.locator('#hub-mt-fresh').select_option('all')
-        assert p.locator('#hub-mt-sort option').all_text_contents() == ['Best value', 'Newest check']
+        assert p.locator('#hub-mt-sort option').all_text_contents() == ['Best value', 'Highest fair chance', 'Newest check']
+        p.locator('#hub-mt-sort').select_option('chance')
+        names = p.locator('#hub-market-results .h-pc-ev .h-pc-row:not(.h-pc-head) .h-pc-pick b').all_text_contents()
+        assert names == ['Nfl Back', 'Nba Wing', 'Nba Guard']                    # 56%, 52%, 50%
+        p.locator('#hub-mt-sort').select_option('ev')
         p.locator('#hub-mt-league').select_option('nfl')
         assert 'Nba Guard' not in p.locator('#hub-market-results').inner_text()
         assert p.locator('#hub-mt-book option').evaluate_all('os=>os.map(o=>o.value)') == ['all', 'gamma']   # books follow the sport
@@ -286,12 +294,71 @@ def test_market_tools_ev_and_arbitrage_sheet(browser, env, monkeypatch, size):
             chip = p.locator('#hub-market-results .h-pc-ev .h-pc-row:not(.h-pc-head) .h-pc-chip').first.bounding_box()
             assert chip and chip['x'] + chip['width'] <= size['width']
             assert 'Fair 50.0% · needs 47.6%' in p.locator('#hub-market-results').inner_text()
+        # 'More filters' and 'How these numbers are worked out' show a chevron, so they read as things to tap
+        marks = p.locator('#hub-market-tools summary').evaluate_all(
+            "ss=>ss.filter(s=>s.getBoundingClientRect().height>0).map(s=>[s.textContent.trim(),getComputedStyle(s,'::after').borderRightStyle,s.getBoundingClientRect().height])")
+        assert any(t.startswith('More filters') for t, _, _ in marks) and any(t.startswith('How these numbers') for t, _, _ in marks)
+        assert all(b == 'solid' and h >= 40 for _, b, h in marks), marks
         css = p.evaluate("document.getElementById('hub-mt-style').textContent")
         assert '#edb968' not in css and '#8a704b' not in css and 'min-width:720px' not in css
         no_h_scroll(p)
         assert not p.errors
     finally:
         c.close()
+
+
+def _aged(doc, ev_age=None, arb_age=None):
+    from datetime import datetime, timezone
+    iso = lambda a: datetime.fromtimestamp(time.time() - a, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    for d in doc['sports'].values():
+        for r in d['ev']:
+            if ev_age is not None:
+                r.update(age_s=ev_age, seen_at=iso(ev_age))
+        for a in d['arbitrage']:
+            for l in a['legs']:
+                if arb_age is not None:
+                    l.update(age_s=arb_age, seen_at=iso(arb_age))
+    return doc
+
+
+def test_market_tools_drop_rows_past_the_servers_age_limits(ctx, env, monkeypatch):
+    """Review 2026-11-05: a sheet left open kept showing a both-sides pair 25 min old as 'win either way'. The page applies the
+    server's own limits on every draw (both prices within arb_max_age_s, a price within ev_stale_s)."""
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS', '1')
+    p = mt_page(ctx, env, _aged(market_doc(age_built=1500), arb_age=1500))
+    text = p.locator('#hub-market-results').inner_text()
+    assert 'Bet both sides at two books' not in text and 'Nba Center' not in text and 'either result pays' not in text
+    assert 'Prices better than the fair chance' in text and market_rows(p) == 3          # the single bets are 25 min old: still in
+    p.unroute('**/api/upgrade/market-tools')
+    p.route('**/api/upgrade/market-tools', lambda r: r.fulfill(json=_aged(market_doc(age_built=2000), ev_age=2000, arb_age=2000)))
+    p.locator('[data-hub="refresh-markets"]').click()
+    p.wait_for_function("!document.querySelector('#hub-market-results').innerText.includes('Prices better than the fair chance')")
+    assert market_rows(p) == 0 and 'Nothing worth acting on right now' in p.locator('#hub-market-results').inner_text()
+    # a fresh pair that ages on screen drops off on the next redraw (the page redraws once a minute), with no new request
+    p.unroute('**/api/upgrade/market-tools')
+    p.route('**/api/upgrade/market-tools', lambda r: r.fulfill(json=market_doc()))
+    p.locator('[data-hub="refresh-markets"]').click()
+    p.wait_for_function("document.querySelector('#hub-market-results').innerText.includes('Bet both sides at two books')")
+    p.evaluate("""() => { const real = Date.now; Date.now = () => real() + 400000; }""")         # 6 min 40 s later
+    p.evaluate("""() => { document.getElementById('hub-market-filters').querySelector('#hub-mt-league').dispatchEvent(new Event('change', {bubbles: true})); }""")
+    p.wait_for_function("!document.querySelector('#hub-market-results').innerText.includes('Bet both sides at two books')")
+    assert not p.errors
+
+
+def test_market_tools_member_sees_prediction_market_rows(ctx, env, monkeypatch):
+    """Review 2026-11-05: Kalshi / Polymarket price rows stay in the member view (plainly labelled); pick'em rows do not."""
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS', '1')
+    doc = market_doc()
+    k = dict(doc['sports']['nba']['ev'][0], book='kalshi', book_label='Kalshi', kind='prediction', player='Nba Forward')
+    doc['sports']['nba']['ev'].append(k)
+    doc['books'].append({'id': 'kalshi', 'label': 'Kalshi'})
+    p = mt_page(ctx, env, doc)
+    row = p.locator('#hub-market-results .h-pc-ev .h-pc-row', has_text='Nba Forward')
+    assert row.count() == 1 and 'Kalshi' in row.inner_text() and 'Prediction market' in row.inner_text()
+    assert 'kalshi' in p.locator('#hub-mt-book option').evaluate_all('os=>os.map(o=>o.value)')
+    assert not p.errors
 
 
 @pytest.mark.parametrize('size', [DESK, PHONE])

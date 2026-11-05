@@ -542,6 +542,9 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
+    # without its goblin line the fixture pool (6 legs, 3 matches) builds 7 distinct pairs; eight need Any lines. The No goblins
+    # default is covered by test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed.
+    p.locator('#hub-generation-lines').select_option('all')
     p.locator('#hub-generate').click()
     p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
     state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 8)
@@ -921,6 +924,31 @@ def test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed(ctx, env, browse
     p.locator('#hub-generation-lines').select_option('no_goblins')
     saved_state(p, lambda d: ((d.get('prefs') or {}).get('researchHub') or {}).get('slipLines') == 'no_goblins')
     no_h_scroll(p)
+    assert not p.errors
+
+
+@pytest.mark.parametrize('old,shown', [('all', 'no_goblins'), ('standard', 'standard')])
+def test_a_batch_saved_before_the_goblin_rule_does_not_turn_goblins_back_on(ctx, env, old, shown):
+    """Review 2026-11-05: members who generated before the Goblins control have studio.options.lines == 'all' saved (the old Lines
+    select's first option and default) and no prefs slipLines. That is not a choice to allow goblins: the control shows No goblins
+    and Generate asks for lines=no_goblins. The old 'Standard lines only' was a deliberate opt-out and carries over."""
+    p = hub(ctx, env)
+    p.evaluate("""async (old) => {
+      const s=await (await fetch('/api/upgrade/state')).json();
+      const r=await fetch('/api/upgrade/state',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({rev:s.rev,studio:{version:1,created_at:new Date().toISOString(),options:{lines:old,noRepeatProps:false},slips:[]}})});
+      if(!r.ok)throw Error('Fixture studio write failed');
+    }""", old)
+    st = saved_state(p, lambda d: ((d.get('studio') or {}).get('options') or {}).get('lines') == old)
+    assert not ((st.get('prefs') or {}).get('researchHub') or {}).get('slipLines')
+    with p.expect_response(lambda r: r.url.endswith('/api/upgrade/state') and r.request.method == 'GET', timeout=30000):
+        p.reload()
+    _studio_build(p)
+    p.wait_for_timeout(800)                                   # the saved state has been read and applied to the control
+    p.wait_for_function("document.getElementById('hub-generation-lines').value===%r" % shown, timeout=15000)
+    with p.expect_request(lambda r: '/api/upgrade/generate?' in r.url) as req:
+        p.locator('#hub-generate').click()
+    assert f'lines={shown}' in req.value.url
     assert not p.errors
 
 

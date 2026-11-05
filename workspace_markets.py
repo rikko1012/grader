@@ -19,9 +19,10 @@ Arbitrage sheet. Best Over and best Under from two different books at the identi
   pick'em pick (not a standalone bet) is flagged and the pair is left out of the sheet; flagged pairs are listed with reasons.
 
 Member view (owner 2026-11-05, "Price check"): every row also carries plain context the page shows as is - the chance the price
-needs (1 / odds), the American price, the average result per $100, each leg's stake per $100 and the either-way return per $100.
-Members see sportsbook rows only: flagged pairs (stale / prediction-market / pick'em legs), exclusion counts, pick'em multiplier
-rows and the formulas stay in the owner's view. Exclusions are also counted per line (excluded_lines), so they never exceed
+needs to break even ((1 - push chance) / odds, so a whole-number line priced with Scout's chance never reads "fair below needed"
+next to a positive result), the American price, the average result per $100, each leg's stake per $100 and the either-way return
+per $100. Members see sportsbook and prediction-market (Kalshi, Polymarket) price rows, as before; pick'em multiplier rows,
+flagged pairs (stale / prediction-market / pick'em legs), exclusion counts and the formulas stay in the owner's view. Exclusions are also counted per line (excluded_lines), so they never exceed
 markets_checked, and sections_possible says whether a sport's prices can produce each section at all.
 
 For 700 members: one build every TTL s for everyone (srv.shared); each member's answer is that build cut to the sports they see."""
@@ -252,7 +253,7 @@ def sheet(srv, sport, now):
                                odds=round(price, 3), p_cal=round(p, 4), p_push=round(pp, 4), p_source=p_source, ev=round(value, 4),
                                width=own, consensus_width=round(cwidth, 4) if cwidth is not None else None,
                                age_s=round(age, 1), seen_at=wb._iso(q["seen"]), source=q["source"], flags=flags,
-                               needs=round(mt.implied(price), 4), american=american(price), per_100=round(value * 100, 2),
+                               needs=round(mt.implied(price) * (1 - pp), 4), american=american(price), per_100=round(value * 100, 2),
                                chance_from=chance_from))
         if len(ev) == n_ev and here:                        # one reason per line, so the line counts add up to markets_checked
             why = max(here.items(), key=lambda kv: kv[1])[0]
@@ -362,14 +363,14 @@ MEMBER_HIDDEN = ("flagged", "excluded", "excluded_lines")
 
 def for_member(body, allowed, owner=False):
     """The shared build cut to the sports this member sees (a dict), with the book list cut to those sports.
-    A member who is not the owner gets sportsbook rows only: no flagged pair (stale, prediction-market or pick'em legs) or its
-    margin, no exclusion counts, no pick'em multiplier rows and no formula strings. The owner keeps everything."""
+    A member who is not the owner gets sportsbook and prediction-market price rows (a pick'em multiplier is not a single bet), clean
+    both-sides pairs only, no flagged pair or its margin, no exclusion counts and no formula strings. The owner keeps everything."""
     doc = json.loads(body)
     doc["sports"] = {s: d for s, d in doc["sports"].items() if allowed.get(s)}
     doc["owner"] = bool(owner)
     if not owner:
         for d in doc["sports"].values():
-            d["ev"] = [r for r in d.get("ev", []) if r.get("kind") == "sportsbook"]
+            d["ev"] = [r for r in d.get("ev", []) if r.get("kind") in ("sportsbook", "prediction")]
             for r in d["ev"]:
                 r.pop("p_source", None)
             d["arbitrage"] = [r for r in d.get("arbitrage", []) if all(l.get("kind") == "sportsbook" and not l.get("flags") for l in r.get("legs", []))]

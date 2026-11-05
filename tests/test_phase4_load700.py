@@ -72,7 +72,8 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
     took = time.time() - t0
     assert codes.count(200) == len(codes), {c: codes.count(c) for c in set(codes)}
     # one shared build per TTL window per (sport, book) board and one sheet build, not one per member. book-lines reads the same
-    # shared boards (Sleeper lists four sports), so it adds at most one build per (sport, book) and none per member
+    # shared boards for the member's own sports only (counts noted beside each build, no re-parse), so it adds at most one build per
+    # (sport, book) and none per member
     assert max(per_key.values()) <= 2 and builds["sheet"] <= 2, per_key
     assert builds["books"] <= 2 * len(bp.providers()["sleeper"]["sports"]), builds
     assert not calls

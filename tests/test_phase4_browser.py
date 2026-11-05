@@ -150,7 +150,7 @@ def test_book_toggle_follows_the_sport_tab(browser, env, sleeper, monkeypatch, s
         lines = p.evaluate("fetch('/api/upgrade/book-lines').then(r=>r.json())")['books']
         shown = set(p.evaluate(SHOWN_BOOKS))
         for b in ('fanduel', 'betrivers'):                                      # on All: only with lines in a sport this member has
-            assert (b in shown) == any(s in tabs for s in lines.get(b, {})), (b, lines, tabs)
+            assert (b in shown) == any(s in tabs and n > 0 for s, n in lines.get(b, {}).items()), (b, lines, tabs)   # 0 = counted empty
             assert not {'cs2', 'lol'} & set(lines.get(b, {}))
         if not {'nba', 'nfl'} & tabs:
             assert not {'fanduel', 'betrivers'} & shown

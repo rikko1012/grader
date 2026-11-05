@@ -185,3 +185,26 @@ def test_advice_takes_the_goblin_rule(env):
     assert st == 200 and all((r.get("replacement") or {}).get("player") != "gobby" for r in doc["legs"])
     st, doc = post(env, "slip-advice", {"legs": legs, "lines": "all"})
     assert st == 200 and any((r.get("replacement") or {}).get("player") == "gobby" for r in doc["legs"])
+
+
+def test_advice_one_goblin_counts_a_goblin_outside_the_pool(env):
+    """Review 2026-11-05: the member's own goblin below Scout's slip bar is not in the pool; the route reads its line type from the
+    board (the client never sends one), so "at most 1 goblin" never offers a second goblin as the swap."""
+    _with_goblin(env)
+    env.rows.append(row("pp:7400", "prizepicks", "lowgob", "Basalt", "Quarry", 11.5, "More", .56, 904, env.rows[0]["start"], odds_type="goblin"))
+    fresh()
+    board = keys_on_board(env)
+    by = {(r["player"]["name"], b): r for (b, _), r in board.items()}
+    assert by[("lowgob", "prizepicks")]["market"]["line_type"] == "goblin"
+    slip = [by[("lowgob", "prizepicks")], by[("mika7", "prizepicks")]]
+    legs = [dict(leg_of(r), stat=r["market"]["stat"], period=r["market"]["period"], player_key=r["player"]["key"], player=r["player"]["name"],
+                 team=r["player"]["team"], event=r["event"]["id"]) for r in slip]
+    assert all("line_type" not in l for l in legs)
+    st, doc = post(env, "slip-advice", {"legs": legs, "lines": "all"})
+    assert st == 200 and not doc["legs"][0]["in_pool"] and (doc["legs"][1].get("replacement") or {}).get("player") == "gobby"
+    st, doc = post(env, "slip-advice", {"legs": legs, "lines": "one_goblin"})
+    assert st == 200 and (doc["legs"][1].get("replacement") or {}).get("player") != "gobby"
+    assert not any((r.get("replacement") or {}).get("player") == "gobby" for r in doc["legs"][1:])
+    legs[0]["line_type"] = "standard"                                          # a client cannot talk the board's type away
+    st, doc = post(env, "slip-advice", {"legs": legs, "lines": "one_goblin"})
+    assert st == 200 and (doc["legs"][1].get("replacement") or {}).get("player") != "gobby"

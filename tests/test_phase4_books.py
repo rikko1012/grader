@@ -286,13 +286,61 @@ def test_book_lines_lists_only_books_with_lines_on_the_members_sports(env, monke
     now = time.time()
     bp.state("sleeper").update(at=now, offers=_sleeper_cs2(now))
     st, doc = get(env, "book-lines")
-    assert st == 200 and doc["books"] == {"sleeper": {"cs2": 1}}, doc          # Sleeper lists no LoL: no lol key
+    assert st == 200 and doc["books"] == {"sleeper": {"cs2": 1}}, doc          # this fixture serves no LoL board: LoL is unknown, left out
     assert all(s not in ("cs2", "lol") for b in ("fanduel", "betrivers") for s in doc["books"].get(b, {}))
     assert all(s in ("cs2", "lol") for v in doc["books"].values() for s in v)  # only the member's own sports (no NBA/NFL here)
-    bp.state("sleeper")["at"] = now - 3600                                    # stale feed: the book drops out, nothing is labelled
+    bp.state("sleeper")["at"] = now - 3600                                    # stale feed = unknown, never 0: the last good count stands
+    server._RESULTS.clear()
+    st, doc = get(env, "book-lines")
+    assert st == 200 and doc["books"] == {"sleeper": {"cs2": 1}}, doc
+    import workspace_api
+    workspace_api._BOOK_LINES_GOOD.clear()                                    # no earlier count: left out, the hub keeps what it had
     server._RESULTS.clear()
     st, doc = get(env, "book-lines")
     assert st == 200 and doc["books"] == {}
+    bp.state("sleeper").update(at=now, offers=[])                             # healthy feed with no CS2 line: a real 0 (the hub hides it)
+    server._RESULTS.clear()
+    st, doc = get(env, "book-lines")
+    assert st == 200 and doc["books"] == {"sleeper": {"cs2": 0}}, doc
+
+
+def test_book_lines_failed_board_is_unknown_not_zero(env, monkeypatch):
+    """Review 2026-11-05: a board build that failed (503 while the sport's board snapshot is missing) was counted 0 and cached 30 s,
+    hiding the book and moving a member off it. Now it is unknown: left out (or the last good count), never 0."""
+    import server
+    monkeypatch.setenv("SCOUT_BOOK_SLEEPER", "1")
+    monkeypatch.setattr(bp, "start", lambda d: False)
+    now = time.time()
+    bp.state("sleeper").update(at=now, offers=_sleeper_cs2(now))
+    real = wb.records
+    monkeypatch.setattr(wb, "records", lambda srv, sport: (None, None))      # board snapshot missing -> the book board is 503
+    st, doc = get(env, "book-lines")
+    assert st == 200 and doc["books"] == {}, doc                              # no 0 for the hub to act on
+    monkeypatch.setattr(wb, "records", real)                                   # board back (the 503 itself is never cached as a result)
+    server._RESULTS.clear()
+    st, doc = get(env, "book-lines")
+    assert doc["books"] == {"sleeper": {"cs2": 1}}, doc
+    monkeypatch.setattr(wb, "records", lambda srv, sport: (None, None))      # a later blip: the last good count stands in
+    server._RESULTS.clear()
+    st, doc = get(env, "book-lines")
+    assert doc["books"] == {"sleeper": {"cs2": 1}}, doc
+
+
+def test_book_lines_count_only_matches_that_have_not_started(env, monkeypatch):
+    """Review 2026-11-05: the hub board drops started matches, so the count does too, or a book shows with an empty board."""
+    import server
+    monkeypatch.setenv("SCOUT_BOOK_SLEEPER", "1")
+    monkeypatch.setattr(bp, "start", lambda d: False)
+    now = time.time()
+    bp.state("sleeper").update(at=now, offers=_sleeper_cs2(now))
+    get(env, "me")
+    assert wb.open_lines(server, "cs2", "sleeper", now) == 1
+    assert wb.open_lines(server, "cs2", "sleeper", now + 400 * 86400) == 0     # every match has started by then
+    parsed, loads = [], json.loads
+    monkeypatch.setattr(wb.json, "loads", lambda *a, **k: parsed.append(1) or loads(*a, **k))
+    assert wb.open_lines(server, "cs2", "sleeper", now) == 1
+    monkeypatch.setattr(wb.json, "loads", loads)
+    assert not parsed                                                         # counted from the note beside the build, no re-parse
 
 
 def test_book_lines_is_one_shared_build(env, monkeypatch):
@@ -305,4 +353,6 @@ def test_book_lines_is_one_shared_build(env, monkeypatch):
     real = wb.board
     monkeypatch.setattr(wb, "board", lambda srv, sport, pid: calls.append((sport, pid)) or real(srv, sport, pid))
     a, b = get(env, "book-lines", user="u1"), get(env, "book-lines", user="u2")
-    assert a == b and len(calls) == len(bp.providers()["sleeper"]["sports"])   # one pass over the sports, shared by both members
+    sports = [s for s, _ in calls]
+    assert a == b and "cs2" in sports and len(sports) == len(set(sports))      # one pass, shared by both members
+    assert not set(sports) & {"nba", "nfl"}                                    # only the member's own sports: no NBA/NFL board build

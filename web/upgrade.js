@@ -400,7 +400,8 @@
     if (!T.legs.length) { T.advice = null; return; }
     const before = sig(), rule = T.slipLines || "no_goblins";
     try {
-      const doc = await api("slip-advice", { legs: T.legs.map((l) => Object.assign(wireLeg(l), { stat: l.stat, period: l.period, player_key: l.player_key })),
+      const doc = await api("slip-advice", { legs: T.legs.map((l) => Object.assign(wireLeg(l), { stat: l.stat, period: l.period, player_key: l.player_key,
+        line_type: R.boards[l.sport]?.recs?.get(offerKey(l.book, l.row_id))?.market?.line_type || undefined })),
         entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])), lines: T.slipLines || "no_goblins" });
       if (sig() === before && rule === (T.slipLines || "no_goblins")) { T.advice = { sig: before, legs: Object.fromEntries((doc.legs || []).map((r) => [r.id, r])) }; paintTray(); }
     } catch (e) { /* advice is extra: the check stays the authority */ }

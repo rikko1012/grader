@@ -91,21 +91,39 @@ export function mount(C) {
   /* the filters that live in the Filters pop-over; the count on its button. Search, sport and platform are on the toolbar itself */
   const activeFilters = () => [H.stat!=='all',H.side!=='all',H.minGrade!=='all',H.onlyDiff,H.watched,H.freshOnly,H.soonOnly,H.movedOnly,H.game!=='all'].filter(Boolean).length;
   const BOOK_SHORT={prizepicks:'PP',underdog:'UD',...Object.fromEntries((EXTRA||[]).map(x=>[x.id,x.short||x.label]))};
-  function bookHasLines(id,sport=H.sport) {
-    if(id==='all')return true;
+  /* 'yes' = lines on this tab now; 'no' = the server counted 0 open lines on every sport here (or the book lists none of them);
+     'unknown' = no count yet for a sport here (first read pending, or a feed blip with no earlier count). Unknown never moves a member
+     off a book they chose (transient-failure rule); it only keeps a book they did not choose hidden. */
+  function bookLinesState(id,sport=H.sport) {
+    if(id==='all')return 'yes';
     const sports=sport==='all'?visibleSports():allowed().filter(s=>s===sport);
-    if(isExtra(id))return !!H.bookLines&&sports.some(s=>(H.bookLines[id]?.[s]||0)>0);
-    if(!['prizepicks','underdog'].includes(id))return false;
-    return sports.some(s=>!R.boards[s]?.at||H.records.some(r=>r.sport===s&&r.offer.platform===id&&!C.started(r)));
+    if(isExtra(id)){
+      const p=EXTRA.find(x=>x.id===id),here=sports.filter(s=>p.sports.includes(s));
+      const n=here.map(s=>H.bookLines?.[id]?.[s]);
+      return n.some(v=>v>0)?'yes':n.some(v=>!Number.isInteger(v))?'unknown':'no';
+    }
+    if(!['prizepicks','underdog'].includes(id))return 'no';
+    return sports.some(s=>!R.boards[s]?.at||H.records.some(r=>r.sport===s&&r.offer.platform===id&&!C.started(r)))?'yes':'no';
   }
-  /* hide each book with no lines on this tab; a chosen book that lost its lines falls back to All (never an empty board or a banner) */
+  const bookHasLines=(id,sport)=>bookLinesState(id,sport)==='yes';
+  /* hide each book with no lines on this tab; a chosen book the server reports empty falls back to All (never an empty board or a banner) */
   function syncBooks() {
-    $('hub-platform').querySelectorAll('[data-hub="book"]').forEach(b=>{if(b.dataset.id!=='all')b.hidden=!bookHasLines(b.dataset.id);});
-    if(H.book!=='all'&&!bookHasLines(H.book)){H.book='all';H.page=0;H.extraState=null;H.extraRecs=[];}
+    $('hub-platform').querySelectorAll('[data-hub="book"]').forEach(b=>{if(b.dataset.id!=='all'){const st=bookLinesState(b.dataset.id);b.hidden=!(st==='yes'||(st==='unknown'&&b.dataset.id===H.book));}});
+    if(H.book!=='all'&&bookLinesState(H.book)==='no'){H.book='all';H.page=0;H.extraState=null;H.extraRecs=[];}
   }
-  async function loadBookLines() {
+  /* the counts change slowly; one read per BOOK_LINES_EVERY ms however often the board refreshes (the board polls every 60 s) */
+  const BOOK_LINES_EVERY=120000;
+  async function loadBookLines(force) {
     if(!EXTRA)return;
-    try{const d=await api('book-lines');if(d&&d.books&&typeof d.books==='object')H.bookLines=d.books;}catch(e){/* keep the last good copy */}
+    if(!force&&H.bookLinesAt&&Date.now()-H.bookLinesAt<BOOK_LINES_EVERY)return;
+    H.bookLinesAt=Date.now();
+    try{
+      const d=await api('book-lines');
+      /* merge only the counts the server sent: a book or sport it left out (its feed blipped before any good count) keeps our last copy */
+      if(d&&d.books&&typeof d.books==='object'){const next={...(H.bookLines||{})};
+        for(const [pid,v] of Object.entries(d.books))if(v&&typeof v==='object'){next[pid]={...(next[pid]||{})};for(const [s,n] of Object.entries(v))if(Number.isInteger(n)&&n>=0)next[pid][s]=n;}
+        H.bookLines=next;}
+    }catch(e){H.bookLinesAt=0;/* keep the last good copy; try again on the next board refresh */}
     if(H.section==='board')paintBoard();else syncBooks();
   }
   function syncFields() {
@@ -326,8 +344,9 @@ export function mount(C) {
   }
   async function loadExtra() {
     const b=H.book;if(!isExtra(b))return;
-    const p=EXTRA.find(x=>x.id===b),sports=allowed().filter(s=>p.sports.includes(s)&&(H.bookLines?.[b]?.[s]||0)>0);
-    if(!sports.length){H.book='all';H.extraState=null;H.extraRecs=[];paintBoard();return;}   // no lines here: back to All, never an error
+    /* a sport the server counted 0 for is skipped; a sport with no count yet is still read (a feed blip never drops the member to All) */
+    const p=EXTRA.find(x=>x.id===b),sports=allowed().filter(s=>p.sports.includes(s)&&H.bookLines?.[b]?.[s]!==0);
+    if(!sports.length){H.book='all';H.extraState=null;H.extraRecs=[];paintBoard();return;}   // counted empty here: back to All, never an error
     if(H.extraState?.book!==b){H.extraState={book:b,state:'loading'};H.extraRecs=[];paintBoard();}
     const res=await Promise.allSettled(sports.map(s=>api('book-board?sport='+encodeURIComponent(s)+'&book='+encodeURIComponent(b))));
     if(H.book!==b)return;
@@ -434,7 +453,10 @@ export function mount(C) {
           sort:['start','player','chance','edge'].includes(f.sort)?f.sort:'start',stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
       });
       H.views=clean(p.views);
-      H.slipLines=cleanLines(p.slipLines||state.studio?.options?.lines);T.slipLines=H.slipLines;
+      /* only a choice made in the Goblins control counts (prefs.researchHub.slipLines). A batch saved before it existed carries the old
+         Lines select's 'all' (its first option and default), which is not a choice to allow goblins, so it reads as No goblins; the
+         old 'Standard lines only' was a deliberate opt-out and carries over as No goblins or demons (review 2026-11-05). */
+      H.slipLines=cleanLines(p.slipLines||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
       if($('hub-generation-lines'))$('hub-generation-lines').value=H.slipLines;
       C.refreshAdvice?.();
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
@@ -906,7 +928,7 @@ export function mount(C) {
   const mtLegsAge=a=>Math.max(...(a.legs||[]).map(l=>mtAge(l)??Infinity));
   const mtText=x=>[x.player,x.team,x.event,x.stat_label,x.book_label,...(x.legs||[]).map(l=>l.book_label)].join(' ').toLowerCase();
   const mtSports=d=>Object.keys(d?.sports||{}).filter(s=>H.mt.league==='all'||H.mt.league===s);
-  const mtBook=x=>x.kind==='sportsbook';
+  const mtBook=x=>x.kind!=='pickem';   /* a single bet: sportsbook or prediction market (pick'em multipliers are owner-only) */
   function mtKeep(sport,x,legs){
     const f=H.mt,books=legs?x.legs.map(l=>l.book):[x.book],sides=legs?x.legs.map(l=>l.side):[x.side];
     const age=legs?mtLegsAge(x):(mtAge(x)??Infinity);
@@ -928,7 +950,7 @@ export function mount(C) {
   function marketFilters(){
     const d=H.marketDoc,sports=Object.keys(d?.sports||{}),books=mtBooks(d);
     const f=H.mt;if(f.book!=='all'&&!books.some(b=>b.id===f.book))f.book='all';
-    if(!['ev','fresh'].includes(f.sort))f.sort='ev';
+    if(!['ev','chance','fresh'].includes(f.sort))f.sort='ev';
     const opt=(v,label,cur)=>`<option value="${esc(v)}"${String(v)===String(cur)?' selected':''}>${esc(label)}</option>`;
     const fresh=d?.method?.fresh_filters||[[120,'2 min'],[600,'10 min'],[1800,'30 min']];
     const more=[f.side!=='all',f.minEv!=='0',f.fresh!=='all',f.sort!=='ev'].filter(Boolean).length;
@@ -939,24 +961,24 @@ export function mount(C) {
       +`<label>Side<select id="hub-mt-side">${opt('all','Both sides',f.side)}${opt('over','Over',f.side)}${opt('under','Under',f.side)}</select></label>`
       +`<label>Minimum expected<select id="hub-mt-minEv">${[['0','Any amount'],['0.01','$1 or more per $100'],['0.02','$2 or more per $100'],['0.05','$5 or more per $100']].map(([v,l])=>opt(v,l,f.minEv)).join('')}</select></label>`
       +`<label>Checked within<select id="hub-mt-fresh">${opt('all','Any time',f.fresh)}${fresh.map(([s,l])=>opt(s,'The last '+l,f.fresh)).join('')}</select></label>`
-      +`<label>Sort<select id="hub-mt-sort">${[['ev','Best value'],['fresh','Newest check']].map(([v,l])=>opt(v,l,f.sort)).join('')}</select></label>`
+      +`<label>Sort<select id="hub-mt-sort">${[['ev','Best value'],['chance','Highest fair chance'],['fresh','Newest check']].map(([v,l])=>opt(v,l,f.sort)).join('')}</select></label>`
       +`<button type="button" id="hub-mt-dense" data-hub="market-density" aria-pressed="${f.dense}">Compact rows</button></div></details></div>`;
   }
   const mtMoney=x=>'$'+Number(x).toFixed(2);
   const mtAgo=t=>t==null||!Number.isFinite(t)?'Time unavailable':t<60?'Just now':t<3600?Math.floor(t/60)+' min ago':Math.floor(t/3600)+' h ago';
   const mtSide=s=>s==='over'?'Over':'Under';
   const mtPick=x=>`<b>${esc(x.player)}</b><small>${x.side?esc(mtSide(x.side))+' ':''}${esc(x.line)} ${esc(x.stat_label||'')}${x.period_label?' · '+esc(x.period_label):''}</small><small>${esc(x.event||'')}${x.start_utc?' · '+esc(when(x.start_utc)):''}${mtSports(H.marketDoc).length>1?' · '+esc(SPORTS[x.sport]||x.sport):''}</small>`;
-  const mtPrice=(label,american,odds)=>`${esc(label)} ${esc(american||'')}${odds!=null&&num(Number(odds))?` <span class="h-pc-dec">(${Number(odds).toFixed(2)})</span>`:''}`;
+  const mtPrice=(label,american)=>`<span class="h-pc-nb">${esc(label)} ${esc(american||'')}</span>`;
   const mtFrom=x=>x.chance_from==='Scout'?'from Scout':/^Other books/.test(x.chance_from||'')?'from other books'+(x.chance_from.match(/\((.*)\)/)?' ('+x.chance_from.match(/\((.*)\)/)[1]+')':''):'';
   function mtEvRow(x){
     return `<li class="h-pc-row"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick(x)}</div>`
-      +`<div class="h-pc-cell" data-label="Book & price">${mtPrice(x.book_label,x.american,x.odds)}${(x.flags||[]).includes('Wide market')?'<small>This book’s prices carry a big cut</small>':''}</div>`
-      +`<div class="h-pc-cell h-pc-fair" data-label="Fair chance vs needed"><span class="h-pc-wide">${pct(x.p_cal)} vs ${pct(x.needs)}</span><span class="h-pc-narrow">Fair ${pct(x.p_cal)} · needs ${pct(x.needs)}</span><small>${esc(mtFrom(x))}</small></div>`
+      +`<div class="h-pc-cell" data-label="Book & price">${mtPrice(x.book_label,x.american)}${x.kind==='prediction'?'<small>Prediction market</small>':''}${H.marketDoc?.owner&&(x.flags||[]).includes('Wide market')?'<small>Wide market (owner)</small>':''}</div>`
+      +`<div class="h-pc-cell h-pc-fair" data-label="Fair chance vs needed"><span class="h-pc-wide">${pct(x.p_cal)} vs ${pct(x.needs)}</span><span class="h-pc-narrow">Fair ${pct(x.p_cal)} · needs ${pct(x.needs)}</span><small>${esc(mtFrom(x))}</small>${num(x.p_push)&&x.p_push>0?`<small>Exactly ${esc(x.line)} refunds the stake (${pct(x.p_push)})</small>`:''}</div>`
       +`<div class="h-pc-cell h-pc-value" data-label="Expected per $100"><span class="h-pc-chip">+${mtMoney(x.per_100)}<i> / $100</i></span></div>`
       +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}</div></li>`;
   }
   function mtArbRow(x){
-    const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}${num(Number(l.odds))?` <span class="h-pc-dec">(${Number(l.odds).toFixed(2)})</span>`:''}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small></div>`;
+    const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small></div>`;
     const back=(100+Number(x.return_per_100))*H.mt.stake/100;
     return `<li class="h-pc-row h-pc-arb"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick({...x,side:null})}</div>${(x.legs||[]).map(leg).join('')}`
       +`<div class="h-pc-cell h-pc-value" data-label="Either way you get"><span class="h-pc-chip"><b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney(back)}</b> back <i data-gain-per100="${Number(x.return_per_100)}">(+${mtMoney(back-H.mt.stake)})</i></span></div>`
@@ -974,12 +996,16 @@ export function mount(C) {
     const ready=sports.filter(s=>d.sports[s]?.state!=='unavailable');
     if(sports.length&&!ready.length)return head+'<p class="h-mt-state" role="status">Prices could not be read just now. Use Refresh prices to try again.</p>';
     let ev=[],arb=[],all=0,quotes=0,lines=0;
+    /* the server's own age limits, applied again on every draw: a sheet left open never shows a pair or price it would no longer
+       build (review 2026-11-05). The tab also reloads the sheet when it comes back into view (see visibilitychange below). */
+    const m0=d.method||{},evMax=Number(m0.ev_stale_s)||1800,arbMax=Number(m0.arb_max_age_s)||300;
+    const live=r=>(mtAge(r)??Infinity)<=evMax,liveArb=r=>mtLegsAge(r)<=arbMax;
     for(const s of ready){const x=d.sports[s]||{};
       quotes+=x.quotes_checked||0;lines+=x.markets_checked||0;
-      const e=(x.ev||[]).filter(mtBook),a=x.arbitrage||[];all+=e.length+a.length;
+      const e=(x.ev||[]).filter(r=>mtBook(r)&&live(r)),a=(x.arbitrage||[]).filter(liveArb);all+=e.length+a.length;
       ev.push(...e.filter(r=>mtKeep(s,r,false)&&num(r.ev)&&r.ev>=Number(f.minEv)));
       arb.push(...a.filter(r=>mtKeep(s,r,true)));}
-    ev.sort((a,b)=>f.sort==='fresh'?(mtAge(a)??1e12)-(mtAge(b)??1e12):b.per_100-a.per_100);
+    ev.sort((a,b)=>f.sort==='fresh'?(mtAge(a)??1e12)-(mtAge(b)??1e12):f.sort==='chance'?b.p_cal-a.p_cal:b.per_100-a.per_100);
     arb.sort((a,b)=>f.sort==='fresh'?mtLegsAge(a)-mtLegsAge(b):b.return_per_100-a.return_per_100||mtLegsAge(a)-mtLegsAge(b));
     const at=new Date(d.as_of),clock=Number.isFinite(at.getTime())?at.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'';
     const one=sports.length===1&&['cs2','lol'].includes(sports[0])?sports[0]:null;
@@ -991,12 +1017,12 @@ export function mount(C) {
         :`<p class="h-mt-state h-pc-none">Nothing worth acting on right now. Checked ${quotes.toLocaleString()} prices on ${lines.toLocaleString()} lines${clock?' at '+esc(clock):''}.</p>`;
     if(ev.length){const x=ev[0];
       body+=`<section class="h-pc-section" aria-label="Prices better than the fair chance"><h3>Prices better than the fair chance</h3><p class="h-pc-ask">Which single bets pay more than their real chance is worth?</p>`
-        +`<p class="h-pc-example">${esc(x.book_label)} pays ${esc(x.american)} on ${esc(mtSide(x.side))} ${esc(x.line)}, which needs a ${pct(x.needs)} chance to break even. The fair chance is ${pct(x.p_cal)}, so over many bets like this you would average about +${mtMoney(x.per_100)} per $100.</p>`
+        +`<p class="h-pc-example">${esc(x.book_label)} pays ${esc(x.american)} on ${esc(mtSide(x.side))} ${esc(x.line)}, which needs a ${pct(x.needs)} chance to break even${num(x.p_push)&&x.p_push>0?` (exactly ${esc(x.line)} refunds the stake)`:''}. The fair chance is ${pct(x.p_cal)}, so over many bets like this you would average about +${mtMoney(x.per_100)} per $100.</p>`
         +`<ol class="h-pc-list h-pc-ev${f.dense?' is-compact':''}">${mtHead(['Pick','Book &amp; price','Fair chance vs needed','Expected per $100','Checked'])}${ev.map(mtEvRow).join('')}</ol></section>`;}
     if(arb.length){const x=arb[0],[l1,l2]=x.legs;
       body+=`<section class="h-pc-section" aria-label="Bet both sides at two books"><h3>Bet both sides at two books</h3><p class="h-pc-ask">Where can I cover Over and Under at different books and win either way?</p>`
         +`<label class="h-pc-stake">Total stake <span>$</span><input id="hub-mt-stake" type="number" inputmode="decimal" min="1" max="100000" step="1" value="${esc(H.mt.stake)}"></label>`
-        +`<p class="h-pc-example">Put ${mtMoney(l1.stake_per_100)} on ${esc(mtSide(l1.side))} at ${esc(l1.american)} and ${mtMoney(l2.stake_per_100)} on ${esc(mtSide(l2.side))} at ${esc(l2.american)}: either result pays about ${mtMoney(100+x.return_per_100)} for $100 staked. Prices move fast, so check both books before betting.</p>`
+        +`<p class="h-pc-example">Put <b data-stake-per100="${Number(l1.stake_per_100)}">${mtMoney(l1.stake_per_100*H.mt.stake/100)}</b> on ${esc(mtSide(l1.side))} at ${esc(l1.book_label)} ${esc(l1.american)} and <b data-stake-per100="${Number(l2.stake_per_100)}">${mtMoney(l2.stake_per_100*H.mt.stake/100)}</b> on ${esc(mtSide(l2.side))} at ${esc(l2.book_label)} ${esc(l2.american)}: either result pays about <b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney((100+Number(x.return_per_100))*H.mt.stake/100)}</b> for <b data-stake-total>${mtMoney(H.mt.stake)}</b> staked.</p>`
         +`<ol class="h-pc-list h-pc-arbs${f.dense?' is-compact':''}">${mtHead(['Pick','Bet 1','Bet 2','Either way you get','Checked'])}${arb.map(mtArbRow).join('')}</ol></section>`;}
     const m=d.method||{},mins=s=>Math.round((s||0)/60);
     const method=`<details class="h-mt-method"><summary>How these numbers are worked out</summary><ul>`
@@ -1010,7 +1036,7 @@ export function mount(C) {
   function mtOwnerHTML(d,ageText){
     const tbl=(cols,rows)=>`<div class="h-table-wrap"><table class="h-table h-owner-table"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
     const parts=mtSports(d).map(s=>{const x=d.sports[s]||{},name=esc(SPORTS[s]||s);
-      const fl=(x.flagged||[]).filter(r=>mtKeep(s,r,true)),pk=(x.ev||[]).filter(r=>!mtBook(r)&&mtKeep(s,r,false));
+      const fl=(x.flagged||[]).filter(r=>mtKeep(s,r,true)),pk=(x.ev||[]).filter(r=>r.kind==='pickem'&&mtKeep(s,r,false));
       const ex=Object.entries(x.excluded||{}),exl=Object.entries(x.excluded_lines||{});
       return `<h4>${name} <small>${(x.ev||[]).length} priced · ${(x.arbitrage||[]).length} both-sides · ${x.quotes_checked||0} prices on ${x.markets_checked||0} lines · newest ${ageText(mtAge({seen_at:x.newest_quote_at}))}${x.sections_possible?` · possible: price ${x.sections_possible.ev?'yes':'no'}, both sides ${x.sections_possible.arb?'yes':'no'}`:''}</small></h4>`
         +(fl.length?`<details class="h-mt-flagged"><summary>Flagged and left out (${fl.length})</summary>${tbl(['Player / market','Legs','Margin %','Why'],fl.map(r=>`<tr><td>${esc(r.player)}<small>${esc(r.stat_label||'')} · ${esc(r.event||'')}</small></td><td>${r.legs.map(l=>`${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(r.line)} ${Number(l.odds).toFixed(2)} · ${ageText(mtAge(l))}`).join('<br>')}</td><td class="h-num">${Number(r.margin_pct).toFixed(2)}%</td><td>${esc((r.flags||[]).join(', '))}</td></tr>`).join(''))}</details>`:'')
@@ -1025,11 +1051,15 @@ export function mount(C) {
     box.querySelectorAll('[data-stake-per100]').forEach(b=>{b.textContent=mtMoney(Number(b.dataset.stakePer100)*v/100);});
     box.querySelectorAll('[data-back-per100]').forEach(b=>{b.textContent=mtMoney(Number(b.dataset.backPer100)*v/100);});
     box.querySelectorAll('[data-gain-per100]').forEach(b=>{b.textContent='(+'+mtMoney(Number(b.dataset.gainPer100)*v/100)+')';});
+    box.querySelectorAll('[data-stake-total]').forEach(b=>{b.textContent=mtMoney(v);});
   }
   const MT_CSS='#u-hub .h-market-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding:12px;margin:0 0 14px;border:1px solid var(--u-line);border-radius:9px;background:var(--u-panel)}'
     +'#u-hub .h-market-filters label{display:grid;gap:4px;flex:1 1 130px;min-width:0;font-size:11px;color:var(--u-muted)}#u-hub .h-market-filters .h-search{flex:2 1 220px}'
     +'#u-hub .h-market-filters :is(input,select){width:100%;min-height:40px}#u-hub .h-market-filters button{flex:0 0 auto;min-height:40px}'
-    +'#u-hub .h-mt-more{flex:1 1 100%;margin:0}#u-hub .h-mt-more>summary{min-height:40px;display:inline-flex;align-items:center;cursor:pointer;color:var(--u-muted)}'
+    +'#u-hub .h-mt-more{flex:1 1 100%;margin:0}#u-hub .h-market-tools details.h-mt-more>summary{min-height:40px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border:1px solid var(--u-line);border-radius:8px;cursor:pointer;color:var(--u-text);background:var(--u-bg,transparent)}'
+    +'#u-hub .h-market-tools summary{list-style:none}#u-hub .h-market-tools summary::-webkit-details-marker{display:none}'
+    +'#u-hub .h-market-tools summary::after{content:"";width:7px;height:7px;margin-left:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px);transition:transform .15s;flex:none}'
+    +'#u-hub .h-market-tools details[open]>summary::after{transform:rotate(225deg) translateY(-1px)}#u-hub .h-pc-nb{white-space:nowrap}'
     +'#u-hub .h-mt-more-body{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding-top:8px}'
     +'#u-hub .h-pc-lede{margin:0 0 12px;color:var(--u-muted)}#u-hub .h-pc-section{margin:0 0 18px}#u-hub .h-pc-section h3{margin:0 0 2px;font-size:16px}'
     +'#u-hub .h-pc-ask{margin:0 0 6px;color:var(--u-muted)}#u-hub .h-pc-example{margin:0 0 10px;padding:10px 12px;border-left:3px solid var(--u-line2);background:var(--u-panel);border-radius:0 8px 8px 0;font-size:13px}'
@@ -1044,7 +1074,7 @@ export function mount(C) {
     +'#u-hub .h-mt-state{padding:12px;border:1px dashed var(--u-line);border-radius:8px;color:var(--u-muted)}#u-hub .h-mt-state.h-warning{color:var(--u-text);border-color:var(--u-line2)}'
     +'#u-hub .h-mt-method ul{margin:6px 0;padding-left:18px}#u-hub .h-mt-method li{margin:4px 0}'
     +'#u-hub .h-market-tools .h-table-wrap{overflow-x:auto;margin:6px 0 14px}#u-hub .h-owner-table{width:100%;border-collapse:collapse}#u-hub .h-owner-table small{display:block}#u-hub .h-owner-table .h-num{white-space:nowrap}'
-    +'#u-hub .h-market-tools details{margin:6px 0 12px}#u-hub .h-market-tools summary{min-height:40px;display:flex;align-items:center;cursor:pointer}'
+    +'#u-hub .h-market-tools details{margin:6px 0 12px}#u-hub .h-market-tools summary{min-height:40px;display:flex;align-items:center;cursor:pointer;font-weight:600}'
     +'@media(max-width:639px){#u-hub .h-pc-head{display:none}#u-hub .h-pc-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:12px}'
     +'#u-hub .h-pc-row>.h-pc-cell{grid-column:1}#u-hub .h-pc-row>.h-pc-value{grid-column:2;grid-row:1;align-self:start;text-align:right}'
     +'#u-hub .h-pc-wide{display:none}#u-hub .h-pc-narrow{display:inline}#u-hub .h-pc-fair small{display:inline;margin-left:6px}'
@@ -1055,7 +1085,7 @@ export function mount(C) {
     if(!$('hub-market-results')){
       // flag-on styles travel with the flag-on markup, so hub.css keeps its bytes
       if(!$('hub-mt-style'))document.head.insertAdjacentHTML('beforeend',`<style id="hub-mt-style">${MT_CSS}</style>`);
-      ($('hub-tools-alerts')||$('hub-tools-body')).insertAdjacentHTML($('hub-tools-alerts')?'beforebegin':'beforeend',`<section class="h-market-tools" id="hub-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2 tabindex="-1">Price check</h2><p>Prices that pay more than they should, and lines where two books let you bet both sides and win either way.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><p class="h-pc-lede">Each row is a single bet at a sportsbook. Green means the price pays more than the fair chance says it should; it is not a sure win.</p><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
+      ($('hub-tools-alerts')||$('hub-tools-body')).insertAdjacentHTML($('hub-tools-alerts')?'beforebegin':'beforeend',`<section class="h-market-tools" id="hub-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2 tabindex="-1">Price check</h2><p>Prices that pay more than they should, and lines where two books let you bet both sides and win either way.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><p class="h-pc-lede">Each row is a single bet at one book. Green is what the price pays over its fair chance, per $100.</p><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
       const box=$('hub-market-filters');
       const read=e=>{const id=(e.target.id||'').replace('hub-mt-','');if(!(id in H.mt)||id==='dense')return;H.mt[id]=e.target.value;paintMarketResults();};
       box.addEventListener('input',e=>{if(e.target.id==='hub-mt-q')read(e);});
@@ -1164,7 +1194,7 @@ export function mount(C) {
     add(id){const r=rec(id);if(!r)return;if(r.extra)return C.say(`${r.offer.platform_label} lines are view only. Slips are PrizePicks or Underdog entries.`);if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
-    refresh(){H.detailSeq++;if(cardOpen())closeCard(false);load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
+    refresh(){H.detailSeq++;if(cardOpen())closeCard(false);H.bookLinesAt=0;load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
     'save-view'(){togglePop(null);openSave('view');}, 'save-alert'(){togglePop(null);openSave('alert');}, 'save-retry':savePreferences,
     'pick-clear'(){H.pickSport='all';H.pickStatus='all';$('hub-pick-sport').value='all';$('hub-pick-status').value='all';paintPicks();},
     'grade-review'(id,el){showGradeReview(id,el?.dataset.before);},
@@ -1310,6 +1340,11 @@ export function mount(C) {
   },true);
   setInterval(()=>{if(isOpen()&&!document.hidden&&H.section==='board')load(true);},60000);
   document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='board'&&Date.now()-(H.lastLoad||0)>60000)load(true);});
+  /* Price check left open: coming back to the tab reloads a sheet older than 2 min, and once a minute the rows are redrawn (no
+     request) so a price or both-sides pair past the server's age limit drops off even if nobody touches the page */
+  const mtOld=()=>{const t=Date.parse(H.marketDoc?.as_of);return !Number.isFinite(t)||Date.now()-t>120000;};
+  document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='tools'&&H.marketDoc&&!H.marketLoading&&mtOld())actions['refresh-markets']();});
+  setInterval(()=>{const box=$('hub-market-results');if(!document.hidden&&H.section==='tools'&&H.marketDoc&&box&&!box.contains(document.activeElement))paintMarketResults();},60000);
   route();
   loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts'||H.section==='tools')paintAlerts();});
   return {refreshSlip};

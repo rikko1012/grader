@@ -139,7 +139,7 @@ def test_plain_context_numbers_equal_the_existing_math(fake):
     s = wm.sheet(None, "nba", fake)
     assert s["ev"]
     for r in s["ev"]:
-        assert r["needs"] == round(1 / r["odds"], 4) or abs(r["needs"] - 1 / r["odds"]) < 1e-3
+        assert abs(r["needs"] - (1 - r["p_push"]) / r["odds"]) < 1e-3                   # consensus route: p_push 0, so 1 / odds
         assert r["per_100"] == round(r["ev"] * 100, 2) or abs(r["per_100"] - r["ev"] * 100) < 0.011
         assert r["american"] == wm.american(r["odds"]) and r["chance_from"].startswith("Other books (")
     assert s["arbitrage"]
@@ -150,6 +150,21 @@ def test_plain_context_numbers_equal_the_existing_math(fake):
         assert abs(backs[0] - backs[1]) <= 0.05 and abs(backs[0] - (100 + a["return_per_100"])) <= 0.05
         assert a["oldest_leg_s"] == max(l["age_s"] for l in a["legs"])
         assert all(l["american"] == wm.american(l["odds"]) for l in a["legs"])
+
+
+def test_needs_is_push_adjusted_on_a_whole_number_line_priced_with_scouts_chance(fake, monkeypatch):
+    """Review 2026-11-05: on a whole-number line the Scout route keeps the push chance, so 'needs' is the push-adjusted break-even
+    (1 - p_push) / odds. With p 0.48, push 0.06 at 2.10 the row must not read 'fair 48% vs needs 47.6%+' against a loss, nor
+    'fair below needs' beside a positive result."""
+    monkeypatch.setattr(wm, "_released_p", lambda g, sport, side: (0.48, 0.06, "v1") if float(g["line"]).is_integer() else None)
+    s = wm.sheet(None, "nba", fake)
+    rows = [r for r in s["ev"] if float(r["line"]).is_integer()]
+    assert rows and all(r["p_push"] == 0.06 for r in rows)
+    for r in rows:
+        assert r["needs"] == round((1 - 0.06) / r["odds"], 4)
+        assert (r["per_100"] > 0) == (r["p_cal"] > r["needs"])                         # the shown chances agree with the +$ figure
+    r = next(r for r in rows if r["odds"] == 2.1)
+    assert r["needs"] == 0.4476 and r["per_100"] == 6.8 and r["p_cal"] == 0.48
 
 
 def test_american_prices():
@@ -188,10 +203,10 @@ def test_member_view_has_sportsbook_rows_only_and_the_owner_keeps_everything(fak
     m = wm.for_member(body, every)
     nba = m["sports"]["nba"]
     assert m["owner"] is False and "flagged" not in nba and "excluded" not in nba and "excluded_lines" not in nba
-    assert nba["ev"] and all(r["kind"] == "sportsbook" and "p_source" not in r for r in nba["ev"])
+    assert nba["ev"] and all(r["kind"] in ("sportsbook", "prediction") and "p_source" not in r for r in nba["ev"])
     assert not any(r["book"] == "sleeper" for r in nba["ev"])                        # pick'em multipliers: no single-bet break-even
     txt = json.dumps(m)
-    assert "Kalshi" not in txt and "kalshi" not in txt and "Stale" not in txt and "Polymarket" not in txt
+    assert "Stale" not in txt and "Prediction market" not in txt                     # no flagged pair or its reasons
     assert all(l["kind"] == "sportsbook" and (l["age_s"] or 0) <= 300 for a in nba["arbitrage"] for l in a["legs"])
     rowbooks = {r["book"] for r in nba["ev"]} | {l["book"] for a in nba["arbitrage"] for l in a["legs"]}
     assert {b["id"] for b in m["books"]} == rowbooks                                 # no book that has no row the member can see
@@ -199,6 +214,19 @@ def test_member_view_has_sportsbook_rows_only_and_the_owner_keeps_everything(fak
     assert o["owner"] is True and o["sports"]["nba"]["flagged"] and o["sports"]["nba"]["excluded"]
     assert any(r["book"] == "sleeper" for r in o["sports"]["nba"]["ev"]) and "p_cal" in o["method"] and "margin" in o["method"]["arbitrage"]
     assert "kalshi" in {b["id"] for b in o["books"]}
+
+
+def test_member_keeps_prediction_market_price_rows_and_drops_only_pickem():
+    """Review 2026-11-05: members saw Kalshi / Polymarket price rows before Price check; only pick'em multipliers leave the member view
+    (and prediction markets stay out of both-sides pairs, as before)."""
+    row = lambda book, kind: {"book": book, "book_label": book.title(), "kind": kind, "p_source": "x", "ev": 0.03}
+    body = json.dumps({"as_of": iso(time.time()), "method": {"ev": "f", "p_cal": "f", "arbitrage": "f", "arb_max_age_s": 300},
+                       "sports": {"nba": {"ev": [row("fanduel", "sportsbook"), row("kalshi", "prediction"), row("polymarket", "prediction"),
+                                                 row("sleeper", "pickem")], "arbitrage": [], "flagged": [], "excluded": {}}}}).encode()
+    m = wm.for_member(body, {"nba": True})
+    assert [r["book"] for r in m["sports"]["nba"]["ev"]] == ["fanduel", "kalshi", "polymarket"]
+    assert {b["id"] for b in m["books"]} == {"fanduel", "kalshi", "polymarket"}
+    assert [r["book"] for r in wm.for_member(body, {"nba": True}, owner=True)["sports"]["nba"]["ev"]] == ["fanduel", "kalshi", "polymarket", "sleeper"]
 
 
 def test_member_books_are_cut_to_the_members_sports(fake, monkeypatch):
