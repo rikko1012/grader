@@ -5903,7 +5903,20 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
         return self.send(200, page.encode(), "text/html; charset=utf-8")
 
 
+# owner 2026-11-05 ("why do i have to turn them on in render"): the remaining-brief surfaces passed tests, review and the 700-member
+# load test, so the running server turns them ON unless Render says otherwise ("0"/"off" = off). Set only when the process runs as
+# the server, never on import, so tests keep their explicit flag-off checks.
+DEFAULT_ON = ("SCOUT_UI_TOKENS", "SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBLIC_RECORD", "SCOUT_PUBLIC_RECORD_SLIPS",
+              "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK")
+
+
+def apply_default_flags(env=os.environ):
+    for k in DEFAULT_ON:
+        env.setdefault(k, "1")
+
+
 if __name__ == "__main__":
+    apply_default_flags()
     __import__("membudget").tune_allocator()          # before any thread starts (2026-10-18 out-of-memory fix)
     threading.Thread(target=warm_start, daemon=True, name="warm-start").start()
     threading.Thread(target=board_forever, daemon=True, name="underdog-board").start()

@@ -660,7 +660,18 @@ def check(url):
     return 2 if "page" in levels else 1 if levels else 0
 
 
+# owner 2026-11-05: these display-only switches are ON unless Render says otherwise ("0"/"off"); set when the service runs (its
+# scheduled jobs inherit them), never on import, so tests keep their explicit off checks. SCOUT_BOARD_H2H is read by the sheets job.
+DEFAULT_ON = ("SPORTS_CONTEXT_RECONCILE", "SPORTS_MARKET_FALLBACK", "SCOUT_BOARD_H2H")
+
+
+def apply_default_flags(env=os.environ):
+    for k in DEFAULT_ON:
+        env.setdefault(k, "1")
+
+
 def main(argv=None):
+    apply_default_flags()
     p = argparse.ArgumentParser(prog="python -m sports.service")
     p.add_argument("--host", default=os.environ.get("SPORTS_SERVICE_HOST", "0.0.0.0"))
     p.add_argument("--port", type=int, default=None)
