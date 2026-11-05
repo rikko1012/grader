@@ -33,6 +33,12 @@ def private_sports_data(monkeypatch, tmp_path):
     from sports import containment
     monkeypatch.setattr(containment, "DEFAULT_PATH", tmp_path / "no_containment_seed.json")
     containment.reset_cache()
+    # pc-1 printed-chance calibration (REGISTER A10): tests see the raw / cal-mi chance unless they write parameters
+    # (sports/tests/test_chance_cal.py checks the committed artifact and the default-on wiring)
+    from sports.model import chance_cal
+    monkeypatch.setattr(chance_cal, "DEFAULT_PATH", tmp_path / "no_chance_cal.json")
+    monkeypatch.delenv("SPORTS_CHANCE_CAL", raising=False)
+    chance_cal.reset_cache()
     for k in ("SPORTS_CONTAIN_NBA", "SPORTS_CONTAIN_NFL", "SPORTS_CAL_AUTOFIT", "SPORTS_GRADECHECK_DAILY",
               "SPORTS_DAILY_AFTER_UTC_H"):
         monkeypatch.delenv(k, raising=False)

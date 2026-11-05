@@ -1,0 +1,86 @@
+{
+ "version": "pc-1",
+ "rule": "owner decision 2026-11-05: printed chance = calibrated chance (chronological fit, held-out test); a failed league keeps letters held",
+ "fitted_at": "2026-11-05T14:36:57Z",
+ "test_from": "2026-11-01",
+ "source": "gradecore-export-1 (last saved sm-1 forecast >= 30 min before start, settled)",
+ "leagues": {
+  "nba": {
+   "spec": "platt",
+   "theta": [
+    0.0,
+    0.280821
+   ],
+   "stats": {},
+   "intercept": "zero",
+   "letters": "held",
+   "stat_lam": null,
+   "n": 8565,
+   "data_window": [
+    "2026-10-24",
+    "2026-11-02"
+   ],
+   "held_out": {
+    "fit_window": [
+     "2026-10-24",
+     "2026-10-31"
+    ],
+    "test_window": [
+     "2026-11-01",
+     "2026-11-02"
+    ],
+    "n_fit": 6447,
+    "n_test": 2118,
+    "pass": false,
+    "why": "failed: log_loss_better",
+    "log_loss": [
+     0.70147,
+     0.68846
+    ],
+    "brier": [
+     0.25319,
+     0.24767
+    ]
+   }
+  },
+  "nfl": {
+   "spec": "platt",
+   "theta": [
+    0.0,
+    0.157121
+   ],
+   "stats": {},
+   "intercept": "zero",
+   "letters": "contain-rule",
+   "stat_lam": null,
+   "n": 3798,
+   "data_window": [
+    "2026-10-25",
+    "2026-11-02"
+   ],
+   "held_out": {
+    "fit_window": [
+     "2026-10-25",
+     "2026-10-29"
+    ],
+    "test_window": [
+     "2026-11-01",
+     "2026-11-02"
+    ],
+    "n_fit": 1550,
+    "n_test": 2248,
+    "pass": true,
+    "why": "all checks pass",
+    "log_loss": [
+     0.7315,
+     0.68927
+    ],
+    "brier": [
+     0.2651,
+     0.24829
+    ]
+   }
+  }
+ },
+ "sha": "9d8d987b2a801b67"
+}

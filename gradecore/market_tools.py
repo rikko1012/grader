@@ -74,3 +74,52 @@ def compare_pair(a, b, now, max_age=120):
     return {'eligible': True, 'opportunity': total < 1, 'stake_shares': [x / total for x in implied],
             'quoted_return': 1 / total - 1, 'push_return': 0.0,
             'execution_guaranteed': False, 'sources': [a.source, b.source]}
+
+
+# ------------------------------------------------------------------------------------------------ Phase 4 EV / arb sheet
+# The Tools workspace (workspace_markets.py) prices every row through these functions and nothing else.
+WIDE_OVERROUND = 0.08          # a two-sided market whose prices add to more than 108% is "wide": less trust in its fair price
+EV_STALE_S = 30 * 60           # a quote older than this is never priced
+ARB_MAX_AGE_S = 5 * 60         # an arbitrage leg older than this is flagged and left out
+
+
+def implied(decimal_odds):
+    """1 / decimal price: the break-even chance a price implies (margin included)."""
+    return 1.0 / number(decimal_odds, 1.000000001)
+
+
+def ev_push_adjusted(p_cal, decimal_odds, p_push=0.0):
+    """EV per 1 unit staked = p_cal x decimal_odds - 1, push-adjusted: a push hands the stake back, so it adds p_push.
+    p_cal is the UNCONDITIONAL win chance. Never a probability-point gap."""
+    p, d, pp = number(p_cal, 0, 1), number(decimal_odds, 1.000000001), number(p_push, 0, 1)
+    if p + pp > 1 + 1e-9:
+        raise ValueError('outcomes exceed one')
+    return p * d + pp - 1.0
+
+
+def _american(d):
+    return (d - 1) * 100 if d >= 2 else -100 / (d - 1)
+
+
+def market_width(over_decimal, under_decimal, wide=WIDE_OVERROUND):
+    """Market-width check of one book's two-sided price: overround (sum of implied - 1), the American-odds width in cents
+    (-110/-110 = 20 cents, -125/+120 = 5 cents) and wide = overround above `wide`."""
+    a, b = number(over_decimal, 1.000000001), number(under_decimal, 1.000000001)
+    xa, xb = _american(a), _american(b)
+    if xa < 0 and xb < 0:
+        cents = -xa - xb - 200
+    elif xa >= 0 and xb >= 0:
+        cents = 200 - xa - xb
+    else:
+        cents = abs(min(xa, xb)) - max(xa, xb)
+    over = 1 / a + 1 / b - 1
+    return {'overround': over, 'width_cents': round(cents, 1), 'wide': over > wide}
+
+
+def arb_two_way(decimal_a, decimal_b):
+    """Two opposite sides on two books. impA = 1/oddsA, impB = 1/oddsB.
+    stake share A = impA / (impA + impB); margin % = (1 / (impA + impB) - 1) x 100. arbitrage = impA + impB < 1."""
+    ia, ib = implied(decimal_a), implied(decimal_b)
+    total = ia + ib
+    return {'implied': [ia, ib], 'total_implied': total, 'stake_share': [ia / total, ib / total],
+            'margin_pct': (1.0 / total - 1.0) * 100.0, 'arbitrage': total < 1.0}

@@ -78,13 +78,34 @@
   const offerKey = (book, id) => book + "|" + id;
   const propKey = (r) => [r.event.id, r.player.key, r.market.stat, r.market.period].join("|");
   const sportKey = (ev, pkey, stat, period, line, book) => [ev, pkey, stat, period, Number(line), book].join("|");
+  /* a board read sends back the ETag of the copy it holds: an unchanged board answers 304 with no body (audit 2026-11-04, polling).
+     Its own path, so a 304 is never an error and the browser cache never adds a second copy. A busy server is retried as api() does. */
+  async function boardRead(path, etag) {
+    for (let i = 0; ; i++) {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000), headers = Object.assign(TOKEN ? { "X-Admin-Token": TOKEN } : {}, etag ? { "If-None-Match": etag } : {});
+      try {
+        const r = await fetch(API + path, { signal: ctl.signal, credentials: "same-origin", headers, cache: "no-store" });
+        if (r.status === 304 && etag) return { same: true };
+        let doc = null;
+        try { doc = await r.json(); } catch (e) { doc = null; }
+        if (!r.ok) throw new ApiError(r.status, doc);
+        return { doc, etag: r.headers.get("ETag") };
+      } catch (e) {
+        if (i >= 2 || !(e instanceof ApiError) || e.status !== 503 || !e.doc || e.doc.error !== "busy") throw e;
+        await new Promise((res) => setTimeout(res, 2000 + Math.random() * 1500));
+      } finally { clearTimeout(t); }
+    }
+  }
   async function loadBoard(sport, force) {
     const b = R.boards[sport];
     if (b.busy) return b.busy;
     if (!force && Date.now() - b.at < BOARD_KEEP) return b;
     b.busy = (async () => {
       try {
-        const doc = await api(sport === "cs2" ? "board" : "board?sport=" + sport);
+        const read = await boardRead(sport === "cs2" ? "board" : "board?sport=" + sport, b.at && !b.error ? b.etag : null);
+        if (read.same) { Object.assign(b, { at: Date.now(), error: false }); b.busy = null; return b; }
+        const doc = read.doc;
+        b.etag = read.etag;
         Object.entries(doc.platforms || {}).forEach(([p, v]) => { if (!own(PLATFORMS, p)) PLATFORMS[p] = v; });
         const recs = new Map(), props = new Map(), keys = new Map();
         (doc.records || []).forEach((r) => {
@@ -157,7 +178,8 @@
   /* ---- account slip: the workspace's saved slip. Every device merges three ways against the copy it last synced ---- */
   const T = {
     legs: [], types: {}, rev: 0, ready: false, synced: new Set(), pending: false, saving: false, saveFail: false, gen: 0, check: null, checkSig: "", checking: false, checkErr: null,
-    tracked: null, trackIdem: {}, trackBusy: {}, copyBusy: false, mine: null, mineState: "idle", tab: "slip", open: new Set(), openPick: null
+    tracked: null, trackIdem: {}, trackBusy: {}, copyBusy: false, mine: null, mineState: "idle", tab: "slip", open: new Set(), openPick: null, advice: null,
+    slipLines: "no_goblins"   /* the member's goblin rule (hub Slip Studio sets it from saved prefs); the adder suggests only lines it allows */
   };
   const sig = () => T.legs.map((l) => [l.id, l.rev, l.read_rev, l.shown_p].join(":")).join(";") + "|" + JSON.stringify(T.types);
   const legIds = (legs) => new Set(legs.map((l) => l.id));
@@ -210,7 +232,7 @@
     }
     T.check = T.checkSig === sig() ? T.check : null;
     paintTray();
-    if (T.legs.length) scheduleCheck();
+    if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
   }
   async function pushState(retried, leaving) {
     if (!T.ready || !T.pending || T.saving) return;
@@ -257,7 +279,7 @@
       T.saveFail = false;
       if (T.pending) saveSoon();
       paintTray();
-      if (T.legs.length) scheduleCheck();
+      if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
     } catch (e) { T.saveFail = true; paintTray(); }
   }
   function slipChanged() {
@@ -266,7 +288,7 @@
     saveSlip();
     paintTray();
     markRows();
-    if (T.legs.length) scheduleCheck();
+    if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
   }
   function addRefusal(rec, side) {
     if (started(rec)) return `${startWord(rec)} at ${when(rec.event.start_utc)}.`;
@@ -276,77 +298,89 @@
     if (held(rec)) return "The grade on this line is held.";
     const same = T.legs.find((l) => l.player_key === rec.player.key && l.stat === rec.market.stat && l.period === rec.market.period && l.book === rec.offer.platform && l.event_id === rec.event.id);
     if (same && !(same.side === side && same.line === rec.offer.line)) return `Conflict: ${cap(same.side)} ${same.line} on this prop is already on your ${rec.offer.platform_label} entry.`;
+    /* sq-1 adder: one leg per player on an entry. PrizePicks counts a player once; Underdog refuses the same side and publishes nothing on both sides */
+    const twin = !same && T.legs.find((l) => l.book === rec.offer.platform && l.sport === rec.sport && l.player_key === rec.player.key);
+    if (twin) return `${rec.player.name} is already on your ${rec.offer.platform_label} entry (${cap(twin.side)} ${twin.line} ${twin.stat_label}, ${twin.period_label}). One leg per player: remove that pick first.`;
     if (T.legs.length >= MAX_LEGS && !same) return `A slip holds ${MAX_LEGS} picks.`;
     return null;
+  }
+  /* Facts about one leg against the rest of its entry, shown at once on the slip (the server's check stays the authority). */
+  function legNotes(l) {
+    const out = [];
+    T.legs.forEach((o) => {
+      if (o.id === l.id || o.book !== l.book || o.sport !== l.sport) return;
+      if (o.player_key === l.player_key) out.push(`${o.player} is on this entry twice. One leg per player.`);
+      else if (o.event_id === l.event_id) out.push(`Same match as ${o.player}: results can move together.${l.book === "prizepicks" && o.team !== l.team ? " PrizePicks keeps its same-match limits in its app; Scout does not offer opposing players here." : ""}`);
+    });
+    return [...new Set(out)];
   }
   function addLeg(rec, side) {
     const why = addRefusal(rec, side);
     if (why) { say(why); return false; }
     const id = legId(rec, side);
     if (T.legs.some((l) => l.id === id)) return true;
-    T.legs.push(makeLeg(rec, side));
+    const leg = makeLeg(rec, side);
+    T.legs.push(leg);
     slipChanged();
-    say(`Added ${rec.player.name} ${cap(side)} ${rec.offer.line} to your account slip`);
+    const notes = legNotes(leg);
+    say(`Added ${rec.player.name} ${cap(side)} ${rec.offer.line} to your slip.${notes.length ? " " + notes[0] : ""}`);
     return true;
   }
-  // Generate from published forecasts only. The server remains the authority for
-  // identity, freshness, permissions, duplicate picks and platform rules.
-  async function generateBatch(records, opts, progress) {
-    const {platform, count, size, entryType, mode, target, tolerance, mix, games} = opts;
-    if (!PLATFORMS[platform] || !Number.isInteger(count) || count<1 || count>12 || !Number.isInteger(size) || size<2 || size>6)
-      throw new Error('Choose 1–12 slips and 2–6 picks per slip.');
-    if (platform==='prizepicks' && size>6) throw new Error('PrizePicks supports up to 6 picks per entry.');
-    if (platform==='underdog' && entryType==='flex' && size<3) throw new Error('Underdog Flex needs at least 3 picks.');
-    if (platform==='underdog' && mix==='mixed') throw new Error('Mixed-sport generation is currently supported on PrizePicks. Choose PrizePicks or a single sport.');
-    if (!PLATFORMS[platform].types.some(t=>t[0]===entryType)) throw new Error('Choose a supported entry type.');
-    const pool=records.filter(r=>r.offer.platform===platform && !started(r) && r.state.kind==='ok' && r.scout.grade && !r.scout.hold
-      && r.scout.side && r.offer[r.scout.side]?.offered && isNum(chanceOf(r,r.scout.side))
-      && (mode!=='balanced'||Math.abs(chanceOf(r,r.scout.side)*100-target)<=tolerance+1e-8))
-      .sort((a,b)=>chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)||a.key.localeCompare(b.key));
-    if(pool.length<size) throw new Error(`Only ${pool.length} eligible props match these settings. Widen the chance range or include more sports.`);
-    const picked=[], signatures=new Set(), exposure=new Map(), rejected=new Set(), usedProps=new Set();
-    // Alternate lines, offer revisions and sides still belong to the same prop.
-    const propKey=r=>JSON.stringify([r.sport,r.event.id,r.player.key,r.market.stat,r.market.period]);
-    const unused=r=>!opts.noRepeatProps||!usedProps.has(propKey(r));
-    let checked=0, lastProblem='', examined=0;
-    // Bounded search, diversified by player exposure. Each successful candidate is
-    // independently checked; no combination's probability is inferred by multiplication.
-    for(let round=0;round<3 && picked.length<count;round++) {
-      for(const anchor of pool) {
-        if(picked.length>=count || checked>=24 || examined>=240) break;
-        examined++;
-        const aid=legId(anchor,anchor.scout.side);if(rejected.has(aid)||!unused(anchor))continue;
-        const chosen=[anchor], ev=new Set([anchor.sport+'|'+anchor.event.id]), players=new Set([anchor.sport+'|'+anchor.player.key]);
-        const ranked=pool.filter(r=>r!==anchor&&unused(r)&&!rejected.has(legId(r,r.scout.side))).sort((a,b)=>{
-          const use=(r)=>exposure.get(r.sport+'|'+r.player.key)||0;
-          return use(a)-use(b) || (mode==='balanced'?Math.abs(chanceOf(a,a.scout.side)-chanceOf(anchor,anchor.scout.side))-Math.abs(chanceOf(b,b.scout.side)-chanceOf(anchor,anchor.scout.side)):chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)) || a.key.localeCompare(b.key);
-        });
-        // A small rotation explores alternate combinations when the top candidate was already emitted.
-        if(round) ranked.push(...ranked.splice(0,Math.min(round,ranked.length)));
-        if(mix==='mixed') ranked.sort((a,b)=>(a.sport===anchor.sport)-(b.sport===anchor.sport));
-        for(const r of ranked) {
-          const e=r.sport+'|'+r.event.id,p=r.sport+'|'+r.player.key;
-          if((games!=='stacks'&&ev.has(e))||players.has(p)||((platform==='underdog'||mix==='single')&&r.sport!==anchor.sport))continue;
-          if(platform==='prizepicks'&&chosen.some(x=>x.sport===r.sport&&x.event.id===r.event.id&&x.player.team!==r.player.team))continue;
-          chosen.push(r);ev.add(e);players.add(p);if(chosen.length===size)break;
+  /* sq-1 (slip_quality.py): the server ranks legs by their settled band record and builds each slip for the best all-hit chance,
+     one leg per match, never repeating a prop when asked. This page maps each leg to the board record it already holds, rechecks
+     every slip, and asks again without a leg that fails (at most GEN_ROUNDS asks, GEN_CHECKS rechecks). Nothing is invented here. */
+  const GEN_ROUNDS = 3, GEN_CHECKS = 16;
+  async function generateBatch(_records, opts, progress) {
+    const {platform, count, size, entryType, mix, games} = opts;
+    if (!PLATFORMS[platform] || !Number.isInteger(count) || count < 1 || count > 12 || !Number.isInteger(size) || size < 2 || size > 6)
+      throw new Error("Choose 1–12 slips and 2–6 picks per slip.");
+    if (platform === "underdog" && entryType === "flex" && size < 3) throw new Error("Underdog Flex needs at least 3 picks.");
+    if (platform === "underdog" && mix === "mixed") throw new Error("Underdog does not publish mixed-sport entries. Choose PrizePicks or one sport.");
+    if (platform === "prizepicks" && games === "stacks") throw new Error("PrizePicks keeps its same-match limits in its app. Same-match legs are built on Underdog only.");
+    if (!PLATFORMS[platform].types.some((t) => t[0] === entryType)) throw new Error("Choose a supported entry type.");
+    const exclude = new Set(), passed = new Set();
+    let checks = 0, last = null, picked = [], note = "";
+    for (let round = 0; round < GEN_ROUNDS; round++) {
+      const q = new URLSearchParams({ platform, type: entryType, slips: String(count), picks: String(size), sports: opts.sports.join(","), mix, games,
+        repeats: opts.noRepeatProps ? "none" : "allow", lines: opts.lines || "no_goblins", research: opts.research ? "1" : "0" });
+      if (exclude.size) q.set("exclude", [...exclude].slice(0, 60).join(","));
+      let doc;
+      try { doc = await api("generate?" + q.toString()); }
+      catch (e) { if (e.doc && e.doc.error && e.status === 400) throw new Error(e.doc.error); throw e; }
+      last = doc; picked = []; let failed = false;
+      for (const s of doc.slips || []) {
+        const recs = s.legs.map((l) => (R.boards[l.sport].recs || new Map()).get(offerKey(l.book, l.row_id)));
+        if (recs.some((r) => !r)) {                       /* the page's board copy is older than the server's: reload, then ask again */
+          s.legs.forEach((l, i) => { if (!recs[i]) exclude.add([l.book, l.row_id, l.side].join("|")); });
+          failed = true; continue;
         }
-        if(chosen.length!==size || (mix==='mixed'&&new Set(chosen.map(r=>r.sport)).size<2))continue;
-        const legs=chosen.map(r=>makeLeg(r,r.scout.side)), signature=legs.map(l=>l.id).sort().join('\n');
-        if(signatures.has(signature))continue;signatures.add(signature);checked++;
-        progress?.(`Checking slip ${picked.length+1} of ${count}…`);
-        let doc;
-        try {doc=await api('recheck',{idem:idem(),legs:legs.map(wireLeg),entry_types:{[platform]:entryType}});}
-        catch(e){if(!picked.length)throw e;lastProblem='The server could not finish checking more combinations.';return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,note:lastProblem};}
-        const bad=legs.filter(l=>!doc.legs?.[l.id]?.ok);
-        if(bad.length){bad.forEach(l=>rejected.add(l.id));lastProblem=doc.legs?.[bad[0].id]?.problems?.[0]?.text||'Some current offers failed recheck.';continue;}
-        if(!doc.entries?.[platform]?.ok){lastProblem=doc.entries?.[platform]?.problems?.[0]?.text||'A combination failed its platform rules.';continue;}
-        picked.push({id:idem(),legs,checked_at:new Date().toISOString(),entry_type:entryType,platform});
-        chosen.forEach(r=>usedProps.add(propKey(r)));
-        legs.forEach(l=>{const k=l.sport+'|'+l.player_key;exposure.set(k,(exposure.get(k)||0)+1);});
+        const legs = recs.map((r, i) => makeLeg(r, s.legs[i].side)), signature = legs.map((l) => l.id).sort().join("\n");
+        if (!passed.has(signature)) {
+          if (checks >= GEN_CHECKS) { note = "The server could not finish checking more combinations."; break; }
+          checks++;
+          progress?.(`Checking slip ${picked.length + 1} of ${count}…`);
+          let c;
+          try { c = await api("recheck", { idem: idem(), legs: legs.map(wireLeg), entry_types: { [platform]: entryType } }); }
+          catch (e) { if (!picked.length) throw e; note = "The server could not finish checking more combinations."; break; }
+          const bad = s.legs.filter((l, i) => !c.legs?.[legs[i].id]?.ok);
+          if (bad.length || !c.entries?.[platform]?.ok) {
+            (bad.length ? bad : s.legs).forEach((l) => exclude.add([l.book, l.row_id, l.side].join("|")));
+            note = (bad.length ? c.legs?.[legs[s.legs.indexOf(bad[0])].id]?.problems?.[0]?.text : c.entries?.[platform]?.problems?.[0]?.text) || "Some current offers failed recheck.";
+            failed = true; continue;
+          }
+          passed.add(signature);
+        }
+        const meta = s.legs.map((l) => ({ rank: l.rank, record: l.record, research: !!l.research, line_type: l.line_type }));
+        picked.push({ id: idem(), legs: legs.map((l, i) => Object.assign(l, { gen: meta[i] })), checked_at: new Date().toISOString(), entry_type: entryType, platform,
+          why: s.why, all_hit: s.all_hit == null ? null : s.all_hit, payout: s.payout ? { multiple: s.payout.multiple, entry_type: s.payout.entry_type } : null,
+          ev: s.ev || null, same_match: !!s.same_match });
       }
+      if (!failed || note === "The server could not finish checking more combinations.") break;
+      await Promise.allSettled(opts.sports.map((sp) => loadBoard(sp, true)));
     }
-    return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,
-      note:picked.length<count?lastProblem||(opts.noRepeatProps?'Not enough unused eligible props could form more valid slips. No props were repeated. Include more sports, widen the chance range, or request fewer slips.':'The bounded search found fewer distinct checked combinations with these settings. Widen the chance range, include more sports, or reduce picks per slip.') :''};
+    const short = picked.length < count ? (note || (last && last.shortage) || "Fewer valid slips than asked with these settings.") : "";
+    return { version: 1, generator: last ? last.version : null, created_at: new Date().toISOString(), options: opts, slips: picked, note: short,
+      pool: last ? { legs: last.pool.legs, matches: last.pool.matches } : null };
   }
   async function useGenerated(slip) {
     if(!slip||!Array.isArray(slip.legs)||slip.legs.some(l=>!cleanLeg(l)))throw new Error('This saved lineup is invalid. Generate again.');
@@ -360,6 +394,31 @@
     T.legs=proposed;T.types=types;slipChanged();T.check=doc;T.checkSig=sig();T.checkErr=null;paintTray();
   }
   function removeLeg(id) { T.legs = T.legs.filter((l) => l.id !== id); slipChanged(); }
+  /* sq-1 adder: each leg's band record and the best replacement that fits the rest of its entry (slip_quality.advise). Read only:
+     a replacement is applied only when the member presses Swap in, at the same position, so nothing is dropped or reordered. */
+  async function runAdvice() {
+    if (!T.legs.length) { T.advice = null; return; }
+    const before = sig(), rule = T.slipLines || "no_goblins";
+    try {
+      const doc = await api("slip-advice", { legs: T.legs.map((l) => Object.assign(wireLeg(l), { stat: l.stat, period: l.period, player_key: l.player_key,
+        line_type: R.boards[l.sport]?.recs?.get(offerKey(l.book, l.row_id))?.market?.line_type || undefined })),
+        entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])), lines: T.slipLines || "no_goblins" });
+      if (sig() === before && rule === (T.slipLines || "no_goblins")) { T.advice = { sig: before, legs: Object.fromEntries((doc.legs || []).map((r) => [r.id, r])) }; paintTray(); }
+    } catch (e) { /* advice is extra: the check stays the authority */ }
+  }
+  const scheduleAdvice = debounce(runAdvice, 900);
+  async function replaceLeg(id) {
+    const adv = T.advice && T.advice.sig === sig() ? T.advice.legs[id] : null, rep = adv && adv.replacement, i = T.legs.findIndex((l) => l.id === id);
+    if (!rep || i < 0) return;
+    await loadBoard(rep.sport);
+    const rec = R.boards[rep.sport].recs.get(offerKey(rep.book, rep.row_id));
+    if (!rec || started(rec)) { say("That line has left the board."); return; }
+    const old = T.legs[i], next = makeLeg(rec, rep.side);
+    if (T.legs.some((l, j) => j !== i && (l.id === next.id || (l.book === next.book && l.sport === next.sport && l.player_key === next.player_key)))) { say(`${next.player} is already on your slip.`); return; }
+    T.legs = T.legs.map((l, j) => (j === i ? next : l));
+    slipChanged();
+    say(`Swapped ${old.player} for ${next.player} ${cap(next.side)} ${next.line}.`);
+  }
   const onSlip = (rec) => T.legs.some((l) => l.sport === rec.sport && l.key === rec.key && l.book === rec.offer.platform);
 
   const askCheck = () => api("recheck", { idem: idem(), legs: T.legs.map(wireLeg), entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])) });
@@ -463,7 +522,7 @@
       T.tracked = { n, label: e.label, receipt: doc.receipts[0].id };
       say(`${plural(n, "pick")} tracked.`);
       loadMine();
-      if (T.legs.length) scheduleCheck();
+      if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
     } catch (err) {
       if (err.status === 409 && err.doc && err.doc.legs) { T.check = err.doc; T.checkSig = sig(); say("The check at Track found a change. Nothing was tracked."); }
       else if (err.status === 503) say("Scout is busy. Your slip is still here: press Track again.");
@@ -538,16 +597,32 @@
     const evText = legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
     const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
+    const notes = legNotes(l), adv = T.advice && T.advice.sig === sig() ? T.advice.legs[l.id] : null, rep = adv && adv.replacement;
+    const noteHtml = notes.length ? `<div class="u-leg-notes">${notes.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
+    const advHtml = adv && (adv.band || rep) ? `<p class="u-leg-advice">${adv.band ? esc(adv.band) + "." : ""}${rep ? ` ${adv.in_pool ? "Ranks higher here" : "Best replacement"}: ${esc(rep.player)} ${cap(rep.side)} ${esc(rep.line)} ${esc(rep.stat_label)}, ${esc(rep.period_label)} · ${pct(rep.p)}<button class="u-btn" type="button" data-u="replace" data-id="${esc(l.id)}">Swap in</button>` : ""}</p>` : "";
     return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
       <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
       <span class="u-leg-meta">${read}${evText}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
-      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${problems}</div>`;
+      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${noteHtml}${advHtml}${problems}</div>`;
+  }
+  /* an entry that only needs more picks is in progress, not refused: its size and two-team rules read as the next step, in
+     neutral text; red stays for real conflicts. null = at least one problem is a real conflict (or a leg did not pass). */
+  function progressOf(e, c) {
+    if (!c || c.ok || !c.problems.length || !e.legs.every((l) => T.check.legs[l.id] && T.check.legs[l.id].ok)) return null;
+    const out = [];
+    for (const p of c.problems) {
+      const size = /entries take (\d+)-(\d+) picks \(this one has (\d+)\)/.exec(p.text || "");
+      if (size && +size[3] < +size[1]) { const n = +size[1] - +size[3]; out.push(`Add ${n} more ${n === 1 ? "pick" : "picks"}`); continue; }
+      if (/^All picks are from one team/.test(p.text || "")) { out.push("Add 1 pick from another team"); continue; }
+      return null;
+    }
+    return out;
   }
   function entryHtml(e, phase) {
     const c = phase === "fresh" ? T.check.entries[e.key] : null, ready = !!(c && c.ok), can = !!(c && c.trackable), busy = !!T.trackBusy[e.key];
-    const types = PLATFORMS[e.platform].types, cur = typeOf(e);
+    const types = PLATFORMS[e.platform].types, cur = typeOf(e), prog = progressOf(e, c);
     const seg = `<div class="u-seg" role="group" aria-label="${esc(e.label)} entry type">${types.map(([v, l]) => `<button type="button" aria-pressed="${cur === v}" data-u="etype" data-id="${esc(e.platform + ":" + v)}">${l}</button>`).join("")}</div>`;
-    const entryP = c && c.problems.length ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}</p>`).join("")}</div>` : "";
+    const entryP = prog ? `<p class="u-progress">${esc(prog.join(" · "))}</p>` : c && c.problems.length ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}</p>`).join("")}</div>` : "";
     const rules = c && c.rules && c.rules.length ? `<details class="u-det" ${det("rules:" + c.platform)}><summary>Platform rules checked</summary><ul>${c.rules.map((r) => `<li>${esc(r.label)}: ${esc(r.text)}.${r.note ? ` ${esc(r.note)}` : ""}${r.source ? ` <a href="${esc(r.source)}" target="_blank" rel="noopener">Source</a>${r.page_date ? `, ${esc(shortDate(r.page_date))}` : ""}` : ""}</li>`).join("")}</ul></details>` : "";
     const open = c && c.open && safeBookLink(c.open.url,e.platform) ? `<button class="u-btn u-gold" data-u="open-entry" data-id="${esc(e.key)}">${esc(c.open.label)}</button>` : "";
     const metric = (value, label) => `<div><b>${value}</b><span>${label}</span></div>`;
@@ -556,8 +631,8 @@
       : (ev?.payout ? metric(esc(ev.payout.multiple)+'×',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
     const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}× entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';
-    const math = `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
-    return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok ? " refused" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
+    const math = prog ? "" : `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
+    return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok && !prog ? " refused" : ""}${prog ? " building" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
       ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1, head && head.legs ? head.legs[i] : null)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}
         <div class="u-acts"><button class="u-btn${!open && can ? " u-gold" : ""}" type="button" ${can && !busy ? "" : "disabled"} data-u="track" data-id="${esc(e.key)}">${busy ? "Tracking" : "Track"}</button><button class="u-btn" type="button" ${ready ? "" : "disabled"} data-u="copy" data-id="${esc(e.key)}">${T.copyBusy ? "Checking" : "Copy"}</button></div></div></section>`;
@@ -634,10 +709,14 @@
   }
   function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
   function chartSvg(results, line, side, w) {
-    /* opponent names in full where they fit; otherwise angled, so a name is never cut to "benche" */
-    const names = results.map((d) => String(d.opponent || "")), longest = Math.max(0, ...names.map((x) => Math.min(x.length, 14)));
-    const slot0 = (w - 36) / Math.max(1, results.length), angled = longest * 6.2 > slot0 - 4;
-    const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 170, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 24 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
+    /* opponent names in full where they fit, each game's date under its name (audit 2026-11-04); otherwise angled as one
+       "name · date" label, so a name is never cut to "benche" */
+    const dateOf = (d) => (d.date ? shortDate(String(d.date)) : "");
+    const names = results.map((d) => String(d.opponent || "")), dates = results.map(dateOf);
+    const flat = Math.max(0, ...names.map((x) => Math.min(x.length, 14)), ...dates.map((x) => x.length));
+    const slot0 = (w - 36) / Math.max(1, results.length), angled = flat * 6.2 > slot0 - 4;
+    const longest = angled ? Math.max(0, ...results.map((d, i) => Math.min(names[i].length, 14) + (dates[i] ? dates[i].length + 3 : 0))) : flat;
+    const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 184, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 38 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
     const vals = data.map((d) => d.value), top = Math.max(line, ...vals, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
     const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
     const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
@@ -647,7 +726,8 @@
       const x = m.l + slot * i + (slot - bw) / 2, yv = y(d.value), push = d.value === line, over = d.value > line, cls = push ? "b-push" : (side === "over" ? over : !over) ? "b-hit" : "b-miss";
       out += `<rect class="${cls}" x="${x}" y="${yv}" width="${bw}" height="${Math.max(base - yv, 1)}" rx="3"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${d.value}`)}</title></rect>`;
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
-      if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 8}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>`;
+      const day = dateOf(d);
+      if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")) + (day ? " · " + day : ""))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 21}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>${day ? `<text class="date" x="${x + bw / 2}" y="${h - 7}" text-anchor="middle">${esc(day)}</text>` : ""}`;
     });
     return out + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${y(line)}" y2="${y(line)}"/><text class="line-lab" x="${w - m.r}" y="${m.t - 10}" text-anchor="end">Line ${esc(line)}</text></svg>`;
   }
@@ -728,8 +808,10 @@
     if (G.key !== k) Object.assign(G, { key: k, ans: null, err: null });
     const left = G.quota ? `<p class="u-dim">${G.quota.remaining_questions} of ${G.quota.questions_limit} questions left today.</p>` : "";
     const sugg = ["What is the projection?", "How often did this line hit?", "What is the head-to-head?", "Is there a better line elsewhere?"];
-    const out = G.busy ? '<div class="u-skel"></div>' : G.err ? `<p>${esc(G.err)}</p>` : G.ans ? G.ans.map((x) => `<p>${esc(x)}</p>`).join("") : "";
-    return `<form class="u-ask" id="u-ask" novalidate><label for="u-ask-q">Ask about this line</label><div class="u-ask-row"><input id="u-ask-q" name="q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button class="u-btn u-gold" type="submit" data-u="genie-ask"${G.busy ? ' aria-disabled="true"' : ""}>Ask</button></div>
+    // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
+    const persona = R.me?.features?.genie_persona === true;
+    const out = G.busy ? '<div class="u-skel"></div>' : G.err ? `<p>${esc(G.err)}</p>` : G.ans ? (persona && G.intro ? `<p class="u-genie-intro">${esc(G.intro)}</p>` : "") + G.ans.map((x) => `<p>${esc(x)}</p>`).join("") : "";
+    return `<form class="u-ask" id="u-ask" novalidate>${persona ? `<p class="u-genie-intro">\u{1F9DE} Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat.</p>` : ""}<label for="u-ask-q">${persona ? "Make a wish about this line" : "Ask about this line"}</label><div class="u-ask-row"><input id="u-ask-q" name="q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button class="u-btn u-gold" type="submit" data-u="genie-ask"${G.busy ? ' aria-disabled="true"' : ""}>Ask</button></div>
       <div class="u-ask-sugg" role="group" aria-label="Suggested questions">${sugg.map((x) => `<button class="u-btn" type="button" data-u="genie-ask" data-id="${esc(x)}">${esc(x)}</button>`).join("")}</div>
       <div class="u-ask-out" id="u-ask-out" role="status" aria-live="polite">${out}</div>${left}</form>`;
   }
@@ -743,12 +825,12 @@
     try {
       const d = await api("genie", { sport: rec.sport, book: rec.offer.platform, id: rec.offer.offer_id, revision: rec.offer.revision, side: P.side, question: q });
       if (G.key !== k) return;
-      G.ans = d.sentences; G.quota = d.quota;
+      G.ans = d.sentences; G.quota = d.quota; G.intro = d.intro || null;
     } catch (e) {
       if (G.key !== k) return;
       const c = e instanceof ApiError ? e.status : 0;
       if (c === 429 && e.doc && e.doc.quota) G.quota = e.doc.quota;
-      G.err = c === 429 ? (e.doc && e.doc.error === "daily_limit_reached" ? "You have used today's questions. They reset at midnight UTC." : "Too many questions in a minute. Try again shortly.")
+      G.err = c === 429 ? (e.doc && e.doc.error === "daily_limit_reached" ? (R.me?.features?.genie_persona ? "\u{1F9DE} Your wishes are spent for today. They reset at midnight UTC." : "You have used today's questions. They reset at midnight UTC.") : "Too many questions in a minute. Try again shortly.")
         : c === 409 ? "This line changed. Reopen it to ask about the current offer." : c === 413 ? "Keep the question under 300 characters." : "The Genie is unavailable right now.";
     } finally { if (G.key === k) { G.busy = false; paintDrawer(); } }
   }
@@ -891,8 +973,9 @@
     pclose() { $("u-drawer").close(); },
     tab(id) { T.tab = id; if (id !== "slip") loadMine(); paintTray(); },
     check() { T.checkErr = null; T.check = null; runCheck(); },
-    clear() { T.legs = []; slipChanged(); say("Slip tray cleared"); },
+    clear() { T.legs = []; slipChanged(); say(HUB && !$("u-hub").hidden ? "Slip cleared" : "Slip tray cleared"); },
     swap: swapLeg,
+    replace: replaceLeg,
     "leg-x": removeLeg,
     etype(v) { const i = v.indexOf(":"); T.types[v.slice(0, i)] = v.slice(i + 1); slipChanged(); },
     track: trackEntry,
@@ -1244,7 +1327,7 @@
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
+        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();

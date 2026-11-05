@@ -2,6 +2,8 @@
 break-even and the "Current lines only" empty state. Flag off: the board, /me and the sheets carry none of it."""
 import json
 
+import re
+
 import pytest
 
 import hltv
@@ -64,6 +66,7 @@ def test_cs2_flag_on_adds_h2h_season_and_the_ud_break_even(env, monkeypatch):
     monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: vals)
     f = _me(env.url)["features"]["board_h2h"]
     assert f["ud_standard_break_even"] == pytest.approx(payouts.break_even("underdog", "standard", 2)) == pytest.approx(3.5 ** -0.5)
+    assert f["source"] == payouts.UD_SOURCE and f["read_at"] == payouts.UD_READ_AT       # the break-even names its published source
     rows = _hits(env.url)
     assert rows and all({"h2h", "season"} <= set(r) for r in rows.values())
     with_h2h = [r for r in rows.values() if r["h2h"]]
@@ -110,15 +113,18 @@ def _hub(ctx, env, size=None):
 def test_board_flag_off_has_no_new_columns(ctx, env, monkeypatch):
     monkeypatch.delenv("SCOUT_BOARD_H2H", raising=False)
     p = _hub(ctx, env)
-    assert p.locator('#hub-table thead th').count() == 12
+    assert p.locator('#hub-table thead th').count() == 9
+    assert p.locator('#hub-table thead .h-strip-head span').all_inner_texts() == ['L5', 'L10', 'L20']
     assert p.locator('#u-hub.h-cols').count() == 0
-    assert p.locator('.h-c-h2h, .h-c-season, .h-c-edge, .h-countdown').count() == 0
-    assert p.locator('#hub-rows .h-hit[class*="h-tone-"]').count() == 0                  # 7 tones stay a V2 look when the flag is off
+    assert p.locator('.h-s-h2h, .h-s-season, .h-c-edge').count() == 0
     p.locator('#hub-rows .h-player').first.click()
-    p.wait_for_selector('#hub-rows .h-detail-row')
-    assert p.locator('#hub-rows .h-detail-row td').first.get_attribute('colspan') == '12'
+    p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
+    assert p.locator('#hub-rows .h-detail-row').count() == 0                            # the card is a panel, never a row inside the table
+    p.locator('#hub-detail [data-hub=card-close]').click()
     p.locator('#hub-q').fill('zzzz-no-such-player')
-    assert 'No lines match these filters' in p.locator('#hub-empty').inner_text()
+    assert 'lines hidden by filters' in p.locator('#hub-empty').inner_text()
+    p.locator('#hub-empty [data-hub=clear-filters]').click()
+    assert p.locator('#hub-q').input_value() == '' and p.locator('#hub-rows tr[data-record]').count() > 0
     assert p.locator('#hub-empty .h-empty-reasons').count() == 0
     assert p.errors == []
 
@@ -141,35 +147,49 @@ def test_board_flag_on_columns_countdown_edge_and_tones(ctx, env, monkeypatch, s
     p = _hub(ctx, env, size)
     if size is DESK:
         heads = [h.strip() for h in p.locator('#hub-table thead th').all_text_contents()]       # raw text; CSS uppercases it
-        assert len(heads) == 15 and any(h.startswith('Edge') for h in heads) and 'H2H' in heads and 'Season' in heads
+        assert len(heads) == 10 and 'Edge vs break-even' in heads                                    # a visible row has an edge, so the column shows
+        assert p.locator('#hub-table thead .h-strip-head span').all_inner_texts() == ['L5', 'L10', 'L20', 'H2H', 'SZN']
     assert p.locator('#u-hub.h-cols').count() == 1
     rows = p.locator('#hub-rows tr[data-record]')
-    assert rows.count() and p.locator('#hub-rows tr[data-record] td.h-c-h2h').count() == rows.count()
-    assert p.locator('#hub-rows tr[data-record] td.h-c-season').count() == rows.count()
+    assert rows.count() and p.locator('#hub-rows tr[data-record] .h-s-h2h').count() == rows.count()
+    assert p.locator('#hub-rows tr[data-record] .h-s-season').count() == rows.count()
     # the shared CS2 pass fills H2H against the fixture opponent (Norrland: 10 of the 20 matches, newest 10 meetings)
     p.locator('#hub-q').fill('vargo')
-    p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record^=cs2] td.h-c-h2h .h-hit')].some(e=>/\\/10/.test(e.textContent))", timeout=15000)
-    h2h = p.locator('#hub-rows tr[data-record^=cs2] td.h-c-h2h .h-hit').first
+    p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record^=cs2] .h-s-h2h .h-hit')].some(e=>/last 10 meetings/.test(e.title))", timeout=15000)
+    h2h = p.locator('#hub-rows tr[data-record^=cs2] .h-s-h2h .h-hit').first
     assert 'meetings with Norrland' in h2h.get_attribute('title') and 'h-tone-' in h2h.get_attribute('class')
-    assert '2026 season' in p.locator('#hub-rows tr[data-record^=cs2] td.h-c-season .h-hit').first.get_attribute('title')
+    assert '2026 season' in p.locator('#hub-rows tr[data-record^=cs2] .h-s-season .h-hit').first.get_attribute('title')
     cd = p.locator('#hub-rows .h-countdown').first
     assert cd.inner_text().startswith('in ') and 'h' in cd.inner_text()             # the fixture starts in about three hours
     p.locator('#hub-q').fill('')
-    # Edge: a number on Underdog standard rows with a Scout side only, a dash everywhere else
+    # Edge (owner 2026-11-05): the row's chance against Underdog's published per-pick break-even on every sport's Underdog standard
+    # line; PrizePicks publishes no fixed per-pick payout, so its cells stay empty
     for i in range(rows.count()):
         r = rows.nth(i)
         rid = r.get_attribute('data-record')
-        edge = r.locator('td.h-c-edge .h-edge')
-        if '|prizepicks|' in rid or not rid.startswith('cs2|'):
-            assert edge.inner_text() == '—', rid                                 # LoL / NBA / NFL never: the slip refuses their EV
+        if '|prizepicks|' in rid:
+            assert r.locator('td.h-c-edge .h-edge').inner_text() == '—', rid
     ud = p.locator('#hub-rows tr[data-record*="|underdog|"] td.h-c-edge .h-edge:not(.empty)')
     assert ud.count() >= 1 and 'break-even' in ud.first.get_attribute('title') and ud.first.inner_text().endswith('pts')
-    assert p.locator('#hub-rows tr[data-record]:not([data-record^="cs2|"]) td.h-c-edge .h-edge:not(.empty)').count() == 0
+    assert all(re.fullmatch(r'[+−±]\d+\.\d', t.replace('pts', '').strip()) for t in ud.all_inner_texts())
+    assert p.locator('#hub-rows .h-edge.negative').count() == 0                     # coloured only when above zero
+    if size is DESK:
+        assert "PrizePicks and goblin or demon lines publish no fixed per-pick payout" in p.locator('#hub-table thead .h-c-edge').get_attribute('title')
+        p.locator('#hub-filters-toggle').click()
+        p.locator('#hub-sort').select_option('edge')
+        first = [e for e in p.locator('#hub-rows tr[data-record] td.h-c-edge .h-edge').all_inner_texts()][:3]
+        assert first and all(x != '—' for x in first) and p.locator('#hub-sort-note').inner_text() == ''
+        p.locator('#hub-q').fill('vargo')
+        book = p.locator('#hub-platform [data-id=prizepicks]')
+        book.click()                                                            # no line on screen has an edge: start-time order, said so
+        assert 'sorted by start time' in p.locator('#hub-sort-note').text_content()
+        assert p.locator('#hub-rows tr.h-game-row').count() >= 1
+        p.locator('#hub-platform [data-id=all]').click(); p.locator('#hub-q').fill('')
+        p.locator('#hub-filters-toggle').click(); p.locator('#hub-sort').select_option('start'); p.keyboard.press('Escape')
     assert p.locator('#hub-rows .h-hit:not(.empty):not(.h-hit-wait):not(.h-hit-both)').count() == \
         p.locator('#hub-rows .h-hit[class*="h-tone-"]').count()                              # every sided cell takes one of the 7 tones
     p.locator('#hub-rows .h-player').first.click()
-    p.wait_for_selector('#hub-rows .h-detail-row')
-    assert p.locator('#hub-rows .h-detail-row td').first.get_attribute('colspan') == '15'
+    p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
     no_h_scroll(p)
     assert p.errors == []
 
@@ -185,11 +205,11 @@ def test_current_lines_only_empty_state_counts_each_reason(ctx, env, monkeypatch
     p.evaluate("""() => { const real=Date.now; Date.now=()=>real()+86400000*3; }""")      # three days on: every fixture match has started
     p.locator('#hub-q').fill('a')
     p.locator('#hub-q').fill('')
-    p.wait_for_selector('#hub-empty .h-empty-reasons')
+    # 2026-11-05 structure review: no current line left means the plain fact and a Refresh, not a list of statuses
+    p.wait_for_selector('#hub-empty [data-hub=refresh]')
     text = p.locator('#hub-empty').inner_text()
-    assert 'Current lines only' in text and 'No current line matches these filters.' in text
-    started = p.locator('#hub-empty [data-reason="Started"] b').inner_text()
-    assert int(started.replace(',', '')) >= n
+    assert 'No current lines' in text and 'hidden by filters' not in text and n > 0
+    assert p.locator('#hub-empty .h-empty-reasons').count() == 0
     no_h_scroll(p)
     assert p.errors == []
 
@@ -214,8 +234,10 @@ def test_board_edge_cells_come_from_the_slip_gate_and_never_break_me(env, monkey
 def test_hub_edge_cell_requires_the_slip_gate_and_the_empty_state_names_no_status():
     from pathlib import Path
     js = (Path(workspace_api.__file__).resolve().parent / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
-    body = js[js.index("function edgeOk(r)"):js.index("/* start countdown")]
-    assert "r.sport!=='cs2'" in body and "Number.isInteger(+r.offer.line)" in body and "COLS?.edge_cells" in body and "||!edgeOk(r))" in body
+    body = js[js.index("function edgeValue(r)"):js.index("/* start countdown")]
+    # owner 2026-11-05: chance vs the published per-pick break-even; Underdog standard at 1.0x only; letters (hold) do not enter it
+    assert "r.offer.platform!=='underdog'" in body and "r.market.line_type!=='standard'" in body and "Math.abs(mult-1)>1e-9" in body
+    assert "s.hold" not in body and "edgeOk" not in js
     empty = js[js.index("function emptyReasons()"):js.index("function installCols()")]
     for banned in ("Board refresh failed", "Source not updated", "'Held'", "unavailableReason"):
         assert banned not in empty

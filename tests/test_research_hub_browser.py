@@ -1,9 +1,13 @@
 """Real Handler + isolated four-sport fixtures. No production account writes."""
 import json
+import os
 import time
+from pathlib import Path
 import pytest
 import server
 from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE
+
+SHOTS_DIR = Path(os.environ['PHASE4_SHOTS']) if os.environ.get('PHASE4_SHOTS') else None
 
 
 def saved_state(page, predicate):
@@ -17,9 +21,28 @@ def saved_state(page, predicate):
     pytest.fail('Account state did not persist: ' + repr(last))
 
 
+def book(p, b):
+    """The platform toggle on the toolbar (All | PP | UD)."""
+    p.locator(f'#hub-platform [data-id={b}]').click()
+
+
+def open_filters(p):
+    if p.locator('#hub-filter-pop').is_hidden():
+        p.locator('#hub-filters-toggle').click()
+
+
+def add_first(p):
+    """+ Add on the first row not on the slip; a prop whose Scout side is not offered opens the ONE card, where the member picks a side."""
+    p.locator('#hub-rows .h-add:not([disabled]):not(.is-on)').first.click()
+    if p.locator('#hub-card').is_visible():
+        p.locator('#hub-detail [data-hub=history-side][data-id=over]').click()
+        p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').click()
+        p.locator('#hub-detail [data-hub=card-close]').click()
+
+
 def hub(ctx, env, size=None):
     p = open_page(ctx, env, '/#all-sports', size)
-    p.wait_for_selector('#hub-rows tr', timeout=30000)
+    p.wait_for_selector('#hub-rows tr[data-record]', timeout=30000)
     p.wait_for_function("document.querySelector('#hub-sports').textContent.includes('NFL')")
     return p
 
@@ -72,7 +95,9 @@ def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
     p.goto(env.url+'/#scout/record')
     p.wait_for_selector('.h-record-calendar')
     assert p.locator('.h-record-calendar').count()==4
-    assert p.locator('.h-calendar-grid summary').count()==120
+    # a run of days with no decided pick folds into one tile: 28 days before the result, the day itself, the day after
+    assert p.locator('.h-calendar-grid summary').count()==4
+    assert p.locator('.h-cal-gap').count()==8 and '28 days' in p.locator('.h-cal-gap').first.inner_text()
     p.locator('.h-calendar-grid summary[aria-label^="2026-11-02"]').first.click()
     assert '1 wins · 0 losses · 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
     assert 'Accuracy only, not profit.' in p.locator('#hub-record-body').inner_text()
@@ -156,21 +181,23 @@ def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env)
     assert all(p.locator('#hub-rows tr[data-record^='+s+']').count() for s in ('cs2','lol','nba','nfl'))
     assert 'SAMPLE' not in p.locator('#u-hub').inner_text()
     p.locator('#hub-q').fill('vargo')
-    assert p.locator('#hub-rows tr').count() == 1
+    assert p.locator('#hub-rows tr[data-record]').count() == 1
     p.locator('#hub-rows .h-prop-toggle').click()
-    assert p.locator('#hub-rows tr').count() >= 2
+    assert p.locator('#hub-rows tr[data-record]').count() >= 2
     assert 'orlo' not in p.locator('#hub-rows').inner_text()
     p.locator('#hub-rows .h-player').first.click()
     p.wait_for_selector('#hub-detail .h-history-chart svg', timeout=15000)
-    # the card shows the overview, history and stats; its drawer keeps only what the card does not (books, the Genie)
-    p.locator('#hub-detail [data-hub=drawer][data-id=books]').click()
-    p.wait_for_selector('#u-drawer[open] .u-tbl', timeout=15000)
-    assert p.locator('#u-drawer [role=tab]').all_inner_texts() == ['Books', 'Ask the Genie']
-    assert p.locator('#u-drawer .u-chart').count() == 0
-    p.locator('#u-drawer [data-u=ptab][data-id=genie]').click()
-    assert 'What would you like to check?' in p.locator('#u-drawer').inner_text()
-    p.locator('[data-u=pclose]').click()
-    p.locator('.h-classic').click()
+    # ONE card: books and the Genie are tabs of the same card; the old drawer is not used inside the hub
+    assert p.locator('#hub-detail [role=tab]').all_inner_texts() == ['Overview', 'Lines', 'Stats', 'Ask']
+    p.locator('#hub-detail [role=tab][data-id=lines]').click()
+    p.wait_for_selector('#hub-detail .h-line-shop table')
+    assert 'Seen' in p.locator('#hub-detail .h-line-shop thead').text_content()
+    p.locator('#hub-detail [role=tab][data-id=ask]').click()
+    assert 'Scout evidence guide' in p.locator('#hub-detail').inner_text()
+    assert not p.locator('#u-drawer').is_visible() and not p.locator('#u-tray').is_visible()
+    p.locator('#hub-detail [data-hub=card-close]').click()
+    assert p.locator('#hub-card').is_hidden()
+    p.locator('.h-sidebar [data-hub=close]').click()
     assert p.locator('#u-hub').is_hidden()
     assert not p.locator('#board').get_attribute('inert')
     assert not p.errors
@@ -178,16 +205,11 @@ def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env)
 
 def test_four_sport_prizepicks_slip_syncs_to_second_browser_context(ctx, env, browser):
     p = hub(ctx, env)
-    p.locator('#hub-book').select_option('prizepicks')
+    book(p, 'prizepicks')
     for i, sport in enumerate(('cs2','lol','nba','nfl')):
         p.locator('#hub-sports [data-id='+sport+']').click()
-        assert p.locator('#hub-rows tr').first.get_attribute('data-record').startswith(sport+'|'), p.locator('#hub-sports').inner_text()
-        p.locator('#hub-rows .h-add:not([disabled])').first.click()
-        if p.locator('#u-drawer').is_visible():
-            # A research-only offer can have no Scout side. The member must explicitly choose.
-            p.locator('#u-drawer [data-u=pside][data-id=over]').click()
-            p.locator('#u-drawer [data-u=padd]').click()
-            p.locator('#u-drawer [data-u=pclose]').click()
+        assert p.locator('#hub-rows tr[data-record]').first.get_attribute('data-record').startswith(sport+'|'), p.locator('#hub-sports').inner_text()
+        add_first(p)            # a research-only offer can have no Scout side: the member explicitly chooses in the card
         assert p.locator('#hub-slip-count').inner_text() == str(i+1), (sport,p.locator('#hub-rows').inner_text(),p.locator('#u-toast').inner_text(),p.errors)
     p.wait_for_function("document.querySelector('#hub-slip-count').textContent === '4'")
     saved = saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 4)
@@ -209,11 +231,14 @@ def test_four_sport_prizepicks_slip_syncs_to_second_browser_context(ctx, env, br
 def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
     p=hub(ctx, env)
     p.locator('#hub-q').fill('vargo')
+    open_filters(p)
     p.locator('#hub-minGrade').select_option('B-')
+    p.locator('#hub-views-toggle').click()
     p.locator('[data-hub=save-view]').click()
     p.locator('#hub-save-name').fill('My CS2 research')
     p.locator('#hub-save-confirm').click()
     saved_state(p, lambda d: len((d.get('prefs') or {}).get('researchHub', {}).get('views', [])) == 1)
+    p.locator('#hub-views-toggle').click()
     p.locator('[data-hub=save-alert]').click()
     p.locator('#hub-save-name').fill('Vargo line updates')
     p.locator('#hub-save-confirm').click()
@@ -221,12 +246,16 @@ def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
     saved_state(p, lambda d: len((d.get('prefs') or {}).get('researchHub', {}).get('alerts', [])) == 1 and len((d.get('prefs') or {}).get('researchHub', {}).get('watch', [])) == 1)
     p.reload()
     p.wait_for_selector('#hub-rows tr')
+    p.locator('#hub-views-toggle').click()
     p.locator('#hub-views').select_option('0')
     assert p.locator('#hub-q').input_value()=='vargo'
     assert p.locator('#hub-minGrade').input_value()=='B-'
-    p.locator('.h-sidebar [data-id=alerts]').click()
+    assert p.locator('#hub-filter-n').inner_text()=='1'                # Filters (n) counts the grade filter
+    p.locator('.h-sidebar [data-id=tools]').click()                      # Tools is the one index; alerts are managed right there
+    assert 'Vargo line updates' in p.locator('#hub-tools-alerts').inner_text()
+    p.locator('#hub-tools-alerts [data-id=alerts]').click()
     assert 'Vargo line updates' in p.locator('#hub-alerts-body').inner_text()
-    assert 'No email or push' in p.locator('#hub-alerts-body').inner_text()
+    assert 'Nothing is sent when it is closed' in p.locator('#hub-alerts-body').inner_text()          # Live highlight: never claims delivery
     assert not p.errors
 
 
@@ -234,7 +263,7 @@ def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
 def test_responsive_record_loading_keyboard_and_no_overflow(ctx, env, size):
     p=hub(ctx, env, size)
     no_h_scroll(p)
-    p.locator(('.h-nav-mobile' if size==PHONE else '.h-sidebar')+' [data-id=record]').click()
+    p.locator(('.h-tabbar' if size==PHONE else '.h-sidebar')+' [data-id=record]').click()
     p.wait_for_selector('.h-record-card',timeout=30000)
     assert 'Actual hit rate' in p.locator('#hub-record-body').inner_text()
     assert p.locator('.h-record-card').count()==4
@@ -252,7 +281,7 @@ def test_quote_refresh_failure_hides_the_lines_and_cannot_add(ctx, env):
     p=hub(ctx, env)
     p.locator('#hub-sports [data-id=cs2]').click()
     p.route('**/api/upgrade/board',lambda r:r.fulfill(status=503,content_type='application/json',body='{"error":"board_unavailable"}'))
-    p.locator('.h-tools [data-hub=refresh]').click()
+    p.locator('.h-toolbar [data-hub=refresh]').click()
     p.wait_for_function("!document.querySelector('#hub-rows .h-add')")
     assert 'could not refresh' not in p.locator('#hub-health').inner_text()
     assert p.locator('#hub-rows .h-add:not([disabled])').count()==0
@@ -263,7 +292,8 @@ def test_unoffered_scout_side_opens_side_choice_instead_of_dead_add(ctx, env):
     p = hub(ctx, env)
 
     def one_sided(route):
-        response = route.fetch()
+        h = dict(route.request.headers); h.pop('if-none-match', None)          # always a full board, never a 304, for the rewrite
+        response = route.fetch(headers=h)
         d = response.json()
         for record in d['records']:
             side = record['scout'].get('side')
@@ -273,11 +303,12 @@ def test_unoffered_scout_side_opens_side_choice_instead_of_dead_add(ctx, env):
 
     p.route('**/api/upgrade/board', one_sided)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-book').select_option('prizepicks')
-    p.locator('.h-tools [data-hub=refresh]').click()
+    book(p, 'prizepicks')
+    p.locator('.h-toolbar [data-hub=refresh]').click()
     p.wait_for_selector('#hub-rows .h-add[aria-label^="Choose a side"]', timeout=10000)
     p.locator('#hub-rows .h-add').first.click()
-    p.wait_for_selector('#u-drawer[open]', timeout=10000)
+    p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision', timeout=10000)      # the same card, side chooser pinned
+    assert not p.locator('#u-drawer').is_visible()
     assert p.locator('#hub-slip-count').inner_text() == '0'
     assert not p.errors
 
@@ -292,15 +323,17 @@ def test_malformed_saved_filters_cannot_break_the_board(ctx, env):
     }""")
     p.reload()
     p.wait_for_selector('#hub-rows tr')
+    p.locator('#hub-views-toggle').click()
     p.locator('#hub-views').select_option('0')
     assert p.locator('#hub-q').input_value()==''
-    assert p.locator('#hub-rows tr').count()>0
+    assert p.locator('#hub-rows tr[data-record]').count()>0
     assert not p.errors
 
 
 def test_successful_response_with_stale_source_is_not_presented_as_current(ctx, env):
     def stale(route):
-        response=route.fetch()
+        h=dict(route.request.headers);h.pop('if-none-match',None)
+        response=route.fetch(headers=h)
         d=response.json()
         for f in d['feeds'].values():
             f['state']='stale'
@@ -308,19 +341,21 @@ def test_successful_response_with_stale_source_is_not_presented_as_current(ctx, 
     p=hub(ctx, env)
     p.route('**/api/upgrade/board',stale)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('.h-tools [data-hub=refresh]').click()
+    p.locator('.h-toolbar [data-hub=refresh]').click()
     p.wait_for_function("!document.querySelector('#hub-rows .h-add')")      # stale lines are left off, never labelled
     assert p.locator('#hub-rows .h-add:not([disabled])').count()==0 and 'stale' not in p.locator('#hub-health').inner_text().lower()
 
 
 def test_phone_keeps_filters_available_without_covering_first_prop(ctx, env):
     p=hub(ctx, env, PHONE)
-    assert not p.locator('#hub-book').is_visible()
-    assert p.locator('#hub-rows tr').first.bounding_box()['y'] < 600
+    assert not p.locator('#hub-stat').is_visible()                     # the other filters wait in the Filters pop-over
+    assert p.locator('#hub-rows tr[data-record]').first.bounding_box()['y'] < 300
     p.locator('#hub-filters-toggle').click()
-    p.locator('#hub-book').select_option('prizepicks')
-    p.locator('#hub-filters-toggle').click()
-    assert all(x.startswith(('cs2|prizepicks|','lol|prizepicks|','nba|prizepicks|','nfl|prizepicks|')) for x in p.locator('#hub-rows tr').evaluate_all('(rows)=>rows.map(r=>r.dataset.record)'))
+    assert p.locator('#hub-stat').is_visible()
+    p.keyboard.press('Escape')
+    assert not p.locator('#hub-stat').is_visible()
+    book(p, 'prizepicks')
+    assert all(x.startswith(('cs2|prizepicks|','lol|prizepicks|','nba|prizepicks|','nfl|prizepicks|')) for x in p.locator('#hub-rows tr[data-record]').evaluate_all('(rows)=>rows.map(r=>r.dataset.record)'))
     no_h_scroll(p)
 
 
@@ -349,7 +384,10 @@ def test_inline_history_line_selection_side_and_keyboard(ctx,env,size):
     assert '3/5' in p.locator('#hub-detail .h-history-summary').inner_text()
     p.locator('#hub-detail [data-hub=history-side][data-id=under]').click()
     assert '2/5' in p.locator('#hub-detail .h-history-summary').inner_text()
+    p.locator('#hub-detail [role=tab][data-id=lines]').click()
     p.locator('#hub-detail [data-hub=detail-line]').filter(has_text='34.5').click()
+    p.wait_for_function("document.querySelector('#hub-card-line')?.selectedOptions[0]?.textContent.includes('34.5')")
+    p.locator('#hub-detail [role=tab][data-id=overview]').click()
     p.wait_for_function("document.querySelector('#hub-detail .h-history-chart')?.getAttribute('aria-label').includes('34.5')")
     assert 'Add Under 34.5' in p.locator('#hub-detail [data-hub=detail-add]').inner_text()
     assert not p.locator('#hub-detail [data-hub=detail-add]').is_disabled()
@@ -377,12 +415,15 @@ def test_inline_research_refuses_a_changed_revision(ctx,env):
 def test_matchup_and_market_filters_reset_cleanly_when_switching_sport(ctx,env):
     p=hub(ctx,env)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-games [data-hub=game]').filter(has_text='Kestrel').click()
+    p.locator('#hub-rows [data-hub=game]').filter(has_text='Kestrel').click()          # a game header row filters to that game
     assert 'vargo' not in p.locator('#hub-rows').inner_text()
+    assert p.locator('#hub-filter-n').inner_text()=='1'
+    open_filters(p)
     p.locator('#hub-stat').select_option(label='Headshots')
+    p.keyboard.press('Escape')
     p.locator('#hub-sports [data-id=nba]').click()
     assert p.locator('#hub-stat').input_value()=='all'
-    assert p.locator('#hub-games [data-id=all]').get_attribute('aria-pressed')=='true'
+    assert p.locator('#hub-rows [data-hub=game][aria-pressed=true]').count()==0 and p.locator('#hub-filter-n').inner_text()==''
     assert p.locator('#hub-rows tr[data-record]').count()>0
     assert not p.errors
 
@@ -390,7 +431,7 @@ def test_matchup_and_market_filters_reset_cleanly_when_switching_sport(ctx,env):
 def test_tracked_picks_have_a_page_with_sport_status_filters_and_receipts(ctx,env):
     p=hub(ctx,env)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-book').select_option('underdog')
+    book(p, 'underdog')
     for name in ('vargo','orlo'):
         p.locator('#hub-q').fill(name)
         p.locator('#hub-rows .h-add:not([disabled])').first.click()
@@ -420,7 +461,7 @@ def test_studio_slip_header_only_with_its_flag(ctx,env,monkeypatch,flag,size):
     monkeypatch.setattr(server,'_p1_export',_calibrated_export)
     p=hub(ctx,env)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-book').select_option('underdog')
+    book(p, 'underdog')
     for name in ('vargo','orlo'):
         p.locator('#hub-q').fill(name)
         p.locator('#hub-rows .h-add:not([disabled])').first.click()
@@ -440,27 +481,25 @@ def test_studio_slip_header_only_with_its_flag(ctx,env,monkeypatch,flag,size):
 
 def test_phone_keeps_specialist_tools_in_a_real_menu(ctx,env):
     p=hub(ctx,env,PHONE)
-    p.locator('.h-tools-menu summary').click()
-    assert p.locator('.h-tools-menu a').filter(has_text='Moneylines').is_visible()
-    assert p.locator('.h-tools-menu a').filter(has_text='Single prop grader').is_visible()
+    p.locator('.h-tabbar [data-hub=more]').click()                      # the bottom bar's More holds the specialist tools
+    assert p.locator('#hub-more a').filter(has_text='Moneylines').is_visible()
+    assert p.locator('#hub-more a').filter(has_text='Single prop grader').is_visible()
+    assert p.locator('#hub-more [data-hub=close]').is_visible()
     no_h_scroll(p)
 
 
 @pytest.mark.parametrize('path',['/#slips','/sports#/slips?lg=nfl','/lol#scout/studio'])
 def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,path):
     p=hub(ctx,env)
-    p.locator('#hub-book').select_option('prizepicks')
+    book(p, 'prizepicks')
     for sport in ('cs2','lol','nba','nfl'):
         p.locator('#hub-sports [data-id='+sport+']').click()
-        p.locator('#hub-rows .h-add:not([disabled])').first.click()
-        if p.locator('#u-drawer').is_visible():
-            p.locator('#u-drawer [data-u=pside][data-id=over]').click()
-            p.locator('#u-drawer [data-u=padd]').click()
-            p.locator('#u-drawer [data-u=pclose]').click()
+        add_first(p)
     saved_state(p,lambda d:len((d.get('slip')or{}).get('legs',[]))==4)
     p.goto(env.url+path)
     p.wait_for_selector('#hub-studio-body .u-entry',timeout=20000)
-    assert p.locator('#hub-title').inner_text()=='Slip Studio'
+    assert p.locator('#hub-title').inner_text()=='Slips'
+    assert p.locator('[data-hub=studio-tab][aria-selected=true]').inner_text().startswith('My slip')
     assert p.locator('#hub-studio-body .u-leg').count()==4
     p.locator('#hub-studio-body [data-u=check]').click()
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
@@ -472,7 +511,7 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
 def test_workspace_navigation_back_reload_and_platform_bookmarks(ctx,env):
     p=open_page(ctx,env,'/#board/prizepicks')
     p.wait_for_selector('#hub-rows tr[data-record]')
-    assert p.locator('#hub-book').input_value()=='prizepicks'
+    assert p.locator('#hub-platform [data-id=prizepicks]').get_attribute('aria-pressed')=='true'
     p.locator('#hub-sports [data-id=nfl]').click()
     p.locator('.h-sidebar [data-id=studio]').click()
     p.go_back()
@@ -499,9 +538,13 @@ def test_single_prop_and_shared_legacy_filter_links_do_not_get_hidden(ctx,env):
     assert p.locator('#u-hub').is_hidden()
     assert p.url.endswith('#one')
 
-def test_generator_saves_eight_distinct_balanced_slips_without_replacing_draft(ctx, env, browser):
+def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx, env, browser):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
+    # without its goblin line the fixture pool (6 legs, 3 matches) builds 7 distinct pairs; eight need Any lines. The No goblins
+    # default is covered by test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed.
+    p.locator('#hub-generation-lines').select_option('all')
     p.locator('#hub-generate').click()
     p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
     state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 8)
@@ -509,18 +552,23 @@ def test_generator_saves_eight_distinct_balanced_slips_without_replacing_draft(c
     assert not (state.get('slip') or {}).get('legs')
     assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
     assert all(len(s['legs']) == 2 for s in slips)
-    assert all(.55 <= l['shown_p'] <= .65 for s in slips for l in s['legs'])
+    assert state['studio']['generator'] == 'sq-1'
+    assert all(s['why'] and all(l['gen']['record'] for l in s['legs']) for s in slips)          # one line per slip, a record per leg
+    assert not [l for s in slips for l in s['legs'] if l['sport'] in ('nba', 'nfl')]           # research estimates stay out unless asked
+    assert all(len({l['player_key'] for l in s['legs']}) == 2 for s in slips)
+    assert p.locator('.h-generated-card .h-batch-why').count() == 8
     assert all(len({(l['sport'], l['event_id']) for l in s['legs']}) == 2 for s in slips)
     assert p.locator('.h-generated-card').count() == 8
     p.locator('[data-hub=use-generated]').first.click()
     saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
     before = saved_state(p, lambda d: bool(d.get('slip')))['slip']
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     p.locator('#hub-generate').click()
     p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
     assert saved_state(p, lambda d: bool(d.get('studio')))['slip'] == before
     c = context(browser, env)
     try:
-        q = open_page(c, env, '/#slips')
+        q = open_page(c, env, '/#slips?tab=build')
         q.wait_for_selector('.h-generated-card', timeout=20000)
         assert q.locator('.h-generated-card').count() == 8
         assert q.locator('#hub-studio-body .u-leg').count() == 2
@@ -532,6 +580,7 @@ def test_generator_saves_eight_distinct_balanced_slips_without_replacing_draft(c
 def test_generator_refuses_server_failure_without_overwriting_draft(ctx, env):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     p.route('**/api/upgrade/recheck', lambda route: route.fulfill(status=503, content_type='application/json', body='{"error":"busy"}'))
     p.locator('#hub-generate').click()
     p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('draft was kept')", timeout=20000)
@@ -543,7 +592,7 @@ def test_generator_refuses_server_failure_without_overwriting_draft(ctx, env):
 def test_studio_controls_and_entry_contents_fit_their_boxes(ctx, env, width):
     p = hub(ctx, env, {'width':width,'height':900})
     p.screenshot(path=f'.fit-board-{width}.png')
-    p.goto(env.url + '/#slips')
+    p.goto(env.url + '/#slips?tab=build')
     p.wait_for_selector('#hub-generate')
     p.locator('#hub-generate').click()
     p.wait_for_function("!document.querySelector('#hub-generate').disabled",timeout=30000)
@@ -565,6 +614,7 @@ def test_inline_prop_displays_available_player_stats(ctx, env):
     p.locator('#hub-sports [data-id=nba]').click()
     p.locator('#hub-q').fill('Karl Anders')
     p.locator('#hub-rows .h-player').first.click()
+    p.locator('#hub-detail [role=tab][data-id=stats]').click()
     p.wait_for_selector('.h-stat-library dl',timeout=15000)
     facts = p.locator('.h-stat-library').inner_text()
     assert 'Points, L5' in facts and '21.4' in facts
@@ -599,24 +649,31 @@ def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, si
     p.locator('#hub-sports [data-id=cs2]').click()
     p.locator('#hub-q').fill('vargo')
     row = p.locator('#hub-rows tr[data-record]').first
-    p.wait_for_selector('#hub-rows .h-c-l5 .h-hit-wait')
-    assert row.locator('.h-c-l5').inner_text().strip() == ''          # a placeholder, never a dash
-    assert row.locator('.h-c-l10 .h-hit').inner_text().replace('\n', '') == '6/10'
+    p.wait_for_selector('#hub-rows .h-s-l5 .h-hit-wait')
+    assert row.locator('.h-s-l5').inner_text().strip() == ''          # a placeholder, never a dash
+    # ONE hit strip: the rate on the cell, the exact counts in its tooltip
+    l10 = row.locator('.h-s-l10 .h-hit')
+    assert l10.inner_text() == '60%' and l10.get_attribute('title').startswith('6 Over of the last 10 at this line')
     p.wait_for_function("!document.querySelector('#hub-rows .h-hit-wait')", timeout=20000)
-    assert row.locator('.h-c-l20 .h-hit').text_content() == '7/9'
-    assert row.locator('.h-c-l20 .h-few').text_content() == '9 games'
-    assert '—' not in row.locator('.h-c-l5').inner_text()
-    assert row.locator('.h-grade.h-grade-b').inner_text() == 'B'
+    l20 = row.locator('.h-s-l20 .h-hit')
+    assert l20.text_content() == '78%' and '7 Over of the last 9' in l20.get_attribute('title') and '(9 games on file)' in l20.get_attribute('title')
+    assert 'h-few' in l20.get_attribute('class')
+    assert '—' not in row.locator('.h-s-l5').inner_text()
+    assert row.locator('.h-c-scout .h-grade.h-grade-b').inner_text() == 'B'                 # side, chance and letter in one Scout cell
+    assert 'Over' in row.locator('.h-c-scout').inner_text()
     assert row.locator('.h-chevron').count() == 0
-    assert row.locator('.h-prop-toggle').inner_text().startswith('View 4 props')
-    compare = row.locator('.h-compare').inner_text()
-    assert '3 lines · 34.5–42.5' in compare and 'PrizePicks 34.5' in compare, compare
+    assert row.locator('.h-prop-toggle').inner_text() == '+3'
+    compare = row.locator('.h-compare')
+    assert '3 lines' in compare.inner_text() and '34.5–42.5' in compare.inner_text()
+    assert 'PrizePicks 34.5' in compare.get_attribute('title')
     p.locator('#hub-sports [data-id=nba]').click()
     p.locator('#hub-q').fill('Karl Anders')
     nba = p.locator('#hub-rows tr[data-record]').first
-    assert nba.locator('.h-grade').count() == 0 and 'Research estimate' in nba.locator('.h-c-grade').inner_text()
+    assert nba.locator('.h-grade').count() == 0 and 'Research estimate' in nba.locator('.h-c-scout').inner_text()
     nba.locator('.h-player').click()
+    p.locator('#hub-detail [role=tab][data-id=stats]').click()
     p.wait_for_selector('#hub-detail .h-stat-group h5', timeout=15000)
+    assert p.locator('#hub-detail .h-full-research a').get_attribute('href').startswith('/sports?view=classic#/player/')
     heads = p.locator('#hub-detail .h-stat-group h5').all_inner_texts()
     assert {'MATCHUP', 'AVERAGES', 'MODEL INPUTS'} <= {h.upper() for h in heads}, heads
     no_h_scroll(p)
@@ -626,6 +683,7 @@ def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, si
 def test_underdog_generation_uses_one_sport_with_enough_games(ctx, env):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     p.locator('#hub-generation-book').select_option('underdog')
     p.locator('#hub-generate').click()
     p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
@@ -639,6 +697,7 @@ def test_underdog_generation_uses_one_sport_with_enough_games(ctx, env):
 def test_batch_mixed_sports_and_stale_candidate_refusal(ctx, env):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     p.locator('#hub-generation-slips').select_option('4')
     p.locator('#hub-generation-mix').select_option('mixed')
     p.locator('#hub-generate').click()
@@ -657,13 +716,19 @@ def test_batch_mixed_sports_and_stale_candidate_refusal(ctx, env):
 def test_batch_shortfall_is_explicit_and_controls_match_platform(ctx, env):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
-    p.locator('#hub-generation-target').select_option('80')
-    p.locator('#hub-generation-tolerance').select_option('3')
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
+    for sport in ('lol', 'nba', 'nfl'):
+        p.locator(f'#hub-generation-sports input[value={sport}]').uncheck()
+    p.locator('#hub-generation-count').select_option('6')
     p.locator('#hub-generate').click()
     p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
-    assert 'eligible props' in p.locator('#hub-generation-status').inner_text()
+    assert 'eligible legs on PrizePicks' in p.locator('#hub-generation-status').inner_text()   # the fixture's CS2 legs cannot make a 6-pick slip
     assert p.locator('.h-generated-card').count() == 0
+    assert p.locator('#hub-generation-games option[value="stacks"]').get_attribute('disabled') is not None   # PrizePicks: one leg per match
+    p.locator('#hub-generation-count').select_option('2')
     p.locator('#hub-generation-book').select_option('underdog')
+    assert p.locator('#hub-generation-games option[value="stacks"]').get_attribute('disabled') is None
+    assert p.locator('#hub-generation-mix option[value="mixed"]').get_attribute('disabled') is not None
     p.locator('#hub-generation-type').select_option('flex')
     assert p.locator('#hub-generation-count').input_value() == '3'
     assert p.locator('#hub-generation-count option[value="2"]').get_attribute('disabled') is not None
@@ -681,6 +746,7 @@ def test_eight_lineups_each_have_requested_number_of_picks(ctx, env, size):
     env.seed()
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     for sport in ('lol','nba','nfl'):
         p.locator(f'#hub-generation-sports input[value={sport}]').uncheck()
     p.locator('#hub-generation-count').select_option(str(size))
@@ -705,6 +771,7 @@ def test_no_repeat_props_across_generated_batch(ctx,env,size,available):
     env.seed()
     p=hub(ctx,env)
     p.locator('.h-sidebar [data-id=studio]').click()
+    p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     for sport in ('lol','nba','nfl'):
         p.locator(f'#hub-generation-sports input[value={sport}]').uncheck()
     p.locator('#hub-generation-count').select_option(str(size))
@@ -720,7 +787,7 @@ def test_no_repeat_props_across_generated_batch(ctx,env,size,available):
     assert batch['options']['noRepeatProps'] is True
     if available<size*8:
         assert 'No props were repeated' in p.locator('#hub-generation-status').inner_text()
-    p.reload();p.wait_for_selector('.h-generated-card')
+    p.reload();p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click();p.wait_for_selector('.h-generated-card')
     assert 'No repeat props' in p.locator('#hub-generated').inner_text()
     assert p.locator('#hub-generation-repeats').input_value()=='none'
     no_h_scroll(p)
@@ -765,3 +832,130 @@ def test_failed_workspace_script_restores_classic(ctx, env):
     p.goto(env.url + '/')
     p.wait_for_function("!document.documentElement.classList.contains('scout-boot')", timeout=12000)
     assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'
+
+
+def test_adder_warns_at_once_refuses_a_second_leg_for_one_player_and_swaps_in_place(ctx, env):
+    """sq-1 adder: a same-match note on the slip at once, a refusal naming the leg already there, and the server's best replacement
+    applied only on Swap in, at the same position."""
+    from tests.workspace_fixture import row
+    start = env.rows[0]['start']
+    extra = [row('pp:7400', 'prizepicks', 'vargo', 'Halcyon', 'Norrland', 15.5, 'More', .62, 900, start, prop='hs'),
+             row('pp:7401', 'prizepicks', 'zenith', 'Orbit', 'Comet', 25.5, 'More', .72, 902, start)]
+    env.rows.extend(extra)
+    env.seed(extra)
+    p = hub(ctx, env)
+    book(p, 'prizepicks')
+    p.locator('#hub-sports [data-id=cs2]').click()
+    def add(name, n=0):
+        p.locator('#hub-q').fill(name)
+        p.wait_for_function("(n)=>document.querySelectorAll('#hub-rows .h-add:not([disabled]):not(.is-on)').length>n", arg=n)
+        p.locator('#hub-rows .h-add:not([disabled]):not(.is-on)').nth(n).click()
+    add('brandr')
+    add('vargo')
+    p.wait_for_function("document.querySelector('#hub-slip-count').textContent === '2'")
+    assert 'Same match as' in p.locator('#u-toast').inner_text()
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.wait_for_selector('#hub-studio-body .u-leg-notes')
+    assert 'Same match as' in p.locator('#hub-studio-body .u-leg-notes').first.inner_text()
+    p.locator('.h-sidebar [data-id=board]').first.click()
+    p.locator('#hub-q').fill('vargo')
+    p.wait_for_function("document.querySelectorAll('#hub-rows .h-add').length>=1")
+    if p.locator('#hub-rows .h-prop-toggle[aria-expanded=false]').count():
+        p.locator('#hub-rows .h-prop-toggle').first.click()                    # the player's other props open under his row
+    other = p.locator('#hub-rows tr[data-record]').filter(has_text='Headshots').locator('.h-add:not(.is-on)')
+    assert other.count() == 1
+    other.first.click()
+    assert 'One leg per player' in p.locator('#u-toast').inner_text()
+    assert p.locator('#hub-slip-count').inner_text() == '2'
+    p.locator('.h-sidebar [data-id=studio]').click()
+    names = "[...document.querySelectorAll('#hub-studio-body .u-leg-name')].map(e=>e.firstChild.textContent)"
+    before = p.evaluate(names)
+    p.wait_for_selector('#hub-studio-body [data-u=replace]', timeout=15000)
+    assert 'zenith' in p.locator('#hub-studio-body .u-leg-advice').filter(has=p.locator('[data-u=replace]')).first.inner_text()
+    p.locator('#hub-studio-body [data-u=replace]').first.click()
+    p.wait_for_function("[...document.querySelectorAll('#hub-studio-body .u-leg-name')].some(e=>e.textContent.startsWith('zenith'))")
+    after = p.evaluate(names)
+    assert len(after) == len(before) == 2 and 'zenith' in after
+    kept = [n for n in before if n in after]
+    assert len(kept) == 1 and after.index(kept[0]) == before.index(kept[0])        # the other leg keeps its place
+    assert not p.errors
+
+
+# ------------------------------------------------------------------------------------------------ goblin rule (owner 2026-11-05)
+
+def _studio_build(p):
+    p.goto(p.url.split('#')[0] + '#slips?tab=build')
+    p.wait_for_selector('#hub-generation-lines')
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed(ctx, env, browser, size):
+    """Slip Studio's Goblins rule: No goblins by default, explained in one plain line, saved to the account (a reload and a second
+    browser keep it), and every generated slip and every adder suggestion follows it."""
+    p = hub(ctx, env, size)
+    _studio_build(p)
+    sel = p.locator('#hub-generation-lines')
+    assert sel.input_value() == 'no_goblins'
+    assert sel.locator('option').all_text_contents() == ['No goblins', 'At most 1 goblin per slip', 'No goblins or demons', 'Any lines']
+    assert p.locator('#hub-generation-lines-help').inner_text() == 'Goblins are easier lines that pay less. Scout leaves them out unless you allow them.'
+    assert 'Goblins (PrizePicks lines set below the standard line' in p.locator('.h-generator details').text_content()
+    if SHOTS_DIR:
+        SHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        p.locator('.h-generator').screenshot(path=str(SHOTS_DIR / f"studio_goblin_rule_{size['width']}.png"))
+    with p.expect_request(lambda r: '/api/upgrade/generate?' in r.url) as req:
+        p.locator('#hub-generate').click()
+    assert 'lines=no_goblins' in req.value.url
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
+    state = saved_state(p, lambda d: (d.get('studio') or {}).get('options', {}).get('lines') == 'no_goblins')
+    legs = [l for s in state['studio']['slips'] for l in s['legs']]
+    assert legs and not [l for l in legs if (l.get('gen') or {}).get('line_type') == 'goblin']
+    assert '· No goblins' in p.locator('.h-batch-head').inner_text()
+    sel.select_option('one_goblin')
+    saved_state(p, lambda d: ((d.get('prefs') or {}).get('researchHub') or {}).get('slipLines') == 'one_goblin')
+    p.reload()
+    p.wait_for_selector('#hub-generation-lines')
+    p.wait_for_function("document.getElementById('hub-generation-lines').value==='one_goblin'", timeout=15000)
+    c = context(browser, env, size)
+    try:
+        q = open_page(c, env, '/#slips?tab=build')
+        q.wait_for_function("document.getElementById('hub-generation-lines')?.value==='one_goblin'", timeout=20000)
+    finally:
+        c.close()
+    p.locator('#hub-generation-lines').select_option('no_goblins')
+    saved_state(p, lambda d: ((d.get('prefs') or {}).get('researchHub') or {}).get('slipLines') == 'no_goblins')
+    no_h_scroll(p)
+    assert not p.errors
+
+
+@pytest.mark.parametrize('old,shown', [('all', 'no_goblins'), ('standard', 'standard')])
+def test_a_batch_saved_before_the_goblin_rule_does_not_turn_goblins_back_on(ctx, env, old, shown):
+    """Review 2026-11-05: members who generated before the Goblins control have studio.options.lines == 'all' saved (the old Lines
+    select's first option and default) and no prefs slipLines. That is not a choice to allow goblins: the control shows No goblins
+    and Generate asks for lines=no_goblins. The old 'Standard lines only' was a deliberate opt-out and carries over."""
+    p = hub(ctx, env)
+    p.evaluate("""async (old) => {
+      const s=await (await fetch('/api/upgrade/state')).json();
+      const r=await fetch('/api/upgrade/state',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({rev:s.rev,studio:{version:1,created_at:new Date().toISOString(),options:{lines:old,noRepeatProps:false},slips:[]}})});
+      if(!r.ok)throw Error('Fixture studio write failed');
+    }""", old)
+    st = saved_state(p, lambda d: ((d.get('studio') or {}).get('options') or {}).get('lines') == old)
+    assert not ((st.get('prefs') or {}).get('researchHub') or {}).get('slipLines')
+    with p.expect_response(lambda r: r.url.endswith('/api/upgrade/state') and r.request.method == 'GET', timeout=30000):
+        p.reload()
+    _studio_build(p)
+    p.wait_for_timeout(800)                                   # the saved state has been read and applied to the control
+    p.wait_for_function("document.getElementById('hub-generation-lines').value===%r" % shown, timeout=15000)
+    with p.expect_request(lambda r: '/api/upgrade/generate?' in r.url) as req:
+        p.locator('#hub-generate').click()
+    assert f'lines={shown}' in req.value.url
+    assert not p.errors
+
+
+def test_adder_asks_with_the_goblin_rule(ctx, env):
+    p = hub(ctx, env)
+    book(p, 'prizepicks')
+    with p.expect_request(lambda r: r.url.endswith('/api/upgrade/slip-advice'), timeout=20000) as req:
+        add_first(p)
+    assert req.value.post_data_json['lines'] == 'no_goblins'
+    assert not p.errors

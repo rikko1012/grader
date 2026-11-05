@@ -26,6 +26,16 @@ def private_hltv_store(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def private_letter_containment(tmp_path):
+    """lc-1 (letter_containment.py): each test reads its own, empty containment state - never a DATA_DIR copy.
+    SCOUT_LETTER_CONTAINMENT ships off (letters as before); tests/test_letter_containment.py turns it on itself."""
+    from gradecore import containment as gc
+    gc.set_path(tmp_path / "letter_containment.json")
+    yield
+    gc.set_path(None)
+
+
+@pytest.fixture(autouse=True)
 def private_map_chance_check(monkeypatch, tmp_path):
     """The HLTV map-chances check (mapchances.py, run by the veto-serve background thread) writes to the test's own folder,
     never to the repo root (a server-start test can let that thread run)."""

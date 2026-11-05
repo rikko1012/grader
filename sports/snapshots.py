@@ -1026,7 +1026,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
         vrows = board_view.player_rows(rows, games)
         view_out.add(vrows)
         for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
-            log = guard_row(league, r, forecasts, vrows.get(r["key"]), now)
+            # sg-2 history rules (thin / stale) read the bv-1 row only when the history was actually read
+            log = guard_row(league, r, forecasts, vrows.get(r["key"]) if history else None, now)
             if events[r["event_id"]][1].start_utc > now:      # the admin log lists games still on the board
                 sanity_log.extend(log)
         tid = cur_team.get(pid)
@@ -1177,6 +1178,7 @@ def guard_row(league, row, forecasts, view_row, now):
         if sv is None:
             continue
         po, pu, mu, model, fid, iv = sv
+        raw = (po, pu)
         line = float(q["line"])
         l10 = ((view_row or {}).get("lines") or {}).get(board_view.line_key(line))
         l10 = list(l10[:4]) if l10 else None
@@ -1187,7 +1189,8 @@ def guard_row(league, row, forecasts, view_row, now):
             ca["f"] = fid
             q["cal"] = ca
             po, pu = ca["po"], ca["pu"]
-        x, code = board_view.quote_x(league, row["stat"], po, pu, mu, line, mkc, l10, iv)
+        x, code = board_view.quote_x(league, row["stat"], po, pu, mu, line, mkc, l10, iv, raw=raw, view=view_row,
+                                     now=now)
         q["x"] = x
         if code:
             out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),
@@ -1216,6 +1219,16 @@ def write_cal_index(root, base_meta, board_rows):
     summary = {"version": cal.VERSION, "enabled": cal.enabled(), "weights": src, "sha": (obj or {}).get("sha"),
                "markets_on": sorted(k for k, p in ((obj or {}).get("params") or {}).items() if p.get("on")),
                "quotes": len(idx), "with_market": sum(1 for v in idx.values() if v.get("mode") == "M")}
+    try:                                                 # pc-1 (REGISTER A10): the printed-chance calibration in use
+        from .model import chance_cal
+        pobj, psrc = chance_cal.load()
+        lg = base_meta.get("league")
+        summary["pc1"] = {"version": chance_cal.VERSION, "enabled": chance_cal.enabled(), "weights": psrc,
+                          "sha": (pobj or {}).get("sha"),
+                          "letters": (((pobj or {}).get("leagues") or {}).get(lg) or {}).get("letters"),
+                          "quotes": sum(1 for v in idx.values() if v.get("mode") == "P")}
+    except Exception as e:                              # noqa: BLE001 - never breaks the snapshot
+        summary["pc1_error"] = type(e).__name__
     # A9a 6: persist the shown (calibrated) chance beside the offer's OWN forecast (a line read's chance belongs to
     # another line's record, so it is never stored); first write wins; never breaks the snapshot
     items = [(q["cal"].get("f"), r.get("stat"), q.get("line"), q["cal"]) for r in board_rows
@@ -1256,8 +1269,11 @@ def write_sanity(root, entries, base_meta, board_rows):
     summary = {"rule": board_view.SANITY_VERSION, "gate_rule": board_view.GATE_VERSION, "held": len(entries),
                "reasons": reasons, "gate_held_quotes": gate,
                "gate": {st: board_view.gate_state(st) for st in sorted({r["stat"] for r in board_rows})}}
+    # "keys": EVERY held (record_id, forecast_id, reason), never truncated - the slip pool reads it, so a held prop is
+    # never a slip leg even when the logged entries are cut at SANITY_MAX
     _write(root / "sanity.json", {**base_meta, **summary, "entries": entries[:SANITY_MAX],
-                                  "truncated": max(0, len(entries) - SANITY_MAX)})
+                                  "truncated": max(0, len(entries) - SANITY_MAX),
+                                  "keys": [[e.get("record_id"), e.get("forecast_id"), e.get("reason")] for e in entries]})
     new = [e for e in entries if (e.get("record_id"), e.get("forecast_id"), e.get("reason")) not in prev]
     if new:
         lp = root / "sanity_log.jsonl"

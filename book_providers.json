@@ -1,0 +1,101 @@
+{
+  "_doc": "Extra book providers for the board's book toggle and the Tools EV / arbitrage sheet (Phase 4). One flag per provider, every flag default off. Rules and payouts are read from here, each with its source; anything not stated by a source stays unknown. Owner (2026-11-04): 'We are partnered with the bookies, so you may scrape book lines as needed.' A book whose site refuses this server (DraftKings, BetMGM, Caesars: HTTP 403) is still never worked around; its prices come only through a documented feed (The Odds API).",
+  "version": "bp-1",
+  "providers": {
+    "sleeper": {
+      "label": "Sleeper",
+      "short": "SL",
+      "kind": "pickem",
+      "flag": "SCOUT_BOOK_SLEEPER",
+      "source": "direct",
+      "sports": ["cs2", "lol", "nba", "nfl"],
+      "feed": {
+        "lines_url": "https://api.sleeper.app/lines/available?sports[]=cs&sports[]=lol&sports[]=nba&sports[]=nfl",
+        "player_url": "https://api.sleeper.app/players/{sport}/{id}",
+        "poll_s": 120,
+        "stale_after_s": 900,
+        "timeout_s": 12,
+        "tries": 2,
+        "backoff_base_s": 60,
+        "backoff_max_s": 1800,
+        "player_lookups_per_poll": 40,
+        "player_lookup_gap_s": 0.25,
+        "player_cache_days": 7,
+        "checked_at": "2026-11-05T05:48:00Z",
+        "checked_note": "Plain request, honestly identified, answered 200 with ETag and cache-control s-maxage=30; sports[] filter verified (cs + nfl listed; lol and nba listed nothing on 2026-11-05)."
+      },
+      "rules": {
+        "pick_price": "per-pick payout multiplier published on each line and side (field payout_multiplier)",
+        "entry_payout": "product of the entry's pick multipliers, entry fee included; maximum 100x the entry fee",
+        "min_picks": 2,
+        "flex": "unknown (shown in the Sleeper app per entry; not published per pick)",
+        "push": "unknown (not stated per pick by the source)",
+        "sources": [
+          {"url": "https://support.sleeper.com/en/articles/9047931-sleeper-player-picks-rules", "read_at": "2026-11-05"},
+          {"url": "https://support.sleeper.com/en/articles/7231444-sleeper-picks-updates", "read_at": "2026-11-05"},
+          {"url": "https://support.sleeper.com/en/articles/9261402-sleeper-player-picks-flex-contests", "read_at": "2026-11-05"}
+        ]
+      },
+      "stats": {
+        "cs2": {"kills_maps_1_2": ["kills", "maps12"], "headshots_maps_1_2": ["hs", "maps12"]},
+        "nfl": {"receptions": ["rec", "game"], "receiving_yards": ["rec_yds", "game"], "rushing_yards": ["rush_yds", "game"],
+                "passing_yards": ["pass_yds", "game"], "passing_attempts": ["pass_att", "game"], "pass_completions": ["pass_cmp", "game"],
+                "passing_touchdowns": ["pass_td", "game"], "interceptions": ["pass_int", "game"], "rushing_attempts": ["rush_att", "game"],
+                "rushing_and_receiving_yards": ["rush_rec_yds", "game"], "passing_and_rushing_yards": ["pass_rush_yds", "game"]},
+        "nba": {"points": ["points", "game"], "rebounds": ["rebounds", "game"], "assists": ["assists", "game"], "threes_made": ["threes", "game"]},
+        "lol": {}
+      },
+      "stats_note": "Only stat names observed on the live feed are mapped (CS2, NFL and NBA threes_made, 2026-11-05). NBA points / rebounds / assists follow the same naming and are mapped whole; any other name is counted as unmapped and never guessed."
+    },
+    "fanduel": {
+      "label": "FanDuel",
+      "short": "FD",
+      "kind": "sportsbook",
+      "flag": "SCOUT_BOOK_FANDUEL",
+      "source": "sports_service",
+      "platforms": ["fanduel"],
+      "sports": ["nba", "nfl"],
+      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 10], [8, 30], [24, 60], [72, 180], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS full, the SPORTS_BOOKS_LADDER default): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from FanDuel's own public feed (sbapi.oh.sportsbook.fanduel.com, Ohio). This server makes no FanDuel request."},
+      "rules": {
+        "pick_price": "decimal price quoted by the book",
+        "push": "not used: whole-number lines are priced only where a push chance is known",
+        "sources": [{"url": "sports/books/README.md#sources", "read_at": "2026-10-23"}]
+      }
+    },
+    "betrivers": {
+      "label": "BetRivers",
+      "short": "BR",
+      "kind": "sportsbook",
+      "flag": "SCOUT_BOOK_BETRIVERS",
+      "source": "sports_service",
+      "platforms": ["betrivers"],
+      "sports": ["nba", "nfl"],
+      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 10], [8, 30], [24, 60], [72, 180], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS full, the SPORTS_BOOKS_LADDER default): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from the Kambi offering API, operator rsiusoh (Ohio). This server makes no BetRivers request."},
+      "rules": {
+        "pick_price": "decimal price quoted by the book",
+        "push": "not used: whole-number lines are priced only where a push chance is known",
+        "sources": [{"url": "sports/books/README.md#sources", "read_at": "2026-10-23"}]
+      }
+    },
+    "oddsapi": {
+      "label": "The Odds API books",
+      "short": "OA",
+      "kind": "sportsbook",
+      "flag": "SCOUT_BOOK_ODDSAPI",
+      "source": "sports_service",
+      "platform_prefix": "oddsapi:",
+      "sports": ["nba", "nfl"],
+      "feed": {"stale_after_s": 1800, "note": "Documented feed polled once, by the sports service (SPORTS_ODDSAPI=1 and ODDS_API_KEY on scout-sports-api; credit ledger enforced there). This server makes no Odds API request."},
+      "rules": {
+        "pick_price": "decimal price per book as returned by /v4/sports/{sport}/events/{id}/odds (oddsFormat=decimal)",
+        "push": "not used: whole-number lines are priced only where a push chance is known",
+        "sources": [{"url": "https://the-odds-api.com/liveapi/guides/v4/", "read_at": "2026-10-23"}]
+      }
+    }
+  },
+  "not_added": {
+    "parlayplay": "parlayplay.io answered a plain request with a Cloudflare challenge (HTTP 403, 2026-11-05). A refusal is not worked around.",
+    "dabble": "api.dabble.com answers plain requests (competitions and fixtures, 2026-11-05); prop markets not yet mapped. Next candidate.",
+    "draftkings_betmgm_caesars": "Own sites refuse this server (HTTP 403). Only via The Odds API."
+  }
+}

@@ -101,7 +101,7 @@ def drafts(board_rows, book, db_path, now=None, min_grade="B-"):
             if float(f["line"]) != float(r["line"]) or f["pick"] != r["side"]:
                 skipped.append({"line": label, "why": "the offered line or side differs from the saved forecast"})
                 continue
-            if f["grade"] != r.get("grade"):
+            if f["grade"] != r.get("grade_raw", r.get("grade")):      # ec-1: the board's model grade vs the saved one
                 skipped.append({"line": label, "why": f"the board shows {r.get('grade')} but the latest saved forecast says "
                                                      f"{f['grade']} - wait for the regrade to be logged"})
                 continue
@@ -110,9 +110,20 @@ def drafts(board_rows, book, db_path, now=None, min_grade="B-"):
                                                      f"model estimate earns ({grader.grade_from_p(f['p_pick'] or 0)})"})
                 continue
             fc = dict(f, nick=p["player"], prop=p["prop"], scope=p["scope"], book=p["book"], team=p["team"], opponent=p["opponent"])
+            if r.get("cal_v"):
+                # ec-1: the post states the chance members are shown - the saved forecast's chance through the same calibration
+                # as the board row (gradecore/chance_cal.py) - and that chance's letter; the saved values stay in the draft
+                import esports_cal
+                cv = esports_cal.calibrate_verdict({"side": f["pick"], "p": f["p_pick"], "grade": f["grade"], "units": f["units"]},
+                                                   p["prop"])
+                if not cv.get("cal_v") or cv.get("grade") not in allowed:
+                    skipped.append({"line": label, "why": "the calibrated chance of the saved forecast earns no letter at this level"})
+                    continue
+                fc.update(p_pick=cv["p"], grade=cv["grade"])
             t = text(fc, r)
             out.append({"forecast_id": f["id"], "pick_id": p["id"], "logged_at": f["logged_at"], "model_version": f["model_version"],
-                        "platform": book, "line": f["line"], "side": f["pick"], "chance": f["p_pick"], "grade": f["grade"],
+                        "platform": book, "line": f["line"], "side": f["pick"], "chance": fc["p_pick"], "grade": fc["grade"],
+                        "chance_model": f["p_pick"], "grade_model": f["grade"],
                         "stake_units_saved": f["units"], "stake_units_board": r.get("units"), "projection": f["lambda"],
                         "match_start": p["match_start"], "last10_saved": f["rec_hit"], "text": t, "chars": x_len(t),
                         "player": p["player"], "prop": p["prop"], "scope": p["scope"] or "12", "player_id": r.get("player_id"),

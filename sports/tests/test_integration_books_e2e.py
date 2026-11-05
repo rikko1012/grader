@@ -214,6 +214,7 @@ def test_the_store_cap_counts_every_sports_file_not_only_canonical(tmp_path, mon
         (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / name).write_bytes(b"x" * int(mb * 1e6))
     assert round(canonical.data_mb(), 1) == 4.5
+    import shutil, types; monkeypatch.setattr(shutil, "disk_usage", lambda p: types.SimpleNamespace(total=1e6, used=0, free=1e12))
     monkeypatch.setattr(canonical, "STORE_MAX_MB", 2.5)                # canonical alone (1 MB) is under it
     with pytest.raises(canonical.BudgetExceeded, match="sports data 4"):
         canonical._check_budget()

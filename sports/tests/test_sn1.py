@@ -1,4 +1,4 @@
-"""sn-1 (REGISTER.md A10): frozen pair with sm-1, shadow recorder (own rows, sm-1 frame untouched, never displayed,
+"""sn-1 (REGISTER.md A11): frozen pair with sm-1, shadow recorder (own rows, sm-1 frame untouched, never displayed,
 off switch) and the one-time held-out scores (thresholds, scored once, decision rule)."""
 import gzip
 import json
@@ -33,7 +33,7 @@ def test_artifact_verifies_pairs_with_live_sm1_and_tamper_refuses(tmp_path, monk
     assert art["pairs_with_sm1"] == sm1["sha"] and art["data_as_of"] == sm1["data_as_of"]
     for mk in sn1.MARKETS:
         a, s = art["markets"][mk], sm1["markets"][mk]
-        assert a["features"] == s["features"] + [sn1.FEATURE]           # the ONLY difference (A10 1)
+        assert a["features"] == s["features"] + [sn1.FEATURE]           # the ONLY difference (A11 1)
         assert (a["half_lives"], a["family"], a["cal"], a["fit_rows"]) == (s["half_lives"], s["family"], s["cal"],
                                                                             s["fit_rows"])
     p = tmp_path / sn1.ARTIFACT.name
@@ -54,7 +54,8 @@ def test_registration_committed_before_the_artifact():
     git = lambda *a: subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, timeout=30)  # noqa: E731
     if git("rev-parse", "--is-shallow-repository").stdout.strip() == "true":
         pytest.skip("shallow clone (CI): commit order is not visible")
-    reg = git("log", "-S", "Amendment A10", "--format=%H", "--", "sports/research/REGISTER.md").stdout.split()
+    reg = git("log", "-S", "sn-1 snap-trend shadow for NFL rec / rec_yds (registered", "--format=%H", "--",
+              "sports/research/REGISTER.md").stdout.split()
     art = git("log", "--diff-filter=A", "--format=%H", "--", "sports/model/artifacts/sn1_nfl.json").stdout.split()
     if not reg or not art:
         pytest.skip("git history not available")

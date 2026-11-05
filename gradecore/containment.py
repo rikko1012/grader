@@ -3,8 +3,9 @@
     contained(sport, league, stat) -> True = no letter for that market.
 
 Order (first that answers wins):
-  1. the owner's env switch, 1 (contained) | 0 (released): SCOUT_CONTAIN_CS2, SCOUT_CONTAIN_LOL, SPORTS_CONTAIN_NBA,
-     SPORTS_CONTAIN_NFL;
+  1. the owner's env switch SCOUT_CONTAIN_CS2, SCOUT_CONTAIN_LOL, SPORTS_CONTAIN_NBA, SPORTS_CONTAIN_NFL = 1: contained.
+     The switch can only contain (owner absolute rule "Never force letters on", Scout upgrade prompt v2 Phase 0): a 0 /
+     off / false is recorded as asked (env_requested) and ignored - release comes only from the check, through the file;
   2. the state file. Scopes are "<sport>" and "<sport>:<league>"; each is {"contained": bool, "stats": [stat, ...]}. Either
      scope containing the market contains it;
   3. nothing known: contained. A market shows no letters until it has passed the check.
@@ -50,10 +51,19 @@ def reset_cache():
 
 
 def env_override(sport):
-    """True / False from the sport's switch, None when unset or not a switch value."""
+    """True / False from the sport's switch, None when unset or not a switch value. What the switch ASKS: only True is
+    applied (_resolve); False is reported as a refused release."""
     name = ENV.get(sport)
     v = os.environ.get(name, "").strip().lower() if name else ""
     return True if v in _ON else (False if v in _OFF else None)
+
+
+def env_request(sport):
+    """{"name", "value", "asked": contain | release | None, "applied": bool} for the sport's switch."""
+    name = ENV.get(sport)
+    ov = env_override(sport)
+    return {"name": name, "value": os.environ.get(name) if name else None,
+            "asked": "contain" if ov is True else "release" if ov is False else None, "applied": ov is True}
 
 
 def _valid(obj):
@@ -87,14 +97,18 @@ def load(force=False):
 
 def _resolve(sport, league):
     ov = env_override(sport)
-    if ov is not None:
-        return {"contained": ov, "stats": [], "source": "env"}
+    if ov is True:                                      # the switch can only contain
+        return {"contained": True, "stats": [], "source": "env"}
     scopes = (load() or {}).get("scopes") or {}
     found = [scopes[k] for k in (sport, f"{sport}:{league}") if k in scopes]
     if not found:
-        return {"contained": True, "stats": [], "source": "default"}
-    return {"contained": any(s["contained"] for s in found), "source": "file",
-            "stats": sorted({x for s in found for x in (s.get("stats") or [])})}
+        st = {"contained": True, "stats": [], "source": "default"}
+    else:
+        st = {"contained": any(s["contained"] for s in found), "source": "file",
+              "stats": sorted({x for s in found for x in (s.get("stats") or [])})}
+    if ov is False:                                     # asked to release: recorded, never applied
+        st["env_requested"] = "release"
+    return st
 
 
 def state(sport, league=None):
@@ -119,7 +133,8 @@ def snapshot():
     """Admin view: each sport's state and switch."""
     obj = load()
     return {"version": VERSION, "updated_at": (obj or {}).get("updated_at"), "sports": {s: state(s) for s in SPORTS},
-            "env": {ENV[s]: os.environ.get(ENV[s]) for s in SPORTS}}
+            "env": {ENV[s]: os.environ.get(ENV[s]) for s in SPORTS}, "env_rule": "1 contains; 0 is ignored (never forces letters on)",
+            "env_requests": {s: env_request(s) for s in SPORTS}}
 
 
 def verdict(rows, min_legs=MIN_LEGS, max_gap=MAX_GAP):

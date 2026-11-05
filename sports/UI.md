@@ -161,7 +161,11 @@ each quote's row signal and the page renders it (`q.x`): **vg-1** a market whose
 (registry.json; NFL: all five) shows projection + chances only, labelled "NFL model not validated - projection only" -
 no lean, edge, gap flag, confidence or edge rank; **sg-1** sanity hold (projection < 25% / > 4x the line for lines >= 2,
 or >= 60% of >= 5 strict L10 games on the side opposite the lean) - same suppression, logged with inputs to
-`<league>/sanity.json` (GET /api/sports/admin/sanity); **cf-2** = cf-1 + market estimate from one source -> max 2 +
+`<league>/sanity.json` (GET /api/sports/admin/sanity; its `keys` list = every held quote, read by the slip pool and
+tracked picks); **sg-2** (2026-11-05) adds holds for broken inputs at every line size: projection at the model floor
+(<= 0.05), a 100% chance shown or raw (>= 99.9%, cal-mi passthrough included), fewer than 3 games with the stat, no game
+with the stat in a year, and (lines < 2) a projection under 25% of a line the player cleared in >= 30% of >= 5 L10
+games - holds only, no chance or letter of an unheld row changes; **cf-2** = cf-1 + market estimate from one source -> max 2 +
 |gap| > 15 pts -> max 2 (stale-input cap still applied by the page at render time); lean additionally needs a POSITIVE
 edge for that side when a market chance exists (N4); **edge sort key** = edge, minus 200 for a single-source or
 > 15-pt-gap row, so such a row never ranks above a multi-source row. Rows without `q.x` (older snapshots) fall back to

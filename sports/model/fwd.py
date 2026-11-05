@@ -399,7 +399,7 @@ def run(leagues=None, forecast_at=None, log=print):
                 out["nflv2_h2"] = nflv2.h2_check(hcon, forecast_at or started)
             except Exception as e:                      # noqa: BLE001 - never blocks sm-1
                 out["nflv2_h2"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
-            try:                                        # sn-1 held-out (REGISTER A10 3): counts only, no interim look
+            try:                                        # sn-1 held-out (REGISTER A11 3): counts only, no interim look
                 from . import sn1
                 out["sn1_heldout"] = sn1.progress(hcon) if sn1.load() is not None else {"state": "no sn-1 artifact"}
             except Exception as e:                      # noqa: BLE001 - never blocks sm-1

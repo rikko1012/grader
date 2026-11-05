@@ -539,6 +539,7 @@ def _sched(**ingest):
 
 def test_alerts_clean_and_each_rule(monkeypatch):
     monkeypatch.setenv("SPORTS_STORE_MAX_MB", "8000")
+    import shutil, types; monkeypatch.setattr(shutil, "disk_usage", lambda p: types.SimpleNamespace(total=1e6, used=0, free=1e12))   # small disk: the configured cap applies
     assert service.alerts(_ops()) == []
     codes = lambda o: {a["code"] for a in service.alerts(o)}                      # noqa: E731
     assert codes(_ops(scheduler_alive=False)) == {"scheduler_down"}

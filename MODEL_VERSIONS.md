@@ -6,7 +6,7 @@
   on the same packaged history at sm-1's own data_as_of (2026-10-23T23:00Z); a plain sm-1 refit there reproduces
   `cc56aeb8b88c31d8` exactly, and the fit rows are identical (9,928). Artifact `sn1_nfl.json` sha `c61887c3a4ba4bfb`,
   `MANIFEST_SN1.json`. It loads only while the live sm-1 sha is the one it pairs with.
-- **Protocol:** REGISTER.md amendment A10 (89e3e59, committed before the fit). Recorded in the forward job into
+- **Protocol:** REGISTER.md amendment A11 (registered as "A10" in 89e3e59 before the fit; renumbered A11 at the merge with main's A10 pc-1; the frozen sn1_nfl.json still says "A10" in its role text, hashed bytes left unchanged). Recorded in the forward job into
   shadow.db (model_version `sn-1`) + `sn1_inputs`; never a store record, never displayed or graded. The held-out window
   is games after the first recorded row: box CRPS once at >= 48 games; book logloss once per market at >= 150 props /
   30 games. Any switch is an owner decision.
@@ -14,6 +14,122 @@
 - **Rollback / off:** `SPORTS_SHADOW_SN1=0` (read per forward run). Status: `python -m sports.model.sn1 status`; the
   forward run summary carries `sn1_shadow` / `sn1_heldout`.
 - **Not in this entry:** SCOUT_NFL_TWO_WAY (same branch) stays off; it failed its walk-forward.
+
+## ec-1 — printed chance = calibrated chance on every CS2 and LoL prop (owner decision 2026-11-05; branch claude/esports-calibrated-chance; NOT deployed; CS2 model tag unchanged `3007c59b74`)
+
+Owner: "we're grading every prop on the board these props will never hit 60% printed chance" -> CALIBRATE. This supersedes the
+earlier "never lower percentages / never turn B into Lean" rule for CS2 and LoL. Still forbidden: an untested cut, raising
+stakes to compensate, forcing an Over/Under balance.
+- **Layer, not a model change** (gradecore/chance_cal.py; artifact gradecore/chance_cal_ec1.json, `ec-1:15f80d5e1daf`):
+  p = the model's own no-push chance of the side it picks; c(p) fitted per game x side, per stat where it has >= 300 settled
+  (else the side's pooled table). SERVED WITH INTERCEPT 0 (coordinator rule 2026-11-05, after an NFL intercept flipped 641
+  sides to Under): logit(c) = a * logit(p), 0 <= a <= 1, a slope-only shrink toward 50% - the printed side is always the
+  model's, 0 side flips. An intercept variant (shrunk = Platt with half its intercept; free = gradecore.calibrate.fit) is served
+  only if it beats intercept 0 on held-out log loss with a match-clustered 95% interval entirely below zero - neither did.
+  Letters from the existing thresholds on c (under 55% = "Lean Over/Under"); stake = min(the model's own stake,
+  grader.units_for_p(c)) - never raised. CS2: applied after the pick log in server.board_payload and the card (esports_cal.py);
+  BOARD, picklog and learning keep the model's own values (p_raw / grade_raw / units_raw ride along). LoL: computed once when
+  the worker saves a forecast (lol/cal.py ec1, the lc-1 cal_* columns; raw p_over / p_under kept).
+  Served slopes: CS2 kills Over 0.00 (the model's kills-Over chance carried no information: every kills Over prints 50.0%),
+  kills Under 0.21, HS Over 0.37, HS Under 0.55; LoL kills Over 0.41, kills Under 0.68, assists (pooled) Over 0.19 / Under 0.62.
+- **Switch:** `SCOUT_CAL_CHANCE` in server.DEFAULT_ON (Render "0" = the model's own chance everywhere, as before).
+- **Data (read-only, 2026-11-05 13:54 UTC):** CS2 = the learning cycle's P1 export (6,317 settled board forecasts on standard
+  lines, Oct 11 - Nov 4); LoL = latest pre-match forecast per offered line with its latest settlement (1,795 graded, Oct 17 - Nov 4).
+- **Held-out test (walk-forward by UTC day, Oct 29 - Nov 4; each day fitted only on matches started >= 6 h before it):**
+  ct-3's calibration rule (>= 300 decided; |stated - hit| <= 2.5 pts overall and on each side with >= 60; log loss not worse).
+  Served (intercept 0):
+  | game | side | n | stated raw | stated calibrated | hit [95% match CI] | log loss raw -> cal |
+  |---|---|---|---|---|---|---|
+  | CS2 | all | 1,827 (101 matches) | 55.2% | 51.5% | 53.6% [50.4, 56.8] | 0.6975 -> 0.6920 |
+  | CS2 | Over | 866 | 55.5% | 51.0% | 52.0% [47.5, 56.8] | 0.7026 -> 0.6930 |
+  | CS2 | Under | 961 | 55.0% | 51.8% | 55.2% [48.9, 61.3] | 0.6929 -> 0.6910 |
+  | LoL | all | 492 (9 series) | 64.4% | 58.4% | 57.9% [49.6, 66.3] | 0.6798 -> 0.6709 |
+  | LoL | Over | 187 | 62.4% | 53.1% | 55.6% [44.9, 67.3] | 0.6899 -> 0.6767 |
+  | LoL | Under | 305 | 65.7% | 61.7% | 59.3% [48.3, 71.9] | 0.6736 -> 0.6673 |
+  Variants side by side (held-out; Over share of printed sides / side flips the fit would make without the 50% floor /
+  "No lean" = printed exactly 50% / Lean under 55% / lettered / 60%+), log loss:
+  | game | variant | log loss | vs zero (95% match CI) | Over share | flips | No lean | Lean | lettered | 60%+ |
+  |---|---|---|---|---|---|---|---|---|---|
+  | CS2 | raw | 0.6975 | | 47.4% | 0 | 22 | 1,028 | 799 | 254 |
+  | CS2 | zero (served) | 0.6920 | | 47.4% | 0 | 93 | 1,745 | 82 | 3 |
+  | CS2 | shrunk | 0.6915 | -0.0005 [-0.0018, +0.0007] | 47.4% | 0 | 0 | 1,804 | 23 | 1 |
+  | CS2 | free | 0.6915 | -0.0005 [-0.0024, +0.0014] | 44.8% if unfloored | 193 | 212 | 1,604 | 223 | 2 |
+  | LoL | raw | 0.6798 | | 38.0% | 0 | 0 | 111 | 381 | 288 |
+  | LoL | zero (served) | 0.6709 | | 38.0% | 0 | 14 | 217 | 275 | 173 |
+  | LoL | shrunk | 0.6710 | +0.0001 [-0.0142, +0.0141] | 23.4% if unfloored | 72 | 72 | 129 | 363 | 198 |
+  | LoL | free | 0.6753 | +0.0044 [-0.0047, +0.0145] | 15.0% if unfloored | 117 | 117 | 138 | 354 | 300 |
+  Verdicts (served): CS2 FAILS by a hair on the Under side (stated 51.8% vs hit 55.1%, +3.3 pts: understated); LoL FAILS by
+  0.01 pt on the Over side (+2.51 pts). Both games print calibrated chances with LETTERS HELD (letter_containment source
+  "calibration"; banner "<Game> letters are held until stated chances match results."). Full tables (5-point bins with CIs,
+  by stat x side, letters, variants): gradecore/reports/chance_cal_ec1_heldout_2026-11-05.json.
+- **Live board 2026-11-05 ~14:20 UTC (read-only GET):** CS2 152 rows: printed >= 60% 29 -> 0; letters 74 (35 staked, 17.5U)
+  -> 0 shown (the calibrated chance would earn 9: 6 B-, 3 B, all HS); "No lean" (50.0%) 3 -> 46 (every kills Over); Lean 78 ->
+  143; 0 side flips. LoL 121 rows: printed >= 60% 69 -> 39; letters held (calibrated chance would earn 69); "No lean" 0 -> 1;
+  Lean 21 -> 50; 0 side flips.
+- **Going forward only:** the record maps P1 rows LOGGED after the layer went live (DATA_DIR/chance_cal_live.json, written once
+  per artifact at server start) through the tables live then; earlier rows keep their logged chance. LoL records saved before
+  carry no ec-1 column and keep their chance.
+- Refit: `python -m gradecore.chance_cal fit --cs2 <P1 pages joined> --lol <LOL_ROWS_SQL rows>` (or `--cs2-db` / `--lol-db` on
+  read-only copies) writes a new artifact + verdicts; a new tag goes live at the next start.
+
+## mw-1 — CS2_MAP_WEIGHTED: vm-2's map weighting as the live projection, behind a flag that defaults to 0 (branch claude/map-weighted, 2026-11-04; NOT deployed, NOT promoted; flag off = CS2 model tag unchanged `3007c59b74`, byte-identical grades)
+
+Built so the registered vm-2 candidate (research/map_chances/REGISTER.md, `vm-2-37ec7435b0`) can be switched on as one
+versioned release IF it passes and the owner approves. Until then the flag stays 0 on Render and vm-2 stays a shadow.
+- **Flag off (unset / anything but `1`, the default):** `map_weighted.activate()` (called once when server.py is imported)
+  does nothing: no function is wrapped, `picklog.MODEL_VERSION` stays the frozen tag (`3007c59b74` from the committed blobs),
+  the grade path makes no extra read, and every grade, chance, stake, projection and forecast row is byte-identical
+  (tests/test_map_weighted.py: identity of the wrapped functions, the tag and the grade JSON). No hashed file is edited.
+- **Flag on (`CS2_MAP_WEIGHTED=1`, read at start):** cs2_scout.finish_line / grader_inputs are wrapped from map_weighted.py
+  (module globals; cs2_scout.py, grader.py, perf*.py, cm2.py and the rest of the hash list stay frozen since 4877218) and the
+  model tag becomes NEW through the existing versioning: `sha1(frozen tag + "|CS2_MAP_WEIGHTED=1|" + LF bytes of
+  map_weighted.py, vm2.py, vm2_params.json, hltv_mapchances.py)[:10]` (`map_weighted.tag_on`). Every pick / forecast row, the
+  board's graded_model and model_versions.json carry it, so flag-on rows are reported per tag and never pooled with
+  `3007c59b74`; the frozen tag itself never moves (turning the flag off restores it exactly).
+  `CS2_MAP_WEIGHTED_CELLS` (e.g. `kills:12,hs:12`; unset / `all` = all six cells) limits the weighting to the cells the
+  registered rule passed (it promotes per cell); a limited set is hashed into the tag, other cells fall back with
+  "cell <prop> <scope> not weighted".
+- **Exact formula (flag on, vm-2-37ec7435b0 arithmetic, nothing refitted):** for player P, match M, offered line L,
+  forecast time t, match start S (the earlier of the forecast's and HLTV's listed start):
+  - snapshot = M's `map_chances` rows only when captured (latest row `updated_at`) at or before t AND before S, and not older
+    than 6 h at t (`STALE_MIN` 360; the scraper re-reads every 3 h, every scan within 6 h of the start); simulated vetoes
+    updated after t are dropped; chance_m = HLTV's integer % for map m; the chances must add up to 100 x maps in the format
+    (+-4);
+  - a_m = P's kills per map on map m over HLTV maps of matches dated in [day(S) - 180 d, day(S)); a map with < 5 such maps
+    uses a0 = all his kills / all his maps in that window; < 10 maps in all = no weighting;
+  - Maps 1-2 / Maps 1-3: per_map = sum_m(chance_m x a_m) / sum_m(chance_m) over every map HLTV lists; kills = per_map x 2 | 3;
+  - Map 1: per_map = a_m of the likeliest simulated veto's (rank 1) Map 1 (first pick; BO1 the left-over map); kills = per_map;
+  - kills line: lambda = kills; sd = c x sqrt(max(lambda, 1)) with c = live sd / sqrt(max(live lambda, 1)) (the live spread);
+  - HS line: lambda_kills = kills, lambda = kills x the live HS per kill, sd rescaled the same way, the live kills spread
+    (spread_c_kills) unchanged;
+  - kills is vm-2's logged `lam_kills` (4 decimals); the grader then runs unchanged on that projection (its own cut rule,
+    the 22-78% kills cap, letters, gates and stakes). The perf version label (perf-2 / perf-cm2 / perf-2-bo3) is kept.
+- **Fallback = the current projection, untouched, reason logged** (any of): not a vm-2 cell (prop kills | HS, scope 1 / 12 /
+  123, whole / half line) or the live projection is not perf-2 / perf-2-bo3 / perf-cm2; team unknown (no team or opponent,
+  or the match has no HLTV id); no HLTV player id; no HLTV map chances / no simulation; chances captured after the forecast
+  time; captured at or after the start; stale; chances that do not add up to the format; scope longer than the format;
+  fewer than 10 window maps; Map 1 without a likeliest veto captured before the start; a crash in the weighting
+  ("map weighting failed (<type>)"). **An HLTV database failure is not a fallback** (owner rule, transient-failure): the
+  projection becomes the existing transient error, so the board keeps its last grade and the card says the database is
+  unreachable.
+- **Forecast record (append-only):** `grader_inputs.map_weighted` is saved in forecasts.inputs with every flag-on forecast:
+  rule, forecast_at, vm2 version + code sha, match / player ids, used, and either the snapshot used (captured_at,
+  start_used, read_at, age_min, lead_min, format, sum, chances per map), per-map kills, a0, map factor, Map 1 pick,
+  `unweighted` {lambda, sd, lambda_kills} and `weighted` {...}, or the reason none were used. shadow.vm2 keeps being logged
+  on every row (with the flag on its live_replay equals the vm-2 arm; the unweighted numbers are in `unweighted`).
+- **Display:** the classic card (player drawer) and the research hub card's "HLTV map chances" block carry `grade_use`:
+  "HLTV map chances used" + their capture time (and the projection without them) when the flag is on and they fed the
+  grade; otherwise "Weight in the grade: 0. Shadow only – not in this grade" with the map-weighted (vm-2) projection beside
+  the live one (card: computed now from the cached snapshot + the player's cached per-map kills, waiting at most 0.5 s; hub:
+  the shadow.vm2 logged on the saved forecast the card shows). A kept board grade (outage) shows no label.
+- **Promotion (the registered rule, unchanged):** one look per cell when the cell has 300 distinct settled forward matches
+  with eligible units (P1 board units, match-clustered bootstrap, 10,000 resamples, seed 20261104); CALIBRATION PASS = the
+  log-loss gain vs C0-pooled and vs live each with a lower 99.167% bound > 0 (the match-clustered interval of the log-loss
+  change does not cross zero), Brier upper 95% bound < +0.0025 and favoured-side gaps within the registered limits;
+  SELECTION PASS = favoured-side hit difference vs live and vs C0 each with a lower 99.167% bound > 0; >= 90% eligible
+  coverage; judged separately. Only a cell with both PASS may be put to the owner, and **promotion needs the owner's
+  approval**; turning the flag on is that approved release. Nothing in this branch turns it on.
+- **Rollback:** `CS2_MAP_WEIGHTED=0` (or unset) on Render + restart. Tests: tests/test_map_weighted.py.
 
 ## vm-2 — HLTV map chances: display at weight 0 + registered shadow (branch claude/vm2-map-chances, 2026-11-04; NOT deployed; CS2 model tag unchanged: `3007c59b74`; no grade change)
 

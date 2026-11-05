@@ -1,0 +1,178 @@
+{
+ "version": "ec-1",
+ "rule": "printed chance = max(50%, calibrated chance of the model's side); letters from the existing thresholds on that chance; stakes never above the model's own",
+ "fitted_at": "2026-11-05T14:47:34Z",
+ "min_n": 300,
+ "floor": 0.5,
+ "games": {
+  "cs2": {
+   "letters": "held",
+   "verdict": "fail",
+   "why": "under: stated 0.518 vs hit 0.551 (gap +3.3 pts > 2.5)",
+   "variant": "zero",
+   "tables": {
+    "*|over": {
+     "kind": "scale",
+     "n": 2845,
+     "a": 0.132631
+    },
+    "*|under": {
+     "kind": "scale",
+     "n": 3472,
+     "a": 0.398351
+    },
+    "hs|over": {
+     "kind": "scale",
+     "n": 1242,
+     "a": 0.369439
+    },
+    "hs|under": {
+     "kind": "scale",
+     "n": 1780,
+     "a": 0.54579
+    },
+    "kills|over": {
+     "kind": "scale",
+     "n": 1603,
+     "a": 0.0
+    },
+    "kills|under": {
+     "kind": "scale",
+     "n": 1692,
+     "a": 0.205745
+    }
+   },
+   "rows": 6317,
+   "data_from": "2026-10-11T11:30:00+00:00",
+   "data_to": "2026-11-04T22:00:00+00:00",
+   "source": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\aa2edd5017cc8a7b\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\data\\cs2_p1.json",
+   "test": {
+    "from": "2026-10-29",
+    "to": "2026-11-04",
+    "summary": {
+     "n": 1827,
+     "matches": 101,
+     "stated_raw": 0.5522,
+     "stated_cal": 0.5146,
+     "hit": 0.5364,
+     "hit_ci": [
+      0.5035,
+      0.5683
+     ],
+     "log_loss_raw": 0.6975,
+     "log_loss_cal": 0.69197,
+     "brier_raw": 0.25199,
+     "brier_cal": 0.24941,
+     "sides": {
+      "over": {
+       "n": 866,
+       "stated": 0.5104,
+       "hit": 0.5196,
+       "gap": 0.0092,
+       "hit_ci": [
+        0.4748,
+        0.5678
+       ],
+       "stated_raw": 0.5549
+      },
+      "under": {
+       "n": 961,
+       "stated": 0.5184,
+       "hit": 0.5515,
+       "gap": 0.0331,
+       "hit_ci": [
+        0.489,
+        0.6126
+       ],
+       "stated_raw": 0.5498
+      }
+     }
+    }
+   }
+  },
+  "lol": {
+   "letters": "held",
+   "verdict": "fail",
+   "why": "over: stated 0.531 vs hit 0.556 (gap +2.5 pts > 2.5)",
+   "variant": "zero",
+   "tables": {
+    "*|over": {
+     "kind": "scale",
+     "n": 617,
+     "a": 0.193699
+    },
+    "*|under": {
+     "kind": "scale",
+     "n": 1178,
+     "a": 0.617265
+    },
+    "assists|over": {
+     "kind": "identity",
+     "n": 132
+    },
+    "assists|under": {
+     "kind": "identity",
+     "n": 298
+    },
+    "kills|over": {
+     "kind": "scale",
+     "n": 485,
+     "a": 0.411048
+    },
+    "kills|under": {
+     "kind": "scale",
+     "n": 880,
+     "a": 0.679444
+    }
+   },
+   "rows": 1795,
+   "data_from": "2026-10-17T18:00:00Z",
+   "data_to": "2026-11-04T22:00:00Z",
+   "source": "C:\\Users\\tikic\\AppData\\Local\\Temp\\claude\\aa2edd5017cc8a7b\\6847ff60-df65-4b0c-851b-1b79f55ef3bf\\scratchpad\\data\\lol_settled.json",
+   "test": {
+    "from": "2026-10-29",
+    "to": "2026-11-04",
+    "summary": {
+     "n": 492,
+     "matches": 9,
+     "stated_raw": 0.6444,
+     "stated_cal": 0.5843,
+     "hit": 0.5793,
+     "hit_ci": [
+      0.4964,
+      0.6634
+     ],
+     "log_loss_raw": 0.67981,
+     "log_loss_cal": 0.67088,
+     "brier_raw": 0.24239,
+     "brier_cal": 0.23891,
+     "sides": {
+      "over": {
+       "n": 187,
+       "stated": 0.531,
+       "hit": 0.5561,
+       "gap": 0.0251,
+       "hit_ci": [
+        0.4494,
+        0.6727
+       ],
+       "stated_raw": 0.6244
+      },
+      "under": {
+       "n": 305,
+       "stated": 0.617,
+       "hit": 0.5934,
+       "gap": -0.0236,
+       "hit_ci": [
+        0.4832,
+        0.7194
+       ],
+       "stated_raw": 0.6567
+      }
+     }
+    }
+   }
+  }
+ },
+ "sha": "15f80d5e1daf"
+}

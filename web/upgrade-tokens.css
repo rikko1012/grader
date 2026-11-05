@@ -84,8 +84,8 @@ html[data-ui-tokens] #u-hub .h-account nav :is(a,button){display:flex;align-item
 /* Market tools: Board-style filter row and two densities */
 html[data-ui-tokens] #u-hub .h-market-filters{background:var(--u-panel);border:1px solid var(--u-line)}
 
-/* Desktop >=1025px: the shell keeps its sidebar down to 1025px; the slip rail column is as wide as the rail when hub.css shows it, else 0 */
-@media(min-width:1025px){
+/* Desktop >=1101px (the hub's desktop breakpoint since the 2026-11-05 structure review): the shell keeps its sidebar down to 1101px; the slip rail column is as wide as the rail when hub.css shows it, else 0 */
+@media(min-width:1101px){
  html[data-ui-tokens] #u-hub.scout-hub{grid-template-columns:184px minmax(0,1fr) auto}
  html[data-ui-tokens] #u-hub .h-slip{width:300px}
  html[data-ui-tokens] #u-hub .h-sidebar{display:flex}

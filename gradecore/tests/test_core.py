@@ -44,15 +44,44 @@ def test_only_explicit_forecast_capture_boundaries_import_core():
                'workspace_api.py', 'sports/api_model.py'}
     reporting = {'results_stated.py', 'lol/center/learning.py', 'sports/results_public.py'}
     scoring = {'public_record.py'}
+    pricing = {'workspace_markets.py'}
+    # ec-1 (owner 2026-11-05): the printed CS2 / LoL chance = the calibrated one. These read ONLY gradecore.chance_cal (the
+    # committed tables); the projection, the pick log and every logged forecast stay the model's own.
+    calibration = {'esports_cal.py', 'lol/cal.py', 'lol/center/forecast.py'}
     for p in list(ROOT.glob("*.py")) + list((ROOT / "sports").rglob("*.py")) + list((ROOT / "lol").rglob("*.py")):
         if 'tests' in p.parts:
             continue
+        if 'gradecore' in _imports(p) and p.relative_to(ROOT).as_posix() in calibration:
+            tree = ast.parse(p.read_text(encoding='utf-8'))
+            nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')
+                     and any(a.name == 'chance_cal' for a in n.names)]
+            assert nodes and all(n.module == 'gradecore' and [a.name for a in n.names] == ['chance_cal'] for n in nodes), p.name
+            if p.name != 'forecast.py':          # the forecast writer is also a capture boundary (checked below)
+                others = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')
+                          and not any(a.name == 'chance_cal' for a in n.names)]
+                assert not others, p.name
+                continue
         if 'gradecore' in _imports(p):
+            if p.relative_to(ROOT).as_posix() in pricing:
+                # Phase 4 Tools sheet: prices book quotes (market_tools, devig) and reads containment's state; never grades or stakes.
+                tree = ast.parse(p.read_text(encoding='utf-8'))
+                nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore' and {a.name for a in n.names} <= {'market_tools', 'devig', 'containment'} for n in nodes)
+                assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
+                continue
             if p.relative_to(ROOT).as_posix() in scoring:
                 # The public record scores saved results (bins, match-resampled ranges); it never grades or stakes.
                 tree = ast.parse(p.read_text(encoding='utf-8'))
                 nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
                 assert nodes and all(n.module == 'gradecore' and [a.name for a in n.names] == ['scorecard'] for n in nodes)
+                assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
+                continue
+            if p.relative_to(ROOT).as_posix() == 'letter_containment.py':
+                # lc-1 display containment: reads the shared containment rule and the payout table, never grades or stakes.
+                tree = ast.parse(p.read_text(encoding='utf-8'))
+                nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore' and [a.name for a in n.names] in (['containment'], ['payouts'], ['chance_cal'])
+                                     for n in nodes)
                 assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
                 continue
             if p.relative_to(ROOT).as_posix() in reporting:

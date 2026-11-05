@@ -695,7 +695,66 @@ verbatim on the service, once a day. Nothing in the A9 5 rule itself (numbers, s
 7. **Nothing else changes.** A8 / A8a / A9 rules, gate H / gate F, sports-sp-1 (0U everywhere), cf-2, N4, sg-1; edges,
    confidence and rank stay withheld for a failed-gate market even when its letters are released (A9 5).
 
-## Amendment A10 - sn-1 snap-trend shadow for NFL rec / rec_yds (registered 2026-11-05, BEFORE any sn-1 artifact was fitted or any forward row recorded)
+## Amendment A9b - the owner's switch can only contain (registered 2026-11-04, owner absolute rule "Never force letters on")
+
+1. `SPORTS_CONTAIN_NBA` / `SPORTS_CONTAIN_NFL` = 1 contains a league (wins over everything, as in A9a 4). A value of
+   0 / off / false no longer releases a league: it is logged ("asked to release; applied: contained") and ignored, so
+   the A9a 4 order for a 0 is file -> seed -> legacy. The A9a text "`SPORTS_CONTAIN_NBA=0|1` ... wins over everything"
+   now reads "1 wins over everything; 0 is ignored". Release happens only through the daily verdict (A9a 3-4).
+2. Reason: on 2026-11-04 both switches were 0 on the service while the daily check held NFL (stated 66.7%, hit 54.7%,
+   n 2,216) and failed NBA (64.5% vs 55.3%, n 4,773); members saw NFL "A" letters on 70% chances.
+3. Reported in `gradecheck.json` (`leagues.<lg>.guards.containment.env_asked / env_applied`) and the admin view
+   (`containment.env_requests`, `containment.letters`). No band, gate, chance or logged forecast changes.
+
+## Amendment A10 - pc-1: the printed NBA / NFL chance is the calibrated chance (owner decision 2026-11-05)
+
+Owner, 2026-11-05: "we're grading every prop on the board these props will never hit 60% printed chance" -> CALIBRATE.
+This supersedes the older "never lower percentages" rule for NBA / NFL. Still forbidden: an untested cut, raising
+stakes to compensate, forcing Over / Under balance.
+
+1. **Form** (`sports/model/chance_cal.py`). z = logit of the saved sm-1 P(Over | no push); spec `platt`
+   q = sigmoid(a + b z) or `split` q = sigmoid(a + b_over max(z, 0) + b_under min(z, 0)); optional per-stat
+   parameters penalised toward the league fit. Printed: P(Over) = (1 - pp) q, P(Under) = (1 - pp)(1 - q), push mass
+   unchanged.
+2. **Data.** gradecore-export-1 (`sports/model/gradecore_export.py`): the last saved sm-1 forecast >= 30 min before
+   the start per event / player / stat / period / line / book, settled win / loss (push / void dropped), read through
+   the read-only admin route. Game-day = start - 10 h.
+3. **Chronology.** Spec chosen on an inner split of the fit window only (its last 2 game-days); the chosen spec fitted
+   on the whole fit window and scored once on the held-out window (game-days >= 2026-11-01). Served parameters = the
+   same spec refitted on every exported row; the held-out verdict travels with them.
+4. **Pass rule per league** (held-out window): calibrated log loss below raw with the game-clustered 95% interval of
+   the difference entirely below 0; |stated - hit| <= 3 pts on the chosen side overall; for Over-leaning and
+   Under-leaning rows separately, |stated - hit| <= 3 pts or the stated chance inside the hit interval.
+5. **Letters.** Letters come only from the printed (calibrated) chance with the sports-gp-1 thresholds; rows under
+   C stay "Lean Over / Under". A league that FAILED (4) keeps its letters held (`containment.contained` -> True, the
+   existing contained wording) while its printed chance is still calibrated. A league that passed keeps the A9a 4
+   containment rule (release only from the daily verdict). The daily grade check scores the pc-1 chance walk-forward
+   (refit per game-day on props settled before that day's first forecast, >= 300 decided rows), so its verdict judges
+   the chance members see.
+6. **Serving.** Default ON with the committed `sports/model/artifacts/chance_cal_pc1.json`;
+   `<SPORTS_DATA_DIR>/model/chance_cal.json` overrides it (a Shell refit: `python -m sports.model.chance_cal fit`);
+   `SPORTS_CHANCE_CAL=0` turns it off (cal-mi-1 / raw as before). pc-1 supersedes cal-mi-1 for display while on.
+   Applies to sm-1 views (own forecast and line reads); mi-1 is not in the fitted population and is not changed.
+   The forecast record keeps the raw chance; `ca.raw` and `model/shown.db` keep raw beside the printed chance.
+7. **First fit (2026-11-05, export built 2026-11-03 23:07 UTC).** NBA: fit 2026-10-24..10-31 (6,447), test
+   11-01..11-02 (2,118, 19 games), spec platt; log loss 0.7015 -> 0.6885, difference [-0.0279, +0.0017] -> FAIL
+   (letters held). NFL: fit 10-25..10-29 (1,550), test 11-01..11-02 (2,248, 13 games), spec platt; log loss 0.7315
+   -> 0.6891, difference [-0.0778, -0.0098], in-the-large and both sides pass -> PASS (letters follow A9a 4). Full
+   tables: `sports/research/pc1_heldout_2026-11-05.json` (numbers above = the first, free-intercept fit; see 8). The pass rule in 4 was written after an exploratory
+   league-level look at the same held-out window (point estimates only); it was not changed after the run.
+8. **Intercept (coordinator review 2026-11-05, before shipping).** The first fit had a free logit shift; on NFL it
+   turned 641 of 2,248 held-out sides from Over to Under (calibrated Under on 97% of rows, from two Sundays with a 47%
+   Over rate) - the correlated-Under risk the owner warned about. Rule now: intercept 0 (shrink toward 50% only, the
+   printed side is always the model's side) unless a shift beats it on held-out log loss with the game-clustered 95%
+   interval of the difference entirely below 0. Compared on the same windows: "free" and "games" (shift penalised as
+   one row per game, prior sd 0.25 logit). Neither cleared the rule (NBA free - zero +0.00006 [-0.0007, +0.0008];
+   NFL free - zero -0.0002 [-0.0062, +0.0071]), so both leagues serve intercept 0 (NBA b 0.281, NFL b 0.157).
+   Verdicts unchanged: NBA FAIL (difference vs raw [-0.0283, +0.0020]), NFL PASS ([-0.0781, -0.0081]).
+
+## Amendment A11 - sn-1 snap-trend shadow for NFL rec / rec_yds (registered 2026-11-05, BEFORE any sn-1 artifact was fitted or any forward row recorded)
+
+Numbering note: committed as "A10" in 89e3e59 (before the sn-1 fit, b6fd3f1) on a branch, while main's A10 (pc-1)
+landed in parallel; renumbered A11 at the merge. The text below is unchanged except for its section references.
 
 Why: the two-way walk-forward (sports/research/two_way_position.md, weekly refits 2025 W10 - 2026 W7) found that adding
 `nfl.snap_trend` (fr-1: L3 snap share - EW snap share) to sm-1 lowered CRPS on the whole eligible population. rec:

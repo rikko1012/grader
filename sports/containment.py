@@ -5,7 +5,9 @@
                                (board_view.GATE_TEXT).
 
 Order (first that answers wins):
-  1. env SPORTS_CONTAIN_NBA / SPORTS_CONTAIN_NFL = 1 (contained) | 0 (released) - the owner's override;
+  1. env SPORTS_CONTAIN_NBA / SPORTS_CONTAIN_NFL = 1 (contained) - the owner's override. It can only CONTAIN (owner
+     absolute rule "Never force letters on", Scout upgrade prompt v2 Phase 0 item 2, ct-1a): 0 / off / false is logged
+     as asked and ignored, so a league the daily check holds stays held. Release comes only from the daily verdict;
   2. <SPORTS_DATA_DIR>/model/containment.json - written by the daily grade check (sports/model/daily.py, A9 5 verdict);
   3. the committed seed sports/model/artifacts/containment_default.json (owner-run gradecheck 2026-10-28: NBA + NFL
      contained);
@@ -38,10 +40,35 @@ def path():
     return config.DATA_DIR / "model" / FILE_NAME
 
 
+ENV_RULE = "ct-1a: SPORTS_CONTAIN_<LG>=1 contains; 0 / off / false is ignored - release comes only from the daily verdict"
+
+
 def env_override(league):
-    """True / False from SPORTS_CONTAIN_<LG>, None when unset or not a switch value."""
+    """True / False from SPORTS_CONTAIN_<LG>, None when unset or not a switch value. What the switch ASKS: only True is
+    applied (_resolve); False is recorded as a refused release."""
     v = os.environ.get(f"SPORTS_CONTAIN_{(league or '').upper()}", "").strip().lower()
     return True if v in _ON else (False if v in _OFF else None)
+
+
+_logged = set()
+
+
+def _log_env(league, st, log=print):
+    """One line per process per (league, asked, applied, source): what the env asked for and what applied."""
+    asked = st.get("env_asked")
+    if asked is None:
+        return
+    key = (league, asked, st["contained"], st["source"])
+    if key in _logged:
+        return
+    _logged.add(key)
+    try:
+        log(f"[containment {VERSION}] {league.upper()}: SPORTS_CONTAIN_{league.upper()}={st.get('env_value')!r} asked to "
+            f"{asked}; applied: {'contained' if st['contained'] else 'letters shown'} (source {st['source']})"
+            + ("" if st.get("env_applied") else " - the switch can only contain; release comes from the daily verdict"),
+            flush=True)
+    except Exception:                                   # noqa: BLE001 - a log line never breaks the board
+        pass
 
 
 def _valid(obj):
@@ -118,19 +145,38 @@ def league_state(league):
 
 def _resolve(league):
     ov = env_override(league)
+    if ov is True:                                      # the owner's switch can only contain
+        st = {"contained": True, "stats": [], "source": "env"}
+    else:
+        obj, src = load()
+        s = ((obj or {}).get("leagues") or {}).get(league)
+        if s is not None:
+            st = {"contained": s["contained"], "stats": sorted(s.get("stats") or []), "source": src}
+        else:
+            st = {"contained": None, "stats": [], "source": "legacy"}
     if ov is not None:
-        return {"contained": ov, "stats": [], "source": "env"}
-    obj, src = load()
-    s = ((obj or {}).get("leagues") or {}).get(league)
-    if s is not None:
-        return {"contained": s["contained"], "stats": sorted(s.get("stats") or []), "source": src}
-    return {"contained": None, "stats": [], "source": "legacy"}
+        st.update(env_asked="contain" if ov else "release", env_applied=bool(ov),
+                  env_value=os.environ.get(f"SPORTS_CONTAIN_{league.upper()}"))
+        _log_env(league, dict(st, contained=letters_word(st, league) != "live"))
+    return st
+
+
+def pc_held(league):
+    """REGISTER A10 (pc-1): True when the printed-chance calibration in use failed its held-out test for this league -
+    letters stay held there (the printed chance is still the calibrated one). It can only contain, never release."""
+    try:
+        from .model import chance_cal
+        return chance_cal.letters_held(league)
+    except Exception:                                   # noqa: BLE001 - never breaks the board
+        return False
 
 
 def contained(league, stat):
-    """THE containment rule for one market (A9a 4)."""
+    """THE containment rule for one market (A9a 4, plus A10: a failed pc-1 held-out test holds the league)."""
     if not league:
         return False
+    if pc_held(league):                                 # pc-1: a league whose held-out calibration test failed
+        return True
     st = league_state(league)
     if st["source"] != "legacy":
         return bool(st["contained"]) or stat in st["stats"]
@@ -141,9 +187,26 @@ def contained(league, stat):
 def snapshot():
     """Admin / gradecheck view: per league state + the env switches and where the state came from."""
     obj, src = load()
-    return {"version": VERSION, "source": src, "updated_at": (obj or {}).get("updated_at"),
-            "leagues": {lg: league_state(lg) for lg in LEAGUES},
-            "env": {f"SPORTS_CONTAIN_{lg.upper()}": os.environ.get(f"SPORTS_CONTAIN_{lg.upper()}") for lg in LEAGUES}}
+    leagues = {lg: league_state(lg) for lg in LEAGUES}
+    return {"version": VERSION, "source": src, "updated_at": (obj or {}).get("updated_at"), "leagues": leagues,
+            "env": {f"SPORTS_CONTAIN_{lg.upper()}": os.environ.get(f"SPORTS_CONTAIN_{lg.upper()}") for lg in LEAGUES},
+            "env_rule": ENV_RULE, "letters": {lg: ("contained" if pc_held(lg) else letters_word(leagues[lg], lg))
+                                              for lg in LEAGUES},
+            "pc1_held": {lg: pc_held(lg) for lg in LEAGUES},
+            "env_requests": {lg: {"name": f"SPORTS_CONTAIN_{lg.upper()}", "value": os.environ.get(f"SPORTS_CONTAIN_{lg.upper()}"),
+                                  "asked": leagues[lg].get("env_asked"), "applied": bool(leagues[lg].get("env_applied"))}
+                             for lg in LEAGUES}}
+
+
+def letters_word(st, league=None):
+    """'contained' | 'contained (stat, ...)' | 'live' for one league state - the status every admin view shows."""
+    c = st.get("contained")
+    if c is None and league:                            # legacy rule: NFL held while VG_CONTAIN_LEAN is on
+        from . import board_view
+        c = bool(board_view.VG_CONTAIN_LEAN) and league == "nfl"
+    if c:
+        return "contained"
+    return "contained (" + ", ".join(st.get("stats") or []) + ")" if st.get("stats") else "live"
 
 
 # ============================================================================================== the A9 5 reading

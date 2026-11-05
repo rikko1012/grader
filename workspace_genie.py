@@ -290,15 +290,37 @@ def _say(topic, doc, side, q):
     return []
 
 
+# SCOUT_GENIE_PERSONA (default off): a light genie voice around the same checked sentences. Persona lines carry no numbers, so
+# the number check, the payload-only rule and the daily cap are exactly as before; the answer sentences are unchanged.
+PERSONA_INTRO = "🧞 Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat."
+PERSONA_HELP = ("🧞 That wish is outside my lamp. I answer from this line's saved data only: the projection, the saved chance, "
+                "the grade, recent results, head-to-head, other books, market prices, a line move, saved stats or the start time.")
+PERSONA_OPEN = {"pick": "🧞 Your wish: Scout's read on this line.", "projection": "🧞 The lamp shows the saved projection.",
+                "chance": "🧞 Here is the saved chance, straight from the record.", "grade": "🧞 The grade, and why it was set.",
+                "history": "🧞 I looked back through the saved results.", "h2h": "🧞 The head-to-head, from the saved meetings.",
+                "books": "🧞 I checked the other books for you.", "market": "🧞 The market prices on file.",
+                "move": "🧞 The line's travels so far.", "stats": "🧞 The saved stats, as recorded.",
+                "start": "🧞 When the lamp says go."}
+
+
+def persona_on():
+    return os.environ.get("SCOUT_GENIE_PERSONA") == "1"
+
+
 def answer(doc, question, side):
     """{"sentences", "topics", "matched", "removed_numbers"}: composed from `doc` only and checked against it."""
     topics = topics_of(question)
+    persona = persona_on()
+    help_text = PERSONA_HELP if persona else HELP
     if not topics:
-        return {"sentences": [HELP], "topics": [], "matched": False, "removed_numbers": 0, "suggestions": list(SUGGESTIONS)}
+        return {"sentences": [help_text], "topics": [], "matched": False, "removed_numbers": 0, "suggestions": list(SUGGESTIONS)}
     said = []
     for t in topics:
         said.extend(_say(t, doc, side, question))
     kept, removed = verify(said, allowed_numbers(doc))
     if not kept:                    # nothing survived the number check: the help text, free (no status line, no charge)
-        return {"sentences": [HELP], "topics": topics, "matched": False, "removed_numbers": removed, "suggestions": list(SUGGESTIONS)}
-    return {"sentences": kept, "topics": topics, "matched": True, "removed_numbers": removed}
+        return {"sentences": [help_text], "topics": topics, "matched": False, "removed_numbers": removed, "suggestions": list(SUGGESTIONS)}
+    out = {"sentences": kept, "topics": topics, "matched": True, "removed_numbers": removed}
+    if persona:
+        out["intro"] = PERSONA_OPEN.get(topics[0])
+    return out

@@ -219,11 +219,9 @@ def adjust(rec, weights=None):
         weights, src = load()
     else:
         src = "given"
-    if not weights:
-        return None
-    p = (weights.get("params") or {}).get(f"{rec.get('stat')}:{rec.get('platform')}")
-    if not p or not p.get("on"):
-        return None
+    p = ((weights or {}).get("params") or {}).get(f"{rec.get('stat')}:{rec.get('platform')}")
+    if not weights or not p or not p.get("on"):
+        return ec1(rec)                                  # no lc-1 market on: the ec-1 calibration (owner 2026-11-05)
     x = features(rec)
     if x is None:
         return None
@@ -232,6 +230,43 @@ def adjust(rec, weights=None):
     dec = 1.0 - pp
     return {"po": round(dec * q, 4), "pu": round(dec * (1 - q), 4), "pp": round(pp, 4),
             "v": f"{VERSION}:{weights['sha']}", "src": src}
+
+
+def ec1(rec):
+    """ec-1 (gradecore/chance_cal.py, owner 2026-11-05: the printed chance = the rate such chances have hit): the calibrated
+    chance of the model's side, the other side 1 - it, the model's push mass kept. -> {"po", "pu", "pp", "v": "ec-1:<sha>",
+    "src": "ec-1"} or None (SCOUT_CAL_CHANCE off / no artifact / no raw chance). The side is never flipped."""
+    try:
+        from gradecore import chance_cal
+    except Exception:                                    # noqa: BLE001
+        return None
+    if not chance_cal.enabled():
+        return None
+    obj = chance_cal.load()
+    try:
+        po, pu = float(rec["p_over"]), float(rec["p_under"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if obj is None or po + pu <= 0:
+        return None
+    pp = float(rec.get("p_push") or 0.0)
+    side = rec.get("model_side") if rec.get("model_side") in ("over", "under") else ("over" if po >= pu else "under")
+    pr = chance_cal.pair("lol", rec.get("stat"), po / (po + pu), side, obj)
+    if pr is None:
+        return None
+    dec = 1.0 - pp
+    return {"po": round(dec * pr[0], 4), "pu": round(dec * pr[1], 4), "pp": round(pp, 4), "v": chance_cal.tag(obj), "src": "ec-1"}
+
+
+def version_enabled(v):
+    """Is the switch of the calibration that produced version tag v on? lc-1: LOL_CAL; ec-1: SCOUT_CAL_CHANCE."""
+    if str(v or "").startswith("ec-1"):
+        try:
+            from gradecore import chance_cal
+            return chance_cal.enabled()
+        except Exception:                                # noqa: BLE001
+            return False
+    return enabled()
 
 
 # ======================================================================================================== fitting (numpy)

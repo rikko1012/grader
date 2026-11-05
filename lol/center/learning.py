@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from . import store
 
 REQUIRED = {"player_markets": 300, "series": 60}
+CONTAIN_ROWS_MAX = 2000             # newest settled offered-side legs kept for the server's letter containment check
 REFIT_EVERY_S = 7 * 86400
 
 
@@ -36,6 +37,7 @@ def dashboard(con):
     player_props = set()
     units = []
     calendar_rows=[]
+    contain_rows = []
     from .forecast import shown, side_offered
     for r in rows:
         r = dict(r)
@@ -46,6 +48,11 @@ def dashboard(con):
             if r['st'] in ('graded','push'):
                 calendar_rows.append({'at':r.get('series_start'),'status':'push' if r['st']=='push' else
                     'win' if bool(r['over_hit']) == (sh['side']=='over') else 'loss'})
+                # the server's letter containment check (letter_containment.py lc-1, gradecore ct-3): one leg per saved
+                # pre-match forecast on a line that offered Scout's side, at the chance members were shown for that side
+                contain_rows.append({"p": round(float(sh["p_side"]), 6), "status": calendar_rows[-1]["status"],
+                                     "match_key": r.get("sid"), "stat": r.get("stat"), "side": sh["side"],
+                                     "platform": r.get("platform"), "at": r.get("series_start"), "id": r.get("id")})
         if r["st"] != "graded":
             continue
         series.add(r["sid"])
@@ -107,6 +114,8 @@ def dashboard(con):
             "offered_side": {"version": 1, "settled_by_status": dict(offered_status),
                              "metrics": {k.removeprefix("offered cohort "): v for k, v in out.items() if k.startswith("offered cohort ")}},
             "series_grouped_95ci": {"all": _grouped_ci(units), "offered_side_only": _grouped_ci([u for u in units if u["offered"]])},
+            "containment_rows": [{k: v for k, v in x.items() if k != "id"} for x in
+                                 sorted(contain_rows, key=lambda x: (str(x["at"] or ""), x["id"] or 0))[-CONTAIN_ROWS_MAX:]],
             "evidence": {"graded_player_markets": len(player_props), "series": len(series), "required": REQUIRED,
                          "unit": "distinct series/player/stat/scope, independent of book or alternate line",
                          "met": len(player_props) >= REQUIRED["player_markets"] and len(series) >= REQUIRED["series"]},

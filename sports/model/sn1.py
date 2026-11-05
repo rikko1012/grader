@@ -1,4 +1,4 @@
-"""sn-1: sm-1 + nfl.snap_trend for NFL rec / rec_yds, in SHADOW (sports/research/REGISTER.md amendment A10).
+"""sn-1: sm-1 + nfl.snap_trend for NFL rec / rec_yds, in SHADOW (sports/research/REGISTER.md amendment A11).
 
 Never displayed, never graded, never changes sm-1. The recorder runs inside the existing forward job (forward.forecast_league)
 after sm-1 wrote the market, reads the sm-1 frame WITHOUT adding columns, and writes to <SPORTS_DATA_DIR>/model/shadow.db:
@@ -7,7 +7,7 @@ Off switch: SPORTS_SHADOW_SN1=0. Any error -> the shadow is skipped for that mar
 
   python -m sports.model.sn1 fit <history.db>      artifact sn1_nfl.json + MANIFEST_SN1.json (same data_as_of as sm-1)
   python -m sports.model.sn1 status                counts + held-out progress (admin, never member-facing)
-  python -m sports.model.sn1 heldout <history.db>  the one-time A10 scores when their thresholds are reached
+  python -m sports.model.sn1 heldout <history.db>  the one-time A11 scores when their thresholds are reached
 """
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ FEATURE = "nfl.snap_trend"
 ART_DIR = Path(__file__).resolve().parent / "artifacts"
 ARTIFACT = ART_DIR / "sn1_nfl.json"
 MANIFEST = ART_DIR / "MANIFEST_SN1.json"
-BOX_MIN_GAMES = 48                      # A10 4
-BOOK_MIN = (150, 30)                    # A10 5: props, games
+BOX_MIN_GAMES = 48                      # A11 4
+BOOK_MIN = (150, 30)                    # A11 5: props, games
 TARGETS = ("prizepicks", "underdog")
 _ON = {"1", "true", "yes", "on"}
 
@@ -44,7 +44,7 @@ def enabled():
 
 # ------------------------------------------------------------------------------------------------------------- fit
 def fit(hcon, as_of=None, out_dir=None):
-    """A10 1: sm-1's frozen configuration + FEATURE, refit by forward.fit's recipe at sm-1's own data_as_of (default)."""
+    """A11 1: sm-1's frozen configuration + FEATURE, refit by forward.fit's recipe at sm-1's own data_as_of (default)."""
     from ..contracts import now_utc
     from . import datasets, forward
     from .fwd import _file_sha
@@ -73,14 +73,14 @@ def fit(hcon, as_of=None, out_dir=None):
     art = {"model_version": VERSION, "sport": SPORT, "fitted_at": now_utc(), "data_as_of": as_of,
            "pairs_with_sm1": sm1["sha"], "config_sha": _sha(cfg)[:16], "added_feature": FEATURE,
            "dataset": datasets.coverage(hcon).get(SPORT), "markets": arts,
-           "role": "challenger (shadow) - REGISTER.md A10; not displayed, not graded"}
+           "role": "challenger (shadow) - REGISTER.md A11; not displayed, not graded"}
     art["sha"] = _sha(art["markets"])[:16]
     p = out_dir / ARTIFACT.name
     p.write_text(json.dumps(art, indent=1, sort_keys=True, default=float), encoding="utf-8")
     man = {"version": "sn1-pkg-1", "model_version": VERSION, "artifact_sha": art["sha"], "freeze_at": art["fitted_at"],
            "pairs_with_sm1": sm1["sha"], "data_as_of": as_of,
            "files": {p.name: {"sha256": _file_sha(p), "bytes": p.stat().st_size}},
-           "held_out": "NFL games starting after the first recorded sn-1 row (A10 3); box once at >= 48 games, book "
+           "held_out": "NFL games starting after the first recorded sn-1 row (A11 3); box once at >= 48 games, book "
                        "once per market at >= 150 props / 30 games"}
     (out_dir / MANIFEST.name).write_text(json.dumps(man, indent=1, sort_keys=True), encoding="utf-8")
     return {"sha": art["sha"], "fitted_at": art["fitted_at"], "markets": {m: v["fit_rows"] for m, v in arts.items()}}
@@ -200,7 +200,7 @@ def _rows(hcon, shadow_path=None):
     con.close()
     last = {}
     for r in raw:
-        if r[2] not in TARGETS or (first and (r[4] or "") <= first):          # A10 3: games after the first row
+        if r[2] not in TARGETS or (first and (r[4] or "") <= first):          # A11 3: games after the first row
             continue
         k = (r[10], r[11], r[0], float(r[1]))
         if k not in last or r[3] > last[k][3]:
@@ -222,7 +222,7 @@ def _rows(hcon, shadow_path=None):
 
 
 def box_score(rows):
-    """A10 4: unique (game, player) sm-1-eligible rows; paired CRPS sn-1 - sm-1, game-clustered CI."""
+    """A11 4: unique (game, player) sm-1-eligible rows; paired CRPS sn-1 - sm-1, game-clustered CI."""
     uniq = {}
     for r in rows:
         if r["eligible"]:
@@ -242,7 +242,7 @@ def box_score(rows):
 
 
 def book_score(rows):
-    """A10 5: every recorded offer at its own line, pushes excluded; paired logloss of P(over | no push)."""
+    """A11 5: every recorded offer at its own line, pushes excluded; paired logloss of P(over | no push)."""
     rs = [r for r in rows if r["y"] != r["line"]]
     if not rs:
         return {"props": 0}
@@ -272,7 +272,7 @@ def book_score(rows):
 
 
 def progress(hcon, shadow_path=None):
-    """Forward job: counts only, no PMF is read and nothing is scored (A10 3: no interim looks). Counts are upper
+    """Forward job: counts only, no PMF is read and nothing is scored (A11 3: no interim looks). Counts are upper
     bounds (pushes / missing box rows are dropped only by the one-time score)."""
     p = Path(shadow_path) if shadow_path else config.DATA_DIR / "model" / "shadow.db"
     done = json.loads(heldout_path().read_text(encoding="utf-8")) if heldout_path().exists() else {}
@@ -301,8 +301,8 @@ def progress(hcon, shadow_path=None):
 
 
 def heldout(hcon, shadow_path=None, now=None):
-    """The one-time A10 scores: box once at >= 48 games; each market's book once at >= 150 props / 30 games. A part
-    that was scored is never re-scored. Then the per-market decision (A10 6) - owner decides any switch."""
+    """The one-time A11 scores: box once at >= 48 games; each market's book once at >= 150 props / 30 games. A part
+    that was scored is never re-scored. Then the per-market decision (A11 6) - owner decides any switch."""
     from ..contracts import now_utc
     p = heldout_path()
     done = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
@@ -319,8 +319,8 @@ def heldout(hcon, shadow_path=None, now=None):
         bx = (done.get("box") or {}).get("markets", {}).get(mk)
         bk = (done.get("book") or {}).get(mk)
         dec[mk] = ("waiting" if bx is None or bk is None else
-                   "pass - owner decision to switch (A10 6)" if bx.get("pass") and not bk.get("fail") else
-                   "fail - retired for this market (A10 6)")
+                   "pass - owner decision to switch (A11 6)" if bx.get("pass") and not bk.get("fail") else
+                   "fail - retired for this market (A11 6)")
     done["decision"] = dec
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(done, indent=1, default=float), encoding="utf-8")

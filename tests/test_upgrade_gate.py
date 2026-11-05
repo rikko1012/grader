@@ -364,7 +364,7 @@ def test_ui_token_sheet_is_the_classic_palette_scoped_with_three_breakpoints():
     for font in ("'Bebas Neue'", "'Outfit'", "'DM Mono'"):
         assert font in css
     assert "Inter" not in css and "#77adff" not in css
-    assert sorted(set(re.findall(r"@media\(([^)]*)\)", css))) == ["max-width:1024px", "max-width:640px", "min-width:1025px"]
+    assert sorted(set(re.findall(r"@media\(([^)]*)\)", css))) == ["max-width:1024px", "max-width:640px", "min-width:1101px"]   # desktop starts at 1101px with the hub (2026-11-05)
     body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
     def top_level(block):                                       # split on commas outside :is(...)
         out, depth, cur = [], 0, ""

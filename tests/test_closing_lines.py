@@ -272,11 +272,14 @@ def test_diagnostics_endpoint_has_clv_only_with_the_flag(site, picks, monkeypatc
     monkeypatch.setattr(server.slip_batches, "read", lambda: [])
     monkeypatch.setattr(server, "map_chance_check_status", lambda: None)
     monkeypatch.setattr(server, "map1_results_status", lambda: None)
+    monkeypatch.setattr(server.letter_containment, "snapshot", lambda: {"version": "lc-1"})     # admin view, its own tests
+    monkeypatch.setattr(server.esports_cal, "status", lambda: {"version": "ec-1"})               # admin view, its own tests
     on = site_get("/admin/diagnostics.json", headers={"X-Admin-Token": "tok123"}).body()
     assert on["closing_lines"]["groups"] and on["closing_lines"]["version"] == cl.VERSION
     monkeypatch.delenv(cl.FLAG)
     off = site_get("/admin/diagnostics.json", headers={"X-Admin-Token": "tok123"}).body()
-    assert "closing_lines" not in off and off == {"cohorts": {}, "n": 1, "map1_results": None, "map_chance_check": None}
+    assert "closing_lines" not in off and off == {"cohorts": {}, "n": 1, "map1_results": None, "map_chance_check": None,
+                                              "letter_containment": {"version": "lc-1"}, "chance_calibration": {"version": "ec-1"}}
 
 
 def test_report_is_cached_and_a_failure_is_stated(picks, monkeypatch):
@@ -295,9 +298,9 @@ def test_report_is_cached_and_a_failure_is_stated(picks, monkeypatch):
 def test_drawer_and_diagnostics_render_only_with_data_and_no_hedge_or_return_words():
     hub = (ROOT / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
     i = hub.index("/* L10 vs closing (SCOUT_CLOSING_LINES)")
-    body = hub[i:hub.index("const pick=", i)]
+    body = hub[i:hub.index("const chart=", i)]
     assert "cl?.n?tile(" in body and "const closingTable=cl?.n?" in body and "L10 vs closing" in body
-    assert "${hitTiles}${closingTile}" in hub and "${closingTable}</section>" in hub
+    assert "${hitTiles}${h2hTile}${seasonTile}${closingTile}" in hub and "${closingTable}</section>" in hub
     assert not any(h in body.lower() for h in HEDGE + FORBIDDEN)
     page = (ROOT / "web" / "diagnostics.html").read_text(encoding="utf-8")
     fn = page[page.index("function clvHtml()"):page.index("function fwdHs()")]

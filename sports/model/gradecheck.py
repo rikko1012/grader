@@ -262,15 +262,16 @@ def attach_l10(rows, hcon, league):
 
 
 # ================================================================================================ scoring (A9 2-3)
-def score_rows(rows, cal_q=None):
-    """Lean, letter, hit and the as-shown holds for every row. cal_q: {fid: walk-forward q} for cal-mi ON markets."""
+def score_rows(rows, cal_q=None, label="cal-mi"):
+    """Lean, letter, hit and the as-shown holds for every row. cal_q: {fid: walk-forward q} for cal-mi ON markets, or
+    the pc-1 walk-forward chance (label "pc-1", REGISTER A10) when pc-1 prints the chance."""
     for r in rows:
         po, pu, pp = r["po"], r["pu"], r["pp"]
         r["chance"] = "raw"
         if cal_q and r["fid"] in cal_q and cal_q[r["fid"]] is not None:
             q = cal_q[r["fid"]]
             po, pu = (1 - pp) * q, (1 - pp) * (1 - q)
-            r["chance"] = "cal-mi"
+            r["chance"] = label
         r["po_s"], r["pu_s"] = po, pu
         mean = r.get("mean")
         lean = board_view.lean_of(po, pu, mean, r["line"])
@@ -291,7 +292,8 @@ def score_rows(rows, cal_q=None):
             mkc = {"po": r["pm"], "pu": 1 - r["pm"], "n": r.get("n_src") or 1}
             r["mk_side"] = mkc["po"] if lean == "over" else mkc["pu"]
             r["n4"] = (p_un - r["mk_side"]) <= 0
-        r["sg_ratio"] = board_view.sanity_check(mean, r["line"], None, None)
+        r["sg_ratio"] = board_view.sanity_check(mean, r["line"], None, None,           # sg-2 floor / certain too
+                                                chances=(po, pu, r["po"], r["pu"]))
         r["sg_l10"] = (board_view.sanity_check(None, r["line"], lean, r["l10"]) if r.get("l10") else None)
         held = bool(r.get("n4")) or bool(r["sg_ratio"]) or bool(r["sg_l10"])
         r["shown"] = not held
@@ -319,6 +321,43 @@ def cal_walk_q(rows, league):
         if f"{r['league']}:{r['stat']}" in on and q is not None:
             out[r["fid"]] = q
     info["rows_with_walk_forward_chance"] = len(out)
+    return out, info
+
+
+PC_WALK_MIN = 300
+
+
+def pc_walk_q(rows, league):
+    """REGISTER A10: {fid: walk-forward pc-1 q} - the printed-chance calibration (sports/model/chance_cal.py, the spec
+    of the parameters in use) refitted for each game-day ONLY on props settled before that day's first forecast
+    (>= PC_WALK_MIN decided rows, else that day keeps the raw chance). Empty when pc-1 is off / not fitted for the
+    league; then the cal-mi rule applies as before."""
+    from . import chance_cal
+    obj, src = chance_cal.load(force=True)
+    p = ((obj or {}).get("leagues") or {}).get(league)
+    info = {"version": chance_cal.VERSION, "enabled": chance_cal.enabled(), "source": src,
+            "sha": (obj or {}).get("sha"), "letters": (p or {}).get("letters")}
+    if not p:
+        return {}, info
+    dec = [{"fid": r["fid"], "stat": r["stat"], "ps": r["ps"], "settled_at": r["settled_at"],
+            "hit": 1.0 if float(r["value"]) > r["line"] else 0.0}
+           for r in rows if r["status"] in ("win", "loss") and r["ps"] is not None and r["value"] is not None
+           and float(r["value"]) != r["line"]]
+    days = {}
+    for r in rows:
+        if r.get("ps") is not None:
+            days.setdefault(cal.game_day(r["forecast_at"]), []).append(r)
+    out, fitted_days = {}, 0
+    for d in sorted(days):
+        cutoff = min(r["forecast_at"] for r in days[d])
+        train = [x for x in dec if (x["settled_at"] or "9") < cutoff]
+        if len(train) < PC_WALK_MIN:
+            continue
+        m = chance_cal.fit(train, p["spec"], p.get("stat_lam"))
+        fitted_days += 1
+        for r, q in zip(days[d], chance_cal.predict(m, days[d])):
+            out[r["fid"]] = q
+    info.update(rows_with_walk_forward_chance=len(out), game_days_fitted=fitted_days, min_train=PC_WALK_MIN)
     return out, info
 
 
@@ -453,6 +492,7 @@ def league_report(rows, league, cal_info):
               "l10_unknown": sum(1 for r in leans if not r.get("l10")),
               "as_shown": len(shown), "as_shown_scored": len(scored),
               "chance_cal_mi": sum(1 for r in rows if r.get("chance") == "cal-mi"),
+              "chance_pc1": sum(1 for r in rows if r.get("chance") == "pc-1"),
               "with_market_chance": sum(1 for r in rows if r.get("pm") is not None),
               "with_inputs": sum(1 for r in rows if r.get("sha")), "with_variant": sum(1 for r in rows if r.get("variant")),
               "with_favourite": sum(1 for r in rows if r.get("fav") is not None)}
@@ -578,8 +618,13 @@ def run(learning, inputs=None, store_path=None, history=None, games=None, league
                 meta["favourite_events"] = attach_favourite(rows, gpath, lg)
             if hcon is not None:
                 meta["l10_rows"] = attach_l10(rows, hcon, lg)
-            cal_q, cal_info = cal_walk_q(rows, lg)
-            score_rows(rows, cal_q)
+            pc_q, pc_info = pc_walk_q(rows, lg)
+            if pc_info.get("letters") is not None:      # A10: pc-1 prints the chance -> score the pc-1 chance
+                cal_q, cal_info = pc_q, {"pc1": pc_info}
+                score_rows(rows, cal_q, label="pc-1")
+            else:
+                cal_q, cal_info = cal_walk_q(rows, lg)
+                score_rows(rows, cal_q)
             cal_info["walk_forward_a8a"] = cal_mi_compact(lcon, icon, lg)
             rep = league_report(rows, lg, cal_info)
             rep["meta"] = meta

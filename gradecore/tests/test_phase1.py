@@ -494,7 +494,7 @@ def test_offer_labels_explain_a_missing_letter():
 
 def test_grade_carries_the_policy_version():
     from gradecore import GRADE_POLICY_VERSION
-    assert policy.grade(0.6, "underdog").policy == GRADE_POLICY_VERSION == "gp-2"
+    assert policy.grade(0.6, "underdog").policy == GRADE_POLICY_VERSION == "gp-3"
 
 
 # --------------------------------------------------------------------------------------------- scorecard
@@ -651,11 +651,26 @@ def test_league_scope_narrows_within_a_sport(state_file):
 
 
 @pytest.mark.parametrize("sport", containment.SPORTS)
-def test_the_owner_switch_beats_the_file(state_file, monkeypatch, sport):
+@pytest.mark.parametrize("off", ["0", "off", "false", "no"])
+def test_the_owner_switch_never_releases(state_file, monkeypatch, sport, off):
+    """Owner absolute rule "Never force letters on": 0 is recorded as asked and ignored; the file / default decides."""
     _write(state_file, {sport: {"contained": True, "stats": ["kills"]}})
-    monkeypatch.setenv(containment.ENV[sport], "0")
+    monkeypatch.setenv(containment.ENV[sport], off)
     containment.reset_cache()
+    assert containment.contained(sport, sport, "kills") is True
+    st = containment.state(sport)
+    assert st["source"] == "file" and st["env_requested"] == "release"
+    assert containment.env_request(sport) == {"name": containment.ENV[sport], "value": off, "asked": "release", "applied": False}
+    containment.set_path(state_file.parent / "missing.json")       # nothing known + a 0: still contained
+    monkeypatch.setenv(containment.ENV[sport], off)
+    assert containment.contained(sport, sport, "kills") is True and containment.state(sport)["source"] == "default"
+    containment.set_path(state_file)
+    _write(state_file, {sport: {"contained": False}})               # released by the check: the 0 changes nothing
     assert containment.contained(sport, sport, "kills") is False
+
+
+@pytest.mark.parametrize("sport", containment.SPORTS)
+def test_the_owner_switch_contains_over_the_file(state_file, monkeypatch, sport):
     _write(state_file, {sport: {"contained": False}})
     monkeypatch.setenv(containment.ENV[sport], "1")
     containment.reset_cache()

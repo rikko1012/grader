@@ -51,8 +51,16 @@ import perf_shadow
 import whop_auth
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
+import letter_containment
+letter_containment.configure(DATA_DIR)              # lc-1: CS2 / LoL letter containment state (display only)
+import esports_cal
+esports_cal.configure(DATA_DIR)                     # ec-1: printed chance = calibrated chance (SCOUT_CAL_CHANCE, display layer)
 
 from polymarket import match_odds, upcoming_events
+import map_weighted
+# CS2_MAP_WEIGHTED (default 0, MODEL_VERSIONS.md mw-1): off = nothing is wrapped and the model tag stays the frozen one;
+# "1" = the live CS2 projection uses vm-2's map weighting (fallback to the current projection, reason logged) under its own tag
+map_weighted.activate()
 
 BASE = Path(__file__).resolve().parent
 WEB = BASE / "web"
@@ -640,7 +648,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
     # one platform's graded lines (2026-10-10: PrizePicks like Underdog); the table shows each player's STANDARD line -
     # PrizePicks goblin / demon markets stay on the board, never mixed into this table. A promo line is a standard Over /
     # Under line graded as standard (2026-10-13 audit: it was left out here and re-added from the feed as 'grading...')
-    rows = [r for r in board_payload(book)["rows"] if (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
+    rows = [r for r in letter_containment.cs2_rows(board_payload(book)["rows"])          # lc-1: held letters read Lean, 0U
+            if (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
     same = [r for r in rows if (r.get("scope") or "12") == scope and same_match(r, match_slug, st)
             and ({comparison._team_same(r.get("team_name") or r.get("team"), team), comparison._team_same(r.get("team_name") or r.get("team"), opponent)} & {True})]
     # the platform's own listed start(s) of this match (from its graded rows): feed lines carry no match id
@@ -851,12 +860,24 @@ def card_veto(res):
 def card_map_chances(res):
     """The card's "HLTV map chances" block (mapchances: display only, weight 0 - never a grade input): hltv_mapchances'
     cached answer for the match (one query per match per 3 minutes, single flight, shared by every member; the card waits at most
-    0.5 s for a refresh). None = no block."""
+    0.5 s for a refresh). None = no block. grade_use (map_weighted): "HLTV map chances used" + capture time when the flag is on
+    and they fed this grade, otherwise "Shadow only - not in this grade" with vm-2's projection beside the live one."""
     try:
         import mapchances
-        return mapchances.for_card(res)
+        block = mapchances.for_card(res)
     except Exception:
         return None
+    try:
+        use = map_weighted.card_status(res)
+        if use and use.get("used") and block is None:
+            block = map_weighted.block_from_record((res.get("grader_inputs") or {}).get("map_weighted"))
+        if block is not None and use:
+            block = dict(block, grade_use=use)
+            if use.get("used"):
+                block.update(weight=1, note=None)
+    except Exception:
+        pass
+    return block
 
 
 def veto_body(match_id):
@@ -1162,13 +1183,20 @@ def _p1_export():
         con.close()
 
 
+def _p1_export_printed():
+    """The P1 export at the chance members were shown: rows logged after ec-1 went live at their calibrated chance
+    (esports_cal.forward_export), earlier rows as logged. The record, its letters and the EV gate read this; the slip
+    ranking table (fitted on the model's own chance) reads _p1_export()."""
+    return esports_cal.forward_export(_p1_export())
+
+
 def results_payload():
     """Member Results (results_view.member_results) from the learning cycle's stored P1 export. Map 1 stays off it until
     Map 1 has results_view.MAP1_RESULTS_MIN_STAKED settled staked units (owner 2026-10-25); the count is cached here too."""
     import results_view
     ex = _p1_export()
     _MAP1_STATUS[:] = [time.time(), results_view.map1_status(ex)]
-    return results_view.member_results(ex)
+    return results_view.member_results(esports_cal.forward_export(ex))
 
 
 def map_chance_check_status():
@@ -1251,6 +1279,9 @@ def board_payload(book="underdog"):
         x["book"] = x.get("book") or "underdog"
         x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked
         x["unavailable"] = side_unavailable(x)   # the feed no longer offers this side: shown as such, never actionable
+    # ec-1 (gradecore/chance_cal.py): the printed chance, letter and stake from the calibrated chance - display only, after the
+    # pick log; BOARD and every logged forecast keep the model's own (p_raw / grade_raw / units_raw ride along)
+    rows = esports_cal.cs2_rows(rows)
     _cap_same_result(rows)                    # within this platform: a slip is one platform's entry
     for x in rows:                            # why a stake is capped + warning marker (display only, sorting clean picks first)
         cg = x.pop("cap_grade", None)
@@ -2086,7 +2117,7 @@ def lol_public():
     if time.time() - _LOL_PUB["at"] > 15:
         _LOL_PUB.update(at=time.time(), on=(LOL_CENTER / "public.flag").exists())
     return _LOL_PUB["on"]
-_LOL_MEMBER = {"mtime": None, "body": None, "lock": threading.Lock()}
+_LOL_MEMBER = {"mtime": None, "body": None, "lock": threading.Lock()}   # mtime = (board.json mtime, lc-1 state)
 LOL_STAKE_NOTE = "0U: LoL stakes start once LoL picks have a settled record at real lines. The grade is the model's grade for this line."
 
 
@@ -2095,7 +2126,7 @@ def lol_member_board():
     pre-match forecast; no internal ids, admin flags or slip internals. Read-only file access - never imports lol."""
     path = LOL_CENTER / "board.json"
     try:
-        mt = path.stat().st_mtime
+        mt = (path.stat().st_mtime, letter_containment.key("lol"))     # a containment change rebuilds once
     except OSError:
         return None
     if _LOL_MEMBER["mtime"] == mt and _LOL_MEMBER["body"] is not None:
@@ -2245,15 +2276,16 @@ def _lol_member_rebuild(path, mt):
                               "grade": ln.get("grade") if fc and _lol_side_offered(ln.get("platform"), ln.get("sides"), ln.get("model_side")) else None,
                               "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None)})
             lines.sort(key=lambda z: (z["line"] if z["line"] is not None else 1e9, z["platform"]))
-            markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"),
+            markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"), "stat": m.get("stat"),
                             "stat_name": LOL_STAT.get(m.get("stat"), m.get("stat")), "scope": m.get("scope"), "lines": lines})
         markets.sort(key=lambda z: (z["team"] or "", z["player"] or "", z["stat_name"] or ""))
         tables.append({"teams": label.get(t.get("sid")) or " vs ".join(teams), "event": t.get("competition"), "best_of": t.get("best_of"),
                        "start": t.get("start"), "markets": markets})
     tables.sort(key=lambda z: z["start"] or "")
     feeds = {LOL_PLATFORM.get(k, k): v for k, v in (b.get("feeds") or {}).items()}
-    body = json.dumps({"at": b.get("at"), "feeds": feeds, "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE,
-                       "slips": _lol_member_slips(b.get("slips_member") or {})}).encode()
+    doc = {"at": b.get("at"), "feeds": feeds, "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE,
+           "slips": _lol_member_slips(b.get("slips_member") or {})}
+    body = json.dumps(letter_containment.lol_member_doc(doc)).encode()     # lc-1: held letters read Lean (display only)
     _LOL_MEMBER.update(mtime=mt, body=body)
     return body
 
@@ -4372,6 +4404,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(key,status,body,keep=300)
             if u.path == "/scout-ui.css":
                 return self.send_shared(("asset", "scout-ui"), 200, web_file("scout-ui.css"), "text/css; charset=utf-8", keep=600)
+            if u.path == "/alerts/unsubscribe":
+                return self.send(*unsubscribe_page(q.get("m"), q.get("t")))
             if u.path == "/health":
                 return self.send(200, {**_HEALTH_SNAPSHOT.read(_health_diagnostics), "ok": True,
                                        "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40]})
@@ -4532,8 +4566,10 @@ class Handler(BaseHTTPRequestHandler):
                 # one build + encoding shared by every member for BOARD_TTL s (2026-10-13 load test: 700 members at once
                 # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
-                st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(with_ud_links(board_payload(bk_)) if PP_OPEN_LINK and bk_ == "underdog"
-                                                                     else board_payload(bk_), default=str).encode()), ttl=BOARD_TTL)
+                # lc-1 (letter_containment): a held market shows Lean, 0U and the banner - display only, BOARD untouched
+                st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(letter_containment.cs2_board(
+                    with_ud_links(board_payload(bk_)) if PP_OPEN_LINK and bk_ == "underdog" else board_payload(bk_)),
+                    default=str).encode()), ttl=BOARD_TTL)
                 return self.send_shared(("board", bk_), st_, body_)
             if u.path == "/admin":
                 return self.admin(q)
@@ -4582,7 +4618,8 @@ class Handler(BaseHTTPRequestHandler):
                     if stale:
                         _DIAG.update(data=diagnostics.build_from_log(picklog, slip_batches.read()), at=time.time())
                 extra = {"closing_lines": closing_lines_status()} if os.environ.get("SCOUT_CLOSING_LINES") == "1" else {}
-                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status(), **extra))
+                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status(),
+                                           letter_containment=letter_containment.snapshot(), chance_calibration=esports_cal.status(), **extra))
             if u.path in ("/content-book", "/content-book.md"):
                 # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
                 # on every load from verified saved forecasts (posts.drafts). Admin token, or CONTENT_BOOK_KEY - a separate
@@ -4599,6 +4636,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(st_, body_, "text/html; charset=utf-8")
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path in ("/admin/coverage", "/admin/coverage.json") and self.authed(q.get("token")):
+                import admin_coverage                     # SCOUT_ADMIN_COVERAGE (default off): health of every source
+                if not admin_coverage.enabled():
+                    return self.send(404, {"error": "not found"})
+                st_, body_ = admin_coverage.shared(sys.modules[__name__])
+                if u.path.endswith(".json"):
+                    return self.send(st_, body_, "application/json", {"Cache-Control": "no-store"})
+                return self.send(200, admin_coverage.page(json.loads(body_)).encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+            if u.path in ("/admin/alerts_dryrun", "/admin/alerts_dryrun.json") and self.authed(q.get("token")):
+                import admin_coverage, workspace_alerts, workspace_api   # read-only: nothing is written or sent
+                doc = workspace_alerts.preview(workspace_api.data_dir(), workspace_api.store().get_state,
+                                               workspace_alerts.live_rows(sys.modules[__name__]))
+                if u.path.endswith(".json"):
+                    return self.send(200, doc, headers={"Cache-Control": "no-store"})
+                return self.send(200, admin_coverage.dryrun_page(doc).encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
             if u.path == "/admin/memprof.json" and self.authed(q.get("token")):
                 return self.send(200, memprof(q.get("action") or "report"))
             if u.path == "/admin/lol" and self.authed(q.get("token")):    # admin LoL board / match tables / cards (not released)
@@ -5305,7 +5357,7 @@ class Handler(BaseHTTPRequestHandler):
         b = slip_builder.get_batch(bid or cur)
         if b is None:
             return self.send(404, {"error": "unknown batch"})
-        return self.send(200, dict(studio_tail_annotate(b), current=(b["batch_id"] == cur), settled_batches=settled_batches(),
+        return self.send(200, dict(letter_containment.cs2_slip_records(studio_tail_annotate(b)), current=(b["batch_id"] == cur), settled_batches=settled_batches(),
                                    track_record=studio_track_record(), builder_version=slip_builder.VERSION))
 
     def studio_history(self):
@@ -5319,7 +5371,7 @@ class Handler(BaseHTTPRequestHandler):
         if not sid:
             return self.send(401, {"error": "members_only"})
         import slip_builder
-        return self.send(200, studio_history_payload(slip_builder.member_batches(sid)))
+        return self.send(200, letter_containment.cs2_slip_records(studio_history_payload(slip_builder.member_batches(sid))))
 
     def studio_capacity(self, q):
         """GET /api/slip_studio/capacity?book=&side=&stat=&scope=[&market=]: eligible lines / matches and the most slips of each
@@ -5338,7 +5390,7 @@ class Handler(BaseHTTPRequestHandler):
         key = ("studio_cap",) + tuple(st[k] for k in ("book", "side", "stat", "scope", "market"))
 
         def compute():
-            gb = graded_board(st["book"])
+            gb = letter_containment.cs2_board(graded_board(st["book"]))      # lc-1: a held leg has no rating
             out = slip_builder.capacity(gb.get("rows") or [], st, model=gb.get("version"))
             out["board"] = {"book": st["book"], "updated": gb.get("updated"), "graded_rows": len(gb.get("rows") or [])}
             return 200, json.dumps(out, default=str).encode()
@@ -5411,7 +5463,7 @@ class Handler(BaseHTTPRequestHandler):
             batch = bid
         else:
             batch = sb.current_batch(sid)
-        gb = graded_board(st["book"])
+        gb = letter_containment.cs2_board(graded_board(st["book"]))          # lc-1: a held leg has no rating
         try:
             res = sb.build(gb["rows"], st, batch=batch, key=idem, model=gb.get("version"), replace=rep)
         except ValueError as e:
@@ -5460,7 +5512,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "legs": [], "slip_id": rec["slip_id"], "batch_id": rec["batch_id"], "book": book,
                                    "copy_text": None})
         feed = prizepicks.board() if book == "prizepicks" else underdog.board()
-        graded = graded_board(book, max_age=2)
+        graded = letter_containment.cs2_board(graded_board(book, max_age=2))   # lc-1: a held grade reads Lean
         v = sb.verify_before_copy(rec, {book: {"feed": feed, "graded": graded}}, model=graded.get("version"))
         # one stored row per request id - or per slip per 30 s without one (the answer is still computed every time)
         key = "v:" + (idem or f"{rec['slip_id']}:{int(time.time() // 30)}")
@@ -5598,6 +5650,10 @@ class Handler(BaseHTTPRequestHandler):
                 res["dist_view"] = None if outage else dist_view.view(res.get("grade"))
             except Exception:
                 res["dist_view"] = None
+            try:                                         # ec-1: after the pick log - the card prints the calibrated chance,
+                res = esports_cal.cs2_card(res)          # letter and stake (new dicts; the logged row keeps the model's own)
+            except Exception:
+                traceback.print_exc()
             try:                                         # after logging: the log keeps the grader's own stake
                 res["verdict"] = board_stake(res, prop, scope, line, lt, book or ("underdog", "prizepicks"))
                 vv = res["verdict"]
@@ -5645,6 +5701,7 @@ class Handler(BaseHTTPRequestHandler):
                 withhold_temporary(res)
             res["veto"] = card_veto(res)                 # map veto panel: the background's stored answer (display only)
             res["map_chances"] = card_map_chances(res)   # HLTV map chances (display only, weight 0; after the pick log)
+            res = letter_containment.cs2_card(res)       # lc-1: after the pick log - a held market reads Lean, 0U (display only)
             t0 = time.time()
             body = json.dumps(public(res), default=str).encode()
             tm["json"] = round(time.time() - t0, 2)
@@ -5777,6 +5834,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "bad Content-Length"})
         if u.path.startswith("/api/slip_studio/"):
             return self.studio_post(u.path, n)
+        if u.path == "/alerts/unsubscribe":
+            if n > 512:
+                self.close_connection = True
+                return self.send(413, {"error": "request too large"})
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace")).items()}
+            return self.send(*unsubscribe_page(form.get("m"), form.get("t"), confirm=True))
         # 2026-10-13 audit: the body was read before any check, as long as the client said (a 10 GB Content-Length was
         # read into memory). Every body here is small: over POST_MAX it is refused unread, members-only before reading.
         # Saved lineup batches contain up to twelve slips. All other routes keep
@@ -5903,11 +5966,37 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
         return self.send(200, page.encode(), "text/html; charset=utf-8")
 
 
+def unsubscribe_page(member, token, confirm=False):
+    """One-tap alert unsubscribe from a Whop message (workspace_alerts.unsub_url). GET shows a button (link previews and prefetch
+    never unsubscribe anyone); POST with the same signed token turns delivery off. A bad or missing token changes nothing."""
+    import workspace_alerts, workspace_api
+    esc = htmllib.escape
+    shell = ("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+             "<title>Scout alerts</title><style>body{background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:520px}"
+             "button{min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #f5c842;background:#f5c842;color:#000;font-weight:600}"
+             "p{color:#bbb}</style></head><body><h1>Scout alerts</h1>{}</body></html>")
+    if not workspace_alerts.unsub_ok(member, token):
+        return 400, shell.replace("{}", "<p>This link is not valid. Turn alerts off in Scout under Alerts.</p>").encode(), "text/html; charset=utf-8"
+    if not confirm:
+        body = (f"<p>Stop background alerts for this account? Live highlight on the research screen is not affected.</p>"
+                f"<form method=post action='/alerts/unsubscribe'><input type=hidden name=m value='{esc(member, quote=True)}'>"
+                f"<input type=hidden name=t value='{esc(token, quote=True)}'><button type=submit>Stop alerts</button></form>")
+        return 200, shell.replace("{}", body).encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"}
+    workspace_alerts.subscription(workspace_api.data_dir(), member, False)
+    return 200, shell.replace("{}", "<p>Done. Background alerts are off for this account. You can turn them back on in Scout under Alerts.</p>").encode(), \
+        "text/html; charset=utf-8", {"Cache-Control": "no-store"}
+
+
 # owner 2026-11-05 ("why do i have to turn them on in render"): the remaining-brief surfaces passed tests, review and the 700-member
 # load test, so the running server turns them ON unless Render says otherwise ("0"/"off" = off). Set only when the process runs as
 # the server, never on import, so tests keep their explicit flag-off checks. SCOUT_UI_TOKENS (gold design) stays off: owner keeps the blue.
 DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBLIC_RECORD", "SCOUT_PUBLIC_RECORD_SLIPS",
-              "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK")
+              "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK",
+              # Phase 4, no keys needed (owner: "why do i have to turn them on in render")
+              "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
+              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE")
+# ec-1 calibrated printed chance (SCOUT_CAL_CHANCE) is OFF by default again: owner 2026-11-05 after go-live, "yeah you've
+# ruined the grader". Render SCOUT_CAL_CHANCE=1 turns it back on; the layer and its artifact stay in the code.
 
 
 def apply_default_flags(env=os.environ):
@@ -5940,6 +6029,18 @@ if __name__ == "__main__":
     threading.Thread(target=lol_center_supervise, daemon=True, name="lol-center").start()
     import workspace_alerts
     workspace_alerts.start(sys.modules[__name__])
+    # lc-1: the CS2 / LoL letter containment check, its own thread (reads the stored P1 export and the LoL worker's
+    # learning.json every 6 h; requests only read the cached state)
+    letter_containment.start(sys.modules[__name__], DATA_DIR)
+    try:                                              # ec-1: when this artifact first went live (the record maps forecasts
+        esports_cal.mark_live(DATA_DIR)               # logged after it at the calibrated chance; earlier ones stay as logged)
+    except Exception:
+        traceback.print_exc()
+    try:                                              # extra book providers' one poller (no-op with every SCOUT_BOOK_* off)
+        import book_providers, workspace_api
+        book_providers.start(workspace_api.data_dir())
+    except Exception:
+        traceback.print_exc()
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:

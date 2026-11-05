@@ -37,3 +37,35 @@ def test_stakes_equalize_actual_returns_and_fee_can_remove_opportunity():
 @pytest.mark.parametrize('kw',[{'line':float('nan')},{'decimal_odds':1},{'source_at':101},{'source':''}])
 def test_quote_contract_rejects_bad_prices_or_provenance(kw):
     with pytest.raises(ValueError):quote(**kw)
+
+
+# ---- Phase 4 sheet math (workspace_markets.py prices through these only)
+from gradecore.market_tools import ev_push_adjusted, market_width, arb_two_way, implied  # noqa: E402
+
+
+def test_ev_is_p_cal_times_decimal_minus_one_with_push_returning_the_stake():
+    assert ev_push_adjusted(.55, 2.0) == pytest.approx(.10)
+    assert ev_push_adjusted(.5, 2.0, .1) == pytest.approx(.10)
+    assert ev_push_adjusted(.5, 1.9) < 0
+    assert ev_push_adjusted(.5, 2.0) == pytest.approx(expected_value(.5, .5, 2.0))
+    with pytest.raises(ValueError):
+        ev_push_adjusted(.8, 2.0, .3)
+    with pytest.raises(ValueError):
+        ev_push_adjusted(.5, 1.0)
+
+
+def test_market_width_overround_cents_and_wide_flag():
+    w = market_width(1 + 100 / 110, 1 + 100 / 110)                       # -110 / -110
+    assert w['overround'] == pytest.approx(.047619, abs=1e-5) and w['width_cents'] == pytest.approx(20) and not w['wide']
+    assert market_width(1.7, 1.8)['wide']
+    assert market_width(2.2, 1.8)['width_cents'] == pytest.approx(5)      # +120 / -125
+
+
+def test_arb_stake_share_and_margin_formula():
+    r = arb_two_way(2.1, 2.2)
+    ia, ib = 1 / 2.1, 1 / 2.2
+    assert r['arbitrage'] and r['stake_share'][0] == pytest.approx(ia / (ia + ib))
+    assert r['margin_pct'] == pytest.approx((1 / (ia + ib) - 1) * 100)
+    assert r['stake_share'][0] * 2.1 == pytest.approx(r['stake_share'][1] * 2.2)
+    assert not arb_two_way(1.9, 1.9)['arbitrage'] and arb_two_way(1.9, 1.9)['margin_pct'] < 0
+    assert implied(2.0) == .5

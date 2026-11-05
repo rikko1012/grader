@@ -77,17 +77,45 @@ def test_committed_seed_contains_both_leagues_with_the_owner_run_numbers(monkeyp
     assert board_view.contain_reason("nfl", "rec_yds") == "NFL model not validated - projection only"
 
 
-def test_env_override_wins_over_file_and_seed(monkeypatch):
+@pytest.mark.parametrize("off", ["0", "off", "false", "no"])
+def test_env_zero_never_releases_a_held_league(monkeypatch, off):
+    """Owner absolute rule "Never force letters on" (ct-1a): SPORTS_CONTAIN_<LG>=0 no longer releases a league the daily
+    check holds - it is logged as asked and ignored. Release comes only from the daily verdict."""
     _state(nba=True, nfl=True)
     assert containment.contained("nba", "points")
-    monkeypatch.setenv("SPORTS_CONTAIN_NBA", "0")
+    monkeypatch.setenv("SPORTS_CONTAIN_NBA", off)
+    monkeypatch.setenv("SPORTS_CONTAIN_NFL", off)
     containment.reset_cache()            # a restart on Render
-    assert not containment.contained("nba", "points") and containment.league_state("nba")["source"] == "env"
-    assert containment.contained("nfl", "rec_yds")                            # the other league keeps the file
+    assert containment.contained("nba", "points") and containment.contained("nfl", "rec_yds")
+    st = containment.league_state("nba")
+    assert st["source"] == "file" and st["env_asked"] == "release" and st["env_applied"] is False
+    snap = containment.snapshot()
+    assert snap["env_requests"]["nba"] == {"name": "SPORTS_CONTAIN_NBA", "value": off, "asked": "release", "applied": False}
+    assert snap["letters"] == {"nba": "contained", "nfl": "contained"}
+    _state(nba=False, nfl=True)          # the daily verdict released NBA: the 0 is not what released it
+    assert not containment.contained("nba", "points") and containment.contained("nfl", "rec_yds")
+
+
+def test_env_request_is_logged_once(monkeypatch, capsys):
+    _state(nba=True, nfl=True)
+    monkeypatch.setenv("SPORTS_CONTAIN_NBA", "0")
+    monkeypatch.setattr(containment, "_logged", set())
+    containment.reset_cache()
+    containment.contained("nba", "points")
+    containment.reset_cache()
+    containment.contained("nba", "points")
+    out = capsys.readouterr().out
+    assert out.count("SPORTS_CONTAIN_NBA='0' asked to release; applied: contained (source file)") == 1, out
+    assert "the switch can only contain" in out
+
+
+def test_env_one_contains_over_a_release(monkeypatch):
     _state(nba=False, nfl=False)
+    assert not containment.contained("nba", "points")
     monkeypatch.setenv("SPORTS_CONTAIN_NBA", "1")
     containment.reset_cache()            # a restart on Render
-    assert containment.contained("nba", "points")
+    assert containment.contained("nba", "points") and containment.league_state("nba")["source"] == "env"
+    assert not containment.contained("nfl", "rec_yds")                        # the other league keeps the file
 
 
 def test_legacy_rule_when_no_state_exists():

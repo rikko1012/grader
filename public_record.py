@@ -84,7 +84,7 @@ def _cs2(srv):
     """The member Results letters on the same P1 picks, plus each tier's and the total's match-resampled 95% range and
     the 5-point reliability bins (gradecore.scorecard: whole matches resampled, 2,000 draws, seed 7)."""
     import results_stated
-    export=srv._p1_export()
+    export=getattr(srv,'_p1_export_printed',srv._p1_export)()   # ec-1: the chance members were shown
     doc=results_stated.stated_observed(export)
     try:
         return _cs2_ranges(doc,export)
@@ -122,12 +122,15 @@ def letter_status(srv,sport):
     NBA / NFL: held when the sports file's containment snapshot (model_gate, sports/containment.py ct-1) or its withheld
     grades say so. Otherwise None: the board shows a letter only on rows carrying a published cf-2 grade
     (workspace_sports.board_row), so a league-wide "live" would claim more than the board shows.
-    CS2 / LoL: the member board's letters do not read a containment state (gradecore ct-2 is shadow, not wired), so the
-    fact is the live board's own: CS2 letters live; LoL letters live at 0 units."""
-    if sport=='cs2':
-        return {'letters':'live','text':'CS2 letters are live on the board.'}
-    if sport=='lol':
-        return {'letters':'live','text':'LoL letters are live on the board, at 0 units.'}
+    CS2 / LoL: the board's own containment state (letter_containment lc-1, the state every member surface reads): held
+    with the banner's words, or live (LoL letters always carry 0 units)."""
+    if sport in ('cs2','lol'):
+        import letter_containment
+        st=letter_containment.state(sport)
+        b=letter_containment.banner(sport,st)
+        if b:
+            return {'letters':'held','text':b}
+        return {'letters':'live','text':'CS2 letters are live on the board.' if sport=='cs2' else 'LoL letters are live on the board, at 0 units.'}
     import workspace_sports
     st,pub=workspace_sports._public(srv)
     d=((pub or {}).get('leagues') or {}).get(sport) if st==200 else None
@@ -146,7 +149,7 @@ def read(srv,sport):
             doc=_cs2(srv)
         else:
             import results_stated
-            doc=results_stated.stated_observed(srv._p1_export())
+            doc=results_stated.stated_observed(getattr(srv,'_p1_export_printed',srv._p1_export)())
     elif sport=='lol':
         import workspace_lol
         doc=workspace_lol.results(srv)

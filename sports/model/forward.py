@@ -299,7 +299,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     icon = inputs_db()
     rec = _shadow_recorder(scon, hcon, league, forecast_at, absences, up)      # sm-2 SHADOW (REGISTER A5 7), never shown
     rec2 = _nflv2_recorder(scon, hcon, league, forecast_at, up, rec)           # sm-nfl-2 SHADOW (REGISTER A6 6)
-    rec3 = _sn1_recorder(league, forecast_at)                                  # sn-1 SHADOW (REGISTER A10 2)
+    rec3 = _sn1_recorder(league, forecast_at)                                  # sn-1 SHADOW (REGISTER A11 2)
     tw = _tw1(league, art["sha"])                                             # tw-1 per-market layer (REGISTER A7 8)
     if tw is not None:
         out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}

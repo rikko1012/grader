@@ -1,0 +1,1080 @@
+{
+ "cs2": {
+  "label": "CS2 (P1)",
+  "units": 6317,
+  "days": [
+   "2026-10-14",
+   "2026-10-15",
+   "2026-10-16",
+   "2026-10-17",
+   "2026-10-18",
+   "2026-10-19",
+   "2026-10-20",
+   "2026-10-21",
+   "2026-10-22",
+   "2026-10-23",
+   "2026-10-24",
+   "2026-10-25",
+   "2026-10-26",
+   "2026-10-27",
+   "2026-10-28",
+   "2026-10-29",
+   "2026-10-30",
+   "2026-10-31",
+   "2026-11-01",
+   "2026-11-02",
+   "2026-11-03",
+   "2026-11-04"
+  ],
+  "runs": [
+   {
+    "size": 2,
+    "no_repeat": false,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 196,
+      "leg_hit": 0.5227,
+      "leg_hit_ci": [
+       0.4671,
+       0.5807
+      ],
+      "printed": 0.6241,
+      "slip_hit": 0.2784,
+      "slip_hit_ci": [
+       0.2216,
+       0.3352
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 141,
+      "leg_hit": 0.4773,
+      "leg_hit_ci": [
+       0.3955,
+       0.558
+      ],
+      "printed": 0.631,
+      "slip_hit": 0.2273,
+      "slip_hit_ci": [
+       0.1307,
+       0.3352
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 123,
+      "leg_hit": 0.5256,
+      "leg_hit_ci": [
+       0.4465,
+       0.6064
+      ],
+      "printed": 0.6653,
+      "slip_hit": 0.2614,
+      "slip_hit_ci": [
+       0.1705,
+       0.358
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 332,
+      "leg_hit": 0.5387,
+      "leg_hit_ci": [
+       0.5095,
+       0.5697
+      ],
+      "printed": 0.5876,
+      "slip_hit": 0.2902,
+      "slip_hit_ci": [
+       0.2548,
+       0.3277
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 22,
+     "diff": 0.0511,
+     "ci": [
+      -0.0511,
+      0.1477
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 22,
+     "diff": 0.017,
+     "ci": [
+      -0.0511,
+      0.0909
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 22,
+     "diff": -0.0118,
+     "ci": [
+      -0.0692,
+      0.0464
+     ]
+    },
+    "sq1_predicted_all_hit": 0.3284
+   },
+   {
+    "size": 2,
+    "no_repeat": true,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 196,
+      "leg_hit": 0.5227,
+      "leg_hit_ci": [
+       0.462,
+       0.5806
+      ],
+      "printed": 0.6241,
+      "slip_hit": 0.2784,
+      "slip_hit_ci": [
+       0.2216,
+       0.3352
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 189,
+      "leg_hit": 0.4886,
+      "leg_hit_ci": [
+       0.4238,
+       0.5587
+      ],
+      "printed": 0.6252,
+      "slip_hit": 0.2443,
+      "slip_hit_ci": [
+       0.1761,
+       0.3182
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 158,
+      "leg_hit": 0.5085,
+      "leg_hit_ci": [
+       0.4413,
+       0.5797
+      ],
+      "printed": 0.6558,
+      "slip_hit": 0.2102,
+      "slip_hit_ci": [
+       0.1307,
+       0.2898
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 352.0,
+      "matches": 332,
+      "leg_hit": 0.5359,
+      "leg_hit_ci": [
+       0.506,
+       0.5635
+      ],
+      "printed": 0.5877,
+      "slip_hit": 0.2877,
+      "slip_hit_ci": [
+       0.2532,
+       0.3233
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 22,
+     "diff": 0.0341,
+     "ci": [
+      -0.0511,
+      0.125
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 22,
+     "diff": 0.0682,
+     "ci": [
+      -0.0057,
+      0.142
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 22,
+     "diff": -0.0093,
+     "ci": [
+      -0.0682,
+      0.0525
+     ]
+    },
+    "sq1_predicted_all_hit": 0.3284
+   },
+   {
+    "size": 3,
+    "no_repeat": false,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 236,
+      "leg_hit": 0.5227,
+      "leg_hit_ci": [
+       0.4741,
+       0.5717
+      ],
+      "printed": 0.613,
+      "slip_hit": 0.125,
+      "slip_hit_ci": [
+       0.0795,
+       0.1761
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 202,
+      "leg_hit": 0.4792,
+      "leg_hit_ci": [
+       0.4146,
+       0.5422
+      ],
+      "printed": 0.6259,
+      "slip_hit": 0.1023,
+      "slip_hit_ci": [
+       0.0625,
+       0.1534
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 176,
+      "leg_hit": 0.5189,
+      "leg_hit_ci": [
+       0.4505,
+       0.5818
+      ],
+      "printed": 0.6543,
+      "slip_hit": 0.142,
+      "slip_hit_ci": [
+       0.0909,
+       0.1989
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 332,
+      "leg_hit": 0.5369,
+      "leg_hit_ci": [
+       0.5073,
+       0.567
+      ],
+      "printed": 0.5877,
+      "slip_hit": 0.1565,
+      "slip_hit_ci": [
+       0.1283,
+       0.1854
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 22,
+     "diff": 0.0227,
+     "ci": [
+      -0.0284,
+      0.0795
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 22,
+     "diff": -0.017,
+     "ci": [
+      -0.0511,
+      0.017
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 22,
+     "diff": -0.0315,
+     "ci": [
+      -0.0747,
+      0.0179
+     ]
+    },
+    "sq1_predicted_all_hit": 0.1825
+   },
+   {
+    "size": 3,
+    "no_repeat": true,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 236,
+      "leg_hit": 0.5227,
+      "leg_hit_ci": [
+       0.4738,
+       0.5752
+      ],
+      "printed": 0.613,
+      "slip_hit": 0.125,
+      "slip_hit_ci": [
+       0.0795,
+       0.1761
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 237,
+      "leg_hit": 0.5019,
+      "leg_hit_ci": [
+       0.4512,
+       0.5533
+      ],
+      "printed": 0.6191,
+      "slip_hit": 0.1364,
+      "slip_hit_ci": [
+       0.0795,
+       0.1932
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 209,
+      "leg_hit": 0.5133,
+      "leg_hit_ci": [
+       0.458,
+       0.5683
+      ],
+      "printed": 0.6441,
+      "slip_hit": 0.1364,
+      "slip_hit_ci": [
+       0.0852,
+       0.1875
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 528.0,
+      "matches": 332,
+      "leg_hit": 0.5374,
+      "leg_hit_ci": [
+       0.5094,
+       0.5647
+      ],
+      "printed": 0.5879,
+      "slip_hit": 0.157,
+      "slip_hit_ci": [
+       0.1277,
+       0.1884
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 22,
+     "diff": -0.0114,
+     "ci": [
+      -0.0739,
+      0.0511
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 22,
+     "diff": -0.0114,
+     "ci": [
+      -0.0511,
+      0.0341
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 22,
+     "diff": -0.032,
+     "ci": [
+      -0.075,
+      0.0137
+     ]
+    },
+    "sq1_predicted_all_hit": 0.1825
+   },
+   {
+    "size": 4,
+    "no_repeat": false,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 265,
+      "leg_hit": 0.544,
+      "leg_hit_ci": [
+       0.5035,
+       0.5861
+      ],
+      "printed": 0.6067,
+      "slip_hit": 0.0852,
+      "slip_hit_ci": [
+       0.0511,
+       0.1193
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 243,
+      "leg_hit": 0.5057,
+      "leg_hit_ci": [
+       0.4534,
+       0.559
+      ],
+      "printed": 0.6206,
+      "slip_hit": 0.0682,
+      "slip_hit_ci": [
+       0.0227,
+       0.1136
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 229,
+      "leg_hit": 0.5185,
+      "leg_hit_ci": [
+       0.4638,
+       0.5745
+      ],
+      "printed": 0.6446,
+      "slip_hit": 0.0795,
+      "slip_hit_ci": [
+       0.0398,
+       0.1193
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 332,
+      "leg_hit": 0.5395,
+      "leg_hit_ci": [
+       0.5115,
+       0.5669
+      ],
+      "printed": 0.588,
+      "slip_hit": 0.0868,
+      "slip_hit_ci": [
+       0.0663,
+       0.1082
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 22,
+     "diff": 0.017,
+     "ci": [
+      -0.0284,
+      0.0625
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 22,
+     "diff": 0.0057,
+     "ci": [
+      -0.0398,
+      0.0511
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 22,
+     "diff": -0.0016,
+     "ci": [
+      -0.0314,
+      0.0263
+     ]
+    },
+    "sq1_predicted_all_hit": 0.1005
+   },
+   {
+    "size": 4,
+    "no_repeat": true,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 265,
+      "leg_hit": 0.544,
+      "leg_hit_ci": [
+       0.5021,
+       0.5869
+      ],
+      "printed": 0.6067,
+      "slip_hit": 0.0852,
+      "slip_hit_ci": [
+       0.0568,
+       0.1193
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 272,
+      "leg_hit": 0.5099,
+      "leg_hit_ci": [
+       0.4642,
+       0.556
+      ],
+      "printed": 0.6138,
+      "slip_hit": 0.0966,
+      "slip_hit_ci": [
+       0.0511,
+       0.142
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 241,
+      "leg_hit": 0.5085,
+      "leg_hit_ci": [
+       0.4576,
+       0.5569
+      ],
+      "printed": 0.6352,
+      "slip_hit": 0.0795,
+      "slip_hit_ci": [
+       0.0455,
+       0.1193
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 176.0,
+      "days": 22,
+      "legs": 704.0,
+      "matches": 332,
+      "leg_hit": 0.535,
+      "leg_hit_ci": [
+       0.5077,
+       0.5629
+      ],
+      "printed": 0.588,
+      "slip_hit": 0.0853,
+      "slip_hit_ci": [
+       0.0628,
+       0.1076
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 22,
+     "diff": -0.0114,
+     "ci": [
+      -0.0511,
+      0.0284
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 22,
+     "diff": 0.0057,
+     "ci": [
+      -0.0227,
+      0.0341
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 22,
+     "diff": -0.0001,
+     "ci": [
+      -0.0274,
+      0.0277
+     ]
+    },
+    "sq1_predicted_all_hit": 0.1005
+   }
+  ]
+ },
+ "lol": {
+  "label": "LoL (settled forecasts)",
+  "units": 1037,
+  "days": [
+   "2026-10-23",
+   "2026-10-24",
+   "2026-10-25",
+   "2026-10-26",
+   "2026-10-28",
+   "2026-10-29",
+   "2026-10-30",
+   "2026-10-31",
+   "2026-11-03",
+   "2026-11-04"
+  ],
+  "runs": [
+   {
+    "size": 2,
+    "no_repeat": false,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 64.0,
+      "days": 8,
+      "legs": 128.0,
+      "matches": 27,
+      "leg_hit": 0.6328,
+      "leg_hit_ci": [
+       0.5137,
+       0.7323
+      ],
+      "printed": 0.7204,
+      "slip_hit": 0.3906,
+      "slip_hit_ci": [
+       0.2344,
+       0.5625
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 64.0,
+      "days": 8,
+      "legs": 128.0,
+      "matches": 29,
+      "leg_hit": 0.5156,
+      "leg_hit_ci": [
+       0.4017,
+       0.6434
+      ],
+      "printed": 0.6227,
+      "slip_hit": 0.2812,
+      "slip_hit_ci": [
+       0.1406,
+       0.4219
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 64.0,
+      "days": 8,
+      "legs": 128.0,
+      "matches": 27,
+      "leg_hit": 0.7188,
+      "leg_hit_ci": [
+       0.6,
+       0.8228
+      ],
+      "printed": 0.7547,
+      "slip_hit": 0.4531,
+      "slip_hit_ci": [
+       0.3438,
+       0.5469
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 64.0,
+      "days": 8,
+      "legs": 128.0,
+      "matches": 33,
+      "leg_hit": 0.5761,
+      "leg_hit_ci": [
+       0.4964,
+       0.6541
+      ],
+      "printed": 0.6482,
+      "slip_hit": 0.3283,
+      "slip_hit_ci": [
+       0.2291,
+       0.4372
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 8,
+     "diff": 0.1094,
+     "ci": [
+      -0.0781,
+      0.25
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 8,
+     "diff": -0.0625,
+     "ci": [
+      -0.2031,
+      0.0625
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 8,
+     "diff": 0.0623,
+     "ci": [
+      -0.0709,
+      0.1749
+     ]
+    },
+    "sq1_predicted_all_hit": 0.401
+   },
+   {
+    "size": 2,
+    "no_repeat": true,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 64.0,
+      "days": 8,
+      "legs": 128.0,
+      "matches": 27,
+      "leg_hit": 0.6328,
+      "leg_hit_ci": [
+       0.5118,
+       0.7344
+      ],
+      "printed": 0.7207,
+      "slip_hit": 0.3906,
+      "slip_hit_ci": [
+       0.2344,
+       0.5625
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 58.0,
+      "days": 8,
+      "legs": 116.0,
+      "matches": 33,
+      "leg_hit": 0.5086,
+      "leg_hit_ci": [
+       0.3871,
+       0.6331
+      ],
+      "printed": 0.6144,
+      "slip_hit": 0.2759,
+      "slip_hit_ci": [
+       0.1167,
+       0.4237
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 64.0,
+      "days": 8,
+      "legs": 128.0,
+      "matches": 29,
+      "leg_hit": 0.6875,
+      "leg_hit_ci": [
+       0.5931,
+       0.7724
+      ],
+      "printed": 0.7349,
+      "slip_hit": 0.4531,
+      "slip_hit_ci": [
+       0.3594,
+       0.5625
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 64.0,
+      "days": 8,
+      "legs": 128.0,
+      "matches": 33,
+      "leg_hit": 0.5782,
+      "leg_hit_ci": [
+       0.4941,
+       0.6559
+      ],
+      "printed": 0.6472,
+      "slip_hit": 0.3263,
+      "slip_hit_ci": [
+       0.2249,
+       0.4444
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 8,
+     "diff": 0.1148,
+     "ci": [
+      -0.0966,
+      0.3158
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 8,
+     "diff": -0.0625,
+     "ci": [
+      -0.1875,
+      0.0469
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 8,
+     "diff": 0.0643,
+     "ci": [
+      -0.0669,
+      0.1804
+     ]
+    },
+    "sq1_predicted_all_hit": 0.4013
+   },
+   {
+    "size": 3,
+    "no_repeat": false,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 40.0,
+      "days": 5,
+      "legs": 120.0,
+      "matches": 26,
+      "leg_hit": 0.7167,
+      "leg_hit_ci": [
+       0.5909,
+       0.811
+      ],
+      "printed": 0.7033,
+      "slip_hit": 0.425,
+      "slip_hit_ci": [
+       0.175,
+       0.65
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 40.0,
+      "days": 5,
+      "legs": 120.0,
+      "matches": 27,
+      "leg_hit": 0.5,
+      "leg_hit_ci": [
+       0.3485,
+       0.6343
+      ],
+      "printed": 0.6227,
+      "slip_hit": 0.15,
+      "slip_hit_ci": [
+       0.025,
+       0.275
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 40.0,
+      "days": 5,
+      "legs": 120.0,
+      "matches": 25,
+      "leg_hit": 0.7333,
+      "leg_hit_ci": [
+       0.6211,
+       0.8254
+      ],
+      "printed": 0.7355,
+      "slip_hit": 0.4,
+      "slip_hit_ci": [
+       0.275,
+       0.525
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 40.0,
+      "days": 5,
+      "legs": 120.0,
+      "matches": 27,
+      "leg_hit": 0.6325,
+      "leg_hit_ci": [
+       0.5456,
+       0.7095
+      ],
+      "printed": 0.6416,
+      "slip_hit": 0.2652,
+      "slip_hit_ci": [
+       0.1323,
+       0.4125
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 5,
+     "diff": 0.275,
+     "ci": [
+      0.0,
+      0.475
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 5,
+     "diff": 0.025,
+     "ci": [
+      -0.125,
+      0.175
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 5,
+     "diff": 0.1598,
+     "ci": [
+      -0.0227,
+      0.316
+     ]
+    },
+    "sq1_predicted_all_hit": 0.2316
+   },
+   {
+    "size": 3,
+    "no_repeat": true,
+    "summary": [
+     {
+      "generator": "sq-1",
+      "slips": 38.0,
+      "days": 5,
+      "legs": 114.0,
+      "matches": 26,
+      "leg_hit": 0.7105,
+      "leg_hit_ci": [
+       0.5827,
+       0.8095
+      ],
+      "printed": 0.7051,
+      "slip_hit": 0.3947,
+      "slip_hit_ci": [
+       0.175,
+       0.6111
+      ]
+     },
+     {
+      "generator": "old balanced 60\u00b15 (default)",
+      "slips": 35.0,
+      "days": 5,
+      "legs": 105.0,
+      "matches": 27,
+      "leg_hit": 0.4857,
+      "leg_hit_ci": [
+       0.3545,
+       0.6132
+      ],
+      "printed": 0.614,
+      "slip_hit": 0.1714,
+      "slip_hit_ci": [
+       0.075,
+       0.2667
+      ]
+     },
+     {
+      "generator": "old highest chance",
+      "slips": 38.0,
+      "days": 5,
+      "legs": 114.0,
+      "matches": 25,
+      "leg_hit": 0.7193,
+      "leg_hit_ci": [
+       0.6162,
+       0.8047
+      ],
+      "printed": 0.724,
+      "slip_hit": 0.3421,
+      "slip_hit_ci": [
+       0.175,
+       0.5278
+      ]
+     },
+     {
+      "generator": "random",
+      "slips": 38.0,
+      "days": 5,
+      "legs": 114.0,
+      "matches": 27,
+      "leg_hit": 0.6127,
+      "leg_hit_ci": [
+       0.5266,
+       0.6954
+      ],
+      "printed": 0.6413,
+      "slip_hit": 0.2489,
+      "slip_hit_ci": [
+       0.1383,
+       0.4024
+      ]
+     }
+    ],
+    "sq1_vs_old_default": {
+     "days": 5,
+     "diff": 0.2233,
+     "ci": [
+      -0.0444,
+      0.45
+     ]
+    },
+    "sq1_vs_old_highest": {
+     "days": 5,
+     "diff": 0.0526,
+     "ci": [
+      -0.1053,
+      0.225
+     ]
+    },
+    "sq1_vs_random": {
+     "days": 5,
+     "diff": 0.1458,
+     "ci": [
+      -0.0376,
+      0.3038
+     ]
+    },
+    "sq1_predicted_all_hit": 0.2328
+   }
+  ]
+ }
+}

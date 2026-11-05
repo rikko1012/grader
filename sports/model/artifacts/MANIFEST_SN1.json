@@ -8,7 +8,7 @@
   }
  },
  "freeze_at": "2026-11-05T14:21:27Z",
- "held_out": "NFL games starting after the first recorded sn-1 row (A10 3); box once at >= 48 games, book once per market at >= 150 props / 30 games",
+ "held_out": "NFL games starting after the first recorded sn-1 row (A11 3); box once at >= 48 games, book once per market at >= 150 props / 30 games",
  "model_version": "sn-1",
  "pairs_with_sm1": "cc56aeb8b88c31d8",
  "version": "sn1-pkg-1"

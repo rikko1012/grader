@@ -390,8 +390,18 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
    hit, n, CI, letters shown / hidden); JSON: `GET /api/sports/admin/model/gradecheck` (admin st1 token; `?part=headline`
    for the summary) or `python -m sports.model.daily status` in the Shell. Switches: `SPORTS_CAL_AUTOFIT=0` (no daily
    fit; manual `fit` still works), `SPORTS_GRADECHECK_DAILY=0` (no daily gradecheck / containment change),
-   `SPORTS_CONTAIN_NBA=0|1` / `SPORTS_CONTAIN_NFL=0|1` (force letters shown / hidden, wins over everything),
+   `SPORTS_CONTAIN_NBA=1` / `SPORTS_CONTAIN_NFL=1` (hide letters, wins over everything; since ct-1a 2026-11-04 a 0 is
+   logged and IGNORED - the switch can only contain, release comes only from the daily verdict; gradecheck.json
+   `containment.env_requests` shows what was asked and what applied),
    `SPORTS_DAILY_AFTER_UTC_H` (default 10). Run now from the Shell: `python -m sports.model.daily run --force`.
+8. Printed chance pc-1 (REGISTER A10, default ON, no Render variable needed). Every NBA / NFL sm-1 chance on the
+   board, cards, sheets, slips, tracked picks and EV is the calibrated chance (`sports/model/chance_cal.py`, committed
+   parameters `sports/model/artifacts/chance_cal_pc1.json`); the raw chance stays in the forecast record, `ca.raw`
+   and `model/shown.db`. A league whose held-out test failed keeps its letters held. Status: `python -m
+   sports.model.chance_cal status`. Refit in the Shell (writes `model/chance_cal.json`, which wins over the committed
+   file): build the exports (`python -m sports.model.gradecore_export --data-dir /sports-data --league nba|nfl`),
+   then `python -m sports.model.chance_cal fit --nba <export> --nfl <export> --test-from <first held-out game-day>
+   --report <path>`. Off: `SPORTS_CHANCE_CAL=0` (the board shows cal-mi-1 / raw as before).
 
 ## 11. Load results (2026-10-23, Windows workstation, 700 simultaneous members)
 
