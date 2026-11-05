@@ -77,6 +77,13 @@ def test_only_explicit_forecast_capture_boundaries_import_core():
                                      for n in nodes)
                 assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
                 continue
+            if p.relative_to(ROOT).as_posix() == 'board_parity.py':
+                # SCOUT_PARITY_* board parity (4.16): display numbers from gradecore.parity (and slip's unit share); never grades, logs or stakes.
+                tree = ast.parse(p.read_text(encoding='utf-8'))
+                nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore' and [a.name for a in n.names] in (['parity'], ['slip']) for n in nodes)
+                assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
+                continue
             if p.relative_to(ROOT).as_posix() in scoring:
                 # The public record scores saved results (bins, match-resampled ranges); it never grades or stakes.
                 tree = ast.parse(p.read_text(encoding='utf-8'))

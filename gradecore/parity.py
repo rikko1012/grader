@@ -10,7 +10,7 @@ Every formula here reuses the section-3 math (gradecore.payouts, gradecore.fair,
   - display sizing: gradecore.slip.stake on the leg priced at its break-even odds (decimal 1 / be); 1/4 Kelly, 1/2 Kelly or
     flat 1U. A member DISPLAY preference only: it never touches the grader's units.
 """
-from gradecore import fair, payouts, slip
+from . import fair, payouts, slip
 
 ENTRY = {"prizepicks": ("power", 2, "PrizePicks Power 2-pick"), "underdog": ("standard", 2, "Underdog standard 2-pick")}
 BANDS = ((0.06, "premium", "Premium"), (0.03, "strong", "Strong"), (0.0, "marginal", "Marginal"))
