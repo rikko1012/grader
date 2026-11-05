@@ -31,15 +31,16 @@ def _row(side="More", p=0.662, units=1.0, prop="hs", grade="B+", **kw):
 
 
 # ------------------------------------------------------------------------------------------------ switch
-def test_default_on_in_the_running_server_and_render_zero_turns_it_off():
+def test_off_by_default_in_the_running_server_render_one_turns_it_on():
+    """Owner rollback 2026-11-05 ("yeah you've ruined the grader"): the running server no longer turns ec-1 on."""
     import server
-    assert "SCOUT_CAL_CHANCE" in server.DEFAULT_ON
+    assert "SCOUT_CAL_CHANCE" not in server.DEFAULT_ON
     env = {}
     server.apply_default_flags(env)
-    assert env["SCOUT_CAL_CHANCE"] == "1"
-    env = {"SCOUT_CAL_CHANCE": "0"}
+    assert "SCOUT_CAL_CHANCE" not in env
+    env = {"SCOUT_CAL_CHANCE": "1"}
     server.apply_default_flags(env)
-    assert env["SCOUT_CAL_CHANCE"] == "0"
+    assert env["SCOUT_CAL_CHANCE"] == "1"
 
 
 def test_off_every_surface_is_the_input_itself(monkeypatch):

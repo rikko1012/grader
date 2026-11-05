@@ -65,7 +65,8 @@ BINS = tuple(round(0.50 + 0.05 * i, 2) for i in range(10))
 
 
 def enabled():
-    return os.environ.get("SPORTS_CHANCE_CAL", "1").strip().lower() not in _OFF
+    # OFF by default again (owner 2026-11-05 after go-live: "yeah you've ruined the grader"); SPORTS_CHANCE_CAL=1 turns it on
+    return os.environ.get("SPORTS_CHANCE_CAL", "0").strip().lower() not in _OFF
 
 
 def weights_path():

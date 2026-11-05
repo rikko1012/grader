@@ -5994,10 +5994,9 @@ DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBL
               "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK",
               # Phase 4, no keys needed (owner: "why do i have to turn them on in render")
               "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
-              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE",
-              # ec-1 (owner 2026-11-05, "these props will never hit 60% printed chance" -> calibrate): the printed CS2 / LoL
-              # chance is the calibrated one (gradecore/chance_cal.py); Render "0" prints the model's own chance again
-              "SCOUT_CAL_CHANCE")
+              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE")
+# ec-1 calibrated printed chance (SCOUT_CAL_CHANCE) is OFF by default again: owner 2026-11-05 after go-live, "yeah you've
+# ruined the grader". Render SCOUT_CAL_CHANCE=1 turns it back on; the layer and its artifact stay in the code.
 
 
 def apply_default_flags(env=os.environ):

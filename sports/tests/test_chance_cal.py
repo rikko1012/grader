@@ -33,6 +33,18 @@ def _write(obj):
 
 
 # ---------------------------------------------------------------------------------------------- committed artifact
+
+@pytest.fixture(autouse=True)
+def _layer_on(monkeypatch):
+    """pc-1 is OFF by default since the owner's rollback (2026-11-05); these tests exercise the layer switched on."""
+    monkeypatch.setenv("SPORTS_CHANCE_CAL", "1")
+
+
+def test_layer_is_off_by_default(monkeypatch):
+    monkeypatch.delenv("SPORTS_CHANCE_CAL", raising=False)
+    assert not chance_cal.enabled()
+
+
 def test_committed_artifact_is_valid_default_on_and_env_zero_turns_it_off(monkeypatch):
     obj = chance_cal.validate(json.loads(COMMITTED.read_text(encoding="utf-8")))
     assert set(obj["leagues"]) == {"nba", "nfl"}
@@ -43,7 +55,7 @@ def test_committed_artifact_is_valid_default_on_and_env_zero_turns_it_off(monkey
     monkeypatch.setattr(chance_cal, "DEFAULT_PATH", COMMITTED)
     chance_cal.reset_cache()
     got, src = chance_cal.load(force=True)
-    assert src == "default" and got["sha"] == obj["sha"]           # no env needed: on by default
+    assert src == "default" and got["sha"] == obj["sha"]           # switched on by the fixture
     a = chance_cal.adjust("nfl", "rec_yds", 0.80, 0.20, 0.0)
     assert a["mode"] == "P" and a["v"] == f"pc-1:{obj['sha']}" and a["po"] < 0.80
     monkeypatch.setenv("SPORTS_CHANCE_CAL", "0")
