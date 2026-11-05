@@ -1,0 +1,446 @@
+{
+ "cs2": [
+  {
+   "size": 2,
+   "no_repeat": false,
+   "printed chance": {
+    "leg_hit": 0.5085,
+    "slip_hit": 0.2102,
+    "vs_random": [
+     -0.0781,
+     -0.1477,
+     0.0
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.5256,
+    "slip_hit": 0.2614,
+    "vs_random": [
+     -0.0269,
+     -0.0965,
+     0.0503
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.5426,
+    "slip_hit": 0.2841,
+    "vs_random": [
+     -0.0042,
+     -0.0754,
+     0.0704
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.5227,
+    "slip_hit": 0.2784,
+    "vs_random": [
+     -0.0099,
+     -0.0656,
+     0.0464
+    ]
+   },
+   "random": {
+    "leg_hit": 0.5367,
+    "slip_hit": 0.2883
+   }
+  },
+  {
+   "size": 2,
+   "no_repeat": true,
+   "printed chance": {
+    "leg_hit": 0.5085,
+    "slip_hit": 0.2102,
+    "vs_random": [
+     -0.0803,
+     -0.1474,
+     -0.0023
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.5256,
+    "slip_hit": 0.2614,
+    "vs_random": [
+     -0.0291,
+     -0.102,
+     0.0472
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.5426,
+    "slip_hit": 0.2841,
+    "vs_random": [
+     -0.0064,
+     -0.0811,
+     0.0685
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.5227,
+    "slip_hit": 0.2784,
+    "vs_random": [
+     -0.0121,
+     -0.0729,
+     0.0444
+    ]
+   },
+   "random": {
+    "leg_hit": 0.5368,
+    "slip_hit": 0.2905
+   }
+  },
+  {
+   "size": 3,
+   "no_repeat": false,
+   "printed chance": {
+    "leg_hit": 0.5133,
+    "slip_hit": 0.1364,
+    "vs_random": [
+     -0.0209,
+     -0.0732,
+     0.0305
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.5152,
+    "slip_hit": 0.1193,
+    "vs_random": [
+     -0.0379,
+     -0.0813,
+     0.0071
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.5095,
+    "slip_hit": 0.142,
+    "vs_random": [
+     -0.0152,
+     -0.0787,
+     0.0431
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.5227,
+    "slip_hit": 0.125,
+    "vs_random": [
+     -0.0322,
+     -0.0759,
+     0.0147
+    ]
+   },
+   "random": {
+    "leg_hit": 0.5367,
+    "slip_hit": 0.1572
+   }
+  },
+  {
+   "size": 3,
+   "no_repeat": true,
+   "printed chance": {
+    "leg_hit": 0.5133,
+    "slip_hit": 0.1364,
+    "vs_random": [
+     -0.0148,
+     -0.0655,
+     0.037
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.5152,
+    "slip_hit": 0.1193,
+    "vs_random": [
+     -0.0318,
+     -0.0754,
+     0.013
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.5095,
+    "slip_hit": 0.142,
+    "vs_random": [
+     -0.0091,
+     -0.0676,
+     0.0562
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.5227,
+    "slip_hit": 0.125,
+    "vs_random": [
+     -0.0261,
+     -0.0676,
+     0.0222
+    ]
+   },
+   "random": {
+    "leg_hit": 0.5354,
+    "slip_hit": 0.1511
+   }
+  },
+  {
+   "size": 4,
+   "no_repeat": false,
+   "printed chance": {
+    "leg_hit": 0.5085,
+    "slip_hit": 0.0795,
+    "vs_random": [
+     -0.0026,
+     -0.0305,
+     0.0277
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.5043,
+    "slip_hit": 0.0568,
+    "vs_random": [
+     -0.0253,
+     -0.0594,
+     0.0195
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.5085,
+    "slip_hit": 0.0682,
+    "vs_random": [
+     -0.014,
+     -0.0485,
+     0.0182
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.544,
+    "slip_hit": 0.0852,
+    "vs_random": [
+     0.0031,
+     -0.0282,
+     0.0318
+    ]
+   },
+   "random": {
+    "leg_hit": 0.535,
+    "slip_hit": 0.0822
+   }
+  },
+  {
+   "size": 4,
+   "no_repeat": true,
+   "printed chance": {
+    "leg_hit": 0.5085,
+    "slip_hit": 0.0795,
+    "vs_random": [
+     -0.0065,
+     -0.0343,
+     0.021
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.5043,
+    "slip_hit": 0.0568,
+    "vs_random": [
+     -0.0293,
+     -0.0674,
+     0.0128
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.5085,
+    "slip_hit": 0.0682,
+    "vs_random": [
+     -0.0179,
+     -0.0508,
+     0.0136
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.544,
+    "slip_hit": 0.0852,
+    "vs_random": [
+     -0.0009,
+     -0.0312,
+     0.0278
+    ]
+   },
+   "random": {
+    "leg_hit": 0.535,
+    "slip_hit": 0.0861
+   }
+  }
+ ],
+ "lol": [
+  {
+   "size": 2,
+   "no_repeat": false,
+   "printed chance": {
+    "leg_hit": 0.6797,
+    "slip_hit": 0.4688,
+    "vs_random": [
+     0.1253,
+     0.0573,
+     0.1919
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.6719,
+    "slip_hit": 0.4531,
+    "vs_random": [
+     0.1097,
+     0.0205,
+     0.2016
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.6719,
+    "slip_hit": 0.4375,
+    "vs_random": [
+     0.0941,
+     0.0092,
+     0.1873
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.6328,
+    "slip_hit": 0.3906,
+    "vs_random": [
+     0.0472,
+     -0.0794,
+     0.1577
+    ]
+   },
+   "random": {
+    "leg_hit": 0.5838,
+    "slip_hit": 0.3434
+   }
+  },
+  {
+   "size": 2,
+   "no_repeat": true,
+   "printed chance": {
+    "leg_hit": 0.6719,
+    "slip_hit": 0.4219,
+    "vs_random": [
+     0.0887,
+     0.0205,
+     0.1598
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.6641,
+    "slip_hit": 0.4375,
+    "vs_random": [
+     0.1044,
+     0.012,
+     0.2205
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.6641,
+    "slip_hit": 0.4219,
+    "vs_random": [
+     0.0887,
+     0.0073,
+     0.183
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.6328,
+    "slip_hit": 0.3906,
+    "vs_random": [
+     0.0575,
+     -0.0805,
+     0.17
+    ]
+   },
+   "random": {
+    "leg_hit": 0.581,
+    "slip_hit": 0.3331
+   }
+  },
+  {
+   "size": 3,
+   "no_repeat": false,
+   "printed chance": {
+    "leg_hit": 0.7333,
+    "slip_hit": 0.375,
+    "vs_random": [
+     0.1297,
+     0.0237,
+     0.2363
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.7333,
+    "slip_hit": 0.375,
+    "vs_random": [
+     0.1297,
+     0.0337,
+     0.2157
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.7333,
+    "slip_hit": 0.375,
+    "vs_random": [
+     0.1297,
+     0.0548,
+     0.2157
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.7167,
+    "slip_hit": 0.425,
+    "vs_random": [
+     0.1797,
+     -0.0187,
+     0.3292
+    ]
+   },
+   "random": {
+    "leg_hit": 0.6193,
+    "slip_hit": 0.2453
+   }
+  },
+  {
+   "size": 3,
+   "no_repeat": true,
+   "printed chance": {
+    "leg_hit": 0.7105,
+    "slip_hit": 0.3421,
+    "vs_random": [
+     0.0989,
+     -0.0133,
+     0.1958
+    ]
+   },
+   "draft 1: shifted chance": {
+    "leg_hit": 0.7105,
+    "slip_hit": 0.3421,
+    "vs_random": [
+     0.0989,
+     0.0065,
+     0.1607
+    ]
+   },
+   "draft 2: band level, printed prior": {
+    "leg_hit": 0.7105,
+    "slip_hit": 0.3421,
+    "vs_random": [
+     0.0989,
+     0.002,
+     0.1618
+    ]
+   },
+   "sq-1: band level, settled-line prior": {
+    "leg_hit": 0.7105,
+    "slip_hit": 0.3947,
+    "vs_random": [
+     0.1516,
+     -0.0861,
+     0.3197
+    ]
+   },
+   "random": {
+    "leg_hit": 0.6129,
+    "slip_hit": 0.2432
+   }
+  }
+ ]
+}

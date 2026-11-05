@@ -26,8 +26,8 @@ from tests.workspace_fixture import MODEL, Fixture, iso, leg_of, row
 API = "/preview/workspace/api/"
 ADMIN = "B" * 40
 ROOT = Path(server.__file__).parent
-GET_ROUTES = ("me", "board", "line?book=underdog&id=x", "mine", "results", "state", "rules", "diagnostics", "grade-review")
-POST_ROUTES = ("recheck", "track", "state", "book-line")
+GET_ROUTES = ("me", "board", "line?book=underdog&id=x", "mine", "results", "state", "rules", "diagnostics", "grade-review", "generate")
+POST_ROUTES = ("recheck", "track", "state", "book-line", "slip-advice")
 
 
 @pytest.fixture

@@ -534,7 +534,7 @@ def test_single_prop_and_shared_legacy_filter_links_do_not_get_hidden(ctx,env):
     assert p.locator('#u-hub').is_hidden()
     assert p.url.endswith('#one')
 
-def test_generator_saves_eight_distinct_balanced_slips_without_replacing_draft(ctx, env, browser):
+def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx, env, browser):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
@@ -545,7 +545,11 @@ def test_generator_saves_eight_distinct_balanced_slips_without_replacing_draft(c
     assert not (state.get('slip') or {}).get('legs')
     assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
     assert all(len(s['legs']) == 2 for s in slips)
-    assert all(.55 <= l['shown_p'] <= .65 for s in slips for l in s['legs'])
+    assert state['studio']['generator'] == 'sq-1'
+    assert all(s['why'] and all(l['gen']['record'] for l in s['legs']) for s in slips)          # one line per slip, a record per leg
+    assert not [l for s in slips for l in s['legs'] if l['sport'] in ('nba', 'nfl')]           # research estimates stay out unless asked
+    assert all(len({l['player_key'] for l in s['legs']}) == 2 for s in slips)
+    assert p.locator('.h-generated-card .h-batch-why').count() == 8
     assert all(len({(l['sport'], l['event_id']) for l in s['legs']}) == 2 for s in slips)
     assert p.locator('.h-generated-card').count() == 8
     p.locator('[data-hub=use-generated]').first.click()
@@ -706,13 +710,18 @@ def test_batch_shortfall_is_explicit_and_controls_match_platform(ctx, env):
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
-    p.locator('#hub-generation-target').select_option('80')
-    p.locator('#hub-generation-tolerance').select_option('3')
+    for sport in ('lol', 'nba', 'nfl'):
+        p.locator(f'#hub-generation-sports input[value={sport}]').uncheck()
+    p.locator('#hub-generation-count').select_option('6')
     p.locator('#hub-generate').click()
     p.wait_for_function("!document.querySelector('#hub-generate').disabled", timeout=30000)
-    assert 'eligible props' in p.locator('#hub-generation-status').inner_text()
+    assert 'eligible legs on PrizePicks' in p.locator('#hub-generation-status').inner_text()   # the fixture's CS2 legs cannot make a 6-pick slip
     assert p.locator('.h-generated-card').count() == 0
+    assert p.locator('#hub-generation-games option[value="stacks"]').get_attribute('disabled') is not None   # PrizePicks: one leg per match
+    p.locator('#hub-generation-count').select_option('2')
     p.locator('#hub-generation-book').select_option('underdog')
+    assert p.locator('#hub-generation-games option[value="stacks"]').get_attribute('disabled') is None
+    assert p.locator('#hub-generation-mix option[value="mixed"]').get_attribute('disabled') is not None
     p.locator('#hub-generation-type').select_option('flex')
     assert p.locator('#hub-generation-count').input_value() == '3'
     assert p.locator('#hub-generation-count option[value="2"]').get_attribute('disabled') is not None
@@ -816,3 +825,50 @@ def test_failed_workspace_script_restores_classic(ctx, env):
     p.goto(env.url + '/')
     p.wait_for_function("!document.documentElement.classList.contains('scout-boot')", timeout=12000)
     assert p.locator('body').evaluate("el=>getComputedStyle(el).visibility") == 'visible'
+
+
+def test_adder_warns_at_once_refuses_a_second_leg_for_one_player_and_swaps_in_place(ctx, env):
+    """sq-1 adder: a same-match note on the slip at once, a refusal naming the leg already there, and the server's best replacement
+    applied only on Swap in, at the same position."""
+    from tests.workspace_fixture import row
+    start = env.rows[0]['start']
+    extra = [row('pp:7400', 'prizepicks', 'vargo', 'Halcyon', 'Norrland', 15.5, 'More', .62, 900, start, prop='hs'),
+             row('pp:7401', 'prizepicks', 'zenith', 'Orbit', 'Comet', 25.5, 'More', .72, 902, start)]
+    env.rows.extend(extra)
+    env.seed(extra)
+    p = hub(ctx, env)
+    book(p, 'prizepicks')
+    p.locator('#hub-sports [data-id=cs2]').click()
+    def add(name, n=0):
+        p.locator('#hub-q').fill(name)
+        p.wait_for_function("(n)=>document.querySelectorAll('#hub-rows .h-add:not([disabled]):not(.is-on)').length>n", arg=n)
+        p.locator('#hub-rows .h-add:not([disabled]):not(.is-on)').nth(n).click()
+    add('brandr')
+    add('vargo')
+    p.wait_for_function("document.querySelector('#hub-slip-count').textContent === '2'")
+    assert 'Same match as' in p.locator('#u-toast').inner_text()
+    p.locator('.h-sidebar [data-id=studio]').click()
+    p.wait_for_selector('#hub-studio-body .u-leg-notes')
+    assert 'Same match as' in p.locator('#hub-studio-body .u-leg-notes').first.inner_text()
+    p.locator('.h-sidebar [data-id=board]').first.click()
+    p.locator('#hub-q').fill('vargo')
+    p.wait_for_function("document.querySelectorAll('#hub-rows .h-add').length>=1")
+    if p.locator('#hub-rows .h-prop-toggle[aria-expanded=false]').count():
+        p.locator('#hub-rows .h-prop-toggle').first.click()                    # the player's other props open under his row
+    other = p.locator('#hub-rows tr[data-record]').filter(has_text='Headshots').locator('.h-add:not(.is-on)')
+    assert other.count() == 1
+    other.first.click()
+    assert 'One leg per player' in p.locator('#u-toast').inner_text()
+    assert p.locator('#hub-slip-count').inner_text() == '2'
+    p.locator('.h-sidebar [data-id=studio]').click()
+    names = "[...document.querySelectorAll('#hub-studio-body .u-leg-name')].map(e=>e.firstChild.textContent)"
+    before = p.evaluate(names)
+    p.wait_for_selector('#hub-studio-body [data-u=replace]', timeout=15000)
+    assert 'zenith' in p.locator('#hub-studio-body .u-leg-advice').filter(has=p.locator('[data-u=replace]')).first.inner_text()
+    p.locator('#hub-studio-body [data-u=replace]').first.click()
+    p.wait_for_function("[...document.querySelectorAll('#hub-studio-body .u-leg-name')].some(e=>e.textContent.startsWith('zenith'))")
+    after = p.evaluate(names)
+    assert len(after) == len(before) == 2 and 'zenith' in after
+    kept = [n for n in before if n in after]
+    assert len(kept) == 1 and after.index(kept[0]) == before.index(kept[0])        # the other leg keeps its place
+    assert not p.errors
