@@ -68,6 +68,20 @@ def vm_cap_mb(env=None):
 
 MAX_VM_MB = vm_cap_mb()
 STORE_MAX_MB = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
+DISK_FREE_FLOOR_MB = float(os.environ.get("SPORTS_DISK_FREE_FLOOR_MB", "5000"))
+
+
+def store_cap_mb(env_cap=None, base=None):
+    """The data-directory cap ingestion pauses at. 2026-11-05: SPORTS_STORE_MAX_MB (4,000) was sized for the old 5 GB disk;
+    on the 105 GB disk it stopped every NBA/NFL feed for ~14 h with 97 GB free. The cap is therefore at least half the
+    disk the data lives on; the real guard is free space (DISK_FREE_FLOOR_MB). -> (cap_mb, free_mb or None)."""
+    import shutil
+    cap = STORE_MAX_MB if env_cap is None else env_cap
+    try:
+        du = shutil.disk_usage(str(base or config.DATA_DIR))
+        return max(cap, 0.5 * du.total / 1e6), du.free / 1e6
+    except OSError:
+        return cap, None
 SETTLE_LOOKBACK_DAYS = 4                 # box scores re-read for corrections this long after a game
 SETTLE_FLOOR = os.environ.get("SPORTS_SETTLE_FLOOR", "2026-10-20T00:00:00Z")   # catch-up reaches back to here
 SETTLE_CATCHUP_MAX = int(os.environ.get("SPORTS_SETTLE_CATCHUP_MAX", "40"))  # older unsettled games per run
@@ -223,9 +237,11 @@ def data_mb():
 
 def _check_budget():
     mb = data_mb()
-    if mb > STORE_MAX_MB:
-        raise BudgetExceeded(f"sports data {mb:.0f} MB > SPORTS_STORE_MAX_MB {STORE_MAX_MB:.0f}: ingestion paused "
-                             f"(canonical.db {store.size_mb():.0f} MB)")
+    cap, free = store_cap_mb()
+    if mb > cap:
+        raise BudgetExceeded(f"sports data {mb:.0f} MB > cap {cap:.0f} MB: ingestion paused (canonical.db {store.size_mb():.0f} MB)")
+    if free is not None and free < DISK_FREE_FLOOR_MB:
+        raise BudgetExceeded(f"disk free {free:.0f} MB < floor {DISK_FREE_FLOOR_MB:.0f} MB: ingestion paused")
 
 
 # --------------------------------------------------------------------------------------------------------- fetches
@@ -544,6 +560,11 @@ def cmd_ingest(a, con):
     results["rss_mb"] = rss_mb()
     results["store_mb"] = round(store.size_mb(), 1)
     _print(results)
+    # 2026-11-05: a paused ingest exited 0 in ~1 s, so the scheduler logged success while every feed went stale for ~14 h
+    paused = [lg for lg in a.leagues if (results.get(lg) or {}).get("state") == "failed"
+              and "ingestion paused" in str((results.get(lg) or {}).get("error") or "")]
+    if paused and len(paused) == len(a.leagues):
+        raise SystemExit(3)
     return results
 
 

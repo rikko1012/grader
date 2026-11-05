@@ -76,6 +76,8 @@ def test_ingest_refuses_without_the_flag(db, monkeypatch):
 
 def test_store_budget_stops_ingestion(monkeypatch):
     monkeypatch.setattr(worker, "STORE_MAX_MB", -1)
+    import shutil, types; monkeypatch.setattr(shutil, "disk_usage", lambda p: types.SimpleNamespace(total=1e6, used=0, free=1e12))   # small disk: the configured cap applies
+    monkeypatch.setattr(worker, "data_mb", lambda: 1.0)
     with pytest.raises(worker.BudgetExceeded):
         worker._check_budget()
 
