@@ -5993,8 +5993,11 @@ def unsubscribe_page(member, token, confirm=False):
 DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBLIC_RECORD", "SCOUT_PUBLIC_RECORD_SLIPS",
               "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK",
               # Phase 4, no keys needed (owner: "why do i have to turn them on in render")
-              "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
+              "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_DABBLE", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
               "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE")
+# SCOUT_BOOK_DABBLE (owner 2026-11-05, "simply code it we are partnered"): api.dabble.com answered 200 without credentials, so it is
+# on like Sleeper. Betr (401 + location check), ParlayPlay (Cloudflare 403) and Boom (app only) are blocked in book_providers.json and
+# have no flag.
 # ec-1 calibrated printed chance (SCOUT_CAL_CHANCE) is OFF by default again: owner 2026-11-05 after go-live, "yeah you've
 # ruined the grader". Render SCOUT_CAL_CHANCE=1 turns it back on; the layer and its artifact stay in the code.
 

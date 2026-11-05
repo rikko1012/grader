@@ -1,16 +1,20 @@
 """Extra book providers (Phase 4): a sport-neutral registry, ONE background poller for direct feeds, and a health record per source.
 
 Config, rules and payouts: book_providers.json (each rule with its source; what no source states stays unknown).
-Flags: one per provider (SCOUT_BOOK_SLEEPER, SCOUT_BOOK_FANDUEL, SCOUT_BOOK_BETRIVERS, SCOUT_BOOK_ODDSAPI); the running server turns on the three that need no key (server.DEFAULT_ON), Render "0" turns one off.
+Flags: one per provider (SCOUT_BOOK_SLEEPER, SCOUT_BOOK_DABBLE, SCOUT_BOOK_FANDUEL, SCOUT_BOOK_BETRIVERS, SCOUT_BOOK_ODDSAPI); the running
+server turns on the ones that need no key (server.DEFAULT_ON), Render "0" turns one off. Apps that refuse this server, need a login or
+a location check, or have no board that answers without an account (Betr, ParlayPlay, Boom) are listed under "blocked" in the config
+with the evidence: no flag, no poller, a "blocked" row on the admin coverage page.
 Off, nothing here runs: no thread, no request, no file.
 
-Direct feeds (today: Sleeper) are polled by one daemon thread, never by a member request, so 700 members at once cost nothing
+Direct feeds (Sleeper, Dabble) are polled by one daemon thread, never by a member request, so 700 members at once cost nothing
 upstream. Each poll:
   - rate limit: no poll before poll_s since the last attempt;
   - conditional GET (If-None-Match): an unchanged answer is a 304 and is not parsed again;
   - retries: up to `tries` attempts inside one poll, only for network errors and 5xx, with a short growing gap;
   - backoff: after a failed poll the next one waits backoff_base_s x 2^(failures-1) (capped at backoff_max_s, +-20% jitter);
-    a Retry-After header wins when it is longer. 429 / 403 are never retried inside the poll;
+    a Retry-After header wins when it is longer. 429 / 403 are never retried inside the poll; a 403 (the site refuses this
+    server) waits refused_backoff_s and shows "refused" on the admin page: a refusal is never worked around;
   - freshness: offers carry observed_at (our last good read) and source_at (the provider's own update time). After
     stale_after_s without a good read the provider is "stale" and its lines are hidden, never shown as current
     (transient-failure rule: a blip hides a line, it never changes one).
@@ -160,6 +164,8 @@ def on_failure(st, feed, now, err, rand=random.random):
     wait = min(feed["backoff_max_s"], feed["backoff_base_s"] * 2 ** (st["failures"] - 1)) * (0.8 + 0.4 * rand())
     if getattr(err, "retry_after", None):
         wait = max(wait, min(err.retry_after, 6 * 3600))
+    if getattr(err, "status", None) == 403:
+        wait = max(wait, feed.get("refused_backoff_s", feed["backoff_max_s"]))
     st.update(backoff_until=now + wait, next_at=now + max(wait, feed["poll_s"]), last_error=str(err)[:80],
               last_status=getattr(err, "status", None))
 
@@ -324,7 +330,219 @@ def _names(players):
     return {s: {k: {"name": v.get("name"), "team": v.get("team")} for k, v in d.items()} for s, d in players.items()}
 
 
-POLLERS = {"sleeper": poll_sleeper}
+# ----------------------------------------------------------------------------------------------------------- Dabble
+# api.dabble.com, read without credentials (2026-11-05). Discovery: /competitions/active/ (a competition by its exact name) ->
+# /competitions/{id}/sport-fixtures (fixture ids and start times only, re-read every fixtures_refresh_s; NFL is 4 MB) ->
+# /sportfixtures/details/{id} per fixture starting within horizon_h (conditional on its ETag). Lines come only from the structured
+# playerProps rows (one per side: player, team, stats keys, value, lineType) joined to prices on (marketId, selectionId); market and
+# selection name strings are never parsed. A side without a price row is a stale selection and is not offered.
+
+def _iso_ts(v):
+    from datetime import datetime, timezone
+    try:
+        t = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def dabble_stat_key(stats):
+    """playerProps.stats -> the config key: one stat as is, a combo as its keys joined with '+' in sorted order."""
+    if not isinstance(stats, list) or not stats or not all(isinstance(x, str) and x for x in stats):
+        return None
+    return "+".join(sorted(stats))
+
+
+def parse_dabble_competitions(doc, wanted):
+    """/competitions/active/ -> {sport: competition id}. Exact name first; the configured id only when that name is absent."""
+    rows = ((doc or {}).get("data") or {}).get("activeCompetitions") or []
+    rows = [c for c in rows if isinstance(c, dict)]
+    out = {}
+    for sport, want in wanted.items():
+        by_name = [c.get("id") for c in rows if c.get("name") == want["name"]]
+        if len(by_name) == 1 and by_name[0]:
+            out[sport] = by_name[0]
+        elif any(c.get("id") == want["id"] for c in rows):
+            out[sport] = want["id"]
+    return out
+
+
+def parse_dabble_fixtures(doc, now, horizon_s):
+    """/competitions/{id}/sport-fixtures -> [(fixture id, start epoch)] open and starting within horizon_s. Only ids and times kept."""
+    out = []
+    for f in (doc or {}).get("data") or []:
+        if not isinstance(f, dict) or f.get("status") != "Open" or not f.get("id"):
+            continue
+        t = _iso_ts(f.get("advertisedStart"))
+        if t is not None and now < t <= now + horizon_s:
+            out.append((str(f["id"]), t))
+    return out
+
+
+def parse_dabble(doc, now, sport, stats):
+    """One /sportfixtures/details/{id} answer -> (offers, skipped counts). Pure: no network, no clock. Counts are per market."""
+    offers, skipped = [], {}
+
+    def skip(why, n=1):
+        skipped[why] = skipped.get(why, 0) + n
+    d = doc.get("data") if isinstance(doc, dict) else None
+    if not isinstance(d, dict):
+        skip("unreadable fixture")
+        return offers, skipped
+    props = [r for r in d.get("playerProps") or [] if isinstance(r, dict)]
+    start = _iso_ts(d.get("advertisedStart"))
+    if d.get("status") != "Open" or start is None or start <= now:
+        skip("not open before the game", max(1, len({r.get("marketId") for r in props})))
+        return offers, skipped
+    markets = {m.get("id"): m for m in d.get("markets") or [] if isinstance(m, dict)}
+    prices = {(x.get("marketId"), x.get("selectionId")): x.get("price") for x in d.get("prices") or [] if isinstance(x, dict)}
+    groups = {}
+    for r in props:
+        groups.setdefault((r.get("marketId"), r.get("value")), []).append(r)
+    smap = stats.get(sport) or {}
+    cand, ids = {}, {}
+    fid = str(d.get("id") or "")
+    for (mid, value), rows in groups.items():
+        try:
+            m = markets.get(mid) or {}
+            if m.get("status") != "open" or m.get("isDfsAllowed") is not True or m.get("isDisplayed") is False:
+                skip("market not open for pick'em"); continue
+            sides, bad = {}, False
+            for r in rows:
+                if r.get("isDisplayed") is False:
+                    continue
+                lt = r.get("lineType")
+                bad = bad or lt in sides or lt not in ("over", "under")
+                sides[lt] = r
+            if bad or not sides:
+                skip("sides unreadable"); continue
+            if any(r.get("isOptimal") is False for r in sides.values()):
+                skip("alternate line (not the main line)"); continue
+            r0 = next(iter(sides.values()))
+            key = dabble_stat_key(r0.get("stats"))
+            if any(dabble_stat_key(r.get("stats")) != key or r.get("playerId") != r0.get("playerId") for r in sides.values()):
+                skip("sides disagree"); continue
+            mapped = smap.get(key)
+            if not mapped:
+                skip(f"unmapped stat: {sport} {key}"[:60]); continue
+            name = r0.get("playerName")
+            if not isinstance(name, str) or not norm(name):
+                skip("no player name"); continue
+            line = float(value)
+
+            def side(lt):
+                r = sides.get(lt)
+                try:
+                    x = float(prices.get((mid, r.get("selectionId")))) if r else None
+                except (TypeError, ValueError):
+                    x = None
+                ok = x is not None and x > 1
+                return {"offered": ok, "payout": None, "price": x if ok else None}
+            over, under = side("over"), side("under")
+            if not (over["offered"] or under["offered"]):
+                skip("no price on either side"); continue
+            team = r0.get("teamName") or ""
+            o = {"provider": "dabble", "book": "dabble", "sport": sport, "raw_stat": key, "stat": mapped[0], "period": mapped[1],
+                 "subject_id": str(r0.get("playerId") or ""), "player": name, "player_norm": norm(name), "team": team,
+                 "team_norm": norm(team), "game_id": fid, "line": line, "over": over, "under": under, "source_at": None, "observed_at": now}
+            cand.setdefault((o["player_norm"], o["stat"], o["period"]), []).append(o)
+            ids.setdefault(o["player_norm"], set()).add(o["subject_id"])
+        except (TypeError, ValueError, KeyError, AttributeError):
+            skip("unreadable line")
+    for (pn, _, _), lst in cand.items():
+        if len(ids.get(pn, ())) > 1:
+            skip("two players share this name", len(lst)); continue
+        if len({o["line"] for o in lst}) > 1:
+            skip("two main lines for one market", len(lst)); continue
+        offers.append(lst[0])
+        if len(lst) > 1:
+            skip("same line listed twice", len(lst) - 1)
+    return offers, skipped
+
+
+def _json(raw):
+    if raw is None:
+        raise FetchError("not modified, but no copy is held")
+    return json.loads(raw)
+
+
+def poll_dabble(data_dir, now=None, fetch=http_get, sleep=time.sleep, clock=time.time):
+    """One scheduled Dabble poll. Returns the provider state. Never raises. Holds only the parsed offers per fixture (no bodies)."""
+    pid = "dabble"
+    p = providers()[pid]
+    feed, st = p["feed"], state(pid)
+    now = clock() if now is None else now
+    if not due(st, feed, now):
+        return st
+    st["attempt_at"] = now
+    base, kw = feed["base_url"], {"timeout": feed["timeout_s"], "tries": feed["tries"]}
+    cache = st.setdefault("by_fixture", {})          # fixture id -> {"etag", "offers", "skipped", "at"}
+    try:
+        if st.get("fixtures_at") is None or now - st["fixtures_at"] >= feed["fixtures_refresh_s"]:
+            st["requests"] += 1
+            _, raw, _ = fetch(base + feed["competitions_path"], **kw)
+            comps = parse_dabble_competitions(_json(raw), feed["competitions"])
+            found = {}
+            for sport in p["sports"]:
+                if sport not in comps:
+                    continue
+                st["requests"] += 1
+                _, raw, _ = fetch(base + feed["fixtures_path"].format(id=comps[sport]), **kw)
+                for fid, start in parse_dabble_fixtures(_json(raw), now, feed["horizon_h"] * 3600):
+                    found[fid] = (sport, start)
+                del raw
+            st.update(fixtures=found, fixtures_at=now, competitions=sorted(comps))
+        live = sorted((start, fid, sport) for fid, (sport, start) in (st.get("fixtures") or {}).items() if start > now)
+        live = live[:feed["max_fixtures"]]
+        offers, skipped, ok, failed = [], {}, 0, 0
+        for i, (start, fid, sport) in enumerate(live):
+            if i:
+                sleep(feed["detail_gap_s"])
+            c = cache.get(fid)
+            try:
+                st["requests"] += 1
+                status, raw, etag = fetch(base + feed["details_path"].format(id=fid), etag=(c or {}).get("etag"), **kw)
+                if status == 304 and c:
+                    st["not_modified"] += 1
+                    c["at"] = now
+                    for o in c["offers"]:
+                        o["observed_at"] = now
+                else:
+                    o, sk = parse_dabble(_json(raw), now, sport, p["stats"])
+                    del raw
+                    c = cache[fid] = {"etag": etag, "offers": o, "skipped": sk, "at": now}
+                ok += 1
+            except FetchError as e:
+                if e.status in (403, 429):
+                    raise
+                failed += 1
+            except ValueError:
+                failed += 1
+            if c and now - c["at"] <= feed["stale_after_s"]:      # a fixture that failed this time keeps its last read until stale
+                offers.extend(c["offers"])
+                for k, v in c["skipped"].items():
+                    skipped[k] = skipped.get(k, 0) + v
+        for fid in [f for f in cache if f not in {x[1] for x in live}]:
+            del cache[fid]                                         # started or gone: forget it
+        if failed:
+            skipped["fixture read failed"] = failed
+        if live and not ok:
+            raise FetchError("every fixture read failed")
+    except FetchError as e:
+        on_failure(st, feed, now, e)
+        return st
+    except ValueError:
+        on_failure(st, feed, now, FetchError("unreadable answer"))
+        return st
+    if len(offers) > feed["max_offers"]:
+        skipped["over the row cap"] = len(offers) - feed["max_offers"]
+        offers = offers[:feed["max_offers"]]
+    st.update(offers=offers, skipped=skipped, parsed_at=now, fixtures_read=len(live))
+    on_success(st, feed, now)
+    return st
+
+
+POLLERS = {"sleeper": poll_sleeper, "dabble": poll_dabble}
 
 
 def offers(pid, sport=None, now=None):
@@ -388,9 +606,12 @@ def health(now=None):
                        skipped=dict(sorted(st["skipped"].items(), key=lambda kv: -kv[1])[:12]),
                        poll_s=feed["poll_s"], stale_after_s=feed["stale_after_s"])
             if row["enabled"] and st["backoff_until"] > now:
-                row["state"] = "backoff"
+                row["state"] = "refused" if st["last_status"] == 403 else "backoff"
         else:
             row.update(state="off" if not row["enabled"] else "via sports service", stale_after_s=p["feed"]["stale_after_s"],
                        note=p["feed"].get("note"))
         out.append(row)
+    for pid, b in (config().get("blocked") or {}).items():
+        out.append({"id": pid, "label": b["label"], "kind": b.get("kind"), "flag": None, "enabled": False, "source": "none",
+                    "sports": [], "state": "blocked", "note": b.get("reason"), "checked_at": b.get("checked_at"), "evidence": b.get("evidence")})
     return out

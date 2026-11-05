@@ -191,6 +191,37 @@ def test_book_toggle_refuses_a_book_with_no_lines_here(ctx, env, sleeper, monkey
     assert not p.errors
 
 
+def test_book_toggle_shows_dabble_beside_sleeper_with_its_price(ctx, env, sleeper, monkeypatch):
+    """Readers added 2026-11-05: Dabble comes through the same generic toggle, short code DB, view only, its per-side decimal price."""
+    monkeypatch.setenv('SCOUT_BOOK_DABBLE', '1')
+    rows = [dict(offer('vargo', 'Halcyon', 38.5), provider='dabble', book='dabble', raw_stat='total-kills-map-one-and-map-two', source_at=None,
+                 over={"offered": True, "payout": None, "price": 1.91}, under={"offered": True, "payout": None, "price": 2.1}),
+            dict(offer('brandr', 'Norrland', 33.5, sid='2'), provider='dabble', book='dabble', raw_stat='total-kills-map-one-and-map-two', source_at=None,
+                 over={"offered": True, "payout": None, "price": 2.05}, under={"offered": True, "payout": None, "price": 1.95})]
+    bp.state('dabble').update(at=time.time(), offers=rows)
+    p = page(ctx, env)
+    lines_read(p, '/')
+    p.wait_for_function(f"{SHOWN_BOOKS}.includes('dabble')", timeout=20000)
+    assert p.evaluate(SHOWN_BOOKS) == ['all', 'prizepicks', 'underdog', 'sleeper', 'dabble']
+    p.locator('#hub-platform [data-hub="book"][data-id="dabble"]').click()
+    assert p.locator('#hub-platform [data-id="dabble"]').get_attribute('aria-pressed') == 'true'
+    p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
+    text = p.locator('#hub-rows').inner_text()
+    assert 'DB' in text and 'vargo' in text and 'brandr' in text
+    v = p.locator('#hub-rows tr[data-record]', has_text='vargo').first
+    assert '61' in v.inner_text() and v.locator('.h-add').inner_text() == 'Info'
+    v.locator('.h-add').click()
+    p.wait_for_function("document.body.innerText.includes('Dabble lines are view only')")
+    assert p.locator('#hub-slip-count').inner_text() == '0'
+    b = p.locator('#hub-rows tr[data-record]', has_text='brandr').first
+    b.locator('.h-player').click()
+    p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
+    detail = p.locator('#hub-detail').inner_text()
+    assert '2.05 decimal' in detail and 'No saved chance at this line' in detail
+    no_h_scroll(p)
+    assert not p.errors
+
+
 @pytest.mark.parametrize('size', [DESK, PHONE])
 def test_live_highlight_wording_without_background_delivery(browser, env, monkeypatch, size):
     monkeypatch.setattr(workspace_alerts, 'configured', lambda: False)

@@ -1,8 +1,9 @@
 """SCOUT_MARKET_TOOLS (default off): the Tools route's +EV feed and arbitrage sheet over prices this server already holds.
 
 Inputs (no provider request is made here): the NBA / NFL snapshots' book rows (FanDuel, BetRivers, The Odds API books,
-Kalshi, Polymarket, collected by the sports service) and, when SCOUT_BOOK_SLEEPER is on, Sleeper's per-pick multipliers
-(book_providers). All math is gradecore.market_tools / gradecore.devig.
+Kalshi, Polymarket, collected by the sports service) and every enabled direct pick'em reader's per-pick prices (book_providers:
+Sleeper multipliers, Dabble per-side prices). Pick'em prices are never a standalone bet: flagged, kept out of the consensus and out
+of the member view. All math is gradecore.market_tools / gradecore.devig.
 
 +EV feed. EV = p_cal x decimal_odds - 1, push-adjusted (gradecore.market_tools.ev_push_adjusted); never a probability gap.
   p_cal, in this order:
@@ -34,7 +35,15 @@ import workspace_books as wb
 
 TTL = 30
 PREDICTION = ("kalshi", "polymarket")
-PICKEM = ("underdog", "prizepicks", "sleeper")
+BOARD_PICKEM = ("underdog", "prizepicks")
+
+
+def direct_pickem():
+    """Direct pick'em readers in the config (Sleeper, Dabble, ...): their quotes are pick'em prices, never sportsbook prices."""
+    return tuple(pid for pid, p in bp.providers().items() if p.get("kind") == "pickem" and pid in bp.POLLERS)
+
+
+PICKEM = BOARD_PICKEM + ("sleeper", "dabble")
 CONSENSUS_MAX_AGE_S = 10 * 60
 MIN_BOOKS = 2
 MAX_ROWS = 300
@@ -55,7 +64,7 @@ def american(d):
 def kind_of(platform):
     if platform in PREDICTION:
         return "prediction"
-    if platform in PICKEM:
+    if platform in PICKEM or platform in direct_pickem():
         return "pickem"
     return "sportsbook"
 
@@ -99,8 +108,8 @@ def _label(p):
     import workspace_sports
     if isinstance(p, str) and p.startswith("oddsapi:"):
         return workspace_sports.book_label(p.split(":", 1)[1]) + " · The Odds API"
-    if p == "sleeper":
-        return "Sleeper"
+    if p in bp.providers() and p in bp.POLLERS:
+        return bp.providers()[p]["label"]
     return workspace_sports.book_label(p)
 
 
@@ -131,16 +140,24 @@ def groups(srv, sport, now):
                 g["quotes"].append(q)
                 continue
             g["quotes"].append(_quote(plat, _num(b.get("over")), _num(b.get("under")), wb._ts(b.get("seen_at")), "sports service · " + _label(plat)))
-    if bp.enabled("sleeper"):
-        subj = wb.subjects(recs)
-        for o in bp.offers("sleeper", sport, now):
+    subj = None
+    for pid in direct_pickem():
+        if not bp.enabled(pid):
+            continue
+        if subj is None:
+            subj = wb.subjects(recs)
+        label = bp.providers()[pid]["label"]
+        for o in bp.offers(pid, sport, now):
             got, _ = wb.match(subj, o)
             if not got:
                 continue
             r0 = got[0]
             k = (r0["event"]["id"], r0["player"]["key"], r0["market"]["stat"], wb._per(r0["market"]["period"]), o["line"])
             g = out.setdefault(k, {"recs": got, "line": o["line"], "quotes": []})
-            g["quotes"].append(_quote("sleeper", o["over"]["payout"], o["under"]["payout"], o["observed_at"], "Sleeper feed", mult=True))
+            # Sleeper publishes a per-pick payout multiplier, Dabble a per-side decimal price: either way a pick'em price
+            over = o["over"].get("payout") or o["over"].get("price")
+            under = o["under"].get("payout") or o["under"].get("price")
+            g["quotes"].append(_quote(pid, over, under, o["observed_at"], label + " feed", mult=True))
     return out
 
 

@@ -1,0 +1,227 @@
+{
+ "status": "success",
+ "data": {
+  "activeCompetitions": [
+   {
+    "id": "7f7c2f8f-ff04-4e5a-a3c8-d503a523d9ad",
+    "name": "NFL",
+    "country": "USA",
+    "displayName": "NFL",
+    "featured": false,
+    "sportId": "e83185f6-956f-4fde-a7a4-7b83d9125311",
+    "sportName": "American Football",
+    "location": 0,
+    "code": "NFL"
+   },
+   {
+    "id": "2acf8935-8d89-455b-bb4b-dbfba9c4ae3b",
+    "name": "NBA",
+    "country": "USA",
+    "displayName": "NBA",
+    "featured": false,
+    "sportId": "01408294-cb34-4cc0-8ab1-504f5c4c6e1f",
+    "sportName": "Basketball",
+    "location": 1,
+    "code": "NBA"
+   },
+   {
+    "id": "9a345ae1-caf1-4b1d-ac56-5fe4fe58cd2c",
+    "name": "YBBI NFL",
+    "country": "USA",
+    "displayName": "YBBI NFL",
+    "featured": false,
+    "sportId": "e83185f6-956f-4fde-a7a4-7b83d9125311",
+    "sportName": "American Football",
+    "location": 1,
+    "code": "YBBI"
+   },
+   {
+    "id": "402c1612-4f2b-44fa-8061-3bafdb4b673d",
+    "name": "CFB",
+    "country": "USA",
+    "displayName": "CFB",
+    "featured": false,
+    "sportId": "e83185f6-956f-4fde-a7a4-7b83d9125311",
+    "sportName": "American Football",
+    "location": 2,
+    "code": "CFB"
+   },
+   {
+    "id": "ab37a56f-0131-41e8-8a5f-e29bce546f9a",
+    "name": "US NHL",
+    "country": "USA",
+    "displayName": "NHL",
+    "featured": false,
+    "sportId": "672ccd17-7c49-43c5-bd87-08e94c107425",
+    "sportName": "Ice Hockey",
+    "location": 2,
+    "code": "NHL"
+   },
+   {
+    "id": "584e0df1-37a5-41e6-9c10-a63455d5bbf9",
+    "name": "CBB",
+    "country": "USA",
+    "displayName": "CBB",
+    "featured": false,
+    "sportId": "01408294-cb34-4cc0-8ab1-504f5c4c6e1f",
+    "sportName": "Basketball",
+    "location": 3,
+    "code": "CBB"
+   },
+   {
+    "id": "aa4cbcb7-f944-4530-a3a2-1155a1565836",
+    "name": "UFC",
+    "displayName": "UFC",
+    "featured": false,
+    "sportId": "b3d42a68-79b7-4b6e-a198-60ed50a4fd28",
+    "sportName": "MMA",
+    "location": 3,
+    "code": "UFC"
+   },
+   {
+    "id": "e87e2d8c-d379-4904-888a-8974c28acefa",
+    "name": "USA - Major League Soccer",
+    "country": "US",
+    "displayName": "MLS",
+    "featured": false,
+    "sportId": "00b7f38e-36f8-4205-8d1e-2a8b0eab8311",
+    "sportName": "Football",
+    "location": 3,
+    "code": "SOC"
+   },
+   {
+    "id": "d21500a4-75e6-4744-8697-ec55266634d1",
+    "name": "PGA",
+    "featured": false,
+    "sportId": "02ffc0b5-aafa-4438-8571-f9a465ad4f10",
+    "sportName": "Golf",
+    "location": 4
+   },
+   {
+    "id": "b3ab59f2-631c-413a-b727-c8e49571cb64",
+    "name": "England - Premier League",
+    "country": "UK",
+    "displayName": "EPL",
+    "featured": false,
+    "sportId": "00b7f38e-36f8-4205-8d1e-2a8b0eab8311",
+    "sportName": "Football",
+    "location": 5,
+    "code": "SOC"
+   },
+   {
+    "id": "6b70f278-081e-4e90-b9eb-122098b24add",
+    "name": "France - Ligue 1",
+    "displayName": "France - Ligue 1",
+    "featured": false,
+    "sportId": "00b7f38e-36f8-4205-8d1e-2a8b0eab8311",
+    "sportName": "Football",
+    "location": 5,
+    "code": "SOC"
+   },
+   {
+    "id": "34ebdd05-ca25-4eb8-8fb9-4086b744e380",
+    "name": "Germany - Bundesliga",
+    "displayName": "Bundesliga",
+    "featured": false,
+    "sportId": "00b7f38e-36f8-4205-8d1e-2a8b0eab8311",
+    "sportName": "Football",
+    "location": 5,
+    "code": "SOC"
+   },
+   {
+    "id": "4ad11b1e-e3a6-4bac-8969-d91ad222739e",
+    "name": "Italy - Serie A",
+    "displayName": "Italy - Serie A",
+    "featured": false,
+    "sportId": "00b7f38e-36f8-4205-8d1e-2a8b0eab8311",
+    "sportName": "Football",
+    "location": 5,
+    "code": "SOC"
+   },
+   {
+    "id": "1609723f-3209-4306-9aa7-a153b21cef22",
+    "name": "Men's Tennis",
+    "displayName": "Tennis M",
+    "featured": false,
+    "sportId": "990fbb42-370d-4a4b-ad00-533bf247cf20",
+    "sportName": "Tennis",
+    "location": 5,
+    "code": "TEN"
+   },
+   {
+    "id": "ea1f99fd-dc39-4d65-80a8-843eadde2272",
+    "name": "Spain - LaLiga",
+    "displayName": "LaLiga",
+    "featured": false,
+    "sportId": "00b7f38e-36f8-4205-8d1e-2a8b0eab8311",
+    "sportName": "Football",
+    "location": 5,
+    "code": "SOC"
+   },
+   {
+    "id": "691b8594-0f4d-44c7-8a78-2d921bb0a4d6",
+    "name": "Women's Tennis",
+    "displayName": "Tennis W",
+    "featured": false,
+    "sportId": "990fbb42-370d-4a4b-ad00-533bf247cf20",
+    "sportName": "Tennis",
+    "location": 5,
+    "code": "TEN"
+   },
+   {
+    "id": "e6ad7f27-7564-44be-9acd-9202dbb410c8",
+    "name": "NBL",
+    "displayName": "NBL",
+    "featured": false,
+    "sportId": "01408294-cb34-4cc0-8ab1-504f5c4c6e1f",
+    "sportName": "Basketball",
+    "location": 7,
+    "code": "NBL"
+   },
+   {
+    "id": "acd5b3f6-dd7a-484f-a4e5-a747badb32c6",
+    "name": "Counter-Strike 2",
+    "displayName": "CS2",
+    "featured": false,
+    "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+    "sportName": "Esports",
+    "location": 10
+   },
+   {
+    "id": "086211fd-5445-4955-be1b-9ed7ba84641d",
+    "name": "LoL",
+    "displayName": "LoL",
+    "featured": false,
+    "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+    "sportName": "Esports",
+    "location": 10
+   },
+   {
+    "id": "01a11e52-7aca-71da-adaf-ee09f7868321",
+    "name": "Men's World Cup",
+    "displayName": "World Cup",
+    "featured": false,
+    "sportId": "2333e210-646d-4e85-a496-f9dceaf550d9",
+    "sportName": "Rugby League",
+    "location": 15
+   },
+   {
+    "id": "6a4e9769-bd96-448a-9e4a-519423b84913",
+    "name": "WBBL",
+    "displayName": "WBBL",
+    "featured": false,
+    "sportId": "f94181ee-0a53-46ad-bc91-2a5544e01444",
+    "sportName": "Cricket",
+    "location": 15
+   },
+   {
+    "id": "01a1260f-1e8d-725f-8e3e-bf8fbbec2523",
+    "name": "Cyclo Cross",
+    "displayName": "Cyclo Cross",
+    "featured": false,
+    "sportId": "ff1a9aa0-a9a9-4928-bc54-5a649a01fdc5",
+    "sportName": "Cycling"
+   }
+  ]
+ }
+}

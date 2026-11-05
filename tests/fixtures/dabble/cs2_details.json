@@ -1,0 +1,482 @@
+{
+ "status": "success",
+ "data": {
+  "id": "01a18e35-266b-72f9-9d1f-e688d72645c7",
+  "name": "PARIVISION vs Natus Vincere",
+  "status": "Open",
+  "advertisedStart": "2026-11-06T06:30:00.000Z",
+  "inplayAvailable": false,
+  "isDisplayed": true,
+  "competitionId": "acd5b3f6-dd7a-484f-a4e5-a747badb32c6",
+  "competitionName": "Counter-Strike 2",
+  "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+  "sportName": "Esports",
+  "markets": [
+   {
+    "id": "01a1aba9-f8b6-70ee-8d9b-7b7e59e62b53",
+    "name": "w0nderful game 1 kills 17.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_1_player_kill_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   },
+   {
+    "id": "01a1aba9-f65f-7538-8008-eb55587490d4",
+    "name": "Aleksib game 1 headshots 5.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_1_player_headshot_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   },
+   {
+    "id": "01a1abaa-0fe3-743b-98e0-df4611e21c6b",
+    "name": "Aleksib game 2 headshots 5.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_2_player_headshot_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   },
+   {
+    "id": "01a1abaa-1779-708d-8054-9885703ec269",
+    "name": "Jame game 2 kills 14.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_2_player_kill_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   },
+   {
+    "id": "01a1abaa-1d9f-737a-bb82-0c61464e37f6",
+    "name": "iM map 1+2 kills 28.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_player_kill_over_under_map_one_and_map_two",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   }
+  ],
+  "marketGroups": [
+   {
+    "id": "efd5df1d-5e57-4833-9684-850acb94111c",
+    "name": "Game 1 Headshots",
+    "displayOrder": 4,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1 Headshots"
+   },
+   {
+    "id": "2bdcc82d-321d-4ede-8bc2-76fcc0431d90",
+    "name": "Game 2 Headshots",
+    "displayOrder": 5,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 2 Headshots"
+   },
+   {
+    "id": "49bf6e4e-88f7-49c5-9e55-d0461fb95e0e",
+    "name": "Game 2 Assists",
+    "displayOrder": 7,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 2 Assists"
+   },
+   {
+    "id": "0d805bbb-6192-40fe-adbe-d49eecdf9015",
+    "name": "Game 1 Assists",
+    "displayOrder": 6,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1 Assists"
+   },
+   {
+    "id": "516d2b83-eeed-4128-93e9-fd373ebb3d31",
+    "name": "Game 1+2 Kills",
+    "displayOrder": 3,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1+2 Kills"
+   },
+   {
+    "id": "fa36041c-5d2b-4a8b-8b1f-1838ce477029",
+    "name": "Game 1 Kills",
+    "displayOrder": 1,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1 Kills"
+   },
+   {
+    "id": "04002483-3787-4cce-b8ef-16940d2d240f",
+    "name": "Game 2 Kills",
+    "displayOrder": 2,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 2 Kills"
+   }
+  ],
+  "marketGroupMappings": [
+   {
+    "name": "Game 1 Headshots",
+    "displayOrder": 4,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a1aba9-f65f-7538-8008-eb55587490d4",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   },
+   {
+    "name": "Game 2 Headshots",
+    "displayOrder": 5,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a1abaa-0fe3-743b-98e0-df4611e21c6b",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   },
+   {
+    "name": "Game 1+2 Kills",
+    "displayOrder": 3,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a1abaa-1d9f-737a-bb82-0c61464e37f6",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   },
+   {
+    "name": "Game 1 Kills",
+    "displayOrder": 1,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a1aba9-f8b6-70ee-8d9b-7b7e59e62b53",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   },
+   {
+    "name": "Game 2 Kills",
+    "displayOrder": 2,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a1abaa-1779-708d-8054-9885703ec269",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   }
+  ],
+  "selections": [
+   {
+    "id": "01a1abaa-103b-7239-92f5-dd2020cca586",
+    "name": "Aleksib game 2 headshots 5.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1abaa-10a6-715e-895d-f4a0aad3816d",
+    "name": "Aleksib game 2 headshots 5.5 under",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1abaa-17de-71b0-a287-ccc87ddf7cbf",
+    "name": "Jame game 2 kills 14.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1abaa-184c-72c7-9688-cbeb9ec4570b",
+    "name": "Jame game 2 kills 14.5 under",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1aba9-f718-7139-b9b7-c0dfc2972752",
+    "name": "Aleksib game 1 headshots 5.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1aba9-f801-76ca-ad73-a8b9a4a0ffb5",
+    "name": "Aleksib game 1 headshots 5.5 under",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1aba9-f933-7478-a02a-8bb10e3f2ce4",
+    "name": "w0nderful game 1 kills 17.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1aba9-fa2f-7732-9d3b-add1db1cd510",
+    "name": "w0nderful game 1 kills 17.5 under",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1abaa-1dbc-7258-bc3c-7db4a0a0ce1a",
+    "name": "iM total kills map one and map two 28.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a1abaa-1e07-74f8-aec4-3fa991904f66",
+    "name": "iM total kills map one and map two 28.5 under",
+    "isDisplayed": true
+   }
+  ],
+  "prices": [
+   {
+    "id": "01a1aba9-f898-75da-adb4-1b51855741af",
+    "selectionId": "01a1aba9-f718-7139-b9b7-c0dfc2972752",
+    "marketId": "01a1aba9-f65f-7538-8008-eb55587490d4",
+    "price": 1.91
+   },
+   {
+    "id": "01a1aba9-f898-75da-adb4-1d9107db7d99",
+    "selectionId": "01a1aba9-f801-76ca-ad73-a8b9a4a0ffb5",
+    "marketId": "01a1aba9-f65f-7538-8008-eb55587490d4",
+    "price": 2.1
+   },
+   {
+    "id": "01a1aba9-fab6-7509-9f5a-e25c7ed7bc49",
+    "selectionId": "01a1aba9-fa2f-7732-9d3b-add1db1cd510",
+    "marketId": "01a1aba9-f8b6-70ee-8d9b-7b7e59e62b53",
+    "price": 1.91
+   },
+   {
+    "id": "01a1aba9-fab6-7509-9f5a-dc454cdf88a1",
+    "selectionId": "01a1aba9-f933-7478-a02a-8bb10e3f2ce4",
+    "marketId": "01a1aba9-f8b6-70ee-8d9b-7b7e59e62b53",
+    "price": 2.1
+   },
+   {
+    "id": "01a1abaa-10e5-7778-ac70-179ba9f6e445",
+    "selectionId": "01a1abaa-103b-7239-92f5-dd2020cca586",
+    "marketId": "01a1abaa-0fe3-743b-98e0-df4611e21c6b",
+    "price": 1.93
+   },
+   {
+    "id": "01a1abaa-10e5-7778-ac70-1a844a665001",
+    "selectionId": "01a1abaa-10a6-715e-895d-f4a0aad3816d",
+    "marketId": "01a1abaa-0fe3-743b-98e0-df4611e21c6b",
+    "price": 2.07
+   },
+   {
+    "id": "01a1abaa-1880-70e1-9c2e-30a0017603e8",
+    "selectionId": "01a1abaa-184c-72c7-9688-cbeb9ec4570b",
+    "marketId": "01a1abaa-1779-708d-8054-9885703ec269",
+    "price": 1.96
+   },
+   {
+    "id": "01a1abaa-1880-70e1-9c2e-2f88bf3a38b0",
+    "selectionId": "01a1abaa-17de-71b0-a287-ccc87ddf7cbf",
+    "marketId": "01a1abaa-1779-708d-8054-9885703ec269",
+    "price": 2.04
+   },
+   {
+    "id": "01a1abaa-1e3c-76bd-a561-218394545ee6",
+    "selectionId": "01a1abaa-1dbc-7258-bc3c-7db4a0a0ce1a",
+    "marketId": "01a1abaa-1d9f-737a-bb82-0c61464e37f6",
+    "price": 1.93
+   },
+   {
+    "id": "01a1abaa-1e3c-76bd-a561-248b83a794ad",
+    "selectionId": "01a1abaa-1e07-74f8-aec4-3fa991904f66",
+    "marketId": "01a1abaa-1d9f-737a-bb82-0c61464e37f6",
+    "price": 2.07
+   }
+  ],
+  "playerProps": [
+   {
+    "playerId": "b3364cbf-d95e-4b80-9a0e-b8ccf5138e58",
+    "playerName": "Aleksib",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1aba9-f65f-7538-8008-eb55587490d4",
+    "selectionId": "01a1aba9-f718-7139-b9b7-c0dfc2972752",
+    "stats": [
+     "game-1-headshots"
+    ],
+    "value": 5.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "b3364cbf-d95e-4b80-9a0e-b8ccf5138e58",
+    "playerName": "Aleksib",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1aba9-f65f-7538-8008-eb55587490d4",
+    "selectionId": "01a1aba9-f801-76ca-ad73-a8b9a4a0ffb5",
+    "stats": [
+     "game-1-headshots"
+    ],
+    "value": 5.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "45e28bf7-d921-4a41-833a-ae546a866875",
+    "playerName": "w0nderful",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1aba9-f8b6-70ee-8d9b-7b7e59e62b53",
+    "selectionId": "01a1aba9-f933-7478-a02a-8bb10e3f2ce4",
+    "stats": [
+     "game-1-kills"
+    ],
+    "value": 17.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "45e28bf7-d921-4a41-833a-ae546a866875",
+    "playerName": "w0nderful",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1aba9-f8b6-70ee-8d9b-7b7e59e62b53",
+    "selectionId": "01a1aba9-fa2f-7732-9d3b-add1db1cd510",
+    "stats": [
+     "game-1-kills"
+    ],
+    "value": 17.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "b3364cbf-d95e-4b80-9a0e-b8ccf5138e58",
+    "playerName": "Aleksib",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1abaa-0fe3-743b-98e0-df4611e21c6b",
+    "selectionId": "01a1abaa-103b-7239-92f5-dd2020cca586",
+    "stats": [
+     "game-2-headshots"
+    ],
+    "value": 5.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "b3364cbf-d95e-4b80-9a0e-b8ccf5138e58",
+    "playerName": "Aleksib",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1abaa-0fe3-743b-98e0-df4611e21c6b",
+    "selectionId": "01a1abaa-10a6-715e-895d-f4a0aad3816d",
+    "stats": [
+     "game-2-headshots"
+    ],
+    "value": 5.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "e217a453-112d-4ecc-921b-dbbba315eacd",
+    "playerName": "Jame",
+    "teamId": "4f379491-73c2-4664-826d-aa8cda2f9b8c",
+    "teamName": "PARIVISION",
+    "teamAbbreviation": "PRV",
+    "marketId": "01a1abaa-1779-708d-8054-9885703ec269",
+    "selectionId": "01a1abaa-17de-71b0-a287-ccc87ddf7cbf",
+    "stats": [
+     "game-2-kills"
+    ],
+    "value": 14.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "e217a453-112d-4ecc-921b-dbbba315eacd",
+    "playerName": "Jame",
+    "teamId": "4f379491-73c2-4664-826d-aa8cda2f9b8c",
+    "teamName": "PARIVISION",
+    "teamAbbreviation": "PRV",
+    "marketId": "01a1abaa-1779-708d-8054-9885703ec269",
+    "selectionId": "01a1abaa-184c-72c7-9688-cbeb9ec4570b",
+    "stats": [
+     "game-2-kills"
+    ],
+    "value": 14.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "3a5b8c8e-9fdb-487a-94a0-cacb793ed5fe",
+    "playerName": "iM",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1abaa-1d9f-737a-bb82-0c61464e37f6",
+    "selectionId": "01a1abaa-1dbc-7258-bc3c-7db4a0a0ce1a",
+    "stats": [
+     "total-kills-map-one-and-map-two"
+    ],
+    "value": 28.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "3a5b8c8e-9fdb-487a-94a0-cacb793ed5fe",
+    "playerName": "iM",
+    "teamId": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "teamName": "Natus Vincere",
+    "teamAbbreviation": "NAVI",
+    "marketId": "01a1abaa-1d9f-737a-bb82-0c61464e37f6",
+    "selectionId": "01a1abaa-1e07-74f8-aec4-3fa991904f66",
+    "stats": [
+     "total-kills-map-one-and-map-two"
+    ],
+    "value": 28.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   }
+  ],
+  "selfMultiExtension": {
+   "allowSelfMulti": false
+  },
+  "teams": [
+   {
+    "id": "4f379491-73c2-4664-826d-aa8cda2f9b8c",
+    "name": "PARIVISION",
+    "abbreviation": "PRV",
+    "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+    "createdAt": "2025-04-14T15:23:08.729Z"
+   },
+   {
+    "id": "b902bdd1-99d8-4cf0-8d6d-bdc834c2e8fd",
+    "name": "Natus Vincere",
+    "abbreviation": "NAVI",
+    "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+    "createdAt": "2024-10-29T11:21:18.604Z"
+   }
+  ]
+ }
+}
