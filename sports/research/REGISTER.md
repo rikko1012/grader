@@ -740,5 +740,13 @@ stakes to compensate, forcing Over / Under balance.
    11-01..11-02 (2,118, 19 games), spec platt; log loss 0.7015 -> 0.6885, difference [-0.0279, +0.0017] -> FAIL
    (letters held). NFL: fit 10-25..10-29 (1,550), test 11-01..11-02 (2,248, 13 games), spec platt; log loss 0.7315
    -> 0.6891, difference [-0.0778, -0.0098], in-the-large and both sides pass -> PASS (letters follow A9a 4). Full
-   tables: `sports/research/pc1_heldout_2026-11-05.json`. The pass rule in 4 was written after an exploratory
+   tables: `sports/research/pc1_heldout_2026-11-05.json` (numbers above = the first, free-intercept fit; see 8). The pass rule in 4 was written after an exploratory
    league-level look at the same held-out window (point estimates only); it was not changed after the run.
+8. **Intercept (coordinator review 2026-11-05, before shipping).** The first fit had a free logit shift; on NFL it
+   turned 641 of 2,248 held-out sides from Over to Under (calibrated Under on 97% of rows, from two Sundays with a 47%
+   Over rate) - the correlated-Under risk the owner warned about. Rule now: intercept 0 (shrink toward 50% only, the
+   printed side is always the model's side) unless a shift beats it on held-out log loss with the game-clustered 95%
+   interval of the difference entirely below 0. Compared on the same windows: "free" and "games" (shift penalised as
+   one row per game, prior sd 0.25 logit). Neither cleared the rule (NBA free - zero +0.00006 [-0.0007, +0.0008];
+   NFL free - zero -0.0002 [-0.0062, +0.0071]), so both leagues serve intercept 0 (NBA b 0.281, NFL b 0.157).
+   Verdicts unchanged: NBA FAIL (difference vs raw [-0.0283, +0.0020]), NFL PASS ([-0.0781, -0.0081]).

@@ -52,6 +52,39 @@ def test_committed_artifact_is_valid_default_on_and_env_zero_turns_it_off(monkey
     assert not chance_cal.letters_held("nba")
 
 
+def test_served_parameters_have_no_shift_so_the_side_never_flips():
+    """Coordinator review 2026-11-05: intercept 0 unless a shift clearly beats it on held-out log loss; with no shift
+    the calibrated side is always the model's side (no flip against the projected mean from calibration alone)."""
+    obj = json.loads(COMMITTED.read_text(encoding="utf-8"))
+    rep = json.loads((Path(chance_cal.__file__).resolve().parents[1] / "research" /
+                      "pc1_heldout_2026-11-05.json").read_text(encoding="utf-8"))
+    for lg, p in obj["leagues"].items():
+        v = rep["leagues"][lg]["intercept_variants"]
+        assert set(v) == set(chance_cal.ICPT_MODES) and v["zero"]["side_flips_vs_raw"] == 0
+        if p["intercept"] == "zero":
+            assert p["theta"][0] == 0 and all(t[0] == 0 for t in p["stats"].values())
+        else:                                                      # a shift is served only under ICPT_RULE
+            assert v[p["intercept"]]["log_loss_minus_intercept0"][2] < 0
+        for po in [i / 100 for i in range(1, 100)]:
+            a = chance_cal.adjust(lg, "x", po, 1 - po, 0.0, weights=obj)
+            if p["intercept"] == "zero" and po != 0.5:
+                assert (a["po"] > 0.5) == (po > 0.5)
+    bad = _obj(nba=("platt", [0.1, 0.3], "contain-rule"))
+    bad["leagues"]["nba"]["intercept"] = "zero"
+    with pytest.raises(ValueError):
+        chance_cal.validate(bad)
+
+
+def test_intercept_zero_fit_keeps_no_shift_even_on_a_one_sided_sample():
+    rows = _rows(per_day=400)
+    for r in rows:
+        r["hit"] = 0.0 if r["ps"] < 0.7 else r["hit"]              # an "Under night": Overs mostly lose
+    assert chance_cal.fit(rows, "platt", 100.0, "zero")["theta"][0] == 0
+    assert chance_cal.fit(rows, "platt", None, "free")["theta"][0] < -0.3
+    g = chance_cal.fit(rows, "platt", None, "games")["theta"][0]
+    assert chance_cal.fit(rows, "platt", None, "free")["theta"][0] < g < 0   # shrunk by game count
+
+
 def test_committed_report_matches_the_artifact():
     rep = json.loads((Path(chance_cal.__file__).resolve().parents[1] / "research" /
                       "pc1_heldout_2026-11-05.json").read_text(encoding="utf-8"))

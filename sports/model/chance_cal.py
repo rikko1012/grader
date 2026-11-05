@@ -10,6 +10,9 @@ compensate, forcing Over / Under balance).
     per stat family: the same form, penalised toward the league fit (ridge, LAM_STAT) - a stat with few rows stays at
     the league fit.
     printed: P(Over) = (1 - pp) q, P(Under) = (1 - pp)(1 - q), P(Push) = pp       (sums to one; push mass unchanged)
+    intercept: "zero" by default (a = 0: the chance only shrinks toward 50%, the printed side is always the model's
+    side); a fitted shift ("free", or "games" = penalised by game count) is served only when it beats intercept 0 on
+    held-out log loss with the game-clustered 95% interval of the difference entirely below 0 (ICPT_RULE).
 
 Fit (chronological, no leakage): rows = settled sm-1 forecasts (one per offer: the last forecast >= 30 min before the
 start, sports/model/gradecore_export.py), game-day = start - 10 h. The spec (league form x per-stat penalty) is chosen
@@ -130,6 +133,10 @@ def validate(obj):
             raise ValueError(f"{lg}: bad per-stat parameters")
         if p.get("letters") not in ("held", "contain-rule"):
             raise ValueError(f"{lg}: letters must be held / contain-rule")
+        if p.get("intercept", "zero") not in ICPT_MODES:
+            raise ValueError(f"{lg}: unknown intercept mode")
+        if p.get("intercept") == "zero" and any(t[0] != 0 for t in [p["theta"]] + list((p.get("stats") or {}).values())):
+            raise ValueError(f"{lg}: intercept 0 parameters carry a shift")
     if obj.get("sha") != _sha(_serving(lgs)):
         raise ValueError("sha mismatch")
     return obj
@@ -270,14 +277,16 @@ def rows_from_results(obj, league):
 
 
 def _fit(X, y, lam, prior):
+    """Penalised logistic regression (Newton). lam: one number or one penalty per parameter."""
     import numpy as np
     X, y = np.asarray(X, float), np.asarray(y, float)
     t0 = np.asarray(prior, float)
+    L = np.broadcast_to(np.asarray(lam, float), t0.shape).copy()
     th = t0.copy()
     for _ in range(100):
         p = 1 / (1 + np.exp(-(X @ th)))
-        g = X.T @ (p - y) + lam * (th - t0)
-        H = (X * (p * (1 - p))[:, None]).T @ X + lam * np.eye(len(th))
+        g = X.T @ (p - y) + L * (th - t0)
+        H = (X * (p * (1 - p))[:, None]).T @ X + np.diag(L)
         step = np.linalg.solve(H, g)
         th = th - step
         if np.max(np.abs(step)) < 1e-10:
@@ -286,23 +295,53 @@ def _fit(X, y, lam, prior):
     return [float(x) for x in th]
 
 
-def fit(rows, spec, stat_lam):
-    """-> {"spec", "theta", "stats": {stat: theta}, "n", "n_stat": {stat: n}} on these rows."""
+# Intercept (logit shift) modes. "zero" (DEFAULT, coordinator review 2026-11-05): no shift - the calibrated chance
+# only shrinks toward 50%, so the printed side is always the model's side (a flip against the projected mean cannot
+# come from calibration). "free": unpenalised shift. "games": the shift penalised as if the data were worth one row
+# per GAME (outcomes inside a game move together): prior sd ICPT_SD on the logit in game units, i.e. penalty
+# (rows / games) / ICPT_SD^2. A shift is served only when it beats "zero" on held-out log loss with the
+# game-clustered 95% interval of the difference entirely below 0 (ICPT_RULE).
+ICPT_MODES = ("zero", "games", "free")
+ICPT_SD = 0.25
+ZERO_LAM = 1e12
+ICPT_RULE = ("intercept served only if its held-out log loss beats intercept-0 with the game-clustered 95% interval "
+             "of the difference entirely below 0; else intercept 0")
+
+
+def _icpt_lam(icpt, rows, base):
+    if icpt == "zero":
+        return ZERO_LAM
+    if icpt == "games":
+        games = max(1, len({r["event"] for r in rows}))
+        return max(base, (len(rows) / games) / ICPT_SD ** 2)
+    return base
+
+
+def fit(rows, spec, stat_lam, icpt="zero"):
+    """-> {"spec", "theta", "stats": {stat: theta}, "n", "n_stat": {stat: n}, "intercept"} on these rows."""
     X = [features(spec, _logit(r["ps"])) for r in rows]
     y = [r["hit"] for r in rows]
-    theta = _fit(X, y, LAM_LEAGUE, [0.0] * len(X[0]))
+    k = len(X[0])
+    theta = _fit(X, y, [_icpt_lam(icpt, rows, LAM_LEAGUE)] + [LAM_LEAGUE] * (k - 1), [0.0] * k)
+    if icpt == "zero":
+        theta[0] = 0.0
     stats, n_stat = {}, {}
     if stat_lam is not None:
         by = {}
         for r, x in zip(rows, X):
-            by.setdefault(r["stat"], []).append((x, r["hit"]))
+            by.setdefault(r["stat"], []).append((r, x))
         for st, xs in sorted(by.items()):
             n_stat[st] = len(xs)
             if len(xs) >= MIN_STAT:
-                stats[st] = _fit([a for a, _ in xs], [b for _, b in xs], stat_lam, theta)
+                srows = [a for a, _ in xs]
+                t = _fit([b for _, b in xs], [a["hit"] for a in srows],
+                         [_icpt_lam(icpt, srows, stat_lam)] + [stat_lam] * (k - 1), theta)
+                if icpt == "zero":
+                    t[0] = 0.0
+                stats[st] = t
     return {"spec": spec, "theta": [round(x, 6) for x in theta],
             "stats": {k: [round(x, 6) for x in v] for k, v in stats.items()}, "n": len(rows), "n_stat": n_stat,
-            "stat_lam": stat_lam}
+            "stat_lam": stat_lam, "intercept": icpt}
 
 
 def predict(model, rows):
@@ -316,7 +355,7 @@ def _ll(p, y):
     return -(y * np.log(p) + (1 - y) * np.log(1 - p))
 
 
-def choose_spec(fit_rows, inner_days=INNER_DAYS):
+def choose_spec(fit_rows, inner_days=INNER_DAYS, icpt="zero"):
     """Spec choice on the fit window ONLY: fit on its earlier game-days, score on its last inner_days. -> (best key,
     {key: inner log loss})."""
     import numpy as np
@@ -327,7 +366,7 @@ def choose_spec(fit_rows, inner_days=INNER_DAYS):
     scores = {}
     for spec in SPECS:
         for lam in STAT_LAMS:
-            m = fit(a, spec, lam)
+            m = fit(a, spec, lam, icpt)
             scores[f"{spec}|{lam}"] = float(np.mean(_ll(predict(m, b), [r["hit"] for r in b])))
     best = min(scores, key=lambda k: (round(scores[k], 6), _complexity(k)))
     return best, scores, {"inner_fit_days": sorted({r["day"] for r in a}), "inner_eval_days": sorted({r["day"] for r in b}),
@@ -433,22 +472,24 @@ def verdict(raw, cal, rows):
     return {"pass": bool(ok), "checks": checks, "why": "all checks pass" if ok else "failed: " + ", ".join(why)}
 
 
-def evaluate_league(rows, test_from):
-    """Chronological evaluation of one league -> (report, chosen key). Fit window = game-days before test_from."""
+def evaluate_league(rows, test_from, icpt="zero"):
+    """Chronological evaluation of one league for one intercept mode -> (report, chosen key). Fit window = game-days
+    before test_from."""
     fit_rows = [r for r in rows if r["day"] < test_from]
     test_rows = [r for r in rows if r["day"] >= test_from]
     if not fit_rows or not test_rows:
         raise ValueError("need settled rows on both sides of test_from")
-    key, inner, inner_meta = choose_spec(fit_rows)
+    key, inner, inner_meta = choose_spec(fit_rows, icpt=icpt)
     spec, lam = _spec_of(key)
-    m = fit(fit_rows, spec, lam)
+    m = fit(fit_rows, spec, lam, icpt)
     raw = [r["ps"] for r in test_rows]
     cal = predict(m, test_rows)
     rep = {"fit_window": [fit_rows[0]["day"], fit_rows[-1]["day"]], "test_window": [test_rows[0]["day"], test_rows[-1]["day"]],
            "fit_days": sorted({r["day"] for r in fit_rows}), "test_days": sorted({r["day"] for r in test_rows}),
            "n_fit": len(fit_rows), "n_test": len(test_rows),
            "spec_choice": {"chosen": key, "inner_log_loss": {k: _r(v, 5) for k, v in inner.items()}, **inner_meta},
-           "fitted_on_fit_window": {k: m[k] for k in ("spec", "theta", "stats", "n", "n_stat", "stat_lam")},
+           "intercept": icpt,
+           "fitted_on_fit_window": {k: m[k] for k in ("spec", "theta", "stats", "n", "n_stat", "stat_lam", "intercept")},
            "raw": {"scores": scores(raw, test_rows), "reliability": reliability(raw, test_rows), "letters": letters(raw)},
            "calibrated": {"scores": scores(cal, test_rows), "reliability": reliability(cal, test_rows),
                           "letters": letters(cal)},
@@ -462,7 +503,30 @@ def evaluate_league(rows, test_from):
                               "cal_rel": {k: {x: v[x] for x in ("n", "stated", "hit", "ci")} for k, v in
                                           reliability([cal[i] for i in ix], rr).items()}}
     rep["verdict"] = verdict(raw, cal, test_rows)
+    rep["side_flips"] = sum(1 for a, b in zip(raw, cal) if (a >= 0.5) != (b >= 0.5))
+    rep["_cal"] = cal
     return rep, key
+
+
+def variant_summary(rep, test_rows, base_cal=None):
+    """Compact per-intercept-mode summary for the comparison table (+ log-loss difference vs intercept 0)."""
+    import numpy as np
+    c = rep["calibrated"]
+    out = {"intercept": rep["intercept"], "spec": rep["spec_choice"]["chosen"],
+           "theta_fit_window": rep["fitted_on_fit_window"]["theta"],
+           "log_loss": c["scores"]["log_loss"], "brier": c["scores"]["brier"],
+           "log_loss_minus_raw": rep["verdict"]["checks"]["log_loss_diff"],
+           "share_over_side": c["scores"]["share_over_side"], "side_flips_vs_raw": rep["side_flips"],
+           "ge60": c["reliability"]["all"]["ge60"], "letters": c["letters"], "verdict": rep["verdict"]["pass"],
+           "why": rep["verdict"]["why"]}
+    for s in ("all", "over", "under"):
+        r = c["reliability"][s]
+        out[s] = {"n": r["n"], "stated": r["stated"], "hit": r["hit"], "ci": r["ci"]}
+    if base_cal is not None:
+        y = np.array([r["hit"] for r in test_rows])
+        d, lo, hi = _boot(_ll(rep["_cal"], y) - _ll(base_cal, y), [r["event"] for r in test_rows])
+        out["log_loss_minus_intercept0"] = [_r(d, 5), _r(lo, 5), _r(hi, 5)]
+    return out
 
 
 def build(exports, test_from, forward=None):
@@ -473,10 +537,24 @@ def build(exports, test_from, forward=None):
         if lg not in exports:
             continue
         rows = rows_from_export(exports[lg])
-        rep, key = evaluate_league(rows, test_from)
+        test_rows = [r for r in rows if r["day"] >= test_from]
+        runs = {m: evaluate_league(rows, test_from, m) for m in ICPT_MODES}
+        base = runs["zero"][0]["_cal"]
+        variants = {m: variant_summary(runs[m][0], test_rows, None if m == "zero" else base) for m in ICPT_MODES}
+        chosen = "zero"                                 # ICPT_RULE: a shift must beat intercept 0 clearly
+        for m in ("games", "free"):
+            hi = variants[m]["log_loss_minus_intercept0"][2]
+            if hi is not None and hi < 0 and (chosen == "zero" or variants[m]["log_loss"] < variants[chosen]["log_loss"]):
+                chosen = m
+        rep, key = runs[chosen]
+        for r_ in runs.values():
+            r_[0].pop("_cal", None)
+        rep["intercept_variants"] = variants
+        rep["intercept_rule"] = ICPT_RULE
+        rep["intercept_chosen"] = chosen
         spec, lam = _spec_of(key)
-        served = fit(rows, spec, lam)
-        rep["served"] = {k: served[k] for k in ("spec", "theta", "stats", "n", "n_stat", "stat_lam")}
+        served = fit(rows, spec, lam, chosen)
+        rep["served"] = {k: served[k] for k in ("spec", "theta", "stats", "n", "n_stat", "stat_lam", "intercept")}
         rep["served"]["data_window"] = [rows[0]["day"], rows[-1]["day"]]
         if forward and forward.get(lg):
             fr = [r for r in forward[lg] if r["day"] > rows[-1]["day"]]
@@ -489,6 +567,7 @@ def build(exports, test_from, forward=None):
                                   "verdict": verdict(fraw, fcal, fr)}
         report["leagues"][lg] = rep
         leagues[lg] = {"spec": served["spec"], "theta": served["theta"], "stats": served["stats"],
+                       "intercept": chosen,
                        "letters": "contain-rule" if rep["verdict"]["pass"] else "held",
                        "stat_lam": lam, "n": served["n"], "data_window": rep["served"]["data_window"],
                        "held_out": {"fit_window": rep["fit_window"], "test_window": rep["test_window"],

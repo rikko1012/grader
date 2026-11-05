@@ -1,17 +1,18 @@
 {
  "version": "pc-1",
  "rule": "owner decision 2026-11-05: printed chance = calibrated chance (chronological fit, held-out test); a failed league keeps letters held",
- "fitted_at": "2026-11-05T14:27:58Z",
+ "fitted_at": "2026-11-05T14:36:57Z",
  "test_from": "2026-11-01",
  "source": "gradecore-export-1 (last saved sm-1 forecast >= 30 min before start, settled)",
  "leagues": {
   "nba": {
    "spec": "platt",
    "theta": [
-    -0.009283,
-    0.275095
+    0.0,
+    0.280821
    ],
    "stats": {},
+   "intercept": "zero",
    "letters": "held",
    "stat_lam": null,
    "n": 8565,
@@ -34,21 +35,22 @@
     "why": "failed: log_loss_better",
     "log_loss": [
      0.70147,
-     0.68852
+     0.68846
     ],
     "brier": [
      0.25319,
-     0.2477
+     0.24767
     ]
    }
   },
   "nfl": {
    "spec": "platt",
    "theta": [
-    -0.078807,
-    0.131691
+    0.0,
+    0.157121
    ],
    "stats": {},
+   "intercept": "zero",
    "letters": "contain-rule",
    "stat_lam": null,
    "n": 3798,
@@ -71,14 +73,14 @@
     "why": "all checks pass",
     "log_loss": [
      0.7315,
-     0.68905
+     0.68927
     ],
     "brier": [
      0.2651,
-     0.24811
+     0.24829
     ]
    }
   }
  },
- "sha": "3ffdd2768255aaca"
+ "sha": "9d8d987b2a801b67"
 }
