@@ -175,6 +175,20 @@ def row_summary(stat, lines, games):
     return out
 
 
+def h2h_season_lines(stat, lines, games, opp_id, h2h_limit=10):
+    """SCOUT_BOARD_H2H (display only): counts at every given line over the newest h2h_limit played games against this exact
+    opponent team id, and over the season of the newest played game. -> {"linesH2h", "linesSeason", "season"}."""
+    played = [g for g in games or () if g.get("participation") == "played" and (g.get("values") or {}).get(stat) is not None]
+    season = played[0].get("season") if played else None
+    vs = [float(g["values"][stat]) for g in played if opp_id and ((g.get("opponent") or {}).get("team_id") == opp_id)][:h2h_limit]
+    ss = [float(g["values"][stat]) for g in played if season is not None and g.get("season") == season]
+    out = {"linesH2h": {}, "linesSeason": {}, "season": season}
+    for ln in sorted({float(x) for x in lines if x is not None}):
+        out["linesH2h"][line_key(ln)] = hit_counts(vs, ln, len(vs))
+        out["linesSeason"][line_key(ln)] = hit_counts(ss, ln, len(ss))
+    return out
+
+
 def line_key(ln):
     """18.5 -> "18.5", 4.0 -> "4" (same text as stats.js line())."""
     ln = float(ln)

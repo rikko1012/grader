@@ -287,6 +287,14 @@ def _tally(a):
     return {"over": a[0], "under": a[1], "push": a[2], "n": a[3]} if a and a[3] else None
 
 
+def _board_columns(v, line, opp):
+    """SCOUT_BOARD_H2H: the sheet's H2H and Season counts at this line (sports/board_view.h2h_season_lines), display only."""
+    if line is None:
+        return {"h2h": None, "season": None}
+    h, s = _tally((v.get("linesH2h") or {}).get(line_key(line))), _tally((v.get("linesSeason") or {}).get(line_key(line)))
+    return {"h2h": dict(h, opponent=opp) if h else None, "season": dict(s, season=str(v.get("season"))) if s and v.get("season") is not None else None}
+
+
 def line_key(x):
     x = float(x)
     return str(int(round(x))) if abs(x - round(x)) < 1e-9 else str(round(x, 1))
@@ -371,7 +379,8 @@ def record_of(lg, doc, m, q, view):
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
                      "validation": {"kind": "research", "label": "Research grade" if grade else HOLD_LABEL,
                                     "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else reason}},
-           "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None},
+           "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None,
+                       **(_board_columns(v, line, opp) if workspace_h2h.board_enabled() else {})},
            "market_chance": {"p_over": mkc["po"], "p_under": mkc["pu"], "sources": mkc.get("n")} if mkc else None,
            "state": {"kind": "ok", "reason": None}}
     x = {"r": q.get("r"), "p": p, "l": line, "o": q.get("o"), "m": q.get("m"), "g": q.get("g"), "ud": q.get("ud"), "fid": sc.get("fid") if sc else None, "po": sc["po"] if sc else None,

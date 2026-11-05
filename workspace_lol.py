@@ -206,7 +206,9 @@ def record_of(x, raw, values):
             "scout": {"side": side, "read_rev": read_rev(x), "p_side": p_side, "p_over": x.get("p_over"), "p_under": x.get("p_under"), "p_push": x.get("p_push"), "projection": x.get("projection"), "range80": x.get("range80"),
                       "grade": grade, "units": 0.0, "stake_reason": x.get("stake_reason"), "hold": None, "model_version": x.get("model_version"), "forecast_at": x.get("forecast_at"), "validation": {"kind": "live"}},
             "history": {"l5": _tally(values, x.get("line"), 5), "l10": _tally(values, x.get("line"), 10), "l20": _tally(values, x.get("line"), 20),
-                        "avg": round(sum(v["value"] for v in values[:10]) / len(values[:10]), 1) if values else x.get("recent_per_game"), "recent": x.get("recent_games")},
+                        "avg": round(sum(v["value"] for v in values[:10]) / len(values[:10]), 1) if values else x.get("recent_per_game"), "recent": x.get("recent_games"),
+                        **({"h2h": workspace_h2h.board_h2h(values, x.get("opponent"), x.get("line")),
+                            "season": workspace_h2h.board_season(values, x.get("line"))} if workspace_h2h.board_enabled() else {})},
             "market_chance": None, "state": {"kind": "ok", "reason": None}}
 
 

@@ -133,7 +133,12 @@ def sheet_markets(player_file, history_games, platform, events, now):
                 fc[cq["lr"]["f"]] = _compact_fc(forecasts[cq["lr"]["f"]])
             qs.append(cq)
         vr = board_view.row_summary(row["stat"], [q["line"] for q in lines], history_games)
-        lg = (row.get("event_id") or "").split(":", 1)[0]
+        if os.environ.get("SCOUT_BOARD_H2H") == "1":  # research board H2H + Season columns; flag off = the sheet bytes as before
+            hm, aw = (ev.get("home") or {}).get("team_id"), (ev.get("away") or {}).get("team_id")
+            tid = row.get("team_id")
+            opp = aw if tid and tid == hm else hm if tid and tid == aw else None
+            vr.update(board_view.h2h_season_lines(row["stat"], [q["line"] for q in lines], history_games, opp))
+        lg =(row.get("event_id") or "").split(":", 1)[0]
         nv = board_view.contain_reason(lg, row["stat"])
         for cq in qs:                                 # the board's row signal on the sheet's own line reads (cf-2)
             own = forecasts.get(cq.get("f") or "")

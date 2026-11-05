@@ -779,3 +779,39 @@ html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align
 .h-mc-maps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;padding:0;list-style:none}
 .h-mc-maps li{display:inline-flex;gap:6px;align-items:baseline;padding:5px 10px;border:1px solid #2a3544;border-radius:7px;background:#141a22;font-size:12.5px;color:#c9d4e2;white-space:nowrap}
 .h-mc-maps li b{font:600 13px 'DM Mono',monospace;font-variant-numeric:tabular-nums;color:#f1f5fa}
+/* SCOUT_BOARD_H2H (default off): Edge, H2H and Season columns, 7-tone cells and the start countdown. Every rule sits under .h-cols */
+#u-hub.h-cols .h-hit.h-tone-0{background:#48272c;color:#ffd2d7}
+#u-hub.h-cols .h-hit.h-tone-1{background:#3b292e;color:#f1c3c9}
+#u-hub.h-cols .h-hit.h-tone-2{background:#302c33;color:#d4c5d0}
+#u-hub.h-cols .h-hit.h-tone-3{background:#283342;color:#d2deef}
+#u-hub.h-cols .h-hit.h-tone-4{background:#233a38;color:#b9dfd3}
+#u-hub.h-cols .h-hit.h-tone-5{background:#204438;color:#b1e7cb}
+#u-hub.h-cols .h-hit.h-tone-6{background:#18553d;color:#c5ffdf}
+@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-player{width:17%}#u-hub.h-cols #hub-table .h-c-market{width:8%}#u-hub.h-cols #hub-table .h-c-line{width:7%}}
+@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-proj{width:4.5%}#u-hub.h-cols #hub-table .h-c-side{width:8%}#u-hub.h-cols #hub-table .h-c-edge{width:5.5%}}
+@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-l5,#u-hub.h-cols #hub-table .h-c-l10,#u-hub.h-cols #hub-table .h-c-l20,#u-hub.h-cols #hub-table .h-c-h2h,#u-hub.h-cols #hub-table .h-c-season{width:5%}}
+@media(min-width:1101px){#u-hub.h-cols #hub-table .h-c-compare{width:12%}#u-hub.h-cols #hub-table .h-c-grade{width:8.5%}}
+#u-hub.h-cols #hub-table>thead>tr>th.h-c-h2h,#u-hub.h-cols #hub-table>thead>tr>th.h-c-season,#u-hub.h-cols #hub-table>thead>tr>th.h-c-edge,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-edge{text-align:center}
+#u-hub.h-cols #hub-table>thead>tr>th small{display:block;font-size:9px;letter-spacing:.04em;color:#8d9db1;margin-top:2px}
+#u-hub.h-cols .h-edge{display:inline-flex;align-items:baseline;gap:3px;font:600 12.5px 'DM Mono',monospace;font-variant-numeric:tabular-nums;color:#d2dbe7;white-space:nowrap}
+#u-hub.h-cols #hub-table .h-edge small{display:inline;margin:0;font-size:10px;color:inherit;opacity:.75}
+#u-hub.h-cols .h-edge.positive{color:#b1e7cb}#u-hub.h-cols .h-edge.negative{color:#f1c3c9}#u-hub.h-cols .h-edge.empty{color:#7d8ea6}
+#u-hub.h-cols .h-countdown{display:inline-block;margin-top:3px;padding:1px 7px;border:1px solid #2f3b4c;border-radius:999px;font:500 10.5px 'DM Mono',monospace;color:#b7c6da;white-space:nowrap}
+#u-hub.h-cols .h-countdown.soon{border-color:#8a6a2a;color:#f5c842}
+#u-hub.h-cols .h-empty{display:grid;gap:8px;justify-items:center;text-align:center}
+#u-hub.h-cols .h-empty-title{font-size:14px;color:#e8eef6}
+#u-hub.h-cols .h-empty-reasons{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+#u-hub.h-cols .h-empty-reasons>span{padding:4px 10px;border:1px solid #2f3b4c;border-radius:999px;font-size:12px;color:#c9d4e2}
+@media(min-width:1101px) and (max-width:1400px){
+ #u-hub.h-cols #hub-table .h-c-player{width:16%}#u-hub.h-cols #hub-table .h-c-compare{width:12%}
+ #u-hub.h-cols .h-hit{min-width:34px;font-size:11px}
+}
+@media(max-width:1100px){
+ #u-hub.h-cols #hub-table>tbody>tr[data-record]{grid-template-areas:"player player player player player watch" "market market market side side side" "line line proj edge grade grade" "l5 l5 l10 l10 l20 l20" "h2h h2h h2h season season season" "compare compare compare compare add add"}
+ #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-edge{grid-area:edge;align-self:center}
+ #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-edge:before{content:'EDGE';display:block;margin-bottom:4px;font:500 9.5px 'DM Mono',monospace;letter-spacing:.06em;color:#8d9db1}
+ #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h{grid-area:h2h}#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season{grid-area:season}
+ #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season{padding:6px 4px 7px;border:1px solid #283342;border-radius:8px;background:#10151d;text-align:center}
+ #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h:before,#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season:before{display:block;margin-bottom:4px;font:500 9.5px 'DM Mono',monospace;letter-spacing:.06em;color:#8d9db1}
+ #u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-h2h:before{content:'H2H'}#u-hub.h-cols #hub-table>tbody>tr[data-record]>td.h-c-season:before{content:'SEASON'}
+}
