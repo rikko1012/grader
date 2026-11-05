@@ -16,6 +16,11 @@ export function mount(C) {
   // SCOUT_BACKGROUND_ALERTS: "Alert me" is delivered by the server job; without it the page-only feature is "Live highlight"
   const BG = R.me.features?.background_alerts === true;
   const ALERT_WORD = BG ? 'Alerts' : 'Live highlight';
+  /* 4.16 board parity (SCOUT_PARITY_*, each default off; borrowed from Upside / Outlier). Every number is the server's
+     (gradecore/parity.py: EV = p / break-even - 1, the verified break-even, the band, the hit-rate key and the display sizes).
+     No flag on = PAR is null and none of the parity code below runs. */
+  const PAR = R.me.features?.parity && typeof R.me.features.parity === 'object' ? R.me.features.parity : null;
+  const P = n => !!PAR?.[n];
   const $ = id => document.getElementById(id);
   const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
@@ -25,6 +30,7 @@ export function mount(C) {
   const CARD_TABS=[['overview','Overview'],['lines','Lines'],['stats','Stats'],['ask','Ask']];
   const DESKTOP=matchMedia('(min-width:1101px)');
   H.extraRecs=[];H.extraState=null;
+  H.par={odds:'american',sizing:'quarter',bankroll:null};H.parKeep=null;
   /* owner 2026-11-05: a book shows in the Platform toggle only on a sport tab where it has lines right now. Extra books: the shared
      /book-lines counts (null until the first read, so extra buttons start hidden; a failed read keeps the last good copy). PrizePicks /
      Underdog: a row on the board for that sport (shown while the sport is still loading). */
@@ -78,13 +84,16 @@ export function mount(C) {
     // games stay together: start time, then the game, then the player (a game header row opens each run)
     // never sort by an empty column: with no edge on any shown line, Edge sorting falls back to start time and the sort control says so
     const list=(isExtra(H.book)?H.extraRecs:H.records).filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r));
-    H.sortFallback=H.sort==='edge'&&!list.some(r=>edgeValue(r)!=null);
+    H.sortFallback=(H.sort==='edge'&&!list.some(r=>edgeValue(r)!=null))||(H.sort==='hit'&&!list.some(r=>parOf(r)?.hit));
     H.sortBy=H.sortFallback?'start':H.sort;
     const byStart=(a,b)=>Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc)||gameKey(a).localeCompare(gameKey(b))||a.player.name.localeCompare(b.player.name);
     return list.sort((a,b)=> {
       if(H.sortBy==='chance') return (b.scout.p_side??-1)-(a.scout.p_side??-1);
       if(H.sortBy==='player') return a.player.name.localeCompare(b.player.name);
       if(H.sortBy==='edge'){const x=edgeValue(a),y=edgeValue(b);return x==null&&y==null?byStart(a,b):x==null?1:y==null?-1:y-x||byStart(a,b);}
+      /* SCOUT_PARITY_HIT_SORT: hit rate minus break-even (the server's key); a line whose hit rate is under its break-even sorts after
+         every line above it, and a line with no key after both, so 100% hit rates at a price that cannot pay never flood the top */
+      if(H.sortBy==='hit'){const x=parOf(a)?.hit,y=parOf(b)?.hit,rk=h=>!h?2:h.below?1:0;return rk(x)-rk(y)||(x&&y?y.key-x.key:0)||byStart(a,b);}
       return byStart(a,b);
     });
   }
@@ -110,6 +119,7 @@ export function mount(C) {
   function syncBooks() {
     $('hub-platform').querySelectorAll('[data-hub="book"]').forEach(b=>{if(b.dataset.id!=='all'){const st=bookLinesState(b.dataset.id);b.hidden=!(st==='yes'||(st==='unknown'&&b.dataset.id===H.book));}});
     if(H.book!=='all'&&bookLinesState(H.book)==='no'){H.book='all';H.page=0;H.extraState=null;H.extraRecs=[];}
+    if(P('plays'))syncPlays();
   }
   /* the counts change slowly; one read per BOOK_LINES_EVERY ms however often the board refreshes (the board polls every 60 s) */
   const BOOK_LINES_EVERY=120000;
@@ -167,6 +177,10 @@ export function mount(C) {
       return `<span class="h-hit h-hit-both" title="${esc(text)}" aria-label="${label}: ${esc(text)}">${t.over}-${t.under}</span>`;
     }
     const hit=countOf(t,side), rate=hit/t.n, text=`${hit} ${sideWord(side)} ${what(t.n)}, ${t.push||0} pushes${few}`;
+    if(P('hit_samples')) {   /* SCOUT_PARITY_HIT_SAMPLES: the sample on the cell ("6/10"), the % in its tooltip */
+      const full=`${text} (${Math.round(rate*100)}%)`;
+      return `<span class="h-hit h-hit-n h-tone-${Math.min(6,Math.floor(rate*7))}${few?' h-few':''}" style="--hit:${rate.toFixed(3)}" title="${esc(full)}" aria-label="${label}: ${esc(full)}">${hit}/${t.n}</span>`;
+    }
     return `<span class="h-hit h-tone-${Math.min(6,Math.floor(rate*7))}${few?' h-few':''}" style="--hit:${rate.toFixed(3)}" title="${esc(text)}" aria-label="${label}: ${esc(text)}">${Math.round(rate*100)}%</span>`;
   }
   const stripHtml = r => `<div class="h-strip">${STRIP.map(([w,l])=>`<span class="h-strip-cell h-s-${w}" data-label="${l}">${stripCell(r,w,l)}</span>`).join('')}</div>`;
@@ -175,17 +189,64 @@ export function mount(C) {
      the value and its source). PrizePicks and goblin / demon lines publish no fixed per-pick payout here: their cell stays empty.
      A fact about the chance against the payout, not a grade: a held or contained letter does not change it. */
   function edgeValue(r) {
+    if(P('edge'))return parOf(r)?parOf(r).ev*100:null;     /* SCOUT_PARITY_EDGE: real EV in %, PrizePicks and Underdog */
     const s=r.scout, be=COLS?.ud_standard_break_even, mult=s.side?r.offer[s.side]?.payout:null;
     if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9)
       return null;
     return (s.p_side-be)*100;
   }
-  const EDGE_WHY=()=>`Scout chance minus the per-pick break-even of an ${COLS?.entry||'Underdog standard 2-pick'} entry`+(num(COLS?.ud_standard_break_even)?` (${(COLS.ud_standard_break_even*100).toFixed(1)}%`+(COLS?.source?`, from Underdog's published payouts${COLS.read_at?' read '+COLS.read_at:''}`:'')+')':'')+', in points. PrizePicks and goblin or demon lines publish no fixed per-pick payout, so their cells stay empty.';
+  const EDGE_WHY=()=>P('edge')?parEdgeWhy():`Scout chance minus the per-pick break-even of an ${COLS?.entry||'Underdog standard 2-pick'} entry`+(num(COLS?.ud_standard_break_even)?` (${(COLS.ud_standard_break_even*100).toFixed(1)}%`+(COLS?.source?`, from Underdog's published payouts${COLS.read_at?' read '+COLS.read_at:''}`:'')+')':'')+', in points. PrizePicks and goblin or demon lines publish no fixed per-pick payout, so their cells stay empty.';
   function edgeCell(r) {
+    if(P('edge'))return parEdgeCell(r);
     const d=edgeValue(r);
     if(d==null)return `<span class="h-edge empty" title="${esc(r.offer.platform==='underdog'?'No fixed per-pick payout is published for this line type':'No fixed per-pick payout is published for this platform')}">—</span>`;
     const be=COLS.ud_standard_break_even;
     return `<span class="h-edge${d>0?' positive':''}" title="${esc(`Scout chance ${pct(r.scout.p_side)} against the ${(be*100).toFixed(1)}% break-even of an ${COLS.entry||'Underdog standard'} entry`)}"><b>${d>0?'+':d<0?'−':'±'}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
+  }
+  /* ---- 4.16 parity helpers: display of the server's numbers only ---- */
+  const parOf = r => r.parity && typeof r.parity === 'object' && num(r.parity.ev) && num(r.parity.be) ? r.parity : null;
+  const evText = ev => `${ev>0?'+':ev<0?'−':'±'}${Math.abs(ev*100).toFixed(1)}%`;
+  const beOdds = p => H.par.odds==='decimal'&&num(p.be_decimal)?p.be_decimal.toFixed(2):num(p.be_american)?(p.be_american>0?'+':'−')+Math.abs(p.be_american):pct(p.be);
+  const SIZING=[['quarter','¼ Kelly'],['half','½ Kelly'],['flat','Flat 1U']];
+  const sizingLabel = () => (SIZING.find(x=>x[0]===H.par.sizing)||SIZING[0])[1];
+  /* SCOUT_PARITY_PREFS: the member's display size for one line: units (1U = the server's unit share of a bankroll) or dollars */
+  function sizeText(p) {
+    const u=p.sizes?.[H.par.sizing], share=PAR?.unit_share;
+    if(!num(u))return null;
+    return num(H.par.bankroll)&&H.par.bankroll>0&&num(share)?'$'+(u*H.par.bankroll*share).toFixed(2):u.toFixed(2)+'U';
+  }
+  function parEdgeWhy() {
+    const t=PAR?.break_even||{}, parts=Object.values(t).filter(v=>v&&num(v.be)).map(v=>`${v.entry} needs ${pct(v.be)} a pick`);
+    return 'Expected value of one pick against its app’s published payout: Scout chance ÷ break-even − 1.'+(parts.length?' '+parts.join('; ')+'.':'')+' Goblin, demon and boosted lines have no published per-pick payout, so they show —.';
+  }
+  function parEdgeCell(r) {
+    const p=parOf(r);
+    if(!p)return `<span class="h-edge empty" title="No published payout for this line, so there is no break-even to measure it against">—</span>`;
+    const size=P('prefs')?sizeText(p):null;
+    const title=`Scout chance ${pct(r.scout.p_side)} against the ${pct(p.be)} break-even (${beOdds(p)}) of a ${p.entry}: ${evText(p.ev)} expected value a pick`+(size?` · ${sizingLabel()}: ${size}`:'');
+    const cell=`<span class="h-edge${p.ev>0?' positive':p.ev<0?' negative':''}" title="${esc(title)}" aria-label="${esc('Edge '+title)}"><b>${evText(p.ev)}</b></span>`;
+    return P('ev_band')?`<span class="h-edge-wrap">${cell}${bandChip(r)}</span>`:cell;     /* the band sits under the edge when both are on */
+  }
+  /* SCOUT_PARITY_EV_BAND: Skip below 0 · Marginal 0–3% · Strong 3–6% · Premium 6%+ (the server's band). The letter is unchanged. */
+  function bandChip(r) {
+    const p=parOf(r);
+    if(!p||!p.band)return '';
+    return `<span class="h-band h-band-${esc(p.band)}" title="${esc(`${evText(p.ev)} expected value against the ${pct(p.be)} break-even of a ${p.entry}. Skip below 0, Marginal 0–3%, Strong 3–6%, Premium 6% or more`)}">${esc(p.band_label)}</span>`;
+  }
+  /* SCOUT_PARITY_PLAYS: how many current lines each app has on this sport tab (extra books: the shared /book-lines count) */
+  function playsCount(id) {
+    if(isExtra(id)){const sp=H.sport==='all'?visibleSports():[H.sport],v=sp.map(s=>H.bookLines?.[id]?.[s]).filter(Number.isInteger);return v.length?v.reduce((a,b)=>a+b,0):null;}
+    return H.records.filter(r=>r.offer.platform===id&&(H.sport==='all'||r.sport===H.sport)&&!C.started(r)&&!unavailableReason(r)).length;
+  }
+  function syncPlays() {
+    $('hub-platform').querySelectorAll('[data-hub="book"]').forEach(b=>{
+      if(b.dataset.id==='all')return;
+      if(!b.dataset.base)b.dataset.base=b.getAttribute('aria-label')||b.textContent;
+      const n=playsCount(b.dataset.id);let chip=b.querySelector('.h-plays');
+      if(n==null){chip?.remove();b.setAttribute('aria-label',b.dataset.base);return;}
+      if(!chip){chip=document.createElement('span');chip.className='h-plays';chip.setAttribute('aria-hidden','true');b.appendChild(chip);}
+      chip.textContent=String(n);b.setAttribute('aria-label',`${b.dataset.base}, ${n} ${n===1?'play':'plays'}`);
+    });
   }
   /* start countdown on the game header row and the card; the ticker below keeps it current between board refreshes */
   function countdown(at) {
@@ -211,7 +272,7 @@ export function mount(C) {
   function scoutCell(r) {
     const s=r.scout;
     if(r.extra&&!s.side)return '<div class="h-scout"><div class="h-direction-options"><span>No saved chance at this line</span></div></div>';
-    if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}</div></div>`;
+    if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div></div>`;
     const both=num(s.p_over)&&num(s.p_under);
     return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
   }
@@ -261,7 +322,8 @@ export function mount(C) {
   function headHtml(showEdge) {
     return `<tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player">Player</th><th class="h-c-market">Market</th><th class="h-c-line">Line</th><th class="h-c-proj">Proj.</th><th class="h-c-scout">Scout</th>`
       +`<th class="h-c-hits"><span class="h-strip h-strip-head">${STRIP.map(([w,l])=>`<span title="${esc(STRIP_TITLE[w])}">${l}</span>`).join('')}</span></th>`
-      +(showEdge?`<th class="h-c-edge" title="${esc(EDGE_WHY())}">Edge <small>vs break-even</small></th>`:'')
+      +(showEdge?P('edge')?`<th class="h-c-edge" title="${esc(EDGE_WHY())}" aria-sort="${H.sortBy==='edge'?'descending':'none'}"><button class="h-th-sort" data-hub="parity-sort" data-id="edge" aria-pressed="${H.sortBy==='edge'}">Edge${H.sortBy==='edge'?' ↓':''} <small>vs break-even</small></button></th>`
+        :`<th class="h-c-edge" title="${esc(EDGE_WHY())}">Edge <small>vs break-even</small></th>`:'')
       +'<th class="h-c-compare">Compare</th><th class="h-c-add"><span class="u-sr">Add to slip</span></th></tr>';
   }
   /* audit 2026-11-04: one plain banner when a source feeding the visible sport(s) is behind: its feed is not current, or its newest
@@ -302,10 +364,11 @@ export function mount(C) {
     const players=[...grouped.values()],size=40,pages=Math.max(1,Math.ceil(players.length/size));
     H.page=Math.min(H.page,pages-1);
     const page=players.slice(H.page*size,(H.page+1)*size);
-    H.showEdge=!!COLS&&page.some(g=>(openPlayers.has(boardPlayerKey(g[0]))?g:[g[0]]).some(r=>edgeValue(r)!=null));
+    H.showEdge=(!!COLS||P('edge'))&&page.some(g=>(openPlayers.has(boardPlayerKey(g[0]))?g:[g[0]]).some(r=>edgeValue(r)!=null));
     $('hub-table').tHead.innerHTML=headHtml(H.showEdge);$('hub-table').classList.toggle('h-has-edge',H.showEdge);
     const cols=9+(H.showEdge?1:0), headers=H.sortBy==='start';
-    $('hub-sort-note').textContent=H.sortFallback?'No line on screen has an edge, so the board is sorted by start time.':'';
+    $('hub-sort-note').textContent=H.sortFallback?(H.sort==='hit'?'No line on screen has a hit rate and a published payout, so the board is sorted by start time.':'No line on screen has an edge, so the board is sorted by start time.')
+      :H.sortBy==='hit'?'Lines whose hit rate is below their break-even are listed last.':'';
     let last=null;
     $('hub-rows').innerHTML=page.map(group=>{const r=group[0],g=gameKey(r),head=headers&&g!==last?gameRow(r,list,cols):'';last=g;
       return head+row(r,group)+(openPlayers.has(boardPlayerKey(r))?group.slice(1).map(x=>row(x)).join(''):'');}).join('');
@@ -427,7 +490,7 @@ export function mount(C) {
       for(let i=0;i<3;i++) {
         const state=await api('state');
         try {
-          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines}}});
+          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,...(H.parKeep?{parity:H.parKeep}:{})}}});
           H.saveError=false; break;
         } catch(e) { if(e.status!==409||i===2) throw e; }
       }
@@ -450,7 +513,7 @@ export function mount(C) {
           minGrade:gradeOrder.includes(f.minGrade)?f.minGrade:'all',freshOnly:f.freshOnly===true,soonOnly:f.soonOnly===true,movedOnly:f.movedOnly===true,
           sport:['all',...allowed()].includes(f.sport)?f.sport:'all',book:['all','prizepicks','underdog',...(EXTRA||[]).map(x=>x.id)].includes(f.book)?f.book:'all',
           q:typeof f.q==='string'?f.q.slice(0,100):'',side:['all','over','under'].includes(f.side)?f.side:'all',
-          sort:['start','player','chance','edge'].includes(f.sort)?f.sort:'start',stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
+          sort:['start','player','chance','edge',...(P('hit_sort')?['hit']:[])].includes(f.sort)?f.sort:'start',stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
       });
       H.views=clean(p.views);
       /* only a choice made in the Goblins control counts (prefs.researchHub.slipLines). A batch saved before it existed carries the old
@@ -460,6 +523,10 @@ export function mount(C) {
       if($('hub-generation-lines'))$('hub-generation-lines').value=H.slipLines;
       C.refreshAdvice?.();
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
+      if(p.parity&&typeof p.parity==='object'){   /* SCOUT_PARITY_PREFS: kept as saved even while the flag is off */
+        const q=p.parity;H.parKeep=q;
+        H.par={odds:q.odds==='decimal'?'decimal':'american',sizing:SIZING.some(x=>x[0]===q.sizing)?q.sizing:'quarter',bankroll:num(q.bankroll)&&q.bankroll>0&&q.bankroll<=1e7?q.bankroll:null};
+      }
       H.alerts=clean(p.alerts);
       if(R.me.features?.background_alerts)H.delivery=await api('alert-delivery');
     } catch(e) {H.saveError=true;}
@@ -598,7 +665,7 @@ export function mount(C) {
     return `<label class="h-dec-line"><span>Line</span><select id="hub-card-line" aria-label="Line and book">${quotes.map(opt).join('')}</select></label>
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}</div>
-      <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>
+      <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))} · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r))||'—')}</small>`:''}
       <div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>
       ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
@@ -626,7 +693,7 @@ export function mount(C) {
       <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
-      ${h2hHtml(hh,line,side)}`;
+      ${h2hHtml(hh,line,side)}${P('report')&&!r.extra?'<p class="h-report-row"><button class="h-link" data-hub="report-open">Report a problem with this line</button></p>':''}`;
   }
   /* Lines: the card's Compare lines and the old drawer's Books table in one place: every book and line for this prop, its prices,
      the Scout read, when the offer was seen; then the market books and the market chance when the server has them */
@@ -902,6 +969,11 @@ export function mount(C) {
       ${leagues.length?card('NBA · NFL','Sheets and Compare','Stat sheets, player comparison and with/without splits from the sports pages.',leagues.map(l=>a(`/sports?view=classic#/sheets?lg=${l}`,`${SPORTS[l]} sheets`)+a(`/sports?view=classic#/compare?lg=${l}`,`${SPORTS[l]} compare`)).join('')):''}
       ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}${R.me.features?.market_tools?card('PRICES','Price check','Prices that pay more than they should, and lines where two books let you bet both sides and win either way.','<button data-hub="mt-jump">Open price check ↓</button>'):''}</div>
       <section class="h-tools-alerts" id="hub-tools-alerts" aria-label="${ALERT_WORD}"></section>`;
+    if(P('prefs'))$('hub-tools-body').insertAdjacentHTML('afterbegin',`<section class="h-prefs" aria-labelledby="hub-prefs-title"><h2 id="hub-prefs-title">Preferences</h2><p>How prices and sizes read on your board and player cards. Scout’s grades and stakes stay the same.</p>
+      <div class="h-prefs-grid"><label>Odds format<select id="hub-pref-odds"><option value="american">American (−137)</option><option value="decimal">Decimal (1.73)</option></select></label>
+      <label>Bet sizing<select id="hub-pref-sizing">${SIZING.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+      <label>Bankroll in $ (optional)<input id="hub-pref-bankroll" type="number" min="1" max="10000000" step="1" inputmode="decimal" placeholder="Sizes show in units"></label></div></section>`);
+    if(P('prefs')){$('hub-pref-odds').value=H.par.odds;$('hub-pref-sizing').value=H.par.sizing;$('hub-pref-bankroll').value=H.par.bankroll??'';}
     if(R.me.owner)$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">OWNER REVIEW</span><h2>Grading comparison</h2><p>Published chances beside the candidate grader, from saved forecast revisions.</p></div></div><div class="h-game-books">${['cs2','lol','nba','nfl'].map(s=>`<button data-hub="grade-review" data-id="${s}">${SPORTS[s]}</button>`).join('')}</div><div id="hub-grade-review" aria-live="polite"><p>Select a sport to inspect its comparison log.</p></div></section>`);
   }
   function gradeSteps(side){
@@ -1213,6 +1285,8 @@ export function mount(C) {
     },
     'delete-alert'(i){const a=H.alerts.splice(Number(i),1)[0];if(a)H.seen.delete(a.id);savePreferences();paintAlerts();},
     'record-retry':showRecord,
+    'parity-sort'(id){if(id!=='edge'||!P('edge'))return;H.sort=H.sort==='edge'?'start':'edge';H.page=0;paintBoard();document.querySelector('#hub-table [data-hub="parity-sort"]')?.focus({preventScroll:true});},
+    'report-open'(){const r=rec(H.detail);if(!P('report')||!r)return;H.reportFor=r;$('hub-report-what').textContent=`${r.player.name} · ${r.market.stat_label} ${r.offer.line} · ${r.offer.platform_label}`;$('hub-report-reason').value='line';$('hub-report-note').value='';$('hub-report-dialog').showModal();$('hub-report-reason').focus();},
   };
   const sectionFocus=(action,id)=>document.querySelector(`#u-hub [data-hub="${action}"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
   const PAGE_BACK=location.pathname==='/sports'?'#/board':location.pathname==='/lol'?'':'#board';
@@ -1230,7 +1304,7 @@ export function mount(C) {
           <div class="h-pop-wrap"><button id="hub-filters-toggle" class="h-filter-toggle" data-hub="filters" aria-expanded="false" aria-controls="hub-filter-pop">Filters<span id="hub-filter-n" class="h-count-badge"></span></button>
             <div id="hub-filter-pop" class="h-pop" role="group" aria-label="Filters and sort" hidden>
               <div class="h-pop-grid"><label>Market<select id="hub-stat"><option value="all">All markets</option></select></label><label>Side<select id="hub-side"><option value="all">Both sides</option><option value="over">Over</option><option value="under">Under</option></select></label>
-                <label>Minimum grade<select id="hub-minGrade"><option value="all">Any grade</option>${gradeOrder.slice().reverse().map(g=>`<option value="${g}">${g} or higher</option>`).join('')}</select></label><label>Sort<select id="hub-sort"><option value="start">Starting soon</option><option value="player">Player name</option><option value="chance">Stated chance</option>${COLS?'<option value="edge">Edge vs break-even</option>':''}</select></label></div><small id="hub-sort-note" class="h-sort-note" role="status"></small>
+                <label>Minimum grade<select id="hub-minGrade"><option value="all">Any grade</option>${gradeOrder.slice().reverse().map(g=>`<option value="${g}">${g} or higher</option>`).join('')}</select></label><label>Sort<select id="hub-sort"><option value="start">Starting soon</option><option value="player">Player name</option><option value="chance">Stated chance</option>${COLS||P('edge')?'<option value="edge">Edge vs break-even</option>':''}${P('hit_sort')?'<option value="hit">Hit rate vs break-even</option>':''}</select></label></div><small id="hub-sort-note" class="h-sort-note" role="status"></small>
               <div class="h-quick"><button id="hub-diff" data-hub="diff" aria-pressed="false">Lines differ</button><button id="hub-watch" data-hub="watched" aria-pressed="false">★ Watchlist</button></div>
               <div class="h-pop-foot"><button data-hub="clear-filters">Clear filters</button><button data-hub="filters">Done</button></div></div></div>
           <div class="h-pop-wrap"><button id="hub-views-toggle" data-hub="views-menu" aria-expanded="false" aria-controls="hub-views-pop">Views <span aria-hidden="true">▾</span></button>
@@ -1286,6 +1360,36 @@ export function mount(C) {
     if(H.saveKind==='alert'){H.alerts=[...H.alerts,v].slice(-12);checkAlerts();}else H.views=[...H.views,v].slice(-12);
     savePreferences();paintBoard();C.say(H.saveKind==='alert'?(BG?'Alert saved. Turn on Whop delivery under Alerts to get it when Scout is closed.':'Live highlight saved for this research screen.'):'Research view saved.');
   });
+  if(P('report')){   /* SCOUT_PARITY_REPORT: one report per line and reason; it goes to the Scout team's data issues list */
+    const reasons=Array.isArray(PAR.reasons)?PAR.reasons:[];
+    document.body.insertAdjacentHTML('beforeend',`<dialog id="hub-report-dialog" class="h-save u-dialog" aria-labelledby="hub-report-title"><form method="dialog"><h2 id="hub-report-title">Report a problem</h2><p id="hub-report-what"></p><label>What is wrong<select id="hub-report-reason">${reasons.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label><label>Details (optional)<textarea id="hub-report-note" maxlength="300" rows="3"></textarea></label><div><button value="cancel" formnovalidate>Cancel</button><button value="send">Send report</button></div></form></dialog>`);
+    $('hub-report-dialog').addEventListener('close',async()=>{
+      const r=H.reportFor;H.reportFor=null;
+      if($('hub-report-dialog').returnValue!=='send'||!r)return;
+      try{const d=await api('report-problem',{sport:r.sport,book:r.offer.platform,id:r.offer.offer_id,revision:r.offer.revision,reason:$('hub-report-reason').value,note:$('hub-report-note').value});
+        C.say(d?.duplicate?'You already reported this line. Thanks.':'Thanks. Your report was sent to the Scout team.');}
+      catch(e){C.say(e.status===404?'This line is no longer on the board.':e.status===429?'Too many reports just now. Try again in a minute.':'The report could not be sent. Try again.');}
+    });
+  }
+  if(P('prefs'))$('u-hub').addEventListener('change',e=>{
+    if(!['hub-pref-odds','hub-pref-sizing','hub-pref-bankroll'].includes(e.target.id))return;
+    const b=Number($('hub-pref-bankroll').value);
+    H.par={odds:$('hub-pref-odds').value==='decimal'?'decimal':'american',sizing:SIZING.some(x=>x[0]===$('hub-pref-sizing').value)?$('hub-pref-sizing').value:'quarter',bankroll:Number.isFinite(b)&&b>0&&b<=1e7?b:null};
+    H.parKeep=H.par;savePreferences();
+  });
+  if(PAR&&!$('hub-parity-style'))document.head.insertAdjacentHTML('beforeend','<style id="hub-parity-style">'
+    +'#u-hub .h-plays{display:inline-block;margin-left:5px;padding:0 5px;border-radius:8px;background:rgba(122,162,255,.16);font:500 10.5px monospace;line-height:16px;vertical-align:1px}'
+    +'#u-hub .h-band{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;font:600 10.5px monospace;letter-spacing:.02em;border:1px solid transparent}'
+    +'#u-hub .h-band-skip{color:#9aa9bd;border-color:rgba(154,169,189,.35)}#u-hub .h-band-marginal{color:#c9d4e3;background:rgba(201,212,227,.08)}'
+    +'#u-hub .h-band-strong{color:#9fe0bf;background:rgba(80,190,140,.12)}#u-hub .h-band-premium{color:#0d2a1d;background:#8fdcb5}'
+    +'#u-hub .h-th-sort{all:unset;cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;min-height:40px;justify-content:center}#u-hub .h-th-sort:focus-visible{outline:2px solid #7aa2ff;outline-offset:2px}'
+    +'#u-hub .h-edge{display:inline-flex;align-items:baseline;gap:3px;font-variant-numeric:tabular-nums;white-space:nowrap}#u-hub .h-edge.positive{color:#b1e7cb}#u-hub .h-edge.negative{color:#f1c3c9}'
+    +'#u-hub .h-edge-wrap{display:inline-flex;flex-direction:column;align-items:center;gap:3px}#u-hub .h-edge-wrap .h-band{margin-left:0}'
+    +'#u-hub #hub-table .h-strip .h-hit.h-hit-n{font-size:11px;letter-spacing:-.03em;padding-left:0;padding-right:0}@media(max-width:700px){#u-hub #hub-table .h-strip .h-hit.h-hit-n{font-size:9px;letter-spacing:-.06em}}#u-hub .h-dec-size{display:block;grid-column:1/-1;color:var(--u-muted,#9aa9bd);font-size:12px}'
+    +'#u-hub .h-report-row{margin:14px 0 4px}#u-hub .h-report-row .h-link{min-height:40px}'
+    +'#u-hub .h-prefs{margin:0 0 18px;padding:16px;border:1px solid var(--u-line,#26364d);border-radius:12px}#u-hub .h-prefs h2{margin:0 0 4px;font-size:17px}#u-hub .h-prefs p{margin:0 0 12px;color:var(--u-muted,#9aa9bd)}'
+    +'#u-hub .h-prefs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}#u-hub .h-prefs-grid label{display:grid;gap:6px}#u-hub .h-prefs-grid select,#u-hub .h-prefs-grid input{min-height:40px;box-sizing:border-box;width:100%}'
+    +'#hub-report-dialog form{display:block;max-width:440px}#hub-report-dialog form>div{display:flex;gap:8px;justify-content:flex-end}#hub-report-dialog p{margin:0 0 12px}#hub-report-dialog textarea{width:100%;box-sizing:border-box}#hub-report-dialog label{display:grid;gap:6px;margin:0 0 12px}#hub-report-dialog select{min-height:40px}</style>');
   $('u-hub').addEventListener('click',e=>{
     const b=e.target.closest('[data-hub]');if(!b||b.disabled)return;
     if(b.tagName==='TR'&&String(getSelection()||'').trim())return;
