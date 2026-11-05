@@ -694,3 +694,41 @@ verbatim on the service, once a day. Nothing in the A9 5 rule itself (numbers, s
    with the shown chance when one exists (closing the A9 audit gap noted in `results_public.grades`).
 7. **Nothing else changes.** A8 / A8a / A9 rules, gate H / gate F, sports-sp-1 (0U everywhere), cf-2, N4, sg-1; edges,
    confidence and rank stay withheld for a failed-gate market even when its letters are released (A9 5).
+
+## Amendment A10 - sn-1 snap-trend shadow for NFL rec / rec_yds (registered 2026-11-05, BEFORE any sn-1 artifact was fitted or any forward row recorded)
+
+Why: the two-way walk-forward (sports/research/two_way_position.md, weekly refits 2025 W10 - 2026 W7) found that adding
+`nfl.snap_trend` (fr-1: L3 snap share - EW snap share) to sm-1 lowered CRPS on the whole eligible population. rec:
+-0.0128 [-0.0206, -0.0052]; rec_yds: -0.128 [-0.210, -0.041]. Logloss at the reference line was also lower.
+Honesty note: snap_trend already failed the original tune (rec CI [-0.017, +0.0001]). Those weeks were the spent locked
+test / test2 windows, and this was a second look at a failed candidate. **None of that is evidence here; only forward
+rows count.**
+
+1. **Candidate sn-1 (per market, rec and rec_yds only).** Exactly sm-1's frozen configuration for the market
+   (model_config_nfl.json: half-lives, features, family, cal-1) with `nfl.snap_trend` appended to the feature list. It is
+   refit with forward.fit's recipe at the SAME data_as_of and on the SAME packaged history as the live sm-1 NFL artifact
+   (2026-10-23T23:00:00Z, history_ds1_2026-10-23.db, sm-1 sha cc56aeb8b88c31d8). The training rows are identical, so the
+   only difference is the added term. Artifact: `sn1_nfl.json` + `MANIFEST_SN1.json`, file and content sha verified at
+   load; any mismatch skips the shadow.
+2. **Recording.** Inside the existing forward job (no new job or frame), after sm-1 writes the market, for every target
+   offer that got an sm-1 forecast. Each row goes to `shadow.db` shadow_forecasts (model_version `sn-1`), plus
+   `sn1_inputs` with the frozen base sm-1 PMF and mean of the same row (before any tw-1 layer), the snap_trend value, and
+   the ds-1 ids. Never displayed and never graded: shadow rows are not store records. Off switch: SPORTS_SHADOW_SN1=0.
+   It never changes sm-1: the recorder reads the frame without adding columns, and any error skips the shadow.
+3. **Held-out window.** NFL games that start after the first recorded sn-1 row. No interim looks: the forward job only
+   counts games. Each score runs once, through the CLI, when its threshold is reached, and is written once to
+   `<SPORTS_DATA_DIR>/model/heldout_sn1.json`.
+4. **Box part (accuracy), once at >= 48 final games with a recorded sn-1 row.** Per market, on unique (game, player)
+   rows that were sm-1-eligible: paired CRPS (sn-1 - base sm-1) against the box-score result, with a game-clustered
+   bootstrap 95% CI (evaluate.boot_mean, B = 2000, SEED). **Pass = the CI is entirely < 0.**
+5. **Book part (calibration, judged separately), once per market at >= 150 props from >= 30 games.** On every recorded
+   offer at its own line, pushes excluded: paired logloss of P(over | no push) against the result, with a game-clustered
+   CI. **Fail = the CI is entirely > 0.** Always reported, not gates: Over / Under share of chosen sides for sn-1 vs sm-1,
+   hit rate by side with CIs, and reliability bins. The Over/Under side balance is reported because of the owner's
+   Under-lean concern.
+6. **Decision.** A market passes only if box passes AND book does not fail. A pass makes sn-1 eligible for an **owner
+   decision** to switch that market: config change + GRADE_POLICY / model version bump + refit + the usual release
+   checks. Nothing switches automatically. A fail retires sn-1 for that market, and snap_trend is not re-tested there
+   without a new registered reason.
+7. **Two-way players** (defensive listing) are outside this question. They stay at sm-1's floor with the sg-2 hold;
+   SCOUT_NFL_TWO_WAY stays off.
