@@ -64,3 +64,25 @@ letter. This note covers the model input.
   st1 token: it lists the sg-2 `floor` holds, which are exactly the 0.05 means. Each forecast's saved input row carries
   the `position` that was used.
 - The snapshot ends 2026-10-23. Hunter's games after that are not in it.
+
+## Refit walk-forward: pre-registered 2026-11-05, before any result was seen
+Script: `sports/research/two_way_walkforward.py`. Data: packaged history `history_ds1_2026-10-23.db`.
+- **Window.** Every NFL week from 2025 W10 through the last completed 2026 week in the snapshot. Each week: as_of = first
+  kickoff - 1 h (results public by KNOWN_AFTER_H only). The frozen model_config_nfl configuration is refit on everything
+  known at as_of (forward.fit's recipe: eligible rows, priors, k, GLM, family params; frozen family and cal-1). The week
+  is forecast through upcoming rows carrying nfl_pg's raw position, exactly like the forward job.
+- **Upcoming rows.** Every row of the week listed QB/RB/WR/TE/FB, plus every defensive-listed row that shows offense.
+- **Arms.** A0 = flag off (today). A1 = SCOUT_NFL_TWO_WAY on. A2 = A1 + `nfl.snap_trend` (registered fr-1 candidate:
+  L3 snap share - EW snap share) in rec and rec_yds only.
+- **Populations.** P = rows eligible under A0 (model.eligible), all players. T = two-way rows (listing outside
+  QB/RB/WR/TE/FB in that row), scored in every arm whatever their eligibility. A0 scores T at its 0.05 floor, which is
+  what the board printed.
+- **Metrics.** CRPS (primary), MAE, logloss at l_ref = floor(last-10 mean) + 0.5 (study.score_partition's reference
+  line). Paired differences use game-clustered bootstrap 95% CIs (evaluate.paired, B = 2000).
+- **A1 qualifies as a bug fix** only if both hold: on P, the A1 - A0 CRPS CI upper bound is < +0.5% of A0 mean CRPS in
+  every market (no harm), and on T, A1 - A0 CRPS is < 0 with the CI excluding 0 in rec and rec_yds.
+- **A2 qualifies** only if all three hold, in rec and rec_yds: on P, A2 - A1 CRPS CI is entirely < 0; on P, the logloss
+  CI upper bound is <= 0; on T, A2 - A1 CRPS < 0. Caveat registered now: snap_trend already failed the original tune
+  (rec CI [-0.017, +0.0001]). This is a second look on later weeks, so a pass is weaker evidence than a first-look pass.
+  It would still need forward confirmation on games after 2026-10-23 before it moves any grade.
+- Nothing is promoted by this run. The flag stays off and the frozen config is unchanged either way.
