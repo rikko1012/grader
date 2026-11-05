@@ -452,8 +452,12 @@ def test_card_and_hub_carry_the_block(db, monkeypatch):
 def test_pages_render_the_block_without_hedge_labels():
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     hub = (ROOT / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
-    for src, fn, close in ((html, "function mapChancesPanel", "\n}\n"), (hub, "function mapChancesHtml", "\n  }\n")):
+    # 2026-11-04 mw-1: the weight line moved into mapChancesUse (map_weighted labels), called at the end of each block
+    for src, fn, use, close in ((html, "function mapChancesPanel", "function mapChancesUse", "\n}\n"),
+                                (hub, "function mapChancesHtml", "function mapChancesUse", "\n  }\n")):
         body = src[src.index(fn):src.index(close, src.index(fn))]
+        body += src[src.index(use):src.index(close, src.index(use))]
+        assert "mapChancesUse(m)" in body
         assert "HLTV map chances" in body and "Weight in the grade: 0." in body and "Likeliest veto" in body
         assert not any(h in body.lower() for h in HEDGE)
     assert "if (nm && d.map_chances) h += mapChancesPanel(d.map_chances)" in html

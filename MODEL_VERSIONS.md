@@ -1,5 +1,64 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## mw-1 — CS2_MAP_WEIGHTED: vm-2's map weighting as the live projection, behind a flag that defaults to 0 (branch claude/map-weighted, 2026-11-04; NOT deployed, NOT promoted; flag off = CS2 model tag unchanged `3007c59b74`, byte-identical grades)
+
+Built so the registered vm-2 candidate (research/map_chances/REGISTER.md, `vm-2-37ec7435b0`) can be switched on as one
+versioned release IF it passes and the owner approves. Until then the flag stays 0 on Render and vm-2 stays a shadow.
+- **Flag off (unset / anything but `1`, the default):** `map_weighted.activate()` (called once when server.py is imported)
+  does nothing: no function is wrapped, `picklog.MODEL_VERSION` stays the frozen tag (`3007c59b74` from the committed blobs),
+  the grade path makes no extra read, and every grade, chance, stake, projection and forecast row is byte-identical
+  (tests/test_map_weighted.py: identity of the wrapped functions, the tag and the grade JSON). No hashed file is edited.
+- **Flag on (`CS2_MAP_WEIGHTED=1`, read at start):** cs2_scout.finish_line / grader_inputs are wrapped from map_weighted.py
+  (module globals; cs2_scout.py, grader.py, perf*.py, cm2.py and the rest of the hash list stay frozen since 4877218) and the
+  model tag becomes NEW through the existing versioning: `sha1(frozen tag + "|CS2_MAP_WEIGHTED=1|" + LF bytes of
+  map_weighted.py, vm2.py, vm2_params.json, hltv_mapchances.py)[:10]` (`map_weighted.tag_on`). Every pick / forecast row, the
+  board's graded_model and model_versions.json carry it, so flag-on rows are reported per tag and never pooled with
+  `3007c59b74`; the frozen tag itself never moves (turning the flag off restores it exactly).
+  `CS2_MAP_WEIGHTED_CELLS` (e.g. `kills:12,hs:12`; unset / `all` = all six cells) limits the weighting to the cells the
+  registered rule passed (it promotes per cell); a limited set is hashed into the tag, other cells fall back with
+  "cell <prop> <scope> not weighted".
+- **Exact formula (flag on, vm-2-37ec7435b0 arithmetic, nothing refitted):** for player P, match M, offered line L,
+  forecast time t, match start S (the earlier of the forecast's and HLTV's listed start):
+  - snapshot = M's `map_chances` rows only when captured (latest row `updated_at`) at or before t AND before S, and not older
+    than 6 h at t (`STALE_MIN` 360; the scraper re-reads every 3 h, every scan within 6 h of the start); simulated vetoes
+    updated after t are dropped; chance_m = HLTV's integer % for map m; the chances must add up to 100 x maps in the format
+    (+-4);
+  - a_m = P's kills per map on map m over HLTV maps of matches dated in [day(S) - 180 d, day(S)); a map with < 5 such maps
+    uses a0 = all his kills / all his maps in that window; < 10 maps in all = no weighting;
+  - Maps 1-2 / Maps 1-3: per_map = sum_m(chance_m x a_m) / sum_m(chance_m) over every map HLTV lists; kills = per_map x 2 | 3;
+  - Map 1: per_map = a_m of the likeliest simulated veto's (rank 1) Map 1 (first pick; BO1 the left-over map); kills = per_map;
+  - kills line: lambda = kills; sd = c x sqrt(max(lambda, 1)) with c = live sd / sqrt(max(live lambda, 1)) (the live spread);
+  - HS line: lambda_kills = kills, lambda = kills x the live HS per kill, sd rescaled the same way, the live kills spread
+    (spread_c_kills) unchanged;
+  - kills is vm-2's logged `lam_kills` (4 decimals); the grader then runs unchanged on that projection (its own cut rule,
+    the 22-78% kills cap, letters, gates and stakes). The perf version label (perf-2 / perf-cm2 / perf-2-bo3) is kept.
+- **Fallback = the current projection, untouched, reason logged** (any of): not a vm-2 cell (prop kills | HS, scope 1 / 12 /
+  123, whole / half line) or the live projection is not perf-2 / perf-2-bo3 / perf-cm2; team unknown (no team or opponent,
+  or the match has no HLTV id); no HLTV player id; no HLTV map chances / no simulation; chances captured after the forecast
+  time; captured at or after the start; stale; chances that do not add up to the format; scope longer than the format;
+  fewer than 10 window maps; Map 1 without a likeliest veto captured before the start; a crash in the weighting
+  ("map weighting failed (<type>)"). **An HLTV database failure is not a fallback** (owner rule, transient-failure): the
+  projection becomes the existing transient error, so the board keeps its last grade and the card says the database is
+  unreachable.
+- **Forecast record (append-only):** `grader_inputs.map_weighted` is saved in forecasts.inputs with every flag-on forecast:
+  rule, forecast_at, vm2 version + code sha, match / player ids, used, and either the snapshot used (captured_at,
+  start_used, read_at, age_min, lead_min, format, sum, chances per map), per-map kills, a0, map factor, Map 1 pick,
+  `unweighted` {lambda, sd, lambda_kills} and `weighted` {...}, or the reason none were used. shadow.vm2 keeps being logged
+  on every row (with the flag on its live_replay equals the vm-2 arm; the unweighted numbers are in `unweighted`).
+- **Display:** the classic card (player drawer) and the research hub card's "HLTV map chances" block carry `grade_use`:
+  "HLTV map chances used" + their capture time (and the projection without them) when the flag is on and they fed the
+  grade; otherwise "Weight in the grade: 0. Shadow only – not in this grade" with the map-weighted (vm-2) projection beside
+  the live one (card: computed now from the cached snapshot + the player's cached per-map kills, waiting at most 0.5 s; hub:
+  the shadow.vm2 logged on the saved forecast the card shows). A kept board grade (outage) shows no label.
+- **Promotion (the registered rule, unchanged):** one look per cell when the cell has 300 distinct settled forward matches
+  with eligible units (P1 board units, match-clustered bootstrap, 10,000 resamples, seed 20261104); CALIBRATION PASS = the
+  log-loss gain vs C0-pooled and vs live each with a lower 99.167% bound > 0 (the match-clustered interval of the log-loss
+  change does not cross zero), Brier upper 95% bound < +0.0025 and favoured-side gaps within the registered limits;
+  SELECTION PASS = favoured-side hit difference vs live and vs C0 each with a lower 99.167% bound > 0; >= 90% eligible
+  coverage; judged separately. Only a cell with both PASS may be put to the owner, and **promotion needs the owner's
+  approval**; turning the flag on is that approved release. Nothing in this branch turns it on.
+- **Rollback:** `CS2_MAP_WEIGHTED=0` (or unset) on Render + restart. Tests: tests/test_map_weighted.py.
+
 ## vm-2 — HLTV map chances: display at weight 0 + registered shadow (branch claude/vm2-map-chances, 2026-11-04; NOT deployed; CS2 model tag unchanged: `3007c59b74`; no grade change)
 
 Registered in research/map_chances/REGISTER.md BEFORE any vm-2 entry or result existed (the scraper's tables started

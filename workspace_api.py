@@ -799,20 +799,35 @@ def _market(x):
     return {"available": True, "p_over": round(a / (a + b), 4), "p_under": round(b / (a + b), 4), "source": "Underdog prices, margin removed"}
 
 
-def _context(srv, fc):
+def _saved(srv, fc):
+    """The saved forecast row's grader inputs, shadow record and projection (one bounded read): {} when there is none."""
     if not fc.get("id") or not _FC_SLOTS.acquire(timeout=1.0):
         return {}
     try:
         con = srv.picklog._read_db()
         try:
-            r = con.execute("SELECT inputs FROM forecasts WHERE id = ?", (fc["id"],)).fetchone()
+            r = con.execute("SELECT inputs, shadow, lambda FROM forecasts WHERE id = ?", (fc["id"],)).fetchone()
         finally:
             con.close()
     finally:
         _FC_SLOTS.release()
-    if not r or not r["inputs"]:
+    if not r:
         return {}
-    gi = json.loads(zlib.decompress(r["inputs"]))
+    out = {"lambda": r["lambda"]}
+    if r["inputs"]:
+        out["gi"] = json.loads(zlib.decompress(r["inputs"]))
+    try:
+        out["shadow"] = json.loads(r["shadow"]) if r["shadow"] else None
+    except (TypeError, ValueError):
+        out["shadow"] = None
+    return out
+
+
+def _context(srv, fc, saved=None):
+    saved = _saved(srv, fc) if saved is None else saved
+    gi = saved.get("gi")
+    if not gi:
+        return {}
     out = []
     for k, label in CONTEXT_KEYS:
         v = gi.get(k) if isinstance(gi, dict) else None
@@ -836,9 +851,10 @@ def _line_body(srv, book, rid):
             books.append({"platform": bk, "platform_label": LABEL.get(bk, bk), "row_id": i, "key": r["key"], "line": o.get("line"), "line_type": line_type_of(o),
                           "over": r["offer"]["over"], "under": r["offer"]["under"], "seen_at": r["offer"]["seen_at"], "scout_side": _side(o), "p_side": o.get("p"),
                           "grade": r["scout"]["grade"]})
-    ctx = {}
+    ctx, saved = {}, {}
     try:
-        ctx = _context(srv, fc)
+        saved = _saved(srv, fc)
+        ctx = _context(srv, fc, saved)
     except Exception:
         ctx = {}
     forecast = None
@@ -854,7 +870,7 @@ def _line_body(srv, book, rid):
         hist["closing"] = closing                      # SCOUT_CLOSING_LINES: only when a past game has a saved closing line
     return 200, {"record": rec, "forecast": forecast, "history": hist,
                  "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
-                 "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x)}
+                 "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved)}
 
 
 def _closing(srv, x, full):
@@ -872,14 +888,30 @@ def _closing(srv, x, full):
         return None
 
 
-def _map_chances(x):
-    """HLTV map chances for the row's match (display only, weight 0 - never a grade input): hltv_mapchances.map_chances_display, the
-    same cached answer as the classic card (waits at most 0.5 s). None = no block."""
+def _map_chances(x, saved=None):
+    """HLTV map chances for the row's match: hltv_mapchances.map_chances_display, the same cached answer as the classic card
+    (waits at most 0.5 s). None = no block. grade_use (map_weighted.saved_status, from the saved forecast this card shows):
+    "HLTV map chances used" + capture time when they fed that grade, otherwise "Shadow only - not in this grade" with the vm-2
+    projection logged on that forecast beside the live one."""
     try:
         import mapchances
-        return mapchances.for_match(x.get("match_id"))
+        block = mapchances.for_match(x.get("match_id"))
     except Exception:
         return None
+    if not saved or saved.get("gi") is None:
+        return block
+    try:
+        import map_weighted
+        use = map_weighted.saved_status(saved.get("gi"), saved.get("shadow"), saved.get("lambda"))
+        if use.get("used") and block is None:
+            block = map_weighted.block_from_record(saved["gi"].get("map_weighted"))
+        if block is not None:
+            block = dict(block, grade_use=use)
+            if use.get("used"):
+                block.update(weight=1, note=None)
+    except Exception:
+        pass
+    return block
 
 
 # ---------------------------------------------------------------------------------------------------------------- responses

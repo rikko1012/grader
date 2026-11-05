@@ -53,6 +53,10 @@ import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
 
 from polymarket import match_odds, upcoming_events
+import map_weighted
+# CS2_MAP_WEIGHTED (default 0, MODEL_VERSIONS.md mw-1): off = nothing is wrapped and the model tag stays the frozen one;
+# "1" = the live CS2 projection uses vm-2's map weighting (fallback to the current projection, reason logged) under its own tag
+map_weighted.activate()
 
 BASE = Path(__file__).resolve().parent
 WEB = BASE / "web"
@@ -851,12 +855,24 @@ def card_veto(res):
 def card_map_chances(res):
     """The card's "HLTV map chances" block (mapchances: display only, weight 0 - never a grade input): hltv_mapchances'
     cached answer for the match (one query per match per 3 minutes, single flight, shared by every member; the card waits at most
-    0.5 s for a refresh). None = no block."""
+    0.5 s for a refresh). None = no block. grade_use (map_weighted): "HLTV map chances used" + capture time when the flag is on
+    and they fed this grade, otherwise "Shadow only - not in this grade" with vm-2's projection beside the live one."""
     try:
         import mapchances
-        return mapchances.for_card(res)
+        block = mapchances.for_card(res)
     except Exception:
         return None
+    try:
+        use = map_weighted.card_status(res)
+        if use and use.get("used") and block is None:
+            block = map_weighted.block_from_record((res.get("grader_inputs") or {}).get("map_weighted"))
+        if block is not None and use:
+            block = dict(block, grade_use=use)
+            if use.get("used"):
+                block.update(weight=1, note=None)
+    except Exception:
+        pass
+    return block
 
 
 def veto_body(match_id):
