@@ -16,6 +16,8 @@ export function mount(C) {
   // SCOUT_BACKGROUND_ALERTS: "Alert me" is delivered by the server job; without it the page-only feature is "Live highlight"
   const BG = R.me.features?.background_alerts === true;
   const ALERT_WORD = BG ? 'Alerts' : 'Live highlight';
+  // SCOUT_PICKEM_EV (default off): the pick'em +EV board at #/ev (web/upgrade-ev.js, served only with the flag on)
+  const EVB = R.me.features?.pickem_ev === true;
   const $ = id => document.getElementById(id);
   const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
@@ -900,7 +902,7 @@ export function mount(C) {
       ${card('RESEARCH','Single prop grader','Inspect a player and line with the grading tools.',a('/?view=classic#one','Open grader'))}
       ${card('RESEARCH','Match research','Team and map research for an upcoming CS2 match.',a('/?view=classic#matches','Open match research'))}
       ${leagues.length?card('NBA · NFL','Sheets and Compare','Stat sheets, player comparison and with/without splits from the sports pages.',leagues.map(l=>a(`/sports?view=classic#/sheets?lg=${l}`,`${SPORTS[l]} sheets`)+a(`/sports?view=classic#/compare?lg=${l}`,`${SPORTS[l]} compare`)).join('')):''}
-      ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}${R.me.features?.market_tools?card('PRICES','Price check','Prices that pay more than they should, and lines where two books let you bet both sides and win either way.','<button data-hub="mt-jump">Open price check ↓</button>'):''}</div>
+      ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}${EVB?card("PICK'EM PRICES",'+EV board',"Pick'em legs whose chance from the books beats what the entry needs.",'<button data-hub="section" data-id="ev">Open +EV board</button>'):''}${R.me.features?.market_tools?card('PRICES','Price check','Prices that pay more than they should, and lines where two books let you bet both sides and win either way.','<button data-hub="mt-jump">Open price check ↓</button>'):''}</div>
       <section class="h-tools-alerts" id="hub-tools-alerts" aria-label="${ALERT_WORD}"></section>`;
     if(R.me.owner)$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">OWNER REVIEW</span><h2>Grading comparison</h2><p>Published chances beside the candidate grader, from saved forecast revisions.</p></div></div><div class="h-game-books">${['cs2','lol','nba','nfl'].map(s=>`<button data-hub="grade-review" data-id="${s}">${SPORTS[s]}</button>`).join('')}</div><div id="hub-grade-review" aria-live="polite"><p>Select a sport to inspect its comparison log.</p></div></section>`);
   }
@@ -1107,8 +1109,13 @@ export function mount(C) {
     document.querySelector('#hub-studio-section .h-studio-intro').insertAdjacentHTML('beforeend','<button data-hub="share-card">Download lineup image</button>');
   }
 
-  const SECTIONS=['board','studio','record','alerts','picks','tools'];
-  const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips'};
+  const SECTIONS=['board','studio','record','alerts','picks','tools',...(EVB?['ev']:[])];
+  const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:'+EV'};
+  async function paintEv(){
+    const box=$('hub-ev-body');if(!box||H.section!=='ev')return;
+    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
+    catch(e){box.innerHTML='<p class="h-mt-state">The +EV board could not be loaded. Use Refresh to try again.</p>';}
+  }
   function section(name,navigate=true) {
     if(name==='games'){H.view='games';name='board';}
     if(!SECTIONS.includes(name))name='board';
@@ -1118,18 +1125,18 @@ export function mount(C) {
     const games=name==='board'&&H.view==='games';
     if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
     for(const n of SECTIONS)$('hub-'+n+'-section').hidden=n!==name;
-    const here=name==='alerts'?'tools':name;
+    const here=name==='alerts'||name==='ev'?'tools':name;
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('u-hub').classList.toggle('h-board-mode',name==='board');
     $('hub-title').textContent=TITLES[name]||'Player props';
-    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else paintAlerts();
+    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev')paintEv();else paintAlerts();
   }
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
     const csBoard=/^#board(?:\/(?:all|prizepicks|underdog))?$/.test(location.hash);
-    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|record|tools|picks|alerts)(?:\?(.*))?$/);
-    const scout=location.hash.match(/^#scout\/(board|games|studio|picks|record|alerts|tools)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
+    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|record|tools|picks|alerts|ev)(?:\?(.*))?$/);
+    const scout=location.hash.match(/^#scout\/(board|games|studio|picks|record|alerts|tools|ev)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
     const mainBoard=location.pathname==='/lol'&&!location.hash || location.pathname==='/sports'&&(!location.hash||location.hash.startsWith('#/board')) || location.pathname==='/'&&(!location.hash||csBoard);
     const open=!classic&&(location.hash==='#all-sports'||!!scout||!!modern||mainBoard||slips);
     if(open&&H.routeHash!==location.pathname+location.hash){
@@ -1250,7 +1257,7 @@ export function mount(C) {
       <section id="hub-picks-section" hidden><div class="h-section-head"><div><p>Your tracked picks, with the line and chance saved when you tracked. Each settles at that line; pushes are counted apart.</p></div><div class="h-pick-filters" hidden><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status">${pickStatus.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label></div></div><div id="hub-picks-body"></div></section>
       <section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section>
       <section id="hub-tools-section" hidden><div class="h-section-head"><div><p>Every research tool outside the board, in one place.</p></div></div><div id="hub-tools-body"></div></section>
-      <section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>
+      <section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>${EVB?'<section id="hub-ev-section" hidden><div id="hub-ev-body"></div></section>':''}
     </div><aside class="h-slip" aria-label="Slip"><header><h2>Slip <span id="hub-slip-count">0</span></h2><button data-hub="receipts">My picks →</button></header><p id="hub-save-status" class="h-sync" aria-live="polite"></p><div id="hub-slip-content" tabindex="-1"></div><footer>One entry per platform. Rechecked against current offers before tracking.</footer></aside>
     <nav class="h-tabbar" aria-label="Sections"><button data-hub="section" data-id="board">Board</button><button id="hub-tab-slip" data-hub="section" data-id="studio">Slip <span id="hub-tab-slip-n" class="h-count-badge">0</span></button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Record</button><button id="hub-more-toggle" data-hub="more" aria-expanded="false" aria-controls="hub-more">More <span id="hub-alert-count-m" class="h-count-badge" aria-label="New filter matches"></span></button></nav>
     <div id="hub-more" class="h-more-sheet" role="group" aria-label="More" hidden><button data-hub="view" data-id="games">By game</button><button data-hub="section" data-id="tools">Tools</button><button data-hub="section" data-id="alerts">${ALERT_WORD}</button><button data-hub="studio-open" data-id="build">Auto-build slips</button><button data-hub="studio-open" data-id="tracked">Tracked slips</button><a href="/?view=classic#moneylines">Moneylines ↗</a><a href="/?view=classic#one">Single prop grader ↗</a><a href="/?view=classic#matches">Match research ↗</a><button data-hub="close">Classic board ↗</button></div>
@@ -1265,6 +1272,7 @@ export function mount(C) {
     $('hub-platform').insertAdjacentHTML('beforeend',EXTRA.map(x=>`<button data-hub="book" data-id="${esc(x.id)}" aria-pressed="false" hidden aria-label="${esc(x.label)} (view only)" title="${esc(x.label)}">${esc(x.short||x.label)}</button>`).join(''));
   }
   installCols();
+  if(EVB)$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em +EV board">+EV</button>');
   if(TOKENS){
     // Skip link first in the hub (the classic page's own is inert under it) and one named account control in the top bar.
     $('u-hub').insertAdjacentHTML('afterbegin','<a class="h-skip" href="#hub-title" data-hub="skip" style="position:fixed;top:-80px;left:16px">Skip to content</a>');

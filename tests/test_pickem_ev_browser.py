@@ -1,0 +1,126 @@
+"""SCOUT_PICKEM_EV in a real browser at 1440 and 390: flag off = no +EV route, card or link; flag on = the #/ev board with the
+app picker, entry picker (need X%), market-priced legs with expandable books, the hidden-plays banner, the filters drawer and the
+model-only list. Real Handler + the isolated fixtures of test_upgrade_browser (no network). Set PICKEM_EV_SHOTS=<folder> to keep
+screenshots."""
+import json
+import os
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+
+import workspace_books as wb
+import workspace_ev as we
+from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
+
+SHOTS_DIR = Path(os.environ['PICKEM_EV_SHOTS']) if os.environ.get('PICKEM_EV_SHOTS') else None
+
+
+def shot(p, name, size):
+    if SHOTS_DIR:
+        SHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        p.screenshot(path=str(SHOTS_DIR / f"{name}_{size['width']}.png"), full_page=True)
+
+
+def iso(t):
+    return datetime.fromtimestamp(t, timezone.utc).isoformat(timespec="seconds")
+
+
+def nba(pkey, name, stat, label, line, app, p_over, books, mult=None):
+    start = iso(time.time() + 3 * 3600)
+    r = {"sport": "nba", "key": f"nba.e1.{pkey}.{stat}.full_game.{line}",
+         "event": {"id": "e1", "label": "Lakers at Celtics", "start_utc": start, "lock_utc": start, "status": "scheduled"},
+         "player": {"key": pkey, "name": name, "team": "LAL"},
+         "market": {"stat": stat, "stat_label": label, "period": "full_game", "period_label": "Full game", "line_type": "standard"},
+         "offer": {"platform": app, "platform_label": "PrizePicks" if app == "prizepicks" else "Underdog", "offer_id": f"{app[:2]}-{pkey}", "revision": "r1",
+                   "line": line, "over": {"offered": True, "payout": mult, "price": None}, "under": {"offered": True, "payout": mult, "price": None}},
+         "scout": {"side": None, "p_side": None, "p_over": p_over, "p_under": None if p_over is None else round(1 - p_over, 4), "p_push": 0.0},
+         "state": {"kind": "ok"}}
+    rows = [{"platform": b, "platform_label": b, "line": ln, "kind": k, "over": o, "under": u, "seen_at": iso(time.time() - age)} for b, ln, k, o, u, age in books]
+    return r, rows
+
+
+ITEMS = [
+    nba("a", "Austin Reaves", "points", "Points", 20.5, "prizepicks", 0.58, [("fanduel", 20.5, "devig", 1.45, 2.85, 40), ("betrivers", 19.5, "devig", 1.40, 3.00, 70),
+                                                                             ("kalshi", 20.5, "mid", "0.64 / 0.66", None, 30)]),
+    nba("b", "Jaylen Brown", "rebounds", "Rebounds", 6.5, "prizepicks", 0.47, [("fanduel", 6.5, "devig", 2.20, 1.68, 50), ("oddsapi:draftkings", 6.5, "devig", 2.15, 1.72, 80)]),
+    nba("c", "Derrick White", "assists", "Assists", 4.5, "prizepicks", 0.51, [("fanduel", 4.5, "devig", 1.91, 1.91, 60)]),
+    nba("d", "Jayson Tatum", "points", "Points", 27.5, "prizepicks", None, [("fanduel", 27.5, "devig", 1.5, 2.8, 5000), ("betrivers", 27.5, "devig", 1.5, 2.8, 6000)]),
+    nba("e", "LeBron James", "assists", "Assists", 7.5, "prizepicks", 0.66, []),
+    nba("f", "Austin Reaves", "points", "Points", 20.5, "underdog", 0.58, [("fanduel", 20.5, "devig", 1.62, 2.40, 40)], mult=1.04),
+]
+
+
+@pytest.fixture
+def ev_on(monkeypatch):
+    monkeypatch.setenv('SCOUT_PICKEM_EV', '1')
+    we._FAIR.clear(); we._LEGS.clear()
+    body = json.dumps({"records": [r for r, _ in ITEMS]}).encode()
+    s = {"body": body, "index": {(r["offer"]["platform"], r["offer"]["offer_id"]): {"books": (rows, []), "st": r["market"]["stat"]} for r, rows in ITEMS}}
+    real = wb.records
+    monkeypatch.setattr(wb, "records", lambda srv, sport: ([r for r, _ in ITEMS], s) if sport == "nba" else real(srv, sport))
+    yield
+    we._FAIR.clear(); we._LEGS.clear()
+
+
+def ev_page(ctx, env, size=None):
+    p = open_page(ctx, env, '/#scout/ev', size)
+    p.wait_for_selector('#hub-ev-body .ev-row', timeout=30000)
+    return p
+
+
+def test_flag_off_has_no_ev_route_card_or_link(ctx, env, monkeypatch):
+    monkeypatch.delenv('SCOUT_PICKEM_EV', raising=False)
+    p = open_page(ctx, env, '/#scout/tools')
+    p.wait_for_selector('#hub-tools-body .h-tool-grid', timeout=30000)
+    assert p.locator('#hub-ev-section').count() == 0 and p.locator('.h-ev-link').count() == 0
+    assert 'EV board' not in p.locator('#hub-tools-body').inner_text()
+    assert not p.errors
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_ev_board(browser, env, ev_on, size):
+    c = context(browser, env, size)
+    try:
+        p = ev_page(c, env, size)
+        txt = p.locator('#hub-ev-body').inner_text()
+        assert '+EV board' in txt and 'need 57.7%' in p.locator('#hub-ev-body').inner_html()
+        assert '2 plays hidden: 2 with only old prices.' in txt
+        # PrizePicks Power 2: Reaves Over is +EV against the market (shown beside the printed model chance); Only +EV hides the rest
+        rows = p.locator('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row')
+        assert rows.count() >= 1 and 'Austin Reaves' in rows.first.inner_text()
+        assert not any(w in txt.lower() for w in ('research estimate', 'provisional', 'not validated', 'lock of'))
+        shot(p, 'ev_board', size)
+        rows.first.locator('[data-ev="books"]').click()
+        p.wait_for_selector('#hub-ev-body .ev-src table')
+        src = p.locator('#hub-ev-body .ev-src').first.inner_text()
+        assert 'FanDuel' in src and 'BetRivers' in src and 'read at 20.5' in src
+        shot(p, 'ev_board_books', size)
+        p.locator('#hub-ev-body .ev-drawer summary').click()
+        assert p.locator('#ev-preset').count() == 1 and p.locator('#ev-method').count() == 1 and p.locator('#ev-min_books').count() == 1
+        assert p.locator('[data-ev-req]').count() >= 2 and p.locator('#ev-lo').count() == 1
+        shot(p, 'ev_board_filters', size)
+        p.locator('[data-ev="evonly"]').first.click()
+        p.wait_for_function("document.querySelectorAll('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row').length >= 3")
+        p.locator('[data-ev="model"]').click()
+        p.wait_for_selector('#hub-ev-body .ev-list-model .ev-row')
+        assert 'Model only' in p.locator('#hub-ev-body .ev-list-model').inner_text()
+        assert 'LeBron James' in p.locator('#hub-ev-body .ev-list-model').inner_text()
+        shot(p, 'ev_board_model_only', size)
+        p.locator('[data-ev="app"][data-id="underdog"]').click()
+        p.wait_for_function("document.querySelector('#ev-entry') && document.querySelector('#ev-entry').value.startsWith('standard-')")
+        no_h_scroll(p)
+        assert not p.errors
+    finally:
+        c.close()
+
+
+def test_tools_card_and_board_link_open_the_ev_route(ctx, env, ev_on):
+    p = open_page(ctx, env, '/#scout/tools')
+    p.wait_for_selector('#hub-tools-body .h-tool-grid', timeout=30000)
+    p.locator('#hub-tools-body [data-hub="section"][data-id="ev"]').click()
+    p.wait_for_selector('#hub-ev-body .ev-row', timeout=30000)
+    assert p.evaluate('location.hash').endswith('ev')
+    assert p.locator('.h-ev-link').count() == 1
+    assert not p.errors
