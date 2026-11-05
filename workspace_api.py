@@ -1050,6 +1050,7 @@ def get_me(h, srv, q, member, scratch, name):
                                      **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {}),
                                      **({"genie_persona": True} if os.environ.get("SCOUT_GENIE") == "1" and os.environ.get("SCOUT_GENIE_PERSONA") == "1" else {}),
                                      **_extra_books(), **board_parity.features(),
+                                     **({"pickem_ev": True} if os.getenv("SCOUT_PICKEM_EV", "").strip() == "1" else {}),
                                      **({"board_h2h": _board_columns(srv)} if workspace_h2h.board_enabled() else {})}})
 
 
@@ -1162,6 +1163,20 @@ def get_market_tools(h, srv, q, member, scratch, name):
     if st != 200:
         return h.send(503, {"error": "market_tools_unavailable"})
     return h.send(200, workspace_markets.for_member(body, access(h, srv, q), owner=bool(scratch) or bool(h._sports_owner())))
+
+
+def get_pickem_ev(h, srv, q, member, scratch, name):
+    """SCOUT_PICKEM_EV (default off): the pick'em +EV board (workspace_ev), one shared build per parameters and sports seen."""
+    import workspace_ev
+    if not workspace_ev.enabled():
+        return h.send(404, {"error": "not found"})
+    try:
+        st, body = workspace_ev.shared(srv, q, access(h, srv, q))
+    except Exception:                                  # noqa: BLE001 - the board stays usable without it
+        return h.send(503, {"error": "pickem_ev_unavailable"})
+    if st != 200:
+        return h.send(503, {"error": "pickem_ev_unavailable"})
+    return h.send(200, body)
 
 
 def get_alert_delivery(h, srv, q, member, scratch, name):
@@ -1899,7 +1914,7 @@ def post_report_problem(h, srv, q, member, scratch, name, n):
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
        "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
-       "book-lines": get_book_lines}
+       "book-lines": get_book_lines, "pickem-ev": get_pickem_ev}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
         "book-line":post_book_line, "slip-advice": post_slip_advice, "report-problem": post_report_problem}
 
