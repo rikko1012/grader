@@ -821,6 +821,15 @@
     }).catch(function (e) { if (onlyEvent) target.innerHTML = errorBox(e) || ""; else fail(e); });
   }
 
+  // same-game injury reconciliation (SPORTS_CONTEXT_RECONCILE): present only when the worker wrote it
+  function contextCheckHtml(blk, at, title, hid) {
+    var r = blk ? L.contextCheck(blk, at, {time: S.localTime, date: S.shortDate}) : null;
+    if (!r) return "";
+    return '<section class="sw-panel sw-cc" aria-labelledby="' + hid + '"><h2 id="' + hid + '">' + esc(title) + '</h2><p class="sw-small sw-faint">' + esc(r.head) + "</p>" +
+      (r.rows.length ? '<ul class="sw-list sw-small">' + r.rows.map(function (x) { return "<li>" + (x.own ? "<b>" + esc(x.text) + "</b>" : esc(x.text)) + "</li>"; }).join("") + "</ul>"
+        : '<p class="sw-small">' + esc(r.none) + "</p>") + "</section>";
+  }
+
   // ---------------------------------------------------------------------------------------------- match context
   function renderGame(eid) {
     main.innerHTML = skeleton(5);
@@ -845,6 +854,9 @@
         '<p class="sw-sub"><b>' + esc(S.localTime(e.start_utc)) + "</b> · " + esc(L.eventStatus(e.status)) + (e.reschedules.length ? " · rescheduled " + e.reschedules.length + "x" : "") + "</p>" +
         (gl || tc ? '<section class="sw-panel" aria-labelledby="sw-tc-h"><h2 id="sw-tc-h">Game and team context</h2>' + gl + tc + "</section>" : "") +
         '<section class="sw-panel" aria-labelledby="sw-inj-h"><h2 id="sw-inj-h">Injury report</h2><div class="sw-grid2">' + injList(e.away) + injList(e.home) + "</div></section>" +
+        (e.context_check ? Object.keys(e.context_check.by_forecast_at || {}).sort().reverse().map(function (at, i) {
+          return contextCheckHtml(e.context_check, at, "Injury report since the projections of " + S.localTime(at), "sw-cc-h" + i);
+        }).join("") : "") +
         '<section class="sw-panel" aria-labelledby="sw-cov-h"><h2 id="sw-cov-h">Props in this game</h2>' + coverageKv(c) + '<div class="sw-kv sw-small">' +
         Object.keys(c.by_platform).filter(function (p) { return c.by_platform[p] > 0; }).sort().map(function (p) { return "<span>" + esc(bookName(p)) + " <b>" + S.int(c.by_platform[p]) + "</b></span>"; }).join("") + "</div>" +
         '<details class="sw-more"><summary>Details</summary><p class="sw-small sw-faint">The list below shows props with a line open now; props whose only lines were taken down, or alternate lines (goblin / demon), are counted above but open on the player page. ' +
@@ -1009,6 +1021,7 @@
             (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Scout projection yet" : esc(L.gateReason((q.not_gradable_because || [])[0] || "") || "Not settled by Scout")) + "</span>") + "</button>";
         }).join("") + '</div><button type="button" class="sw-stripbtn next" data-strip="1" aria-label="More lines" hidden>›</button></div>';
         h += '<div class="sw-grid2" style="margin-top:12px"><div>' + (m.scope && m.scope !== "full_game" ? '<section class="sw-state">Period-specific history is unavailable for ' + esc(m.scope.replace(/_/g, " ")) + '. Full-game totals are not compared with this line.</section>' : historyPanel(m, ln, sel)) + '<div id="sw-without"></div></div><div>' + forecastPanel(fc, det, sel, m) + "</div></div>";
+        h += contextCheckHtml(P.context_check, fc && fc.forecast_at, "Injury report since this projection", "sw-cc-h");
         if (!m.scope || m.scope === "full_game") {
           h += matchupPanel(P, games, m, ln);
           h += contextPanel(P, games, m);
