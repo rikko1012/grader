@@ -291,7 +291,8 @@ def score_rows(rows, cal_q=None):
             mkc = {"po": r["pm"], "pu": 1 - r["pm"], "n": r.get("n_src") or 1}
             r["mk_side"] = mkc["po"] if lean == "over" else mkc["pu"]
             r["n4"] = (p_un - r["mk_side"]) <= 0
-        r["sg_ratio"] = board_view.sanity_check(mean, r["line"], None, None)
+        r["sg_ratio"] = board_view.sanity_check(mean, r["line"], None, None,           # sg-2 floor / certain too
+                                                chances=(po, pu, r["po"], r["pu"]))
         r["sg_l10"] = (board_view.sanity_check(None, r["line"], lean, r["l10"]) if r.get("l10") else None)
         held = bool(r.get("n4")) or bool(r["sg_ratio"]) or bool(r["sg_l10"])
         r["shown"] = not held
