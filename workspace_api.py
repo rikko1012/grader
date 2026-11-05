@@ -1043,6 +1043,48 @@ def get_book_board(h, srv, q, member, scratch, name):
     return h.send(st, body, "application/json")
 
 
+BOOK_LINES_TTL = 30
+
+
+def _book_lines(srv):
+    """{as_of, books: {pid: {sport: lines}}} for every enabled extra book on every sport it lists, counted from the same shared
+    book-board build members read (workspace_books.board, single flight, TTL 30 s), so this adds no provider request. A stale,
+    failing or backed-off feed has no records, so it counts 0 and the book is hidden, never labelled."""
+    import book_providers
+    import workspace_books
+
+    def compute():
+        out = {}
+        for pid in book_providers.enabled_ids():
+            for sport in book_providers.providers()[pid]["sports"]:
+                try:
+                    st, body = workspace_books.board(srv, sport, pid)
+                    n = len(json.loads(body).get("records") or []) if st == 200 else 0
+                except Exception:                          # noqa: BLE001 - one book failing never hides the others
+                    n = 0
+                out.setdefault(pid, {})[sport] = n
+        return 200, json.dumps({"as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"), "books": out}, separators=(",", ":")).encode()
+    return srv.shared(("ws_book_lines",), compute, ttl=BOOK_LINES_TTL)
+
+
+def get_book_lines(h, srv, q, member, scratch, name):
+    """Which extra books have lines on which of this member's sports right now: the hub's book toggle shows a book on a sport tab
+    only when it has lines there (owner 2026-11-05: no FanDuel / BetRivers on the CS2 or LoL tab). One shared build for everyone,
+    cut to the member's sports; books and sports with no lines are left out. Every provider off = the unknown-route answer."""
+    import book_providers
+    if not book_providers.enabled_ids():
+        return h.send(404, {"error": "not found"})
+    book_providers.start(data_dir())
+    try:
+        st, body = _book_lines(srv)
+        doc = json.loads(body)
+    except Exception:
+        return h.send(503, {"error": "Book lines unavailable"})
+    allowed = access(h, srv, q)
+    books = {pid: {s: n for s, n in v.items() if allowed.get(s) and isinstance(n, int) and n > 0} for pid, v in (doc.get("books") or {}).items()}
+    return h.send(200, {"as_of": doc.get("as_of"), "books": {pid: v for pid, v in books.items() if v}})
+
+
 def get_market_tools(h, srv, q, member, scratch, name):
     """SCOUT_MARKET_TOOLS: the Tools route's +EV feed and arbitrage sheet (workspace_markets), one shared build for everyone."""
     if os.getenv('SCOUT_MARKET_TOOLS')!='1':return h.send(404,{'error':'not found'})
@@ -1052,7 +1094,7 @@ def get_market_tools(h, srv, q, member, scratch, name):
     st, body = workspace_markets.shared(srv)
     if st != 200:
         return h.send(503, {"error": "market_tools_unavailable"})
-    return h.send(200, workspace_markets.for_member(body, access(h, srv, q)))
+    return h.send(200, workspace_markets.for_member(body, access(h, srv, q), owner=bool(scratch) or bool(h._sports_owner())))
 
 
 def get_alert_delivery(h, srv, q, member, scratch, name):
@@ -1404,8 +1446,8 @@ def _gen_opts(q, allowed):
     if not sports:
         return None, "Choose at least one sport."
     mix, games, repeats = q.get("mix") or "any", q.get("games") or "spread", q.get("repeats") or "allow"
-    lines = q.get("lines") or "all"
-    if mix not in ("any", "mixed", "single") or games not in ("spread", "stacks") or repeats not in ("allow", "none") or lines not in ("all", "standard"):
+    lines = q.get("lines") or sq.LINE_RULE_DEFAULT        # owner 2026-11-05: goblins stay out unless the member allows them
+    if mix not in ("any", "mixed", "single") or games not in ("spread", "stacks") or repeats not in ("allow", "none") or lines not in sq.LINE_RULES:
         return None, "Choose supported generator settings."
     if mix == "mixed" and platform == "underdog":
         return None, "Underdog does not publish mixed-sport entries. Choose PrizePicks or one sport."
@@ -1528,11 +1570,14 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
     slip = [{"id": l["id"], "sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "player": l.get("player"),
              "player_key": l.get("player_key"), "team": l.get("team"), "event": l.get("event"), "stat": l.get("stat"), "period": l.get("period")} for l in legs]
     et = d.get("entry_types") if isinstance(d.get("entry_types"), dict) else {}
+    lines = d.get("lines") if d.get("lines") is not None else sq.LINE_RULE_DEFAULT
+    if lines not in sq.LINE_RULES:
+        return h.send(400, {"error": "Choose supported generator settings."})
     out = {}
     for platform in dict.fromkeys(l["book"] for l in slip):
         mine = [x for x in slip if x["book"] == platform]
         t = et.get(platform)
-        for m, r in zip(mine, sq.advise(mine, by_key, pool_legs, t if isinstance(t, str) and len(t) <= 16 else None)):
+        for m, r in zip(mine, sq.advise(mine, by_key, pool_legs, t if isinstance(t, str) and len(t) <= 16 else None, lines)):
             if m["sport"] in lc.SPORTS and lc.contained(m["sport"], m.get("stat")):     # lc-1: a held letter has no rating
                 r = dict(r, notes=[{"code": "contained", "text": lc.banner(m["sport"])}] + list(r.get("notes") or []))
             out[m["id"]] = r
@@ -1721,7 +1766,8 @@ def post_genie(h, srv, q, member, scratch, name, n):
 
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
-       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board}
+       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
+       "book-lines": get_book_lines}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
         "book-line":post_book_line, "slip-advice": post_slip_advice}
 

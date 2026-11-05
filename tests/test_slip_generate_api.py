@@ -142,3 +142,46 @@ def test_advice_keeps_order_names_same_match_and_suggests_a_fitting_replacement(
 def test_advice_refuses_a_bad_body(env):
     assert post(env, "slip-advice", {"legs": "x"})[0] == 400
     assert post(env, "slip-advice", {"legs": [{"id": "a", "sport": "cs2", "book": "prizepicks", "row_id": "x", "side": "over", "line": 1, "stat": 5}]})[0] == 400
+
+
+
+# ------------------------------------------------------------------------------------------------------------- goblin rule (owner 2026-11-05)
+
+def _with_goblin(env):
+    env.rows.append(row("pp:7300", "prizepicks", "gobby", "Lumen", "Ridge", 12.5, "More", .88, 903, env.rows[0]["start"], odds_type="goblin"))
+    fresh()
+
+
+def _line_types(doc):
+    return [l["line_type"] for s in doc["slips"] for l in s["legs"]]
+
+
+def test_generate_leaves_goblins_out_unless_allowed(env):
+    _with_goblin(env)
+    st, doc = gen(env, slips=4)
+    assert st == 200 and doc["slips"] and "goblin" not in _line_types(doc)
+    assert doc["options"]["lines"] == "no_goblins"
+    st, doc = gen(env, slips=4, lines="all")
+    assert st == 200 and "goblin" in _line_types(doc)                          # the old behaviour stays one choice away
+    st, doc = gen(env, slips=4, lines="one_goblin")
+    assert st == 200 and max([l["line_type"] for l in s["legs"]].count("goblin") for s in doc["slips"]) <= 1
+    st, doc = gen(env, slips=4, lines="standard")
+    assert st == 200 and set(_line_types(doc)) <= {"standard"}
+
+
+def test_generate_refuses_an_unknown_goblin_rule(env):
+    assert gen(env, lines="bogus") == (400, {"error": "Choose supported generator settings."})
+
+
+def test_advice_takes_the_goblin_rule(env):
+    _with_goblin(env)
+    board = keys_on_board(env)
+    by = {(r["player"]["name"], b): r for (b, _), r in board.items()}
+    slip = [by[("mika7", "prizepicks")], by[("vargo", "prizepicks")]]
+    legs = [dict(leg_of(r), stat=r["market"]["stat"], period=r["market"]["period"], player_key=r["player"]["key"], player=r["player"]["name"],
+                 team=r["player"]["team"], event=r["event"]["id"]) for r in slip]
+    assert post(env, "slip-advice", {"legs": legs, "lines": "bogus"}) == (400, {"error": "Choose supported generator settings."})
+    st, doc = post(env, "slip-advice", {"legs": legs})
+    assert st == 200 and all((r.get("replacement") or {}).get("player") != "gobby" for r in doc["legs"])
+    st, doc = post(env, "slip-advice", {"legs": legs, "lines": "all"})
+    assert st == 200 and any((r.get("replacement") or {}).get("player") == "gobby" for r in doc["legs"])

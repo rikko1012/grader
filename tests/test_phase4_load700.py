@@ -1,4 +1,4 @@
-"""700 members at once on the Phase 4 routes with every Phase 4 flag on: /me, the extra-book board and the EV / arbitrage sheet.
+"""700 members at once on the Phase 4 routes with every Phase 4 flag on: /me, the extra-book board, book-lines and the EV / arbitrage sheet.
 No 5xx, one shared build per window (single flight), no provider request from any member. Fixture upstreams only."""
 import threading
 
@@ -33,6 +33,7 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
                                                 "over": {"offered": True, "payout": 1.8, "price": None}, "under": {"offered": True, "payout": 1.76, "price": None},
                                                 "source_at": now - 60, "observed_at": now}])
     builds = {"books": 0, "sheet": 0}
+    per_key = {}
     lock = threading.Lock()
     real_b, real_s = wb.build, wm.build
 
@@ -40,12 +41,13 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
         def run(*a, **k):
             with lock:
                 builds[name] += 1
+                per_key[(name,) + tuple(a[1:])] = per_key.get((name,) + tuple(a[1:]), 0) + 1
             time.sleep(0.05)
             return fn(*a, **k)
         return run
     monkeypatch.setattr(wb, "build", count("books", real_b))
     monkeypatch.setattr(wm, "build", count("sheet", real_s))
-    paths = ["me", "book-board?sport=cs2&book=sleeper", "market-tools"]
+    paths = ["me", "book-board?sport=cs2&book=sleeper", "book-lines", "market-tools"]
     codes = []
 
     def member(i):
@@ -69,6 +71,9 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
             codes.extend(r)
     took = time.time() - t0
     assert codes.count(200) == len(codes), {c: codes.count(c) for c in set(codes)}
-    assert builds["books"] <= 2 and builds["sheet"] <= 2, builds          # one shared build per TTL window, not one per member
+    # one shared build per TTL window per (sport, book) board and one sheet build, not one per member. book-lines reads the same
+    # shared boards (Sleeper lists four sports), so it adds at most one build per (sport, book) and none per member
+    assert max(per_key.values()) <= 2 and builds["sheet"] <= 2, per_key
+    assert builds["books"] <= 2 * len(bp.providers()["sleeper"]["sports"]), builds
     assert not calls
     assert took < 120, took

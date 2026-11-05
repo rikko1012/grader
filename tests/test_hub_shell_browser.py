@@ -1,5 +1,5 @@
 """Hub shell flags in a real browser: SCOUT_UI_TOKENS (classic tokens, skip link, account control, 40px targets, three breakpoints),
-SCOUT_MARKET_TOOLS (Board-style price filters and density) and the SCOUT_BACKGROUND_ALERTS deep link to a prop. Each flag off and on.
+SCOUT_MARKET_TOOLS (Price check: plain sections, filters and density) and the SCOUT_BACKGROUND_ALERTS deep link to a prop. Each flag off and on.
 Real Handler + isolated fixtures; no network, no production writes."""
 import json
 import os
@@ -143,39 +143,67 @@ def test_ui_tokens_on_classic_entry_chip_is_one_colour(browser, env, monkeypatch
 
 # ---------------------------------------------------------------------------------------------------------------- SCOUT_MARKET_TOOLS
 
-def market_doc(age_built=0):
-    """The Phase 4 sheet (workspace_markets.build) as the server sends it."""
+def market_doc(age_built=0, owner=False, empty=False):
+    """The Price check sheet (workspace_markets.build, cut by for_member) as the server sends it. owner=True keeps the owner's
+    extras (flagged pairs, pick'em rows, exclusions, formulas); a member's copy has none of them."""
     now = time.time()
     iso = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    def ev(book, label, player, side, odds, p, e, age=30, flags=(), wide=False, sport='nba'):
-        return {'sport': sport, 'event': 'Away at Home', 'player': player, 'team': 'T', 'stat': 'points', 'stat_label': 'Points', 'period_label': 'Full game',
-                'line': 24.5, 'side': side, 'book': book, 'book_label': label, 'kind': 'sportsbook', 'odds': odds, 'p_cal': p, 'p_push': 0.0,
-                'p_source': 'No-vig consensus · FanDuel, BetRivers (worst case of 4 devig methods)', 'ev': e,
-                'width': {'overround': .09 if wide else .04, 'width_cents': 30 if wide else 15, 'wide': wide}, 'age_s': age, 'seen_at': iso(now - age),
-                'source': 'sports service · ' + label, 'flags': list(flags)}
+    am = lambda d: f"+{round((d - 1) * 100)}" if d >= 2 else f"-{round(100 / (d - 1))}"
+    def ev(book, label, player, side, odds, p, e, age=30, flags=(), wide=False, sport='nba', kind='sportsbook'):
+        return {'sport': sport, 'event': 'Away at Home', 'start_utc': iso(now + 7200), 'player': player, 'team': 'T', 'stat': 'points', 'stat_label': 'Points',
+                'period_label': 'Full game', 'line': 24.5, 'side': side, 'book': book, 'book_label': label, 'kind': kind, 'odds': odds, 'p_cal': p, 'p_push': 0.0,
+                'ev': e, 'width': {'overround': .09 if wide else .04, 'width_cents': 30 if wide else 15, 'wide': wide}, 'age_s': age, 'seen_at': iso(now - age),
+                'source': 'sports service · ' + label, 'flags': list(flags), 'needs': round(1 / odds, 4), 'american': am(odds), 'per_100': round(e * 100, 2),
+                'chance_from': 'Other books (Beta, Gamma)', **({'p_source': 'No-vig consensus · Beta, Gamma (worst case of 4 devig methods)'} if owner else {})}
     def leg(book, label, side, odds, share, age=20, flags=()):
         return {'side': side, 'book': book, 'book_label': label, 'kind': 'sportsbook', 'odds': odds, 'implied': 1 / odds, 'stake_share': share,
-                'age_s': age, 'seen_at': iso(now - age), 'source': 'sports service · ' + label, 'flags': list(flags)}
-    arb = {'sport': 'nba', 'event': 'Away at Home', 'player': 'Nba Center', 'team': 'T', 'stat': 'points', 'stat_label': 'Points', 'period_label': 'Full game',
-           'line': 24.5, 'margin_pct': 1.244, 'total_implied': .98771,
+                'stake_per_100': round(share * 100, 2), 'american': am(odds), 'age_s': age, 'seen_at': iso(now - age), 'source': 'sports service · ' + label,
+                'flags': list(flags)}
+    arb = {'sport': 'nba', 'event': 'Away at Home', 'start_utc': iso(now + 7200), 'player': 'Nba Center', 'team': 'T', 'stat': 'points', 'stat_label': 'Points',
+           'period_label': 'Full game', 'line': 24.5, 'margin_pct': 1.244, 'total_implied': .98771, 'return_per_100': 1.24, 'oldest_leg_s': 20,
            'legs': [leg('alpha', 'Alpha', 'over', 2.08, .4867), leg('beta', 'Beta', 'under', 2.05, .5133)]}
     flagged = dict(arb, player='Nba Stale', margin_pct=3.1, flags=['Stale leg'],
-                   legs=[leg('alpha', 'Alpha', 'over', 2.2, .48, age=900, flags=['Stale leg']), leg('beta', 'Beta', 'under', 2.0, .52)])
+                   legs=[leg('alpha', 'Alpha', 'over', 2.2, .48, age=900, flags=['Stale leg']), leg('kalshi', 'Kalshi', 'under', 2.0, .52)])
     nba = {'state': 'ready', 'as_of': iso(now), 'newest_quote_at': iso(now - 20), 'quotes_checked': 9, 'markets_checked': 3,
            'ev': [ev('alpha', 'Alpha', 'Nba Guard', 'over', 2.1, .5, .05), ev('beta', 'Beta', 'Nba Wing', 'under', 1.95, .52, .014, age=300, wide=True, flags=['Wide market'])],
-           'arbitrage': [arb], 'flagged': [flagged], 'excluded': {'Whole-number line: push chance not priced': 3}}
+           'arbitrage': [arb], 'sections_possible': {'ev': True, 'arb': True}}
     nfl = {'state': 'ready', 'as_of': iso(now), 'newest_quote_at': iso(now - 40), 'quotes_checked': 2, 'markets_checked': 1,
-           'ev': [dict(ev('gamma', 'Gamma', 'Nfl Back', 'over', 1.9, .56, .064, age=40), sport='nfl', stat_label='Rush yards')], 'arbitrage': [], 'flagged': [], 'excluded': {}}
-    cs2 = {'state': 'empty', 'as_of': iso(now), 'ev': [], 'arbitrage': [], 'flagged': [], 'excluded': {}}
-    return {'as_of': iso(now - age_built), 'sports': {'cs2': cs2, 'nba': nba, 'nfl': nfl},
-            'books': [{'id': 'alpha', 'label': 'Alpha'}, {'id': 'beta', 'label': 'Beta'}, {'id': 'gamma', 'label': 'Gamma'}],
-            'method': {'ev': 'EV = p_cal x decimal odds - 1, push-adjusted (a push returns the stake)', 'p_cal': 'Scout chance or consensus.',
-                       'arbitrage': 'stake share A = impA / (impA + impB); margin % = (1 / (impA + impB) - 1) x 100',
-                       'wide_overround': .08, 'arb_max_age_s': 300, 'ev_stale_s': 1800, 'fresh_filters': [[120, '2 min'], [600, '10 min'], [1800, '30 min']]}}
+           'ev': [dict(ev('gamma', 'Gamma', 'Nfl Back', 'over', 1.9, .56, .064, age=40), sport='nfl', stat_label='Rush yards')], 'arbitrage': [],
+           'sections_possible': {'ev': True, 'arb': False}}
+    cs2 = {'state': 'ready', 'as_of': iso(now), 'quotes_checked': 39, 'markets_checked': 39, 'ev': [], 'arbitrage': [], 'sections_possible': {'ev': False, 'arb': False}}
+    if empty:
+        nba = dict(nba, ev=[], arbitrage=[], quotes_checked=671, markets_checked=325)
+        nfl = dict(nfl, ev=[], arbitrage=[], quotes_checked=1765, markets_checked=968)
+    if owner:
+        nba.update(flagged=[flagged], excluded={'Whole-number line: push chance not priced': 3}, excluded_lines={'Whole-number line: push chance not priced': 1})
+        nba['ev'] = nba['ev'] + [ev('sleeper', 'Sleeper', 'Nba Pickem', 'over', 2.6, .5, .3, kind='pickem', flags=["Pick'em multiplier: needs 2+ picks"])]
+        for d in (nfl, cs2):
+            d.update(flagged=[], excluded={}, excluded_lines={})
+    books = sorted({(r['book'], r['book_label']) for d in (cs2, nba, nfl) for r in d['ev']}
+                   | {(l['book'], l['book_label']) for d in (cs2, nba, nfl) for r in d['arbitrage'] + d.get('flagged', []) for l in r['legs']})
+    method = {'wide_overround': .08, 'arb_max_age_s': 300, 'ev_stale_s': 1800, 'fresh_filters': [[120, '2 min'], [600, '10 min'], [1800, '30 min']]}
+    if owner:
+        method.update(ev='EV = p_cal x decimal odds - 1, push-adjusted (a push returns the stake)', p_cal='Scout chance or consensus.',
+                      arbitrage='stake share A = impA / (impA + impB); margin % = (1 / (impA + impB) - 1) x 100')
+    return {'as_of': iso(now - age_built), 'owner': owner, 'sports': {'cs2': cs2, 'nba': nba, 'nfl': nfl},
+            'books': [{'id': b, 'label': l} for b, l in books], 'method': method}
+
+
+JARGON = ('p_cal', 'devig', 'no-vig', 'overround', 'impA', 'Margin %', 'Stake share', 'Flagged and left out', 'Prices not rated', 'Kalshi', 'Polymarket', 'Stale')
 
 
 def market_rows(p):
-    return p.locator('#hub-market-results .h-market-table:not(.h-flagged) tbody tr').count() - p.locator('#hub-market-results details.h-mt-flagged tbody tr').count()
+    return p.locator('#hub-market-results .h-pc-list > .h-pc-row:not(.h-pc-head)').count()
+
+
+def mt_page(c, env, doc, path='/#/tools'):
+    p = c.new_page()
+    p.errors = []
+    p.on('pageerror', lambda e: p.errors.append(str(e)))
+    p.route('**/api/upgrade/market-tools', lambda r: r.fulfill(json=doc))
+    p.goto(env.url + path)
+    p.wait_for_selector('#hub-market-filters .h-market-filters')            # loads on its own: no click needed
+    return p
 
 
 def test_market_tools_off_has_no_price_section(ctx, env, monkeypatch):
@@ -185,44 +213,63 @@ def test_market_tools_off_has_no_price_section(ctx, env, monkeypatch):
     p.wait_for_selector('#hub-tools-body article')
     assert p.locator('[data-hub="refresh-markets"]').count() == 0 and p.locator('#hub-market-filters').count() == 0
     assert p.locator('#hub-mt-style').count() == 0
+    assert 'Price check' not in p.locator('#hub-tools-body').inner_text()
     assert not p.errors
 
 
 @pytest.mark.parametrize('size', [DESK, PHONE])
 def test_market_tools_ev_and_arbitrage_sheet(browser, env, monkeypatch, size):
+    """Price check (owner 2026-11-05): two plain sections, money per $100, a stake box, no jargon and no status chips for members."""
     monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
     monkeypatch.setenv('SCOUT_MARKET_TOOLS', '1')
     c = context(browser, env, size)
     try:
-        p = c.new_page()
-        p.errors = []
-        p.on('pageerror', lambda e: p.errors.append(str(e)))
-        doc = market_doc()
-        p.route('**/api/upgrade/market-tools', lambda r: r.fulfill(json=doc))
-        p.goto(env.url + '/#/tools')
-        p.wait_for_selector('#hub-market-filters .h-market-filters')            # loads on its own: no click needed
-        assert market_rows(p) == 5                                              # NBA: 2 EV rows + a two-leg arbitrage; NFL: 1 EV row
-        heads = p.locator('#hub-market-results article').nth(1).locator('table').first.locator('th').all_text_contents()
-        assert heads == ['Player / market', 'Book', 'Side / line', 'Odds', 'p_cal', 'EV %', 'Freshness', 'Source']
-        arb_heads = p.locator('#hub-market-results article').nth(1).locator('table').nth(1).locator('th').all_text_contents()
-        assert arb_heads == ['Player / market', 'Book', 'Side / line', 'Odds', 'Stake share', 'Margin %', 'Freshness', 'Source']
+        p = mt_page(c, env, market_doc())
+        if SHOTS_DIR:                                                           # as a member first sees it, before any filter
+            SHOTS_DIR.mkdir(parents=True, exist_ok=True)
+            p.locator('#hub-market-tools').screenshot(path=str(SHOTS_DIR / f"tools_price_check_{size['width']}.png"))
+        assert 'Price check' in p.locator('#hub-tools-body').inner_text()
+        assert p.locator('#hub-market-tools h2').inner_text() == 'Price check'
+        assert market_rows(p) == 4                                              # 3 single bets (NBA 2, NFL 1) + 1 both-sides pair
+        titles = p.locator('#hub-market-results .h-pc-section h3').all_text_contents()
+        assert titles == ['Prices better than the fair chance', 'Bet both sides at two books']
+        heads = p.locator('#hub-market-results .h-pc-ev .h-pc-head .h-pc-cell').all_text_contents()
+        assert heads == ['Pick', 'Book & price', 'Fair chance vs needed', 'Expected per $100', 'Checked']
+        arb_heads = p.locator('#hub-market-results .h-pc-arbs .h-pc-head .h-pc-cell').all_text_contents()
+        assert arb_heads == ['Pick', 'Bet 1', 'Bet 2', 'Either way you get', 'Checked']
         text = p.locator('#hub-market-results').inner_text()
-        assert '+5.0%' in text and '48.7%' in text and '+1.24%' in text and 'Wide market' in text
-        assert 'No book prices are held for CS2 right now.' in text
+        assert '+$6.40' in text and '+$5.00' in text and '+$1.40' in text            # expected per $100, best first
+        assert 'Alpha +110' in text and '(2.10)' in text                              # American price with the decimal beside it
+        assert '50.0%' in text and '47.6%' in text                                    # fair chance vs the chance the price needs
+        assert '$48.67' in text and '$51.33' in text and '$101.24 back' in text and '(+$1.24)' in text
+        assert 'This book’s prices carry a big cut' in text
+        assert ('Gamma pays -111 on Over 24.5, which needs a 52.6% chance to break even. The fair chance is 56.0%, so over many bets '
+                'like this you would average about +$6.40 per $100.') in text                  # the worked example uses the best row
+        assert 'Beta Under 24.5 +105 (2.05)' in text and 'Put $48.67 on Over at +108 and $51.33 on Under at +105' in text
+        for word in JARGON:
+            assert word not in text, word
+        assert p.locator('#hub-market-results .h-flag, details.h-mt-flagged, details.h-mt-owner').count() == 0
         assert 'guaranteed' not in text.lower() and 'not bet placement' not in text.lower()
-        flagged = p.locator('details.h-mt-flagged')
-        assert flagged.count() == 1 and 'Flagged and left out (1)' in flagged.inner_text()
+        # the stake box only scales the server's numbers
+        p.locator('#hub-mt-stake').fill('250')
+        p.wait_for_function("document.querySelector('#hub-market-results').innerText.includes('$253.10 back')")
+        assert '$121.6' in p.locator('#hub-market-results').inner_text() and p.evaluate("document.activeElement.id") == 'hub-mt-stake'
+        # filters: Search, Sport and Book on the bar; the rest under More filters
         p.locator('#hub-mt-book').select_option('gamma')
         assert 'Nfl Back' in p.locator('#hub-market-results').inner_text() and 'Nba Guard' not in p.locator('#hub-market-results').inner_text()
         p.locator('#hub-mt-book').select_option('all')
+        assert p.locator('#hub-mt-minEv').is_hidden()
+        p.locator('details.h-mt-more > summary').click()
         p.locator('#hub-mt-minEv').select_option('0.02')
         assert 'Nba Wing' not in p.locator('#hub-market-results').inner_text()
         p.locator('#hub-mt-minEv').select_option('0')
         p.locator('#hub-mt-fresh').select_option('120')
         assert 'Nba Wing' not in p.locator('#hub-market-results').inner_text() and 'Nba Guard' in p.locator('#hub-market-results').inner_text()
         p.locator('#hub-mt-fresh').select_option('all')
+        assert p.locator('#hub-mt-sort option').all_text_contents() == ['Best value', 'Newest check']
         p.locator('#hub-mt-league').select_option('nfl')
         assert 'Nba Guard' not in p.locator('#hub-market-results').inner_text()
+        assert p.locator('#hub-mt-book option').evaluate_all('os=>os.map(o=>o.value)') == ['all', 'gamma']   # books follow the sport
         p.locator('#hub-mt-league').select_option('all')
         p.locator('#hub-mt-q').fill('center')
         assert p.evaluate("document.activeElement.id") == 'hub-mt-q'
@@ -230,14 +277,69 @@ def test_market_tools_ev_and_arbitrage_sheet(browser, env, monkeypatch, size):
         p.locator('#hub-mt-q').fill('')
         dense = p.locator('#hub-mt-dense')
         dense.click()
-        assert dense.get_attribute('aria-pressed') == 'true' and p.locator('.h-market-table.is-compact').count() >= 3
-        assert p.locator('#hub-market-filters :is(select,input,button)').evaluate_all("es=>es.every(e=>e.getBoundingClientRect().height>=40)")
+        assert dense.get_attribute('aria-pressed') == 'true' and p.locator('.h-pc-list.is-compact').count() == 2
+        assert p.locator('#hub-market-filters :is(select,input,button,summary)').evaluate_all(
+            "es=>es.filter(e=>e.getBoundingClientRect().height>0).every(e=>e.getBoundingClientRect().height>=40)")
+        assert p.locator('.h-market-table').count() == 0                         # no 720px table: rows are cards on a phone
+        if size['width'] < 640:
+            assert p.locator('#hub-market-results .h-pc-head').first.is_hidden()
+            chip = p.locator('#hub-market-results .h-pc-ev .h-pc-row:not(.h-pc-head) .h-pc-chip').first.bounding_box()
+            assert chip and chip['x'] + chip['width'] <= size['width']
+            assert 'Fair 50.0% · needs 47.6%' in p.locator('#hub-market-results').inner_text()
+        css = p.evaluate("document.getElementById('hub-mt-style').textContent")
+        assert '#edb968' not in css and '#8a704b' not in css and 'min-width:720px' not in css
         no_h_scroll(p)
-        if SHOTS_DIR:
-            p.locator('#hub-market-tools').screenshot(path=str(SHOTS_DIR / f"tools_ev_arb_{size['width']}.png"))
         assert not p.errors
     finally:
         c.close()
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_market_tools_nothing_to_act_on_is_one_line(browser, env, monkeypatch, size):
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS', '1')
+    c = context(browser, env, size)
+    try:
+        p = mt_page(c, env, market_doc(empty=True))
+        text = p.locator('#hub-market-results').inner_text()
+        assert text.count('Nothing worth acting on right now. Checked 2,475 prices on 1,332 lines at ') == 1
+        assert p.locator('#hub-market-results .h-pc-section').count() == 0 and p.locator('#hub-market-results .h-mt-state').count() == 1
+        assert 'No +EV' not in text and 'No two-book' not in text and 'No book prices are held' not in text
+        no_h_scroll(p)
+        if SHOTS_DIR:
+            SHOTS_DIR.mkdir(parents=True, exist_ok=True)
+            p.locator('#hub-market-tools').screenshot(path=str(SHOTS_DIR / f"tools_price_check_empty_{size['width']}.png"))
+        assert not p.errors
+    finally:
+        c.close()
+
+
+def test_market_tools_follow_the_cs2_tab(ctx, env, monkeypatch):
+    """On the CS2 tab the sheet shows CS2 only; with no sportsbook prices for CS2 it says so in one line and lists no other book."""
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS', '1')
+    p = mt_page(ctx, env, market_doc(), path='/#/tools?sport=cs2')
+    assert p.locator('#hub-mt-league').input_value() == 'cs2'
+    assert p.locator('#hub-mt-book option').evaluate_all('os=>os.map(o=>o.value)') == ['all']
+    text = p.locator('#hub-market-results').inner_text()
+    assert 'No sportsbook offers CS2 prices right now' in text and 'Nba' not in text and 'Alpha' not in text
+    assert not p.errors
+
+
+def test_market_tools_owner_keeps_every_detail(ctx, env, monkeypatch):
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS', '1')
+    p = mt_page(ctx, env, market_doc(owner=True))
+    assert market_rows(p) == 4                                                  # the pick'em row stays out of the single-bet list
+    owner = p.locator('details.h-mt-owner')
+    assert owner.count() == 1
+    owner.locator('> summary').click()
+    t = owner.inner_text()
+    assert 'Flagged and left out (1)' in t and "Pick'em, not a single bet (1)" in t and 'Prices not rated' in t
+    p.locator('details.h-mt-method > summary').click()
+    p.locator('details.h-mt-formulas > summary').click()
+    assert 'impA' in p.locator('details.h-mt-formulas').inner_text()
+    assert not p.errors
 
 
 def test_market_tools_loading_stale_and_error_states(ctx, env, monkeypatch):

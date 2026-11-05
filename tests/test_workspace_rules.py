@@ -102,6 +102,8 @@ def test_rows_say_no_more_than_their_page():
     assert "unless Stacks are available" in same["text"] and "carry no Stacks" in same["note"]
     assert "for the most part" in R.TABLE["mixed_sports"]["prizepicks"]["text"].lower()
     assert R.TABLE["goblins_demons"]["underdog"]["status"] == "scout" and R.TABLE["two_platforms"]["prizepicks"]["status"] == "scout"
+    gob = R.TABLE["goblins_demons"]["prizepicks"]                  # the PrizePicks fact stays; Scout's own builder rule is a note
+    assert gob["text"] == "Allowed in any number" and "leaves goblins out unless you allow them" in gob["note"]
 
 
 def test_payout_copy_equals_the_sports_table():

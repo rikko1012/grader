@@ -126,7 +126,82 @@ def test_http_off_is_404_and_on_is_cut_to_the_member(env, monkeypatch):
     monkeypatch.setenv("SCOUT_MARKET_TOOLS", "1")
     st, doc = get(env, "market-tools")
     assert st == 200 and set(doc["sports"]) <= {"cs2", "lol", "nba", "nfl"} and "cs2" in doc["sports"]
-    assert "p_cal" in doc["method"] and "margin" in doc["method"]["arbitrage"]
+    assert doc["owner"] is False and "p_cal" not in doc["method"] and "arbitrage" not in doc["method"]   # formulas: owner view only
+    assert all(k not in d for d in doc["sports"].values() for k in ("flagged", "excluded", "excluded_lines"))
     assert doc["sports"]["cs2"]["ev"] == [] and doc["sports"]["cs2"]["arbitrage"] == []        # no book prices for CS2 props held
     txt = json.dumps(doc).lower()
     assert "guarantee" not in txt and "not bet placement" not in txt
+
+
+# ---------------------------------------------------------------------------------------------------------------- Price check (owner 2026-11-05)
+
+def test_plain_context_numbers_equal_the_existing_math(fake):
+    s = wm.sheet(None, "nba", fake)
+    assert s["ev"]
+    for r in s["ev"]:
+        assert r["needs"] == round(1 / r["odds"], 4) or abs(r["needs"] - 1 / r["odds"]) < 1e-3
+        assert r["per_100"] == round(r["ev"] * 100, 2) or abs(r["per_100"] - r["ev"] * 100) < 0.011
+        assert r["american"] == wm.american(r["odds"]) and r["chance_from"].startswith("Other books (")
+    assert s["arbitrage"]
+    for a in s["arbitrage"]:
+        stakes = [l["stake_per_100"] for l in a["legs"]]
+        assert abs(sum(stakes) - 100) <= 0.011
+        backs = [l["stake_per_100"] * l["odds"] for l in a["legs"]]
+        assert abs(backs[0] - backs[1]) <= 0.05 and abs(backs[0] - (100 + a["return_per_100"])) <= 0.05
+        assert a["oldest_leg_s"] == max(l["age_s"] for l in a["legs"])
+        assert all(l["american"] == wm.american(l["odds"]) for l in a["legs"])
+
+
+def test_american_prices():
+    assert [wm.american(x) for x in (2.25, 2.0, 1.9, 1.5, 1.0, None, "x")] == ["+125", "+100", "-111", "-200", None, None, None]
+
+
+def test_exclusions_per_line_never_exceed_lines_checked(fake):
+    s = wm.sheet(None, "nba", fake)
+    assert sum(s["excluded_lines"].values()) <= s["markets_checked"]
+    assert sum(s["excluded"].values()) >= sum(s["excluded_lines"].values())          # the per-price counts stay for the owner
+    assert s["sections_possible"] == {"ev": True, "arb": True}
+
+
+def test_sections_possible_is_false_without_enough_sportsbooks(monkeypatch):
+    bp.reset(); wb.reset()
+    now = time.time()
+    snaps = {"nba": snap([("p1", 20.5, [("fanduel", 2.10, 1.80, 30)]), ("p2", 9.5, [("kalshi", "0.40 / 0.42", None, 30), ("fanduel", 1.9, 1.9, 30)])], now)}
+    monkeypatch.setattr(wb, "snap", lambda srv, sport: snaps.get(sport))
+    monkeypatch.setattr(wm, "model_released", lambda sport, stat: False)
+    s = wm.sheet(None, "nba", now)
+    assert s["sections_possible"] == {"ev": False, "arb": False} and s["ev"] == [] and s["arbitrage"] == []
+
+
+def _member_body(fake, monkeypatch):
+    monkeypatch.setenv("SCOUT_BOOK_SLEEPER", "1")
+    st = bp.state("sleeper")
+    st.update(at=fake, offers=[{"provider": "sleeper", "sport": "nba", "stat": "points", "period": "game", "player": "Nba p1", "player_norm": "nbap1",
+                                "team": "A", "team_norm": "a", "line": 20.5, "subject_id": "1", "raw_stat": "points", "game_id": "g",
+                                "over": {"offered": True, "payout": 2.6}, "under": {"offered": True, "payout": 1.2}, "source_at": fake - 30, "observed_at": fake}])
+    return json.dumps(wm.build(None, now=fake)).encode()
+
+
+def test_member_view_has_sportsbook_rows_only_and_the_owner_keeps_everything(fake, monkeypatch):
+    body = _member_body(fake, monkeypatch)
+    every = {"cs2": True, "lol": True, "nba": True, "nfl": True}
+    m = wm.for_member(body, every)
+    nba = m["sports"]["nba"]
+    assert m["owner"] is False and "flagged" not in nba and "excluded" not in nba and "excluded_lines" not in nba
+    assert nba["ev"] and all(r["kind"] == "sportsbook" and "p_source" not in r for r in nba["ev"])
+    assert not any(r["book"] == "sleeper" for r in nba["ev"])                        # pick'em multipliers: no single-bet break-even
+    txt = json.dumps(m)
+    assert "Kalshi" not in txt and "kalshi" not in txt and "Stale" not in txt and "Polymarket" not in txt
+    assert all(l["kind"] == "sportsbook" and (l["age_s"] or 0) <= 300 for a in nba["arbitrage"] for l in a["legs"])
+    rowbooks = {r["book"] for r in nba["ev"]} | {l["book"] for a in nba["arbitrage"] for l in a["legs"]}
+    assert {b["id"] for b in m["books"]} == rowbooks                                 # no book that has no row the member can see
+    o = wm.for_member(body, every, owner=True)
+    assert o["owner"] is True and o["sports"]["nba"]["flagged"] and o["sports"]["nba"]["excluded"]
+    assert any(r["book"] == "sleeper" for r in o["sports"]["nba"]["ev"]) and "p_cal" in o["method"] and "margin" in o["method"]["arbitrage"]
+    assert "kalshi" in {b["id"] for b in o["books"]}
+
+
+def test_member_books_are_cut_to_the_members_sports(fake, monkeypatch):
+    body = _member_body(fake, monkeypatch)
+    m = wm.for_member(body, {"cs2": True, "lol": True})
+    assert set(m["sports"]) == {"cs2", "lol"} and m["books"] == []                     # no NBA/NFL book on a CS2/LoL-only account
