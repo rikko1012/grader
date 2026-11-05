@@ -329,11 +329,30 @@ def problems(legs, platform, entry_type=None, same_match=False):
 
 # ---------------------------------------------------------------------------------------------------------------- search
 
+LINE_RULES = ("no_goblins", "one_goblin", "standard", "all")
+LINE_RULE_DEFAULT = "no_goblins"      # the member routes' default (workspace_api._gen_opts / post_slip_advice); the library default stays "all"
+
+
+def line_ok(l, lines):
+    """The member's goblin rule for one leg Scout picks: standard = no goblins or demons, no_goblins = no goblins (demons allowed),
+    one_goblin / all = any line type (one_goblin is capped per slip by max_goblins)."""
+    lt = (l or {}).get("line_type") or "standard"
+    if lines == "standard":
+        return lt == "standard"
+    if lines == "no_goblins":
+        return lt != "goblin"
+    return True
+
+
+def max_goblins(lines):
+    return 1 if lines == "one_goblin" else None
+
+
 def _score(l, uses):
     return math.log(max(l["rank_p"], 1e-9)) - REUSE_PENALTY * uses(l)
 
 
-def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken):
+def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, goblin_cap=None):
     """Exact branch-and-bound for one slip. -> (legs or None, nodes, exact)."""
     scored = sorted(((_score(l, uses), l) for l in cands), key=lambda t: (-t[0], t[1]["key"]))[:POOL_CAP]
     scores = [s for s, _ in scored]
@@ -343,6 +362,7 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken):
     st = {"nodes": 0, "cut": False}
     allow_same = same_match and same_match_allowed(platform)
     chosen, players, matches, sports = [], set(), {}, {}
+    gob = [0]
 
     def leaf(score):
         sig = frozenset(l["key"] for l in chosen)
@@ -379,9 +399,12 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken):
                 continue                                    # Underdog publishes no mixed-sport entry
             if mix == "single" and chosen and l["sport"] != chosen[0]["sport"]:
                 continue
-            chosen.append(l); players.add(pk); matches[mk] = matches.get(mk, 0) + 1
+            g = 1 if l.get("line_type") == "goblin" else 0
+            if g and goblin_cap is not None and gob[0] >= goblin_cap:
+                continue                                    # the member's goblin rule: at most goblin_cap goblins per slip
+            chosen.append(l); players.add(pk); matches[mk] = matches.get(mk, 0) + 1; gob[0] += g
             dfs(j + 1, score + scores[j])
-            chosen.pop(); players.discard(pk); matches[mk] -= 1
+            chosen.pop(); players.discard(pk); matches[mk] -= 1; gob[0] -= g
             if not matches[mk]:
                 del matches[mk]
             if st["cut"]:
@@ -421,12 +444,14 @@ def why_line(legs, pool_size, first, reused):
 
 def build(legs, opts):
     """One batch from a ranked pool. opts: {platform, entry_type, count, size, mix: any|mixed|single, same_match: bool,
-    no_repeat: bool}. -> {slips, shortage, search}."""
+    no_repeat: bool, lines: no_goblins|one_goblin|standard|all (missing = all, so the frozen research scripts reproduce;
+    the member routes always pass the member's rule)}. -> {slips, shortage, search}."""
     platform, et = opts["platform"], opts.get("entry_type")
     size, count = int(opts["size"]), int(opts["count"])
     mix, same_match, no_repeat = opts.get("mix") or "any", bool(opts.get("same_match")), bool(opts.get("no_repeat"))
-    standard_only = opts.get("lines") == "standard"
-    cands = [l for l in legs if l["book"] == platform and (not standard_only or l["line_type"] == "standard")]
+    lines = opts.get("lines") or "all"
+    cap = max_goblins(lines)
+    cands = [l for l in legs if l["book"] == platform and line_ok(l, lines)]
     used_prop, used_player, taken, slips, nodes, exact = {}, {}, set(), [], 0, True
 
     def uses(l):
@@ -434,7 +459,7 @@ def build(legs, opts):
 
     for k in range(count):
         free = [l for l in cands if not (no_repeat and l["prop"] in used_prop)]
-        got, nn, ex = _best_slip(free, size, platform, et, same_match, mix, uses, taken)
+        got, nn, ex = _best_slip(free, size, platform, et, same_match, mix, uses, taken, cap)
         nodes += nn
         exact = exact and ex
         if not got:
@@ -456,7 +481,9 @@ def build(legs, opts):
         one_sport = platform == "underdog" or mix == "single"
         matches = max((len(v) for v in by_sport.values()), default=0) if one_sport else sum(len(v) for v in by_sport.values())
         if len(cands) < size:
-            shortage = f"Only {len(cands)} eligible legs on {label} right now."
+            dropped = any(l["book"] == platform and not line_ok(l, lines) for l in legs)    # name the rule only when it removed a leg
+            rule = {"no_goblins": " without goblins", "standard": " without goblins or demons"}.get(lines, "") if dropped else ""
+            shortage = f"Only {len(cands)} eligible legs on {label}{rule} right now."
         elif matches < size and not same_match:
             where = f"one sport on {label}" if one_sport else label
             shortage = (f"The eligible legs for {where} come from {matches} matches at most; a {size}-pick slip needs {size} different matches."
@@ -476,10 +503,12 @@ def _brief(l):
             "band": band_text(l["band"], l["sport"], l["line_type"]) if not l["research"] else "Research estimate"}
 
 
-def advise(slip, legs_by_key, ranked, entry_type=None):
+def advise(slip, legs_by_key, ranked, entry_type=None, lines="all"):
     """slip: [{sport, book, row_id, side, player, team, event, stat, period}] in the member's order (never reordered).
     legs_by_key: every pool leg by key (all platforms); ranked: pool legs best first. -> [{key, notes, in_pool, rank?, band?,
-    replacement?}] one per leg, same order."""
+    replacement?}] one per leg, same order. lines: the member's goblin rule for what Scout suggests; a leg the member chose is never
+    flagged for its line type. Each slip leg may carry line_type (the route reads it from the board), so a goblin the member added
+    that is not in the pool still counts toward "at most 1 goblin"."""
     out = []
     who = lambda x: x.get("player_key") or x.get("player")
     for i, s in enumerate(slip):
@@ -510,6 +539,11 @@ def advise(slip, legs_by_key, ranked, entry_type=None):
                 break
             if c["book"] != s.get("book"):
                 continue
+            if not line_ok(c, lines):
+                continue
+            if (lines == "one_goblin" and c.get("line_type") == "goblin"
+                    and any((o.get("line_type") or "standard") == "goblin" for o in others)):
+                continue
             if c["key"] == key or any(c["key"] == o.get("key") for o in others):
                 continue
             if any((c["sport"], c["pkey"]) == (o["sport"], o.get("pkey")) for o in others):
@@ -532,4 +566,5 @@ def _loose(o):
         return None
     return {"key": leg_key(o.get("book"), o.get("row_id"), o.get("side")), "sport": o["sport"], "book": o["book"], "pkey": o.get("player_key") or o.get("player"),
             "player": o.get("player") or "", "team": o.get("team") or "", "event": str(o.get("event") or ""), "side": o.get("side"),
+            "line_type": o.get("line_type") or "standard",
             "prop": (o["sport"], str(o.get("event") or ""), o.get("player_key") or o.get("player"), o.get("stat"), o.get("period"))}

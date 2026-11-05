@@ -1,9 +1,13 @@
 """Real Handler + isolated four-sport fixtures. No production account writes."""
 import json
+import os
 import time
+from pathlib import Path
 import pytest
 import server
 from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE
+
+SHOTS_DIR = Path(os.environ['PHASE4_SHOTS']) if os.environ.get('PHASE4_SHOTS') else None
 
 
 def saved_state(page, predicate):
@@ -538,6 +542,9 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     p = hub(ctx, env)
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
+    # without its goblin line the fixture pool (6 legs, 3 matches) builds 7 distinct pairs; eight need Any lines. The No goblins
+    # default is covered by test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed.
+    p.locator('#hub-generation-lines').select_option('all')
     p.locator('#hub-generate').click()
     p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
     state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 8)
@@ -871,4 +878,84 @@ def test_adder_warns_at_once_refuses_a_second_leg_for_one_player_and_swaps_in_pl
     assert len(after) == len(before) == 2 and 'zenith' in after
     kept = [n for n in before if n in after]
     assert len(kept) == 1 and after.index(kept[0]) == before.index(kept[0])        # the other leg keeps its place
+    assert not p.errors
+
+
+# ------------------------------------------------------------------------------------------------ goblin rule (owner 2026-11-05)
+
+def _studio_build(p):
+    p.goto(p.url.split('#')[0] + '#slips?tab=build')
+    p.wait_for_selector('#hub-generation-lines')
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed(ctx, env, browser, size):
+    """Slip Studio's Goblins rule: No goblins by default, explained in one plain line, saved to the account (a reload and a second
+    browser keep it), and every generated slip and every adder suggestion follows it."""
+    p = hub(ctx, env, size)
+    _studio_build(p)
+    sel = p.locator('#hub-generation-lines')
+    assert sel.input_value() == 'no_goblins'
+    assert sel.locator('option').all_text_contents() == ['No goblins', 'At most 1 goblin per slip', 'No goblins or demons', 'Any lines']
+    assert p.locator('#hub-generation-lines-help').inner_text() == 'Goblins are easier lines that pay less. Scout leaves them out unless you allow them.'
+    assert 'Goblins (PrizePicks lines set below the standard line' in p.locator('.h-generator details').text_content()
+    if SHOTS_DIR:
+        SHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        p.locator('.h-generator').screenshot(path=str(SHOTS_DIR / f"studio_goblin_rule_{size['width']}.png"))
+    with p.expect_request(lambda r: '/api/upgrade/generate?' in r.url) as req:
+        p.locator('#hub-generate').click()
+    assert 'lines=no_goblins' in req.value.url
+    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
+    state = saved_state(p, lambda d: (d.get('studio') or {}).get('options', {}).get('lines') == 'no_goblins')
+    legs = [l for s in state['studio']['slips'] for l in s['legs']]
+    assert legs and not [l for l in legs if (l.get('gen') or {}).get('line_type') == 'goblin']
+    assert '· No goblins' in p.locator('.h-batch-head').inner_text()
+    sel.select_option('one_goblin')
+    saved_state(p, lambda d: ((d.get('prefs') or {}).get('researchHub') or {}).get('slipLines') == 'one_goblin')
+    p.reload()
+    p.wait_for_selector('#hub-generation-lines')
+    p.wait_for_function("document.getElementById('hub-generation-lines').value==='one_goblin'", timeout=15000)
+    c = context(browser, env, size)
+    try:
+        q = open_page(c, env, '/#slips?tab=build')
+        q.wait_for_function("document.getElementById('hub-generation-lines')?.value==='one_goblin'", timeout=20000)
+    finally:
+        c.close()
+    p.locator('#hub-generation-lines').select_option('no_goblins')
+    saved_state(p, lambda d: ((d.get('prefs') or {}).get('researchHub') or {}).get('slipLines') == 'no_goblins')
+    no_h_scroll(p)
+    assert not p.errors
+
+
+@pytest.mark.parametrize('old,shown', [('all', 'no_goblins'), ('standard', 'standard')])
+def test_a_batch_saved_before_the_goblin_rule_does_not_turn_goblins_back_on(ctx, env, old, shown):
+    """Review 2026-11-05: members who generated before the Goblins control have studio.options.lines == 'all' saved (the old Lines
+    select's first option and default) and no prefs slipLines. That is not a choice to allow goblins: the control shows No goblins
+    and Generate asks for lines=no_goblins. The old 'Standard lines only' was a deliberate opt-out and carries over."""
+    p = hub(ctx, env)
+    p.evaluate("""async (old) => {
+      const s=await (await fetch('/api/upgrade/state')).json();
+      const r=await fetch('/api/upgrade/state',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({rev:s.rev,studio:{version:1,created_at:new Date().toISOString(),options:{lines:old,noRepeatProps:false},slips:[]}})});
+      if(!r.ok)throw Error('Fixture studio write failed');
+    }""", old)
+    st = saved_state(p, lambda d: ((d.get('studio') or {}).get('options') or {}).get('lines') == old)
+    assert not ((st.get('prefs') or {}).get('researchHub') or {}).get('slipLines')
+    with p.expect_response(lambda r: r.url.endswith('/api/upgrade/state') and r.request.method == 'GET', timeout=30000):
+        p.reload()
+    _studio_build(p)
+    p.wait_for_timeout(800)                                   # the saved state has been read and applied to the control
+    p.wait_for_function("document.getElementById('hub-generation-lines').value===%r" % shown, timeout=15000)
+    with p.expect_request(lambda r: '/api/upgrade/generate?' in r.url) as req:
+        p.locator('#hub-generate').click()
+    assert f'lines={shown}' in req.value.url
+    assert not p.errors
+
+
+def test_adder_asks_with_the_goblin_rule(ctx, env):
+    p = hub(ctx, env)
+    book(p, 'prizepicks')
+    with p.expect_request(lambda r: r.url.endswith('/api/upgrade/slip-advice'), timeout=20000) as req:
+        add_first(p)
+    assert req.value.post_data_json['lines'] == 'no_goblins'
     assert not p.errors

@@ -73,6 +73,7 @@ def records(srv, sport):
 
 def reset():
     _PARSED.clear()
+    _LINES.clear()
 
 
 def subjects(recs):
@@ -279,12 +280,49 @@ def build(srv, sport, pid, now=None):
     return 200, doc
 
 
+_LINES = {}                                       # (sport, pid) -> (body bytes, feed state, [lock epoch per record]) beside each board build
+HEALTHY = ("ok", "empty", "not_offered")          # feed states whose record count is a real answer (0 included)
+
+
+def _lock_epoch(r):
+    e = r.get("event") or {}
+    if e.get("status") == "started":
+        return 0.0
+    t = _ts(e.get("lock_utc") or e.get("start_utc"))
+    return t
+
+
+def _note_lines(sport, pid, body, doc):
+    _LINES[(sport, pid)] = (body, (doc.get("feed") or {}).get("state"), [_lock_epoch(r) for r in doc.get("records") or []])
+
+
 def board(srv, sport, pid):
-    """Shared single-flight copy: (status, body bytes)."""
+    """Shared single-flight copy: (status, body bytes). Each build also notes its feed state and record lock times, so open_lines
+    counts without parsing the body again."""
     def compute():
         st, doc = build(srv, sport, pid)
-        return st, json.dumps(doc, default=str, separators=(",", ":")).encode()
+        body = json.dumps(doc, default=str, separators=(",", ":")).encode()
+        if st == 200:
+            _note_lines(sport, pid, body, doc)
+        return st, body
     return srv.shared(("ws_books", sport, pid), compute, ttl=TTL)
+
+
+def open_lines(srv, sport, pid, now=None):
+    """Lines of one extra book on one sport whose match has not started (the hub board's own started rule: status started, or lock /
+    start time passed), or None when that is unknown right now: the board build failed (e.g. 503 while the sport's board snapshot is
+    missing) or the feed is not healthy (starting, failing, stale). None is never the same as 0 (transient-failure rule)."""
+    now = time.time() if now is None else now
+    st, body = board(srv, sport, pid)
+    if st != 200:
+        return None
+    c = _LINES.get((sport, pid))
+    if not c or c[0] is not body:                  # a body built before this process noted it: parse once and note it
+        _note_lines(sport, pid, body, json.loads(body))
+        c = _LINES[(sport, pid)]
+    if c[1] not in HEALTHY:
+        return None
+    return sum(1 for t in c[2] if t is None or t > now)
 
 
 def coverage(srv, sports=("cs2", "lol", "nba", "nfl")):

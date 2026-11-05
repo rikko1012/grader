@@ -44,3 +44,7 @@ map_chance_check.db*
 # browser test screenshots written to the repo root (tests/test_research_hub_browser.py)
 /.fit-*.png
 /.record-*.png
+
+# local screenshot / probe output from browser test runs (never shipped)
+.pt/
+sports/tests/_shots/

@@ -25,7 +25,15 @@ export function mount(C) {
   const CARD_TABS=[['overview','Overview'],['lines','Lines'],['stats','Stats'],['ask','Ask']];
   const DESKTOP=matchMedia('(min-width:1101px)');
   H.extraRecs=[];H.extraState=null;
-  H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',fresh:'all',sort:'ev',dense:false};
+  /* owner 2026-11-05: a book shows in the Platform toggle only on a sport tab where it has lines right now. Extra books: the shared
+     /book-lines counts (null until the first read, so extra buttons start hidden; a failed read keeps the last good copy). PrizePicks /
+     Underdog: a row on the board for that sport (shown while the sport is still loading). */
+  H.bookLines=null;
+  /* owner 2026-11-05: the member's goblin rule for every slip Scout builds or suggests (generator and adder). Saved in prefs. */
+  const LINE_RULES=[['no_goblins','No goblins'],['one_goblin','At most 1 goblin per slip'],['standard','No goblins or demons'],['all','Any lines']];
+  const cleanLines=v=>LINE_RULES.some(r=>r[0]===v)?v:'no_goblins';
+  H.slipLines='no_goblins';T.slipLines=H.slipLines;
+  H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',fresh:'all',sort:'ev',dense:false,stake:100,tab:null,moreOpen:false};
   try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
   const key = r => [r.sport,r.offer.platform,r.offer.offer_id].join('|');
@@ -83,8 +91,44 @@ export function mount(C) {
   /* the filters that live in the Filters pop-over; the count on its button. Search, sport and platform are on the toolbar itself */
   const activeFilters = () => [H.stat!=='all',H.side!=='all',H.minGrade!=='all',H.onlyDiff,H.watched,H.freshOnly,H.soonOnly,H.movedOnly,H.game!=='all'].filter(Boolean).length;
   const BOOK_SHORT={prizepicks:'PP',underdog:'UD',...Object.fromEntries((EXTRA||[]).map(x=>[x.id,x.short||x.label]))};
+  /* 'yes' = lines on this tab now; 'no' = the server counted 0 open lines on every sport here (or the book lists none of them);
+     'unknown' = no count yet for a sport here (first read pending, or a feed blip with no earlier count). Unknown never moves a member
+     off a book they chose (transient-failure rule); it only keeps a book they did not choose hidden. */
+  function bookLinesState(id,sport=H.sport) {
+    if(id==='all')return 'yes';
+    const sports=sport==='all'?visibleSports():allowed().filter(s=>s===sport);
+    if(isExtra(id)){
+      const p=EXTRA.find(x=>x.id===id),here=sports.filter(s=>p.sports.includes(s));
+      const n=here.map(s=>H.bookLines?.[id]?.[s]);
+      return n.some(v=>v>0)?'yes':n.some(v=>!Number.isInteger(v))?'unknown':'no';
+    }
+    if(!['prizepicks','underdog'].includes(id))return 'no';
+    return sports.some(s=>!R.boards[s]?.at||H.records.some(r=>r.sport===s&&r.offer.platform===id&&!C.started(r)))?'yes':'no';
+  }
+  const bookHasLines=(id,sport)=>bookLinesState(id,sport)==='yes';
+  /* hide each book with no lines on this tab; a chosen book the server reports empty falls back to All (never an empty board or a banner) */
+  function syncBooks() {
+    $('hub-platform').querySelectorAll('[data-hub="book"]').forEach(b=>{if(b.dataset.id!=='all'){const st=bookLinesState(b.dataset.id);b.hidden=!(st==='yes'||(st==='unknown'&&b.dataset.id===H.book));}});
+    if(H.book!=='all'&&bookLinesState(H.book)==='no'){H.book='all';H.page=0;H.extraState=null;H.extraRecs=[];}
+  }
+  /* the counts change slowly; one read per BOOK_LINES_EVERY ms however often the board refreshes (the board polls every 60 s) */
+  const BOOK_LINES_EVERY=120000;
+  async function loadBookLines(force) {
+    if(!EXTRA)return;
+    if(!force&&H.bookLinesAt&&Date.now()-H.bookLinesAt<BOOK_LINES_EVERY)return;
+    H.bookLinesAt=Date.now();
+    try{
+      const d=await api('book-lines');
+      /* merge only the counts the server sent: a book or sport it left out (its feed blipped before any good count) keeps our last copy */
+      if(d&&d.books&&typeof d.books==='object'){const next={...(H.bookLines||{})};
+        for(const [pid,v] of Object.entries(d.books))if(v&&typeof v==='object'){next[pid]={...(next[pid]||{})};for(const [s,n] of Object.entries(v))if(Number.isInteger(n)&&n>=0)next[pid][s]=n;}
+        H.bookLines=next;}
+    }catch(e){H.bookLinesAt=0;/* keep the last good copy; try again on the next board refresh */}
+    if(H.section==='board')paintBoard();else syncBooks();
+  }
   function syncFields() {
     for(const n of ['side','sort','q','minGrade']) $('hub-'+n).value=H[n];
+    syncBooks();
     $('hub-platform').querySelectorAll('[data-hub="book"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===H.book)));
     $('hub-diff').setAttribute('aria-pressed',String(H.onlyDiff));
     $('hub-watch').setAttribute('aria-pressed',String(H.watched));
@@ -300,7 +344,9 @@ export function mount(C) {
   }
   async function loadExtra() {
     const b=H.book;if(!isExtra(b))return;
-    const p=EXTRA.find(x=>x.id===b),sports=allowed().filter(s=>p.sports.includes(s));
+    /* a sport the server counted 0 for is skipped; a sport with no count yet is still read (a feed blip never drops the member to All) */
+    const p=EXTRA.find(x=>x.id===b),sports=allowed().filter(s=>p.sports.includes(s)&&H.bookLines?.[b]?.[s]!==0);
+    if(!sports.length){H.book='all';H.extraState=null;H.extraRecs=[];paintBoard();return;}   // counted empty here: back to All, never an error
     if(H.extraState?.book!==b){H.extraState={book:b,state:'loading'};H.extraRecs=[];paintBoard();}
     const res=await Promise.allSettled(sports.map(s=>api('book-board?sport='+encodeURIComponent(s)+'&book='+encodeURIComponent(b))));
     if(H.book!==b)return;
@@ -347,6 +393,7 @@ export function mount(C) {
     if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;paintDetail();}
     H.loading=false; paintBoard(); checkAlerts();
     if(isExtra(H.book))loadExtra();
+    loadBookLines();
     openPending();
     if(sports.includes('cs2')) { await C.loadHits(); paintBoard(); pollHits(); }
     if(H.queued){const next=H.queued.filter(x=>visibleSports().includes(x)),f=H.queuedForce;H.queued=null;H.queuedForce=false;if(next.length)load(f,next);}
@@ -380,7 +427,7 @@ export function mount(C) {
       for(let i=0;i<3;i++) {
         const state=await api('state');
         try {
-          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts}}});
+          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines}}});
           H.saveError=false; break;
         } catch(e) { if(e.status!==409||i===2) throw e; }
       }
@@ -406,6 +453,12 @@ export function mount(C) {
           sort:['start','player','chance','edge'].includes(f.sort)?f.sort:'start',stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
       });
       H.views=clean(p.views);
+      /* only a choice made in the Goblins control counts (prefs.researchHub.slipLines). A batch saved before it existed carries the old
+         Lines select's 'all' (its first option and default), which is not a choice to allow goblins, so it reads as No goblins; the
+         old 'Standard lines only' was a deliberate opt-out and carries over as No goblins or demons (review 2026-11-05). */
+      H.slipLines=cleanLines(p.slipLines||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
+      if($('hub-generation-lines'))$('hub-generation-lines').value=H.slipLines;
+      C.refreshAdvice?.();
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
       H.alerts=clean(p.alerts);
       if(R.me.features?.background_alerts)H.delivery=await api('alert-delivery');
@@ -766,7 +819,7 @@ export function mount(C) {
     if(!slips.length){box.innerHTML='<div class="h-empty"><h3>Your generated slips appear here</h3><p>Choose how many slips and how many picks per slip. Your slip stays separate.</p></div>';return;}
     const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
     const lineTag=l=>l.gen?.line_type&&l.gen.line_type!=='standard'?` <em class="h-line-tag">${esc(l.gen.line_type[0].toUpperCase()+l.gen.line_type.slice(1))}</em>`:'';
-    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
+    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
       const metrics=[num(s.all_hit)?`<span>All-hit chance <b>${pct(s.all_hit)}</b></span>`:(s.same_match?'<span>Legs share a match <b>No all-hit chance</b></span>':''),
         s.payout&&num(s.payout.multiple)?`<span>All-hit payout <b>${esc(s.payout.multiple)}×</b></span>`:'',
         s.ev&&num(s.ev.ev)?`<span>Expected return <b>${pct(s.ev.ev)}</b></span>`:''].filter(Boolean).join('');
@@ -788,11 +841,11 @@ export function mount(C) {
       <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} slips</option>`).join('')}</select></label>
       <label>Picks per slip<select id="hub-generation-count">${[2,3,4,5,6].map(n=>`<option value="${n}">${n} picks</option>`).join('')}</select></label>
       <label>Sport mix<select id="hub-generation-mix"><option value="any">Any mix</option><option value="mixed">Mixed sports</option><option value="single">One sport</option></select></label>
-      <label>Lines<select id="hub-generation-lines"><option value="all">All lines</option><option value="standard">Standard lines only</option></select></label>
+      <label class="h-goblin-rule">Goblins<select id="hub-generation-lines" aria-describedby="hub-generation-lines-help">${LINE_RULES.map(([v,t])=>`<option value="${v}"${v===H.slipLines?' selected':''}>${t}</option>`).join('')}</select><small id="hub-generation-lines-help">Goblins are easier lines that pay less. Scout leaves them out unless you allow them.</small></label>
       <label>Game selection<select id="hub-generation-games"><option value="spread">One per match</option><option value="stacks">Same match (Underdog)</option></select></label>
       <label>Prop reuse<select id="hub-generation-repeats"><option value="allow">Allow across slips</option><option value="none">No repeat props</option></select></label>
       ${research?'<label>Research estimates<select id="hub-generation-research"><option value="leave">Leave out</option><option value="include">Include, marked</option></select></label>':''}
-      <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
+      <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
   }
   /* 30 days of the record; a run of days with no decided pick folds into one quiet tile instead of a wall of dashes */
   function calendarHTML(doc){
@@ -847,7 +900,7 @@ export function mount(C) {
       ${card('RESEARCH','Single prop grader','Inspect a player and line with the grading tools.',a('/?view=classic#one','Open grader'))}
       ${card('RESEARCH','Match research','Team and map research for an upcoming CS2 match.',a('/?view=classic#matches','Open match research'))}
       ${leagues.length?card('NBA · NFL','Sheets and Compare','Stat sheets, player comparison and with/without splits from the sports pages.',leagues.map(l=>a(`/sports?view=classic#/sheets?lg=${l}`,`${SPORTS[l]} sheets`)+a(`/sports?view=classic#/compare?lg=${l}`,`${SPORTS[l]} compare`)).join('')):''}
-      ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}${R.me.features?.market_tools?card('PRICES','EV &amp; arbitrage','+EV prices against the calibrated chance or the no-vig market, and two-book arbitrage, line for line.','<button data-hub="mt-jump">Open the sheet ↓</button>'):''}</div>
+      ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}${R.me.features?.market_tools?card('PRICES','Price check','Prices that pay more than they should, and lines where two books let you bet both sides and win either way.','<button data-hub="mt-jump">Open price check ↓</button>'):''}</div>
       <section class="h-tools-alerts" id="hub-tools-alerts" aria-label="${ALERT_WORD}"></section>`;
     if(R.me.owner)$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">OWNER REVIEW</span><h2>Grading comparison</h2><p>Published chances beside the candidate grader, from saved forecast revisions.</p></div></div><div class="h-game-books">${['cs2','lol','nba','nfl'].map(s=>`<button data-hub="grade-review" data-id="${s}">${SPORTS[s]}</button>`).join('')}</div><div id="hub-grade-review" aria-live="polite"><p>Select a sport to inspect its comparison log.</p></div></section>`);
   }
@@ -865,89 +918,183 @@ export function mount(C) {
       box.innerHTML=`<p><b>${esc(SPORTS[sport])}</b> · ${d.started_at?'Capturing since '+esc(when(d.started_at)):'No comparisons captured yet'}. Candidate grades do not change published picks.</p>${d.rows?.length?`<div class="h-table-wrap"><table class="h-table"><thead><tr><th>Player / event</th><th>Market / line</th><th>Published</th><th>Candidate Over</th><th>Candidate Under</th><th>Saved</th></tr></thead><tbody>${d.rows.map(r=>`<tr><td>${esc(r.player)}<small>${esc(r.event)}</small></td><td>${esc(r.stat)} ${esc(r.line)}<small>${esc(r.period)} · ${esc(r.book)}</small></td><td>${esc(r.old_letter||'No letter')}<small>${pct(r.old_p)}</small></td>${['over','under'].map(s=>`<td>${pct(r.sides?.[s]?.p)}<small>${esc(r.sides?.[s]?.grade?.band||'No band')}</small>${gradeSteps(r.sides?.[s])}</td>`).join('')}<td>${esc(when(r.at))}<small>${esc(r.policy)}</small></td></tr>`).join('')}</tbody></table></div>`:'<p>New forecasts appear here after shadow capture is enabled and the next forecast job completes.</p>'}${d.next_before?`<button data-hub="grade-review" data-id="${esc(sport)}" data-before="${Number(d.next_before)}">Older comparisons →</button>`:''}`;
     }catch(e){if(request===H.gradeReviewRequest&&box.isConnected)box.textContent='Comparison unavailable. Select the sport again to retry.';}
   }
-  // SCOUT_MARKET_TOOLS: the +EV feed and arbitrage sheet over the server's one shared build (workspace_markets.py, math in
-  // gradecore/market_tools.py). Board filter pattern (sport, book, side, minimum EV, freshness, search, sort) and two densities.
-  // Filters only hide rows; every number is the server's.
+  // SCOUT_MARKET_TOOLS "Price check" (owner 2026-11-05: the EV & arbitrage sheet "makes no sense"): the same shared build
+  // (workspace_markets.py, math in gradecore/market_tools.py) in plain words. Section A answers "which single bets pay more than
+  // their fair chance?", section B "where can I bet both sides at two books and win either way?". A section with no rows is not
+  // drawn; nothing at all = one line. Every number is the server's (needs, per_100, stake_per_100, return_per_100); the stake box
+  // only scales them. Members get sportsbook rows only; the owner's view keeps flagged pairs, exclusions, pick'em rows and formulas.
+  // Filters only hide rows. The sheet follows the hub sport tab; its Sport filter can still widen it.
   const mtAge=x=>{const t=Date.parse(x?.seen_at);return Number.isFinite(t)?Math.max(0,(Date.now()-t)/1000):null;};
   const mtLegsAge=a=>Math.max(...(a.legs||[]).map(l=>mtAge(l)??Infinity));
   const mtText=x=>[x.player,x.team,x.event,x.stat_label,x.book_label,...(x.legs||[]).map(l=>l.book_label)].join(' ').toLowerCase();
+  const mtSports=d=>Object.keys(d?.sports||{}).filter(s=>H.mt.league==='all'||H.mt.league===s);
+  const mtBook=x=>x.kind!=='pickem';   /* a single bet: sportsbook or prediction market (pick'em multipliers are owner-only) */
   function mtKeep(sport,x,legs){
     const f=H.mt,books=legs?x.legs.map(l=>l.book):[x.book],sides=legs?x.legs.map(l=>l.side):[x.side];
     const age=legs?mtLegsAge(x):(mtAge(x)??Infinity);
     return (f.league==='all'||f.league===sport)&&(f.book==='all'||books.includes(f.book))&&(f.side==='all'||sides.includes(f.side))
       &&(f.fresh==='all'||age<=Number(f.fresh))&&(!f.q||mtText(x).includes(f.q.toLowerCase()));
   }
+  /* the Book list follows the Sport filter: only books with a row in the sports in view (a book with no CS2 or LoL row never shows there) */
+  function mtBooks(d){
+    const out=new Map();
+    for(const s of mtSports(d)){const x=d.sports[s]||{};
+      for(const r of (x.ev||[]).filter(r=>d.owner||mtBook(r)))out.set(r.book,r.book_label);
+      for(const r of [...(x.arbitrage||[]),...(d.owner?x.flagged||[]:[])])for(const l of r.legs||[])out.set(l.book,l.book_label);}
+    return [...out.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,label])=>({id,label}));
+  }
+  function mtFollowTab(){
+    const d=H.marketDoc;if(!d||H.mt.tab===H.sport)return;
+    H.mt.tab=H.sport;H.mt.league=H.sport!=='all'&&d.sports?.[H.sport]?H.sport:'all';
+  }
   function marketFilters(){
-    const d=H.marketDoc,sports=Object.keys(d?.sports||{}),books=d?.books||[];
+    const d=H.marketDoc,sports=Object.keys(d?.sports||{}),books=mtBooks(d);
+    const f=H.mt;if(f.book!=='all'&&!books.some(b=>b.id===f.book))f.book='all';
+    if(!['ev','chance','fresh'].includes(f.sort))f.sort='ev';
     const opt=(v,label,cur)=>`<option value="${esc(v)}"${String(v)===String(cur)?' selected':''}>${esc(label)}</option>`;
-    const f=H.mt,fresh=d?.method?.fresh_filters||[[120,'2 min'],[600,'10 min'],[1800,'30 min']];
+    const fresh=d?.method?.fresh_filters||[[120,'2 min'],[600,'10 min'],[1800,'30 min']];
+    const more=[f.side!=='all',f.minEv!=='0',f.fresh!=='all',f.sort!=='ev'].filter(Boolean).length;
     return `<div class="h-market-filters" role="group" aria-label="Price filters"><label class="h-search"><span>Search</span><input id="hub-mt-q" type="search" value="${esc(f.q)}" placeholder="Player, market or book" aria-label="Search prices"></label>`
       +`<label>Sport<select id="hub-mt-league">${opt('all','All sports',f.league)}${sports.map(l=>opt(l,SPORTS[l]||l,f.league)).join('')}</select></label>`
       +`<label>Book<select id="hub-mt-book">${opt('all','All books',f.book)}${books.map(b=>opt(b.id,b.label,f.book)).join('')}</select></label>`
+      +`<details class="h-mt-more"${H.mt.moreOpen?' open':''}><summary>More filters${more?` (${more})`:''}</summary><div class="h-mt-more-body">`
       +`<label>Side<select id="hub-mt-side">${opt('all','Both sides',f.side)}${opt('over','Over',f.side)}${opt('under','Under',f.side)}</select></label>`
-      +`<label>Minimum EV<select id="hub-mt-minEv">${[['0','Any positive'],['0.01','1% or more'],['0.02','2% or more'],['0.05','5% or more']].map(([v,l])=>opt(v,l,f.minEv)).join('')}</select></label>`
-      +`<label>Freshness<select id="hub-mt-fresh">${opt('all','Any age',f.fresh)}${fresh.map(([s,l])=>opt(s,'Within '+l,f.fresh)).join('')}</select></label>`
-      +`<label>Sort<select id="hub-mt-sort">${[['ev','Highest EV / margin'],['chance','Highest p_cal'],['fresh','Newest quote']].map(([v,l])=>opt(v,l,f.sort)).join('')}</select></label>`
-      +`<button type="button" id="hub-mt-dense" data-hub="market-density" aria-pressed="${f.dense}">Compact rows</button></div>`;
+      +`<label>Minimum expected<select id="hub-mt-minEv">${[['0','Any amount'],['0.01','$1 or more per $100'],['0.02','$2 or more per $100'],['0.05','$5 or more per $100']].map(([v,l])=>opt(v,l,f.minEv)).join('')}</select></label>`
+      +`<label>Checked within<select id="hub-mt-fresh">${opt('all','Any time',f.fresh)}${fresh.map(([s,l])=>opt(s,'The last '+l,f.fresh)).join('')}</select></label>`
+      +`<label>Sort<select id="hub-mt-sort">${[['ev','Best value'],['chance','Highest fair chance'],['fresh','Newest check']].map(([v,l])=>opt(v,l,f.sort)).join('')}</select></label>`
+      +`<button type="button" id="hub-mt-dense" data-hub="market-density" aria-pressed="${f.dense}">Compact rows</button></div></details></div>`;
   }
+  const mtMoney=x=>'$'+Number(x).toFixed(2);
+  const mtAgo=t=>t==null||!Number.isFinite(t)?'Time unavailable':t<60?'Just now':t<3600?Math.floor(t/60)+' min ago':Math.floor(t/3600)+' h ago';
+  const mtSide=s=>s==='over'?'Over':'Under';
+  const mtPick=x=>`<b>${esc(x.player)}</b><small>${x.side?esc(mtSide(x.side))+' ':''}${esc(x.line)} ${esc(x.stat_label||'')}${x.period_label?' · '+esc(x.period_label):''}</small><small>${esc(x.event||'')}${x.start_utc?' · '+esc(when(x.start_utc)):''}${mtSports(H.marketDoc).length>1?' · '+esc(SPORTS[x.sport]||x.sport):''}</small>`;
+  const mtPrice=(label,american)=>`<span class="h-pc-nb">${esc(label)} ${esc(american||'')}</span>`;
+  const mtFrom=x=>x.chance_from==='Scout'?'from Scout':/^Other books/.test(x.chance_from||'')?'from other books'+(x.chance_from.match(/\((.*)\)/)?' ('+x.chance_from.match(/\((.*)\)/)[1]+')':''):'';
+  function mtEvRow(x){
+    return `<li class="h-pc-row"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick(x)}</div>`
+      +`<div class="h-pc-cell" data-label="Book & price">${mtPrice(x.book_label,x.american)}${x.kind==='prediction'?'<small>Prediction market</small>':''}${H.marketDoc?.owner&&(x.flags||[]).includes('Wide market')?'<small>Wide market (owner)</small>':''}</div>`
+      +`<div class="h-pc-cell h-pc-fair" data-label="Fair chance vs needed"><span class="h-pc-wide">${pct(x.p_cal)} vs ${pct(x.needs)}</span><span class="h-pc-narrow">Fair ${pct(x.p_cal)} · needs ${pct(x.needs)}</span><small>${esc(mtFrom(x))}</small>${num(x.p_push)&&x.p_push>0?`<small>Exactly ${esc(x.line)} refunds the stake (${pct(x.p_push)})</small>`:''}</div>`
+      +`<div class="h-pc-cell h-pc-value" data-label="Expected per $100"><span class="h-pc-chip">+${mtMoney(x.per_100)}<i> / $100</i></span></div>`
+      +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}</div></li>`;
+  }
+  function mtArbRow(x){
+    const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small></div>`;
+    const back=(100+Number(x.return_per_100))*H.mt.stake/100;
+    return `<li class="h-pc-row h-pc-arb"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick({...x,side:null})}</div>${(x.legs||[]).map(leg).join('')}`
+      +`<div class="h-pc-cell h-pc-value" data-label="Either way you get"><span class="h-pc-chip"><b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney(back)}</b> back <i data-gain-per100="${Number(x.return_per_100)}">(+${mtMoney(back-H.mt.stake)})</i></span></div>`
+      +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtLegsAge(x)))}</div></li>`;
+  }
+  const mtHead=cols=>`<li class="h-pc-row h-pc-head" aria-hidden="true">${cols.map(c=>`<div class="h-pc-cell">${c}</div>`).join('')}</li>`;
   function marketHTML(){
     if(H.marketLoading&&!H.marketDoc)return '<p class="h-mt-state" role="status">Checking current prices…</p>';
     if(H.marketError)return `<p class="h-mt-state h-warning" role="status">${esc(H.marketError)} Use Refresh prices to try again.</p>`;
     if(!H.marketDoc)return '<p class="h-mt-state">Choose Refresh prices to read the latest prices.</p>';
-    const d=H.marketDoc,f=H.mt,pctf=(x,dp=1)=>num(x)?(x*100).toFixed(dp)+'%':'—',odds=x=>num(Number(x))?Number(x).toFixed(2):'—';
+    const d=H.marketDoc,f=H.mt,sports=mtSports(d),owner=!!d.owner;
     const ageText=t=>t==null||!Number.isFinite(t)?'—':t<60?Math.round(t)+'s':t<5400?Math.floor(t/60)+'m':(t/3600).toFixed(1)+'h';
-    const flagHtml=fl=>(fl||[]).map(t=>`<span class="h-flag">${esc(t)}</span>`).join(' ');
-    const sideText=x=>(x.side==='over'?'Over':'Under')+' '+esc(x.line);
-    const market=x=>`${esc(x.player)}<small>${esc(x.period_label||'')} ${esc(x.stat_label||'')} · ${esc(x.event||'')}</small>`;
-    const tbl=(head,body)=>`<div class="h-table-wrap"><table class="h-table h-market-table${f.dense?' is-compact':''}"><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
     const builtAge=(Date.now()-Date.parse(d.as_of))/1000;
-    const stale=Number.isFinite(builtAge)&&builtAge>120;
-    let shown=0;
-    const out=Object.entries(d.sports||{}).filter(([sport])=>f.league==='all'||f.league===sport).map(([sport,s])=>{
-      const name=esc(SPORTS[sport]||sport);
-      if(s.state==='unavailable')return `<article><h3>${name}</h3><p class="h-mt-state h-warning">${esc(s.error||'Prices unavailable')}. Nothing is shown rather than old prices.</p></article>`;
-      if(s.state==='empty')return `<article><h3>${name}</h3><p class="h-mt-state">No book prices are held for ${name} right now.</p></article>`;
-      const ev=(s.ev||[]).filter(x=>mtKeep(sport,x,false)&&num(x.ev)&&x.ev>=Number(f.minEv)).sort((a,b)=>f.sort==='chance'?b.p_cal-a.p_cal:f.sort==='fresh'?(mtAge(a)??1e12)-(mtAge(b)??1e12):b.ev-a.ev);
-      const arb=(s.arbitrage||[]).filter(x=>mtKeep(sport,x,true)).sort((a,b)=>f.sort==='fresh'?mtLegsAge(a)-mtLegsAge(b):b.margin_pct-a.margin_pct);
-      const flagged=(s.flagged||[]).filter(x=>mtKeep(sport,{...x,legs:x.legs},true));
-      shown+=ev.length+arb.length;
-      const evTable=ev.length?tbl(['Player / market','Book','Side / line','Odds','p_cal','EV %','Freshness','Source'],ev.map(x=>`<tr><td>${market(x)}</td><td>${esc(x.book_label)}</td><td>${sideText(x)}</td><td class="h-num">${odds(x.odds)}</td><td class="h-num">${pctf(x.p_cal)}</td><td class="h-num h-pos">+${(x.ev*100).toFixed(1)}%</td><td class="h-num">${ageText(mtAge(x))}${x.width?`<small>width ${esc(x.width.width_cents)}¢</small>`:''} ${flagHtml(x.flags)}</td><td><small class="h-src">${esc(x.p_source)}<br>${esc(x.source)}</small></td></tr>`).join(''))
-        :`<p class="h-mt-state">No +EV prices match these filters${(s.ev||[]).length?'':' right now'}.</p>`;
-      const arbTable=arb.length?tbl(['Player / market','Book','Side / line','Odds','Stake share','Margin %','Freshness','Source'],arb.map(x=>x.legs.map((l,i)=>`<tr${i?' class="h-arb-leg"':''}><td>${i?'':market(x)}</td><td>${esc(l.book_label)}</td><td>${sideText({side:l.side,line:x.line})}</td><td class="h-num">${odds(l.odds)}</td><td class="h-num">${pctf(l.stake_share)}</td><td class="h-num">${i?'':'+'+x.margin_pct.toFixed(2)+'%'}</td><td class="h-num">${ageText(mtAge(l))}</td><td><small class="h-src">${esc(l.source)}</small></td></tr>`).join('')).join(''))
-        :`<p class="h-mt-state">No two-book price pairs below 100% match these filters.</p>`;
-      const flaggedHtml=flagged.length?`<details class="h-mt-flagged"><summary>Flagged and left out (${flagged.length})</summary>${tbl(['Player / market','Legs','Margin %','Why'],flagged.map(x=>`<tr><td>${market(x)}</td><td>${x.legs.map(l=>`${esc(l.book_label)} ${sideText({side:l.side,line:x.line})} ${odds(l.odds)} · ${ageText(mtAge(l))}`).join('<br>')}</td><td class="h-num">${x.margin_pct.toFixed(2)}%</td><td>${flagHtml(x.flags)}</td></tr>`).join(''))}</details>`:'';
-      const ex=Object.entries(s.excluded||{});
-      return `<article><h3>${name} <small>${(s.ev||[]).length} +EV · ${(s.arbitrage||[]).length} arbitrage · ${s.quotes_checked||0} prices on ${s.markets_checked||0} lines · newest ${ageText(mtAge({seen_at:s.newest_quote_at}))}</small></h3>`
-        +`<h4>+EV feed</h4>${evTable}<h4>Arbitrage sheet</h4>${arbTable}${flaggedHtml}`
-        +(ex.length?`<details><summary>Prices not rated, and why</summary>${ex.map(([reason,n])=>`<p>${esc(reason)}: ${Number(n)}</p>`).join('')}</details>`:'')+`</article>`;
-    }).join('');
-    const head=stale?`<p class="h-mt-state h-warning" role="status">These prices were built ${ageText(builtAge)} ago. Refresh prices for the current sheet.</p>`:'';
-    const method=d.method?`<details class="h-mt-method"><summary>How these numbers are worked out</summary><p>${esc(d.method.ev)}.</p><p>p_cal: ${esc(d.method.p_cal)}</p><p>Arbitrage: ${esc(d.method.arbitrage)}. Legs older than ${Math.round((d.method.arb_max_age_s||300)/60)} minutes, prediction-market legs and pick'em picks are flagged and left out.</p><p>Market width: a book whose two prices add to more than ${Math.round((1+(d.method.wide_overround||.08))*100)}% is flagged as a wide market and is not used in the consensus.</p></details>`:'';
-    return head+(out||'<p class="h-mt-state">No supported price feeds are available to this account.</p>')+method;
+    const head=Number.isFinite(builtAge)&&builtAge>120?`<p class="h-mt-state" role="status">These prices were built ${ageText(builtAge)} ago. Refresh prices for the current sheet.</p>`:'';
+    const ready=sports.filter(s=>d.sports[s]?.state!=='unavailable');
+    if(sports.length&&!ready.length)return head+'<p class="h-mt-state" role="status">Prices could not be read just now. Use Refresh prices to try again.</p>';
+    let ev=[],arb=[],all=0,quotes=0,lines=0;
+    /* the server's own age limits, applied again on every draw: a sheet left open never shows a pair or price it would no longer
+       build (review 2026-11-05). The tab also reloads the sheet when it comes back into view (see visibilitychange below). */
+    const m0=d.method||{},evMax=Number(m0.ev_stale_s)||1800,arbMax=Number(m0.arb_max_age_s)||300;
+    const live=r=>(mtAge(r)??Infinity)<=evMax,liveArb=r=>mtLegsAge(r)<=arbMax;
+    for(const s of ready){const x=d.sports[s]||{};
+      quotes+=x.quotes_checked||0;lines+=x.markets_checked||0;
+      const e=(x.ev||[]).filter(r=>mtBook(r)&&live(r)),a=(x.arbitrage||[]).filter(liveArb);all+=e.length+a.length;
+      ev.push(...e.filter(r=>mtKeep(s,r,false)&&num(r.ev)&&r.ev>=Number(f.minEv)));
+      arb.push(...a.filter(r=>mtKeep(s,r,true)));}
+    ev.sort((a,b)=>f.sort==='fresh'?(mtAge(a)??1e12)-(mtAge(b)??1e12):f.sort==='chance'?b.p_cal-a.p_cal:b.per_100-a.per_100);
+    arb.sort((a,b)=>f.sort==='fresh'?mtLegsAge(a)-mtLegsAge(b):b.return_per_100-a.return_per_100||mtLegsAge(a)-mtLegsAge(b));
+    const at=new Date(d.as_of),clock=Number.isFinite(at.getTime())?at.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'';
+    const one=sports.length===1&&['cs2','lol'].includes(sports[0])?sports[0]:null;
+    let body='';
+    if(one&&!all&&!(d.sports[one]?.sections_possible?.ev||d.sports[one]?.sections_possible?.arb))
+      body=`<p class="h-mt-state h-pc-none">No sportsbook offers ${esc(SPORTS[one])} prices right now, so there is nothing to check here. ${esc(SPORTS[one])} lines are on the Board.</p>`;
+    else if(!ev.length&&!arb.length)
+      body=all?`<p class="h-mt-state h-pc-none">No prices match these filters. Clear a filter to see all ${all} rows.</p>`
+        :`<p class="h-mt-state h-pc-none">Nothing worth acting on right now. Checked ${quotes.toLocaleString()} prices on ${lines.toLocaleString()} lines${clock?' at '+esc(clock):''}.</p>`;
+    if(ev.length){const x=ev[0];
+      body+=`<section class="h-pc-section" aria-label="Prices better than the fair chance"><h3>Prices better than the fair chance</h3><p class="h-pc-ask">Which single bets pay more than their real chance is worth?</p>`
+        +`<p class="h-pc-example">${esc(x.book_label)} pays ${esc(x.american)} on ${esc(mtSide(x.side))} ${esc(x.line)}, which needs a ${pct(x.needs)} chance to break even${num(x.p_push)&&x.p_push>0?` (exactly ${esc(x.line)} refunds the stake)`:''}. The fair chance is ${pct(x.p_cal)}, so over many bets like this you would average about +${mtMoney(x.per_100)} per $100.</p>`
+        +`<ol class="h-pc-list h-pc-ev${f.dense?' is-compact':''}">${mtHead(['Pick','Book &amp; price','Fair chance vs needed','Expected per $100','Checked'])}${ev.map(mtEvRow).join('')}</ol></section>`;}
+    if(arb.length){const x=arb[0],[l1,l2]=x.legs;
+      body+=`<section class="h-pc-section" aria-label="Bet both sides at two books"><h3>Bet both sides at two books</h3><p class="h-pc-ask">Where can I cover Over and Under at different books and win either way?</p>`
+        +`<label class="h-pc-stake">Total stake <span>$</span><input id="hub-mt-stake" type="number" inputmode="decimal" min="1" max="100000" step="1" value="${esc(H.mt.stake)}"></label>`
+        +`<p class="h-pc-example">Put <b data-stake-per100="${Number(l1.stake_per_100)}">${mtMoney(l1.stake_per_100*H.mt.stake/100)}</b> on ${esc(mtSide(l1.side))} at ${esc(l1.book_label)} ${esc(l1.american)} and <b data-stake-per100="${Number(l2.stake_per_100)}">${mtMoney(l2.stake_per_100*H.mt.stake/100)}</b> on ${esc(mtSide(l2.side))} at ${esc(l2.book_label)} ${esc(l2.american)}: either result pays about <b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney((100+Number(x.return_per_100))*H.mt.stake/100)}</b> for <b data-stake-total>${mtMoney(H.mt.stake)}</b> staked.</p>`
+        +`<ol class="h-pc-list h-pc-arbs${f.dense?' is-compact':''}">${mtHead(['Pick','Bet 1','Bet 2','Either way you get','Checked'])}${arb.map(mtArbRow).join('')}</ol></section>`;}
+    const m=d.method||{},mins=s=>Math.round((s||0)/60);
+    const method=`<details class="h-mt-method"><summary>How these numbers are worked out</summary><ul>`
+      +`<li>The fair chance is Scout’s chance only where Scout’s chances have been checked against results. Otherwise it is the average of at least two other sportsbooks at the same line, with their cut removed.</li>`
+      +`<li>A price is only used if it was seen in the last ${mins(m.ev_stale_s||1800)} minutes. A both-sides pair needs both prices seen in the last ${mins(m.arb_max_age_s||300)} minutes.</li>`
+      +`<li>Prediction markets and pick’em apps are never used for both-sides bets.</li></ul>`
+      +(owner&&m.ev?`<details class="h-mt-formulas"><summary>Formulas (owner)</summary><p>${esc(m.ev)}.</p><p>Fair chance: ${esc(m.p_cal)}</p><p>Both sides: ${esc(m.arbitrage)}. Wide market above ${Math.round((1+(m.wide_overround||.08))*100)}%.</p></details>`:'')+`</details>`;
+    return head+body+method+(owner?mtOwnerHTML(d,ageText):'');
+  }
+  /* owner only: what members never see (flagged pairs, pick'em rows, exclusion counts), so no original detail is lost */
+  function mtOwnerHTML(d,ageText){
+    const tbl=(cols,rows)=>`<div class="h-table-wrap"><table class="h-table h-owner-table"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    const parts=mtSports(d).map(s=>{const x=d.sports[s]||{},name=esc(SPORTS[s]||s);
+      const fl=(x.flagged||[]).filter(r=>mtKeep(s,r,true)),pk=(x.ev||[]).filter(r=>r.kind==='pickem'&&mtKeep(s,r,false));
+      const ex=Object.entries(x.excluded||{}),exl=Object.entries(x.excluded_lines||{});
+      return `<h4>${name} <small>${(x.ev||[]).length} priced · ${(x.arbitrage||[]).length} both-sides · ${x.quotes_checked||0} prices on ${x.markets_checked||0} lines · newest ${ageText(mtAge({seen_at:x.newest_quote_at}))}${x.sections_possible?` · possible: price ${x.sections_possible.ev?'yes':'no'}, both sides ${x.sections_possible.arb?'yes':'no'}`:''}</small></h4>`
+        +(fl.length?`<details class="h-mt-flagged"><summary>Flagged and left out (${fl.length})</summary>${tbl(['Player / market','Legs','Margin %','Why'],fl.map(r=>`<tr><td>${esc(r.player)}<small>${esc(r.stat_label||'')} · ${esc(r.event||'')}</small></td><td>${r.legs.map(l=>`${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(r.line)} ${Number(l.odds).toFixed(2)} · ${ageText(mtAge(l))}`).join('<br>')}</td><td class="h-num">${Number(r.margin_pct).toFixed(2)}%</td><td>${esc((r.flags||[]).join(', '))}</td></tr>`).join(''))}</details>`:'')
+        +(pk.length?`<details><summary>Pick'em, not a single bet (${pk.length})</summary>${tbl(['Player / market','Book','Side / line','Multiplier','Fair chance','Per $100'],pk.map(r=>`<tr><td>${esc(r.player)}</td><td>${esc(r.book_label)}</td><td>${esc(mtSide(r.side))} ${esc(r.line)}</td><td class="h-num">${Number(r.odds).toFixed(2)}x</td><td class="h-num">${pct(r.p_cal)}</td><td class="h-num">${num(r.per_100)?'+'+mtMoney(r.per_100):'—'}</td></tr>`).join(''))}</details>`:'')
+        +(ex.length?`<details><summary>Prices not rated, and why</summary>${ex.map(([k,n])=>`<p>${esc(k)}: ${Number(n)} prices</p>`).join('')}${exl.map(([k,n])=>`<p>${esc(k)}: ${Number(n)} lines</p>`).join('')}</details>`:'');}).join('');
+    return `<details class="h-mt-owner"><summary>Owner check</summary>${parts}</details>`;
+  }
+  function mtStakeInput(e){
+    if(e.target.id!=='hub-mt-stake')return;
+    const v=Number(e.target.value);if(!(v>0&&v<=100000))return;
+    H.mt.stake=v;const box=$('hub-market-results');
+    box.querySelectorAll('[data-stake-per100]').forEach(b=>{b.textContent=mtMoney(Number(b.dataset.stakePer100)*v/100);});
+    box.querySelectorAll('[data-back-per100]').forEach(b=>{b.textContent=mtMoney(Number(b.dataset.backPer100)*v/100);});
+    box.querySelectorAll('[data-gain-per100]').forEach(b=>{b.textContent='(+'+mtMoney(Number(b.dataset.gainPer100)*v/100)+')';});
+    box.querySelectorAll('[data-stake-total]').forEach(b=>{b.textContent=mtMoney(v);});
   }
   const MT_CSS='#u-hub .h-market-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding:12px;margin:0 0 14px;border:1px solid var(--u-line);border-radius:9px;background:var(--u-panel)}'
-    +'#u-hub .h-market-filters label{display:grid;gap:4px;flex:1 1 130px;min-width:0;font-size:10px;color:var(--u-muted)}#u-hub .h-market-filters .h-search{flex:2 1 220px}'
-    +'#u-hub .h-market-filters :is(input,select){width:100%;min-height:40px}#u-hub .h-market-filters>button{flex:0 0 auto;min-height:40px}'
-    +'#u-hub .h-market-tools .h-table-wrap{overflow-x:auto;margin:6px 0 14px}#u-hub .h-market-table{width:100%;min-width:720px;border-collapse:collapse}'
-    +'#u-hub .h-market-table .h-num{white-space:nowrap}#u-hub .h-market-table tr.h-arb-leg td{border-top:0}#u-hub .h-market-table small{display:block}'
-    +'#u-hub .h-market-table .h-pos{color:#3FD07A;font-weight:600}#u-hub .h-src{color:var(--u-muted);max-width:260px}'
-    +'#u-hub .h-market-table.is-compact :is(td,th){padding-top:4px;padding-bottom:4px;font-size:12px}#u-hub .h-market-table.is-compact small{display:inline;margin-left:6px}'
-    +'#u-hub .h-mt-state{padding:12px;border:1px dashed var(--u-line);border-radius:8px;color:var(--u-muted)}#u-hub .h-mt-state.h-warning{color:#edb968;border-color:#8a704b}'
-    +'#u-hub .h-flag{display:inline-block;margin-left:4px;padding:1px 6px;border:1px solid #8a704b;border-radius:4px;font-size:10px;color:#edb968;white-space:nowrap}'
-    +'#u-hub .h-market-tools details{margin:6px 0 12px}#u-hub .h-market-tools summary{min-height:40px;display:flex;align-items:center;cursor:pointer}';
+    +'#u-hub .h-market-filters label{display:grid;gap:4px;flex:1 1 130px;min-width:0;font-size:11px;color:var(--u-muted)}#u-hub .h-market-filters .h-search{flex:2 1 220px}'
+    +'#u-hub .h-market-filters :is(input,select){width:100%;min-height:40px}#u-hub .h-market-filters button{flex:0 0 auto;min-height:40px}'
+    +'#u-hub .h-mt-more{flex:1 1 100%;margin:0}#u-hub .h-market-tools details.h-mt-more>summary{min-height:40px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border:1px solid var(--u-line);border-radius:8px;cursor:pointer;color:var(--u-text);background:var(--u-bg,transparent)}'
+    +'#u-hub .h-market-tools summary{list-style:none}#u-hub .h-market-tools summary::-webkit-details-marker{display:none}'
+    +'#u-hub .h-market-tools summary::after{content:"";width:7px;height:7px;margin-left:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px);transition:transform .15s;flex:none}'
+    +'#u-hub .h-market-tools details[open]>summary::after{transform:rotate(225deg) translateY(-1px)}#u-hub .h-pc-nb{white-space:nowrap}'
+    +'#u-hub .h-mt-more-body{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding-top:8px}'
+    +'#u-hub .h-pc-lede{margin:0 0 12px;color:var(--u-muted)}#u-hub .h-pc-section{margin:0 0 18px}#u-hub .h-pc-section h3{margin:0 0 2px;font-size:16px}'
+    +'#u-hub .h-pc-ask{margin:0 0 6px;color:var(--u-muted)}#u-hub .h-pc-example{margin:0 0 10px;padding:10px 12px;border-left:3px solid var(--u-line2);background:var(--u-panel);border-radius:0 8px 8px 0;font-size:13px}'
+    +'#u-hub .h-pc-list{list-style:none;margin:0;padding:0;border:1px solid var(--u-line);border-radius:9px;overflow:hidden}'
+    +'#u-hub .h-pc-row{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,1.1fr) minmax(0,.8fr);gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--u-line)}'
+    +'#u-hub .h-pc-row:first-child{border-top:0}#u-hub .h-pc-head{font-size:11px;color:var(--u-muted);background:var(--u-panel);padding-top:8px;padding-bottom:8px}'
+    +'#u-hub .h-pc-cell{min-width:0;overflow-wrap:anywhere}#u-hub .h-pc-cell small{display:block;color:var(--u-muted);font-size:12px}#u-hub .h-pc-dec{color:var(--u-muted)}'
+    +'#u-hub .h-pc-narrow{display:none}#u-hub .h-pc-chip{display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(63,208,122,.12);color:#3FD07A;font-weight:600;white-space:nowrap}'
+    +'#u-hub .h-pc-chip i{font-style:normal;font-weight:400;color:var(--u-muted)}#u-hub .h-pc-age{color:var(--u-muted);font-size:12px}'
+    +'#u-hub .h-pc-list.is-compact .h-pc-row{padding-top:5px;padding-bottom:5px;font-size:12px}#u-hub .h-pc-list.is-compact .h-pc-cell small{display:inline;margin-left:6px}'
+    +'#u-hub .h-pc-stake{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px;color:var(--u-muted)}#u-hub .h-pc-stake input{width:110px;min-height:40px}'
+    +'#u-hub .h-mt-state{padding:12px;border:1px dashed var(--u-line);border-radius:8px;color:var(--u-muted)}#u-hub .h-mt-state.h-warning{color:var(--u-text);border-color:var(--u-line2)}'
+    +'#u-hub .h-mt-method ul{margin:6px 0;padding-left:18px}#u-hub .h-mt-method li{margin:4px 0}'
+    +'#u-hub .h-market-tools .h-table-wrap{overflow-x:auto;margin:6px 0 14px}#u-hub .h-owner-table{width:100%;border-collapse:collapse}#u-hub .h-owner-table small{display:block}#u-hub .h-owner-table .h-num{white-space:nowrap}'
+    +'#u-hub .h-market-tools details{margin:6px 0 12px}#u-hub .h-market-tools summary{min-height:40px;display:flex;align-items:center;cursor:pointer;font-weight:600}'
+    +'@media(max-width:639px){#u-hub .h-pc-head{display:none}#u-hub .h-pc-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:12px}'
+    +'#u-hub .h-pc-row>.h-pc-cell{grid-column:1}#u-hub .h-pc-row>.h-pc-value{grid-column:2;grid-row:1;align-self:start;text-align:right}'
+    +'#u-hub .h-pc-wide{display:none}#u-hub .h-pc-narrow{display:inline}#u-hub .h-pc-fair small{display:inline;margin-left:6px}'
+    +'#u-hub .h-pc-arb .h-pc-leg::before{content:attr(data-label) " · ";color:var(--u-muted);font-size:12px}#u-hub .h-pc-age{font-size:11px}}';
   function paintMarketResults(){const box=$('hub-market-results');if(box)box.innerHTML=marketHTML();}
   function paintMarkets(){
     if(!R.me.features?.market_tools||H.section!=='tools')return;
     if(!$('hub-market-results')){
       // flag-on styles travel with the flag-on markup, so hub.css keeps its bytes
       if(!$('hub-mt-style'))document.head.insertAdjacentHTML('beforeend',`<style id="hub-mt-style">${MT_CSS}</style>`);
-      ($('hub-tools-alerts')||$('hub-tools-body')).insertAdjacentHTML($('hub-tools-alerts')?'beforebegin':'beforeend',`<section class="h-market-tools" id="hub-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2 tabindex="-1">EV &amp; arbitrage</h2><p>Book prices against Scout's calibrated chance or the no-vig market, line for line.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
+      ($('hub-tools-alerts')||$('hub-tools-body')).insertAdjacentHTML($('hub-tools-alerts')?'beforebegin':'beforeend',`<section class="h-market-tools" id="hub-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2 tabindex="-1">Price check</h2><p>Prices that pay more than they should, and lines where two books let you bet both sides and win either way.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><p class="h-pc-lede">Each row is a single bet at one book. Green is what the price pays over its fair chance, per $100.</p><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
       const box=$('hub-market-filters');
       const read=e=>{const id=(e.target.id||'').replace('hub-mt-','');if(!(id in H.mt)||id==='dense')return;H.mt[id]=e.target.value;paintMarketResults();};
       box.addEventListener('input',e=>{if(e.target.id==='hub-mt-q')read(e);});
-      box.addEventListener('change',e=>{if(e.target.id!=='hub-mt-q')read(e);});
+      box.addEventListener('change',e=>{if(e.target.id!=='hub-mt-q')read(e);if(e.target.id==='hub-mt-league')paintMarkets();});
+      box.addEventListener('toggle',e=>{if(e.target.classList?.contains('h-mt-more'))H.mt.moreOpen=e.target.open;},true);
+      $('hub-market-results').addEventListener('input',mtStakeInput);
       if(!H.marketDoc&&!H.marketLoading&&!H.marketError)actions['refresh-markets']();
     }
+    mtFollowTab();
     const box=$('hub-market-filters'),had=box.contains(document.activeElement)?document.activeElement.id:null;
     box.innerHTML=H.marketDoc?marketFilters():'';
     if(had)$(had)?.focus({preventScroll:true});
@@ -1024,7 +1171,7 @@ export function mount(C) {
     generate, 'use-generated':useGenerated, 'open-generated':i=>C.openGenerated(H.batch?.slips?.[Number(i)]), 'open-line':()=>C.openLine(rec(H.detail),H.histSide), 'save-batch':saveBatch,
     'player-market'(id){if(rec(id))openCard(id,H.cardTab);},
     filters(){togglePop('filter');}, 'views-menu'(){togglePop('views');}, more(){togglePop('more');},
-    book(id){if(!['all','prizepicks','underdog'].includes(id)&&!isExtra(id))return;H.book=id;H.page=0;paintBoard();if(isExtra(id))loadExtra();},
+    book(id){if(!['all','prizepicks','underdog'].includes(id)&&!isExtra(id))return;if(!bookHasLines(id))return;H.book=id;H.page=0;paintBoard();if(isExtra(id))loadExtra();},
     'mt-jump'(){$('hub-market-tools')?.scrollIntoView({block:'start'});$('hub-market-tools')?.querySelector('h2')?.focus?.({preventScroll:true});},
     'clear-filters'(){Object.assign(H,{book:'all',q:'',stat:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,game:'all',page:0});paintBoard();},
     view(id){H.view=id==='games'?'games':'list';H.page=0;section('board');},
@@ -1047,7 +1194,7 @@ export function mount(C) {
     add(id){const r=rec(id);if(!r)return;if(r.extra)return C.say(`${r.offer.platform_label} lines are view only. Slips are PrizePicks or Underdog entries.`);if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
-    refresh(){H.detailSeq++;if(cardOpen())closeCard(false);load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
+    refresh(){H.detailSeq++;if(cardOpen())closeCard(false);H.bookLinesAt=0;load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
     'save-view'(){togglePop(null);openSave('view');}, 'save-alert'(){togglePop(null);openSave('alert');}, 'save-retry':savePreferences,
     'pick-clear'(){H.pickSport='all';H.pickStatus='all';$('hub-pick-sport').value='all';$('hub-pick-status').value='all';paintPicks();},
     'grade-review'(id,el){showGradeReview(id,el?.dataset.before);},
@@ -1115,7 +1262,7 @@ export function mount(C) {
     if(!$('hub-extra-style'))document.head.insertAdjacentHTML('beforeend','<style id="hub-extra-style">#u-hub .h-add.h-add-info{font-size:12px;font-weight:500}'
       +'#u-hub .h-extra-detail{padding:12px 16px}#u-hub .h-extra-detail h3{margin:0 0 10px;font-size:15px}#u-hub .h-extra-kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 10px}'
       +'#u-hub .h-extra-kv dt{font-size:11px;color:var(--u-muted)}#u-hub .h-extra-kv dd{margin:2px 0 0}#u-hub .h-extra-state{margin:0 0 10px}#u-hub .h-extra-state summary{min-height:40px;display:flex;align-items:center;cursor:pointer}</style>');
-    $('hub-platform').insertAdjacentHTML('beforeend',EXTRA.map(x=>`<button data-hub="book" data-id="${esc(x.id)}" aria-pressed="false" aria-label="${esc(x.label)} (view only)" title="${esc(x.label)}">${esc(x.short||x.label)}</button>`).join(''));
+    $('hub-platform').insertAdjacentHTML('beforeend',EXTRA.map(x=>`<button data-hub="book" data-id="${esc(x.id)}" aria-pressed="false" hidden aria-label="${esc(x.label)} (view only)" title="${esc(x.label)}">${esc(x.short||x.label)}</button>`).join(''));
   }
   installCols();
   if(TOKENS){
@@ -1169,6 +1316,7 @@ export function mount(C) {
     mixed.disabled=p==='underdog';if(mixed.disabled&&$('hub-generation-mix').value==='mixed')$('hub-generation-mix').value='any';
   }
   for(const id of ['book','type'])$('hub-generation-'+id).addEventListener('change',generationControls);
+  $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
   generationControls();
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});
@@ -1192,6 +1340,11 @@ export function mount(C) {
   },true);
   setInterval(()=>{if(isOpen()&&!document.hidden&&H.section==='board')load(true);},60000);
   document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='board'&&Date.now()-(H.lastLoad||0)>60000)load(true);});
+  /* Price check left open: coming back to the tab reloads a sheet older than 2 min, and once a minute the rows are redrawn (no
+     request) so a price or both-sides pair past the server's age limit drops off even if nobody touches the page */
+  const mtOld=()=>{const t=Date.parse(H.marketDoc?.as_of);return !Number.isFinite(t)||Date.now()-t>120000;};
+  document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='tools'&&H.marketDoc&&!H.marketLoading&&mtOld())actions['refresh-markets']();});
+  setInterval(()=>{const box=$('hub-market-results');if(!document.hidden&&H.section==='tools'&&H.marketDoc&&box&&!box.contains(document.activeElement))paintMarketResults();},60000);
   route();
   loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts'||H.section==='tools')paintAlerts();});
   return {refreshSlip};

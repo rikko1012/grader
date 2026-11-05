@@ -178,7 +178,8 @@
   /* ---- account slip: the workspace's saved slip. Every device merges three ways against the copy it last synced ---- */
   const T = {
     legs: [], types: {}, rev: 0, ready: false, synced: new Set(), pending: false, saving: false, saveFail: false, gen: 0, check: null, checkSig: "", checking: false, checkErr: null,
-    tracked: null, trackIdem: {}, trackBusy: {}, copyBusy: false, mine: null, mineState: "idle", tab: "slip", open: new Set(), openPick: null, advice: null
+    tracked: null, trackIdem: {}, trackBusy: {}, copyBusy: false, mine: null, mineState: "idle", tab: "slip", open: new Set(), openPick: null, advice: null,
+    slipLines: "no_goblins"   /* the member's goblin rule (hub Slip Studio sets it from saved prefs); the adder suggests only lines it allows */
   };
   const sig = () => T.legs.map((l) => [l.id, l.rev, l.read_rev, l.shown_p].join(":")).join(";") + "|" + JSON.stringify(T.types);
   const legIds = (legs) => new Set(legs.map((l) => l.id));
@@ -341,7 +342,7 @@
     let checks = 0, last = null, picked = [], note = "";
     for (let round = 0; round < GEN_ROUNDS; round++) {
       const q = new URLSearchParams({ platform, type: entryType, slips: String(count), picks: String(size), sports: opts.sports.join(","), mix, games,
-        repeats: opts.noRepeatProps ? "none" : "allow", lines: opts.lines || "all", research: opts.research ? "1" : "0" });
+        repeats: opts.noRepeatProps ? "none" : "allow", lines: opts.lines || "no_goblins", research: opts.research ? "1" : "0" });
       if (exclude.size) q.set("exclude", [...exclude].slice(0, 60).join(","));
       let doc;
       try { doc = await api("generate?" + q.toString()); }
@@ -397,11 +398,12 @@
      a replacement is applied only when the member presses Swap in, at the same position, so nothing is dropped or reordered. */
   async function runAdvice() {
     if (!T.legs.length) { T.advice = null; return; }
-    const before = sig();
+    const before = sig(), rule = T.slipLines || "no_goblins";
     try {
-      const doc = await api("slip-advice", { legs: T.legs.map((l) => Object.assign(wireLeg(l), { stat: l.stat, period: l.period, player_key: l.player_key })),
-        entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])) });
-      if (sig() === before) { T.advice = { sig: before, legs: Object.fromEntries((doc.legs || []).map((r) => [r.id, r])) }; paintTray(); }
+      const doc = await api("slip-advice", { legs: T.legs.map((l) => Object.assign(wireLeg(l), { stat: l.stat, period: l.period, player_key: l.player_key,
+        line_type: R.boards[l.sport]?.recs?.get(offerKey(l.book, l.row_id))?.market?.line_type || undefined })),
+        entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])), lines: T.slipLines || "no_goblins" });
+      if (sig() === before && rule === (T.slipLines || "no_goblins")) { T.advice = { sig: before, legs: Object.fromEntries((doc.legs || []).map((r) => [r.id, r])) }; paintTray(); }
     } catch (e) { /* advice is extra: the check stays the authority */ }
   }
   const scheduleAdvice = debounce(runAdvice, 900);
@@ -1325,7 +1327,7 @@
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
+        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();

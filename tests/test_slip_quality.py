@@ -231,8 +231,68 @@ def test_only_open_lines_reach_a_slip():
 
 def test_standard_lines_option():
     recs = [rec("g", "e1", .8, line_type="goblin"), rec("a", "e2", .6), rec("b", "e3", .58)]
-    assert {l["player"] for l in build(recs)["slips"][0]["legs"]} == {"g", "a"}
+    assert {l["player"] for l in build(recs, lines="all")["slips"][0]["legs"]} == {"g", "a"}
     assert {l["player"] for l in build(recs, lines="standard")["slips"][0]["legs"]} == {"a", "b"}
+
+
+def _goblin_pool():
+    """High-chance goblins (would win every search) beside lower-chance standard legs and two demons."""
+    gob = [rec(f"g{i}", f"eg{i}", .86 - i * .01, line_type="goblin", line=14.5) for i in range(6)]
+    dem = [rec(f"d{i}", f"ed{i}", .62 - i * .01, line_type="demon", line=26.5) for i in range(2)]
+    std = [rec(f"s{i}", f"es{i}", .6 - i * .005) for i in range(10)]
+    return gob + dem + std
+
+
+def _types(b):
+    return [[l["line_type"] for l in s["legs"]] for s in b["slips"]]
+
+
+def test_library_default_is_all_lines_so_research_reruns_reproduce():
+    """The member routes pass the member's rule (default no_goblins); sq.build / sq.advise without one keep every line, as the
+    frozen research/slip_quality_2026_11_04 scripts recorded."""
+    for o in ({}, {"lines": None}):
+        assert _types(build(_goblin_pool(), count=12, size=3, **o)) == _types(build(_goblin_pool(), count=12, size=3, lines="all"))
+
+
+def test_goblin_rule_no_goblins_keeps_demons():
+    for o in ({"lines": "no_goblins"},):
+        b = build(_goblin_pool(), count=12, size=3, **o)
+        assert len(b["slips"]) == 12
+        ts = _types(b)
+        assert not any("goblin" in t for t in ts)
+        assert any("demon" in t for t in ts)              # demons pay more; only "No goblins or demons" drops them
+
+
+def test_goblin_rule_one_goblin_caps_each_slip():
+    b = build(_goblin_pool(), count=12, size=4, lines="one_goblin")
+    assert len(b["slips"]) == 12
+    assert max(t.count("goblin") for t in _types(b)) == 1
+    assert any("goblin" in t for t in _types(b))
+
+
+def test_goblin_rule_standard_drops_goblins_and_demons():
+    b = build(_goblin_pool(), count=12, size=3, lines="standard")
+    assert b["slips"] and all(set(t) == {"standard"} for t in _types(b))
+
+
+def test_goblin_rule_all_matches_the_old_search():
+    b = build(_goblin_pool(), count=12, size=3, lines="all")
+    assert sum(t.count("goblin") for t in _types(b)) >= 12   # unchanged: the best all-hit chance takes the goblins
+    assert _types(b)[0] == ["goblin", "goblin", "goblin"]
+
+
+def test_goblin_rule_shortage_says_why_in_plain_words():
+    recs = [rec("g", "e1", .8, line_type="goblin"), rec("a", "e2", .6)]
+    assert build(recs, lines="no_goblins")["shortage"] == "Only 1 eligible legs on PrizePicks without goblins right now."
+    assert build(recs, lines="standard")["shortage"] == "Only 1 eligible legs on PrizePicks without goblins or demons right now."
+
+
+def test_line_rule_values():
+    assert sq.LINE_RULES == ("no_goblins", "one_goblin", "standard", "all") and sq.LINE_RULE_DEFAULT == "no_goblins"
+    g, d, s = {"line_type": "goblin"}, {"line_type": "demon"}, {"line_type": "standard"}
+    assert [sq.line_ok(x, "no_goblins") for x in (g, d, s)] == [False, True, True]
+    assert [sq.line_ok(x, "standard") for x in (g, d, s)] == [False, False, True]
+    assert all(sq.line_ok(x, r) for x in (g, d, s) for r in ("one_goblin", "all"))
 
 
 # ------------------------------------------------------------------------------------------------------------- objective
@@ -316,9 +376,41 @@ def slip_leg(r):
             "player_key": r["player"]["key"], "team": r["player"]["team"], "event": r["event"]["id"], "stat": r["market"]["stat"], "period": r["market"]["period"]}
 
 
-def advise(slip_recs, pool_recs):
+def advise(slip_recs, pool_recs, **kw):
     legs, _ = legs_of(pool_recs)
-    return sq.advise([slip_leg(r) for r in slip_recs], {l["key"]: l for l in legs}, legs)
+    return sq.advise([slip_leg(r) for r in slip_recs], {l["key"]: l for l in legs}, legs, **kw)
+
+
+def test_adder_never_suggests_a_goblin_under_no_goblins():
+    weak, keep = rec("w", "e1", .56), rec("k", "e2", .6)
+    gob, std = rec("g", "e3", .85, line_type="goblin", line=14.5), rec("s", "e4", .7)
+    pool = [weak, keep, gob, std]
+    assert advise([weak, keep], pool, lines="all")[0]["replacement"]["player"] == "g"
+    assert advise([weak, keep], pool)[0]["replacement"]["player"] == "g"      # library default: every line
+    assert advise([weak, keep], pool, lines="no_goblins")[0]["replacement"]["player"] == "s"
+
+
+def test_adder_one_goblin_skips_a_second_goblin_and_keeps_the_members_own():
+    mine, weak = rec("m", "e1", .8, line_type="goblin", line=14.5), rec("w", "e2", .56)
+    gob, std = rec("g", "e3", .85, line_type="goblin", line=14.5), rec("s", "e4", .7)
+    out = advise([mine, weak], [mine, weak, gob, std], lines="one_goblin")
+    assert out[1]["replacement"]["player"] == "s"
+    assert out[0]["in_pool"] and out[0]["band"] and not any(n["code"] == "line_type" for n in out[0]["notes"])
+    out = advise([mine, weak], [mine, weak, gob, std], lines="no_goblins")   # the member's own goblin is never flagged
+    assert out[0]["in_pool"] and out[0]["notes"] == [] and out[1]["replacement"]["player"] == "s"
+
+
+def test_adder_one_goblin_counts_the_members_goblin_outside_the_pool():
+    """Review 2026-11-05: a goblin the member added that is not in Scout's pool (below the bar, held, ungraded) still counts, so
+    "at most 1 goblin" never suggests a second one. The route reads line_type from the board; the library reads it off the leg."""
+    off, weak = rec("o", "e1", .8, line_type="goblin", line=14.5), rec("w", "e2", .56)
+    gob, std = rec("g", "e3", .85, line_type="goblin", line=14.5), rec("s", "e4", .7)
+    legs, _ = legs_of([weak, gob, std])                          # the member's goblin is NOT in the pool
+    slip = [dict(slip_leg(off), line_type="goblin"), slip_leg(weak)]
+    out = sq.advise(slip, {l["key"]: l for l in legs}, legs, lines="one_goblin")
+    assert not out[0]["in_pool"] and out[1]["replacement"]["player"] == "s"
+    slip[0].pop("line_type")                                     # without the type the check cannot see it (the reviewed bug)
+    assert sq.advise(slip, {l["key"]: l for l in legs}, legs, lines="one_goblin")[1]["replacement"]["player"] == "g"
 
 
 def test_adder_names_conflict_same_player_and_same_match():

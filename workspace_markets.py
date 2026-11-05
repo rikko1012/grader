@@ -18,6 +18,13 @@ Arbitrage sheet. Best Over and best Under from two different books at the identi
   A leg that is stale (older than ARB_MAX_AGE_S), from a prediction market (depth and fees not verified), one-sided or a
   pick'em pick (not a standalone bet) is flagged and the pair is left out of the sheet; flagged pairs are listed with reasons.
 
+Member view (owner 2026-11-05, "Price check"): every row also carries plain context the page shows as is - the chance the price
+needs to break even ((1 - push chance) / odds, so a whole-number line priced with Scout's chance never reads "fair below needed"
+next to a positive result), the American price, the average result per $100, each leg's stake per $100 and the either-way return
+per $100. Members see sportsbook and prediction-market (Kalshi, Polymarket) price rows, as before; pick'em multiplier rows,
+flagged pairs (stale / prediction-market / pick'em legs), exclusion counts and the formulas stay in the owner's view. Exclusions are also counted per line (excluded_lines), so they never exceed
+markets_checked, and sections_possible says whether a sport's prices can produce each section at all.
+
 For 700 members: one build every TTL s for everyone (srv.shared); each member's answer is that build cut to the sports they see."""
 import json
 import time
@@ -32,6 +39,17 @@ CONSENSUS_MAX_AGE_S = 10 * 60
 MIN_BOOKS = 2
 MAX_ROWS = 300
 FRESH_FILTERS = [[120, "2 min"], [600, "10 min"], [1800, "30 min"]]
+
+
+def american(d):
+    """Decimal price -> American price text (+125 / -111)."""
+    try:
+        d = float(d)
+    except (TypeError, ValueError):
+        return None
+    if not d > 1:
+        return None
+    return f"+{round((d - 1) * 100)}" if d >= 2 else f"-{round(100 / (d - 1))}"
 
 
 def kind_of(platform):
@@ -171,11 +189,22 @@ def sheet(srv, sport, now):
     if gs is None:
         return {"state": "unavailable", "error": "Board not loaded yet", "ev": [], "arbitrage": [], "flagged": [], "excluded": {}}
     ev, arb, flagged, excluded, newest, n_quotes = [], [], [], {}, None, 0
+    excluded_lines, possible = {}, {"ev": False, "arb": False}
+    here = {}
 
     def ex(why, n=1):
         excluded[why] = excluded.get(why, 0) + n
+        here[why] = here.get(why, 0) + n
     for g in gs.values():
         quotes = g["quotes"]
+        here.clear()
+        n_ev = len(ev)
+        books = {q["book"] for q in quotes if q["kind"] == "sportsbook" and not q.get("exchange") and not q["multiplier"] and (q["over"] or q["under"])}
+        two_sided = {q["book"] for q in quotes if q["kind"] == "sportsbook" and not q.get("exchange") and q["over"] and q["under"]}
+        if len(books) >= 2:
+            possible["arb"] = True                          # two sportsbooks at one line: a both-sides pair can exist
+        if len(two_sided) > MIN_BOOKS:
+            possible["ev"] = True                           # a priced book plus MIN_BOOKS others: a fair chance can exist
         whole = float(g["line"]).is_integer()
         for q in quotes:
             n_quotes += 1
@@ -195,8 +224,10 @@ def sheet(srv, sport, now):
                     continue
                 rel = _released_p(g, sport, side)
                 if rel:
+                    possible["ev"] = True
                     p, pp, mv = rel
                     p_source, books, cwidth = f"Scout calibrated chance ({mv})", [], None
+                    chance_from = "Scout"
                 else:
                     if whole:
                         ex("Whole-number line: push chance not priced"); continue
@@ -206,6 +237,7 @@ def sheet(srv, sport, now):
                     p, books, cwidth = c
                     pp = 0.0
                     p_source = "No-vig consensus · " + ", ".join(books) + " (worst case of 4 devig methods)"
+                    chance_from = "Other books (" + ", ".join(books) + ")"
                 try:
                     value = mt.ev_push_adjusted(p, price, pp)
                 except ValueError:
@@ -220,7 +252,12 @@ def sheet(srv, sport, now):
                 ev.append(dict(_row_base(g, sport), side=side, book=q["book"], book_label=q["book_label"], kind=q["kind"],
                                odds=round(price, 3), p_cal=round(p, 4), p_push=round(pp, 4), p_source=p_source, ev=round(value, 4),
                                width=own, consensus_width=round(cwidth, 4) if cwidth is not None else None,
-                               age_s=round(age, 1), seen_at=wb._iso(q["seen"]), source=q["source"], flags=flags))
+                               age_s=round(age, 1), seen_at=wb._iso(q["seen"]), source=q["source"], flags=flags,
+                               needs=round(mt.implied(price) * (1 - pp), 4), american=american(price), per_100=round(value * 100, 2),
+                               chance_from=chance_from))
+        if len(ev) == n_ev and here:                        # one reason per line, so the line counts add up to markets_checked
+            why = max(here.items(), key=lambda kv: kv[1])[0]
+            excluded_lines[why] = excluded_lines.get(why, 0) + 1
         # ---- arbitrage: best Over and best Under on two different books
         legs = []
         for q in quotes:
@@ -259,13 +296,17 @@ def sheet(srv, sport, now):
             if not r["arbitrage"]:
                 continue
             fl = leg_flags(x, "over") + leg_flags(y, "under")
+            ages = [None if z["seen"] is None else round(now - z["seen"], 1) for z in (x, y)]
             row = dict(_row_base(g, sport), margin_pct=round(r["margin_pct"], 3), total_implied=round(r["total_implied"], 5),
+                       return_per_100=round(r["margin_pct"], 2), oldest_leg_s=None if None in ages else max(ages),
                        legs=[{"side": "over", "book": x["book"], "book_label": x["book_label"], "kind": x["kind"], "odds": round(x["over"], 3),
                               "implied": round(r["implied"][0], 5), "stake_share": round(r["stake_share"][0], 5),
+                              "stake_per_100": round(r["stake_share"][0] * 100, 2), "american": american(x["over"]),
                               "age_s": None if x["seen"] is None else round(now - x["seen"], 1), "seen_at": wb._iso(x["seen"]), "source": x["source"],
                               "flags": leg_flags(x, "over")},
                              {"side": "under", "book": y["book"], "book_label": y["book_label"], "kind": y["kind"], "odds": round(y["under"], 3),
                               "implied": round(r["implied"][1], 5), "stake_share": round(r["stake_share"][1], 5),
+                              "stake_per_100": round(r["stake_share"][1] * 100, 2), "american": american(y["under"]),
                               "age_s": None if y["seen"] is None else round(now - y["seen"], 1), "seen_at": wb._iso(y["seen"]), "source": y["source"],
                               "flags": leg_flags(y, "under")}])
             if clean and not fl:
@@ -279,7 +320,7 @@ def sheet(srv, sport, now):
     flagged.sort(key=lambda x: -x["margin_pct"])
     return {"state": "ready" if n_quotes else "empty", "as_of": wb._iso(now), "newest_quote_at": wb._iso(newest),
             "quotes_checked": n_quotes, "markets_checked": len(gs), "ev": ev[:MAX_ROWS], "arbitrage": arb[:MAX_ROWS],
-            "flagged": flagged[:MAX_ROWS], "excluded": excluded}
+            "flagged": flagged[:MAX_ROWS], "excluded": excluded, "excluded_lines": excluded_lines, "sections_possible": possible}
 
 
 METHOD = {"ev": "EV = p_cal x decimal odds - 1, push-adjusted (a push returns the stake)",
@@ -298,10 +339,17 @@ def build(srv, now=None):
             sports[sport] = sheet(srv, sport, now)
         except Exception as e:                     # noqa: BLE001 - one sport failing never empties the others
             sports[sport] = {"state": "unavailable", "error": type(e).__name__, "ev": [], "arbitrage": [], "flagged": [], "excluded": {}}
-    books = sorted({(r["book"], r["book_label"]) for d in sports.values() for r in d.get("ev", [])}
-                   | {(l["book"], l["book_label"]) for d in sports.values() for r in d.get("arbitrage", []) + d.get("flagged", []) for l in r["legs"]})
+    books = _books(sports.values())
     method = dict(METHOD, wide_overround=mt.WIDE_OVERROUND, arb_max_age_s=mt.ARB_MAX_AGE_S, ev_stale_s=mt.EV_STALE_S)
-    return {"as_of": wb._iso(now), "sports": sports, "books": [{"id": b, "label": l} for b, l in books], "method": method}
+    return {"as_of": wb._iso(now), "sports": sports, "books": books, "method": method}
+
+
+def _books(docs, flagged=False):
+    """Books that have a row in these sport docs (EV and both-sides rows; flagged pairs only for the owner's view)."""
+    docs = list(docs)
+    out = {(r["book"], r["book_label"]) for d in docs for r in d.get("ev", [])}
+    out |= {(l["book"], l["book_label"]) for d in docs for r in d.get("arbitrage", []) + (d.get("flagged", []) if flagged else []) for l in r["legs"]}
+    return [{"id": b, "label": l} for b, l in sorted(out)]
 
 
 def shared(srv):
@@ -310,8 +358,24 @@ def shared(srv):
     return srv.shared(("ws_market_sheet",), compute, ttl=TTL)
 
 
-def for_member(body, allowed):
-    """The shared build cut to the sports this member sees (a dict)."""
+MEMBER_HIDDEN = ("flagged", "excluded", "excluded_lines")
+
+
+def for_member(body, allowed, owner=False):
+    """The shared build cut to the sports this member sees (a dict), with the book list cut to those sports.
+    A member who is not the owner gets sportsbook and prediction-market price rows (a pick'em multiplier is not a single bet), clean
+    both-sides pairs only, no flagged pair or its margin, no exclusion counts and no formula strings. The owner keeps everything."""
     doc = json.loads(body)
     doc["sports"] = {s: d for s, d in doc["sports"].items() if allowed.get(s)}
+    doc["owner"] = bool(owner)
+    if not owner:
+        for d in doc["sports"].values():
+            d["ev"] = [r for r in d.get("ev", []) if r.get("kind") in ("sportsbook", "prediction")]
+            for r in d["ev"]:
+                r.pop("p_source", None)
+            d["arbitrage"] = [r for r in d.get("arbitrage", []) if all(l.get("kind") == "sportsbook" and not l.get("flags") for l in r.get("legs", []))]
+            for k in MEMBER_HIDDEN:
+                d.pop(k, None)
+        doc["method"] = {k: v for k, v in (doc.get("method") or {}).items() if k not in ("ev", "p_cal", "arbitrage")}
+    doc["books"] = _books(doc["sports"].values(), flagged=owner)
     return doc
