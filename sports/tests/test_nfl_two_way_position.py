@@ -89,6 +89,10 @@ def test_flag_on_keeps_two_way_history_and_maps_upcoming(tmp_path, monkeypatch):
     assert len(mine) >= 10 and len(up) == 1                        # his offensive rows are back
     assert set(df["position"][i] for i in mine) == {"WR"}
     assert set(np.asarray(df["position"])) <= set(featurize.NFL_POS)
+    # linemen / specialists play offensive snaps but are never pulled in (walk-forward amendment 2026-11-05)
+    ol = {r[0] for r in con.execute("SELECT DISTINCT player_id FROM nfl_pg WHERE position IN ('OT','G','C') "
+                                    "AND offense_snaps > 0 LIMIT 50")}
+    assert ol and not (set(np.asarray(df["player_id"])) & ol)
     art = forward.load_artifact("nfl")
     if art is None:
         pytest.skip("no NFL artifact")

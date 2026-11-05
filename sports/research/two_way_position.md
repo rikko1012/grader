@@ -44,7 +44,9 @@ letter. This note covers the model input.
 - **The fix removes the floor but overshoots Hunter's 2026 role.** For example, 2026-09-13: projected 4.0 rec / 47 yds,
   actual 1 / 8. On 2026-09-20 and 2026-09-27: projected about 3.5 / 40 and 3.0 / 34, actual 0 / 0. His offensive snaps
   fell from 37-67 a game in 2025 to 0-9 in 2026. sm-1 has no snap-share input, so it carries 2025 volume forward. At a
-  9.5 line it would print a near-certain Over: the same failure as before, on the other side.
+  9.5 line it would lean Over against a player who has mostly gone under. (Correction 2026-11-05: I first wrote
+  "near-certain Over" without computing it. In the walk-forward, A1's P(over) at the reference lines was 0.26-0.47, so
+  it is wrong, not certain.)
 
 ## Recommendation
 - **Keep `SCOUT_NFL_TWO_WAY` off.** Keep the sg-2 hold on two-way players. Under the factor rule, nothing moves grades
@@ -86,3 +88,50 @@ Script: `sports/research/two_way_walkforward.py`. Data: packaged history `histor
   (rec CI [-0.017, +0.0001]). This is a second look on later weeks, so a pass is weaker evidence than a first-look pass.
   It would still need forward confirmation on games after 2026-10-23 before it moves any grade.
 - Nothing is promoted by this run. The flag stays off and the frozen config is unchanged either way.
+
+## Walk-forward results (2026-11-05)
+Files: `sports/research/results/two_way_wf_v1_preregistered.json` (as registered) and `two_way_wf_v2_amended.json`.
+20 weeks (2025 W10 - 2026 W7), weekly refits, about 4 minutes per run.
+
+**Amendments after v1 (post-hoc, so labelled):**
+- v1's T contained 304 "two-way" players, mostly offensive linemen. An OT/G/C listing is outside QB-FB and linemen have
+  offensive snaps, so the flag pulled them in as "WR". v2 excludes OL and specialist listings
+  (`featurize.NFL_NOT_TWO_WAY`). P results are identical in v1 and v2.
+- T logloss is invalid: for those rows A0 has no history, so its reference line differs from A1's. v2 reports logloss on
+  P only.
+- T2 (post-hoc) = two-way rows of players with 2 or more prior games of targets or carries: 9 rows (Hunter 5, Matlock 2,
+  Simmons 1, Tonga 1).
+
+**P: A0-eligible rows, 244 games, 1,986 rows per market.** Paired CRPS difference, game-clustered 95% CI:
+
+| market | A1 - A0 | A2 - A1 | A2 - A1 logloss |
+|---|---|---|---|
+| rec | -0.0001 [-0.0004, +0.0001] | **-0.0128 [-0.0206, -0.0052]** (1.191 -> 1.178) | -0.0076 [-0.0126, -0.0021] |
+| rec_yds | +0.0022 [-0.0034, +0.0089] | **-0.128 [-0.210, -0.041]** (16.42 -> 16.29) | -0.0051 [-0.0090, -0.0012] |
+| pass_yds, rush_att, rush_yds | 0 (identical) | 0 (snap_trend not added) | - |
+
+**Two-way rows (v2).** T = 48 rows / 42 games; T2 = 9 rows.
+
+| market | pop | A0 floor CRPS | A1 | A2 | A1 - A0 CI |
+|---|---|---|---|---|---|
+| rec | T2 | 0.887 | 1.085 | 1.089 | [-0.78, +1.03] |
+| rec_yds | T2 | 9.44 | 11.55 | 11.81 | [-9.6, +11.3] |
+
+Hunter, 2026 (rec): actual 1, 0, 0, 1, 4. A1 projected 4.0, 3.5, 3.0, 2.5, 2.3. A2 projected 4.3, 3.4, 2.5, 1.8, 1.7.
+snap_trend only catches his role drop once 3 low-snap games are in the L3 window.
+
+**Verdict against the pre-registered rules:**
+- **A1 (two-way rows) does not qualify.** It passes no-harm on P, but on two-way rows it is not better than the 0.05
+  floor (point estimate worse, CI spans 0, only 9 meaningful rows). Most of those games ended at 0 or 1, so the floor
+  scores well by accident. The flag stays off; Hunter stays at the floor and the sg-2 hold keeps him off the board.
+- **A2 does not qualify as the two-way fix.** It improves nothing on two-way rows.
+- **Separate finding: `nfl.snap_trend` in rec / rec_yds improves the whole population on these weeks.** CRPS and logloss
+  CIs are entirely below 0 (about -1.1% rec, -0.8% rec_yds CRPS). It is a second look at a candidate that failed the
+  original tune (rec CI touched 0), on 2025 W10+ / 2026 weeks that the locked test and test2 had already used. Per the
+  factor rule and "forward evidence stays forward", this is a reason to put it on a forward shadow clock, not to switch
+  it on. That is an owner decision; nothing has been registered or changed.
+
+**Two-way players: recommended handling.** The data cannot support a model for them (a handful of players, about 9
+usable rows in 20 weeks, and roles that change week to week). Keep them held: today's floor plus the sg-2 hold already
+does that. If the board should say why, add an explicit sg-2 reason ("two-way player: no validated model") instead of
+relying on the floor. Display only, no grade change.

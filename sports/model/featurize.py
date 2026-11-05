@@ -220,6 +220,10 @@ NFL_FILL0 = ("pass_att", "pass_cmp", "pass_yds", "carries", "rush_yds", "targets
              "rz_carries", "i10_targets", "i10_carries", "rec_air_yds")
 
 
+# offensive line and specialists play offensive snaps without being two-way skill players: never pulled in (walk-forward
+# 2026-11-05 amendment: the first version labelled every lineman with snaps "WR")
+NFL_NOT_TWO_WAY = ("OT", "T", "G", "OG", "C", "OL", "K", "P", "LS", "")
+NFL_NOT_TWO_WAY_SQL = "(" + ",".join(f"'{p}'" for p in NFL_NOT_TWO_WAY) + ")"
 NFL_RECENT_POS = 8     # upcoming position = most frequent mapped position over the player's last N rows
 
 
@@ -304,8 +308,9 @@ def nfl_frame(con, h_opp=4, upcoming=None, as_of=None, with_lags=True):
     # mean at rec 1.5 / rec_yds 9.5). Flag on: a defensive-listed row is kept when that row itself shows offense
     # (offensive snaps, targets, carries or passes) - a per-row test, so no future data decides inclusion.
     keep = ("p.position IN ('QB','RB','WR','TE','FB')" if not two_way else
-            "(p.position IN ('QB','RB','WR','TE','FB') OR COALESCE(p.offense_snaps, 0) > 0 OR "
-            "COALESCE(p.targets, 0) + COALESCE(p.carries, 0) + COALESCE(p.pass_att, 0) > 0)")
+            "(p.position IN ('QB','RB','WR','TE','FB') OR (COALESCE(p.position, '') NOT IN " + NFL_NOT_TWO_WAY_SQL +
+            " AND (COALESCE(p.offense_snaps, 0) > 0 OR "
+            "COALESCE(p.targets, 0) + COALESCE(p.carries, 0) + COALESCE(p.pass_att, 0) > 0)))")
     pg = Frame.from_sql(con, "SELECT p.*, g.start_utc, g.spread_home, g.total_line, g.roof, g.temp, g.wind "
                              "FROM nfl_pg p JOIN games g ON g.league='nfl' AND g.game_id = p.game_id "
                              f"WHERE g.status = 'final' AND {keep}")
