@@ -116,7 +116,7 @@
   const siblings = (rec) => (R.boards[rec.sport].props.get(propKey(rec)) || [rec]);
   const tallies = (rec) => {
     const h = rec.history || {}, saved = rec.sport === "cs2" ? R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)] || {} : {}, more = saved.line === rec.offer.line ? saved : {};
-    return { l5: h.l5 || more.l5 || null, l10: h.l10 || null, l20: h.l20 || more.l20 || null };
+    return { l5: h.l5 || more.l5 || null, l10: h.l10 || null, l20: h.l20 || more.l20 || null, h2h: h.h2h || more.h2h || null, season: h.season || more.season || null };   /* h2h / season: SCOUT_BOARD_H2H only */
   };
 
   /* ---- offer helpers, the workspace's rules ---- */

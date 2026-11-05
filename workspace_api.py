@@ -939,7 +939,15 @@ def get_me(h, srv, q, member, scratch, name):
                                      "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
                                      "background_alerts": bool(workspace_alerts.configured()),
                                      "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK),
-                                     **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {})}})
+                                     **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {}),
+                                     **({"board_h2h": _board_columns()} if workspace_h2h.board_enabled() else {})}})
+
+
+def _board_columns():
+    """SCOUT_BOARD_H2H: the break-even the board's Edge column compares with. Underdog standard 2-pick at a 1.0x pick only, from the
+    gradecore payout table; any other book, entry or multiplier has no published per-pick break-even here, so it shows no edge."""
+    from gradecore import payouts
+    return {"ud_standard_break_even": payouts.break_even("underdog", "standard", 2), "entry": "Underdog standard 2-pick"}
 
 
 def get_market_tools(h, srv, q, member, scratch, name):
@@ -1105,6 +1113,9 @@ def _hits_doc(srv, snap):
     d = _HITS_DOC
     items = list(snap['index'].items())
     key = tuple((book, rid, x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push')) for (book, rid), x in items)
+    cols = workspace_h2h.board_enabled()              # SCOUT_BOARD_H2H: the H2H and Season columns ride on this same shared pass
+    if cols:
+        key = ("h2h",) + key
     if d.get('key') == key and d["body"] is not None and time.time() - d["at"] < d["ttl"]:
         return d["body"]
     if not d["lock"].acquire(blocking=False):
@@ -1125,6 +1136,9 @@ def _hits_doc(srv, snap):
             ser = (_history(srv, x, full=True) or {}).get("ser")
             if ser:
                 rows[f"{book}|{rid}"] = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
+                if cols:
+                    rows[f"{book}|{rid}"].update(h2h=workspace_h2h.board_h2h(ser, x.get("opp_name") or x.get("opponent"), x.get("line")),
+                                                 season=workspace_h2h.board_season(ser, x.get("line")))
         if complete:
             d['cursor'] = 0
         d['rows'] = rows

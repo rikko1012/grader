@@ -5,6 +5,8 @@ export function mount(C) {
   if(!document.querySelector('link[href="/upgrade/hub.css"]')){const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);}
   const {api, R, T, SPORTS, esc, pct, when} = C;
   const V2 = R.me.features?.workspace_v2 === true;
+  // SCOUT_BOARD_H2H (default off): H2H + Season columns, 7-tone cells, start countdown, Edge vs the Underdog standard break-even
+  const COLS = R.me.features?.board_h2h && typeof R.me.features.board_h2h === 'object' ? R.me.features.board_h2h : null;
   const $ = id => document.getElementById(id);
   const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
@@ -82,8 +84,38 @@ export function mount(C) {
     }
     if(!side) return `<span class="h-hit h-hit-both" title="Last ${t.n} results at this line: ${t.over} Over, ${t.under} Under, ${t.push||0} pushes. Historical counts, not a recommendation."><span>O <b>${t.over}</b><small>/${t.n}</small></span><span>U <b>${t.under}</b><small>/${t.n}</small></span></span>${fewNote(t,n)}`;
     const hit=countOf(t,side), rate=hit/t.n;
-    return `<span class="h-hit ${V2?'h-tone-'+Math.min(6,Math.floor(rate*7)):rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${rate.toFixed(3)}" title="${hit} ${sideWord(side)} of the last ${t.n} at this line, ${t.push||0} pushes">${hit}<small>/${t.n}</small></span>${fewNote(t,n)}`;
+    return `<span class="h-hit ${V2||COLS?'h-tone-'+Math.min(6,Math.floor(rate*7)):rate>=.6?'positive':rate<.4?'negative':''}" style="--hit:${rate.toFixed(3)}" title="${hit} ${sideWord(side)} of the last ${t.n} at this line, ${t.push||0} pushes">${hit}<small>/${t.n}</small></span>${fewNote(t,n)}`;
   }
+  /* SCOUT_BOARD_H2H: H2H (meetings with tonight's opponent) and Season, counted at the displayed line like L5/L10/L20 */
+  function extraCell(r,which) {
+    const t=C.tallies(r)[which], side=r.scout.side, opp=r.player.opponent||'this opponent';
+    const what=which==='h2h'?(n=>`of the last ${n} ${n===1?'meeting':'meetings'} with ${opp}`):(n=>`of ${n} ${t?.season?t.season+' ':''}season ${n===1?'result':'results'}`);
+    if(!t||!t.n) {
+      if(C.hitsPending(r)) return `<span class="h-hit h-hit-wait" role="img" aria-label="${which==='h2h'?'H2H':'Season'} loading"></span>`;
+      return `<span class="h-hit empty" title="${esc(which==='h2h'?'No past meetings with '+opp+' at this line':'No completed results this season at this line')}">—</span>`;
+    }
+    if(!side) return `<span class="h-hit h-hit-both" title="${esc(`${t.over} Over, ${t.under} Under, ${t.push||0} pushes ${what(t.n)} at this line. Historical counts, not a recommendation.`)}"><span>O <b>${t.over}</b><small>/${t.n}</small></span><span>U <b>${t.under}</b><small>/${t.n}</small></span></span>`;
+    const hit=countOf(t,side), rate=hit/t.n;
+    return `<span class="h-hit h-tone-${Math.min(6,Math.floor(rate*7))}" style="--hit:${rate.toFixed(3)}" title="${esc(`${hit} ${sideWord(side)} ${what(t.n)} at this line, ${t.push||0} pushes`)}">${hit}<small>/${t.n}</small></span>`;
+  }
+  /* Edge vs break-even: Underdog standard lines at a 1.0x pick only (gradecore payout table); every other line shows no edge */
+  function edgeCell(r) {
+    const s=r.scout, be=COLS?.ud_standard_break_even, mult=s.side?r.offer[s.side]?.payout:null;
+    if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||s.hold||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9)
+      return '<span class="h-edge empty" title="Edge is shown for Underdog standard lines only">—</span>';
+    const d=(s.p_side-be)*100;
+    return `<span class="h-edge ${d>0?'positive':d<0?'negative':''}" title="${esc(`Scout chance ${pct(s.p_side)} against the ${(be*100).toFixed(1)}% break-even of an ${COLS.entry||'Underdog standard'} entry`)}"><b>${d>0?'+':d<0?'−':''}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
+  }
+  /* start countdown in the Player cell; the ticker below keeps it current between board refreshes */
+  function countdown(at) {
+    const ms=Date.parse(at)-Date.now();
+    if(!Number.isFinite(ms)) return '';
+    if(ms<=0) return 'Starting';
+    const m=Math.floor(ms/60000), d=Math.floor(m/1440), h=Math.floor(m%1440/60), mm=m%60;
+    return 'in '+(d?`${d}d ${h}h`:h?`${h}h ${String(mm).padStart(2,'0')}m`:`${Math.max(1,mm)}m`);
+  }
+  const countdownHtml = r => `<span class="h-countdown${Date.parse(r.event.start_utc)-Date.now()<=3600000?' soon':''}" data-start="${esc(r.event.start_utc)}">${esc(countdown(r.event.start_utc))}</span>`;
+  const COL_COUNT = COLS?15:12;
   const openPlayers = new Set();
   const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
   function sideCell(r) {
@@ -127,14 +159,35 @@ export function mount(C) {
     const match=`${r.event.label} · ${when(r.event.start_utc)}`;
     return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="${open?'is-expanded':''}${group?'':' is-sub'}">
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
-      <td class="h-c-player"><div class="h-pcell"><span class="h-avatar" aria-hidden="true">${initials(r.player.name)}</span><div class="h-pinfo"><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${open}"><b>${esc(r.player.name)}</b><small>${esc(r.player.team)}<i>${SPORTS[r.sport]}</i></small></button><div class="h-match" title="${esc(match)}">${esc(match)}</div>${toggle}</div></div></td>
+      <td class="h-c-player"><div class="h-pcell"><span class="h-avatar" aria-hidden="true">${initials(r.player.name)}</span><div class="h-pinfo"><button class="h-player" data-hub="expand" data-id="${k}" aria-expanded="${open}"><b>${esc(r.player.name)}</b><small>${esc(r.player.team)}<i>${SPORTS[r.sport]}</i></small></button><div class="h-match" title="${esc(match)}">${esc(match)}</div>${COLS?countdownHtml(r):''}${toggle}</div></div></td>
       <td class="h-c-market"><b>${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></td>
       <td class="h-c-line h-number"><b>${esc(r.offer.line)}</b><small>${esc(r.offer.platform_label)}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
-      <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td class="h-c-side">${sideCell(r)}</td>
-      <td class="h-c-l5">${cell(r,5)}</td><td class="h-c-l10">${cell(r,10)}</td><td class="h-c-l20">${cell(r,20)}</td>
+      <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td><td class="h-c-side">${sideCell(r)}</td>${COLS?`<td class="h-c-edge h-number">${edgeCell(r)}</td>`:''}
+      <td class="h-c-l5">${cell(r,5)}</td><td class="h-c-l10">${cell(r,10)}</td><td class="h-c-l20">${cell(r,20)}</td>${COLS?`<td class="h-c-h2h">${extraCell(r,'h2h')}</td><td class="h-c-season">${extraCell(r,'season')}</td>`:''}
       <td class="h-c-compare">${compareCell(r)}</td>
       <td class="h-c-grade"><div class="h-grade-cell">${gradeChip(r)}<small class="h-seen" title="Offer revision first observed ${esc(r.offer.seen_at||'at an unavailable time')}">Seen ${esc(age(r.offer.seen_at))}</small></div></td>
-      <td class="h-c-add"><button class="h-add ${on||choose?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':choose?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':choose?'Side':'+'}</button></td></tr>${open?'<tr class="h-detail-row"><td colspan="12"><div id="hub-detail" class="h-card" aria-live="polite"></div></td></tr>':''}`;
+      <td class="h-c-add"><button class="h-add ${on||choose?'selected':''}" data-hub="add" data-id="${k}" aria-label="${on?'Review':choose?'Choose a side for':'Add'} ${esc(r.player.name)} to slip" ${unavailable?'disabled':''}>${on?'Added':choose?'Side':'+'}</button></td></tr>${open?'<tr class="h-detail-row"><td colspan="'+COL_COUNT+'"><div id="hub-detail" class="h-card" aria-live="polite"></div></td></tr>':''}`;
+  }
+  /* SCOUT_BOARD_H2H: "Current lines only" — when no current line is left, say how many lines matching these filters were left
+     off and why (the board itself still never shows a stale or failed row) */
+  function emptyReasons() {
+    const counts=new Map();
+    for(const r of H.records){
+      if(!matches(r,{...H,freshOnly:false}))continue;
+      const why=C.started(r)?'Started':(()=>{const u=unavailableReason(r);return !u?null:u==='Refresh failed'?'Board refresh failed':/^Source /.test(u)?'Source not updated':'Held';})();
+      if(why)counts.set(why,(counts.get(why)||0)+1);
+    }
+    if(!counts.size)return null;
+    const total=[...counts.values()].reduce((a,b)=>a+b,0);
+    return `<b class="h-empty-title">Current lines only</b><span>No current line matches these filters. ${total.toLocaleString()} ${total===1?'line was':'lines were'} left off:</span><span class="h-empty-reasons">${[...counts.entries()].sort((a,b)=>b[1]-a[1]).map(([w,n])=>`<span data-reason="${esc(w)}">${esc(w)} <b>${n.toLocaleString()}</b></span>`).join('')}</span>`;
+  }
+  function installCols() {
+    if(!COLS)return;
+    $('u-hub').classList.add('h-cols');
+    const head=$('hub-table').tHead.rows[0];
+    head.querySelector('.h-c-side').insertAdjacentHTML('afterend','<th class="h-c-edge" title="Scout chance minus the per-pick break-even. Underdog standard lines only.">Edge <small>vs break-even</small></th>');
+    head.querySelector('.h-c-l20').insertAdjacentHTML('afterend','<th class="h-c-h2h" title="Past meetings with tonight\'s opponent, at this line">H2H</th><th class="h-c-season" title="This season\'s results, at this line">Season</th>');
+    setInterval(()=>{if(!isOpen()||document.hidden)return;document.querySelectorAll('#hub-rows .h-countdown[data-start]').forEach(el=>{const t=countdown(el.dataset.start);if(el.textContent!==t)el.textContent=t;el.classList.toggle('soon',Date.parse(el.dataset.start)-Date.now()<=3600000);});},30000);
   }
   function paintBoard() {
     if(!isOpen()||H.section!=='board') return;
@@ -149,7 +202,8 @@ export function mount(C) {
     $('hub-rows').innerHTML=players.slice(H.page*size,(H.page+1)*size).map(group=>row(group[0],group)+(openPlayers.has(boardPlayerKey(group[0]))?group.slice(1).map(r=>row(r)).join(''):'')).join('');
     paintDetail();
     $('hub-empty').hidden=list.length>0;
-    $('hub-empty').textContent=H.loading?'Loading the available boards…':H.records.length?'No lines match these filters. Try another sport, book or player.':'No upcoming lines are available. Refresh to check again.';
+    const why=COLS&&!list.length&&!H.loading?emptyReasons():null;
+    if(why)$('hub-empty').innerHTML=why;else $('hub-empty').textContent=H.loading?'Loading the available boards…':H.records.length?'No lines match these filters. Try another sport, book or player.':'No upcoming lines are available. Refresh to check again.';
     $('hub-pagination').innerHTML=`<span>${players.length?H.page*size+1:0}–${Math.min((H.page+1)*size,players.length)} of ${players.length} players</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
     $('hub-views').innerHTML='<option value="">Saved views</option>'+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
     restoreFocus();
@@ -606,6 +660,7 @@ export function mount(C) {
   $('hub-board-section').querySelector('.h-tools>button').insertAdjacentHTML('beforebegin','<button class="h-filter-toggle" id="hub-filters-toggle" data-hub="filters" aria-expanded="false" aria-label="Filters and saved views">Filters</button>');
   $('hub-board-section').insertAdjacentHTML('beforebegin','<nav class="h-nav-mobile" aria-label="Research sections"><button data-hub="section" data-id="board">Props</button><button data-hub="section" data-id="studio">Slip Studio</button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Results</button><button data-hub="section" data-id="alerts">Alerts</button></nav>');
   installV2();
+  installCols();
   const entryHost=document.querySelector('.workspace-tools')||document.querySelector('.sw-tabs')||document.querySelector('.ot-lol .bar')||document.querySelector('body header');
   if(entryHost) entryHost.appendChild(entry); else document.body.prepend(entry);
   $('hub-save-dialog').addEventListener('close',()=>{
