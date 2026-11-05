@@ -41,11 +41,11 @@
         "nfl": {"receptions": ["rec", "game"], "receiving_yards": ["rec_yds", "game"], "rushing_yards": ["rush_yds", "game"],
                 "passing_yards": ["pass_yds", "game"], "passing_attempts": ["pass_att", "game"], "pass_completions": ["pass_cmp", "game"],
                 "passing_touchdowns": ["pass_td", "game"], "interceptions": ["pass_int", "game"], "rushing_attempts": ["rush_att", "game"],
-                "rushing_and_receiving_yards": ["rush_rec_yds", "game"]},
-        "nba": {"points": ["points", "game"], "rebounds": ["rebounds", "game"], "assists": ["assists", "game"]},
+                "rushing_and_receiving_yards": ["rush_rec_yds", "game"], "passing_and_rushing_yards": ["pass_rush_yds", "game"]},
+        "nba": {"points": ["points", "game"], "rebounds": ["rebounds", "game"], "assists": ["assists", "game"], "threes_made": ["threes", "game"]},
         "lol": {}
       },
-      "stats_note": "Only stat names observed on the live feed are mapped (CS2 and NFL, 2026-11-05). NBA points / rebounds / assists follow the same naming and are mapped whole; any other name is counted as unmapped and never guessed."
+      "stats_note": "Only stat names observed on the live feed are mapped (CS2, NFL and NBA threes_made, 2026-11-05). NBA points / rebounds / assists follow the same naming and are mapped whole; any other name is counted as unmapped and never guessed."
     },
     "fanduel": {
       "label": "FanDuel",

@@ -251,7 +251,7 @@ def test_saved_view_alert_and_watch_are_account_preferences(ctx, env):
     assert 'Vargo line updates' in p.locator('#hub-tools-alerts').inner_text()
     p.locator('#hub-tools-alerts [data-id=alerts]').click()
     assert 'Vargo line updates' in p.locator('#hub-alerts-body').inner_text()
-    assert 'No email or push' in p.locator('#hub-alerts-body').inner_text()
+    assert 'Nothing is sent when it is closed' in p.locator('#hub-alerts-body').inner_text()          # Live highlight: never claims delivery
     assert not p.errors
 
 
