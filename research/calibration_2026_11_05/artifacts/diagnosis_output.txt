@@ -1,0 +1,107 @@
+
+======== CS2 (6317 units)  results cohort {'n': 1831, 'matches': 326, 'stated': 0.6088, 'hit': 0.5319, 'over_by': 0.0769, 'hit_minus_stated_ci': [-0.10922, -0.0439]}
+ ALL {'n': 6317, 'matches': 356, 'bias_proj_minus_actual': -0.074, 'bias_ci': [-0.48836, 0.31291], 'mean_actual_minus_line': 0.151, 'over_rate': 0.489, 'mean_proj_minus_line': 0.077, 'mean_abs_proj_minus_line': 0.881, 'gap_slope_beta': 0.263, 'gap_slope_ci': [0.025, 0.479], 'gap_intercept': 0.13, 'mae_projection': 4.933, 'mae_line': 4.893, 'resid_sd_over_model_sd': 0.993, 'resid_mean_in_sds': 0.007, 'probit_shift_a': -0.025, 'probit_slope_b': 0.257}
+ prop           hs                     n  3022 bias 0.024 [-0.24321, 0.27009] slope 0.443 [0.205, 0.669] sd-ratio 0.989 probit a -0.031 b 0.448 MAE proj/line 3.753/3.752 over 0.4828
+ prop           kills                  n  3295 bias -0.163 [-0.69337, 0.35586] slope 0.198 [-0.053, 0.452] sd-ratio 0.996 probit a -0.014 b 0.079 MAE proj/line 6.015/5.94 over 0.4947
+ prop x scope   hs 1                   n   206 bias 0.413 [-0.06598, 0.9048] slope -0.771 [-1.584, 0.157] sd-ratio 0.96 probit a -0.159 b -1.546 MAE proj/line 2.67/2.556 over 0.4515
+ prop x scope   hs 12                  n  2761 bias -0.014 [-0.29737, 0.26274] slope 0.476 [0.214, 0.749] sd-ratio 0.991 probit a -0.02 b 0.555 MAE proj/line 3.816/3.823 over 0.4861
+ prop x scope   hs 123                 n    55 bias 0.5 [-1.547, 2.8224] slope 0.261 [-0.66, 0.805] sd-ratio 0.97 probit a -0.133 b 0.355 MAE proj/line 4.666/4.682 over 0.4364
+ prop x scope   kills 1                n   258 bias 0.661 [-0.36863, 1.63278] slope -0.668 [-1.599, 0.283] sd-ratio 0.95 probit a -0.213 b -1.024 MAE proj/line 4.301/4.143 over 0.407
+ prop x scope   kills 12               n  2978 bias -0.222 [-0.78516, 0.29428] slope 0.209 [-0.064, 0.501] sd-ratio 0.998 probit a -0.0 b 0.177 MAE proj/line 6.113/6.048 over 0.5003
+ prop x scope   kills 123              n    59 bias -0.773 [-5.44472, 4.84036] slope 0.537 [-0.292, 2.092] sd-ratio 1.068 probit a 0.233 b -0.431 MAE proj/line 8.575/8.347 over 0.5932
+ prop x side    hs Over                n  1242 bias 0.374 [0.00973, 0.74353] slope 0.368 [-0.127, 0.896] sd-ratio 0.978 probit a 0.033 b 0.233 MAE proj/line 3.737/3.713 over 0.5258
+ prop x side    hs Under               n  1780 bias -0.22 [-0.53453, 0.07511] slope 0.193 [-0.207, 0.573] sd-ratio 0.993 probit a -0.11 b 0.058 MAE proj/line 3.764/3.78 over 0.4528
+ prop x side    kills Over             n  1603 bias 0.534 [-0.0454, 1.07972] slope -0.181 [-0.626, 0.248] sd-ratio 0.966 probit a 0.076 b -0.299 MAE proj/line 5.819/5.693 over 0.5122
+ prop x side    kills Under            n  1692 bias -0.824 [-1.51472, -0.16852] slope 0.211 [-0.307, 0.76] sd-ratio 1.016 probit a -0.078 b -0.181 MAE proj/line 6.202/6.173 over 0.4781
+ letter band    A- and up (68%+)       n   103 bias 1.554 [-0.39167, 3.45364] slope 0.003 [-0.502, 0.467] sd-ratio 1.113 probit a 0.008 b 0.206 MAE proj/line 5.838/5.248 over 0.5243
+ letter band    B (57-63%)             n  1521 bias -0.087 [-0.55144, 0.40432] slope 0.356 [0.071, 0.647] sd-ratio 0.987 probit a -0.042 b 0.259 MAE proj/line 4.895/4.831 over 0.4793
+ letter band    B+ (63-68%)            n   312 bias 0.725 [-0.20448, 1.60011] slope 0.108 [-0.284, 0.46] sd-ratio 1.046 probit a 0.056 b -0.199 MAE proj/line 5.418/5.011 over 0.516
+ letter band    B- (55-57%)            n   963 bias -0.103 [-0.63546, 0.44429] slope 0.31 [-0.219, 0.903] sd-ratio 0.973 probit a -0.025 b 0.677 MAE proj/line 4.788/4.787 over 0.4818
+ letter band    under 55%              n  3418 bias -0.181 [-0.60227, 0.24714] slope 0.642 [0.004, 1.254] sd-ratio 0.991 probit a -0.014 b 0.925 MAE proj/line 4.92/4.93 over 0.4918
+ week           Nov 1-4                n   878 bias -0.15 [-1.30559, 0.9131] slope 0.188 [-0.379, 0.773] sd-ratio 1.013 probit a -0.019 b 0.036 MAE proj/line 4.994/4.958 over 0.492
+ week           Oct 11-17              n  1549 bias 0.12 [-0.51421, 0.73639] slope 0.137 [-0.25, 0.517] sd-ratio 0.95 probit a -0.057 b 0.284 MAE proj/line 4.578/4.524 over 0.4777
+ week           Oct 18-24              n  1887 bias -0.701 [-1.56523, 0.14766] slope 0.214 [-0.239, 0.702] sd-ratio 1.075 probit a 0.047 b -0.025 MAE proj/line 5.472/5.392 over 0.5188
+ week           Oct 25-31              n  2003 bias 0.401 [-0.12713, 0.95067] slope 0.519 [0.124, 0.947] sd-ratio 0.926 probit a -0.078 b 0.679 MAE proj/line 4.673/4.681 over 0.4683
+ -- slices_all_units
+    prop kills: 3295 0.555/0.517 | hs: 3022 0.555/0.538
+    scope 12: 5739 0.555/0.531 | 1: 464 0.547/0.481 | 123: 114 0.570/0.509
+    prop x scope kills 12: 2978 0.555/0.522 | hs 12: 2761 0.555/0.541 | kills 1: 258 0.548/0.469 | hs 1: 206 0.546/0.495 | kills 123: 59 0.578/0.475 | hs 123: 55 0.562/0.545
+    favoured side Under: 3472 0.553/0.535 | Over: 2845 0.557/0.518
+    prop x side hs Under: 1780 0.556/0.547 | kills Under: 1692 0.550/0.522 | kills Over: 1603 0.559/0.512 | hs Over: 1242 0.553/0.526
+    letter band under 55%: 3418 0.523/0.527 | B (57-63%): 1521 0.593/0.527 | B- (55-57%): 963 0.559/0.545 | B+ (63-68%): 312 0.650/0.471 | A- and up (68%+): 103 0.709/0.553
+    model tag 3007c59b74: 1847 0.552/0.538 | 2085aa791c: 782 0.548/0.575 | 794a775f51: 757 0.560/0.536 | aa6696d5d6: 743 0.551/0.505 | 9cfcbd217a: 609 0.555/0.543 | 6f6e2d39d7: 302 0.572/0.553 | c36104d079: 287 0.546/0.484 | a310d76b55: 273 0.559/0.498 | f663af8917: 233 0.553/0.519
+    projection-line distance 0-1: 4193 0.531/0.533 | 1-2: 1553 0.585/0.515 | 2-3: 416 0.630/0.510 | 3-5: 146 0.679/0.555
+    book underdog: 3789 0.555/0.516 | prizepicks: 2528 0.554/0.544
+    week Oct 25-31: 2003 0.551/0.560 | Oct 18-24: 1887 0.555/0.508 | Oct 11-17: 1549 0.562/0.510 | Nov 1-4: 878 0.550/0.526
+    projection source perf-cm2: 3568 0.551/0.537 | perf-2: 1931 0.553/0.528 | not in forecast record: 656 0.570/0.489 | perf-2-bo3: 162 0.590/0.457
+    odds source thunderpick: 4804 0.553/0.535 | polymarket: 853 0.557/0.524 | none: 660 0.564/0.476
+    raw vs stated stated = raw: 6025 0.554/0.533 | no raw saved: 289 0.571/0.419
+ -- slices_results_cohort
+    prop kills: 951 0.610/0.517 | hs: 880 0.608/0.548
+    scope 12: 1781 0.609/0.532 | 123: 50 0.620/0.520
+    prop x scope kills 12: 922 0.609/0.519 | hs 12: 859 0.608/0.546 | kills 123: 29 0.625/0.448 | hs 123: 21 0.613/0.619
+    favoured side Under: 985 0.603/0.537 | Over: 846 0.616/0.526
+    prop x side hs Under: 544 0.605/0.550 | kills Over: 510 0.617/0.514 | kills Under: 441 0.601/0.521 | hs Over: 336 0.613/0.545
+    letter band B (57-63%): 1440 0.594/0.538 | B+ (63-68%): 294 0.650/0.486 | A- and up (68%+): 97 0.710/0.577
+    model tag 3007c59b74: 500 0.608/0.530 | 794a775f51: 262 0.613/0.519 | aa6696d5d6: 209 0.601/0.469 | 2085aa791c: 194 0.603/0.624 | 9cfcbd217a: 159 0.609/0.641 | 6f6e2d39d7: 129 0.624/0.605 | a310d76b55: 65 0.605/0.508 | f663af8917: 64 0.613/0.453 | c36104d079: 56 0.600/0.464
+    projection-line distance 1-2: 1011 0.595/0.528 | 2-3: 409 0.629/0.516 | 0-1: 256 0.583/0.570 | 3-5: 146 0.679/0.555
+    book underdog: 1114 0.610/0.521 | prizepicks: 717 0.608/0.549
+    week Oct 18-24: 560 0.608/0.487 | Oct 25-31: 553 0.606/0.559 | Oct 11-17: 510 0.614/0.557 | Nov 1-4: 208 0.606/0.519
+    projection source perf-cm2: 1005 0.604/0.527 | perf-2: 470 0.609/0.560 | not in forecast record: 278 0.620/0.522 | perf-2-bo3: 78 0.627/0.462
+    odds source thunderpick: 1334 0.609/0.533 | polymarket: 252 0.607/0.548 | none: 245 0.613/0.510
+    raw vs stated stated = raw: 1703 0.608/0.541 | no raw saved: 125 0.619/0.424
+ raw vs stated {'n': 6028, 'stated': {'n': 6028, 'matches': 339, 'stated': 0.554, 'hit': 0.5325, 'over_by': 0.0214, 'hit_minus_stated_ci': [-0.04061, -0.00357]}, 'raw': {'n': 6028, 'matches': 339, 'stated': 0.554, 'hit': 0.5323, 'over_by': 0.0216, 'hit_minus_stated_ci': [-0.04086, -0.00379]}, 'logloss_stated': 0.69658, 'logloss_raw': 0.69672, 'mean_abs_diff': 0.0003}
+
+======== LOL (1795 units)  results cohort {'n': 1037, 'stated_printed': 0.6064, 'hit': 0.5333}
+ ALL {'n': 1795, 'matches': 38, 'bias_proj_minus_actual': 0.244, 'bias_ci': [-0.07176, 0.56835], 'mean_actual_minus_line': -0.378, 'over_rate': 0.4145, 'mean_proj_minus_line': -0.134, 'mean_abs_proj_minus_line': 1.319, 'gap_slope_beta': 0.497, 'gap_slope_ci': [0.175, 0.858], 'gap_intercept': -0.311, 'mae_projection': 2.744, 'mae_line': 2.707, 'resid_sd_over_model_sd': 0.919, 'resid_mean_in_sds': -0.064, 'probit_shift_a': -0.146, 'probit_slope_b': 0.41}
+ prop           assists                n   430 bias 0.501 [-0.17319, 1.2384] slope 0.351 [-0.016, 0.833] sd-ratio 0.871 probit a -0.276 b -0.101 MAE proj/line 3.996/3.795 over 0.4
+ prop           kills                  n  1365 bias 0.163 [-0.09532, 0.41914] slope 0.569 [0.264, 0.902] sd-ratio 0.933 probit a -0.123 b 0.531 MAE proj/line 2.349/2.364 over 0.419
+ prop x scope   assists 1              n   232 bias 0.093 [-0.78087, 0.93218] slope 0.115 [-0.553, 1.036] sd-ratio 0.927 probit a -0.256 b -0.6 MAE proj/line 3.514/3.168 over 0.4483
+ prop x scope   assists 12             n   154 bias 0.888 [-0.26336, 2.01137] slope 0.41 [-0.135, 1.375] sd-ratio 0.763 probit a -0.266 b 0.396 MAE proj/line 4.215/4.221 over 0.3636
+ prop x scope   assists 123            n    44 bias 1.296 None slope 0.188 [-1.106, 0.341] sd-ratio 0.887 probit a -0.675 b -0.202 MAE proj/line 5.772/5.614 over 0.2727
+ prop x scope   kills 1                n   688 bias 0.235 [-0.07637, 0.56334] slope 0.493 [0.204, 0.881] sd-ratio 1.01 probit a -0.267 b 0.344 MAE proj/line 1.933/1.94 over 0.3721
+ prop x scope   kills 12               n   466 bias 0.429 [0.11947, 0.80336] slope 0.764 [0.243, 1.208] sd-ratio 0.796 probit a -0.074 b 0.983 MAE proj/line 2.389/2.578 over 0.4227
+ prop x scope   kills 123              n   211 bias -0.66 [-1.16857, 0.07753] slope 0.397 [-0.03, 0.989] sd-ratio 0.923 probit a 0.179 b 0.126 MAE proj/line 3.621/3.275 over 0.564
+ prop x side    assists Over           n   132 bias 2.221 [0.66134, 3.69054] slope -0.233 [-1.239, 1.264] sd-ratio 0.859 probit a -0.074 b -1.108 MAE proj/line 4.468/3.538 over 0.3788
+ prop x side    assists Under          n   298 bias -0.261 [-1.17487, 0.64825] slope 0.527 [0.09, 1.049] sd-ratio 0.84 probit a -0.154 b 0.178 MAE proj/line 3.787/3.909 over 0.4094
+ prop x side    kills Over             n   485 bias 0.904 [0.35618, 1.4334] slope 0.624 [0.109, 1.302] sd-ratio 0.808 probit a -0.256 b 0.938 MAE proj/line 2.532/2.378 over 0.5072
+ prop x side    kills Under            n   880 bias -0.246 [-0.66319, 0.16736] slope 0.635 [0.343, 1.038] sd-ratio 0.976 probit a -0.151 b 0.44 MAE proj/line 2.249/2.356 over 0.3705
+ letter band    A- and up (68%+)       n   575 bias -0.357 [-1.01461, 0.29492] slope 0.517 [0.208, 0.918] sd-ratio 1.005 probit a -0.004 b 0.515 MAE proj/line 2.968/3.027 over 0.4157
+ letter band    B (57-63%)             n   400 bias 0.486 [0.00487, 0.94324] slope 0.384 [-0.138, 0.936] sd-ratio 0.881 probit a -0.193 b 0.236 MAE proj/line 2.64/2.499 over 0.42
+ letter band    B+ (63-68%)            n   284 bias 0.626 [0.17661, 1.09912] slope 0.504 [0.036, 0.939] sd-ratio 0.858 probit a -0.321 b 0.333 MAE proj/line 2.499/2.493 over 0.3486
+ letter band    B- (55-57%)            n   138 bias 0.319 [-0.39746, 1.07368] slope -0.501 [-1.728, 0.862] sd-ratio 0.89 probit a -0.103 b 0.514 MAE proj/line 2.658/2.547 over 0.4565
+ letter band    under 55%              n   398 bias 0.569 [-0.07186, 1.21553] slope 0.398 [-1.401, 1.851] sd-ratio 0.838 probit a -0.152 b -0.27 MAE proj/line 2.728/2.662 over 0.4397
+ week           Nov 1-4                n   126 bias -1.093 None slope 0.453 [0.163, 1.114] sd-ratio 0.784 probit a 0.285 b 0.319 MAE proj/line 3.628/3.198 over 0.5952
+ week           Oct 11-17              n    45 bias -0.724 None slope 0.485 [0.485, 0.485] sd-ratio 0.866 probit a 0.143 b -0.148 MAE proj/line 3.748/3.411 over 0.5778
+ week           Oct 18-24              n   774 bias 0.22 [-0.31974, 0.74712] slope 0.284 [-0.091, 0.746] sd-ratio 1.02 probit a -0.267 b 0.081 MAE proj/line 2.6/2.483 over 0.3889
+ week           Oct 25-31              n   850 bias 0.515 [0.14094, 0.89721] slope 0.641 [0.19, 1.188] sd-ratio 0.829 probit a -0.138 b 0.74 MAE proj/line 2.691/2.801 over 0.4024
+ -- slices_all_units
+    prop kills: 1365 0.639/0.586 | assists: 430 0.635/0.526
+    scope 1: 920 0.632/0.562 | 12: 620 0.645/0.613 | 123: 255 0.641/0.506
+    prop x scope kills 1: 688 0.634/0.593 | kills 12: 466 0.646/0.620 | assists 1: 232 0.627/0.470 | kills 123: 211 0.637/0.488 | assists 12: 154 0.641/0.591 | assists 123: 44 0.657/0.591
+    favoured side Under: 1178 0.654/0.620 | Over: 617 0.606/0.480
+    prop x side kills Under: 880 0.653/0.629 | kills Over: 485 0.612/0.507 | assists Under: 298 0.658/0.591 | assists Over: 132 0.584/0.379
+    letter band A- and up (68%+): 575 0.755/0.636 | B (57-63%): 400 0.597/0.542 | under 55%: 398 0.524/0.487 | B+ (63-68%): 284 0.656/0.616 | B- (55-57%): 138 0.559/0.536
+    model tag lol-1f: 1694 0.637/0.578 | lol-1: 101 0.650/0.465
+    projection-line distance 0-1: 906 0.583/0.565 | 1-2: 507 0.648/0.556 | 2-3: 216 0.726/0.556 | 3-5: 133 0.786/0.684 | 5+: 33 0.826/0.636
+    book prizepicks: 907 0.655/0.605 | underdog: 888 0.620/0.537
+    week Oct 25-31: 850 0.641/0.598 | Oct 18-24: 774 0.631/0.562 | Nov 1-4: 126 0.652/0.524 | Oct 11-17: 45 0.656/0.378
+    odds type balanced: 888 0.620/0.537 | standard: 390 0.632/0.561 | demon: 279 0.701/0.717 | goblin: 238 0.641/0.546
+    series format BO1: 920 0.632/0.562 | BO3: 620 0.645/0.613 | BO5: 255 0.641/0.506
+    league World Championship: 1743 0.638/0.571 | EMEA Masters: 28 0.555/0.571
+    role mid: 403 0.645/0.538 | bot: 398 0.649/0.598 | jungle: 381 0.638/0.593 | top: 356 0.635/0.534 | support: 257 0.613/0.603
+ -- slices_results_cohort
+    prop kills: 905 0.619/0.556 | assists: 132 0.584/0.379
+    scope 1: 538 0.609/0.533 | 12: 351 0.624/0.561 | 123: 148 0.613/0.466
+    prop x scope kills 1: 467 0.613/0.559 | kills 12: 298 0.631/0.584 | kills 123: 140 0.614/0.486 | assists 1: 71 0.582/0.366 | assists 12: 53 0.586/0.434
+    favoured side Over: 617 0.606/0.480 | Under: 420 0.627/0.612
+    prop x side kills Over: 485 0.612/0.507 | kills Under: 420 0.627/0.612 | assists Over: 132 0.584/0.379
+    letter band under 55%: 296 0.524/0.466 | B (57-63%): 258 0.596/0.512 | A- and up (68%+): 244 0.742/0.611 | B+ (63-68%): 142 0.655/0.570 | B- (55-57%): 97 0.559/0.546
+    model tag lol-1f: 985 0.615/0.546 | lol-1: 52 0.609/0.288
+    projection-line distance 0-1: 506 0.571/0.547 | 1-2: 343 0.618/0.513 | 2-3: 125 0.702/0.512 | 3-5: 54 0.766/0.593
+    book underdog: 552 0.599/0.496 | prizepicks: 485 0.633/0.575
+    week Oct 25-31: 488 0.621/0.553 | Oct 18-24: 456 0.605/0.520 | Nov 1-4: 71 0.636/0.563 | Oct 11-17: 22 0.602/0.273
+    odds type balanced: 552 0.599/0.496 | standard: 297 0.621/0.583 | goblin: 172 0.662/0.593 | demon: 16 0.538/0.250
+    series format BO1: 538 0.609/0.533 | BO3: 351 0.624/0.561 | BO5: 148 0.613/0.466
+    league World Championship: 998 0.616/0.531 | EMEA Masters: 25 0.554/0.560
+    role mid: 244 0.622/0.512 | bot: 244 0.630/0.570 | jungle: 227 0.611/0.555 | top: 215 0.613/0.502 | support: 107 0.574/0.514
