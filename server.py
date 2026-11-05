@@ -1181,6 +1181,16 @@ def map_chance_check_status():
         return None
 
 
+def closing_lines_status():
+    """Admin diagnostics (SCOUT_CLOSING_LINES): pick-log lines vs the closing lines saved at lock, CLV in line points by group
+    and platform (closing_lines.clv_report, cached 5 minutes, bounded reads; never a grade input)."""
+    try:
+        import closing_lines
+        return closing_lines.report_cached(picklog._read_db)
+    except Exception:
+        return None
+
+
 def map1_results_status():
     """Admin diagnostics: Map 1's settled staked P1 units vs MAP1_RESULTS_MIN_STAKED (cached 5 minutes)."""
     import results_view
@@ -2935,7 +2945,20 @@ def graded_board(book, max_age=5.0):
         hit = _GB.get(book)
         if not hit or time.time() - hit[0] > max_age:
             hit = _GB[book] = (time.time(), board_payload(book))
+            _closing_observe(book, hit[1])
     return hit[1]
+
+
+def _closing_observe(book, payload):
+    """SCOUT_CLOSING_LINES (owner flag, default off): each fresh board copy's pre-lock lines; the last one before lock is saved
+    once (closing_lines.py, append-only). Display / diagnostics data only, never a grade input; never breaks the board."""
+    if os.environ.get("SCOUT_CLOSING_LINES") != "1":
+        return
+    try:
+        import closing_lines
+        closing_lines.observe(book, (payload or {}).get("rows") or [])
+    except Exception:
+        pass
 
 
 _SETTLED = [0.0, None]
@@ -3221,6 +3244,12 @@ def board_forever():
             # both platforms' lines, each graded at its own line and market type with the same pipeline (same
             # projection for the same player / match / stat / maps and model version; only the line differs)
             feeds = {"underdog": underdog.board(wait=True), "prizepicks": prizepicks.board(wait=True)}
+            if os.environ.get("SCOUT_CLOSING_LINES") == "1":  # closing lines are captured with no member online too
+                for bk_ in ("underdog", "prizepicks"):
+                    try:
+                        graded_board(bk_)
+                    except Exception:
+                        pass
             pass_meta = {bk_: feed_meta(bk_, fb_) for bk_, fb_ in feeds.items()}     # pl-2 anchors: the graded snapshot
             rows = feeds["underdog"]["rows"] + feeds["prizepicks"]["rows"]
             now = datetime.now(timezone.utc).isoformat()
@@ -4510,7 +4539,8 @@ class Handler(BaseHTTPRequestHandler):
                     stale = not _DIAG.get("at") or time.time() - _DIAG["at"] > 600 or (q.get("fresh") and _DIAG["at"] <= asked)
                     if stale:
                         _DIAG.update(data=diagnostics.build_from_log(picklog, slip_batches.read()), at=time.time())
-                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status()))
+                extra = {"closing_lines": closing_lines_status()} if os.environ.get("SCOUT_CLOSING_LINES") == "1" else {}
+                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status(), **extra))
             if u.path in ("/content-book", "/content-book.md"):
                 # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
                 # on every load from verified saved forecasts (posts.drafts). Admin token, or CONTENT_BOOK_KEY - a separate

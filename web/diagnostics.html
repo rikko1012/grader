@@ -73,6 +73,7 @@ function draw() {
       <td>${s.bias_ci ? `${n2(s.bias_ci[0])}–${n2(s.bias_ci[1])}` : "–"}</td><td>${s.in80 == null ? "–" : pc(s.in80) + ` (${s.in80_n})`}</td><td>${n2(s.rounds_bias)}</td>
       <td>${s.top_selections.n ? `${pc(s.top_selections.hit_rate)} / ${pc(s.top_selections.predicted)} (${s.top_selections.n})` : "–"}</td></tr>`).join("")}</tbody></table></div>
     ${fwdHs()}
+    ${clvHtml()}
     ${(D.cohorts[cohort].by_projection_source || []).length ? `<h2>Underdog board lines by projection source</h2><div class="small muted">Underdog board lines only, each model version on its own. Bias = projection minus actual (+ = projected too high), match-grouped 95% interval. Lines replayed from saved inputs only.</div>
       ${$("#fsrc").value && $("#fsrc").value !== "board" ? `<div class="small muted">Not shown for the selected forecast source: this table covers Underdog board lines only.</div>` : `
       <div class="scroll"><table><thead><tr><th>Projection / stat / maps / version</th><th>Lines</th><th>Matches</th><th>Bias</th><th>Bias 95%</th><th>Hit</th><th>Predicted</th></tr></thead><tbody>
@@ -84,6 +85,16 @@ function draw() {
     <h2>Flagged lines (latest)</h2><div class="scroll"><table><thead><tr><th>Line</th><th>Side</th><th>Proj</th><th>Actual</th><th>Chance</th><th>Hit</th><th>Rounds pred / act</th><th>Rate pred / act</th><th>HS/kill pred / act</th><th>Flags</th></tr></thead><tbody>
     ${(D.cohorts[cohort].flagged_examples || []).filter(f).reverse().map(r => `<tr><td>#${r.pick_id} ${esc(r.prop)} ${r.line} (${esc(r.source)})</td><td>${esc(r.side)}</td><td>${n2(r.lam)}</td><td>${r.actual}</td><td>${pc(r.p)}</td><td>${r.hit ? "hit" : "miss"}</td>
       <td>${r.rounds_pred ?? "–"} / ${r.rounds_act ?? "–"}</td><td>${r.rate_pred ?? "–"} / ${r.rate_act ?? "–"}</td><td>${r.hsk_pred ?? "–"} / ${r.hsk_act ?? "–"}</td><td style="text-align:left">${r.flags.map(x => `<span class="flag">${esc(x)}</span>`).join("")}</td></tr>`).join("")}</tbody></table></div>`;
+}
+// SCOUT_CLOSING_LINES: pick-log lines vs the closing line saved at lock (closing_lines.py; never a grade input). Absent with the flag off.
+function clvHtml() {
+  const C = D.closing_lines; if (!C) return "";
+  if (C.error) return `<h2>Closing-line value (CLV)</h2><div class="small">${esc(C.error)}</div>`;
+  const ci = x => x ? ` (95% by match ${n2(x[0])} to ${n2(x[1])})` : "";
+  return `<h2 id="clv">Closing-line value (CLV)</h2><div class="small muted">${esc(C.note)} Last ${esc(C.days)} days · ${C.closing_saved} closing lines saved (${C.closing_stale} last seen over ${esc(C.stale_after_min)} min before lock) · ${C.pending_in_memory} offers waiting for lock · ${C.picks_unmatched ?? 0} lines with no saved closing line · ${C.picks_without_platform ?? 0} research lines without a platform</div>
+    <div class="scroll"><table><thead><tr><th>Group / platform</th><th>Lines</th><th>Matches</th><th>Mean CLV</th><th>Moved toward / same / against</th><th>Staked lines: mean CLV</th><th>Lean lines: mean CLV</th><th>Stale closing</th></tr></thead><tbody>
+    ${(C.groups || []).map(g => `<tr><td>${esc(g.group)} · ${esc(g.book)}</td><td>${g.n}</td><td>${g.matches}</td><td>${n2(g.clv_mean)}${ci(g.clv_ci95)}</td><td>${g.moved_toward} / ${g.unchanged} / ${g.moved_against}</td>
+      <td>${g.staked_n ? n2(g.staked_clv_mean) + ci(g.staked_clv_ci95) + ` (${g.staked_n})` : "–"}</td><td>${g.lean_n ? n2(g.lean_clv_mean) + ci(g.lean_clv_ci95) + ` (${g.lean_n})` : "–"}</td><td>${g.stale_closing}</td></tr>`).join("") || `<tr><td colspan="8">No pick-log line has a saved closing line yet</td></tr>`}</tbody></table></div>`;
 }
 function fwdHs() {
   const F = D.forward_hs; if (!F) return "";
