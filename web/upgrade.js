@@ -178,7 +178,7 @@
   /* ---- account slip: the workspace's saved slip. Every device merges three ways against the copy it last synced ---- */
   const T = {
     legs: [], types: {}, rev: 0, ready: false, synced: new Set(), pending: false, saving: false, saveFail: false, gen: 0, check: null, checkSig: "", checking: false, checkErr: null,
-    tracked: null, trackIdem: {}, trackBusy: {}, copyBusy: false, mine: null, mineState: "idle", tab: "slip", open: new Set(), openPick: null
+    tracked: null, trackIdem: {}, trackBusy: {}, copyBusy: false, mine: null, mineState: "idle", tab: "slip", open: new Set(), openPick: null, advice: null
   };
   const sig = () => T.legs.map((l) => [l.id, l.rev, l.read_rev, l.shown_p].join(":")).join(";") + "|" + JSON.stringify(T.types);
   const legIds = (legs) => new Set(legs.map((l) => l.id));
@@ -231,7 +231,7 @@
     }
     T.check = T.checkSig === sig() ? T.check : null;
     paintTray();
-    if (T.legs.length) scheduleCheck();
+    if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
   }
   async function pushState(retried, leaving) {
     if (!T.ready || !T.pending || T.saving) return;
@@ -278,7 +278,7 @@
       T.saveFail = false;
       if (T.pending) saveSoon();
       paintTray();
-      if (T.legs.length) scheduleCheck();
+      if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
     } catch (e) { T.saveFail = true; paintTray(); }
   }
   function slipChanged() {
@@ -287,7 +287,7 @@
     saveSlip();
     paintTray();
     markRows();
-    if (T.legs.length) scheduleCheck();
+    if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
   }
   function addRefusal(rec, side) {
     if (started(rec)) return `${startWord(rec)} at ${when(rec.event.start_utc)}.`;
@@ -297,77 +297,89 @@
     if (held(rec)) return "The grade on this line is held.";
     const same = T.legs.find((l) => l.player_key === rec.player.key && l.stat === rec.market.stat && l.period === rec.market.period && l.book === rec.offer.platform && l.event_id === rec.event.id);
     if (same && !(same.side === side && same.line === rec.offer.line)) return `Conflict: ${cap(same.side)} ${same.line} on this prop is already on your ${rec.offer.platform_label} entry.`;
+    /* sq-1 adder: one leg per player on an entry. PrizePicks counts a player once; Underdog refuses the same side and publishes nothing on both sides */
+    const twin = !same && T.legs.find((l) => l.book === rec.offer.platform && l.sport === rec.sport && l.player_key === rec.player.key);
+    if (twin) return `${rec.player.name} is already on your ${rec.offer.platform_label} entry (${cap(twin.side)} ${twin.line} ${twin.stat_label}, ${twin.period_label}). One leg per player: remove that pick first.`;
     if (T.legs.length >= MAX_LEGS && !same) return `A slip holds ${MAX_LEGS} picks.`;
     return null;
+  }
+  /* Facts about one leg against the rest of its entry, shown at once on the slip (the server's check stays the authority). */
+  function legNotes(l) {
+    const out = [];
+    T.legs.forEach((o) => {
+      if (o.id === l.id || o.book !== l.book || o.sport !== l.sport) return;
+      if (o.player_key === l.player_key) out.push(`${o.player} is on this entry twice. One leg per player.`);
+      else if (o.event_id === l.event_id) out.push(`Same match as ${o.player}: results can move together.${l.book === "prizepicks" && o.team !== l.team ? " PrizePicks keeps its same-match limits in its app; Scout does not offer opposing players here." : ""}`);
+    });
+    return [...new Set(out)];
   }
   function addLeg(rec, side) {
     const why = addRefusal(rec, side);
     if (why) { say(why); return false; }
     const id = legId(rec, side);
     if (T.legs.some((l) => l.id === id)) return true;
-    T.legs.push(makeLeg(rec, side));
+    const leg = makeLeg(rec, side);
+    T.legs.push(leg);
     slipChanged();
-    say(`Added ${rec.player.name} ${cap(side)} ${rec.offer.line} to your slip`);
+    const notes = legNotes(leg);
+    say(`Added ${rec.player.name} ${cap(side)} ${rec.offer.line} to your slip.${notes.length ? " " + notes[0] : ""}`);
     return true;
   }
-  // Generate from published forecasts only. The server remains the authority for
-  // identity, freshness, permissions, duplicate picks and platform rules.
-  async function generateBatch(records, opts, progress) {
-    const {platform, count, size, entryType, mode, target, tolerance, mix, games} = opts;
-    if (!PLATFORMS[platform] || !Number.isInteger(count) || count<1 || count>12 || !Number.isInteger(size) || size<2 || size>6)
-      throw new Error('Choose 1–12 slips and 2–6 picks per slip.');
-    if (platform==='prizepicks' && size>6) throw new Error('PrizePicks supports up to 6 picks per entry.');
-    if (platform==='underdog' && entryType==='flex' && size<3) throw new Error('Underdog Flex needs at least 3 picks.');
-    if (platform==='underdog' && mix==='mixed') throw new Error('Mixed-sport generation is currently supported on PrizePicks. Choose PrizePicks or a single sport.');
-    if (!PLATFORMS[platform].types.some(t=>t[0]===entryType)) throw new Error('Choose a supported entry type.');
-    const pool=records.filter(r=>r.offer.platform===platform && !started(r) && r.state.kind==='ok' && r.scout.grade && !r.scout.hold
-      && r.scout.side && r.offer[r.scout.side]?.offered && isNum(chanceOf(r,r.scout.side))
-      && (mode!=='balanced'||Math.abs(chanceOf(r,r.scout.side)*100-target)<=tolerance+1e-8))
-      .sort((a,b)=>chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)||a.key.localeCompare(b.key));
-    if(pool.length<size) throw new Error(`Only ${pool.length} eligible props match these settings. Widen the chance range or include more sports.`);
-    const picked=[], signatures=new Set(), exposure=new Map(), rejected=new Set(), usedProps=new Set();
-    // Alternate lines, offer revisions and sides still belong to the same prop.
-    const propKey=r=>JSON.stringify([r.sport,r.event.id,r.player.key,r.market.stat,r.market.period]);
-    const unused=r=>!opts.noRepeatProps||!usedProps.has(propKey(r));
-    let checked=0, lastProblem='', examined=0;
-    // Bounded search, diversified by player exposure. Each successful candidate is
-    // independently checked; no combination's probability is inferred by multiplication.
-    for(let round=0;round<3 && picked.length<count;round++) {
-      for(const anchor of pool) {
-        if(picked.length>=count || checked>=24 || examined>=240) break;
-        examined++;
-        const aid=legId(anchor,anchor.scout.side);if(rejected.has(aid)||!unused(anchor))continue;
-        const chosen=[anchor], ev=new Set([anchor.sport+'|'+anchor.event.id]), players=new Set([anchor.sport+'|'+anchor.player.key]);
-        const ranked=pool.filter(r=>r!==anchor&&unused(r)&&!rejected.has(legId(r,r.scout.side))).sort((a,b)=>{
-          const use=(r)=>exposure.get(r.sport+'|'+r.player.key)||0;
-          return use(a)-use(b) || (mode==='balanced'?Math.abs(chanceOf(a,a.scout.side)-chanceOf(anchor,anchor.scout.side))-Math.abs(chanceOf(b,b.scout.side)-chanceOf(anchor,anchor.scout.side)):chanceOf(b,b.scout.side)-chanceOf(a,a.scout.side)) || a.key.localeCompare(b.key);
-        });
-        // A small rotation explores alternate combinations when the top candidate was already emitted.
-        if(round) ranked.push(...ranked.splice(0,Math.min(round,ranked.length)));
-        if(mix==='mixed') ranked.sort((a,b)=>(a.sport===anchor.sport)-(b.sport===anchor.sport));
-        for(const r of ranked) {
-          const e=r.sport+'|'+r.event.id,p=r.sport+'|'+r.player.key;
-          if((games!=='stacks'&&ev.has(e))||players.has(p)||((platform==='underdog'||mix==='single')&&r.sport!==anchor.sport))continue;
-          if(platform==='prizepicks'&&chosen.some(x=>x.sport===r.sport&&x.event.id===r.event.id&&x.player.team!==r.player.team))continue;
-          chosen.push(r);ev.add(e);players.add(p);if(chosen.length===size)break;
+  /* sq-1 (slip_quality.py): the server ranks legs by their settled band record and builds each slip for the best all-hit chance,
+     one leg per match, never repeating a prop when asked. This page maps each leg to the board record it already holds, rechecks
+     every slip, and asks again without a leg that fails (at most GEN_ROUNDS asks, GEN_CHECKS rechecks). Nothing is invented here. */
+  const GEN_ROUNDS = 3, GEN_CHECKS = 16;
+  async function generateBatch(_records, opts, progress) {
+    const {platform, count, size, entryType, mix, games} = opts;
+    if (!PLATFORMS[platform] || !Number.isInteger(count) || count < 1 || count > 12 || !Number.isInteger(size) || size < 2 || size > 6)
+      throw new Error("Choose 1–12 slips and 2–6 picks per slip.");
+    if (platform === "underdog" && entryType === "flex" && size < 3) throw new Error("Underdog Flex needs at least 3 picks.");
+    if (platform === "underdog" && mix === "mixed") throw new Error("Underdog does not publish mixed-sport entries. Choose PrizePicks or one sport.");
+    if (platform === "prizepicks" && games === "stacks") throw new Error("PrizePicks keeps its same-match limits in its app. Same-match legs are built on Underdog only.");
+    if (!PLATFORMS[platform].types.some((t) => t[0] === entryType)) throw new Error("Choose a supported entry type.");
+    const exclude = new Set(), passed = new Set();
+    let checks = 0, last = null, picked = [], note = "";
+    for (let round = 0; round < GEN_ROUNDS; round++) {
+      const q = new URLSearchParams({ platform, type: entryType, slips: String(count), picks: String(size), sports: opts.sports.join(","), mix, games,
+        repeats: opts.noRepeatProps ? "none" : "allow", lines: opts.lines || "all", research: opts.research ? "1" : "0" });
+      if (exclude.size) q.set("exclude", [...exclude].slice(0, 60).join(","));
+      let doc;
+      try { doc = await api("generate?" + q.toString()); }
+      catch (e) { if (e.doc && e.doc.error && e.status === 400) throw new Error(e.doc.error); throw e; }
+      last = doc; picked = []; let failed = false;
+      for (const s of doc.slips || []) {
+        const recs = s.legs.map((l) => (R.boards[l.sport].recs || new Map()).get(offerKey(l.book, l.row_id)));
+        if (recs.some((r) => !r)) {                       /* the page's board copy is older than the server's: reload, then ask again */
+          s.legs.forEach((l, i) => { if (!recs[i]) exclude.add([l.book, l.row_id, l.side].join("|")); });
+          failed = true; continue;
         }
-        if(chosen.length!==size || (mix==='mixed'&&new Set(chosen.map(r=>r.sport)).size<2))continue;
-        const legs=chosen.map(r=>makeLeg(r,r.scout.side)), signature=legs.map(l=>l.id).sort().join('\n');
-        if(signatures.has(signature))continue;signatures.add(signature);checked++;
-        progress?.(`Checking slip ${picked.length+1} of ${count}…`);
-        let doc;
-        try {doc=await api('recheck',{idem:idem(),legs:legs.map(wireLeg),entry_types:{[platform]:entryType}});}
-        catch(e){if(!picked.length)throw e;lastProblem='The server could not finish checking more combinations.';return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,note:lastProblem};}
-        const bad=legs.filter(l=>!doc.legs?.[l.id]?.ok);
-        if(bad.length){bad.forEach(l=>rejected.add(l.id));lastProblem=doc.legs?.[bad[0].id]?.problems?.[0]?.text||'Some current offers failed recheck.';continue;}
-        if(!doc.entries?.[platform]?.ok){lastProblem=doc.entries?.[platform]?.problems?.[0]?.text||'A combination failed its platform rules.';continue;}
-        picked.push({id:idem(),legs,checked_at:new Date().toISOString(),entry_type:entryType,platform});
-        chosen.forEach(r=>usedProps.add(propKey(r)));
-        legs.forEach(l=>{const k=l.sport+'|'+l.player_key;exposure.set(k,(exposure.get(k)||0)+1);});
+        const legs = recs.map((r, i) => makeLeg(r, s.legs[i].side)), signature = legs.map((l) => l.id).sort().join("\n");
+        if (!passed.has(signature)) {
+          if (checks >= GEN_CHECKS) { note = "The server could not finish checking more combinations."; break; }
+          checks++;
+          progress?.(`Checking slip ${picked.length + 1} of ${count}…`);
+          let c;
+          try { c = await api("recheck", { idem: idem(), legs: legs.map(wireLeg), entry_types: { [platform]: entryType } }); }
+          catch (e) { if (!picked.length) throw e; note = "The server could not finish checking more combinations."; break; }
+          const bad = s.legs.filter((l, i) => !c.legs?.[legs[i].id]?.ok);
+          if (bad.length || !c.entries?.[platform]?.ok) {
+            (bad.length ? bad : s.legs).forEach((l) => exclude.add([l.book, l.row_id, l.side].join("|")));
+            note = (bad.length ? c.legs?.[legs[s.legs.indexOf(bad[0])].id]?.problems?.[0]?.text : c.entries?.[platform]?.problems?.[0]?.text) || "Some current offers failed recheck.";
+            failed = true; continue;
+          }
+          passed.add(signature);
+        }
+        const meta = s.legs.map((l) => ({ rank: l.rank, record: l.record, research: !!l.research, line_type: l.line_type }));
+        picked.push({ id: idem(), legs: legs.map((l, i) => Object.assign(l, { gen: meta[i] })), checked_at: new Date().toISOString(), entry_type: entryType, platform,
+          why: s.why, all_hit: s.all_hit == null ? null : s.all_hit, payout: s.payout ? { multiple: s.payout.multiple, entry_type: s.payout.entry_type } : null,
+          ev: s.ev || null, same_match: !!s.same_match });
       }
+      if (!failed || note === "The server could not finish checking more combinations.") break;
+      await Promise.allSettled(opts.sports.map((sp) => loadBoard(sp, true)));
     }
-    return {version:1,created_at:new Date().toISOString(),options:opts,slips:picked,
-      note:picked.length<count?lastProblem||(opts.noRepeatProps?'Not enough unused eligible props could form more valid slips. No props were repeated. Include more sports, widen the chance range, or request fewer slips.':'The bounded search found fewer distinct checked combinations with these settings. Widen the chance range, include more sports, or reduce picks per slip.') :''};
+    const short = picked.length < count ? (note || (last && last.shortage) || "Fewer valid slips than asked with these settings.") : "";
+    return { version: 1, generator: last ? last.version : null, created_at: new Date().toISOString(), options: opts, slips: picked, note: short,
+      pool: last ? { legs: last.pool.legs, matches: last.pool.matches } : null };
   }
   async function useGenerated(slip) {
     if(!slip||!Array.isArray(slip.legs)||slip.legs.some(l=>!cleanLeg(l)))throw new Error('This saved lineup is invalid. Generate again.');
@@ -381,6 +393,30 @@
     T.legs=proposed;T.types=types;slipChanged();T.check=doc;T.checkSig=sig();T.checkErr=null;paintTray();
   }
   function removeLeg(id) { T.legs = T.legs.filter((l) => l.id !== id); slipChanged(); }
+  /* sq-1 adder: each leg's band record and the best replacement that fits the rest of its entry (slip_quality.advise). Read only:
+     a replacement is applied only when the member presses Swap in, at the same position, so nothing is dropped or reordered. */
+  async function runAdvice() {
+    if (!T.legs.length) { T.advice = null; return; }
+    const before = sig();
+    try {
+      const doc = await api("slip-advice", { legs: T.legs.map((l) => Object.assign(wireLeg(l), { stat: l.stat, period: l.period, player_key: l.player_key })),
+        entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])) });
+      if (sig() === before) { T.advice = { sig: before, legs: Object.fromEntries((doc.legs || []).map((r) => [r.id, r])) }; paintTray(); }
+    } catch (e) { /* advice is extra: the check stays the authority */ }
+  }
+  const scheduleAdvice = debounce(runAdvice, 900);
+  async function replaceLeg(id) {
+    const adv = T.advice && T.advice.sig === sig() ? T.advice.legs[id] : null, rep = adv && adv.replacement, i = T.legs.findIndex((l) => l.id === id);
+    if (!rep || i < 0) return;
+    await loadBoard(rep.sport);
+    const rec = R.boards[rep.sport].recs.get(offerKey(rep.book, rep.row_id));
+    if (!rec || started(rec)) { say("That line has left the board."); return; }
+    const old = T.legs[i], next = makeLeg(rec, rep.side);
+    if (T.legs.some((l, j) => j !== i && (l.id === next.id || (l.book === next.book && l.sport === next.sport && l.player_key === next.player_key)))) { say(`${next.player} is already on your slip.`); return; }
+    T.legs = T.legs.map((l, j) => (j === i ? next : l));
+    slipChanged();
+    say(`Swapped ${old.player} for ${next.player} ${cap(next.side)} ${next.line}.`);
+  }
   const onSlip = (rec) => T.legs.some((l) => l.sport === rec.sport && l.key === rec.key && l.book === rec.offer.platform);
 
   const askCheck = () => api("recheck", { idem: idem(), legs: T.legs.map(wireLeg), entry_types: Object.fromEntries(entries().map((e) => [e.platform, typeOf(e)])) });
@@ -484,7 +520,7 @@
       T.tracked = { n, label: e.label, receipt: doc.receipts[0].id };
       say(`${plural(n, "pick")} tracked.`);
       loadMine();
-      if (T.legs.length) scheduleCheck();
+      if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
     } catch (err) {
       if (err.status === 409 && err.doc && err.doc.legs) { T.check = err.doc; T.checkSig = sig(); say("The check at Track found a change. Nothing was tracked."); }
       else if (err.status === 503) say("Scout is busy. Your slip is still here: press Track again.");
@@ -559,10 +595,13 @@
     const evText = legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
     const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
+    const notes = legNotes(l), adv = T.advice && T.advice.sig === sig() ? T.advice.legs[l.id] : null, rep = adv && adv.replacement;
+    const noteHtml = notes.length ? `<div class="u-leg-notes">${notes.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
+    const advHtml = adv && (adv.band || rep) ? `<p class="u-leg-advice">${adv.band ? esc(adv.band) + "." : ""}${rep ? ` ${adv.in_pool ? "Ranks higher here" : "Best replacement"}: ${esc(rep.player)} ${cap(rep.side)} ${esc(rep.line)} ${esc(rep.stat_label)}, ${esc(rep.period_label)} · ${pct(rep.p)}<button class="u-btn" type="button" data-u="replace" data-id="${esc(l.id)}">Swap in</button>` : ""}</p>` : "";
     return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
       <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
       <span class="u-leg-meta">${read}${evText}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
-      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${problems}</div>`;
+      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${noteHtml}${advHtml}${problems}</div>`;
   }
   /* an entry that only needs more picks is in progress, not refused: its size and two-team rules read as the next step, in
      neutral text; red stays for real conflicts. null = at least one problem is a real conflict (or a leg did not pass). */
@@ -932,6 +971,7 @@
     check() { T.checkErr = null; T.check = null; runCheck(); },
     clear() { T.legs = []; slipChanged(); say(HUB && !$("u-hub").hidden ? "Slip cleared" : "Slip tray cleared"); },
     swap: swapLeg,
+    replace: replaceLeg,
     "leg-x": removeLeg,
     etype(v) { const i = v.indexOf(":"); T.types[v.slice(0, i)] = v.slice(i + 1); slipChanged(); },
     track: trackEntry,

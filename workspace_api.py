@@ -30,6 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import slip_quality as sq
 import workspace_h2h
 import workspace_rules as rules
 import workspace_store as wstore
@@ -70,7 +71,7 @@ _BEFORE_RE = re.compile(r"^[0-9T:.+\-Z]{10,40}$")
 _HLTV_SLUG_RE = re.compile(r"hltv-(\d+)")
 _FC_SLOTS = threading.BoundedSemaphore(8)
 _HIST_SLOTS = threading.BoundedSemaphore(3)
-_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}, "genie": {}}
+_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}, "genie": {}, "generate": {}, "advice": {}}
 _ST = {"store": None}
 _ST_LOCK = threading.Lock()
 _SNAP = {"at": 0.0, "body": None, "index": {}, "props": {}, "last": {}, "doc": None, "gen": 0, "feeds": {}}
@@ -159,6 +160,7 @@ def reset():
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
     _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={})
+    _SLIP_POOL.clear()
     for d in _HITS.values():
         d.clear()
     for name in ("workspace_lol", "workspace_sports", "workspace_genie"):
@@ -1260,6 +1262,238 @@ def get_grade_review(h, srv, q, member, scratch, name):
         return h.send(503, {'error': 'Comparison report unavailable'})
 
 
+# ---------------------------------------------------------------------------------------------------------------- Slip Studio (sq-1)
+# slip_quality.py chooses the legs; these routes feed it the shared snapshots. One pool per sport, rebuilt only when that sport's
+# snapshot bytes or the band table change (a per-sport lock: a crowd waits for one build). One batch per option set, shared for
+# GEN_TTL s over srv.shared's single flight, so 700 members pressing Generate run a handful of searches, each bounded by
+# slip_quality.NODE_LIMIT. The band table is rebuilt at most every CAL_TTL s from the stored P1 export and the LoL settlements.
+
+GEN_PER_MIN, ADVICE_PER_MIN = 20, 60
+GEN_TTL, CAL_TTL = 20, 900
+EXCLUDE_MAX = 60
+SLIP_SCOPE = {"map1": "1", "maps12": "12", "maps13": "123"}
+_SLIP_POOL = {}
+_SLIP_LOCKS = {s: threading.Lock() for s in SPORTS}
+LOL_SETTLED_SQL = (
+    "SELECT f.stat, f.p_over, f.p_under, f.model_side, f.sid, f.series_start, s.over_hit FROM lol_forecasts f "
+    "JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM lol_forecasts WHERE forecast_at < series_start "
+    "GROUP BY platform, market_key, line) z ON z.id = f.id "
+    "JOIN (SELECT unit_key, MAX(version) AS v FROM lol_settlements GROUP BY unit_key) lv ON "
+    "lv.unit_key = f.platform || '|' || f.market_key || '|' || f.line "
+    "JOIN lol_settlements s ON s.unit_key = lv.unit_key AND s.version = lv.v "
+    "WHERE s.status = 'graded' AND f.side_offered = 1")
+
+
+def _lol_settled(srv):
+    """LoL settled pre-match forecasts on offered sides (lol/center/learning.dashboard's join), read-only."""
+    import workspace_lol
+    con = workspace_lol._open(srv, "lol.db")
+    try:
+        return [dict(r) for r in con.execute(LOL_SETTLED_SQL).fetchall()]
+    finally:
+        con.close()
+
+
+def _slip_table(srv):
+    """The sq-1 band table, or None when nothing settled can be read (legs then rank at their published chance)."""
+    def compute():
+        units = sq.units_from_p1(srv._p1_export() or {})
+        try:
+            units += sq.units_from_lol(_lol_settled(srv))
+        except Exception:                       # no LoL record on this host: LoL legs rank at their published chance
+            pass
+        return 200, sq.calibration_table(units)
+    try:
+        return srv.shared(("ws_slip_cal",), compute, ttl=CAL_TTL)[1]
+    except Exception:
+        return None
+
+
+def _sport_snap(srv, sport):
+    if sport == "cs2":
+        return snapshot(srv)
+    return _adapter("lol").snapshot(srv) if sport == "lol" else _adapter(sport).snapshot(srv, sport)
+
+
+def _slip_pool(srv, sport, table):
+    """(every pool leg of one sport, research legs included and flagged; exclusion counts), or None with no snapshot."""
+    snap = _sport_snap(srv, sport)
+    if snap is None:
+        return None
+    body = snap["body"]
+    with _SLIP_LOCKS[sport]:
+        hit = _SLIP_POOL.get(sport)
+        if hit and hit[0] is body and hit[1] is table:
+            return hit[2], hit[3]
+        recs = []
+        for (book, _rid), x in list((snap.get("index") or {}).items()):
+            if book not in sq.PLATFORMS:
+                continue
+            try:
+                recs.append(record_of(x) if sport == "cs2" else json.loads(x["rec"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+        legs, why = sq.pool(recs, feeds={sport: snap.get("feeds") or {}}, research_ok=True, table=table)
+        _SLIP_POOL[sport] = (body, table, legs, why)
+        return legs, why
+
+
+def _gen_opts(q, allowed):
+    """The member's Generate settings -> (options, None), or (None, the reason in member words)."""
+    platform = q.get("platform") or "prizepicks"
+    if platform not in sq.PLATFORMS:
+        return None, "Choose PrizePicks or Underdog."
+    et = q.get("type") or sq.ENTRY_TYPES[platform][0]
+    if et not in sq.ENTRY_TYPES[platform]:
+        return None, "Choose a supported entry type."
+    try:
+        count, size = int(q.get("slips") or 8), int(q.get("picks") or 2)
+    except ValueError:
+        return None, "Choose 1-12 slips and 2-6 picks per slip."
+    if not 1 <= count <= sq.MAX_SLIPS or not sq.MIN_PICKS <= size <= sq.MAX_PICKS:
+        return None, "Choose 1-12 slips and 2-6 picks per slip."
+    if platform == "underdog" and et == "flex" and size < 3:
+        return None, "Underdog Flex needs at least 3 picks."
+    asked = [s for s in (q.get("sports") or "cs2").split(",") if s]
+    if not asked or len(asked) > len(SPORTS) or any(s not in SPORTS for s in asked):
+        return None, "Choose at least one sport."
+    sports = tuple(s for s in SPORTS if s in asked and allowed.get(s))
+    if not sports:
+        return None, "Choose at least one sport."
+    mix, games, repeats = q.get("mix") or "any", q.get("games") or "spread", q.get("repeats") or "allow"
+    lines = q.get("lines") or "all"
+    if mix not in ("any", "mixed", "single") or games not in ("spread", "stacks") or repeats not in ("allow", "none") or lines not in ("all", "standard"):
+        return None, "Choose supported generator settings."
+    if mix == "mixed" and platform == "underdog":
+        return None, "Underdog does not publish mixed-sport entries. Choose PrizePicks or one sport."
+    if mix == "mixed" and len(sports) < 2:
+        return None, "Mixed sports needs at least two sports."
+    if games == "stacks" and not sq.same_match_allowed(platform):
+        return None, "PrizePicks keeps its same-match limits in its app. Scout builds same-match legs on Underdog only."
+    exclude = tuple(sorted({x for x in (q.get("exclude") or "").split(",") if x}))
+    if len(exclude) > EXCLUDE_MAX or any(len(x) > 200 or not _LEG_ID_RE.match(x) for x in exclude):
+        return None, "Too many lines to leave out. Generate again."
+    research = q.get("research") == "1" and any(s in sq.RESEARCH_SPORTS for s in sports)
+    return {"platform": platform, "entry_type": et, "count": count, "size": size, "sports": sports, "mix": mix, "same_match": games == "stacks",
+            "no_repeat": repeats == "none", "lines": lines, "research": research, "exclude": exclude}, None
+
+
+def _ev_leg(l):
+    return {"name": l["player"], "sport": l["sport"], "match": l["event"], "line": l["line"], "multiplier": l["multiplier"], "on_side": True, "p": l["p"],
+            "tag": l["model_version"], "prop": l["stat"], "scope": SLIP_SCOPE.get(l["period"], l["period"]), "line_type": l["line_type"]}
+
+
+def _wire_slip(s, srv, now):
+    out = {"platform": s["platform"], "entry_type": s["entry_type"], "why": s["why"], "same_match": s["same_match"],
+           "legs": [{"sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "line_type": l["line_type"],
+                     "player": l["player"], "p": l["p"], "rank": l["rank"], "rank_p": round(l["rank_p"], 4), "research": l["research"],
+                     "record": "Research estimate" if l["research"] else sq.band_text(l["band"], l["sport"], l["line_type"])} for l in s["legs"]]}
+    if s["all_hit"] is not None:
+        out["all_hit"] = round(s["all_hit"], 4)
+    if s["payout"]:
+        out["payout"] = s["payout"]
+        ev = rules.ev_status(s["platform"], s["entry_type"], [_ev_leg(l) for l in s["legs"]], lambda: _gate(srv), now.timestamp())
+        if ev.get("available"):                 # a verified payout AND chances that passed the settled-results gate (CS2 only today)
+            out["ev"] = {"ev": ev["ev"], "hit_chance": ev["hit_chance"]}
+    return out
+
+
+def _ranked(legs):
+    """Copies, best first, each ranked on its own platform."""
+    legs = sorted(legs, key=lambda l: (-l["rank_p"], -l["p"], l["key"]))
+    out, seen = [], {}
+    for l in legs:
+        seen[l["book"]] = seen.get(l["book"], 0) + 1
+        out.append(dict(l, rank=seen[l["book"]]))
+    return out
+
+
+def _generate(srv, o):
+    now = datetime.now(timezone.utc)
+    table = _slip_table(srv)
+    legs, why, missing = [], {}, []
+    for sport in o["sports"]:
+        got = _slip_pool(srv, sport, table)
+        if got is None:
+            missing.append(sport)
+            continue
+        for l in got[0]:
+            st = sq._ts(l["start"])
+            if st is None or (st - now).total_seconds() < sq.LEAD_S:
+                why["started"] = why.get("started", 0) + 1
+            elif l["research"] and not o["research"]:
+                why["research"] = why.get("research", 0) + 1
+            elif l["key"] in o["exclude"]:
+                why["excluded"] = why.get("excluded", 0) + 1
+            else:
+                legs.append(l)
+        for k, v in got[1].items():
+            why[k] = why.get(k, 0) + v
+    legs = _ranked(legs)
+    b = sq.build(legs, o)
+    mine = [l for l in legs if l["book"] == o["platform"]]
+    doc = {"version": sq.VERSION, "built_at": now.isoformat(timespec="seconds"), "options": dict(o, sports=list(o["sports"]), exclude=len(o["exclude"])),
+           "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,
+                    "banded": bool(table and table.get("cells"))},
+           "slips": [_wire_slip(s, srv, now) for s in b["slips"]], "shortage": b["shortage"], "search": b["search"]}
+    return 200, json.dumps(doc, default=str, separators=(",", ":")).encode()
+
+
+def get_generate(h, srv, q, member, scratch, name):
+    o, why = _gen_opts(q, access(h, srv, q))
+    if o is None:
+        return h.send(400, {"error": why})
+    if _limited(h, srv, "generate", member, GEN_PER_MIN):
+        return None
+    key = ("ws_gen", o["platform"], o["entry_type"], o["count"], o["size"], o["sports"], o["mix"], o["same_match"], o["no_repeat"], o["lines"],
+           o["research"], hashlib.sha256("\n".join(o["exclude"]).encode()).hexdigest()[:16] if o["exclude"] else "")
+    try:
+        st_, body = srv.shared(key, lambda: _generate(srv, o), ttl=GEN_TTL)
+    except Exception:
+        return h.send(503, {"error": "Scout could not build slips just now. Try again."})
+    return h.send(st_, body)
+
+
+def _advice_legs(d):
+    legs = _legs_of(d)
+    if legs is None:
+        return None
+    for l in legs:
+        for k in ("stat", "period", "player_key"):
+            if l.get(k) is not None and (not isinstance(l[k], str) or len(l[k]) > 120):
+                return None
+    return legs
+
+
+def post_slip_advice(h, srv, q, member, scratch, name, n):
+    """The adder: per leg of the member's slip (in its order), same-player / same-match / conflict facts, the band record, and the
+    best replacement on the same platform that fits the other legs. Reads the shared pools only; never changes the slip."""
+    d = _read_json(h, srv, n)
+    legs = _advice_legs(d) if d else None
+    if legs is None:
+        return h.send(400, {"error": "bad slip"})
+    if _limited(h, srv, "advice", member, ADVICE_PER_MIN):
+        return None
+    allowed, table, now = access(h, srv, q), _slip_table(srv), datetime.now(timezone.utc)
+    pool_legs = []
+    for sport in [s for s in SPORTS if allowed.get(s) and any(l["sport"] == s for l in legs)]:
+        got = _slip_pool(srv, sport, table)
+        if got:
+            pool_legs += [x for x in got[0] if not x["research"] and ((sq._ts(x["start"]) or now) - now).total_seconds() >= sq.LEAD_S]
+    pool_legs = _ranked(pool_legs)
+    by_key = {l["key"]: l for l in pool_legs}
+    slip = [{"id": l["id"], "sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "player": l.get("player"),
+             "player_key": l.get("player_key"), "team": l.get("team"), "event": l.get("event"), "stat": l.get("stat"), "period": l.get("period")} for l in legs]
+    et = d.get("entry_types") if isinstance(d.get("entry_types"), dict) else {}
+    out = {}
+    for platform in dict.fromkeys(l["book"] for l in slip):
+        mine = [x for x in slip if x["book"] == platform]
+        t = et.get(platform)
+        for m, r in zip(mine, sq.advise(mine, by_key, pool_legs, t if isinstance(t, str) and len(t) <= 16 else None)):
+            out[m["id"]] = r
+    return h.send(200, {"version": sq.VERSION, "legs": [dict(out[l["id"]], id=l["id"]) for l in legs]})
+
+
 def post_recheck(h, srv, q, member, scratch, name, n):
     d = _read_json(h, srv, n)
     legs = _legs_of(d) if d else None
@@ -1439,9 +1673,9 @@ def post_genie(h, srv, q, member, scratch, name, n):
 
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
-       "market-tools":get_market_tools, "grade-review":get_grade_review}
+       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
-        "book-line":post_book_line}
+        "book-line":post_book_line, "slip-advice": post_slip_advice}
 
 
 GENIE = {"GET": get_genie, "POST": post_genie}       # SCOUT_GENIE=1 only: off, "genie" is the unknown-route answer

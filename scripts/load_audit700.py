@@ -256,6 +256,13 @@ def workspace_run():
         other = {"sports": sports_stub, "lol": lol_fx}
     workspace_api.reset()
     seeded = seed_history(workspace_api, HISTORY) if HISTORY else 0
+    GEN_BUILDS = [0]                                            # Slip Studio sq-1: one search per option set per GEN_TTL, shared
+    real_generate = workspace_api._generate
+
+    def counted_generate(srv, o):
+        GEN_BUILDS[0] += 1
+        return real_generate(srv, o)
+    workspace_api._generate = counted_generate
 
     tls = threading.local()
 
@@ -311,6 +318,11 @@ def workspace_run():
                  ("POST", "recheck", {"idem": f"check-{i:06d}", "legs": legs, "entry_types": {"underdog": "standard"}}),
                  ("POST", "track", {"idem": f"track-{i:06d}", "entry_key": "underdog", "entry_type": "standard", "legs": legs}),
                  ("GET", "mine", None), ("POST", "state", {"rev": 0, "slip": {"legs": legs, "types": {}}}), ("GET", "state", None), ("GET", "results", None)]
+        gen_sports = "cs2,lol,nba,nfl" if ALLSPORTS else "cs2"
+        steps += [("GET", f"generate?platform=underdog&type=standard&slips={8 if i % 2 else 4}&picks={2 if i % 2 else 3}&sports={gen_sports}&repeats={'none' if i % 3 else 'allow'}", None),
+                  ("POST", "slip-advice", {"legs": [dict(l, stat=r["market"]["stat"], period=r["market"]["period"], player_key=r["player"]["key"], player=r["player"]["name"],
+                                                         team=r["player"]["team"], event=r["event"]["id"]) for l, r in zip(legs, (a, b))],
+                                          "entry_types": {"underdog": "standard"}})]
         if ALLSPORTS:
             n1, n2 = nba[i % 120], nba[(i % 120 + 121) % len(nba)]
             l1, l2 = next(r for r in lol if r["player"]["name"] == "Harky"), next(r for r in lol if r["player"]["name"] == "Kratos")
@@ -346,7 +358,8 @@ def workspace_run():
            "errors_5xx": sum(1 for x in res if x[1] >= 500), "non_200": sum(1 for x in res if x[1] != 200), "p50_ms": pct(lat, .5), "p95_ms": pct(lat, .95), "p99_ms": pct(lat, .99),
            "board_builds": builds, "allowed_builds": int((time.time() - t_start) / 5) + 2, "grade_calls": fx.grades, "receipts": diag["counts"]["receipts"],
            "expected_receipts": (6 if ALLSPORTS else 2) * MEMBERS + seeded, "history_per_member": HISTORY, "settle_pass_s": round(settle_s, 3), "slips": diag["counts"]["slips"],
-           "states": diag["counts"]["member_state"], "routes": {}}
+           "states": diag["counts"]["member_state"], "generate_builds": GEN_BUILDS[0], "allowed_generate_builds": 6 * (int((time.time() - t_start) / workspace_api.GEN_TTL) + 2),
+           "routes": {}}
     if other:
         rep["sports_service_calls"] = other["sports"].calls
     for p in sorted({x[0] for x in res}):
@@ -356,7 +369,8 @@ def workspace_run():
             codes[x[1]] = codes.get(x[1], 0) + 1
         rep["routes"][p] = {"n": len(rows), "codes": codes, "p50_ms": pct([x[2] for x in rows], .5), "p99_ms": pct([x[2] for x in rows], .99),
                             "avg_kb": round(sum(x[3] for x in rows) / len(rows) / 1e3, 1), "gzip_share": round(sum(1 for x in rows if x[4] == "gzip") / len(rows), 2)}
-    rep["pass"] = (rep["non_200"] == 0 and rep["grade_calls"] == 0 and rep["board_builds"] <= rep["allowed_builds"] and rep["receipts"] == rep["expected_receipts"])
+    rep["pass"] = (rep["non_200"] == 0 and rep["grade_calls"] == 0 and rep["board_builds"] <= rep["allowed_builds"] and rep["receipts"] == rep["expected_receipts"]
+                   and rep["generate_builds"] <= rep["allowed_generate_builds"])
     print("RESULT " + json.dumps(rep))
     workspace_api.reset()
     if other:
