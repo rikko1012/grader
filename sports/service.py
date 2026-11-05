@@ -278,8 +278,14 @@ def alerts(o):
             lim = ALERT_RULES["kalshi_stale_min"] if plat.startswith("kalshi") else ALERT_RULES["feed_stale_min"]
             if f.get("age_min") is None or f["age_min"] > lim:
                 out.append({"level": "warn", "code": "feed_stale", "detail": {"platform": plat, **f, "limit_min": lim}})
-    mb = feeds.get("store_mb")
-    stop_mb = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
+    # the same measure the worker pauses on: the whole data directory against store_cap_mb (2026-11-05: the alert read
+    # canonical.db alone, so ingestion paused for ~14 h with no store_full alert)
+    mb = sum(v for v in (feeds.get("data_mb") or {}).values() if isinstance(v, (int, float))) or feeds.get("store_mb")
+    try:
+        from .worker import store_cap_mb
+        stop_mb = store_cap_mb(float(os.environ.get("SPORTS_STORE_MAX_MB", "1500")))[0]   # read now, as before
+    except Exception:                                   # noqa: BLE001 - the alert never breaks ops
+        stop_mb = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
     if mb is not None and mb >= stop_mb:
         out.append({"level": "page", "code": "store_full_ingest_paused", "detail": {"store_mb": mb, "max_mb": stop_mb}})
     elif mb is not None and mb >= min(ALERT_RULES["store_warn_mb"], 0.8 * stop_mb):

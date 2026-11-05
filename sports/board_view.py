@@ -97,12 +97,38 @@ def gate_reason(league, stat):
 #               (lean Under with >= 6 of 10 Overs; lean Over with >= 6 of 10 Unders; 3 of 5 when only 5 played)
 # Lines below RATIO_MIN_LINE (0.5 / 1.5 counts) are discrete enough that a mean far below the line is legitimate (a
 # centre's 0.1 threes at 0.5); the L10 rule still applies to them. Each suppressed row is logged (sanity_log).
-SANITY_VERSION = "sg-1"
+#
+# sg-2 (2026-11-05, owner: "100% research grades" on NFL props) keeps every sg-1 rule and adds holds for BROKEN inputs
+# only - it never lowers a chance and never changes a letter of a row it does not hold:
+#   floor       mu <= MU_FLOOR: the projection sits on the model's floor (sports/model/model.py family_pmf clamps the
+#               mean at 0.05), i.e. the model had no usable opportunity input (Travis Hunter rec 1.5: mu 0.05, 80%
+#               range [0, 0], P(Under) 1.0 shown as an A)
+#   certain     the shown OR the raw chance of either side >= CERTAIN_P: a point-mass / degenerate distribution (a
+#               100% player-prop chance is not a forecast). cal-mi passes a degenerate raw chance straight through,
+#               so both are checked
+#   thin        the player has fewer than THIN_MIN played games with this stat (the bv-1 L10 window's n)
+#   stale       his newest played game with this stat is more than STALE_DAYS before now (a whole season missed)
+#   small_low   L < RATIO_MIN_LINE and mu < 0.25 x L while the player cleared this exact line in at least
+#               SMALL_OVER_SHARE of his last-10 games (n >= L10_MIN_N): the collapse is not his real role. A centre's
+#               0.1 threes at 0.5 with 1 three-game in 10 stays graded (the reason sg-1 skipped small lines)
+# The rules that need history (thin, stale, small_low, l10_contra) only run when the history was read (l10 / view
+# given); a snapshot built without history keeps the sg-1 behaviour.
+SANITY_VERSION = "sg-2"
 RATIO_LOW, RATIO_HIGH, RATIO_MIN_LINE = 0.25, 4.0, 2.0
 L10_MIN_N, L10_CONTRA_SHARE = 5, 0.6
+MU_FLOOR = 0.05
+CERTAIN_P = 0.999
+THIN_MIN = 3
+STALE_DAYS = 365
+SMALL_OVER_SHARE = 0.3
 SANITY_TEXT = {"ratio_low": "Held: projection is under 25% of the line",
                "ratio_high": "Held: projection is over 4x the line",
-               "l10_contra": "Held: last-10 results contradict the lean"}
+               "l10_contra": "Held: last-10 results contradict the lean",
+               "floor": "Held: projection is at the model's floor (no usable inputs)",
+               "certain": "Held: the forecast puts 100% on one side (degenerate distribution)",
+               "thin": f"Held: fewer than {THIN_MIN} games with this stat",
+               "stale": "Held: no game with this stat in the last year",
+               "small_low": "Held: projection is under 25% of a line the player recently cleared"}
 
 
 def lean_of(po, pu, mu, line):
@@ -117,14 +143,43 @@ def lean_of(po, pu, mu, line):
     return None
 
 
-def sanity_check(mu, line, lean, l10=None):
-    """-> None or a reason code (SANITY_TEXT). l10 = [over, under, push, n] strict counts at this line, or None."""
+def _days_between(a, b):
+    """Whole days from ISO time a to ISO time b, or None when either is missing / unreadable."""
+    from datetime import datetime, timezone
+
+    def p(s):
+        t = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    try:
+        return (p(b) - p(a)).total_seconds() / 86400.0
+    except (TypeError, ValueError):
+        return None
+
+
+def sanity_check(mu, line, lean, l10=None, chances=(), last_at=None, now=None, played=None):
+    """-> None or a reason code (SANITY_TEXT). l10 = [over, under, push, n] strict counts at this line, or None (no
+    history read). chances = every chance shown or computed for this quote (raw and displayed, either side); played =
+    the player's played games with this stat (bv-1 view "played"); last_at = his newest one (bv-1 view "to10"), now =
+    the snapshot time (both ISO). None = not known: that rule does not run."""
     line = float(line)
-    if mu is not None and line >= RATIO_MIN_LINE:
+    if mu is not None and line >= RATIO_MIN_LINE:            # sg-1 ratio rules first (their codes are unchanged)
         if mu < RATIO_LOW * line:
             return "ratio_low"
         if mu > RATIO_HIGH * line:
             return "ratio_high"
+    if mu is not None and mu <= MU_FLOOR + 1e-9:
+        return "floor"
+    if any(c is not None and c >= CERTAIN_P - 1e-12 for c in chances):
+        return "certain"
+    if (played is not None and played < THIN_MIN) or (l10 is not None and l10[3] < THIN_MIN):
+        return "thin"
+    if last_at and now:
+        gap = _days_between(last_at, now)
+        if gap is not None and gap > STALE_DAYS:
+            return "stale"
+    if mu is not None and line < RATIO_MIN_LINE and mu < RATIO_LOW * line and l10 and l10[3] >= L10_MIN_N \
+            and l10[0] >= SMALL_OVER_SHARE * l10[3] - 1e-9:
+        return "small_low"
     if lean and l10 and l10[3] >= L10_MIN_N:
         opp = l10[0] if lean == "under" else l10[1]
         if opp >= L10_CONTRA_SHARE * l10[3] - 1e-9:
@@ -364,9 +419,10 @@ def calibrated(league, stat, po, pu, pp, model, mkc):
         return None
 
 
-def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
-    """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-1 sanity), else the cf-2
-    signal. -> (x, sanity code or None)."""
+def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None, raw=None, view=None, now=None):
+    """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-2 sanity), else the cf-2
+    signal. raw = the uncalibrated (po, pu) when cal-mi changed the shown chance; view = the bv-1 row summary (its
+    "to10" dates the newest game with the stat); now = snapshot time. -> (x, sanity code or None)."""
     held = contain_reason(league, stat)                # A9a 4: the one containment source, both leagues
     if held:
         return {"b": "gate", "t": held, "v": GATE_VERSION}, None
@@ -374,7 +430,8 @@ def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None):
     sig = signal(po, pu, mu, line, mkc, l10, iv)
     # the L10 rule reads the lean the row actually carries (after N4): a row the market already priced away has no
     # lean, so it is never "held: last-10 results contradict the lean" - the ratio rules apply either way
-    code = sanity_check(mu, line, sig.get("ln"), l10)
+    code = sanity_check(mu, line, sig.get("ln"), l10, chances=(po, pu) + tuple(raw or ()),
+                        last_at=(view or {}).get("to10"), now=now, played=(view or {}).get("played"))
     if code:
         return {"b": code, "t": SANITY_TEXT[code], "v": SANITY_VERSION}, code
     if sig.get("ln"):                                  # rg-1: grade from the UNROUNDED lean-side chance

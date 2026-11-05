@@ -121,10 +121,11 @@ GRADES = ("A", "B", "C", "Lean")
 GRADE_RULE = "rg-1"
 
 
-def research_grade(fc, side, league, probs=None):
+def research_grade(fc, side, league, probs=None, rid=None):
     """The board's research letter (sports/board_view rg-1) this forecast can carry on `side`: the lean rule (chance >
-    50% and the mean on that side), no vg-1 hold while containment is on, no sg-1 ratio hold; else None. The board's
-    market (N4) and L10 holds are applied by the page before it shows a letter - a letter it did show must equal this.
+    50% and the mean on that side), no vg-1 hold while containment is on, no sg-2 hold (the ratio / floor / certain
+    rules re-checked here, the history rules read from the board's last sanity.json for this record); else None. The
+    board's market (N4) hold is applied by the page before it shows a letter - a letter it did show must equal this.
     probs = the DISPLAYED chances ({p_over, p_under}: the quote's cal-mi-1 chance when the board showed one)."""
     from . import board_view
     if fc.p_over is None or fc.p_under is None or fc.model_version not in board_view.SCOUT_MODELS:
@@ -135,9 +136,45 @@ def research_grade(fc, side, league, probs=None):
         return None
     if board_view.contain_reason(league, fc.stat):
         return None
-    if board_view.sanity_check(fc.projection_mean, line, side) is not None:
+    if board_view.sanity_check(fc.projection_mean, line, side, chances=(po, pu, fc.p_over, fc.p_under)) is not None:
+        return None
+    if rid is not None and held_quote(league, rid, fc.forecast_id):
         return None
     return board_view.research_grade(po if side == "over" else pu)
+
+
+_HELD = {}
+
+
+def held_quote(league, rid, fid):
+    """The sg-2 reason the last snapshot held this quote + forecast with (snapshots sanity.json "keys"), or None.
+    Cached per league like cal_quote: the file's mtime is re-checked every CAL_CHECK_S seconds."""
+    import json as _json
+    import time as _t
+    from . import snapshots
+    now = _t.time()
+    c = _HELD.get(league)
+    if c is None or now - c[0] > CAL_CHECK_S:
+        p = snapshots.snap_root() / league / "sanity.json"
+        try:
+            mt = p.stat().st_mtime_ns
+        except OSError:
+            mt = None
+        if c is not None and c[1] == mt:
+            _HELD[league] = (now, mt, c[2])
+        else:
+            idx = {}
+            if mt is not None:
+                try:
+                    d = _json.loads(p.read_text(encoding="utf-8"))
+                    keys = d.get("keys") if isinstance(d.get("keys"), list) else \
+                        [[e.get("record_id"), e.get("forecast_id"), e.get("reason")] for e in d.get("entries") or ()]
+                    idx = {(k[0], k[1]): k[2] for k in keys if isinstance(k, list) and len(k) == 3}
+                except (OSError, ValueError, AttributeError):
+                    idx = {}
+            _HELD[league] = (now, mt, idx)
+        c = _HELD[league]
+    return c[2].get((rid, fid))
 
 
 _CAL = {}
@@ -248,7 +285,7 @@ def check(con, item, now=None):
     shown_grade = item.get("grade")
     if shown_grade is not None and shown_grade not in GRADES:
         raise ValueError("grade must be A, B, C or Lean")
-    expect = research_grade(fc, side, o.league, displayed) if fc else None
+    expect = research_grade(fc, side, o.league, displayed, rid) if fc else None
     mismatch = None
     if shown_grade is not None and shown_grade != expect:      # never a letter the forecast record cannot carry
         mismatch, shown_grade = shown_grade, None
