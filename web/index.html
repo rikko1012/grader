@@ -1034,7 +1034,17 @@ function mapChancesPanel(m) {
     if ((lv.steps || []).length) h += `<div class="small muted" style="margin-top:4px">${lv.steps.map(s => s.action === "leftover"
       ? `${esc(s.map)} left over` : `${s.team ? esc(s.team) + " " : ""}${esc(s.action)} ${esc(s.map)}`).join(" · ")}</div>`;
   }
-  return h + `<div class="small muted" style="margin-top:6px">Weight in the grade: 0. ${esc(m.note || "The grade does not use HLTV map chances yet.")}</div></div>`;
+  return h + mapChancesUse(m) + `</div>`;
+}
+// CS2_MAP_WEIGHTED (map_weighted.py): "HLTV map chances used" + their capture time when they fed this grade, otherwise
+// "Shadow only – not in this grade" with the map-weighted (vm-2) projection beside the live one. Weight 0 unless used.
+function mapChancesUse(m) {
+  const u = m.grade_use;
+  if (u && u.used) return `<div class="small" style="margin-top:6px"><b>${esc(u.label)}</b>${u.at ? ` · captured ${esc(clockTxt(u.at))}` : ""}`
+    + (u.projection != null ? ` · projection ${esc(u.projection)}${u.unweighted != null ? ` (without map chances ${esc(u.unweighted)})` : ""}` : "") + `</div>`;
+  let h = `<div class="small muted" style="margin-top:6px">Weight in the grade: 0. ${esc(u ? u.label : (m.note || "The grade does not use HLTV map chances yet."))}</div>`;
+  if (u && u.shadow != null && u.projection != null) h += `<div class="small muted">Map-weighted projection (shadow) ${esc(u.shadow)} · live projection ${esc(u.projection)}</div>`;
+  return h;
 }
 const num = (x, d = 2) => x == null ? "–" : Number(x).toFixed(d);
 // kills chances are capped at 78% (caps.kills_chance): a capped chance says so wherever it shows - same number, labelled

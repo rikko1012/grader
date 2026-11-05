@@ -250,8 +250,12 @@ def map_chances(match_id, start=None):
     """The latest HLTV map chances captured BEFORE the match start, with their capture time (vm-2 shadow input).
     The start is the earlier of the caller's (the forecast's match start) and HLTV's listed start. map_chances holds only
     the latest read, so a snapshot updated at or after the start leaves nothing usable ("late"). Never raises."""
-    snap = map_chances_snapshot(match_id)
-    if not snap.get("ok"):
+    return cut_before_start(map_chances_snapshot(match_id), start)
+
+
+def cut_before_start(snap, start=None):
+    """map_chances()'s pre-start rule applied to a snapshot already in hand (the card's display answer, map_weighted). Pure."""
+    if not isinstance(snap, dict) or not snap.get("ok"):
         return snap
     starts = [t for t in (hltv._utc_dt(start), hltv._utc_dt(snap.get("start"))) if t is not None]
     if not starts:
@@ -300,3 +304,36 @@ def player_map_kills(player_id, before, days):
                                  transient=False), ok=True)
     hit = _mc_get(key, PMK_TTL)
     return hit if hit is not hltv.MISS else hltv.single_flight(key, read, lambda: _mc_get(key, PMK_TTL))
+
+
+def player_map_kills_display(player_id, before, days, wait=MC_DISPLAY_WAIT):
+    """Member card path (map_weighted's shadow projection beside the live one): the cached answer, else one background read
+    (single flight, at most 2 refresh threads) that the card waits for at most `wait` seconds. None when nothing good is in
+    hand in time - the card then shows no shadow number. Never raises."""
+    try:
+        from datetime import date
+        pid = int(player_id)
+        b = before if isinstance(before, date) else date.fromisoformat(str(before)[:10])
+        key = ("player_map_kills", pid, b.isoformat(), int(days))
+    except (TypeError, ValueError):
+        return None
+    if not hltv.dsn():
+        return None
+    hit = _mc_get(key, PMK_TTL)
+    if hit is not hltv.MISS:
+        return hit if hit.get("ok") else None
+    if _MC_BG.acquire(blocking=False):
+        def run():
+            try:
+                player_map_kills(pid, b, days)
+            except Exception:
+                pass
+            finally:
+                _MC_BG.release()
+        th = threading.Thread(target=run, daemon=True, name="hltv-player-map-kills")
+        th.start()
+        th.join(wait)
+        hit = _mc_get(key, PMK_TTL)
+        if hit is not hltv.MISS and hit.get("ok"):
+            return hit
+    return None

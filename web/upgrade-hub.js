@@ -397,7 +397,15 @@ export function mount(C) {
     const lv=m.veto;
     return `<section class="h-mapchances"><div class="h-sec-head"><h4>HLTV map chances</h4><small>${m.at?`Updated ${esc(when(m.at))}`:''}</small></div><ul class="h-mc-maps">${m.maps.map(x=>`<li>${esc(x.name)} <b>${esc(x.pct)}%</b></li>`).join('')}</ul>
       ${lv&&(lv.maps||[]).length?`<p class="h-history-note">Likeliest veto${lv.pct!=null?` (${esc(lv.pct)}% of HLTV's simulations)`:''}: ${lv.maps.map(x=>`${esc(x.slot)} ${esc(x.name)}`).join(' · ')}</p>`:''}
-      <p class="h-history-note">Weight in the grade: 0. ${esc(m.note||'The grade does not use HLTV map chances yet.')}</p></section>`;
+      ${mapChancesUse(m)}</section>`;
+  }
+  /* CS2_MAP_WEIGHTED (map_weighted.saved_status, from the saved forecast): "HLTV map chances used" + capture time when they fed
+     this grade, otherwise "Shadow only – not in this grade" with the map-weighted (vm-2) projection beside the live one. */
+  function mapChancesUse(m) {
+    const u=m.grade_use;
+    if(u&&u.used)return `<p class="h-history-note"><b>${esc(u.label)}</b>${u.at?` · captured ${esc(when(u.at))}`:''}${u.projection!=null?` · projection ${esc(u.projection)}${u.unweighted!=null?` (without map chances ${esc(u.unweighted)})`:''}`:''}</p>`;
+    return `<p class="h-history-note">Weight in the grade: 0. ${esc(u?u.label:(m.note||'The grade does not use HLTV map chances yet.'))}</p>`
+      +(u&&u.shadow!=null&&u.projection!=null?`<p class="h-history-note">Map-weighted projection (shadow) ${esc(u.shadow)} · live projection ${esc(u.projection)}</p>`:'');
   }
   function paintDetail() {
     const box=$('hub-detail'),r=rec(H.detail);if(!box||!r)return;
