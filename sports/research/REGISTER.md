@@ -694,3 +694,14 @@ verbatim on the service, once a day. Nothing in the A9 5 rule itself (numbers, s
    with the shown chance when one exists (closing the A9 audit gap noted in `results_public.grades`).
 7. **Nothing else changes.** A8 / A8a / A9 rules, gate H / gate F, sports-sp-1 (0U everywhere), cf-2, N4, sg-1; edges,
    confidence and rank stay withheld for a failed-gate market even when its letters are released (A9 5).
+
+## Amendment A9b - the owner's switch can only contain (registered 2026-11-04, owner absolute rule "Never force letters on")
+
+1. `SPORTS_CONTAIN_NBA` / `SPORTS_CONTAIN_NFL` = 1 contains a league (wins over everything, as in A9a 4). A value of
+   0 / off / false no longer releases a league: it is logged ("asked to release; applied: contained") and ignored, so
+   the A9a 4 order for a 0 is file -> seed -> legacy. The A9a text "`SPORTS_CONTAIN_NBA=0|1` ... wins over everything"
+   now reads "1 wins over everything; 0 is ignored". Release happens only through the daily verdict (A9a 3-4).
+2. Reason: on 2026-11-04 both switches were 0 on the service while the daily check held NFL (stated 66.7%, hit 54.7%,
+   n 2,216) and failed NBA (64.5% vs 55.3%, n 4,773); members saw NFL "A" letters on 70% chances.
+3. Reported in `gradecheck.json` (`leagues.<lg>.guards.containment.env_asked / env_applied`) and the admin view
+   (`containment.env_requests`, `containment.letters`). No band, gate, chance or logged forecast changes.

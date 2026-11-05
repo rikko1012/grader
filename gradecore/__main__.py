@@ -1,4 +1,4 @@
-"""python -m gradecore: offline evaluation of the shared grading candidate (gp-2). Read-only inputs, artifacts to a folder.
+"""python -m gradecore: offline evaluation of the shared grading candidate (gp-3). Read-only inputs, artifacts to a folder.
 
   evaluate     rows (JSONL in the evaluation contract) -> calibration_<sport>.json per sport + evaluation_<stamp>.json
   reliability  one sport's held-out reliability bins (candidate beside the saved published chances) ->

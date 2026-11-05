@@ -33,7 +33,7 @@ def test_evaluate_writes_artifacts_never_release_and_refuses_a_silent_overwrite(
     argv = ['evaluate', '--rows', rp, '--fit-end', FIT_END, '--calibration-end', CAL_END, '--reps', '40', '--out', str(out)]
     assert cli.main(argv) == 0
     cal = json.loads((out / 'calibration_nba.json').read_text(encoding='utf-8'))
-    assert cal['sport'] == 'nba' and cal['release_allowed'] is False and 'tables' in cal and cal['policy'] == 'gp-2'
+    assert cal['sport'] == 'nba' and cal['release_allowed'] is False and 'tables' in cal and cal['policy'] == 'gp-3'
     assert not (out / 'calibration_cs2.json').exists()                       # only sports present in the rows
     [report_path] = out.glob('evaluation_*.json')
     rep = json.loads(report_path.read_text(encoding='utf-8'))

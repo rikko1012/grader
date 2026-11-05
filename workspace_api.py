@@ -30,6 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import letter_containment as lc
 import slip_quality as sq
 import workspace_h2h
 import workspace_rules as rules
@@ -265,8 +266,16 @@ def event_id(x):
 def read_rev(x):
     """The identity of Scout's read as the slip shows it: side, chance and letter. Stake is left out: the same-match cap moves it
     whenever another row in the group changes, and the slip does not show it."""
-    fields = [_side(x), x.get("p"), x.get("model_grade") or x.get("grade")]
+    fields = [_side(x), x.get("p"), _shown_grade(x)]
     return "r-" + hashlib.sha256(json.dumps(fields, default=str).encode()).hexdigest()[:16]
+
+
+def _shown_grade(x):
+    """The letter the member sees on this row: none while CS2 letters are held (letter_containment lc-1, display only) - the
+    read's identity then carries no letter either, so the hash never encodes a held letter."""
+    if x.get("side") and x.get("state") != "SCOUT" and lc.contained("cs2", x.get("prop")):
+        return "held"
+    return x.get("model_grade") or x.get("grade")
 
 
 def _nick(x):
@@ -302,7 +311,8 @@ def record_of(x):
     period, period_label = SCOPE.get(scope, (scope, scope))
     prop, lt = x.get("prop"), line_type_of(x)
     teams, nick = _teams(x), _nick(x)
-    grade = x.get("model_grade") or x.get("grade")
+    grade = _shown_grade(x)
+    held = grade == "held"                      # lc-1: no letter, 0U; the chance and the side stay
     p = x.get("p")
     n, over, push = x.get("l10_n"), x.get("l10_over"), x.get("l10_push") or 0
     l10 = {"over": over, "under": n - over, "push": push, "n": n + push} if n and over is not None else None
@@ -320,9 +330,10 @@ def record_of(x):
                       "under": {"offered": _offered(x, "under"), "payout": x.get("lower" if book == "underdog" else "mod_lower"), "price": x.get("price_lower")},
                       "moved_from": x.get("open_line") if moved else None, "moved_at": _iso(x.get("moved_at")) if moved else None},
             "scout": {"side": side, "read_rev": read_rev(x), "p_side": p, "p_over": p if side == "over" else None, "p_under": p if side == "under" else None, "p_push": _push(x),
-                      "projection": x.get("proj"), "range80": None, "grade": grade if grade in ("A+", "A", "A-", "B+", "B", "B-") else None, "units": x.get("units"),
-                      "stake_reason": x.get("stake_reason") or x.get("cap_reason"), "hold": None, "model_version": x.get("graded_model"), "forecast_at": x.get("graded_at"),
-                      "validation": {"kind": "live"}},
+                      "projection": x.get("proj"), "range80": None, "grade": grade if grade in ("A+", "A", "A-", "B+", "B", "B-") else None,
+                      "units": 0.0 if held else x.get("units"),
+                      "stake_reason": None if held else x.get("stake_reason") or x.get("cap_reason"), "hold": None, "model_version": x.get("graded_model"), "forecast_at": x.get("graded_at"),
+                      "validation": {"kind": "live"}, **({"letter_held": True} if held else {})},
             "history": {"l5": None, "l10": l10, "l20": None, "avg": x.get("l10_avg"), "recent": None}, "market_chance": None,
             "state": {"kind": "ok" if not x.get("unavailable") and not x.get("hltv_retry") else "held",
                       "reason": x.get("unavailable") if isinstance(x.get("unavailable"), str) else None}}
@@ -361,8 +372,8 @@ def _build(srv):
     feeds = {bk: _feed_state(srv, bk, docs.get(bk), bk in failed) for bk in BOOKS}
     times = sorted(f["at"] for f in feeds.values() if f["at"])
     version = next((p.get("version") for p in docs.values() if p), None)
-    body = json.dumps({"version": version, "board_at": times[0] if times else None, "feeds": feeds, "records": records},
-                      default=str, separators=(",", ":")).encode()
+    body = json.dumps({"version": version, "board_at": times[0] if times else None, "feeds": feeds, "records": records,
+                       "letter_hold": lc.hold_info("cs2")}, default=str, separators=(",", ":")).encode()
     if _SNAP["body"] == body:
         body = _SNAP["body"]                    # identical bytes: the same object, so nothing is compressed again
     _SNAP.update(at=time.time(), body=body, index=index, props=props, feeds=feeds, gen=_SNAP["gen"] + 1)
@@ -692,6 +703,7 @@ def run_check(srv, member, legs, entry_types, now=None, allowed=None):
         e["ok"] = e["rule_ok"] and legs_ok
         e["trackable"] = e["trackable"] and legs_ok
         if e["rule_ok"] and legs_ok:
+            ev_legs = [_held_leg(l) for l in ev_legs]
             e["ev"] = rules.ev_status(e["platform"], e["entry_type"], ev_legs, gate, now.timestamp())
             if e["ev"].get("available") and rules.slip_header_on(os.environ):
                 head = _slip_header(e["ev"], e["entry_type"], ev_legs)
@@ -713,6 +725,15 @@ def run_check(srv, member, legs, entry_types, now=None, allowed=None):
             fails[p["check"]] += 1
     return {"checked_at": now.isoformat(timespec="seconds"), "snapshot_at": _iso(snap["at"]) if snap else None, "ttl_s": CHECK_TTL_S,
             "legs": results, "entries": entries, "fails": fails}
+
+
+def _held_leg(l):
+    """lc-1: a CS2 / LoL leg whose letter is held carries the banner as "held" - workspace_rules gives it no rating (no EV, no
+    slip header), the same step as a sport with no validated record."""
+    sport = l.get("sport") or "cs2"
+    if sport in lc.SPORTS and lc.contained(sport, l.get("prop") or l.get("stat")):
+        return dict(l, held=lc.banner(sport))
+    return l
 
 
 def public_check(res):
@@ -986,7 +1007,7 @@ def _board_columns(srv=None):
     an edge the slip refuses. LoL, NBA and NFL never get one (rules.EV_NOT_VALIDATED). Any failure: no cells, no edge."""
     from gradecore import payouts
     cells = {}
-    if srv is not None:
+    if srv is not None and not lc.contained("cs2"):        # lc-1: a held leg has no rating, so no edge either
         try:
             for k, bands in rules.edge_cells(_gate(srv), time.time()).items():
                 tag, prop, scope = k.rsplit("|", 2)
@@ -1490,6 +1511,8 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
         mine = [x for x in slip if x["book"] == platform]
         t = et.get(platform)
         for m, r in zip(mine, sq.advise(mine, by_key, pool_legs, t if isinstance(t, str) and len(t) <= 16 else None)):
+            if m["sport"] in lc.SPORTS and lc.contained(m["sport"], m.get("stat")):     # lc-1: a held letter has no rating
+                r = dict(r, notes=[{"code": "contained", "text": lc.banner(m["sport"])}] + list(r.get("notes") or []))
             out[m["id"]] = r
     return h.send(200, {"version": sq.VERSION, "legs": [dict(out[l["id"]], id=l["id"]) for l in legs]})
 
@@ -1535,7 +1558,9 @@ def _payload(x, leg, res, e):
             "platform_label": rec["offer"]["platform_label"], "scout_side": rec["scout"]["side"], "on_side": leg["side"] == rec["scout"]["side"],
             "displayed_p": leg.get("shown_p") if leg["side"] == rec["scout"]["side"] else None, "grade": rec["scout"]["grade"], "units": rec["scout"]["units"],
             "stake_reason": rec["scout"]["stake_reason"], "projection": rec["scout"]["projection"], "forecast_p": fc.get("p_pick"), "forecast_at": fc.get("logged_at"),
-            "forecast_grade": fc.get("grade"), "forecast_units": fc.get("units"), "l10": rec["history"]["l10"], "feed_at": rec["offer"]["seen_at"],
+            # lc-1: while the letter is held the member's receipt keeps no letter or stake (the pick log keeps both)
+            "forecast_grade": "LEAN" if rec["scout"].get("letter_held") else fc.get("grade"),
+            "forecast_units": 0.0 if rec["scout"].get("letter_held") else fc.get("units"), "l10": rec["history"]["l10"], "feed_at": rec["offer"]["seen_at"],
             "rules_version": e.get("rules_version"), "entry_type": e.get("entry_type")}
 
 

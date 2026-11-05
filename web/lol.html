@@ -21,6 +21,7 @@ h1{font:700 17px var(--display);letter-spacing:.4px;margin:0;white-space:nowrap}
 .eyebrow{font:10px var(--mono);letter-spacing:.16em;color:var(--accent-2);text-transform:uppercase}
 .intro h2{font:600 clamp(24px,3vw,34px)/1.15 var(--display);margin:6px 0 4px;letter-spacing:-.5px}.intro p{margin:0;color:var(--muted);font-size:13px;max-width:640px}
 .feeds{font-size:12px;color:var(--muted);display:flex;gap:6px 14px;flex-wrap:wrap}.feeds b{color:var(--text);font-weight:600}
+.banner.lhold{border-color:#8bb8ff55;background:#8bb8ff12;color:#cfe0ff}
 .banner{border:1px solid #e3b34155;background:#e3b34112;color:#f2d27a;border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:13px}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 14px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
 .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:#0b1018}
@@ -311,7 +312,8 @@ function gradeChip(x) {
 function startedTag(x) { return started(x) ? `<span class="tag">Started</span>` : ""; }
 function typeTag(t) { return t === "Standard" ? "" : `<span class="tag ${t === "Promo" ? "promo" : "alt"}">${esc(t)}</span>`; }
 function pickCell(x) {
-  if (x.pick_offered) return `<span class="pick ${x.pick_side === "Over" ? "over" : "under"}">${esc(x.pick)}</span>`;
+  // lc-1: while LoL letters are held the side reads "Lean Over / Lean Under" (no letter, 0U)
+  if (x.pick_offered) return `<span class="pick ${x.pick_side === "Over" ? "over" : "under"}">${x.letter_held ? "Lean " : ""}${esc(x.pick)}</span>`;
   const o = offeredSide(x);
   const p = o ? (o.side === "Over" ? x.p_over : x.p_under) : null;
   return `<span class="pick off">${esc(x.pick_side)} unavailable</span><span class="offnote">${o ? `Offered: ${o.side} ${x.line} at ${pct(p)}` : "No side offered"}</span>`;
@@ -634,6 +636,7 @@ function ctWhyNot(c) {
   // alternate lines (Goblin / Demon / adjusted) pay differently, so a chance alone can't rank them against a standard line
   if (x.line_type && x.line_type !== "Standard") return `${x.line_type} alt line – different payout, not ranked.`;
   if (!x.grade) return "No grade on this line.";
+  if (x.letter_held) return `Lean: LoL letters are held until stated chances match results.`;
   if (!ctLetter(x)) return `${x.grade}: the chance is under 55%.`;
   return "";
 }
@@ -821,6 +824,9 @@ function feedsLine() {
   const parts = Object.entries(D.feeds || {}).map(([k, v]) => `<span>${esc(k)} lines checked <b>${when(v)}</b></span>`);
   return parts.join("");
 }
+function holdBanner() {   // lc-1: one plain-fact banner while LoL letters are held
+  return D && D.letter_hold && D.letter_hold.banner ? `<div class="banner lhold" role="status">${esc(D.letter_hold.banner)}</div>` : "";
+}
 function staleBanner() {
   const out = [];
   for (const [k, v] of Object.entries(D.feeds || {})) { const m = ago(v); if (m != null && m > 15) out.push(`${esc(k)} lines were last checked ${m} minutes ago.`); }
@@ -841,7 +847,7 @@ function render() {
   for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)} · ${new Date(x.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams} · ${new Date(t.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
   if (F.match !== "all" && !ms.has(F.match)) F.match = "all";
-  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>Read the match. Find your pick.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${staleBanner()}${NOTE ? `<div class="banner" role="status">${esc(NOTE)}</div>` : ""}`;
+  let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>Read the match. Find your pick.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${holdBanner()}${staleBanner()}${NOTE ? `<div class="banner" role="status">${esc(NOTE)}</div>` : ""}`;
   NOTE = null;
   h += `<div class="workspace-nav">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}</div><div class="bar ${filtersOpen ? "filters-open" : ""}">${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
     <button type="button" class="btn filter-toggle" id="filtertoggle" aria-expanded="${filtersOpen}">${filtersOpen ? "Fewer filters" : "More filters"}${[F.match, F.scope, F.type, F.floor].filter(v => v !== "all").length ? " · filters active" : ""}</button>

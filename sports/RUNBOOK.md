@@ -390,7 +390,9 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
    hit, n, CI, letters shown / hidden); JSON: `GET /api/sports/admin/model/gradecheck` (admin st1 token; `?part=headline`
    for the summary) or `python -m sports.model.daily status` in the Shell. Switches: `SPORTS_CAL_AUTOFIT=0` (no daily
    fit; manual `fit` still works), `SPORTS_GRADECHECK_DAILY=0` (no daily gradecheck / containment change),
-   `SPORTS_CONTAIN_NBA=0|1` / `SPORTS_CONTAIN_NFL=0|1` (force letters shown / hidden, wins over everything),
+   `SPORTS_CONTAIN_NBA=1` / `SPORTS_CONTAIN_NFL=1` (hide letters, wins over everything; since ct-1a 2026-11-04 a 0 is
+   logged and IGNORED - the switch can only contain, release comes only from the daily verdict; gradecheck.json
+   `containment.env_requests` shows what was asked and what applied),
    `SPORTS_DAILY_AFTER_UTC_H` (default 10). Run now from the Shell: `python -m sports.model.daily run --force`.
 
 ## 11. Load results (2026-10-23, Windows workstation, 700 simultaneous members)

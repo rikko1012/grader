@@ -343,8 +343,8 @@ def record_of(lg, doc, m, q, view):
     lean, held = lean_and_hold(m, q, sc, mkc)
     held = None if held is None else held or HOLD_DETAIL.format(LG=lg.upper())
     # Letters are published by Sports, never reconstructed from probabilities here.
-    # The owner's containment override may release research letters; it does not
-    # validate the model or release stakes. Sanity/market holds still win.
+    # The owner's containment switch can only hold research letters (sports/containment.py ct-1a);
+    # release comes only from the daily verdict. Stakes stay 0. Sanity/market holds still win.
     signal = q.get("x") or {}
     grade = signal.get("gr") if held is None and lean and signal.get("v") == "cf-2" else None
     if grade not in ("A", "B", "C", "Lean"):

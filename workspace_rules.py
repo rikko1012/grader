@@ -230,7 +230,7 @@ def _pts(x):
 
 def ev_status(platform, entry_type, legs, gate, now_ts):
     """EV for a pending slip, or the first reason it is absent, in the published order. legs: [{name, sport, match, line,
-    multiplier, on_side, p, tag, prop, scope}]. gate: a callable returning gate_from_export's dict (or None), called only when
+    multiplier, on_side, p, tag, prop, scope, held?}]; held = the containment banner of a leg whose letter is held (no rating). gate: a callable returning gate_from_export's dict (or None), called only when
     the entry reaches that step. A chance outside CS2 has no validated record, so a verified payout is shown and EV is not.
     -> {"available": False, "reason", "payout"?} or {"available": True, "ev", "hit_chance", "payout"}."""
     def no(reason, **extra):
@@ -259,6 +259,9 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
     payout = {"multiple": base, "entry_type": et, "source": UD_PAYOUTS, "page_date": UD_PAYOUT_PAGE}
     if any(float(l.get("line") or 0).is_integer() for l in legs):
         return no("A whole-number line can push, and a push changes the payout tier.", payout=payout)
+    held = next((l["held"] for l in legs if l.get("held")), None)
+    if held:                                        # letter containment (lc-1): a held leg has no rating
+        return no(held, payout=payout)
     other = next((l["sport"] for l in legs if l.get("sport") in EV_NOT_VALIDATED), None)
     if other:
         return no(EV_NOT_VALIDATED[other], payout=payout)
@@ -318,7 +321,7 @@ def edge_cells(gate, now_ts):
 def leg_edge_ok(leg, cells):
     """The board-side mirror of ev_status's per-leg steps: CS2 only, a half-point line (no push), a saved chance on the
     shown side at EV_MIN_CHANCE or more, a 1.0x pick, and a chance band that passed edge_cells."""
-    if leg.get("sport") != "cs2" or leg.get("sport") in EV_NOT_VALIDATED:
+    if leg.get("sport") != "cs2" or leg.get("sport") in EV_NOT_VALIDATED or leg.get("held"):
         return False
     try:
         if float(leg.get("line")).is_integer():

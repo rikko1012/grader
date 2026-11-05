@@ -8,6 +8,7 @@ One snapshot per board.json write, single flight. Past games are read once per s
 behind one connection. Settlement is the LoL worker's own lol_settlements row for the receipt's platform, market and line: this
 module only says which side of it the member took. LoL letters carry 0 units, and a stake is never shown as anything else."""
 import hashlib
+import letter_containment
 import workspace_h2h
 import json
 import re
@@ -204,7 +205,8 @@ def record_of(x, raw, values):
                       "seen_at": x.get("line_checked") or x.get("line_seen"), "over": {"offered": _offered(x.get("sides"), "Over"), "payout": _payout(x.get("sides"), "Over"), "price": None},
                       "under": {"offered": _offered(x.get("sides"), "Under"), "payout": _payout(x.get("sides"), "Under"), "price": None}, "moved_from": None, "moved_at": None},
             "scout": {"side": side, "read_rev": read_rev(x), "p_side": p_side, "p_over": x.get("p_over"), "p_under": x.get("p_under"), "p_push": x.get("p_push"), "projection": x.get("projection"), "range80": x.get("range80"),
-                      "grade": grade, "units": 0.0, "stake_reason": x.get("stake_reason"), "hold": None, "model_version": x.get("model_version"), "forecast_at": x.get("forecast_at"), "validation": {"kind": "live"}},
+                      "grade": grade, "units": 0.0, "stake_reason": x.get("stake_reason"), "hold": None, "model_version": x.get("model_version"), "forecast_at": x.get("forecast_at"), "validation": {"kind": "live"},
+                      **({"letter_held": True} if x.get("letter_held") else {})},
             "history": {"l5": _tally(values, x.get("line"), 5), "l10": _tally(values, x.get("line"), 10), "l20": _tally(values, x.get("line"), 20),
                         "avg": round(sum(v["value"] for v in values[:10]) / len(values[:10]), 1) if values else x.get("recent_per_game"), "recent": x.get("recent_games"),
                         **({"h2h": workspace_h2h.board_h2h(values, x.get("opponent"), x.get("line")),
@@ -215,7 +217,7 @@ def record_of(x, raw, values):
 def _build(srv):
     path = Path(srv.LOL_CENTER) / "board.json"
     try:
-        mt = path.stat().st_mtime
+        mt = (path.stat().st_mtime, letter_containment.key("lol"))     # lc-1: a containment change rebuilds once
     except OSError:
         raise Down("board.json") from None
     aged = any(f["state"] == "ok" and _ts(f["at"]) is not None and (datetime.now(timezone.utc) - _ts(f["at"])).total_seconds() > QUOTE_MAX_AGE_S for f in _SNAP["feeds"].values())

@@ -55,6 +55,14 @@ def test_only_explicit_forecast_capture_boundaries_import_core():
                 assert nodes and all(n.module == 'gradecore' and [a.name for a in n.names] == ['scorecard'] for n in nodes)
                 assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
                 continue
+            if p.relative_to(ROOT).as_posix() == 'letter_containment.py':
+                # lc-1 display containment: reads the shared containment rule and the payout table, never grades or stakes.
+                tree = ast.parse(p.read_text(encoding='utf-8'))
+                nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore' and [a.name for a in n.names] in (['containment'], ['payouts'])
+                                     for n in nodes)
+                assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
+                continue
             if p.relative_to(ROOT).as_posix() in reporting:
                 # Shared calendar formatting cannot introduce live grading.
                 nodes = [n for n in ast.walk(ast.parse(p.read_text(encoding='utf-8')))

@@ -140,7 +140,8 @@ async function loadSportsGrades() {
   el.innerHTML = `<b>Sports grade check</b> · game-day ${esc(G.game_day || "none yet")} · generated ${esc(G.generated_at || "–")}
     ${lgs.map(lg => { const h = H[lg] || {}, c = C[lg] || {}, L = h.letters || {};
       const shown = c.contained ? "letters HIDDEN" : ((c.stats || []).length ? "letters shown except " + c.stats.map(esc).join(", ") : "letters shown");
-      return `<div style="margin-top:6px"><b>${esc(lg.toUpperCase())}</b> · verdict <b>${esc(h.verdict || "–")}</b> · ${shown} <span class="muted">(${esc(c.source || "–")})</span>
+      const envNote = c.env_asked ? ` · env asked to ${esc(c.env_asked)}${c.env_applied ? " (applied)" : " (ignored: the switch can only contain)"}` : "";
+      return `<div style="margin-top:6px"><b>${esc(lg.toUpperCase())}</b> · verdict <b>${esc(h.verdict || "–")}</b> · ${shown} <span class="muted">(${esc(c.source || "–")}${envNote})</span>
       <div class="muted">${esc(h.why || "")} · A+B n ${esc(h.n ?? "–")} from ${esc(h.games ?? "–")} games / ${esc(h.game_days ?? "–")} days · cal-mi ON: ${(h.cal_mi_on || []).map(esc).join(", ") || "none"}</div>
       <div class="scroll"><table><thead><tr><th>Grade</th><th>n</th><th>Stated</th><th>Hit</th><th>95% (by game)</th></tr></thead><tbody>
       ${["A", "B", "C", "Lean", "AB"].filter(g => L[g]).map(g => `<tr><td>${g === "AB" ? "A+B" : g}</td><td>${esc(L[g].n ?? "–")}</td><td>${pc(L[g].stated)}</td><td>${pc(L[g].hit)}</td><td>${ci(L[g].ci)}</td></tr>`).join("") || `<tr><td colspan="5">No daily run yet</td></tr>`}

@@ -82,6 +82,7 @@ html[data-upgrade].hub-open .h-entry,html[data-upgrade].hub-open #u-tray-btn{dis
 .h-table-title>span{font-size:11px;color:#9daabb}
 .h-table-title>small{margin-left:auto;font-size:10px;color:#7f90a5}
 .h-empty{text-align:center;padding:48px 20px;color:#a0aec0;font-size:13px}
+.h-letter-hold{border:1px solid #8bb8ff55;background:#8bb8ff12;color:#cfe0ff;border-radius:8px;padding:8px 12px;margin:0 0 8px;font-size:13px}
 .h-pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:14px;color:#8d9fb6;font:10px 'DM Mono',monospace}
 .h-pagination span{margin-right:auto}
 .h-pagination button{font:11px 'Outfit',system-ui;min-height:34px}

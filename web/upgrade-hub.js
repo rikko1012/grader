@@ -151,6 +151,7 @@ export function mount(C) {
   function gradeChip(r) {
     const s=r.scout;
     if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
+    if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
     if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>${['nba','nfl'].includes(r.sport)?'<small class="h-grade-tag">Research grade</small>':''}`;
     if(s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span>`;
     return '';
@@ -259,8 +260,11 @@ export function mount(C) {
     $('hub-count').textContent=`${players.length.toLocaleString()} players · ${list.length.toLocaleString()} lines`;
     $('hub-clear').hidden=!activeFilters()&&H.book==='all'&&!H.q;
     $('hub-sources').innerHTML=H.loading?$('hub-sources').innerHTML:sourcesHtml();
+    /* lc-1 (SCOUT_LETTER_CONTAINMENT, off unless the owner turns it on): one plain-fact banner per visible sport whose letters
+       the server holds; those rows read Lean Over/Under with the chance, no letter, 0U */
+    const heldSports=[...new Set(list.filter(r=>r.scout.letter_held).map(r=>r.sport))];
     // the Sports grades note belongs to the NBA and NFL boards only
-    $('hub-health').innerHTML=(['nba','nfl'].includes(H.sport)&&list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About ${esc(SPORTS[H.sport])} grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Record for stated chances and actual results.</p></details>`:'');
+    $('hub-health').innerHTML=heldSports.map(sp=>`<p class="h-letter-hold" role="status">${esc(SPORTS[sp]||sp.toUpperCase())} letters are held until stated chances match results.</p>`).join('')+(['nba','nfl'].includes(H.sport)&&list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About ${esc(SPORTS[H.sport])} grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Record for stated chances and actual results.</p></details>`:'');
     const games=H.view==='games';
     $('hub-board-section').classList.toggle('h-by-game',games);
     $('hub-board-section').querySelectorAll('[data-hub="view"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===(games?'games':'list'))));

@@ -51,6 +51,8 @@ import perf_shadow
 import whop_auth
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
+import letter_containment
+letter_containment.configure(DATA_DIR)              # lc-1: CS2 / LoL letter containment state (display only)
 
 from polymarket import match_odds, upcoming_events
 import map_weighted
@@ -644,7 +646,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
     # one platform's graded lines (2026-10-10: PrizePicks like Underdog); the table shows each player's STANDARD line -
     # PrizePicks goblin / demon markets stay on the board, never mixed into this table. A promo line is a standard Over /
     # Under line graded as standard (2026-10-13 audit: it was left out here and re-added from the feed as 'grading...')
-    rows = [r for r in board_payload(book)["rows"] if (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
+    rows = [r for r in letter_containment.cs2_rows(board_payload(book)["rows"])          # lc-1: held letters read Lean, 0U
+            if (r.get("line_type") or r.get("odds_type") or "standard") in ("standard", "promo")]
     same = [r for r in rows if (r.get("scope") or "12") == scope and same_match(r, match_slug, st)
             and ({comparison._team_same(r.get("team_name") or r.get("team"), team), comparison._team_same(r.get("team_name") or r.get("team"), opponent)} & {True})]
     # the platform's own listed start(s) of this match (from its graded rows): feed lines carry no match id
@@ -2102,7 +2105,7 @@ def lol_public():
     if time.time() - _LOL_PUB["at"] > 15:
         _LOL_PUB.update(at=time.time(), on=(LOL_CENTER / "public.flag").exists())
     return _LOL_PUB["on"]
-_LOL_MEMBER = {"mtime": None, "body": None, "lock": threading.Lock()}
+_LOL_MEMBER = {"mtime": None, "body": None, "lock": threading.Lock()}   # mtime = (board.json mtime, lc-1 state)
 LOL_STAKE_NOTE = "0U: LoL stakes start once LoL picks have a settled record at real lines. The grade is the model's grade for this line."
 
 
@@ -2111,7 +2114,7 @@ def lol_member_board():
     pre-match forecast; no internal ids, admin flags or slip internals. Read-only file access - never imports lol."""
     path = LOL_CENTER / "board.json"
     try:
-        mt = path.stat().st_mtime
+        mt = (path.stat().st_mtime, letter_containment.key("lol"))     # a containment change rebuilds once
     except OSError:
         return None
     if _LOL_MEMBER["mtime"] == mt and _LOL_MEMBER["body"] is not None:
@@ -2261,15 +2264,16 @@ def _lol_member_rebuild(path, mt):
                               "grade": ln.get("grade") if fc and _lol_side_offered(ln.get("platform"), ln.get("sides"), ln.get("model_side")) else None,
                               "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None)})
             lines.sort(key=lambda z: (z["line"] if z["line"] is not None else 1e9, z["platform"]))
-            markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"),
+            markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"), "stat": m.get("stat"),
                             "stat_name": LOL_STAT.get(m.get("stat"), m.get("stat")), "scope": m.get("scope"), "lines": lines})
         markets.sort(key=lambda z: (z["team"] or "", z["player"] or "", z["stat_name"] or ""))
         tables.append({"teams": label.get(t.get("sid")) or " vs ".join(teams), "event": t.get("competition"), "best_of": t.get("best_of"),
                        "start": t.get("start"), "markets": markets})
     tables.sort(key=lambda z: z["start"] or "")
     feeds = {LOL_PLATFORM.get(k, k): v for k, v in (b.get("feeds") or {}).items()}
-    body = json.dumps({"at": b.get("at"), "feeds": feeds, "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE,
-                       "slips": _lol_member_slips(b.get("slips_member") or {})}).encode()
+    doc = {"at": b.get("at"), "feeds": feeds, "rows": rows, "match_tables": tables, "stake_note": LOL_STAKE_NOTE,
+           "slips": _lol_member_slips(b.get("slips_member") or {})}
+    body = json.dumps(letter_containment.lol_member_doc(doc)).encode()     # lc-1: held letters read Lean (display only)
     _LOL_MEMBER.update(mtime=mt, body=body)
     return body
 
@@ -4548,8 +4552,10 @@ class Handler(BaseHTTPRequestHandler):
                 # one build + encoding shared by every member for BOARD_TTL s (2026-10-13 load test: 700 members at once
                 # each rebuilt and encoded the whole board; the local test server refused half the connections meanwhile)
                 bk_ = "prizepicks" if q.get("book") == "prizepicks" else "underdog"
-                st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(with_ud_links(board_payload(bk_)) if PP_OPEN_LINK and bk_ == "underdog"
-                                                                     else board_payload(bk_), default=str).encode()), ttl=BOARD_TTL)
+                # lc-1 (letter_containment): a held market shows Lean, 0U and the banner - display only, BOARD untouched
+                st_, body_ = shared(("board", bk_), lambda: (200, json.dumps(letter_containment.cs2_board(
+                    with_ud_links(board_payload(bk_)) if PP_OPEN_LINK and bk_ == "underdog" else board_payload(bk_)),
+                    default=str).encode()), ttl=BOARD_TTL)
                 return self.send_shared(("board", bk_), st_, body_)
             if u.path == "/admin":
                 return self.admin(q)
@@ -4598,7 +4604,8 @@ class Handler(BaseHTTPRequestHandler):
                     if stale:
                         _DIAG.update(data=diagnostics.build_from_log(picklog, slip_batches.read()), at=time.time())
                 extra = {"closing_lines": closing_lines_status()} if os.environ.get("SCOUT_CLOSING_LINES") == "1" else {}
-                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status(), **extra))
+                return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status(),
+                                           letter_containment=letter_containment.snapshot(), **extra))
             if u.path in ("/content-book", "/content-book.md"):
                 # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
                 # on every load from verified saved forecasts (posts.drafts). Admin token, or CONTENT_BOOK_KEY - a separate
@@ -5321,7 +5328,7 @@ class Handler(BaseHTTPRequestHandler):
         b = slip_builder.get_batch(bid or cur)
         if b is None:
             return self.send(404, {"error": "unknown batch"})
-        return self.send(200, dict(studio_tail_annotate(b), current=(b["batch_id"] == cur), settled_batches=settled_batches(),
+        return self.send(200, dict(letter_containment.cs2_slip_records(studio_tail_annotate(b)), current=(b["batch_id"] == cur), settled_batches=settled_batches(),
                                    track_record=studio_track_record(), builder_version=slip_builder.VERSION))
 
     def studio_history(self):
@@ -5335,7 +5342,7 @@ class Handler(BaseHTTPRequestHandler):
         if not sid:
             return self.send(401, {"error": "members_only"})
         import slip_builder
-        return self.send(200, studio_history_payload(slip_builder.member_batches(sid)))
+        return self.send(200, letter_containment.cs2_slip_records(studio_history_payload(slip_builder.member_batches(sid))))
 
     def studio_capacity(self, q):
         """GET /api/slip_studio/capacity?book=&side=&stat=&scope=[&market=]: eligible lines / matches and the most slips of each
@@ -5354,7 +5361,7 @@ class Handler(BaseHTTPRequestHandler):
         key = ("studio_cap",) + tuple(st[k] for k in ("book", "side", "stat", "scope", "market"))
 
         def compute():
-            gb = graded_board(st["book"])
+            gb = letter_containment.cs2_board(graded_board(st["book"]))      # lc-1: a held leg has no rating
             out = slip_builder.capacity(gb.get("rows") or [], st, model=gb.get("version"))
             out["board"] = {"book": st["book"], "updated": gb.get("updated"), "graded_rows": len(gb.get("rows") or [])}
             return 200, json.dumps(out, default=str).encode()
@@ -5427,7 +5434,7 @@ class Handler(BaseHTTPRequestHandler):
             batch = bid
         else:
             batch = sb.current_batch(sid)
-        gb = graded_board(st["book"])
+        gb = letter_containment.cs2_board(graded_board(st["book"]))          # lc-1: a held leg has no rating
         try:
             res = sb.build(gb["rows"], st, batch=batch, key=idem, model=gb.get("version"), replace=rep)
         except ValueError as e:
@@ -5476,7 +5483,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "legs": [], "slip_id": rec["slip_id"], "batch_id": rec["batch_id"], "book": book,
                                    "copy_text": None})
         feed = prizepicks.board() if book == "prizepicks" else underdog.board()
-        graded = graded_board(book, max_age=2)
+        graded = letter_containment.cs2_board(graded_board(book, max_age=2))   # lc-1: a held grade reads Lean
         v = sb.verify_before_copy(rec, {book: {"feed": feed, "graded": graded}}, model=graded.get("version"))
         # one stored row per request id - or per slip per 30 s without one (the answer is still computed every time)
         key = "v:" + (idem or f"{rec['slip_id']}:{int(time.time() // 30)}")
@@ -5661,6 +5668,7 @@ class Handler(BaseHTTPRequestHandler):
                 withhold_temporary(res)
             res["veto"] = card_veto(res)                 # map veto panel: the background's stored answer (display only)
             res["map_chances"] = card_map_chances(res)   # HLTV map chances (display only, weight 0; after the pick log)
+            res = letter_containment.cs2_card(res)       # lc-1: after the pick log - a held market reads Lean, 0U (display only)
             t0 = time.time()
             body = json.dumps(public(res), default=str).encode()
             tm["json"] = round(time.time() - t0, 2)
@@ -5956,6 +5964,9 @@ if __name__ == "__main__":
     threading.Thread(target=lol_center_supervise, daemon=True, name="lol-center").start()
     import workspace_alerts
     workspace_alerts.start(sys.modules[__name__])
+    # lc-1: the CS2 / LoL letter containment check, its own thread (reads the stored P1 export and the LoL worker's
+    # learning.json every 6 h; requests only read the cached state)
+    letter_containment.start(sys.modules[__name__], DATA_DIR)
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:

@@ -11,7 +11,8 @@ sq-1, in plain words:
      row is not held, Scout's side is offered, the chance is a number. CS2 needs a live letter (A+ to B) with a stake, or a 0U
      stake that only the same-match exposure cap took away. LoL needs the model's letter (A+ to B; LoL letters carry 0 units).
      NBA / NFL letters are research estimates: left out unless the member asks for them, and then marked. A held or contained
-     prop is never a leg. A degenerate chance (DEGENERATE_P or more, or a projection near zero against the line) is never a leg.
+     prop is never a leg (a letter held by letter_containment lc-1: "contained", no rating). A degenerate chance
+     (DEGENERATE_P or more, or a projection near zero against the line) is never a leg.
   2. Rank. Each leg's chance to hit is what its band has won on settled results: the band is sport x stat x side x chance band
      (BANDS). The band's settled hit rate is shrunk by PRIOR_K picks toward its stat's settled line at the leg's chance (least
      squares of hit on printed chance per sport x stat, itself shrunk by LINE_K picks toward "the published chance is right"). So a
@@ -205,6 +206,8 @@ def exclusion(rec, now, feeds=None, research_ok=False):
         return "held"
     if sc.get("hold"):
         return "held"
+    if sc.get("letter_held"):                       # letter containment lc-1: a held letter has no rating, never a leg
+        return "contained"
     if feeds is not None and ((feeds or {}).get(book) or {}).get("state") != "ok":
         return "feed"
     ev = rec.get("event") or {}
