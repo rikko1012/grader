@@ -177,3 +177,97 @@ def kalshi_taker_fee(price, contracts=1.0, coefficient=0.07):
     is unverified). Fees never change a probability."""
     raw = coefficient * contracts * price * (1.0 - price)
     return math.ceil(raw * 100 - 1e-9) / 100.0
+
+
+# ------------------------------------------------------------------------------------------------ competitor spec, section 3
+# The verified pick'em tables (pickem_payouts.json: PrizePicks help center + the Underdog table above, each with its source
+# and read date) feed the new flagged features only. CONFIG stays as it was, so every live caller of break_even() (letter
+# containment, policy) is unchanged: PrizePicks there is still None until the owner switches a caller to pickem_config().
+PICKEM_FILE = Path(__file__).with_name("pickem_payouts.json")
+
+
+@lru_cache(maxsize=1)
+def _pickem_raw():
+    raw = json.loads(PICKEM_FILE.read_text(encoding="utf-8"))
+    return {k: v for k, v in raw.items() if not k.startswith("_")}
+
+
+@lru_cache(maxsize=1)
+def pickem_config():
+    """CONFIG with every VERIFIED table from pickem_payouts.json laid over it (cached: read-only, copy before changing).
+    A book whose file entry is not marked verified is left out, so its break-even stays None (unavailable, never guessed)."""
+    verified = {b: c for b, c in _pickem_raw().items() if c.get("verified") is True}
+    return with_tables(verified)
+
+
+def power_break_even(n, multiple):
+    """Per-leg break-even of an all-or-nothing entry: be(n, M) = (1/M)^(1/n)."""
+    if n < 1 or not multiple or multiple <= 1:
+        raise ValueError("an n-pick entry needs n >= 1 and a multiple above 1")
+    return (1.0 / float(multiple)) ** (1.0 / n)
+
+
+def american_of(be):
+    """A per-leg break-even shown as American odds (Upside's 'PrizePicks leg = -119'):
+    -100 be / (1 - be) when be >= 0.5, else 100 (1 - be) / be."""
+    be = float(be)
+    if not 0 < be < 1:
+        raise ValueError("break-even must be between 0 and 1")
+    return -100.0 * be / (1.0 - be) if be >= 0.5 else 100.0 * (1.0 - be) / be
+
+
+def tiers(book, entry, n, config=None):
+    """The entry's payout by number of HITS -> {hits: gross multiple}, or None when no verified table covers it.
+    Power / standard = {n: M}; flex rows are stored by losses and turned into hits here. Missing hit counts pay 0."""
+    row = _row(book, entry, n, config if config is not None else pickem_config())
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return {n - int(losses): float(m) for losses, m in row.items()}
+    return {n: float(row)}
+
+
+def tier_return(tier, n, p):
+    """Expected gross multiple with chance p on every leg: sum_k P(k hits | n, p) payout_k."""
+    return sum(comb(n, k) * p ** k * (1 - p) ** (n - k) * float(m) for k, m in tier.items())
+
+
+def tier_break_even(tier, n, tol=1e-12):
+    """Solve sum_k P(k hits | n, p) payout_k = 1 for p (bisection on [0, 1]; the return rises with p). None when even
+    p = 1 cannot reach 1 (a table that can never break even)."""
+    if tier_return(tier, n, 1.0) < 1.0:
+        return None
+    lo, hi = 0.0, 1.0
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if tier_return(tier, n, mid) < 1.0:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < tol:
+            break
+    return (lo + hi) / 2
+
+
+def entry_break_even(book, entry, n, config=None):
+    """Per-leg break-even of a verified entry: Power closed form, Flex solved numerically. None = unavailable."""
+    t = tiers(book, entry, n, config)
+    if t is None:
+        return None
+    if set(t) == {n}:
+        return power_break_even(n, t[n])
+    return tier_break_even(t, n)
+
+
+def entry_types(config=None):
+    """Every verified (book, entry, n) with its tiers, break-even and break-even as American odds, plus the source."""
+    cfg = config if config is not None else pickem_config()
+    out = []
+    for book, b in sorted(cfg.items()):
+        for entry, table in (b.get("entries") or {}).items():
+            for n in sorted(table or ()):
+                be = entry_break_even(book, entry, n, cfg)
+                out.append({"book": book, "entry": entry, "n": n, "tiers": tiers(book, entry, n, cfg), "break_even": be,
+                            "american": None if be is None else american_of(be), "source": b.get("source"),
+                            "read_at": b.get("read_at"), "version": b.get("version")})
+    return out
