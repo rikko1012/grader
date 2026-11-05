@@ -1,4 +1,4 @@
-"""Slip Studio sq-1 across CS2, LoL, NBA and NFL over real HTTP (tests/workspace_other_fixture.py): research estimates stay out
+"""Slip Studio sq-1 / sq-2 across CS2, LoL, NBA and NFL over real HTTP (tests/workspace_other_fixture.py): research estimates stay out
 unless asked and are then marked, held lines never enter, Underdog keeps one sport, and the LoL settled record is read from the
 worker's real schema. No network and no production data."""
 import pytest
@@ -23,8 +23,9 @@ def test_research_estimates_stay_out_unless_asked_then_marked(env, monkeypatch):
     monkeypatch.setattr(server.Handler, "_sports_owner", lambda self: True)
     st, doc = gen(env)
     assert st == 200, doc
-    assert not [l for l in legs(doc) if l["sport"] in ("nba", "nfl")]
-    assert doc["pool"]["excluded"].get("research", 0) >= 1
+    # sq-2: left out, a research letter is a plain leg at its printed chance - never marked, never a letter
+    sp = [l for l in legs(doc) if l["sport"] in ("nba", "nfl")]
+    assert all(l["chance"] and not l["research"] and l["record"] == f"Lean {l['side'].title()}" and l["p"] > 0.5 for l in sp)
     st, doc = gen(env, research=1, sports="cs2,nba", slips=8)      # the fixture has one research letter per platform: it pairs with CS2
     assert st == 200
     research = [l for l in legs(doc) if l["research"]]
@@ -42,7 +43,11 @@ def test_held_lines_never_enter_even_with_research(env, monkeypatch):
         board.update({(r["offer"]["platform"], r["offer"]["offer_id"]): r for r in b["records"]})
     for l in legs(doc):
         r = board[(l["book"], l["row_id"])]
-        assert not r["scout"]["hold"] and r["scout"]["grade"] in sq.RESEARCH_GRADES
+        if l["chance"]:                         # sq-2: a leg without a letter only on the side the adapter names as the model's own
+            assert l["side"] == (r["scout"]["side"] or r["scout"].get("slip_side")) and l["p"] > 0.5
+            assert r["scout"].get("slip_side") == l["side"]
+        else:
+            assert not r["scout"]["hold"] and r["scout"]["grade"] in sq.RESEARCH_GRADES
 
 
 def test_underdog_slips_keep_one_sport(env, monkeypatch):

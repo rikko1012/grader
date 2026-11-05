@@ -370,10 +370,13 @@
           }
           passed.add(signature);
         }
-        const meta = s.legs.map((l) => ({ rank: l.rank, record: l.record, research: !!l.research, line_type: l.line_type }));
+        /* sq-2: a leg without a letter ("chance") is built from Scout's printed chance; break_even is the platform's published
+           per-pick break-even where known (never for goblin / demon lines), below_break_even the slip's warning for that leg */
+        const meta = s.legs.map((l) => ({ rank: l.rank, record: l.record, research: !!l.research, line_type: l.line_type, chance: !!l.chance,
+          ...(typeof l.break_even === "number" ? { break_even: l.break_even, below_break_even: !!l.below_break_even } : {}) }));
         picked.push({ id: idem(), legs: legs.map((l, i) => Object.assign(l, { gen: meta[i] })), checked_at: new Date().toISOString(), entry_type: entryType, platform,
           why: s.why, all_hit: s.all_hit == null ? null : s.all_hit, payout: s.payout ? { multiple: s.payout.multiple, entry_type: s.payout.entry_type } : null,
-          ev: s.ev || null, same_match: !!s.same_match });
+          ev: s.ev || null, same_match: !!s.same_match, ...(typeof s.break_even === "number" ? { break_even: s.break_even } : {}) });
       }
       if (!failed || note === "The server could not finish checking more combinations.") break;
       await Promise.allSettled(opts.sports.map((sp) => loadBoard(sp, true)));

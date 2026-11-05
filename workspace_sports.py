@@ -283,6 +283,83 @@ def lean_and_hold(m, q, sc, mkc):
     return lean, None
 
 
+def slip_side(m, q, sc, mkc, lean, held, v, now=None):
+    """sq-2 (Slip Studio chance legs): the model's own side of a quote with no letter, or None. Never a flipped side and never a
+    side the board's own rules would not show:
+      - a row the board leans on (no hold): that lean (cf-2's server signal already applied the market rule and the sanity holds);
+      - a row whose letters are held by its league's containment (q.x.b == "gate": the snapshot skips the signal and the sanity
+        check for it): sports/board_view's lean rule (chance above 50% AND the mean on the same side of the line), the N4 market
+        rule (no side the market prices at least as high) and its sanity holds, on the printed (calibrated) chance;
+      - anything else (a data hold, a sanity hold, no saved forecast for this offer - the slip recheck could not track it): None."""
+    if not sc or not sc.get("fid"):
+        return None
+    if held is None:
+        return lean if lean in ("over", "under") else None
+    x = q.get("x") or {}
+    line = q.get("l")
+    if x.get("b") != "gate" or m.get("nv") or not _nn(line):
+        return None
+    side = lean_of(sc, line)
+    if side and mkc:
+        d = (sc["po"] - mkc["po"]) if side == "over" else (sc["pu"] - mkc["pu"])
+        if d <= 1e-9:
+            return None
+    if not side:
+        return None
+    try:
+        a = ((v or {}).get("lines") or {}).get(line_key(line))
+        raw = (q.get("ca") or {}).get("raw")
+        chances = (sc["po"], sc["pu"]) + tuple(c for c in (raw or ())[:2] if _nn(c))
+        code = sanity_code(sc.get("mu"), line, side, list(a[:4]) if a else None, chances=chances,
+                           last_at=(v or {}).get("to10"), now=now, played=(v or {}).get("played"))
+    except Exception:                                   # noqa: BLE001 - the check cannot run: no side (never a guess)
+        return None
+    return None if code else side
+
+
+# sports/board_view.py sg-2 sanity_check, mirrored here because this module never imports the sports package (the sports service
+# is its own process; sports/tests/test_sports_isolation.py). tests/test_slip_chance_legs.py proves the two agree on a grid.
+SG_RATIO_LOW, SG_RATIO_HIGH, SG_RATIO_MIN_LINE, SG_L10_MIN_N, SG_L10_CONTRA_SHARE = 0.25, 4.0, 2.0, 5, 0.6
+SG_MU_FLOOR, SG_CERTAIN_P, SG_THIN_MIN, SG_STALE_DAYS, SG_SMALL_OVER_SHARE = 0.05, 0.999, 3, 365, 0.3
+
+
+def _days(a, b):
+    try:
+        ta, tb = (datetime.fromisoformat(str(x).replace("Z", "+00:00")) for x in (a, b))
+        ta, tb = (t if t.tzinfo else t.replace(tzinfo=timezone.utc) for t in (ta, tb))
+        return (tb - ta).total_seconds() / 86400.0
+    except (TypeError, ValueError):
+        return None
+
+
+def sanity_code(mu, line, lean, l10=None, chances=(), last_at=None, now=None, played=None):
+    """= sports/board_view.sanity_check: None or the hold code."""
+    line = float(line)
+    if mu is not None and line >= SG_RATIO_MIN_LINE:
+        if mu < SG_RATIO_LOW * line:
+            return "ratio_low"
+        if mu > SG_RATIO_HIGH * line:
+            return "ratio_high"
+    if mu is not None and mu <= SG_MU_FLOOR + 1e-9:
+        return "floor"
+    if any(c is not None and c >= SG_CERTAIN_P - 1e-12 for c in chances):
+        return "certain"
+    if (played is not None and played < SG_THIN_MIN) or (l10 is not None and l10[3] < SG_THIN_MIN):
+        return "thin"
+    if last_at and now:
+        gap = _days(last_at, now)
+        if gap is not None and gap > SG_STALE_DAYS:
+            return "stale"
+    if mu is not None and line < SG_RATIO_MIN_LINE and mu < SG_RATIO_LOW * line and l10 and l10[3] >= SG_L10_MIN_N \
+            and l10[0] >= SG_SMALL_OVER_SHARE * l10[3] - 1e-9:
+        return "small_low"
+    if lean and l10 and l10[3] >= SG_L10_MIN_N:
+        opp = l10[0] if lean == "under" else l10[1]
+        if opp >= SG_L10_CONTRA_SHARE * l10[3] - 1e-9:
+            return "l10_contra"
+    return None
+
+
 def _tally(a):
     return {"over": a[0], "under": a[1], "push": a[2], "n": a[3]} if a and a[3] else None
 
@@ -367,6 +444,7 @@ def record_of(lg, doc, m, q, view):
     pkey = _norm(m.get("pid"))
     period_label = PERIOD.get(scope, scope.replace("_", " ").title())
     side_p = None if not sc or not lean else (sc["po"] if lean == "over" else sc["pu"])
+    own = None if grade else slip_side(m, q, sc, mkc, lean, held, v, datetime.now(timezone.utc).isoformat())
     rec = {"sport": lg, "key": ".".join(str(k) for k in (lg, m.get("e"), pkey, m.get("st"), scope, line)),
            "event": {"id": m.get("e"), "id_kind": "canonical", "label": f"{away} at {home}" if away and home else f"{team or lg.upper()} game", "teams": [away, home], "competition": lg.upper(),
                      "best_of": None, "start_utc": ev.get("start_utc"), "lock_utc": ev.get("start_utc"), "status": "started" if ev.get("started") or ev.get("locked") else "scheduled"},
@@ -377,6 +455,7 @@ def record_of(lg, doc, m, q, view):
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
+                     **({"slip_side": own} if own else {}),
                      "validation": {"kind": "research", "label": "Research grade" if grade else HOLD_LABEL,
                                     "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else reason}},
            "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None,
