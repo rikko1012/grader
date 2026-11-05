@@ -925,3 +925,52 @@ assists:underdog 273: live 62.9 / 50.2, lc-1 59.8 / 54.2, -0.0420 (-0.114, +0.02
 settle, once per UTC day from 06:00, child process, single BLAS thread, 900 s timeout); a dry run on the fresh pull wrote all three
 markets OFF (child peak working set 37.9 MB on Windows; 47.6 MB on a 4,800-row synthetic record in the test) and the second run
 logged "skip". Admin: `/admin/lol/learning.json` -> `lc1`; admin LoL page tab "Calibration (lc-1)". Switch `LOL_CAL_AUTOFIT=0`.
+
+## lpf-1 (2026-11-05): full-history projection distribution, walk-forward - FAILS one check (Over gap), nothing promoted
+
+Owner 2026-11-05: "dont ruin calibration simply fix projections ... we have every possible inch of data". Research / shadow
+only: `lol/lpf.py`, `lol/lpf_data.py`, `lol/lpf_eval.py` (no live module imports them; `lol/tests/test_lpf.py` enforces it).
+Report: `lol/eval/lpf1_walkforward_2026-11-05.json`. Data: the full local copy of production's LoL tables
+(`cs2_scout_ops/data/lol_full/lol_full.db`, export 2026-11-05T15:06Z): 129,535 player-games, 12,955 games, 60,346
+(series, player) targets, 2025-11-03 .. 2026-11-04 (nothing older exists anywhere reachable).
+
+**Baseline = the live model re-run on the same history** (`lpf_data.LiveBaseline`: lol/model.project with the saved fit,
+the lol-1f multiplier, the 245-day window and the windowed Elo, the A2 mixture). Against the 14,808 kills / 5,406 assists
+saved lol-1f forecasts: per-game lambda median relative difference 0.03%, 94% within 1%, 98-99% within 3%; Elo p_win median
+difference 0.0002. Note: lol-1 / lol-1f were fitted on Apr-Aug 2026 targets, so the baseline is in-sample for part of DEV.
+
+**Candidate (frozen on DEV before the hold-out was run): W variant with the live offset.** A LightGBM Poisson booster per stat
+on per-game rows (games 1-3), started from the live per-game lambda (init score) so it learns the correction, 93 pre-match
+features (player rates at 3 half-lives, form, per-minute, shares, KP, damage / gold share, CS / vision, his results in wins
+and losses, games / rest / stand-in / league-switch / champion pool; team and opponent pace, conceded, length, win rate,
+rest, lineup continuity, lane opponent; league-aware Elo (lp-1 LeagueElo), league gap, plain Elo, kill-difference gap;
+league / patch / same-event pace, best-of, international / Primary / playoffs, role, game number, decider flag) plus the
+game's result; the forecast mixes won-game and lost-game means over the series paths with a walk-forward win model
+(logistic on the strength inputs) and a decider model for best-of-3 game 3; NB size per (stat, scope, role) by ML on
+out-of-sample predictions of the 60 days before each refit. Monthly refits on earlier series only. No chance multiplier,
+no forced balance, no side shift, no stake. Variants tried on DEV only: M (mean only) no offset +0.0020 [-0.0001, +0.0039];
+M + offset +0.0034 [+0.0018, +0.0051]; W no offset +0.0087; W + offset +0.0087 [+0.0067, +0.0107]; W + offset + decider model
++0.0085 [+0.0066, +0.0106] (chosen: better best-of-3 Maps 1-3 MAE; one fix of a look-ahead found by the test - the role prior
+was a full-period average, now running).
+
+**All outcomes (log score per row, candidate - live, series-clustered 95% CI).** DEV (2026-03..09, 7 refits): pooled
++0.0085 [+0.0066, +0.0106]. HOLD-OUT (2026-10-01..11-04, refits Oct 1 / Nov 1, run once): pooled **+0.0153
+[+0.0047, +0.0260]**; kills Map 1 +0.0062 [+0.0001, +0.0120], Maps 1-2 +0.0066 [-0.0017, +0.0149]; deaths Map 1 +0.0126
+[+0.0021, +0.0226]; assists Map 1 +0.0119 [-0.0011, +0.0248], Maps 1-2 +0.0139 [-0.0021, +0.0289]; MAE lower in every
+hold-out cell (kills Map 1 2.085 -> 2.067, assists Maps 1-2 5.134 -> 5.045). PIT and P(X > t) threshold calibration per cell
+are in the report (mixed: better in some cells, slightly worse in others).
+
+**At the offered lines (1,795 settled graded props, 2026-10-17..11-05, mostly Worlds; hold-out refits).**
+| | live | candidate |
+|---|---|---|
+| stated / hit, all | 63.8 / 57.2 (+6.6) | 61.4 / 59.4 (+1.9) PASS |
+| Over picks | 60.6 / 48.0 (+12.6), n 617 | 60.0 / 51.2 (**+8.8**, CI +1.0 .. +17.0), n 664 FAIL |
+| Under picks | 65.5 / 62.0 (+3.5), n 1,178 | 62.2 / 64.3 (-2.1), n 1,131 PASS |
+| graded (>= 55%) count / hit | 1,339 / 59.3% | 1,244 (92.9%) / 63.1% (+3.8 [-0.6, +8.1]) PASS |
+| log loss at the line | 0.6886 | 0.6689 (diff -0.020 [-0.048, +0.008]) |
+| Over share (data Over rate 41.5%) | 34.4% | 37.0% |
+
+**Verdict: FAILS** (Over stated - hit +8.8 > 2.5). Every other condition passes. The hold-out is spent; no change was made
+after it was read. Live is unchanged. Next: register lpf-1 as a forward shadow so the Over question is judged on events
+other than Worlds 2026 (the line stage is 38-ish series of one international event); a second year of history needs the
+owner's OK (Leaguepedia backfill with the bot login, or Oracle's Elixir files).
