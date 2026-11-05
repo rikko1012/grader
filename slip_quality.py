@@ -247,7 +247,10 @@ def make_leg(rec, table):
     side = sc["side"]
     p = sc["p_over"] if side == "over" else sc["p_under"]
     research = rec["sport"] in RESEARCH_SPORTS
-    q, band = ranked_chance(rec["sport"], m["stat"], side, p, sc.get("p_push"), research, table)
+    # ec-1: the band table is fitted on the model's own chance, so a calibrated row is ranked at its raw chance (p_raw); the
+    # printed chance p is unchanged
+    p_rank = sc["p_raw"] if isinstance(sc.get("p_raw"), (int, float)) and not isinstance(sc.get("p_raw"), bool) else p
+    q, band = ranked_chance(rec["sport"], m["stat"], side, p_rank, sc.get("p_push"), research, table)
     start = rec["event"].get("lock_utc") or rec["event"].get("start_utc")
     return {"key": leg_key(offer["platform"], offer["offer_id"], side), "sport": rec["sport"], "book": offer["platform"], "row_id": str(offer["offer_id"]),
             "side": side, "line": offer.get("line"), "line_type": m.get("line_type") or "standard", "event": str(rec["event"]["id"]),

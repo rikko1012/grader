@@ -53,6 +53,8 @@ import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
 import letter_containment
 letter_containment.configure(DATA_DIR)              # lc-1: CS2 / LoL letter containment state (display only)
+import esports_cal
+esports_cal.configure(DATA_DIR)                     # ec-1: printed chance = calibrated chance (SCOUT_CAL_CHANCE, display layer)
 
 from polymarket import match_odds, upcoming_events
 import map_weighted
@@ -1181,13 +1183,20 @@ def _p1_export():
         con.close()
 
 
+def _p1_export_printed():
+    """The P1 export at the chance members were shown: rows logged after ec-1 went live at their calibrated chance
+    (esports_cal.forward_export), earlier rows as logged. The record, its letters and the EV gate read this; the slip
+    ranking table (fitted on the model's own chance) reads _p1_export()."""
+    return esports_cal.forward_export(_p1_export())
+
+
 def results_payload():
     """Member Results (results_view.member_results) from the learning cycle's stored P1 export. Map 1 stays off it until
     Map 1 has results_view.MAP1_RESULTS_MIN_STAKED settled staked units (owner 2026-10-25); the count is cached here too."""
     import results_view
     ex = _p1_export()
     _MAP1_STATUS[:] = [time.time(), results_view.map1_status(ex)]
-    return results_view.member_results(ex)
+    return results_view.member_results(esports_cal.forward_export(ex))
 
 
 def map_chance_check_status():
@@ -1270,6 +1279,9 @@ def board_payload(book="underdog"):
         x["book"] = x.get("book") or "underdog"
         x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked
         x["unavailable"] = side_unavailable(x)   # the feed no longer offers this side: shown as such, never actionable
+    # ec-1 (gradecore/chance_cal.py): the printed chance, letter and stake from the calibrated chance - display only, after the
+    # pick log; BOARD and every logged forecast keep the model's own (p_raw / grade_raw / units_raw ride along)
+    rows = esports_cal.cs2_rows(rows)
     _cap_same_result(rows)                    # within this platform: a slip is one platform's entry
     for x in rows:                            # why a stake is capped + warning marker (display only, sorting clean picks first)
         cg = x.pop("cap_grade", None)
@@ -4607,7 +4619,7 @@ class Handler(BaseHTTPRequestHandler):
                         _DIAG.update(data=diagnostics.build_from_log(picklog, slip_batches.read()), at=time.time())
                 extra = {"closing_lines": closing_lines_status()} if os.environ.get("SCOUT_CLOSING_LINES") == "1" else {}
                 return self.send(200, dict(_DIAG["data"], map1_results=map1_results_status(), map_chance_check=map_chance_check_status(),
-                                           letter_containment=letter_containment.snapshot(), **extra))
+                                           letter_containment=letter_containment.snapshot(), chance_calibration=esports_cal.status(), **extra))
             if u.path in ("/content-book", "/content-book.md"):
                 # the video creator's content book (owner 2026-10-19): the 1,000-idea library + today's real lines, built
                 # on every load from verified saved forecasts (posts.drafts). Admin token, or CONTENT_BOOK_KEY - a separate
@@ -5638,6 +5650,10 @@ class Handler(BaseHTTPRequestHandler):
                 res["dist_view"] = None if outage else dist_view.view(res.get("grade"))
             except Exception:
                 res["dist_view"] = None
+            try:                                         # ec-1: after the pick log - the card prints the calibrated chance,
+                res = esports_cal.cs2_card(res)          # letter and stake (new dicts; the logged row keeps the model's own)
+            except Exception:
+                traceback.print_exc()
             try:                                         # after logging: the log keeps the grader's own stake
                 res["verdict"] = board_stake(res, prop, scope, line, lt, book or ("underdog", "prizepicks"))
                 vv = res["verdict"]
@@ -5978,7 +5994,10 @@ DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBL
               "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK",
               # Phase 4, no keys needed (owner: "why do i have to turn them on in render")
               "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
-              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE")
+              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE",
+              # ec-1 (owner 2026-11-05, "these props will never hit 60% printed chance" -> calibrate): the printed CS2 / LoL
+              # chance is the calibrated one (gradecore/chance_cal.py); Render "0" prints the model's own chance again
+              "SCOUT_CAL_CHANCE")
 
 
 def apply_default_flags(env=os.environ):
@@ -6014,6 +6033,10 @@ if __name__ == "__main__":
     # lc-1: the CS2 / LoL letter containment check, its own thread (reads the stored P1 export and the LoL worker's
     # learning.json every 6 h; requests only read the cached state)
     letter_containment.start(sys.modules[__name__], DATA_DIR)
+    try:                                              # ec-1: when this artifact first went live (the record maps forecasts
+        esports_cal.mark_live(DATA_DIR)               # logged after it at the calibrated chance; earlier ones stay as logged)
+    except Exception:
+        traceback.print_exc()
     try:                                              # extra book providers' one poller (no-op with every SCOUT_BOOK_* off)
         import book_providers, workspace_api
         book_providers.start(workspace_api.data_dir())

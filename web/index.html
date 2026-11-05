@@ -3999,7 +3999,7 @@ function render(d) {
       <div class="scroll"><table class="simtab"><thead><tr><th>If…</th><th class="num">Chance</th><th class="num">Avg</th><th class="num">Over ${g.line}</th></tr></thead><tbody>
       ${sm.scenarios.map(x => `<tr><td>${lab(x)}</td><td class="num">${pct(x.chance)}</td><td class="num">${x.avg}</td><td class="num">${pc(x.p_over)}</td></tr>`).join("")}
       </tbody></table></div>
-      ${Math.abs(sm.p_more - (g.p_more ?? sm.p_more)) > 0.015 ? `<div class="small muted" style="margin-top:6px">The grade shows ${pct(g.p_more)} for Over: ${(g.flags || []).some(f => f.startsWith("CAP") || f.startsWith("Chance capped")) ? "high chances are capped on the grade (see notes)" : perfGrade(g) ? "both come from the same distribution – the gap is run-to-run noise" : "the older model adds safety margins on top of the distribution"}. The simulation shows the distribution itself.</div>` : ""}
+      ${Math.abs(sm.p_more - (g.p_more ?? sm.p_more)) > 0.015 ? `<div class="small muted" style="margin-top:6px">The grade shows ${pct(g.p_more)} for Over: ${g.cal_v ? `the printed chance is calibrated to how such chances have hit on settled lines (the model's own: ${pct(g.p_more_raw)})` : (g.flags || []).some(f => f.startsWith("CAP") || f.startsWith("Chance capped")) ? "high chances are capped on the grade (see notes)" : perfGrade(g) ? "both come from the same distribution – the gap is run-to-run noise" : "the older model adds safety margins on top of the distribution"}. The simulation shows the distribution itself.</div>` : ""}
     </section>`;
     h += roundSim(sm.rounds, g, unit);
   }
@@ -4663,7 +4663,7 @@ function distChart(d) {
       <line class="dm" x1="${mx}" x2="${mx}" y1="16" y2="${base}"/><line class="dl" x1="${lx}" x2="${lx}" y1="10" y2="${base}"/>
       <text class="dlt" x="${lx}" y="9">line ${v.line}</text>${ticks}</svg>
     <div class="distkey small"><span><i class="k-o"></i>Over (above the line) ${pct(v.over)}</span><span><i class="k-u"></i>Under ${pct(v.under)}</span>${v.push ? `<span><i class="k-p"></i>Push at ${v.line} ${pct(v.push)}</span>` : ""}<span><i class="k-m"></i>Mean ${v.mean} · median ${v.median}</span></div>
-    <div class="small muted">8 in 10 of the model's outcomes fall between ${v.lo} and ${v.hi} (faded bars are outside that range). ${esc(v.note)}${g.prop === "kills" ? "; the printed kills chance is capped at 78%" : ""}${side && v.push ? "; the printed chance leaves pushes out" : ""}.</div></section>`;
+    <div class="small muted">8 in 10 of the model's outcomes fall between ${v.lo} and ${v.hi} (faded bars are outside that range). ${esc(v.note)}${g.cal_v ? "; the printed chance is calibrated to how such chances have hit on settled lines" : g.prop === "kills" ? "; the printed kills chance is capped at 78%" : ""}${side && v.push ? "; the printed chance leaves pushes out" : ""}.</div></section>`;
 }
 function cardTabs(out, d) {
   const kids = [...out.children], hero = kids.find(x => x.classList.contains("herocard"));
