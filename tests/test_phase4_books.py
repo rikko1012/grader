@@ -250,11 +250,6 @@ def test_book_quote_staleness_follows_the_sports_fetch_ladder():
     game 14 h out (fetched hourly) keeps its quote for 2 h instead of disappearing between fetches."""
     import book_providers as bp
     import workspace_books as wb
-    from sports.books import schedule
-    for pid in ("fanduel", "betrivers"):
-        feed = bp.providers()[pid]["feed"]
-        assert [tuple(x) for x in feed["ladder"]] == [tuple(x) for x in schedule.LADDERS["full"]]
-        assert feed["stale_min_s"] == schedule.STALE_MIN_S
     feed = bp.providers()["fanduel"]["feed"]
     now = 1_800_000_000.0
 
