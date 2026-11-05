@@ -209,3 +209,65 @@ def test_gate_counts_the_exact_tag_only():
     assert set(g["cells"]) == {"T|kills|12"} and g["cells"]["T|kills|12"]["matches"] == 40
     b = g["cells"]["T|kills|12"]["bands"][0]
     assert b["picks"] == 40 and b["observed"] == 0.5 and b["ci"] is not None
+
+
+# ---- SCOUT_SLIP_HEADER: gradecore/slip.py on an available EV only
+from gradecore import slip as GS    # noqa: E402  (the test may import gradecore; workspace_rules never does)
+
+
+@pytest.mark.parametrize("value,on", [(None, False), ("", False), ("0", False), ("off", False), ("1", True), ("on", True)])
+def test_slip_header_flag_reads_default_off(value, on):
+    assert R.slip_header_on({} if value is None else {"SCOUT_SLIP_HEADER": value}) is on
+
+
+def test_workspace_rules_still_imports_no_gradecore():
+    tree = ast.parse((ROOT / "workspace_rules.py").read_text(encoding="utf-8"))
+    names = [a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names]
+    names += [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
+    assert not any(x.startswith("gradecore") for x in names)
+
+
+def test_leg_ev_is_push_adjusted_and_a_push_is_never_a_win():
+    assert R.leg_ev(0.6, 2.0) == pytest.approx(0.2)
+    assert R.leg_ev(0.5, 2.0, p_push=0.1) == pytest.approx(0.1)     # the push returns the stake only
+
+
+def test_slip_header_standard_matches_ev_and_gives_quarter_kelly_and_leg_ev():
+    out = ev()
+    h = R.slip_header(out, "standard", legs2(), GS.evaluate)
+    assert h["payout_multiple"] == 3.5 and h["p_all_win"] == 0.36 and h["pushes"] == "excluded"
+    assert h["expected_return"] == pytest.approx(out["ev"], abs=1e-4) == pytest.approx(0.26, abs=1e-4)
+    assert h["quarter_kelly"] == pytest.approx((0.36 * 2.5 - 0.64) / 2.5 / 4, abs=1e-4)
+    assert h["leg_price"] == pytest.approx(3.5 ** 0.5, abs=1e-4)
+    assert [x["ev"] for x in h["legs"]] == [round(0.6 * 3.5 ** 0.5 - 1, 4)] * 2 and [x["line"] for x in h["legs"]] == [30.5, 31.5]
+    assert "independent" in h["basis"]
+
+
+def test_slip_header_flex_has_no_per_leg_ev():
+    legs = [ev_leg(i=i) for i in range(3)]
+    out = ev(legs, et="flex")
+    h = R.slip_header(out, "flex", legs, GS.evaluate)
+    assert h["expected_return"] == pytest.approx(R.flex_return([0.6] * 3) - 1, abs=1e-4) and h["p_all_win"] == pytest.approx(0.216)
+    assert "legs" not in h and "leg_price" not in h
+
+
+@pytest.mark.parametrize("kw,gate", [
+    ({"platform": "prizepicks"}, None),                          # payout unknown
+    ({"legs": [ev_leg(i=0, line=30.0), ev_leg(i=1)]}, None),     # a push is possible
+    ({}, good_gate(matches=120)),                                # chances not validated
+    ({"legs": [ev_leg(i=0, match="same"), ev_leg(i=1, match="same")]}, None),
+])
+def test_slip_header_absent_unless_payout_verified_and_chances_validated(kw, gate):
+    legs = kw.get("legs", legs2())
+    out = ev(gate=gate, **kw)
+    assert out["available"] is False
+    calls = []
+    assert R.slip_header(out, kw.get("et", "standard"), legs, lambda *a: calls.append(a)) is None and calls == []
+
+
+def test_slip_header_refuses_a_second_number_and_an_unpriced_push():
+    out = ev()
+    assert R.slip_header(out, "standard", legs2(), lambda legs, pay: dict(GS.evaluate(legs, pay), net_ev=0.5)) is None
+    assert R.slip_header(dict(out, payout=dict(out["payout"], multiple=3.0)), "standard", legs2(), GS.evaluate) is None
+    assert R.header_payout("standard", 2)(("win", "push")) is None and R.header_payout("flex", 4) is None
+    assert R.header_payout("standard", 2)(("win", "loss")) == 0.0

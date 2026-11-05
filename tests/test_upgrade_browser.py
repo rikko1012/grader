@@ -40,7 +40,7 @@ def browser():
 
 @pytest.fixture
 def env(monkeypatch, tmp_path):
-    for k in ("REQUIRE_WHOP", "RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME", "SCOUT_WORKSPACE_PREVIEW"):
+    for k in ("REQUIRE_WHOP", "RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME", "SCOUT_WORKSPACE_PREVIEW", "SCOUT_SLIP_HEADER"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("SCOUT_UPGRADE", "1")
     monkeypatch.setenv("SPORTS_UI", "1")
@@ -274,6 +274,39 @@ def test_slip_tray_recheck_track_receipt_record(ctx, env):
     assert "Chance you saw" in p.locator("#u-tray").inner_text()
     p.locator("#u-tray-tabs [data-id=record]").click()
     assert "Hit, miss, push" in p.locator("#u-tray").inner_text()
+    assert not p.errors
+
+
+def _calibrated_export():
+    from tests.workspace_fixture import MODEL
+    rows = [{"match": f"m{k}-{i}", "p": p, "over": 1 if i < round(p * 400) else 0, "prop": "kills", "scope": "12", "version": MODEL,
+             "start": "2026-10-20T10:00:00+00:00", "units": 0.5, "forecast_id": k * 1000 + i}
+            for k, p in enumerate((0.612, 0.598)) for i in range(400)]
+    return {"at": iso(datetime.now(timezone.utc)), "rows": rows, "pushes": [], "excluded": {}}
+
+
+@pytest.mark.parametrize("flag", ["0", "1"])
+def test_slip_header_in_the_tray_only_with_its_flag(ctx, env, monkeypatch, flag):
+    """SCOUT_SLIP_HEADER: off = the three EV boxes of before; on = gradecore/slip.py payout, all-win chance (pushes excluded),
+    expected return and quarter-Kelly, plus per-pick EV, on a verified payout with validated chances. No overflow at 390."""
+    monkeypatch.setenv("SCOUT_SLIP_HEADER", flag)
+    monkeypatch.setattr(server, "_p1_export", _calibrated_export)
+    p = cs2_board(ctx, env, {"width": 390, "height": 844})
+    add_two_on_underdog(p)
+    p.locator("#u-tray-btn").click()
+    p.wait_for_selector("#u-tray [data-u=track]:not([disabled])", timeout=15000)
+    p.wait_for_selector("#u-tray .u-slip-metrics>div", timeout=15000)
+    text = p.locator("#u-tray").inner_text()
+    if flag == "1":
+        assert p.locator("#u-tray .u-slip-metrics.u-slip-head>div").count() == 4
+        assert "Quarter-Kelly of bankroll" in text and "pushes excluded" in text and "Expected return" in text
+        assert p.locator("#u-tray .u-leg-ev").count() == 2
+        boxes = p.evaluate("[...document.querySelectorAll('#u-tray .u-slip-head>div')].map(d=>d.getBoundingClientRect().height)")
+        assert min(boxes) > 0
+    else:
+        assert p.locator("#u-tray .u-slip-head").count() == 0 and p.locator("#u-tray .u-leg-ev").count() == 0
+        assert p.locator("#u-tray .u-slip-metrics>div").count() == 3 and "Quarter-Kelly" not in text and "Win chance" in text
+    assert p.evaluate("document.documentElement.scrollWidth") <= 390
     assert not p.errors
 
 

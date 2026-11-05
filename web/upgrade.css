@@ -276,6 +276,9 @@ html[data-upgrade] .u-slip-metrics{display:grid;grid-template-columns:repeat(3,1
 html[data-upgrade] .u-slip-metrics>div{padding:9px 6px;background:var(--u-panel2);border:1px solid var(--u-line);border-radius:5px}
 html[data-upgrade] .u-slip-metrics b{display:block;font:500 17px var(--u-mono);color:var(--u-text)}
 html[data-upgrade] .u-slip-metrics span{display:block;font-size:9px;color:var(--u-muted);margin-top:4px}
+html[data-upgrade] .u-slip-metrics.u-slip-head,html[data-upgrade] #u-hub .u-slip-metrics.u-slip-head{grid-template-columns:repeat(2,minmax(0,1fr))}
+html[data-upgrade] .u-slip-head>div{min-width:0;overflow-wrap:anywhere}
+html[data-upgrade] .u-leg-ev{font-family:var(--u-mono);color:var(--u-text)}
 html[data-upgrade] .u-genie .u-det{border:1px solid var(--u-line);border-radius:7px;padding:12px;margin:12px 0;line-height:1.8}
 html[data-upgrade] .u-genie summary{font-size:14px;font-weight:500}
 
