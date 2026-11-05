@@ -138,7 +138,15 @@ def upcoming_rows(scon, hcon, league, now):
             gsis.setdefault(str(r["espn_id"]), []).append(r["gsis_id"])
     pos = {}
     tbl = "nba_pg" if league == "nba" else "nfl_pg"
-    for r in hcon.execute(f"SELECT player_id, position FROM {tbl} WHERE position IS NOT NULL AND position != ''"):
+    # SCOUT_NFL_TWO_WAY on (sanity 2026-11-05): most recent listing wins - the old query has no ORDER BY, so a player
+    # listed under two positions (FB/TE, RB/FB, ...) gets whichever row SQLite returns last; nfl_frame then replaces it
+    # with the most frequent mapped position over the player's last NFL_RECENT_POS rows. Off: unchanged.
+    sql = f"SELECT player_id, position FROM {tbl} WHERE position IS NOT NULL AND position != ''"
+    if league == "nfl" and featurize.nfl_two_way_on():
+        sql = (f"SELECT p.player_id, p.position FROM {tbl} p LEFT JOIN games g ON g.league = 'nfl' AND "
+               "g.game_id = p.game_id WHERE p.position IS NOT NULL AND p.position != '' "
+               "ORDER BY COALESCE(g.start_utc, ''), p.game_id")
+    for r in hcon.execute(sql):
         pos[r["player_id"]] = r["position"]
     rows, idmap, skipped = {}, {}, {}
     for rid, o in store.iter_offers(scon, league=league, limit=500000):
