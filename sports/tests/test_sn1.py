@@ -43,11 +43,36 @@ def test_artifact_verifies_pairs_with_live_sm1_and_tamper_refuses(tmp_path, monk
     assert sn1.load() is None                                          # sm-1 refit -> pair no longer exact
 
 
+def _flat(o, pre=""):
+    """Numeric leaves of a fitted config -> {path: float}."""
+    if isinstance(o, dict):
+        return {k2: v2 for k, v in o.items() for k2, v2 in _flat(v, f"{pre}/{k}").items()}
+    if isinstance(o, list):
+        return {k2: v2 for i, v in enumerate(o) for k2, v2 in _flat(v, f"{pre}[{i}]").items()}
+    return {pre: float(o)} if isinstance(o, (int, float)) and not isinstance(o, bool) else {}
+
+
 def test_fit_reproduces_the_frozen_artifact(hist, tmp_path):
+    """Same rows and the same fitted model as the frozen sn-1 artifact. Compared by value, not by hash: numpy builds
+    (Windows 2.5.3 vs CI Linux 2.5.4) round the last bits differently, so an exact content hash differs by platform."""
     con = datasets.connect(hist)
-    res = sn1.fit(con, out_dir=tmp_path)
+    sn1.fit(con, out_dir=tmp_path)
+    new = json.loads((tmp_path / sn1.ARTIFACT.name).read_text(encoding="utf-8"))
+    old = sn1.load()
+    worst = {}
+    for mk in sn1.MARKETS:
+        a, b = old["markets"][mk], new["markets"][mk]
+        assert (a["features"], a["family"], a["cal"], a["fit_rows"], a["fit_games"]) ==             (b["features"], b["family"], b["cal"], b["fit_rows"], b["fit_games"])
+        fa, fb = _flat(a), _flat(b)
+        assert set(fa) == set(fb)
+        rel = max(abs(fa[k] - fb[k]) / max(abs(fa[k]), 1e-9) for k in fa)
+        _, df = _up_frame(hist, 40)
+        rows = [forward._row_dict(df, i) for i in np.flatnonzero(np.asarray(df["is_up"], float) == 1)]
+        pmf = max(float(np.max(np.abs(forward.pmf_from_row(a, r, mk, "nfl")[0] -
+                                      forward.pmf_from_row(b, r, mk, "nfl")[0]))) for r in rows)
+        worst[mk] = (rel, pmf)
     con.close()
-    assert res["sha"] == sn1.load()["sha"]
+    assert all(r < 1e-6 and p < 1e-9 for r, p in worst.values()), worst
 
 
 def test_registration_committed_before_the_artifact():
