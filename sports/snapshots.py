@@ -45,8 +45,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import (board_view, cache, capabilities, config, fair, flags, forecast_detail, game_lines, identity,
-               market_view, markets, scout_chance, store)
+from . import (board_view, cache, capabilities, config, context_reconcile, fair, flags, forecast_detail, game_lines,
+               identity, market_view, markets, scout_chance, store)
 from .names import team_abbr
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
@@ -884,6 +884,26 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                    not r["primary"], r["stat"]))
 
     stage("board rows")
+    # same-game injury reconciliation (SPORTS_CONTEXT_RECONCILE, default off): display only, nothing reads it back
+    ctx_check, ev_times = None, defaultdict(set)
+    if context_reconcile.on():
+        for f in forecasts.values():
+            if f.get("event_id") in events and events[f["event_id"]][1].start_utc > now and f.get("forecast_at"):
+                ev_times[f["event_id"]].add(f["forecast_at"])
+        ctx_check = context_reconcile.Checker(con, league, now, {t for ts in ev_times.values() for t in ts})
+
+        def _cc_name(pid_):
+            p_ = all_inj_players.get(pid_) or players.get(pid_)
+            if p_ is None:
+                rs_ = _latest(con, "player", "player_id = ?", [pid_], now)
+                p_ = rs_[0][1] if rs_ else None
+            return p_.name if p_ else pid_
+
+        def _cc_event(eid_):
+            e_ = events[eid_][1]
+            tp = {t_: sorted(team_players.get(t_, ())) for t_ in (e_.away_team_id, e_.home_team_id)}
+            return ctx_check.event_block(eid_, tp, ev_times.get(eid_, ()), _cc_name, cur_team,
+                                         lambda t_: team_abbr(league, teams[t_].abbr) if t_ in teams else None)
     # slate
     slate = []
     glines = game_lines.game_lines(league, {eid: e for eid, (_, e, _) in events.items()})
@@ -916,6 +936,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                    "players": len({r["player_id"] for r in rows}), "by_platform": dict(plat)},
                       "game_lines": glines.get(eid),
                       "injuries": inj})
+        if ctx_check is not None and eid in ev_times:
+            blk = _cc_event(eid)
+            if blk:
+                slate[-1]["context_check"] = blk
 
     # models / validation state (facts: counts)
     # settled counts come from the results ledger (forecast <-> settlement linked by offer identity,
@@ -1025,7 +1049,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                 if lad is None and saved:                    # sm-1 / mi-1: the forecast's own saved PMF
                     lad, why, chart = pmf_ladder(fc, saved, ladder_lines(fc.line, spec["shape"], book_lines)), None,                         pmf_chart(saved)
                 fdetail[fid] = {"ladder": lad, "ladder_withheld": why, "pmf": chart}
-        _write(pl_dir / f"{safe_name(pid)}.json", {
+        pfile = {
             **base_meta, "player_id": pid, "player": p.name if p else (rows[0]["player"] if rows else pid),
             "position": p.position if p else None, "player_record_id": None, "status": p.status if p else None,
             "team": _team_view(teams, tid) if tid else None, "injury": injuries.get(pid), "next_event": next_ev,
@@ -1034,7 +1058,12 @@ def build(con, league, now=None, base=None, history=True, results=True):
             "factors": dict(factors(fam, games, next_ev, mates_out), engine=ctx_by_pid.get(pid),
                             not_held=[x["factor"] for x in (ctx_by_pid.get(pid) or {}).get("not_held", [])]
                             or NOT_HELD[fam]),
-            "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}})
+            "history": {"games": len(games), "sources": sorted({s for g in games for s in g["source"]})}}
+        if ctx_check is not None and next_ev and next_ev["event_id"] in ev_times:
+            pblk = context_reconcile.Checker.player_block(_cc_event(next_ev["event_id"]), pid, tid)
+            if pblk:
+                pfile["context_check"] = pblk
+        _write(pl_dir / f"{safe_name(pid)}.json", pfile)
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1
     sizes["board_view"] = view_out.close()
@@ -1053,6 +1082,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
     if results:
         sizes["results"] = _write(root / "results.json", {**res_obj, **base_meta})
     manifest["sizes"] = sizes
+    if ctx_check is not None:
+        manifest["context_check"] = ctx_check.summary()
     stage("players")
     manifest["build_s"] = round(time.time() - t0, 2)
     manifest["build_rss_mb"] = mem

@@ -248,7 +248,26 @@
       e(gradeWords(g, side)) + '</span> <span class="sw-grade-tag">Research grade</span>' + (nv ? ' <span class="sw-grade-nv">' + e(nv) + "</span>" : "");
   }
 
-  var api = {gradeWords: gradeWords, gradeHtml: gradeHtml, GRADE_TAG: GRADE_TAG, GRADE_BANDS: GRADE_BANDS, eventStatus: eventStatus, slipReason: slipReason, gateReason: gateReason, variant: variant,
+  // ------------------------------------------- same-game injury reconciliation (SPORTS_CONTEXT_RECONCILE, ctx-rec-1)
+  // blk = player file / slate event "context_check" (sports/context_reconcile.py); at = the forecast's forecast_at.
+  // -> {head, rows: [{text, own}], none} in plain text (the page escapes it), or null when this time was not checked.
+  var ROLE_WORD = {teammate: "teammate", opponent: "opponent"};
+  function contextCheck(blk, at, fmt) {
+    if (!blk || !at || !blk.by_forecast_at || !blk.by_forecast_at[at]) return null;
+    var x = blk.by_forecast_at[at], f = fmt || {};
+    var time = f.time || String, date = f.date || String;
+    var head = "Projection made " + time(at) + (blk.report_read_at ? " · ESPN injury report last read " + time(blk.report_read_at) : "");
+    var rows = (x.changes || []).map(function (c) {
+      var who = (c.player || c.player_id) + (c.team ? " (" + teamTag(c.team) + ")" : "") + (ROLE_WORD[c.role] ? " · " + ROLE_WORD[c.role] : "");
+      var move = (c.before ? injuryStatus(c.before) : "Not listed") + " → " + (c.after ? injuryStatus(c.after) : "Not listed");
+      var when = [c.source_as_of ? "ESPN " + date(c.source_as_of) : "", c.read_at ? "read " + time(c.read_at) : ""].filter(Boolean).join(" · ");
+      return {text: who + ": " + move + (when ? " · " + when : ""), own: c.role === "player"};
+    });
+    return {head: head, rows: rows, own: !!x.player_change,
+            none: rows.length ? null : "No injury status change on either team since this projection."};
+  }
+
+  var api = {gradeWords: gradeWords, gradeHtml: gradeHtml, contextCheck: contextCheck, GRADE_TAG: GRADE_TAG, GRADE_BANDS: GRADE_BANDS, eventStatus: eventStatus, slipReason: slipReason, gateReason: gateReason, variant: variant,
              availability: availability, participation: participation, injuryStatus: injuryStatus, injuryParts: injuryParts,
              injuryText: injuryText, seasonLabel: seasonLabel, windowLabel: windowLabel, seasonBreaks: seasonBreaks,
              spansText: spansText, teamPlaceholder: teamPlaceholder, searchPlaceholder: searchPlaceholder, SLIP_REASON: SLIP_REASON, EVENT_STATUS: EVENT_STATUS,
