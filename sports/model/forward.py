@@ -299,6 +299,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     icon = inputs_db()
     rec = _shadow_recorder(scon, hcon, league, forecast_at, absences, up)      # sm-2 SHADOW (REGISTER A5 7), never shown
     rec2 = _nflv2_recorder(scon, hcon, league, forecast_at, up, rec)           # sm-nfl-2 SHADOW (REGISTER A6 6)
+    rec3 = _sn1_recorder(league, forecast_at)                                  # sn-1 SHADOW (REGISTER A10 2)
     tw = _tw1(league, art["sha"])                                             # tw-1 per-market layer (REGISTER A7 8)
     if tw is not None:
         out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}
@@ -420,12 +421,16 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             rec.market(mk, df, hl, rowpos, sh_items, events)
         if rec2 is not None:
             rec2.market(mk, df, hl, rowpos, sh_items, events, sm1_probs)
+        if rec3 is not None:
+            rec3.market(mk, df, hl, rowpos, sh_items, events, base_of, pmf_of)
         log({"league": league, "market": mk, "written": out["written"]})
     icon.close()
     if rec is not None:
         out["shadow"] = rec.close()
     if rec2 is not None:
         out["shadow_nflv2"] = rec2.close()
+    if rec3 is not None:
+        out["shadow_sn1"] = rec3.close()
     return out
 
 
@@ -460,6 +465,21 @@ def _nflv2_recorder(scon, hcon, league, forecast_at, up, rec=None):
             return None
         absences = rec.absences if rec is not None else shadow._report(scon, hcon, league, forecast_at, up)[1]
         return nflv2.Recorder(hcon, forecast_at, absences=absences, context=getattr(rec, "context", None), art=art)
+    except Exception:                                    # noqa: BLE001
+        return None
+
+
+def _sn1_recorder(league, forecast_at):
+    """The sn-1 shadow recorder for NFL, or None (other league / no verified artifact paired with this sm-1 /
+    SPORTS_SHADOW_SN1=0 / any error - sm-1 is never affected)."""
+    if league != "nfl":
+        return None
+    try:
+        from . import sn1
+        if not sn1.enabled():
+            return None
+        art = sn1.load()
+        return sn1.Recorder(forecast_at, art=art) if art is not None else None
     except Exception:                                    # noqa: BLE001
         return None
 

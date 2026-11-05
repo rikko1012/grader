@@ -1,5 +1,20 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## sn-1 — NFL snap-trend challenger, shadow only (branch claude/nfl-two-way-position, 2026-11-05; NOT deployed; sm-1 NFL artifact unchanged: `cc56aeb8b88c31d8`; no grade change)
+
+- **What:** sm-1's frozen rec / rec_yds configuration plus `nfl.snap_trend` (L3 snap share - EW snap share). It is refit
+  on the same packaged history at sm-1's own data_as_of (2026-10-23T23:00Z); a plain sm-1 refit there reproduces
+  `cc56aeb8b88c31d8` exactly, and the fit rows are identical (9,928). Artifact `sn1_nfl.json` sha `c61887c3a4ba4bfb`,
+  `MANIFEST_SN1.json`. It loads only while the live sm-1 sha is the one it pairs with.
+- **Protocol:** REGISTER.md amendment A10 (89e3e59, committed before the fit). Recorded in the forward job into
+  shadow.db (model_version `sn-1`) + `sn1_inputs`; never a store record, never displayed or graded. The held-out window
+  is games after the first recorded row: box CRPS once at >= 48 games; book logloss once per market at >= 150 props /
+  30 games. Any switch is an owner decision.
+- **Why:** two-way walk-forward, population result, as a second look (sports/research/two_way_position.md).
+- **Rollback / off:** `SPORTS_SHADOW_SN1=0` (read per forward run). Status: `python -m sports.model.sn1 status`; the
+  forward run summary carries `sn1_shadow` / `sn1_heldout`.
+- **Not in this entry:** SCOUT_NFL_TWO_WAY (same branch) stays off; it failed its walk-forward.
+
 ## vm-2 — HLTV map chances: display at weight 0 + registered shadow (branch claude/vm2-map-chances, 2026-11-04; NOT deployed; CS2 model tag unchanged: `3007c59b74`; no grade change)
 
 Registered in research/map_chances/REGISTER.md BEFORE any vm-2 entry or result existed (the scraper's tables started

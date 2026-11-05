@@ -1,0 +1,15 @@
+{
+ "artifact_sha": "c61887c3a4ba4bfb",
+ "data_as_of": "2026-10-23T23:00:00Z",
+ "files": {
+  "sn1_nfl.json": {
+   "bytes": 62595,
+   "sha256": "9ea79295c8ae83ae5fcb4c1eda85e649d2e94f447eb64e9894b6531832a52b5f"
+  }
+ },
+ "freeze_at": "2026-11-05T14:21:27Z",
+ "held_out": "NFL games starting after the first recorded sn-1 row (A10 3); box once at >= 48 games, book once per market at >= 150 props / 30 games",
+ "model_version": "sn-1",
+ "pairs_with_sm1": "cc56aeb8b88c31d8",
+ "version": "sn1-pkg-1"
+}
