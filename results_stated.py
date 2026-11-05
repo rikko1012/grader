@@ -6,8 +6,9 @@ from results_view import MAP1_RESULTS_MIN_STAKED, RULE, SCOPE, STAT, _line, map1
 LETTERS = ("A+", "A", "A-", "B+", "B", "B-")
 
 
-def stated_observed(export, map1_min=MAP1_RESULTS_MIN_STAKED):
-    """The letter is the published scale read at the printed chance. Each group keeps its pushes apart."""
+def rule_picks(export, map1_min=MAP1_RESULTS_MIN_STAKED):
+    """The picks stated_observed counts, its pushes and its calendar rows, on the same rule and the same Map 1 hold.
+    -> (picks, pushed, calendar_rows). A pick: {"match", "printed", "win", "letter", "market"}."""
     from grader import grade_from_p
     rows = (export or {}).get("rows") or []
     pushes_in = (export or {}).get("pushes") or []
@@ -30,6 +31,12 @@ def stated_observed(export, map1_min=MAP1_RESULTS_MIN_STAKED):
         if p is not None and max(p, 1 - p) >= RULE:
             pushed.append({"letter": grade_from_p(max(p, 1 - p)), "market": market(r)})
             calendar_rows.append({'at':r.get('start'),'status':'push'})
+    return picks, pushed, calendar_rows
+
+
+def stated_observed(export, map1_min=MAP1_RESULTS_MIN_STAKED):
+    """The letter is the published scale read at the printed chance. Each group keeps its pushes apart."""
+    picks, pushed, calendar_rows = rule_picks(export, map1_min)
 
     def group(key, names):
         return [dict(_line([x for x in picks if x[key] == k]), name=k, pushes=sum(1 for x in pushed if x[key] == k)) for k in names]
