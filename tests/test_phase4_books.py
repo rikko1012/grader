@@ -243,3 +243,27 @@ def test_extra_lines_never_enter_the_slip_generator_pool(env, monkeypatch):
     from pathlib import Path
     js = (Path(wb.__file__).parent / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
     assert "const pool=H.records.filter(" in js and "H.extraRecs.filter(" not in js.split("const pool=")[1][:200]
+
+
+def test_book_quote_staleness_follows_the_sports_fetch_ladder():
+    """A FanDuel / BetRivers quote is stale on the sports service's own rule (2 x the fetch interval, >= 20 min), so a
+    game 14 h out (fetched hourly) keeps its quote for 2 h instead of disappearing between fetches."""
+    import book_providers as bp
+    import workspace_books as wb
+    from sports.books import schedule
+    for pid in ("fanduel", "betrivers"):
+        feed = bp.providers()[pid]["feed"]
+        assert [tuple(x) for x in feed["ladder"]] == [tuple(x) for x in schedule.LADDERS["full"]]
+        assert feed["stale_min_s"] == schedule.STALE_MIN_S
+    feed = bp.providers()["fanduel"]["feed"]
+    now = 1_800_000_000.0
+
+    def rec(hours):
+        from datetime import datetime, timezone
+        iso = datetime.fromtimestamp(now + hours * 3600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return [{"event": {"start_utc": iso}}]
+    assert wb.quote_stale_after(feed, rec(14), now) == 7200          # hourly rung
+    assert wb.quote_stale_after(feed, rec(1), now) == 1200           # 10-min rung -> the 20-min floor
+    assert wb.quote_stale_after(feed, rec(48), now) == 6 * 3600      # 3-hourly rung
+    assert wb.quote_stale_after(feed, [], now) == feed["stale_after_s"]
+    assert wb.quote_stale_after(feed, rec(-1), now) == feed["stale_after_s"]   # started: the fixed rule

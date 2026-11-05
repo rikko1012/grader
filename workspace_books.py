@@ -137,6 +137,26 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
 
 # ------------------------------------------------------------------------------------------------- sports-service books
 
+def quote_stale_after(feed, recs, now):
+    """Seconds after which a sports-service book quote is stale. With a "ladder" in the provider's feed config (the
+    sports books worker's own fetch schedule, sports/books/schedule.py LADDERS["full"]): 2 x the fetch interval for a
+    game that far from its start, at least stale_min_s - the same rule the sports service applies, so a quote is never
+    hidden between two scheduled fetches. Without a ladder or a known start: the fixed stale_after_s."""
+    fixed = feed["stale_after_s"]
+    ladder = feed.get("ladder")
+    starts = [_ts((r.get("event") or {}).get("start_utc")) for r in recs or ()]
+    starts = [x for x in starts if x is not None]
+    if not ladder or not starts:
+        return fixed
+    hours = (min(starts) - now) / 3600.0
+    if hours <= 0:
+        return fixed
+    for max_h, every_min in ladder:
+        if hours <= max_h:
+            return max(feed.get("stale_min_s", 1200), 2 * 60 * every_min)
+    return fixed
+
+
 def platform_of(pid, platform):
     p = bp.providers()[pid]
     if p.get("platform_prefix"):
@@ -222,11 +242,11 @@ def build(srv, sport, pid, now=None):
         for k, b, x in quotes:
             cov["offers"] += 1
             t = _ts(b.get("seen_at"))
-            if t is None or now - t > stale_after:
+            got = _recs_of(s, props, x)
+            if t is None or now - t > quote_stale_after(p["feed"], got, now):
                 cov["stale"] += 1
                 continue
             newest = t if newest is None or t > newest else newest
-            got = _recs_of(s, props, x)
             if not got:
                 miss("market not on the board")
                 continue
