@@ -27,6 +27,21 @@ def test_missing_forecast_is_not_a_containment_claim():
     assert 'matching forecast' in record(forecast=False)['hold']['reason']
 
 
+def test_sg2_degenerate_projection_is_a_research_estimate_with_its_reason():
+    """sg-2 (2026-11-05): a floor / degenerate / thin-history hold reaches the member board as a Research estimate with
+    the reason, no letter, no stake - even though the published row carries a 100% chance."""
+    for code, text in (('floor', "Held: projection is at the model's floor (no usable inputs)"),
+                       ('certain', 'Held: the forecast puts 100% on one side (degenerate distribution)'),
+                       ('thin', 'Held: fewer than 3 games with this stat')):
+        q={'p':'underdog','r':'offer:underdog:9','l':1.5,'o':[1,1],'f':'f1','x':{'b':code,'t':text,'v':'sg-2'}}
+        m={'k':'event|player|rec|full_game','e':'event','pid':'player','n':'Travis Hunter','st':'rec','mk':None}
+        doc={'fc':{'f1':{'m':'sm-1','po':0.0,'pu':1.0,'pp':0,'mu':0.05}}}
+        rec,x=ws.record_of('nfl',doc,m,q,{})
+        s=rec['scout']
+        assert s['grade'] is None and s['units'] is None and s['side'] is None and x['lean'] is None
+        assert s['hold']=={'label':'Research estimate','reason':text} and s['validation']['label']=='Research estimate'
+
+
 def test_explicit_containment_and_sanity_reasons_are_preserved():
     assert record({'b':'gate'})['hold']['reason']==ws.HOLD_DETAIL.format(LG='NBA')
     assert record({'b':'l10_contra','t':'Recent results contradict this lean'})['hold']['reason']=='Recent results contradict this lean'

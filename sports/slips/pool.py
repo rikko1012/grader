@@ -247,15 +247,18 @@ def leg_weight(platform, p_win, multiplier):
 
 
 def _sanity_held(league):
-    """(record_id, forecast_id) pairs the board's last snapshot held with sg-1 (l10_contra needs the history the board
-    reads; the ratio rules are re-checked here directly)."""
+    """{(record_id, forecast_id): reason code} the board's last snapshot held with sg-2 (the history rules need the
+    history the board reads; the ratio / floor / certain rules are re-checked here directly). Reads the full "keys"
+    list (never truncated), else the logged entries of an older file."""
     try:
         import json
         from ..snapshots import snap_root
         d = json.loads((snap_root() / league / "sanity.json").read_text(encoding="utf-8"))
-        return {(e.get("record_id"), e.get("forecast_id")) for e in d.get("entries") or ()}
+        if isinstance(d.get("keys"), list):
+            return {(k[0], k[1]): k[2] for k in d["keys"] if isinstance(k, list) and len(k) == 3}
+        return {(e.get("record_id"), e.get("forecast_id")): e.get("reason") for e in d.get("entries") or ()}
     except Exception:                                   # noqa: BLE001 - no snapshot yet: the ratio rules still apply
-        return set()
+        return {}
 
 
 def lean_mismatch(po, pu, mean, line, side):
@@ -272,16 +275,20 @@ def lean_mismatch(po, pu, mean, line, side):
             (po if side == "over" else pu) > 0.5 else "no lean: the board does not lean to this side")
 
 
-def guard_reason(f, league, rid=None, held=()):
-    """vg-1 / sg-1 for one forecast as a slip leg -> exclusion text or None (member policy)."""
+def guard_reason(f, league, rid=None, held=(), chances=()):
+    """vg-1 / sg-2 for one forecast as a slip leg -> exclusion text or None (member policy). held = the board's
+    {(record_id, forecast_id): reason} (or a set of pairs); chances = the leg's shown chances (cal-mi) beside the raw."""
     if f.model_version not in board_view.SCOUT_MODELS:
         return None
     if board_view.contain_reason(league, f.stat) or board_view.gate_reason(league, f.stat):
         return "model not validated for this market: projection only"     # contained (A9a 4) or failed gate
     side = f.chosen_side
-    code = board_view.sanity_check(f.projection_mean, f.line, side if side in ("over", "under") else None)
+    code = board_view.sanity_check(f.projection_mean, f.line, side if side in ("over", "under") else None,
+                                   chances=(getattr(f, "p_over", None), getattr(f, "p_under", None)) + tuple(chances))
     if code is None and (rid, f.forecast_id) in held:
-        code = "l10_contra"
+        code = (held.get((rid, f.forecast_id)) if isinstance(held, dict) else None) or "l10_contra"
+        if code not in board_view.SANITY_TEXT:
+            code = "l10_contra"
     return f"held by the sanity guard: {board_view.SANITY_TEXT[code][6:]}" if code else None
 
 
@@ -321,7 +328,7 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
     if why:
         return why, None
     if policy == "member":
-        g = guard_reason(f, o.league, rid, held)
+        g = guard_reason(f, o.league, rid, held, (po, pu))
         if g:
             return g, None
     q = o.side(side)

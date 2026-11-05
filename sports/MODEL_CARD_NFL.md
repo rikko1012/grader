@@ -151,6 +151,10 @@ nflverse weekly player stats + snap counts + play-by-play 2022-2026 (2026 throug
   edge, confidence or edge rank (board, sheets, slip pool). Projection + chances stay, labelled "NFL model not
   validated - projection only". sg-1 sanity guard (all markets) holds a row when the projection is under 25% / over
   4x the line (lines >= 2) or the strict L10 at the line contradicts the lean (>= 60% of >= 5 games on the other side).
+  sg-2 (2026-11-05) also holds broken inputs at every line size (sports/board_view.py SANITY_TEXT): projection at the
+  model floor, a 100% chance, fewer than 3 games with the stat, no game with it in a year, small-line collapse against
+  the player's own L10. Live case: Travis Hunter rec 1.5 - mean 0.05 (family_pmf floor), 80% range [0, 0], P(Under)
+  1.0 shown as an A while he cleared 1.5 in 4 of his last 10 (sg-1 skipped lines under 2).
 - **Bug fixed (featurize.nfl_frame):** training maps FB -> RB, upcoming rows kept "FB"; no position prior matched,
   efficiency was NaN and the PMF collapsed onto 0 (Kyle Juszczyk rec_yds: 0.05 projected at 11.5; 11.2 after the
   map, same frozen artifact). 13 of 3,747 forward NFL sm-1 forecasts on the 2026-10-24 store copy were FB rows.
