@@ -4272,9 +4272,22 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
-            if u.path in ('/record','/record.js','/api/record'):
-                if os.environ.get('SCOUT_PUBLIC_RECORD') != '1':
+            if u.path in ('/record','/record.js','/api/record','/api/record/slips'):
+                if os.environ.get('SCOUT_PUBLIC_RECORD') != '1' or (u.path == '/api/record/slips' and os.environ.get('SCOUT_PUBLIC_RECORD_SLIPS') != '1'):
                     return self.send(404, {'error':'not found'})
+                if u.path == '/api/record/slips':
+                    sport=q.get('sport','cs2')
+                    if sport not in ('cs2','lol','nba','nfl'):
+                        return self.send(400,{'error':'unsupported sport'})
+                    def slips_read():                   # one bounded read-only query per window for all four sports
+                        import public_record, workspace_api
+                        try:return 200,json.dumps(public_record.read_slips(workspace_api.data_dir()/'workspace.db'),allow_nan=False).encode()
+                        except Exception:return 503,b'{"error":"slips_unavailable"}'
+                    def slips_sport():
+                        st,body=shared(('public_record_slips',),slips_read,ttl=300)
+                        return (200,json.dumps({'sport':sport,**json.loads(body)[sport]}).encode()) if st==200 else (st,body)
+                    status,body=shared(('public_record_slips',sport),slips_sport,ttl=300)
+                    return self.send_shared(('public_record_slips',sport),status,body,keep=300)
                 if u.path != '/api/record':
                     name,ctype=('record.html','text/html; charset=utf-8') if u.path=='/record' else ('record.js','text/javascript; charset=utf-8')
                     return self.send_shared(('public_record_asset',name),200,web_file(name),ctype,keep=600)
@@ -4285,8 +4298,9 @@ class Handler(BaseHTTPRequestHandler):
                     import public_record
                     try:return 200,json.dumps(public_record.read(sys.modules[__name__],sport),allow_nan=False).encode()
                     except Exception:return 503,b'{"error":"record_unavailable"}'
-                status,body=shared(('public_record',sport),record_read,ttl=300)
-                return self.send_shared(('public_record',sport),status,body,keep=300)
+                key=('public_record',sport,os.environ.get('SCOUT_RECORD_STATUS')=='1',os.environ.get('SCOUT_PUBLIC_RECORD_SLIPS')=='1')
+                status,body=shared(key,record_read,ttl=300)
+                return self.send_shared(key,status,body,keep=300)
             if u.path == "/scout-ui.css":
                 return self.send_shared(("asset", "scout-ui"), 200, web_file("scout-ui.css"), "text/css; charset=utf-8", keep=600)
             if u.path == "/health":

@@ -107,6 +107,48 @@ def test_public_record_four_sports_retry_and_safe_text(ctx,env,monkeypatch,size)
     p.screenshot(path=f'.record-{size["width"]}.png',full_page=True)
 
 
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_public_record_bins_letters_fact_and_slips_tab(ctx,env,monkeypatch,size):
+    import re
+    for k in ('SCOUT_PUBLIC_RECORD','SCOUT_RECORD_STATUS','SCOUT_PUBLIC_RECORD_SLIPS'):monkeypatch.setenv(k,'1')
+    p=ctx.new_page();p.set_viewport_size(size)
+    rec={'sport':'nba','population':'Fixture population','rule':'Fixture rule','calendar':None,'slips_tab':True,
+         'totals':{'wins':5,'losses':3,'pushes':1,'void':2,'matches':4,'match_word':'games','observed':.625,'printed':.6,'ci':[.4,.8]},
+         'bands':[{'name':'60–65%','wins':5,'losses':3,'observed':.625,'printed':.62,'ci':[.4,.8]}],
+         'reliability':[{'lo':.55,'hi':.6,'n':4,'stated':.58,'hit':.5,'ci':[.25,.75]},{'lo':.6,'hi':.65,'n':4,'stated':.62,'hit':.75,'ci':[.5,1]}],
+         'status':{'letters':'held','text':'NBA letters are held. NBA figures are research estimates.'}}
+    slips={'sport':'nba','tracked':7,'mixed':2,'pending':2,'settled':5,'all_hit':2,'missed':2,'push_or_void':1,'all_hit_rate':.5,
+           'legs':{'hit':9,'miss':2,'push':1,'void':0,'pending':2},
+           'by_platform':[{'name':'Underdog','settled':5,'all_hit':2,'missed':2,'push_or_void':1}],
+           'by_size':[{'name':'2 picks','settled':3,'all_hit':1,'missed':1,'push_or_void':1},{'name':'3 picks','settled':2,'all_hit':1,'missed':1,'push_or_void':0}]}
+    p.route(re.compile(r'.*/api/record/slips\?.*'),lambda r:r.fulfill(json=dict(slips,sport=r.request.url.split('sport=')[1])))
+    p.route(re.compile(r'.*/api/record\?.*'),lambda r:r.fulfill(json=rec))
+    p.goto(env.url+'/record#nba')
+    p.wait_for_selector('#record .rel-chart')
+    text=p.locator('#record').inner_text()
+    for want in ('NBA letters are held','8 decided (wins plus losses)','1 pushes, counted apart','2 voids, left out','4 games','40.0% to 80.0%','55–60%'):
+        assert want in text, want
+    assert p.locator('.rel-chart circle').count()==2
+    no_h_scroll(p)
+    small=p.evaluate("[...document.querySelectorAll('button,a')].filter(e=>e.offsetParent).map(e=>[e.textContent,e.getBoundingClientRect().height]).filter(x=>x[1]<40)")
+    assert not small, small
+    p.locator('[data-view=slips]').click()
+    p.wait_for_function("location.hash==='#nba/slips' && document.querySelector('#record').textContent.includes('Settled slips')")
+    text=p.locator('#record').inner_text()
+    for want in ('Every leg hit','7 slips tracked','1 settled with a push or void leg, counted apart','2 mixed-sport slips included','A push or void leg is never a hit','3 picks'):
+        assert want in text, want
+    assert p.locator('[data-view=slips]').get_attribute('aria-pressed')=='true'
+    no_h_scroll(p)
+    p.locator('[data-sport=cs2]').click()
+    p.wait_for_function("location.hash==='#cs2/slips' && document.querySelector('#record h2').textContent==='CS2'")
+    p.locator('a.skip').focus()
+    assert p.evaluate("document.querySelector('a.skip').getBoundingClientRect().left")>=0
+    p.keyboard.press('Enter')
+    assert p.evaluate("document.activeElement.id")=='record' and p.evaluate('location.hash')=='#cs2/slips'
+    body=p.locator('body').inner_text().lower()
+    assert not re.search(r'profit|\broi\b|not a bet|betting advice|financial advice|hypothetical|unsure|provisional',body)
+
+
 def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env):
     p = hub(ctx, env)
     p.wait_for_function("document.querySelectorAll('#hub-rows tr[data-record^=nba]').length > 0")
