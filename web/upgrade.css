@@ -332,3 +332,4 @@ html[data-upgrade] #boardout .crow-head[data-u] span:last-child{display:none}
 html[data-upgrade] #boardout .crow .c-act{grid-column:2/-1;justify-content:flex-start;max-width:none}
 html[data-upgrade] #boardout .crow>*{min-width:0;overflow-wrap:anywhere}
 }
+html[data-upgrade] .u-genie-intro{margin:0 0 8px;font-weight:500;color:var(--u-text)}

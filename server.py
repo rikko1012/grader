@@ -4392,6 +4392,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(key,status,body,keep=300)
             if u.path == "/scout-ui.css":
                 return self.send_shared(("asset", "scout-ui"), 200, web_file("scout-ui.css"), "text/css; charset=utf-8", keep=600)
+            if u.path == "/alerts/unsubscribe":
+                return self.send(*unsubscribe_page(q.get("m"), q.get("t")))
             if u.path == "/health":
                 return self.send(200, {**_HEALTH_SNAPSHOT.read(_health_diagnostics), "ok": True,
                                        "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40]})
@@ -4622,6 +4624,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(st_, body_, "text/html; charset=utf-8")
             if u.path == "/admin/diagnostics" and self.authed(q.get("token")):
                 return self.send(200, (WEB / "diagnostics.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path in ("/admin/coverage", "/admin/coverage.json") and self.authed(q.get("token")):
+                import admin_coverage                     # SCOUT_ADMIN_COVERAGE (default off): health of every source
+                if not admin_coverage.enabled():
+                    return self.send(404, {"error": "not found"})
+                st_, body_ = admin_coverage.shared(sys.modules[__name__])
+                if u.path.endswith(".json"):
+                    return self.send(st_, body_, "application/json", {"Cache-Control": "no-store"})
+                return self.send(200, admin_coverage.page(json.loads(body_)).encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+            if u.path in ("/admin/alerts_dryrun", "/admin/alerts_dryrun.json") and self.authed(q.get("token")):
+                import admin_coverage, workspace_alerts, workspace_api   # read-only: nothing is written or sent
+                doc = workspace_alerts.preview(workspace_api.data_dir(), workspace_api.store().get_state,
+                                               workspace_alerts.live_rows(sys.modules[__name__]))
+                if u.path.endswith(".json"):
+                    return self.send(200, doc, headers={"Cache-Control": "no-store"})
+                return self.send(200, admin_coverage.dryrun_page(doc).encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
             if u.path == "/admin/memprof.json" and self.authed(q.get("token")):
                 return self.send(200, memprof(q.get("action") or "report"))
             if u.path == "/admin/lol" and self.authed(q.get("token")):    # admin LoL board / match tables / cards (not released)
@@ -5801,6 +5818,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "bad Content-Length"})
         if u.path.startswith("/api/slip_studio/"):
             return self.studio_post(u.path, n)
+        if u.path == "/alerts/unsubscribe":
+            if n > 512:
+                self.close_connection = True
+                return self.send(413, {"error": "request too large"})
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace")).items()}
+            return self.send(*unsubscribe_page(form.get("m"), form.get("t"), confirm=True))
         # 2026-10-13 audit: the body was read before any check, as long as the client said (a 10 GB Content-Length was
         # read into memory). Every body here is small: over POST_MAX it is refused unread, members-only before reading.
         # Saved lineup batches contain up to twelve slips. All other routes keep
@@ -5927,6 +5950,27 @@ th{{color:#8b95a8}}input{{background:#1a2130;color:#e8ecf3;border:1px solid #252
         return self.send(200, page.encode(), "text/html; charset=utf-8")
 
 
+def unsubscribe_page(member, token, confirm=False):
+    """One-tap alert unsubscribe from a Whop message (workspace_alerts.unsub_url). GET shows a button (link previews and prefetch
+    never unsubscribe anyone); POST with the same signed token turns delivery off. A bad or missing token changes nothing."""
+    import workspace_alerts, workspace_api
+    esc = htmllib.escape
+    shell = ("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+             "<title>Scout alerts</title><style>body{background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:520px}"
+             "button{min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #f5c842;background:#f5c842;color:#000;font-weight:600}"
+             "p{color:#bbb}</style></head><body><h1>Scout alerts</h1>{}</body></html>")
+    if not workspace_alerts.unsub_ok(member, token):
+        return 400, shell.replace("{}", "<p>This link is not valid. Turn alerts off in Scout under Alerts.</p>").encode(), "text/html; charset=utf-8"
+    if not confirm:
+        body = (f"<p>Stop background alerts for this account? Live highlight on the research screen is not affected.</p>"
+                f"<form method=post action='/alerts/unsubscribe'><input type=hidden name=m value='{esc(member, quote=True)}'>"
+                f"<input type=hidden name=t value='{esc(token, quote=True)}'><button type=submit>Stop alerts</button></form>")
+        return 200, shell.replace("{}", body).encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"}
+    workspace_alerts.subscription(workspace_api.data_dir(), member, False)
+    return 200, shell.replace("{}", "<p>Done. Background alerts are off for this account. You can turn them back on in Scout under Alerts.</p>").encode(), \
+        "text/html; charset=utf-8", {"Cache-Control": "no-store"}
+
+
 # owner 2026-11-05 ("why do i have to turn them on in render"): the remaining-brief surfaces passed tests, review and the 700-member
 # load test, so the running server turns them ON unless Render says otherwise ("0"/"off" = off). Set only when the process runs as
 # the server, never on import, so tests keep their explicit flag-off checks. SCOUT_UI_TOKENS (gold design) stays off: owner keeps the blue.
@@ -5967,6 +6011,11 @@ if __name__ == "__main__":
     # lc-1: the CS2 / LoL letter containment check, its own thread (reads the stored P1 export and the LoL worker's
     # learning.json every 6 h; requests only read the cached state)
     letter_containment.start(sys.modules[__name__], DATA_DIR)
+    try:                                              # extra book providers' one poller (no-op with every SCOUT_BOOK_* off)
+        import book_providers, workspace_api
+        book_providers.start(workspace_api.data_dir())
+    except Exception:
+        traceback.print_exc()
     try:
         hltv.search_players("a")                      # loads the HLTV player-search index in the background
     except Exception:

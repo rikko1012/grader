@@ -806,8 +806,10 @@
     if (G.key !== k) Object.assign(G, { key: k, ans: null, err: null });
     const left = G.quota ? `<p class="u-dim">${G.quota.remaining_questions} of ${G.quota.questions_limit} questions left today.</p>` : "";
     const sugg = ["What is the projection?", "How often did this line hit?", "What is the head-to-head?", "Is there a better line elsewhere?"];
-    const out = G.busy ? '<div class="u-skel"></div>' : G.err ? `<p>${esc(G.err)}</p>` : G.ans ? G.ans.map((x) => `<p>${esc(x)}</p>`).join("") : "";
-    return `<form class="u-ask" id="u-ask" novalidate><label for="u-ask-q">Ask about this line</label><div class="u-ask-row"><input id="u-ask-q" name="q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button class="u-btn u-gold" type="submit" data-u="genie-ask"${G.busy ? ' aria-disabled="true"' : ""}>Ask</button></div>
+    // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
+    const persona = R.me?.features?.genie_persona === true;
+    const out = G.busy ? '<div class="u-skel"></div>' : G.err ? `<p>${esc(G.err)}</p>` : G.ans ? (persona && G.intro ? `<p class="u-genie-intro">${esc(G.intro)}</p>` : "") + G.ans.map((x) => `<p>${esc(x)}</p>`).join("") : "";
+    return `<form class="u-ask" id="u-ask" novalidate>${persona ? `<p class="u-genie-intro">\u{1F9DE} Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat.</p>` : ""}<label for="u-ask-q">${persona ? "Make a wish about this line" : "Ask about this line"}</label><div class="u-ask-row"><input id="u-ask-q" name="q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button class="u-btn u-gold" type="submit" data-u="genie-ask"${G.busy ? ' aria-disabled="true"' : ""}>Ask</button></div>
       <div class="u-ask-sugg" role="group" aria-label="Suggested questions">${sugg.map((x) => `<button class="u-btn" type="button" data-u="genie-ask" data-id="${esc(x)}">${esc(x)}</button>`).join("")}</div>
       <div class="u-ask-out" id="u-ask-out" role="status" aria-live="polite">${out}</div>${left}</form>`;
   }
@@ -821,12 +823,12 @@
     try {
       const d = await api("genie", { sport: rec.sport, book: rec.offer.platform, id: rec.offer.offer_id, revision: rec.offer.revision, side: P.side, question: q });
       if (G.key !== k) return;
-      G.ans = d.sentences; G.quota = d.quota;
+      G.ans = d.sentences; G.quota = d.quota; G.intro = d.intro || null;
     } catch (e) {
       if (G.key !== k) return;
       const c = e instanceof ApiError ? e.status : 0;
       if (c === 429 && e.doc && e.doc.quota) G.quota = e.doc.quota;
-      G.err = c === 429 ? (e.doc && e.doc.error === "daily_limit_reached" ? "You have used today's questions. They reset at midnight UTC." : "Too many questions in a minute. Try again shortly.")
+      G.err = c === 429 ? (e.doc && e.doc.error === "daily_limit_reached" ? (R.me?.features?.genie_persona ? "\u{1F9DE} Your wishes are spent for today. They reset at midnight UTC." : "You have used today's questions. They reset at midnight UTC.") : "Too many questions in a minute. Try again shortly.")
         : c === 409 ? "This line changed. Reopen it to ask about the current offer." : c === 413 ? "Keep the question under 300 characters." : "The Genie is unavailable right now.";
     } finally { if (G.key === k) { G.busy = false; paintDrawer(); } }
   }

@@ -44,10 +44,18 @@ def test_only_explicit_forecast_capture_boundaries_import_core():
                'workspace_api.py', 'sports/api_model.py'}
     reporting = {'results_stated.py', 'lol/center/learning.py', 'sports/results_public.py'}
     scoring = {'public_record.py'}
+    pricing = {'workspace_markets.py'}
     for p in list(ROOT.glob("*.py")) + list((ROOT / "sports").rglob("*.py")) + list((ROOT / "lol").rglob("*.py")):
         if 'tests' in p.parts:
             continue
         if 'gradecore' in _imports(p):
+            if p.relative_to(ROOT).as_posix() in pricing:
+                # Phase 4 Tools sheet: prices book quotes (market_tools, devig) and reads containment's state; never grades or stakes.
+                tree = ast.parse(p.read_text(encoding='utf-8'))
+                nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore' and {a.name for a in n.names} <= {'market_tools', 'devig', 'containment'} for n in nodes)
+                assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
+                continue
             if p.relative_to(ROOT).as_posix() in scoring:
                 # The public record scores saved results (bins, match-resampled ranges); it never grades or stakes.
                 tree = ast.parse(p.read_text(encoding='utf-8'))

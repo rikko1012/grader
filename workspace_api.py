@@ -164,7 +164,7 @@ def reset():
     _SLIP_POOL.clear()
     for d in _HITS.values():
         d.clear()
-    for name in ("workspace_lol", "workspace_sports", "workspace_genie"):
+    for name in ("workspace_lol", "workspace_sports", "workspace_genie", "workspace_books"):
         mod = sys.modules.get(name)
         if mod is not None:
             mod.reset()
@@ -996,6 +996,8 @@ def get_me(h, srv, q, member, scratch, name):
                                      "market_tools": os.getenv('SCOUT_MARKET_TOOLS')=='1', "book_links": bool(srv.PP_OPEN_LINK),
                                      **({"ui_tokens": True} if os.getenv('SCOUT_UI_TOKENS', '').strip() == '1' else {}),
                                      **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {}),
+                                     **({"genie_persona": True} if os.environ.get("SCOUT_GENIE") == "1" and os.environ.get("SCOUT_GENIE_PERSONA") == "1" else {}),
+                                     **_extra_books(),
                                      **({"board_h2h": _board_columns(srv)} if workspace_h2h.board_enabled() else {})}})
 
 
@@ -1019,18 +1021,38 @@ def _board_columns(srv=None):
             "edge_cells": cells, "min_chance": rules.EV_MIN_CHANCE}
 
 
+def _extra_books():
+    """SCOUT_BOOK_<PROVIDER> (each default off): the extra books the board's book toggle offers. All off = no key at all."""
+    import book_providers
+    if not book_providers.enabled_ids():
+        return {}
+    return {"extra_books": book_providers.features()}
+
+
+def get_book_board(h, srv, q, member, scratch, name):
+    """One extra book's display lines for one sport (workspace_books). Provider off = the unknown-route answer."""
+    import book_providers
+    import workspace_books
+    pid, sport = q.get("book"), _sport_q(h, srv, q)
+    if not isinstance(pid, str) or pid not in book_providers.providers() or not book_providers.enabled(pid):
+        return h.send(404, {"error": "not found"})
+    if sport is None or sport not in book_providers.providers()[pid]["sports"]:
+        return h.send(404, {"error": "not found"})
+    book_providers.start(data_dir())
+    st, body = workspace_books.board(srv, sport, pid)
+    return h.send(st, body, "application/json")
+
+
 def get_market_tools(h, srv, q, member, scratch, name):
+    """SCOUT_MARKET_TOOLS: the Tools route's +EV feed and arbitrage sheet (workspace_markets), one shared build for everyone."""
     if os.getenv('SCOUT_MARKET_TOOLS')!='1':return h.send(404,{'error':'not found'})
-    allowed=access(h,srv,q)
-    import workspace_sports
-    out={}
-    for league in ('nba','nfl'):
-        if not allowed.get(league):continue
-        def read(lg=league):
-            try:return 200,workspace_sports.call(srv,'/api/sports/market-tools',{'league':lg})[0]
-            except workspace_sports.Down:return 503,{'state':'unavailable','error':'Market feed unavailable','ev':[],'arbitrage':[]}
-        out[league]=srv.shared(('ws_market_tools',league),read,ttl=30)[1]
-    return h.send(200,{'leagues':out,'supported_sports':['nba','nfl']})
+    import workspace_markets
+    import book_providers
+    book_providers.start(data_dir())
+    st, body = workspace_markets.shared(srv)
+    if st != 200:
+        return h.send(503, {"error": "market_tools_unavailable"})
+    return h.send(200, workspace_markets.for_member(body, access(h, srv, q)))
 
 
 def get_alert_delivery(h, srv, q, member, scratch, name):
@@ -1653,7 +1675,8 @@ def post_state(h, srv, q, member, scratch, name, n):
 
 def get_genie(h, srv, q, member, scratch, name):
     import workspace_genie
-    return h.send(200, {"quota": workspace_genie.quota(data_dir(), member), "suggestions": list(workspace_genie.SUGGESTIONS)})
+    return h.send(200, {"quota": workspace_genie.quota(data_dir(), member), "suggestions": list(workspace_genie.SUGGESTIONS),
+                        **({"intro": workspace_genie.PERSONA_INTRO} if workspace_genie.persona_on() else {})})
 
 
 def post_genie(h, srv, q, member, scratch, name, n):
@@ -1698,7 +1721,7 @@ def post_genie(h, srv, q, member, scratch, name, n):
 
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
-       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate}
+       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
         "book-line":post_book_line, "slip-advice": post_slip_advice}
 
