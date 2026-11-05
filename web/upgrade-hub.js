@@ -611,8 +611,10 @@ export function mount(C) {
     const side=H.histSide, k=key(r)+'|'+r.offer.revision+'|'+side;
     if(G.key!==k)Object.assign(G,{key:k,ans:null,err:null});
     const genie=R.me.features?.genie===true, s=r.scout, t=C.tallies(r).l10, other=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform), chance=C.chanceOf(r,side);
-    const out=G.busy?'<p class="h-detail-loading">Checking this line’s saved numbers…</p>':G.err?`<p>${esc(G.err)}</p>`:G.ans?G.ans.map(x=>`<p>${esc(x)}</p>`).join(''):'';
-    const form=genie?`<form class="h-ask" id="hub-ask" novalidate><label for="hub-ask-q">Ask about this line</label><div class="h-ask-row"><input id="hub-ask-q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button type="submit"${G.busy?' aria-disabled="true"':''}>Ask</button></div>
+    // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
+    const persona=genie&&R.me.features?.genie_persona===true;
+    const out=G.busy?'<p class="h-detail-loading">Checking this line’s saved numbers…</p>':G.err?`<p>${esc(G.err)}</p>`:G.ans?(persona&&G.intro?`<p class="h-genie-intro">${esc(G.intro)}</p>`:'')+G.ans.map(x=>`<p>${esc(x)}</p>`).join(''):'';
+    const form=genie?`${persona?`<p class="h-genie-intro">\u{1F9DE} Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat.</p>`:''}<form class="h-ask" id="hub-ask" novalidate><label for="hub-ask-q">${persona?'Make a wish about this line':'Ask about this line'}</label><div class="h-ask-row"><input id="hub-ask-q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button type="submit"${G.busy?' aria-disabled="true"':''}>Ask</button></div>
       <div class="h-ask-sugg" role="group" aria-label="Suggested questions">${SUGGEST.map(x=>`<button type="button" data-hub="genie-ask" data-id="${esc(x)}">${esc(x)}</button>`).join('')}</div>
       <div class="h-ask-out" id="hub-ask-out" role="status" aria-live="polite">${out}</div>${G.quota?`<p class="h-history-note">${Number(G.quota.remaining_questions)} of ${Number(G.quota.questions_limit)} questions left today.</p>`:''}</form>`:'';
     return `${form}<details class="h-guide"${genie?'':' open'}><summary>Scout evidence guide</summary><p class="h-history-note">Answers use this offer's saved forecast and research data only.</p>
@@ -631,12 +633,12 @@ export function mount(C) {
     try {
       const d=await api('genie',{sport:r.sport,book:r.offer.platform,id:r.offer.offer_id,revision:r.offer.revision,side:H.histSide,question:q});
       if(G.key!==k)return;
-      G.ans=Array.isArray(d.sentences)?d.sentences:[];G.quota=d.quota||null;
+      G.ans=Array.isArray(d.sentences)?d.sentences:[];G.quota=d.quota||null;G.intro=typeof d.intro==='string'?d.intro:null;
     } catch(e) {
       if(G.key!==k)return;
       const c=e.status||0;
       if(c===429&&e.doc?.quota)G.quota=e.doc.quota;
-      G.err=c===429?(e.doc?.error==='daily_limit_reached'?"You have used today's questions. They reset at midnight UTC.":'Too many questions in a minute. Try again shortly.')
+      G.err=c===429?(e.doc?.error==='daily_limit_reached'?(R.me.features?.genie_persona?"\u{1F9DE} Your wishes are spent for today. They reset at midnight UTC.":"You have used today's questions. They reset at midnight UTC."):'Too many questions in a minute. Try again shortly.')
         :c===409?'This line changed. Reopen it to ask about the current offer.':c===413?'Keep the question under 300 characters.':'The Genie is unavailable right now.';
     } finally {if(G.key===k){G.busy=false;paintBody();}}
   }

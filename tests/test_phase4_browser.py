@@ -49,7 +49,7 @@ def hub(ctx, env, size=None, path='/#all-sports'):
 def test_book_toggle_flag_off_has_only_the_pickem_books(ctx, env, monkeypatch):
     monkeypatch.delenv('SCOUT_BOOK_SLEEPER', raising=False)
     p = hub(ctx, env)
-    assert p.locator('#hub-book option').evaluate_all('os=>os.map(o=>o.value)') == ['all', 'prizepicks', 'underdog']
+    assert p.locator('#hub-platform [data-hub="book"]').evaluate_all('bs=>bs.map(b=>b.dataset.id)') == ['all', 'prizepicks', 'underdog']
     assert not p.errors
 
 
@@ -58,13 +58,12 @@ def test_book_toggle_flag_on_shows_view_only_sleeper_lines(browser, env, sleeper
     c = context(browser, env, size)
     try:
         p = hub(c, env, size)
-        assert 'sleeper' in p.locator('#hub-book option').evaluate_all('os=>os.map(o=>o.value)')
-        if size is PHONE:
-            p.locator('#hub-filters-toggle').click()
-        p.locator('#hub-book').select_option('sleeper')
+        assert 'sleeper' in p.locator('#hub-platform [data-hub="book"]').evaluate_all('bs=>bs.map(b=>b.dataset.id)')
+        p.locator('#hub-platform [data-hub="book"][data-id="sleeper"]').click()
+        assert p.locator('#hub-platform [data-id="sleeper"]').get_attribute('aria-pressed') == 'true'
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
         text = p.locator('#hub-rows').inner_text()
-        assert 'Sleeper' in text and 'vargo' in text and 'brandr' in text
+        assert 'SL' in text and 'vargo' in text and 'brandr' in text
         v = p.locator('#hub-rows tr[data-record]', has_text='vargo').first
         b = p.locator('#hub-rows tr[data-record]', has_text='brandr').first
         assert '61' in v.inner_text()                                       # the saved Underdog chance at the same line, unchanged
@@ -75,11 +74,14 @@ def test_book_toggle_flag_on_shows_view_only_sleeper_lines(browser, env, sleeper
         assert p.locator('#hub-slip-count').inner_text() == '0'            # nothing reached the slip (one book per slip)
         assert 'view only' in p.locator('#hub-health').inner_text().lower()
         b.locator('.h-player').click()
-        p.wait_for_selector('#hub-detail .h-extra-detail')
+        p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
+        assert 'No saved chance at this line' in b.inner_text()                # the one Scout cell says so too
         detail = p.locator('#hub-detail').inner_text()
         assert '1.80x pick multiplier' in detail and 'No saved chance at this line' in detail
         no_h_scroll(p)
         shot(p, 'board_sleeper', size)
+        p.locator('#hub-detail [data-hub="card-close"]').click()
+        assert p.locator('#hub-card').is_hidden()
         assert not p.errors
     finally:
         c.close()
@@ -88,7 +90,7 @@ def test_book_toggle_flag_on_shows_view_only_sleeper_lines(browser, env, sleeper
 def test_book_toggle_stale_feed_hides_lines_and_says_so(ctx, env, sleeper):
     sleeper['at'] = time.time() - 3600
     p = hub(ctx, env)
-    p.locator('#hub-book').select_option('sleeper')
+    p.locator('#hub-platform [data-hub="book"][data-id="sleeper"]').click()
     p.wait_for_function("document.getElementById('hub-health').innerText.includes('older than their freshness limit')", timeout=20000)
     assert p.locator('#hub-rows tr[data-record]').count() == 0
     assert not p.errors
@@ -105,7 +107,7 @@ def test_live_highlight_wording_without_background_delivery(browser, env, monkey
         body = p.locator('#u-hub').inner_text()
         assert 'Live highlight' in body and 'Nothing is sent when it is closed' in body
         assert 'Line alerts' not in body and 'Alert me' not in p.locator('#u-hub').evaluate('e=>e.innerHTML')
-        assert p.locator('[data-hub="save-alert"]').first.inner_text() == 'Live highlight'
+        assert p.locator('[data-hub="save-alert"]').first.text_content() == 'Live highlight these filters'
         shot(p, 'live_highlight', size)
         assert not p.errors
     finally:
@@ -117,7 +119,7 @@ def test_alert_me_with_background_delivery(ctx, env, monkeypatch):
     monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
     p = open_page(ctx, env, '/#/alerts')
     p.wait_for_selector('#hub-alerts-body h2')
-    assert p.locator('[data-hub="save-alert"]').first.inner_text() == 'Alert me'
+    assert p.locator('[data-hub="save-alert"]').first.text_content() == 'Alert me on these filters'
     assert 'Whop notifications' in p.locator('#hub-alerts-body').inner_text()
     assert 'Live highlight · this visit' in p.locator('#hub-alerts-body').inner_text()
     assert 'Line alerts' not in p.locator('#u-hub').inner_text()
@@ -136,23 +138,19 @@ def test_genie_persona_intro(browser, env, monkeypatch, size, persona):
     try:
         p = hub(c, env, size)
         p.locator('#hub-rows tr[data-record]').first.locator('.h-player').click()
-        p.wait_for_selector('#hub-detail', timeout=20000)
-        btn = p.locator('[data-hub="drawer"][data-id="genie"], [data-u="ptab"][data-id="genie"]').first
-        if btn.count() == 0:
-            pytest.skip('no Genie entry on this card layout')
-        btn.click()
-        p.wait_for_selector('#u-ask')
-        intro = p.locator('#u-ask .u-genie-intro')
+        p.wait_for_selector('#hub-card:not([hidden]) [data-hub="card-tab"][data-id="ask"]', timeout=20000)
+        p.locator('[data-hub="card-tab"][data-id="ask"]').click()
+        p.wait_for_selector('#hub-ask')
+        intro = p.locator('#hub-card .h-genie-intro').filter(has_text='Ask the Genie')
         assert intro.count() == (1 if persona else 0)
         if persona:
-            assert intro.inner_text().startswith('\U0001F9DE') and 'never a made-up stat' in intro.inner_text()
-        p.locator('#u-ask-q').fill('What is the projection?')
-        p.locator('#u-ask button[type=submit]').click()
-        p.wait_for_function("document.querySelector('#u-ask-out') && document.querySelector('#u-ask-out').innerText.includes('projection')", timeout=20000)
-        out = p.locator('#u-ask-out').inner_text()
-        assert ('\U0001F9DE' in out) is persona
-        if persona:
-            shot(p, 'genie_persona', size)
+            assert intro.inner_text().startswith('🧞') and 'never a made-up stat' in intro.inner_text()
+        p.locator('#hub-ask-q').fill('What is the projection?')
+        p.locator('#hub-ask button[type=submit]').click()
+        p.wait_for_function("document.querySelector('#hub-ask-out') && document.querySelector('#hub-ask-out').innerText.includes('projection')", timeout=20000)
+        out = p.locator('#hub-ask-out').inner_text()
+        assert ('🧞' in out) is persona
+        shot(p, 'genie_persona' if persona else 'genie_plain', size)
         assert not p.errors
     finally:
         c.close()

@@ -1123,3 +1123,4 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 #u-hub #hub-record-body a,#u-hub .h-record-card a{display:inline-flex;align-items:center;min-height:40px}
 /* 2026-11-05: the open card covered the board's market column (the +N props toggle) at 1440; it stays narrower and docks right when the slip is empty, so player and market columns stay usable beside it */
 @media(min-width:1101px){#u-hub .h-card-panel{width:min(460px,calc(100vw - var(--side-w) - var(--slip-w) - 180px))}#u-hub.h-slip-empty:not(.h-studio-mode) .h-card-panel{right:0}}
+#u-hub .h-genie-intro{margin:0 0 8px;font-weight:500;color:var(--u-text)}
