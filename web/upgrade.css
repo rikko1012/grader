@@ -333,3 +333,14 @@ html[data-upgrade] #boardout .crow .c-act{grid-column:2/-1;justify-content:flex-
 html[data-upgrade] #boardout .crow>*{min-width:0;overflow-wrap:anywhere}
 }
 html[data-upgrade] .u-genie-intro{margin:0 0 8px;font-weight:500;color:var(--u-text)}
+/* SCOUT_SLIP_HEADER_V2 (spec 4.3): payout, win (no push), true EV, Kelly units; red line on a leg below break-even */
+html[data-upgrade] .u-slip-metrics.u-four,html[data-upgrade] #u-hub .u-slip-metrics.u-slip-head.u-four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:520px){html[data-upgrade] .u-slip-metrics.u-four,html[data-upgrade] #u-hub .u-slip-metrics.u-slip-head.u-four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+html[data-upgrade] .u-head2 small{display:block;font:400 10px var(--u-mono);color:var(--u-muted);margin-top:3px}
+html[data-upgrade] .u-head2 .u-pos{color:var(--u-good)}
+html[data-upgrade] .u-head2 .u-neg{color:var(--u-bad)}
+html[data-upgrade] .u-need{margin:0 0 6px;font-size:12px;color:var(--u-muted)}
+html[data-upgrade] .u-need b{font:500 12px var(--u-mono);color:var(--u-text)}
+html[data-upgrade] .u-cant{margin:0 0 6px;font-size:12px;color:var(--u-text)}
+html[data-upgrade] .u-leg.u-leg-below{box-shadow:inset 3px 0 0 var(--u-bad)}
+html[data-upgrade] .u-below{grid-column:1/-1;margin:3px 0 0;font-size:12px;color:var(--u-bad)}

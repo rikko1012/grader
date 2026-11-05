@@ -632,6 +632,48 @@ def _slip_header(ev, entry_type, ev_legs):
         return None
 
 
+SLIP_HEADER_V2_FLAG = "SCOUT_SLIP_HEADER_V2"
+UD_FLEX4_REASON = "Underdog's pages list two 4-pick flex payouts."
+SPECIAL_LINE_REASON = "Special-line payouts are set on the PrizePicks lineup screen."
+UD_MULTIPLIER_REASON = "Underdog does not publish how multipliers combine."
+
+
+def slip_header_v2_on(env):
+    """SCOUT_SLIP_HEADER_V2 (default off): the spec 4.3 header in the slip rail."""
+    return str((env or {}).get(SLIP_HEADER_V2_FLAG) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _v2_leg(platform, r):
+    """One checked leg -> gradecore.slip_header's leg: the chance the board prints for this side (CS2 prints one for Scout's
+    side only), its match, and why the book prices this pick elsewhere (goblin / demon, an Underdog payout multiplier)."""
+    x = r.get("_ev") or {}
+    sport = x.get("sport") or "cs2"
+    p = x.get("p") if (x.get("on_side") or sport != "cs2") else None
+    unpriced = None
+    if str(x.get("line_type") or "standard").lower() not in ("standard", "normal"):
+        unpriced = SPECIAL_LINE_REASON
+    elif platform == "underdog" and x.get("multiplier") is not None and x.get("multiplier") != 1.0:
+        unpriced = UD_MULTIPLIER_REASON
+    return {"p": p, "match_key": None if x.get("match") is None else f"{sport}:{x['match']}", "unpriced": unpriced}
+
+
+def _slip_header_v2(platform, ls, results):
+    """SCOUT_SLIP_HEADER_V2: payout, win chance, EV, Kelly units and per-leg break-even for every entry type of this platform
+    (so the Power / Flex toggle repaints without a request), from server-checked legs only: 2+ legs, every leg passing its
+    checks. Any failure leaves the header out; the entry, its checks and its EV are unchanged either way."""
+    try:
+        rs = [results[l["id"]] for l in ls]
+        if len(rs) < 2 or not all(r.get("ok") and r.get("_ev") for r in rs):
+            return None
+        from gradecore import slip_header as gsh    # imported only with the flag on: a flag-off process never loads it
+        head = gsh.header([_v2_leg(platform, r) for r in rs], platform)
+        if head and platform == "underdog" and len(rs) == 4 and "flex" in head["types"]:
+            head["types"]["flex"] = {"entry": "flex", "n": 4, "rated": False, "reason": UD_FLEX4_REASON}
+        return head
+    except Exception:
+        return None
+
+
 def _adapter(sport):
     if sport == "lol":
         import workspace_lol
@@ -716,6 +758,10 @@ def run_check(srv, member, legs, entry_types, now=None, allowed=None):
                     e["ev"]["header"] = head
         else:
             e["ev"] = {"available": False, "reason": "This entry has not passed its checks."}
+        if slip_header_v2_on(os.environ):
+            head2 = _slip_header_v2(platform, ls, results)
+            if head2:
+                e["slip_header"] = head2
         if e["trackable"]:
             link = _open_link(srv, e["platform"], ls, results)
             if link:
