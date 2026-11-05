@@ -743,8 +743,8 @@ def _history(srv, x, full=False):
             since = (date.today() - timedelta(days=365)).isoformat()
             if scope == "123":
                 rows = srv.records._hltv_rows(nick, team, since)
-                ser = [{"date": s["date"], "opponent": s.get("opponent"), "value": s["total"], "maps": s.get("maps") or [], "values": s.get("values") or []}
-                       for s in srv.records._series(rows, stat)]
+                ser = [({"date": s["date"], "opponent": s.get("opponent"), "value": s["total"], "maps": s.get("maps") or [], "values": s.get("values") or []},
+                        s.get("match_id")) for s in srv.records._series(rows, stat)]
             else:
                 by, maps = {}, []
                 for r in srv.hltv.recent_series(nick, team, since):
@@ -752,11 +752,12 @@ def _history(srv, x, full=False):
                     if r.get("number") in ((1,) if scope == "1" else (1, 2)):
                         by.setdefault(r["match_id"], []).append(r)
                 need = 1 if scope == "1" else 2
-                ser = [{"date": m[0]["date"], "opponent": m[0].get("opponent"), "value": sum(y[stat] for y in m), "maps": [y.get("map") for y in m],
-                        "values": [y[stat] for y in m]}
+                ser = [({"date": m[0]["date"], "opponent": m[0].get("opponent"), "value": sum(y[stat] for y in m), "maps": [y.get("map") for y in m],
+                         "values": [y[stat] for y in m]}, m[0].get("match_id"))
                        for m in by.values() if len(m) == need and all(y.get(stat) is not None for y in m)]
-            ser.sort(key=lambda s: s["date"], reverse=True)
-            return 200, {"ser": ser, "stats": _map_stats(maps) if scope != "123" else None}
+            ser.sort(key=lambda s: s[0]["date"], reverse=True)
+            # each game's match id rides beside the series (never inside it: the /line bytes stay as they were); closing lines use it
+            return 200, {"ser": [s for s, _ in ser], "mids": [m for _, m in ser], "stats": _map_stats(maps) if scope != "123" else None}
         except Exception:
             return 200, None, 1
         finally:
@@ -833,9 +834,28 @@ def _line_body(srv, book, rid):
     full = _history(srv, x, full=True) or {}           # the cached year (one read serves both): H2H and stats
     if full.get("stats"):
         ctx = {"rows": full["stats"] + (ctx or {}).get("rows", [])}
-    return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser},
+    hist = {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser}
+    closing = _closing(srv, x, full) if os.environ.get("SCOUT_CLOSING_LINES") == "1" else None
+    if closing:
+        hist["closing"] = closing                      # SCOUT_CLOSING_LINES: only when a past game has a saved closing line
+    return 200, {"record": rec, "forecast": forecast, "history": hist,
                  "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
                  "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x)}
+
+
+def _closing(srv, x, full):
+    """L10 vs closing (SCOUT_CLOSING_LINES): the player's last 10 results, each against the closing line this platform's board
+    showed at that match's lock (closing_lines.py, saved once, append-only). One bounded indexed read per player / stat / maps /
+    platform, shared by every member for closing_lines.CACHE_TTL seconds. None = no block (no game has a saved closing line)."""
+    try:
+        import closing_lines as cl
+        if not full or not full.get("ser") or not full.get("mids"):
+            return None
+        args = (cl.norm(_nick(x)), x.get("prop"), str(x.get("scope") or "12"), _book(x), line_type_of(x))
+        rows = srv.shared(("ws_closing",) + args, lambda: (200, cl.rows_for(*args)), ttl=cl.CACHE_TTL)[1]
+        return cl.l10_vs_closing(full["ser"], full["mids"], rows or [], platform_label=LABEL.get(_book(x), _book(x)))
+    except Exception:
+        return None
 
 
 def _map_chances(x):
