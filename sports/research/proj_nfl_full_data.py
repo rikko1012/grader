@@ -3,6 +3,7 @@
     python -m sports.research.proj_nfl_full_data --ds1 <history_ds1_2026-10-23.db> --work <nfl_full.db> --out <new db>
         [--nflverse <dir with games.csv, players.csv, stats_player_week_2026.csv, snap_counts_2026.csv,
                      play_by_play_2026.csv.gz, optional injuries_2026.csv / depth_charts_2026.csv>]
+        [--espn-summary <saved site.api.espn.com nfl summary JSON of a final game> ...]
 
 Builds ONE local SQLite file in the ds-1 schema (games / nfl_pg / nfl_tg / nfl_ids) so the repo's own featurizer
 (sports.model.featurize.nfl_frame) runs on it unchanged:
@@ -118,7 +119,68 @@ def refresh_nflverse(out, nflv_dir, season=NFLV_SEASON):
     return res
 
 
-def build(ds1, work, out, nflverse=None):
+SKILL = ("QB", "RB", "WR", "TE", "FB", "HB")
+
+
+def espn_summary_rows(path, known_pos=None):
+    """ESPN public game summary (site.api.espn.com .../nfl/summary?event=<id>, saved locally) -> rows shaped like the
+    espn_gamelog SELECT in build(): (player_id, event_id, start_utc, team, opp, home, participation, pass_att, pass_cmp,
+    pass_yds, pass_td, pass_int, rush_att, rush_yds, targets, rec, rec_yds). Only a FINAL game is read. A player listed
+    under passing / rushing / receiving played; one listed only under fumbles / kick or punt returns is added with zero
+    volume when his known position (known_pos: espn id -> position) is a skill position. Players absent from the box
+    (no touch, no target) get no row, exactly like the ESPN game-log harvest."""
+    import json
+    s = json.loads(Path(path).read_text(encoding="utf-8"))
+    comp = s["header"]["competitions"][0]
+    if not comp.get("status", {}).get("type", {}).get("completed"):
+        return [], {"not_final": 1}
+    eid = "nfl:espn:" + str(s["header"]["id"])
+    start = comp["date"]
+    if len(start) == 17:                       # 2026-11-06T01:15Z -> seconds
+        start = start[:-1] + ":00Z"
+    side = {c["team"]["abbreviation"]: c["homeAway"] for c in comp["competitors"]}
+    teams = list(side)
+    acc = {}
+    for t in s["boxscore"]["players"]:
+        team = t["team"]["abbreviation"]
+        opp = [x for x in teams if x != team][0]
+        for cat in t["statistics"]:
+            keys = cat.get("keys") or []
+            for a in cat["athletes"]:
+                pid = str(a["athlete"]["id"])
+                r = acc.setdefault(pid, {"team": team, "opp": opp, "home": int(side[team] == "home"), "cats": set()})
+                r["cats"].add(cat["name"])
+                st = dict(zip(keys, a.get("stats") or []))
+
+                def num(k):
+                    try:
+                        return float(st[k])
+                    except (KeyError, ValueError, TypeError):
+                        return 0.0
+                if cat["name"] == "passing":
+                    c_a = str(st.get("completions/passingAttempts", "0/0")).split("/")
+                    r["pass_cmp"], r["pass_att"] = float(c_a[0] or 0), float(c_a[1] or 0)
+                    r["pass_yds"], r["pass_td"], r["pass_int"] = num("passingYards"), num("passingTouchdowns"), \
+                        num("interceptions")
+                elif cat["name"] == "rushing":
+                    r["rush_att"], r["rush_yds"] = num("rushingAttempts"), num("rushingYards")
+                elif cat["name"] == "receiving":
+                    r["rec"], r["rec_yds"], r["targets"] = num("receptions"), num("receivingYards"), \
+                        num("receivingTargets")
+    out, skipped = [], {}
+    kp = known_pos or {}
+    for pid, r in acc.items():
+        if not r["cats"] & {"passing", "rushing", "receiving"}:
+            if not (r["cats"] & {"fumbles", "kickReturns", "puntReturns"}) or kp.get(pid) not in SKILL:
+                skipped["no_offensive_line"] = skipped.get("no_offensive_line", 0) + 1
+                continue
+        out.append(("nfl:player:espn:" + pid, eid, start, r["team"], r["opp"], r["home"], "played",
+                    *[r.get(k, 0.0) for k in ("pass_att", "pass_cmp", "pass_yds", "pass_td", "pass_int", "rush_att",
+                                              "rush_yds", "targets", "rec", "rec_yds")]))
+    return out, skipped
+
+
+def build(ds1, work, out, nflverse=None, espn_summaries=()):
     out = Path(out)
     if out.exists():
         out.unlink()
@@ -151,6 +213,21 @@ def build(ds1, work, out, nflverse=None):
                      "pass_yds, pass_td, pass_int, rush_att, rush_yds, targets, rec, rec_yds FROM espn_gamelog "
                      "WHERE start_utc > ? ORDER BY start_utc", (cutoff,)).fetchall()
     added, teams, finals, skipped = 0, set(), set(), {}
+    if espn_summaries:
+        espn_pos = {}
+        for e, p in con.execute("SELECT espn_id, position FROM nfl_pg WHERE espn_id IS NOT NULL"):
+            try:
+                espn_pos[str(int(float(e)))] = p
+            except (TypeError, ValueError):
+                continue
+        for e, (p, _n) in ctx_pos.items():
+            espn_pos.setdefault(e, p)
+        have = {(str(r[0]), str(r[1])) for r in rows}
+        for f in espn_summaries:
+            extra, sk = espn_summary_rows(f, espn_pos)
+            for k, v in sk.items():
+                skipped["summary_" + k] = skipped.get("summary_" + k, 0) + v
+            rows = list(rows) + [x for x in extra if x[2] > cutoff and (x[0], x[1]) not in have]
     for r in rows:
         eid = str(r[1]).split(":")[-1]
         g = games.get(eid)
@@ -187,7 +264,8 @@ def build(ds1, work, out, nflverse=None):
     con.execute("CREATE TABLE IF NOT EXISTS pnf_build (k TEXT PRIMARY KEY, v TEXT)")
     con.executemany("INSERT OR REPLACE INTO pnf_build VALUES (?,?)", [
         ("history_cutoff", cutoff), ("espn_rows_added", str(added)), ("espn_games", str(len(finals))),
-        ("skipped", repr(skipped)), ("nflverse_refresh", repr(nflv))])
+        ("skipped", repr(skipped)), ("nflverse_refresh", repr(nflv)),
+        ("espn_summaries", repr([(Path(f).name, _sha(f)) for f in espn_summaries]))])
     con.commit()
     con.close()
     w.close()
@@ -201,8 +279,11 @@ def main(argv=None):
     ap.add_argument("--work", required=True, help="nfl_full.db working copy (espn_gamelog / espn_player_ctx)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--nflverse", help="local folder of nflverse release files: rebuild the 2026 season from them first")
+    ap.add_argument("--espn-summary", action="append", default=[],
+                    help="saved ESPN summary JSON of a final game after the history cutoff (repeatable); its box score "
+                         "fills that game like the ESPN game-log rows")
     a = ap.parse_args(argv)
-    print(build(a.ds1, a.work, a.out, a.nflverse))
+    print(build(a.ds1, a.work, a.out, a.nflverse, a.espn_summary))
 
 
 if __name__ == "__main__":

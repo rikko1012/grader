@@ -174,3 +174,40 @@ def test_data_build_refreshes_2026_from_local_nflverse_files(tmp_path):
     assert f["stats_player_week_2026.csv"] == D._sha(nd / "stats_player_week_2026.csv")
     assert "depth_charts_2026.csv" in f and "injuries_2026.csv" in f
     assert dict(c.execute("SELECT k, v FROM pnf_build").fetchall())["history_cutoff"].startswith("2026-10-18")
+
+
+def test_espn_summary_rows_parse_final_box_only(tmp_path):
+    import json
+    from sports.research import proj_nfl_full_data as D
+
+    def summ(completed):
+        return {"header": {"id": "401", "competitions": [{
+            "date": "2026-11-06T01:15Z", "status": {"type": {"completed": completed}},
+            "competitors": [{"homeAway": "home", "team": {"abbreviation": "BAL"}},
+                            {"homeAway": "away", "team": {"abbreviation": "JAX"}}]}]},
+            "boxscore": {"players": [
+                {"team": {"abbreviation": "JAX"}, "statistics": [
+                    {"name": "passing", "keys": ["completions/passingAttempts", "passingYards", "yardsPerPassAttempt",
+                                                 "passingTouchdowns", "interceptions"],
+                     "athletes": [{"athlete": {"id": "1"}, "stats": ["16/26", "242", "9.3", "1", "0"]}]},
+                    {"name": "receiving", "keys": ["receptions", "receivingYards", "yardsPerReception",
+                                                   "receivingTouchdowns", "longReception", "receivingTargets"],
+                     "athletes": [{"athlete": {"id": "2"}, "stats": ["0", "0", "0.0", "0", "0", "2"]}]}]},
+                {"team": {"abbreviation": "BAL"}, "statistics": [
+                    {"name": "kickReturns", "keys": ["kickReturns"],
+                     "athletes": [{"athlete": {"id": "3"}, "stats": ["2"]}, {"athlete": {"id": "4"}, "stats": ["1"]}]},
+                    {"name": "defensive", "keys": ["totalTackles"],
+                     "athletes": [{"athlete": {"id": "5"}, "stats": ["7"]}]}]}]}}
+    f = tmp_path / "s.json"
+    f.write_text(json.dumps(summ(False)), encoding="utf-8")
+    assert D.espn_summary_rows(f)[0] == []
+    f.write_text(json.dumps(summ(True)), encoding="utf-8")
+    rows, sk = D.espn_summary_rows(f, {"3": "RB", "4": "CB"})
+    by = {r[0]: r for r in rows}
+    assert set(by) == {"nfl:player:espn:1", "nfl:player:espn:2", "nfl:player:espn:3"}
+    qb = by["nfl:player:espn:1"]
+    assert qb[1:7] == ("nfl:espn:401", "2026-11-06T01:15:00Z", "JAX", "BAL", 0, "played")
+    assert qb[7:12] == (26.0, 16.0, 242.0, 1.0, 0.0)
+    assert by["nfl:player:espn:2"][14:17] == (2.0, 0.0, 0.0)          # targets, rec, rec_yds: target without catch
+    assert by["nfl:player:espn:3"][5] == 1 and sum(by["nfl:player:espn:3"][7:]) == 0
+    assert sk == {"no_offensive_line": 2}
