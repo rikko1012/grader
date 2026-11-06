@@ -3,7 +3,11 @@
 Selecting an extra book shows that book's lines for players already on the board. Nothing is recomputed:
   - same exact line as a PrizePicks / Underdog row -> that row's saved side, chance, projection and letter, unchanged; no stake
     (stakes are set for the pick'em entry the forecast was graded for);
-  - any other line -> the line and price only, with no side and no chance (a different line is a different pick).
+  - any other line -> Scout's chance at THAT line, read from the same saved projection distribution of that player / stat / maps
+    (line_chance: CS2 grader dist, LoL saved NB), labelled as Scout's chance at that line, with no letter and no stake; when the
+    saved distribution does not reproduce the board's own chance, the line and price only.
+  - every line -> L5 / L10 / L20 (and H2H / Season with SCOUT_BOARD_H2H) counted from the player's game log at the line shown
+    (audit 2026-11-05 A2/B4), and the board player's research doc (history, stats, H2H, Ask) through line_doc().
 Matching is exact: normalised player name + stat + period; two board players with that name need the exact team too, otherwise
 the line is left out and counted as ambiguous. Never fuzzy.
 Rows are display-only research lines: they cannot be added to a Scout slip (one book per slip; slips are PrizePicks / Underdog).
@@ -74,6 +78,7 @@ def records(srv, sport):
 def reset():
     _PARSED.clear()
     _LINES.clear()
+    _BY_ID.clear()
 
 
 def subjects(recs):
@@ -132,11 +137,37 @@ def match(subj, o, rule=None):
     return None, "two board players share this name"
 
 
-def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed_at, offer_key):
-    """One display record for an extra book's line, built from the board's own records of that player and market."""
-    same = sorted((r for r in recs if r["offer"].get("line") == line and (r["market"].get("line_type") or "standard") == "standard"),
-                  key=lambda r: PREF.index(r["offer"]["platform"]) if r["offer"]["platform"] in PREF else len(PREF))
-    base = same[0] if same else recs[0]
+def _pref(r):
+    return PREF.index(r["offer"]["platform"]) if r["offer"]["platform"] in PREF else len(PREF)
+
+
+def _pick_base(recs, line, nearest=True):
+    """(board record, same line?): the same standard line on PrizePicks / Underdog, else (esports) the nearest standard line of that
+    player, whose saved distribution the chance at this line is read from; NBA / NFL keep the board's first record (unchanged)."""
+    std = [r for r in recs if (r["market"].get("line_type") or "standard") == "standard"]
+    same = sorted((r for r in std if r["offer"].get("line") == line), key=_pref)
+    if same:
+        return same[0], True
+    if not nearest:
+        return recs[0], False
+    try:
+        near = sorted(std, key=lambda r: (abs(float(r["offer"].get("line")) - float(line)), _pref(r)))
+    except (TypeError, ValueError):
+        near = []
+    return (near[0] if near else recs[0]), False
+
+
+def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed_at, offer_key, read=None):
+    """One display record for an extra book's line, built from the board's own records of that player and market.
+    read(base record, line) -> (chance at this line or None, history at this line or None): line_chance + the game log."""
+    base, is_same = _pick_base(recs, line, nearest=sport in ("cs2", "lol"))
+    same = [base] if is_same else []
+    chance, hist = None, None
+    if read is not None:
+        try:
+            chance, hist = read(base, line)
+        except Exception:                          # noqa: BLE001 - a failed read shows the line without them, never a wrong number
+            chance, hist = None, None
     r = copy.deepcopy(base)
     m = r["market"]
     m["line_type"] = "standard"
@@ -151,11 +182,18 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
         s = r["scout"]
         s["units"] = None
         s["stake_reason"] = f"Same line and saved chance as {base['offer']['platform_label']}; stakes are set for that entry only."
+        if hist:                                   # the saved L10 at this exact line stays; L5 / L20 / H2H / Season from the game log
+            bh = base.get("history") or {}
+            r["history"] = dict(hist, l10=bh.get("l10") or hist.get("l10"), avg=bh["avg"] if bh.get("avg") is not None else hist.get("avg"))
     else:
-        r["scout"] = {"side": None, "read_rev": "x-none", "p_side": None, "p_over": None, "p_under": None, "p_push": None,
-                      "projection": base["scout"].get("projection"), "range80": None, "grade": None, "units": None, "stake_reason": None,
-                      "hold": None, "model_version": base["scout"].get("model_version"), "forecast_at": None, "validation": base["scout"].get("validation")}
-        r["history"] = {"l5": None, "l10": None, "l20": None, "avg": None, "recent": None}
+        c = chance or {}
+        r["scout"] = {"side": c.get("side"), "read_rev": ("x-" + _sha(line, c.get("side"), c.get("p_over"), c.get("p_under"))[:16]) if chance else "x-none",
+                      "p_side": c.get("p_side"), "p_over": c.get("p_over"), "p_under": c.get("p_under"), "p_push": c.get("p_push"),
+                      "projection": base["scout"].get("projection"), "range80": base["scout"].get("range80"), "grade": None, "units": None,
+                      "stake_reason": None, "hold": None, "model_version": base["scout"].get("model_version"),
+                      "forecast_at": base["scout"].get("forecast_at") if chance else None, "validation": base["scout"].get("validation"),
+                      **({"line_chance": True} if chance else {})}
+        r["history"] = hist or {"l5": None, "l10": None, "l20": None, "avg": None, "recent": None}
         r["market_chance"] = None
     if sport in ("cs2", "lol") and r["scout"].get("grade"):
         import letter_containment as lc               # lc-1: a held letter is never shown on an extra book's line either
@@ -164,6 +202,9 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
     r["state"] = {"kind": "ok", "reason": None}
     pc = bp.providers().get(pid) or {}
     r["extra"] = {"provider": pid, "kind": kind, "same_line_as": base["offer"]["platform_label"] if same else None,
+                  # the board line whose player research doc this line opens (line_doc), and whether its chance is read at this line
+                  "base": {"platform": base["offer"]["platform"], "offer_id": base["offer"].get("offer_id"), "line": base["offer"].get("line")},
+                  "line_chance": bool(chance) and not same,
                   # Dabble: its per-side number is its own unit, never decimal odds (book_providers.json price_note)
                   "price_comparable": pc.get("price_comparable", True), "price_label": pc.get("price_label")}
     return r
@@ -257,6 +298,7 @@ def build(srv, sport, pid, now=None):
         feed_state = bp.freshness(st, p["feed"], now)
         feed_at = st["at"]
         subj = subjects(recs)
+        read = reader(srv, sport, s) if sport in ("cs2", "lol") else None
         for o in bp.offers(pid, sport, now):
             cov["offers"] += 1
             got, why = match(subj, o, p.get("match"))
@@ -265,7 +307,9 @@ def build(srv, sport, pid, now=None):
                 continue
             cov["matched"] += 1
             r = derive(pid, label, kind, sport, got, o["line"], o["over"], o["under"], o.get("source_at"), o["observed_at"],
-                       (o["subject_id"], o["raw_stat"], o["line"], o["game_id"]))
+                       (o["subject_id"], o["raw_stat"], o["line"], o["game_id"]), read=read)
+            cov["line_chance"] = cov.get("line_chance", 0) + bool(r["extra"].get("line_chance"))
+            cov["with_history"] = cov.get("with_history", 0) + bool((r.get("history") or {}).get("l5"))
             cov["same_line"] += r["extra"]["same_line_as"] is not None
             if o.get("source_at"):
                 ages.append(now - o["source_at"])
@@ -311,6 +355,141 @@ def build(srv, sport, pid, now=None):
            "platforms": {pid: {"label": label, "short": p.get("short"), "slip": False, "kind": kind,
                                  "price_comparable": p.get("price_comparable", True), "price_label": p.get("price_label")}},
            "records": out if feed_state in ("ok",) or p["source"] != "direct" else [], "coverage": cov}
+    return 200, doc
+
+
+# ------------------------------------------------------------------------------------- the game log and the saved distribution
+
+HISTORY_BUDGET_S = 1.0                            # one build reads uncached CS2 game logs this long at most; the rest come from the cache
+
+
+def _hist_of(ser, line, opponent):
+    """L5 / L10 / L20 / avg (and H2H / Season with SCOUT_BOARD_H2H) at this line from one newest-first game log, or None."""
+    import workspace_h2h
+    if not ser or not isinstance(line, (int, float)):
+        return None
+
+    def tally(n):
+        w = ser[:n]
+        o = sum(1 for g in w if g["value"] > line)
+        u = sum(1 for g in w if g["value"] < line)
+        return {"over": o, "under": u, "push": len(w) - o - u, "n": len(w)}
+    last = [g["value"] for g in ser[:10]]
+    out = {"l5": tally(5), "l10": tally(10), "l20": tally(20), "avg": round(sum(last) / len(last), 1), "recent": None}
+    if workspace_h2h.board_enabled():
+        out.update(h2h=workspace_h2h.board_h2h(ser, opponent, line), season=workspace_h2h.board_season(ser, line))
+    return out
+
+
+def series_of(srv, sport, s, base, budget=None):
+    """(newest-first game log of this board record's player / stat / maps, the board's index row); (None, row) when not known now.
+    CS2: the HLTV year workspace_api reads for /line (cached and shared); past `budget` only what is already cached. LoL: the
+    snapshot's own series (no I/O)."""
+    o = (base or {}).get("offer") or {}
+    x = ((s or {}).get("index") or {}).get((o.get("platform"), str(o.get("offer_id"))))
+    if x is None:
+        return None, None
+    if sport == "cs2":
+        import workspace_api as api
+        peek = budget is not None and time.monotonic() > budget
+        try:
+            doc = api._history(srv, x, full=True, peek=peek) or {}
+        except Exception:                          # noqa: BLE001 - no game log now: the counts are left out, never zero
+            doc = {}
+        ser = [g for g in doc.get("ser") or [] if isinstance(g.get("value"), (int, float))]
+        return (ser or None), x
+    if sport == "lol":
+        import workspace_lol
+        return (workspace_lol.series_values(((s or {}).get("series") or {}).get(x.get("pid")), x.get("stat"), x.get("scope")) or None), x
+    return None, x
+
+
+def chance_of(srv, sport, x, line):
+    """Scout's chance at this line from the board row's saved distribution (line_chance), or None."""
+    import line_chance
+    if x is None:
+        return None
+    if sport == "cs2":
+        g = (getattr(srv, "BOARD", None) or {}).get(x.get("id")) or {}
+        if not g.get("dist"):
+            return None
+        return line_chance.cs2_at(dict(x, dist=g["dist"]), line)
+    if sport == "lol":
+        return line_chance.lol_at(x.get("lam"), x.get("nb"), x.get("fc_line") if x.get("fc_line") is not None else x.get("line"),
+                                  x.get("po"), x.get("pu"), line)
+    return None
+
+
+def reader(srv, sport, s):
+    """read(base record, line) for derive(): (chance at the line, history at the line). One read budget per build."""
+    budget = time.monotonic() + HISTORY_BUDGET_S
+
+    def read(base, line):
+        try:
+            ln = float(line)
+        except (TypeError, ValueError):
+            return None, None
+        ser, x = series_of(srv, sport, s, base, budget)
+        return chance_of(srv, sport, x, ln), _hist_of(ser, ln, (base.get("player") or {}).get("opponent"))
+    return read
+
+
+_BY_ID = {}                                       # (sport, pid) -> (body bytes, {offer id: record}) of the last book board parsed
+
+
+def record_by_id(srv, sport, pid, oid):
+    """(status, record or None) of one extra-book line on the shared book board."""
+    st, body = board(srv, sport, pid)
+    if st != 200:
+        return st, None
+    c = _BY_ID.get((sport, pid))
+    if not c or c[0] is not body:
+        doc = json.loads(body)
+        c = _BY_ID[(sport, pid)] = (body, {r["offer"]["offer_id"]: r for r in doc.get("records") or []})
+    return 200, c[1].get(oid)
+
+
+def line_doc(srv, sport, pid, oid):
+    """(status, doc): an extra book's line opens the board player's research doc (history, stats, H2H, books, Ask) at its OWN line.
+    The record is the extra line's own (its line and price, and Scout's chance at that line or none); the history series is the
+    player's game log, so every count is at the line shown. No letter and no stake (unchanged rule)."""
+    import workspace_api as api
+    import workspace_h2h
+    st, rec = record_by_id(srv, sport, pid, oid)
+    if st != 200:
+        return 503, {"error": "line_unavailable"}
+    if rec is None:
+        return 404, {"error": "not found"}
+    base = (rec.get("extra") or {}).get("base") or {}
+    got = api._line_for(srv, sport, base.get("platform"), str(base.get("offer_id")))
+    if got is None or got[0] != 200:
+        return 404, {"error": "not found"}
+    doc = json.loads(got[1])
+    recs, s = records(srv, sport)
+    brec = next((r for r in recs or [] if r["offer"]["platform"] == base.get("platform") and str(r["offer"].get("offer_id")) == str(base.get("offer_id"))), None)
+    ser = series_of(srv, sport, s, brec)[0] if brec else None
+    line, same = rec["offer"]["line"], bool((rec.get("extra") or {}).get("same_line_as"))
+    h = rec.get("history") or {}
+    hist = dict(doc.get("history") or {}, tally=h.get("l10"))
+    if h.get("avg") is not None:
+        hist["avg"] = h["avg"]
+    if ser:
+        hist["series"] = ser[:20]
+    doc["history"] = hist
+    if not same:
+        doc["forecast"] = None                     # no forecast was saved at this line; a chance shown is read from the distribution
+    old = doc.get("h2h")
+    if ser:
+        doc["h2h"] = workspace_h2h.h2h(ser, rec["player"].get("opponent"), line)
+    elif old:
+        vals = [g["value"] for g in old.get("series") or [] if isinstance(g.get("value"), (int, float))]
+        doc["h2h"] = dict(old, over=sum(v > line for v in vals), under=sum(v < line for v in vals), push=sum(v == line for v in vals))
+    o = rec["offer"]
+    doc["books"] = list(doc.get("books") or []) + [{"platform": o["platform"], "platform_label": o["platform_label"], "row_id": o["offer_id"], "key": rec["key"],
+                                                    "line": line, "line_type": "standard", "over": o["over"], "under": o["under"], "seen_at": o.get("seen_at"),
+                                                    "scout_side": rec["scout"].get("side"), "p_side": rec["scout"].get("p_side"), "grade": None}]
+    doc["market"] = {"available": False, "reason": f"{o['platform_label']} prices are not used for a market chance."}
+    doc["record"] = rec
     return 200, doc
 
 

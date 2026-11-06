@@ -233,7 +233,8 @@ def _build(srv):
     for r in json.loads(path.read_text(encoding="utf-8")).get("rows") or []:
         if r.get("market_key"):
             raw[srv._lol_key(r.get("platform"), r["market_key"])] = {"market_key": r["market_key"], "link": r.get("link") or {}, "fid": (r.get("forecast") or {}).get("id"), "line_id": r.get("line_id"),
-                                                                     "fc_line": (r.get("forecast") or {}).get("line"), "market_type": r.get("market_type"), "stat": r.get("stat"), "ud_link": None}
+                                                                     "fc_line": (r.get("forecast") or {}).get("line"), "market_type": r.get("market_type"), "stat": r.get("stat"), "ud_link": None,
+                                                                     "nb": (r.get("forecast") or {}).get("nb_size")}
     pids, series, canon = sorted({r["link"]["pid"] for r in raw.values() if r["link"].get("pid")}), {}, {}
     try:
         con = _open(srv)
@@ -257,7 +258,8 @@ def _build(srv):
               "line": x.get("line"), "stat": x.get("stat"), "scope": x.get("scope"), "scope_digits": "".join(str(n) for n in PERIOD.get(x.get("scope"), ("", "", ()))[2]), "period": rec["market"]["period"], "platform": x.get("platform"), "start": x.get("start"), "checked": x.get("line_checked"),
               "over": rec["offer"]["over"]["offered"], "under": rec["offer"]["under"]["offered"], "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "po": x.get("p_over"), "pu": x.get("p_under"), "side": rec["scout"]["side"],
               "model": x.get("model_version"), "at": x.get("forecast_at"), "name": x.get("player") or "", "team": x.get("team") or "", "pkey": rec["player"]["key"], "lt": rec["market"]["line_type"], "ud": x.get("ud_app_link"),
-              "eid": rec["event"]["id"], "projection_id": r.get("line_id"), "member": {k: x.get(k) for k in RESEARCH_KEYS}}
+              "eid": rec["event"]["id"], "projection_id": r.get("line_id"), "member": {k: x.get(k) for k in RESEARCH_KEYS},
+              "nb": r.get("nb"), "lam": x.get("projection")}     # the saved NB (server side only): another book's line is read from it
         index[(x.get("platform"), x.get("key"))] = ix
         props.setdefault((ix["eid"], ix["pkey"], ix["stat"], ix["period"]), []).append((x.get("platform"), x.get("key")))
     at = member.get("at")

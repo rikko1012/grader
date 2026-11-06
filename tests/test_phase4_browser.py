@@ -70,9 +70,12 @@ def test_book_toggle_flag_on_shows_view_only_sleeper_lines(browser, env, sleeper
         assert '61' in v.inner_text()                                       # the saved Underdog chance at the same line, unchanged
         assert 'Lean' not in v.inner_text() or 'Lean' in p.locator('#hub-rows').inner_text()
         assert v.locator('.h-add').inner_text() == 'Info'
-        v.locator('.h-add').click()
-        p.wait_for_function("document.body.innerText.includes('Sleeper lines are view only')")
+        v.locator('.h-add').click()                                         # audit 2026-11-05: Info opens the research card (it only toasted)
+        p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
+        assert p.locator('#hub-detail [role="tab"]').count() >= 3 and 'L5' in p.locator('#hub-detail').inner_text()
+        assert 'View only' in p.locator('#hub-decision').inner_text() and p.locator('#hub-decision [data-hub="detail-add"]').count() == 0
         assert p.locator('#hub-slip-count').inner_text() == '0'            # nothing reached the slip (one book per slip)
+        p.locator('#hub-detail [data-hub="card-close"]').click()
         assert 'view only' in p.locator('#hub-health').inner_text().lower()
         b.locator('.h-player').click()
         p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
@@ -221,9 +224,10 @@ def test_book_toggle_shows_dabble_beside_sleeper_with_its_price(ctx, env, sleepe
     assert 'DB' in text and 'vargo' in text and 'brandr' in text
     v = p.locator('#hub-rows tr[data-record]', has_text='vargo').first
     assert '61' in v.inner_text() and v.locator('.h-add').inner_text() == 'Info'
-    v.locator('.h-add').click()
-    p.wait_for_function("document.body.innerText.includes('Dabble lines are view only')")
+    v.locator('.h-add').click()                                             # Info opens the research card, never the slip
+    p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
     assert p.locator('#hub-slip-count').inner_text() == '0'
+    p.locator('#hub-detail [data-hub="card-close"]').click()
     b = p.locator('#hub-rows tr[data-record]', has_text='brandr').first
     b.locator('.h-player').click()
     p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
