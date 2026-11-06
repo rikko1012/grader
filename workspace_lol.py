@@ -183,19 +183,29 @@ def read_rev(x):
     return "r-" + _hash(x.get("pick_side"), x.get("p_over"), x.get("p_under"), x.get("grade"))
 
 
+ONE_SIDED = ("Over only", "Under only")
+
+
+def one_sided_reason(label):
+    return f"{label}: Scout grades lines that offer both sides."
+
+
 def record_of(x, raw, values):
-    """One display record from one member row. Chances, grade and the 0U stake are the member row's own."""
+    """One display record from one member row. Chances, grade and the 0U stake are the member row's own.
+    os-1 (owner 2026-11-06, as sports cap-2): a line the book offers on one side only (server.lol_one_sided_label) keeps its
+    line, price and Goblin / Demon tag and reads "Over only" / "Under only": no Scout chance, side, letter, stake or slip."""
+    one = x.get("one_sided") if x.get("one_sided") in ONE_SIDED else None
     scope = x.get("scope")
     period, period_label, _ = PERIOD.get(scope, (_norm(scope) or "other", scope or "Other", ()))
-    side = SIDE.get(x.get("pick_side"))
+    side = None if one else SIDE.get(x.get("pick_side"))
     link = raw.get("link") or {}
     sid = "lol-" + _hash(link.get("sid") or (x.get("match"), x.get("start")))    # the worker's own ids stay on the server, as on /api/lol/board
     who = x.get("player") or ""
     pkey = "p" + _hash(link.get("pid") or who)
     lt = {"Goblin": "goblin", "Demon": "demon"}.get(x.get("line_type"), "standard")
-    grade = x.get("grade") if x.get("grade") in LETTERS else None
+    grade = x.get("grade") if x.get("grade") in LETTERS and not one else None
     teams = sorted([str(x.get("team") or ""), str(x.get("opponent") or "")], key=str.lower)
-    p_side = x.get("p_over") if side == "over" else x.get("p_under")
+    p_side = None if one else x.get("p_over") if side == "over" else x.get("p_under")
     key = ".".join(str(k) for k in ("lol", sid, pkey, x.get("stat"), period, x.get("line"))) + ("" if lt == "standard" else "." + lt)
     return {"sport": "lol", "key": key,
             "event": {"id": sid, "id_kind": "canonical" if link.get("sid") else "derived", "label": x.get("match") or " vs ".join(t for t in teams if t), "teams": teams, "competition": x.get("event") or "",
@@ -205,9 +215,12 @@ def record_of(x, raw, values):
             "offer": {"platform": x.get("platform"), "platform_label": x.get("platform_label") or x.get("platform"), "offer_id": x.get("key"), "revision": offer_rev(x, raw), "revision_kind": "derived", "line": x.get("line"),
                       "seen_at": x.get("line_checked") or x.get("line_seen"), "over": {"offered": _offered(x.get("sides"), "Over"), "payout": _payout(x.get("sides"), "Over"), "price": None},
                       "under": {"offered": _offered(x.get("sides"), "Under"), "payout": _payout(x.get("sides"), "Under"), "price": None}, "moved_from": None, "moved_at": None},
-            "scout": {"side": side, "read_rev": read_rev(x), "p_side": p_side, "p_over": x.get("p_over"), "p_under": x.get("p_under"), "p_push": x.get("p_push"), "projection": x.get("projection"), "range80": x.get("range80"),
-                      "grade": grade, "units": 0.0, "stake_reason": x.get("stake_reason"), "hold": None, "model_version": x.get("model_version"), "forecast_at": x.get("forecast_at"), "validation": {"kind": "live"},
-                      **({"letter_held": True} if x.get("letter_held") else {})},
+            "scout": ({"side": None, "read_rev": read_rev(dict(x, pick_side=None, p_over=None, p_under=None, grade=one)), "p_side": None, "p_over": None, "p_under": None, "p_push": None,
+                       "projection": None, "range80": None, "grade": None, "units": None, "stake_reason": None, "hold": {"label": one, "reason": one_sided_reason(one)},
+                       "model_version": None, "forecast_at": None, "validation": {"kind": "live", "label": one, "detail": one_sided_reason(one)}} if one else
+                      {"side": side, "read_rev": read_rev(x), "p_side": p_side, "p_over": x.get("p_over"), "p_under": x.get("p_under"), "p_push": x.get("p_push"), "projection": x.get("projection"), "range80": x.get("range80"),
+                       "grade": grade, "units": 0.0, "stake_reason": x.get("stake_reason"), "hold": None, "model_version": x.get("model_version"), "forecast_at": x.get("forecast_at"), "validation": {"kind": "live"},
+                       **({"letter_held": True} if x.get("letter_held") else {})}),
             "history": {"l5": _tally(values, x.get("line"), 5), "l10": _tally(values, x.get("line"), 10), "l20": _tally(values, x.get("line"), 20),
                         "avg": round(sum(v["value"] for v in values[:10]) / len(values[:10]), 1) if values else x.get("recent_per_game"), "recent": x.get("recent_games"),
                         **({"h2h": workspace_h2h.board_h2h(values, x.get("opponent"), x.get("line")),
@@ -260,6 +273,8 @@ def _build(srv):
               "model": x.get("model_version"), "at": x.get("forecast_at"), "name": x.get("player") or "", "team": x.get("team") or "", "pkey": rec["player"]["key"], "lt": rec["market"]["line_type"], "ud": x.get("ud_app_link"),
               "eid": rec["event"]["id"], "projection_id": r.get("line_id"), "member": {k: x.get(k) for k in RESEARCH_KEYS},
               "nb": r.get("nb"), "lam": x.get("projection")}     # the saved NB (server side only): another book's line is read from it
+        if rec["scout"].get("hold"):
+            ix.update(fid=None, po=None, pu=None, one_sided=rec["scout"]["hold"]["label"])
         index[(x.get("platform"), x.get("key"))] = ix
         props.setdefault((ix["eid"], ix["pkey"], ix["stat"], ix["period"]), []).append((x.get("platform"), x.get("key")))
     at = member.get("at")
@@ -352,7 +367,9 @@ def check_leg(srv, leg, now):
         problems.append(_pr(1, "moved", f"Line moved from {_n(leg['line'])} to {_n(x['line'])}." if moved else f"This offer changed on {label}.", swap=True))
     if not x[side]:
         problems.append(_pr(1, "side", f"{SIDE_WORD[side]} is not offered on {label}."))
-    fp = forecast_problem(srv, x, leg, _pr, DISPLAY_MAX_GAP)
+    if x.get("one_sided"):                      # os-1: shown, never on a slip or tracked
+        problems.append(_pr(1, "not_gradable", one_sided_reason(x["one_sided"])))
+    fp = None if x.get("one_sided") else forecast_problem(srv, x, leg, _pr, DISPLAY_MAX_GAP)
     if fp:
         problems.append(fp)
     rec = json.loads(x["rec"])
@@ -501,7 +518,7 @@ def results(srv):
     grade = [_group(k[6:], v) for k, v in sorted(metrics.items()) if k.startswith("grade ")]
     role = [_group(k[5:], v) for k, v in sorted(metrics.items()) if k.startswith("role ") and k[5:] not in ("None", "")]
     return {"sport": "lol", "label": "LoL forecast record", "as_of": doc.get("at"), 'calendar':doc.get('calendar'),
-            "population": "Saved pre-match LoL forecasts on lines that offered Scout's side, each scored on official game stats. Letters carry 0 units.",
+            "population": "Saved pre-match LoL forecasts on lines that offered both sides, each scored on official game stats. Over only and Under only lines are not graded and are not counted. Letters carry 0 units.",
             "rule": "One result per platform, market and line. Hit rate is results for Scout's side over graded results. Pushes stay apart, voids and lines with no settled rule stay out.",
             "totals": {"picks": main.get("n") or 0, "wins": main.get("side_wins"), "losses": None if main.get("side_wins") is None else (main.get("n") or 0) - main["side_wins"], "pushes": st.get("push", 0) if cohort else None, "observed": main.get("side_hit_rate"),
                        "ci": [ci["lo95"], ci["hi95"]] if ci.get("lo95") is not None else None, "printed": main.get("mean_displayed_p_side"), "matches": main.get("series"), "void": (st.get("void") or 0) + (st.get("dnp") or 0) if cohort else None, "match_word": "series"},

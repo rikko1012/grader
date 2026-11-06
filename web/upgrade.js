@@ -174,8 +174,14 @@
   const held = (r) => r.state.kind === "held";
   const slipOffer = (r) => !!(PLATFORMS[r.offer.platform] || {}).slip;
   const chanceOf = (rec, side) => (side === "under" ? rec.scout.p_under : side === "over" ? rec.scout.p_over : null);
+  /* LoL os-1 / sports cap-2 (owner 2026-11-06): a line the book offers on one side only reads "Over only" / "Under only" with its
+     line and price - no chance, side, letter, stake, slip or EV. The label is the server's (scout.hold.label), never worked out here */
+  const ONE_SIDED = ["Over only", "Under only"];
+  const oneSided = (rec) => { const l = rec && rec.scout && rec.scout.hold && rec.scout.hold.label; return ONE_SIDED.includes(l) ? l : null; };
+  const oneSidedNote = (rec) => `${oneSided(rec)}: Scout grades lines that offer both sides.`;
   function verdictText(rec, side) {
     const s = rec.scout, sd = side || s.side;
+    if (oneSided(rec)) return oneSided(rec);
     if (!sd) return "No lean";
     if (s.side && sd !== s.side) return `Scout side is ${cap(s.side)}`;
     if (s.hold) return `Research estimate ${cap(sd)}`;
@@ -325,6 +331,7 @@
   function addRefusal(rec, side) {
     if (started(rec)) return `${startWord(rec)} at ${when(rec.event.start_utc)}.`;
     if (!slipOffer(rec)) return `${rec.offer.platform_label} is shown for comparison. Slips cover PrizePicks and Underdog.`;
+    if (oneSided(rec)) return oneSidedNote(rec);
     if (!side) return "Choose a side first.";
     if (!rec.offer[side].offered) return `${cap(side)} is not offered on ${rec.offer.platform_label}.`;
     if (held(rec)) return "The grade on this line is held.";
@@ -1226,13 +1233,14 @@
   function lolRow(x, sub, alts) {
     const rec = LOL.rec(x), side = x.pick_side === "Over" ? "over" : x.pick_side === "Under" ? "under" : null;
     const p = side === "under" ? x.p_under : x.p_over, letter = lolGrade(x), lean = /^Lean/.test(letter) || !letter;
-    const pick = !x.pick_offered ? `<span class="u-dim">${esc(x.pick_side || "No pick")}${x.pick_side ? " not offered" : ""}</span>` : `${lean ? "Lean " : ""}${esc(x.pick_side)} <b>${pct(p)}</b>`;
+    const pick = x.one_sided ? `<span class="u-dim" title="${esc(x.stake_reason || "")}">${esc(x.one_sided)}</span>`           /* os-1: never graded */
+      : !x.pick_offered ? `<span class="u-dim">${esc(x.pick_side || "No pick")}${x.pick_side ? " not offered" : ""}</span>` : `${lean ? "Lean " : ""}${esc(x.pick_side)} <b>${pct(p)}</b>`;
     return `<div class="u-row u-lol${sub ? " u-sub" : ""}" data-k="${esc(x.key)}" tabindex="0" role="button" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}">
-      <span class="u-g${lean ? " lean" : ""}">${esc(lean ? "L" : letter)}</span>
+      <span class="u-g${lean ? " lean" : ""}">${x.one_sided ? "--" : esc(lean ? "L" : letter)}</span>
       <div class="u-who"><b>${esc(x.player)}</b><small>${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} vs ${esc(x.opponent || "")}</small><small>${esc(new Date(x.start).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }))}</small>${alts || ""}</div>
       <div class="u-mkt">${esc(x.stat_name)}<small>${esc(x.scope)} · ${esc(x.platform_label)}${x.line_type !== "Standard" ? " · " + esc(x.line_type) : ""}</small></div>
       <div class="u-num"><span class="u-k">Line</span><b>${esc(x.line)}</b></div><div class="u-num"><span class="u-k">Proj</span>${x.projection == null ? "--" : Number(x.projection).toFixed(1)}</div>
-      <div class="u-pick-c">${pick}</div>${hitsHtml(rec, side)}${booksCell(rec)}<div class="u-stake">${esc(letter || "--")} · ${esc(x.units)}U</div>
+      <div class="u-pick-c">${pick}</div>${hitsHtml(rec, side)}${booksCell(rec)}<div class="u-stake">${x.one_sided ? esc(x.one_sided) : `${esc(letter || "--")} · ${esc(x.units)}U`}</div>
       <div class="u-act">${researchBtn()}${trayBtn(rec)}${typeof ctBtnHtml === "function" ? ctBtnHtml(x) : ""}</div></div>`;
   }
   function lolRows() {
@@ -1447,7 +1455,7 @@
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip, faceHtml, lineKind, lineKindHtml });
+        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
     } catch (e) { window.scoutClassicMount?.(); console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();
