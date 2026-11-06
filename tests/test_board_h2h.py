@@ -159,6 +159,7 @@ def test_board_flag_on_columns_countdown_edge_and_tones(ctx, env, monkeypatch, s
     h2h = p.locator('#hub-rows tr[data-record^=cs2] .h-s-h2h .h-hit').first
     assert 'meetings with Norrland' in h2h.get_attribute('title') and 'h-tone-' in h2h.get_attribute('class')
     assert '2026 season' in p.locator('#hub-rows tr[data-record^=cs2] .h-s-season .h-hit').first.get_attribute('title')
+    p.locator('#hub-sort').select_option('start')                 # countdowns sit on the start-time sort's game header rows
     cd = p.locator('#hub-rows .h-countdown').first
     assert cd.inner_text().startswith('in ') and 'h' in cd.inner_text()             # the fixture starts in about three hours
     p.locator('#hub-q').fill('')

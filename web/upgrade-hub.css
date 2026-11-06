@@ -1142,3 +1142,86 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 #u-hub .h-ev-link{flex:none;min-height:40px;padding:0 12px;border:1px solid #364355;border-radius:6px;background:transparent;color:#c6d2e2;font-size:12px;white-space:nowrap;cursor:pointer}
 #u-hub .h-ev-link:hover{background:#1d2b3d;color:#eef5ff}#u-hub .h-ev-link:focus-visible{outline:2px solid #7aa2ff;outline-offset:2px}
 @media(max-width:719px){#u-hub .h-toolbar .h-ev-link{order:3}}
+/* ==== audit 2026-11-05, board group: sorting, sticky toolbar, fixed sport tabs, faces, line kinds, below break-even ==== */
+/* B7: the toolbar stays on screen while the board scrolls; the table header sits right under it */
+#u-hub .h-toolbar{position:sticky;top:-12px;z-index:6;background:#101216;padding-block:3px;margin-top:-3px;box-shadow:0 1px 0 #1d232c}
+#u-hub #hub-table>thead>tr>th{top:calc(var(--h-bar,52px) - 12px)}
+/* B7: each sport tab keeps its width while its count loads */
+#u-hub .h-toolbar .h-sports span{display:inline-block;min-width:3.4ch;text-align:center;box-sizing:border-box}
+#u-hub .h-toolbar .h-sports span.h-n-wait{visibility:hidden}
+#u-hub .h-toolbar .h-sports span.h-n-wait:before{content:'00'}
+/* A6: sortable column headers (40px targets); the arrow comes from data-sort, so each header keeps its name */
+#u-hub #hub-table>thead>tr>th:has(.h-th-sort){padding-block:0}
+#u-hub #hub-table .h-th-sort{all:unset;box-sizing:border-box;position:relative;display:inline-flex;flex-direction:column;justify-content:center;min-height:40px;cursor:pointer;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit}
+#u-hub #hub-table .h-th-sort:hover{color:#dfe9f7}
+#u-hub #hub-table .h-th-sort:focus-visible{outline:2px solid #7aa2ff;outline-offset:2px;border-radius:3px}
+#u-hub #hub-table .h-th-sort[data-sort=descending],#u-hub #hub-table .h-th-sort[data-sort=ascending]{color:#cfe1ff}
+#u-hub #hub-table .h-th-sort{flex-direction:row;align-items:center}
+#u-hub #hub-table .h-th-sort[data-sort=descending] .h-th-l:after{content:'↓';margin-left:2px}
+#u-hub #hub-table .h-th-sort[data-sort=ascending] .h-th-l:after{content:'↑';margin-left:2px}
+#u-hub #hub-table .h-c-edge .h-th-sort{flex-direction:column;align-items:center}
+#u-hub #hub-table .h-strip-head .h-th-sort{display:flex;justify-content:center;width:100%}
+#u-hub .h-strip-head .h-strip-th{font-style:normal;min-width:0;text-align:center}
+/* the Sort menu on the count line */
+#u-hub .h-table-title{flex-wrap:wrap}
+#u-hub .h-sortbar{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+#u-hub .h-sortbar label{font-size:11.5px;color:#9daabb}
+#u-hub .h-sortbar select{min-height:40px;font-size:12px;width:170px;max-width:46vw}
+#u-hub .h-sort-dir{min-width:40px;min-height:40px;padding:0;font-size:15px}
+#u-hub .h-sortbar~.h-viewmode{margin-left:0}
+#u-hub .h-table-title>.h-sort-note{order:9;flex-basis:100%;margin:0}
+/* B5: "Research grade" is never cut; it wraps beside the letter */
+#u-hub #hub-table .h-scout-grade{flex-wrap:nowrap}
+#u-hub #hub-table .h-scout-grade .h-grade-tag{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.1;font-size:9.5px;min-width:0}
+/* B2: below break-even, muted, under the read */
+#u-hub .h-below{display:inline-block;justify-self:start;margin:1px 0 0;padding:0 6px;border:1px solid #3a4352;border-radius:999px;font-size:10px!important;line-height:15px!important;color:#97a3b4!important;white-space:nowrap;background:transparent;width:max-content}
+#u-hub .h-dec-chance .h-below{margin:0 0 0 2px}
+#u-hub #hub-table td.h-c-edge .h-below{display:block;width:auto;margin:3px auto 0;padding:0 3px;font:500 9px/11px Inter,system-ui,sans-serif!important;white-space:normal;overflow-wrap:normal;word-break:keep-all;text-align:center;max-width:62px;border-radius:6px}
+/* a row with no published side (both chances and Research estimate) keeps the 56-64px row */
+#u-hub #hub-table .h-scout:has(.h-direction-options){gap:0;line-height:1.2}
+#u-hub #hub-table .h-scout:has(.h-direction-options) .h-grade-text{line-height:1.2}
+/* B3: the PrizePicks line kind on every PrizePicks row, leg and receipt */
+.u-lt{font-style:normal;font-size:10px;font-weight:600;letter-spacing:.02em;padding:0 4px;border-radius:3px;border:1px solid #3a4658;color:#c3cfdf;white-space:nowrap}
+.u-lt-goblin{border-color:#3d6b52;color:#a8e0c0}.u-lt-demon{border-color:#7a3e48;color:#f0b6be}.u-lt-standard{border-color:#3a4658;color:#b9c6d8}
+#u-hub #hub-table .h-c-line b .u-lt{display:inline-block;margin-left:5px;padding:0 3px;font:600 9.5px/14px Inter,system-ui,sans-serif;letter-spacing:.01em;vertical-align:3px}
+/* room for the line kind and the 32px face: the line column widens, the fixed columns give a little back so the player keeps his name */
+#u-hub #hub-table .h-c-line{width:104px}#u-hub #hub-table .h-c-watch{width:40px}#u-hub #hub-table .h-c-market{width:12.5%}
+#u-hub #hub-table .h-c-compare{width:76px}#u-hub #hub-table .h-c-add{width:68px}#u-hub #hub-table .h-c-edge{width:66px}
+@media(min-width:1101px) and (max-width:1400px){#u-hub #hub-table .h-c-line{width:100px}#u-hub #hub-table .h-c-add{width:64px}}
+/* faces: NBA / NFL headshot in a circle, the team logo in its corner, initials underneath when an image is missing */
+.u-face{position:relative;display:inline-grid;place-items:center;flex:0 0 var(--face,32px);width:var(--face,32px);height:var(--face,32px);border-radius:50%;background:#1d242e;border:1px solid #3a4555;color:#dfe7f2;font:600 calc(var(--face,32px) * .34) 'DM Mono',monospace;vertical-align:middle;box-sizing:border-box}
+.u-face>i{font-style:normal;line-height:1}
+.u-face>.u-face-shot{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;object-position:50% 20%;background:#1d242e}
+.u-face>.u-face-logo{position:absolute;right:-4px;bottom:-4px;width:calc(var(--face,32px) * .46);height:calc(var(--face,32px) * .46);border-radius:50%;background:#e8edf3;padding:1px;box-sizing:border-box;object-fit:contain}
+.u-face>[hidden]{display:none}
+.u-face>img{opacity:0;transition:opacity .15s}.u-face>img.is-in{opacity:1}   /* the initials show until the image arrives */
+#u-hub #hub-table td.h-c-player .u-face{float:left;margin:4px 10px 0 0}
+#u-hub #hub-table td.h-c-player .u-face+.h-player{width:calc(100% - 42px)}
+#u-hub .h-card .h-card-head .u-face{flex:none;align-self:center}
+.u-leg .u-leg-name .u-face{margin-right:8px}
+.u-leg .u-leg-name:has(.u-face){display:flex;align-items:center}
+.u-pick-face>button{display:flex;align-items:center;gap:10px}
+.u-pick-face>button>.u-face{flex:0 0 32px}
+#u-hub .h-generated-card li.h-leg-face{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:center}
+/* B6: the line is dashed and named on the line itself; the median is its own dotted line */
+#u-hub .h-history-chart .median-mark,html[data-upgrade] .u-chart .median-mark{stroke:#a98fd8;stroke-width:1.2;stroke-dasharray:1 3}
+#u-hub .h-history-chart .median-lab,html[data-upgrade] .u-chart .median-lab{fill:#c4b2ea}
+#u-hub .h-legend i.median{display:inline-block;width:14px;height:0;border:0;border-top:2px dotted #a98fd8;border-radius:0;background:none;vertical-align:middle}
+/* a long market name ("Passing yards") keeps the 56-64px row on desktop; the full name is in its tooltip and on the card */
+@media(min-width:1101px){#u-hub #hub-table .h-mcell b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+/* A13: the Filters panel's quick filters wrap instead of cutting their words */
+#u-hub .h-pop .h-quick button{white-space:normal;text-align:left;line-height:1.2;max-width:100%;overflow:visible;text-overflow:clip}
+@media(max-width:1100px){
+ #u-hub .h-toolbar{top:-10px}
+ #u-hub .h-sortbar{margin-left:0}
+ #u-hub .h-sortbar select{width:150px}
+ #u-hub .h-table-title{gap:6px 8px}
+ #u-hub #hub-table .h-c-line b .u-lt{display:table;margin:3px 0 0;vertical-align:0}
+ /* A14: the hit strip takes the card's full middle width on phone (it was squeezed to ~22px a cell beside Edge) */
+ #u-hub #hub-table.h-has-edge>tbody>tr[data-record]{grid-template-areas:"player player market market watch" "line scout scout edge add" "proj hits hits hits compare"}
+ #u-hub #hub-table td.h-c-player .u-face{margin-top:0}
+ /* A14: phone hit chips large enough to read */
+ #u-hub #hub-table .h-strip .h-hit{height:32px;font-size:13px}
+ #u-hub #hub-table .h-strip .h-hit.h-hit-n{font-size:12px!important;letter-spacing:-.02em!important}
+ #u-hub #hub-table .h-strip-cell:before{font-size:10px;margin-bottom:2px}
+}
