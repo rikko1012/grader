@@ -974,3 +974,33 @@ are in the report (mixed: better in some cells, slightly worse in others).
 after it was read. Live is unchanged. Next: register lpf-1 as a forward shadow so the Over question is judged on events
 other than Worlds 2026 (the line stage is 38-ish series of one international event); a second year of history needs the
 owner's OK (Leaguepedia backfill with the bot login, or Oracle's Elixir files).
+
+### lpf-1 second year of history: Oracle's Elixir 2025 + 2026 (added 2026-11-05, history only, no evaluation rerun)
+
+Owner approved the download on 2026-11-05. Files (public OE Google Drive folder, untrusted data, parsed with csv only), stored
+under `cs2_scout_ops/data/lol_full/downloads/oe_{2025,2026}/`; hashes are in `cs2_scout_ops/data/lol_full/oe_manifest.json`:
+- 2025: 79,186,324 bytes, 120,528 rows (10,044 games x 12), 2025-01-11 .. 2025-12-29, 45 leagues.
+- 2026: 79,169,863 bytes, 118,404 rows (9,867 games), 2026-01-01 .. 2026-11-06, 44 leagues.
+
+**Overlap with production's copy (2025-11-03 .. 2026-11-04, 12,955 games).** Matched on the set of ten champions plus the closest
+UTC time within 48 h. 10,023 of the 10,062 OE games in that window match (99.6%). 10,020 are within 1 h and 3 within 6 h.
+Game numbers agree in all 10,023. Per-player kills / deaths / assists are identical in 100,214 of 100,230 rows; 16 differ.
+The 39 unmatched OE games are VCS 33, ROL 3 and Worlds 3. Production has 2,932 games OE does not have, mostly smaller events:
+Prime League 1st Division 652, Hellenic Challengers Cup 237 and Esports Nations Cup 181. No OE game before 2025-11-03 matches a
+production game.
+
+**What is added** (`lol/lpf_oe.py` -> `cs2_scout_ops/data/lol_full/lol_oe_hist.db`). It adds the 9,849 OE games from
+2025-01-11 to 2025-11-02: 98,490 player rows in about 4,733 rebuilt series. OE ids are mapped to production ids by majority
+vote over the matched games. 78% of player rows get a production player id and 73% a production team id; 39 players and 11
+teams had a split vote. OE league codes are mapped to production names the same way; 2025-only codes with no counterpart in
+the overlap keep the OE code (LFL2, LVP SL, LTA N / S, NEXO, PRMP, CT, ASI, LTA). Patches are written 25.xx as in production.
+`Store(db, extra=[...])` uses these rows as **history only**:
+- targets are unchanged (60,346);
+- `LiveBaseline` ignores them, so the reconstruction of live is unchanged;
+- the candidate's features and both Elo ratings use them.
+
+67% of targets' players now have second-year history: 36% of Nov 2025 targets and 54-76% of targets in later months.
+
+Reproduce: `python -I -c "import sys; sys.path.insert(0, r'<worktree>'); from lol import lpf_oe; lpf_oe.main()" --db <lol_full.db>
+--out <lol_oe_hist.db> --report <report.json> <2025.csv> <2026.csv>`, then `python -m lol.lpf_eval --db <lol_full.db> --extra
+<lol_oe_hist.db> --cache <dir> --out <report>`. The lpf-1 hold-out is spent: a rerun with the extra year is DEV evidence only.

@@ -150,7 +150,7 @@ def test_cluster_ci_resamples_series():
 
 
 def test_no_live_module_imports_research_modules():
-    research = {"lpf", "lpf_data", "lpf_eval", "lp1"}
+    research = {"lpf", "lpf_data", "lpf_eval", "lp1", "lpf_oe"}
     live = [p for p in (ROOT / "lol").rglob("*.py") if p.stem not in research and "tests" not in p.parts]
     live += list(ROOT.glob("*.py"))
     for p in live:

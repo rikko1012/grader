@@ -59,14 +59,14 @@ def cluster_ci(vals, clusters, B=BOOT, seed=1):
 
 
 # ============================================================================================ build (cached)
-def build(db, cache, log):
-    path = os.path.join(cache, "lpf_build.pkl") if cache else None
+def build(db, cache, log, extra=()):
+    path = os.path.join(cache, "lpf_build_oe.pkl" if extra else "lpf_build.pkl") if cache else None
     if path and os.path.exists(path):
         log(f"loading cached build {path}")
         with open(path, "rb") as fh:
             return pickle.load(fh)
     t0 = time.time()
-    st = D.Store(db)
+    st = D.Store(db, extra=extra)
     T = D.targets(st)
     B = D.LiveBaseline(st, log)
     for t in T:
@@ -82,7 +82,8 @@ def build(db, cache, log):
     sizes = {f"{s}|{sc}": B.size(s, sc) for s in D.STATS for sc in SCOPES}
     for t in T:
         t.pop("tournament_obj", None)
-    out = {"T": T, "X": X, "names": names, "live_sizes": sizes, "db_rows": len(st.rows)}
+    out = {"T": T, "X": X, "names": names, "live_sizes": sizes, "db_rows": len(st.rows) - st.extra_rows,
+           "extra_rows": st.extra_rows}
     # the settled record (Stage B) - read here so the harness needs the DB once
     sql = ("SELECT f.*, s.status AS s_status, s.over_hit AS s_over_hit, s.push AS s_push, s.actual AS s_actual "
            "FROM forecasts f JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM forecasts WHERE forecast_at < series_start "
@@ -634,14 +635,16 @@ def main(argv=None):
     ap.add_argument("--rounds", type=int, default=lpf.N_ROUNDS)
     ap.add_argument("--drop", default="")
     ap.add_argument("--offset", action="store_true", help="start the booster from the live projection (learn the correction)")
+    ap.add_argument("--extra", action="append", default=[],
+                    help="history-only SQLite (lol/lpf_oe.py output: Oracle's Elixir second year); features only, never targets")
     a = ap.parse_args(argv)
     log = lambda *x: print(*x, file=sys.stderr, flush=True)  # noqa: E731
-    b = build(a.db, a.cache, log)
+    b = build(a.db, a.cache, log, extra=a.extra)
     fr = Frame(b)
     fr.gw = wins_per_game(fr, a.db, a.cache, log)
     cand = Candidate(fr, a.variant, drop=[x for x in a.drop.split(",") if x], rounds=a.rounds, log=log, offset=a.offset)
     report = {"version": lpf.VERSION, "variant": a.variant, "offset_live": a.offset, "rounds": a.rounds, "written_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "data": {"player_games": b["db_rows"], "targets": len(fr.T), "first_day": iso(fr.day.min()), "last_day": iso(fr.day.max()),
+              "data": {"player_games": b["db_rows"], "extra_history_player_games": b.get("extra_rows", 0), "targets": len(fr.T), "first_day": iso(fr.day.min()), "last_day": iso(fr.day.max()),
                        "features": len(cand.feat)},
               "baseline_reconstruction": b["live_forecasts_check"], "features": cand.feat}
     refits = REFITS_DEV + (REFITS_HOLD if a.stage == "final" else [])

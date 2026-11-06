@@ -38,12 +38,29 @@ def connect(path):
 class Store:
     """Everything the harness reads, loaded once."""
 
-    def __init__(self, path):
+    def __init__(self, path, extra=()):
+        """extra: history-only SQLite files in the same shape (lol/lpf_oe.py: the Oracle's Elixir second year). Their rows
+        carry _src = 'oe': they feed the candidate's features only; targets() and LiveBaseline skip them."""
         con = connect(path)
         cols = ("game_key, player_id, team_id, opponent_id, team, opponent, side, role, champion, kills, deaths, assists, cs, gold, "
                 "team_kills, opp_kills, win, duration_s, match_key, game_number, best_of, played_at, league, damage, vision")
         self.rows = [dict(r) for r in con.execute(f"SELECT {cols} FROM hist_player_games WHERE played_at IS NOT NULL")]
         self.games = {r["game_key"]: dict(r) for r in con.execute("SELECT * FROM hist_games")}
+        self.extra_rows = 0
+        for xp in extra or ():
+            xc = connect(xp)
+            for r in xc.execute(f"SELECT {cols} FROM hist_player_games WHERE played_at IS NOT NULL"):
+                r = dict(r)
+                r["_src"] = "oe"
+                self.rows.append(r)
+                self.extra_rows += 1
+            for r in xc.execute("SELECT * FROM hist_games"):
+                g = dict(r)
+                g["_src"] = "oe"
+                if g["game_key"] in self.games:
+                    raise ValueError(f"extra history repeats a production game: {g['game_key']}")
+                self.games[g["game_key"]] = g
+            xc.close()
         self.series = {r["sid"]: dict(r) for r in con.execute(
             "SELECT sid, tournament_page, tournament, best_of, scheduled_utc, first_game_utc, n_games, score1, score2, ff, nullified "
             "FROM center_c_series")}
@@ -84,6 +101,8 @@ def targets(st):
     tournament, best_of, the number of games the series had (n_series)."""
     by_match = defaultdict(list)
     for r in st.rows:
+        if r.get("_src") == "oe":                 # history-only rows never become targets
+            continue
         if r.get("kills") is None or r.get("team_kills") is None or r.get("opp_kills") is None or not r.get("role"):
             continue
         by_match[r["match_key"]].append(r)
@@ -152,7 +171,9 @@ class LiveBaseline:
         self.m, self.factors = model, factors
         self.ff = json.loads((model.config.PKG_DIR / fc.FACTOR_FIT_FILE).read_text(encoding="utf-8"))
         self.st = st
-        rows = [r for r in st.rows if r.get("kills") is not None and r.get("team_kills") is not None and r.get("opp_kills") is not None]
+        # live never had the extra (Oracle's Elixir) history: the reconstruction uses production rows only
+        prod = [r for r in st.rows if r.get("_src") != "oe"]
+        rows = [r for r in prod if r.get("kills") is not None and r.get("team_kills") is not None and r.get("opp_kills") is not None]
         self.pin = defaultdict(list)       # pid -> (day, k, d, a, tk, ok, win)
         self.tin = defaultdict(list)       # team -> (day, tk, ok)
         seen = set()
@@ -165,7 +186,7 @@ class LiveBaseline:
         # Elo game list as elo.from_rows builds it (one entry per game, the first row's side), keyed like live (teams.key(id))
         seen, self.elo_games = set(), []
         tkey = {}
-        for r in st.rows:
+        for r in prod:
             if r["game_key"] in seen or r.get("win") is None:
                 continue
             seen.add(r["game_key"])
@@ -176,7 +197,7 @@ class LiveBaseline:
         self.tkey = tkey
         self._elo_day = {}
         games = {gk: {"patch": g.get("patch"), "tournament": g.get("tournament"), "league": g.get("league"),
-                      "played_at": g.get("played_at")} for gk, g in st.games.items()}
+                      "played_at": g.get("played_at")} for gk, g in st.games.items() if g.get("_src") != "oe"}
         self.index = factors.Index(rows, games, match_day=st.match_day)
         self.index.pl = _Window(self.index.pl)
         self.index.tm = _Window(self.index.tm)
