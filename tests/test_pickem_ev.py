@@ -10,6 +10,7 @@ import pytest
 import workspace_books as wb
 import workspace_ev as we
 from gradecore import ev_board, fair, payouts
+from gradecore.tests.pickem_ref import reference_tables  # noqa: F401  (fixture: PrizePicks REFERENCE rates, formula tests only)
 from tests.test_workspace_api import env, get  # noqa: F401
 
 
@@ -41,7 +42,8 @@ def snap(items):
 
 
 @pytest.fixture
-def fake(monkeypatch):
+def fake(monkeypatch, reference_tables):
+    """Board arithmetic on fixture quotes. PrizePicks rows are priced on its REFERENCE table here (never live: see pickem_ref)."""
     wb.reset()
     we._FAIR.clear(); we._LEGS.clear()
     items = [
@@ -119,11 +121,32 @@ def test_filters_change_the_fair(fake):
     assert {s["label"]: s["weight"] for s in r["sources"]}["BetRivers"] == 0.0
 
 
-def test_params_are_normalised():
+def test_params_are_normalised(reference_tables):
     p = we.params({"app": "x", "entry": "power", "n": "99", "preset": "bad", "method": "bad", "min_books": "50", "min_liq": "123",
                    "max_width": "7", "req": "a,b,c"}, ["a", "b", "c"])
     assert p[:6] == ("prizepicks", "power", 2, "equal", "worst", ev_board.MIN_BOOKS_MAX)
     assert p[6] == ("a", "b") and p[8] == 100.0 and p[9] == fair.MAX_WIDTH
+
+
+def test_live_tables_offer_underdog_only_and_prizepicks_is_never_priced():
+    """Owner rule 2026-11-04: the PrizePicks table is unverified, so no PrizePicks entry, break-even or EV reaches a member."""
+    assert {e["app"] for e in we.entries()} == {"underdog"}
+    assert not any(e["entry"] == "flex" and e["n"] == 2 for e in we.entries())     # no entry type the app does not show
+    assert we.params({})[:3] == ("underdog", "standard", 2)
+    assert we.params({"app": "prizepicks", "entry": "flex", "n": "2"})[:3] == ("underdog", "standard", 2)
+
+
+def test_quotes_near_the_freshness_limit_are_left_out_for_both_cache_windows(fake):
+    """Review 2026-11-05: a price is cached up to TTL in _FAIR and TTL in srv.shared, so pricing stops 2 x TTL early."""
+    lim = we.price_limits()
+    assert lim["sportsbook"] == fair.FRESHNESS_S["sportsbook"] - 2 * we.TTL and lim["exchange"] == fair.FRESHNESS_S["exchange"] - 2 * we.TTL
+    edge = fair.FRESHNESS_S["sportsbook"] - we.TTL                       # inside the raw limit, too old once both windows pass
+    res = fair.fair_chance([fair.Quote("fanduel", 20.5, 1000.0 - edge, over=1.9, under=1.9)], "over", 20.5, 1000.0, freshness=lim)
+    assert res["p"] is None and res["dropped"][0]["reason"] == "stale"
+    d = we.build(None, we.params({}, []), ALL)
+    assert d["options"]["freshness_s"] == lim
+    for r in d["rows"]:
+        assert all(s["age_s"] <= lim[s["kind"] if s["kind"] == "exchange" else "sportsbook"] for s in r["sources"])
 
 
 def test_sports_the_member_cannot_see_are_cut(fake):
@@ -141,7 +164,7 @@ def test_http_flag_off_is_404_and_on_answers(env, monkeypatch):
     st, me = get(env, "me")
     assert me["features"]["pickem_ev"] is True
     st, doc = get(env, "pickem-ev")
-    assert st == 200 and doc["app"] == "prizepicks" and "rows" in doc and "model_only" in doc and "cs2" in doc["sports"]
+    assert st == 200 and doc["app"] == "underdog" and doc["apps"] == ["underdog"] and "rows" in doc and "model_only" in doc and "cs2" in doc["sports"]
     txt = json.dumps(doc).lower()
     for word in ("guarantee", "lock", "research estimate", "provisional", "placed"):
         assert word not in txt, word

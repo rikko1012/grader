@@ -1,5 +1,6 @@
 """4.16 board parity fixes in a real browser at 1440 and 390 (real Handler, fixture boards, no network): every SCOUT_PARITY_* flag
-off leaves the board as it was; on, the Edge column is real EV and sorts from its header, hit cells read "6/10" with the % in the
+off leaves the board as it was; on, the Edge column is real EV on the lines the slip check would rate (CS2, settled results
+passing; every other line keeps the points gap and no band) and sorts from its header, hit cells read "6/10" with the % in the
 tooltip, the hit-rate sort puts lines below break-even last, the platform toggle shows plays counts, the EV band chip shows, the
 card's Report a problem writes one data_issues row, and Preferences change the odds format and the display size only.
 Set PARITY_SHOTS=<folder> to keep screenshots."""
@@ -32,9 +33,20 @@ def flags(monkeypatch):
         monkeypatch.delenv(k, raising=False)
 
 
-def parity_on(monkeypatch):
+def parity_on(monkeypatch, passing=True):
     for k in bpar.FLAGS.values():
         monkeypatch.setenv(k, "1")
+    if passing:
+        monkeypatch.setattr(workspace_api, "_gate", passing_gate)
+
+
+def passing_gate(srv, tags=None):
+    """Every fixture CS2 model version x stat x maps cell passes the slip's settled-results check (as test_board_h2h does)."""
+    import time as _t
+    tags = tags or {x.get("graded_model") for x in (workspace_api._SNAP["index"] or {}).values()}
+    band = {"lo": 0.0, "hi": 1.0, "printed": 0.6, "observed": 0.6, "ci": [0.5, 0.7], "picks": 400}
+    cells = {f"{t}|{prop}|{sc}": {"matches": 400, "bands": [band]} for t in tags for prop in ("kills", "headshots", "hs") for sc in ("12", "1", "2", "3")}
+    return {"at_ts": _t.time() - 60, "cells": cells}
 
 
 def board(ctx, env, size, sport='cs2'):
@@ -67,9 +79,11 @@ def test_parity_on_board(ctx, env, size, monkeypatch):
     assert cells.count() > 0
     c = cells.first
     assert re.fullmatch(r'\d+/\d+', c.inner_text()) and re.search(r'\(\d+%\)', c.get_attribute('title'))
-    # EV band chip next to the letter, plain words
+    # EV band chip next to the letter, plain words, on rated CS2 lines only (no PrizePicks: its payout stays unknown)
     bands = p.locator('#hub-rows .h-band').all_inner_texts()
     assert bands and set(bands) <= {'Skip', 'Marginal', 'Strong', 'Premium'}
+    assert p.locator('#hub-rows tr[data-record] .h-band').count() == p.evaluate(
+        "[...document.querySelectorAll('#hub-rows tr[data-record]')].filter(tr=>tr.querySelector('.h-band')).length")
     # plays chips in the platform toggle
     chips = p.locator('#hub-platform .h-plays')
     assert chips.count() >= 1 and all(t.isdigit() for t in chips.all_inner_texts())
@@ -77,13 +91,15 @@ def test_parity_on_board(ctx, env, size, monkeypatch):
     no_h_scroll(p)
     shot(p, 'parity_board', size)
     if size == DESK:
-        # Edge column: real EV with "%", sortable from its header
+        # Edge column: real EV with "%" on rated lines, the points gap elsewhere; sortable from its header (EV lines first)
         edge = p.locator('#hub-rows .h-c-edge .h-edge b')
-        assert edge.count() > 0 and all(re.fullmatch(r'[+−±]\d+\.\d%', t) for t in edge.all_inner_texts())
+        texts = edge.all_inner_texts()
+        assert edge.count() > 0 and any(t.endswith('%') for t in texts) and all(re.fullmatch(r'[+−±]\d+\.\d%?', t) for t in texts)
         p.locator('#hub-table [data-hub=parity-sort]').click()
         assert p.locator('#hub-sort').input_value() == 'edge'
-        vals = [float(t.replace('−', '-').replace('±', '').rstrip('%')) for t in p.locator('#hub-rows tr[data-record] .h-c-edge .h-edge b').all_inner_texts()]
-        assert vals == sorted(vals, reverse=True)
+        texts = p.locator('#hub-rows tr[data-record] .h-c-edge .h-edge b').all_inner_texts()
+        ev = [float(t.replace('−', '-').replace('±', '').rstrip('%')) for t in texts if t.endswith('%')]
+        assert ev == sorted(ev, reverse=True) and texts[:len(ev)] == [t for t in texts if t.endswith('%')]
         assert p.locator('#hub-table th.h-c-edge').get_attribute('aria-sort') == 'descending'
         p.locator('#hub-table [data-hub=parity-sort]').click()
         assert p.locator('#hub-sort').input_value() == 'start'
@@ -117,12 +133,13 @@ def test_report_a_problem_and_preferences(ctx, env, size, monkeypatch):
     p.locator('#hub-rows .h-player').first.click()
     p.wait_for_selector('#hub-detail [data-hub=detail-add]', timeout=20000)
     size_line = p.locator('#hub-detail .h-dec-size')
-    assert re.search(r'Break-even \d\.\d\d · ½ Kelly: \$\d+\.\d\d', size_line.inner_text())
+    assert re.search(r'Break-even \d\.\d\d( · ½ Kelly: \$\d+\.\d\d)?$', size_line.inner_text())     # a size only on a staked, rated line
+    assert 'U' not in size_line.inner_text().replace('Under', '')            # never in units beside Scout's own stake
     # the grade, chance and the slip are unchanged by the preference (display only)
     assert p.locator('#hub-detail .h-dec-chance b').inner_text().endswith('%')
     p.evaluate("document.querySelector('#hub-detail [data-hub=card-close]').click()")
-    edge_title = p.locator('#hub-rows .h-c-edge .h-edge').first.get_attribute('title') if size == DESK else ''
-    assert size != DESK or re.search(r'\(\d\.\d\d\)', edge_title)
+    titles = p.locator('#hub-rows .h-c-edge .h-edge').evaluate_all("es => es.map(e => e.title)") if size == DESK else []
+    assert size != DESK or any(re.search(r'\(\d\.\d\d\)', t) for t in titles)
     p.locator('#hub-rows .h-player').first.click()
     p.wait_for_selector('#hub-detail [data-hub=report-open]', timeout=20000)
     # Report a problem
@@ -138,4 +155,17 @@ def test_report_a_problem_and_preferences(ctx, env, size, monkeypatch):
         rows = [tuple(r) for r in con.execute("SELECT sport, reason, note, player FROM data_issues")]
     assert rows == [('cs2', 'stats', 'L10 looks off', 'vargo')]
     no_h_scroll(p)
+    assert not p.errors
+
+
+def test_held_cs2_letters_get_no_band_no_ev_and_no_size(ctx, env, monkeypatch):
+    """Review 2026-11-05: letter containment wins; a held row keeps 'Lean' and 0U, never a band, an EV % or a display size."""
+    parity_on(monkeypatch)
+    monkeypatch.setattr(workspace_api.lc, "state", lambda sport: {"contained": True} if sport == "cs2" else {})
+    workspace_api.reset()
+    p = board(ctx, env, DESK)
+    rows = p.locator('#hub-rows tr[data-record^="cs2"]')
+    assert rows.count() > 0
+    assert p.locator('#hub-rows tr[data-record^="cs2"] .h-band').count() == 0
+    assert not [t for t in p.locator('#hub-rows tr[data-record^="cs2"] .h-c-edge .h-edge b').all_inner_texts() if t.endswith('%')]
     assert not p.errors

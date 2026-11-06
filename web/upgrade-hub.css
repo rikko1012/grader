@@ -1138,3 +1138,7 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 .h-lh-legend i.lh-c0{background:#7fa8ff}.h-lh-legend i.lh-c1{background:#c69cf2}.h-lh-legend i.lh-c2{background:#6fd0c3}.h-lh-legend i.lh-c3{background:#e39d6c}
 .h-lh-legend i.lh-close{height:0;border-top:2px solid #eef3fa;border-radius:0;vertical-align:3px}
 .h-history-chart .close-mark{stroke:#eef3fa;stroke-width:2.5;stroke-linecap:round}
+/* SCOUT_PICKEM_EV: the "Best prices" link beside the platform toggle, sized like the toggle's buttons */
+#u-hub .h-ev-link{flex:none;min-height:40px;padding:0 12px;border:1px solid #364355;border-radius:6px;background:transparent;color:#c6d2e2;font-size:12px;white-space:nowrap;cursor:pointer}
+#u-hub .h-ev-link:hover{background:#1d2b3d;color:#eef5ff}#u-hub .h-ev-link:focus-visible{outline:2px solid #7aa2ff;outline-offset:2px}
+@media(max-width:719px){#u-hub .h-toolbar .h-ev-link{order:3}}

@@ -10,7 +10,8 @@ import server
 import workspace_api
 import workspace_store
 from gradecore import fair, parity, payouts, slip
-from tests.test_workspace_api import env, get, post, records, fresh  # noqa: F401
+from gradecore.tests.pickem_ref import reference_tables  # noqa: F401  (fixture: PrizePicks REFERENCE rates, formula tests only)
+from tests.test_workspace_api import calibrated_export, env, get, post, records, fresh  # noqa: F401
 
 PP_BE = math.sqrt(1 / 3.0)      # PrizePicks Power 2-pick pays 3x: (1/3)^(1/2)
 UD_BE = math.sqrt(1 / 3.5)      # Underdog standard 2-pick pays 3.5x
@@ -28,7 +29,13 @@ def all_on(monkeypatch):
 
 
 # ---------------------------------------------------------------------------------------------------------- formulas
-def test_break_even_is_the_verified_two_pick_entry_of_each_book():
+def test_live_table_has_underdog_only_prizepicks_stays_unavailable():
+    t = parity.table()
+    assert set(t) == {"underdog"} and parity.break_even("prizepicks") is None       # unverified: owner rule 2026-11-04
+    assert parity.row(0.7, "over", "prizepicks", "standard", None, rated=True) is None
+
+
+def test_break_even_is_the_two_pick_entry_of_each_book(reference_tables):
     t = parity.table()
     assert t["prizepicks"]["be"] == pytest.approx(PP_BE) and t["prizepicks"]["entry"] == "PrizePicks Power 2-pick"
     assert t["underdog"]["be"] == pytest.approx(UD_BE) and t["underdog"]["entry"] == "Underdog standard 2-pick"
@@ -37,7 +44,7 @@ def test_break_even_is_the_verified_two_pick_entry_of_each_book():
     assert t["prizepicks"]["source"].startswith("https://www.prizepicks.com/") and t["underdog"]["source"].startswith("https://help.underdogsports.com/")
 
 
-def test_unverified_book_line_type_or_modifier_has_no_break_even(monkeypatch):
+def test_unverified_book_line_type_or_modifier_has_no_break_even(monkeypatch, reference_tables):
     assert parity.break_even("sleeper") is None and parity.leg_be("draftkings", "standard", None) is None
     assert parity.leg_be("prizepicks", "goblin", None) is None and parity.leg_be("prizepicks", "demon", None) is None
     assert parity.leg_be("underdog", "standard", 1.5) is None            # modifier combinations are not published
@@ -48,10 +55,34 @@ def test_unverified_book_line_type_or_modifier_has_no_break_even(monkeypatch):
 
 
 @pytest.mark.parametrize("p,book,be", [(0.62, "underdog", UD_BE), (0.55, "prizepicks", PP_BE), (0.5774, "prizepicks", PP_BE)])
-def test_ev_is_p_times_per_leg_payout_minus_one(p, book, be):
-    r = parity.row(p, "over", book, "standard", None)
+def test_ev_is_p_times_per_leg_payout_minus_one(p, book, be, reference_tables):
+    r = parity.row(p, "over", book, "standard", None, rated=True)
     assert r["ev"] == pytest.approx(p / be - 1, abs=1e-6) == pytest.approx(p * (1 / be) - 1, abs=1e-6)
     assert r["ev"] == pytest.approx(fair.leg_ev(p, be), abs=1e-6)
+    plain = parity.row(p, "over", book, "standard", None)                 # not rated: break-even only, no EV / band / size
+    assert plain["be"] == r["be"] and not {"ev", "band", "band_label", "sizes_pct"} & set(plain)
+
+
+def test_whole_line_ev_uses_the_no_push_chance_like_the_ev_board_and_the_slip_header():
+    """One definition everywhere (review 2026-11-05): over 0.55, push 0.08, under 0.37 against Underdog standard 2-pick."""
+    from gradecore import ev_board
+    from gradecore import slip_header as gsh
+    be = UD_BE
+    want = 0.55 / (0.55 + 0.37) / be - 1
+    r = parity.row(0.55, "over", "underdog", "standard", 1.0, p_push=0.08, rated=True)
+    board = ev_board.price_leg([], "over", 20.0, 0, be=be, p_model=0.55, p_model_other=0.37)
+    head = gsh.entry_header([{"p": 0.55 / 0.92, "match_key": "a"}, {"p": 0.55 / 0.92, "match_key": "b"}], "underdog", "standard")
+    assert r["ev"] == pytest.approx(want, abs=1e-6) == pytest.approx(board["ev_model"], abs=1e-6)
+    assert head["legs"][0]["ev"] == pytest.approx(want, abs=1e-4)
+    # a half-point line has no push: the same chance on all three surfaces
+    half = parity.row(0.61, "over", "underdog", "standard", 1.0, p_push=0.0, rated=True)["ev"]
+    hb = ev_board.price_leg([], "over", 20.5, 0, be=be, p_model=0.61, p_model_other=0.39)["ev_model"]
+    hh = gsh.entry_header([{"p": 0.61, "match_key": "a"}, {"p": 0.61, "match_key": "b"}], "underdog", "standard")["legs"][0]["ev"]
+    assert half == pytest.approx(hb, abs=1e-6) == pytest.approx(hh, abs=1e-4) == pytest.approx(0.61 / be - 1, abs=1e-4)
+    # and a board record on a whole-number line is never rated (the slip check refuses whole lines)
+    rec = {"sport": "cs2", "scout": {"side": "over", "p_side": 0.55, "p_push": 0.08, "units": 1.0},
+           "offer": {"platform": "underdog", "line": 20.0, "over": {"payout": 1.0}}, "market": {"line_type": "standard"}}
+    assert "ev" not in parity.of_record(rec, rated=True)
 
 
 @pytest.mark.parametrize("ev,band", [(-0.2, "skip"), (-1e-9, "skip"), (0.0, "marginal"), (0.0299, "marginal"), (0.03, "strong"),
@@ -61,7 +92,7 @@ def test_ev_band_edges(ev, band):
     assert parity.band(None) is None
 
 
-def test_hit_rate_key_is_hit_rate_minus_break_even_and_flags_junk():
+def test_hit_rate_key_is_hit_rate_minus_break_even_and_flags_junk(reference_tables):
     r = parity.row(0.6, "under", "prizepicks", "standard", None, {"over": 4, "under": 6, "push": 0, "n": 10})
     assert r["hit"] == {"hits": 6, "n": 10, "key": pytest.approx(0.6 - PP_BE, abs=1e-6), "below": False}
     junk = parity.row(0.6, "over", "prizepicks", "standard", None, {"over": 5, "under": 5, "push": 0, "n": 10})
@@ -70,17 +101,36 @@ def test_hit_rate_key_is_hit_rate_minus_break_even_and_flags_junk():
     assert parity.row(0.6, "over", "prizepicks", "standard", None)["hit"] is None
 
 
-def test_display_sizes_are_kelly_at_break_even_odds_and_flat_one_unit():
-    p, be = 0.62, UD_BE
-    d = 1 / be
-    full = (p * d - 1) / (d - 1)                                          # closed-form Kelly of a two-outcome bet
-    assert parity.leg_kelly(p, be) == pytest.approx(full, abs=1e-9)
-    s = parity.row(p, "over", "underdog", "standard", 1.0)["sizes"]
-    assert s["quarter"] == pytest.approx(round(full * 0.25 / slip.UNIT_SHARE, 2))
-    assert s["half"] == pytest.approx(round(full * 0.5 / slip.UNIT_SHARE, 2))
-    assert s["flat"] == 1.0
-    neg = parity.row(0.5, "over", "underdog", "standard", 1.0)["sizes"]
+def test_display_sizes_are_the_entry_kelly_capped_as_a_share_of_bankroll():
+    """Review 2026-11-05: size the real 2-pick entry (both legs at p, its payout), not one leg at 1 / break-even odds."""
+    p = 0.60
+    full = (p * p * 3.5 - 1) / (3.5 - 1)                                  # closed-form Kelly of the all-or-nothing 2-pick entry
+    s = parity.row(p, "over", "underdog", "standard", 1.0, rated=True, sized=True)["sizes_pct"]
+    assert s["quarter"] == pytest.approx(round(full * 0.25 * 100, 2))       # % of bankroll: 1/4 Kelly of the entry
+    assert s["flat"] == pytest.approx(slip.UNIT_SHARE * 100)               # flat = 1% of bankroll
+    leg_only = (p / UD_BE - 1) / (1 / UD_BE - 1)                           # the old single-leg reading ran high
+    assert leg_only > full
+    hi = parity.row(0.70, "over", "underdog", "standard", 1.0, rated=True, sized=True)["sizes_pct"]
+    cap = parity.SIZE_CAP_UNITS * slip.UNIT_SHARE * 100
+    assert hi["quarter"] == pytest.approx(cap) and hi["half"] == pytest.approx(cap)   # capped at the grader's unit cap
+    neg = parity.row(0.5, "over", "underdog", "standard", 1.0, rated=True, sized=True)["sizes_pct"]
     assert neg == {"quarter": 0.0, "half": 0.0, "flat": 0.0}                # no edge: no size
+    assert "sizes_pct" not in parity.row(0.6, "over", "underdog", "standard", 1.0, rated=True)   # a 0U line has no size
+
+
+@pytest.mark.parametrize("sport,scout", [
+    ("nba", {"letter_held": True, "units": 0}), ("nfl", {"hold": "League containment", "units": 0}),
+    ("lol", {"units": 0.0}), ("cs2", {"letter_held": True, "units": 0.0}), ("cs2", {"units": 0.0})])
+def test_held_rows_other_sports_and_zero_unit_rows_get_no_band_and_no_size(sport, scout, monkeypatch, reference_tables):
+    all_on(monkeypatch)
+    rec = {"sport": sport, "scout": dict({"side": "over", "p_side": 0.72}, **scout),
+           "offer": {"platform": "underdog", "line": 22.5, "over": {"payout": 1.0}}, "market": {"line_type": "standard"},
+           "history": {"l10": {"over": 7, "under": 3, "n": 10}}}
+    v = bpar.attach(rec, rated=True)["parity"]
+    assert "sizes_pct" not in v and "sizes" not in v
+    if sport != "cs2" or scout.get("letter_held"):
+        assert not {"ev", "band", "band_label"} & set(v)
+    assert v["be"] == pytest.approx(UD_BE) and v["hit"]["hits"] == 7        # break-even and the hit-rate key stay
 
 
 def test_no_side_or_no_chance_has_no_row():
@@ -102,7 +152,7 @@ def test_features_name_only_the_flags_that_are_on(monkeypatch):
     all_on(monkeypatch)
     f = bpar.features()["parity"]
     assert set(f) >= set(bpar.FLAGS) and f["unit_share"] == slip.UNIT_SHARE
-    assert set(f["break_even"]) == {"prizepicks", "underdog"} and dict(f["reasons"]) == bpar.REASONS
+    assert set(f["break_even"]) == {"underdog"} and dict(f["reasons"]) == bpar.REASONS      # PrizePicks unverified
 
 
 # ---------------------------------------------------------------------------------------------------------- the board
@@ -116,12 +166,18 @@ def test_board_rows_carry_parity_only_with_a_row_flag(env, monkeypatch):
     r = records(env)
     v = r[("vargo", "underdog")]
     assert v["parity"]["be"] == pytest.approx(UD_BE, abs=1e-6)
-    assert v["parity"]["ev"] == pytest.approx(v["scout"]["p_side"] / UD_BE - 1, abs=1e-5)
+    assert "ev" not in v["parity"]                 # 0 settled matches: the slip check would not rate it, so no EV here either
     assert v["parity"]["hit"]["n"] == v["history"]["l10"]["n"]
+    assert all("parity" not in x for (n, b), x in r.items() if b == "prizepicks")    # no verified PrizePicks payout
     # grades, chances and stakes are untouched
     assert v["scout"]["units"] == env.by("vargo")["units"] and v["scout"]["grade"] == "B"
     _, me = get(env, "me")
     assert me["features"]["parity"]["edge"] is True
+    # with settled results that pass the slip's check, the same row carries the EV the slip would show
+    monkeypatch.setattr(server, "_p1_export", calibrated_export)
+    workspace_api.reset()
+    v = records(env)[("vargo", "underdog")]
+    assert v["parity"]["ev"] == pytest.approx(v["scout"]["p_side"] / UD_BE - 1, abs=1e-5) and v["parity"]["band"]
 
 
 # ---------------------------------------------------------------------------------------------------------- Report a problem
@@ -131,7 +187,11 @@ def _line(env):
 
 
 def test_report_is_refused_while_its_flag_is_off(env):
+    # off = origin/main's unknown-route answer for a POST (403 before any sign-in check), not a registered route
+    assert "report-problem" not in workspace_api.POST
     assert post(env, "report-problem", _line(env)) == (403, {"error": "forbidden"})
+    assert post(env, "report-problem", _line(env), user=None) == (403, {"error": "forbidden"})
+    assert post(env, "no-such-route", _line(env), user=None) == (403, {"error": "forbidden"})
 
 
 def test_report_writes_one_data_issues_row(env, monkeypatch, tmp_path):

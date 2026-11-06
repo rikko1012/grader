@@ -5,8 +5,37 @@ import math
 import pytest
 
 from gradecore import ev_board, fair, line_shift, payouts
+from gradecore.tests.pickem_ref import REAL_PICKEM_CONFIG, reference_tables  # noqa: F401  (fixture)
 
 NOW = 1_800_000_000.0
+
+
+@pytest.fixture(autouse=True)
+def _formula_tables(reference_tables):
+    """The formulas below run on the PrizePicks REFERENCE numbers (unverified, so never live): see pickem_ref."""
+    return reference_tables
+
+
+def test_prizepicks_break_even_is_unavailable_on_the_live_tables():
+    live = REAL_PICKEM_CONFIG()
+    assert ev_board.pickem_break_even("prizepicks", "power", 2, config=live) is None
+    assert ev_board.pickem_break_even("prizepicks", "flex", 2, config=live) is None
+    assert ev_board.pickem_break_even("underdog", "standard", 2, config=live) == pytest.approx(3.5 ** -0.5)
+
+
+def test_a_book_line_too_far_from_the_pickem_line_gives_no_chance():
+    """Review 2026-11-05: an NBA points quote at 18.5 read at 30.5 (a 12-point shift, GAP_WARN 3) is a different market."""
+    rd = line_shift.reader("nba", "points")
+    assert rd is not None
+    q = [sb("fanduel", 1.87, 1.95, line=18.5)]
+    for line in (22.5, 26.5, 30.5):
+        r = fair.fair_chance(q, "under", line, NOW, reader=rd)
+        assert r["p"] is None and r["dropped"][0]["reason"] == "different line too far"
+        assert ev_board.hidden_reason(r) == "line"
+    near = fair.fair_chance(q, "under", 20.5, NOW, reader=rd)          # a 2-point shift stays inside GAP_WARN
+    assert near["p"] is not None and near["sources"][0]["shifted"]
+    res = ev_board.price_leg(q, "under", 30.5, NOW, be=0.57735, p_model=None, p_model_other=None, reader=rd)
+    assert res["ev"] is None and res["hidden"] == "line"
 
 
 def sb(book, over, under, line=20.5, age=60):

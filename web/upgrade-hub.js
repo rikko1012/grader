@@ -92,7 +92,8 @@ export function mount(C) {
     return list.sort((a,b)=> {
       if(H.sortBy==='chance') return (b.scout.p_side??-1)-(a.scout.p_side??-1);
       if(H.sortBy==='player') return a.player.name.localeCompare(b.player.name);
-      if(H.sortBy==='edge'){const x=edgeValue(a),y=edgeValue(b);return x==null&&y==null?byStart(a,b):x==null?1:y==null?-1:y-x||byStart(a,b);}
+      if(H.sortBy==='edge'){const x=edgeValue(a),y=edgeValue(b),ea=P('edge')&&!!evOf(a),eb=P('edge')&&!!evOf(b);   /* rated EV % first, then points */
+        return x==null&&y==null?byStart(a,b):x==null?1:y==null?-1:(eb-ea)||y-x||byStart(a,b);}
       /* SCOUT_PARITY_HIT_SORT: hit rate minus break-even (the server's key); a line whose hit rate is under its break-even sorts after
          every line above it, and a line with no key after both, so 100% hit rates at a price that cannot pay never flood the top */
       if(H.sortBy==='hit'){const x=parOf(a)?.hit,y=parOf(b)?.hit,rk=h=>!h?2:h.below?1:0;return rk(x)-rk(y)||(x&&y?y.key-x.key:0)||byStart(a,b);}
@@ -191,7 +192,7 @@ export function mount(C) {
      the value and its source). PrizePicks and goblin / demon lines publish no fixed per-pick payout here: their cell stays empty.
      A fact about the chance against the payout, not a grade: a held or contained letter does not change it. */
   function edgeValue(r) {
-    if(P('edge'))return parOf(r)?parOf(r).ev*100:null;     /* SCOUT_PARITY_EDGE: real EV in %, PrizePicks and Underdog */
+    if(P('edge')&&evOf(r))return evOf(r).ev*100;     /* SCOUT_PARITY_EDGE: EV in % only where the slip check rates the line */
     const s=r.scout, be=COLS?.ud_standard_break_even, mult=s.side?r.offer[s.side]?.payout:null;
     if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9)
       return null;
@@ -199,41 +200,45 @@ export function mount(C) {
   }
   const EDGE_WHY=()=>P('edge')?parEdgeWhy():`Scout chance minus the per-pick break-even of an ${COLS?.entry||'Underdog standard 2-pick'} entry`+(num(COLS?.ud_standard_break_even)?` (${(COLS.ud_standard_break_even*100).toFixed(1)}%`+(COLS?.source?`, from Underdog's published payouts${COLS.read_at?' read '+COLS.read_at:''}`:'')+')':'')+', in points. PrizePicks and goblin or demon lines publish no fixed per-pick payout, so their cells stay empty.';
   function edgeCell(r) {
-    if(P('edge'))return parEdgeCell(r);
+    if(P('edge')&&evOf(r))return parEdgeCell(r);     /* otherwise the points gap below, as before */
     const d=edgeValue(r);
     if(d==null)return `<span class="h-edge empty" title="${esc(r.offer.platform==='underdog'?'No fixed per-pick payout is published for this line type':'No fixed per-pick payout is published for this platform')}">—</span>`;
     const be=COLS.ud_standard_break_even;
     return `<span class="h-edge${d>0?' positive':''}" title="${esc(`Scout chance ${pct(r.scout.p_side)} against the ${(be*100).toFixed(1)}% break-even of an ${COLS.entry||'Underdog standard'} entry`)}"><b>${d>0?'+':d<0?'−':'±'}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
   }
   /* ---- 4.16 parity helpers: display of the server's numbers only ---- */
-  const parOf = r => r.parity && typeof r.parity === 'object' && num(r.parity.ev) && num(r.parity.be) ? r.parity : null;
+  const parOf = r => r.parity && typeof r.parity === 'object' && num(r.parity.be) ? r.parity : null;
+  /* the server sends ev / band / sizes only for a line the live slip check would rate (CS2, letter not held, half-point line,
+     a chance band that passed the settled-results check); every other row keeps the points gap and gets no band */
+  const evOf = r => {const p=parOf(r);return p&&num(p.ev)?p:null;};
   const evText = ev => `${ev>0?'+':ev<0?'−':'±'}${Math.abs(ev*100).toFixed(1)}%`;
   const beOdds = p => H.par.odds==='decimal'&&num(p.be_decimal)?p.be_decimal.toFixed(2):num(p.be_american)?(p.be_american>0?'+':'−')+Math.abs(p.be_american):pct(p.be);
-  const SIZING=[['quarter','¼ Kelly'],['half','½ Kelly'],['flat','Flat 1U']];
+  const SIZING=[['quarter','¼ Kelly'],['half','½ Kelly'],['flat','Flat 1%']];
   const sizingLabel = () => (SIZING.find(x=>x[0]===H.par.sizing)||SIZING[0])[1];
-  /* SCOUT_PARITY_PREFS: the member's display size for one line: units (1U = the server's unit share of a bankroll) or dollars */
+  /* SCOUT_PARITY_PREFS: the member's display size for one line, as a share of bankroll or in dollars, never in units (Scout's
+     stake on the line stays the only unit figure) */
   function sizeText(p) {
-    const u=p.sizes?.[H.par.sizing], share=PAR?.unit_share;
-    if(!num(u))return null;
-    return num(H.par.bankroll)&&H.par.bankroll>0&&num(share)?'$'+(u*H.par.bankroll*share).toFixed(2):u.toFixed(2)+'U';
+    const v=p.sizes_pct?.[H.par.sizing];
+    if(!num(v))return null;
+    return num(H.par.bankroll)&&H.par.bankroll>0?'$'+(v/100*H.par.bankroll).toFixed(2):v.toFixed(1)+'% of bankroll';
   }
   function parEdgeWhy() {
     const t=PAR?.break_even||{}, parts=Object.values(t).filter(v=>v&&num(v.be)).map(v=>`${v.entry} needs ${pct(v.be)} a pick`);
-    return 'Expected value of one pick against its app’s published payout: Scout chance ÷ break-even − 1.'+(parts.length?' '+parts.join('; ')+'.':'')+' Goblin, demon and boosted lines have no published per-pick payout, so they show —.';
+    return 'On lines where Scout’s settled results back the chance: average return of one pick against its app’s published payout (Scout chance ÷ break-even − 1).'+(parts.length?' '+parts.join('; ')+'.':'')+' Other lines show Scout chance minus the break-even, in points. Goblin, demon and boosted lines have no published per-pick payout, so they show —.';
   }
   function parEdgeCell(r) {
-    const p=parOf(r);
+    const p=evOf(r);
     if(!p)return `<span class="h-edge empty" title="No published payout for this line, so there is no break-even to measure it against">—</span>`;
     const size=P('prefs')?sizeText(p):null;
-    const title=`Scout chance ${pct(r.scout.p_side)} against the ${pct(p.be)} break-even (${beOdds(p)}) of a ${p.entry}: ${evText(p.ev)} expected value a pick`+(size?` · ${sizingLabel()}: ${size}`:'');
+    const title=`Scout chance ${pct(r.scout.p_side)} against the ${pct(p.be)} break-even (${beOdds(p)}) of a ${p.entry}: ${evText(p.ev)} average return a pick`+(size?` · ${sizingLabel()}: ${size}`:'');
     const cell=`<span class="h-edge${p.ev>0?' positive':p.ev<0?' negative':''}" title="${esc(title)}" aria-label="${esc('Edge '+title)}"><b>${evText(p.ev)}</b></span>`;
     return P('ev_band')?`<span class="h-edge-wrap">${cell}${bandChip(r)}</span>`:cell;     /* the band sits under the edge when both are on */
   }
   /* SCOUT_PARITY_EV_BAND: Skip below 0 · Marginal 0–3% · Strong 3–6% · Premium 6%+ (the server's band). The letter is unchanged. */
   function bandChip(r) {
-    const p=parOf(r);
+    const p=evOf(r);
     if(!p||!p.band)return '';
-    return `<span class="h-band h-band-${esc(p.band)}" title="${esc(`${evText(p.ev)} expected value against the ${pct(p.be)} break-even of a ${p.entry}. Skip below 0, Marginal 0–3%, Strong 3–6%, Premium 6% or more`)}">${esc(p.band_label)}</span>`;
+    return `<span class="h-band h-band-${esc(p.band)}" title="${esc(`${evText(p.ev)} average return against the ${pct(p.be)} break-even of a ${p.entry}. Skip below 0, Marginal 0–3%, Strong 3–6%, Premium 6% or more`)}">${esc(p.band_label)}</span>`;
   }
   /* SCOUT_PARITY_PLAYS: how many current lines each app has on this sport tab (extra books: the shared /book-lines count) */
   function playsCount(id) {
@@ -713,7 +718,7 @@ export function mount(C) {
     return `<label class="h-dec-line"><span>Line</span><select id="hub-card-line" aria-label="Line and book">${quotes.map(opt).join('')}</select></label>
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}</div>
-      <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))} · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r))||'—')}</small>`:''}
+      <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
       <div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>
       ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
@@ -1017,12 +1022,12 @@ export function mount(C) {
       ${card('RESEARCH','Single prop grader','Inspect a player and line with the grading tools.',a('/?view=classic#one','Open grader'))}
       ${card('RESEARCH','Match research','Team and map research for an upcoming CS2 match.',a('/?view=classic#matches','Open match research'))}
       ${leagues.length?card('NBA · NFL','Sheets and Compare','Stat sheets, player comparison and with/without splits from the sports pages.',leagues.map(l=>a(`/sports?view=classic#/sheets?lg=${l}`,`${SPORTS[l]} sheets`)+a(`/sports?view=classic#/compare?lg=${l}`,`${SPORTS[l]} compare`)).join('')):''}
-      ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}${EVB?card("PICK'EM PRICES",'+EV board',"Pick'em legs whose chance from the books beats what the entry needs.",'<button data-hub="section" data-id="ev">Open +EV board</button>'):''}${R.me.features?.market_tools?card('PRICES','Price check','Prices that pay more than they should, and lines where two books let you bet both sides and win either way.','<button data-hub="mt-jump">Open price check ↓</button>'):''}</div>
+      ${classic?card('CLASSIC','Classic boards','The original boards, with every original filter.',classic):''}${EVB?card("PICK'EM PRICES",'Best prices',"Pick'em legs whose chance from the books beats what the entry needs.",'<button data-hub="section" data-id="ev">Open best prices</button>'):''}${R.me.features?.market_tools?card('PRICES','Price check','Prices that pay more than they should, and lines where two books let you bet both sides and win either way.','<button data-hub="mt-jump">Open price check ↓</button>'):''}</div>
       <section class="h-tools-alerts" id="hub-tools-alerts" aria-label="${ALERT_WORD}"></section>`;
     if(P('prefs'))$('hub-tools-body').insertAdjacentHTML('afterbegin',`<section class="h-prefs" aria-labelledby="hub-prefs-title"><h2 id="hub-prefs-title">Preferences</h2><p>How prices and sizes read on your board and player cards. Scout’s grades and stakes stay the same.</p>
       <div class="h-prefs-grid"><label>Odds format<select id="hub-pref-odds"><option value="american">American (−137)</option><option value="decimal">Decimal (1.73)</option></select></label>
       <label>Bet sizing<select id="hub-pref-sizing">${SIZING.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
-      <label>Bankroll in $ (optional)<input id="hub-pref-bankroll" type="number" min="1" max="10000000" step="1" inputmode="decimal" placeholder="Sizes show in units"></label></div></section>`);
+      <label>Bankroll in $ (optional)<input id="hub-pref-bankroll" type="number" min="1" max="10000000" step="1" inputmode="decimal" placeholder="Sizes show as % of bankroll"></label></div></section>`);
     if(P('prefs')){$('hub-pref-odds').value=H.par.odds;$('hub-pref-sizing').value=H.par.sizing;$('hub-pref-bankroll').value=H.par.bankroll??'';}
     if(R.me.owner)$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">OWNER REVIEW</span><h2>Grading comparison</h2><p>Published chances beside the candidate grader, from saved forecast revisions.</p></div></div><div class="h-game-books">${['cs2','lol','nba','nfl'].map(s=>`<button data-hub="grade-review" data-id="${s}">${SPORTS[s]}</button>`).join('')}</div><div id="hub-grade-review" aria-live="polite"><p>Select a sport to inspect its comparison log.</p></div></section>`);
   }
@@ -1230,11 +1235,11 @@ export function mount(C) {
   }
 
   const SECTIONS=['board','studio','record','alerts','picks','tools',...(EVB?['ev']:[])];
-  const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:'+EV'};
+  const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:'Best prices'};
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev')return;
     try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
-    catch(e){box.innerHTML='<p class="h-mt-state">The +EV board could not be loaded. Use Refresh to try again.</p>';}
+    catch(e){box.innerHTML='<p class="h-mt-state">Best prices could not be loaded. Use Refresh to try again.</p>';}
   }
   function section(name,navigate=true) {
     if(name==='games'){H.view='games';name='board';}
@@ -1394,7 +1399,7 @@ export function mount(C) {
     $('hub-platform').insertAdjacentHTML('beforeend',EXTRA.map(x=>`<button data-hub="book" data-id="${esc(x.id)}" aria-pressed="false" hidden aria-label="${esc(x.label)} (view only)" title="${esc(x.label)}">${esc(x.short||x.label)}</button>`).join(''));
   }
   installCols();
-  if(EVB)$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em +EV board">+EV</button>');
+  if(EVB)$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">Best prices</button>');
   if(TOKENS){
     // Skip link first in the hub (the classic page's own is inert under it) and one named account control in the top bar.
     $('u-hub').insertAdjacentHTML('afterbegin','<a class="h-skip" href="#hub-title" data-hub="skip" style="position:fixed;top:-80px;left:16px">Skip to content</a>');

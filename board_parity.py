@@ -46,12 +46,14 @@ def features():
     return {"parity": got}
 
 
-def attach(rec):
-    """Add rec["parity"] (gradecore.parity.of_record) when a row flag is on; a row with nothing to rate gets no key. Returns rec."""
+def attach(rec, rated=False):
+    """Add rec["parity"] (gradecore.parity.of_record) when a row flag is on; a row with nothing to rate gets no key. Returns rec.
+    rated = the CS2 board's own settled-results check passed for this row (workspace_rules.leg_edge_ok): only then does the
+    row carry an EV, a band or a display size. LoL / NBA / NFL never pass it (rules.EV_NOT_VALIDATED)."""
     if rows_on():
         from gradecore import parity
         try:
-            v = parity.of_record(rec)
+            v = parity.of_record(rec, rated=rated)
         except (TypeError, ValueError):
             v = None
         if v is not None:

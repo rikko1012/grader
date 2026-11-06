@@ -71,8 +71,8 @@ def params(q, books=()):
     """The query -> a normalised, hashable parameter tuple (unknown values fall back to the defaults)."""
     from gradecore import ev_board, fair
     g = lambda k, d=None: (q.get(k) or d)
-    app = g("app", "prizepicks") if g("app") in APPS else "prizepicks"
     ok = {(e["app"], e["entry"], e["n"]) for e in entries()}
+    app = g("app") if g("app") in {a for a, _, _ in ok} else default_app()
     entry = g("entry", "power" if app == "prizepicks" else "standard")
     try:
         n = int(g("n", 2))
@@ -99,6 +99,19 @@ def params(q, books=()):
     min_liq = _choice(g("min_liq", 0), ev_board.MIN_LIQUIDITY_CHOICES, 0.0)
     max_width = _choice(g("max_width", fair.MAX_WIDTH), ev_board.MAX_WIDTH_CHOICES, fair.MAX_WIDTH)
     return (app, entry, n, preset, method, min_books, req, weights, min_liq, max_width)
+
+
+def price_limits():
+    """Each quote kind's freshness limit less both cache windows (this module's _FAIR memo and srv.shared, TTL each), so a
+    price a member sees is never older than gradecore.fair.FRESHNESS_S, however late in both windows it is served."""
+    from gradecore import fair
+    return {k: max(0.0, v - 2 * TTL) for k, v in fair.FRESHNESS_S.items()}
+
+
+def default_app():
+    """The first app with a verified payout table (PrizePicks has none recorded: its break-even stays unavailable)."""
+    apps = [e["app"] for e in entries()]
+    return next((a for a in APPS if a in apps), "underdog")
 
 
 def _fair_opts(p):
@@ -211,7 +224,7 @@ def _priced(srv, p, now):
         hit = _FAIR.get(fkey)
         if hit is not None and now - hit[0] < TTL:
             return legs, hit[1]
-    opts = _fair_opts(p)
+    opts = dict(_fair_opts(p), freshness=price_limits())
     out, readers = {}, {}
     for leg in legs:
         if leg["sport"] not in MARKET_SPORTS or not leg["book_rows"]:
@@ -267,7 +280,7 @@ def build(srv, p, allowed, now=None):
         p_np = ev_board.no_push(leg["p_model"], leg["p_model_other"])
         base = {k: leg[k] for k in ("key", "sport", "app", "side", "line", "player", "team", "event", "start_utc", "stat_label",
                                    "period_label", "revision")}
-        base.update(app_label=APP_LABEL[app], multiplier=leg["multiplier"], be=None if be is None else round(be, 4),
+        base.update(app_label=APP_LABEL[app], multiplier=leg["multiplier"], be=None if be is None else round(be, 6),
                     american=None if be is None else round(payouts.american_of(be)),
                     p_model=None if leg["p_model"] is None else round(float(leg["p_model"]), 4),
                     ev_model=None if p_np is None or be is None else round(fair.leg_ev(p_np, be), 4))
@@ -291,8 +304,10 @@ def build(srv, p, allowed, now=None):
     model_rows.sort(key=lambda r: (r.get("ev_model") is None, -(r.get("ev_model") or 0.0)))
     used = sorted({s["book"] for r in rows for s in r["sources"]} | set(labels))
     src = cfg.get(app) or {}
+    verified = {e["app"] for e in entries()}
     return {"as_of": wb._iso(now), "app": app, "app_label": APP_LABEL[app], "entry": entry, "n": n,
-            "break_even": None if entry_be is None else round(entry_be, 4),
+            "apps": [a for a in APPS if a in verified],
+            "break_even": None if entry_be is None else round(entry_be, 6),
             "american": None if entry_be is None else round(payouts.american_of(entry_be)),
             "payout_source": {"source": src.get("source"), "read_at": src.get("read_at"), "version": src.get("version")},
             "params": {"preset": p[3], "method": p[4], "min_books": p[5], "req": list(p[6]), "weights": dict(p[7]),
@@ -301,7 +316,7 @@ def build(srv, p, allowed, now=None):
                         "books": [{"id": b, "label": labels.get(b, b.title())} for b in used],
                         "weight_choices": list(ev_board.WEIGHT_CHOICES), "min_liq_choices": list(ev_board.MIN_LIQUIDITY_CHOICES),
                         "max_width_choices": list(ev_board.MAX_WIDTH_CHOICES), "min_books_max": ev_board.MIN_BOOKS_MAX,
-                        "freshness_s": dict(fair.FRESHNESS_S), "max_spread": fair.MAX_SPREAD},
+                        "freshness_s": price_limits(), "max_spread": fair.MAX_SPREAD},
             "plays": plays, "rows": rows[:MAX_ROWS], "rows_total": len(rows), "model_only": model_rows[:MAX_MODEL_ROWS],
             "model_only_total": len(model_rows), "hidden": {"count": sum(hidden.values()), "by": hidden,
                                                              "text": ev_board.hidden_banner(hidden)},

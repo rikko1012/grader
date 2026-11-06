@@ -142,8 +142,10 @@ def at_line(p_over_quote, quote_line, line, reader=None):
         return {"over": p_over_quote, "under": 1.0 - p_over_quote, "push": None, "shifted": False}
     if reader is None:
         return None
-    o, u, p = _split(reader(float(quote_line), float(p_over_quote), float(line)))
-    return {"over": o, "under": u, "push": p, "shifted": abs(float(line) - float(quote_line)) > 1e-9}
+    got = reader(float(quote_line), float(p_over_quote), float(line))
+    o, u, p = _split(got)
+    return {"over": o, "under": u, "push": p, "shifted": abs(float(line) - float(quote_line)) > 1e-9,
+            "far": bool(got.get("far")) if isinstance(got, dict) else False}
 
 
 def _no_push(r, side):
@@ -208,6 +210,10 @@ def fair_chance(quotes, side, line, now, *, weights=None, preset="equal", method
         r = at_line(p_over_q, q.line, line, reader)
         if r is None:
             drop(q, "different line and no line-shift shape")
+            continue
+        if r.get("far"):
+            # beyond line_shift.GAP_WARN the shape is read far from the price: usually a different market, never an edge
+            drop(q, "different line too far")
             continue
         if q.kind == "sportsbook" and method == "worst":
             # Worst case for the CHOSEN side at the pick'em line: read every method through the shift, keep the lowest.

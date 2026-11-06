@@ -367,9 +367,11 @@ def _build(srv):
     if not any(docs.values()):
         raise RuntimeError("no board")
     records, index, props = [], {}, {}
+    cells = _parity_cells(srv, {x.get("graded_model") for p in docs.values() for x in (p or {}).get("rows") or []}) if board_parity.rows_on() else {}
     for bk, p in docs.items():
         for x in (p or {}).get("rows") or []:
-            rec = board_parity.attach(record_of(x))      # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
+            rec = record_of(x)                           # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on;
+            board_parity.attach(rec, rated=_parity_rated(x, rec, cells))   # EV / band / size only where the slip would rate it
             records.append(rec)
             index[(_book(x), str(x.get("id")))] = x
             props.setdefault((rec["event"]["id"], rec["player"]["key"], x.get("prop"), x.get("scope") or "12"), []).append((_book(x), str(x.get("id"))))
@@ -610,15 +612,20 @@ def _dup_checks(legs, results, st, member):
         r["ok"] = not r["problems"]
 
 
-def _gate(srv):
-    """gate_from_export's answer, or None when the export cannot be read: ev_status names that, never a count of zero."""
+def _gate(srv, tags=None):
+    """gate_from_export's answer, or None when the export cannot be read: ev_status names that, never a count of zero.
+    tags: the model versions to read (default: the current board snapshot's). The board build passes the rows it is building,
+    so the first build after a restart is rated too; the steady-state tag set is the same key, so both share one read."""
+    if tags is None:
+        tags = {x.get("graded_model") for x in (_SNAP["index"] or {}).values()}
+    tags = frozenset(t for t in tags if t)
+
     def compute():
         ex = getattr(srv, "_p1_export_printed", srv._p1_export)() or {}      # ec-1: bands at the printed chance
-        tags = {x.get("graded_model") for x in (_SNAP["index"] or {}).values()}
         at = _ts(ex.get("at")) if ex.get("at") else None
         return 200, rules.gate_from_export(ex, tags, at.timestamp() if at else None)
     try:
-        return srv.shared(("ws_ev_gate",), compute, ttl=900)[1]
+        return srv.shared(("ws_ev_gate", tuple(sorted(tags))), compute, ttl=900)[1]
     except Exception:
         return None
 
@@ -658,18 +665,52 @@ def _v2_leg(platform, r):
     return {"p": p, "match_key": None if x.get("match") is None else f"{sport}:{x['match']}", "unpriced": unpriced}
 
 
-def _slip_header_v2(platform, ls, results):
-    """SCOUT_SLIP_HEADER_V2: payout, win chance, EV, Kelly units and per-leg break-even for every entry type of this platform
+V2_KEEP_UNRATED = ("entry", "n", "payout", "tiers", "break_even", "break_even_american")
+V2_DROP = ("kelly_units", "kelly_fraction")       # no Kelly on the member slip until the owner approves it (one stake per line)
+
+
+def _v2_unrated(t, reason):
+    """An entry type the live EV check refuses: its payout and break-even only, the check's own reason, no chance or EV."""
+    return dict({k: t[k] for k in V2_KEEP_UNRATED if k in t}, rated=False, reason=reason)
+
+
+def _v2_build(platform, legs):
+    from gradecore import slip_header as gsh    # imported only with the flag on: a flag-off process never loads it
+    head = gsh.header(legs, platform)
+    if head:
+        for t in head["types"].values():
+            for k in V2_DROP:
+                t.pop(k, None)
+    return head
+
+
+def _slip_header_v2(platform, ls, results, ev_for=None, srv=None):
+    """SCOUT_SLIP_HEADER_V2: payout, chance all hit, average return and per-leg break-even for every entry type of this platform
     (so the Power / Flex toggle repaints without a request), from server-checked legs only: 2+ legs, every leg passing its
-    checks. Any failure leaves the header out; the entry, its checks and its EV are unchanged either way."""
+    checks. An entry type is RATED only where the live EV check (rules.ev_status via ev_for(entry type), the same held-letter,
+    sport, whole-line, multiplier, same-match and settled-results steps) gives an EV; otherwise it shows that check's reason.
+    One build per leg set for CHECK_TTL_S (srv.shared), not one per member. Any failure leaves the header out; the entry, its
+    checks and its EV are unchanged either way."""
     try:
         rs = [results[l["id"]] for l in ls]
         if len(rs) < 2 or not all(r.get("ok") and r.get("_ev") for r in rs):
             return None
-        from gradecore import slip_header as gsh    # imported only with the flag on: a flag-off process never loads it
-        head = gsh.header([_v2_leg(platform, r) for r in rs], platform)
-        if head and platform == "underdog" and len(rs) == 4 and "flex" in head["types"]:
+        legs = [_v2_leg(platform, r) for r in rs]
+        if srv is not None and hasattr(srv, "shared"):
+            key = ("ws_slip_h2", platform, json.dumps(legs, sort_keys=True, default=str))
+            head = srv.shared(key, lambda: (200, _v2_build(platform, legs)), ttl=CHECK_TTL_S)[1]
+        else:
+            head = _v2_build(platform, legs)
+        if not head:
+            return None
+        head = json.loads(json.dumps(head))           # the shared copy is never changed
+        if platform == "underdog" and len(rs) == 4 and "flex" in head["types"]:
             head["types"]["flex"] = {"entry": "flex", "n": 4, "rated": False, "reason": UD_FLEX4_REASON}
+        if ev_for is not None:
+            for name, t in list(head["types"].items()):
+                ev = ev_for(name) or {}
+                if not ev.get("available"):
+                    head["types"][name] = _v2_unrated(t, ev.get("reason") or "This entry can't be rated.")
         return head
     except Exception:
         return None
@@ -759,8 +800,14 @@ def run_check(srv, member, legs, entry_types, now=None, allowed=None):
                     e["ev"]["header"] = head
         else:
             e["ev"] = {"available": False, "reason": "This entry has not passed its checks."}
-        if slip_header_v2_on(os.environ):
-            head2 = _slip_header_v2(platform, ls, results)
+        if slip_header_v2_on(os.environ) and e["rule_ok"] and legs_ok:
+            memo = {e["entry_type"]: e["ev"]}         # ev_legs here already carry the lc-1 hold (_held_leg above)
+
+            def ev_for(name, _p=e["platform"], _l=ev_legs, _m=memo):
+                if name not in _m:
+                    _m[name] = rules.ev_status(_p, name, _l, gate, now.timestamp())
+                return _m[name]
+            head2 = _slip_header_v2(platform, ls, results, ev_for, srv)
             if head2:
                 e["slip_header"] = head2
         if e["trackable"]:
@@ -1092,6 +1139,29 @@ def _board_columns(srv=None):
     return {"ud_standard_break_even": payouts.break_even("underdog", "standard", 2), "entry": "Underdog standard 2-pick",
             "source": payouts.UD_SOURCE, "read_at": payouts.UD_READ_AT,
             "edge_cells": cells, "min_chance": rules.EV_MIN_CHANCE}
+
+
+def _parity_cells(srv, tags=None):
+    """SCOUT_PARITY_* rows: rules.edge_cells, raw tag|prop|scope keys (leg_edge_ok's). Held CS2 letters or any failure: none,
+    so no row is rated. Read once per board build, from the same cached gate the slip check uses."""
+    if lc.contained("cs2"):
+        return {}
+    try:
+        return rules.edge_cells(_gate(srv, tags), time.time())
+    except Exception:
+        return {}
+
+
+def _parity_rated(x, rec, cells):
+    """True only where the live slip check would rate this single CS2 leg (rules.leg_edge_ok: half-point line, saved chance
+    at 57%+ on Scout's side, a 1.0x pick, a chance band that passed the settled-results check) and its letter is not held."""
+    if not cells or rec["scout"].get("letter_held") or not rec["scout"].get("side"):
+        return False
+    side = rec["scout"]["side"]
+    leg = {"sport": "cs2", "line": x.get("line"), "p": x.get("p"), "on_side": True,
+           "multiplier": x.get("higher") if side == "over" else x.get("lower"), "tag": x.get("graded_model"),
+           "prop": x.get("prop"), "scope": x.get("scope") or "12"}
+    return rules.leg_edge_ok(leg, cells)
 
 
 def _extra_books():
@@ -1913,7 +1983,7 @@ def _record_for(h, srv, sport, book, rid):
 def post_report_problem(h, srv, q, member, scratch, name, n):
     """SCOUT_PARITY_REPORT: a member's "Report a problem" on one board line -> data_issues in the workspace store. Rate limited;
     the line must be on the board now. Nothing on the board changes: the owner reviews the rows."""
-    if not board_parity.on("report"):
+    if not board_parity.on("report"):              # not reached: handle() registers the route only while the flag is on
         h.rfile.read(n)
         return h.send(403, {"error": "forbidden"})
     if n > 4096:
@@ -1936,7 +2006,8 @@ GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "re
        "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
        "book-lines": get_book_lines, "pickem-ev": get_pickem_ev}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
-        "book-line":post_book_line, "slip-advice": post_slip_advice, "report-problem": post_report_problem}
+        "book-line":post_book_line, "slip-advice": post_slip_advice}
+FLAGGED_POST = {"report-problem": ("report", post_report_problem)}   # SCOUT_PARITY_REPORT only: off = the unknown-route answer
 
 
 GENIE = {"GET": get_genie, "POST": post_genie}       # SCOUT_GENIE=1 only: off, "genie" is the unknown-route answer
@@ -1948,6 +2019,8 @@ def handle(h, srv, method, path, q, n=0, prefix=None):
     fn = (GET if method == "GET" else POST).get(name)
     if fn is None and name == "genie" and os.environ.get("SCOUT_GENIE") == "1":
         fn = GENIE["GET" if method == "GET" else "POST"]
+    if fn is None and method == "POST" and name in FLAGGED_POST and board_parity.on(FLAGGED_POST[name][0]):
+        fn = FLAGGED_POST[name][1]
     if fn is None:
         if method == "GET":
             return h.send(404, {"error": "not found"})

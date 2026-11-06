@@ -3,6 +3,10 @@ payouts.tiers / entry_break_even (verified tables), slip.slip_ev (Poisson-binomi
 copula, 20k seeded draws, 95% interval) where a validated same-match correlation exists, slip.stake (quarter-Kelly, display
 only) and fair.leg_ev. Every entry type of the book is computed in one call so the Power / Flex toggle needs no new request.
 
+The server (workspace_api._slip_header_v2) rates an entry type only where the live EV check (workspace_rules.ev_status: held
+letters, sports without a validated record, whole-number lines, multipliers, same-match picks, settled results) gives an EV,
+and drops the Kelly fields before the slip sees them (one stake per line; owner decision pending).
+
 Each leg's chance is the chance the board prints (the spec's p_cal while calibration is off). A leg without one is unrated
 and the header says how many; a same-match pair without a validated correlation cannot be rated. Nothing here places a slip,
 changes a grade or sizes a grader stake.
@@ -44,10 +48,10 @@ def entry_header(legs, book, entry, correlation=no_correlation, kelly=gslip.KELL
     if unpriced:
         return dict(out, reason=unpriced)
     be = payouts.entry_break_even(book, entry, n, config)
-    out.update(payout=t.get(n), tiers={str(k): v for k, v in sorted(t.items())}, break_even=_r(be),
+    out.update(payout=t.get(n), tiers={str(k): v for k, v in sorted(t.items())}, break_even=_r(be, 6),
                break_even_american=None if be is None else round(payouts.american_of(be)))
     probs = [_chance(l) for l in legs]
-    out["legs"] = [{"index": i, "p": _r(p), "need": _r(be), "below": p is not None and be is not None and p < be,
+    out["legs"] = [{"index": i, "p": _r(p), "need": _r(be, 6), "below": p is not None and be is not None and p < be,
                     "ev": _r(fair.leg_ev(p, be)) if p is not None and be is not None else None} for i, p in enumerate(probs)]
     unrated = sum(p is None for p in probs)
     if unrated:

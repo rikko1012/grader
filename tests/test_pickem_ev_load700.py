@@ -69,6 +69,8 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
             codes.extend(r)
     took = time.time() - t0
     assert codes.count(200) == len(codes), {c: codes.count(c) for c in set(codes)}
-    assert len(builds) == 2 and max(builds.values()) <= 2, builds            # one build per app parameters, not one per member
+    # PrizePicks payouts are unverified, so ?app=prizepicks (the default) and ?app=underdog normalise to the same Underdog
+    # parameters: one build for all 700 members, not one per member
+    assert len(builds) == 1 and max(builds.values()) <= 2, builds
     assert priced[0] <= 2 * 2 * len(items), priced                          # each leg-side priced once per window (both apps share it)
     assert took < 120, took

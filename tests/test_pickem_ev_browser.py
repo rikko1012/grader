@@ -1,6 +1,7 @@
-"""SCOUT_PICKEM_EV in a real browser at 1440 and 390: flag off = no +EV route, card or link; flag on = the #/ev board with the
-app picker, entry picker (need X%), market-priced legs with expandable books, the hidden-plays banner, the filters drawer and the
-model-only list. Real Handler + the isolated fixtures of test_upgrade_browser (no network). Set PICKEM_EV_SHOTS=<folder> to keep
+"""SCOUT_PICKEM_EV in a real browser at 1440 and 390: flag off = no Best prices route, card or link; flag on = the #/ev board with
+the app picker (verified payouts only: Underdog; PrizePicks stays unavailable), entry picker (need X%), market-priced legs with
+expandable books, the hidden-plays banner, the filters drawer and the no-book-price list. Every control at least 40px tall, plain
+words only. Real Handler + the isolated fixtures of test_upgrade_browser (no network). Set PICKEM_EV_SHOTS=<folder> to keep
 screenshots."""
 import json
 import os
@@ -41,15 +42,24 @@ def nba(pkey, name, stat, label, line, app, p_over, books, mult=None):
     return r, rows
 
 
+UD = "underdog"
 ITEMS = [
-    nba("a", "Austin Reaves", "points", "Points", 20.5, "prizepicks", 0.58, [("fanduel", 20.5, "devig", 1.45, 2.85, 40), ("betrivers", 19.5, "devig", 1.40, 3.00, 70),
+    nba("a", "Austin Reaves", "points", "Points", 20.5, UD, 0.58, [("fanduel", 20.5, "devig", 1.45, 2.85, 40), ("betrivers", 19.5, "devig", 1.40, 3.00, 70),
                                                                              ("kalshi", 20.5, "mid", "0.64 / 0.66", None, 30)]),
-    nba("b", "Jaylen Brown", "rebounds", "Rebounds", 6.5, "prizepicks", 0.47, [("fanduel", 6.5, "devig", 2.20, 1.68, 50), ("oddsapi:draftkings", 6.5, "devig", 2.15, 1.72, 80)]),
-    nba("c", "Derrick White", "assists", "Assists", 4.5, "prizepicks", 0.51, [("fanduel", 4.5, "devig", 1.91, 1.91, 60)]),
-    nba("d", "Jayson Tatum", "points", "Points", 27.5, "prizepicks", None, [("fanduel", 27.5, "devig", 1.5, 2.8, 5000), ("betrivers", 27.5, "devig", 1.5, 2.8, 6000)]),
-    nba("e", "LeBron James", "assists", "Assists", 7.5, "prizepicks", 0.66, []),
-    nba("f", "Austin Reaves", "points", "Points", 20.5, "underdog", 0.58, [("fanduel", 20.5, "devig", 1.62, 2.40, 40)], mult=1.04),
+    nba("b", "Jaylen Brown", "rebounds", "Rebounds", 6.5, UD, 0.47, [("fanduel", 6.5, "devig", 2.20, 1.68, 50), ("oddsapi:draftkings", 6.5, "devig", 2.15, 1.72, 80)]),
+    nba("c", "Derrick White", "assists", "Assists", 4.5, UD, 0.51, [("fanduel", 4.5, "devig", 1.91, 1.91, 60)]),
+    nba("d", "Jayson Tatum", "points", "Points", 27.5, UD, None, [("fanduel", 27.5, "devig", 1.5, 2.8, 5000), ("betrivers", 27.5, "devig", 1.5, 2.8, 6000)]),
+    nba("e", "LeBron James", "assists", "Assists", 7.5, UD, 0.66, []),
+    nba("f", "Austin Reaves", "points", "Points", 20.5, "prizepicks", 0.58, [("fanduel", 20.5, "devig", 1.62, 2.40, 40)]),
 ]
+for _r, _ in ITEMS:                                   # plain 1.0x Underdog picks (the "f" PrizePicks row stays unpriced)
+    if _r["offer"]["platform"] == UD:
+        _r["offer"]["over"]["payout"] = _r["offer"]["under"]["payout"] = 1.0
+
+SMALL = """() => [...document.querySelectorAll('#hub-ev-body button, #hub-ev-body select, #hub-ev-body input, #hub-ev-body summary, #hub-ev-body .ev-req label, .h-ev-link')]
+  .filter(e => e.offsetParent !== null && e.type !== 'checkbox').map(e => [e.id || e.className || e.textContent.trim().slice(0, 30), e.getBoundingClientRect().height])
+  .filter(([, h]) => h < 39.5)"""
+JARGON = ('+ev', 'kelly', 'shin', 'multiplicative', 'devig', 'vig', 'liquidity', 'spread', 'sharp', 'ev on model', 'model only')
 
 
 @pytest.fixture
@@ -75,7 +85,7 @@ def test_flag_off_has_no_ev_route_card_or_link(ctx, env, monkeypatch):
     p = open_page(ctx, env, '/#scout/tools')
     p.wait_for_selector('#hub-tools-body .h-tool-grid', timeout=30000)
     assert p.locator('#hub-ev-section').count() == 0 and p.locator('.h-ev-link').count() == 0
-    assert 'EV board' not in p.locator('#hub-tools-body').inner_text()
+    assert 'Best prices' not in p.locator('#hub-tools-body').inner_text()
     assert not p.errors
 
 
@@ -85,9 +95,13 @@ def test_ev_board(browser, env, ev_on, size):
     try:
         p = ev_page(c, env, size)
         txt = p.locator('#hub-ev-body').inner_text()
-        assert '+EV board' in txt and 'need 57.7%' in p.locator('#hub-ev-body').inner_html()
+        assert 'Best prices' in txt and 'need 53.5%' in p.locator('#hub-ev-body').inner_html()
         assert '2 plays hidden: 2 with only old prices.' in txt
-        # PrizePicks Power 2: Reaves Over is +EV against the market (shown beside the printed model chance); Only +EV hides the rest
+        # only the verified app is offered: PrizePicks payouts stay unavailable (owner rule 2026-11-04)
+        assert p.locator('[data-ev="app"]').count() == 1 and p.locator('[data-ev="app"][data-id="underdog"]').count() == 1
+        assert p.evaluate("document.querySelector('#ev-entry').value").startswith('standard-')
+        assert 'Flex 2-pick' not in p.locator('#ev-entry').inner_text()
+        # Underdog standard 2: Reaves Over beats the entry against the market (shown beside Scout's chance); the toggle hides the rest
         rows = p.locator('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row')
         assert rows.count() >= 1 and 'Austin Reaves' in rows.first.inner_text()
         assert not any(w in txt.lower() for w in ('research estimate', 'provisional', 'not validated', 'lock of'))
@@ -98,18 +112,19 @@ def test_ev_board(browser, env, ev_on, size):
         assert 'FanDuel' in src and 'BetRivers' in src and 'read at 20.5' in src
         shot(p, 'ev_board_books', size)
         p.locator('#hub-ev-body .ev-drawer summary').click()
-        assert p.locator('#ev-preset').count() == 1 and p.locator('#ev-method').count() == 1 and p.locator('#ev-min_books').count() == 1
+        assert p.locator('#ev-preset').count() == 1 and p.locator('#ev-method').count() == 0 and p.locator('#ev-min_books').count() == 1
         assert p.locator('[data-ev-req]').count() >= 2 and p.locator('#ev-lo').count() == 1
         shot(p, 'ev_board_filters', size)
+        assert p.evaluate(SMALL) == []                                     # every control at least 40px tall
+        low = p.locator('#hub-ev-body').inner_text().lower()
+        assert not [w for w in JARGON if w in low], [w for w in JARGON if w in low]
         p.locator('[data-ev="evonly"]').first.click()
         p.wait_for_function("document.querySelectorAll('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row').length >= 3")
         p.locator('[data-ev="model"]').click()
         p.wait_for_selector('#hub-ev-body .ev-list-model .ev-row')
-        assert 'Model only' in p.locator('#hub-ev-body .ev-list-model').inner_text()
+        assert 'No book price' in p.locator('#hub-ev-body .ev-list-model').inner_text()
         assert 'LeBron James' in p.locator('#hub-ev-body .ev-list-model').inner_text()
         shot(p, 'ev_board_model_only', size)
-        p.locator('[data-ev="app"][data-id="underdog"]').click()
-        p.wait_for_function("document.querySelector('#ev-entry') && document.querySelector('#ev-entry').value.startsWith('standard-')")
         no_h_scroll(p)
         assert not p.errors
     finally:
@@ -124,3 +139,20 @@ def test_tools_card_and_board_link_open_the_ev_route(ctx, env, ev_on):
     assert p.evaluate('location.hash').endswith('ev')
     assert p.locator('.h-ev-link').count() == 1
     assert not p.errors
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_best_prices_link_is_styled_sized_and_fits(browser, env, ev_on, size):
+    c = context(browser, env, size)
+    try:
+        p = open_page(c, env, '/#scout/board?sport=cs2', size)
+        p.wait_for_selector('.h-ev-link', timeout=30000)
+        box = p.evaluate("""() => {const e=document.querySelector('.h-ev-link'), r=e.getBoundingClientRect(), s=getComputedStyle(e);
+          return {h: r.height, w: r.width, right: r.right, left: r.left, vw: innerWidth, text: e.textContent.trim(), border: s.borderTopStyle}}""")
+        assert box['h'] >= 40 and box['w'] >= 40 and box['left'] >= 0 and box['right'] <= box['vw'], box
+        assert box['text'] == 'Best prices' and box['border'] == 'solid', box
+        no_h_scroll(p)
+        shot(p, 'ev_link', size)
+        assert not p.errors
+    finally:
+        c.close()

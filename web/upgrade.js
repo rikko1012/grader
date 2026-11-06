@@ -607,12 +607,9 @@
     const metric = (value, label, cls) => `<div><b${cls ? ` class="${cls}"` : ""}>${value}</b><span>${label}</span></div>`;
     const need = t.break_even != null ? `<p class="u-need">Each leg needs <b>≥ ${pct(t.break_even)}</b>${t.break_even_american != null ? ` (${t.break_even_american > 0 ? "+" : ""}${esc(t.break_even_american)})` : ""}</p>` : "";
     if (!t.rated) return `<div class="u-head2" data-entry="${esc(t.entry)}">${t.payout != null ? `<div class="u-slip-metrics u-slip-head">${metric(esc(t.payout) + "×", "Payout")}</div>` : ""}${need}<p class="u-cant">${esc(t.reason || "Can't rate this entry.")}</p></div>`;
-    const range = (lo, hi, f) => (lo != null && hi != null ? `<small>${f(lo)} to ${f(hi)}</small>` : "");
-    const values = metric(esc(t.payout) + "×", "Payout") + metric(pct(t.win) + range(t.win_low, t.win_high, pct), "Win (no push)")
-      + metric(signed(t.ev) + range(t.ev_low, t.ev_high, signed), "True EV", t.ev > 0 ? "u-pos" : t.ev < 0 ? "u-neg" : "")
-      + metric(`${esc(Number(t.kelly_units).toFixed(1))}u`, "Kelly ¼ units");
-    const basis = t.correlated ? `Same-match picks: correlated EV, ${esc(t.basis)}, 95% range shown.` : "Scout's printed chances, pushes left out.";
-    return `<div class="u-head2" data-entry="${esc(t.entry)}"><div class="u-slip-metrics u-slip-head u-four">${values}</div>${need}<p class="u-dim">${basis} Kelly sizing is for your own display; 1 unit = 1% of bankroll.</p></div>`;
+    const values = metric(esc(t.payout) + "×", "Payout") + metric(pct(t.win), "Chance all hit")
+      + metric(signed(t.ev), "Average return", t.ev > 0 ? "u-pos" : t.ev < 0 ? "u-neg" : "");
+    return `<div class="u-head2" data-entry="${esc(t.entry)}"><div class="u-slip-metrics u-slip-head">${values}</div>${need}<p class="u-dim">From the chances Scout shows on each pick. Average return is per entry, not a win chance.</p></div>`;
   }
   function legHtml(l, phase, link, position, legEv, leg2) {
     const c = phase === "fresh" ? T.check.legs[l.id] : null;

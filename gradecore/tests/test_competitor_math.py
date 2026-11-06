@@ -7,18 +7,32 @@ import random
 import pytest
 
 from gradecore import devig, fair, market_tools, payouts, slip, steam
+from gradecore.tests.pickem_ref import REAL_PICKEM_CONFIG, reference_tables  # noqa: F401  (fixture)
 
 PP_POWER = {2: 3.0, 3: 6.0, 4: 10.0, 5: 20.0, 6: 37.5}
 
 
+@pytest.fixture(autouse=True)
+def _formula_tables(reference_tables):
+    """The formulas below run on the PrizePicks REFERENCE numbers (unverified, so never live): see pickem_ref."""
+    return reference_tables
+
+
 # ----------------------------------------------------------------------------------------------- payout tables
-def test_verified_tables_carry_source_and_read_date():
+def test_tables_carry_source_and_read_date_and_prizepicks_stays_unverified():
     raw = json.loads(payouts.PICKEM_FILE.read_text(encoding="utf-8"))
     for book in ("prizepicks", "underdog"):
-        assert raw[book]["verified"] is True
         assert raw[book]["source"].startswith("https://")
         assert raw[book]["read_at"] and raw[book]["version"]
     assert raw["prizepicks"]["source"] == "https://www.prizepicks.com/help-center/payouts"
+    # owner rule 2026-11-04 (main c865e1b): unknown payouts stay unknown. No recorded in-app / partner-API evidence exists for
+    # the PrizePicks tiers (the partial Flex tiers and Flex 2-pick were never seen in-app), so the live config leaves it out.
+    assert raw["underdog"]["verified"] is True and raw["prizepicks"]["verified"] is False
+    live = REAL_PICKEM_CONFIG()
+    assert live["prizepicks"]["entries"] == {"power": None, "flex": None}
+    assert payouts.entry_break_even("prizepicks", "power", 2, live) is None
+    assert payouts.entry_break_even("prizepicks", "flex", 4, live) is None
+    assert {e["book"] for e in payouts.entry_types(live)} == {"underdog"}
 
 
 def test_prizepicks_tables_match_the_recorded_help_center_reference():
@@ -47,18 +61,19 @@ def test_unverified_book_or_size_is_unavailable(tmp_path, monkeypatch):
     assert payouts.entry_break_even("sleeper", "power", 2) is None
     assert slip.entry_ev([0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6], "prizepicks", "power")["available"] is False
     raw = json.loads(payouts.PICKEM_FILE.read_text(encoding="utf-8"))
-    raw["prizepicks"]["verified"] = False
+    raw["underdog"]["verified"] = False                  # an unverified file entry adds nothing over CONFIG
     f = tmp_path / "p.json"
     f.write_text(json.dumps(raw), encoding="utf-8")
     monkeypatch.setattr(payouts, "PICKEM_FILE", f)
     payouts._pickem_raw.cache_clear()
-    payouts.pickem_config.cache_clear()
+    REAL_PICKEM_CONFIG.cache_clear()
     try:
-        assert payouts.entry_break_even("prizepicks", "power", 2) is None
-        assert payouts.entry_break_even("underdog", "standard", 2) == pytest.approx(3.5 ** -0.5)
+        live = REAL_PICKEM_CONFIG()
+        assert payouts.entry_break_even("prizepicks", "power", 2, live) is None
+        assert payouts.entry_break_even("underdog", "standard", 2, live) == pytest.approx(3.5 ** -0.5)   # CONFIG base table
     finally:
         payouts._pickem_raw.cache_clear()
-        payouts.pickem_config.cache_clear()
+        REAL_PICKEM_CONFIG.cache_clear()
 
 
 # ----------------------------------------------------------------------------------------------- break-even
