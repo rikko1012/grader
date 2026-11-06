@@ -171,7 +171,7 @@ def test_phone_bottom_tab_bar_and_two_line_cards(ctx, env):
     assert bar.bounding_box()['y'] + bar.bounding_box()['height'] >= 843
     assert p.locator('.h-sidebar').is_hidden() and p.locator('.h-slip').is_hidden()
     heights = p.evaluate("[...document.querySelectorAll('#hub-rows tr[data-record]')].slice(0,6).map(r=>Math.round(r.getBoundingClientRect().height))")
-    assert all(120 <= h <= 160 for h in heights), heights          # was 393px
+    assert all(120 <= h <= 215 for h in heights), heights          # was 393px; 2026-11-06: +~55px for the hit windows' own labelled line
     assert p.locator('#hub-rows tr[data-record]').first.bounding_box()['y'] < 300
     small = p.evaluate(SMALL, '#u-hub')
     assert small == [], small
