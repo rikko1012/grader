@@ -23,6 +23,10 @@ export function mount(C) {
   const P = n => !!PAR?.[n];
   // SCOUT_PICKEM_EV (default off): the pick'em +EV board at #/ev (web/upgrade-ev.js, served only with the flag on)
   const EVB = R.me.features?.pickem_ev === true;
+  /* SCOUT_MARKET_EDGE (owner site audit 2026-11-06): the Market edge column, the best line and price per side across books and the
+     line discrepancy chip on every sport. The server's numbers only (workspace_market_edge.py): the books' chance with their margin
+     removed (2+ books with a current price) minus what one pick needs on that app's 2-pick entry. Never Scout's grade. */
+  const MX = R.me.features?.market_edge && typeof R.me.features.market_edge === 'object' ? R.me.features.market_edge : null;
   const $ = id => document.getElementById(id);
   const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
@@ -32,7 +36,7 @@ export function mount(C) {
   /* A6 (audit 2026-11-05): one sort for every sport, from the Sort menu or a column header. Default: Edge where the Edge column
      exists, else start time. The member's choice is remembered on their account (and on this device until it syncs). */
   const HAS_EDGE=!!COLS||P('edge');
-  const SORTS=[...(HAS_EDGE?[['edge','Edge vs break-even']]:[]),['chance','Scout chance'],['start','Start time'],['l5','L5 hit rate'],['l10','L10 hit rate'],['l20','L20 hit rate'],
+  const SORTS=[...(HAS_EDGE?[['edge','Edge vs break-even']]:[]),...(MX?[['medge','Market edge']]:[]),['chance','Scout chance'],['start','Start time'],['l5','L5 hit rate'],['l10','L10 hit rate'],['l20','L20 hit rate'],
     ...(COLS?[['h2h','H2H hit rate'],['season','Season hit rate']]:[]),['line','Line'],['player','Player name'],...(P('hit_sort')?[['hit','Hit rate vs break-even']]:[])];
   const SORT_KEYS=SORTS.map(x=>x[0]);
   const DEFAULT_SORT=HAS_EDGE?'edge':'start';
@@ -44,7 +48,7 @@ export function mount(C) {
   try{adoptSort(JSON.parse(localStorage.getItem(SORT_LS())||'null'));}catch(e){/* no saved sort on this device */}
   const CARD_TABS=[['overview','Overview'],['lines','Lines'],['stats','Stats'],['ask','Ask']];
   const DESKTOP=matchMedia('(min-width:1101px)');
-  H.extraRecs=[];H.extraState=null;
+  H.extraRecs=[];H.extraState=null;H.mx={};
   H.par={odds:'american',sizing:'quarter',bankroll:null};H.parKeep=null;
   /* owner 2026-11-05: a book shows in the Platform toggle only on a sport tab where it has lines right now. Extra books: the shared
      /book-lines counts (null until the first read, so extra buttons start hidden; a failed read keeps the last good copy). PrizePicks /
@@ -103,7 +107,7 @@ export function mount(C) {
     // never sort by an empty column: with no edge on any shown line, Edge sorting falls back to start time and the sort control says so
     const list=(isExtra(H.book)?H.extraRecs:H.records).filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r));
     const sort=SORT_KEYS.includes(H.sort)?H.sort:DEFAULT_SORT;
-    H.sortFallback=(sort==='edge'&&!list.some(r=>edgeValue(r)!=null))||(sort==='hit'&&!list.some(r=>parOf(r)?.hit))||(WINDOWS.has(sort)&&!list.some(r=>sortValue(r,sort)!=null));
+    H.sortFallback=(sort==='edge'&&!list.some(r=>edgeValue(r)!=null))||(sort==='medge'&&!list.some(r=>mxValue(r)!=null))||(sort==='hit'&&!list.some(r=>parOf(r)?.hit))||(WINDOWS.has(sort)&&!list.some(r=>sortValue(r,sort)!=null));
     H.sortBy=H.sortFallback?'start':sort;
     const asc=H.sortFallback?true:H.sortDir==='asc';
     const byStart=(a,b)=>Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc)||gameKey(a).localeCompare(gameKey(b))||a.player.name.localeCompare(b.player.name);
@@ -113,6 +117,7 @@ export function mount(C) {
       if(H.sortBy==='start') return asc?byStart(a,b):byStart(b,a);
       if(H.sortBy==='player') return (asc?1:-1)*a.player.name.localeCompare(b.player.name)||byStart(a,b);
       if(H.sortBy==='line'||H.sortBy==='chance'||WINDOWS.has(H.sortBy)) return byValue(sortValue(a,H.sortBy),sortValue(b,H.sortBy))||byStart(a,b);
+      if(H.sortBy==='medge') return byValue(mxValue(a),mxValue(b))||byStart(a,b);   /* rows with no market edge last, in either direction */
       if(H.sortBy==='edge'){const x=edgeValue(a),y=edgeValue(b),ea=P('edge')&&!!evOf(a),eb=P('edge')&&!!evOf(b);   /* rated EV % first, then points */
         return x==null&&y==null?byStart(a,b):x==null?1:y==null?-1:(eb-ea)||(asc?x-y:y-x)||byStart(a,b);}
       /* SCOUT_PARITY_HIT_SORT: hit rate minus break-even (the server's key); a line whose hit rate is under its break-even sorts after
@@ -317,7 +322,6 @@ export function mount(C) {
   /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters say Research grade */
   function gradeChip(r) {
     const s=r.scout;
-    if(C.oneSided(r)) return `<span class="h-grade-text h-one-sided">${esc(C.oneSided(r))}</span>`;
     if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
     if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
     if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance" title="Scout\u2019s chance at this line">Chance at this line</span>';   /* short on the row (follow-up 2026-11-06: was cut off); the card keeps the full sentence */   /* audit 2026-11-05: another book's line, same saved distribution */
@@ -341,13 +345,82 @@ export function mount(C) {
     const t=`Scout's chance ${pct(r.scout.p_side)} is under the ${num(b.be)?pct(b.be)+' ':''}break-even of a ${b.entry}`;
     return `<small class="h-below" title="${esc(t)}" aria-label="${esc(t)}">Below break‑even</small>`;
   }
+  /* ---- SCOUT_MARKET_EDGE: display of the server's numbers only ---- */
+  const mxDoc = r => MX?H.mx[r.sport]||null:null;
+  const mxRow = r => mxDoc(r)?.rows?.[r.offer.platform+'|'+r.offer.offer_id]||null;
+  const mxValue = r => {const v=mxRow(r)?.fav;return v&&num(v.edge)?v.edge*100:null;};
+  const ptsText = e => `${e>0?'+':e<0?'−':'±'}${Math.abs(e*100).toFixed(1)}`;
+  const MX_WHY = () => `The books’ chance for a side with their margin removed (at least ${MX?.min_books||2} books with a current price), minus what one pick needs to break even (${Object.values(MX?.entries||{}).map(e=>`${e.label} ${pct(e.be)}`).join(', ')}), in points. Shown for the side the books favour, and for Scout’s side too when Scout picks the other one. This is the books’ number, not Scout’s grade.`;
+  function mxWhy(r) {
+    const x=mxRow(r), d=mxDoc(r);
+    if(x?.why)return x.why;
+    if(d?.why)return d.why;
+    if(r.extra||!['prizepicks','underdog'].includes(r.offer.platform))return 'Market edge is measured on PrizePicks and Underdog lines.';
+    return 'No sportsbook prices this line right now.';
+  }
+  const mxSay = v => `the books give the ${sideWord(v.side)} ${pct(v.p)} (${v.books.join(', ')})${num(v.be)?`; ${/^[AEIOU]/i.test(v.entry)?'an':'a'} ${v.entry} needs ${pct(v.be)} a pick, so ${ptsText(v.edge)} points`:'; no published break-even for this payout'}`;
+  function mxTitle(r) {
+    const x=mxRow(r);if(!x?.fav)return mxWhy(r);
+    const scout=x.scout?` For Scout’s side, ${mxSay(x.scout)}.`:x.scout_why&&r.scout.side?` Scout’s side (${sideWord(r.scout.side)}): ${x.scout_why}`:'';
+    return `Market edge: ${mxSay(x.fav)}.${scout} The books’ number, not Scout’s grade.`;
+  }
+  /* one cell: the favoured side's edge (green only when positive; a negative one is shown in plain text, never hidden) and, when Scout
+     picks the other side, that side's edge on its own line */
+  function mxCell(r) {
+    if(!mxDoc(r))return '<span class="h-medge h-medge-wait" aria-hidden="true"></span>';
+    const x=mxRow(r), v=x?.fav;
+    if(!v||!num(v.edge)){const w=mxWhy(r);return `<span class="h-medge empty" title="${esc(w)}" aria-label="${esc('Market edge: '+w)}">—</span>`;}
+    const t=mxTitle(r), sc=x.scout&&num(x.scout.edge)?x.scout:null;
+    return `<span class="h-medge-wrap" title="${esc(t)}" aria-label="${esc(t)}"><span class="h-medge${v.edge>0?' positive':''}"><b>${ptsText(v.edge)}</b><small>pts</small></span><small class="h-medge-side">${sideWord(v.side)}</small>${sc?`<small class="h-medge-side h-medge-scout${sc.edge>0?' positive':''}">Scout ${sc.side==='over'?'↗':'↘'}${ptsText(sc.edge)}</small>`:''}</span>`;
+  }
+  /* wide desktop: the Edge column holds both numbers, each labelled (Scout's edge as before, then the books' edge with an arrow for its
+     side), so the board keeps the player's name; the separate Market edge column is used where the Edge column steps aside
+     (1101-1280px) and on the phone card's own line */
+  function booksLine(r) {
+    if(!mxDoc(r))return '<span class="h-edge-books" aria-hidden="true"></span>';
+    const v=mxRow(r)?.fav;
+    if(!v||!num(v.edge)){const w=mxWhy(r);return `<span class="h-edge-books empty" title="${esc(w)}" aria-label="${esc('Market edge: '+w)}"><i>Books</i>—</span>`;}
+    const t=mxTitle(r);
+    return `<span class="h-edge-books" title="${esc(t)}" aria-label="${esc(t)}"><i>Books</i><b class="h-medge${v.edge>0?' positive':''}">${v.side==='over'?'↗':'↘'}${ptsText(v.edge)}</b></span>`;
+  }
+  /* best line and price per side across every book (Over: the lowest line, then the payout needing the lowest chance; Under: the highest) */
+  const propKeyOf = r => [r.event.id,r.player.key,r.market.stat,r.market.period].join('|');
+  const bestOf = r => mxDoc(r)?.props?.[propKeyOf(r)]||null;
+  const bestText = (x,sd) => `${sd==='over'?'O':'U'}\u2009${x.line} ${x.short}${x.price?'\u2009'+x.price:''}`;   /* thin spaces: the price fits the 90px button */
+  const bestSay = (x,sd) => `Best ${sideWord(sd)}: ${x.label} ${x.line}${x.price?` at ${x.price}`:''}${num(x.needs)?` (needs ${pct(x.needs)} a pick)`:''}`;
+  /* line discrepancy (owner 2026-10-19, CS2 chip ca84528, now every sport): another book's standard line for the same player, stat and
+     game at least gap_min away from this line. Facts only: which line is easier depends on the side; payouts can differ. */
+  function gapOf(r) {
+    /* on the pick'em lines a member enters (PrizePicks, Underdog, Sleeper, Dabble), as the CS2 chip; never on an exchange's ladder rung */
+    const pickem=['prizepicks','underdog'].includes(r.offer.platform)||r.extra?.kind==='pickem';
+    const b=bestOf(r), L=Number(r.offer.line);if(!pickem||!b||r.market.line_type!=='standard'||!Number.isFinite(L))return null;
+    let far=null;
+    for(const [label,line,book] of b.ls||[]){if(book===r.offer.platform)continue;const d=Number(line)-L;
+      const app=['prizepicks','underdog'].includes(book);   /* at an equal distance, the other pick'em app first (as the CS2 chip) */
+      if(Math.abs(d)>=(MX.gap_min||1)-1e-9&&(!far||Math.abs(d)>Math.abs(far.d)+1e-9||(Math.abs(d)>Math.abs(far.d)-1e-9&&app&&!far.app)))far={label,line,book,d,app};}
+    return far?{...far,all:b.ls}:null;
+  }
+  function gapChip(r) {
+    const g=gapOf(r);if(!g)return '';
+    const sd=r.scout.side, easier=sd?` For the ${sideWord(sd)}, the ${sd==='over'?'lower':'higher'} line is the easier one; payouts can differ.`:' For an Over the lower line is the easier one, for an Under the higher one; payouts can differ.';
+    const tip=`Line discrepancy: ${g.label} lists ${g.line} for the same player, stat and ${['cs2','lol'].includes(r.sport)?'maps':'game'}, ${+Math.abs(g.d).toFixed(1)} ${g.d>0?'higher':'lower'} than this line. Lines now: ${g.all.map(x=>x[0]+' '+x[1]).join(' · ')}.${easier}`;
+    return `<span class="h-gap" title="${esc(tip)}" aria-label="${esc(tip)}" tabindex="0">≠ ${esc(g.label)} ${esc(g.line)}</span>`;
+  }
+  /* the board's market-edge doc per sport, read with the board (one shared server build per sport every 30 s); a failed read keeps
+     the last good copy (transient-failure rule) */
+  async function loadMarketEdge(sports) {
+    if(!MX)return;
+    const res=await Promise.allSettled(sports.map(s=>api('market-edge?sport='+encodeURIComponent(s)).then(d=>[s,d])));
+    let got=false;
+    for(const x of res)if(x.status==='fulfilled'&&x.value[1]&&typeof x.value[1]==='object'){H.mx[x.value[0]]=x.value[1];got=true;}
+    if(got){if(H.section==='board')paintBoard();if(cardOpen()&&H.cardTab==='lines')paintDetail();}
+  }
   /* ONE Scout cell: side, chance and the letter (or Lean Over/Under) together. No published side = both chances, no side shown */
   function scoutCell(r) {
     const s=r.scout;
     /* an extra book's line with no saved chance: the cell stays empty (no status sentence, owner rule 2026-10-16); with both chances
        it reads like any other row without a side */
     if(r.extra&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return '';
-    if(C.oneSided(r)) return `<div class="h-scout"><div class="h-direction-options" title="${esc(C.oneSidedNote(r))}"><span class="h-one-sided">${esc(C.oneSided(r))}</span></div></div>`;
     if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>${H.showEdge?'':belowChip(r)}</div>`;
     const both=num(s.p_over)&&num(s.p_under);
     return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
@@ -368,6 +441,15 @@ export function mount(C) {
       sub=lines.length>1?`${lines[0]}–${lines[lines.length-1]}`:`at ${lines[0]}`;
       full=`${main} · ${sub} · `+others.map(x=>`${x.offer.platform_label} ${x.offer.line}${x.market.line_type!=='standard'?' '+C.lineLabel(x):''}`).join(' · ');
     }
+    /* SCOUT_MARKET_EDGE: the best Over and the best Under across every book (sportsbooks and extra books too) replace the line range,
+       which they contain (lowest line for the Over, highest for the Under); the count names every book that lists the prop */
+    const b=bestOf(r);
+    if(b&&(b.over||b.under)){
+      if(b.n>books.size)main=`${b.n} books`;
+      const best=['over','under'].filter(sd=>b[sd]);
+      full=best.map(sd=>bestSay(b[sd],sd)).join(' · ')+' · '+full;
+      return `<button class="h-compare h-compare-best${different(r)?' differ':''}" data-hub="books" data-id="${esc(key(r))}" title="${esc(full)}" aria-label="Compare books and lines for ${esc(r.player.name)}: ${esc(full)}"><b>${esc(main)}</b>${best.map(sd=>`<small class="h-best h-best-${sd}">${esc(bestText(b[sd],sd))}</small>`).join('')}</button>`;
+    }
     return `<button class="h-compare${different(r)?' differ':''}" data-hub="books" data-id="${esc(key(r))}" title="${esc(full)}" aria-label="Compare books and lines for ${esc(r.player.name)}: ${esc(full)}"><b>${esc(main)}</b><small>${esc(sub)}</small></button>`;
   }
   function row(r, group=null) {
@@ -382,13 +464,13 @@ export function mount(C) {
     return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group?'':' is-sub'}${noHits(r)?' h-nohits':''}">
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small><span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
-      <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></div>${toggle}</div></td>
+      <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
       <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
       <td class="h-c-scout">${scoutCell(r)}</td>
-      <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}</td>`:''}
+      <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}${MX?booksLine(r):''}</td>`:''}${MX?`<td class="h-c-medge h-number${mxValue(r)==null?' is-empty':''}">${mxCell(r)}</td>`:''}
       <td class="h-c-compare">${compareCell(r)}</td>
-      <td class="h-c-add">${C.oneSided(r)&&!r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research. ${esc(C.oneSidedNote(r))}" title="${esc(C.oneSidedNote(r))}">Info</button>`:r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research for the ${esc(r.offer.platform_label)} line" title="Research for this line. View only: slips are PrizePicks or Underdog entries">Info</button>`:`<button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button>`}</td></tr>`;
+      <td class="h-c-add">${r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research for the ${esc(r.offer.platform_label)} line" title="Research for this line. View only: slips are PrizePicks or Underdog entries">Info</button>`:`<button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button>`}</td></tr>`;
   }
   /* the game header row: matchup, sport, start and countdown once per game; a click shows only that game (and back) */
   function gameRow(r,list,cols) {
@@ -403,6 +485,7 @@ export function mount(C) {
     return `<tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player" aria-sort="${sortState('player')}">${sortBtn('player','Player')}</th><th class="h-c-market">Market</th><th class="h-c-line" aria-sort="${sortState('line')}">${sortBtn('line','Line')}</th><th class="h-c-proj">Proj.</th><th class="h-c-scout" aria-sort="${sortState('chance')}">${sortBtn('chance','Scout')}</th>`
       +`<th class="h-c-hits"><span class="h-strip h-strip-head">${STRIP.map(([w,l])=>`<i class="h-strip-th" title="${esc(STRIP_TITLE[w])}">${sortBtn(w,l)}</i>`).join('')}</span></th>`
       +(showEdge?`<th class="h-c-edge" title="${esc(EDGE_WHY())}" aria-sort="${sortState('edge')}">${sortBtn('edge','Edge',' <small>vs break-even</small>')}</th>`:'')
+      +(MX?`<th class="h-c-medge" title="${esc(MX_WHY())}" aria-sort="${sortState('medge')}">${sortBtn('medge','Market edge',' <small>books vs break-even</small>')}</th>`:'')
       +'<th class="h-c-compare">Compare</th><th class="h-c-add"><span class="u-sr">Add to slip</span></th></tr>';
   }
   /* audit 2026-11-04: one plain banner when a source feeding the visible sport(s) is behind: its feed is not current, or its newest
@@ -446,10 +529,10 @@ export function mount(C) {
     H.page=Math.min(H.page,pages-1);
     const page=players.slice(H.page*size,(H.page+1)*size);
     H.showEdge=HAS_EDGE;   /* B5: the same columns on every sport tab; a line with no published per-pick payout shows — */
-    $('hub-table').tHead.innerHTML=headHtml(H.showEdge);$('hub-table').classList.toggle('h-has-edge',H.showEdge);
-    const cols=9+(H.showEdge?1:0), headers=H.sortBy==='start';
+    $('hub-table').tHead.innerHTML=headHtml(H.showEdge);$('hub-table').classList.toggle('h-has-edge',H.showEdge);$('hub-table').classList.toggle('h-has-medge',!!MX);
+    const cols=9+(H.showEdge?1:0)+(MX?1:0), headers=H.sortBy==='start';
     /* the default Edge sort falls back to start time quietly; a sort the member chose says why it fell back */
-    $('hub-sort-note').textContent=H.sortFallback&&H.sortChosen?(H.sort==='hit'?'No line on screen has a hit rate and a published payout, so the board is sorted by start time.':H.sort==='edge'?'No line on screen has an edge, so the board is sorted by start time.':`No line on screen has ${sortName(H.sort).replace(' hit rate','')} results, so the board is sorted by start time.`)
+    $('hub-sort-note').textContent=H.sortFallback&&H.sortChosen?(H.sort==='hit'?'No line on screen has a hit rate and a published payout, so the board is sorted by start time.':H.sort==='edge'?'No line on screen has an edge, so the board is sorted by start time.':H.sort==='medge'?'No line on screen has a market edge, so the board is sorted by start time.':`No line on screen has ${sortName(H.sort).replace(' hit rate','')} results, so the board is sorted by start time.`)
       :H.sortBy==='hit'?'Lines whose hit rate is below their break-even are listed last.':'';
     let last=null;
     $('hub-rows').innerHTML=page.map(group=>{const r=group[0],g=gameKey(r),head=headers&&g!==last?gameRow(r,list,cols):'';last=g;
@@ -543,6 +626,7 @@ export function mount(C) {
     H.loading=false; paintBoard(); checkAlerts();
     if(isExtra(H.book))loadExtra();
     loadBookLines();
+    loadMarketEdge(sports);
     openPending();
     if(sports.includes('cs2')) { await C.loadHits(); paintBoard(); pollHits(); }
     if(H.queued){const next=H.queued.filter(x=>visibleSports().includes(x)),f=H.queuedForce;H.queued=null;H.queuedForce=false;if(next.length)load(f,next);}
@@ -793,13 +877,13 @@ export function mount(C) {
     const side=H.histSide, line=r.offer.line, s=r.scout, quotes=C.siblings(r), on=C.onSlip(r);
     const eligible=!r.extra&&H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
     const chance=C.chanceOf(r,side);
-    const pick=C.oneSided(r)?gradeChip(r):s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:s.hold?'<span class="h-grade-text">Research estimate</span>':'';
+    const pick=s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:s.hold?'<span class="h-grade-text">Research estimate</span>':'';
     const opt=q=>`<option value="${esc(key(q))}"${key(q)===key(r)?' selected':''}>${esc(q.offer.platform_label)} ${esc(q.offer.line)}${kindOf(q)?' · '+esc(kindOf(q)):q.market.line_type!=='standard'?' · '+esc(C.lineLabel(q)):''}</option>`;
     return `<label class="h-dec-line"><span>Line</span><select id="hub-card-line" aria-label="Line and book">${quotes.map(opt).join('')}</select></label>
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}${s.side===side?belowChip(r):''}</div>
       <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
-      ${C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
+      ${r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
       ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
   /* ---- "Why Scout leans Over / Under" (owner 2026-11-06: "people have no idea why they should take the props"). Plain facts at the
@@ -1032,9 +1116,24 @@ export function mount(C) {
     const price=v=>v==null?'—':esc(v);
     const mrow=(b,showLine)=>`<tr><td>${esc(b.platform_label)}${showLine?` <small>${esc(b.line)}</small>`:''}</td><td>${price(b.over)}</td><td>${price(b.under)}</td><td>${num(b.chance)?pct(b.chance):'—'}</td></tr>`;
     const market=doc?.market?(doc.market.available?`<p class="h-history-note">Market chance from ${esc(doc.market.source||'the market')}: Over ${pct(doc.market.p_over)}, Under ${pct(doc.market.p_under)}.</p>`:doc.market.reason?`<p class="h-history-note">${esc(doc.market.reason)}</p>`:''):'';
-    return `<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${C.oneSided(q)?esc(C.oneSided(q)):q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}</tbody></table></div>
+    return `${MX?bestLinesHtml(r):''}<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}</tbody></table></div>
       <p class="h-history-note">Choose a line to recount its past results. Each line is its own pick with its own forecast; payouts and availability differ.</p>
       ${extra.length||other.length?`<div class="h-sec-head"><h4>Market books</h4></div><div class="h-scroll-x"><table><thead><tr><th>Book</th><th>Over</th><th>Under</th><th>Its chance</th></tr></thead><tbody>${extra.map(b=>mrow(b,false)).join('')}${other.map(b=>mrow(b,true)).join('')}</tbody></table></div>`:''}${market}</section>`;
+  }
+  /* SCOUT_MARKET_EDGE on the card's Lines tab: the best line and price for each side across every book, the discrepancy chip, and
+     this line's market edge (the books' chance minus the entry's break-even) for both sides the server measured */
+  function bestLinesHtml(r) {
+    const b=bestOf(r), x=mxRow(r);
+    if(!mxDoc(r))return '';
+    const cell=(sd)=>{const v=b?.[sd];if(!v)return `<tr><th scope="row">${sideWord(sd)}</th><td colspan="3">No book lists this side now</td></tr>`;
+      return `<tr><th scope="row">${sideWord(sd)}</th><td><b>${esc(v.line)}</b> <small>${esc(v.label)}</small></td><td>${esc(v.price||(v.book==='underdog'?'1.00x':v.book==='prizepicks'?'Power 2-pick':'—'))}</td><td>${num(v.needs)?pct(v.needs):'—'}</td></tr>`;};
+    const edges=[x?.fav,x?.scout].filter(v=>v&&num(v.p));
+    const edgeLine=v=>`<li><b class="h-medge${num(v.edge)&&v.edge>0?' positive':''}">${sideWord(v.side)} ${num(v.edge)?ptsText(v.edge)+' pts':'—'}</b> <span>${esc(mxSay(v))}${v===x?.scout?' (Scout’s side)':''}.</span></li>`;
+    const why=x?.fav?'':`<p class="h-history-note">${esc(mxWhy(r))}</p>`;
+    return `<section class="h-best-lines"><div class="h-sec-head"><h4>Best line per side</h4>${MX?gapChip(r):''}</div>
+      <div class="h-scroll-x"><table><thead><tr><th>Side</th><th>Best line</th><th>Price</th><th>Needs</th></tr></thead><tbody>${cell('over')}${cell('under')}</tbody></table></div>
+      <p class="h-history-note">Across ${b?.n||1} ${b?.n===1?'book':'books'}: the Over's best line is the lowest, the Under's the highest; at the same line, the payout that needs the lowest chance to break even. Payouts and rules differ by app.</p>
+      <div class="h-sec-head"><h4>Market edge</h4><small>books vs break-even</small></div>${edges.length?`<ul class="h-medge-list">${edges.map(edgeLine).join('')}</ul><p class="h-history-note">The books’ number, not Scout’s grade.</p>`:why}</section>`;
   }
   function statsTabHtml(r) {
     const doc=H.detailDoc, all=(doc?.history?.series||[]).filter(g=>num(g.value));
@@ -1594,11 +1693,11 @@ export function mount(C) {
     'card-tab'(id){if(!CARD_TABS.some(t=>t[0]===id))return;H.cardTab=id;paintDetail();$('hub-card-body').scrollTop=0;$('hub-tab-'+id)?.focus({preventScroll:true});},
     'genie-ask'(q){genieAsk(q);},
     'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id==='under'?'under':'over';paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
-    'detail-add'(){const r=rec(H.detail);if(!r||r.extra)return;if(C.oneSided(r))return;if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;C.addLeg(r,H.histSide);refreshSlip();},
+    'detail-add'(){const r=rec(H.detail);if(!r||r.extra)return;if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;C.addLeg(r,H.histSide);refreshSlip();},
     // alert notices open the same card as the board
     research(id){const r=rec(id);if(!r)return C.say('This offer is no longer on the board. Refresh to see current lines.');if(H.section!=='board')section('board');openCard(id);},
     books(id){if(rec(id))openCard(id,'lines');},
-    add(id){const r=rec(id);if(!r)return;if(r.extra)return openCard(id,'overview');if(C.oneSided(r))return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
+    add(id){const r=rec(id);if(!r)return;if(r.extra)return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
     refresh(){H.detailSeq++;if(cardOpen())closeCard(false);H.bookLinesAt=0;load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},

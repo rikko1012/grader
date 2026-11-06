@@ -42,7 +42,7 @@ def test_desktop_first_row_high_on_the_screen_with_ten_rows_and_one_toolbar(ctx,
     assert m['player'] >= 120, m                                 # the name keeps its width even with the Edge column on
     assert m['first'] <= 200, m                                  # was 512px before the review
     assert m['visible'] >= 10, (m, p.locator('#hub-sources').inner_text(), p.locator('#hub-health').inner_text(), p.locator('.h-table-title').inner_text())   # was 4
-    assert m['toolbarH'] <= 48 and max(m['tops']) - min(m['tops']) <= 2, m   # sport tabs, search, platform, Filters, Views and refresh: one row
+    assert m['toolbarH'] <= 52 and max(m['tops']) - min(m['tops']) <= 2, m   # one row; 52 = the 44px sport tabs (owner site audit 2026-11-06) + 2 x 3px
     assert all(56 <= h <= 64 for h in m['heights']), m           # compact rows (was 123px)
     # the old bands are gone: no matchup chips, no second filter row, no duplicate classic button or More tools group
     assert p.locator('#hub-games, .h-games, .h-tools-menu, .h-classic, .h-nav-mobile, .h-mobile-slip').count() == 0

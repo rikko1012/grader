@@ -48,8 +48,6 @@ def candidates(con, platform, mode="mixed", exclude_roles=(), preview=False, now
         reasons = json.loads(f["slip_reasons"] or "[]")
         hard = [r for r in reasons if not (preview and r.startswith("stake 0U"))]
         why += hard
-        if sh["one_sided"] and forecast.ONE_SIDED_REASON not in why:      # os-1, records saved before it included
-            why.append(forecast.ONE_SIDED_REASON)
         start = forecast._when(f["series_start"])
         if start and start <= now:
             why.append("series started")
@@ -158,10 +156,7 @@ def member_summary(con, sizes=(2, 3), now=None):
         upcoming = [f for f in _latest(con, pl) if (forecast._when(f["series_start"]) or now) > now]
         reasons = {}
         for f in upcoming:
-            rs = json.loads(f["slip_reasons"] or "[]")
-            if forecast.one_sided(f["platform"], f.get("sides")) and forecast.ONE_SIDED_REASON not in rs:
-                rs.append(forecast.ONE_SIDED_REASON)          # os-1: a record saved before it lists its old reasons only
-            for r in rs:
+            for r in json.loads(f["slip_reasons"] or "[]"):
                 reasons[r] = reasons.get(r, 0) + 1
         out["platforms"][pl] = {
             "recommended": [dict(slip, size=r["size"]) for r in res for slip in r["slips"]],

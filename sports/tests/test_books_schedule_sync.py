@@ -12,5 +12,5 @@ def test_book_providers_ladder_matches_the_books_worker():
     cfg = json.loads((ROOT / "book_providers.json").read_text(encoding="utf-8"))
     for pid in ("fanduel", "betrivers"):
         feed = cfg["providers"][pid]["feed"]
-        assert [tuple(x) for x in feed["ladder"]] == [tuple(x) for x in schedule.LADDERS[schedule.DIRECT_DEFAULT]]
+        assert [tuple(x) for x in feed["ladder"]] == [tuple(x) for x in schedule.LADDERS["full"]]
         assert feed["stale_min_s"] == schedule.STALE_MIN_S

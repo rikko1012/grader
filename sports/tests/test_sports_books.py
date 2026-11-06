@@ -353,9 +353,9 @@ def test_worker_fetches_due_games_once_and_stores(db, no_espn):
     p = FakeProvider([_game(), _game("far", "2026-11-05T23:10:00Z")], {"36220759": _offers(event="36220759")})
     s = worker.run_once(db, ("nba",), NOW, {"fake": p}, probe=False)
     assert p.calls == ["36220759"] and s["providers"]["fake"]["new_quotes"] == 2   # the far game is beyond the ladder
-    s = worker.run_once(db, ("nba",), NOW + timedelta(minutes=4), {"fake": p}, probe=False)
+    s = worker.run_once(db, ("nba",), NOW + timedelta(minutes=5), {"fake": p}, probe=False)
     assert p.calls == ["36220759"] and s["providers"]["fake"]["fetched"] == 0       # not due again yet
-    worker.run_once(db, ("nba",), NOW + timedelta(minutes=5), {"fake": p}, probe=False)   # direct ladder: 5 min inside 8 h
+    worker.run_once(db, ("nba",), NOW + timedelta(minutes=31), {"fake": p}, probe=False)
     assert p.calls == ["36220759", "36220759"]
     assert db.one("SELECT event_key FROM sports_book_events WHERE provider_event_id = '36220759'")["event_key"] == "espn:401"
 

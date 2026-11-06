@@ -32,7 +32,6 @@ def dashboard(con):
         "JOIN lol_settlements s ON s.unit_key = lv.unit_key AND s.version = lv.v").fetchall()
     status = defaultdict(int)
     offered_status = defaultdict(int)
-    one_sided_status = defaultdict(int)
     groups = defaultdict(list)
     series = set()
     player_props = set()
@@ -44,24 +43,16 @@ def dashboard(con):
         r = dict(r)
         sh = shown(r)
         status[r["st"]] += 1
-        # os-1 (owner 2026-11-06): a line that offered one side only is never graded, so it is never in the record. Every
-        # record computed from here on leaves it out, the rows settled before included; the saved forecast and its
-        # settlement stay as they are (counted under "one_sided_lines").
-        in_record = sh["side_offered"] == 1 and not sh["one_sided"]
-        if sh["one_sided"]:
-            one_sided_status[r["st"]] += 1
-        if in_record:
+        if sh["side_offered"] == 1:
             offered_status[r["st"]] += 1
-        if sh["side_offered"] == 1 and r['st'] in ('graded','push'):
-            res = 'push' if r['st']=='push' else 'win' if bool(r['over_hit']) == (sh['side']=='over') else 'loss'
-            if in_record:
-                calendar_rows.append({'at':r.get('series_start'),'status':res})
-            # the server's letter containment check (letter_containment.py lc-1, gradecore ct-3): one leg per saved
-            # pre-match forecast on a line that offered Scout's side, at the chance members were shown for that side.
-            # Unchanged by os-1: the evidence behind holding letters is not the member record (an owner decision apart).
-            contain_rows.append({"p": round(float(sh["p_side"]), 6), "status": res,
-                                 "match_key": r.get("sid"), "stat": r.get("stat"), "side": sh["side"],
-                                 "platform": r.get("platform"), "at": r.get("series_start"), "id": r.get("id")})
+            if r['st'] in ('graded','push'):
+                calendar_rows.append({'at':r.get('series_start'),'status':'push' if r['st']=='push' else
+                    'win' if bool(r['over_hit']) == (sh['side']=='over') else 'loss'})
+                # the server's letter containment check (letter_containment.py lc-1, gradecore ct-3): one leg per saved
+                # pre-match forecast on a line that offered Scout's side, at the chance members were shown for that side
+                contain_rows.append({"p": round(float(sh["p_side"]), 6), "status": calendar_rows[-1]["status"],
+                                     "match_key": r.get("sid"), "stat": r.get("stat"), "side": sh["side"],
+                                     "platform": r.get("platform"), "at": r.get("series_start"), "id": r.get("id")})
         if r["st"] != "graded":
             continue
         series.add(r["sid"])
@@ -74,12 +65,12 @@ def dashboard(con):
                     "ll": -(hit * math.log(max(p, 1e-6)) + (1 - hit) * math.log(max(1 - p, 1e-6))), "p": p, "hit": hit,
                     "side_hit": (hit == 1.0) if side == "over" else (hit == 0.0), "p_side": p if side == "over" else 1 - p,
                     "printed": po if side == "over" else pu, "sid": r["sid"], "offered": offered}
-        u = unit(sh["p_over"], sh["p_under"], sh["side"], in_record)
+        u = unit(sh["p_over"], sh["p_under"], sh["side"], sh["side_offered"] == 1)
         units.append(u)
         for key in ("all", f"stat {r['stat']}", f"scope {r['scope']}", f"platform {r['platform']}", f"role {r['role']}",
                     f"grade {sh['grade_label']}", f"model {r['model_version']}",
                     f"fit {r['model_version']} {r['fit_sha']}",
-                    "side offered" if u["offered"] else ("one-sided line (not graded)" if sh["one_sided"] else "side not offered"),
+                    "side offered" if u["offered"] else "side not offered",
                     f"chance shown {sh['cal'] or 'raw'}"):
             groups[key].append(u)
             if u["offered"]:
@@ -120,9 +111,7 @@ def dashboard(con):
               "graded_offered_props": graded, "graded_matches": len(series), "graded_distinct_player_props": len(player_props)}
     from gradecore.calendar import daily_record
     return {"at": store.now_iso(), 'calendar':daily_record(calendar_rows,store.now_iso(),'Series start date · US Central','America/Chicago'), "settled_by_status": dict(status), "counts": counts, "metrics": out,
-            "one_sided_lines": {"rule": "os-1", "settled_by_status": dict(one_sided_status),
-                                "note": "lines that offered one side only: never graded, left out of the record (rows kept)"},
-            "offered_side": {"version": 2, "rule": "os-1: both sides offered", "settled_by_status": dict(offered_status),
+            "offered_side": {"version": 1, "settled_by_status": dict(offered_status),
                              "metrics": {k.removeprefix("offered cohort "): v for k, v in out.items() if k.startswith("offered cohort ")}},
             "series_grouped_95ci": {"all": _grouped_ci(units), "offered_side_only": _grouped_ci([u for u in units if u["offered"]])},
             "containment_rows": [{k: v for k, v in x.items() if k != "id"} for x in

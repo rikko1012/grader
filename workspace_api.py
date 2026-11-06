@@ -1125,6 +1125,7 @@ def _limited(h, srv, bucket, member, limit):
 
 def get_me(h, srv, q, member, scratch, name):
     import workspace_alerts
+    import workspace_market_edge
     return h.send(200, {"member": member, "name": name, "scratch": scratch, "sports": access(h, srv, q), "rules_version": rules.RULES_VERSION,
                         "owner": bool(scratch) or bool(h._sports_owner()),
                         "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1",
@@ -1136,6 +1137,7 @@ def get_me(h, srv, q, member, scratch, name):
                                      **({"genie_persona": True} if os.environ.get("SCOUT_GENIE") == "1" and os.environ.get("SCOUT_GENIE_PERSONA") == "1" else {}),
                                      **_extra_books(), **board_parity.features(),
                                      **({"pickem_ev": True} if os.getenv("SCOUT_PICKEM_EV", "").strip() == "1" else {}),
+                                     **(workspace_market_edge.features() if workspace_market_edge.enabled() else {}),
                                      **({"board_h2h": _board_columns(srv)} if workspace_h2h.board_enabled() else {})}})
 
 
@@ -1285,6 +1287,24 @@ def get_pickem_ev(h, srv, q, member, scratch, name):
     if st != 200:
         return h.send(503, {"error": "pickem_ev_unavailable"})
     return h.send(200, body)
+
+
+def get_market_edge(h, srv, q, member, scratch, name):
+    """SCOUT_MARKET_EDGE: the board's Market edge column and best line per side for one sport (workspace_market_edge), one shared
+    build per sport every 30 s for everyone. Flag off = the unknown-route answer."""
+    import workspace_market_edge as wme
+    if not wme.enabled():
+        return h.send(404, {"error": "not found"})
+    sport = _sport_q(h, srv, q)
+    if sport is None:
+        return h.send(404, {"error": "not found"})
+    try:
+        st, body = wme.shared(srv, sport)
+    except Exception:                                  # noqa: BLE001 - the board stays usable without it
+        return h.send(503, {"error": "market_edge_unavailable"})
+    if st != 200:
+        return h.send(503, {"error": "market_edge_unavailable"})
+    return h.send_shared(("ws_market_edge", sport), 200, body, keep=60)
 
 
 def get_alert_delivery(h, srv, q, member, scratch, name):
@@ -2043,7 +2063,7 @@ def post_report_problem(h, srv, q, member, scratch, name, n):
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
        "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
-       "book-lines": get_book_lines, "pickem-ev": get_pickem_ev}
+       "book-lines": get_book_lines, "pickem-ev": get_pickem_ev, "market-edge": get_market_edge}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
         "book-line":post_book_line, "slip-advice": post_slip_advice}
 FLAGGED_POST = {"report-problem": ("report", post_report_problem)}   # SCOUT_PARITY_REPORT only: off = the unknown-route answer

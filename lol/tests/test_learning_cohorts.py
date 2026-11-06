@@ -38,7 +38,7 @@ def test_evidence_deduplicates_book_lines_and_splits_model_versions(con, tmp_pat
 def test_member_printed_chance_is_not_no_push_probability(con, tmp_path, monkeypatch):
     settle_fixture(con, tmp_path, monkeypatch)
     con.execute("UPDATE lol_forecasts SET p_over=.6, p_under=.3, p_push=.1, cal_version=NULL, sides=?",
-                ('{"higher":{"status":"active","offered":true},"lower":{"status":"active","offered":true}}',))
+                ('{"higher":{"status":"active","offered":true}}',))
     con.commit()
     m = learning.dashboard(con)['offered_side']['metrics']['all']
     assert m['mean_p_side'] == .667

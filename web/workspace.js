@@ -158,8 +158,7 @@
   const rowFlag = (row) => (started(row.lead) ? "started" : "");
   const chanceOf = (rec, side) => (side === "under" ? rec.scout.p_under : side === "over" ? rec.scout.p_over : null);
   function verdict(rec, side) {
-    const s = rec.scout, sd = side || s.side, one = s.hold && ["Over only", "Under only"].includes(s.hold.label) ? s.hold.label : null;
-    if (one) return { html: `<span class="verdict">${one}</span>`, text: one };          /* LoL os-1 / sports cap-2: never graded */
+    const s = rec.scout, sd = side || s.side;
     if (!sd) return { html: '<span class="verdict">No lean</span>', text: "No lean" };
     if (s.side && sd !== s.side) return { html: `<span class="verdict">Scout side is ${cap(s.side)}</span>`, text: `Scout side is ${cap(s.side)}` };
     if (s.hold) return { html: `<span class="verdict">${cap(sd)}</span>`, text: `Research estimate ${cap(sd)}` };

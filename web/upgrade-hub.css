@@ -1280,3 +1280,79 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
  #u-hub .h-card-body>.h-why{padding:10px 10px 8px}
  #u-hub .h-why-list li{font-size:13px;padding:6px 7px}
 }
+
+/* ==== owner site audit 2026-11-06 (SCOUT_MARKET_EDGE + sport tabs) ==== */
+/* B: All, CS2, LoL, NBA and NFL are always visible. The sport tabs get their own full-width toolbar row of equal tabs (44px targets)
+   instead of a strip that shrank beside the search and scrolled sideways with no scrollbar; each count sits in a fixed-width badge, so
+   a count loading or changing never moves a tab. */
+#u-hub .h-toolbar{flex-wrap:wrap}
+#u-hub .h-toolbar .h-sports{order:-1;flex:none;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(56px,1fr);gap:2px;min-width:0;overflow:visible}
+#u-hub .h-toolbar .h-sports button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:44px;min-height:44px;padding:0 4px;font-size:13px;white-space:nowrap;overflow:hidden}
+#u-hub .h-toolbar .h-sports button>span{display:inline-block;flex:none;min-width:3.4ch;margin:0;padding:1px 4px;box-sizing:border-box;text-align:center;border-radius:4px;background:#232a34;font:10px/14px 'DM Mono',monospace;opacity:.8}
+#u-hub .h-toolbar .h-sports button>span.h-n-wait{visibility:hidden}
+@media(max-width:1100px){#u-hub .h-toolbar .h-sports{flex:1 1 100%;grid-auto-columns:minmax(0,1fr);gap:4px}}
+@media(max-width:420px){
+ #u-hub .h-toolbar .h-sports{gap:2px}
+ #u-hub .h-toolbar .h-sports button{flex-direction:column;gap:1px;padding:2px 2px 0;font-size:12px;line-height:15px}
+ #u-hub .h-toolbar .h-sports button>span{padding:0 3px;font-size:9.5px;line-height:13px}
+}
+/* A: Market edge, the books' chance minus the entry's break-even (green only when positive; a negative one is plain text) */
+#u-hub #hub-table .h-c-medge{width:78px;text-align:center}
+#u-hub #hub-table>thead>tr>th.h-c-medge small{display:block;margin:0;font-size:8px;letter-spacing:0;white-space:nowrap}
+#u-hub #hub-table .h-c-medge .h-th-sort{flex-direction:column;align-items:center}
+#u-hub .h-medge-wrap{display:inline-flex;flex-direction:column;align-items:center;gap:1px;cursor:help;min-width:0;max-width:100%}
+#u-hub .h-medge{display:inline-flex;align-items:baseline;gap:3px;font-variant-numeric:tabular-nums;white-space:nowrap;color:#d9e4f2}
+#u-hub .h-medge b{font-size:13px;font-weight:600}
+#u-hub .h-medge small{font-size:10px;color:#8fa2b9}
+#u-hub .h-medge.positive,#u-hub .h-medge-scout.positive{color:#b1e7cb}
+#u-hub .h-medge.empty{color:#6c7b90;cursor:help}
+#u-hub .h-medge-wait{display:inline-block;width:30px;height:12px}
+#u-hub .h-medge-side{display:block;font-size:10px;line-height:12px;color:#8fa2b9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#u-hub .h-medge-scout{font-size:9.5px;color:#aebaca}
+/* C: the best Over and the best Under in the Compare button; the discrepancy chip (lilac, as on the CS2 classic board) under the market */
+#u-hub #hub-table .h-c-compare{width:100px}
+#u-hub #hub-table .h-compare-best small.h-best{display:block;font:10px/13px 'DM Mono',monospace;color:#9fb2c9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#u-hub .h-gap{display:inline-flex;align-items:center;max-width:100%;margin:2px 0 0;padding:0 5px;border:1px dashed #bba5ff66;border-radius:6px;background:#bba5ff14;color:#c9b6ff;font:600 10px/15px Inter,system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help;box-sizing:border-box}
+#u-hub .h-gap:focus-visible{outline:2px solid #7aa2ff;outline-offset:2px}
+#u-hub #hub-table .h-mcell .h-gap{display:table;margin-top:2px}
+#u-hub .h-best-lines{margin:0 0 16px}
+#u-hub .h-best-lines .h-sec-head .h-gap{margin:0 0 0 auto}
+#u-hub .h-best-lines table th[scope=row]{text-align:left;font-weight:600}
+#u-hub .h-medge-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#u-hub .h-medge-list li{padding:6px 8px;border-left:3px solid #33404f;border-radius:3px;background:#18212d;font-size:12.5px;line-height:1.45;color:#d6e0ec}
+#u-hub .h-medge-list li b.h-medge{display:inline;font:600 13px 'DM Mono',monospace;margin-right:4px}
+@media(min-width:1101px) and (max-width:1400px){#u-hub #hub-table .h-c-compare{width:94px}#u-hub #hub-table .h-c-medge{width:72px}}
+/* phone / tablet card: the market edge on its own labelled line above the hit windows; a row with no market edge has no such line */
+@media(max-width:1100px){
+ #u-hub #hub-table.h-has-medge>tbody>tr[data-record],#u-hub.h-cols #hub-table.h-has-medge>tbody>tr[data-record]{grid-template-areas:"player player market watch" "line scout scout add" "proj scout scout compare" "medge medge medge medge" "hits hits hits hits"}
+ #u-hub #hub-table.h-has-edge.h-has-medge>tbody>tr[data-record],#u-hub.h-cols #hub-table.h-has-edge.h-has-medge>tbody>tr[data-record]{grid-template-areas:"player player market market watch" "line scout scout edge add" "proj scout scout edge compare" "medge medge medge medge medge" "hits hits hits hits hits"}
+ #u-hub #hub-table.h-has-medge>tbody>tr[data-record].h-nohits,#u-hub.h-cols #hub-table.h-has-medge>tbody>tr[data-record].h-nohits{grid-template-areas:"player player market watch" "line scout scout add" "proj scout scout compare" "medge medge medge medge"}
+ #u-hub #hub-table.h-has-edge.h-has-medge>tbody>tr[data-record].h-nohits,#u-hub.h-cols #hub-table.h-has-edge.h-has-medge>tbody>tr[data-record].h-nohits{grid-template-areas:"player player market market watch" "line scout scout edge add" "proj scout scout edge compare" "medge medge medge medge medge"}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-medge{grid-area:medge;display:flex;align-items:center;gap:8px;min-width:0;text-align:left;padding-top:4px!important;border-top:1px solid #253041}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-medge:before{content:'MARKET EDGE';flex:none;font:600 10px/1.2 'DM Mono',monospace;letter-spacing:.06em;color:#9fb0c5}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-medge.is-empty{display:none}
+ #u-hub #hub-table td.h-c-medge .h-medge-wrap{flex-direction:row;align-items:baseline;flex-wrap:wrap;gap:2px 8px}
+ #u-hub #hub-table td.h-c-medge .h-medge-side{font-size:11.5px;line-height:15px}
+ #u-hub #hub-table td.h-c-medge .h-medge b{font-size:14px}
+ #u-hub #hub-table .h-c-compare{width:auto}
+ #u-hub #hub-table .h-compare-best{padding-inline:6px}
+ #u-hub #hub-table .h-compare-best small.h-best{font:500 10px/13px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+}
+/* wide desktop (1281px+): one Edge column with both numbers, each labelled - Scout's edge as before, then "Books" with the side's arrow -
+   so the player's name keeps its width; the separate Market edge column shows where the Edge column steps aside (1101-1280px), on the
+   phone card (its own line) and whenever the board has no Edge column */
+#u-hub #hub-table .h-edge-books{display:none}
+@media(min-width:1281px){
+ #u-hub #hub-table.h-has-edge .h-c-medge{display:none}
+ #u-hub #hub-table.h-has-edge td.h-c-edge .h-edge-books{display:flex;align-items:baseline;justify-content:center;gap:3px;margin-top:1px;line-height:13px;white-space:nowrap;cursor:help}
+ #u-hub #hub-table.h-has-edge.h-has-medge td.h-c-edge .h-below{max-width:74px;white-space:nowrap;margin-top:2px}
+ #u-hub #hub-table.h-has-edge td.h-c-edge .h-edge-books>i{font:500 8.5px 'DM Mono',monospace;font-style:normal;letter-spacing:.04em;text-transform:uppercase;color:#8d9db1}
+ #u-hub #hub-table.h-has-edge td.h-c-edge .h-edge-books>b{font-size:11.5px;font-weight:600}
+ #u-hub #hub-table.h-has-edge td.h-c-edge .h-edge-books.empty{color:#6c7b90;font-size:11px}
+ #u-hub #hub-table.h-has-medge .h-c-edge{width:76px}
+}
+@media(min-width:1101px){#u-hub #hub-table .h-c-compare{width:90px}#u-hub #hub-table .h-compare-best{padding-inline:6px}#u-hub #hub-table .h-compare-best small.h-best{font:500 10px/13px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
+@media(min-width:1101px) and (max-width:1280px){#u-hub #hub-table .h-c-medge{width:66px}#u-hub #hub-table .h-c-compare{width:84px}}
+@media(min-width:1101px){#u-hub #hub-table>thead>tr>th.h-c-medge .h-th-l{white-space:normal;text-align:center;line-height:1.15}}
+@media(min-width:1101px) and (max-width:1280px){#u-hub #hub-table>thead>tr>th.h-c-medge small{display:none}}
+@media(min-width:1101px){#u-hub #hub-table>tbody>tr[data-record]>td.h-c-medge{padding-inline:3px}#u-hub #hub-table td.h-c-medge .h-medge-scout{font:500 9.5px/12px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
