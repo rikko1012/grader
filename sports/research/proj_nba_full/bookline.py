@@ -14,7 +14,17 @@ are reported separately with whole-game bootstrap CIs.
 Pass = all-outcome log score CI > 0 (walkforward report) AND |stated - hit| <= 2.5 pts overall, Over and Under AND
 graded count >= 90% of live AND graded hit >= live.
 
+Rerun 2026-11-06 (optional --comparison / --export): adds the read-only gradecore-comparison download (every saved sm-1
+raw forecast 2026-11-04 00:24Z .. 11-06 03:17Z, NO outcomes) for the 14 games of Nov 4 US (Nov 5 UTC). Per offer the
+LAST forecast >= 30 min before tip (start from nba_full.db games) is kept and scored OFFLINE against the nba_full.db box
+score (player must have played; DNP = void). Source priority per offer: service export > service results ledger >
+offline-scored comparison. --export restricts every source to the CURRENT live tag: export rows must carry that
+artifact_version; comparison rows are sm-1 raw forecasts only (gradecore adapter rule) produced while that artifact
+was the live one.
+
   python -m sports.research.proj_nba_full.bookline <pred_dir> <out.json> [nba_full.db]
+                                                   [--comparison <gradecore_comparison_nba.json>]
+                                                   [--export <gradecore_export_nba.json>] [--live-tag sm-1:<sha>]
 """
 from __future__ import annotations
 
@@ -37,19 +47,78 @@ def _t(s):
     return pd.to_datetime(s, utc=True)
 
 
-def load_props(props):
+KEY = ["game_id", "player_id", "market", "line", "book"]
+
+
+def export_tags(path):
+    """forecast_id -> artifact_version from the read-only gradecore export (settled_props does not carry it)."""
+    rows = json.loads(Path(path).read_text(encoding="utf-8"))["rows"]
+    return {r["forecast_id"]: r.get("artifact_version") for r in rows}
+
+
+def load_comparison(path, games, box):
+    """gradecore-comparison rows (sm-1 raw forecasts, no outcomes) -> one row per offer: the last forecast >= 30 min
+    before tip, scored offline against the box score. games: game_id -> start_utc of FINAL games; box: (game_id,
+    player_id) -> {stat: value} for PLAYED rows. Returns (frame, counts)."""
+    rows = json.loads(Path(path).read_text(encoding="utf-8"))["rows"]
+    cnt = {"rows": len(rows), "not_final_game": 0, "under_30_min": 0, "bad_probability": 0}
+    recs = []
+    for r in rows:
+        st = games.get(r["event"])
+        if st is None:
+            cnt["not_final_game"] += 1
+            continue
+        if (_t(st) - _t(r["at"])).total_seconds() < 1800:
+            cnt["under_30_min"] += 1
+            continue
+        so, su = (r.get("sides") or {}).get("over") or {}, (r.get("sides") or {}).get("under") or {}
+        ro, ru = so.get("raw"), su.get("raw")
+        if ro is None or ru is None or not (ro + ru) > 0:
+            cnt["bad_probability"] += 1
+            continue
+        recs.append({"src": "gradecore_comparison_2026-11-06_offline_scored", "forecast_id": r["forecast_id"],
+                     "model_version": "sm-1", "game_id": r["event"], "player_id": r["player"], "market": r["stat"],
+                     "line": float(r["line"]), "book": r["book"], "forecast_at": r["at"], "start_at": st,
+                     "po_live": ro / (ro + ru), "grade_policy": r.get("policy")})
+    c = pd.DataFrame(recs)
+    c = c.sort_values("forecast_at").drop_duplicates(KEY, keep="last").reset_index(drop=True)
+    cnt["offers"] = int(len(c))
+    act, played = [], []
+    for g, p, mk in zip(c["game_id"], c["player_id"], c["market"]):
+        b = box.get((g, p))
+        played.append(b is not None)
+        act.append(np.nan if b is None else b.get(pnf.STATS.get(mk, mk), np.nan))
+    c["actual_box"] = act
+    cnt["void_did_not_play"] = int((~np.asarray(played)).sum())
+    cnt["games"] = int(c["game_id"].nunique())
+    return c[np.asarray(played)].reset_index(drop=True), cnt
+
+
+def load_props(props, comparison=None, tags=None, live_tag=None):
     p = props[props["model_version"] == "sm-1"].copy()
     ex = p[p["src"].str.startswith("gradecore")].copy()
     ex["po_live"] = np.where(ex["side"] == "over", ex["p_side"], 1 - ex["p_side"])
-    key = ["game_id", "player_id", "market", "line", "book"]
-    seen = set(map(tuple, ex[key].to_numpy()))
+    if tags is not None:
+        ex["artifact_version"] = ex["forecast_id"].map(tags)
+        if live_tag is not None:
+            ex = ex[ex["artifact_version"] == live_tag].copy()
+    seen = set(map(tuple, ex[KEY].to_numpy()))
     rs = p[p["src"].str.startswith("results")].copy()
     rs = rs[(_t(rs["start_at"]) - _t(rs["forecast_at"])).dt.total_seconds() >= 1800]
-    rs = rs.sort_values("forecast_at").drop_duplicates(key, keep="last")
-    rs = rs[[tuple(r) not in seen for r in rs[key].to_numpy()]].copy()
+    rs = rs.sort_values("forecast_at").drop_duplicates(KEY, keep="last")
+    rs = rs[np.array([tuple(r) not in seen for r in rs[KEY].to_numpy()], dtype=bool)].copy()
     rs["po_live"] = rs["p_over"] / (rs["p_over"] + rs["p_under"])
-    out = pd.concat([ex, rs], ignore_index=True)
+    parts = [ex, rs]
+    if comparison is not None and len(comparison):
+        seen |= set(map(tuple, rs[KEY].to_numpy()))
+        cm = comparison[np.array([tuple(r) not in seen for r in comparison[KEY].to_numpy()], dtype=bool)].copy()
+        parts.append(cm)
+    out = pd.concat(parts, ignore_index=True)
     out["actual"] = out["actual_box"]
+    return _finish(out)
+
+
+def _finish(out):
     out = out[out["actual"].notna() & (out["actual"] != out["line"])].copy()
     out["over"] = (out["actual"] > out["line"]).astype(float)
     out["key"] = out["game_id"] + "|" + out["player_id"]
@@ -159,15 +228,56 @@ def strip(e):
     return {k: v for k, v in e.items() if not k.startswith("_")}
 
 
-def main(pred_dir, out_json, db=None):
+def _games_box(db):
+    con = D._ro(db or D.default_db())
+    games = dict(con.execute("SELECT game_id, start_utc FROM games WHERE status = 'final'").fetchall())
+    cols = sorted(set(pnf.STATS.values()))
+    box = {(g, p): dict(zip(cols, v)) for g, p, *v in
+           con.execute(f"SELECT game_id, player_id, {', '.join(cols)} FROM player_games WHERE played = 1").fetchall()}
+    con.close()
+    return games, box
+
+
+def main(pred_dir, out_json, db=None, comparison=None, export=None, live_tag=None):
     raw = D.load(db)
-    props = load_props(raw[4])
+    comp, comp_counts = (None, None)
+    if comparison:
+        games, box = _games_box(db)
+        comp, comp_counts = load_comparison(comparison, games, box)
+    tags = export_tags(export) if export else None
+    props = load_props(raw[4], comp, tags, live_tag)
     n_all = len(props)
     props = attach(props, pred_dir, "sm1frozen", by_refit=False)
     props = attach(props, pred_dir, "pnf")
     ok = props["po_sm1frozen"].notna() & props["po_pnf"].notna()
     dropped = props[~ok]
     P = props[ok].reset_index(drop=True)
+    rep = _report(P, n_all, dropped)
+    rep["live_tag"] = live_tag
+    rep["export_tags_seen"] = (pd.Series(tags).value_counts().to_dict() if tags else None)
+    rep["comparison_counts"] = comp_counts
+    rep["subsets"] = {}
+    for nm, m in (("service_settled_only", ~P["src"].str.startswith("gradecore_comparison")),
+                  ("nov5utc_games_all_sources", _t(P["start_at"]).dt.strftime("%Y-%m-%d") == "2026-11-05"),
+                  ("offline_scored_only", P["src"].str.startswith("gradecore_comparison"))):
+        m = m.to_numpy()
+        if m.sum() >= 50:
+            sub = _report(P[m].reset_index(drop=True), int(m.sum()), P.iloc[:0], markets=False)
+            rep["subsets"][nm] = {k: sub[k] for k in ("rows_scored", "games", "by_src", "live", "pnf", "pnf_vs_live")}
+            for k in ("live", "pnf"):
+                rep["subsets"][nm][k] = {kk: sub[k][kk] for kk in ("n", "logloss", "all", "over", "under", "graded")}
+    Path(out_json).write_text(json.dumps(rep, indent=1, default=float), encoding="utf-8")
+    for nm, k in (("live", "live"), ("recomputed", "recomputed_sm1"), ("pnf", "pnf")):
+        e = rep[k]
+        print(nm, "LL", e["logloss"], "all", e["all"]["stated"], e["all"]["hit"], "O", e["over"]["n"], e["over"]["gap"],
+              "U", e["under"]["n"], e["under"]["gap"], "graded", e["graded"]["n"], e["graded"].get("hit"),
+              "overshare", e["over_share"])
+    print("pnf_vs_live", rep["pnf_vs_live"])
+    print("reconstruction", rep["reconstruction"], "dropped", rep["dropped_unscored"], "comparison", comp_counts)
+    return rep
+
+
+def _report(P, n_all, dropped, markets=True):
     bt = Boot(P["game_id"].to_numpy())
     line, over = P["line"].to_numpy(float), P["over"].to_numpy(float)
     live = evaluate(P["po_live"], P["mean_sm1frozen"], line, over, bt)
@@ -186,7 +296,7 @@ def main(pred_dir, out_json, db=None):
            "live": strip(live), "recomputed_sm1": strip(rec), "pnf": strip(cand),
            "pnf_vs_live": compare(live, cand, bt), "pnf_vs_recomputed": compare(rec, cand, bt),
            "recomputed_vs_live": compare(live, rec, bt), "by_market": {}}
-    for mk in pnf.STATS:
+    for mk in (pnf.STATS if markets else ()):
         m = (P["market"] == mk).to_numpy()
         if m.sum() < 50:
             continue
@@ -196,15 +306,20 @@ def main(pred_dir, out_json, db=None):
         rep["by_market"][mk] = {"live": {k: strip(lv)[k] for k in ("n", "logloss", "all", "over", "under", "graded")},
                                 "pnf": {k: strip(cd)[k] for k in ("n", "logloss", "all", "over", "under", "graded")},
                                 "pnf_vs_live": compare(lv, cd, b2)}
-    Path(out_json).write_text(json.dumps(rep, indent=1, default=float), encoding="utf-8")
-    for nm, e in (("live", live), ("recomputed", rec), ("pnf", cand)):
-        print(nm, "LL", e["logloss"], "all", e["all"]["stated"], e["all"]["hit"], "O", e["over"]["n"], e["over"]["gap"],
-              "U", e["under"]["n"], e["under"]["gap"], "graded", e["graded"]["n"], e["graded"].get("hit"),
-              "overshare", e["over_share"])
-    print("pnf_vs_live", rep["pnf_vs_live"])
-    print("reconstruction", rep["reconstruction"], "dropped", rep["dropped_unscored"])
     return rep
 
 
+def _cli(argv):
+    pos, opt, i = [], {}, 0
+    while i < len(argv):
+        if argv[i].startswith("--"):
+            opt[argv[i][2:].replace("-", "_")] = argv[i + 1]
+            i += 2
+        else:
+            pos.append(argv[i])
+            i += 1
+    return main(pos[0], pos[1], pos[2] if len(pos) > 2 else None, **opt)
+
+
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
+    _cli(sys.argv[1:])

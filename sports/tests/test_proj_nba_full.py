@@ -198,3 +198,43 @@ def test_bookline_load_props_dedupes():
     assert len(out) == 2                                       # export row kept, later dup dropped, < 30 min dropped
     assert out.loc[out["player_id"] == "p", "po_live"].iloc[0] == pytest.approx(0.6)
     assert out.loc[out["player_id"] == "q", "po_live"].iloc[0] == pytest.approx(0.3)
+
+
+def test_bookline_comparison_offline_scoring(tmp_path):
+    import json
+    def row(fid, at, event="g2", player="p", stat="points", line=10.5, book="underdog", po=0.4):
+        return {"forecast_id": fid, "at": at, "event": event, "player": player, "stat": stat, "line": line,
+                "book": book, "policy": "gp-2", "sides": {"over": {"raw": po}, "under": {"raw": 1 - po}}}
+    rows = [row("a", "2026-11-05T20:00:00Z", po=0.4),
+            row("b", "2026-11-05T22:40:00Z", po=0.7),          # latest >= 30 min before 23:30 tip: kept
+            row("c", "2026-11-05T23:10:00Z", po=0.9),          # < 30 min before tip: dropped
+            row("d", "2026-11-05T20:00:00Z", player="dnp"),    # did not play: void
+            row("e", "2026-11-05T20:00:00Z", event="g9"),      # game not final: dropped
+            row("f", "2026-11-05T20:00:00Z", player="q", line=8.5, po=0.2)]   # key also in results: results win
+    path = tmp_path / "cmp.json"
+    path.write_text(json.dumps({"rows": rows}), encoding="utf-8")
+    games = {"g2": "2026-11-05T23:30:00Z"}
+    box = {("g2", "p"): {"pts": 12.0}, ("g2", "q"): {"pts": 9.0}}
+    comp, cnt = bookline.load_comparison(path, games, box)
+    assert cnt["under_30_min"] == 1 and cnt["not_final_game"] == 1 and cnt["void_did_not_play"] == 1
+    assert len(comp) == 2
+    assert comp.loc[comp["player_id"] == "p", "po_live"].iloc[0] == pytest.approx(0.7)
+    assert comp.loc[comp["player_id"] == "p", "actual_box"].iloc[0] == 12.0
+    res = pd.DataFrame([dict(src="results_ledger_x", model_version="sm-1", game_id="g2", player_id="q",
+                             market="points", line=8.5, book="underdog", side=None, p_side=None, p_over=0.6,
+                             p_under=0.4, forecast_id="r1", forecast_at="2026-11-05T20:00:00Z",
+                             start_at="2026-11-05T23:30:00Z", actual_box=9.0)])
+    out = bookline.load_props(res, comp)
+    assert len(out) == 2
+    q = out[out["player_id"] == "q"].iloc[0]
+    assert q["src"] == "results_ledger_x" and q["po_live"] == pytest.approx(0.6)
+    assert out.loc[out["player_id"] == "p", "over"].iloc[0] == 1.0
+
+
+def test_bookline_live_tag_filter():
+    rows = [dict(src="gradecore_export_x", model_version="sm-1", forecast_id=f, game_id="g", player_id=f,
+                 market="points", line=10.5, book="pp", side="over", p_side=0.6, p_over=None, p_under=None,
+                 forecast_at="2026-10-30T10:00:00Z", start_at="2026-10-30T23:00:00Z", actual_box=12.0)
+            for f in ("x", "y")]
+    out = bookline.load_props(pd.DataFrame(rows), tags={"x": "sm-1:aaa", "y": "sm-1:old"}, live_tag="sm-1:aaa")
+    assert list(out["player_id"]) == ["x"]
