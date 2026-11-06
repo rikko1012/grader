@@ -119,27 +119,78 @@ def htmlunescape(s):
 
 
 def test_landing_content_and_wording(srv):
+    """Sign-in refresh (owner 2026-11-06, "fix the sign in page now"): the page describes the product as it is live - one board
+    for four sports, the books it reads, hit rates, the "Why" card, HLTV map chances, line history, the +EV board, Slip Studio,
+    the Genie and the public record - and none of the retired claims (letter range and units, The Odds API, the Results
+    ledger, the long per-sport tool lists). No numbers about accuracy, no hedge labels."""
     page = landing()
     s = page.decode("utf-8")
-    assert "{{JOIN_URL}}" not in s and s.count('href="https://whop.com/joined/1time-test/?a=1&amp;b=2"') >= 2
-    assert s.count('href="/auth/login"') >= 3 and "Sign in with Whop" in s and "Join on Whop" in s
-    for sec in ('id="cs2"', 'id="lol"', 'id="sports"', 'id="how"'):
+    assert "{{JOIN_URL}}" not in s and s.count('href="https://whop.com/joined/1time-test/?a=1&amp;b=2"') >= 3
+    assert s.count('href="/auth/login"') >= 4 and s.count('href="/record"') >= 2
+    for sec in ('id="features"', 'id="how"', 'id="signin-error"'):
         assert sec in s
     text = _text(page)
-    for need in ("1time Scout", "CS2", "League of Legends", "NBA", "NFL", "One membership", "Single Prop", "Slate",
-                 "Prop Board", "Matchroom", "Map veto", "Map 1 and Map 2", "Slip studio", "Moneylines",
-                 "kills, assists and deaths", "Prop board", "Player research", "Slip Studio", "Track pick", "My picks",
-                 "Results", "How it works", "HLTV", "BO3.gg", "Leaguepedia", "ESPN", "nflverse", "Underdog",
-                 "PrizePicks", "Kalshi", "Polymarket", "FanDuel", "BetRivers", "The Odds API", "Thunderpick",
-                 "A+ to B–", "15 props", "L5", "L10", "L20", "logged before the game and settled"):
+    for need in ("1time Scout", "CS2", "League of Legends", "NBA", "NFL", "Every player prop. One board.",
+                 "Sign in with Whop", "Join on Whop", "Four sports, one board", "letter grade",
+                 "PrizePicks", "Underdog", "Sleeper", "Dabble", "FanDuel", "BetRivers", "Kalshi", "Polymarket",
+                 "L5, L10, L20, head-to-head and season", "Why Scout leans Over or Under", "HLTV map chances",
+                 "Line history", "+EV board", "Slip Studio", "break even", "Slips save to your account", "Ask the Genie",
+                 "The record is public", "How it works", "One membership"):
         assert need in text, need
+    for gone in ("A+ to B", "units", "The Odds API", "Results ledger", "Track pick", "Maps 1", "15 props", "Thunderpick",
+                 "Slate", "Matchroom", "Sheets", "logged before the game and settled"):
+        assert gone not in text, gone
     low = text.lower()
     for bad in (r"financial advice", r"betting advice", r"research tool", r"not advice", r"guarantee", r"\block",
-                r"\blocks\b", r"win[- ]rate", r"profit", r"\broi\b", r"free money", r"sure thing", r"can'?t lose",
-                r"unconfirmed", r"not confirmed", r"uncertain", r"unsure", r"tentative", r"provisional", r"beta\b",
-                r"\bmaybe\b", r"research estimate"):
+                r"\blocks\b", r"win[- ]rate", r"accura", r"profit", r"\broi\b", r"free money", r"sure thing", r"can'?t lose",
+                r"\bbeat\b", r"unconfirmed", r"not confirmed", r"uncertain", r"unsure", r"tentative", r"provisional", r"beta\b",
+                r"\bmaybe\b", r"research estimate", r"\bheld\b", r"\d+(\.\d+)?\s*%"):
         assert not re.search(bad, low), bad
-    assert "<script src" not in s                                         # no external scripts
+    assert "<script src" not in s and "<img" not in s and "url(" not in s       # no external scripts, no images
+
+
+def test_landing_uses_the_member_app_design():
+    """The front door of the same app: the hub's charcoal / white / blue tokens and fonts (web/upgrade-hub.css, web/upgrade.css)
+    and the hub sidebar's brand block - none of the old orange and black, none of the rejected gold."""
+    s = (server.WEB / "landing.html").read_text(encoding="utf-8")
+    app = ((server.WEB / "upgrade-hub.css").read_text(encoding="utf-8") + (server.WEB / "upgrade.css").read_text(encoding="utf-8")).lower()
+    css = re.search(r"(?s)<style>(.*?)</style>", s).group(1).lower()
+    for token in ("#101215", "#121519", "#161c24", "#303d4e", "#2b323c", "#435165", "#f4f6fa", "#b3becb", "#77adff",
+                  "#347ff0", "#20344e", "#4775aa", "#dbeaff"):
+        assert token in css, token
+    for c in set(re.findall(r"#[0-9a-f]{6}\b", css)):        # every colour on the page is one the app already uses
+        assert c in app, c
+    for old in ("#ff7a1a", "#ffa53a", "#f5c842", "#f5d77b", "#f5c542", "chakra petch", "inter,"):
+        assert old not in css, old
+    assert "'outfit'" in css and "'dm mono'" in css
+    font = re.search(r'<link href="(https://fonts\.googleapis\.com/[^"]+)" rel="stylesheet">', s).group(1)
+    assert font in (server.WEB / "index.html").read_text(encoding="utf-8")   # the font request the member page already makes
+    assert '<span aria-hidden="true">1T</span><b>1TIME <em>SCOUT</em></b>' in s
+
+
+@pytest.fixture
+def big_queue(monkeypatch):
+    """As the running server sets it (server.py __main__): hundreds of connections may wait to be accepted."""
+    monkeypatch.setattr(ThreadingHTTPServer, "request_queue_size", 2048)
+
+
+def test_700_signed_out_visitors_at_once_get_one_shared_page(big_queue, srv):
+    """700 signed-out visitors on / at the same moment: every answer is 200 with the same bytes and ETag."""
+    from concurrent.futures import ThreadPoolExecutor
+    want = landing()
+
+    def one(_):
+        for attempt in range(3):
+            try:
+                return get(srv, "/")
+            except OSError:
+                time.sleep(0.2 * (attempt + 1))
+        return get(srv, "/")
+
+    with ThreadPoolExecutor(max_workers=700) as pool:
+        out = list(pool.map(one, range(700)))
+    assert len(out) == 700 and all(st == 200 and body == want for st, _h, body in out)
+    assert len({h["etag"] for _st, h, _b in out}) == 1 and landing() is want
 
 
 def test_landing_bytes_are_one_object_per_version(srv, monkeypatch):
