@@ -1,6 +1,8 @@
 """pnf-1 data: the full NFL history working db for the projection rebuild (research only, read-only inputs).
 
     python -m sports.research.proj_nfl_full_data --ds1 <history_ds1_2026-10-23.db> --work <nfl_full.db> --out <new db>
+        [--nflverse <dir with games.csv, players.csv, stats_player_week_2026.csv, snap_counts_2026.csv,
+                     play_by_play_2026.csv.gz, optional injuries_2026.csv / depth_charts_2026.csv>]
 
 Builds ONE local SQLite file in the ds-1 schema (games / nfl_pg / nfl_tg / nfl_ids) so the repo's own featurizer
 (sports.model.featurize.nfl_frame) runs on it unchanged:
@@ -12,13 +14,25 @@ Builds ONE local SQLite file in the ds-1 schema (games / nfl_pg / nfl_tg / nfl_i
     `src` = 'espn' marks them. Their team-game rows exist (rest days, QB-change lag) with NULL play counts, and the
     games are marked final. ESPN ids map to gsis ids through nfl_ids; team abbreviations LAR -> LA, WSH -> WAS.
 
+With --nflverse (pnf-1 refresh 2026-11-05) the 2026 season is first rebuilt from a local copy of the nflverse release
+files by the repo's own loader (sports.model.datasets.nfl_build, files passed in - no network), so weeks 7-8 carry the
+full nflverse fields (snap share, target share, air yards, red zone) instead of ESPN box scores; ESPN rows then only
+fill games after the refreshed cutoff. Each file's sha256 / bytes / rows go to table files (url = the release URL).
+injuries_2026.csv and depth_charts_2026.csv, when present, are copied raw into nflv_injuries / nflv_depth_charts for
+later study only (no featurizer reads them; depth chart rows keep their snapshot time dt, injury rows their week).
+
 Nothing here reads outcomes into features: this only assembles history rows; featurize keeps every feature strictly
 prior to the row's game (start + 6 h known-at rule)."""
 from __future__ import annotations
 
 import argparse
+import csv
+import gzip
+import hashlib
+import io
 import shutil
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 TEAM_MAP = {"LAR": "LA", "WSH": "WAS"}
@@ -29,12 +43,88 @@ def _ro(path):
     return sqlite3.connect("file:" + str(Path(path)).replace("\\", "/") + "?mode=ro", uri=True)
 
 
-def build(ds1, work, out):
+NFLV_SEASON = 2026
+
+
+def _sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _text(path):
+    raw = gzip.open(path, "rb") if str(path).endswith(".gz") else open(path, "rb")
+    return io.TextIOWrapper(raw, encoding="utf-8", errors="replace", newline="")
+
+
+def refresh_nflverse(out, nflv_dir, season=NFLV_SEASON):
+    """Rebuild `season` in the copied ds-1 db from local nflverse release files (the repo's own nfl_build, no network).
+    -> nfl_build counts + raw table counts."""
+    from ..model import datasets
+    d = Path(nflv_dir)
+    specs = datasets.nfl_files(season)
+    files, opened = {}, []
+    for name, _url, _gz, required in specs:
+        f = d / name
+        if not f.exists():
+            if required:
+                raise FileNotFoundError(f"missing nflverse file {name} in {d}")
+            continue
+        files[name] = _text(f)
+        opened.append(files[name])
+    con = datasets.connect(out)
+    try:
+        res = datasets.nfl_build(con, seasons=(season,), files=files)
+    finally:
+        for t in opened:
+            t.close()
+    for name, url, _gz, _req in specs:
+        f = d / name
+        if f.exists():
+            rows = res.get(f"stats_{season}") if name.startswith("stats_player_week") else None
+            con.execute("INSERT OR REPLACE INTO files (name, url, fetched_at, sha256, bytes, rows) VALUES (?,?,?,?,?,?)",
+                        (name, url, datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"), _sha(f), f.stat().st_size, rows))
+    for name, table in ((f"injuries_{season}.csv", "nflv_injuries"), (f"depth_charts_{season}.csv", "nflv_depth_charts")):
+        f = d / name
+        if not f.exists():
+            continue
+        with _text(f) as fh:
+            rd = csv.reader(fh)
+            cols = next(rd)
+            con.execute(f"DROP TABLE IF EXISTS {table}")
+            con.execute(f"CREATE TABLE {table} (" + ", ".join(f'"{c}" TEXT' for c in cols) + ")")
+            n = 0
+            batch = []
+            for r in rd:
+                batch.append(r)
+                if len(batch) >= 50000:
+                    con.executemany(f"INSERT INTO {table} VALUES (" + ",".join("?" * len(cols)) + ")", batch)
+                    n += len(batch)
+                    batch = []
+            con.executemany(f"INSERT INTO {table} VALUES (" + ",".join("?" * len(cols)) + ")", batch)
+            n += len(batch)
+        con.execute("INSERT OR REPLACE INTO files (name, url, fetched_at, sha256, bytes, rows) VALUES (?,?,?,?,?,?)",
+                    (name, f"{datasets.NFLVERSE}/{name.split('_' + str(season))[0]}/{name}",
+                     datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), _sha(f),
+                     f.stat().st_size, n))
+        res[table] = n
+    con.commit()
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    con.execute("PRAGMA journal_mode=DELETE")
+    con.close()
+    return res
+
+
+def build(ds1, work, out, nflverse=None):
     out = Path(out)
     if out.exists():
         out.unlink()
     shutil.copyfile(ds1, out)
     out.chmod(0o644)
+    nflv = refresh_nflverse(out, nflverse) if nflverse else None
     con = sqlite3.connect(out)
     con.execute("PRAGMA journal_mode=OFF")
     cols = [r[1] for r in con.execute("PRAGMA table_info(nfl_pg)")]
@@ -96,12 +186,13 @@ def build(ds1, work, out):
         con.execute("UPDATE games SET status = 'final' WHERE game_id = ?", (game_id,))
     con.execute("CREATE TABLE IF NOT EXISTS pnf_build (k TEXT PRIMARY KEY, v TEXT)")
     con.executemany("INSERT OR REPLACE INTO pnf_build VALUES (?,?)", [
-        ("ds1_cutoff", cutoff), ("espn_rows_added", str(added)), ("espn_games", str(len(finals))),
-        ("skipped", repr(skipped))])
+        ("history_cutoff", cutoff), ("espn_rows_added", str(added)), ("espn_games", str(len(finals))),
+        ("skipped", repr(skipped)), ("nflverse_refresh", repr(nflv))])
     con.commit()
     con.close()
     w.close()
-    return {"ds1_cutoff": cutoff, "espn_rows_added": added, "espn_games": len(finals), "skipped": skipped}
+    return {"cutoff": cutoff, "espn_rows_added": added, "espn_games": len(finals), "skipped": skipped,
+            "nflverse_refresh": nflv}
 
 
 def main(argv=None):
@@ -109,8 +200,9 @@ def main(argv=None):
     ap.add_argument("--ds1", required=True)
     ap.add_argument("--work", required=True, help="nfl_full.db working copy (espn_gamelog / espn_player_ctx)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--nflverse", help="local folder of nflverse release files: rebuild the 2026 season from them first")
     a = ap.parse_args(argv)
-    print(build(a.ds1, a.work, a.out))
+    print(build(a.ds1, a.work, a.out, a.nflverse))
 
 
 if __name__ == "__main__":

@@ -127,3 +127,50 @@ def test_augment_features_use_prior_games_only(tmp_path):
     for k in a:
         assert (a[k] == b[k]) or (a[k] != a[k] and b[k] != b[k]), k
     con.close()
+
+
+def test_data_build_refreshes_2026_from_local_nflverse_files(tmp_path):
+    """--nflverse: the 2026 season reloads from local release files (no network) before the ESPN fill; earlier seasons
+    stay; injuries / depth charts land raw; each file's sha256 is recorded. Every team / player / number is a FIXTURE."""
+    import gzip
+
+    from sports.model import datasets
+    from sports.research import proj_nfl_full_data as D
+    from sports.tests.test_fwd_nfl_refresh import _files
+
+    ds1 = tmp_path / "ds1.db"
+    con = datasets.connect(ds1)
+    con.execute("INSERT INTO nfl_pg (game_id, player_id, season, week, rec) VALUES ('2022_01_AAA_BBB', 'P0', 2022, 1, 7)")
+    con.commit()
+    datasets.nfl_build(con, seasons=(2026,), files=_files([7]))
+    con.execute("PRAGMA journal_mode=DELETE")
+    con.close()
+    work = tmp_path / "work.db"
+    w = sqlite3.connect(work)
+    w.execute("CREATE TABLE espn_gamelog (player_id, event_id, start_utc, team, opp, home, participation, pass_att, "
+              "pass_cmp, pass_yds, pass_td, pass_int, rush_att, rush_yds, targets, rec, rec_yds)")
+    w.execute("CREATE TABLE espn_player_ctx (player_id, position, player)")
+    w.commit()
+    w.close()
+    nd = tmp_path / "nflv"
+    nd.mkdir()
+    for name, txt in _files([7, 8]).items():
+        if name.endswith(".gz"):
+            (nd / name).write_bytes(gzip.compress(txt.encode()))
+        else:
+            (nd / name).write_text(txt, encoding="utf-8")
+    (nd / "injuries_2026.csv").write_text("season,week,gsis_id,report_status\n2026,8,P1,Questionable\n", encoding="utf-8")
+    (nd / "depth_charts_2026.csv").write_text("dt,team,gsis_id,pos_abb,pos_rank\n2026-10-15T12:00:00Z,BAL,P1,WR,1\n"
+                                              "2026-10-16T12:00:00Z,BAL,P1,WR,2\n", encoding="utf-8")
+    out = tmp_path / "out.db"
+    res = D.build(ds1, work, out, nflverse=nd)
+    assert res["nflverse_refresh"]["stats_2026"] == 2
+    assert res["nflverse_refresh"]["nflv_injuries"] == 1 and res["nflverse_refresh"]["nflv_depth_charts"] == 2
+    c = sqlite3.connect(out)
+    assert c.execute("SELECT week, rec, src FROM nfl_pg WHERE season = 2026 ORDER BY week").fetchall() == [
+        (7, 7.0, "nflverse"), (8, 8.0, "nflverse")]
+    assert c.execute("SELECT rec FROM nfl_pg WHERE season = 2022").fetchone()[0] == 7
+    f = dict(c.execute("SELECT name, sha256 FROM files").fetchall())
+    assert f["stats_player_week_2026.csv"] == D._sha(nd / "stats_player_week_2026.csv")
+    assert "depth_charts_2026.csv" in f and "injuries_2026.csv" in f
+    assert dict(c.execute("SELECT k, v FROM pnf_build").fetchall())["history_cutoff"].startswith("2026-10-18")
