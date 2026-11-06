@@ -9,8 +9,8 @@ Every formula here reuses the section-3 math (gradecore.payouts, gradecore.fair,
   - hit-rate sort key (spec 3 'Hit-rate sorting rule'): fair.hit_rate_edge(hits, n, be) = hit rate - break-even.
   - display sizing: gradecore.slip.stake on the ENTRY the break-even belongs to (the book's default 2-pick, both legs at this
     chance, its real payout tiers), capped at policy.MAX_UNITS, shown as a share of bankroll (never "U", so it can never be
-    read as a second grader stake). 1/4 Kelly, 1/2 Kelly or flat 1%. A member DISPLAY preference only; owner decision
-    pending before SCOUT_PARITY_PREFS is switched on.
+    read as a second grader stake). 1/4 Kelly, 1/2 Kelly or flat 1%. A member DISPLAY preference only; SCOUT_PARITY_PREFS
+    on by owner instruction 2026-11-05 ("Turn on Kelly sizing in board preferences as a percentage of bankroll").
 
 Rating gates (review 2026-11-05): EV, band and sizes are given only when the caller says the row is RATED, i.e. the live
 slip check would rate it (CS2 only, letter not held, half-point line, chance band passing the settled-results check:

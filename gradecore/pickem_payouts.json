@@ -1,5 +1,5 @@
 {
-  "_about": "Pick'em payout tables (only books marked verified are used) for the competitor-spec features (SCOUT_PICKEM_EV, SCOUT_BEST_SLIPS, SCOUT_SLIP_HEADER math). Read by gradecore.payouts.pickem_config(); the default gradecore.payouts.CONFIG (and every live caller of it) is untouched. Flex tables are keyed by LOSSES -> gross payout multiple (entry fee included). Standard lines only: goblin / demon / promo lines and same-game combinations can pay differently and stay unavailable unless their payout is supplied.",
+  "_about": "Pick'em payout tables (only books marked verified are used) for the competitor-spec features (SCOUT_PICKEM_EV, SCOUT_BEST_SLIPS, SCOUT_SLIP_HEADER math). Read by gradecore.payouts: every book marked verified here is laid over gradecore.payouts.CONFIG and pickem_config(). Flex tables are keyed by LOSSES -> gross payout multiple (entry fee included). Standard lines only: goblin / demon / promo lines and same-game combinations can pay differently and stay unavailable unless their payout is supplied.",
   "prizepicks": {
     "default_entry": "power",
     "entries": {
@@ -16,8 +16,11 @@
     "page_date": "2026-10-19",
     "read_at": "2026-11-05",
     "version": "pp-payouts-2026-10-19",
-    "verified": false,
-    "status": "NOT VERIFIED (owner rule 2026-11-04, main c865e1b: unknown payouts stay unknown). These are the PrizePicks help-center REFERENCE rates (page dated 2026-10-19), the same numbers as payout_reference.py, which says no EV, stake or settlement may treat a reference rate as the accepted payout. No partner-API response or dated in-app screenshot is recorded, and the partial Flex tiers (1.5x, 2x, 0.4x) and Flex 2-pick were never seen in-app. pickem_config() leaves this book out, so every PrizePicks break-even and EV on the new surfaces shows unavailable, matching workspace_rules.ev_status. To verify: record the evidence (API response or dated screenshot) per tier, get the owner to sign off, then set verified true for those tiers only.",
+    "verified": true,
+    "verified_at": "2026-11-05",
+    "verified_by": "owner sign-off",
+    "not_in_app": {"flex": [2]},
+    "status": "VERIFIED by owner sign-off 2026-11-05 (verbatim: \"Mark the PrizePicks help-center payout table as verified so PrizePicks gets EV and break-even.\"). Source https://www.prizepicks.com/help-center/payouts, page dated 2026-10-19: Power 2-6 = 3/6/10/20/37.5x, Flex tiers as in entries.flex. This sign-off supersedes the 2026-11-04 rule (main c865e1b) for this table only. Standard lines only: goblin / demon / promo lines and same-game lineups pay unpublished multipliers and stay unavailable.",
     "caveats": ["DNPs and reboots reduce the pick count (lower multiplier)", "ties can lower the payout one level", "goblin / demon / promo / same-game lineups can pay differently", "Flex 2-pick appears on the help center but not in the in-app view of 2026-11-05"]
   },
   "underdog": {

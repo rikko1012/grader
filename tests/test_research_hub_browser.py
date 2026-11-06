@@ -503,7 +503,8 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
     assert p.locator('#hub-studio-body .u-leg').count()==4
     p.locator('#hub-studio-body [data-u=check]').click()
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
-    assert 'PrizePicks shows lineup payouts only in its app.' in p.locator('#hub-studio-body').inner_text()      # unknown payouts stay unknown
+    # owner sign-off 2026-11-05: the PrizePicks help-center table is verified, so the entry shows its payout (4-pick Power 10x)
+    assert 'All-hit payout' in p.locator('#hub-studio-body').inner_text() and 'only in its app' not in p.locator('#hub-studio-body').inner_text()
     assert 'Published payout tiers' not in p.locator('#hub-studio-body').inner_text()
     assert not p.errors
 

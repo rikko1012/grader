@@ -113,7 +113,8 @@ def test_cs2_legs_are_the_member_results_picks():
     assert len(legs) == len(picks) == 40 and results_view.RULE == 0.57
     assert [l["status"] == "win" for l in legs] == [bool(p["win"]) for p in picks]
     assert abs(legs[0]["break_even"] - 3.5 ** -0.5) < 1e-9
-    assert lc.cs2_legs(_p1(5, book="prizepicks"))[0]["break_even"] is None   # no verified payout: no EV from that leg
+    # owner sign-off 2026-11-05: PrizePicks' help-center table is verified, so its legs carry the Power 2-pick break-even
+    assert abs(lc.cs2_legs(_p1(5, book="prizepicks"))[0]["break_even"] - 3.0 ** -0.5) < 1e-9
 
 
 def _srv(tmp_path, export=None, lol_rows=None, export_error=None):
@@ -150,9 +151,11 @@ def test_a_source_that_cannot_be_read_changes_nothing(state, tmp_path):
     assert not lc.contained("cs2")
 
 
-def test_prizepicks_legs_never_count_toward_a_release(state, tmp_path):
+def test_prizepicks_legs_count_at_their_verified_break_even(state, tmp_path):
+    """Owner sign-off 2026-11-05: PrizePicks legs have a known break-even (Power 2-pick, 57.7%), so they count; 62% stated and
+    hit sits too close to 57.7% for the EV interval to clear 0, so the verdict is contain (not "insufficient")."""
     lc.run_once(_srv(tmp_path, _p1(stated=0.62, hit=0.62, book="prizepicks")), log=lambda *a, **k: None)
-    assert lc.contained("cs2") and lc._JOB["results"]["cs2"]["verdict"] == "insufficient"
+    assert lc.contained("cs2") and lc._JOB["results"]["cs2"]["verdict"] == "contain"
 
 
 # ------------------------------------------------------------------------------------------------ CS2 surfaces

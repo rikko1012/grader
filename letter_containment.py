@@ -15,7 +15,7 @@ Who decides (gradecore/containment.py ct-3, the shared rule - no second policy h
      EV interval wholly above 0 (plus ct-3's per-side and per-stat checks). CS2 legs: the stored P1 scorecard export, on
      the member Results rule (favoured side at 57%+, the same Map 1 hold). LoL legs: the LoL worker's settled pre-match
      forecasts on lines that offered Scout's side (learning.json containment_rows). A leg counts only with a known
-     break-even (gradecore.payouts: Underdog standard; PrizePicks payouts are not verified, so its legs cannot show an EV);
+     break-even (gradecore.payouts: Underdog standard; PrizePicks power, verified by owner sign-off 2026-11-05);
   4. with the flag on and nothing known (no file yet, an unreadable file, the job not run): contained.
 The job runs in its own thread every REFRESH_S seconds; a request only reads the cached state (gradecore re-checks the
 file's mtime every 30 s). A source that cannot be read changes nothing (a transient failure never releases or contains).

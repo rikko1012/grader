@@ -56,7 +56,8 @@ def entries():
     """Every verified (app, entry, n) with its break-even, for the entry picker."""
     from gradecore import payouts
     return [{"app": e["book"], "entry": e["entry"], "n": e["n"], "break_even": e["break_even"], "american": e["american"]}
-            for e in payouts.entry_types() if e["book"] in APPS and e["break_even"] is not None]
+            for e in payouts.entry_types() if e["book"] in APPS and e["break_even"] is not None
+            and payouts.in_app(e["book"], e["entry"], e["n"])]
 
 
 def _choice(v, choices, default):
@@ -109,7 +110,7 @@ def price_limits():
 
 
 def default_app():
-    """The first app with a verified payout table (PrizePicks has none recorded: its break-even stays unavailable)."""
+    """The first app with a verified payout table (PrizePicks: verified by owner sign-off 2026-11-05)."""
     apps = [e["app"] for e in entries()]
     return next((a for a in APPS if a in apps), "underdog")
 

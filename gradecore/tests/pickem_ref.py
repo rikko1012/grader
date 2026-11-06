@@ -1,7 +1,7 @@
-"""FORMULA TESTS ONLY. The PrizePicks table in gradecore/pickem_payouts.json is the help-center REFERENCE, marked
-verified: false (owner rule 2026-11-04: unknown payouts stay unknown), so payouts.pickem_config() leaves it out and every
-live surface shows its break-even and EV as unavailable. The arithmetic (closed forms, flex solving, Monte Carlo) is still
-checked against those reference numbers, laid over CONFIG here and patched in only inside a test."""
+"""The PrizePicks help-center table in gradecore/pickem_payouts.json is VERIFIED by owner sign-off 2026-11-05 (it superseded the
+2026-11-04 "unknown payouts stay unknown" rule for this table), so payouts.pickem_config() and payouts.CONFIG carry it live.
+reference_tables lays every file table over CONFIG regardless of its verified mark, so the formula tests keep running on the
+same numbers whatever the file says."""
 import pytest
 
 from gradecore import payouts
