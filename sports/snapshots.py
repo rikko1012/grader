@@ -1023,7 +1023,12 @@ def build(con, league, now=None, base=None, history=True, results=True):
                        "opponent": _team_view(teams, e.away_team_id if tid == e.home_team_id else e.home_team_id)
                        if tid in (e.home_team_id, e.away_team_id) else None}
         games = player_games(con, league, pid, now, teams, ev_cache) if history else []
-        vrows = board_view.player_rows(rows, games)
+        opp_ids = {}                                     # tonight's opponent per row: the board's H2H column (display only)
+        for r in rows:
+            e_ = events[r["event_id"]][1]
+            t_ = r.get("team_id")
+            opp_ids[r["key"]] = (e_.away_team_id if t_ == e_.home_team_id else e_.home_team_id) if t_ in (e_.home_team_id, e_.away_team_id) else None
+        vrows = board_view.player_rows(rows, games, opp_ids)
         view_out.add(vrows)
         for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
             # sg-2 history rules (thin / stale) read the bv-1 row only when the history was actually read

@@ -62,7 +62,8 @@ def board(ctx, env, size, sport='cs2'):
 @pytest.mark.parametrize('size', [DESK, PHONE])
 def test_flags_off_board_is_unchanged(ctx, env, size):
     p = board(ctx, env, size)
-    assert p.locator('.h-plays, .h-band, .h-th-sort, .h-hit-n, #hub-report-dialog, #hub-parity-style').count() == 0
+    # every board column sorts from its header since the audit of 2026-11-05 (.h-th-sort on all sports); no parity part shows
+    assert p.locator('.h-plays, .h-band, [data-hub=parity-sort], .h-hit-n, #hub-report-dialog, #hub-parity-style').count() == 0
     assert all(re.fullmatch(r'\d+%|\d+-\d+|—', t) for t in p.locator('#hub-rows .h-hit').all_inner_texts())
     assert p.locator('#hub-sort option[value=hit]').count() == 0
     assert not p.errors
@@ -95,14 +96,15 @@ def test_parity_on_board(ctx, env, size, monkeypatch):
         edge = p.locator('#hub-rows .h-c-edge .h-edge b')
         texts = edge.all_inner_texts()
         assert edge.count() > 0 and any(t.endswith('%') for t in texts) and all(re.fullmatch(r'[+−±]\d+\.\d%?', t) for t in texts)
-        p.locator('#hub-table [data-hub=parity-sort]').click()
+        p.locator('#hub-sort').select_option('start')             # Edge is the default sort (audit 2026-11-05): start elsewhere first
+        p.locator('#hub-table [data-hub=sort-col][data-id=edge]').click()
         assert p.locator('#hub-sort').input_value() == 'edge'
         texts = p.locator('#hub-rows tr[data-record] .h-c-edge .h-edge b').all_inner_texts()
         ev = [float(t.replace('−', '-').replace('±', '').rstrip('%')) for t in texts if t.endswith('%')]
         assert ev == sorted(ev, reverse=True) and texts[:len(ev)] == [t for t in texts if t.endswith('%')]
         assert p.locator('#hub-table th.h-c-edge').get_attribute('aria-sort') == 'descending'
-        p.locator('#hub-table [data-hub=parity-sort]').click()
-        assert p.locator('#hub-sort').input_value() == 'start'
+        p.locator('#hub-table [data-hub=sort-col][data-id=edge]').click()           # a second click turns the order around
+        assert p.locator('#hub-sort').input_value() == 'edge' and p.locator('#hub-table th.h-c-edge').get_attribute('aria-sort') == 'ascending'
         # hit-rate sort: lines below break-even listed last
         p.locator('#hub-filters-toggle').click()
         p.locator('#hub-sort').select_option('hit')
