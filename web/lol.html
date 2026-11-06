@@ -305,6 +305,7 @@ function matchName(x) { return x.match; }
 function pside(x) { return x.pick_side === "Over" ? x.p_over : x.p_under; }
 function offeredSide(x) { return x.sides.find(s => s.offered && s.side !== x.pick_side); }
 function gradeChip(x) {
+  if (x.one_sided) return `<span class="g off">${esc(x.one_sided)}</span>`;   // os-1: a line offering one side only is never graded
   if (!x.pick_offered) return `<span class="g off">No pick</span>`;          // never a letter grade on a side the line does not offer
   if (!x.grade) return NA;
   return `<span class="${String(x.grade).startsWith("Lean") ? "g lean" : "g"}">${esc(x.grade)}</span>`;
@@ -312,6 +313,7 @@ function gradeChip(x) {
 function startedTag(x) { return started(x) ? `<span class="tag">Started</span>` : ""; }
 function typeTag(t) { return t === "Standard" ? "" : `<span class="tag ${t === "Promo" ? "promo" : "alt"}">${esc(t)}</span>`; }
 function pickCell(x) {
+  if (x.one_sided) return `<span class="pick off">${esc(x.one_sided)}</span><span class="offnote">${esc(x.stake_reason || "")}</span>`;
   // lc-1: while LoL letters are held the side reads "Lean Over / Lean Under" (no letter, 0U)
   if (x.pick_offered) return `<span class="pick ${x.pick_side === "Over" ? "over" : "under"}">${x.letter_held ? "Lean " : ""}${esc(x.pick)}</span>`;
   const o = offeredSide(x);
@@ -326,7 +328,7 @@ function quoteIssue(x) {
   return Date.now() - at > 15 * 60000 ? "The line has not been checked in the last 15 minutes." : null;
 }
 function playable(x) { return !whyNot(x); }
-function whyNot(x) { return !Number.isFinite(Date.parse(x.start || "")) ? "The match start time is missing." : started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : quoteIssue(x); }
+function whyNot(x) { return x.one_sided ? x.stake_reason || `${x.one_sided}: Scout grades lines that offer both sides.` : !Number.isFinite(Date.parse(x.start || "")) ? "The match start time is missing." : started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : quoteIssue(x); }
 function legOf(x) { return {key: x.key, platform: x.platform, platform_label: x.platform_label, player: x.player, team: x.team, opponent: x.opponent,
   stat: x.stat, stat_name: x.stat_name, scope: x.scope, line: x.line, side: x.pick_side, line_type: x.line_type, match_key: matchKey(x), start: x.start, grade: x.grade}; }
 function legText(l) { return `${l.player} (${l.team}) vs ${l.opponent} - ${l.stat_name}, ${l.scope} - ${l.platform_label}${l.line_type !== "Standard" ? " " + l.line_type : ""} - ${l.side} ${l.line}`; }
@@ -478,7 +480,7 @@ function boardView() {
       <td>${pickCell(x)}</td><td>${gradeChip(x)}${savedAgo(x) ? `<span class="sub saved">${esc(savedAgo(x))}</span>` : ""}</td><td class="num">${x.units}U</td><td>${ctBtnHtml(x)}</td></tr>`;
     c += `<div class="mcw"><button type="button" class="mcard" data-k="${k}"><div class="card-meta"><span>${esc(x.platform_label)}</span><span>${esc(x.scope)}</span></div><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
       <div class="card-market">${esc(x.stat_name)} ${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
-      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="card-footer small muted">Stake ${esc(x.units)}U${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>${ctBtnHtml(x)}</div>`;
+      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="card-footer small muted">${x.one_sided ? esc(x.one_sided) : `Stake ${esc(x.units)}U`}${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>${ctBtnHtml(x)}</div>`;
   }
   return t + `</tbody></table></div>` + c + `</div><div class="results-heading"><span class="small muted">Showing ${rs.length} of ${allRows.length} matching lines</span>${rs.length < allRows.length ? `<button type="button" class="btn" id="morelines">Show 48 more lines</button>` : ""}</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
 }
@@ -486,7 +488,7 @@ function linesHtml(m) {
   return `<div class="lines">${m.lines.map(l => {
     const sides = l.sides.map(s => s.offered ? `${s.side}${s.payout ? " ×" + esc(s.payout) : ""}` : `<span class="faint">${s.side} not offered</span>`).join(" · ");
     const model = l.projection == null ? `<span class="faint">Projection unavailable</span>` :
-      `proj ${num(l.projection)} · Over ${pct(l.p_over)} · Under ${pct(l.p_under)}${l.p_push > 0 ? ` · Push ${pct(l.p_push)}` : ""}${!l.grade ? "" : (l.sides.find(z => z.side === l.pick_side) || {}).offered ? ` · <span class="g ${String(l.grade).startsWith("Lean") ? "lean" : ""}">${esc(l.grade)}</span>` : ` · <span class="faint">${esc(l.pick_side || "")} unavailable - no pick</span>`}`;
+      `proj ${num(l.projection)} · Over ${pct(l.p_over)} · Under ${pct(l.p_under)}${l.p_push > 0 ? ` · Push ${pct(l.p_push)}` : ""}${l.one_sided ? ` · ${esc(l.one_sided)}` : !l.grade ? "" : (l.sides.find(z => z.side === l.pick_side) || {}).offered ? ` · <span class="g ${String(l.grade).startsWith("Lean") ? "lean" : ""}">${esc(l.grade)}</span>` : ` · <span class="faint">${esc(l.pick_side || "")} unavailable - no pick</span>`}`;
     return `<div class="ln"><span>${esc(l.platform)}${typeTag(l.line_type)}</span><b>${l.line}</b><span class="small">${sides}</span><span class="small">${model}</span></div>`;
   }).join("")}</div>`;
 }

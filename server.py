@@ -2201,6 +2201,7 @@ def _lol_key(platform, market_key):
 
 LOL_SLIP_REASON = {"stake 0U": "LoL stakes are 0U until LoL picks have a settled record at real lines - no slip is suggested until then",
                    "the model's side is not offered": "the pick's side is not offered on that line",
+                   "the line offers one side only": "lines that offer one side only are not graded: Scout grades lines that offer both sides",
                    "offered sides not": "the feed does not list the pick's side as offered",
                    "rule not": "the platform's settlement rule for that prop is not on file",
                    "not offered as a slip leg": "that stat is not used in slips",
@@ -2233,6 +2234,29 @@ def _lol_member_slips(sm):
     return out
 
 
+LOL_ONE_SIDED = {"over": "Over only", "under": "Under only"}
+
+
+def _lol_one_sided(platform, sides):
+    """lol/center/forecast.one_sided, read here without importing lol (owner 2026-11-06, os-1): "Over only" / "Under only"
+    when the book offers that side only, else None. Underdog: one option listed. PrizePicks: exactly one side offered (a
+    goblin / demon line with no allowed sides sent is More only). Such a line shows its line and price, never a grade."""
+    sides = sides if isinstance(sides, dict) else {}
+    if platform == "underdog":
+        listed = [k for k in ("higher", "lower") if sides.get(k)]
+        return LOL_ONE_SIDED["over" if listed[0] == "higher" else "under"] if len(listed) == 1 else None
+    o, u = ((sides.get("higher") or {}).get("offered") is True), ((sides.get("lower") or {}).get("offered") is True)
+    return LOL_ONE_SIDED["over"] if o and not u else (LOL_ONE_SIDED["under"] if u and not o else None)
+
+
+def lol_one_sided_label(platform, sides, saved=None):
+    """The label of a one-sided LoL line: the forecast's own (saved sides) or the current offer's - either one is enough."""
+    return LOL_ONE_SIDED.get(saved) or _lol_one_sided(platform, sides)
+
+
+LOL_ONE_SIDED_NOTE = "{}: Scout grades lines that offer both sides."
+
+
 def _lol_side_offered(platform, sides, model_side):
     name = {"over": "Over", "under": "Under"}.get(model_side)
     return any(x["side"] == name and x["offered"] for x in _lol_sides(platform, sides))
@@ -2258,6 +2282,7 @@ def _lol_member_rebuild(path, mt):
         pick_offered = next(s["offered"] for s in sides if s["side"] == side)
         lt, lt_note = _lol_line_type(x.get("platform"), x.get("odds_type"), inp.get("market"))
         rec = inp.get("recent") or {}
+        one = lol_one_sided_label(x.get("platform"), x.get("sides"), f.get("one_sided"))
         rows.append({"key": _lol_key(x.get("platform"), x.get("market_key")),
                      "platform": x.get("platform"), "platform_label": LOL_PLATFORM.get(x.get("platform"), x.get("platform")),
                      "player": x.get("player"), "team": x.get("team"), "role": x.get("role"), "opponent": x.get("opponent"),
@@ -2274,6 +2299,12 @@ def _lol_member_rebuild(path, mt):
                      "line_seen": x.get("quote_seen_at"), "line_checked": x.get("quote_checked_at") or x.get("quote_seen_at"),
                      "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [], "not_modelled": inp.get("unknowns") or [],
                      "model_version": str(f.get("model") or "").split(" ")[0] or None, "factors": inp.get("factors"), "team_win": inp.get("team_win")})
+        if one:         # os-1: the line and its price only - no chance, projection, pick, letter or stake
+            side_one = "Over" if one == LOL_ONE_SIDED["over"] else "Under"
+            rows[-1].update(one_sided=one, pick_side=side_one, pick=f"{side_one} {x.get('line')}", pick_offered=False, grade=None,
+                            units=None, stake_reason=LOL_ONE_SIDED_NOTE.format(one), p_over=None, p_under=None, p_push=None,
+                            projection=None, median=None, range80=None, drivers=[], factors=None, model_version=None,
+                            forecast_at=None)
         if PP_OPEN_LINK and x.get("platform") == "prizepicks":     # the PrizePicks projection id of the CURRENT offer (lineup link)
             rows[-1]["pp_projection_id"] = pplink.projection_id(x.get("line_id"))
         if PP_OPEN_LINK and x.get("platform") == "underdog":       # Underdog's link to this line's market screen (2026-10-29)
@@ -2291,14 +2322,16 @@ def _lol_member_rebuild(path, mt):
             lines = []
             for ln in m.get("lines") or []:
                 lt, _ = _lol_line_type(ln.get("platform"), ln.get("odds_type"), ln.get("market"))
-                fc = ln.get("projection") is not None and ln.get("current") is not False
+                one = lol_one_sided_label(ln.get("platform"), ln.get("sides"), ln.get("one_sided"))
+                fc = ln.get("projection") is not None and ln.get("current") is not False and not one
                 lines.append({"platform": LOL_PLATFORM.get(ln.get("platform"), ln.get("platform")), "line_type": lt, "line": ln.get("line"),
                               "sides": _lol_sides(ln.get("platform"), ln.get("sides")), "checked": ln.get("checked_at"),
                               "projection": ln.get("projection") if fc else None, "p_over": ln.get("p_over") if fc else None,
                               "p_under": ln.get("p_under") if fc else None,
                               "p_push": ln.get("p_push") if fc else None,
                               "grade": ln.get("grade") if fc and _lol_side_offered(ln.get("platform"), ln.get("sides"), ln.get("model_side")) else None,
-                              "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None)})
+                              "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None),
+                              **({"one_sided": one} if one else {})})
             lines.sort(key=lambda z: (z["line"] if z["line"] is not None else 1e9, z["platform"]))
             markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"), "stat": m.get("stat"),
                             "stat_name": LOL_STAT.get(m.get("stat"), m.get("stat")), "scope": m.get("scope"), "lines": lines})

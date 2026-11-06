@@ -193,6 +193,8 @@ def _legs(srv):
             app = o.get("platform")
             if app not in APPS or (m.get("line_type") or "standard") != "standard" or o.get("line") is None:
                 continue
+            if ((sc.get("hold") or {}).get("label") in ("Over only", "Under only")):
+                continue                           # LoL os-1 / sports cap-2: a one-sided line is never priced (no EV or Edge)
             ev = r.get("event") or {}
             start = wb._ts(ev.get("lock_utc") or ev.get("start_utc"))
             if ev.get("status") == "started" or (start is not None and start <= now):

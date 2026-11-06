@@ -255,6 +255,30 @@ def side_offered(platform, sides, side):
     return s.get("offered")
 
 
+ONE_SIDED_LABEL = {"over": "Over only", "under": "Under only"}
+ONE_SIDED_REASON = "the line offers one side only (Scout grades lines that offer both sides)"
+
+
+def one_sided(platform, sides):
+    """Owner 2026-11-06 (LoL os-1, as sports cap-2): "over" / "under" when the book offers that side only, else None.
+    Underdog: the line lists one option only (a listed side whose status is suspended right now is still listed, so a
+    two-sided line keeps its grade). PrizePicks: exactly one side offered - allowed_wager_types naming one side, or a
+    goblin / demon line with no allowed sides sent (More only by PrizePicks' rule; lol/center/markets.pp_sides).
+    Such a line is shown with its line and price and never graded, staked, put on a slip, priced or counted in the record."""
+    if isinstance(sides, str):
+        try:
+            sides = json.loads(sides or "{}")
+        except ValueError:
+            sides = {}
+    sides = sides if isinstance(sides, dict) else {}
+    if platform == "underdog":
+        listed = [k for k in ("higher", "lower") if sides.get(k)]
+        return ("over" if listed[0] == "higher" else "under") if len(listed) == 1 else None
+    o = (sides.get("higher") or {}).get("offered") is True
+    u = (sides.get("lower") or {}).get("offered") is True
+    return "over" if o and not u else ("under" if u and not o else None)
+
+
 def shown(f):
     """THE chance members see for one saved forecast record (dict) - every LoL surface reads it here: board.json rows and
     match tables (member board, cards, compare, copy-pick and slip checks), slips, the slip line check, learning.
@@ -294,9 +318,13 @@ def shown(f):
         grade, units_policy = f["grade"], f["units_policy"]
     if f.get("model_side") == rside and f.get("grade") and not f.get("cal_version"):
         rgrade = f["grade"]
+    one = one_sided(f.get("platform"), sides)
+    label = f"Lean {side.title()}" if grade == "Lean" else grade
+    if one:                     # os-1: shown with its line and price, never graded (the saved chances stay in the record row)
+        grade, label, units_policy = None, ONE_SIDED_LABEL[one], 0.0
     return {"p_over": po, "p_under": pu, "p_push": float(pp), "side": side, "p_side": p_side,
             "side_offered": None if off is None else int(bool(off)), "grade": grade,
-            "grade_label": f"Lean {side.title()}" if grade == "Lean" else grade, "units_policy": units_policy, "cal": v,
+            "grade_label": label, "units_policy": units_policy, "cal": v, "one_sided": one,
             "raw": {"p_over": raw[0], "p_under": raw[1], "p_push": raw[2], "side": rside, "grade": rgrade}}
 
 
@@ -523,7 +551,9 @@ def slip_eligibility(rec):
             why.append(f"{rec['platform']} rule not confirmed: {name}")
     if "format_scope_mismatch" in rec["flags"]:
         why.append("line scope does not match the series format")
-    if rec["side_offered"] != 1:
+    if one_sided(rec["platform"], rec.get("sides")):
+        why.append(ONE_SIDED_REASON)
+    elif rec["side_offered"] != 1:
         why.append("the model's side is not offered on this line" if rec["side_offered"] == 0 else "offered sides not confirmed by the feed")
     if any(f.startswith("no history") for f in rec["flags"]):
         why.append("no stored history for the player")
@@ -562,7 +592,9 @@ def slip_check(con, legs, now=None):
             why.append(f"leg {r['id']}: series start missing")
         elif _when(r["series_start"]) <= now:
             why.append(f"leg {r['id']}: series started")
-        if not r["slip_eligible"]:
+        if one_sided(r["platform"], r.get("sides")):
+            why.append(f"leg {r['id']}: {ONE_SIDED_REASON}")
+        elif not r["slip_eligible"]:
             why.append(f"leg {r['id']}: not eligible ({'; '.join(json.loads(r['slip_reasons'] or '[]'))})")
     return {"eligible": not why, "reasons": why, "legs": len(rows)}
 
@@ -794,7 +826,7 @@ def board(con, now=None):
                 "slip_reasons": json.loads(f["slip_reasons"] or "[]"), "current": f["line"] == r["line"],
                 "grade": sh["grade_label"], "units": f["units"], "units_policy": sh["units_policy"],
                 "stake_restriction": LOL_STAKE_RESTRICTION if sh["units_policy"] > 0 else None,
-                "calibration": sh["cal"], "raw": sh["raw"]},
+                "calibration": sh["cal"], "raw": sh["raw"], "one_sided": sh["one_sided"]},
             "grade": sh.get("grade_label"), "stake": (f or {}).get("units")})
     tables = {}
     for x in rows:
@@ -809,6 +841,7 @@ def board(con, now=None):
                  "p_over": (x["forecast"] or {}).get("p_over"), "p_under": (x["forecast"] or {}).get("p_under"),
                  "p_push": (x["forecast"] or {}).get("p_push"),
                  "model_side": (x["forecast"] or {}).get("model_side"), "grade": (x["forecast"] or {}).get("grade"),
+                 "one_sided": (x["forecast"] or {}).get("one_sided"),
                  "current": (x["forecast"] or {}).get("current"),
                  "market": ((x["forecast"] or {}).get("inputs") or {}).get("market")})
     settled = [dict(r) for r in con.execute("SELECT * FROM lol_settlements WHERE settled_at >= ? ORDER BY id DESC LIMIT 500",

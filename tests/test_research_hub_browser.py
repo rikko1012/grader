@@ -33,7 +33,7 @@ def open_filters(p):
 
 def add_first(p):
     """+ Add on the first row not on the slip; a prop whose Scout side is not offered opens the ONE card, where the member picks a side."""
-    p.locator('#hub-rows .h-add:not([disabled]):not(.is-on)').first.click()
+    p.locator('#hub-rows .h-add:not([disabled]):not(.is-on):not(.h-add-info)').first.click()     # Info = view only (an extra book or an Over only line, os-1)
     if p.locator('#hub-card').is_visible():
         p.locator('#hub-detail [data-hub=history-side][data-id=over]').click()
         p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').click()
