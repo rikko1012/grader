@@ -1,0 +1,4055 @@
+{
+ "generated_at": "2026-11-06T05:26:22Z",
+ "protocol": "* refit dates: the 1st of every month with games (2024-10 .. 2026-06 = DEVELOPMENT window) and 2026-10-24 12:00Z,\n    2026-11-01 12:00Z (FINAL window, games 2026-10-24 .. 2026-11-05 - untouched while iterating; also the window of\n    the settled book-line props). A refit uses only games with start + 4 h <= the refit time; it predicts the games\n    from the refit time to the next refit.\n  * evaluated rows: played player-games eligible under sm-1 (>= 5 prior played games, last-10 minutes >= 15), both\n    models on exactly the same rows. Distributions are conditional on playing (props on DNPs are void).\n  * clustered CIs: whole-game bootstrap (B draws) of per-game sums.",
+ "dev_sm1_refit_vs_pnf": {},
+ "final_sm1_refit_vs_pnf": {
+  "points": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -3.24479,
+   "logscore_cand": -3.09652,
+   "d_logscore": 0.14828,
+   "d_logscore_ci": [
+    0.09202,
+    0.21439
+   ],
+   "mae_base": 5.2147,
+   "mae_cand": 4.8386,
+   "d_mae": -0.3761,
+   "d_mae_ci": [
+    -0.48314,
+    -0.26572
+   ],
+   "bias_base": 1.3854,
+   "bias_cand": 0.5554,
+   "pit_deciles_base": [
+    0.1467,
+    0.1221,
+    0.1134,
+    0.0937,
+    0.0894,
+    0.09,
+    0.0949,
+    0.0962,
+    0.0826,
+    0.0709
+   ],
+   "pit_deciles_cand": [
+    0.1147,
+    0.1153,
+    0.111,
+    0.0962,
+    0.0919,
+    0.106,
+    0.0943,
+    0.1005,
+    0.0808,
+    0.0894
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 11354,
+     "stated": 0.6338,
+     "hit": 0.6245,
+     "gap": 0.0092
+    },
+    "over": {
+     "n": 4768,
+     "stated": 0.619,
+     "hit": 0.5375,
+     "gap": 0.0814
+    },
+    "under": {
+     "n": 6586,
+     "stated": 0.6445,
+     "hit": 0.6875,
+     "gap": -0.043
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 1239,
+      "stated": 0.5247,
+      "hit": 0.4754
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 1065,
+      "stated": 0.5761,
+      "hit": 0.4986
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 872,
+      "stated": 0.6241,
+      "hit": 0.5585
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 720,
+      "stated": 0.6719,
+      "hit": 0.5847
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 469,
+      "stated": 0.7222,
+      "hit": 0.5991
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 246,
+      "stated": 0.7726,
+      "hit": 0.6098
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 116,
+      "stated": 0.821,
+      "hit": 0.7069
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 1178,
+      "stated": 0.5267,
+      "hit": 0.5866
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 1227,
+      "stated": 0.5748,
+      "hit": 0.6194
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 1228,
+      "stated": 0.6253,
+      "hit": 0.6637
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 1115,
+      "stated": 0.6749,
+      "hit": 0.6942
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 906,
+      "stated": 0.7239,
+      "hit": 0.7682
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 568,
+      "stated": 0.7709,
+      "hit": 0.8187
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 266,
+      "stated": 0.8214,
+      "hit": 0.8835
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 79,
+      "stated": 0.8693,
+      "hit": 0.9241
+     }
+    ],
+    "max_bin_gap": 0.1628
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 11354,
+     "stated": 0.6563,
+     "hit": 0.6531,
+     "gap": 0.0032
+    },
+    "over": {
+     "n": 4146,
+     "stated": 0.6204,
+     "hit": 0.5822,
+     "gap": 0.0381
+    },
+    "under": {
+     "n": 7208,
+     "stated": 0.677,
+     "hit": 0.6938,
+     "gap": -0.0168
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 1028,
+      "stated": 0.5248,
+      "hit": 0.5126
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 946,
+      "stated": 0.5748,
+      "hit": 0.5444
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 794,
+      "stated": 0.6247,
+      "hit": 0.5856
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 619,
+      "stated": 0.6738,
+      "hit": 0.622
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 400,
+      "stated": 0.7229,
+      "hit": 0.6625
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 213,
+      "stated": 0.77,
+      "hit": 0.6948
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 106,
+      "stated": 0.823,
+      "hit": 0.7453
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 1105,
+      "stated": 0.5254,
+      "hit": 0.552
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 1112,
+      "stated": 0.575,
+      "hit": 0.5944
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 1133,
+      "stated": 0.6246,
+      "hit": 0.639
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 1047,
+      "stated": 0.6751,
+      "hit": 0.6848
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 911,
+      "stated": 0.7248,
+      "hit": 0.7333
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 711,
+      "stated": 0.774,
+      "hit": 0.7932
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 501,
+      "stated": 0.8235,
+      "hit": 0.8603
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 352,
+      "stated": 0.8734,
+      "hit": 0.875
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 237,
+      "stated": 0.9238,
+      "hit": 0.9409
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 99,
+      "stated": 0.9656,
+      "hit": 0.9596
+     }
+    ],
+    "max_bin_gap": 0.0777
+   }
+  },
+  "rebounds": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -2.26229,
+   "logscore_cand": -2.21138,
+   "d_logscore": 0.05091,
+   "d_logscore_ci": [
+    0.03207,
+    0.07118
+   ],
+   "mae_base": 1.9939,
+   "mae_cand": 1.9234,
+   "d_mae": -0.0705,
+   "d_mae_ci": [
+    -0.10511,
+    -0.04004
+   ],
+   "bias_base": 0.1514,
+   "bias_cand": -0.059,
+   "pit_deciles_base": [
+    0.1178,
+    0.1005,
+    0.1017,
+    0.0894,
+    0.0949,
+    0.1054,
+    0.1017,
+    0.1005,
+    0.0943,
+    0.0937
+   ],
+   "pit_deciles_cand": [
+    0.0888,
+    0.103,
+    0.1011,
+    0.0949,
+    0.1048,
+    0.0894,
+    0.1048,
+    0.1079,
+    0.0986,
+    0.1067
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7035,
+     "hit": 0.7055,
+     "gap": -0.0021
+    },
+    "over": {
+     "n": 3409,
+     "stated": 0.6918,
+     "hit": 0.6908,
+     "gap": 0.001
+    },
+    "under": {
+     "n": 4701,
+     "stated": 0.7119,
+     "hit": 0.7162,
+     "gap": -0.0043
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 481,
+      "stated": 0.5243,
+      "hit": 0.5551
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 457,
+      "stated": 0.5746,
+      "hit": 0.5864
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 491,
+      "stated": 0.6239,
+      "hit": 0.5988
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 431,
+      "stated": 0.6749,
+      "hit": 0.6868
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 433,
+      "stated": 0.7234,
+      "hit": 0.7159
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 384,
+      "stated": 0.7735,
+      "hit": 0.7448
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 275,
+      "stated": 0.8228,
+      "hit": 0.8182
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 252,
+      "stated": 0.8757,
+      "hit": 0.8849
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 199,
+      "stated": 0.9216,
+      "hit": 0.9146
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 502,
+      "stated": 0.5256,
+      "hit": 0.5378
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 522,
+      "stated": 0.5746,
+      "hit": 0.5996
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 572,
+      "stated": 0.6257,
+      "hit": 0.6276
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 575,
+      "stated": 0.6743,
+      "hit": 0.6643
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 633,
+      "stated": 0.726,
+      "hit": 0.733
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 632,
+      "stated": 0.7739,
+      "hit": 0.7801
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 592,
+      "stated": 0.8244,
+      "hit": 0.8277
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 416,
+      "stated": 0.8724,
+      "hit": 0.8702
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 228,
+      "stated": 0.9202,
+      "hit": 0.9079
+     }
+    ],
+    "max_bin_gap": 0.0308
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7119,
+     "hit": 0.7104,
+     "gap": 0.0016
+    },
+    "over": {
+     "n": 3234,
+     "stated": 0.6882,
+     "hit": 0.7072,
+     "gap": -0.019
+    },
+    "under": {
+     "n": 4876,
+     "stated": 0.7277,
+     "hit": 0.7125,
+     "gap": 0.0152
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 471,
+      "stated": 0.5244,
+      "hit": 0.5478
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 452,
+      "stated": 0.5746,
+      "hit": 0.5752
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 450,
+      "stated": 0.6259,
+      "hit": 0.6467
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 434,
+      "stated": 0.674,
+      "hit": 0.7005
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 393,
+      "stated": 0.724,
+      "hit": 0.7557
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 378,
+      "stated": 0.775,
+      "hit": 0.7804
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 288,
+      "stated": 0.8235,
+      "hit": 0.8403
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 204,
+      "stated": 0.8759,
+      "hit": 0.9118
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 148,
+      "stated": 0.9199,
+      "hit": 0.9392
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 487,
+      "stated": 0.5255,
+      "hit": 0.5133
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 489,
+      "stated": 0.5745,
+      "hit": 0.546
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 530,
+      "stated": 0.625,
+      "hit": 0.6094
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 562,
+      "stated": 0.6753,
+      "hit": 0.6495
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 621,
+      "stated": 0.7251,
+      "hit": 0.7134
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 607,
+      "stated": 0.7753,
+      "hit": 0.7512
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 629,
+      "stated": 0.8254,
+      "hit": 0.8235
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 480,
+      "stated": 0.8735,
+      "hit": 0.8708
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 336,
+      "stated": 0.9236,
+      "hit": 0.9048
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 135,
+      "stated": 0.9701,
+      "hit": 0.963
+     }
+    ],
+    "max_bin_gap": 0.0359
+   }
+  },
+  "assists": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -1.88042,
+   "logscore_cand": -1.85116,
+   "d_logscore": 0.02926,
+   "d_logscore_ci": [
+    0.01049,
+    0.0437
+   ],
+   "mae_base": 1.4412,
+   "mae_cand": 1.4139,
+   "d_mae": -0.0273,
+   "d_mae_ci": [
+    -0.0532,
+    0.00084
+   ],
+   "bias_base": 0.0871,
+   "bias_cand": 0.0905,
+   "pit_deciles_base": [
+    0.1307,
+    0.0968,
+    0.1116,
+    0.0943,
+    0.0943,
+    0.1023,
+    0.103,
+    0.0943,
+    0.0925,
+    0.0801
+   ],
+   "pit_deciles_cand": [
+    0.1048,
+    0.0986,
+    0.1116,
+    0.1036,
+    0.0956,
+    0.1005,
+    0.1048,
+    0.098,
+    0.0956,
+    0.0869
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7302,
+     "hit": 0.7284,
+     "gap": 0.0018
+    },
+    "over": {
+     "n": 3525,
+     "stated": 0.7105,
+     "hit": 0.6769,
+     "gap": 0.0336
+    },
+    "under": {
+     "n": 4585,
+     "stated": 0.7453,
+     "hit": 0.7679,
+     "gap": -0.0226
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 362,
+      "stated": 0.5249,
+      "hit": 0.5249
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 374,
+      "stated": 0.5756,
+      "hit": 0.5
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 409,
+      "stated": 0.6261,
+      "hit": 0.599
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 488,
+      "stated": 0.6747,
+      "hit": 0.6496
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 496,
+      "stated": 0.7251,
+      "hit": 0.7097
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 539,
+      "stated": 0.7736,
+      "hit": 0.7199
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 402,
+      "stated": 0.8261,
+      "hit": 0.7761
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 297,
+      "stated": 0.8739,
+      "hit": 0.862
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 156,
+      "stated": 0.921,
+      "hit": 0.8782
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 422,
+      "stated": 0.525,
+      "hit": 0.5498
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 408,
+      "stated": 0.5731,
+      "hit": 0.5956
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 449,
+      "stated": 0.626,
+      "hit": 0.6481
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 486,
+      "stated": 0.6754,
+      "hit": 0.6955
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 489,
+      "stated": 0.726,
+      "hit": 0.7771
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 537,
+      "stated": 0.7751,
+      "hit": 0.8119
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 597,
+      "stated": 0.8254,
+      "hit": 0.8409
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 517,
+      "stated": 0.875,
+      "hit": 0.882
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 481,
+      "stated": 0.9234,
+      "hit": 0.9356
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 199,
+      "stated": 0.9649,
+      "hit": 0.9698
+     }
+    ],
+    "max_bin_gap": 0.0756
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7345,
+     "hit": 0.7351,
+     "gap": -0.0007
+    },
+    "over": {
+     "n": 3394,
+     "stated": 0.7034,
+     "hit": 0.6918,
+     "gap": 0.0116
+    },
+    "under": {
+     "n": 4716,
+     "stated": 0.7568,
+     "hit": 0.7663,
+     "gap": -0.0095
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 365,
+      "stated": 0.5254,
+      "hit": 0.4877
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 421,
+      "stated": 0.5735,
+      "hit": 0.5582
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 431,
+      "stated": 0.6245,
+      "hit": 0.6218
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 454,
+      "stated": 0.6748,
+      "hit": 0.6696
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 508,
+      "stated": 0.7245,
+      "hit": 0.7205
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 417,
+      "stated": 0.7744,
+      "hit": 0.7698
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 379,
+      "stated": 0.8264,
+      "hit": 0.7942
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 257,
+      "stated": 0.8726,
+      "hit": 0.8599
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 139,
+      "stated": 0.9223,
+      "hit": 0.9496
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 395,
+      "stated": 0.5245,
+      "hit": 0.5165
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 436,
+      "stated": 0.5758,
+      "hit": 0.594
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 458,
+      "stated": 0.6247,
+      "hit": 0.6572
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 435,
+      "stated": 0.6752,
+      "hit": 0.6759
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 482,
+      "stated": 0.7248,
+      "hit": 0.7676
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 507,
+      "stated": 0.7754,
+      "hit": 0.7949
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 554,
+      "stated": 0.8255,
+      "hit": 0.8321
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 517,
+      "stated": 0.8749,
+      "hit": 0.8878
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 565,
+      "stated": 0.9252,
+      "hit": 0.9062
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 367,
+      "stated": 0.9709,
+      "hit": 0.9564
+     }
+    ],
+    "max_bin_gap": 0.0428
+   }
+  },
+  "threes": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -1.43488,
+   "logscore_cand": -1.4161,
+   "d_logscore": 0.01879,
+   "d_logscore_ci": [
+    0.00681,
+    0.02901
+   ],
+   "mae_base": 1.0079,
+   "mae_cand": 0.9808,
+   "d_mae": -0.0271,
+   "d_mae_ci": [
+    -0.0373,
+    -0.01648
+   ],
+   "bias_base": 0.0613,
+   "bias_cand": 0.0179,
+   "pit_deciles_base": [
+    0.1104,
+    0.1147,
+    0.1079,
+    0.1017,
+    0.0912,
+    0.0919,
+    0.0869,
+    0.1023,
+    0.0894,
+    0.1036
+   ],
+   "pit_deciles_cand": [
+    0.1091,
+    0.106,
+    0.1054,
+    0.0999,
+    0.0925,
+    0.0919,
+    0.1036,
+    0.0943,
+    0.0912,
+    0.106
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 4866,
+     "stated": 0.7176,
+     "hit": 0.7063,
+     "gap": 0.0113
+    },
+    "over": {
+     "n": 1576,
+     "stated": 0.6533,
+     "hit": 0.6129,
+     "gap": 0.0404
+    },
+    "under": {
+     "n": 3290,
+     "stated": 0.7484,
+     "hit": 0.7511,
+     "gap": -0.0027
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 259,
+      "stated": 0.5244,
+      "hit": 0.4942
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 252,
+      "stated": 0.5753,
+      "hit": 0.496
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 275,
+      "stated": 0.6253,
+      "hit": 0.5855
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 278,
+      "stated": 0.676,
+      "hit": 0.6763
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 227,
+      "stated": 0.7235,
+      "hit": 0.6388
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 195,
+      "stated": 0.7724,
+      "hit": 0.7744
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 82,
+      "stated": 0.8199,
+      "hit": 0.7927
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 256,
+      "stated": 0.5264,
+      "hit": 0.5078
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 324,
+      "stated": 0.5727,
+      "hit": 0.5432
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 345,
+      "stated": 0.6261,
+      "hit": 0.6638
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 336,
+      "stated": 0.6746,
+      "hit": 0.7083
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 386,
+      "stated": 0.7249,
+      "hit": 0.7358
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 418,
+      "stated": 0.7768,
+      "hit": 0.7775
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 384,
+      "stated": 0.8239,
+      "hit": 0.8359
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 319,
+      "stated": 0.8741,
+      "hit": 0.8433
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 158,
+      "stated": 0.9252,
+      "hit": 0.9177
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 364,
+      "stated": 0.9706,
+      "hit": 0.9725
+     }
+    ],
+    "max_bin_gap": 0.0847
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 4866,
+     "stated": 0.7284,
+     "hit": 0.7201,
+     "gap": 0.0083
+    },
+    "over": {
+     "n": 1523,
+     "stated": 0.6608,
+     "hit": 0.6389,
+     "gap": 0.0219
+    },
+    "under": {
+     "n": 3343,
+     "stated": 0.7591,
+     "hit": 0.7571,
+     "gap": 0.002
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 256,
+      "stated": 0.526,
+      "hit": 0.5273
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 219,
+      "stated": 0.5722,
+      "hit": 0.5616
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 246,
+      "stated": 0.6257,
+      "hit": 0.6138
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 255,
+      "stated": 0.6756,
+      "hit": 0.6118
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 228,
+      "stated": 0.7268,
+      "hit": 0.7368
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 186,
+      "stated": 0.7728,
+      "hit": 0.7366
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 102,
+      "stated": 0.8208,
+      "hit": 0.8039
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 254,
+      "stated": 0.5257,
+      "hit": 0.4606
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 310,
+      "stated": 0.5757,
+      "hit": 0.6
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 341,
+      "stated": 0.6263,
+      "hit": 0.7067
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 309,
+      "stated": 0.6758,
+      "hit": 0.6796
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 374,
+      "stated": 0.7247,
+      "hit": 0.6979
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 414,
+      "stated": 0.7762,
+      "hit": 0.7536
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 426,
+      "stated": 0.8246,
+      "hit": 0.8286
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 259,
+      "stated": 0.8738,
+      "hit": 0.8764
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 224,
+      "stated": 0.9237,
+      "hit": 0.9241
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 432,
+      "stated": 0.9874,
+      "hit": 0.9653
+     }
+    ],
+    "max_bin_gap": 0.0804
+   }
+  },
+  "pooled": {
+   "n": 6488,
+   "d_logscore": 0.06181,
+   "d_logscore_ci": [
+    0.04485,
+    0.07848
+   ]
+  }
+ },
+ "final_sm1_frozen_vs_pnf": {
+  "points": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -3.24655,
+   "logscore_cand": -3.09652,
+   "d_logscore": 0.15004,
+   "d_logscore_ci": [
+    0.09366,
+    0.21628
+   ],
+   "mae_base": 5.2182,
+   "mae_cand": 4.8386,
+   "d_mae": -0.3796,
+   "d_mae_ci": [
+    -0.48554,
+    -0.27035
+   ],
+   "bias_base": 1.401,
+   "bias_cand": 0.5554,
+   "pit_deciles_base": [
+    0.148,
+    0.1221,
+    0.1116,
+    0.0937,
+    0.09,
+    0.0931,
+    0.0925,
+    0.0949,
+    0.0832,
+    0.0703
+   ],
+   "pit_deciles_cand": [
+    0.1147,
+    0.1153,
+    0.111,
+    0.0962,
+    0.0919,
+    0.106,
+    0.0943,
+    0.1005,
+    0.0808,
+    0.0894
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 11354,
+     "stated": 0.6337,
+     "hit": 0.6243,
+     "gap": 0.0094
+    },
+    "over": {
+     "n": 4791,
+     "stated": 0.6193,
+     "hit": 0.537,
+     "gap": 0.0823
+    },
+    "under": {
+     "n": 6563,
+     "stated": 0.6442,
+     "hit": 0.6879,
+     "gap": -0.0437
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 1233,
+      "stated": 0.5244,
+      "hit": 0.472
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 1075,
+      "stated": 0.576,
+      "hit": 0.5033
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 878,
+      "stated": 0.6243,
+      "hit": 0.5558
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 720,
+      "stated": 0.672,
+      "hit": 0.5806
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 476,
+      "stated": 0.7221,
+      "hit": 0.5987
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 250,
+      "stated": 0.7723,
+      "hit": 0.612
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 118,
+      "stated": 0.8208,
+      "hit": 0.7119
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 1170,
+      "stated": 0.5265,
+      "hit": 0.5855
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 1234,
+      "stated": 0.5746,
+      "hit": 0.6199
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 1236,
+      "stated": 0.6256,
+      "hit": 0.6642
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 1091,
+      "stated": 0.6751,
+      "hit": 0.6984
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 909,
+      "stated": 0.7237,
+      "hit": 0.7657
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 560,
+      "stated": 0.7709,
+      "hit": 0.8232
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 268,
+      "stated": 0.8213,
+      "hit": 0.8769
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 76,
+      "stated": 0.8693,
+      "hit": 0.9342
+     }
+    ],
+    "max_bin_gap": 0.1603
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 11354,
+     "stated": 0.6563,
+     "hit": 0.6531,
+     "gap": 0.0032
+    },
+    "over": {
+     "n": 4146,
+     "stated": 0.6204,
+     "hit": 0.5822,
+     "gap": 0.0381
+    },
+    "under": {
+     "n": 7208,
+     "stated": 0.677,
+     "hit": 0.6938,
+     "gap": -0.0168
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 1028,
+      "stated": 0.5248,
+      "hit": 0.5126
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 946,
+      "stated": 0.5748,
+      "hit": 0.5444
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 794,
+      "stated": 0.6247,
+      "hit": 0.5856
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 619,
+      "stated": 0.6738,
+      "hit": 0.622
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 400,
+      "stated": 0.7229,
+      "hit": 0.6625
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 213,
+      "stated": 0.77,
+      "hit": 0.6948
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 106,
+      "stated": 0.823,
+      "hit": 0.7453
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 1105,
+      "stated": 0.5254,
+      "hit": 0.552
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 1112,
+      "stated": 0.575,
+      "hit": 0.5944
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 1133,
+      "stated": 0.6246,
+      "hit": 0.639
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 1047,
+      "stated": 0.6751,
+      "hit": 0.6848
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 911,
+      "stated": 0.7248,
+      "hit": 0.7333
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 711,
+      "stated": 0.774,
+      "hit": 0.7932
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 501,
+      "stated": 0.8235,
+      "hit": 0.8603
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 352,
+      "stated": 0.8734,
+      "hit": 0.875
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 237,
+      "stated": 0.9238,
+      "hit": 0.9409
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 99,
+      "stated": 0.9656,
+      "hit": 0.9596
+     }
+    ],
+    "max_bin_gap": 0.0777
+   }
+  },
+  "rebounds": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -2.26238,
+   "logscore_cand": -2.21138,
+   "d_logscore": 0.051,
+   "d_logscore_ci": [
+    0.03214,
+    0.07129
+   ],
+   "mae_base": 1.9943,
+   "mae_cand": 1.9234,
+   "d_mae": -0.0709,
+   "d_mae_ci": [
+    -0.10559,
+    -0.04036
+   ],
+   "bias_base": 0.1535,
+   "bias_cand": -0.059,
+   "pit_deciles_base": [
+    0.1184,
+    0.1005,
+    0.1011,
+    0.0906,
+    0.0937,
+    0.1054,
+    0.1017,
+    0.1011,
+    0.0931,
+    0.0943
+   ],
+   "pit_deciles_cand": [
+    0.0888,
+    0.103,
+    0.1011,
+    0.0949,
+    0.1048,
+    0.0894,
+    0.1048,
+    0.1079,
+    0.0986,
+    0.1067
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7034,
+     "hit": 0.7057,
+     "gap": -0.0022
+    },
+    "over": {
+     "n": 3410,
+     "stated": 0.6921,
+     "hit": 0.6909,
+     "gap": 0.0012
+    },
+    "under": {
+     "n": 4700,
+     "stated": 0.7117,
+     "hit": 0.7164,
+     "gap": -0.0047
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 478,
+      "stated": 0.5245,
+      "hit": 0.5544
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 461,
+      "stated": 0.5748,
+      "hit": 0.5922
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 482,
+      "stated": 0.6239,
+      "hit": 0.5954
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 439,
+      "stated": 0.6748,
+      "hit": 0.6834
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 434,
+      "stated": 0.7237,
+      "hit": 0.7166
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 382,
+      "stated": 0.7736,
+      "hit": 0.7435
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 277,
+      "stated": 0.8229,
+      "hit": 0.8195
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 250,
+      "stated": 0.8757,
+      "hit": 0.888
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 201,
+      "stated": 0.9215,
+      "hit": 0.9104
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 505,
+      "stated": 0.5255,
+      "hit": 0.5366
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 528,
+      "stated": 0.5749,
+      "hit": 0.6004
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 566,
+      "stated": 0.626,
+      "hit": 0.6307
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 574,
+      "stated": 0.6743,
+      "hit": 0.6638
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 637,
+      "stated": 0.7261,
+      "hit": 0.7331
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 624,
+      "stated": 0.7739,
+      "hit": 0.7821
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 593,
+      "stated": 0.8242,
+      "hit": 0.8263
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 416,
+      "stated": 0.8723,
+      "hit": 0.8702
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 228,
+      "stated": 0.92,
+      "hit": 0.9079
+     }
+    ],
+    "max_bin_gap": 0.0301
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7119,
+     "hit": 0.7104,
+     "gap": 0.0016
+    },
+    "over": {
+     "n": 3234,
+     "stated": 0.6882,
+     "hit": 0.7072,
+     "gap": -0.019
+    },
+    "under": {
+     "n": 4876,
+     "stated": 0.7277,
+     "hit": 0.7125,
+     "gap": 0.0152
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 471,
+      "stated": 0.5244,
+      "hit": 0.5478
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 452,
+      "stated": 0.5746,
+      "hit": 0.5752
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 450,
+      "stated": 0.6259,
+      "hit": 0.6467
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 434,
+      "stated": 0.674,
+      "hit": 0.7005
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 393,
+      "stated": 0.724,
+      "hit": 0.7557
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 378,
+      "stated": 0.775,
+      "hit": 0.7804
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 288,
+      "stated": 0.8235,
+      "hit": 0.8403
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 204,
+      "stated": 0.8759,
+      "hit": 0.9118
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 148,
+      "stated": 0.9199,
+      "hit": 0.9392
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 487,
+      "stated": 0.5255,
+      "hit": 0.5133
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 489,
+      "stated": 0.5745,
+      "hit": 0.546
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 530,
+      "stated": 0.625,
+      "hit": 0.6094
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 562,
+      "stated": 0.6753,
+      "hit": 0.6495
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 621,
+      "stated": 0.7251,
+      "hit": 0.7134
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 607,
+      "stated": 0.7753,
+      "hit": 0.7512
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 629,
+      "stated": 0.8254,
+      "hit": 0.8235
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 480,
+      "stated": 0.8735,
+      "hit": 0.8708
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 336,
+      "stated": 0.9236,
+      "hit": 0.9048
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 135,
+      "stated": 0.9701,
+      "hit": 0.963
+     }
+    ],
+    "max_bin_gap": 0.0359
+   }
+  },
+  "assists": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -1.8805,
+   "logscore_cand": -1.85116,
+   "d_logscore": 0.02934,
+   "d_logscore_ci": [
+    0.01054,
+    0.04379
+   ],
+   "mae_base": 1.4414,
+   "mae_cand": 1.4139,
+   "d_mae": -0.0275,
+   "d_mae_ci": [
+    -0.05335,
+    0.00069
+   ],
+   "bias_base": 0.0882,
+   "bias_cand": 0.0905,
+   "pit_deciles_base": [
+    0.1301,
+    0.098,
+    0.111,
+    0.0943,
+    0.0943,
+    0.103,
+    0.1023,
+    0.0943,
+    0.0925,
+    0.0801
+   ],
+   "pit_deciles_cand": [
+    0.1048,
+    0.0986,
+    0.1116,
+    0.1036,
+    0.0956,
+    0.1005,
+    0.1048,
+    0.098,
+    0.0956,
+    0.0869
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7301,
+     "hit": 0.7287,
+     "gap": 0.0014
+    },
+    "over": {
+     "n": 3530,
+     "stated": 0.7104,
+     "hit": 0.6771,
+     "gap": 0.0333
+    },
+    "under": {
+     "n": 4580,
+     "stated": 0.7454,
+     "hit": 0.7686,
+     "gap": -0.0232
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 364,
+      "stated": 0.5247,
+      "hit": 0.5302
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 376,
+      "stated": 0.5755,
+      "hit": 0.4973
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 407,
+      "stated": 0.6261,
+      "hit": 0.602
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 489,
+      "stated": 0.6747,
+      "hit": 0.6462
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 496,
+      "stated": 0.7251,
+      "hit": 0.7097
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 541,
+      "stated": 0.7737,
+      "hit": 0.7209
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 401,
+      "stated": 0.8262,
+      "hit": 0.7756
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 295,
+      "stated": 0.8736,
+      "hit": 0.861
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 159,
+      "stated": 0.9207,
+      "hit": 0.8805
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 419,
+      "stated": 0.5251,
+      "hit": 0.5513
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 409,
+      "stated": 0.5732,
+      "hit": 0.6015
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 449,
+      "stated": 0.6261,
+      "hit": 0.6459
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 484,
+      "stated": 0.6754,
+      "hit": 0.6963
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 492,
+      "stated": 0.726,
+      "hit": 0.7785
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 534,
+      "stated": 0.7752,
+      "hit": 0.8109
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 600,
+      "stated": 0.8254,
+      "hit": 0.8417
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 516,
+      "stated": 0.8752,
+      "hit": 0.8818
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 481,
+      "stated": 0.9236,
+      "hit": 0.9356
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 196,
+      "stated": 0.965,
+      "hit": 0.9694
+     }
+    ],
+    "max_bin_gap": 0.0782
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7345,
+     "hit": 0.7351,
+     "gap": -0.0007
+    },
+    "over": {
+     "n": 3394,
+     "stated": 0.7034,
+     "hit": 0.6918,
+     "gap": 0.0116
+    },
+    "under": {
+     "n": 4716,
+     "stated": 0.7568,
+     "hit": 0.7663,
+     "gap": -0.0095
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 365,
+      "stated": 0.5254,
+      "hit": 0.4877
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 421,
+      "stated": 0.5735,
+      "hit": 0.5582
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 431,
+      "stated": 0.6245,
+      "hit": 0.6218
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 454,
+      "stated": 0.6748,
+      "hit": 0.6696
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 508,
+      "stated": 0.7245,
+      "hit": 0.7205
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 417,
+      "stated": 0.7744,
+      "hit": 0.7698
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 379,
+      "stated": 0.8264,
+      "hit": 0.7942
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 257,
+      "stated": 0.8726,
+      "hit": 0.8599
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 139,
+      "stated": 0.9223,
+      "hit": 0.9496
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 395,
+      "stated": 0.5245,
+      "hit": 0.5165
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 436,
+      "stated": 0.5758,
+      "hit": 0.594
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 458,
+      "stated": 0.6247,
+      "hit": 0.6572
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 435,
+      "stated": 0.6752,
+      "hit": 0.6759
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 482,
+      "stated": 0.7248,
+      "hit": 0.7676
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 507,
+      "stated": 0.7754,
+      "hit": 0.7949
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 554,
+      "stated": 0.8255,
+      "hit": 0.8321
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 517,
+      "stated": 0.8749,
+      "hit": 0.8878
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 565,
+      "stated": 0.9252,
+      "hit": 0.9062
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 367,
+      "stated": 0.9709,
+      "hit": 0.9564
+     }
+    ],
+    "max_bin_gap": 0.0428
+   }
+  },
+  "threes": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -1.43489,
+   "logscore_cand": -1.4161,
+   "d_logscore": 0.01879,
+   "d_logscore_ci": [
+    0.00681,
+    0.02901
+   ],
+   "mae_base": 1.0079,
+   "mae_cand": 0.9808,
+   "d_mae": -0.0272,
+   "d_mae_ci": [
+    -0.03736,
+    -0.01654
+   ],
+   "bias_base": 0.0619,
+   "bias_cand": 0.0179,
+   "pit_deciles_base": [
+    0.1104,
+    0.1147,
+    0.1079,
+    0.1017,
+    0.0912,
+    0.0919,
+    0.0875,
+    0.1017,
+    0.0894,
+    0.1036
+   ],
+   "pit_deciles_cand": [
+    0.1091,
+    0.106,
+    0.1054,
+    0.0999,
+    0.0925,
+    0.0919,
+    0.1036,
+    0.0943,
+    0.0912,
+    0.106
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 4866,
+     "stated": 0.7175,
+     "hit": 0.7063,
+     "gap": 0.0112
+    },
+    "over": {
+     "n": 1576,
+     "stated": 0.6534,
+     "hit": 0.6129,
+     "gap": 0.0405
+    },
+    "under": {
+     "n": 3290,
+     "stated": 0.7483,
+     "hit": 0.7511,
+     "gap": -0.0028
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 257,
+      "stated": 0.5244,
+      "hit": 0.4903
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 254,
+      "stated": 0.5752,
+      "hit": 0.5
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 274,
+      "stated": 0.6253,
+      "hit": 0.5839
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 278,
+      "stated": 0.6759,
+      "hit": 0.6763
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 226,
+      "stated": 0.7233,
+      "hit": 0.6416
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 197,
+      "stated": 0.7722,
+      "hit": 0.7716
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 82,
+      "stated": 0.82,
+      "hit": 0.7927
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 257,
+      "stated": 0.5263,
+      "hit": 0.5058
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 323,
+      "stated": 0.5727,
+      "hit": 0.5449
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 346,
+      "stated": 0.626,
+      "hit": 0.6647
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 336,
+      "stated": 0.6746,
+      "hit": 0.7054
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 386,
+      "stated": 0.7248,
+      "hit": 0.7358
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 417,
+      "stated": 0.7767,
+      "hit": 0.7794
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 384,
+      "stated": 0.8238,
+      "hit": 0.8359
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 319,
+      "stated": 0.874,
+      "hit": 0.8433
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 158,
+      "stated": 0.9252,
+      "hit": 0.9177
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 364,
+      "stated": 0.9706,
+      "hit": 0.9725
+     }
+    ],
+    "max_bin_gap": 0.0817
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 4866,
+     "stated": 0.7284,
+     "hit": 0.7201,
+     "gap": 0.0083
+    },
+    "over": {
+     "n": 1523,
+     "stated": 0.6608,
+     "hit": 0.6389,
+     "gap": 0.0219
+    },
+    "under": {
+     "n": 3343,
+     "stated": 0.7591,
+     "hit": 0.7571,
+     "gap": 0.002
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 256,
+      "stated": 0.526,
+      "hit": 0.5273
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 219,
+      "stated": 0.5722,
+      "hit": 0.5616
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 246,
+      "stated": 0.6257,
+      "hit": 0.6138
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 255,
+      "stated": 0.6756,
+      "hit": 0.6118
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 228,
+      "stated": 0.7268,
+      "hit": 0.7368
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 186,
+      "stated": 0.7728,
+      "hit": 0.7366
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 102,
+      "stated": 0.8208,
+      "hit": 0.8039
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 254,
+      "stated": 0.5257,
+      "hit": 0.4606
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 310,
+      "stated": 0.5757,
+      "hit": 0.6
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 341,
+      "stated": 0.6263,
+      "hit": 0.7067
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 309,
+      "stated": 0.6758,
+      "hit": 0.6796
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 374,
+      "stated": 0.7247,
+      "hit": 0.6979
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 414,
+      "stated": 0.7762,
+      "hit": 0.7536
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 426,
+      "stated": 0.8246,
+      "hit": 0.8286
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 259,
+      "stated": 0.8738,
+      "hit": 0.8764
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 224,
+      "stated": 0.9237,
+      "hit": 0.9241
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 432,
+      "stated": 0.9874,
+      "hit": 0.9653
+     }
+    ],
+    "max_bin_gap": 0.0804
+   }
+  },
+  "pooled": {
+   "n": 6488,
+   "d_logscore": 0.06229,
+   "d_logscore_ci": [
+    0.04499,
+    0.07901
+   ]
+  }
+ },
+ "final_sm1_frozen_vs_sm1_refit": {
+  "points": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -3.24655,
+   "logscore_cand": -3.24479,
+   "d_logscore": 0.00176,
+   "d_logscore_ci": [
+    -0.00056,
+    0.00485
+   ],
+   "mae_base": 5.2182,
+   "mae_cand": 5.2147,
+   "d_mae": -0.0035,
+   "d_mae_ci": [
+    -0.00708,
+    -0.00041
+   ],
+   "bias_base": 1.401,
+   "bias_cand": 1.3854,
+   "pit_deciles_base": [
+    0.148,
+    0.1221,
+    0.1116,
+    0.0937,
+    0.09,
+    0.0931,
+    0.0925,
+    0.0949,
+    0.0832,
+    0.0703
+   ],
+   "pit_deciles_cand": [
+    0.1467,
+    0.1221,
+    0.1134,
+    0.0937,
+    0.0894,
+    0.09,
+    0.0949,
+    0.0962,
+    0.0826,
+    0.0709
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 11354,
+     "stated": 0.6337,
+     "hit": 0.6243,
+     "gap": 0.0094
+    },
+    "over": {
+     "n": 4791,
+     "stated": 0.6193,
+     "hit": 0.537,
+     "gap": 0.0823
+    },
+    "under": {
+     "n": 6563,
+     "stated": 0.6442,
+     "hit": 0.6879,
+     "gap": -0.0437
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 1233,
+      "stated": 0.5244,
+      "hit": 0.472
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 1075,
+      "stated": 0.576,
+      "hit": 0.5033
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 878,
+      "stated": 0.6243,
+      "hit": 0.5558
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 720,
+      "stated": 0.672,
+      "hit": 0.5806
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 476,
+      "stated": 0.7221,
+      "hit": 0.5987
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 250,
+      "stated": 0.7723,
+      "hit": 0.612
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 118,
+      "stated": 0.8208,
+      "hit": 0.7119
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 1170,
+      "stated": 0.5265,
+      "hit": 0.5855
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 1234,
+      "stated": 0.5746,
+      "hit": 0.6199
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 1236,
+      "stated": 0.6256,
+      "hit": 0.6642
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 1091,
+      "stated": 0.6751,
+      "hit": 0.6984
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 909,
+      "stated": 0.7237,
+      "hit": 0.7657
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 560,
+      "stated": 0.7709,
+      "hit": 0.8232
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 268,
+      "stated": 0.8213,
+      "hit": 0.8769
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 76,
+      "stated": 0.8693,
+      "hit": 0.9342
+     }
+    ],
+    "max_bin_gap": 0.1603
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 11354,
+     "stated": 0.6338,
+     "hit": 0.6245,
+     "gap": 0.0092
+    },
+    "over": {
+     "n": 4768,
+     "stated": 0.619,
+     "hit": 0.5375,
+     "gap": 0.0814
+    },
+    "under": {
+     "n": 6586,
+     "stated": 0.6445,
+     "hit": 0.6875,
+     "gap": -0.043
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 1239,
+      "stated": 0.5247,
+      "hit": 0.4754
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 1065,
+      "stated": 0.5761,
+      "hit": 0.4986
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 872,
+      "stated": 0.6241,
+      "hit": 0.5585
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 720,
+      "stated": 0.6719,
+      "hit": 0.5847
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 469,
+      "stated": 0.7222,
+      "hit": 0.5991
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 246,
+      "stated": 0.7726,
+      "hit": 0.6098
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 116,
+      "stated": 0.821,
+      "hit": 0.7069
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 1178,
+      "stated": 0.5267,
+      "hit": 0.5866
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 1227,
+      "stated": 0.5748,
+      "hit": 0.6194
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 1228,
+      "stated": 0.6253,
+      "hit": 0.6637
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 1115,
+      "stated": 0.6749,
+      "hit": 0.6942
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 906,
+      "stated": 0.7239,
+      "hit": 0.7682
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 568,
+      "stated": 0.7709,
+      "hit": 0.8187
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 266,
+      "stated": 0.8214,
+      "hit": 0.8835
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 79,
+      "stated": 0.8693,
+      "hit": 0.9241
+     }
+    ],
+    "max_bin_gap": 0.1628
+   }
+  },
+  "rebounds": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -2.26238,
+   "logscore_cand": -2.26229,
+   "d_logscore": 9e-05,
+   "d_logscore_ci": [
+    -2e-05,
+    0.00019
+   ],
+   "mae_base": 1.9943,
+   "mae_cand": 1.9939,
+   "d_mae": -0.0004,
+   "d_mae_ci": [
+    -0.00072,
+    -0.0001
+   ],
+   "bias_base": 0.1535,
+   "bias_cand": 0.1514,
+   "pit_deciles_base": [
+    0.1184,
+    0.1005,
+    0.1011,
+    0.0906,
+    0.0937,
+    0.1054,
+    0.1017,
+    0.1011,
+    0.0931,
+    0.0943
+   ],
+   "pit_deciles_cand": [
+    0.1178,
+    0.1005,
+    0.1017,
+    0.0894,
+    0.0949,
+    0.1054,
+    0.1017,
+    0.1005,
+    0.0943,
+    0.0937
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7034,
+     "hit": 0.7057,
+     "gap": -0.0022
+    },
+    "over": {
+     "n": 3410,
+     "stated": 0.6921,
+     "hit": 0.6909,
+     "gap": 0.0012
+    },
+    "under": {
+     "n": 4700,
+     "stated": 0.7117,
+     "hit": 0.7164,
+     "gap": -0.0047
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 478,
+      "stated": 0.5245,
+      "hit": 0.5544
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 461,
+      "stated": 0.5748,
+      "hit": 0.5922
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 482,
+      "stated": 0.6239,
+      "hit": 0.5954
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 439,
+      "stated": 0.6748,
+      "hit": 0.6834
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 434,
+      "stated": 0.7237,
+      "hit": 0.7166
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 382,
+      "stated": 0.7736,
+      "hit": 0.7435
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 277,
+      "stated": 0.8229,
+      "hit": 0.8195
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 250,
+      "stated": 0.8757,
+      "hit": 0.888
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 201,
+      "stated": 0.9215,
+      "hit": 0.9104
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 505,
+      "stated": 0.5255,
+      "hit": 0.5366
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 528,
+      "stated": 0.5749,
+      "hit": 0.6004
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 566,
+      "stated": 0.626,
+      "hit": 0.6307
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 574,
+      "stated": 0.6743,
+      "hit": 0.6638
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 637,
+      "stated": 0.7261,
+      "hit": 0.7331
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 624,
+      "stated": 0.7739,
+      "hit": 0.7821
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 593,
+      "stated": 0.8242,
+      "hit": 0.8263
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 416,
+      "stated": 0.8723,
+      "hit": 0.8702
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 228,
+      "stated": 0.92,
+      "hit": 0.9079
+     }
+    ],
+    "max_bin_gap": 0.0301
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7035,
+     "hit": 0.7055,
+     "gap": -0.0021
+    },
+    "over": {
+     "n": 3409,
+     "stated": 0.6918,
+     "hit": 0.6908,
+     "gap": 0.001
+    },
+    "under": {
+     "n": 4701,
+     "stated": 0.7119,
+     "hit": 0.7162,
+     "gap": -0.0043
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 481,
+      "stated": 0.5243,
+      "hit": 0.5551
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 457,
+      "stated": 0.5746,
+      "hit": 0.5864
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 491,
+      "stated": 0.6239,
+      "hit": 0.5988
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 431,
+      "stated": 0.6749,
+      "hit": 0.6868
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 433,
+      "stated": 0.7234,
+      "hit": 0.7159
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 384,
+      "stated": 0.7735,
+      "hit": 0.7448
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 275,
+      "stated": 0.8228,
+      "hit": 0.8182
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 252,
+      "stated": 0.8757,
+      "hit": 0.8849
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 199,
+      "stated": 0.9216,
+      "hit": 0.9146
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 502,
+      "stated": 0.5256,
+      "hit": 0.5378
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 522,
+      "stated": 0.5746,
+      "hit": 0.5996
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 572,
+      "stated": 0.6257,
+      "hit": 0.6276
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 575,
+      "stated": 0.6743,
+      "hit": 0.6643
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 633,
+      "stated": 0.726,
+      "hit": 0.733
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 632,
+      "stated": 0.7739,
+      "hit": 0.7801
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 592,
+      "stated": 0.8244,
+      "hit": 0.8277
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 416,
+      "stated": 0.8724,
+      "hit": 0.8702
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 228,
+      "stated": 0.9202,
+      "hit": 0.9079
+     }
+    ],
+    "max_bin_gap": 0.0308
+   }
+  },
+  "assists": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -1.8805,
+   "logscore_cand": -1.88042,
+   "d_logscore": 8e-05,
+   "d_logscore_ci": [
+    2e-05,
+    0.00016
+   ],
+   "mae_base": 1.4414,
+   "mae_cand": 1.4412,
+   "d_mae": -0.0002,
+   "d_mae_ci": [
+    -0.00029,
+    -4e-05
+   ],
+   "bias_base": 0.0882,
+   "bias_cand": 0.0871,
+   "pit_deciles_base": [
+    0.1301,
+    0.098,
+    0.111,
+    0.0943,
+    0.0943,
+    0.103,
+    0.1023,
+    0.0943,
+    0.0925,
+    0.0801
+   ],
+   "pit_deciles_cand": [
+    0.1307,
+    0.0968,
+    0.1116,
+    0.0943,
+    0.0943,
+    0.1023,
+    0.103,
+    0.0943,
+    0.0925,
+    0.0801
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7301,
+     "hit": 0.7287,
+     "gap": 0.0014
+    },
+    "over": {
+     "n": 3530,
+     "stated": 0.7104,
+     "hit": 0.6771,
+     "gap": 0.0333
+    },
+    "under": {
+     "n": 4580,
+     "stated": 0.7454,
+     "hit": 0.7686,
+     "gap": -0.0232
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 364,
+      "stated": 0.5247,
+      "hit": 0.5302
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 376,
+      "stated": 0.5755,
+      "hit": 0.4973
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 407,
+      "stated": 0.6261,
+      "hit": 0.602
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 489,
+      "stated": 0.6747,
+      "hit": 0.6462
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 496,
+      "stated": 0.7251,
+      "hit": 0.7097
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 541,
+      "stated": 0.7737,
+      "hit": 0.7209
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 401,
+      "stated": 0.8262,
+      "hit": 0.7756
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 295,
+      "stated": 0.8736,
+      "hit": 0.861
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 159,
+      "stated": 0.9207,
+      "hit": 0.8805
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 419,
+      "stated": 0.5251,
+      "hit": 0.5513
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 409,
+      "stated": 0.5732,
+      "hit": 0.6015
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 449,
+      "stated": 0.6261,
+      "hit": 0.6459
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 484,
+      "stated": 0.6754,
+      "hit": 0.6963
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 492,
+      "stated": 0.726,
+      "hit": 0.7785
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 534,
+      "stated": 0.7752,
+      "hit": 0.8109
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 600,
+      "stated": 0.8254,
+      "hit": 0.8417
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 516,
+      "stated": 0.8752,
+      "hit": 0.8818
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 481,
+      "stated": 0.9236,
+      "hit": 0.9356
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 196,
+      "stated": 0.965,
+      "hit": 0.9694
+     }
+    ],
+    "max_bin_gap": 0.0782
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 8110,
+     "stated": 0.7302,
+     "hit": 0.7284,
+     "gap": 0.0018
+    },
+    "over": {
+     "n": 3525,
+     "stated": 0.7105,
+     "hit": 0.6769,
+     "gap": 0.0336
+    },
+    "under": {
+     "n": 4585,
+     "stated": 0.7453,
+     "hit": 0.7679,
+     "gap": -0.0226
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 362,
+      "stated": 0.5249,
+      "hit": 0.5249
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 374,
+      "stated": 0.5756,
+      "hit": 0.5
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 409,
+      "stated": 0.6261,
+      "hit": 0.599
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 488,
+      "stated": 0.6747,
+      "hit": 0.6496
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 496,
+      "stated": 0.7251,
+      "hit": 0.7097
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 539,
+      "stated": 0.7736,
+      "hit": 0.7199
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 402,
+      "stated": 0.8261,
+      "hit": 0.7761
+     },
+     {
+      "side": "over",
+      "bin": "0.85",
+      "n": 297,
+      "stated": 0.8739,
+      "hit": 0.862
+     },
+     {
+      "side": "over",
+      "bin": "0.90",
+      "n": 156,
+      "stated": 0.921,
+      "hit": 0.8782
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 422,
+      "stated": 0.525,
+      "hit": 0.5498
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 408,
+      "stated": 0.5731,
+      "hit": 0.5956
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 449,
+      "stated": 0.626,
+      "hit": 0.6481
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 486,
+      "stated": 0.6754,
+      "hit": 0.6955
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 489,
+      "stated": 0.726,
+      "hit": 0.7771
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 537,
+      "stated": 0.7751,
+      "hit": 0.8119
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 597,
+      "stated": 0.8254,
+      "hit": 0.8409
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 517,
+      "stated": 0.875,
+      "hit": 0.882
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 481,
+      "stated": 0.9234,
+      "hit": 0.9356
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 199,
+      "stated": 0.9649,
+      "hit": 0.9698
+     }
+    ],
+    "max_bin_gap": 0.0756
+   }
+  },
+  "threes": {
+   "n": 1622,
+   "games": 100,
+   "logscore_base": -1.43489,
+   "logscore_cand": -1.43488,
+   "d_logscore": 1e-05,
+   "d_logscore_ci": [
+    -3e-05,
+    4e-05
+   ],
+   "mae_base": 1.0079,
+   "mae_cand": 1.0079,
+   "d_mae": -0.0001,
+   "d_mae_ci": [
+    -0.00012,
+    -2e-05
+   ],
+   "bias_base": 0.0619,
+   "bias_cand": 0.0613,
+   "pit_deciles_base": [
+    0.1104,
+    0.1147,
+    0.1079,
+    0.1017,
+    0.0912,
+    0.0919,
+    0.0875,
+    0.1017,
+    0.0894,
+    0.1036
+   ],
+   "pit_deciles_cand": [
+    0.1104,
+    0.1147,
+    0.1079,
+    0.1017,
+    0.0912,
+    0.0919,
+    0.0869,
+    0.1023,
+    0.0894,
+    0.1036
+   ],
+   "thr_cal_base": {
+    "all": {
+     "n": 4866,
+     "stated": 0.7175,
+     "hit": 0.7063,
+     "gap": 0.0112
+    },
+    "over": {
+     "n": 1576,
+     "stated": 0.6534,
+     "hit": 0.6129,
+     "gap": 0.0405
+    },
+    "under": {
+     "n": 3290,
+     "stated": 0.7483,
+     "hit": 0.7511,
+     "gap": -0.0028
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 257,
+      "stated": 0.5244,
+      "hit": 0.4903
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 254,
+      "stated": 0.5752,
+      "hit": 0.5
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 274,
+      "stated": 0.6253,
+      "hit": 0.5839
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 278,
+      "stated": 0.6759,
+      "hit": 0.6763
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 226,
+      "stated": 0.7233,
+      "hit": 0.6416
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 197,
+      "stated": 0.7722,
+      "hit": 0.7716
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 82,
+      "stated": 0.82,
+      "hit": 0.7927
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 257,
+      "stated": 0.5263,
+      "hit": 0.5058
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 323,
+      "stated": 0.5727,
+      "hit": 0.5449
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 346,
+      "stated": 0.626,
+      "hit": 0.6647
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 336,
+      "stated": 0.6746,
+      "hit": 0.7054
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 386,
+      "stated": 0.7248,
+      "hit": 0.7358
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 417,
+      "stated": 0.7767,
+      "hit": 0.7794
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 384,
+      "stated": 0.8238,
+      "hit": 0.8359
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 319,
+      "stated": 0.874,
+      "hit": 0.8433
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 158,
+      "stated": 0.9252,
+      "hit": 0.9177
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 364,
+      "stated": 0.9706,
+      "hit": 0.9725
+     }
+    ],
+    "max_bin_gap": 0.0817
+   },
+   "thr_cal_cand": {
+    "all": {
+     "n": 4866,
+     "stated": 0.7176,
+     "hit": 0.7063,
+     "gap": 0.0113
+    },
+    "over": {
+     "n": 1576,
+     "stated": 0.6533,
+     "hit": 0.6129,
+     "gap": 0.0404
+    },
+    "under": {
+     "n": 3290,
+     "stated": 0.7484,
+     "hit": 0.7511,
+     "gap": -0.0027
+    },
+    "bins": [
+     {
+      "side": "over",
+      "bin": "0.50",
+      "n": 259,
+      "stated": 0.5244,
+      "hit": 0.4942
+     },
+     {
+      "side": "over",
+      "bin": "0.55",
+      "n": 252,
+      "stated": 0.5753,
+      "hit": 0.496
+     },
+     {
+      "side": "over",
+      "bin": "0.60",
+      "n": 275,
+      "stated": 0.6253,
+      "hit": 0.5855
+     },
+     {
+      "side": "over",
+      "bin": "0.65",
+      "n": 278,
+      "stated": 0.676,
+      "hit": 0.6763
+     },
+     {
+      "side": "over",
+      "bin": "0.70",
+      "n": 227,
+      "stated": 0.7235,
+      "hit": 0.6388
+     },
+     {
+      "side": "over",
+      "bin": "0.75",
+      "n": 195,
+      "stated": 0.7724,
+      "hit": 0.7744
+     },
+     {
+      "side": "over",
+      "bin": "0.80",
+      "n": 82,
+      "stated": 0.8199,
+      "hit": 0.7927
+     },
+     {
+      "side": "under",
+      "bin": "0.50",
+      "n": 256,
+      "stated": 0.5264,
+      "hit": 0.5078
+     },
+     {
+      "side": "under",
+      "bin": "0.55",
+      "n": 324,
+      "stated": 0.5727,
+      "hit": 0.5432
+     },
+     {
+      "side": "under",
+      "bin": "0.60",
+      "n": 345,
+      "stated": 0.6261,
+      "hit": 0.6638
+     },
+     {
+      "side": "under",
+      "bin": "0.65",
+      "n": 336,
+      "stated": 0.6746,
+      "hit": 0.7083
+     },
+     {
+      "side": "under",
+      "bin": "0.70",
+      "n": 386,
+      "stated": 0.7249,
+      "hit": 0.7358
+     },
+     {
+      "side": "under",
+      "bin": "0.75",
+      "n": 418,
+      "stated": 0.7768,
+      "hit": 0.7775
+     },
+     {
+      "side": "under",
+      "bin": "0.80",
+      "n": 384,
+      "stated": 0.8239,
+      "hit": 0.8359
+     },
+     {
+      "side": "under",
+      "bin": "0.85",
+      "n": 319,
+      "stated": 0.8741,
+      "hit": 0.8433
+     },
+     {
+      "side": "under",
+      "bin": "0.90",
+      "n": 158,
+      "stated": 0.9252,
+      "hit": 0.9177
+     },
+     {
+      "side": "under",
+      "bin": "0.95",
+      "n": 364,
+      "stated": 0.9706,
+      "hit": 0.9725
+     }
+    ],
+    "max_bin_gap": 0.0847
+   }
+  },
+  "pooled": {
+   "n": 6488,
+   "d_logscore": 0.00048,
+   "d_logscore_ci": [
+    -9e-05,
+    0.00127
+   ]
+  }
+ }
+}

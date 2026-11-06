@@ -25,6 +25,7 @@ was the live one.
   python -m sports.research.proj_nba_full.bookline <pred_dir> <out.json> [nba_full.db]
                                                    [--comparison <gradecore_comparison_nba.json>]
                                                    [--export <gradecore_export_nba.json>] [--live-tag sm-1:<sha>]
+                                                   [--export-only 1]
 """
 from __future__ import annotations
 
@@ -94,7 +95,9 @@ def load_comparison(path, games, box):
     return c[np.asarray(played)].reset_index(drop=True), cnt
 
 
-def load_props(props, comparison=None, tags=None, live_tag=None):
+def load_props(props, comparison=None, tags=None, live_tag=None, export_only=False):
+    """export_only: service-settled gradecore export rows only (the 2026-11-06 fresh-export rerun's primary population;
+    no results-ledger or offline-scored rows)."""
     p = props[props["model_version"] == "sm-1"].copy()
     ex = p[p["src"].str.startswith("gradecore")].copy()
     ex["po_live"] = np.where(ex["side"] == "over", ex["p_side"], 1 - ex["p_side"])
@@ -108,8 +111,8 @@ def load_props(props, comparison=None, tags=None, live_tag=None):
     rs = rs.sort_values("forecast_at").drop_duplicates(KEY, keep="last")
     rs = rs[np.array([tuple(r) not in seen for r in rs[KEY].to_numpy()], dtype=bool)].copy()
     rs["po_live"] = rs["p_over"] / (rs["p_over"] + rs["p_under"])
-    parts = [ex, rs]
-    if comparison is not None and len(comparison):
+    parts = [ex] if export_only else [ex, rs]
+    if not export_only and comparison is not None and len(comparison):
         seen |= set(map(tuple, rs[KEY].to_numpy()))
         cm = comparison[np.array([tuple(r) not in seen for r in comparison[KEY].to_numpy()], dtype=bool)].copy()
         parts.append(cm)
@@ -238,14 +241,15 @@ def _games_box(db):
     return games, box
 
 
-def main(pred_dir, out_json, db=None, comparison=None, export=None, live_tag=None):
+def main(pred_dir, out_json, db=None, comparison=None, export=None, live_tag=None, export_only=None):
+    export_only = str(export_only or "").lower() in ("1", "true", "yes")
     raw = D.load(db)
     comp, comp_counts = (None, None)
     if comparison:
         games, box = _games_box(db)
         comp, comp_counts = load_comparison(comparison, games, box)
     tags = export_tags(export) if export else None
-    props = load_props(raw[4], comp, tags, live_tag)
+    props = load_props(raw[4], comp, tags, live_tag, export_only)
     n_all = len(props)
     props = attach(props, pred_dir, "sm1frozen", by_refit=False)
     props = attach(props, pred_dir, "pnf")
@@ -254,6 +258,7 @@ def main(pred_dir, out_json, db=None, comparison=None, export=None, live_tag=Non
     P = props[ok].reset_index(drop=True)
     rep = _report(P, n_all, dropped)
     rep["live_tag"] = live_tag
+    rep["export_only"] = export_only
     rep["export_tags_seen"] = (pd.Series(tags).value_counts().to_dict() if tags else None)
     rep["comparison_counts"] = comp_counts
     rep["subsets"] = {}

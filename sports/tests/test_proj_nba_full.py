@@ -176,6 +176,18 @@ def test_windows_chronological_and_final_untouched():
     assert all(W._ep(a) < W._ep(b) for _, a, b in w)
 
 
+def test_final_end_default_and_override(monkeypatch):
+    import importlib
+    monkeypatch.delenv("PNF_FINAL_END", raising=False)
+    m = importlib.reload(W)
+    assert m.FINAL_END == "2026-11-06T00:00:00Z"            # earlier committed results stay reproducible
+    monkeypatch.setenv("PNF_FINAL_END", "2026-11-07T00:00:00Z")
+    m = importlib.reload(W)
+    assert m.windows("final")[-1][2] == "2026-11-07T00:00:00Z"
+    monkeypatch.delenv("PNF_FINAL_END")
+    importlib.reload(W)
+
+
 def test_bookline_load_props_dedupes():
     rows = [
         dict(src="gradecore_export_x", model_version="sm-1", game_id="g", player_id="p", market="points", line=10.5,
@@ -238,3 +250,15 @@ def test_bookline_live_tag_filter():
             for f in ("x", "y")]
     out = bookline.load_props(pd.DataFrame(rows), tags={"x": "sm-1:aaa", "y": "sm-1:old"}, live_tag="sm-1:aaa")
     assert list(out["player_id"]) == ["x"]
+
+
+def test_bookline_export_only_drops_other_sources():
+    base = dict(model_version="sm-1", game_id="g", market="points", line=10.5, book="pp",
+                forecast_at="2026-10-30T10:00:00Z", start_at="2026-10-30T23:00:00Z", actual_box=12.0)
+    rows = [dict(base, src="gradecore_export_x", forecast_id="x", player_id="x", side="over", p_side=0.6,
+                 p_over=None, p_under=None),
+            dict(base, src="results_ledger_x", forecast_id="r", player_id="r", side=None, p_side=None,
+                 p_over=0.6, p_under=0.4)]
+    assert len(bookline.load_props(pd.DataFrame(rows))) == 2
+    out = bookline.load_props(pd.DataFrame(rows), export_only=True)
+    assert list(out["src"]) == ["gradecore_export_x"]

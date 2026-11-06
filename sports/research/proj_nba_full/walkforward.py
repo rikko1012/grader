@@ -43,7 +43,9 @@ DEV_REFITS = [f"{y}-{m:02d}-01T00:00:00Z" for y, m in
                (2025, 10), (2025, 11), (2025, 12), (2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5), (2026, 6)]]
 DEV_END = "2026-07-01T00:00:00Z"
 FINAL_REFITS = ["2026-10-24T00:00:00Z", "2026-11-01T00:00:00Z"]
-FINAL_END = "2026-11-06T00:00:00Z"
+# end of the FINAL window; the 2026-11-06 fresh-export rerun sets PNF_FINAL_END=2026-11-07T00:00:00Z so the one newly
+# settled Nov 6 UTC game is scored (the default keeps every earlier result reproducible)
+FINAL_END = os.environ.get("PNF_FINAL_END", "2026-11-06T00:00:00Z")
 B = 500
 
 
