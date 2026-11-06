@@ -128,12 +128,13 @@ def test_params_are_normalised(reference_tables):
     assert p[6] == ("a", "b") and p[8] == 100.0 and p[9] == fair.MAX_WIDTH
 
 
-def test_live_tables_offer_underdog_only_and_prizepicks_is_never_priced():
-    """Owner rule 2026-11-04: the PrizePicks table is unverified, so no PrizePicks entry, break-even or EV reaches a member."""
-    assert {e["app"] for e in we.entries()} == {"underdog"}
+def test_live_tables_offer_both_apps_prizepicks_verified_by_owner():
+    """Owner sign-off 2026-11-05: the PrizePicks help-center table is verified, so PrizePicks entries are priced (standard lines)."""
+    assert {e["app"] for e in we.entries()} == {"prizepicks", "underdog"}
     assert not any(e["entry"] == "flex" and e["n"] == 2 for e in we.entries())     # no entry type the app does not show
-    assert we.params({})[:3] == ("underdog", "standard", 2)
-    assert we.params({"app": "prizepicks", "entry": "flex", "n": "2"})[:3] == ("underdog", "standard", 2)
+    assert we.params({})[:3] == ("prizepicks", "power", 2)
+    assert we.params({"app": "prizepicks", "entry": "flex", "n": "2"})[:3] == ("prizepicks", "power", 2)
+    assert we.params({"app": "underdog"})[:3] == ("underdog", "standard", 2)
 
 
 def test_quotes_near_the_freshness_limit_are_left_out_for_both_cache_windows(fake):
@@ -164,7 +165,7 @@ def test_http_flag_off_is_404_and_on_answers(env, monkeypatch):
     st, me = get(env, "me")
     assert me["features"]["pickem_ev"] is True
     st, doc = get(env, "pickem-ev")
-    assert st == 200 and doc["app"] == "underdog" and doc["apps"] == ["underdog"] and "rows" in doc and "model_only" in doc and "cs2" in doc["sports"]
+    assert st == 200 and doc["app"] == "prizepicks" and doc["apps"] == ["prizepicks", "underdog"] and "rows" in doc and "model_only" in doc and "cs2" in doc["sports"]
     txt = json.dumps(doc).lower()
     for word in ("guarantee", "lock", "research estimate", "provisional", "placed"):
         assert word not in txt, word

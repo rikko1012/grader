@@ -1,4 +1,5 @@
-"""Competitor spec 4.16 board parity fixes: one flag per fix, every one OFF by default (not in server.DEFAULT_ON).
+"""Competitor spec 4.16 board parity fixes: one flag per fix, every one ON in the running server since the owner's 2026-11-05
+"Turn everything on" (server.DEFAULT_ON; Render "0" turns any one off). Unset in a bare import / test process = off.
 
   SCOUT_PARITY_EDGE         Edge vs break-even column = real leg EV (p / be - 1) for PrizePicks and Underdog, sortable from its header
   SCOUT_PARITY_HIT_SAMPLES  hit cells read "6/10" with the % in the tooltip

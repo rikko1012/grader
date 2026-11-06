@@ -169,3 +169,24 @@ def test_held_cs2_letters_get_no_band_no_ev_and_no_size(ctx, env, monkeypatch):
     assert p.locator('#hub-rows tr[data-record^="cs2"] .h-band').count() == 0
     assert not [t for t in p.locator('#hub-rows tr[data-record^="cs2"] .h-c-edge .h-edge b').all_inner_texts() if t.endswith('%')]
     assert not p.errors
+
+
+@pytest.mark.parametrize('sport', ['lol', 'cs2'])
+def test_unrated_prizepicks_rows_show_the_points_gap_not_no_payout(ctx, env, monkeypatch, sport):
+    """Owner sign-off 2026-11-05: the PrizePicks help-center table is verified, so an unrated PrizePicks standard row (every LoL row,
+    a CS2 row whose settled results do not pass) shows Scout chance minus its PrizePicks break-even in points, never 'No fixed
+    per-pick payout is published for this platform'."""
+    parity_on(monkeypatch, passing=False)
+    workspace_api.reset()
+    p = board(ctx, env, DESK, sport=sport)
+    p.locator('#hub-platform [data-id=prizepicks]').click()
+    rows = p.locator('#hub-rows tr[data-record*="|prizepicks|"]')
+    assert rows.count() > 0
+    titles = rows.locator('td.h-c-edge .h-edge').evaluate_all("es => es.map(e => e.title)")
+    assert not [t for t in titles if 'published for this platform' in t]
+    gaps = rows.locator('td.h-c-edge .h-edge:not(.empty)')
+    assert gaps.count() >= 1 and all(t.endswith('pts') for t in gaps.all_inner_texts())
+    t = gaps.first.get_attribute('title')
+    assert '57.7% break-even' in t and 'PrizePicks' in t and 'not rated' in t
+    assert 'not rated yet' in p.locator('#hub-table thead .h-c-edge').get_attribute('title')
+    assert not p.errors

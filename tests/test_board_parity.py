@@ -1,5 +1,5 @@
-"""Competitor spec 4.16 board parity fixes (board_parity.py + gradecore/parity.py): the formulas, the flags (each OFF by default,
-none in server.DEFAULT_ON), the board rows they add, and the Report a problem route into data_issues. Fixture data only."""
+"""Competitor spec 4.16 board parity fixes (board_parity.py + gradecore/parity.py): the formulas, the flags (each unset = off in a bare
+process; all in server.DEFAULT_ON since the owner's 2026-11-05 "Turn everything on"), the board rows they add, and the Report a problem route into data_issues. Fixture data only."""
 import json
 import math
 
@@ -29,10 +29,12 @@ def all_on(monkeypatch):
 
 
 # ---------------------------------------------------------------------------------------------------------- formulas
-def test_live_table_has_underdog_only_prizepicks_stays_unavailable():
-    t = parity.table()
-    assert set(t) == {"underdog"} and parity.break_even("prizepicks") is None       # unverified: owner rule 2026-11-04
-    assert parity.row(0.7, "over", "prizepicks", "standard", None, rated=True) is None
+def test_live_table_has_both_books_prizepicks_verified_by_owner():
+    t = parity.table()                             # owner sign-off 2026-11-05: the PrizePicks help-center table is verified
+    assert set(t) == {"prizepicks", "underdog"} and parity.break_even("prizepicks")["be"] == pytest.approx(PP_BE)
+    r = parity.row(0.7, "over", "prizepicks", "standard", None, rated=True)
+    assert r["be"] == pytest.approx(PP_BE, abs=1e-6) and r["ev"] == pytest.approx(0.7 / PP_BE - 1, abs=1e-4)
+    assert parity.row(0.7, "over", "prizepicks", "goblin", None, rated=True) is None      # goblin / demon: unpublished payout
 
 
 def test_break_even_is_the_two_pick_entry_of_each_book(reference_tables):
@@ -50,7 +52,7 @@ def test_unverified_book_line_type_or_modifier_has_no_break_even(monkeypatch, re
     assert parity.leg_be("underdog", "standard", 1.5) is None            # modifier combinations are not published
     assert parity.leg_be("underdog", "standard", 1.0)["be"] == pytest.approx(UD_BE)
     # a book whose table is not marked verified is unavailable, never guessed
-    monkeypatch.setattr(payouts, "pickem_config", lambda: payouts.with_tables({}))
+    monkeypatch.setattr(payouts, "pickem_config", lambda: payouts.with_tables({}, payouts.CODED_CONFIG))
     assert parity.break_even("prizepicks") is None
 
 
@@ -139,9 +141,10 @@ def test_no_side_or_no_chance_has_no_row():
 
 
 # ---------------------------------------------------------------------------------------------------------- flags
-def test_every_flag_off_by_default_and_not_turned_on_by_the_server():
+def test_every_flag_off_unset_and_turned_on_by_the_running_server():
+    """Unset = off (a bare process); the running server turns every one on (owner 2026-11-05, "Turn everything on")."""
     assert bpar.features() == {} and not bpar.rows_on()
-    assert not set(bpar.FLAGS.values()) & set(server.DEFAULT_ON)
+    assert set(bpar.FLAGS.values()) <= set(server.DEFAULT_ON)
     rec = {"scout": {"side": "over", "p_side": 0.6}, "offer": {"platform": "underdog", "over": {"payout": 1.0}}, "market": {"line_type": "standard"}}
     assert "parity" not in bpar.attach(dict(rec))
 
@@ -152,7 +155,7 @@ def test_features_name_only_the_flags_that_are_on(monkeypatch):
     all_on(monkeypatch)
     f = bpar.features()["parity"]
     assert set(f) >= set(bpar.FLAGS) and f["unit_share"] == slip.UNIT_SHARE
-    assert set(f["break_even"]) == {"underdog"} and dict(f["reasons"]) == bpar.REASONS      # PrizePicks unverified
+    assert set(f["break_even"]) == {"prizepicks", "underdog"} and dict(f["reasons"]) == bpar.REASONS   # both verified
 
 
 # ---------------------------------------------------------------------------------------------------------- the board
@@ -168,7 +171,10 @@ def test_board_rows_carry_parity_only_with_a_row_flag(env, monkeypatch):
     assert v["parity"]["be"] == pytest.approx(UD_BE, abs=1e-6)
     assert "ev" not in v["parity"]                 # 0 settled matches: the slip check would not rate it, so no EV here either
     assert v["parity"]["hit"]["n"] == v["history"]["l10"]["n"]
-    assert all("parity" not in x for (n, b), x in r.items() if b == "prizepicks")    # no verified PrizePicks payout
+    pp = [x for (n, b), x in r.items() if b == "prizepicks" and (x.get("market") or {}).get("line_type", "standard") == "standard"
+          and (x.get("scout") or {}).get("side")]
+    assert pp and all(x["parity"]["be"] == pytest.approx(PP_BE, abs=1e-6) for x in pp if "parity" in x)   # verified 2026-11-05
+    assert any("parity" in x for x in pp)
     # grades, chances and stakes are untouched
     assert v["scout"]["units"] == env.by("vargo")["units"] and v["scout"]["grade"] == "B"
     _, me = get(env, "me")

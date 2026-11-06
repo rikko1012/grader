@@ -704,6 +704,9 @@ def _slip_header_v2(platform, ls, results, ev_for=None, srv=None):
         if not head:
             return None
         head = json.loads(json.dumps(head))           # the shared copy is never changed
+        from gradecore import payouts as _pay
+        for name in [k for k in head["types"] if not _pay.in_app(platform, k, len(rs))]:
+            head["types"].pop(name)                   # PrizePicks Flex 2-pick: not an entry the app offers
         if platform == "underdog" and len(rs) == 4 and "flex" in head["types"]:
             head["types"]["flex"] = {"entry": "flex", "n": 4, "rated": False, "reason": UD_FLEX4_REASON}
         if ev_for is not None:
@@ -1611,6 +1614,8 @@ def _gen_opts(q, allowed):
         return None, "Choose 1-12 slips and 2-6 picks per slip."
     if platform == "underdog" and et == "flex" and size < 3:
         return None, "Underdog Flex needs at least 3 picks."
+    if platform == "prizepicks" and et == "flex" and size < 3:
+        return None, "PrizePicks Flex needs at least 3 picks."            # Flex 2-pick: help center only, not in the app
     asked = [s for s in (q.get("sports") or "cs2").split(",") if s]
     if not asked or len(asked) > len(SPORTS) or any(s not in SPORTS for s in asked):
         return None, "Choose at least one sport."
