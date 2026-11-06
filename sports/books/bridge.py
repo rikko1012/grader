@@ -76,20 +76,29 @@ def to_offers(offers, lg, event_key, observed_at, resolver=None):
     return b
 
 
-def store_game(con, league, platforms, event_id, batch, observed_at, complete):
+def store_game(con, league, platforms, event_id, batch, observed_at, complete, prefix=None):
     """Store one game's offers; after a COMPLETE read, offers of these platforms on this game that the read no longer
-    lists get a 'removed' revision (never after a failed / partial read, never on other games)."""
+    lists get a 'removed' revision (never after a failed / partial read, never on other games). prefix
+    ("oddspapi:"): a league-wide read covers EVERY book of that provider, so current offers on this game of any platform
+    starting with prefix are covered too - a book that dropped the game (or a game with no props left) is withdrawn,
+    matching books.db's save_offers for the same read (bug sweep 2026-11-06 #4)."""
     res = store.put_many(con, batch.records)
     store.quarantine_many(con, batch.quarantine, league, observed_at)
     removed = 0
     if complete and event_id:
         seen = {(r.platform, r.offer_id) for r in batch.records}
         stale = []
-        for p in platforms:
-            for _, o in store.offers(con, league=league, event_id=event_id, platform=p, limit=100000):
-                if (o.platform, o.offer_id) in seen or o.availability == "removed":
-                    continue
-                stale.append(store.withdrawn(o, observed_at))
+        if prefix:
+            plats = set(platforms)
+            current = (o for _, o in store.offers(con, league=league, event_id=event_id, limit=100000)
+                       if o.platform in plats or o.platform.startswith(prefix))
+        else:
+            current = (o for p in platforms
+                       for _, o in store.offers(con, league=league, event_id=event_id, platform=p, limit=100000))
+        for o in current:
+            if (o.platform, o.offer_id) in seen or o.availability == "removed":
+                continue
+            stale.append(store.withdrawn(o, observed_at))
         removed = store.put_many(con, stale)["revision"]
     return {k: res[k] for k in ("inserted", "duplicate", "revision", "invalid")} | {"removed": removed}
 
@@ -105,7 +114,8 @@ def sink(con, resolver_for):
                                                               else [])
         eid = batch.records[0].event_id if batch.records else (
             f"{lg['key']}:espn:{event_key.split(':', 1)[1]}" if event_key and event_key.startswith("espn:") else None)
-        r = store_game(con, lg["key"], plats, eid, batch, observed_at, complete)
+        r = store_game(con, lg["key"], plats, eid, batch, observed_at, complete,
+                       prefix=None if provider in ("fanduel", "betrivers") else f"{provider}:")
         t = totals.setdefault(provider, {"offers": 0, "inserted": 0, "revision": 0, "duplicate": 0, "removed": 0,
                                          "unresolved_player": 0})
         t["offers"] += len(batch.records)
