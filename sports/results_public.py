@@ -446,7 +446,7 @@ def build(con, now=None, base=None):
                                      "rule": GATE_RULE},
                        "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows, lg),
                        "recent": rec, "model_gate": model_gate(lg),
-                       'calendar':daily_record(({'at':r.get('settled_at'),'status':r.get('lean_result')} for r in rows), now, 'Settlement date · UTC'),
+                       'calendar':daily_record(({'at':r.get('settled_at'),'status':r.get('lean_result')} for r in rows), now, 'Settlement date · US Central', 'America/Chicago'),
                        "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(hh_rows)},
                        "raw_counts": raw_counts(all_rows), "counting": COUNTING}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),

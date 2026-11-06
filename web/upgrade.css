@@ -74,7 +74,7 @@ html[data-upgrade] .u-alt-btn:hover{text-decoration:underline}
 html[data-upgrade] .u-hits{display:flex;gap:3px}
 html[data-upgrade] .u-hc{display:inline-flex;flex-direction:column;align-items:center;min-width:38px;padding:2px 3px;border:1px solid var(--u-line);border-radius:4px;background:#0c0c0c;font:400 11.5px/1.25 var(--u-mono);color:var(--u-text)}
 html[data-upgrade] .u-hc i{font-style:normal;font-size:9.5px;color:var(--u-faint)}
-html[data-upgrade] .u-hc b{font-weight:500}
+html[data-upgrade] .u-hc b{font-weight:500;white-space:nowrap;overflow-wrap:normal;word-break:keep-all}   /* audit 2026-11-05: "10/20" never breaks as "10/2 0" */
 html[data-upgrade] .u-hc.up{border-color:#6d5a1e;color:var(--u-gold)}
 html[data-upgrade] .u-hc.none{color:var(--u-faint)}
 html[data-upgrade] .u-books{display:flex;flex-wrap:wrap;gap:3px}
@@ -319,7 +319,10 @@ html[data-upgrade] .u-ask-out p{margin:8px 0 0;line-height:1.6;overflow-wrap:any
 }
 @media(max-width:640px){
   html[data-upgrade] .u-dialog{width:100vw;border-left:0}
-  html[data-upgrade] .u-tray-btn{left:auto;right:12px;transform:none;bottom:calc(76px + env(safe-area-inset-bottom));min-height:38px;padding:6px 12px;font-size:12px}
+  /* audit 2026-11-05 A14: on a phone the Slip tray is a full-width bottom bar (above the page's own bottom nav or slip-draft bar,
+     measured by upgrade.js as --u-tray-lift), never a floating button over a row's numbers; the page keeps room for it at the end. */
+  html[data-upgrade] .u-tray-btn{left:0;right:0;width:100%;transform:none;bottom:max(var(--u-tray-lift,0px),env(safe-area-inset-bottom));min-height:46px;padding:0 16px;border-width:1px 0 0;border-radius:0;font-size:13px;text-align:center;box-shadow:0 -6px 18px #0008;background:#0c0c0c}
+  html[data-upgrade] body{padding-bottom:calc(var(--u-tray-lift,0px) + 58px + env(safe-area-inset-bottom))}
   html[data-upgrade] .u-toast{bottom:130px}
   html[data-upgrade] .u-res{padding:12px}
   html[data-upgrade] .bbar{padding:8px;margin:0 0 8px}

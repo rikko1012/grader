@@ -19,3 +19,12 @@ def test_calendar_has_exact_window_utc_dates_and_separate_pushes():
 def test_missing_or_naive_snapshot_date_is_not_invented():
     assert daily_record([],None,'UTC')['state']=='date_unavailable'
     assert daily_record([],'2026-11-03','UTC')['days']==[]
+
+
+def test_member_zone_window_ends_today_in_us_central():
+    # audit 2026-11-05: read at 9:27 PM CST on Nov 5 (03:27 UTC Nov 6) the window is Oct 7 - Nov 5, never a future day, and a
+    # 7 PM CST game counts on Nov 5
+    from gradecore.calendar import MEMBER_ZONE
+    doc=daily_record([{'at':'2026-11-06T01:00:00Z','status':'win'}],'2026-11-06T03:27:00Z','Match start date · US Central',MEMBER_ZONE)
+    assert len(doc['days'])==30 and doc['days'][0]['date']=='2026-10-07' and doc['days'][-1]['date']=='2026-11-05'
+    assert doc['days'][-1]['wins']==1

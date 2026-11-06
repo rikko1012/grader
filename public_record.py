@@ -130,7 +130,8 @@ def letter_status(srv,sport):
         b=letter_containment.banner(sport,st)
         if b:
             return {'letters':'held','text':b}
-        return {'letters':'live','text':'CS2 letters are live on the board.' if sport=='cs2' else 'LoL letters are live on the board, at 0 units.'}
+        # audit 2026-11-05: a plain fact about what the board shows, never a claim about the letters (they sit beside each tier's hit rate)
+        return {'letters':'live','text':'The CS2 board shows letter grades.' if sport=='cs2' else 'The LoL board shows letter grades, at 0 units.'}
     import workspace_sports
     st,pub=workspace_sports._public(srv)
     d=((pub or {}).get('leagues') or {}).get(sport) if st==200 else None

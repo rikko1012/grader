@@ -4155,11 +4155,37 @@ def ui_tokens_on():
     return os.environ.get("SCOUT_UI_TOKENS", "").strip() == "1"
 
 
+def classic_lazy_on():
+    """audit 2026-11-05: on the upgraded CS2 page the classic page is built only when it is shown (?view=classic, a classic route such
+    as #matches, or the research board unavailable). Until then it waits in a <template>: not in the page, not read by screen readers,
+    its scripts not run. SCOUT_CLASSIC_LAZY=0 sends it built at once, as before."""
+    return os.environ.get("SCOUT_CLASSIC_LAZY", "").strip() != "0"
+
+
+# Builds the template's classic page in place: scripts are recreated so they run, in page order, once every node is in. The research
+# board's routes keep it unbuilt; upgrade.js / hub.js call scoutClassicMount() when the board is not shown after all. The classic
+# sign-in lock (body.locked, lifted by the classic script) waits with it, so its rules never hide the board's own header.
+CLASSIC_MOUNT = br"""<script>(function(){
+var t=document.getElementById('scout-classic');
+window.scoutClassicMount=function(){
+if(!t||!t.parentNode)return false;
+var b=document.body;if(b.dataset.classicLocked){b.classList.add('locked');delete b.dataset.classicLocked;}
+var f=document.importNode(t.content,true),list=f.querySelectorAll('script');
+for(var i=0;i<list.length;i++){var o=list[i],n=document.createElement('script');for(var a=0;a<o.attributes.length;a++)n.setAttribute(o.attributes[a].name,o.attributes[a].value);n.text=o.text;o.parentNode.replaceChild(n,o);}
+var p=t.parentNode;p.insertBefore(f,t);p.removeChild(t);t=null;
+document.dispatchEvent(new Event('scout-classic-mount'));
+return true;};
+var h=location.hash;
+if(window.scoutClassic||!(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|record|tools|picks|alerts|ev)(?:[?\/]|$))/.test(h)))window.scoutClassicMount();
+else if(document.body.classList.contains('locked')){document.body.classList.remove('locked');document.body.dataset.classicLocked='1';}
+})();</script>"""
+
+
 def upgrade_page(body, name):
     """The upgraded copy of a member page. Memoised per page OBJECT, as sports_nav is: send_shared caches the ETag + gzip by body
     identity, so a fresh copy per request would recompress the page every time."""
-    tokens = ui_tokens_on()
-    hit = _UPGRADE_MEMO.get((id(body), name, tokens))
+    tokens, lazy = ui_tokens_on(), name == "cs2" and classic_lazy_on()
+    hit = _UPGRADE_MEMO.get((id(body), name, tokens, lazy))
     if hit is not None and hit[0] is body:
         return hit[1]
     # Runs in the head, before the original board can paint. Classic keeps its
@@ -4191,11 +4217,16 @@ const link=document.createElement('link');link.rel='stylesheet';link.href=href;l
     i, j = body.rfind(b"</head>"), body.rfind(b"</body>")
     out = body
     if 0 <= i < j:                                      # a page without its markers goes out as it is
-        out = body[:i] + head + body[i:j] + tail + body[j:]
+        k = body.find(b"<body", i)
+        k = body.find(b">", k) + 1 if 0 <= k < j else 0
+        if lazy and 0 < k <= j:                         # the classic CS2 page waits in a template until it is shown
+            out = body[:i] + head + body[i:k] + b'<template id="scout-classic">' + body[k:j] + b"</template>" + CLASSIC_MOUNT + tail + body[j:]
+        else:
+            out = body[:i] + head + body[i:j] + tail + body[j:]
         out = out.replace(b"<html ", mark.encode(), 1)
     if len(_UPGRADE_MEMO) > 16:                         # a handful of pages; old versions drop when a file changes
         _UPGRADE_MEMO.clear()
-    _UPGRADE_MEMO[(id(body), name, tokens)] = (body, out)
+    _UPGRADE_MEMO[(id(body), name, tokens, lazy)] = (body, out)
     return out
 
 

@@ -196,13 +196,15 @@
     return {
       id: legId(r, side), key: r.key, sport: r.sport, book: r.offer.platform, row_id: r.offer.offer_id, side, line: r.offer.line, rev: r.offer.revision, read_rev: r.scout.read_rev || null, shown_p: chanceOf(r, side),
       event_id: r.event.id, event_label: r.event.label, player: r.player.name, player_key: r.player.key, team: r.player.team, stat: r.market.stat, stat_label: r.market.stat_label,
-      period: r.market.period, period_label: r.market.period_label, platform_label: r.offer.platform_label, shown_label: verdictText(r, side), added_at: addedAt || new Date().toISOString()
+      period: r.market.period, period_label: r.market.period_label, platform_label: r.offer.platform_label, shown_label: verdictText(r, side), added_at: addedAt || new Date().toISOString(),
+      start_utc: r.event.lock_utc || r.event.start_utc || null      /* audit 2026-11-05: the tray clears the leg once this has passed */
     };
   }
   const wireLeg = (l) => ({ id: l.id, sport: l.sport, book: l.book, row_id: l.row_id, side: l.side, line: l.line, rev: l.rev, read_rev: l.read_rev, shown_p: l.shown_p, team: l.team, player: l.player, event: l.event_id });
   const LEG_TEXT = ["id", "key", "book", "row_id", "event_id", "event_label", "player", "player_key", "team", "stat", "stat_label", "period", "period_label", "platform_label", "rev", "shown_label"];
   const cleanLeg = (l) => isObj(l) && LEG_TEXT.every((k) => isStr(l[k])) && own(SPORTS, l.sport) && own(PLATFORMS, l.book) && (l.side === "over" || l.side === "under") && isNum(l.line)
-    && (l.shown_p == null || isNum(l.shown_p)) && (l.read_rev == null || isStr(l.read_rev)) && isStr(l.added_at) && Number.isFinite(Date.parse(l.added_at));
+    && (l.shown_p == null || isNum(l.shown_p)) && (l.read_rev == null || isStr(l.read_rev)) && isStr(l.added_at) && Number.isFinite(Date.parse(l.added_at))
+    && (l.start_utc == null || isStr(l.start_utc));
 
   /* ---- account slip: the workspace's saved slip. Every device merges three ways against the copy it last synced ---- */
   const T = {
@@ -308,6 +310,7 @@
       T.saveFail = false;
       if (T.pending) saveSoon();
       paintTray();
+      removeStarted();                                  /* a leg left from an earlier day never reaches the tray */
       if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
     } catch (e) { T.saveFail = true; paintTray(); }
   }
@@ -463,6 +466,7 @@
     T.checking = false;
     if (sig() !== before) scheduleCheck();
     paintTray();
+    removeStarted();                                    /* a "started" answer clears that leg at once */
   }
   const scheduleCheck = debounce(runCheck, CHECK_DEBOUNCE);
   function slipPhase() {
@@ -567,14 +571,24 @@
     paintTray();
   }
 
+  /* audit 2026-11-05 S5/A9: a started or expired leg leaves every tray by itself (classic pages and the board's slip read this one
+     account slip). It is identified positively: the leg's current row, else its saved start time, else the server check's "Match /
+     Game started" answer. A missing row alone may be a feed outage and never removes a leg; only a leg saved before legs carried a
+     start time, and older than LEG_EXPIRE_MS, is treated as expired. */
+  const LEG_EXPIRE_MS = 4 * 86400000;
+  function legGone(l, now) {
+    const r = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
+    if (r && r.event.id === l.event_id) return started(r);
+    const t = Date.parse(l.start_utc || "");
+    if (Number.isFinite(t)) return t <= now;
+    const c = T.check && T.check.legs && T.check.legs[l.id];
+    if (c && (c.problems || []).some((p) => p.code === "locked")) return true;
+    const at = Date.parse(l.added_at);
+    return Number.isFinite(at) && now - at > LEG_EXPIRE_MS;
+  }
   function removeStarted() {
-    if (!R.me?.features?.workspace_v2 || !T.ready || T.saving || T.checking) return;
-    // Remove only a positively identified, currently loaded event. A missing row
-    // may be a feed outage, so it is left for the authoritative server recheck.
-    const gone = T.legs.filter(l => {
-      const r = R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
-      return r && r.event.id === l.event_id && started(r);
-    });
+    if (!T.ready || T.saving || T.checking) return;
+    const now = Date.now(), gone = T.legs.filter((l) => legGone(l, now));
     if (!gone.length) return;
     const ids = new Set(gone.map(l=>l.id));
     T.legs = T.legs.filter(l=>!ids.has(l.id));
@@ -650,12 +664,19 @@
       + metric(signed(t.ev), "Average return", t.ev > 0 ? "u-pos" : t.ev < 0 ? "u-neg" : "");
     return `<div class="u-head2" data-entry="${esc(t.entry)}"><div class="u-slip-metrics u-slip-head">${values}</div>${need}<p class="u-dim">From the chances Scout shows on each pick. Average return is per entry, not a win chance.</p></div>`;
   }
+  /* audit 2026-11-05: the read a leg shows comes from its current row (a letter that is held now reads as held). With no current row
+     the saved letter is not repeated, since it may since have been held; the side and the saved chance stay. Lean stays Lean. */
+  function legLabel(l) {
+    const r = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
+    if (r && r.event.id === l.event_id) return verdictText(r, l.side);
+    return /^[A-F][+-]? /.test(l.shown_label) ? cap(l.side) : l.shown_label;
+  }
   function legHtml(l, phase, link, position, legEv, leg2) {
     const c = phase === "fresh" ? T.check.legs[l.id] : null;
     const evText = leg2 ? "" : legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
     const below = leg2 && leg2.below, need2 = below ? `<p class="u-below">Below the ${pct(leg2.need)} each leg needs</p>` : "";
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
-    const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
+    const label = legLabel(l), against = label.startsWith("Scout side"), read = against ? esc(label) : `${esc(label)} ${pct(l.shown_p)}`;
     const notes = legNotes(l), adv = T.advice && T.advice.sig === sig() ? T.advice.legs[l.id] : null, rep = adv && adv.replacement;
     const noteHtml = notes.length ? `<div class="u-leg-notes">${notes.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
     const advHtml = adv && (adv.band || rep) ? `<p class="u-leg-advice">${adv.band ? esc(adv.band) + "." : ""}${rep ? ` ${adv.in_pool ? "Ranks higher here" : "Best replacement"}: ${esc(rep.player)} ${cap(rep.side)} ${esc(rep.line)} ${esc(rep.stat_label)}, ${esc(rep.period_label)} · ${pct(rep.p)}<button class="u-btn" type="button" data-u="replace" data-id="${esc(l.id)}">Swap in</button>` : ""}</p>` : "";
@@ -986,6 +1007,21 @@
     };
     place();
     wide.addEventListener("change", place);
+    /* phone: the bar sits on top of a fixed bottom nav (CS2 sections) or the Sports slip-draft bar when one is on screen */
+    const lift = () => {
+      let h = 0;
+      for (const el of [$("modes"), $("sw-tray")]) {
+        if (!el || el.hidden) continue;
+        const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+        if (cs.position === "fixed" && cs.display !== "none" && r.height && r.bottom >= innerHeight - 2) h = Math.max(h, Math.round(r.height));
+      }
+      document.documentElement.style.setProperty("--u-tray-lift", h + "px");
+    };
+    lift();
+    addEventListener("resize", guard(lift));
+    new MutationObserver(guard(lift)).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    document.addEventListener("scout-classic-mount", guard(lift));
+    setInterval(guard(lift), 2000);
     const head = document.querySelector("header.sw-top");
     if (head) new MutationObserver(() => { if (wide.matches && !head.contains($("u-tray-btn"))) place(); }).observe(head, { childList: true });
   }
@@ -1391,13 +1427,13 @@
     mountShell();
     (PAGE === "cs2" ? hookCs2 : PAGE === "lol" ? hookLol : hookSports)();     /* on before the first await: a draw in the meantime is not missed */
     try { R.me = await api("me"); } catch (e) { R.me = null; }
-    if (!R.me) { $("u-tray-btn").hidden = true; window.scoutBootDone?.(); return; }        /* not a member the API knows: the page stays as it is */
+    if (!R.me) { $("u-tray-btn").hidden = true; window.scoutClassicMount?.(); window.scoutBootDone?.(); return; }        /* not a member the API knows: the page stays as it is */
     try {
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
         research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip, faceHtml, lineKind, lineKindHtml });
-    } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
+    } catch (e) { window.scoutClassicMount?.(); console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();
     paintTray();
@@ -1405,5 +1441,9 @@
     else if (PAGE === "lol") startLol();
     else if (PAGE === "sports") startSports();
   }
-  start().catch(() => { window.scoutBootDone?.(); console.warn("Workspace unavailable; original tools remain available"); });
+  /* audit 2026-11-05: on the CS2 page the classic page is built only when it is shown (server.upgrade_page). Built later in this visit,
+     it gets the same hooks the page start gives it. */
+  let started2 = false;
+  document.addEventListener("scout-classic-mount", guard(() => { if (PAGE !== "cs2") return; hookCs2(); if (started2) startCs2(); }));
+  start().then(() => { started2 = true; }, () => { window.scoutClassicMount?.(); window.scoutBootDone?.(); console.warn("Workspace unavailable; original tools remain available"); });
 })();

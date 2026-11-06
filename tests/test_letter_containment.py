@@ -290,7 +290,7 @@ def test_record_status_reflects_the_real_state(state, monkeypatch):
     assert public_record.letter_status(None, "cs2") == {"letters": "held", "text": CS2_BANNER}
     assert public_record.letter_status(None, "lol") == {"letters": "held", "text": LOL_BANNER}
     _release(state, "cs2")
-    assert public_record.letter_status(None, "cs2") == {"letters": "live", "text": "CS2 letters are live on the board."}
+    assert public_record.letter_status(None, "cs2") == {"letters": "live", "text": "The CS2 board shows letter grades."}
     _flag(monkeypatch, False)
     assert public_record.letter_status(None, "lol")["letters"] == "live"
 
@@ -321,7 +321,7 @@ def test_board_and_record_routes_flag_on_and_off(env, state, monkeypatch):
     assert "letter_hold" not in d and not any(r.get("letter_held") for r in d["rows"])
     assert any(r.get("model_grade") in lc.LETTERS for r in d["rows"])
     rec = json.loads(get(env.base, "/api/record?sport=cs2")[1])
-    assert rec["status"] == {"letters": "live", "text": "CS2 letters are live on the board."}
+    assert rec["status"] == {"letters": "live", "text": "The CS2 board shows letter grades."}
 
 
 # ------------------------------------------------------------------------------------------------ the server wiring

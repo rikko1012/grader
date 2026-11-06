@@ -71,7 +71,22 @@
     return {platform: pf, others: PLATFORMS.filter(function (p) { return p !== pf && counts[p]; }).map(function (p) { return {platform: p, n: counts[p]}; })};
   }
 
-  var api = {SIZES: SIZES, draftKey: draftKey, addLeg: addLeg, removeLeg: removeLeg, validate: validate, activePlatform: activePlatform};
+  // audit 2026-11-05 S5: a pick whose game has started is locked on the platform; the draft drops it by itself. Only the pick's own
+  // saved start decides (a pick with no start time stays for Slip Studio's server check). -> {draft, gone: [legs]}
+  function pruneStarted(draft, now) {
+    var t = now === undefined ? Date.now() : now, legs = (draft && draft.legs) || [], gone = [], keep = [];
+    legs.forEach(function (l) { var s = l && l.start_utc ? Date.parse(l.start_utc) : NaN; (isFinite(s) && s <= t ? gone : keep).push(l); });
+    if (!gone.length) return {draft: draft, gone: gone};
+    var d = {legs: keep};
+    Object.keys(draft).forEach(function (k) { if (k !== "legs") d[k] = draft[k]; });
+    delete d.payout_key;
+    return {draft: d, gone: gone};
+  }
+  function goneText(gone) {
+    return "Removed " + plural(gone.length, "started pick") + ": " + gone.map(function (l) { return l.player || "a pick"; }).join(", ") + ".";
+  }
+
+  var api = {SIZES: SIZES, draftKey: draftKey, addLeg: addLeg, removeLeg: removeLeg, validate: validate, activePlatform: activePlatform, pruneStarted: pruneStarted, goneText: goneText};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
 
   // ------------------------------------------------------------------------------------------- storage + DOM
@@ -142,8 +157,13 @@
   function render(lg) {
     lastLg = lg || league();
     ensure();
-    var counts = {};
-    PLATFORMS.forEach(function (p) { var d = get(draftKey(lastLg, p)); counts[p] = d && d.legs ? d.legs.length : 0; });
+    var counts = {}, pruned = [];
+    PLATFORMS.forEach(function (p) {
+      var d = get(draftKey(lastLg, p));
+      if (d && d.legs) { var r = pruneStarted(d); if (r.gone.length) { pruned = pruned.concat(r.gone); try { put(draftKey(lastLg, p), r.draft); } catch (e) {} d = r.draft; } }
+      counts[p] = d && d.legs ? d.legs.length : 0;
+    });
+    if (pruned.length) announce(goneText(pruned), true);
     var ctx = get("ss:ctx") || {}, ap = activePlatform(ctx, counts, lastLg), pf = ap.platform;
     var d = pf ? get(draftKey(lastLg, pf)) || {legs: []} : {legs: []}, legs = d.legs || [];
     var has = legs.length > 0 || ap.others.length > 0;
@@ -179,6 +199,7 @@
       "</div>";
   }
 
+  setInterval(function () { if (!document.hidden && el) render(league()); }, 30000);   // a game that starts while the page is open
   api.add = add; api.render = render;
   root.SportsTray = api;
 })(this);

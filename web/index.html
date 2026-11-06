@@ -405,7 +405,9 @@ a.udopen{text-decoration:none;display:inline-flex;align-items:center;justify-con
 .myslip .leg>span{flex:1;min-width:0}.myslip .x{background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px}
 .myslip .warn{color:var(--warn);font-size:12.5px;margin-top:8px;padding:10px 12px;border:1px solid #f5c54240;border-radius:8px;background:#f5c54208}
 .slipexpo .small{margin:3px 0}
-@media(min-width:1180px){body[data-route="slips"].hasslip #slip{display:none!important}body[data-route="slips"].hasslip:not(.locked) .wrap{margin-left:208px;margin-right:auto;padding-left:32px;padding-right:32px}}
+/* audit 2026-11-05 A13: the Slips page keeps the right-hand slip like every other page; its "Your slip" card (the same content) steps
+   aside while the panel is beside it, and returns on narrower screens and when the slip is empty */
+@media(min-width:1180px){body[data-route="slips"].hasslip:not(.locked) #myslip{display:none}}
 body[data-route="slips"] #slipbtn{display:none!important}
 .studio-note{margin:10px 0}.studio-pins{margin:10px 0;padding:10px 12px;border:1px solid var(--accent);border-radius:10px;font-size:13px;line-height:1.9}
 .pinchip{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line-2);border-radius:99px;padding:0 2px 0 10px;margin:0 4px 0 0}
@@ -766,6 +768,17 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
   #results .res-head>:last-child{grid-column:1/-1}
   #results .res-head .ot-metric{padding:12px 14px}
   #results .res-head .ot-metric strong{font-size:24px}}
+/* audit 2026-11-05 A13: on a phone the CS2 header is one short block, so Top plays and its first card are on the first screen.
+   Every tool stays: the tool buttons sit in one row that scrolls sideways inside itself (never the page). */
+@media(max-width:640px){
+  .workspace-intro{padding:6px 0 4px!important;gap:8px!important;margin-bottom:2px}
+  .workspace-intro .eyebrow{margin:0}
+  .workspace-intro h2{font-size:21px!important;line-height:1.15;margin:3px 0 0!important}
+  .workspace-tools{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;gap:6px!important;padding-bottom:2px}
+  .workspace-tools::-webkit-scrollbar{display:none}
+  .workspace-tools>*,.workspace-tools .tools-nav a{flex:0 0 auto!important;white-space:nowrap!important;min-height:40px}
+  #who{margin:-4px 0 2px!important}
+  body.mode-board .ot-featured,body.mode-matches .ot-featured{margin-top:6px}}
 .studio-ess .seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);width:100%}
 .studio-ess .seg button{min-width:0;padding-left:6px;padding-right:6px;text-align:center}
 .crow .c-mkt .pill,.crow .c-mkt .dstat{white-space:nowrap;display:inline-block}
@@ -2009,8 +2022,19 @@ function drawMySlip(s) {                 // U1: the Slips page's "Your slip" car
   el.innerHTML = s.length ? slipHtml(s, "page")
     : `<h4>Your slip</h4><div class="small muted">Empty – add picks from the Board with <b>+ Slip</b>, or press <b>Send to my slip</b> on a Studio slip below.</div>`;
 }
+// audit 2026-11-05 S5: a pick whose match has started is locked on the platform, so the slip drops it by itself (a toast names
+// it) instead of keeping it with Copy beside it. Only the leg's own saved start / lock decides; a feed outage never removes a pick.
+function pruneStartedLegs() {
+  const s = store.get("cs2s_slip", []), now = Date.now(), gone = s.filter(x => legStarted(x, now));
+  if (!gone.length) return s;
+  const keep = s.filter(x => !legStarted(x, now));
+  store.set("cs2s_slip", keep);
+  try { toast(`Removed ${gone.length} started pick${gone.length === 1 ? "" : "s"}: ${gone.map(x => x.p).join(", ")}`, 3500); } catch {}
+  return keep;
+}
+setInterval(() => { try { if (!document.hidden && store.get("cs2s_slip", []).some(x => legStarted(x))) drawSlip(); } catch {} }, 30000);
 function drawSlip() {
-  const s = store.get("cs2s_slip", []);
+  const s = pruneStartedLegs();
   $("#slipbtn").hidden = !s.length; $("#slipbtn").textContent = innerWidth < 1180 ? `${s.length} pick${s.length === 1 ? "" : "s"} selected · open slip` : `Slip (${s.length})`;
   document.body.classList.toggle("hasslip", s.length > 0);
   if (s.length && innerWidth >= 1180) $("#slip").hidden = false;          // desktop: the slip stays open beside the board
