@@ -47,6 +47,7 @@ import records
 import roles
 import underdog
 import grade_display
+import line_chance
 import perf_shadow
 import whop_auth
 import bo3
@@ -397,6 +398,29 @@ BOARD_WORKERS = 3       # lines graded side by side (one at a time left most of 
 BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades are cached anyway)
 BOARD_TTL = 5           # /api/board: one answer per platform shared by every member for 5 s
 HLTV_RETRY = 90         # a line graded while the HLTV database was unreachable is tried again this soon
+
+FEED_GRADE_MAX_S = 2 * 3600   # audit 2026-11-05 B1: a platform whose last good read is older than this is not graded as current (its
+                              # lines keep their last grade; the workspace hides them as stale); a feed blip shorter than this changes nothing
+
+
+def feed_age_s(fb, now=None):
+    """Seconds since this platform feed's last good read ({"at": epoch or ISO}), or None when it has never been read."""
+    at = (fb or {}).get("at")
+    if isinstance(at, str):
+        try:
+            t = datetime.fromisoformat(at.replace("Z", "+00:00"))
+            at = (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).timestamp()
+        except ValueError:
+            return None
+    if not isinstance(at, (int, float)) or at <= 0:
+        return None
+    return max(0.0, (time.time() if now is None else now) - float(at))
+
+
+def feed_current(fb, now=None):
+    """True while this feed's last good read is recent enough to grade its lines as current."""
+    a = feed_age_s(fb, now)
+    return a is not None and a <= FEED_GRADE_MAX_S
 
 
 def _hltv_status(public=False):
@@ -3317,7 +3341,10 @@ def board_forever():
             moved = lambda r: (((BOARD.get(r["id"]) or {}).get("graded_line") is not None
                                 and float(BOARD[r["id"]]["graded_line"]) != float(r.get("line") or -1))
                                or side_opened(BOARD.get(r["id"]), r))
-            gradable = lambda r, now_: (not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now_)
+            # audit 2026-11-05 B1: lines of a feed with no good read for FEED_GRADE_MAX_S are not graded as current (last grade kept)
+            current = {bk_: feed_current(fb_) for bk_, fb_ in feeds.items()}
+            gradable = lambda r, now_: ((not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now_)
+                                        and current.get(r.get("book") or "underdog", True))
             todo = [r for r in rows if gradable(r, now)
                     and (time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY or moved(r))]
             # lines from an older model version first, then soonest matches; one match's lines and each player's kills /
@@ -3383,6 +3410,10 @@ def board_forever():
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "model_outcomes": copy.deepcopy(g.get("probs_raw")),
+                                      # the exact distribution behind this grade (grader.py "dist", display only, server side: never
+                                      # in a member payload - protect_recipe): the workspace reads another book's line from it
+                                      # (line_chance.cs2_at), never a new model or a shrink
+                                      "dist": line_chance.compact_dist(g.get("dist")),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
                                       "reason": v.get("reason"), "nick": (pb.get("player") or {}).get("nick"),
                                       # projection minus the line (the cut the grade uses since the 2026-10-07 continuity fix)

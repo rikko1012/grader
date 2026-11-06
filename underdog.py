@@ -8,7 +8,7 @@ background every REFRESH seconds, so a member's grade never waits on Underdog; i
 reached, the last board is kept (and nothing else changes).
 
 - board()            -> {"at", "rows": [{id, player, team, opponent, matchup, start, prop, line,
-                         higher, lower, alt}], "error"}
+                         higher, lower, alt, updated_at (Underdog's change time), seen_at (Scout's read time)}], "error"}
 - line_for(nick, prop) -> the board row for that player + prop, or None
 """
 import re
@@ -284,6 +284,12 @@ def _opening(rows, now=None):
         pass
 
 
+def stamp(t=None):
+    """ISO-8601 UTC time of one board read (the row's seen_at)."""
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(time.time() if t is None else t, timezone.utc).isoformat(timespec="seconds")
+
+
 def _refresh():
     global _IDS
     import requests
@@ -292,6 +298,12 @@ def _refresh():
         r.raise_for_status()
         body = r.json()
         rows = parse(body)
+        # audit 2026-11-05 B1: the time Scout read each line (members' "UD · 32h" was the line's own updated_at, i.e. when Underdog
+        # last CHANGED it, while the feed itself was minutes old). updated_at stays the platform's change time; seen_at is this read.
+        # A failed read keeps the last good rows with their own seen_at, so their age keeps growing and shows.
+        seen = stamp()
+        for x in rows:
+            x["seen_at"] = seen
         try:
             ids = ids_of(body)
         except Exception:

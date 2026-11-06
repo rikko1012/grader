@@ -161,7 +161,8 @@
     const saved = R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)];
     return (!R.hitsAt || !R.hitsComplete) && !(saved && saved.line === rec.offer.line);
   };
-  const siblings = (rec) => (R.boards[rec.sport].props.get(propKey(rec)) || [rec]);
+  /* an extra book's line (Sleeper, Dabble) sits with the board's lines of that player and market, first, so its card can switch between them */
+  const siblings = (rec) => { const b = R.boards[rec.sport].props.get(propKey(rec)) || []; return rec.extra ? [rec, ...b.filter((x) => x !== rec)] : (b.length ? b : [rec]); };
   const tallies = (rec) => {
     const h = rec.history || {}, saved = rec.sport === "cs2" ? R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)] || {} : {}, more = saved.line === rec.offer.line ? saved : {};
     return { l5: h.l5 || more.l5 || null, l10: h.l10 || null, l20: h.l20 || more.l20 || null, h2h: h.h2h || more.h2h || null, season: h.season || more.season || null };   /* h2h / season: SCOUT_BOARD_H2H only */
@@ -178,6 +179,7 @@
     if (!sd) return "No lean";
     if (s.side && sd !== s.side) return `Scout side is ${cap(s.side)}`;
     if (s.hold) return `Research estimate ${cap(sd)}`;
+    if (s.line_chance) return `Scout's chance at this line: ${cap(sd)}`;      /* another book's line, read from the saved distribution: no letter */
     if (s.grade) return `${s.grade} ${cap(sd)}${rec.sport === "nba" || rec.sport === "nfl" ? " · Research grade" : ""}`;      /* as classic sports */
     return `Lean ${cap(sd)}`;
   }

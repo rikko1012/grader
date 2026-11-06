@@ -864,9 +864,21 @@ def _map_stats(maps):
     return out
 
 
-def _history(srv, x, full=False):
+def _peek_shared(srv, key):
+    """A shared answer already computed and still fresh, or None - never computes (srv._RESULTS is srv.shared's own store)."""
+    res, lock = getattr(srv, "_RESULTS", None), getattr(srv, "_RG", None)
+    if res is None or lock is None:
+        return None
+    with lock:
+        hit = res.get(key)
+    if not hit or len(hit) < 4 or hit[3] <= time.time() or hit[1] != 200:
+        return None
+    return hit[2]
+
+
+def _history(srv, x, full=False, peek=False):
     """Game-by-game results from the HLTV tables, only when they reproduce the saved L10 tally. Three Postgres slots: a member
-    who cannot get one within 0.5 s sees the saved tally alone."""
+    who cannot get one within 0.5 s sees the saved tally alone. peek=True (with full): the cached year only, no read."""
     n, over, push = x.get("l10_n"), x.get("l10_over"), x.get("l10_push") or 0
     if not full and (not n or over is None):
         return None
@@ -902,7 +914,10 @@ def _history(srv, x, full=False):
         finally:
             _HIST_SLOTS.release()
     line = x.get("line")
-    doc = srv.shared(("ws_hist", _norm(nick), _norm(team), prop, scope), compute, ttl=HISTORY_TTL)[1]
+    key = ("ws_hist", _norm(nick), _norm(team), prop, scope)
+    if peek:                                           # the cached year only (no read): an extra book's board build past its budget
+        return _peek_shared(srv, key) if full else None
+    doc = srv.shared(key, compute, ttl=HISTORY_TTL)[1]
     if full:
         return doc
     ser = (doc or {}).get("ser", [])[:20]
@@ -1325,7 +1340,20 @@ def _line_shared(h, srv, q):
     book, rid, sport = q.get("book"), q.get("id"), _sport_q(h, srv, q)
     if sport is None or not isinstance(book, str) or not book or len(book) > 40 or not isinstance(rid, str) or not rid or not _ID_RE.match(rid):
         return None
-    if sport == "cs2":
+    return _line_for(srv, sport, book, rid)
+
+
+def _line_for(srv, sport, book, rid):
+    """(status, body bytes) of one line's research doc (shared single flight), or None when it is not on a board now."""
+    import book_providers
+    if book not in BOOKS and book in book_providers.providers():
+        # audit 2026-11-05 A2/B4: an extra book's line (Sleeper, Dabble) opens the board player's research doc at its own line
+        p = book_providers.providers()[book]
+        if not book_providers.enabled(book) or sport not in p["sports"] or sport not in ("cs2", "lol") or not rid.startswith("x-"):
+            return None
+        import workspace_books
+        fn = lambda: workspace_books.line_doc(srv, sport, book, rid)
+    elif sport == "cs2":
         if book not in BOOKS or snapshot(srv) is None or (book, rid) not in _SNAP["index"]:
             return None
         fn = lambda: _line_body(srv, book, rid)
