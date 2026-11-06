@@ -344,12 +344,13 @@ def test_filters_panel_words_fit_and_by_game_counts_read_singular(ctx, env, size
 
 def test_phone_hit_chips_are_larger(ctx, env):
     p = board(ctx, env, PHONE)
-    sizes = p.evaluate("""[...document.querySelectorAll('#hub-rows tr[data-record] .h-strip .h-hit')].slice(0, 20).map(e => {
+    # card-and-chips 2026-11-06: a row with no result in any window has no strip line on the phone (h-nohits), so it is not measured
+    sizes = p.evaluate("""[...document.querySelectorAll('#hub-rows tr[data-record]:not(.h-nohits) .h-strip .h-hit')].slice(0, 20).map(e => {
       const r = e.getBoundingClientRect(), c = e.closest('.h-strip-cell').getBoundingClientRect();   // 2026-11-06: label + value box
       return [Math.round(r.width), Math.round(c.height), parseFloat(getComputedStyle(e).fontSize)]; })""")
     assert sizes and all(w >= 32 and h >= 44 and f >= 12 for w, h, f in sizes), sizes      # were ~22px wide, 26px tall, 11px
     heights = p.evaluate("[...document.querySelectorAll('#hub-rows tr[data-record]')].slice(0,6).map(r=>Math.round(r.getBoundingClientRect().height))")
-    assert all(120 <= h <= 215 for h in heights), heights      # 2026-11-06: the hit windows' own labelled line
+    assert all(90 <= h <= 215 for h in heights), heights      # 2026-11-06: the hit windows' own labelled line
     shot(p, 'a14-phone-chips')
     no_h_scroll(p)
     assert not p.errors
