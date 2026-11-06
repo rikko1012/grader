@@ -61,8 +61,10 @@ def test_700_members_recheck_with_the_v2_header(big_queue, env, monkeypatch):
     for _, book, doc in got:
         e = doc["entries"][book]
         assert "slip_header" in e, e.get("ev")
-        if book == "prizepicks":                                             # payouts unknown: never rated
-            assert all(t["rated"] is False for t in e["slip_header"]["types"].values())
+        if book == "prizepicks":                     # verified table (owner 2026-11-05): rated exactly where the live EV check is
+            assert set(e["slip_header"]["types"]) == {"power"}                  # Flex 2-pick: not an entry the app offers
+            assert e["slip_header"]["types"]["power"]["rated"] is bool(e["ev"].get("available"))
+            assert e["slip_header"]["types"]["power"]["payout"] == 3.0
     assert builds[0] <= 2 * len(sets), builds        # one build per leg set per window (single flight), not one per member
     assert took < 120, took
     workspace_api.reset()

@@ -704,6 +704,9 @@ def _slip_header_v2(platform, ls, results, ev_for=None, srv=None):
         if not head:
             return None
         head = json.loads(json.dumps(head))           # the shared copy is never changed
+        from gradecore import payouts as _pay
+        for name in [k for k in head["types"] if not _pay.in_app(platform, k, len(rs))]:
+            head["types"].pop(name)                   # PrizePicks Flex 2-pick: not an entry the app offers
         if platform == "underdog" and len(rs) == 4 and "flex" in head["types"]:
             head["types"]["flex"] = {"entry": "flex", "n": 4, "rated": False, "reason": UD_FLEX4_REASON}
         if ev_for is not None:
@@ -1646,16 +1649,13 @@ _BE = {}
 
 def _break_even(platform, entry_type, n):
     """sq-2: the published per-pick break-even of a standard n-pick entry at 1.0x picks, or None when it is not known:
-    gradecore.payouts on Underdog's table, and on PrizePicks' published standard power / flex base rates (payout_reference.py).
-    Display only - beside a slip and its legs - never an EV, a stake or a settlement."""
+    gradecore.payouts on Underdog's table and PrizePicks' verified help-center table (owner sign-off 2026-11-05).
+    Display only - beside a slip and its legs - never a stake or a settlement."""
     k = (platform, entry_type, n)
     if k not in _BE:
         try:
             from gradecore import payouts
-            import payout_reference
-            cfg = payouts.with_tables({"prizepicks": {"entries": {"power": payout_reference.PP_POWER, "flex": payout_reference.PP_FLEX}}}) \
-                if platform == "prizepicks" else None
-            _BE[k] = payouts.break_even(platform, entry_type, n, config=cfg)
+            _BE[k] = payouts.break_even(platform, entry_type, n)
         except Exception:                               # noqa: BLE001 - unknown = no break-even shown, never a guess
             _BE[k] = None
     return _BE[k]

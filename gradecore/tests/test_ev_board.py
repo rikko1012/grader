@@ -16,10 +16,13 @@ def _formula_tables(reference_tables):
     return reference_tables
 
 
-def test_prizepicks_break_even_is_unavailable_on_the_live_tables():
+def test_prizepicks_break_even_is_live_on_standard_lines_only():
+    """Owner sign-off 2026-11-05: the PrizePicks help-center table is verified; goblin / demon lines stay unavailable."""
     live = REAL_PICKEM_CONFIG()
-    assert ev_board.pickem_break_even("prizepicks", "power", 2, config=live) is None
-    assert ev_board.pickem_break_even("prizepicks", "flex", 2, config=live) is None
+    assert ev_board.pickem_break_even("prizepicks", "power", 2, config=live) == pytest.approx(3.0 ** -0.5)
+    assert ev_board.pickem_break_even("prizepicks", "flex", 3, config=live) is not None
+    assert ev_board.pickem_break_even("prizepicks", "power", 2, line_type="goblin", config=live) is None
+    assert ev_board.pickem_break_even("prizepicks", "power", 2, line_type="demon", config=live) is None
     assert ev_board.pickem_break_even("underdog", "standard", 2, config=live) == pytest.approx(3.5 ** -0.5)
 
 

@@ -30,7 +30,8 @@ def test_generate_builds_rule_correct_slips_from_board_legs(env):
         assert len({r["event"]["id"] for r in recs}) == 2                     # one leg per match
         assert len({r["player"]["key"] for r in recs}) == 2                   # one leg per player
         assert all(l["side"] == r["scout"]["side"] and l["p"] == r["scout"]["p_side"] for l, r in zip(s["legs"], recs))
-        assert s["why"] and "all_hit" in s and "payout" not in s and "ev" not in s    # PrizePicks payouts stay unknown
+        assert s["why"] and "all_hit" in s and "ev" not in s                  # PrizePicks payout: verified table (2026-11-05)
+        assert s["payout"]["multiple"] == 3.0 and s["payout"]["source"] == "https://www.prizepicks.com/help-center/payouts"
     first = {l["player"] for l in doc["slips"][0]["legs"]}
     assert first == {"vargo", "orlo"}                                         # the two best legs of different matches
     sigs = [frozenset((l["book"], l["row_id"]) for l in s["legs"]) for s in doc["slips"]]

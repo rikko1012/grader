@@ -34,7 +34,8 @@ sq-1, in plain words:
      Nothing is dropped or reordered: a replacement is only ever applied by the member, in place.
 
 Search: exact branch-and-bound per slip over the best POOL_CAP legs (NODE_LIMIT nodes, reported when reached). Payout: Underdog's
-published table when every pick is a 1.0x pick; PrizePicks payouts stay unknown. EV is never computed here (workspace_rules.
+published table when every pick is a 1.0x pick; PrizePicks' verified help-center table (owner 2026-11-05) on standard lines.
+EV is never computed here (workspace_rules.
 ev_status decides it, only with a verified payout and validated chances).
 
 sq-2 chance legs (owner 2026-11-05, "Calibrate: printed chance = tested hit rate; only props that pass keep a letter"; that day every
@@ -468,7 +469,14 @@ def all_hit(legs):
 
 
 def payout(platform, entry_type, legs):
-    """The published all-hit multiple, or None: Underdog's table when every pick is a 1.0x pick; PrizePicks stays unknown."""
+    """The published all-hit multiple, or None: Underdog's table when every pick is a 1.0x pick; PrizePicks' verified help-center
+    table (owner sign-off 2026-11-05) when every pick is a standard line with no modifier (goblin / demon / promo stay unknown)."""
+    if platform == "prizepicks":
+        if any((l.get("line_type") or "standard") != "standard" or l.get("multiplier") not in (None, 1, 1.0) for l in legs):
+            return None
+        pp = rules.pp_payout(entry_type or "power", len(legs))
+        return None if pp is None else {"multiple": pp["multiple"], "entry_type": entry_type or "power", "source": pp["source"],
+                                        "page_date": pp["page_date"]}
     if platform != "underdog" or any(l.get("multiplier") != 1.0 for l in legs):
         return None
     m = rules.payout_multiple(entry_type or "standard", len(legs))
