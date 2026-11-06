@@ -36,22 +36,13 @@ sq-1, in plain words:
 Search: exact branch-and-bound per slip over the best POOL_CAP legs (NODE_LIMIT nodes, reported when reached). Payout: Underdog's
 published table when every pick is a 1.0x pick; PrizePicks' verified help-center table (owner 2026-11-05) on standard lines.
 EV is never computed here (workspace_rules.
-ev_status decides it, only with a verified payout and validated chances).
-
-sq-2 chance legs (owner 2026-11-05, "Calibrate: printed chance = tested hit rate; only props that pass keep a letter"; that day every
-sport's letters were held and the studio built 0 slips). With chance_ok (the member routes; the library default stays off so the
-frozen research scripts reproduce), a leg whose letter is held (lc-1 contained / calibration hold, an NBA / NFL gate hold whose
-adapter still names the model's own side in scout.slip_side) or that sits below the letter threshold is still a leg when: it is
-Scout's side (never flipped), the printed (calibrated) chance of that side is above 50% (strictly), the line is open (every pool
-rule above), and the member's goblin rule and the slip rules hold. Such a leg ("chance": True) ranks at its printed chance - the
-number members see, never the raw model chance - and carries no letter, no units and no EV. A lettered leg keeps its banded rank,
-so it comes first only when its banded chance is higher. A held row (data hold, sanity hold, transient failure) is never a leg."""
+ev_status decides it, only with a verified payout and validated chances)."""
 import math
 from datetime import datetime, timezone
 
 import workspace_rules as rules
 
-VERSION = "sq-2"
+VERSION = "sq-1"
 PLATFORMS = ("prizepicks", "underdog")
 ENTRY_TYPES = {"prizepicks": ("power", "flex"), "underdog": ("standard", "flex")}
 SPORTS = ("cs2", "lol", "nba", "nfl")
@@ -204,119 +195,85 @@ def leg_key(book, row_id, side):
     return f"{book}|{row_id}|{side}"
 
 
-def classify(rec, now, feeds=None, research_ok=False, chance_ok=False):
-    """(None, kind) when this record is a pool leg - kind "rated" (its letter ranks it) or "chance" (sq-2: no letter, ranked at the
-    printed chance; only with chance_ok) - else (the reason it is not, None). feeds: {platform: {"state"}} of the record's sport."""
+def exclusion(rec, now, feeds=None, research_ok=False):
+    """None when this record is a pool leg, else the reason it is not. feeds: {platform: {"state"}} of the record's sport."""
     sport, sc, offer = rec.get("sport"), rec.get("scout") or {}, rec.get("offer") or {}
     book, side = offer.get("platform"), sc.get("side")
     if book not in PLATFORMS:
-        return "platform", None
+        return "platform"
     if sport not in SPORTS:
-        return "sport", None
+        return "sport"
     if (rec.get("state") or {}).get("kind") != "ok":
-        return "held", None
-    chance = False
+        return "held"
     if sc.get("hold"):
-        # an NBA / NFL row without a letter: a leg only when its adapter names the model's own side (workspace_sports.slip_side:
-        # the board's lean rule, its market rule and its sanity holds); a data or sanity hold names none and stays out
-        own = sc.get("slip_side")
-        if not chance_ok or own not in ("over", "under") or (side is not None and side != own):
-            return "held", None
-        side, chance = own, True
-    if sc.get("letter_held"):                       # letter containment lc-1: a held letter has no rating
-        if not chance_ok:
-            return "contained", None
-        chance = True
+        return "held"
+    if sc.get("letter_held"):                       # letter containment lc-1: a held letter has no rating, never a leg
+        return "contained"
     if feeds is not None and ((feeds or {}).get(book) or {}).get("state") != "ok":
-        return "feed", None
+        return "feed"
     ev = rec.get("event") or {}
     start = _ts(ev.get("lock_utc")) or _ts(ev.get("start_utc"))
     if ev.get("status") == "started" or start is None or (start - now).total_seconds() < LEAD_S:
-        return "started", None
+        return "started"
     if side not in ("over", "under") or not (offer.get(side) or {}).get("offered"):
-        return "side", None
+        return "side"
     p = sc.get("p_over") if side == "over" else sc.get("p_under")
     if not _num(p) or not 0 < p < 1:
-        return "chance", None
+        return "chance"
     proj, line = sc.get("projection"), offer.get("line")
     if p >= DEGENERATE_P or (_num(proj) and _num(line) and line > 0 and proj < NEAR_ZERO_PROJ * line):
-        return "degenerate", None
+        return "degenerate"
     if not (rec.get("player") or {}).get("team"):
-        return "team", None
-    if not chance:
-        grade, why = sc.get("grade"), None
-        if sport == "cs2":
-            if (sc.get("validation") or {}).get("kind") != "live" or grade not in CS2_GRADES:
-                why = "grade"
-            else:
-                units, sr = sc.get("units"), str(sc.get("stake_reason") or "")
-                if not (_num(units) and units > 0) and not sr.startswith("same-match"):
-                    why = "stake"
-        elif sport == "lol":
-            if grade not in LOL_GRADES:
-                why = "grade"
-        elif grade not in RESEARCH_GRADES:
-            why = "grade"
-        elif not research_ok:
-            why = "research"
-        if why is not None:
-            if not chance_ok or why == "research":  # a research letter stays the member's research option (the route makes it a
-                return why, None                    # chance leg when research estimates are left out: as_chance)
-            chance = True
-    if chance and not p > 0.5:                      # never a side Scout prints at 50% or below
-        return "below_half", None
-    return None, "chance" if chance else "rated"
-
-
-def exclusion(rec, now, feeds=None, research_ok=False, chance_ok=False):
-    """None when this record is a pool leg, else the reason it is not. feeds: {platform: {"state"}} of the record's sport."""
-    return classify(rec, now, feeds, research_ok, chance_ok)[0]
-
-
-def make_leg(rec, table, chance=False):
-    sc, offer, m = rec["scout"], rec["offer"], rec["market"]
-    side = sc["side"] if sc.get("side") in ("over", "under") else sc.get("slip_side")
-    p = sc["p_over"] if side == "over" else sc["p_under"]
-    research = rec["sport"] in RESEARCH_SPORTS and not chance
-    if chance:
-        # sq-2: ranked at the printed chance the member sees (the calibrated chance), never the raw model chance; no letter
-        q, band = p, None
+        return "team"
+    grade = sc.get("grade")
+    if sport == "cs2":
+        if (sc.get("validation") or {}).get("kind") != "live" or grade not in CS2_GRADES:
+            return "grade"
+        units, why = sc.get("units"), str(sc.get("stake_reason") or "")
+        if not (_num(units) and units > 0) and not why.startswith("same-match"):
+            return "stake"
+    elif sport == "lol":
+        if grade not in LOL_GRADES:
+            return "grade"
     else:
-        # ec-1: the band table is fitted on the model's own chance, so a calibrated row is ranked at its raw chance (p_raw); the
-        # printed chance p is unchanged
-        p_rank = sc["p_raw"] if isinstance(sc.get("p_raw"), (int, float)) and not isinstance(sc.get("p_raw"), bool) else p
-        q, band = ranked_chance(rec["sport"], m["stat"], side, p_rank, sc.get("p_push"), research, table)
+        if grade not in RESEARCH_GRADES:
+            return "grade"
+        if not research_ok:
+            return "research"
+    return None
+
+
+def make_leg(rec, table):
+    sc, offer, m = rec["scout"], rec["offer"], rec["market"]
+    side = sc["side"]
+    p = sc["p_over"] if side == "over" else sc["p_under"]
+    research = rec["sport"] in RESEARCH_SPORTS
+    # ec-1: the band table is fitted on the model's own chance, so a calibrated row is ranked at its raw chance (p_raw); the
+    # printed chance p is unchanged
+    p_rank = sc["p_raw"] if isinstance(sc.get("p_raw"), (int, float)) and not isinstance(sc.get("p_raw"), bool) else p
+    q, band = ranked_chance(rec["sport"], m["stat"], side, p_rank, sc.get("p_push"), research, table)
     start = rec["event"].get("lock_utc") or rec["event"].get("start_utc")
     return {"key": leg_key(offer["platform"], offer["offer_id"], side), "sport": rec["sport"], "book": offer["platform"], "row_id": str(offer["offer_id"]),
             "side": side, "line": offer.get("line"), "line_type": m.get("line_type") or "standard", "event": str(rec["event"]["id"]),
             "event_label": rec["event"].get("label") or "", "start": start, "player": rec["player"].get("name") or "", "pkey": rec["player"]["key"],
             "team": rec["player"].get("team") or "", "stat": m["stat"], "stat_label": m.get("stat_label") or m["stat"], "period": m["period"],
             "period_label": m.get("period_label") or m["period"], "p": p, "p_push": sc.get("p_push") or 0.0, "rank_p": q, "band": band,
-            "research": research, "chance": bool(chance), "grade": None if chance else sc.get("grade"),
-            "multiplier": (offer.get(side) or {}).get("payout"), "model_version": sc.get("model_version"), "prop": prop_key(rec)}
+            "research": research, "grade": sc.get("grade"), "multiplier": (offer.get(side) or {}).get("payout"), "model_version": sc.get("model_version"),
+            "prop": prop_key(rec)}
 
 
-def as_chance(l):
-    """A research-letter leg as a chance leg (sq-2: the member left research estimates out): ranked at its printed chance, no
-    letter. None when the printed chance is 50% or below."""
-    if not l["p"] > 0.5:
-        return None
-    return dict(l, rank_p=l["p"], band=None, research=False, chance=True, grade=None)
-
-
-def pool(records, now=None, feeds=None, research_ok=False, table=None, exclude=(), chance_ok=False):
-    """(legs ranked best first, {reason: count}). feeds: {sport: {platform: {"state"}}} or None to skip the feed check.
-    chance_ok (sq-2): legs without a letter join at their printed chance (the member routes); off = sq-1's pool exactly."""
+def pool(records, now=None, feeds=None, research_ok=False, table=None, exclude=()):
+    """(legs ranked best first, {reason: count}). feeds: {sport: {platform: {"state"}}} or None to skip the feed check."""
     now = now or datetime.now(timezone.utc)
     skip = set(exclude or ())
     legs, why = [], {}
     for rec in records or ():
         try:
-            r, kind = classify(rec, now, None if feeds is None else feeds.get(rec.get("sport")) or {}, research_ok, chance_ok)
+            r = exclusion(rec, now, None if feeds is None else feeds.get(rec.get("sport")) or {}, research_ok)
         except (KeyError, TypeError, AttributeError):
-            r, kind = "invalid", None
+            r = "invalid"
         if r is None:
-            leg = make_leg(rec, table, chance=kind == "chance")
+            leg = make_leg(rec, table)
             if leg["key"] in skip:
                 r = "excluded"
             else:
@@ -483,28 +440,14 @@ def payout(platform, entry_type, legs):
     return None if m is None else {"multiple": m, "entry_type": entry_type or "standard", "source": rules.UD_PAYOUTS, "page_date": rules.UD_PAYOUT_PAGE}
 
 
-def leg_break_even(l, be):
-    """The slip's per-pick break-even be (workspace_api._break_even: gradecore.payouts) for one leg, or None: goblin / demon lines and
-    Underdog picks paying other than 1.0x pay an unpublished amount, so no break-even is invented for them."""
-    if be is None or (l.get("line_type") or "standard") != "standard":
-        return None
-    if l["book"] == "underdog" and l.get("multiplier") not in (None, 1, 1.0):
-        return None
-    return be
-
-
-def why_line(legs, pool_size, first, reused, pos=None):
-    """pos: {leg key: rank among the legs the member's goblin rule leaves} so "rank r of n" counts the same legs (None = l["rank"])."""
+def why_line(legs, pool_size, first, reused):
     matches = len({(l["sport"], l["event"]) for l in legs})
-    at = (lambda l: pos.get(l["key"], l["rank"])) if pos else (lambda l: l["rank"])
-    ranks = ", ".join(str(at(l)) for l in sorted(legs, key=at))
+    ranks = ", ".join(str(l["rank"]) for l in sorted(legs, key=lambda l: l["rank"]))
     head = "Best all-hit chance on the board" if first else "Best all-hit chance left" + ("" if reused else " with unused props")
     one = "one leg each" if matches == len(legs) else "same-match legs"
     research = sum(1 for l in legs if l["research"])
     tail = f"; {research} research estimate{'s' if research != 1 else ''}" if research else ""
-    chance = sum(1 for l in legs if l.get("chance"))
-    by = "by Scout's chance" if chance == len(legs) else "by settled hit rate and Scout's chance" if chance else "by settled hit rate"
-    return f"{head}: {matches} matches, {one}; legs rank {ranks} of {pool_size} {by}{tail}."
+    return f"{head}: {matches} matches, {one}; legs rank {ranks} of {pool_size} by settled hit rate{tail}."
 
 
 def build(legs, opts):
@@ -517,7 +460,6 @@ def build(legs, opts):
     lines = opts.get("lines") or "all"
     cap = max_goblins(lines)
     cands = [l for l in legs if l["book"] == platform and line_ok(l, lines)]
-    pos = {l["key"]: i + 1 for i, l in enumerate(cands)}
     used_prop, used_player, taken, slips, nodes, exact = {}, {}, set(), [], 0, True
 
     def uses(l):
@@ -537,7 +479,7 @@ def build(legs, opts):
             used_player[(l["sport"], l["pkey"])] = used_player.get((l["sport"], l["pkey"]), 0) + 1
         got = sorted(got, key=lambda l: l["rank"])
         slips.append({"platform": platform, "entry_type": et, "legs": got, "all_hit": all_hit(got), "payout": payout(platform, et, got),
-                      "same_match": len({(l["sport"], l["event"]) for l in got}) < len(got), "why": why_line(got, len(cands), k == 0, reused, pos)})
+                      "same_match": len({(l["sport"], l["event"]) for l in got}) < len(got), "why": why_line(got, len(cands), k == 0, reused)})
     shortage = None
     if len(slips) < count:
         label = rules.LABEL.get(platform, platform)
@@ -563,17 +505,10 @@ def build(legs, opts):
 
 # ---------------------------------------------------------------------------------------------------------------- adder
 
-def leg_text(l):
-    """The one line under a leg: its band record, "Research estimate", or for a chance leg the plain read ("Lean Over")."""
-    if l.get("chance"):
-        return f"Lean {str(l['side']).title()}"
-    return "Research estimate" if l["research"] else band_text(l["band"], l["sport"], l["line_type"])
-
-
 def _brief(l):
     return {"key": l["key"], "sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "player": l["player"],
             "line": l["line"], "stat_label": l["stat_label"], "period_label": l["period_label"], "p": l["p"], "rank": l["rank"],
-            "band": leg_text(l), "chance": bool(l.get("chance"))}
+            "band": band_text(l["band"], l["sport"], l["line_type"]) if not l["research"] else "Research estimate"}
 
 
 def advise(slip, legs_by_key, ranked, entry_type=None, lines="all"):

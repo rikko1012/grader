@@ -553,10 +553,9 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     assert not (state.get('slip') or {}).get('legs')
     assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
     assert all(len(s['legs']) == 2 for s in slips)
-    assert state['studio']['generator'] == 'sq-2'
+    assert state['studio']['generator'] == 'sq-1'
     assert all(s['why'] and all(l['gen']['record'] for l in s['legs']) for s in slips)          # one line per slip, a record per leg
-    # research estimates are never marked unless asked; an NBA / NFL leg without a letter is a plain leg at Scout's chance (sq-2)
-    assert all(l['gen']['chance'] and not l['gen']['research'] for s in slips for l in s['legs'] if l['sport'] in ('nba', 'nfl'))
+    assert not [l for s in slips for l in s['legs'] if l['sport'] in ('nba', 'nfl')]           # research estimates stay out unless asked
     assert all(len({l['player_key'] for l in s['legs']}) == 2 for s in slips)
     assert p.locator('.h-generated-card .h-batch-why').count() == 8
     assert all(len({(l['sport'], l['event_id']) for l in s['legs']}) == 2 for s in slips)
@@ -960,39 +959,4 @@ def test_adder_asks_with_the_goblin_rule(ctx, env):
     with p.expect_request(lambda r: r.url.endswith('/api/upgrade/slip-advice'), timeout=20000) as req:
         add_first(p)
     assert req.value.post_data_json['lines'] == 'no_goblins'
-    assert not p.errors
-
-
-# ------------------------------------------------------------------------------------- sq-2 chance legs (live bug 2026-11-05)
-
-@pytest.mark.parametrize('size', [DESK, PHONE])
-def test_studio_builds_from_scouts_chances_when_every_letter_is_held(ctx, env, monkeypatch, size):
-    """Live 2026-11-05 16:05 UTC: calibrated chances held every letter and Generate built 0 slips. With every CS2 / LoL letter held the
-    studio builds slips from Scout's printed chances: each leg says Lean Over / Lean Under, the slip shows the per-pick break-even,
-    no letter or stake appears, and no hold label is printed on the cards."""
-    import letter_containment as lc
-    import workspace_api
-    monkeypatch.setenv('SCOUT_CONTAIN_CS2', '1')
-    monkeypatch.setenv('SCOUT_CONTAIN_LOL', '1')
-    workspace_api._SLIP_POOL.clear()
-    assert lc.contained('cs2') and lc.contained('lol')
-    p = hub(ctx, env, size)
-    _studio_build(p)
-    p.locator('#hub-generation-sports input[value=nba]').uncheck()
-    p.locator('#hub-generation-sports input[value=nfl]').uncheck()
-    assert 'Built from Scout’s chances.' in p.locator('.h-generator > p').first.inner_text()
-    p.locator('#hub-generate').click()
-    p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
-    state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) > 0)
-    legs = [l for s in state['studio']['slips'] for l in s['legs']]
-    assert legs and all(l['gen']['chance'] and l['gen']['record'] in ('Lean Over', 'Lean Under') for l in legs)
-    assert all(l['shown_p'] > 0.5 for l in legs) and not [l for l in legs if l['gen'].get('line_type') == 'goblin']
-    assert p.locator('.h-generated-card').count() == len(state['studio']['slips'])
-    text = p.locator('#hub-generated').inner_text()
-    assert 'Built from Scout’s chances.' in text and 'Break-even per pick' in text and 'Lean ' in text
-    assert 'held' not in text.lower() and not any(t in text for t in (' A+ ', ' B+ ', 'units', ' 1U', ' 0U'))
-    below = sum(1 for l in legs if l['gen'].get('below_break_even'))
-    assert below and p.locator('.h-generated-card .h-batch-warn').count() == below        # the fixture has legs under 57.7%
-    assert 'Below the 57.7% break-even per pick' in text
-    no_h_scroll(p)
     assert not p.errors

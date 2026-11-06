@@ -22,7 +22,7 @@ def keys_on_board(fx):
 def test_generate_builds_rule_correct_slips_from_board_legs(env):
     board = keys_on_board(env)
     st, doc = gen(env)
-    assert st == 200 and doc["version"] == "sq-2"
+    assert st == 200 and doc["version"] == "sq-1"
     assert doc["slips"], doc
     for s in doc["slips"]:
         assert s["platform"] == "prizepicks" and s["entry_type"] == "power" and len(s["legs"]) == 2
@@ -56,8 +56,7 @@ def test_underdog_payout_is_the_published_table(env):
 def test_no_repeat_props_and_shortage(env):
     st, doc = gen(env, slips=8, repeats="none")
     props = [(l["row_id"]) for s in doc["slips"] for l in s["legs"]]
-    # 3 PrizePicks legs of B or better + 1 B- leg at its printed chance (sq-2), 2 matches: two 2-pick slips, no repeats
-    assert len(props) == len(set(props)) and len(doc["slips"]) == 2
+    assert len(props) == len(set(props)) and len(doc["slips"]) == 1           # 3 PrizePicks legs of B or better: one 2-pick slip, no repeats
     assert doc["shortage"].startswith("No props were repeated")
 
 
@@ -115,17 +114,12 @@ def test_generate_changes_nothing_on_the_board(env):
     assert strip(before) == strip(after)
 
 
-def test_sub_letter_lines_enter_at_their_chance_and_coinflips_stay_out(env):
-    """sq-2: a Lean (below the letter threshold) is a leg at its printed chance - no letter, no units, "Lean Over" - and a side
-    printed at 50% (or below) never is."""
+def test_research_and_lean_lines_stay_out(env):
     env.rows.append(row("pp:7100", "prizepicks", "leanman", "Zeta", "Omega", 20.5, "More", .54, 950, env.rows[0]["start"]))
-    env.rows.append(row("pp:7101", "prizepicks", "coinman", "Delta", "Sigma", 20.5, "More", .50, 951, env.rows[0]["start"]))
     fresh()
     st, doc = gen(env, slips=12)
-    lean = [l for s in doc["slips"] for l in s["legs"] if l["player"] == "leanman"]
-    assert lean and all(l["chance"] and l["record"] == "Lean Over" and l["rank_p"] == 0.54 and "units" not in l for l in lean)
-    assert all(l["player"] != "coinman" for s in doc["slips"] for l in s["legs"])
-    assert doc["pool"]["excluded"]["below_half"] >= 1
+    assert all(l["player"] != "leanman" for s in doc["slips"] for l in s["legs"])
+    assert doc["pool"]["excluded"]["grade"] >= 1
 
 
 def test_advice_keeps_order_names_same_match_and_suggests_a_fitting_replacement(env):
@@ -136,14 +130,13 @@ def test_advice_keeps_order_names_same_match_and_suggests_a_fitting_replacement(
     legs = [dict(leg_of(r), stat=r["market"]["stat"], period=r["market"]["period"], player_key=r["player"]["key"], player=r["player"]["name"],
                  team=r["player"]["team"], event=r["event"]["id"]) for r in slip]
     st, doc = post(env, "slip-advice", {"legs": legs, "entry_types": {"prizepicks": "power"}})
-    assert st == 200 and doc["version"] == "sq-2"
+    assert st == 200 and doc["version"] == "sq-1"
     assert [r["id"] for r in doc["legs"]] == [l["id"] for l in legs]                 # never reordered
     notes = {r["id"]: [n["code"] for n in r["notes"]] for r in doc["legs"]}
     assert notes[legs[0]["id"]] == ["same_match"] and notes[legs[1]["id"]] == ["same_match"] and notes[legs[2]["id"]] == []
     rep = doc["legs"][2].get("replacement")
     assert rep and rep["player"] == "ace" and rep["book"] == "prizepicks"
-    assert [r["in_pool"] for r in doc["legs"]] == [True, True, True]                 # mika7's 56.6% B-: a leg at its chance (sq-2)
-    assert doc["legs"][2]["band"] == "Lean Over"
+    assert [r["in_pool"] for r in doc["legs"]] == [True, True, False]                # mika7's 56.6% is a B-: not a slip leg
     assert "No settled record" in doc["legs"][0]["band"]
 
 
@@ -199,7 +192,7 @@ def test_advice_one_goblin_counts_a_goblin_outside_the_pool(env):
     """Review 2026-11-05: the member's own goblin below Scout's slip bar is not in the pool; the route reads its line type from the
     board (the client never sends one), so "at most 1 goblin" never offers a second goblin as the swap."""
     _with_goblin(env)
-    env.rows.append(row("pp:7400", "prizepicks", "lowgob", "Basalt", "Quarry", 11.5, "More", .50, 904, env.rows[0]["start"], odds_type="goblin"))
+    env.rows.append(row("pp:7400", "prizepicks", "lowgob", "Basalt", "Quarry", 11.5, "More", .56, 904, env.rows[0]["start"], odds_type="goblin"))
     fresh()
     board = keys_on_board(env)
     by = {(r["player"]["name"], b): r for (b, _), r in board.items()}

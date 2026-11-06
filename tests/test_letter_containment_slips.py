@@ -56,28 +56,13 @@ def test_generator_and_advice_flag_off_are_unchanged(env, flag):
     assert st == 200 and all(n["code"] != "contained" for n in adv["legs"][0]["notes"])
 
 
-def test_generator_and_advice_flag_on_build_from_chances(env, flag):
-    """sq-2 (live bug 2026-11-05: every letter held -> 0 slips): held legs are built at their printed chance, never with a letter
-    or a stake, always on Scout's own side above 50%; the adder uses them and puts no hold label on a leg it can use."""
+def test_generator_and_advice_flag_on_skip_held_legs(env, flag):
     flag(True)
     st, doc = _gen(env, "u2", slips=3)
-    assert st == 200 and doc["slips"] and not doc["pool"]["excluded"].get("contained")
-    assert doc["pool"]["chance_legs"] == doc["pool"]["legs"] > 0
-    recs = {(x["offer"]["platform"], x["offer"]["offer_id"]): x for x in records(env).values()}
-    for s in doc["slips"]:
-        assert "ev" not in s
-        for l in s["legs"]:
-            r = recs[(l["book"], l["row_id"])]
-            assert l["chance"] is True and l["side"] == r["scout"]["side"] and l["p"] > 0.5
-            assert l["rank_p"] == round(l["p"], 4) and l["record"] == f"Lean {l['side'].title()}"
-            assert "units" not in l and "grade" not in l
+    assert st == 200 and doc["slips"] == [] and doc["pool"]["excluded"].get("contained", 0) >= 1
     r = next(x for x in records(env).values() if x["offer"]["platform"] == "prizepicks" and x["scout"]["side"])
     assert r["scout"]["grade"] is None and r["scout"]["letter_held"] is True
     st, adv = post(env, "slip-advice", {"legs": [_advice_leg(r)], "entry_types": {"prizepicks": "power"}})
     leg = adv["legs"][0]
-    p = r["scout"]["p_over"] if r["scout"]["side"] == "over" else r["scout"]["p_under"]
-    assert st == 200 and leg["in_pool"] is (0.5 < p < sq.DEGENERATE_P)
-    if leg["in_pool"]:
-        assert all(n["code"] != "contained" for n in leg["notes"]) and leg["band"] == f"Lean {r['scout']['side'].title()}"
-    else:
-        assert leg["notes"][0] == {"code": "contained", "text": CS2_BANNER}
+    assert st == 200 and leg["notes"][0] == {"code": "contained", "text": CS2_BANNER} and leg["in_pool"] is False
+    assert "replacement" not in leg                                            # every CS2 leg is held: nothing rated to offer
