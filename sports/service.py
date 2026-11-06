@@ -493,6 +493,7 @@ class Handler(BaseHTTPRequestHandler):
         self._member_ok = False
         u = urlparse(self.path)
         cors, ok = self._cors()
+        body = b""
         if method == "POST":
             try:
                 n = int(self.headers.get("Content-Length") or 0)
@@ -502,6 +503,19 @@ class Handler(BaseHTTPRequestHandler):
                 self.close_connection = True
                 return self._send(413 if n > BODY_MAX else 400, {"error": "body_too_large" if n > 0 else "bad_length"},
                                   headers=cors)
+            # bug sweep 2026-11-06 #11: drain the body before ANY early answer (health, admin/ops 403, flag off) - unread
+            # bytes on a kept-alive connection were parsed as the next request (desync / request smuggling). A chunked
+            # body is never parsed here, so that connection is closed after the answer.
+            if self.headers.get("Transfer-Encoding"):
+                self.close_connection = True
+            try:
+                body = self.rfile.read(n) if n else b""
+            except (OSError, socket.timeout):
+                self.close_connection = True
+                return
+            if len(body) != n:                          # client sent less than it said: nothing left to trust
+                self.close_connection = True
+                return
         if not ok:
             self.close_connection = True
             with _SLOCK:
@@ -537,11 +551,7 @@ class Handler(BaseHTTPRequestHandler):
                                      "why": why}, headers=cors)
         if not flags.on("SPORTS_API"):
             return self._send(404, {"error": "not found"}, headers=cors)
-        body = b""
-        if method == "POST":
-            n = int(self.headers.get("Content-Length") or 0)
-            body = self.rfile.read(n) if n else b""
-        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        q ={k: v[0] for k, v in parse_qs(u.query).items()}
         req = web.Request(path=u.path, query=q, method=method, body=body, member=claims["sub"], role=claims["role"])
         self._member_ok = True
         try:

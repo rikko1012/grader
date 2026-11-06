@@ -6,7 +6,7 @@ Each cached answer used to be its own .json.gz file: ~50,000 files of ~1.5 KB ea
 takes at least one 4 KB disk block, so 95 MB of data occupied ~240 MB of the volume. Same data,
 same keys, same expiry rules - one file, zlib-compressed rows, no per-file waste.
 
-- get(bucket, name) -> (saved_at, data) or None;  put(bucket, name, data)
+- get(bucket, name) -> (saved_at, data) or None;  put(bucket, name, data) -> True when saved
 - A miss falls back to the old .json.gz file (if any), moves it in and deletes the file, so nothing
   is lost and nothing is re-downloaded; migrate() does the rest in the background.
 - Never fatal: a locked/full disk only means an answer isn't saved (like the old files).
@@ -61,11 +61,11 @@ def _legacy(bucket, name):
             data = json.load(f)
     except (OSError, ValueError, EOFError):
         return None
-    put(bucket, name, data, at)
-    try:
-        p.unlink()
-    except OSError:
-        pass
+    if put(bucket, name, data, at):                # bug sweep 2026-11-06 #17: the file goes only once the row is saved
+        try:
+            p.unlink()
+        except OSError:
+            pass
     return at, data
 
 
@@ -90,10 +90,12 @@ def put(bucket, name, data, at=None):
             con.execute("INSERT OR REPLACE INTO kv (bucket, name, at, data) VALUES (?, ?, ?, ?)",
                         (bucket, name, at or time.time(), blob))
             con.commit()
+        return True
     except (sqlite3.Error, TypeError, ValueError) as e:
         if not _warned[0]:
             print(f"cache write failed ({e}) - continuing without saving", file=sys.stderr, flush=True)
             _warned[0] = True
+        return False
 
 
 def prune(bucket, older_than_days):

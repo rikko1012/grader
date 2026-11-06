@@ -482,11 +482,16 @@ def history(market=None, limit=500):
     import collections
     out = collections.deque(maxlen=max(1, int(limit)))  # streamed (audit 2026-10-26): memory = `limit` events, never the file
     try:
-        with open(HISTORY, encoding="utf-8") as f:
+        with open(HISTORY, encoding="utf-8", errors="replace") as f:
             for x in f:
                 if not x.strip():
                     continue
-                e = json.loads(x)
+                try:                                    # bug sweep 2026-11-06 #23: a line cut short by a kill/full disk
+                    e = json.loads(x)                   # is skipped, not a broken endpoint until hand-edited
+                except ValueError:
+                    continue
+                if not isinstance(e, dict):
+                    continue
                 if not market or e.get("market") == market:
                     out.append(e)
     except OSError:

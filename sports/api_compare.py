@@ -91,8 +91,10 @@ def _load(lg):
 def _started(row, now):
     if row.get("started") is True:
         return True
-    if row.get("status") and (_LIVE.search(str(row["status"])) or str(row["status"]).lower() in _CLOSED):
-        return True                     # the board's lock rule (snapshots._locked): any status but scheduled
+    # the board's lock rule (snapshots._locked): any status but scheduled is locked (bug sweep 2026-11-06 #30: this
+    # matched live/closed statuses only, so 'unknown' with a future start answered 'ok' while the board refused picks)
+    if row.get("status") and str(row["status"]).lower() != "scheduled":
+        return True
     s = row.get("start")
     if not s:
         return False
@@ -112,7 +114,12 @@ _CLOSED = {"postponed": "Game postponed", "cancelled": "Game cancelled", "suspen
 def _closed_text(row):
     """Why a shared prop's game no longer takes picks - a postponed game is not 'started' (was: 'post' in the live
     pattern matched 'postponed')."""
-    return _CLOSED.get(str(row.get("status") or "").lower(), "Game has started")
+    st = str(row.get("status") or "").lower()
+    if st in _CLOSED:
+        return _CLOSED[st]
+    if st and st != "scheduled" and not _LIVE.search(st) and row.get("started") is not True:
+        return "Game closed to new picks"   # locked by its status (e.g. 'unknown'), not by a start
+    return "Game has started"
 
 
 def _ln(x):
