@@ -236,6 +236,8 @@ def test_books_command_keeps_the_store_cap_and_disk_floor(monkeypatch, capsys):
 def sched_env(monkeypatch):
     monkeypatch.setenv("SPORTS_LEAGUES", "nba nfl")
     monkeypatch.setattr(scheduler, "JOBS", {})
+    import copy
+    monkeypatch.setattr(scheduler, "STATS", copy.deepcopy(scheduler.STATS))   # own counters: peak_reserved_mb must not leak into test_scheduler
     for k in ("SPORTS_CHILD_BUDGET_MB", "SPORTS_MAX_HEAVY", "SPORTS_HEAVY_SLOTS"):
         monkeypatch.delenv(k, raising=False)
 
