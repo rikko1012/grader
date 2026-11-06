@@ -19,6 +19,10 @@ from ..identity import eastern_offset_hours
 RULE_VERSION = "ds-1"
 _MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
                                             "nov", "dec"))}
+# A real month name or abbreviation as a whole word (bug sweep 2026-11-06 #3 / #33: "[a-z]*" after a 3-letter prefix
+# read "Mark 3", "markets 2", "Junior 5", "declined 4" as dates). Shared with grounding._MDAY.
+MONTH_WORD = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+              r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b")
 _WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "ten": 10, "fourteen": 14,
             "thirty": 30}
 
@@ -101,11 +105,11 @@ def resolve(phrase: str, league: str = "nba", now: datetime | None = None):
         except ValueError:
             return None
         return _days(d, d, phrase, "date")
-    m = re.fullmatch(r"([a-z]{3})[a-z]*\.? (\d{1,2})(?:st|nd|rd|th)?(?:,? (\d{4}))?", p)
-    if m and m.group(1) in _MONTHS:
+    m = re.fullmatch(r"(" + MONTH_WORD + r")\.? (\d{1,2})(?:st|nd|rd|th)?(?:,? (\d{4}))?", p)
+    if m:
         y = int(m.group(3)) if m.group(3) else today.year
         try:
-            d = date(y, _MONTHS[m.group(1)], int(m.group(2)))
+            d = date(y, _MONTHS[m.group(1)[:3]], int(m.group(2)))
         except ValueError:
             return None
         if not m.group(3) and d > today + timedelta(days=60):       # "Dec 30" asked in January = last December
@@ -116,7 +120,7 @@ def resolve(phrase: str, league: str = "nba", now: datetime | None = None):
 
 _SCAN = re.compile(r"\b(last night(?:'s games)?|yesterday|tonight|today|tomorrow|this season|last season|this week|"
                    r"last week|past week|(?:last|past) (?:\d{1,3}|one|two|three|four|five|six|seven|ten|fourteen|thirty) "
-                   r"days?|\d{4}-\d{2}-\d{2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.? "
+                   r"days?|\d{4}-\d{2}-\d{2}|" + MONTH_WORD + r"\.? "
                    r"\d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?)\b", re.I)
 
 

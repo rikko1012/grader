@@ -19,13 +19,14 @@ from datetime import timedelta
 
 from ..contracts import parse_utc
 from ..identity import eastern_offset_hours
+from .dates import MONTH_WORD          # real month words only (bug sweep 2026-11-06 #3: "declined 4" was read as a date)
 
 REMOVED = "[number removed]"
 ID_KEYS = ("forecast_id", "agg_id", "record_id")
 _CITE = re.compile(r"\[ref:\s*([^\]\s]{1,160})\s*\]")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2})?Z?)?\b")
 _MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
-_MDAY = re.compile(r"\b(" + "|".join(_MONTHS) + r")[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b", re.I)
+_MDAY = re.compile(r"\b(" + MONTH_WORD + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b", re.I)
 _CLOCK = re.compile(r"\b(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)?(?:\s*(ET|EDT|EST|UTC|Z))?", re.I)
 _IDS = re.compile(r"\b(?:fc|agg|cg)-[0-9a-f]{6,}\b|\b[a-z]+:[A-Za-z0-9_:.|\-]+\b|\b\w*[A-Za-z_]\d[\w]*\b")
 _VOCAB = re.compile(r"\b(?:3|three)[- ]?(?:pointers?|point(?:ers)?|pt|pm|s)\b|\b3PT\b|\b[1-4](?:st|nd|rd|th)\s+"

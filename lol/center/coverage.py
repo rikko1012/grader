@@ -29,8 +29,10 @@ def compute(con):
     tours = {page_key(r["OverviewPage"]): r for r in store.current_rows(con, "Tournaments") if r.get("OverviewPage")}
     span = con.execute("SELECT MIN(start_utc), MAX(start_utc), COUNT(*) FROM c_games WHERE remake = 0").fetchone()
     by_t = {}
+    # kills_mismatch counts the flag build.py writes when raw team kills differ from the player-kill sum (bug sweep
+    # 2026-11-06 #19: it matched '%kills_mismatch%', a flag nothing writes, so it always read 0)
     for r in con.execute("""SELECT g.tournament_page AS t, COUNT(*) AS games, SUM(g.n_players = 10) AS full_scoreboards,
-            SUM(g.flags LIKE '%kills_mismatch%') AS kills_mismatch, SUM(g.flags LIKE '%order_conflict%') AS order_conflict,
+            SUM(g.flags LIKE '%team_total_differs_from_player_sum%') AS kills_mismatch, SUM(g.flags LIKE '%order_conflict%') AS order_conflict,
             SUM(g.sid IS NULL) AS no_series, MIN(g.start_utc) AS first, MAX(g.start_utc) AS last
             FROM c_games g WHERE g.remake = 0 GROUP BY g.tournament_page"""):
         d = dict(r)

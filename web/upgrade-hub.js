@@ -1146,11 +1146,13 @@ export function mount(C) {
   }
   /* Ask: the Genie (SCOUT_GENIE) answers one question about this line from its own payload, every number checked by the server;
      the evidence guide sits folded underneath (open when the Genie is off) */
-  const G={key:null,q:'',busy:false,ans:null,err:null,quota:null};
+  /* seq: one number per question; a reply whose seq is no longer current is dropped (bug sweep 2026-11-06 #13: switching side or line
+     mid-question left busy=true for good and the Genie said 'Checking…' on every line until a reload) */
+  const G={key:null,q:'',busy:false,ans:null,err:null,quota:null,seq:0};
   const SUGGEST=['What is the projection?','How often did this line hit?','What is the head-to-head?','Is there a better line elsewhere?'];
   function askHtml(r) {
     const side=H.histSide, k=key(r)+'|'+r.offer.revision+'|'+side;
-    if(G.key!==k)Object.assign(G,{key:k,ans:null,err:null});
+    if(G.key!==k){Object.assign(G,{key:k,ans:null,err:null,busy:false});G.seq++;}
     const genie=R.me.features?.genie===true, s=r.scout, t=C.tallies(r).l10, other=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform), chance=C.chanceOf(r,side);
     // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
     const persona=genie&&R.me.features?.genie_persona===true;
@@ -1169,19 +1171,19 @@ export function mount(C) {
     const box=$('hub-ask-q'), q=(text||(box?box.value:'')||'').trim();
     G.q=q;
     if(!q){G.err='Type a question about this line first.';paintBody();return;}
-    const k=G.key;
+    const tok=++G.seq;
     Object.assign(G,{busy:true,err:null,ans:null});paintBody();
     try {
       const d=await api('genie',{sport:r.sport,book:r.offer.platform,id:r.offer.offer_id,revision:r.offer.revision,side:H.histSide,question:q});
-      if(G.key!==k)return;
+      if(G.seq!==tok)return;
       G.ans=Array.isArray(d.sentences)?d.sentences:[];G.quota=d.quota||null;G.intro=typeof d.intro==='string'?d.intro:null;
     } catch(e) {
-      if(G.key!==k)return;
+      if(G.seq!==tok)return;
       const c=e.status||0;
       if(c===429&&e.doc?.quota)G.quota=e.doc.quota;
       G.err=c===429?(e.doc?.error==='daily_limit_reached'?(R.me.features?.genie_persona?"\u{1F9DE} Your wishes are spent for today. They reset at midnight UTC.":"You have used today's questions. They reset at midnight UTC."):'Too many questions in a minute. Try again shortly.')
         :c===409?'This line changed. Reopen it to ask about the current offer.':c===413?'Keep the question under 300 characters.':'The Genie is unavailable right now.';
-    } finally {if(G.key===k){G.busy=false;paintBody();}}
+    } finally {if(G.seq===tok){G.busy=false;paintBody();}}
   }
   function tabHtml(r) {
     const warn=H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`:'';
