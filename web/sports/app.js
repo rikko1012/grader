@@ -1322,7 +1322,9 @@
           stateBox("No settled forecasts yet", "Forecasts are scored after their games are final and Scout settles them from the box score. " + ((man && man.models || []).map(function (x) { return S.int(x.forecasts) + " forecasts waiting"; }).join(" · ") || ""));
         return;
       }
-      if (RP && PL) h += RP.summaryHtml(state.lg, PL, {statName: statName, hh: R.head_to_head});
+      // A7: the summary's comparison is the one-pick-per-prop head-to-head (rp-2) when the public file has it
+      if (RP && PL) h += RP.summaryHtml(state.lg, PL, {statName: statName,
+                                                      hh: PL.head_to_head && (PL.head_to_head.rows || []).length ? PL.head_to_head : R.head_to_head});
       else h += '<section class="sw-panel"><p class="sw-muted">The summary is being prepared. The full numbers are in Details below.</p></section>';
       var det = [];
       if (RP && R.head_to_head)          // N5 hh-1: Scout vs market on the same props (full table)

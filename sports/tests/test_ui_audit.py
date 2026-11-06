@@ -311,7 +311,7 @@ def test_sort_indicator_and_phone_select_follow_the_sort_in_effect():
 def test_market_fallback_cell_is_display_only_and_behind_its_switch():
     js = (WEB / "table.js").read_text(encoding="utf-8")
     assert "r.marketFallback = !mkc && fb && fb.n > 0" in js and 'data-fallback="' in js
-    assert "Not used for lean or edge" in js and "books, stale" in js
+    assert "Not used for lean or edge" in js and "older book prices" in js and "books, stale" not in js
     mv = (WEB.parents[1] / "sports" / "market_view.py").read_text(encoding="utf-8")
     assert 'FALLBACK_FLAG = "SPORTS_MARKET_FALLBACK"' in mv and "if fallback and head_c is None" in mv
     bv = (WEB.parents[1] / "sports" / "board_view.py").read_text(encoding="utf-8")

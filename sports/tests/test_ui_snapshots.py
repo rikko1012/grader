@@ -152,11 +152,15 @@ def test_board_rows_align_only_identical_markets(built):
     rows = [r for r in b["markets"] if r["st"] == "points"]
     assert len(rows) == 1
     r = rows[0]
-    assert sorted(q["p"] for q in r["q"]) == ["prizepicks", "underdog"]       # same event / player / stat / scope
-    assert r["alt"] == 1                                                       # goblin kept apart, counted
+    # audit 2026-11-05 S1/S2: the Underdog Over-only line (stored 'balanced') is its own market - kept apart like the
+    # goblin, never an ordinary board quote
+    assert sorted(q["p"] for q in r["q"]) == ["prizepicks"]                   # same event / player / stat / scope
+    assert r["alt"] == 2                                                       # goblin + Underdog one-sided, counted
     assert [q["l"] for q in r["kn"]] == [19.5, 21.5] and r["kr"] == 3          # nearest Kalshi rungs + ladder size
-    ud = [q for q in r["q"] if q["p"] == "underdog"][0]
-    assert ud["o"] == [1, 0] and ud["m"][0] == 1.03                            # unavailable side stays unavailable
+    pf = _load(built, f"players/{snapshots.safe_name(KAT)}.json")
+    ud = [q for m in pf["markets"] for q in m["alternates"] if q["platform"] == "underdog"][0]
+    assert ud["variant"] == "one_sided" and [s["offered"] for s in ud["sides"]] == [True, False]
+    assert ud["sides"][0]["multiplier"] == 1.03                               # unavailable side stays unavailable
     assert not any(m["st"] == "pra" for m in b["markets"])                    # combo -> secondary file
     more = _load(built, "board_more.json")
     assert [m["st"] for m in more["markets"]] == ["pra"] and more["markets"][0]["cap"] == "research_only"
@@ -219,7 +223,7 @@ def test_slate_has_coverage_injuries_and_start_provenance(built):
     s = _load(built, "slate.json")
     e = [x for x in s["events"] if x["event_id"] == "nba:espn:1"][0]
     assert e["start_utc"] == h.START and e["start_source"] == "espn" and e["home"]["abbr"] == "BOS"
-    assert e["coverage"]["by_platform"] == {"prizepicks": 2, "underdog": 1, "kalshi": 3}   # points + the pra combo row
+    assert e["coverage"]["by_platform"] == {"prizepicks": 2, "kalshi": 3}   # points + the pra combo row (UD one-sided = alternate)
     assert [i["player_id"] for i in e["injuries"]] == [BRUNSON]
     assert all(x["start_source"] == "espn" for x in s["events"])             # game-log events never on the slate
 
@@ -304,9 +308,9 @@ def test_forecast_is_attached_only_to_the_offer_it_was_made_for(built):
                                   SideQuote("under", False))))
     snapshots.build(con, "nba", now=NOW)
     con.close()
-    b = _load(built, "board.json")
-    ud = [q for r in b["markets"] for q in r["q"] if q["p"] == "underdog"][0]
-    assert ud["f"] == built["f2"].forecast_id and b["fc"][ud["f"]]["rv"] == 1
+    pf = _load(built, f"players/{snapshots.safe_name(KAT)}.json")
+    ud = [q for m in pf["markets"] for q in m["alternates"] if q["platform"] == "underdog"][0]
+    assert ud["forecast_id"] == built["f2"].forecast_id and pf["forecasts"][ud["forecast_id"]]["for_revision"] == 1
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")

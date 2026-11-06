@@ -428,7 +428,7 @@ def t_player_game_log(ctx, a):
 
 
 def _group(o):
-    if o.variant not in capabilities.ORDINARY_VARIANTS or o.promotional or not o.event_id or not o.player_id \
+    if not capabilities.is_ordinary(o) or o.promotional or not o.event_id or not o.player_id \
             or not o.stat:
         return None
     return "cg-" + hashlib.sha256(f"{o.league}|{o.event_id}|{o.player_id}|{o.stat}|{o.scope}".encode()).hexdigest()[:12]

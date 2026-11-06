@@ -497,7 +497,8 @@ def status_label(e, now):
 
 def offer_view(rid, o, meta):
     ok, why = capabilities.gate(o)
-    return {"record_id": rid, "platform": o.platform, "offer_id": o.offer_id, "line": o.line, "variant": o.variant,
+    return {"record_id": rid, "platform": o.platform, "offer_id": o.offer_id, "line": o.line,
+            "variant": capabilities.variant_of(o),          # S1/S2: a stored one-sided Underdog line reads one_sided
             "promotional": o.promotional, "availability": o.availability, "scope": o.scope,
             "source_stat": o.source_stat, "rule_version": o.rule_version, "revision": meta["revision"],
             "sides": [{"side": s.side, "offered": s.offered, "price_format": s.price_format, "price": s.price,
@@ -801,7 +802,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
         if row["team"] is None and o.team:              # N9: the first offer may carry no team (Kalshi); any later one does
             row["team"] = o.team
         row_items[key].append((rid, o, m))
-        if not o.promotional and o.platform != "kalshi" and o.variant in capabilities.ORDINARY_VARIANTS:
+        if not o.promotional and o.platform != "kalshi" and capabilities.is_ordinary(o):
             row_targets[key].append((rid, o))
         v = offer_view(rid, o, m)
         ch = _choose(attached.get(rid, []))
@@ -815,7 +816,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
             row["promotional"].append(v)
         elif o.platform == "kalshi":
             row["kalshi"].append(v)
-        elif o.variant in capabilities.ORDINARY_VARIANTS:
+        elif capabilities.is_ordinary(o):
             row["quotes"].append(v)
         else:
             row["alternates"].append(v)
@@ -833,6 +834,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
     mv_stats = {"rows": 0, "with_consensus": 0, "books_listed": 0, "books_in_consensus": 0}
     for row in markets_rows.values():
         if events[row["event_id"]][1].start_utc <= now:     # started games leave the board (shown as started on the slate)
+            continue
+        if row.get("scope", "full_game") != "full_game":
+            # S1/S2 (audit 2026-11-05): quarter / half lines (Underdog period_1_points = 1Q Points) keep their real
+            # scope in the store and on the player page, but never sit on the full-game board, sheets or workspace
             continue
         ev_ = events[row["event_id"]][1]
         if row["team_id"] not in (ev_.home_team_id, ev_.away_team_id):
@@ -916,7 +921,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
         for r in rows:
             for q in r["quotes"]:
                 plat[q["platform"]] += 1
-            plat["kalshi"] += r["kalshi_rungs"]
+            if r["kalshi_rungs"]:                       # B8: a source with nothing on this game is not listed (no "Kalshi 0")
+                plat["kalshi"] += r["kalshi_rungs"]
         inj = []
         for tid in (e.away_team_id, e.home_team_id):
             for pid in sorted(team_players.get(tid, ())):
@@ -1025,6 +1031,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
         games = player_games(con, league, pid, now, teams, ev_cache) if history else []
         vrows = board_view.player_rows(rows, games)
         view_out.add(vrows)
+        for r in rows if games else ():                  # S3 di-1: pick'em lines far below recent output leave the board
+            for q in r["quotes"]:                        # (quote dicts are shared with board_rows: compact_row drops them)
+                if board_view.far_below_recent(r["stat"], q["line"], games):
+                    q["di"] = board_view.DI_VERSION
         for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
             # sg-2 history rules (thin / stale) read the bv-1 row only when the history was actually read
             log = guard_row(league, r, forecasts, vrows.get(r["key"]) if history else None, now)
@@ -1139,7 +1149,9 @@ def compact_row(r, league=None):
     nv = board_view.contain_reason(league, r["stat"]) if league else None
     return {**({"nv": nv} if nv else {}), "k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
             "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
-            "q": [_ud_quote(compact_quote(q), q, league) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
+            # S3 di-1: a line far below recent output is a different market under a full-game name - not shown
+            "q": [_ud_quote(compact_quote(q), q, league) for q in r["quotes"] if not q.get("di")],
+            "kn": [compact_quote(q) for q in r["kalshi_near"]],
             "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market"),
             "sc": r.get("sc", 0), "hid": scout_chance.hidden_reason(r)}
 
@@ -1626,6 +1638,9 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
                 fc = fcs.get(fid)
                 if fc is None or fid in seen:
                     continue
+                if (getattr(fc, "scope", "full_game") or "full_game") != "full_game" or (
+                        plat == "underdog" and len(tuple(getattr(fc, "sides_available", ()) or ())) == 1):
+                    continue                            # S1/S2: quarter / half and Underdog one-sided lines never count
                 seen.add(fid)
                 sides = {x.side: x for x in ss}
                 any_s = ss[0]

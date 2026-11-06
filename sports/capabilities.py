@@ -26,6 +26,26 @@ SUPPORTED = {
 COMBOS = {"pra", "pr", "pa", "ra", "stocks", "rush_rec_yds", "pass_rush_yds"}
 ORDINARY_VARIANTS = {"standard", "balanced", "main", "ladder_rung"}
 CAPABILITY_VERSION = "cap-1"
+ONE_SIDED_PLATFORMS = {"underdog"}
+
+
+def variant_of(offer):
+    """The line's REAL type (audit 2026-11-05 S1/S2). An Underdog line that lists only one side (higher-only at a
+    changed payout, e.g. Austin Reaves 1Q Points 3.5 Over 0.86x) is a different market from the two-sided main line:
+    'one_sided', never ordinary. New rows are stored that way by adapters.ud_offers; rows stored before carry
+    'balanced' and are read as one_sided here, so no production row is rewritten. offer = OfferSnapshot or an offer
+    view dict (snapshots.offer_view: platform, variant, sides [{side, offered}])."""
+    get = offer.get if isinstance(offer, dict) else (lambda k, d=None: getattr(offer, k, d))
+    v = get("variant")
+    if v != "balanced" or get("platform") not in ONE_SIDED_PLATFORMS:
+        return v
+    on = sum(1 for x in (get("sides") or ())
+             if (x.get("offered") if isinstance(x, dict) else getattr(x, "offered", False)))
+    return "one_sided" if on == 1 else v
+
+
+def is_ordinary(offer):
+    return variant_of(offer) in ORDINARY_VARIANTS
 
 
 @dataclass(frozen=True)
@@ -98,8 +118,8 @@ def gate(offer) -> tuple:
         why.append(f"scope {offer.scope}: only full-game markets are graded")
     if offer.promotional:
         why.append("promotional line: never graded or mixed with ordinary lines")
-    if offer.variant not in ORDINARY_VARIANTS:
-        why.append(f"variant {offer.variant}: alternate payout line, kept apart from ordinary lines")
+    if variant_of(offer) not in ORDINARY_VARIANTS:
+        why.append(f"variant {variant_of(offer)}: alternate payout line, kept apart from ordinary lines")
     if offer.event_id is None:
         why.append("event not resolved to a canonical event")
     if offer.player_id is None:
@@ -125,7 +145,7 @@ def compatible(a, b) -> tuple:
         return False, f"different scope ({a.scope} vs {b.scope})"
     if a.promotional or b.promotional:
         return False, "promotional line"
-    if a.variant not in ORDINARY_VARIANTS or b.variant not in ORDINARY_VARIANTS:
+    if variant_of(a) not in ORDINARY_VARIANTS or variant_of(b) not in ORDINARY_VARIANTS:
         return False, "alternate-payout variant"
     return True, None
 

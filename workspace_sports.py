@@ -29,7 +29,23 @@ PICKEM = ("underdog", "prizepicks")
 LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
 BOOK_LABEL = {"fanduel": "FanDuel", "betrivers": "BetRivers", "kalshi": "Kalshi", "polymarket": "Polymarket", "pinnacle": "Pinnacle", "draftkings": "DraftKings",
               "betmgm": "BetMGM", "caesars": "Caesars", "bovada": "Bovada", "fanatics": "Fanatics", "espnbet": "ESPN BET", "hardrockbet": "Hard Rock", "bet365": "bet365"}
-PERIOD = {"full_game": "Full game", "1h": "First half", "2h": "Second half", "1q": "First quarter"}
+PERIOD = {"full_game": "Full game", "1h": "First half", "2h": "Second half", "1q": "First quarter",
+          "first_half": "First half", "second_half": "Second half", "q1": "First quarter", "q2": "Second quarter",
+          "q3": "Third quarter", "q4": "Fourth quarter"}        # sports scopes (contracts SCOPES) + the older short keys
+ORDINARY_V = {None, "", "standard", "balanced", "main", "ladder_rung"}
+
+
+def line_type_of(q):
+    """The line's real type for members (audit 2026-11-05 S1/S2): 'standard' only for an ordinary line that lists
+    both sides; an Underdog higher-only line is 'over only', never Standard; goblin / demon / alternate as named."""
+    v, o = q.get("v"), q.get("o") or [1, 1]
+    if v == "one_sided" or (v in ORDINARY_V and q.get("p") == "underdog" and len(o) == 2 and o[0] != o[1]):
+        return "over only" if o and o[0] else "under only"
+    return "standard" if v in ORDINARY_V else str(v).replace("_", " ")
+
+
+def full_game_key(k):
+    return ((k or "").rsplit("|", 1)[-1] or "full_game") == "full_game"
 HOLD_LABEL = "Research estimate"
 HOLD_DETAIL = "{LG} grades are held until forward results clear review."
 SERVICE_USER = "workspace-reader"       # the hook's member for reads no one member owns: shared boards, settled results
@@ -301,8 +317,25 @@ def line_key(x):
     return str(int(round(x))) if abs(x - round(x)) < 1e-9 else str(round(x, 1))
 
 
-def _team(v):
-    return (v or {}).get("abbr") or (v or {}).get("name") or ""
+# B8 (audit 2026-11-05): ONE team code per team on every surface - the same table as sports/names.py TEAM_ABBR and
+# web/sports/labels.js TEAM_ABBR (this module never imports sports; sports/tests/test_audit_sports_1105.py keeps the
+# three equal). The board's event teams carry ESPN's codes (logo URLs use them); members always read UTA, never UTAH.
+TEAM_ABBR = {
+    "nba": {"GS": "GSW", "NY": "NYK", "SA": "SAS", "NO": "NOP", "UTAH": "UTA", "WSH": "WAS"},
+    "nfl": {"WSH": "WAS"},
+}
+
+
+def team_code(lg, abbr):
+    if not abbr:
+        return abbr
+    a = str(abbr).strip().upper()
+    return TEAM_ABBR.get(lg, {}).get(a, a)
+
+
+def _team(v, lg=None):
+    a = (v or {}).get("abbr")
+    return team_code(lg, a) if a and lg else (a or (v or {}).get("name") or "")
 
 
 def _hash(*fields):
@@ -332,8 +365,8 @@ def _side_prices(q, i):
 def record_of(lg, doc, m, q, view):
     """One display record from one quote of one market row: the row's values only, nothing recomputed."""
     ev = (doc.get("events") or {}).get(m.get("e")) or {}
-    home, away = _team(ev.get("home")), _team(ev.get("away"))
-    team = m.get("tm") or ""
+    home, away = _team(ev.get("home"), lg), _team(ev.get("away"), lg)
+    team = team_code(lg, m.get("tm")) or ""
     tid = m.get("tid")
     opp = away if tid and tid == (ev.get("home") or {}).get("team_id") else home if tid and tid == (ev.get("away") or {}).get("team_id") else ""
     scope = (m.get("k") or "").rsplit("|", 1)[-1] or "full_game"
@@ -372,7 +405,7 @@ def record_of(lg, doc, m, q, view):
            "event": {"id": m.get("e"), "id_kind": "canonical", "label": f"{away} at {home}" if away and home else f"{team or lg.upper()} game", "teams": [away, home], "competition": lg.upper(),
                      "best_of": None, "start_utc": ev.get("start_utc"), "lock_utc": ev.get("start_utc"), "status": "started" if ev.get("started") or ev.get("locked") else "scheduled"},
            "player": {"id": m.get("pid"), "key": pkey, "name": m.get("n") or "", "team": team, "opponent": opp, "role": m.get("pos") or ""},
-           "market": {"stat": m.get("st"), "stat_label": (doc.get("stats") or {}).get(m.get("st"), m.get("st")), "period": scope, "period_label": period_label, "line_type": "standard"},
+           "market": {"stat": m.get("st"), "stat_label": (doc.get("stats") or {}).get(m.get("st"), m.get("st")), "period": scope, "period_label": period_label, "line_type": line_type_of(q)},
            "offer": {"platform": p, "platform_label": book_label(p), "offer_id": rid, "revision": offer_rev(q), "revision_kind": "exact", "line": line, "seen_at": q.get("t"),
                      "over": _side_prices(q, 0), "under": _side_prices(q, 1), "moved_from": None, "moved_at": None},
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
@@ -387,7 +420,8 @@ def record_of(lg, doc, m, q, view):
     x = {"r": q.get("r"), "p": p, "l": line, "o": q.get("o"), "m": q.get("m"), "g": q.get("g"), "ud": q.get("ud"), "fid": sc.get("fid") if sc else None, "po": sc["po"] if sc else None,
          "pu": sc["pu"] if sc else None, "pp": sc["pp"] if sc else None, "mu": sc.get("mu") if sc else None, "model": sc.get("model") if sc else None, "at": sc.get("at") if sc else None,
          "lean": lean, "start": ev.get("start_utc"), "started": bool(ev.get("started") or ev.get("locked")), "e": m.get("e"), "pid": m.get("pid"), "name": m.get("n") or "", "team": team, "st": m.get("st"),
-         "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey, "variant":q.get('v')}
+         "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey, "variant":q.get('v'),
+         "line_type": rec["market"]["line_type"]}
     return rec, x
 
 
@@ -454,6 +488,8 @@ def _build(srv, lg):
     records, index, props, platforms = [], {}, {}, {}
     for doc in (head, more or {}):
         for m in doc.get("markets") or []:
+            if not full_game_key(m.get("k")):
+                continue                                # S1/S2: quarter / half lines are not full-game board rows
             for q in m.get("q") or []:
                 if len(records) >= MAX_RECORDS or q.get("l") is None:
                     continue
@@ -583,7 +619,7 @@ def payload(x, leg, res, e):
 def receipt_fields(x, leg, lg, res, e):
     side, oid = leg["side"], offer_id(x["r"], x["p"])
     mult = (x["m"] or [None, None])[0 if side == "over" else 1]
-    return {"sport": lg, "row_id": x["rid"], "offer_rev": x["rev"], "side": side, "line": x["l"], "line_type": "standard", "pick_id": None, "forecast_id": x["fid"], "match_slug": x["e"], "match_id": x["e"],
+    return {"sport": lg, "row_id": x["rid"], "offer_rev": x["rev"], "side": side, "line": x["l"], "line_type": x.get("line_type") or "standard", "pick_id": None, "forecast_id": x["fid"], "match_slug": x["e"], "match_id": x["e"],
             "match_key": x["e"], "nick": x["pkey"], "prop": x["st"], "scope": x["scope"], "start_utc": x["start"], "model_version": x["model"], "payload": payload(x, leg, res, e),
             "settle_key": f"{lg}|{x['p']}|{oid}|{side}|{x['l']}", "settle_ref": {"league": lg, "platform": x["p"], "offer_id": oid, "side": side, "line": x["l"], "team": x["team"], "multiplier": mult}}
 
@@ -649,7 +685,8 @@ def _player(srv, lg, pid, path):
 def trim(doc):
     """Only what research reads, so a cached player costs little."""
     if "games" in doc:
-        return {"games": [{"start_utc": g.get("start_utc"), "opponent": _team(g.get("opponent")), "home": g.get("home"), "played": g.get("participation") == "played", "values": g.get("values") or {},
+        lg = {"basketball": "nba", "football": "nfl"}.get(doc.get("family"))      # B8: one team code
+        return {"games": [{"start_utc": g.get("start_utc"), "opponent": _team(g.get("opponent"), lg), "home": g.get("home"), "played": g.get("participation") == "played", "values": g.get("values") or {},
                            "season": g.get("season")} for g in (doc.get("games") or [])[:RESEARCH_MAX_GAMES]]}
     f = doc.get("factors") or {}
     return {"position": doc.get("position"), "status": doc.get("status"), "injury": doc.get("injury"), "next_event": doc.get("next_event"), "context": f.get("context") or [], "stats": f.get("stats") or [],
@@ -712,7 +749,7 @@ def line_doc(srv, lg, book, rid):
         o = snap["index"].get((bk, i))
         if o is not None:
             r = json.loads(o["rec"])
-            books.append({"platform": bk, "platform_label": r["offer"]["platform_label"], "row_id": i, "key": r["key"], "line": o["l"], "line_type": "standard", "over": r["offer"]["over"], "under": r["offer"]["under"],
+            books.append({"platform": bk, "platform_label": r["offer"]["platform_label"], "row_id": i, "key": r["key"], "line": o["l"], "line_type": o.get("line_type") or "standard", "over": r["offer"]["over"], "under": r["offer"]["under"],
                           "seen_at": r["offer"]["seen_at"], "scout_side": o["lean"], "p_side": r["scout"]["p_side"], "grade": r["scout"]["grade"]})
     same, other = x.get("books") or ([], [])
     mk = rec.get("market_chance")

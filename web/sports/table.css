@@ -69,6 +69,16 @@
   .sw .sw-tb-lean .sw-grade-tag,.sw .sw-tb-lean .sw-grade-nv{white-space:normal}
 }
 .sw .sw-tb .sw-p{white-space:nowrap}
+/* A8 (audit 2026-11-05): on phones the Scout and Market cells are about 100 px wide - the mean, Over and Under stack on
+   their own lines instead of running into the next column ("O 38.8%3%U 61...") */
+@media(max-width:760px){
+  .sw .sw-tb-scout::before{content:"Scout";display:block;color:var(--faint);font-size:11px}
+  .sw .sw-tb-scout .sw-tb-mu,.sw .sw-tb-scout .sw-p{display:block;line-height:1.35}
+  .sw .sw-tb-mkt::before,.sw .sw-tb-edge::before,.sw .sw-tb-hit::before,.sw .sw-tb-hit5::before{display:block}
+  .sw .sw-tb-scout,.sw .sw-tb-mkt,.sw .sw-tb-edge{align-self:start}
+}
+/* wider screens: the two chance columns never squeeze below their text */
+@media(min-width:761px){.sw .sw-tb-scout{min-width:150px}.sw .sw-tb-mkt{min-width:96px}}
 .sw .sw-fx-statall{flex:0 0 auto;min-height:40px;border-radius:999px;background:#101620;border:1px solid var(--line-2);padding:0 12px;font-size:12.5px;color:var(--muted);max-width:100%}
 .sw .sw-tech-src{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 /* rg-1 research grade (owner 2026-10-25): letter + "Research grade" tag; NFL adds "NFL model not validated" */

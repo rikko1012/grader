@@ -39,7 +39,8 @@ SCOPES = ("full_game", "first_half", "second_half", "q1", "q2", "q3", "q4", "fir
           "unknown")
 SIDES = ("over", "under")
 PRICE_FORMATS = ("none", "decimal", "american", "exchange_yes_no", "payout_multiplier")
-VARIANTS = ("standard", "goblin", "demon", "alternate", "balanced", "ladder_rung", "main", "unknown")
+VARIANTS = ("standard", "goblin", "demon", "alternate", "balanced", "ladder_rung", "main", "unknown",
+            "one_sided")      # one_sided: a pick'em line that lists only one side (Underdog higher-only), never ordinary
 AVAILABILITY = ("open", "suspended", "removed", "unknown")
 PARTICIPATION = ("played", "did_not_play", "inactive", "unknown")
 CONTEXT_KINDS = ("injury", "starter", "teammate_absent", "expected_minutes", "expected_snaps", "role", "weather",

@@ -153,3 +153,19 @@ interplay A1-A4): `python -m pytest sports/tests -q` -> 485 passed, 10 skipped.
   deployed service runs one ingest-loop child that takes leagues in turn, so no league is starved).
 - books.db / games.db on Postgres (SPORTS_DB_DSN) use a transaction-scoped advisory lock; only the SQLite path is
   exercised by the tests (no Postgres in CI).
+
+## Audit 2026-11-05 (S1/S2, S3, A7) - the line's real market
+- Underdog period lines (`appearance_stat.stat` `period_1_points` = display "1Q Points", `period_1_2_*` = 1H) are
+  stored with their real scope (q1 / first_half) since sc-1. The sheets ignored the scope and compared them with
+  full-game history: the "Most consistent" 100% rows (Reaves Points 3.5 Over 0.86x, Maye pass yds 49.5, ...) were 1Q
+  lines. Now: only full-game markets reach the board files, the sheets and the workspace; quarter / half lines stay on
+  the player page with their period. The forecast record (results_public rp-2 and the results ledger) skips them.
+- An Underdog line that lists ONE side (higher-only at a changed payout) is `one_sided` (contracts VARIANTS), never an
+  ordinary / Standard line: new rows are stored that way by adapters.ud_offers; rows stored earlier as `balanced` are
+  read as one_sided by capabilities.variant_of (no production row rewritten). gate() refuses it (not graded, not in
+  the slip pool); the sheet shows it as "Over only".
+- di-1 data-integrity hold (board_view.far_below_recent, NOT a grading factor): a full-game pick'em line below half
+  the median of the player's newest 10 played games (>= 5 games, median >= 3) is a different market under a
+  full-game name and is kept off the board table and the sheets.
+- Results rp-2: one representative forecast per game x player x stat (pick'em main line before books before Kalshi,
+  then the line closest to the forecast's own projection, newest first); raw forecast counts kept as raw_counts.

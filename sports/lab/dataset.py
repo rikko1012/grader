@@ -73,7 +73,7 @@ def _offer_lines(league, stat, cutoff):
     try:
         with store.opened(read_only=True) as con:
             for rid, o in store.offers(con, league=league, stat=stat, as_of=cutoff, limit=200000):
-                if o.scope != "full_game" or o.promotional or o.variant not in capabilities.ORDINARY_VARIANTS:
+                if o.scope != "full_game" or o.promotional or not capabilities.is_ordinary(o):
                     continue
                 if o.event_id and o.player_id:
                     out.setdefault((o.event_id, o.player_id), []).append((o.known_at or o.observed_at, o.line, rid))
