@@ -501,7 +501,7 @@ def line_table(r):
 
 
 # ============================================================================================ stage B
-def stage_b(fr, preds, settled, log):
+def stage_b(fr, preds, settled, log, live_tags=()):
     from . import model
     from .center.forecast import side_offered
     key = {(t["match"], t["pid"]): i for i, t in enumerate(fr.T)}
@@ -537,11 +537,21 @@ def stage_b(fr, preds, settled, log):
             out[lab].append({"p": p, "q": q, "over": over, "hit": r["s_over_hit"] if over else 1 - r["s_over_hit"], "y": r["s_over_hit"],
                              "graded": (po if over else pu) >= 0.55, "sid": r["sid"], "stat": r["stat"], "scope": r["scope"],
                              "offered": bool(side_offered(r["platform"], r["sides_d"], "over" if over else "under")),
-                             "odds_type": r.get("odds_type")})
+                             "odds_type": r.get("odds_type"), "model_version": r.get("model_version")})
     res["scored_rows"] = len(out["live"])
     res["no_history_target"] = missing
     for lab in ("live", "base", "cand"):
         res[lab] = summarize(out[lab], out["live"] if lab != "live" else None)
+    # the same comparison on the rows saved under ONE live model tag (the current one), never a mix of versions
+    res["by_live_tag"] = {}
+    for tag in live_tags:
+        keep = [j for j, o in enumerate(out["live"]) if o["model_version"] == tag]
+        sub = {"rows": len(keep)}
+        if keep:
+            sl = [out["live"][j] for j in keep]
+            for lab in ("live", "base", "cand"):
+                sub[lab] = summarize(sl if lab == "live" else [out[lab][j] for j in keep], sl if lab != "live" else None)
+        res["by_live_tag"][tag] = sub
     return res
 
 
@@ -637,8 +647,12 @@ def main(argv=None):
     ap.add_argument("--offset", action="store_true", help="start the booster from the live projection (learn the correction)")
     ap.add_argument("--extra", action="append", default=[],
                     help="history-only SQLite (lol/lpf_oe.py output: Oracle's Elixir second year); features only, never targets")
+    ap.add_argument("--live-tag", action="append", default=None,
+                    help="also score Stage B on rows saved under this live model tag only (default: lol-1f, the current tag)")
+    ap.add_argument("--save-preds", default=None, help="pickle the walk-forward predictions here (research reuse)")
     a = ap.parse_args(argv)
-    log = lambda *x: print(*x, file=sys.stderr, flush=True)  # noqa: E731
+    a.live_tag = a.live_tag or ["lol-1f"]
+    log =lambda *x: print(*x, file=sys.stderr, flush=True)  # noqa: E731
     b = build(a.db, a.cache, log, extra=a.extra)
     fr = Frame(b)
     fr.gw = wins_per_game(fr, a.db, a.cache, log)
@@ -654,9 +668,18 @@ def main(argv=None):
     report["dev"] = stage_a(fr, preds, D.day_of(REFITS_DEV[0]), D.day_of(REFITS_HOLD[0]), log, "DEV")
     if a.stage == "final":
         report["holdout"] = stage_a(fr, preds, D.day_of(REFITS_HOLD[0]), D.day_of(END), log, "HOLDOUT")
-        report["lines"] = stage_b(fr, preds, b["settled"], log)
+        report["lines"] = stage_b(fr, preds, b["settled"], log, live_tags=a.live_tag)
         ok, why = verdict(report["holdout"], report["lines"])
         report["verdict"] = {"pass": ok, "why": why}
+        report["verdict_by_live_tag"] = {}
+        for tag, sub in report["lines"]["by_live_tag"].items():
+            if sub["rows"]:
+                tok, twhy = verdict(report["holdout"], sub)
+                report["verdict_by_live_tag"][tag] = {"pass": tok, "why": twhy}
+                log(f"VERDICT {tag} only ({sub['rows']} rows) {tok} {twhy}")
+    if a.save_preds:
+        with open(a.save_preds, "wb") as fh:
+            pickle.dump(preds, fh)
         for lab in ("live", "base", "cand"):
             x = report["lines"][lab]
             log(f"LINES {lab:5s} n {x['n']} LL {x['log_loss']} {x.get('dLL_vs_live')} all {x['all']['stated']}/{x['all']['hit']} "

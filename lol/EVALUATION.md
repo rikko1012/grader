@@ -1004,3 +1004,45 @@ the overlap keep the OE code (LFL2, LVP SL, LTA N / S, NEXO, PRMP, CT, ASI, LTA)
 Reproduce: `python -I -c "import sys; sys.path.insert(0, r'<worktree>'); from lol import lpf_oe; lpf_oe.main()" --db <lol_full.db>
 --out <lol_oe_hist.db> --report <report.json> <2025.csv> <2026.csv>`, then `python -m lol.lpf_eval --db <lol_full.db> --extra
 <lol_oe_hist.db> --cache <dir> --out <report>`. The lpf-1 hold-out is spent: a rerun with the extra year is DEV evidence only.
+
+### lpf-1 rerun with the Oracle's Elixir second year (2026-11-05) - still FAILS (Over gap), DEV evidence only, nothing promoted
+
+Same candidate (W + live offset + decider model, 300 rounds), same refits, same pass rules; the hold-out was already spent, so
+this is development evidence only. Two runs on one machine, same code (`lpf_eval.py` now also scores Stage B on the rows saved
+under ONE live tag, `--live-tag`, default `lol-1f` = the current kills / assists tag, fit f59d290ec261, no calibration layer;
+the 101 settled `lol-1` rows of Oct 17-18 are dropped there):
+- **before** = no extra history (`lol/eval/lpf1_nooe_rerun_2026-11-05.json`; reruns the original lpf-1 build cache);
+- **after** = `--extra lol_oe_hist.db` (98,490 extra player-game rows; `lol/eval/lpf1_oe_rerun_2026-11-05.json`).
+Run-to-run noise: LightGBM is multithreaded, so "before" does not reproduce the original report exactly (hold-out +0.0184 vs
++0.0153; Over gap +8.6 vs +8.8; graded 1,230 vs 1,244). Differences of that size between before and after are noise.
+
+**All outcomes (log score per row, candidate - live, series-clustered 95% CI).**
+| | original lpf-1 | before (rerun) | after (+OE year) |
+|---|---|---|---|
+| DEV pooled | +0.0085 [+0.0066, +0.0106] | +0.0081 [+0.0058, +0.0103] | **+0.0115 [+0.0090, +0.0140]** |
+| HOLD-OUT pooled | +0.0153 [+0.0047, +0.0260] | +0.0184 [+0.0072, +0.0298] | **+0.0239 [+0.0129, +0.0360]** |
+| kills Map 1 (MAE live 2.085) | +0.0062 (2.067) | +0.0073 (2.056) | +0.0120 [+0.0050, +0.0183] (2.037) |
+| kills Maps 1-2 (3.228) | +0.0066 (3.212) | +0.0082 (3.201) | +0.0121 [+0.0029, +0.0211] (3.172) |
+| deaths Map 1 (1.767) | +0.0126 (1.757) | +0.0156 (1.751) | +0.0240 [+0.0137, +0.0335] (1.734) |
+| assists Map 1 (3.537) | +0.0119 (3.469) | +0.0165 (3.452) | +0.0230 [+0.0083, +0.0377] (3.410) |
+| assists Maps 1-2 (5.134) | +0.0139 (5.045) | +0.0169 (5.022) | +0.0151 [-0.0048, +0.0337] (4.999) |
+
+**At the offered lines, current live tag only (lol-1f: 1,694 settled graded props / 36 series).** stated / hit (gap, 95% CI).
+| | live lol-1f | candidate before | candidate after |
+|---|---|---|---|
+| all | 63.7 / 57.8 (+5.9) | 61.1 / 60.0 (+1.1) PASS | 62.1 / 59.6 (+2.5) PASS (2.46) |
+| Over | 60.7 / 49.0 (+11.7 [+3.1, +20.3]), n 592 | 59.9 / 51.9 (+8.0 [+0.2, +17.0]), n 657 FAIL | 59.8 / 51.7 (**+8.1 [+0.8, +16.1]**), n 567 FAIL |
+| Under | 65.3 / 62.5 (+2.8), n 1,102 | 61.9 / 65.1 (-3.2), n 1,037 FAIL | 63.3 / 63.6 (-0.4), n 1,127 PASS |
+| graded count / hit | 1,261 / 60.0% | 1,158 (91.8%) / 63.0% (+3.1 [-1.6, +7.7]) PASS | 1,192 (94.5%) / 63.8% (+3.9 [-0.1, +7.7]) PASS |
+| log loss at the line | 0.6839 | 0.6624 (-0.022 [-0.053, +0.009]) | 0.6601 (-0.024 [-0.053, +0.002]) |
+| Over share (data Over rate 41.5%) | 35.0% | 38.8% | 33.5% |
+
+All versions mixed (1,795 rows, as the original): after = all 62.3 / 59.4 (+2.9, FAIL by 0.4), Over 59.8 / 51.3 (+8.5, n 589)
+FAIL, Under 63.5 / 63.4 (+0.1) PASS, graded 1,270 (94.8%) / 63.2% vs live 1,339 / 59.3% PASS.
+
+**Verdict: FAILS on the current tag** (Over stated - hit +8.1 > 2.5; all three other conditions pass, the overall gap only
+just, 2.46). The extra year makes every distribution check better (hold-out log-score gain +0.0184 -> +0.0239, MAE lower in
+every cell, deaths and kills Map 1 now clearly positive) and fixes the Under side at the lines (-3.2 -> -0.4), but the Over
+picks are as overconfident as before (+8.0 -> +8.1): the line stage is still 36 series of mostly one event (Worlds 2026),
+where the Over rate was 41.5%. Nothing changes live. Reproduce: `python -m lol.lpf_eval --db <lol_full.db> --extra
+<lol_oe_hist.db> --variant W --offset --stage final --cache <dir> --out <report.json>` (omit `--extra` for "before").
