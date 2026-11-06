@@ -12,7 +12,8 @@ home-win) when reachable; the history store for the sg-1 L10 rule when reachable
 Side = the board lean (board_view.lean_of with the PMF mean), letter = sports-gp-1 band of the unrounded lean-side
 chance (board_view.research_grade), hit = the lean's result at the forecast's own line. "as shown" removes what the
 live board would have held: N4 (market prices the lean side at least as high), sg-1 ratio holds, sg-1 l10_contra when
-the history store is reachable. The chance is the raw sm-1 chance, or the A8 4 walk-forward cal-mi chance for a market
+the history store is reachable, and (cap-2, owner 2026-11-06) a stored one-sided Underdog line when the canonical store
+is reachable. The chance is the raw sm-1 chance, or the A8 4 walk-forward cal-mi chance for a market
 whose cal-mi flag is ON in the weights in use (A9 2). Verdict per league = A9 5, read by the owner; nothing here
 changes a letter, a flag or a stake.
 """
@@ -295,7 +296,9 @@ def score_rows(rows, cal_q=None, label="cal-mi"):
         r["sg_ratio"] = board_view.sanity_check(mean, r["line"], None, None,           # sg-2 floor / certain too
                                                 chances=(po, pu, r["po"], r["pu"]))
         r["sg_l10"] = (board_view.sanity_check(None, r["line"], lean, r["l10"]) if r.get("l10") else None)
-        held = bool(r.get("n4")) or bool(r["sg_ratio"]) or bool(r["sg_l10"])
+        # cap-2 (owner 2026-11-06): a stored one-sided Underdog line is not graded on the live board - never "as shown"
+        r["one_sided"] = r.get("variant") == "one_sided"
+        held = bool(r.get("n4")) or bool(r["sg_ratio"]) or bool(r["sg_l10"]) or r["one_sided"]
         r["shown"] = not held
         try:
             r["cf2"] = board_view.signal(po, pu, mean, r["line"], mkc, r.get("l10"), r.get("iv")).get("c")

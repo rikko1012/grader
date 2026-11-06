@@ -42,7 +42,8 @@ DEFINITIONS
                     Per model tables use step 1-3 inside each model. The head-to-head pairs EACH Scout model with
                     the market on THAT model's own representative line only (one pair per model per prop).
                     raw_counts keeps the forecast-level totals for the owner.
-                    Excluded entirely: quarter / half forecasts (S1/S2).
+                    Excluded entirely: quarter / half forecasts (S1/S2) and forecasts saved for a stored one-sided
+                    Underdog line (cap-2, owner 2026-11-06: Over only / Under only lines are not graded).
 """
 from __future__ import annotations
 
@@ -171,6 +172,7 @@ def _rows_from(con, league, setts):
         seen = _shown.get_many(by_fc)
     except Exception:                                   # noqa: BLE001 - results never break on the side store
         seen = {}
+    os_cache = {}
     for fid, ss in by_fc.items():
         fc = fcs.get(fid) or store.get(con, fid)
         if fc is None or getattr(fc, "league", league) != league:
@@ -178,9 +180,10 @@ def _rows_from(con, league, setts):
         if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
             continue                                    # S1/S2: a quarter / half line is never in the record
         plats = sorted({s.platform for s in ss if getattr(s, "platform", None)})
-        # (follow-up 2026-11-06) no exclusion by len(sides_available): today's offered sides are not the line's type
-        # (a suspended side made a two-sided line look one-sided and dropped its history); one-sided full-game lines
-        # keep their record because their grading scope is unchanged
+        # cap-2 (owner 2026-11-06): a one-sided line is not graded, so a forecast saved for one is not in the record.
+        # Read from the STORED offer variant, never today's offered sides (a suspended side never drops a line)
+        if "underdog" in plats and snapshots.one_sided_forecast(con, fc, os_cache):
+            continue
         outcome = None
         for s in ss:
             st, oc = at_line(s, fc.line, "over")

@@ -34,7 +34,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import board_view, snapshots
+from . import board_view, capabilities, snapshots
 from .contracts import now_utc
 
 VERSION = "sh-1"
@@ -129,6 +129,11 @@ def sheet_markets(player_file, history_games, platform, events, now):
         for q in lines:
             cq = snapshots.compact_quote(dict(q, last_seen_at=q.get("last_seen_at") or q.get("observed_at"),
                                               gradable=bool(q.get("gradable"))))
+            if capabilities.is_one_sided(q):          # cap-2 (owner 2026-11-06): "Over only", no chance / edge / grade
+                cq.pop("f", None)
+                cq.pop("lr", None)
+                qs.append(cq)
+                continue
             own = forecasts.get(cq.get("f") or "")
             if own:
                 fc[own["forecast_id"]] = _compact_fc(own)

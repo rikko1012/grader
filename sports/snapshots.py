@@ -805,7 +805,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
         if not o.promotional and o.platform != "kalshi" and capabilities.is_ordinary(o):
             row_targets[key].append((rid, o))
         v = offer_view(rid, o, m)
-        ch = _choose(attached.get(rid, []))
+        # owner 2026-11-06: a one-sided line (Over only / Under only) is shown with no forecast - a forecast saved for
+        # it before cap-2 is never attached, so it shows no Scout chance, grade, letter or stake
+        ch = None if capabilities.is_one_sided(o) else _choose(attached.get(rid, []))
         if ch:
             fc, frid, frev = ch[0]
             v["forecast_id"] = fc.forecast_id
@@ -1390,7 +1392,7 @@ def same_line_forecasts(row, forecasts):
                 by_line[k] = f["forecast_id"]
     n = 0
     for q in row.get("quotes") or []:
-        if q.get("forecast_id"):
+        if q.get("forecast_id") or capabilities.is_one_sided(q):    # owner 2026-11-06: one-sided lines stay ungraded
             continue
         fid = by_line.get(round(float(q["line"]), 3))
         if fid:
@@ -1426,6 +1428,10 @@ def no_forecast_reason(row, q, run):
     if row.get("capability") != "supported":
         return "Market not supported by the Scout model" + (f": {row['capability_reason']}" if row.get(
             "capability_reason") else "")
+    if capabilities.is_one_sided(q):                   # owner 2026-11-06: labelled by its side, never graded
+        side = capabilities.only_side(q)
+        return ("Over only" if side == "over" else "Under only" if side == "under" else "One side only") + \
+            " line - Scout grades lines that offer both sides"
     if not q.get("gradable"):
         why = q.get("not_gradable_because") or []
         return "Line not modelled: " + (why[0] if why else "not an ordinary line")
@@ -1623,6 +1629,25 @@ def settled_forecast_links(con, setts):
     return links, fcs
 
 
+def one_sided_forecast(con, fc, cache=None):
+    """Owner 2026-11-06 (cap-2): True for a forecast made for a STORED one-sided Underdog line (Over only / Under only).
+    Such lines are not graded, so a forecast saved for one before cap-2 never enters the record or the ledger. Only a
+    forecast listing exactly one side can be one: just those decode their offer record (bounded, read-only)."""
+    if len(tuple(getattr(fc, "sides_available", ()) or ())) != 1:
+        return False
+    cache = {} if cache is None else cache
+    for orid in getattr(fc, "offer_snapshot_ids", ()) or ():
+        if orid not in cache:
+            try:
+                o = store.get(con, orid)
+            except Exception:                           # noqa: BLE001 - an unreadable revision is not evidence
+                o = None
+            cache[orid] = bool(o is not None and getattr(o, "KIND", None) == "offer" and capabilities.is_one_sided(o))
+        if cache[orid]:
+            return True
+    return False
+
+
 def results_view(con, league, setts, now, base_meta, rows_only=False):
     """One ledger row per (forecast, settled offer side pair). Projection accuracy and probability accuracy are computed
     per forecast; returns appear only where a settlement records an actual stake and payout."""
@@ -1632,6 +1657,7 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
     for s in setts:
         by_offer[(s.platform, s.offer_id)].append(s)
     links, fcs = settled_forecast_links(con, setts)
+    os_cache = {}
     for (plat, oid), ss in by_offer.items():
         for s in ss[:1]:
             for fid in links.get((plat, oid), ()):
@@ -1639,8 +1665,9 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
                 if fc is None or fid in seen:
                     continue
                 if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
-                    continue                            # S1/S2: quarter / half lines never count (one-sided full-game
-                                                        # lines keep their record: grading scope unchanged, 2026-11-06)
+                    continue                            # S1/S2: quarter / half lines never count
+                if plat == "underdog" and one_sided_forecast(con, fc, os_cache):
+                    continue                            # cap-2 (owner 2026-11-06): one-sided lines are not graded
                 seen.add(fid)
                 sides = {x.side: x for x in ss}
                 any_s = ss[0]

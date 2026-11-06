@@ -44,6 +44,16 @@ def line_type_of(q):
     return "standard" if v in ORDINARY_V else str(v).replace("_", " ")
 
 
+def one_sided_label(q):
+    """Owner 2026-11-06 (sports cap-2): "Over only" / "Under only" for a STORED one-sided line (variant one_sided), else
+    None. Such a line is shown with its line and price and never graded, staked, put on a slip or tracked. A two-sided
+    line whose other side is suspended right now keeps its grading (its type is the stored variant)."""
+    if q.get("v") != "one_sided":
+        return None
+    o = q.get("o") or [0, 0]
+    return "Over only" if o and o[0] else "Under only"
+
+
 def full_game_key(k):
     return ((k or "").rsplit("|", 1)[-1] or "full_game") == "full_game"
 HOLD_LABEL = "Research estimate"
@@ -375,9 +385,10 @@ def record_of(lg, doc, m, q, view):
     scope = (m.get("k") or "").rsplit("|", 1)[-1] or "full_game"
     p = q.get("p")
     fc = doc.get("fc") or {}
-    sc = scout_at(q, fc)
+    one = one_sided_label(q)
+    sc = None if one else scout_at(q, fc)       # owner 2026-11-06: a one-sided line is shown, never graded
     mkc = market_at(m.get("mk"), q)
-    lean, held = lean_and_hold(m, q, sc, mkc)
+    lean, held = (None, None) if one else lean_and_hold(m, q, sc, mkc)
     held = None if held is None else held or HOLD_DETAIL.format(LG=lg.upper())
     # Letters are published by Sports, never reconstructed from probabilities here.
     # The owner's containment switch can only hold research letters (sports/containment.py ct-1a);
@@ -386,7 +397,9 @@ def record_of(lg, doc, m, q, view):
     grade = signal.get("gr") if held is None and lean and signal.get("v") == "cf-2" else None
     if grade not in ("A", "B", "C", "Lean"):
         grade = None
-    if held is not None:
+    if one:
+        reason = f"{one}: Scout grades lines that offer both sides."
+    elif held is not None:
         reason = held
     elif not sc:
         reason = "A matching forecast is not available for this line yet."
@@ -396,7 +409,7 @@ def record_of(lg, doc, m, q, view):
         reason = "The forecast does not give a clear direction at this line."
     else:
         reason = "A published grade is not available for this forecast yet."
-    hold = None if grade else {"label": HOLD_LABEL, "reason": reason}
+    hold = None if grade else {"label": one or HOLD_LABEL, "reason": reason}
     line = q.get("l")
     v = view.get(m.get("k")) or {}
     a = (v.get("lines") or {}).get(line_key(line)) if line is not None else None
@@ -414,7 +427,7 @@ def record_of(lg, doc, m, q, view):
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
-                     "validation": {"kind": "research", "label": "Research grade" if grade else HOLD_LABEL,
+                     "validation": {"kind": "research", "label": "Research grade" if grade else (one or HOLD_LABEL),
                                     "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else reason}},
            "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None,
                        **(_board_columns(v, line, opp) if workspace_h2h.board_enabled() else {})},
@@ -581,7 +594,9 @@ def check_leg(srv, leg, lg, now):
         problems.append(_pr(1, "moved", f"Line moved from {_n(leg['line'])} to {_n(x['l'])}." if moved else f"This offer changed on {label}.", swap=True))
     if not (x["o"] or [0, 0])[0 if side == "over" else 1]:
         problems.append(_pr(1, "side", f"{SIDE_WORD[side]} is not offered on {label}."))
-    if not x["g"]:
+    if x.get("variant") == "one_sided":          # owner 2026-11-06: shown, never on a slip or tracked
+        problems.append(_pr(1, "not_gradable", f"{one_sided_label({'v': 'one_sided', 'o': x['o']})}: Scout grades lines that offer both sides."))
+    elif not x["g"]:
         problems.append(_pr(1, "not_gradable", "Scout cannot settle this line."))
     if not x["fid"]:
         problems.append(_pr(2, "no_forecast", "No saved forecast for this line, so it cannot be tracked."))

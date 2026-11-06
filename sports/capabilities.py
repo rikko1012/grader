@@ -9,8 +9,8 @@ Status per (league, market):
                  double-double / triple-double, game spread, game total, fantasy score, first-basket, ...
 
 gate(offer) is the single check every model / slip / UI path calls before a forecast can be graded. It refuses:
-unknown stat, unsupported market, non full-game scope, promotional lines, unresolved event / player, offers that list no
-side, and removed offers. Side availability is per offer (OfferSnapshot.sides), never a platform-wide assumption.
+unknown stat, unsupported market, non full-game scope, promotional lines, one-sided lines (owner 2026-11-06), unresolved
+event / player, offers that list no side, and removed offers. Side availability is per offer (OfferSnapshot.sides), never a platform-wide assumption.
 
 compatible(a, b) says whether two offers are the SAME market (same canonical event, player, stat, scope, and both
 ordinary lines) - the only case where prices from two books may be aligned or compared.
@@ -24,13 +24,16 @@ SUPPORTED = {
     "nfl": ("pass_yds", "rush_yds", "rec_yds", "rush_att", "rec"),
 }
 COMBOS = {"pra", "pr", "pa", "ra", "stocks", "rush_rec_yds", "pass_rush_yds"}
-# one_sided (audit 2026-11-05 S1/S2): an Underdog line that LISTS only one side (adapters.ud_offers). It is labelled by
-# its sides ("Over only", never Standard) on member pages, but its grading scope is UNCHANGED from before the audit:
-# a full-game one-sided line is graded, forecast and pickable exactly as when it was stored 'balanced' (the unlisted
-# side is still refused by the slip pool's "chosen side not offered" and picks' side check). Quarter / half lines are
-# refused by their scope. Narrowing what is graded is an owner decision (audit follow-up, 2026-11-06), not made here.
+# one_sided (audit 2026-11-05 S1/S2): an Underdog line that LISTS only one side (adapters.ud_offers). It stays an
+# ordinary line for PLACEMENT (it sits on the board row beside the other quotes, labelled by its side: "Over only" /
+# "Under only", never Standard). cap-2, owner decision 2026-11-06: a one-sided line is NOT graded - gate() refuses it,
+# so it gets no forecast, grade, letter, stake, slip leg, tracked pick, record entry or EV. Quarter / half lines are
+# refused by their scope as before. The type is the STORED variant (the sides Underdog lists), never today's offered
+# sides, so a passing suspension of one side never changes a line's grading.
 ORDINARY_VARIANTS = {"standard", "balanced", "main", "ladder_rung", "one_sided"}
-CAPABILITY_VERSION = "cap-1"
+UNGRADED_VARIANTS = {"one_sided"}
+ONE_SIDED_REASON = "one-sided line (Over only or Under only): not graded"
+CAPABILITY_VERSION = "cap-2"
 ONE_SIDED_PLATFORMS = {"underdog"}
 
 
@@ -45,6 +48,22 @@ def variant_of(offer):
 
 def is_ordinary(offer):
     return variant_of(offer) in ORDINARY_VARIANTS
+
+
+def is_one_sided(offer):
+    """Owner 2026-11-06: a stored one-sided line is shown (Over only / Under only) and never graded."""
+    return variant_of(offer) in UNGRADED_VARIANTS
+
+
+def only_side(offer):
+    """'over' / 'under' for a one-sided line: its offered side (the adapter stores both sides, the unlisted one as not
+    offered), else None (not one-sided, or its one side is suspended right now)."""
+    if not is_one_sided(offer):
+        return None
+    get = offer.get if isinstance(offer, dict) else (lambda k, d=None: getattr(offer, k, d))
+    on = {(x.get("side") if isinstance(x, dict) else getattr(x, "side", None)) for x in (get("sides") or ())
+          if (x.get("offered") if isinstance(x, dict) else getattr(x, "offered", False))}
+    return next(iter(on)) if len(on) == 1 and on <= {"over", "under"} else None
 
 
 @dataclass(frozen=True)
@@ -119,6 +138,8 @@ def gate(offer) -> tuple:
         why.append("promotional line: never graded or mixed with ordinary lines")
     if variant_of(offer) not in ORDINARY_VARIANTS:
         why.append(f"variant {variant_of(offer)}: alternate payout line, kept apart from ordinary lines")
+    if is_one_sided(offer):
+        why.append(ONE_SIDED_REASON)
     if offer.event_id is None:
         why.append("event not resolved to a canonical event")
     if offer.player_id is None:
