@@ -209,7 +209,11 @@ def default_jobs():
         # books source back into the ingest cycles (rollback).
         **({"books": dict(argv=_py("-m", "sports.worker", "books", *lg), every_s=60, cadence=("books", tuple(lg)),
                           timeout_s=600, flag="SPORTS_INGEST", cap_mb=BOOKS_CAP_MB, cls=LIGHT, prio=2,
-                          locks=("books",), env={"SPORTS_WORKER_CONCURRENCY": "1"})} if books_job else {}),
+                          locks=("books",), env={"SPORTS_WORKER_CONCURRENCY": "1"},
+                          # live 2026-11-06 22:19-22:25: a WAITING exclusive model-forward held every later start for
+                          # 6+ min (and a running one blocks all starts for up to 15 min) - so the books job runs
+                          # beside exclusive jobs; network-bound, 108 MB of the 1,200 MB budget on Standard
+                          beside_exclusive=True)} if books_job else {}),
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
                                        "kalshi"),
                               every_s=1800 if std else 3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
@@ -485,12 +489,14 @@ class Scheduler:
         return not (a.get("league") and a.get("league") == b.get("league"))
 
     def _fits(self, name):
+        """beside_exclusive (the books job, 2026-11-06): a light, network-bound job that may run beside an exclusive
+        model job and that an exclusive job does not wait for - the reservation total still holds both."""
         spec = self.specs[name]
-        classes = [self.specs[n]["cls"] for n in self.running]
-        if EXCLUSIVE in classes:
+        others = [n for n in self.running if not self.specs[n].get("beside_exclusive")]
+        if any(self.specs[n]["cls"] == EXCLUSIVE for n in self.running) and not spec.get("beside_exclusive"):
             return False
         if spec["cls"] == EXCLUSIVE:
-            return not self.running
+            return not others and (not self.running or self.reserved() + spec["cap_mb"] <= self.budget)
         if spec["cls"] == HEAVY:
             heavy = [self.specs[n] for n in self.running if self.specs[n]["cls"] == HEAVY]
             if len(heavy) >= self.max_heavy or not all(self._pairable(spec, h) for h in heavy):
@@ -639,7 +645,18 @@ class Scheduler:
         with _LOCK:
             STATS["peak_children_rss_mb"] = round(max(STATS["peak_children_rss_mb"], total), 1)
         held = None                                     # an urgent job waiting for a slot
+        excl = None                                     # an exclusive job waiting for everything else to finish
         for name in self.due():
+            if excl is not None:
+                # behind a waiting exclusive job only a beside_exclusive job may start, and only if the exclusive job
+                # still fits beside every beside_exclusive job once the others (which it waits for anyway) are done -
+                # so neither ever starves the other
+                spec = self.specs[name]
+                beside = sum(self.specs[n]["cap_mb"] for n in self.running if self.specs[n].get("beside_exclusive"))
+                if spec.get("beside_exclusive") and self._fits(name) and \
+                        beside + spec["cap_mb"] + self.specs[excl]["cap_mb"] <= self.budget:
+                    self.start(name)
+                continue
             if (held is None or self._may_pass(name, held)) and self._fits(name):
                 self.start(name)
                 continue
@@ -648,7 +665,8 @@ class Scheduler:
             with _LOCK:
                 STATS["deferred_ticks"] += 1
             if self.specs[name]["cls"] == EXCLUSIVE:
-                break                                   # hold everything behind a waiting exclusive job (no starvation)
+                excl = name                             # hold everything behind a waiting exclusive job (no starvation)
+                continue
             if held is None and self._urgent(name, t):
                 held = name                             # nothing may take the slot it is waiting for
 

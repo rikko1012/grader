@@ -123,6 +123,35 @@ def test_pending_is_a_cheap_due_check_that_matches_run_once(db):
     assert feed.calls == ["events", "g1", "g1"]
 
 
+def test_a_due_time_set_under_the_old_ladder_does_not_hold_the_game_back(db, monkeypatch):
+    """Live 2026-11-06 22:13-22:20 UTC: after the deploy the books job ran every minute and exited (2.3 s, 36 MB) while
+    FanDuel / BetRivers stayed 21 min old - the last read (21:59, inside the ingest cycle, old "full" ladder) had set
+    each NBA game's next due time 30 min ahead (22:29), and pending() / run_once honoured it although the direct
+    ladder says 3-5 min for games 1-4 h out."""
+    feed = Feed("fd", [_game("g1", 2 * 60 + 1), _game("g2", 4 * 60)])          # 2 h 01 m and 4 h out at the read
+    monkeypatch.setenv("SPORTS_BOOKS_LADDER", "full")
+    book_worker.run_once(db, ("nba",), NOW, {"fd": feed}, probe=False)
+    assert store.due(db, "fd", "nba", "g1") == _iso(NOW + timedelta(minutes=30))
+    monkeypatch.delenv("SPORTS_BOOKS_LADDER")                                   # the deploy: direct ladder
+    later = NOW + timedelta(minutes=14)
+    assert book_worker.pending(db, ("nba",), later, {"fd": feed}, probe=False)
+    book_worker.run_once(db, ("nba",), later, {"fd": feed}, probe=False)
+    assert feed.calls == ["events", "g1", "g2", "g1", "g2"]
+    assert store.due(db, "fd", "nba", "g1") == _iso(later + timedelta(minutes=3))   # now on the 3-min rung
+    assert not book_worker.pending(db, ("nba",), later + timedelta(minutes=2), {"fd": feed}, probe=False)
+    assert book_worker.pending(db, ("nba",), later + timedelta(minutes=3), {"fd": feed}, probe=False)
+
+
+def test_a_game_crossing_into_a_shorter_rung_is_read_on_the_shorter_rung(db):
+    feed = Feed("fd", [_game("g1", 8 * 60 + 2)])                                # 8 h 02 m: the 8-min rung
+    book_worker.run_once(db, ("nba",), NOW, {"fd": feed}, probe=False)
+    assert store.due(db, "fd", "nba", "g1") == _iso(NOW + timedelta(minutes=8))
+    # 3 min later the game is inside 8 h (5-min rung): due time 5 min ahead is allowed, not earlier
+    assert not book_worker.pending(db, ("nba",), NOW + timedelta(minutes=3), {"fd": feed}, probe=False)
+    assert book_worker.is_due(_iso(NOW + timedelta(minutes=30)), "direct", feed.games[0].start,
+                              NOW + timedelta(minutes=3))                       # a 30-min due time would not be
+
+
 def test_pending_ignores_games_beyond_the_ladder_and_started_games(db):
     feed = Feed("fd", [_game("far", 9 * 24 * 60), _game("live", -10)])
     book_worker.run_once(db, ("nba",), NOW, {"fd": feed}, probe=False)
@@ -241,6 +270,76 @@ def test_books_cadence_follows_the_slate(tmp_path):
     assert scheduler.cadence_every(("books", ("nba", "nfl")), t, tmp_path) == 60          # game day
     slate("nba", [t + 2 * 86400])
     assert scheduler.cadence_every(("books", ("nba", "nfl")), t, tmp_path) == 180         # idle
+
+
+class _Proc:
+    _n = 0
+
+    def __init__(self):
+        _Proc._n += 1
+        self.pid, self.rc = 90000 + _Proc._n, None
+
+    def poll(self):
+        return self.rc
+
+
+def test_a_waiting_or_running_exclusive_job_never_holds_the_books_job_back(monkeypatch, sched_env):
+    """Live 2026-11-06 22:19-22:25 UTC: model-forward (exclusive) waited behind settle (heavy, ~20 min), aged ahead of
+    every job, and the tick's "hold everything behind a waiting exclusive job" stopped the books job from starting
+    (last start 22:19:12, FanDuel / BetRivers 26 min old); a RUNNING exclusive job blocked it for up to 15 min more."""
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
+    monkeypatch.setenv("SPORTS_CHILD_BUDGET_MB", "1200")
+    monkeypatch.setenv("SPORTS_FORECAST", "1")
+    monkeypatch.setenv("SPORTS_INGEST", "1")
+    monkeypatch.setattr(scheduler, "rss_mb", lambda pid: 10.0)
+    procs = {}
+    monkeypatch.setattr(scheduler, "spawn", lambda spec: procs.setdefault(spec["argv"][3], _Proc()))
+    all_jobs = scheduler.default_jobs()
+    jobs = {k: all_jobs[k] for k in ("books", "settle", "model-forward")}
+    clock = [1_794_000_000.0]
+    sch = scheduler.Scheduler(jobs=jobs, budget=scheduler.budget_mb(), now=lambda: clock[0], max_heavy_n=2)
+    for n in jobs:
+        scheduler.JOBS[n]["next_start"] = clock[0] + 10 ** 6
+    scheduler.JOBS["settle"]["next_start"] = clock[0]
+    sch.tick()
+    assert set(sch.running) == {"settle"}
+    scheduler.JOBS["model-forward"]["next_start"] = clock[0] - 720           # waiting 12 min: aged ahead of books
+    scheduler.JOBS["books"]["next_start"] = clock[0]
+    assert sch.due()[0] == "model-forward"
+    sch.tick()
+    assert "books" in sch.running and "model-forward" not in sch.running     # books starts behind the waiting job
+    procs["books"].rc = 0
+    clock[0] += 2
+    sch.tick()                                                               # books done; settle still running
+    procs["settle"].rc = 0
+    procs.pop("books")
+    scheduler.JOBS["books"]["next_start"] = clock[0]
+    clock[0] += 1
+    sch.tick()                                                               # settle ends -> the exclusive starts
+    assert "model-forward" in sch.running
+    clock[0] += 60
+    scheduler.JOBS["books"]["next_start"] = clock[0]
+    sch.tick()
+    assert "books" in sch.running                                            # ...and books runs beside it
+    assert sch.reserved() <= scheduler.budget_mb()
+
+
+def test_an_exclusive_job_does_not_wait_for_the_books_job_but_others_still_wait_for_it(sched_env):
+    jobs = {"books": dict(argv=["x"], every_s=60, cls="light", cap_mb=100, prio=2, flag="SPORTS_API",
+                          beside_exclusive=True),
+            "excl": dict(argv=["x"], every_s=60, cls="exclusive", cap_mb=300, prio=5, flag="SPORTS_API"),
+            "heavy": dict(argv=["x"], every_s=60, cls="heavy", cap_mb=100, prio=3, flag="SPORTS_API"),
+            "light": dict(argv=["x"], every_s=60, cls="light", cap_mb=50, prio=4, flag="SPORTS_API")}
+    sch = scheduler.Scheduler(jobs=jobs, budget=500, max_heavy_n=2)
+    sch.running = {"books": (None, 0)}
+    assert sch._fits("excl")                                                 # never waits for the books job
+    sch.running = {"excl": (None, 0)}
+    assert sch._fits("books") and not sch._fits("heavy") and not sch._fits("light")
+    sch.running = {"heavy": (None, 0)}
+    assert not sch._fits("excl")                                             # everything else still runs alone
+    small = scheduler.Scheduler(jobs=jobs, budget=350, max_heavy_n=1)       # Starter-sized budget: memory first
+    small.running = {"excl": (None, 0)}
+    assert not small._fits("books")
 
 
 def test_books_job_fits_beside_two_heavy_jobs_on_standard(monkeypatch, sched_env):
