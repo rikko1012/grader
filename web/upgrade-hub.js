@@ -271,6 +271,7 @@ export function mount(C) {
     const s=r.scout;
     if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
     if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
+    if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance">Scout\u2019s chance at this line</span>';   /* audit 2026-11-05: another book's line, same saved distribution */
     if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>${['nba','nfl'].includes(r.sport)?'<small class="h-grade-tag">Research grade</small>':''}`;
     if(s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span>`;
     return '';
@@ -319,7 +320,7 @@ export function mount(C) {
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}</td>`:''}
       <td class="h-c-compare">${compareCell(r)}</td>
-      <td class="h-c-add">${r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="${esc(r.offer.platform_label)} line: view only, not on slips" title="View only: slips are PrizePicks or Underdog entries">Info</button>`:`<button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button>`}</td></tr>`;
+      <td class="h-c-add">${r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research for the ${esc(r.offer.platform_label)} line" title="Research for this line. View only: slips are PrizePicks or Underdog entries">Info</button>`:`<button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button>`}</td></tr>`;
   }
   /* the game header row: matchup, sport, start and countdown once per game; a click shows only that game (and back) */
   function gameRow(r,list,cols) {
@@ -425,10 +426,11 @@ export function mount(C) {
     H.extraState={book:b,state:!docs.length?'error':states.includes('ok')?'ok':states.find(x=>x&&x!=='not_offered')||'empty',at:docs.map(d=>d.feed?.at).filter(Boolean).sort().pop()||null};
     paintBoard();
   }
-  function extraDetail(r) {
+  /* an extra book's line in the full card (audit 2026-11-05 A2/B4): its own prices and Scout's read at this line, above the research */
+  function extraOffer(r) {
     const o=r.offer,x=r.extra||{},price=sd=>!o[sd]?.offered?'Not offered':x.price_comparable===false?(num(o[sd].price)?esc(x.price_label||'App price')+' '+o[sd].price.toFixed(2)+' <small>(not what an entry pays)</small>':'Listed'):num(o[sd].price)?o[sd].price.toFixed(2)+' decimal':num(o[sd].payout)?o[sd].payout.toFixed(2)+'x pick multiplier':'Price unavailable';
-    return `<header class="h-card-head"><button class="h-back" data-hub="card-close" aria-label="Back to the board"><span aria-hidden="true">←</span> Back</button><div class="h-card-id"><h3 id="hub-card-title" tabindex="-1">${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${esc(r.player.team)} · ${esc(r.event.label)} · ${esc(when(r.event.start_utc))}</p></div></header>
-      <div class="h-extra-detail"><h3>${esc(o.platform_label)} · ${esc(o.line)}</h3><dl class="h-extra-kv"><div><dt>Over</dt><dd>${price('over')}</dd></div><div><dt>Under</dt><dd>${price('under')}</dd></div><div><dt>Read</dt><dd>${esc(o.seen_at?age(o.seen_at):'—')}</dd></div><div><dt>Scout's read</dt><dd>${x.same_line_as?`Same line as ${esc(x.same_line_as)}: ${r.scout.side?esc(sideWord(r.scout.side))+' '+pct(r.scout.p_side):'no side'}`:'No saved chance at this line'}</dd></div></dl><p>View only. Slips are PrizePicks or Underdog entries; open ${esc(o.platform_label)} to play this line.</p></div>`;
+    const s=r.scout,read=x.same_line_as?`Same line as ${esc(x.same_line_as)}: ${s.side?esc(sideWord(s.side))+' '+pct(s.p_side):'no side'}`:s.line_chance&&s.side?`${esc(sideWord(s.side))} ${pct(s.p_side)}, Scout\u2019s chance at this line`:'No saved chance at this line';
+    return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(o.platform_label)} · ${esc(o.line)}</h4><small>Read ${esc(o.seen_at?age(o.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Over</dt><dd>${price('over')}</dd></div><div><dt>Under</dt><dd>${price('under')}</dd></div><div><dt>Scout's read</dt><dd>${read}</dd></div></dl>${s.line_chance?'<p class="h-history-note">Read from the same saved projection as this player\u2019s graded line. No letter or stake: those are set for the PrizePicks or Underdog entry only.</p>':''}</section>`;
   }
   function refreshSlip() {
     if(!isOpen()) return;
@@ -574,7 +576,6 @@ export function mount(C) {
     H.cardTab=CARD_TABS.some(t=>t[0]===tab)?tab:'overview';
     if(same){paintDetail();return Promise.resolve();}
     if(!cardOpen())H.cardFrom=document.activeElement;
-    if(r.extra){H.expanded=id;H.detail=id;H.detailSeq++;$('hub-card').hidden=false;$('u-hub').classList.add('h-card-open');paintBoard();paintDetail();$('hub-card-title')?.focus({preventScroll:true});return Promise.resolve();}
     const sd=r.scout.side;
     H.expanded=id;H.histN=10;H.histSide=sd&&r.offer[sd]?.offered?sd:r.offer.over.offered?'over':r.offer.under.offered?'under':(sd||'over');
     $('hub-card').hidden=false;$('u-hub').classList.add('h-card-open');
@@ -711,7 +712,7 @@ export function mount(C) {
   }
   function decisionHtml(r) {
     const side=H.histSide, line=r.offer.line, s=r.scout, quotes=C.siblings(r), on=C.onSlip(r);
-    const eligible=H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
+    const eligible=!r.extra&&H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
     const chance=C.chanceOf(r,side);
     const pick=s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:s.hold?'<span class="h-grade-text">Research estimate</span>':'';
     const opt=q=>`<option value="${esc(key(q))}"${key(q)===key(r)?' selected':''}>${esc(q.offer.platform_label)} ${esc(q.offer.line)}${q.market.line_type!=='standard'?' · '+esc(C.lineLabel(q)):''}</option>`;
@@ -719,7 +720,7 @@ export function mount(C) {
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}</div>
       <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
-      <div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>
+      ${r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
       ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
   function overviewHtml(r) {
@@ -743,7 +744,7 @@ export function mount(C) {
       :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span></div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table></div></details>`
       :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
     const lh=doc?.history?.line_history, avgClose=num(lh?.avg_closing_l10)?tile(esc(lh.avg_closing_l10),'Avg closing line',`<small>last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'} · ${esc(lh.closing_platform)}</small>`,' is-closing'):'';
-    return `<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
+    return `${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
       <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
@@ -824,7 +825,6 @@ export function mount(C) {
   }
   function paintDetail() {
     const box=$('hub-detail'),r=rec(H.detail);if(!box||!r||!cardOpen())return;
-    if(r.extra){box.innerHTML=extraDetail(r);return;}
     const restoreFocus=focusAfter(box), body=$('hub-card-body'), top=body?body.scrollTop:0, wasTab=box.dataset.tab, wasId=box.dataset.id;
     const playerMarkets=[...new Map(H.records.filter(x=>x.sport===r.sport&&x.player.key===r.player.key&&x.event.id===r.event.id&&x.offer.platform===r.offer.platform&&!C.started(x)).map(x=>[x.market.stat+'|'+x.market.period,x])).values()];
     const watched=H.watch.includes(playerKey(r));
@@ -1320,11 +1320,11 @@ export function mount(C) {
     'card-tab'(id){if(!CARD_TABS.some(t=>t[0]===id))return;H.cardTab=id;paintDetail();$('hub-card-body').scrollTop=0;$('hub-tab-'+id)?.focus({preventScroll:true});},
     'genie-ask'(q){genieAsk(q);},
     'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id==='under'?'under':'over';paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
-    'detail-add'(){const r=rec(H.detail);if(!r)return;if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;C.addLeg(r,H.histSide);refreshSlip();},
+    'detail-add'(){const r=rec(H.detail);if(!r||r.extra)return;if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;C.addLeg(r,H.histSide);refreshSlip();},
     // alert notices open the same card as the board
     research(id){const r=rec(id);if(!r)return C.say('This offer is no longer on the board. Refresh to see current lines.');if(H.section!=='board')section('board');openCard(id);},
     books(id){if(rec(id))openCard(id,'lines');},
-    add(id){const r=rec(id);if(!r)return;if(r.extra)return C.say(`${r.offer.platform_label} lines are view only. Slips are PrizePicks or Underdog entries.`);if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
+    add(id){const r=rec(id);if(!r)return;if(r.extra)return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
     refresh(){H.detailSeq++;if(cardOpen())closeCard(false);H.bookLinesAt=0;load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},

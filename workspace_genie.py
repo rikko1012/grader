@@ -161,6 +161,8 @@ def _verdict(rec, side):
         return f"Scout side is {_cap(s['side'])}"
     if s.get("hold"):
         return f"Research estimate {_cap(sd)}"
+    if s.get("line_chance"):                     # another book's line, read from the saved distribution: no letter
+        return f"Scout's chance at this line: {_cap(sd)}"
     if s.get("grade"):
         return f"{s['grade']} {_cap(sd)}" + (" · Research grade" if rec.get("sport") in ("nba", "nfl") else "")
     return f"Lean {_cap(sd)}"

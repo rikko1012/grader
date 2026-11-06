@@ -741,7 +741,9 @@ def board(con, now=None):
             "link": {"status": r.get("link_status"), "reason": r.get("link_reason"), "sid": r.get("sid"), "pid": r.get("pid")},
             "forecast": None if not f else {
                 # the shown chance (lc-1 when on, else raw) - side, grade and offered check follow it; raw kept for admin
-                "id": f["id"], "at": f["forecast_at"], "line": f["line"], "projection": f["lambda"], "p_over": sh["p_over"],
+                "id": f["id"], "at": f["forecast_at"], "line": f["line"], "projection": f["lambda"],
+                # the saved NB spread (display: the workspace reads another book's line from this same distribution)
+                "nb_size": f["nb_size"] if "nb_size" in f.keys() else None, "p_over": sh["p_over"],
                 "p_under": sh["p_under"], "p_push": sh["p_push"], "model_side": sh["side"], "side_offered": sh["side_offered"],
                 "model": f"{f['model_version']} ({f['form']}, fit {f['fit_sha']})", "inputs": json.loads(f["inputs"] or "{}"),
                 "flags": json.loads(f["flags"] or "[]"), "slip_eligible": bool(f["slip_eligible"]),

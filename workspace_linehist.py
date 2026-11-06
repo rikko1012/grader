@@ -254,7 +254,9 @@ def app_series(x, now=None):
         if open_line is not None and open_line != _num(x.get("line")) and moved is not None:
             pts.append({"at": moved, "line": _num(x.get("line")), "kind": "move"})
     cur = _num(x.get("line"))
-    seen = _ts(x.get("seen_at") or x.get("updated_at")) or now
+    # Underdog's updated_at is when Underdog last changed the line (its seen_at is Scout's read time since 2026-11-05): kept as before
+    ud = (x.get("book") or "underdog") == "underdog"
+    seen = _ts((x.get("updated_at") if ud else None) or x.get("seen_at") or x.get("updated_at")) or now
     last = next((p for p in reversed(pts) if p["line"] is not None), None)
     if cur is not None and (last is None or last["line"] != cur or pts[-1]["line"] is None):
         pts.append({"at": max(seen, pts[-1]["at"]) if pts else seen, "line": cur, "kind": "move" if last else "seen"})   # seen: no stored opening for it
