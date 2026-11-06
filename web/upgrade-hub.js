@@ -982,7 +982,9 @@ export function mount(C) {
       out.push(`<details class="${d.decided?'has-results':''}"><summary aria-label="${esc(d.date)}: ${d.wins} wins, ${d.losses} losses, ${d.pushes} pushes"><time>${esc(d.date.slice(5))}</time><b>${num(d.hit_rate)?Math.round(d.hit_rate*100)+'%':'—'}</b><small>${d.decided} decided</small></summary><p>${d.wins} wins · ${d.losses} losses · ${d.pushes} pushes</p></details>`);
     }
     flush();
-    return `<section class="h-record-calendar" aria-label="30-day accuracy calendar"><header><h3>Last 30 days</h3><span>${esc(doc.basis)}</span></header><div class="h-calendar-grid">${out.join('')}</div><p>Accuracy only, not profit. ${doc.missing_dates?`${Number(doc.missing_dates)} records have no saved date and are excluded from this calendar.`:'Pushes are listed separately.'}</p></section>`;
+    const md=t=>{const d=new Date(t+'T12:00:00Z');return Number.isFinite(d.getTime())?d.toLocaleDateString([], {month:'short',day:'numeric',timeZone:'UTC'}):t;};
+    const span=doc.days.length?md(doc.days[0].date)+' – '+md(doc.days[doc.days.length-1].date):'';
+    return `<section class="h-record-calendar" aria-label="30-day accuracy calendar"><header><h3>Last 30 days${span?` <small>${esc(span)}</small>`:''}</h3><span>${esc(doc.basis)}</span></header><div class="h-calendar-grid">${out.join('')}</div><p>Accuracy only, not profit. ${doc.missing_dates?`${Number(doc.missing_dates)} records have no saved date and are excluded from this calendar.`:'Pushes are listed separately.'}</p></section>`;
   }
   async function showRecord() {
     const seq=++H.seq, sport=$('hub-record-sport').value;
@@ -1073,7 +1075,9 @@ export function mount(C) {
   }
   function mtFollowTab(){
     const d=H.marketDoc;if(!d||H.mt.tab===H.sport)return;
-    H.mt.tab=H.sport;H.mt.league=H.sport!=='all'&&d.sports?.[H.sport]?H.sport:'all';
+    // audit 2026-11-05: CS2 and LoL have no sportsbook prices, so from their tabs the sheet opens on NBA (the Sport filter still widens it)
+    const want=['cs2','lol'].includes(H.sport)&&d.sports?.nba?'nba':H.sport;
+    H.mt.tab=H.sport;H.mt.league=want!=='all'&&d.sports?.[want]?want:'all';
   }
   function marketFilters(){
     const d=H.marketDoc,sports=Object.keys(d?.sports||{}),books=mtBooks(d);
@@ -1284,7 +1288,7 @@ export function mount(C) {
       if(open&&!node.inert){node.dataset.hubInert='1';node.inert=true;}
       if(!open&&node.dataset.hubInert){node.inert=false;delete node.dataset.hubInert;}
     }
-    if(!open)return;
+    if(!open){window.scoutClassicMount?.();return;}   /* the classic CS2 page is built only when it is shown (audit 2026-11-05) */
     const target=modern?({slips:'studio',results:'record'}[modern[1]]||modern[1]):scout?scout[1]:slips?'studio':'board';
     if(target==='board')H.view='list';
     section(target,false);syncFields();paintBoard();refreshSlip();load();
@@ -1391,7 +1395,8 @@ export function mount(C) {
     <div id="hub-more" class="h-more-sheet" role="group" aria-label="More" hidden><button data-hub="view" data-id="games">By game</button><button data-hub="section" data-id="tools">Tools</button><button data-hub="section" data-id="alerts">${ALERT_WORD}</button><button data-hub="studio-open" data-id="build">Auto-build slips</button><button data-hub="studio-open" data-id="tracked">Tracked slips</button><a href="/?view=classic#moneylines">Moneylines ↗</a><a href="/?view=classic#one">Single prop grader ↗</a><a href="/?view=classic#matches">Match research ↗</a><button data-hub="close">Classic board ↗</button></div>
     <aside id="hub-card" class="h-card-panel" role="dialog" aria-modal="false" aria-labelledby="hub-card-title" hidden><div id="hub-detail" class="h-card"></div></aside></section>
     <dialog id="hub-save-dialog" class="h-save u-dialog" aria-labelledby="hub-save-title"><form method="dialog"><h2 id="hub-save-title">Save view</h2><label>Name<input id="hub-save-name" maxlength="48" required autocomplete="off"></label><p id="hub-save-note">Saved to your account.</p><div><button value="cancel" formnovalidate>Cancel</button><button id="hub-save-confirm" value="save">Save</button></div></form></dialog>`);
-  const entry=document.createElement('a');entry.href='#all-sports';entry.className='h-entry';entry.textContent='All sports research';
+  // audit 2026-11-05 A1: a full path, so the link opens the research board on All sports from every classic page (CS2, LoL, Sports)
+  const entry=document.createElement('a');entry.href='/#all-sports';entry.className='h-entry';entry.textContent='All sports research';
   installV2();
   if(EXTRA){
     if(!$('hub-extra-style'))document.head.insertAdjacentHTML('beforeend','<style id="hub-extra-style">#u-hub .h-add.h-add-info{font-size:12px;font-weight:500}'
@@ -1413,8 +1418,13 @@ export function mount(C) {
     document.addEventListener('pointerdown',e=>{if(acct.open&&!acct.contains(e.target))acct.open=false;});    /* a click outside closes it */
     document.addEventListener('focusin',e=>{if(acct.open&&!acct.contains(e.target))acct.open=false;});
   }
-  const entryHost=document.querySelector('.workspace-tools')||document.querySelector('.sw-tabs')||document.querySelector('.ot-lol .bar')||document.querySelector('body header');
-  if(entryHost) entryHost.appendChild(entry); else document.body.prepend(entry);
+  const hostEntry=()=>{const entryHost=document.querySelector('.workspace-tools')||document.querySelector('.sw-tabs')||document.querySelector('.ot-lol .bar')||document.querySelector('body header');
+    if(entryHost) entryHost.appendChild(entry); else if(!entry.isConnected) document.body.prepend(entry);};
+  hostEntry();
+  document.addEventListener('scout-classic-mount',hostEntry);   /* the classic page built later: the entry joins its toolbar */
+  /* LoL draws its filter bar after its data loads: the entry then moves from the sticky header (no room on a phone, where it
+     hung below the header over the rows) into that bar, and back into it whenever the page redraws the bar (audit 2026-11-05) */
+  if(document.body.classList.contains('ot-lol')){let q=0;new MutationObserver(()=>{if(q)return;q=requestAnimationFrame(()=>{q=0;const bar=document.querySelector('.ot-lol .bar');if(bar&&entry.parentNode!==bar)bar.appendChild(entry);});}).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});}
   $('hub-save-dialog').addEventListener('close',()=>{
     if($('hub-save-dialog').returnValue!=='save')return;
     const name=$('hub-save-name').value.trim();if(!name)return;

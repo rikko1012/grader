@@ -135,7 +135,7 @@ def test_record_flags_off_leave_the_record_answer_as_before(env,monkeypatch):
 def test_record_status_flag_on_adds_the_letters_fact(env,monkeypatch):
     monkeypatch.setenv('SCOUT_PUBLIC_RECORD','1');monkeypatch.setenv('SCOUT_RECORD_STATUS','1');monkeypatch.delenv('SCOUT_PUBLIC_RECORD_SLIPS',raising=False)
     d=json.loads(get(env.base,'/api/record?sport=cs2')[1])
-    assert d['status']=={'letters':'live','text':'CS2 letters are live on the board.'} and 'slips_tab' not in d
+    assert d['status']=={'letters':'live','text':'The CS2 board shows letter grades.'} and 'slips_tab' not in d
     assert get(env.base,'/api/record/slips?sport=cs2')[0]==404
 
 

@@ -194,8 +194,9 @@ html[data-upgrade] .h-save.u-dialog{inset:50% auto auto 50%;transform:translate(
 @media(prefers-reduced-motion:reduce){
  .scout-hub *{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
-/* The entry is part of the existing toolbar, never a floating cover over member data. */
-html[data-upgrade] .h-entry{position:static;inset:auto;display:inline-flex;align-items:center;justify-content:center;min-height:36px;box-shadow:none;white-space:nowrap;margin:0;font-size:12px}
+/* The entry is part of the existing toolbar, never a floating cover over member data. z-index:auto (audit 2026-11-05): as a flex item
+   a z-index still stacks, so the old 51 painted the link over the sticky LoL / Sports header and the Slip tray button when scrolled. */
+html[data-upgrade] .h-entry{position:static;inset:auto;z-index:auto;display:inline-flex;align-items:center;justify-content:center;min-height:36px;box-shadow:none;white-space:nowrap;margin:0;font-size:12px}
 /* Main member workspace. Layout follows the research flow rather than decorative cards. */
 .scout-hub{grid-template-columns:182px minmax(0,1fr) 300px;background:#101216}
 .h-center{padding:24px 22px 48px}

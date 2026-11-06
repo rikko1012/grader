@@ -382,11 +382,14 @@ def test_market_tools_nothing_to_act_on_is_one_line(browser, env, monkeypatch, s
 
 
 def test_market_tools_follow_the_cs2_tab(ctx, env, monkeypatch):
-    """On the CS2 tab the sheet shows CS2 only; with no sportsbook prices for CS2 it says so in one line and lists no other book."""
+    """Audit 2026-11-05: CS2 has no sportsbook prices, so from the CS2 tab the sheet opens on NBA. Choosing CS2 in its Sport filter
+    still shows CS2 only: with no sportsbook prices for CS2 it says so in one line and lists no other book."""
     monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
     monkeypatch.setenv('SCOUT_MARKET_TOOLS', '1')
     p = mt_page(ctx, env, market_doc(), path='/#/tools?sport=cs2')
-    assert p.locator('#hub-mt-league').input_value() == 'cs2'
+    assert p.locator('#hub-mt-league').input_value() == 'nba'
+    p.locator('#hub-mt-league').select_option('cs2')
+    p.wait_for_function("document.getElementById('hub-market-results').innerText.includes('No sportsbook offers CS2')")
     assert p.locator('#hub-mt-book option').evaluate_all('os=>os.map(o=>o.value)') == ['all']
     text = p.locator('#hub-market-results').inner_text()
     assert 'No sportsbook offers CS2 prices right now' in text and 'Nba' not in text and 'Alpha' not in text

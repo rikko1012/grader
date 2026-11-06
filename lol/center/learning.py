@@ -110,7 +110,7 @@ def dashboard(con):
               "distinct_matches": con.execute("SELECT COUNT(DISTINCT sid) FROM lol_forecasts WHERE forecast_at < series_start").fetchone()[0],
               "graded_offered_props": graded, "graded_matches": len(series), "graded_distinct_player_props": len(player_props)}
     from gradecore.calendar import daily_record
-    return {"at": store.now_iso(), 'calendar':daily_record(calendar_rows,store.now_iso(),'Series start date · UTC'), "settled_by_status": dict(status), "counts": counts, "metrics": out,
+    return {"at": store.now_iso(), 'calendar':daily_record(calendar_rows,store.now_iso(),'Series start date · US Central','America/Chicago'), "settled_by_status": dict(status), "counts": counts, "metrics": out,
             "offered_side": {"version": 1, "settled_by_status": dict(offered_status),
                              "metrics": {k.removeprefix("offered cohort "): v for k, v in out.items() if k.startswith("offered cohort ")}},
             "series_grouped_95ci": {"all": _grouped_ci(units), "offered_side_only": _grouped_ci([u for u in units if u["offered"]])},

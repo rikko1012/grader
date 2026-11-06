@@ -359,7 +359,7 @@ def build(con, now=None, base=None):
                                      "rule": GATE_RULE},
                        "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows, lg),
                        "recent": rec, "model_gate": model_gate(lg),
-                       'calendar':daily_record(({'at':r.get('settled_at'),'status':r.get('lean_result')} for r in rows), now, 'Settlement date · UTC'),
+                       'calendar':daily_record(({'at':r.get('settled_at'),'status':r.get('lean_result')} for r in rows), now, 'Settlement date · US Central', 'America/Chicago'),
                        "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(rows)}}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
            "grades": "research grades rg-1 (owner 2026-10-25): sports-gp-1 bands of the unrounded lean-side chance - "
