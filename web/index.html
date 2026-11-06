@@ -180,7 +180,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .gtag{display:inline-block;min-width:34px;text-align:center;font:700 12px var(--display);padding:3px 7px;border-radius:7px}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--accent);color:var(--text);padding:9px 16px;border-radius:10px;font-size:13.5px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
-.toast.has-undo{pointer-events:auto;display:flex;align-items:center;gap:10px}.toast .toast-undo{background:none;border:1px solid var(--accent);color:var(--text);border-radius:7px;padding:5px 10px;font:inherit;font-weight:600;cursor:pointer;min-height:32px}
+.toast.has-undo{pointer-events:auto;display:flex;align-items:center;gap:10px;width:max-content;max-width:calc(100vw - 24px);box-sizing:border-box}.toast .toast-undo{background:none;border:1px solid var(--accent);color:var(--text);border-radius:7px;padding:5px 10px;font:inherit;font-weight:600;cursor:pointer;min-height:32px}
 .g-bplus{background:rgba(163,214,74,.10);color:#a3d64a;border:1px solid #a3d64a}
 .badge.g-bplus{box-shadow:0 0 30px rgba(163,214,74,.18)} .herocard.g-bplus{--hc:#a3d64a;background:var(--panel);color:inherit;border:1px solid var(--line)}
 /* sticky one-line grade bar (shows once the main form scrolls away) */
@@ -2037,7 +2037,9 @@ function pruneStartedLegs() {
   return keep;
 }
 function undoToast(msg, gone) {
+  toast(msg, 8000);                                     // the one toast path (its message), then the Undo button beside it
   const t = $("#toast");
+  if (!t || t.textContent !== msg) return;
   t.innerHTML = `<span>${esc(msg)}</span> <button type="button" class="toast-undo" data-undo-prune="1">Undo</button>`;
   t.classList.add("on", "has-undo"); clearTimeout(toast.t);
   t.querySelector("[data-undo-prune]").onclick = () => {
