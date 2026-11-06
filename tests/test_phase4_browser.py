@@ -10,6 +10,7 @@ import pytest
 import book_providers as bp
 import workspace_alerts
 import workspace_books as wb
+from tests.test_pickem_readers import event_of  # noqa: E402
 from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 
 SHOTS_DIR = Path(os.environ['PHASE4_SHOTS']) if os.environ.get('PHASE4_SHOTS') else None
@@ -192,12 +193,22 @@ def test_book_toggle_refuses_a_book_with_no_lines_here(ctx, env, sleeper, monkey
 
 
 def test_book_toggle_shows_dabble_beside_sleeper_with_its_price(ctx, env, sleeper, monkeypatch):
-    """Readers added 2026-11-05: Dabble comes through the same generic toggle, short code DB, view only, its per-side decimal price."""
+    """Readers added 2026-11-05: Dabble comes through the same generic toggle, short code DB, view only, its per-side price shown as its own unit (never decimal odds)."""
     monkeypatch.setenv('SCOUT_BOOK_DABBLE', '1')
     rows = [dict(offer('vargo', 'Halcyon', 38.5), provider='dabble', book='dabble', raw_stat='total-kills-map-one-and-map-two', source_at=None,
                  over={"offered": True, "payout": None, "price": 1.91}, under={"offered": True, "payout": None, "price": 2.1}),
             dict(offer('brandr', 'Norrland', 33.5, sid='2'), provider='dabble', book='dabble', raw_stat='total-kills-map-one-and-map-two', source_at=None,
                  over={"offered": True, "payout": None, "price": 2.05}, under={"offered": True, "payout": None, "price": 1.95})]
+    real = wb.records
+
+    def with_events(srv, sport):                    # Dabble lines carry their fixture's teams and start: copy the board match's
+        recs, s = real(srv, sport)
+        for o in rows:
+            rec = next((r for r in recs or () if r['player']['name'] == o['player']), None)
+            if rec:
+                o.update(event_of(rec))
+        return recs, s
+    monkeypatch.setattr(wb, 'records', with_events)
     bp.state('dabble').update(at=time.time(), offers=rows)
     p = page(ctx, env)
     lines_read(p, '/')
@@ -217,7 +228,8 @@ def test_book_toggle_shows_dabble_beside_sleeper_with_its_price(ctx, env, sleepe
     b.locator('.h-player').click()
     p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
     detail = p.locator('#hub-detail').inner_text()
-    assert '2.05 decimal' in detail and 'No saved chance at this line' in detail
+    assert 'Dabble price 2.05' in detail and 'not what an entry pays' in detail and '2.05 decimal' not in detail
+    assert 'No saved chance at this line' in detail
     no_h_scroll(p)
     assert not p.errors
 

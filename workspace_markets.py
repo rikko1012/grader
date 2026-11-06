@@ -1,9 +1,10 @@
 """SCOUT_MARKET_TOOLS (default off): the Tools route's +EV feed and arbitrage sheet over prices this server already holds.
 
 Inputs (no provider request is made here): the NBA / NFL snapshots' book rows (FanDuel, BetRivers, The Odds API books,
-Kalshi, Polymarket, collected by the sports service) and every enabled direct pick'em reader's per-pick prices (book_providers:
-Sleeper multipliers, Dabble per-side prices). Pick'em prices are never a standalone bet: flagged, kept out of the consensus and out
-of the member view. All math is gradecore.market_tools / gradecore.devig.
+Kalshi, Polymarket, collected by the sports service) and every enabled direct pick'em reader whose price is a documented payout
+(book_providers: Sleeper per-pick multipliers). Dabble's per-side number is undocumented and not what an entry pays
+("price_comparable": false), so it never enters this math. Pick'em prices are never a standalone bet: flagged, kept out of the
+consensus and out of the member view. All math is gradecore.market_tools / gradecore.devig.
 
 +EV feed. EV = p_cal x decimal_odds - 1, push-adjusted (gradecore.market_tools.ev_push_adjusted); never a probability gap.
   p_cal, in this order:
@@ -142,22 +143,22 @@ def groups(srv, sport, now):
             g["quotes"].append(_quote(plat, _num(b.get("over")), _num(b.get("under")), wb._ts(b.get("seen_at")), "sports service · " + _label(plat)))
     subj = None
     for pid in direct_pickem():
-        if not bp.enabled(pid):
+        if not bp.enabled(pid) or bp.providers()[pid].get("price_comparable") is False:
+            # Dabble: its per-side number is not what an entry pays (book_providers.json rules.pick_price). Priced as decimal odds
+            # it makes every near-fair side look +EV, so it stays out of the +EV feed and the arbitrage sheet entirely.
             continue
         if subj is None:
             subj = wb.subjects(recs)
         label = bp.providers()[pid]["label"]
         for o in bp.offers(pid, sport, now):
-            got, _ = wb.match(subj, o)
+            got, _ = wb.match(subj, o, bp.providers()[pid].get("match"))
             if not got:
                 continue
             r0 = got[0]
             k = (r0["event"]["id"], r0["player"]["key"], r0["market"]["stat"], wb._per(r0["market"]["period"]), o["line"])
             g = out.setdefault(k, {"recs": got, "line": o["line"], "quotes": []})
-            # Sleeper publishes a per-pick payout multiplier, Dabble a per-side decimal price: either way a pick'em price
-            over = o["over"].get("payout") or o["over"].get("price")
-            under = o["under"].get("payout") or o["under"].get("price")
-            g["quotes"].append(_quote(pid, over, under, o["observed_at"], label + " feed", mult=True))
+            # only a documented per-pick payout (Sleeper's multiplier) is a pick'em price here
+            g["quotes"].append(_quote(pid, o["over"].get("payout"), o["under"].get("payout"), o["observed_at"], label + " feed", mult=True))
     return out
 
 

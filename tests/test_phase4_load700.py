@@ -9,7 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 import book_providers as bp
 import workspace_books as wb
 import workspace_markets as wm
-from tests.test_workspace_api import env, API  # noqa: F401
+from tests.test_workspace_api import env, API, records  # noqa: F401
+from tests.test_pickem_readers import event_of
 
 
 @pytest.fixture
@@ -36,7 +37,7 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
                                                "stat": "kills", "period": "maps12", "subject_id": "u7", "player": "vargo", "player_norm": "vargo",
                                                "team": "Halcyon", "team_norm": "halcyon", "game_id": "f", "line": 37.5,
                                                "over": {"offered": True, "payout": None, "price": 1.91}, "under": {"offered": True, "payout": None, "price": 2.1},
-                                               "source_at": None, "observed_at": now}])
+                                               "source_at": None, "observed_at": now, **event_of(records(env)[("vargo", "underdog")])}])
     builds = {"books": 0, "sheet": 0}
     per_key = {}
     lock = threading.Lock()

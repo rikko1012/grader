@@ -154,7 +154,7 @@
     if (s.grade) return `${s.grade} ${cap(sd)}${rec.sport === "nba" || rec.sport === "nfl" ? " · Research grade" : ""}`;      /* as classic sports */
     return `Lean ${cap(sd)}`;
   }
-  const decimalOf = (o, side) => { const v = o.offer[side]; return (PLATFORMS[o.offer.platform] || {}).kind === "decimal" ? v.payout : v.price; };
+  const decimalOf = (o, side) => { const v = o.offer[side], P = PLATFORMS[o.offer.platform] || {}; if (P.price_comparable === false) return null; /* Dabble: own unit, never odds */ return P.kind === "decimal" ? v.payout : v.price; };
   function priceText(o, side) {
     const v = o.offer[side], dec = decimalOf(o, side);
     if (!v.offered) return null;

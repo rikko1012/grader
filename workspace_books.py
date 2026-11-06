@@ -89,11 +89,41 @@ def subjects(recs):
     return out
 
 
-def match(subj, o):
-    """-> (records, None) or (None, reason). Exact name; the team decides only between two players of the same name."""
+def _same_event(recs, o, tol):
+    """The offer's fixture is the board record's match: the same two teams, or the same start within tol seconds."""
+    teams = set(o.get("event_teams") or ())
+    start = o.get("event_start")
+    for r in recs:
+        e = r.get("event") or {}
+        board = {bp.norm(t) for t in e.get("teams") or () if bp.norm(t)}
+        if len(teams) == 2 and board == teams:
+            return True
+        t = _ts(e.get("start_utc"))
+        if start is not None and t is not None and abs(t - start) <= tol:
+            return True
+    return False
+
+
+def match(subj, o, rule=None):
+    """-> (records, None) or (None, reason). Exact name; the team decides only between two players of the same name.
+    With a provider match rule (book_providers.json "match", Dabble), the offer's team must be the board player's team and its
+    fixture the board's match, even when only one board player has the name: a namesake or a later fixture never copies a read."""
     found = subj.get((o["player_norm"], o["stat"], _per(o["period"])))
     if not found:
         return None, "player not on the board"
+    if rule:
+        if not o.get("team_norm"):
+            return None, "team missing"
+        same_team = {k: v for k, v in found.items() if k[1] and k[1] == o["team_norm"]}
+        if not same_team:
+            return None, "team does not match"
+        tol = rule.get("start_tolerance_s", 5400)
+        same = [v for v in same_team.values() if _same_event(v, o, tol)]
+        if not same:
+            return None, "another match"
+        if len(same) > 1:
+            return None, "two board players share this name"
+        return same[0], None
     if len(found) == 1:
         return next(iter(found.values())), None
     same_team = [v for (eid, team), v in found.items() if team and team == o.get("team_norm")]
@@ -132,7 +162,10 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
         if lc.contained(sport, m.get("stat")):
             r["scout"].update(grade=None, letter_held=True, units=None)
     r["state"] = {"kind": "ok", "reason": None}
-    r["extra"] = {"provider": pid, "kind": kind, "same_line_as": base["offer"]["platform_label"] if same else None}
+    pc = bp.providers().get(pid) or {}
+    r["extra"] = {"provider": pid, "kind": kind, "same_line_as": base["offer"]["platform_label"] if same else None,
+                  # Dabble: its per-side number is its own unit, never decimal odds (book_providers.json price_note)
+                  "price_comparable": pc.get("price_comparable", True), "price_label": pc.get("price_label")}
     return r
 
 
@@ -226,7 +259,7 @@ def build(srv, sport, pid, now=None):
         subj = subjects(recs)
         for o in bp.offers(pid, sport, now):
             cov["offers"] += 1
-            got, why = match(subj, o)
+            got, why = match(subj, o, p.get("match"))
             if got is None:
                 miss(why)
                 continue
@@ -275,7 +308,8 @@ def build(srv, sport, pid, now=None):
                median_staleness_s=round(statistics.median(ages), 1) if ages else None)
     doc = {"sport": sport, "book": pid, "label": label, "kind": kind, "rules": p.get("rules") or {},
            "feed": {"state": feed_state, "at": _iso(feed_at), "stale_after_s": stale_after},
-           "platforms": {pid: {"label": label, "short": p.get("short"), "slip": False, "kind": kind}},
+           "platforms": {pid: {"label": label, "short": p.get("short"), "slip": False, "kind": kind,
+                                 "price_comparable": p.get("price_comparable", True), "price_label": p.get("price_label")}},
            "records": out if feed_state in ("ok",) or p["source"] != "direct" else [], "coverage": cov}
     return 200, doc
 

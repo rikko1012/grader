@@ -166,8 +166,9 @@
     return { html: `<span class="verdict">Lean ${cap(sd)}</span>`, text: `Lean ${cap(sd)}` };
   }
   const decimalOf = (o, side) => {                              /* a decimal price, the one number two books can compare on */
-    const v = o.offer[side];
-    return D.platforms[o.offer.platform].kind === "decimal" ? v.payout : v.price;
+    const v = o.offer[side], P = D.platforms[o.offer.platform];
+    if (P.price_comparable === false) return null;              /* Dabble: its own unit, not what an entry pays: never compared as odds */
+    return P.kind === "decimal" ? v.payout : v.price;
   };
   function priceText(o, side) {
     const v = o.offer[side], dec = decimalOf(o, side);

@@ -324,12 +324,18 @@ def test_started_fixtures_are_dropped_and_the_row_cap_holds(tmp_path, monkeypatc
 
 # ---------------------------------------------------------------------------------------------------------- HTTP + generic code
 
-def offer(player="vargo", team="Halcyon", line=38.5, stat="kills", period="maps12", now=None):
+def event_of(rec):
+    """A board record's match as a Dabble offer carries it: the fixture's two team names (normalised) and its start."""
+    e = rec["event"]
+    return {"event_teams": sorted(bp.norm(t) for t in e["teams"] if t), "event_start": wb._ts(e["start_utc"])}
+
+
+def offer(player="vargo", team="Halcyon", line=38.5, stat="kills", period="maps12", now=None, event=None):
     now = time.time() if now is None else now
     return {"provider": "dabble", "book": "dabble", "sport": "cs2", "raw_stat": "total-kills-map-one-and-map-two", "stat": stat, "period": period,
             "subject_id": "u-" + player, "player": player, "player_norm": bp.norm(player), "team": team, "team_norm": bp.norm(team),
             "game_id": "f1", "line": line, "over": {"offered": True, "payout": None, "price": 1.91},
-            "under": {"offered": True, "payout": None, "price": 2.1}, "source_at": None, "observed_at": now}
+            "under": {"offered": True, "payout": None, "price": 2.1}, "source_at": None, "observed_at": now, **(event or {})}
 
 
 def test_http_flag_off_is_the_unknown_route(env):
@@ -341,8 +347,9 @@ def test_http_dabble_lines_match_the_board_exactly_and_never_change_it(env, monk
     monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
     before = records(env)
     now = time.time()
-    bp.state("dabble").update(at=now, offers=[offer(now=now), offer("brandr", "Norrland", 33.5, now=now), offer("ghost", "", 20.5, now=now),
-                                              offer("varg0", "Halcyon", 38.5, now=now)])
+    ev = {n: event_of(before[(n, "underdog")]) for n in ("vargo", "brandr")}
+    bp.state("dabble").update(at=now, offers=[offer(now=now, event=ev["vargo"]), offer("brandr", "Norrland", 33.5, now=now, event=ev["brandr"]),
+                                              offer("ghost", "", 20.5, now=now), offer("varg0", "Halcyon", 38.5, now=now, event=ev["vargo"])])
     st, me = get(env, "me")
     assert [x["id"] for x in me["features"]["extra_books"]] == ["dabble"] and "api.dabble.com" not in json.dumps(me)
     assert me["features"]["extra_books"][0]["short"] == "DB" and me["features"]["extra_books"][0]["rules"]["all_in"]["2"] == 3
@@ -362,23 +369,199 @@ def test_http_dabble_lines_match_the_board_exactly_and_never_change_it(env, monk
     assert st == 200 and "dabble" not in json.dumps(gen).lower()                                         # never on a slip
 
 
-def test_market_sheet_reads_dabble_as_a_pickem_price_never_a_member_row(monkeypatch):
+def test_market_sheet_never_prices_dabble_as_decimal_odds(monkeypatch):
+    """Review 2026-11-05: Dabble's per-side number is near fair (2.01 / 2.00) and is not what an entry pays. Read as decimal odds,
+    p_cal 0.55 at 2.01 shows about +10.6% EV. It stays out of the +EV feed and the arbitrage sheet (owner view too)."""
     import workspace_markets as wm
     from tests.test_phase4_markets import snap, iso  # noqa: F401
     now = time.time()
     s = snap([("p1", 20.5, [("fanduel", 2.10, 1.80, 30), ("betrivers", 1.95, 1.90, 40), ("oddsapi:draftkings", 2.25, 1.70, 20)])], now)
     monkeypatch.setattr(wb, "snap", lambda srv, sport: s if sport == "nba" else None)
-    monkeypatch.setattr(wm, "model_released", lambda sport, stat: False)
+    monkeypatch.setattr(wm, "model_released", lambda sport, stat: True)            # a released Scout chance would price it
     monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
     o = dict(offer("Nba p1", "A", 20.5, "points", "game", now), sport="nba")
-    o["over"]["price"] = 2.6
+    o["over"]["price"], o["under"]["price"] = 2.01, 2.00
     bp.state("dabble").update(at=now, offers=[o])
+    monkeypatch.setattr(wb, "match", lambda subj, x, rule=None: (next(iter(subj.get((x["player_norm"], x["stat"], "game"), {}).values()), None), None))
     sh = wm.sheet(None, "nba", now)
-    db = [x for x in sh["ev"] if x["book"] == "dabble"]
-    assert db and db[0]["kind"] == "pickem" and db[0]["book_label"] == "Dabble" and "Pick'em multiplier: needs 2+ picks" in db[0]["flags"]
-    assert all(l["book"] != "dabble" for a in sh["arbitrage"] for l in a["legs"])
+    assert not [x for x in sh["ev"] if x["book"] == "dabble"]
+    assert all(l["book"] != "dabble" for a in sh["arbitrage"] + sh.get("flagged", []) for l in a.get("legs", []))
+    assert "dabble" not in json.dumps(sh)
     m = wm.for_member(json.dumps({"as_of": iso(now), "method": {}, "sports": {"nba": sh}}).encode(), {"nba": True})
     assert not any(r["book"] == "dabble" for r in m["sports"]["nba"]["ev"])
+    assert bp.providers()["dabble"]["price_comparable"] is False and bp.providers()["sleeper"].get("price_comparable", True) is True
+
+
+# ---------------------------------------------------------------------------------------------------------- board match (review 2026-11-05)
+
+def _subj(team="Some Other Team", eid="hltv:999", teams=("Some Other Team", "Rivals"), start="2026-11-06T06:30:00+00:00"):
+    rec = {"event": {"id": eid, "teams": list(teams), "start_utc": start}, "player": {"name": "Aleksib", "team": team, "key": "aleksib"},
+           "market": {"stat": "kills", "period": "map1", "line_type": "standard"},
+           "offer": {"platform": "prizepicks", "platform_label": "PrizePicks", "line": 11.5},
+           "scout": {"side": "over", "p_side": 0.61, "grade": "B", "units": 1, "projection": 13.0}}
+    return rec, wb.subjects([rec])
+
+
+def _aleksib_offer():
+    """The live fixture's Aleksib (Natus Vincere, PARIVISION vs Natus Vincere), kills map 1 at 11.5."""
+    doc = load("cs2_details.json")
+    d, rows = _one(doc, "Aleksib")
+    for r in rows:
+        r.update(stats=["game-1-kills"], value=11.5)
+    return next(o for o in bp.parse_dabble(doc, NOW, "cs2", stats())[0] if o["player"] == "Aleksib")
+
+
+def test_parsed_offer_carries_its_fixture_teams_and_start():
+    o = _aleksib_offer()
+    assert o["event_teams"] == ["natusvincere", "parivision"] and o["event_start"] == bp._iso_ts("2026-11-06T06:30:00.000Z")
+
+
+def test_a_namesake_on_another_team_never_copies_a_saved_read():
+    rule = bp.providers()["dabble"]["match"]
+    o = _aleksib_offer()
+    rec, subj = _subj()                                                  # one board Aleksib, another team, same start
+    assert wb.match(subj, o, rule) == (None, "team does not match")
+    assert wb.match(subj, o)[0] is not None                             # the old rule (no provider rule) would have copied it
+    assert wb.match(subj, dict(o, team_norm=""), rule) == (None, "team missing")
+
+
+def test_a_later_fixture_of_the_same_player_never_copies_a_saved_read():
+    rule = bp.providers()["dabble"]["match"]
+    o = _aleksib_offer()
+    rec, subj = _subj("Natus Vincere", teams=("Natus Vincere", "FaZe"), start="2026-11-07T12:00:00+00:00")    # same team, later match
+    assert wb.match(subj, o, rule) == (None, "another match")
+    rec, subj = _subj("Natus Vincere", teams=("Natus Vincere", "PARIVISION"), start="2026-11-06T09:00:00+00:00")   # same teams
+    assert wb.match(subj, o, rule)[0] == [rec]
+    rec, subj = _subj("Natus Vincere", teams=("NAVI", "PRV"), start="2026-11-06T07:00:00+00:00")             # names differ, start within 90 min
+    assert wb.match(subj, o, rule)[0] == [rec]
+
+
+def test_build_counts_a_namesake_and_derives_nothing_from_it(monkeypatch):
+    monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
+    o = dict(_aleksib_offer(), observed_at=time.time())
+    rec, _ = _subj()
+    monkeypatch.setattr(wb, "records", lambda srv, sport: ([rec], {}))
+    bp.state("dabble").update(at=time.time(), offers=[o])
+    st, doc = wb.build(None, "cs2", "dabble")
+    assert st == 200 and doc["records"] == [] and doc["coverage"]["reasons"] == {"team does not match": 1}
+
+
+# ---------------------------------------------------------------------------------------------------------- poll isolation (review 2026-11-05)
+
+class Clock:
+    def __init__(self, t):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+
+def test_dabble_timeouts_never_starve_sleeper(tmp_path, monkeypatch):
+    """Every detail read times out (timeout 20 s x 2 tries + 0.5 s): one Dabble poll stops after max_failures_in_a_row and inside
+    its budget, so Sleeper (stale_after_s 900) is polled again before its lines go stale."""
+    monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
+    feed = bp.providers()["dabble"]["feed"]
+    fake, clock = Fake(), Clock(NOW)
+    for i in range(30):                                                   # a busy day: many CS2 fixtures
+        d = copy.deepcopy(load("cs2_details.json"))
+        d["data"]["id"] = f"cs2-{i}"
+        fake.details[f"cs2-{i}"] = d
+
+    def slow(url, etag=None, timeout=None, tries=None):
+        if "/sportfixtures/details/" in url:
+            clock.t += timeout * tries + 0.5
+            raise bp.FetchError("TimeoutError")
+        return fake(url, etag, timeout, tries)
+
+    def gap(s):
+        clock.t += s
+    st = bp.poll_dabble(tmp_path, now=NOW, fetch=slow, sleep=gap, clock=clock)
+    took = clock.t - NOW
+    assert st["failures"] == 1 and "in a row" in st["last_error"] and st["backoff_until"] > NOW
+    assert took <= bp.poll_budget_s(feed) + feed["timeout_s"] * feed["tries"] + 1, took
+    sl = bp.providers()["sleeper"]["feed"]
+    sleeper = bp.state("sleeper")
+    sleeper.update(at=NOW)
+    assert bp.freshness(sleeper, sl, clock.t) == "ok"
+    assert bp.poll_budget_s(feed) <= sl["stale_after_s"] / 3
+
+
+def test_slow_but_answering_feed_stops_at_the_budget_and_rotates(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
+    feed = bp.providers()["dabble"]["feed"]
+    fake, clock = Fake(), Clock(NOW)
+    for i in range(12):
+        d = copy.deepcopy(load("cs2_details.json"))
+        d["data"]["id"] = f"cs2-{i}"
+        fake.details[f"cs2-{i}"] = d
+
+    def slow(url, etag=None, timeout=None, tries=None):
+        if "/sportfixtures/details/" in url:
+            clock.t += 50
+        return fake(url, etag, timeout, tries)
+    st = bp.poll_dabble(tmp_path, now=NOW, fetch=slow, sleep=lambda s: None, clock=clock)
+    assert st["failures"] == 0 and st["skipped"]["not read this poll (time budget)"] > 0
+    assert clock.t - NOW <= bp.poll_budget_s(feed) + 50
+    first = {f for f, c in st["by_fixture"].items()}
+    clock.t = NOW + feed["poll_s"]
+    st = bp.poll_dabble(tmp_path, now=NOW + feed["poll_s"], fetch=slow, sleep=lambda s: None, clock=clock)
+    second = {f for f, c in st["by_fixture"].items() if c["at"] == NOW + feed["poll_s"]}
+    assert second and not (second & first)                               # the ones not read last time go first
+
+
+def test_fixture_cap_is_per_sport_and_counted(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
+    feed = dict(bp.providers()["dabble"]["feed"], max_fixtures_per_sport=1)
+    monkeypatch.setitem(bp.providers()["dabble"], "feed", feed)
+    fake = Fake()
+    d = copy.deepcopy(load("cs2_details.json"))
+    d["data"].update(id="cs2-late", advertisedStart="2026-11-06T18:00:00.000Z")
+    fake.details["cs2-late"] = d
+    st = bp.poll_dabble(tmp_path, now=NOW, fetch=fake, sleep=lambda s: None)
+    assert st["skipped"]["over the fixture cap: cs2"] == 1 and st["fixtures_read"] == 2       # one CS2 and the LoL fixture
+    assert {o["sport"] for o in st["offers"]} == {"cs2", "lol"}
+
+
+def test_a_passed_start_rereads_the_list_sooner_and_a_moved_start_is_kept(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
+    feed = bp.providers()["dabble"]["feed"]
+    fake = Fake()
+    bp.poll_dabble(tmp_path, now=NOW, fetch=fake, sleep=lambda s: None)
+    old = bp._iso_ts(fake.details[CS2_ID]["data"]["advertisedStart"])
+    fake.details[CS2_ID]["data"]["advertisedStart"] = "2026-11-06T09:30:00.000Z"          # moved 3 h later
+    t = old + 1                                                                           # the cached start has passed
+    st0 = bp.state("dabble")
+    st0["fixtures_next_at"] = t + 999                                                     # its 30 min clock not yet due
+    n = len(fake.calls)
+    st = bp.poll_dabble(tmp_path, now=t, fetch=fake, sleep=lambda s: None)
+    assert any("competitions/active" in u for u, _ in fake.calls[n:])                    # list re-read before its 30 min clock
+    assert CS2_ID in st["by_fixture"] and st["fixtures"][CS2_ID][1] == bp._iso_ts("2026-11-06T09:30:00.000Z")
+    assert any(o["game_id"] == CS2_ID for o in st["offers"])
+
+
+def test_one_sport_list_failing_keeps_its_previous_fixtures(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
+    feed = bp.providers()["dabble"]["feed"]
+    fake = Fake()
+    bp.poll_dabble(tmp_path, now=NOW, fetch=fake, sleep=lambda s: None)
+    nfl = bp.providers()["dabble"]["feed"]["competitions"]["nfl"]["id"]
+
+    def flaky(url, etag=None, timeout=None, tries=None):
+        if f"/competitions/{nfl}/sport-fixtures" in url:
+            raise bp.FetchError("TimeoutError")
+        return fake(url, etag, timeout, tries)
+    t = NOW + feed["fixtures_refresh_s"]
+    st = bp.poll_dabble(tmp_path, now=t, fetch=flaky, sleep=lambda s: None)
+    assert st["failures"] == 0 and st["at"] == t and len(st["offers"]) == 5
+    assert st["skipped"]["fixture list failed: nfl"] == 1 and st["fixtures_next_at"] == t + feed["fixtures_min_refresh_s"]
+    assert {x["id"]: x for x in bp.health(t + 1)}["dabble"]["state"] == "ok"
+
+
+def test_an_unexpected_discovery_answer_is_a_failure_not_a_green_zero(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
+    st = bp.poll_dabble(tmp_path, now=NOW, fetch=lambda url, **k: (200, b'{"data":{"somethingElse":[]}}', None), sleep=lambda s: None)
+    assert st["failures"] == 1 and st["last_error"] == "no configured competition found" and not st["at"]
+    assert {x["id"]: x for x in bp.health(NOW + 1)}["dabble"]["state"] in ("backoff", "failing")
 
 
 def test_admin_coverage_lists_dabble_and_the_blocked_apps():

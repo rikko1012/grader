@@ -336,6 +336,10 @@ def _names(players):
 # /sportfixtures/details/{id} per fixture starting within horizon_h (conditional on its ETag). Lines come only from the structured
 # playerProps rows (one per side: player, team, stats keys, value, lineType) joined to prices on (marketId, selectionId); market and
 # selection name strings are never parsed. A side without a price row is a stale selection and is not offered.
+# Review 2026-11-05: each offer carries its fixture's teams and start (workspace_books.match checks both against the board's match);
+# one poll stays inside poll_budget_s and stops after max_failures_in_a_row network failures (the poller thread is shared with
+# Sleeper); the fixture cap is per sport and counted; one sport's list failing keeps its previous ids; discovery that finds none
+# of the configured competitions is a failure, never a green 0. Dabble's price never enters +EV / arbitrage math (price_comparable).
 
 def _iso_ts(v):
     from datetime import datetime, timezone
@@ -402,6 +406,8 @@ def parse_dabble(doc, now, sport, stats):
     smap = stats.get(sport) or {}
     cand, ids = {}, {}
     fid = str(d.get("id") or "")
+    # the fixture's own teams and start: the board match checks the line belongs to the board's match, not a namesake's or a later one
+    event_teams = sorted({norm(t.get("name") or "") for t in d.get("teams") or [] if isinstance(t, dict) and norm(t.get("name") or "")})
     for (mid, value), rows in groups.items():
         try:
             m = markets.get(mid) or {}
@@ -444,7 +450,8 @@ def parse_dabble(doc, now, sport, stats):
             team = r0.get("teamName") or ""
             o = {"provider": "dabble", "book": "dabble", "sport": sport, "raw_stat": key, "stat": mapped[0], "period": mapped[1],
                  "subject_id": str(r0.get("playerId") or ""), "player": name, "player_norm": norm(name), "team": team,
-                 "team_norm": norm(team), "game_id": fid, "line": line, "over": over, "under": under, "source_at": None, "observed_at": now}
+                 "team_norm": norm(team), "game_id": fid, "line": line, "over": over, "under": under, "source_at": None, "observed_at": now,
+                 "event_teams": event_teams, "event_start": start}
             cand.setdefault((o["player_norm"], o["stat"], o["period"]), []).append(o)
             ids.setdefault(o["player_norm"], set()).add(o["subject_id"])
         except (TypeError, ValueError, KeyError, AttributeError):
@@ -466,6 +473,63 @@ def _json(raw):
     return json.loads(raw)
 
 
+def poll_budget_s(feed):
+    """Wall-clock seconds one poll may spend. All direct feeds share the one poller thread, so a slow or timing-out app must
+    hand the thread back long before another app's lines go stale (Sleeper stale_after_s 900): at most a third of the
+    shortest stale_after_s of any direct feed, and never more than this feed's poll_s."""
+    other = [p["feed"]["stale_after_s"] for p in providers().values() if p.get("source") == "direct" and p.get("feed")]
+    cap = min([feed["poll_s"], feed["stale_after_s"] / 3] + [s / 3 for s in other])
+    return min(feed.get("poll_budget_s") or cap, cap)
+
+
+def _dabble_list_due(st, feed, now):
+    """The fixture lists are re-read every fixtures_refresh_s, and sooner (not before fixtures_min_refresh_s) when a cached start
+    has passed: the fixture may have moved later, and a new fixture may have been posted."""
+    at = st.get("fixtures_at")
+    if at is None or now >= st.get("fixtures_next_at", at + feed["fixtures_refresh_s"]):
+        return True
+    passed = any(start <= now for _, start in (st.get("fixtures") or {}).values())
+    return passed and now - at >= feed["fixtures_min_refresh_s"]
+
+
+def _dabble_read_lists(st, p, feed, now, fetch, kw, over_budget):
+    """Competitions, then one fixture list per sport. Fails the poll only when the competitions read fails or names none of the
+    configured competitions (a changed or stripped answer is never a green 'ok' with 0 lines). One sport's list failing keeps
+    that sport's previous fixture ids and is counted; the others are read as usual."""
+    base = feed["base_url"]
+    st["requests"] += 1
+    _, raw, _ = fetch(base + feed["competitions_path"], **kw)
+    comps = parse_dabble_competitions(_json(raw), feed["competitions"])
+    del raw
+    if not comps:
+        raise FetchError("no configured competition found")
+    old, found, sk = st.get("fixtures") or {}, {}, {}
+    for sport in p["sports"]:
+        if sport not in comps:
+            continue
+        try:
+            if over_budget():
+                raise FetchError("time budget")
+            st["requests"] += 1
+            _, raw, _ = fetch(base + feed["fixtures_path"].format(id=comps[sport]), **kw)
+            rows = parse_dabble_fixtures(_json(raw), now, feed["horizon_h"] * 3600)
+            del raw
+        except FetchError as e:
+            if e.status in (403, 429):
+                raise
+            sk[f"fixture list failed: {sport}"] = 1
+            found.update({f: v for f, v in old.items() if v[0] == sport})
+            continue
+        except ValueError:
+            sk[f"fixture list failed: {sport}"] = 1
+            found.update({f: v for f, v in old.items() if v[0] == sport})
+            continue
+        for fid, start in rows:
+            found[fid] = (sport, start)
+    nxt = now + (feed["fixtures_min_refresh_s"] if sk else feed["fixtures_refresh_s"])     # a failed list is retried sooner
+    st.update(fixtures=found, fixtures_at=now, fixtures_next_at=nxt, competitions=sorted(comps), list_skipped=sk)
+
+
 def poll_dabble(data_dir, now=None, fetch=http_get, sleep=time.sleep, clock=time.time):
     """One scheduled Dabble poll. Returns the provider state. Never raises. Holds only the parsed offers per fixture (no bodies)."""
     pid = "dabble"
@@ -477,55 +541,68 @@ def poll_dabble(data_dir, now=None, fetch=http_get, sleep=time.sleep, clock=time
     st["attempt_at"] = now
     base, kw = feed["base_url"], {"timeout": feed["timeout_s"], "tries": feed["tries"]}
     cache = st.setdefault("by_fixture", {})          # fixture id -> {"etag", "offers", "skipped", "at"}
+    t0, budget = clock(), poll_budget_s(feed)
+    over_budget = lambda: clock() - t0 > budget      # noqa: E731 - wall clock of this poll, never the injected `now`
     try:
-        if st.get("fixtures_at") is None or now - st["fixtures_at"] >= feed["fixtures_refresh_s"]:
-            st["requests"] += 1
-            _, raw, _ = fetch(base + feed["competitions_path"], **kw)
-            comps = parse_dabble_competitions(_json(raw), feed["competitions"])
-            found = {}
-            for sport in p["sports"]:
-                if sport not in comps:
-                    continue
-                st["requests"] += 1
-                _, raw, _ = fetch(base + feed["fixtures_path"].format(id=comps[sport]), **kw)
-                for fid, start in parse_dabble_fixtures(_json(raw), now, feed["horizon_h"] * 3600):
-                    found[fid] = (sport, start)
-                del raw
-            st.update(fixtures=found, fixtures_at=now, competitions=sorted(comps))
+        if _dabble_list_due(st, feed, now):
+            _dabble_read_lists(st, p, feed, now, fetch, kw, over_budget)
         live = sorted((start, fid, sport) for fid, (sport, start) in (st.get("fixtures") or {}).items() if start > now)
-        live = live[:feed["max_fixtures"]]
-        offers, skipped, ok, failed = [], {}, 0, 0
-        for i, (start, fid, sport) in enumerate(live):
-            if i:
-                sleep(feed["detail_gap_s"])
+        offers, skipped, ok, failed, in_a_row = [], dict(st.get("list_skipped") or {}), 0, 0, 0
+        per, kept = {}, []
+        for x in live:                                             # the cap is per sport: a heavy NBA / NFL day never drops CS2 / LoL
+            per[x[2]] = per.get(x[2], 0) + 1
+            if per[x[2]] <= feed["max_fixtures_per_sport"]:
+                kept.append(x)
+            else:
+                skipped[f"over the fixture cap: {x[2]}"] = skipped.get(f"over the fixture cap: {x[2]}", 0) + 1
+        live = kept
+        # least recently read first, so a poll cut short by its time budget reads the others next time
+        order = sorted(live, key=lambda x: ((cache.get(x[1]) or {}).get("at") or 0, x[0]))
+        stopped = 0
+        for i, (start, fid, sport) in enumerate(order):
             c = cache.get(fid)
-            try:
-                st["requests"] += 1
-                status, raw, etag = fetch(base + feed["details_path"].format(id=fid), etag=(c or {}).get("etag"), **kw)
-                if status == 304 and c:
-                    st["not_modified"] += 1
-                    c["at"] = now
-                    for o in c["offers"]:
-                        o["observed_at"] = now
-                else:
-                    o, sk = parse_dabble(_json(raw), now, sport, p["stats"])
-                    del raw
-                    c = cache[fid] = {"etag": etag, "offers": o, "skipped": sk, "at": now}
-                ok += 1
-            except FetchError as e:
-                if e.status in (403, 429):
-                    raise
-                failed += 1
-            except ValueError:
-                failed += 1
-            if c and now - c["at"] <= feed["stale_after_s"]:      # a fixture that failed this time keeps its last read until stale
+            if i and (stopped or over_budget()):
+                stopped += 1                                       # not read this poll: its last read stays until stale
+            else:
+                if i:
+                    sleep(feed["detail_gap_s"])
+                try:
+                    st["requests"] += 1
+                    status, raw, etag = fetch(base + feed["details_path"].format(id=fid), etag=(c or {}).get("etag"), **kw)
+                    if status == 304 and c:
+                        st["not_modified"] += 1
+                        c["at"] = now
+                        for o in c["offers"]:
+                            o["observed_at"] = now
+                    else:
+                        doc = _json(raw)
+                        del raw
+                        o, sk = parse_dabble(doc, now, sport, p["stats"])
+                        moved = _iso_ts((doc.get("data") or {}).get("advertisedStart")) if isinstance(doc, dict) else None
+                        if moved is not None and moved != start:   # the fixture's own start wins over the cached list
+                            st["fixtures"][fid] = (sport, moved)
+                        c = cache[fid] = {"etag": etag, "offers": o, "skipped": sk, "at": now}
+                    ok += 1
+                    in_a_row = 0
+                except FetchError as e:
+                    if e.status in (403, 429):
+                        raise
+                    failed += 1
+                    in_a_row += 1
+                    if in_a_row >= feed["max_failures_in_a_row"]:
+                        raise FetchError(f"{in_a_row} fixture reads failed in a row ({str(e)[:30]})")
+                except ValueError:
+                    failed += 1
+            if c and now - c["at"] <= feed["stale_after_s"]:      # a fixture not read this time keeps its last read until stale
                 offers.extend(c["offers"])
                 for k, v in c["skipped"].items():
                     skipped[k] = skipped.get(k, 0) + v
         for fid in [f for f in cache if f not in {x[1] for x in live}]:
-            del cache[fid]                                         # started or gone: forget it
+            del cache[fid]                                         # started, gone or over the cap: forget it
         if failed:
             skipped["fixture read failed"] = failed
+        if stopped:
+            skipped["not read this poll (time budget)"] = stopped
         if live and not ok:
             raise FetchError("every fixture read failed")
     except FetchError as e:

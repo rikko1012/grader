@@ -356,7 +356,7 @@ export function mount(C) {
     paintBoard();
   }
   function extraDetail(r) {
-    const o=r.offer,x=r.extra||{},price=sd=>!o[sd]?.offered?'Not offered':num(o[sd].price)?o[sd].price.toFixed(2)+' decimal':num(o[sd].payout)?o[sd].payout.toFixed(2)+'x pick multiplier':'Price unavailable';
+    const o=r.offer,x=r.extra||{},price=sd=>!o[sd]?.offered?'Not offered':x.price_comparable===false?(num(o[sd].price)?esc(x.price_label||'App price')+' '+o[sd].price.toFixed(2)+' <small>(not what an entry pays)</small>':'Listed'):num(o[sd].price)?o[sd].price.toFixed(2)+' decimal':num(o[sd].payout)?o[sd].payout.toFixed(2)+'x pick multiplier':'Price unavailable';
     return `<header class="h-card-head"><button class="h-back" data-hub="card-close" aria-label="Back to the board"><span aria-hidden="true">←</span> Back</button><div class="h-card-id"><h3 id="hub-card-title" tabindex="-1">${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${esc(r.player.team)} · ${esc(r.event.label)} · ${esc(when(r.event.start_utc))}</p></div></header>
       <div class="h-extra-detail"><h3>${esc(o.platform_label)} · ${esc(o.line)}</h3><dl class="h-extra-kv"><div><dt>Over</dt><dd>${price('over')}</dd></div><div><dt>Under</dt><dd>${price('under')}</dd></div><div><dt>Read</dt><dd>${esc(o.seen_at?age(o.seen_at):'—')}</dd></div><div><dt>Scout's read</dt><dd>${x.same_line_as?`Same line as ${esc(x.same_line_as)}: ${r.scout.side?esc(sideWord(r.scout.side))+' '+pct(r.scout.p_side):'no side'}`:'No saved chance at this line'}</dd></div></dl><p>View only. Slips are PrizePicks or Underdog entries; open ${esc(o.platform_label)} to play this line.</p></div>`;
   }
@@ -635,7 +635,8 @@ export function mount(C) {
     const quoteText=(q,sd)=>{
       const o=q.offer[sd];
       if(!o.offered)return 'Not offered';
-      const kind=C.PLATFORMS[q.offer.platform]?.kind;
+      const P=C.PLATFORMS[q.offer.platform]||{},kind=P.kind;
+      if(P.price_comparable===false)return num(o.price)?(P.price_label||'App price')+' '+o.price.toFixed(2):'Listed';   /* Dabble: its own unit, never odds */
       if(kind==='decimal')return num(o.payout)?o.payout.toFixed(2):'Odds unavailable';
       if(num(o.price))return o.price.toFixed(2);
       if(num(o.payout)&&o.payout!==1)return o.payout.toFixed(2)+'× modifier';
