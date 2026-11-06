@@ -4115,6 +4115,7 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
 UPGRADE_API = "/api/upgrade/"
 _UPGRADE_MEMO = {}                                      # (id(page bytes), name, tokens) -> (page bytes, upgraded page)
 UI_TOKENS_ROUTE = "/upgrade/tokens.css"                 # SCOUT_UI_TOKENS=1 only; off = the unknown-route answer
+PICKEM_EV_ROUTE = "/upgrade/ev.js"                      # SCOUT_PICKEM_EV=1 only (the +EV board's page script); off = unknown route
 
 
 def ui_tokens_on():
@@ -4423,6 +4424,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(("upgrade", name), 200, web_file(name), ctype, keep=600)
             if u.path == UI_TOKENS_ROUTE and ui_tokens_on() and self._upgrade_on(q):    # SCOUT_UI_TOKENS only
                 return self.send_shared(("upgrade", "upgrade-tokens.css"), 200, web_file("upgrade-tokens.css"), "text/css; charset=utf-8", keep=600)
+            if u.path == PICKEM_EV_ROUTE and os.environ.get("SCOUT_PICKEM_EV", "").strip() == "1" and self._upgrade_on(q):
+                return self.send_shared(("upgrade", "upgrade-ev.js"), 200, web_file("upgrade-ev.js"), "text/javascript; charset=utf-8", keep=600)
             if u.path.startswith(UPGRADE_API) and self._upgrade_on(q):
                 return self._workspace_api("GET", u.path, q, prefix=UPGRADE_API)
             if u.path in ("/", "/index.html"):

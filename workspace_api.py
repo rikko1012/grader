@@ -30,6 +30,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import board_parity
 import letter_containment as lc
 import slip_quality as sq
 import workspace_h2h
@@ -72,7 +73,7 @@ _BEFORE_RE = re.compile(r"^[0-9T:.+\-Z]{10,40}$")
 _HLTV_SLUG_RE = re.compile(r"hltv-(\d+)")
 _FC_SLOTS = threading.BoundedSemaphore(8)
 _HIST_SLOTS = threading.BoundedSemaphore(3)
-_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}, "genie": {}, "generate": {}, "advice": {}}
+_HITS = {"recheck": {}, "track": {}, "state": {}, "mine": {}, "genie": {}, "generate": {}, "advice": {}, "report": {}}
 _ST = {"store": None}
 _ST_LOCK = threading.Lock()
 _SNAP = {"at": 0.0, "body": None, "index": {}, "props": {}, "last": {}, "doc": None, "gen": 0, "feeds": {}}
@@ -366,9 +367,11 @@ def _build(srv):
     if not any(docs.values()):
         raise RuntimeError("no board")
     records, index, props = [], {}, {}
+    cells = _parity_cells(srv, {x.get("graded_model") for p in docs.values() for x in (p or {}).get("rows") or []}) if board_parity.rows_on() else {}
     for bk, p in docs.items():
         for x in (p or {}).get("rows") or []:
-            rec = record_of(x)
+            rec = record_of(x)                           # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on;
+            board_parity.attach(rec, rated=_parity_rated(x, rec, cells))   # EV / band / size only where the slip would rate it
             records.append(rec)
             index[(_book(x), str(x.get("id")))] = x
             props.setdefault((rec["event"]["id"], rec["player"]["key"], x.get("prop"), x.get("scope") or "12"), []).append((_book(x), str(x.get("id"))))
@@ -609,15 +612,20 @@ def _dup_checks(legs, results, st, member):
         r["ok"] = not r["problems"]
 
 
-def _gate(srv):
-    """gate_from_export's answer, or None when the export cannot be read: ev_status names that, never a count of zero."""
+def _gate(srv, tags=None):
+    """gate_from_export's answer, or None when the export cannot be read: ev_status names that, never a count of zero.
+    tags: the model versions to read (default: the current board snapshot's). The board build passes the rows it is building,
+    so the first build after a restart is rated too; the steady-state tag set is the same key, so both share one read."""
+    if tags is None:
+        tags = {x.get("graded_model") for x in (_SNAP["index"] or {}).values()}
+    tags = frozenset(t for t in tags if t)
+
     def compute():
         ex = getattr(srv, "_p1_export_printed", srv._p1_export)() or {}      # ec-1: bands at the printed chance
-        tags = {x.get("graded_model") for x in (_SNAP["index"] or {}).values()}
         at = _ts(ex.get("at")) if ex.get("at") else None
         return 200, rules.gate_from_export(ex, tags, at.timestamp() if at else None)
     try:
-        return srv.shared(("ws_ev_gate",), compute, ttl=900)[1]
+        return srv.shared(("ws_ev_gate", tuple(sorted(tags))), compute, ttl=900)[1]
     except Exception:
         return None
 
@@ -628,6 +636,82 @@ def _slip_header(ev, entry_type, ev_legs):
     try:
         from gradecore import slip as gslip         # imported only with the flag on: a flag-off process never loads it
         return rules.slip_header(ev, entry_type, ev_legs, gslip.evaluate)
+    except Exception:
+        return None
+
+
+SLIP_HEADER_V2_FLAG = "SCOUT_SLIP_HEADER_V2"
+UD_FLEX4_REASON = "Underdog's pages list two 4-pick flex payouts."
+SPECIAL_LINE_REASON = "Special-line payouts are set on the PrizePicks lineup screen."
+UD_MULTIPLIER_REASON = "Underdog does not publish how multipliers combine."
+
+
+def slip_header_v2_on(env):
+    """SCOUT_SLIP_HEADER_V2 (default off): the spec 4.3 header in the slip rail."""
+    return str((env or {}).get(SLIP_HEADER_V2_FLAG) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _v2_leg(platform, r):
+    """One checked leg -> gradecore.slip_header's leg: the chance the board prints for this side (CS2 prints one for Scout's
+    side only), its match, and why the book prices this pick elsewhere (goblin / demon, an Underdog payout multiplier)."""
+    x = r.get("_ev") or {}
+    sport = x.get("sport") or "cs2"
+    p = x.get("p") if (x.get("on_side") or sport != "cs2") else None
+    unpriced = None
+    if str(x.get("line_type") or "standard").lower() not in ("standard", "normal"):
+        unpriced = SPECIAL_LINE_REASON
+    elif platform == "underdog" and x.get("multiplier") is not None and x.get("multiplier") != 1.0:
+        unpriced = UD_MULTIPLIER_REASON
+    return {"p": p, "match_key": None if x.get("match") is None else f"{sport}:{x['match']}", "unpriced": unpriced}
+
+
+V2_KEEP_UNRATED = ("entry", "n", "payout", "tiers", "break_even", "break_even_american")
+V2_DROP = ("kelly_units", "kelly_fraction")       # no Kelly on the member slip until the owner approves it (one stake per line)
+
+
+def _v2_unrated(t, reason):
+    """An entry type the live EV check refuses: its payout and break-even only, the check's own reason, no chance or EV."""
+    return dict({k: t[k] for k in V2_KEEP_UNRATED if k in t}, rated=False, reason=reason)
+
+
+def _v2_build(platform, legs):
+    from gradecore import slip_header as gsh    # imported only with the flag on: a flag-off process never loads it
+    head = gsh.header(legs, platform)
+    if head:
+        for t in head["types"].values():
+            for k in V2_DROP:
+                t.pop(k, None)
+    return head
+
+
+def _slip_header_v2(platform, ls, results, ev_for=None, srv=None):
+    """SCOUT_SLIP_HEADER_V2: payout, chance all hit, average return and per-leg break-even for every entry type of this platform
+    (so the Power / Flex toggle repaints without a request), from server-checked legs only: 2+ legs, every leg passing its
+    checks. An entry type is RATED only where the live EV check (rules.ev_status via ev_for(entry type), the same held-letter,
+    sport, whole-line, multiplier, same-match and settled-results steps) gives an EV; otherwise it shows that check's reason.
+    One build per leg set for CHECK_TTL_S (srv.shared), not one per member. Any failure leaves the header out; the entry, its
+    checks and its EV are unchanged either way."""
+    try:
+        rs = [results[l["id"]] for l in ls]
+        if len(rs) < 2 or not all(r.get("ok") and r.get("_ev") for r in rs):
+            return None
+        legs = [_v2_leg(platform, r) for r in rs]
+        if srv is not None and hasattr(srv, "shared"):
+            key = ("ws_slip_h2", platform, json.dumps(legs, sort_keys=True, default=str))
+            head = srv.shared(key, lambda: (200, _v2_build(platform, legs)), ttl=CHECK_TTL_S)[1]
+        else:
+            head = _v2_build(platform, legs)
+        if not head:
+            return None
+        head = json.loads(json.dumps(head))           # the shared copy is never changed
+        if platform == "underdog" and len(rs) == 4 and "flex" in head["types"]:
+            head["types"]["flex"] = {"entry": "flex", "n": 4, "rated": False, "reason": UD_FLEX4_REASON}
+        if ev_for is not None:
+            for name, t in list(head["types"].items()):
+                ev = ev_for(name) or {}
+                if not ev.get("available"):
+                    head["types"][name] = _v2_unrated(t, ev.get("reason") or "This entry can't be rated.")
+        return head
     except Exception:
         return None
 
@@ -716,6 +800,16 @@ def run_check(srv, member, legs, entry_types, now=None, allowed=None):
                     e["ev"]["header"] = head
         else:
             e["ev"] = {"available": False, "reason": "This entry has not passed its checks."}
+        if slip_header_v2_on(os.environ) and e["rule_ok"] and legs_ok:
+            memo = {e["entry_type"]: e["ev"]}         # ev_legs here already carry the lc-1 hold (_held_leg above)
+
+            def ev_for(name, _p=e["platform"], _l=ev_legs, _m=memo):
+                if name not in _m:
+                    _m[name] = rules.ev_status(_p, name, _l, gate, now.timestamp())
+                return _m[name]
+            head2 = _slip_header_v2(platform, ls, results, ev_for, srv)
+            if head2:
+                e["slip_header"] = head2
         if e["trackable"]:
             link = _open_link(srv, e["platform"], ls, results)
             if link:
@@ -896,6 +990,8 @@ def _line_body(srv, book, rid):
     closing = _closing(srv, x, full) if os.environ.get("SCOUT_CLOSING_LINES") == "1" else None
     if closing:
         hist["closing"] = closing                      # SCOUT_CLOSING_LINES: only when a past game has a saved closing line
+    if os.environ.get("SCOUT_LINE_HISTORY") == "1":     # lh-1 (workspace_linehist.py): every app's moves + closing markers, display only
+        _line_history(srv, x, prop_key, full, hist)
     return 200, {"record": rec, "forecast": forecast, "history": hist,
                  "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
                  "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved)}
@@ -914,6 +1010,24 @@ def _closing(srv, x, full):
         return cl.l10_vs_closing(full["ser"], full["mids"], rows or [], platform_label=LABEL.get(_book(x), _book(x)))
     except Exception:
         return None
+
+
+def _line_history(srv, x, prop_key, full, hist):
+    """SCOUT_LINE_HISTORY: the card's line history (one line per app) and closing markers. Never breaks /line."""
+    try:
+        import workspace_linehist
+        import closing_lines as cl
+        sib = [_SNAP["index"].get(k) for k in _SNAP["props"].get(prop_key, [])]
+        args = (cl.norm(_nick(x)), x.get("prop"), str(x.get("scope") or "12"), _book(x), line_type_of(x))
+        lh = workspace_linehist.block(srv, x, sib, full, args)
+        if lh:
+            hist["line_history"] = lh
+        if "closing" not in hist:                      # L10 vs closing beside L10 vs current, from saved closing lines
+            c = _closing(srv, x, full)
+            if c:
+                hist["closing"] = c
+    except Exception:
+        pass
 
 
 def _map_chances(x, saved=None):
@@ -1002,7 +1116,8 @@ def get_me(h, srv, q, member, scratch, name):
                                      **({"ui_tokens": True} if os.getenv('SCOUT_UI_TOKENS', '').strip() == '1' else {}),
                                      **({"genie": True} if os.environ.get("SCOUT_GENIE") == "1" else {}),
                                      **({"genie_persona": True} if os.environ.get("SCOUT_GENIE") == "1" and os.environ.get("SCOUT_GENIE_PERSONA") == "1" else {}),
-                                     **_extra_books(),
+                                     **_extra_books(), **board_parity.features(),
+                                     **({"pickem_ev": True} if os.getenv("SCOUT_PICKEM_EV", "").strip() == "1" else {}),
                                      **({"board_h2h": _board_columns(srv)} if workspace_h2h.board_enabled() else {})}})
 
 
@@ -1024,6 +1139,29 @@ def _board_columns(srv=None):
     return {"ud_standard_break_even": payouts.break_even("underdog", "standard", 2), "entry": "Underdog standard 2-pick",
             "source": payouts.UD_SOURCE, "read_at": payouts.UD_READ_AT,
             "edge_cells": cells, "min_chance": rules.EV_MIN_CHANCE}
+
+
+def _parity_cells(srv, tags=None):
+    """SCOUT_PARITY_* rows: rules.edge_cells, raw tag|prop|scope keys (leg_edge_ok's). Held CS2 letters or any failure: none,
+    so no row is rated. Read once per board build, from the same cached gate the slip check uses."""
+    if lc.contained("cs2"):
+        return {}
+    try:
+        return rules.edge_cells(_gate(srv, tags), time.time())
+    except Exception:
+        return {}
+
+
+def _parity_rated(x, rec, cells):
+    """True only where the live slip check would rate this single CS2 leg (rules.leg_edge_ok: half-point line, saved chance
+    at 57%+ on Scout's side, a 1.0x pick, a chance band that passed the settled-results check) and its letter is not held."""
+    if not cells or rec["scout"].get("letter_held") or not rec["scout"].get("side"):
+        return False
+    side = rec["scout"]["side"]
+    leg = {"sport": "cs2", "line": x.get("line"), "p": x.get("p"), "on_side": True,
+           "multiplier": x.get("higher") if side == "over" else x.get("lower"), "tag": x.get("graded_model"),
+           "prop": x.get("prop"), "scope": x.get("scope") or "12"}
+    return rules.leg_edge_ok(leg, cells)
 
 
 def _extra_books():
@@ -1115,6 +1253,20 @@ def get_market_tools(h, srv, q, member, scratch, name):
     if st != 200:
         return h.send(503, {"error": "market_tools_unavailable"})
     return h.send(200, workspace_markets.for_member(body, access(h, srv, q), owner=bool(scratch) or bool(h._sports_owner())))
+
+
+def get_pickem_ev(h, srv, q, member, scratch, name):
+    """SCOUT_PICKEM_EV (default off): the pick'em +EV board (workspace_ev), one shared build per parameters and sports seen."""
+    import workspace_ev
+    if not workspace_ev.enabled():
+        return h.send(404, {"error": "not found"})
+    try:
+        st, body = workspace_ev.shared(srv, q, access(h, srv, q))
+    except Exception:                                  # noqa: BLE001 - the board stays usable without it
+        return h.send(503, {"error": "pickem_ev_unavailable"})
+    if st != 200:
+        return h.send(503, {"error": "pickem_ev_unavailable"})
+    return h.send(200, body)
 
 
 def get_alert_delivery(h, srv, q, member, scratch, name):
@@ -1814,12 +1966,48 @@ def post_genie(h, srv, q, member, scratch, name, n):
     return h.send(200, dict(out, quota=quota, key=rec.get("key"), side=side))
 
 
+def _record_for(h, srv, sport, book, rid):
+    """The board's current display record for one line, or None (not on the board now, or not this member's sport)."""
+    if _sport_q(h, srv, {"sport": sport}) is None:
+        return None
+    if sport == "cs2":
+        snap = snapshot(srv)
+        x = snap["index"].get((book, rid)) if snap else None
+        return record_of(x) if x is not None else None
+    mod = _adapter(sport)
+    snap = mod.snapshot(srv) if sport == "lol" else mod.snapshot(srv, sport)
+    ix = snap["index"].get((book, rid)) if snap else None
+    return json.loads(ix["rec"]) if ix and ix.get("rec") else None
+
+
+def post_report_problem(h, srv, q, member, scratch, name, n):
+    """SCOUT_PARITY_REPORT: a member's "Report a problem" on one board line -> data_issues in the workspace store. Rate limited;
+    the line must be on the board now. Nothing on the board changes: the owner reviews the rows."""
+    if not board_parity.on("report"):              # not reached: handle() registers the route only while the flag is on
+        h.rfile.read(n)
+        return h.send(403, {"error": "forbidden"})
+    if n > 4096:
+        h.rfile.read(n)
+        return h.send(413, {"error": "request too large"})
+    f, err = board_parity.clean_report(_read_json(h, srv, n))
+    if err:
+        return h.send(400, {"error": err})
+    if _limited(h, srv, "report", member, board_parity.REPORT_PER_MIN):
+        return None
+    rec = _record_for(h, srv, f["sport"], f["platform"], f["offer_id"])
+    if rec is None:
+        return h.send(404, {"error": "This line is no longer on the board."})
+    out = board_parity.save_report(store(), member, scratch, f, rec, wstore.iso())
+    return h.send(200, {"ok": True, "duplicate": out["duplicate"]})
+
+
 GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
        "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
-       "book-lines": get_book_lines}
+       "book-lines": get_book_lines, "pickem-ev": get_pickem_ev}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
         "book-line":post_book_line, "slip-advice": post_slip_advice}
+FLAGGED_POST = {"report-problem": ("report", post_report_problem)}   # SCOUT_PARITY_REPORT only: off = the unknown-route answer
 
 
 GENIE = {"GET": get_genie, "POST": post_genie}       # SCOUT_GENIE=1 only: off, "genie" is the unknown-route answer
@@ -1831,6 +2019,8 @@ def handle(h, srv, method, path, q, n=0, prefix=None):
     fn = (GET if method == "GET" else POST).get(name)
     if fn is None and name == "genie" and os.environ.get("SCOUT_GENIE") == "1":
         fn = GENIE["GET" if method == "GET" else "POST"]
+    if fn is None and method == "POST" and name in FLAGGED_POST and board_parity.on(FLAGGED_POST[name][0]):
+        fn = FLAGGED_POST[name][1]
     if fn is None:
         if method == "GET":
             return h.send(404, {"error": "not found"})

@@ -11,6 +11,7 @@ staking recommendation. This adapter never upgrades the model's validation statu
 For 700 members: one snapshot per league every BOARD_TTL s, single flight, revalidated by ETag so an unchanged board costs one
 small request per part and no parse. A live pick check is shared per exact leg for CHECK_TTL s behind CHECK_SLOTS. The index keeps
 each record as bytes: at most MAX_RECORDS records per league are held."""
+import board_parity
 import gzip
 import hashlib
 import workspace_h2h
@@ -460,6 +461,7 @@ def _build(srv, lg):
                 rec, x = record_of(lg, d, m, q, view)
                 if not rec["event"]["start_utc"]:
                     continue
+                board_parity.attach(rec)                # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
                 records.append(rec)
                 x["rec"] = json.dumps(rec, default=str, separators=(",", ":")).encode()
                 x["books"] = _book_rows(m.get("mk"), q.get("l"))

@@ -592,18 +592,38 @@
     const vals = Object.values(T.check.entries), ready = vals.filter((e) => e.ok).length;
     return `<b>${ready} of ${vals.length} ${vals.length === 1 ? "entry" : "entries"} ready.</b> Checked ${clock(T.check.checked_at)}.`;
   }
-  function legHtml(l, phase, link, position, legEv) {
+  /* SCOUT_SLIP_HEADER_V2 (server flag, default off): spec 4.3. The server sends every entry type of the platform at once, so the
+     Power / Flex toggle repaints from the last answer for the same legs at once, before the recheck returns. */
+  const signed = (x) => (typeof x !== "number" ? "--" : (x > 0 ? "+" : x < 0 ? "−" : "") + (Math.abs(x) * 100).toFixed(1) + "%");
+  const legsKey = (e) => e.platform + "|" + e.legs.map((l) => [l.id, l.rev, l.read_rev, l.shown_p].join(":")).join(";");
+  function head2Of(e, c) {
+    T.head2 = T.head2 || {};
+    const k = legsKey(e);
+    if (c) { if (c.slip_header) T.head2[k] = c.slip_header; else delete T.head2[k]; }   /* a fresh answer without one clears it */
+    const h = T.head2[k];
+    return h && h.types ? h.types[typeOf(e)] || null : null;
+  }
+  function head2Html(t) {
+    const metric = (value, label, cls) => `<div><b${cls ? ` class="${cls}"` : ""}>${value}</b><span>${label}</span></div>`;
+    const need = t.break_even != null ? `<p class="u-need">Each leg needs <b>≥ ${pct(t.break_even)}</b>${t.break_even_american != null ? ` (${t.break_even_american > 0 ? "+" : ""}${esc(t.break_even_american)})` : ""}</p>` : "";
+    if (!t.rated) return `<div class="u-head2" data-entry="${esc(t.entry)}">${t.payout != null ? `<div class="u-slip-metrics u-slip-head">${metric(esc(t.payout) + "×", "Payout")}</div>` : ""}${need}<p class="u-cant">${esc(t.reason || "Can't rate this entry.")}</p></div>`;
+    const values = metric(esc(t.payout) + "×", "Payout") + metric(pct(t.win), "Chance all hit")
+      + metric(signed(t.ev), "Average return", t.ev > 0 ? "u-pos" : t.ev < 0 ? "u-neg" : "");
+    return `<div class="u-head2" data-entry="${esc(t.entry)}"><div class="u-slip-metrics u-slip-head">${values}</div>${need}<p class="u-dim">From the chances Scout shows on each pick. Average return is per entry, not a win chance.</p></div>`;
+  }
+  function legHtml(l, phase, link, position, legEv, leg2) {
     const c = phase === "fresh" ? T.check.legs[l.id] : null;
-    const evText = legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
+    const evText = leg2 ? "" : legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
+    const below = leg2 && leg2.below, need2 = below ? `<p class="u-below">Below the ${pct(leg2.need)} each leg needs</p>` : "";
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
     const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
     const notes = legNotes(l), adv = T.advice && T.advice.sig === sig() ? T.advice.legs[l.id] : null, rep = adv && adv.replacement;
     const noteHtml = notes.length ? `<div class="u-leg-notes">${notes.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
     const advHtml = adv && (adv.band || rep) ? `<p class="u-leg-advice">${adv.band ? esc(adv.band) + "." : ""}${rep ? ` ${adv.in_pool ? "Ranks higher here" : "Best replacement"}: ${esc(rep.player)} ${cap(rep.side)} ${esc(rep.line)} ${esc(rep.stat_label)}, ${esc(rep.period_label)} · ${pct(rep.p)}<button class="u-btn" type="button" data-u="replace" data-id="${esc(l.id)}">Swap in</button>` : ""}</p>` : "";
-    return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
+    return `<div class="u-leg${c && !c.ok ? " bad" : ""}${below ? " u-leg-below" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
       <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
       <span class="u-leg-meta">${read}${evText}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
-      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${noteHtml}${advHtml}${problems}</div>`;
+      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${need2}${noteHtml}${advHtml}${problems}</div>`;
   }
   /* an entry that only needs more picks is in progress, not refused: its size and two-team rules read as the next step, in
      neutral text; red stays for real conflicts. null = at least one problem is a real conflict (or a leg did not pass). */
@@ -631,9 +651,10 @@
       : (ev?.payout ? metric(esc(ev.payout.multiple)+'×',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
     const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}× entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';
-    const math = prog ? "" : `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
+    const t2 = prog ? null : head2Of(e, c);
+    const math = prog ? "" : t2 ? `${head2Html(t2)}${tiers}` : `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
     return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok && !prog ? " refused" : ""}${prog ? " building" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
-      ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1, head && head.legs ? head.legs[i] : null)).join("")}
+      ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1, head && head.legs ? head.legs[i] : null, t2 && t2.legs ? t2.legs[i] : null)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}
         <div class="u-acts"><button class="u-btn${!open && can ? " u-gold" : ""}" type="button" ${can && !busy ? "" : "disabled"} data-u="track" data-id="${esc(e.key)}">${busy ? "Tracking" : "Track"}</button><button class="u-btn" type="button" ${ready ? "" : "disabled"} data-u="copy" data-id="${esc(e.key)}">${T.copyBusy ? "Checking" : "Copy"}</button></div></div></section>`;
   }
@@ -717,7 +738,7 @@
     const slot0 = (w - 36) / Math.max(1, results.length), angled = flat * 6.2 > slot0 - 4;
     const longest = angled ? Math.max(0, ...results.map((d, i) => Math.min(names[i].length, 14) + (dates[i] ? dates[i].length + 3 : 0))) : flat;
     const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 184, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 38 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
-    const vals = data.map((d) => d.value), top = Math.max(line, ...vals, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
+    const vals = data.map((d) => d.value), closes = data.map((d) => d.closing).filter((c) => typeof c === "number"), top = Math.max(line, ...vals, ...closes, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
     const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
     const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
     let out = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`;
@@ -726,6 +747,7 @@
       const x = m.l + slot * i + (slot - bw) / 2, yv = y(d.value), push = d.value === line, over = d.value > line, cls = push ? "b-push" : (side === "over" ? over : !over) ? "b-hit" : "b-miss";
       out += `<rect class="${cls}" x="${x}" y="${yv}" width="${bw}" height="${Math.max(base - yv, 1)}" rx="3"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${d.value}`)}</title></rect>`;
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
+      if (typeof d.closing === "number") out += `<line class="close-mark" x1="${x - 3}" x2="${x + bw + 3}" y1="${y(d.closing)}" y2="${y(d.closing)}"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: closed at ${d.closing}, finished ${d.value}`)}</title></line>`;   /* lh-1: the line this game closed at */
       const day = dateOf(d);
       if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")) + (day ? " · " + day : ""))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 21}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>${day ? `<text class="date" x="${x + bw / 2}" y="${h - 7}" text-anchor="middle">${esc(day)}</text>` : ""}`;
     });

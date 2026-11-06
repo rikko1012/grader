@@ -347,5 +347,5 @@ def test_hub_scout_cell_and_card_render_a_held_row_as_lean_0u():
     js = (Path(__file__).resolve().parent.parent / "web" / "upgrade-hub.js").read_text(encoding="utf-8")
     chip = js.split("function gradeChip(r) {")[1].split("\n  }")[0]
     assert chip.index("s.letter_held") < chip.index("if(s.grade)") and "Lean ${sideWord(s.side)}" in chip and ">0U<" in chip
-    assert "<div class=\"h-scout-grade\">${gradeChip(r)}</div>" in js and "side===s.side?gradeChip(r)" in js
+    assert "<div class=\"h-scout-grade\">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>" in js and "side===s.side?gradeChip(r)" in js
     assert "letters are held until stated chances match results." in js and "r.scout.letter_held" in js
