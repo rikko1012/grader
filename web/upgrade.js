@@ -31,6 +31,33 @@
     underdog: { label: "Underdog", short: "UD", slip: true, kind: "multiplier", types: [["standard", "Standard"], ["flex", "Flex"]] }
   };
   const STATUS = { hit: "Hit", miss: "Miss", push: "Push", void: "Void", pending: "Pending" };
+  /* NBA / NFL faces (audit 2026-11-05): ESPN headshots and team logos, as the classic sports board shows them. The ESPN id is read
+     from the player id ("nba:player:espn:4432194") or the normalized key the board and receipts carry ("nbaplayerespn4432194").
+     Lazy images over the initials: a missing image hides itself and the initials show. Esports get no face. */
+  const FACE_LG = { nba: 1, nfl: 1 };
+  function espnIdOf(sport, id, key) {
+    if (!FACE_LG[sport]) return null;
+    const m = /:espn:(\d+)$/.exec(String(id || "")) || /^(?:nba|nfl)playerespn(\d+)$/.exec(String(key || ""));
+    return m ? m[1] : null;
+  }
+  const headshotUrl = (sport, id, key) => { const n = espnIdOf(sport, id, key); return n ? `https://a.espncdn.com/i/headshots/${sport}/players/full/${n}.png` : null; };
+  const logoUrl = (sport, abbr) => (FACE_LG[sport] && /^[A-Za-z]{2,4}$/.test(String(abbr || "")) ? `https://a.espncdn.com/i/teamlogos/${sport}/500/${String(abbr).toLowerCase()}.png` : null);
+  const initialsOf = (n) => String(n || "").split(/\s+/).filter(Boolean).map((x) => x[0]).slice(0, 2).join("").toUpperCase();
+  function faceHtml(sport, o) {
+    if (!FACE_LG[sport]) return "";
+    const size = o.size || 32, shot = headshotUrl(sport, o.id, o.key), logo = logoUrl(sport, o.team), team = String(o.team || "").toUpperCase();
+    return `<span class="u-face${o.cls ? " " + o.cls : ""}" style="--face:${size}px"><i aria-hidden="true">${esc(initialsOf(o.name))}</i>`
+      + (shot ? `<img class="u-face-shot" src="${esc(shot)}" alt="${esc(o.name)} headshot" width="${size}" height="${size}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-face>` : "")
+      + (logo ? `<img class="u-face-logo" src="${esc(logo)}" alt="${esc(team)} logo" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-face>` : "") + "</span>";
+  }
+  /* a face image that fails (no headshot, blocked, offline) hides itself; the initials under it stay */
+  document.addEventListener("load", (e) => { const t = e.target; if (t && t.tagName === "IMG" && t.hasAttribute("data-face")) t.classList.add("is-in"); }, true);
+  document.addEventListener("error", (e) => { const t = e.target; if (t && t.tagName === "IMG" && t.hasAttribute("data-face")) { t.hidden = true; t.closest(".u-face")?.classList.add(t.classList.contains("u-face-logo") ? "u-face-nologo" : "u-face-fb"); } }, true);
+  /* a leg's face: its board row when loaded (team abbreviation from the event), else what the leg saved */
+  const legFace = (l, size) => { const r = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id)); return faceHtml(l.sport, { id: r && r.player.id, key: l.player_key || l.nick, name: l.player, team: (r && r.player.team_abbr) || l.team, size }); };
+  /* PrizePicks lines always say which kind they are (audit 2026-11-05, B3): Goblin, Demon or Standard */
+  const lineKind = (book, lt) => (book !== "prizepicks" ? "" : lt === "goblin" ? "Goblin" : lt === "demon" ? "Demon" : "Standard");
+  const lineKindHtml = (book, lt) => { const k = lineKind(book, lt); return k ? ` <em class="u-lt u-lt-${k.toLowerCase()}">${k}</em>` : ""; };
   const CHECKS = ["Game not started", "Offer available and unchanged", "Forecast belongs to this event, line and period", "Platform accepts this combination", "No duplicates or conflicts"];
   const MAX_LEGS = 8, BOARD_KEEP = 45000, HITS_RETRY = 10000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, DRAFT_MAX_MS = 86400000;
 
@@ -562,10 +589,20 @@
     const g=canvas.getContext('2d');
     g.fillStyle='#10151d';g.fillRect(0,0,canvas.width,canvas.height);
     g.fillStyle='#77adff';g.fillRect(0,0,canvas.width,8);
-    const text=(value,y,size,color='#f4f7fc')=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>960)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'…',60,y);};
+    const text=(value,y,size,color='#f4f7fc',x=60)=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>1020-x)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'…',x,y);};
+    /* NBA / NFL legs carry the player's headshot and team logo (audit 2026-11-05); an image that cannot load in time, or that ESPN
+       does not share with this page, leaves the initials circle. Esports legs are drawn as before. */
+    const loadImg=url=>!url?Promise.resolve(null):new Promise(res=>{const im=new Image();let done=false;const end=v=>{if(!done){done=true;res(v);}};im.crossOrigin='anonymous';im.referrerPolicy='no-referrer';im.onload=()=>end(im);im.onerror=()=>end(null);setTimeout(()=>end(null),2500);im.src=url;});
+    const faces=await Promise.all(legs.map(l=>{if(!FACE_LG[l.sport])return null;const r=R.boards[l.sport].recs.get(offerKey(l.book,l.row_id));return Promise.all([loadImg(headshotUrl(l.sport,r&&r.player.id,l.player_key)),loadImg(logoUrl(l.sport,(r&&r.player.team_abbr)||l.team))]);}));
     text('1TIME SCOUT',74,34);text(`${list[0].label} · ${legs.length} picks · ${typeOf(list[0])}`,126,25,'#bbcee8');
     text('RESEARCH LINEUP',166,18,'#94a7bf');
-    legs.forEach((l,i)=>{const y=220+i*140;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27);text(`${cap(l.side)} ${l.line} ${l.stat_label} · ${l.period_label}`,y+53,24,'#c5dbfb');text(l.event_label,y+86,18,'#99acc4');});
+    legs.forEach((l,i)=>{const y=220+i*140,f=faces[i],x=f?170:60;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();
+      if(f){const cx=105,cy=y+40,rad=44;g.save();g.beginPath();g.arc(cx,cy,rad,0,Math.PI*2);g.fillStyle='#1d242e';g.fill();g.clip();
+        if(f[0]){try{g.drawImage(f[0],cx-rad*1.3,cy-rad*1.05,rad*2.6,rad*1.9);}catch(e){f[0]=null;}}
+        g.restore();if(!f[0]){g.font='600 30px sans-serif';g.fillStyle='#dfe7f2';g.textAlign='center';g.fillText(initialsOf(l.player),cx,cy+11);g.textAlign='left';}
+        if(f[1]){try{g.drawImage(f[1],cx+rad-30,cy+rad-30,34,34);}catch(e){}}}
+      const lr=R.boards[l.sport].recs.get(offerKey(l.book,l.row_id)),kind=lineKind(l.book,l.line_type||(lr&&lr.market.line_type));
+      text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27,undefined,x);text(`${cap(l.side)} ${l.line} ${l.stat_label} · ${l.period_label}${kind?' · '+kind:''}`,y+53,24,'#c5dbfb',x);text(l.event_label,y+86,18,'#99acc4',x);});
     text(`Lines checked ${when(check.checked_at)}. Recheck in the app before use.`,canvas.height-65,18,'#aebed1');
     text('No stake, combined win chance or return is implied.',canvas.height-32,17,'#aebed1');
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
@@ -620,8 +657,9 @@
     const notes = legNotes(l), adv = T.advice && T.advice.sig === sig() ? T.advice.legs[l.id] : null, rep = adv && adv.replacement;
     const noteHtml = notes.length ? `<div class="u-leg-notes">${notes.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
     const advHtml = adv && (adv.band || rep) ? `<p class="u-leg-advice">${adv.band ? esc(adv.band) + "." : ""}${rep ? ` ${adv.in_pool ? "Ranks higher here" : "Best replacement"}: ${esc(rep.player)} ${cap(rep.side)} ${esc(rep.line)} ${esc(rep.stat_label)}, ${esc(rep.period_label)} · ${pct(rep.p)}<button class="u-btn" type="button" data-u="replace" data-id="${esc(l.id)}">Swap in</button>` : ""}</p>` : "";
-    return `<div class="u-leg${c && !c.ok ? " bad" : ""}${below ? " u-leg-below" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
-      <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
+    const lr = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id)), lt = l.line_type || (lr && lr.market.line_type);
+    return `<div class="u-leg${c && !c.ok ? " bad" : ""}${below ? " u-leg-below" : ""}${FACE_LG[l.sport] ? " u-leg-face" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${legFace(l, 28)}${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
+      <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineKindHtml(l.book, lt)}</span>
       <span class="u-leg-meta">${read}${evText}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
       <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${need2}${noteHtml}${advHtml}${problems}</div>`;
   }
@@ -674,7 +712,7 @@
     const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
       ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label], ["Tracked", when(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="u-pick-body"><dl class="u-kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><ol class="u-time">${(r.timeline || []).map((t) => `<li><time>${esc(when(t.at))}</time>${esc(t.text)}</li>`).join("")}</ol></div>` : "";
-    return `<article class="u-pick"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}"><span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)} · ${esc(r.matchup)}</small></span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
+    return `<article class="u-pick${FACE_LG[r.sport] ? " u-pick-face" : ""}"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}">${faceHtml(r.sport, { key: r.nick, name: r.player, team: r.team, size: 32 })}<span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)}${r.platform === "prizepicks" ? " · " + lineKind(r.platform, r.line_type) : ""} · ${esc(r.matchup)}</small></span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
   }
   function picksTab() {
     const d = T.mine;
@@ -729,7 +767,9 @@
     return { over: list.filter((g) => g.value > line).length, under: list.filter((g) => g.value < line).length, push: list.filter((g) => g.value === line).length, n: list.length };
   }
   function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
-  function chartSvg(results, line, side, w) {
+  function chartSvg(results, line, side, w, opts) {
+    line = Number(line);
+    const median = opts && typeof opts.median === "number" && Number.isFinite(opts.median) ? opts.median : null;
     /* opponent names in full where they fit, each game's date under its name (audit 2026-11-04); otherwise angled as one
        "name · date" label, so a name is never cut to "benche" */
     const dateOf = (d) => (d.date ? shortDate(String(d.date)) : "");
@@ -751,7 +791,12 @@
       const day = dateOf(d);
       if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")) + (day ? " · " + day : ""))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 21}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>${day ? `<text class="date" x="${x + bw / 2}" y="${h - 7}" text-anchor="middle">${esc(day)}</text>` : ""}`;
     });
-    return out + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${y(line)}" y2="${y(line)}"/><text class="line-lab" x="${w - m.r}" y="${m.t - 10}" text-anchor="end">Line ${esc(line)}</text></svg>`;
+    /* audit 2026-11-05 (B6): the dashed line IS the offered line, labelled on the line itself; the median of the games shown is its
+       own dotted line with its own label, so the two never read as one */
+    const ly = y(line), my = median != null ? y(median) : null, near = my != null && Math.abs(my - ly) < 13;
+    const lyLab = Math.max(m.t - 4, ly - 4), myLab = my == null ? null : near && my >= ly ? Math.min(base - 3, my + 12) : Math.max(m.t - 4, my - 4);
+    const med = my == null ? "" : `<line class="median-mark" x1="${m.l}" x2="${w - m.r}" y1="${my}" y2="${my}"/><text class="median-lab" x="${m.l + 4}" y="${myLab}">Median ${esc(Math.round(median * 10) / 10)}</text>`;
+    return out + med + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${ly}" y2="${ly}"/><text class="line-lab" x="${w - m.r}" y="${lyLab}" text-anchor="end">Line ${esc(line)}</text></svg>`;
   }
   function tilesHtml(rec, side) {
     const s = rec.scout, ln = P.doc, m = ln && ln.market && ln.market.available ? (side === "under" ? ln.market.p_under : ln.market.p_over) : null;
@@ -1349,7 +1394,7 @@
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
+        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip, faceHtml, lineKind, lineKindHtml });
     } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();

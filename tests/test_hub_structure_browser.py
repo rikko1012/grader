@@ -48,7 +48,9 @@ def test_desktop_first_row_high_on_the_screen_with_ten_rows_and_one_toolbar(ctx,
     assert p.locator('#hub-games, .h-games, .h-tools-menu, .h-classic, .h-nav-mobile, .h-mobile-slip').count() == 0
     assert p.locator('#u-hub [data-hub=close]').locator('visible=true').count() == 1
     assert p.locator('.h-sidebar nav [data-hub=section]').all_inner_texts() == ['Board', 'Slips', 'My picks', 'Record', 'Tools']
-    # matchup and countdown live on the game header rows, and a header click filters to that game
+    # matchup and countdown live on the game header rows of the start-time sort (the Edge default lists by edge, audit 2026-11-05),
+    # and a header click filters to that game
+    p.locator('#hub-sort').select_option('start')
     head = p.locator('#hub-rows tr.h-game-row [data-hub=game]').first
     event = head.locator('.h-match').inner_text()
     assert head.locator('.h-countdown').inner_text().startswith('in ')
@@ -76,9 +78,10 @@ def test_one_scout_cell_and_one_hit_strip_with_counts_in_tooltips(ctx, env):
         assert text == '—' or re.search(r'\d+ (Over|Under)', title), title     # the counts live in the tooltip
     scout = row.locator('.h-c-scout').inner_text()
     assert re.search(r'(Over|Under)\s+\d+\.\d%', scout) and (row.locator('.h-grade').count() == 1 or 'Lean' in scout or 'Research' in scout)
-    # Edge only when a visible row has a value (the fixture's NBA board has none)
+    # audit 2026-11-05 (B5): the same columns on every sport tab; the fixture's NBA board has no edge value, so its cells read —
+    cs2_heads = p.locator('#hub-table thead th').all_text_contents()
     p.locator('#hub-sports [data-id=nba]').click()
-    assert p.locator('#hub-table thead .h-c-edge').count() == 0
+    assert p.locator('#hub-table thead .h-c-edge').count() == 1 and p.locator('#hub-table thead th').all_text_contents() == cs2_heads
     # the Sports grades note shows on the NBA and NFL tabs only
     assert p.locator('#hub-health details').count() == 1
     p.locator('#hub-sports [data-id=cs2]').click()
@@ -285,7 +288,8 @@ def test_only_the_visible_sport_is_read_and_reads_revalidate(ctx, env):
     p.wait_for_timeout(800)
     urls = [r.url.split('/api/upgrade/')[1] for r in reads]
     assert urls and all(u == 'board' for u in urls), urls                       # no LoL, NBA or NFL read for a CS2 board
-    assert p.locator('#hub-sports [data-id=lol] span').count() == 0              # an unread board shows no guessed count
+    assert p.locator('#hub-sports [data-id=lol] span:not(.h-n-wait)').count() == 0   # an unread board shows no guessed count (only its room)
+    assert p.locator('#hub-sports [data-id=lol] .h-n-wait').evaluate("e => getComputedStyle(e).visibility === 'hidden' && e.getAttribute('aria-hidden') === 'true' && e.textContent === ''")
     p.locator('#hub-sports [data-id=lol]').click()
     p.wait_for_selector('#hub-rows tr[data-record^="lol|"]', timeout=20000)
     urls = [r.url.split('/api/upgrade/')[1] for r in reads]
@@ -330,6 +334,7 @@ def test_a_source_behind_gets_one_plain_banner_with_refresh(ctx, env):
 @pytest.mark.parametrize('size', [DESK, PHONE])
 def test_every_page_keeps_40px_targets_and_the_chart_dates(ctx, env, size):
     p = board(ctx, env, size)
+    p.locator('#hub-sort').select_option('start')                # the CS2 card first, as before the Edge default (audit 2026-11-05)
     bad = p.evaluate(SMALL, '#u-hub')
     assert bad == [], bad
     p.locator('#hub-filters-toggle').click()
