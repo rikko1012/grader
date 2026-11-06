@@ -792,6 +792,137 @@ export function mount(C) {
       ${r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
       ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
+  /* ---- "Why Scout leans Over / Under" (owner 2026-11-06: members could not see why to take a prop). 3-6 plain facts at the top
+     of the card, each with its number and its sample, then "What could go wrong" (definite facts only). Every figure is read from
+     what the card already loaded (the board record and its research doc): nothing is fetched, modelled or graded here.
+     Each fact says honestly whether it feeds the grade: filled dot = used in the grade (Scout's own projection / chance, the
+     model's own listed factors, map chances only when the saved forecast used them); hollow dot = context only, weight 0. ---- */
+  const f1 = v => String(Math.round(v*10)/10);
+  const ctxRows = doc => (doc?.context?.rows||[]).filter(f=>f&&f.label&&f.value!=null&&f.value!=='');
+  const ctxVal = (doc,label) => ctxRows(doc).find(f=>f.label===label)?.value;
+  /* NBA / NFL averages rows ("Minutes, L3", "Targets, Season 2026") -> {L3, L5, L10, Season} of the first measure that has them */
+  function usageOf(doc,sport,stat) {
+    const rows=ctxRows(doc).filter(f=>f.group==='Averages'&&num(Number(f.value)));
+    const want=sport==='nba'?(/three|3pt|fg3/i.test(stat)?['3-point attempts','Minutes']:['Minutes','Field-goal attempts']):/rec|tgt|target/i.test(stat)?['Snaps','Snap share','Targets']:/rush|carr/i.test(stat)?['Snaps','Snap share','Carries']:/pass|cmp|comp|att/i.test(stat)?['Snaps','Pass attempts']:['Snaps','Snap share','Targets','Carries'];
+    for(const name of want){
+      const got={};rows.forEach(f=>{const m=/^(.*), (L3|L5|L10|Season.*)$/.exec(f.label);if(m&&m[1]===name)got[m[2].startsWith('Season')?'Season':m[2]]=Number(f.value);});
+      if(num(got.L3)&&num(got.L10))return {name,...got};
+    }
+    return null;
+  }
+  function whyFacts(r) {
+    const doc=H.detailDoc, s=r.scout, line=Number(r.offer.line), lean=s.side||null, side=lean||H.histSide, Side=sideWord(side);
+    const why=[], risk=[], add=(list,html,used,dir=0)=>list.push({html,used:!!used,dir});
+    const toward=v=>side==='over'?v>line:v<line, away=v=>side==='over'?v<line:v>line;
+    const stat=esc(r.market.stat_label);
+    /* 1. Scout's own number: the projection against the line and the chance on this side (this IS the grade) */
+    const chance=C.chanceOf(r,side);
+    if(num(s.projection)&&Number.isFinite(line)){
+      const gap=s.projection-line;
+      add(why,`Scout projects <b>${f1(s.projection)}</b> ${stat}, <b>${f1(Math.abs(gap))}</b> ${gap>=0?'above':'below'} the ${esc(r.offer.line)} line${chance!=null?` · <b>${pct(chance)}</b> chance ${Side}${s.line_chance?' at this line':''}`:''}`,true,toward(s.projection)?1:away(s.projection)?-1:0);
+    } else if(chance!=null) add(why,`Scout gives <b>${pct(chance)}</b> chance ${Side} ${esc(r.offer.line)}`,true,1);
+    /* 2. results at THIS line: L10 first, L5 / L20 / season beside it */
+    const all=(doc?.history?.series||[]).filter(g=>num(g.value));
+    const w={5:windowTally(r,all,5),10:windowTally(r,all,10),20:windowTally(r,all,20)}, se=C.tallies(r).season;
+    const main=w[10]?.n?w[10]:w[5]?.n?w[5]:w[20]?.n?w[20]:null;
+    if(main){
+      const k=countOf(main,side), rest=[[5,w[5]],[20,w[20]]].filter(([n,t])=>t?.n&&t!==main).map(([n,t])=>`L${n} ${countOf(t,side)}/${t.n}`);
+      if(se?.n)rest.push(`season ${countOf(se,side)}/${se.n}`);
+      add(k*2<main.n?risk:why,`Went ${Side} in <b>${k}</b> of the last <b>${main.n}</b> at ${esc(r.offer.line)}${rest.length?` <small>(${rest.join(' · ')})</small>`:''}`,false,k*2>main.n?1:k*2<main.n?-1:0);
+      const l5=w[5];
+      if(l5?.n>=5&&main!==l5&&k*2>=main.n&&countOf(l5,side)*2<l5.n)add(risk,`Recent form turned: ${Side} in only <b>${countOf(l5,side)}</b> of the last <b>5</b>`,false,-1);
+      if(main.n<5)add(risk,`Small sample: only <b>${main.n}</b> past ${main.n===1?'result':'results'} on file for this market`,false,-1);
+    }
+    /* 3. average and median of the last 10 (or fewer) results against the line */
+    const ten=all.slice(0,10);
+    if(ten.length>=3&&Number.isFinite(line)){
+      const avg=ten.reduce((a,g)=>a+g.value,0)/ten.length, srt=ten.map(g=>g.value).sort((a,b)=>a-b), m=Math.floor(srt.length/2), med=srt.length%2?srt[m]:(srt[m-1]+srt[m])/2;
+      const text=`Averaged <b>${f1(avg)}</b>, median <b>${f1(med)}</b> over the last ${ten.length} · line ${esc(r.offer.line)}`;
+      if(toward(avg)&&toward(med))add(why,text,false,1);
+      else if(away(avg)&&away(med))add(risk,text,false,-1);
+      else add(risk,`${text}: the average and the median sit on opposite sides of the line`,false,-1);
+    } else if(num(r.history?.avg)&&Number.isFinite(line)){
+      const a=r.history.avg, dir=toward(a)?1:away(a)?-1:0;
+      add(dir<0?risk:why,`Averaged <b>${esc(a)}</b> over the last 10 · line ${esc(r.offer.line)}`,false,dir);
+    }
+    /* 4. this opponent */
+    const hh=doc?.h2h;
+    if(hh?.opponent&&hh.n){
+      const k=countOf(hh,side), dir=hh.n>=2?(k*2>hh.n?1:k*2<hh.n?-1:0):0;
+      add(dir<0?risk:why,`Vs ${esc(hh.opponent)}: ${Side} in <b>${k}</b> of <b>${hh.n}</b> past ${hh.n===1?'meeting':'meetings'}${num(hh.avg)?`, average <b>${f1(hh.avg)}</b>`:''}`,false,dir);
+    }
+    /* 5. the matchup, per sport, from the doc's own blocks */
+    if(r.sport==='cs2'){
+      const mc=doc?.map_chances, used=!!mc?.grade_use?.used;
+      if(mc&&(mc.maps||[]).length){
+        const top=mc.maps.filter(x=>num(Number(x.pct))).slice(0,3), per=new Map();
+        all.forEach(g=>(g.maps||[]).forEach((name,i)=>{if(!name||!g.values||!num(g.values[i]))return;const e=per.get(name)||{n:0,t:0};e.n++;e.t+=g.values[i];per.set(name,e);}));
+        const his=top.filter(x=>per.get(x.name)?.n).map(x=>{const e=per.get(x.name);return `${esc(x.name)} <b>${f1(e.t/e.n)}</b> <small>(${e.n} ${e.n===1?'map':'maps'})</small>`;});
+        add(why,`Likely maps: ${top.map(x=>`${esc(x.name)} <b>${esc(x.pct)}%</b>`).join(' · ')}${his.length?`. His ${stat} per map there: ${his.join(' · ')}`:''}`,used,0);
+      }
+      const bo=r.event.best_of, days=ctxRows(doc).find(f=>f.key==='days_since_last_map')?.value;
+      if(num(Number(bo))&&Number(bo)>0)add(why,`Best of <b>${esc(bo)}</b> · ${esc(r.market.period_label)} count for this line`,false,0);
+      if(num(Number(days))&&Number(days)>=15)add(risk,`Last official map <b>${esc(days)} days</b> ago`,false,-1);
+    } else if(r.sport==='lol'){
+      const series=ctxVal(doc,'Series length'), counted=ctxVal(doc,'Maps counted');
+      if(series)add(why,`${esc(series)}${counted?` · ${esc(counted)}`:''}`,false,0);
+      const drivers=(doc?.context?.drivers||[]).filter(Boolean).slice(0,3);
+      if(drivers.length)add(why,`Scout's model factors: ${drivers.map(d=>esc(factText(d))).join(' · ')}`,true,0);
+      const ts=ctxVal(doc,'Team win chance, Scout'), tm=ctxVal(doc,'Team win chance, market');
+      if(tm&&parseFloat(tm)<50&&ts&&parseFloat(ts)>=50)add(risk,`The betting market makes ${esc(r.player.team||'his team')} the underdog: <b>${esc(tm)}</b> to win (Scout ${esc(ts)})`,false,-1);
+      else if(ts||tm)add(why,`${esc(r.player.team||'His team')}'s win chance: ${ts?`Scout <b>${esc(ts)}</b>`:''}${ts&&tm?' · ':''}${tm?`market <b>${esc(tm)}</b>`:''}`,false,0);
+    } else {
+      const u=usageOf(doc,r.sport,r.market.stat);
+      if(u){
+        const text=`${esc(u.name)}: <b>${f1(u.L3)}</b> last 3 · <b>${f1(u.L10)}</b> last 10${num(u.Season)?` · <b>${f1(u.Season)}</b> season`:''}`, drop=u.L3<u.L10*0.9, rise=u.L3>u.L10*1.1;
+        if((drop&&side==='over')||(rise&&side==='under'))add(risk,`${esc(u.name)} ${drop?'down':'up'}: ${text.slice(text.indexOf(':')+2)}`,false,-1);
+        else add(why,text,false,drop||rise?1:0);
+      }
+      /* teammates out: only definite statuses on the saved injury report (never day-to-day or questionable) */
+      const rows=ctxRows(doc), i=rows.findIndex(f=>f.label==='Teammates on the injury report');
+      const outs=i<0?[]:rows.slice(i+1).filter(f=>f.group==='Matchup'&&/^(out|injured_reserve)$/i.test(String(f.value))).map(f=>f.label);
+      if(outs.length)add(why,`Teammates out: ${outs.slice(0,4).map(esc).join(', ')}${outs.length>4?` and ${outs.length-4} more`:''}`,false,0);
+      if(ctxVal(doc,'Back-to-back')==='Yes')add(risk,'Second game of a back-to-back',false,-1);
+      const venue=ctxVal(doc,'Venue');
+      if(venue&&r.player.opponent)add(why,`${venue==='home'?'Home':'Away'} game vs ${esc(r.player.opponent)}`,false,0);
+      const inputs=rows.filter(f=>f.group==='Model inputs').slice(0,3);
+      if(inputs.length)add(why,`Scout's model inputs: ${inputs.map(f=>`${esc(f.label)} <b>${esc(factText(f.value))}</b>`).join(' · ')}`,true,0);
+    }
+    /* 6. the line itself: moves since it opened, then where other books and the market sit */
+    const from=r.offer.moved_from;
+    const opened=(doc?.history?.line_history?.apps||[]).find(a=>a.platform===r.offer.platform)?.points?.find(p=>p.kind==='open'&&num(p.line))?.line;
+    const was=from!=null?Number(from):num(opened)&&opened!==line?opened:null;
+    if(was!=null&&Number.isFinite(line)&&was!==line){
+      const against=side==='over'?line>was:line<was;
+      add(against?risk:why,`Line moved ${line>was?'up':'down'} from <b>${esc(was)}</b> to <b>${esc(r.offer.line)}</b> on ${esc(r.offer.platform_label)}${against?` (harder for the ${Side})`:` (easier for the ${Side})`}`,false,against?-1:1);
+    }
+    const others=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform||x.offer.line!==r.offer.line).slice(0,4);
+    if(others.length)add(why,`Other lines: ${others.map(x=>`${esc(x.offer.platform_label)}${kindOf(x)?' '+esc(kindOf(x)):''} <b>${esc(x.offer.line)}</b>`).join(' · ')}`,false,0);
+    const mk=doc?.market;
+    if(mk?.available&&num(mk.p_over)&&num(mk.p_under)){
+      const p=side==='over'?mk.p_over:mk.p_under;
+      const even=Math.abs(p-.5)<.02;   /* within 2 points of even: the prices take no side */
+      add(!even&&p<.5?risk:why,`${even?'Market prices are close to even':p<.5?'Market prices lean the other way':'Market prices agree'}: <b>${pct(p)}</b> ${Side} <small>(${esc(mk.source||'market')})</small>`,false,even?0:p<.5?-1:1);
+    } else {
+      const b=(doc?.market_books?.same||[]).find(x=>num(x.chance));
+      if(b)add(why,`${esc(b.platform_label)} at ${esc(b.line)}: <b>${pct(side==='over'?b.chance:1-b.chance)}</b> ${Side} <small>(margin removed)</small>`,false,0);
+    }
+    return {lean,side,why,risk};
+  }
+  function whyHtml(r) {
+    const {lean,side,why,risk}=whyFacts(r);
+    if(!why.length&&!risk.length)return '';
+    /* the forecast first, then facts that support the side, then context; at most six */
+    const top=[why[0],...why.slice(1).filter(f=>f.dir>0),...why.slice(1).filter(f=>f.dir<=0)].filter(Boolean).slice(0,6);
+    const dot=f=>f.used?'<i class="h-why-dot is-used" title="Used in the grade"></i><span class="u-sr">Used in the grade: </span>':'<i class="h-why-dot" title="Context only, not used in the grade"></i><span class="u-sr">Context only, not used in the grade: </span>';
+    const li=f=>`<li class="${f.dir>0?'is-for':f.dir<0?'is-against':''}">${dot(f)}<span>${f.html}</span></li>`;
+    const title=lean?`Why Scout leans ${sideWord(lean)} ${esc(r.offer.line)}`:`The numbers for ${sideWord(side)} ${esc(r.offer.line)}`;
+    return `<section class="h-why" aria-labelledby="hub-why-title"><div class="h-sec-head"><h4 id="hub-why-title">${title}</h4>${lean?'':'<small>Scout has no side at this line</small>'}</div>
+      <ul class="h-why-list">${top.map(li).join('')}</ul>
+      ${risk.length?`<h5 class="h-why-risk-head">What could go wrong</h5><ul class="h-why-list h-why-risk">${risk.slice(0,4).map(li).join('')}</ul>`:''}
+      ${H.detailState==='loading'?'<p class="h-history-note">Loading the rest of this player’s research…</p>':''}
+      <p class="h-why-key"><span><i class="h-why-dot is-used"></i>Used in the grade</span><span><i class="h-why-dot"></i>Context only, not in the grade</span></p></section>`;
+  }
   function overviewHtml(r) {
     const side=H.histSide, line=r.offer.line, doc=H.detailDoc;
     const all=(doc?.history?.series||[]).filter(g=>num(g.value)), series=all.slice(0,H.histN);
@@ -813,7 +944,7 @@ export function mount(C) {
       :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span>${median!=null?`<span><i class="median"></i>Median ${esc(Math.round(median*10)/10)}</span>`:''}</div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table></div></details>`
       :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
     const lh=doc?.history?.line_history, avgClose=num(lh?.avg_closing_l10)?tile(esc(lh.avg_closing_l10),'Avg closing line',`<small>last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'} · ${esc(lh.closing_platform)}</small>`,' is-closing'):'';
-    return `${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
+    return `${whyHtml(r)}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
       <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
