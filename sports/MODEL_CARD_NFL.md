@@ -177,6 +177,10 @@ nflverse weekly player stats + snap counts + play-by-play 2022-2026 (2026 throug
   diagnostic and shadow state in `sports/MODEL_CARD_SMNFL2.md`. pass_yds / rec_yds / rec in shadow, rush markets
   dropped on tune; held-out H2 is forward only (0 / 48 games); NFL stays contained.
 
+- **Follow-up (2026-11-05):** challenger sn-1 (REGISTER A11: sm-1 + nfl.snap_trend, rec / rec_yds) in shadow, paired
+  with sm-1 cc56aeb8b88c31d8 on identical fit rows. The evidence for it so far is a spent-window second look
+  (sports/research/two_way_position.md); only the forward held-out window counts. NFL stays contained.
+
 
 ## Walk-forward fine-tuning tw-1 (REGISTER A7, 2026-10-25) - nothing switched, NFL stays contained
 
