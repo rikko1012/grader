@@ -161,7 +161,7 @@ def reset():
         _ST["sports"] = False
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
-    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={})
+    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={}, sigs={})
     _SLIP_POOL.clear()
     _BOOK_LINES_GOOD.clear()
     _LINE_TYPE_CACHE.clear()
@@ -1458,26 +1458,31 @@ def _hits_doc(srv, snap):
     if not d["lock"].acquire(blocking=False):
         return d["body"] or b'{"rows":{},"complete":false}'
     try:
+        # owner 2026-11-06 (phone screenshot, most CS2 rows L10 only): a moved line used to wipe every filled row and restart the
+        # pass, so on a busy board it rarely finished. Rows still on the board at the same line are KEPT; only new or moved rows
+        # are read, missing ones first, and the pass walks that short list.
         if d.get('key') != key:
-            d.update(key=key, cursor=0, rows={})
+            live = {f"{book}|{rid}": (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push')) for (book, rid), x in items}
+            sigs = d.get('sigs') or {}
+            kept = {k: v for k, v in (d.get('rows') or {}).items() if k in live and sigs.get(k) == live[k]}
+            d.update(key=key, cursor=0, rows=kept, sigs={k: sigs[k] for k in kept})
         t0, rows, complete = time.time(), dict(d.get('rows', {})), True
-        start = d.get('cursor', 0)
-        for i in range(start, len(items)):
-            (book, rid), x = items[i]
+        todo = [it for it in items if f"{it[0][0]}|{it[0][1]}" not in rows]
+        start = 0
+        for i in range(start, len(todo)):
+            (book, rid), x = todo[i]
             if i > start and time.time() - t0 > HITS_BUDGET_S:
                 complete = False
-                d['cursor'] = i
                 break
             # owner 2026-11-04: L5 is never empty when L10 is shown, and L20 counts the games he has (e.g. 14/17), so the newest
             # HLTV results count even when they do not reproduce the saved L10 exactly
             ser = (_history(srv, x, full=True) or {}).get("ser")
             if ser:
+                d.setdefault('sigs', {})[f"{book}|{rid}"] = (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push'))
                 rows[f"{book}|{rid}"] = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
                 if cols:
                     rows[f"{book}|{rid}"].update(h2h=workspace_h2h.board_h2h(ser, x.get("opp_name") or x.get("opponent"), x.get("line")),
                                                  season=workspace_h2h.board_season(ser, x.get("line")))
-        if complete:
-            d['cursor'] = 0
         d['rows'] = rows
         body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
         if d["body"] == body:
