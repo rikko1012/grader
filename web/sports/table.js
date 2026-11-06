@@ -118,6 +118,12 @@
              fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION,
              held: held ? held.t : null, heldCode: held ? held.b : null};
     if (q.p === "underdog" && typeof q.ud === "string" && UD_LINK_RE.test(q.ud)) r.ud = q.ud;
+    // owner 2026-11-06 (cap-2): a line that lists one side is labelled by it and never graded (the server sends no
+    // forecast for it; nothing here reads one either)
+    if (q.v === "one_sided") {
+      r.oneSided = q.o && q.o[0] ? "Over only" : "Under only";
+      r.scout = sc = null; r.lean = lean = null; held = null; r.held = null; r.heldCode = null;
+    }
     // SPORTS_MARKET_FALLBACK (snapshot mk.fb, display only): the books' own readings at this exact line when none passed
     // the frozen 15-minute rule. Shown in the Market cell as a stale fallback; never a lean, edge, gap or sort input.
     var fb = m.mk && m.mk.fb;
@@ -147,7 +153,7 @@
       if (r.notValidated) { r.edge = null; r.sortKey = null; r.gapPts = null; r.gap = false; r.mLean = null; }
     }
     r.leanOffered = lean ? !!(q.o && q.o[lean === "over" ? 0 : 1]) : null;
-    r.conf = held || r.notValidated ? null : X ? serverConf(X, r, now) : confidence(r, now);
+    r.conf = held || r.notValidated || r.oneSided ? null : X ? serverConf(X, r, now) : confidence(r, now);
     return r;
   }
   // the one lean rule for a Scout chance + market chance pair (surfaces without a board row: slips, sheets)
@@ -285,6 +291,7 @@
       '><button type="button" class="sw-tb-sort" data-tsort="' + key + '">' + esc(label) + (on ? ' <span aria-hidden="true">' + (dir > 0 ? "▲" : "▼") + "</span>" : "") + "</button></th>";
   }
   function leanBadge(r) {
+    if (r.oneSided) return '<span class="sw-tb-lean none" data-onesided>' + esc(r.oneSided) + "</span>";
     if (!r.scout) return '<span class="sw-tb-lean none">No Scout chance</span>';
     if (r.held) return '<span class="sw-tb-lean none sw-tb-held" data-held="' + esc(r.heldCode) + '">' + esc(r.held) + "</span>";
     if (!r.lean) return '<span class="sw-tb-lean none"' + (r.noLean ? ' data-nolean="' + r.noLean.side + '" title="Scout favours ' + (r.noLean.side === "over" ? "Over" : "Under") + " but the market prices it higher (" + edgeText(r.noLean.edge) + ' pts)"' : "") + ">No lean</span>";

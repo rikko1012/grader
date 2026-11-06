@@ -162,9 +162,13 @@ interplay A1-A4): `python -m pytest sports/tests -q` -> 485 passed, 10 skipped.
   the player page with their period. The forecast record (results_public rp-2 and the results ledger) skips them.
 - An Underdog line that LISTS one side (higher-only at a changed payout) is stored `one_sided` by adapters.ud_offers
   (contracts VARIANTS). Member pages label it by its sides ("Over only"), never Standard, and it is never the sheet's
-  'current line'. Follow-up 2026-11-06: its grading scope is UNCHANGED from before the audit (a full-game one-sided
-  line is graded, forecast and pickable as when it was stored `balanced`; the unlisted side stays refused by the
-  slip pool's "chosen side not offered"). Narrowing that is an owner decision. Stored rows are never re-read by
+  'current line'. Owner decision 2026-11-06 (capabilities cap-2): a one-sided line is NOT graded. It stays on the
+  board row with its line and price, labelled "Over only" / "Under only" (board table Lean cell, card, player page,
+  sheets, workspace hold label), and capabilities.gate refuses it, so it gets no forecast, Scout chance, grade,
+  letter, stake, slip leg, tracked pick or EV; a forecast saved for one before cap-2 is never attached
+  (snapshots.build, same_line_forecasts, sheets line reads) and is left out of the public record (rp-2) and the
+  results ledger (snapshots.one_sided_forecast, by the stored offer variant). gradecheck never counts one as "as
+  shown". The plain market chance at the line stays, as on other ungraded rows. Stored rows are never re-read by
   their offered sides, so a suspended side never changes a line's type, grading or record.
 - di-1 (median hold) was removed 2026-11-06: it hid real full-game lines (Tank Dell rec_yds 15.5 = FanDuel 15.5,
   most deep goblins) while they stayed forecast and in the slip pool; the 1Q / 1H lines it targeted are already

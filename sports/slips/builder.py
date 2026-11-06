@@ -19,9 +19,9 @@ Objective (lexicographic, exact branch-and-bound over the WHOLE batch, not slip-
 then most legs (the larger requested sizes first), then fewest reused props / players, then the largest sum of leg
 weights over every slip. bs-2 (N8, owner re-audit 2026-10-24): a leg's weight is log(p_win x its Underdog payout
 multiplier) on Underdog - so the search maximises the all-hit expected payout at the published payout - and
-log(p_win) on PrizePicks (lineup payouts are in-app only). The batch is then RANKED: Underdog slips by
-joint.published_return (expected return at the published payout - research estimate), PrizePicks slips by the
-all-hit chance (independence-labelled), with batch["ranking"] saying which. The search is exact
+log(p_win) on PrizePicks (no per-pick multiplier). The batch is then RANKED by joint.published_return (expected
+return at the published payout - research estimate; PrizePicks at its verified help-center table since 2026-11-06),
+with batch["ranking"] saying which. The search is exact
 unless NODE_LIMIT is reached (then the best batch found, improved by single-leg replacement, and "exact": False).
 Inside every slip, always: distinct players, no two legs sharing a box-score part (points + PRA of one player
 collide), <= max_per_event legs per game, the platform's published entry rules (rules.entry_check), no identical slip
@@ -405,20 +405,17 @@ RANKING = {
     "underdog": {"by": "expected_return", "label": joint.RETURN_LABEL,
                  "note": "Ranked by expected return at Underdog's published payout, using each pick's chance and "
                          "payout multiplier; picks assumed independent. A multiple of the entry, not a profit."},
-    "prizepicks": {"by": "joint_chance", "label": "All picks hit (estimate)",
-                   "note": joint.PP_NOT_PUBLISHED + ". Ranked by the chance all picks hit (picks assumed "
-                           "independent)."},
+    "prizepicks": {"by": "expected_return", "label": joint.RETURN_LABEL,
+                   "note": "Ranked by expected return at PrizePicks' published payout, using each pick's chance; picks "
+                           "assumed independent. A multiple of the entry, not a profit."},
 }
 
 
 def rank_slips(platform, slips):
-    """Best first: Underdog by expected return at the published payout, PrizePicks by all-hit chance; a slip whose
-    value is unknown goes last; ties by slip id (deterministic)."""
+    """Best first by expected return at the platform's published payout (Underdog table; PrizePicks' verified table,
+    owner 2026-11-06); a slip whose value is unknown goes last; ties by slip id (deterministic)."""
     def key(s):
-        if platform == "underdog":
-            v = (s.get("expected_return") or {}).get("value")
-        else:
-            v = (s.get("joint") or {}).get("p_all_win")
+        v = (s.get("expected_return") or {}).get("value")
         return (v is None, -(v or 0.0), s["slip_id"])
     out = sorted(slips, key=key)
     for i, s in enumerate(out):

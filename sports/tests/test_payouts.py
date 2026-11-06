@@ -7,7 +7,8 @@ from sports import edges, payouts
 def test_underdog_published_tables():
     assert payouts.UD_STANDARD == {2: 3.5, 3: 6.5, 4: 12.0, 5: 20.0, 6: 35.0, 7: 65.0, 8: 120.0}
     assert payouts.UD_FLEX[3] == {0: 3.25, 1: 1.09} and payouts.UD_FLEX[8] == {0: 80.0, 1: 3.0, 2: 1.0}
-    assert payouts.PP_TABLE is None and "unverified" in payouts.PP_STATUS
+    # owner 2026-11-06: the verified PrizePicks table (gradecore/pickem_payouts.json) - test_pp_payouts_sports.py
+    assert payouts.PP_POWER == {2: 3.0, 3: 6.0, 4: 10.0, 5: 20.0, 6: 37.5} and "verified" in payouts.PP_STATUS
 
 
 def test_the_data_branch_5345_is_the_standard_two_pick_only():

@@ -94,7 +94,8 @@ keys map to parts in `markets.MARKETS`.
 - `identity`: `us_date()` (US Eastern, DST-exact), `Teams.resolve()` (exact aliases), `EventIndex.resolve(day, away,
   home)`, `Rosters.resolve(name, team_ids)`; `adapters.Resolver` wraps them.
 - `payouts`: Underdog standard / flex tables and break-evens, `ud_entry_payout` (modifier product = labelled
-  assumption), `straight_ev`, `kalshi_taker_fee` (unverified coefficient). PrizePicks: `PP_TABLE is None`.
+  assumption), `straight_ev`, `kalshi_taker_fee` (unverified coefficient). PrizePicks: `PP_TABLE` = the verified table in
+  `gradecore/pickem_payouts.json` (read as data), `pp_tiers`, `pp_in_app` (Flex 2-pick not offered).
 - `settlement.settle_offer(offer, obs_by_stat, event, settled_at)` and `settlement.record(con, settlements)` (revision
   chaining). Platform rules in `settlement.SETTLE_RULES`.
 

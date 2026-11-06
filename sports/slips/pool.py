@@ -241,7 +241,7 @@ def build(con, league, platform, now=None, policy="member", market_at=None, cal_
 
 def leg_weight(platform, p_win, multiplier):
     """bs-2 (N8): log(p_win x payout multiplier) on Underdog (sum over a slip = log of the all-hit expected payout at
-    the published base payout), log(p_win) on PrizePicks (no published lineup payout) or a missing multiplier."""
+    the published base payout), log(p_win) on PrizePicks (no per-pick multiplier) or a missing multiplier."""
     m = float(multiplier) if platform == "underdog" and multiplier is not None and float(multiplier) > 0 else 1.0
     return math.log(p_win * m)
 

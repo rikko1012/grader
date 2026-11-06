@@ -591,6 +591,9 @@
     return '<p class="sw-grade-banner" data-grade-banner>' + esc(L.GRADE_TAG) + " · " + esc(L.GRADE_BANDS) + " · stakes 0</p>";
   }
   function scoutBlock(m, q, f, B) {                     // Scout's own projection (sm-1) or mi-1, labelled
+    if (q.v === "one_sided")                            // owner 2026-11-06 (cap-2): labelled by its side, never graded
+      return '<div class="sw-num-block sw-scout" data-onesided><div class="sw-num-label">' + (q.o && q.o[0] ? "Over only" : "Under only") +
+        '</div><p class="sw-small">Scout grades lines that offer both sides.</p></div>';
     var stat = (B.stats[m.st] || m.st).toLowerCase(), kind = f ? S.kindOf(f.m) : null;
     if (f && kind !== "market") {
       return '<div class="sw-num-block sw-scout"><div class="sw-num-label">' + esc(S.kindLabel(f.m)) + "</div>" +
@@ -658,7 +661,7 @@
         scoutBlock(m, q, f, B) + marketBlock(m, q, f, B) +
         (!S.fresh(q.t, Date.now()) ? '<div class="sw-small sw-stale" role="note">Line not re-confirmed by ' + esc(bookName(q.p)) + " for " + esc(S.age(q.t).replace(/ ago$/, "")) + "</div>" : "") +
         '<div class="sw-offer-meta">' + esc(offeredText(q.o)) + priceText(q) + ' · Observed ' + esc(S.age(q.t)) +
-        (q.v !== 'standard' && q.v !== 'balanced' ? ' · ' + esc(q.v) : '') +
+        (q.v !== 'standard' && q.v !== 'balanced' && q.v !== 'one_sided' ? ' · ' + esc(q.v) : '') +
         (q.m ? ' · Multipliers O ' + S.mult(q.m[0]) + ' / U ' + S.mult(q.m[1]) : '') + '</div>' +
         renderActions(m, q, f, B) + techDetails(["Offer record " + esc(q.r)], quoteSource(q)) + '</div>';
     }
@@ -1049,7 +1052,8 @@
         } catch (e) { /* the module never breaks the player page */ }
       }
 
-      function capVariant(v) { return v && ["standard", "balanced", "main", "ladder_rung"].indexOf(v) < 0; }
+      // one_sided: its side is already the "Over only" / "Under only" text beside the line (never the raw type name)
+      function capVariant(v) { return v && ["standard", "balanced", "main", "ladder_rung", "one_sided"].indexOf(v) < 0; }
 
       function forecastPanel(fc, det, q, mk) {
         var h = '<section class="sw-panel" aria-labelledby="sw-fc-h"><h2 id="sw-fc-h">' + esc(fc ? modelWords(fc.model_version) : "Scout projection") + (q ? " · Line " + S.line(q.line) + " · " + esc(bookName(q.platform)) : "") + "</h2>";

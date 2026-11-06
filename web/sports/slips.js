@@ -230,13 +230,13 @@
       return "<li><span>" + esc(r.outcome) + "</span><span class=ss-num>" + (r.multiple != null ? esc(r.multiple) + "x" : esc(r.text || "")) + (r.multiple != null && r.text ? " - " + esc(r.text) : "") + "</span></li>";
     }).join("") + "</ul>";
   }
-  // N8: expected return at the published payout (Underdog), or why there is none (PrizePicks: in-app payouts only)
+  // N8: expected return at the published payout (Underdog table; PrizePicks' verified help-center table), or why there is none
   function mult2(x) { return (Math.round(x * 100) / 100).toFixed(2) + "x"; }
   function returnText(er, platform) {
-    if (platform === "prizepicks") return '<p class="ss-er">Payout not published<small>PrizePicks shows lineup payouts in the app only.</small></p>';
     if (!er) return "";
-    if (er.value != null && er.shown) return '<p class="ss-er">Expected return at the published payout - research estimate: <strong class="ss-num">' + mult2(er.value) + "</strong> the entry<small>From each pick's chance and Underdog's published payout table; picks assumed independent. Not a profit figure.</small></p>";
-    return '<p class="ss-er">Expected return at the published payout: not shown<small>' + esc(er.why || "Underdog adjusts this payout for the picks' multipliers; the app shows the exact figure") + "</small></p>";
+    var book = platform === "prizepicks" ? "PrizePicks" : "Underdog", owns = platform === "prizepicks" ? "PrizePicks'" : "Underdog's";
+    if (er.value != null && er.shown) return '<p class="ss-er">Expected return at the published payout - research estimate: <strong class="ss-num">' + mult2(er.value) + "</strong> the entry<small>From each pick's chance and " + owns + " published payout table; picks assumed independent. Not a profit figure.</small></p>";
+    return '<p class="ss-er">Expected return at the published payout: not shown<small>' + esc(er.why || (book + " adjusts this payout for the picks; the app shows the exact figure")) + "</small></p>";
   }
   function rankingNote(b) {
     var r = b.ranking;

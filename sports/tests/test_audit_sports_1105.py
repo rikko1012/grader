@@ -40,9 +40,10 @@ def test_underdog_quarter_and_one_sided_lines_keep_their_real_market():
     for r in (reaves_q1, harden_q1):
         ok, why = capabilities.gate(r)
         assert not ok and any("scope q1" in w for w in why)          # quarter lines: never graded (scope)
-    # follow-up 2026-11-06: a FULL-GAME one-sided line keeps its pre-audit grading scope (owner decision pending):
-    # stored one_sided (labelled "Over only" by its sides), still gradable, so the board, slips and record agree
-    assert capabilities.is_ordinary(blocks[0])
+    # owner decision 2026-11-06 (cap-2): a FULL-GAME one-sided line stays on the board row (ordinary placement,
+    # labelled "Over only") but is never graded - the gate refuses it by its stored type
+    assert capabilities.is_ordinary(blocks[0]) and capabilities.is_one_sided(blocks[0])
+    assert capabilities.ONE_SIDED_REASON in capabilities.gate(blocks[0])[1]
     assert not any("variant" in w for w in capabilities.gate(blocks[0])[1])   # (unresolved ids here: no resolver)
 
 

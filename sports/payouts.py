@@ -7,8 +7,12 @@ UNDERDOG - published base payouts, read 2026-10-23 20:3x UTC from
   pick must be correct to receive the max payout boost"; flex 3-8 picks; 6+ pick flex allows 2 losses).
   How several modifiers combine is NOT stated: payout = base x product(modifiers) is an ASSUMPTION
   (MODIFIER_RULE), labelled as such everywhere it is used.
-PRIZEPICKS - payout tables are in-app only (platform_rules.py): PP_TABLE is None and every PrizePicks payout /
-  break-even is UNVERIFIED. Nothing here invents one.
+PRIZEPICKS - the help-center table (https://www.prizepicks.com/help-center/payouts, page dated 2026-10-19) is VERIFIED by
+  owner sign-off 2026-11-05 and recorded in gradecore/pickem_payouts.json. Sports reads THAT file as data (PP_FILE, the
+  same file the main site's gradecore.payouts reads; no gradecore code is imported): PP_TABLE = its PrizePicks entry when
+  it is marked verified, else None (unknown stays unknown). Power 2-6, Flex 3-6 in the app (Flex 2-pick is listed on the
+  help center but marked "not_in_app"). Standard lines only: goblin / demon / promo lines pay differently and stay
+  unavailable.
 
 Break-even per pick (equal chance p on every pick, all modifiers 1.0):
   standard n-pick:  p^n * B_n = 1           ->  p* = B_n ** (-1/n)
@@ -21,7 +25,10 @@ These are payout mathematics for internal evaluation - never a member-facing EV 
 """
 from __future__ import annotations
 
+import json
+from functools import lru_cache
 from math import comb
+from pathlib import Path
 
 UD_SOURCE = "https://help.underdogsports.com/en/articles/13780101-pick-em-standard-flex-entry-payouts"
 UD_READ_AT = "2026-10-23T20:35:00Z"
@@ -36,8 +43,49 @@ UD_FLEX = {                                         # losses -> payout multiple 
     8: {0: 80.0, 1: 3.0, 2: 1.0},
 }
 MODIFIER_RULE = "assumed: entry payout = base x product of pick modifiers (Underdog does not publish the combination)"
-PP_TABLE = None
-PP_STATUS = "unverified: PrizePicks payout tables are in-app only"
+PP_FILE = Path(__file__).resolve().parent.parent / "gradecore" / "pickem_payouts.json"
+PP_STANDARD_VARIANTS = (None, "", "standard")      # goblin / demon / promo lines: no published payout
+
+
+@lru_cache(maxsize=1)
+def _pp_file():
+    """The PrizePicks entry of gradecore/pickem_payouts.json when it is marked verified, else None (a missing / broken
+    file or an unverified table: no PrizePicks payout, never a guess)."""
+    try:
+        b = json.loads(PP_FILE.read_text(encoding="utf-8")).get("prizepicks") or {}
+    except (OSError, ValueError):
+        return None
+    if b.get("verified") is not True:
+        return None
+    ent = b.get("entries") or {}
+    power = {int(k): float(v) for k, v in (ent.get("power") or {}).items()}
+    flex = {int(n): {int(k): float(v) for k, v in row.items()} for n, row in (ent.get("flex") or {}).items()}
+    not_in_app = {e: tuple(int(x) for x in v) for e, v in (b.get("not_in_app") or {}).items()}
+    return {"power": power, "flex": flex, "not_in_app": not_in_app, "source": b.get("source"),
+            "page_date": b.get("page_date"), "version": b.get("version"), "verified_at": b.get("verified_at")}
+
+
+PP_TABLE = _pp_file()
+PP_VERSION = (PP_TABLE or {}).get("version")
+PP_STATUS = (f"verified: PrizePicks help-center payouts {PP_VERSION} (owner sign-off {PP_TABLE.get('verified_at')})"
+             if PP_TABLE else "unverified: no verified PrizePicks payout table")
+PP_POWER = (PP_TABLE or {}).get("power") or {}              # picks -> all-correct multiple
+PP_FLEX = (PP_TABLE or {}).get("flex") or {}                # picks -> {losses: multiple} (entry fee included)
+
+
+def pp_in_app(entry_type, n):
+    """False for an entry the help center lists but the PrizePicks app does not offer (Flex 2-pick)."""
+    return int(n) not in ((PP_TABLE or {}).get("not_in_app") or {}).get(entry_type, ())
+
+
+def pp_tiers(entry_type, n):
+    """PrizePicks payout of an n-pick entry by number of CORRECT picks -> {correct: multiple}, or None when the
+    verified table has no such entry. Power = {n: M}; flex rows are stored by losses."""
+    if entry_type == "power":
+        m = PP_POWER.get(n)
+        return None if m is None else {n: m}
+    row = PP_FLEX.get(n) if entry_type == "flex" else None
+    return None if row is None else {n - k: m for k, m in row.items()}
 
 
 def ud_standard_break_even(n: int) -> float:

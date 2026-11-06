@@ -698,6 +698,8 @@ def plain_gate_reason(why):
     """capabilities.gate reasons -> one plain member sentence (audit 2026-11-05: no internal wording such as
     'variant one_sided' on member pages). The full reason list stays in the offer view for the owner."""
     w = " ".join(why or ()).lower()
+    if "one-sided" in w:                                # owner 2026-11-06: Over only / Under only lines are not graded
+        return "Scout doesn't grade or track this pick: the line offers one side only."
     if "scope" in w:
         part = "it is a quarter or half line, and Scout only tracks full-game lines"
     elif "promotional" in w:

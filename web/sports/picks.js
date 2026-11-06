@@ -105,6 +105,12 @@
   function legText(l) { return l.player + " " + (l.side === "over" ? "Over " : "Under ") + line(l.line) + " " + statOf(l) + " on " + bookName(l.platform); }
 
   // opts: {compact: bool (board card), title: "Player stat line book" for labels}
+  // owner 2026-11-06 (cap-2): an Underdog line that lists one side is labelled by that side and is never graded,
+  // added to a slip or tracked (the server refuses it too: capabilities.gate)
+  function oneSidedHtml(over) {
+    return '<div class="sw-act sw-act-none" data-onesided><p class="sw-small sw-faint">' + (over ? "Over only" : "Under only") +
+      " – Scout grades lines that offer both sides.</p></div>";
+  }
   function actions(legs, why, opts) {
     opts = opts || {};
     var ch = sideChoices(legs, why);
@@ -296,6 +302,7 @@
       var P = c.player, ne = P.next_event, sides = {};
       if (q.platform === "kalshi") return "";
       (q.sides || []).forEach(function (x) { sides[x.side] = x; });
+      if (q.variant === "one_sided") return oneSidedHtml(!!(sides.over && sides.over.offered));   // owner 2026-11-06 (cap-2)
       ["over", "under"].forEach(function (x) {
         if (!(sides[x] && sides[x].offered)) { why[x] = (x === "over" ? "Over" : "Under") + " is not offered on " + bookName(q.platform); return; }
         legs[x] = makeLeg({platform: q.platform, record_id: q.record_id, forecast_id: f ? f.forecast_id : q.forecast_id,
@@ -307,6 +314,7 @@
       return actions(legs, why);
     }
     if (q.p === "kalshi" || !q.o) return "";           // board / match card
+    if (q.v === "one_sided") return oneSidedHtml(q.o[0] === 1);   // owner 2026-11-06 (cap-2): shown, never graded or tracked
     if (!q.g) return actions({}, {over: "Scout cannot settle this line", under: "Scout cannot settle this line"}, {compact: true});
     var B = c.board || {stats: {}};
     [["over", 0], ["under", 1]].forEach(function (x) {
