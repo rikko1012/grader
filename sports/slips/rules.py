@@ -19,12 +19,13 @@ Sources (read 2026-10-23 ~22:07 UTC by plain HTTPS GET of the public help pages,
   P-OUT   https://www.prizepicks.com/help-center/potential-outcomes    last updated October 19, 2026
   P-RB    https://www.prizepicks.com/reboots                           (NFL / NBA reboot policy)
 
-PrizePicks payouts: P-OUT publishes "standard payout rates" for the Minimum Guarantee (power 2-6, flex 2-6) but says
-"Some lineups may earn a different payout than the standard rates listed above" (discounted projections, several
-players from one team or game) and that a lineup receives the HIGHER of its leaderboard and Minimum Guarantee payouts.
-So no lineup's own payout is published: PP_STANDARD_MG is kept for internal arithmetic and admin output only and
-member pages show no PrizePicks payout figure (owner rule: hide unconfirmed information). The foundation's
-payouts.PP_TABLE stays None ("in-app only") - this module records what the public page does say.
+PrizePicks payouts (owner 2026-11-06: "update the Sports Slip Studio so it uses the verified PrizePicks payout table"):
+the help-center table https://www.prizepicks.com/help-center/payouts (page dated 2026-10-19) is VERIFIED by owner
+sign-off 2026-11-05 in gradecore/pickem_payouts.json, the same file the main site reads; payouts.PP_TABLE reads it.
+Power 2-6 and Flex 3-6 are offered (Flex 2-pick is on the help center but not in the app, so it is never offered here).
+Standard lines only: a goblin / demon / promo pick pays differently and its lineup shows no payout figure.
+DNPs and ties drop the lineup one tier each along P-DNP's chain (6 -> 5 -> 4 -> 3 Flex, 3-pick Flex -> 2-pick Power,
+n-pick Power -> (n-1)-pick Power, 2-pick -> refund for a DNP; a tie never makes a lineup ineligible).
 
 Underdog payouts: the base tables (payouts.UD_STANDARD / UD_FLEX, version ud-payouts-2026-10-23) assume every pick
 at 1.0x; a pick with another payout multiplier changes the entry payout by an UNPUBLISHED combination rule
@@ -110,9 +111,11 @@ RULES = {
                               "quote": "Correlated projections can also modify your projected payout in your entry."},
     },
     "prizepicks": {
-        "entry_size": {"verified": True, "src": "P-PICKS", "power": (2, 6), "flex": (2, 6),
+        "entry_size": {"verified": True, "src": "P-PICKS", "power": (2, 6), "flex": (3, 6),
                        "quote": "Pick between 2 and 6 projections.",
-                       "note": "Colorado residents: minimum 3 (the member's state is unknown here - not checked)"},
+                       "note": "Flex 2-pick is listed on the payout page but not offered in the app (in-app view "
+                               "2026-11-05, gradecore/pickem_payouts.json not_in_app), so Flex takes 3-6 here. "
+                               "Colorado residents: minimum 3 (the member's state is unknown here - not checked)"},
         "two_teams": {"verified": True, "src": "P-PICKS",
                       "quote": "You must have picks from AT LEAST 2 different teams in order for it to be a valid "
                                "lineup."},
@@ -137,26 +140,30 @@ RULES = {
                              "quote": "If DNPs or Reboots make it so that all remaining players in a lineup are on "
                                       "the same team, this will make the lineup ineligible."},
         "refund_two_pick": {"verified": True, "src": "P-DNP", "quote": "2-Pick Power → Refund, not eligible for payout"},
+        "flex_reverts": {"verified": True, "src": "P-DNP", "quote": "3-Pick Flex → 2-Pick Power",
+                         "note": "6 -> 5 -> 4 -> 3-pick Flex, then 3-pick Flex -> 2-pick Power (read 2026-11-06)"},
         "reboot": {"verified": True, "src": "P-RB", "detectable": False,
                    "quote": "Reboots are only applied to MORE selections",
                    "note": "NBA / NFL: player leaves in the 1st half and does not return in the 2nd half; not "
                            "detectable from ESPN box scores - flagged on affected settlements"},
-        "standard_rates": {"verified": True, "src": "P-OUT", "member_display": False,
-                           "quote": "Some lineups may earn a different payout than the standard rates listed above.",
-                           "note": "a lineup gets the higher of its leaderboard and Minimum Guarantee payouts; the "
-                                   "lineup's own payout is shown only in the app"},
+        "payouts": {"verified": True, "src": "P-PAY",
+                    "quote": "Mark the PrizePicks help-center payout table as verified so PrizePicks gets EV and "
+                             "break-even.",
+                    "note": "owner sign-off 2026-11-05 (quoted) on the help-center payout table "
+                            "(gradecore/pickem_payouts.json); standard lines only - goblin / demon / promo lines pay "
+                            "differently and show no figure"},
     },
 }
+SOURCES["P-PAY"] = ("https://www.prizepicks.com/help-center/payouts", "October 19, 2026")
 
-# PrizePicks "Minimum Guarantee" standard payout rates (P-OUT, October 19, 2026) - INTERNAL / ADMIN ONLY.
-PP_STANDARD_POWER = {2: 3.0, 3: 6.0, 4: 10.0, 5: 20.0, 6: 37.5}
-PP_STANDARD_FLEX = {                                    # picks -> {correct: multiple}
-    6: {6: 25.0, 5: 2.0, 4: 0.4},
-    5: {5: 10.0, 4: 2.0, 3: 0.4},
-    4: {4: 6.0, 3: 1.5},
-    3: {3: 3.0, 2: 1.0},
-    2: {2: 2.0, 1: 0.5},
-}
+# PrizePicks payouts, from the verified table (payouts.PP_TABLE = gradecore/pickem_payouts.json): picks -> multiple /
+# picks -> {correct: multiple}. Flex 2 stays in the table (the help center lists it) but is never offered here.
+PP_STANDARD_POWER = dict(payouts.PP_POWER)
+PP_STANDARD_FLEX = {n: payouts.pp_tiers("flex", n) for n in sorted(payouts.PP_FLEX)}
+# P-DNP's tier drops: (entry, picks) -> (entry, picks) one DNP / tie lower; None = refund (DNP) / no payout (tie)
+PP_REVERT = {("flex", 6): ("flex", 5), ("flex", 5): ("flex", 4), ("flex", 4): ("flex", 3), ("flex", 3): ("power", 2),
+             ("flex", 2): None, ("power", 6): ("power", 5), ("power", 5): ("power", 4), ("power", 4): ("power", 3),
+             ("power", 3): ("power", 2), ("power", 2): None}
 # Underdog flex "revert down" targets as printed on U-FLEX: from n picks -> (entry, picks, printed multiple)
 UD_FLEX_REVERT = {8: ("flex", 7, 40.0), 7: ("flex", 6, 25.0), 6: ("flex", 5, 10.0), 5: ("flex", 4, 6.0),
                   4: ("flex", 3, 3.0), 3: ("standard", 2, 3.5)}
@@ -224,6 +231,11 @@ def entry_check(legs, platform, entry_type=None):
     return {"eligible": eligible, "refusals": refusals, "unverified": notes, "rules_version": RULES_VERSION}
 
 
+def pp_standard(legs):
+    """Every pick is a standard PrizePicks line (not goblin / demon / promo): the only lineups the table covers."""
+    return all(l.get("variant") in payouts.PP_STANDARD_VARIANTS and not l.get("promotional") for l in legs)
+
+
 def _ud_base(entry_type, n):
     if entry_type == "standard":
         return payouts.UD_STANDARD.get(n)
@@ -270,13 +282,29 @@ def schedule(platform, entry_type, legs):
         out["member"].append({"outcome": "Left with 1 pick or one team", "multiple": None, "text": "refunded"})
         return out
     if platform == "prizepicks":
-        tab = PP_STANDARD_POWER.get(n) if entry_type == "power" else PP_STANDARD_FLEX.get(n)
-        out["internal"] = {"standard_rate": tab, "source": "P-OUT", "member_display": False}
-        out["why_no_figures"] = "PrizePicks shows this lineup's payout in the app"
-        out["member"].append({"outcome": "Payout", "multiple": None, "text": out["why_no_figures"]})
+        tiers = payouts.pp_tiers(entry_type, n) if payouts.pp_in_app(entry_type, n) else None
+        out["internal"] = {"tiers": tiers, "source": "P-PAY", "table_version": payouts.PP_VERSION}
+        if tiers is None:
+            out["why_no_figures"] = f"PrizePicks has no {n}-pick {entry_type} entry"
+            return out
+        if not pp_standard(legs):
+            out["why_no_figures"] = "PrizePicks pays goblin, demon and promo picks differently; the app shows the figure"
+            out["member"].append({"outcome": "Payout", "multiple": None, "text": out["why_no_figures"]})
+            return out
+        out["figures_shown"] = True
+        out["basis"] = f"PrizePicks published payouts ({payouts.PP_VERSION}), standard lines"
+        if entry_type == "power":
+            out["member"].append({"outcome": f"All {n} correct", "multiple": tiers[n]})
+            out["member"].append({"outcome": "Any pick wrong", "multiple": 0.0})
+        else:
+            for k, m in sorted(tiers.items(), reverse=True):
+                out["member"].append({"outcome": f"{k} of {n} correct", "multiple": m})
+            out["member"].append({"outcome": "More wrong", "multiple": 0.0})
+        tgt = PP_REVERT.get((entry_type, n))
         out["member"].append({"outcome": "A pick is DNP or ties", "multiple": None,
-                              "text": (f"the lineup drops to {n - 1} picks" if n > 2 else
-                                       "a DNP refunds the lineup; a tie leaves one pick")})
+                              "text": (f"pays as a {tgt[1]}-pick {tgt[0].title()}" if tgt else
+                                       "a DNP refunds the lineup")})
+        out["member"].append({"outcome": "DNPs leave 1 pick or one team", "multiple": None, "text": "refunded"})
         return out
     out["why_no_figures"] = "not a pick'em platform"
     return out

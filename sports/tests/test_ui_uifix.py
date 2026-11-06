@@ -443,15 +443,17 @@ def test_slip_studio_ranks_by_expected_return_and_labels_it(browser):
     ctx.close()
 
 
-def test_slip_studio_prizepicks_says_payout_not_published(browser):
+def test_slip_studio_prizepicks_shows_the_verified_payout(browser):
+    """Owner 2026-11-06: PrizePicks slips use the verified help-center table (no 'payout not published')."""
     legs = [dict(_leg(i), platform="prizepicks") for i in (1, 2)]
     b = _batch(legs)
     b["slips"][0].update(platform="prizepicks", entry_type="power", rank=1,
-                         expected_return={"value": None, "shown": False, "basis": None,
-                                          "why": "PrizePicks shows lineup payouts in the app only - payout not published"})
-    b["ranking"] = {"by": "joint_chance", "label": "All picks hit (estimate)",
-                    "note": "PrizePicks shows lineup payouts in the app only - payout not published. Ranked by the "
-                            "chance all picks hit (picks assumed independent)."}
+                         expected_return={"value": 0.99, "shown": True, "basis": "PrizePicks published payouts", "why": None},
+                         payout={"member": [{"outcome": "All 2 correct", "multiple": 3.0},
+                                            {"outcome": "Any pick wrong", "multiple": 0.0}], "figures_shown": True})
+    b["ranking"] = {"by": "expected_return", "label": "Expected return at the published payout - research estimate",
+                    "note": "Ranked by expected return at PrizePicks' published payout, using each pick's chance; picks "
+                            "assumed independent. A multiple of the entry, not a profit."}
     api_ = {"/api/sports/slips/pool": dict(POOL_RESEARCH, platform="prizepicks", legs=legs), "/api/sports/slips/build": b,
             "/api/sports/manifest": {"models": [], "platforms": {}}}
     ctx, page, errors = _page(browser, api_)
@@ -461,8 +463,10 @@ def test_slip_studio_prizepicks_says_payout_not_published(browser):
     page.click("#ss-build")
     page.wait_for_selector(".ss-card")
     res = page.locator("#ss-results").inner_text()
-    assert "payout not published" in res and "Ranked by the chance all picks hit" in res and "Payout not published" in res
-    assert "Expected return at the published payout -" not in res
+    assert "not published" not in res.lower() and "in the app only" not in res
+    assert "Ranked by expected return at PrizePicks' published payout" in res
+    assert "Expected return at the published payout - research estimate: 0.99x" in res and "PrizePicks' published payout table" in res
+    assert "All 2 correct" in res and "3x" in res
     assert not errors, errors
     ctx.close()
 
@@ -487,5 +491,44 @@ def test_board_search_placeholder_follows_the_league(browser):
     assert "KC or Chiefs" in ph and "Celtics" not in ph and "BOS" not in ph
     page.click("#sw-league button[data-lg=nba]")
     page.wait_for_function("document.getElementById('sw-q') && /BOS or Celtics/.test(document.getElementById('sw-q').placeholder)")
+    assert not errors, errors
+    ctx.close()
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+def test_slip_studio_prizepicks_flex_real_batch_at_phone_and_desktop(browser, width, tmp_path):
+    """Owner 2026-11-06: a REAL builder batch (verified PrizePicks table, Flex 3-pick) rendered on the Slips page at
+    390 and 1440: every tier from the table, the DNP rule, expected return shown, no 'not published', no sideways scroll."""
+    import math as _m
+    from sports import api_slips
+    from sports.slips import builder as _b
+    legs = [dict(_leg(i, side="over" if i % 2 else "under"), platform="prizepicks",
+                 leg_id=f"prizepicks|pp:{i}|{'over' if i % 2 else 'under'}", offer_id=f"pp:{i}",
+                 side_word="More" if i % 2 else "Less", multiplier=None, variant="standard", promotional=False, weight=_m.log(0.58), prop_keys=(f"p{i}|pts",),
+                 last_seen_at="2030-01-01T00:00:00Z", source_time_unknown=False, research_grade=None)
+            for i in (1, 2, 3, 4)]
+    pool = dict(POOL_RESEARCH, platform="prizepicks", legs=legs, eligible=4, research_legs=0)
+    b = _b.build({"platform": "prizepicks", "league": "nba", "policy": "member", "snapshot_id": "ps-1",
+                  "snapshot_at": "2030-01-01T00:00:00Z", "legs": legs, "excluded": {}},
+                 {"sides": "mixed", "sizes": {3: 2}, "entry_type": "flex"})
+    b = json.loads(json.dumps(dict(b, slips=[api_slips.public_slip(s) for s in b["slips"]]), default=list))
+    api_ = {"/api/sports/slips/pool": pool, "/api/sports/slips/build": b,
+            "/api/sports/manifest": {"models": [], "platforms": {}}}
+    ctx, page, errors = _page(browser, api_, width=width)
+    _open_slips(page)
+    page.select_option("#ss-platform", "prizepicks")
+    page.select_option("#ss-entry", "flex")
+    page.wait_for_selector("#ss-pool p, #ss-pool .ss-locked", timeout=15000)
+    page.click("#ss-build")
+    page.wait_for_selector(".ss-card")
+    res = page.locator("#ss-results").inner_text()
+    assert "not published" not in res.lower() and "in the app only" not in res
+    assert "Ranked by expected return at PrizePicks' published payout" in res
+    first = page.locator(".ss-card").first.inner_text()
+    assert "3 of 3 correct" in first and "3x" in first and "2 of 3 correct" in first and "1x" in first
+    assert "pays as a 2-pick Power" in first and "Expected return at the published payout - research estimate:" in first
+    sw = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
+    assert sw[0] <= sw[1], sw
+    page.screenshot(path=str(tmp_path / f"pp_flex_slips_{width}.png"), full_page=True)
     assert not errors, errors
     ctx.close()

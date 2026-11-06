@@ -20,15 +20,16 @@ published_return(platform, entry_type, legs)  (N8, owner re-audit 2026-10-24 - t
   entry as base x product(multipliers of the active picks) (payouts.MODIFIER_RULE). Member wording: "Expected return
   at the published payout - research estimate" (a multiple of the entry, never ROI / profit). shown = every
   multiplier is exactly 1.0 (the base table IS the published payout); with other multipliers the combination is
-  not published, so the figure only ranks and is not shown. PrizePicks lineup payouts are in-app only: no value,
-  "payout not published", and Slip Studio ranks those slips by the all-hit chance instead.
+  not published, so the figure only ranks and is not shown. PrizePicks (owner 2026-11-06): the verified help-center
+  table (payouts.PP_TABLE, gradecore/pickem_payouts.json), standard lines only, through the same settlement rules;
+  a goblin / demon / promo pick -> no value.
 """
 from __future__ import annotations
 
 from itertools import product
 
 from .. import payouts
-from . import settle
+from . import rules, settle
 
 INDEPENDENCE = "estimate: multiplies each pick's chance, assuming the games are independent (not measured)"
 VOID_NOTE = "the chance a player does not play is not in the forecasts"
@@ -82,14 +83,36 @@ def expectation(platform, entry_type, legs, payout=None):
 
 
 RETURN_LABEL = "Expected return at the published payout - research estimate"
-PP_NOT_PUBLISHED = "PrizePicks shows lineup payouts in the app only - payout not published"
+PP_NOT_STANDARD = "PrizePicks pays goblin, demon and promo picks differently; the app shows the exact figure"
+
+
+def _pp_return(entry_type, legs):
+    """PrizePicks: the same 3^n outcome sum through settle.entry_result, at the verified help-center table."""
+    if not rules.pp_standard(legs):
+        return {"value": None, "shown": False, "basis": None, "why": PP_NOT_STANDARD}
+    if payouts.pp_tiers(entry_type, len(legs)) is None or not payouts.pp_in_app(entry_type, len(legs)):
+        return {"value": None, "shown": False, "basis": None,
+                "why": f"PrizePicks has no {len(legs)}-pick {entry_type} entry"}
+    j = joint(legs)
+    if not j["available"]:
+        return {"value": None, "shown": False, "basis": None, "why": j["reason"]}
+    e = 0.0
+    for p, res in outcome_distribution(legs):
+        r = settle.entry_result("prizepicks", entry_type, legs, res)
+        if r["payout_multiple"] is None:
+            return {"value": None, "shown": False, "basis": None,
+                    "why": "a reachable outcome has no published payout (" + (r.get("reason") or "unknown") + ")"}
+        e += p * r["payout_multiple"]
+    return {"value": e, "shown": True, "basis": f"PrizePicks published payouts {payouts.PP_VERSION}; " + INDEPENDENCE,
+            "why": None}
 
 
 def published_return(platform, entry_type, legs):
     """-> {"value": E[payout multiple] | None, "shown": bool, "basis", "why"}; see the module docstring."""
+    if platform == "prizepicks":
+        return _pp_return(entry_type, legs)
     if platform != "underdog":
-        return {"value": None, "shown": False, "basis": None,
-                "why": PP_NOT_PUBLISHED if platform == "prizepicks" else "not a pick'em platform"}
+        return {"value": None, "shown": False, "basis": None, "why": "not a pick'em platform"}
     j = joint(legs)
     if not j["available"]:
         return {"value": None, "shown": False, "basis": None, "why": j["reason"]}

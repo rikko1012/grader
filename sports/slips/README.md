@@ -1,4 +1,4 @@
-# Slip Studio (sports/slips) - builder bs-2 (ranked by expected return at the published payout on Underdog, all-hit chance on PrizePicks), policy sp-2, rules slip-rules-2026-10-23, settlement ss-1
+# Slip Studio (sports/slips) - builder bs-2 (ranked by expected return at the published payout: Underdog's table, PrizePicks' verified table), policy sp-2, rules slip-rules-2026-10-23, settlement ss-1
 
 Owner brief sections 7, 10, 12. Pure sports code (relative imports only; `test_sports_isolation.py`).
 
@@ -51,9 +51,10 @@ the clipboard ONLY with `copy_text` from an ok copy answer; the text says the sl
   U-TIE2), flex revert chain (U-FLEX), modifier shift survives voids (U-SHIFT). Figures shown only when every leg's
   multiplier is 1.0 (the combination rule is unpublished). The printed 4-pick-flex revert (3x) conflicts with the
   3-pick flex table (3.25x): that payout is reported unknown.
-- PrizePicks: the public Potential Outcomes page lists standard Minimum Guarantee rates but says a lineup may pay
-  differently and pays the higher of leaderboard / Minimum Guarantee. Kept internal / admin only; members see "PrizePicks
-  shows this lineup's payout in the app". Entry rules (2-6 picks, two teams, player once) are verified.
+- PrizePicks (owner 2026-11-06): the help-center payout table (page dated 2026-10-19), verified by owner sign-off
+  2026-11-05 in `gradecore/pickem_payouts.json` - the same file the main site reads (`payouts.PP_TABLE`; a test keeps
+  the two readings equal). Power 2-6 and Flex 3-6 (Flex 2-pick is not offered in the app). Standard lines only: a
+  goblin / demon / promo pick shows no payout figure. Entry rules (two teams, player once) are verified.
 - Joint chance: product of unconditional leg chances for distinct games, labelled an independence estimate; same-game
   legs refused. Internal expectation (`joint.expectation`, via the settlement rules) is logged and admin-only; no
   member-facing EV.
@@ -62,7 +63,9 @@ the clipboard ONLY with `copy_text` from an ok copy answer; the text says the sl
 
 `settle.entry_result` per platform (fixtures in `sports/tests/test_slips.py`): Underdog voids/ties drop out and the
 entry pays for the active picks, < 2 active or one team -> refund, flex revert chain; PrizePicks DNP and ties drop one
-tier, DNPs to < 2 picks or one team -> refund, ties never make a lineup ineligible. Lost Higher/More picks carry a
+tier along P-DNP's chain (3-pick Flex -> 2-pick Power), DNPs to < 2 picks or one team -> refund, ties never make a
+lineup ineligible; payouts from the verified table (`sports/tests/test_pp_payouts_sports.py` compares every case with
+`gradecore.payouts.tiers`). Lost Higher/More picks carry a
 Rescue / Reboot note (not visible in box scores). Corrected leg results (settlement revisions) give a new slip
 settlement revision that supersedes the earlier one (kept; tables are append-only by trigger).
 
