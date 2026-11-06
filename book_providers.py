@@ -383,6 +383,18 @@ def parse_dabble_fixtures(doc, now, horizon_s):
     return out
 
 
+# Dabble names NBA / NFL teams in full ("Orlando Magic"); the board uses ESPN codes ("ORL"). An exact full-name table, never fuzzy:
+# a name not in it stays as it is and the line is counted "team does not match".
+DABBLE_TEAM_CODES = {
+    "nba": {"Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN", "Charlotte Hornets": "CHA", "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE", "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN", "Detroit Pistons": "DET", "Golden State Warriors": "GS", "Houston Rockets": "HOU", "Indiana Pacers": "IND", "LA Clippers": "LAC", "Los Angeles Clippers": "LAC", "Los Angeles Lakers": "LAL", "Memphis Grizzlies": "MEM", "Miami Heat": "MIA", "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN", "New Orleans Pelicans": "NO", "New York Knicks": "NY", "Oklahoma City Thunder": "OKC", "Orlando Magic": "ORL", "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX", "Portland Trail Blazers": "POR", "Sacramento Kings": "SAC", "San Antonio Spurs": "SA", "Toronto Raptors": "TOR", "Utah Jazz": "UTAH", "Washington Wizards": "WSH"},
+    "nfl": {"Arizona Cardinals": "ARI", "Atlanta Falcons": "ATL", "Baltimore Ravens": "BAL", "Buffalo Bills": "BUF", "Carolina Panthers": "CAR", "Chicago Bears": "CHI", "Cincinnati Bengals": "CIN", "Cleveland Browns": "CLE", "Dallas Cowboys": "DAL", "Denver Broncos": "DEN", "Detroit Lions": "DET", "Green Bay Packers": "GB", "Houston Texans": "HOU", "Indianapolis Colts": "IND", "Jacksonville Jaguars": "JAX", "Kansas City Chiefs": "KC", "Las Vegas Raiders": "LV", "Los Angeles Chargers": "LAC", "Los Angeles Rams": "LAR", "Miami Dolphins": "MIA", "Minnesota Vikings": "MIN", "New England Patriots": "NE", "New Orleans Saints": "NO", "New York Giants": "NYG", "New York Jets": "NYJ", "Philadelphia Eagles": "PHI", "Pittsburgh Steelers": "PIT", "San Francisco 49ers": "SF", "Seattle Seahawks": "SEA", "Tampa Bay Buccaneers": "TB", "Tennessee Titans": "TEN", "Washington Commanders": "WSH"},
+}
+
+
+def _dabble_team(sport, name):
+    return (DABBLE_TEAM_CODES.get(sport) or {}).get(name, name)
+
+
 def parse_dabble(doc, now, sport, stats):
     """One /sportfixtures/details/{id} answer -> (offers, skipped counts). Pure: no network, no clock. Counts are per market."""
     offers, skipped = [], {}
@@ -407,7 +419,7 @@ def parse_dabble(doc, now, sport, stats):
     cand, ids = {}, {}
     fid = str(d.get("id") or "")
     # the fixture's own teams and start: the board match checks the line belongs to the board's match, not a namesake's or a later one
-    event_teams = sorted({norm(t.get("name") or "") for t in d.get("teams") or [] if isinstance(t, dict) and norm(t.get("name") or "")})
+    event_teams = sorted({norm(_dabble_team(sport, t.get("name") or "")) for t in d.get("teams") or [] if isinstance(t, dict) and norm(t.get("name") or "")})
     for (mid, value), rows in groups.items():
         try:
             m = markets.get(mid) or {}
@@ -447,7 +459,7 @@ def parse_dabble(doc, now, sport, stats):
             over, under = side("over"), side("under")
             if not (over["offered"] or under["offered"]):
                 skip("no price on either side"); continue
-            team = r0.get("teamName") or ""
+            team = _dabble_team(sport, r0.get("teamName") or "")
             o = {"provider": "dabble", "book": "dabble", "sport": sport, "raw_stat": key, "stat": mapped[0], "period": mapped[1],
                  "subject_id": str(r0.get("playerId") or ""), "player": name, "player_norm": norm(name), "team": team,
                  "team_norm": norm(team), "game_id": fid, "line": line, "over": over, "under": under, "source_at": None, "observed_at": now,

@@ -573,3 +573,13 @@ def test_admin_coverage_lists_dabble_and_the_blocked_apps():
         assert by[label]["state"] == "blocked" and by[label]["detail"] and by[label]["evidence"] and by[label]["flag"] is None
     html = admin_coverage.page({"rows": rows, "summary": {}, "at": "x"})
     assert "Cloudflare" in html and "blocked" in html
+
+
+def test_dabble_nba_nfl_full_team_names_map_to_board_codes():
+    """Live 2026-11-06: 430 of 491 NBA Dabble lines were 'team does not match' - Dabble says 'Orlando Magic', the board 'ORL'."""
+    import book_providers as bp
+    assert bp._dabble_team("nba", "Orlando Magic") == "ORL" and bp._dabble_team("nba", "Phoenix Suns") == "PHX"
+    assert bp._dabble_team("nfl", "Baltimore Ravens") == "BAL" and bp._dabble_team("nfl", "Jacksonville Jaguars") == "JAX"
+    assert bp._dabble_team("nba", "Unknown Team") == "Unknown Team"            # never guessed
+    assert bp._dabble_team("cs2", "Natus Vincere") == "Natus Vincere"          # esports untouched
+    assert len(set(bp.DABBLE_TEAM_CODES["nba"].values())) == 30 and len(set(bp.DABBLE_TEAM_CODES["nfl"].values())) == 32
