@@ -1590,7 +1590,8 @@ def _slip_pool(srv, sport, table):
                 recs.append(record_of(x) if sport == "cs2" else json.loads(x["rec"]))
             except (KeyError, TypeError, ValueError):
                 continue
-        legs, why = sq.pool(recs, feeds={sport: snap.get("feeds") or {}}, research_ok=True, table=table)
+        # sq-2: legs without a letter join at their printed chance (owner 2026-11-05: letters only where calibration passed)
+        legs, why = sq.pool(recs, feeds={sport: snap.get("feeds") or {}}, research_ok=True, table=table, chance_ok=True)
         _SLIP_POOL[sport] = (body, table, legs, why)
         return legs, why
 
@@ -1640,15 +1641,48 @@ def _ev_leg(l):
             "tag": l["model_version"], "prop": l["stat"], "scope": SLIP_SCOPE.get(l["period"], l["period"]), "line_type": l["line_type"]}
 
 
+_BE = {}
+
+
+def _break_even(platform, entry_type, n):
+    """sq-2: the published per-pick break-even of a standard n-pick entry at 1.0x picks, or None when it is not known:
+    gradecore.payouts on Underdog's table, and on PrizePicks' published standard power / flex base rates (payout_reference.py).
+    Display only - beside a slip and its legs - never an EV, a stake or a settlement."""
+    k = (platform, entry_type, n)
+    if k not in _BE:
+        try:
+            from gradecore import payouts
+            import payout_reference
+            cfg = payouts.with_tables({"prizepicks": {"entries": {"power": payout_reference.PP_POWER, "flex": payout_reference.PP_FLEX}}}) \
+                if platform == "prizepicks" else None
+            _BE[k] = payouts.break_even(platform, entry_type, n, config=cfg)
+        except Exception:                               # noqa: BLE001 - unknown = no break-even shown, never a guess
+            _BE[k] = None
+    return _BE[k]
+
+
+def _wire_leg(l, be):
+    out = {"sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "line_type": l["line_type"],
+           "player": l["player"], "p": l["p"], "rank": l["rank"], "rank_p": round(l["rank_p"], 4), "research": l["research"],
+           "chance": bool(l.get("chance")), "record": sq.leg_text(l)}
+    b = sq.leg_break_even(l, be)
+    if b is not None:                           # the platform's published per-pick break-even; below it gets the slip's warning
+        out["break_even"] = round(b, 4)
+        out["below_break_even"] = l["p"] < b
+    return out
+
+
 def _wire_slip(s, srv, now):
+    be = _break_even(s["platform"], s["entry_type"], len(s["legs"]))
     out = {"platform": s["platform"], "entry_type": s["entry_type"], "why": s["why"], "same_match": s["same_match"],
-           "legs": [{"sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "line_type": l["line_type"],
-                     "player": l["player"], "p": l["p"], "rank": l["rank"], "rank_p": round(l["rank_p"], 4), "research": l["research"],
-                     "record": "Research estimate" if l["research"] else sq.band_text(l["band"], l["sport"], l["line_type"])} for l in s["legs"]]}
+           "legs": [_wire_leg(l, be) for l in s["legs"]]}
+    if be is not None:
+        out["break_even"] = round(be, 4)
     if s["all_hit"] is not None:
         out["all_hit"] = round(s["all_hit"], 4)
     if s["payout"]:
         out["payout"] = s["payout"]
+    if s["payout"] and not any(l.get("chance") for l in s["legs"]):     # a chance leg has no rating: no EV on its slip
         ev = rules.ev_status(s["platform"], s["entry_type"], [_ev_leg(l) for l in s["legs"]], lambda: _gate(srv), now.timestamp())
         if ev.get("available"):                 # a verified payout AND chances that passed the settled-results gate (CS2 only today)
             out["ev"] = {"ev": ev["ev"], "hit_chance": ev["hit_chance"]}
@@ -1678,10 +1712,14 @@ def _generate(srv, o):
             st = sq._ts(l["start"])
             if st is None or (st - now).total_seconds() < sq.LEAD_S:
                 why["started"] = why.get("started", 0) + 1
-            elif l["research"] and not o["research"]:
-                why["research"] = why.get("research", 0) + 1
             elif l["key"] in o["exclude"]:
                 why["excluded"] = why.get("excluded", 0) + 1
+            elif l["research"] and not o["research"]:
+                c = sq.as_chance(l)             # sq-2: research estimates left out -> the leg at its printed chance, no letter
+                if c is None:
+                    why["below_half"] = why.get("below_half", 0) + 1
+                else:
+                    legs.append(c)
             else:
                 legs.append(l)
         for k, v in got[1].items():
@@ -1691,7 +1729,7 @@ def _generate(srv, o):
     mine = [l for l in legs if l["book"] == o["platform"]]
     doc = {"version": sq.VERSION, "built_at": now.isoformat(timespec="seconds"), "options": dict(o, sports=list(o["sports"]), exclude=len(o["exclude"])),
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,
-                    "banded": bool(table and table.get("cells"))},
+                    "banded": bool(table and table.get("cells")), "chance_legs": sum(1 for l in mine if l.get("chance"))},
            "slips": [_wire_slip(s, srv, now) for s in b["slips"]], "shortage": b["shortage"], "search": b["search"]}
     return 200, json.dumps(doc, default=str, separators=(",", ":")).encode()
 
@@ -1763,7 +1801,12 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
     for sport in [s for s in SPORTS if allowed.get(s) and any(l["sport"] == s for l in legs)]:
         got = _slip_pool(srv, sport, table)
         if got:
-            pool_legs += [x for x in got[0] if not x["research"] and ((sq._ts(x["start"]) or now) - now).total_seconds() >= sq.LEAD_S]
+            for x in got[0]:                    # sq-2: a research letter is suggested at its printed chance, as the generator does
+                if ((sq._ts(x["start"]) or now) - now).total_seconds() < sq.LEAD_S:
+                    continue
+                x = sq.as_chance(x) if x["research"] else x
+                if x is not None:
+                    pool_legs.append(x)
     pool_legs = _ranked(pool_legs)
     by_key = {l["key"]: l for l in pool_legs}
     types = {s: _line_types(srv, s) for s in {l["sport"] for l in legs}}
@@ -1780,7 +1823,8 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
         mine = [x for x in slip if x["book"] == platform]
         t = et.get(platform)
         for m, r in zip(mine, sq.advise(mine, by_key, pool_legs, t if isinstance(t, str) and len(t) <= 16 else None, lines)):
-            if m["sport"] in lc.SPORTS and lc.contained(m["sport"], m.get("stat")):     # lc-1: a held letter has no rating
+            # lc-1: a held letter has no rating; a leg the studio itself uses at its chance (sq-2) carries no status label
+            if not r.get("in_pool") and m["sport"] in lc.SPORTS and lc.contained(m["sport"], m.get("stat")):
                 r = dict(r, notes=[{"code": "contained", "text": lc.banner(m["sport"])}] + list(r.get("notes") or []))
             out[m["id"]] = r
     return h.send(200, {"version": sq.VERSION, "legs": [dict(out[l["id"]], id=l["id"]) for l in legs]})
