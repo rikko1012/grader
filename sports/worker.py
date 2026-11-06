@@ -5,6 +5,7 @@ at import time. Run it as its own service / cron:
   python -m sports.worker ingest nba nfl [--sources espn,pp,ud,kalshi,injuries,oddsapi,polymarket,books,games]
                                                         one cycle                                     (SPORTS_INGEST)
   python -m sports.worker loop nba nfl --every 10       ingest every N minutes + settle hourly       (SPORTS_INGEST)
+  python -m sports.worker books nba nfl                 the books job alone, when a game is due      (SPORTS_INGEST)
   python -m sports.worker settle [nba nfl]              settle stored offers of final games           (SPORTS_INGEST)
   python -m sports.worker verify nba --date YYYY-MM-DD  Kalshi settled values vs ESPN box scores      (SPORTS_INGEST)
   python -m sports.worker forecast [nba nfl]            sharp-2 market-only research forecasts         (SPORTS_INGEST)
@@ -28,7 +29,10 @@ This is the ONE scheduled collector (the sports service's ingest-loop child). Ea
   oddsapi      The Odds API through books/sources.oddsapi_ingest (credit ledger; events and players resolved)
   polymarket   books/sources.polymarket_ingest
   books        FanDuel / BetRivers own feeds (+ OddsPapi when its guard allows): books/worker.run_once, each game
-               read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch
+               read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch. Scheduled as
+               its OWN light job (`books` command, scheduler "books", every minute on a game day; 2026-11-06) so the
+               direct ladder (3 / 5 / 8 min inside 2 / 8 / 24 h) is kept; the ingest-<league> cycles leave it out
+               unless SPORTS_BOOKS_JOB=0
   games        sports/games collect.tick: pre-game context (pickcenter, predictor, NWS weather), ESPN-supplied
                DraftKings prop lines, Kalshi game ladders, BPI / FPI, rosters / injuries through the same cached reads
                as above (no second request)
@@ -433,6 +437,49 @@ def _ingest_books(con, lg, resolver):
             bdb.close()
 
 
+def books_league(con, league, now=None):
+    """The books job for one league (scheduler "books"): exits at once - no provider request, no ESPN read, no canonical
+    write - unless books.worker.pending says a game list, a game on the direct ladder or a probe is due. Otherwise the
+    same pass the ingest cycle made before (_ingest_books): the canonical resolver first (ESPN events / rosters through
+    the shared caches), then books.worker.run_once with the sc-1 sink."""
+    from .books import store as book_store, worker as book_worker
+    with _COLLECT_LOCK:
+        bdb = book_store.connect()
+        try:
+            due = book_worker.pending(bdb, (league,), now=now)
+        finally:
+            bdb.close()
+    if not due:
+        return {"league": league, "due": False}
+    _check_budget()                                     # store cap + DISK_FREE_FLOOR_MB, as every ingest cycle
+    lg = config.league(league)
+    observed_at = now_utc()
+    out = {"league": league, "due": True, "observed_at": observed_at}
+    resolver = build_resolver(con, lg, observed_at, out)
+    out["books"] = _ingest_books(con, lg, resolver)
+    return out
+
+
+def cmd_books(a, con):
+    """python -m sports.worker books nba nfl: FanDuel / BetRivers (+ OddsPapi when its guard allows) on the direct
+    ladder (books/schedule.py), the scheduler's light "books" job. Exit 3 when ingestion is paused (store cap / disk
+    floor), so the scheduler records a failure instead of a silent success."""
+    flags.require("SPORTS_INGEST")
+    out = {}
+    for lg in a.leagues:
+        try:
+            out[lg] = books_league(con, lg)
+        except BudgetExceeded as e:
+            out[lg] = {"state": "failed", "error": str(e)}
+        except Exception as e:                          # noqa: BLE001 - one league never stops the other
+            out[lg] = {"state": "failed", "error": f"{type(e).__name__}: {str(e)[:200]}"}
+    out["rss_mb"] = rss_mb()
+    _print(out)
+    if a.leagues and all("ingestion paused" in str((out.get(lg) or {}).get("error") or "") for lg in a.leagues):
+        raise SystemExit(3)
+    return out
+
+
 def _ingest_games(lg):
     from .games import collect, store as game_store
     with _COLLECT_LOCK:
@@ -672,6 +719,8 @@ def main(argv=None):
         if name == "loop":
             s.add_argument("--every", type=int, default=10)
             s.add_argument("--kalshi-every", type=int, default=30)
+    s = sub.add_parser("books")
+    s.add_argument("leagues", nargs="+")
     s = sub.add_parser("settle")
     s.add_argument("leagues", nargs="*")
     s.add_argument("--since", help="backfill: settle every stored game started since this date (YYYY-MM-DD)")
@@ -689,7 +738,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     if a.cmd == "train":
         flags.require("SPORTS_TRAIN")                   # a refused command sets no memory cap on its process
-    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "settle", "train") else None
+    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "settle", "train") else None
     if a.cmd == "train":
         from .model import jobs as model_jobs           # model agent's registered training jobs (sports/model/jobs.py)
         return model_jobs.main(a.rest)
@@ -699,8 +748,8 @@ def main(argv=None):
             return
         if cap:
             print(f"memory cap: {cap}", file=sys.stderr)
-        return {"ingest": cmd_ingest, "loop": cmd_loop, "settle": cmd_settle, "coverage": cmd_coverage,
-                "verify": cmd_verify, "forecast": cmd_forecast, "jobs": lambda a, con: _print(Jobs(con).list())}[a.cmd](a, con)
+        return {"ingest": cmd_ingest, "loop": cmd_loop, "books": cmd_books, "settle": cmd_settle,
+                "coverage": cmd_coverage, "verify": cmd_verify, "forecast": cmd_forecast, "jobs": lambda a, con: _print(Jobs(con).list())}[a.cmd](a, con)
 
 
 if __name__ == "__main__":
