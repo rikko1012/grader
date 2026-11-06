@@ -46,6 +46,7 @@
   // ------------------------------------------------------------------------------------------- outcomes at a line
   function outcome(value, ln) {          // strict: Over if value > line, Under if value < line, Push if equal
     if (value === null || value === undefined) return null;
+    if (ln === null || ln === undefined || !isFinite(ln)) return null;   // bug #48: no shown line -> no Over / Under (v > null was always "over")
     if (value > ln) return "over";
     if (value < ln) return "under";
     return "push";

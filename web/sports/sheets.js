@@ -49,7 +49,10 @@
   }
   var KEYS = {
     player: function (r) { return (r.player || "").toLowerCase(); },
-    game: function (r) { return r.start || r.s || r.e || ""; },
+    game: function (r, ev) {   // bug #51: Most-consistent rows carry only the event id - resolve its start from D.events
+      var e = r.e && ev ? ev[r.e] : null;
+      return r.start || r.s || (e && e.s) || r.e || "";
+    },
     stat: function (r) { return statOf(r); },
     line: function (r) { return nn(r.line) ? r.line : r.l; },
     type: function (r) { return variantLabel(r.variant); },
@@ -99,9 +102,9 @@
     if (r.scout) return "No lean";
     return r.combo ? "No Scout projection for combined stats yet" : "No Scout chance at this line";
   }
-  function sortRows(rows, key, dir) {                    // missing values always last, stable
+  function sortRows(rows, key, dir, events) {            // missing values always last, stable; events = D.events (game start)
     var f = KEYS[key] || KEYS.edge, sgn = dir === "asc" ? 1 : -1;
-    return rows.map(function (r, i) { return [r, f(r), i]; }).sort(function (a, b) {
+    return rows.map(function (r, i) { return [r, f(r, events), i]; }).sort(function (a, b) {
       var x = a[1], y = b[1], nx = x === null || x === undefined || x === "", ny = y === null || y === undefined || y === "";
       if (nx || ny) return nx === ny ? a[2] - b[2] : (nx ? 1 : -1);
       if (x < y) return -sgn; if (x > y) return sgn;

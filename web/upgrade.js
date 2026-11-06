@@ -964,9 +964,14 @@
     const picker = distinct.length > 1 ? `<span class="u-lines" role="group" aria-label="Lines on this prop">${distinct.map((o) => `<button type="button" aria-pressed="${o.offer.line === rec.offer.line}" data-u="pline" data-id="${esc(offerKey(o.offer.platform, o.offer.offer_id))}">${esc(o.offer.line)}</button>`).join("")}</span>` : `<b class="u-line">${esc(rec.offer.line)}</b>`;
     const refusal = addRefusal(rec, side), inSlip = T.legs.find((l) => l.id === legId(rec, side)), note = started(rec) ? `<p class="u-note">${esc(startWord(rec))} at ${esc(when(rec.event.start_utc))}</p>` : "";
     const scroll = $("u-drawer-body") ? $("u-drawer-body").scrollTop : 0;
+    /* bug #56: the drawer is modal, so its toasts live inside it (as the tray's do); the same node is kept across repaints so a
+       toast raised just before a repaint (padd: say() then paintDrawer()) stays on screen */
+    let toast = box.querySelector(".u-toast");
+    if (!toast) { toast = document.createElement("div"); toast.className = "u-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite"); }
     keepFocus(box, () => { box.innerHTML = `<div class="u-d-head"><div><h2 id="u-drawer-title">${esc(rec.player.name)}</h2>${picker}<p>${esc(SPORTS[rec.sport])} · ${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)} · ${esc(rec.offer.platform_label)}</p><p>${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} · ${esc(rec.event.label)}${rec.event.competition ? " · " + esc(rec.event.competition) : ""} · ${esc(when(rec.event.start_utc))}${rec.event.best_of ? ` · BO${esc(rec.event.best_of)}` : ""}${rec.offer.moved_from != null ? ` · Moved from ${esc(rec.offer.moved_from)}` : ""}</p></div><button class="u-x" type="button" aria-label="Close research" data-u="pclose">${X_ICON}</button></div>
       <div class="u-tabs" role="tablist" aria-label="Research sections">${tabs}</div><div class="u-d-body" id="u-drawer-body" tabindex="0">${note}${body}</div>
       <div class="u-d-foot">${refusal && !inSlip ? `<p class="u-dim" role="status">${esc(refusal)}</p>` : ""}<div class="u-acts">${R.me.features?.book_links&&rec.offer.platform==='underdog'&&!refusal?'<button class="u-btn" type="button" data-u="open-line">Open in Underdog</button>':''}<button class="u-btn" type="button" data-u="tray">Slip tray · ${T.legs.length}</button><button class="u-btn u-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} data-u="padd">${inSlip ? "Remove from slip tray" : `Add ${cap(side)} ${esc(rec.offer.line)} on ${esc(rec.offer.platform_label)}`}</button></div></div>`; });
+    box.appendChild(toast);
     $("u-drawer-body").scrollTop = scroll;
     const res = seriesOf();
     if (res) box.querySelectorAll("[data-chart]").forEach((el) => { el.innerHTML = chartSvg(res.slice(0, +el.dataset.n), rec.offer.line, side, Math.max(240, Math.round(el.clientWidth))); });

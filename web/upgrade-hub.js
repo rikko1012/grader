@@ -337,7 +337,9 @@ export function mount(C) {
   function belowBreakEven(r) {
     const s=r.scout;if(!s.side||!num(s.p_side))return null;
     const d=edgeValue(r);
-    if(d!=null)return d<0?{be:evOf(r)?evOf(r).be:COLS?.ud_standard_break_even,entry:evOf(r)?evOf(r).entry:COLS?.entry||'Underdog standard'}:null;
+    /* bug #55: the same break-even edgeValue measured against (rated EV, else the row's own book), as edgeCell names it */
+    const par=evOf(r)||edgeBe(r);
+    if(d!=null)return d<0?{be:par?par.be:COLS?.ud_standard_break_even,entry:par?par.entry:(COLS?.entry||'Underdog standard')}:null;
     const p=parOf(r);
     return p&&s.p_side<p.be?{be:p.be,entry:p.entry||'entry'}:null;
   }
