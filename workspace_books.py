@@ -157,13 +157,23 @@ def _pick_base(recs, line, nearest=True):
     return (near[0] if near else recs[0]), False
 
 
+def _windows():
+    """The hit-rate windows a board row shows: L5 / L10 / L20, and H2H / Season with SCOUT_BOARD_H2H."""
+    import workspace_h2h
+    return ("l5", "l10", "l20") + (("h2h", "season") if workspace_h2h.board_enabled() else ())
+
+
 def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed_at, offer_key, read=None):
     """One display record for an extra book's line, built from the board's own records of that player and market.
     read(base record, line) -> (chance at this line or None, history at this line or None): line_chance + the game log."""
     base, is_same = _pick_base(recs, line, nearest=sport in ("cs2", "lol"))
     same = [base] if is_same else []
     chance, hist = None, None
-    if read is not None:
+    # NBA / NFL: a same-line row keeps the board's own counts (snapshot job) and reads the game log only for a window the board
+    # row is missing; another line reads it for every window (card-why 2026-11-06)
+    sports_same = sport not in ("cs2", "lol") and is_same
+    gaps = [w for w in _windows() if not ((base.get("history") or {}).get(w) or {}).get("n")] if sports_same else []
+    if read is not None and (not sports_same or gaps):
         try:
             chance, hist = read(base, line)
         except Exception:                          # noqa: BLE001 - a failed read shows the line without them, never a wrong number
@@ -182,7 +192,10 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
         s = r["scout"]
         s["units"] = None
         s["stake_reason"] = f"Same line and saved chance as {base['offer']['platform_label']}; stakes are set for that entry only."
-        if hist:                                   # the saved L10 at this exact line stays; L5 / L20 / H2H / Season from the game log
+        if hist and sports_same:                   # NBA / NFL: the board's own counts stay; only its empty windows are filled
+            bh = dict(base.get("history") or {})
+            r["history"] = dict(bh, **{w: hist.get(w) for w in gaps if hist.get(w)})
+        elif hist:                                 # the saved L10 at this exact line stays; L5 / L20 / H2H / Season from the game log
             bh = base.get("history") or {}
             r["history"] = dict(hist, l10=bh.get("l10") or hist.get("l10"), avg=bh["avg"] if bh.get("avg") is not None else hist.get("avg"))
     else:
@@ -298,7 +311,7 @@ def build(srv, sport, pid, now=None):
         feed_state = bp.freshness(st, p["feed"], now)
         feed_at = st["at"]
         subj = subjects(recs)
-        read = reader(srv, sport, s) if sport in ("cs2", "lol") else None
+        read = reader(srv, sport, s)
         for o in bp.offers(pid, sport, now):
             cov["offers"] += 1
             got, why = match(subj, o, p.get("match"))
@@ -316,6 +329,7 @@ def build(srv, sport, pid, now=None):
             out.append(r)
     elif sport in ("nba", "nfl"):
         quotes, props = book_quotes(s, pid)
+        read = reader(srv, sport, s)
         newest = None
         for k, b, x in quotes:
             cov["offers"] += 1
@@ -331,7 +345,7 @@ def build(srv, sport, pid, now=None):
             cov["matched"] += 1
             over = {"offered": _num(b.get("over")) is not None, "payout": _num(b.get("over")), "price": _num(b.get("over"))}
             under = {"offered": _num(b.get("under")) is not None, "payout": _num(b.get("under")), "price": _num(b.get("under"))}
-            r = derive(pid, label, kind, sport, got, b.get("line"), over, under, None, t, k)
+            r = derive(pid, label, kind, sport, got, b.get("line"), over, under, None, t, k, read=read)
             plat = b.get("platform")
             if plat != pid:                        # The Odds API: each book keeps its own name
                 r["offer"]["platform_label"] = (b.get("platform_label") or plat) + " · The Odds API"
@@ -377,7 +391,9 @@ def _hist_of(ser, line, opponent):
     last = [g["value"] for g in ser[:10]]
     out = {"l5": tally(5), "l10": tally(10), "l20": tally(20), "avg": round(sum(last) / len(last), 1), "recent": None}
     if workspace_h2h.board_enabled():
-        out.update(h2h=workspace_h2h.board_h2h(ser, opponent, line), season=workspace_h2h.board_season(ser, line))
+        # NBA / NFL seasons cross the calendar year: the season of the newest played game, as the board's own SZN column counts it
+        season = _sports_season(ser, line) if ser and "season" in ser[0] else workspace_h2h.board_season(ser, line)
+        out.update(h2h=workspace_h2h.board_h2h(ser, opponent, line), season=season)
     return out
 
 
@@ -401,7 +417,48 @@ def series_of(srv, sport, s, base, budget=None):
     if sport == "lol":
         import workspace_lol
         return (workspace_lol.series_values(((s or {}).get("series") or {}).get(x.get("pid")), x.get("stat"), x.get("scope")) or None), x
+    if sport in ("nba", "nfl"):
+        return sports_series(srv, sport, x, budget), x
     return None, x
+
+
+def sports_series(srv, lg, x, budget=None):
+    """NBA / NFL (card-why 2026-11-06): the player's newest-first played games for this stat (full game only), each with its
+    season, from the SAME shared player file the research card reads (workspace_sports._player, one upstream read per player
+    per PLAYER_TTL for every member). Past `budget` only what is already cached; None when not known now (no counts shown)."""
+    import workspace_api as api
+    import workspace_sports as ws
+    pid, stat = x.get("pid"), x.get("st")
+    if x.get("scope") != "full_game" or not stat or not ws._PID_RE.match(str(pid or "")):
+        return None
+    try:
+        if budget is not None and time.monotonic() > budget:
+            doc = api._peek_shared(srv, ("ws_sp_file", "/api/sports/history", lg, pid))
+        else:
+            doc = ws._player(srv, lg, pid, "/api/sports/history")
+    except Exception:                              # noqa: BLE001 - no game log now: the counts are left out, never zero
+        doc = None
+    out = []
+    for g in (doc or {}).get("games") or []:
+        v = (g.get("values") or {}).get(stat)
+        if g.get("played") and isinstance(v, (int, float)) and not isinstance(v, bool):
+            out.append({"date": str(g.get("start_utc") or "")[:10], "opponent": g.get("opponent") or "", "value": v, "season": g.get("season"),
+                        "_n": len((doc or {}).get("games") or [])})
+    return out or None
+
+
+def _sports_season(ser, line):
+    """{over, under, push, n, season} over the newest played game's season, or None when the saved file may not hold the whole
+    season (the file keeps the newest RESEARCH_MAX_GAMES games: a full file of one season could be cut short)."""
+    import workspace_sports as ws
+    season = ser[0].get("season") if ser else None
+    if season is None:
+        return None
+    vals = [g["value"] for g in ser if g.get("season") == season]
+    full = (ser[0].get("_n") or 0) >= ws.RESEARCH_MAX_GAMES and all(g.get("season") == season for g in ser)
+    if not vals or full:
+        return None
+    return {"over": sum(v > line for v in vals), "under": sum(v < line for v in vals), "push": sum(v == line for v in vals), "n": len(vals), "season": str(season)}
 
 
 def chance_of(srv, sport, x, line):
@@ -474,7 +531,7 @@ def line_doc(srv, sport, pid, oid):
     if h.get("avg") is not None:
         hist["avg"] = h["avg"]
     if ser:
-        hist["series"] = ser[:20]
+        hist["series"] = [{k: v for k, v in g.items() if not k.startswith("_") and k != "season"} for g in ser[:20]]
     doc["history"] = hist
     if not same:
         doc["forecast"] = None                     # no forecast was saved at this line; a chance shown is read from the distribution

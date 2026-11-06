@@ -1225,3 +1225,34 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
  #u-hub #hub-table .h-strip .h-hit.h-hit-n{font-size:12px!important;letter-spacing:-.02em!important}
  #u-hub #hub-table .h-strip-cell:before{font-size:10px;margin-bottom:2px}
 }
+/* card-why (owner 2026-11-06): "Why Scout leans Over / Under" first on the card: the facts as a list, the side's risks under them.
+   Filled dot = used in the grade, hollow dot = context only (weight 0). A green / red edge marks a fact for / against the side. */
+#u-hub .h-card-body>.h-why{margin:0 0 16px;padding:12px 14px 10px;border:1px solid #2f4562;border-radius:8px;background:#141c27}
+#u-hub .h-why .h-sec-head{margin-bottom:6px}
+#u-hub .h-why .h-sec-head h4{font-size:15px}
+#u-hub .h-why-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#u-hub .h-why-list li{display:grid;grid-template-columns:12px minmax(0,1fr);gap:8px;align-items:start;padding:6px 8px;border-left:3px solid #33404f;border-radius:3px;background:#18212d;font-size:13px;line-height:1.45;color:#d6e0ec;overflow-wrap:anywhere}
+#u-hub .h-why-list li.is-for{border-left-color:#3f9a72}
+#u-hub .h-why-list li.is-against{border-left-color:#b9616b}
+#u-hub .h-why-list li b{font:600 13px 'DM Mono',monospace;color:#f2f7ff}
+#u-hub .h-why-list li small{font-size:11.5px;color:#9aabbf}
+#u-hub .h-why-dot{display:inline-block;width:9px;height:9px;margin-top:5px;border:1.5px solid #8fb3e0;border-radius:50%;background:transparent;flex:none}
+#u-hub .h-why-dot.is-used{background:#8fb3e0}
+#u-hub .h-why-risk-head{margin:12px 0 6px;font-size:13px;font-weight:600;color:#f0c9cd}
+#u-hub .h-why-key{display:flex;flex-wrap:wrap;gap:4px 14px;margin:10px 0 0;font-size:11px;color:#8d9db1}
+#u-hub .h-why-key span{display:inline-flex;align-items:center;gap:6px}
+#u-hub .h-why-key .h-why-dot{margin-top:0}
+/* owner 2026-11-06: on phone the L5 / L10 / L20 / H2H / SZN chips were squeezed into the middle of a row beside Proj and Edge
+   (~36px a chip, 3px apart). They now get a full-width row of their own, evenly spaced, each with its label above it. */
+@media(max-width:1100px){
+ #u-hub #hub-table>tbody>tr[data-record],#u-hub.h-cols #hub-table>tbody>tr[data-record]{grid-template-columns:minmax(0,1fr) minmax(0,.62fr) minmax(0,1.38fr) 80px;grid-template-areas:"player player market watch" "line scout scout add" "hits hits hits hits" "proj proj compare compare"}
+ #u-hub #hub-table.h-has-edge>tbody>tr[data-record]{grid-template-columns:minmax(0,1fr) minmax(0,.62fr) minmax(0,.9fr) 56px 80px;grid-template-areas:"player player market market watch" "line scout scout edge add" "hits hits hits hits hits" "proj proj compare compare compare"}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-hits{padding:6px 0 2px;border-top:1px solid #222c38}
+ #u-hub #hub-table .h-strip{gap:8px}
+ #u-hub #hub-table .h-strip .h-hit{height:34px;font-size:13.5px;border-radius:6px}
+ #u-hub #hub-table .h-strip-cell:before{font-size:10.5px;margin-bottom:3px;letter-spacing:.06em}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-proj{display:flex;align-items:baseline;gap:6px;align-self:center}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-proj:before{margin:0}
+ #u-hub .h-card-body>.h-why{padding:10px 10px 8px}
+ #u-hub .h-why-list li{font-size:13px;padding:6px 7px}
+}
