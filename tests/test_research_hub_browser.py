@@ -98,8 +98,10 @@ def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
     # a run of days with no decided pick folds into one tile: 28 days before the result, the day itself, the day after
     assert p.locator('.h-calendar-grid summary').count()==4
     assert p.locator('.h-cal-gap').count()==8 and '28 days' in p.locator('.h-cal-gap').first.inner_text()
-    p.locator('.h-calendar-grid summary[aria-label^="2026-11-02"]').first.click()
-    assert '1 wins · 0 losses · 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
+    p.locator('.h-calendar-grid summary[aria-label^="Nov 2:"]').first.click()
+    assert '1 win · 0 losses · 1 push' in p.locator('.h-calendar-grid details[open]').inner_text()
+    import re                                       # follow-up 2026-11-06: cells read like the header ("Nov 2"), never "11-02"
+    assert not any(re.search(r'\b\d\d-\d\d\b', t) for t in p.locator('.h-calendar-grid time').all_inner_texts())
     assert 'Accuracy only, not profit.' in p.locator('#hub-record-body').inner_text()
     no_h_scroll(p)
 

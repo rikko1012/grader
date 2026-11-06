@@ -180,6 +180,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .gtag{display:inline-block;min-width:34px;text-align:center;font:700 12px var(--display);padding:3px 7px;border-radius:7px}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--accent);color:var(--text);padding:9px 16px;border-radius:10px;font-size:13.5px;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
+.toast.has-undo{pointer-events:auto;display:flex;align-items:center;gap:10px}.toast .toast-undo{background:none;border:1px solid var(--accent);color:var(--text);border-radius:7px;padding:5px 10px;font:inherit;font-weight:600;cursor:pointer;min-height:32px}
 .g-bplus{background:rgba(163,214,74,.10);color:#a3d64a;border:1px solid #a3d64a}
 .badge.g-bplus{box-shadow:0 0 30px rgba(163,214,74,.18)} .herocard.g-bplus{--hc:#a3d64a;background:var(--panel);color:inherit;border:1px solid var(--line)}
 /* sticky one-line grade bar (shows once the main form scrolls away) */
@@ -1270,7 +1271,7 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-dym]
 // ---------- quality of life: saved settings, shortcuts, recent grades, copy/share, slate
 const store = {get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
-function toast(msg, ms) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), ms || 1800); }
+function toast(msg, ms) { const t = $("#toast"); t.textContent = msg; t.classList.remove("has-undo"); t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), ms || 1800); }
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast("Copied"); }
   catch { const a = document.createElement("textarea"); a.value = text; document.body.append(a); a.select();
@@ -2024,15 +2025,31 @@ function drawMySlip(s) {                 // U1: the Slips page's "Your slip" car
 }
 // audit 2026-11-05 S5: a pick whose match has started is locked on the platform, so the slip drops it by itself (a toast names
 // it) instead of keeping it with Copy beside it. Only the leg's own saved start / lock decides; a feed outage never removes a pick.
+// Follow-up 2026-11-06: the start is read on this device's clock, so the toast carries Undo (a fast clock never loses a pick for
+// good). An undone pick is kept (ku) with its "Started – remove" button, and is never removed by itself again.
+const prunable = (x, now) => !x.ku && legStarted(x, now);
 function pruneStartedLegs() {
-  const s = store.get("cs2s_slip", []), now = Date.now(), gone = s.filter(x => legStarted(x, now));
+  const s = store.get("cs2s_slip", []), now = Date.now(), gone = s.filter(x => prunable(x, now));
   if (!gone.length) return s;
-  const keep = s.filter(x => !legStarted(x, now));
+  const keep = s.filter(x => !prunable(x, now));
   store.set("cs2s_slip", keep);
-  try { toast(`Removed ${gone.length} started pick${gone.length === 1 ? "" : "s"}: ${gone.map(x => x.p).join(", ")}`, 3500); } catch {}
+  try { undoToast(`Removed ${gone.length} started pick${gone.length === 1 ? "" : "s"}: ${gone.map(x => x.p).join(", ")}`, gone); } catch {}
   return keep;
 }
-setInterval(() => { try { if (!document.hidden && store.get("cs2s_slip", []).some(x => legStarted(x))) drawSlip(); } catch {} }, 30000);
+function undoToast(msg, gone) {
+  const t = $("#toast");
+  t.innerHTML = `<span>${esc(msg)}</span> <button type="button" class="toast-undo" data-undo-prune="1">Undo</button>`;
+  t.classList.add("on", "has-undo"); clearTimeout(toast.t);
+  t.querySelector("[data-undo-prune]").onclick = () => {
+    const cur = store.get("cs2s_slip", []), keys = new Set(cur.map(legKey));
+    store.set("cs2s_slip", cur.concat(gone.filter(x => !keys.has(legKey(x))).map(x => ({...x, ku: 1}))));
+    t.classList.remove("on", "has-undo"); t.textContent = "";
+    drawSlip();
+    toast(`Kept ${gone.map(x => x.p).join(", ")} on your slip`);
+  };
+  toast.t = setTimeout(() => t.classList.remove("on", "has-undo"), 8000);
+}
+setInterval(() => { try { if (!document.hidden && store.get("cs2s_slip", []).some(x => prunable(x))) drawSlip(); } catch {} }, 30000);
 function drawSlip() {
   const s = pruneStartedLegs();
   $("#slipbtn").hidden = !s.length; $("#slipbtn").textContent = innerWidth < 1180 ? `${s.length} pick${s.length === 1 ? "" : "s"} selected · open slip` : `Slip (${s.length})`;

@@ -82,6 +82,9 @@ def cs2_at(x, line):
         return None
     if x.get("cal_v") or x.get("p_raw") is not None:
         return None                            # the printed chance is a display layer's: never mixed with a raw read
+    if x.get("perf_on") is not True or any("only half counts" in str(f) for f in (x.get("flags") or ())):
+        return None                            # old pipeline: its gap-trust shift and margins depend on the line, so the saved
+                                               # distribution read at another line is not what the grader would print there
     dist, raw, p = x.get("dist"), x.get("model_outcomes") or {}, x.get("p")
     try:
         pmf = dist_view.pmf(dist) if dist else None

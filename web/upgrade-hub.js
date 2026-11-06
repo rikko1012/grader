@@ -316,7 +316,7 @@ export function mount(C) {
     const s=r.scout;
     if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
     if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
-    if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance">Scout\u2019s chance at this line</span>';   /* audit 2026-11-05: another book's line, same saved distribution */
+    if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance" title="Scout\u2019s chance at this line">Chance at this line</span>';   /* short on the row (follow-up 2026-11-06: was cut off); the card keeps the full sentence */   /* audit 2026-11-05: another book's line, same saved distribution */
     if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>${['nba','nfl'].includes(r.sport)?'<small class="h-grade-tag">Research grade</small>':''}`;
     if(s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span>`;
     return '';
@@ -374,9 +374,9 @@ export function mount(C) {
     const add=on?['On slip ✓',`On slip: show ${name} in the slip`]:choose?['Side',`Choose a side for ${name}`]:['+ Add',`Add ${name} ${sideWord(side)} ${esc(r.offer.line)} to slip`];
     return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group?'':' is-sub'}">
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
-      <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${esc(r.player.team)}${esc(vs)}<i>${SPORTS[r.sport]}</i></small></button></td>
+      <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small><span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
       <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></div>${toggle}</div></td>
-      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · offer revision first observed ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago',''))}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
+      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago',''))}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}</td>`:''}
@@ -432,6 +432,8 @@ export function mount(C) {
     const restoreFocus=focusAfter($('hub-board-section'));
     syncFields();
     const list=rows(), grouped=new Map();
+    /* the default sort fell back to start time: the menu names the order on screen (the saved choice is unchanged) */
+    if(H.sortFallback&&!H.sortChosen)$('hub-sort').value='start';
     for(const r of list){const k=boardPlayerKey(r);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k).push(r);}
     const players=[...grouped.values()],size=40,pages=Math.max(1,Math.ceil(players.length/size));
     H.page=Math.min(H.page,pages-1);
@@ -1042,17 +1044,21 @@ export function mount(C) {
   function calendarHTML(doc){
     if(!doc?.days?.length)return '<p class="h-muted">Daily history will appear after the next Record update.</p>';
     const out=[];let run=[];
-    const flush=()=>{if(!run.length)return;const a=run[0].date.slice(5),b=run[run.length-1].date.slice(5);
+    /* follow-up 2026-11-06: every date on the calendar reads "Oct 7", the same as its header; counts take their singular */
+    const md=t=>{const d=new Date(t+'T12:00:00Z');return Number.isFinite(d.getTime())?d.toLocaleDateString('en-US', {month:'short',day:'numeric',timeZone:'UTC'}):t;};
+    const n_=(n,one,many)=>`${n} ${Number(n)===1?one:many}`;
+    const wlp=d=>`${n_(d.wins,'win','wins')} · ${n_(d.losses,'loss','losses')} · ${n_(d.pushes,'push','pushes')}`;
+    const flush=()=>{if(!run.length)return;const a=md(run[0].date),b=md(run[run.length-1].date);
       out.push(`<div class="h-cal-gap" role="note" aria-label="${esc(`${run[0].date}${run.length>1?' to '+run[run.length-1].date:''}: no decided picks`)}"><time>${esc(a)}${run.length>1?' – '+esc(b):''}</time><small>${run.length>1?`${run.length} days · `:''}none decided</small></div>`);run=[];};
     for(const d of doc.days){
       if(!d.decided&&!d.wins&&!d.losses&&!d.pushes){run.push(d);continue;}
       flush();
-      out.push(`<details class="${d.decided?'has-results':''}"><summary aria-label="${esc(d.date)}: ${d.wins} wins, ${d.losses} losses, ${d.pushes} pushes"><time>${esc(d.date.slice(5))}</time><b>${num(d.hit_rate)?Math.round(d.hit_rate*100)+'%':'—'}</b><small>${d.decided} decided</small></summary><p>${d.wins} wins · ${d.losses} losses · ${d.pushes} pushes</p></details>`);
+      out.push(`<details class="${d.decided?'has-results':''}"><summary aria-label="${esc(md(d.date))}: ${esc(wlp(d).replace(/ · /g,', '))}"><time datetime="${esc(d.date)}">${esc(md(d.date))}</time><b>${num(d.hit_rate)?Math.round(d.hit_rate*100)+'%':'—'}</b><small>${d.decided} decided</small></summary><p>${esc(wlp(d))}</p></details>`);
     }
     flush();
-    const md=t=>{const d=new Date(t+'T12:00:00Z');return Number.isFinite(d.getTime())?d.toLocaleDateString([], {month:'short',day:'numeric',timeZone:'UTC'}):t;};
     const span=doc.days.length?md(doc.days[0].date)+' – '+md(doc.days[doc.days.length-1].date):'';
-    return `<section class="h-record-calendar" aria-label="30-day accuracy calendar"><header><h3>Last 30 days${span?` <small>${esc(span)}</small>`:''}</h3><span>${esc(doc.basis)}</span></header><div class="h-calendar-grid">${out.join('')}</div><p>Accuracy only, not profit. ${doc.missing_dates?`${Number(doc.missing_dates)} records have no saved date and are excluded from this calendar.`:'Pushes are listed separately.'}</p></section>`;
+    const miss=Number(doc.missing_dates)||0;
+    return `<section class="h-record-calendar" aria-label="30-day accuracy calendar"><header><h3>Last 30 days${span?` <small>${esc(span)}</small>`:''}</h3><span>${esc(doc.basis)}</span></header><div class="h-calendar-grid">${out.join('')}</div><p>Accuracy only, not profit. ${miss?`${miss===1?'1 record has':miss+' records have'} no saved date and ${miss===1?'is':'are'} excluded from this calendar.`:'Pushes are listed separately.'}</p></section>`;
   }
   async function showRecord() {
     const seq=++H.seq, sport=$('hub-record-sport').value;
@@ -1064,7 +1070,7 @@ export function mount(C) {
       const s=sports[i];
       if(res.status!=='fulfilled') return `<article class="h-record-card"><h2>${SPORTS[s]}</h2><p>Record unavailable. <button data-hub="record-retry">Retry</button></p></article>`;
       const d=res.value,t=d.totals||{},bands=s==='cs2'?d.by_letter:d.groups?.chance;
-      return `<article class="h-record-card"><header><h2>${SPORTS[s]}</h2><span>${s==='nba'||s==='nfl'?'Research forecasts':'Saved forecasts'}</span></header><div class="h-score"><div><b>${t.wins??'—'}<em> / </em>${t.losses??'—'}</b><span>Wins / losses · ${t.pushes??'—'} pushes separately</span></div><div><b>${pct(t.observed)}</b><span>Actual hit rate</span></div><div><b>${pct(t.printed)}</b><span>Average stated chance</span></div></div>
+      return `<article class="h-record-card"><header><h2>${SPORTS[s]}</h2><span>${s==='nba'||s==='nfl'?'Research forecasts':'Saved forecasts'}</span></header><div class="h-score"><div><b>${t.wins??'—'}<em> / </em>${t.losses??'—'}</b><span>Wins / losses · ${t.pushes??'—'} ${t.pushes===1?'push':'pushes'} counted apart</span></div><div><b>${pct(t.observed)}</b><span>Actual hit rate</span></div><div><b>${pct(t.printed)}</b><span>Average stated chance</span></div></div>
         <p>${esc(d.population||d.rule||'')}</p>${d.population?`<details><summary>Counting rule</summary><p>${esc(d.rule)}</p></details>`:''}
         ${bands?.length?`<div class="h-reliability"><div class="h-rel-head"><span>Tier / sample</span><span>Stated ○ · Actual ●</span></div>${bands.map(b=>`<div class="h-rel-row"><span><b>${esc(b.name)}</b><small>${b.picks??0} picks</small></span><div class="h-rel-scale">${num(b.printed)?`<i class="stated" style="left:${Math.max(0,Math.min(100,b.printed*100))}%"></i>`:''}${num(b.observed)?`<i class="actual" style="left:${Math.max(0,Math.min(100,b.observed*100))}%"></i>`:''}</div><span>${pct(b.printed)} / ${pct(b.observed)}</span></div>`).join('')}<p class="h-axis">0%<span>50%</span>100%</p></div>`:''}
         ${calendarHTML(d.calendar)}<footer>${num(t.wins)&&num(t.losses)?t.wins+t.losses:'—'} decided picks · ${t.matches??'—'} ${esc(t.match_word||'matches')} · Updated ${esc(d.as_of?when(d.as_of):'time unavailable')}${t.ci?` · 95% interval ${pct(t.ci[0])}–${pct(t.ci[1])}`:''}</footer></article>`;

@@ -58,5 +58,5 @@ const L = {gate: {settled_props: 400, required: 300, under_review: true}, grades
            head_to_head: {rows: []}, recent: []};
 const h = RP.summaryHtml("nba", L, {});
 ok(h.indexOf("rx-cmp") >= 0 && h.indexOf("rx-cmp") < h.indexOf("rx-sum"), "comparison first");
-ok(h.indexOf("One pick per player, stat and game.") > 0, "counting rule stated in plain words");
+ok(h.indexOf("One pick per player, stat and game: the app line closest to Scout") > 0, "counting rule stated in plain words");
 console.log("ok");

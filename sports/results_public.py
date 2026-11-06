@@ -31,15 +31,18 @@ DEFINITIONS
                     up to hundreds of times (31,882 "picks" in ~11 days). Every count, hit rate, band, grade, calendar
                     and recent row now uses ONE representative forecast per (game, player, stat):
                       1. per line, the newest forecast of that line (the last one before the game);
-                      2. the line comes from a pick'em main line (PrizePicks / Underdog) before a sportsbook line,
-                         before a Kalshi rung only;
+                      2. a line settled on a pick'em app (PrizePicks / Underdog, any line type: standard, goblin,
+                         demon, alternate) before a sportsbook line, before a Kalshi rung only;
                       3. then the line CLOSEST TO THE FORECAST'S OWN PROJECTION (|line - projection mean|, what the
-                         model saw at forecast time); ties: newest forecast, then forecast id;
+                         model saw at forecast time); ties: newest forecast, then forecast id. This is result-blind
+                         but it is NOT necessarily the board's headline line: it is the line where that model leaned
+                         least, so stated hit rates lean toward closer-to-even lines (said in COUNTING);
                       4. across Scout models the board's model order (snapshots.models_pref) decides; a Scout model
                          before a market-only model.
-                    Per model tables use step 1-3 inside each model. The head-to-head pairs Scout and the market on
-                    that representative line only. raw_counts keeps the forecast-level totals for the owner.
-                    Excluded entirely: quarter / half forecasts and Underdog one-sided lines (S1/S2).
+                    Per model tables use step 1-3 inside each model. The head-to-head pairs EACH Scout model with
+                    the market on THAT model's own representative line only (one pair per model per prop).
+                    raw_counts keeps the forecast-level totals for the owner.
+                    Excluded entirely: quarter / half forecasts (S1/S2).
 """
 from __future__ import annotations
 
@@ -175,8 +178,9 @@ def _rows_from(con, league, setts):
         if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
             continue                                    # S1/S2: a quarter / half line is never in the record
         plats = sorted({s.platform for s in ss if getattr(s, "platform", None)})
-        if len(tuple(getattr(fc, "sides_available", ()) or ())) == 1 and plats and set(plats) <= {"underdog"}:
-            continue                                    # S1/S2: an Underdog one-sided line is a different market
+        # (follow-up 2026-11-06) no exclusion by len(sides_available): today's offered sides are not the line's type
+        # (a suspended side made a two-sided line look one-sided and dropped its history); one-sided full-game lines
+        # keep their record because their grading scope is unchanged
         outcome = None
         for s in ss:
             st, oc = at_line(s, fc.line, "over")
@@ -430,10 +434,7 @@ def build(con, now=None, base=None):
             mr = [r for r in reps if r["model"] == mv]
             models[mv] = dict(summarize(mr), research_only=all(r["research_only"] for r in mr))
         stats = {st: summarize([r for r in rows if r["stat"] == st]) for st in sorted({r["stat"] for r in rows})}
-        rep_lines = {(r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3)) for r in reps
-                     if r["model"] in SCOUT}
-        hh_rows = [r for r in all_rows if (r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3))
-                   in rep_lines]
+        hh_rows = head_to_head_rows(all_rows, reps)
         rec = recent(rows, league=lg)
         try:
             names = snapshots.player_names(con, {r["player_id"] for r in rec if r.get("player_id")}, now)
@@ -468,8 +469,27 @@ def build(con, now=None, base=None):
             **{lg: leagues[lg]["gate"]["text"] for lg in leagues}}
 
 
-COUNTING = ("one pick per game x player x stat (rp-2): the pick'em main line closest to the projection at forecast "
-            "time; raw_counts = every forecast of every listed line, kept for the owner")
+COUNTING = ("one pick per game x player x stat (rp-2): a pick'em app line (any type) before a sportsbook line, then "
+            "the line closest to Scout's projection at forecast time - so the counted line is often a near-even line, "
+            "not always the board's headline line; raw_counts = every forecast of every listed line, kept for the owner")
+
+
+def head_to_head_rows(all_rows, reps):
+    """A7 (follow-up 2026-11-06): each Scout model's forecasts ONLY at that model's own representative line, plus the
+    market forecasts at those lines. Before, the union of every Scout model's lines paired each model once per line in
+    the union (sm-1 @15.5 and mi-1 @16.5 -> 2 pairs each); now head_to_head yields one pair per model per prop."""
+    own = {(r["event_id"], r["player_id"], r["stat"], r.get("model")): round(float(r["line"]), 3)
+           for r in reps if r.get("model") in SCOUT}
+    lines = {(k[0], k[1], k[2], ln) for k, ln in own.items()}
+    out = []
+    for r in all_rows:
+        mv = r.get("model") or r.get("model_version") or ""
+        ln = round(float(r["line"]), 3)
+        if (r["event_id"], r["player_id"], r["stat"], ln) not in lines:
+            continue
+        if _is_market(mv) or own.get((r["event_id"], r["player_id"], r["stat"], mv)) == ln:
+            out.append(r)
+    return out
 
 
 def build_if_stale(con, force=False, base=None):

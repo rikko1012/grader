@@ -121,6 +121,26 @@ def test_start_time_sort_keeps_game_headers_and_flag_off_defaults_to_start(ctx, 
 
 
 @pytest.mark.parametrize('size', SIZES)
+def test_sport_tag_stays_whole_under_the_edge_sort(ctx, env, size):
+    """Follow-up 2026-11-06: with 'Team vs Opp' under the name (any sort but start time) only the matchup text is cut; the sport
+    tag keeps its full text inside its cell at 390 and 1440."""
+    p = board(ctx, env, size)
+    assert p.locator('#hub-sort').input_value() == 'edge'
+    bad = p.evaluate("""() => [...document.querySelectorAll('#hub-rows tr[data-record] .h-player small')].map(s => {
+      const i = s.querySelector(':scope > i'), td = s.closest('td'), v = s.querySelector(':scope > .h-vs');
+      if (!i || getComputedStyle(i).display === 'none') return null;
+      const a = i.getBoundingClientRect(), c = td.getBoundingClientRect();
+      return (a.right <= c.right + 0.5 && i.scrollWidth <= i.clientWidth + 1 && i.textContent.trim() && a.width > 8 && v) ? null
+        : {row: s.closest('tr').dataset.record, tag: i.textContent, right: a.right, cell: c.right, w: a.width}; }).filter(Boolean)""")
+    assert bad == [], bad
+    shown = p.evaluate("[...document.querySelectorAll('#hub-rows tr[data-record] .h-player small>i')].filter(i => getComputedStyle(i).display !== 'none').length")
+    assert shown > 0
+    assert p.locator('#hub-rows .h-player small .h-vs').first.inner_text().count(' vs ') == 1
+    shot(p, 'b5-sport-tag-edge-sort')
+    assert not p.errors
+
+
+@pytest.mark.parametrize('size', SIZES)
 def test_sports_rows_name_the_game_once_and_never_cut_research_grade(ctx, env, size):
     p = board(ctx, env, size)
     sport(p, 'nba')
@@ -165,7 +185,18 @@ def test_chart_dashed_line_is_the_offered_line_and_the_median_is_separate(ctx, e
     (v0, y0), (v1, y1) = m['ticks'][0], m['ticks'][1]
     at = y0 + (line - v0) * (y1 - y0) / (v1 - v0)
     assert abs(at - m['line']) < 0.6, m                     # the dashed line sits at the offered line on the chart's own scale
-    assert m['lab'] == f'Line {line:g}' and abs(m['labY'] - (m['line'] - 4)) < 0.6, m   # named on the line itself
+    # named on the line itself (just above or just below it), or in the top margin when bars fill both spots
+    assert m['lab'] == f'Line {line:g}' and (abs(m['labY'] - (m['line'] - 4)) < 0.6 or abs(m['labY'] - (m['line'] + 12)) < 0.6
+                                             or m['labY'] <= 16), m
+    # follow-up 2026-11-06: the label's box never covers a bar, the newest game's value or the median label
+    clash = p.evaluate("""() => { const svg = document.querySelector('#hub-detail .h-history-chart svg');
+      const b = (e) => { const r = e.getBBox(); return [r.x, r.y, r.x + r.width, r.y + r.height]; };
+      const lab = b(svg.querySelector('.line-lab'));
+      const others = [...svg.querySelectorAll('rect'), ...svg.querySelectorAll('text:not(.line-lab):not(.opp):not(.date)')]
+        .filter(e => !(e.tagName === 'text' && e.previousElementSibling && e.previousElementSibling.matches('line.grid')));
+      return others.map(e => [e.tagName + ':' + (e.textContent || '').slice(0, 20), b(e)])
+        .filter(([, q]) => lab[0] < q[2] - 0.5 && lab[2] > q[0] + 0.5 && lab[1] < q[3] - 0.5 && lab[3] > q[1] + 0.5).map(x => x[0]); }""")
+    assert clash == [], clash
     assert m['mlab'] and m['mlab'].startswith('Median ') and m['median'] is not None and m['dash'] != m['mdash'], m
     vals = sorted(float(t) for t in p.locator('#hub-detail .h-history-table tbody td:nth-child(3)').all_text_contents())
     mid = len(vals) // 2
@@ -330,6 +361,18 @@ FACE = r'^https://a\.espncdn\.com/i/headshots/(nba|nfl)/players/full/\d+\.png$'
 LOGO = r'^https://a\.espncdn\.com/i/teamlogos/(nba|nfl)/500/[a-z]{2,4}\.png$'
 
 
+def initials_fit(p, sel, want):
+    """follow-up 2026-11-06: a leg face's initials sit on one line, centred in the circle, never styled as a sport tag"""
+    got = p.evaluate("""(sel) => [...document.querySelectorAll(sel)].map(f => { const i = f.querySelector(':scope > i'), a = f.getBoundingClientRect(),
+      b = i.getBoundingClientRect(), cs = getComputedStyle(i);
+      return {t: i.textContent, w: a.width, h: a.height, iw: b.width, ih: b.height, dx: Math.abs((b.left + b.width / 2) - (a.left + a.width / 2)),
+              border: cs.borderTopWidth, ml: cs.marginLeft, pad: cs.paddingLeft}; })""", sel)
+    assert sorted(x['t'] for x in got) == sorted(want), got
+    for x in got:
+        assert round(x['w']) == round(x['h']) and x['iw'] < x['w'] - 4 and x['ih'] < x['h'] * 0.7, x   # one line inside the circle
+        assert x['dx'] < 1.5 and x['border'] in ('0px', '') and x['ml'] == '0px' and x['pad'] == '0px', x
+
+
 @pytest.mark.parametrize('size', SIZES)
 def test_nba_nfl_faces_on_rows_card_slip_and_picks_esports_unchanged(ctx, env, size):
     p = board(ctx, env, size)
@@ -375,10 +418,13 @@ def test_nba_nfl_faces_on_rows_card_slip_and_picks_esports_unchanged(ctx, env, s
     if size == DESK:
         legs = p.locator('#hub-slip-content .u-leg')
         assert legs.count() == 2 and p.locator('#hub-slip-content .u-leg .u-face').count() == 2
+        initials_fit(p, '#hub-slip-content .u-leg .u-face', ['KA', 'RL'])
         shot(p, 'faces-slip-column')
     p.goto(env.url + '/#/slips')
     p.wait_for_selector('#hub-studio-body .u-leg .u-face')
     assert p.locator('#hub-studio-body .u-leg .u-face').count() == 2
+    p.wait_for_function("[...document.querySelectorAll('#hub-studio-body .u-leg .u-face')].every(f => f.classList.contains('u-face-fb'))")
+    initials_fit(p, '#hub-studio-body .u-leg .u-face', ['KA', 'RL'])
     assert re.match(FACE, p.locator('#hub-studio-body .u-leg .u-face img').first.get_attribute('src'))
     shot(p, 'faces-my-slip')
     p.wait_for_selector('#hub-studio-body [data-u=track]:not([disabled])', timeout=20000)

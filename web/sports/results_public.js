@@ -171,7 +171,7 @@
       h += '<div class="rx-big"><span data-rx-wlp>' + escH(rec.wlp) + '</span> <span class="rx-unit">W-L-P</span></div>' +
         '<div class="rx-line"><b data-rx-rate>' + escH(rec.rateText) + "</b> hit rate on " + escH(int(rec.decided)) + " decided picks" +
         (rec.range ? ' <span class="rx-range" data-rx-range>(95% range ' + escH(rec.range) + ")</span>" : "") + "</div>" +
-        '<div class="rx-line sw-small sw-muted" data-rx-counting>One pick per player, stat and game.</div>';
+        '<div class="rx-line sw-small sw-muted" data-rx-counting>One pick per player, stat and game: the app line closest to Scout’s projection.</div>';
     } else h += '<div class="rx-line sw-muted">No settled Scout picks yet.</div>';
     h += "</div>";
     if (!contained) h += '<div class="rx-gr"><div class="rx-k">Graded picks <span class="sw-grade-tag">Research grades</span></div><div class="rx-tiles">' +

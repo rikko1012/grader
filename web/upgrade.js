@@ -576,24 +576,28 @@
      Game started" answer. A missing row alone may be a feed outage and never removes a leg; only a leg saved before legs carried a
      start time, and older than LEG_EXPIRE_MS, is treated as expired. */
   const LEG_EXPIRE_MS = 4 * 86400000;
+  /* -> "started" | "expired" | false (follow-up 2026-11-06: an expired pick is never announced as started) */
   function legGone(l, now) {
     const r = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
-    if (r && r.event.id === l.event_id) return started(r);
+    if (r && r.event.id === l.event_id) return started(r) ? "started" : false;
     const t = Date.parse(l.start_utc || "");
-    if (Number.isFinite(t)) return t <= now;
+    if (Number.isFinite(t)) return t <= now ? "started" : false;
     const c = T.check && T.check.legs && T.check.legs[l.id];
-    if (c && (c.problems || []).some((p) => p.code === "locked")) return true;
+    if (c && (c.problems || []).some((p) => p.code === "locked")) return "started";
     const at = Date.parse(l.added_at);
-    return Number.isFinite(at) && now - at > LEG_EXPIRE_MS;
+    return Number.isFinite(at) && now - at > LEG_EXPIRE_MS ? "expired" : false;
   }
+  const picksWord = (n, kind) => `${n} ${kind} ${n === 1 ? "pick" : "picks"}`;   /* the classic slip's wording: "Removed 1 started pick: X." */
   function removeStarted() {
     if (!T.ready || T.saving || T.checking) return;
-    const now = Date.now(), gone = T.legs.filter((l) => legGone(l, now));
+    const now = Date.now(), why = new Map(T.legs.map((l) => [l.id, legGone(l, now)])), gone = T.legs.filter((l) => why.get(l.id));
     if (!gone.length) return;
     const ids = new Set(gone.map(l=>l.id));
     T.legs = T.legs.filter(l=>!ids.has(l.id));
     slipChanged();
-    say(`Removed ${gone.length} started ${gone.length===1?'leg':'legs'}: ${gone.map(l=>l.player).join(', ')}.`);
+    const st = gone.filter((l) => why.get(l.id) === "started"), ex = gone.filter((l) => why.get(l.id) === "expired");
+    say([st.length ? `Removed ${picksWord(st.length, "started")}: ${st.map(l=>l.player).join(', ')}.` : "",
+         ex.length ? `Removed ${picksWord(ex.length, "expired")} (added more than 4 days ago): ${ex.map(l=>l.player).join(', ')}.` : ""].filter(Boolean).join(" "));
   }
 
   async function shareSlip() {
@@ -805,10 +809,13 @@
     const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
     const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
     let out = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`;
+    const boxes = [], CH = 6.4;                                   /* bars and value labels: the "Line" label never sits on them */
     for (let t = 0; t <= top; t += step) out += `<line class="grid" x1="${m.l}" x2="${w - m.r}" y1="${y(t)}" y2="${y(t)}"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${Math.round(t * 10) / 10}</text>`;
     data.forEach((d, i) => {
       const x = m.l + slot * i + (slot - bw) / 2, yv = y(d.value), push = d.value === line, over = d.value > line, cls = push ? "b-push" : (side === "over" ? over : !over) ? "b-hit" : "b-miss";
       out += `<rect class="${cls}" x="${x}" y="${yv}" width="${bw}" height="${Math.max(base - yv, 1)}" rx="3"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${d.value}`)}</title></rect>`;
+      boxes.push([x - 2, yv - 1, x + bw + 2, base]);
+      if (i === data.length - 1) { const tw = String(d.value).length * CH; boxes.push([x + bw / 2 - tw / 2 - 2, yv - 15, x + bw / 2 + tw / 2 + 2, yv - 2]); }
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
       if (typeof d.closing === "number") out += `<line class="close-mark" x1="${x - 3}" x2="${x + bw + 3}" y1="${y(d.closing)}" y2="${y(d.closing)}"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: closed at ${d.closing}, finished ${d.value}`)}</title></line>`;   /* lh-1: the line this game closed at */
       const day = dateOf(d);
@@ -818,8 +825,16 @@
        own dotted line with its own label, so the two never read as one */
     const ly = y(line), my = median != null ? y(median) : null, near = my != null && Math.abs(my - ly) < 13;
     const lyLab = Math.max(m.t - 4, ly - 4), myLab = my == null ? null : near && my >= ly ? Math.min(base - 3, my + 12) : Math.max(m.t - 4, my - 4);
-    const med = my == null ? "" : `<line class="median-mark" x1="${m.l}" x2="${w - m.r}" y1="${my}" y2="${my}"/><text class="median-lab" x="${m.l + 4}" y="${myLab}">Median ${esc(Math.round(median * 10) / 10)}</text>`;
-    return out + med + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${ly}" y2="${ly}"/><text class="line-lab" x="${w - m.r}" y="${lyLab}" text-anchor="end">Line ${esc(line)}</text></svg>`;
+    const medTxt = median == null ? "" : `Median ${Math.round(median * 10) / 10}`;
+    const med = my == null ? "" : `<line class="median-mark" x1="${m.l}" x2="${w - m.r}" y1="${my}" y2="${my}"/><text class="median-lab" x="${m.l + 4}" y="${myLab}">${esc(medTxt)}</text>`;
+    if (my != null) boxes.push([m.l + 2, myLab - 11, m.l + 6 + medTxt.length * CH, myLab + 3]);
+    /* follow-up 2026-11-06 (B6): the "Line" label goes on the line, right then left, above then below - the first spot that covers
+       no bar, no value and no median label; when the bars fill every spot it sits in the top margin, over the plot */
+    const lt = `Line ${line}`, lw = lt.length * CH, hits = (b) => boxes.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+    const spot = (anchor, yb) => { const x0 = anchor === "end" ? w - m.r - lw : m.l + 4; return { anchor, x: anchor === "end" ? w - m.r : m.l + 4, y: yb, box: [x0, yb - 10, x0 + lw, yb + 3] }; };
+    const cands = [spot("end", lyLab), spot("end", ly + 12), spot("start", lyLab), spot("start", ly + 12)].filter((c) => c.box[1] >= m.t - 14 && c.box[3] <= base - 1);
+    const pick = cands.find((c) => !hits(c.box)) || spot("end", m.t - 8);
+    return out + med + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${ly}" y2="${ly}"/><text class="line-lab" x="${pick.x}" y="${pick.y}" text-anchor="${pick.anchor}">${esc(lt)}</text></svg>`;
   }
   function tilesHtml(rec, side) {
     const s = rec.scout, ln = P.doc, m = ln && ln.market && ln.market.available ? (side === "under" ? ln.market.p_under : ln.market.p_over) : null;

@@ -41,7 +41,7 @@ def test_700_members_on_sleeper_lines_and_their_research(big_queue, env, monkeyp
     for bk in ("underdog", "prizepicks"):
         x = env.by("vargo", bk)
         x.update(p=row["p"], side=row["side"], model_outcomes=row["model_outcomes"])
-        server.BOARD[x["id"]] = {"dist": row["dist"]}
+        server.BOARD[x["id"]] = {"dist": row["dist"], "perf_on": True}
     now = time.time()
     off = lambda line, sid, who="vargo", team="Halcyon": {
         "provider": "sleeper", "book": "sleeper", "sport": "cs2", "raw_stat": "kills_maps_1_2", "stat": "kills", "period": "maps12", "subject_id": sid,

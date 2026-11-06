@@ -92,16 +92,6 @@ def full_game(row):
     return (row.get("scope") or (row.get("key") or "").rsplit("|", 1)[-1] or "full_game") == "full_game"
 
 
-def far_lines(row, history_games):
-    """S3 di-1 (board_view.far_below_recent): the lines of this market far below the player's recent output -
-    a different market, kept off the sheet. Not a grading factor."""
-    if not history_games:
-        return set()
-    return {float(q["line"]) for q in (row.get("quotes") or []) + (row.get("alternates") or [])
-            if isinstance(q, dict) and q.get("line") is not None
-            and board_view.far_below_recent(row.get("stat"), q["line"], history_games)}
-
-
 # ------------------------------------------------------------------------------------------------------ builders
 def _compact_fc(f):
     """The board's compact forecast (snapshots.compact_forecasts format) for one full forecast view."""
@@ -126,10 +116,9 @@ def sheet_markets(player_file, history_games, platform, events, now):
             continue                                  # started games leave the sheet
         if not full_game(row):
             continue                                  # S1/S2: quarter / half lines are a different market
-        far = far_lines(row, history_games)
         lines = [q for q in (row.get("quotes") or []) + (row.get("alternates") or [])
                  if isinstance(q, dict) and q.get("platform") == platform and not q.get("promotional")
-                 and q.get("availability", "open") == "open" and float(q["line"]) not in far]
+                 and q.get("availability", "open") == "open"]
         if not lines:
             continue
         scout = [fid for fid in {q.get("forecast_id") for q in row.get("quotes") or []} - {None}
@@ -192,11 +181,11 @@ def sheet_markets(player_file, history_games, platform, events, now):
 
 def headline_line(row):
     """CONSISTENT's current line: PrizePicks standard, else the Underdog main line - an ordinary line that lists BOTH
-    sides (S1/S2: a one-sided line is never the 'current line', even when an older stored row calls it balanced)."""
+    sides (S1/S2: a one-sided line is never the 'current line'). The type is the LISTED sides stored by the adapter
+    (variant one_sided), never today's offered sides, so a passing suspension of one side changes nothing."""
     for plat in PLATFORMS:
         for q in row.get("quotes") or []:
-            sides = {s.get("side"): s.get("offered") for s in q.get("sides") or [] if isinstance(s, dict)}
-            if q.get("platform") == "underdog" and sides and not (sides.get("over") and sides.get("under")):
+            if q.get("variant") == "one_sided":
                 continue
             if q.get("platform") == plat and q.get("variant") in ORDINARY and not q.get("promotional"):
                 return plat, float(q["line"])
@@ -212,8 +201,8 @@ def consistent_rows(player_file, history_games, events, now):
         if not full_game(row):
             continue                                  # S1/S2: a 1Q / 1H line is never compared with full-game history
         plat, line = headline_line(row)
-        if plat is None or board_view.far_below_recent(row["stat"], line, history_games):
-            continue                                  # S3 di-1: a line far below recent output is a different market
+        if plat is None:
+            continue
         pv = board_view.played_values(history_games, row["stat"])
         vals = [x[0] for x in pv]
         o10, u10, p10, n10 = board_view.hit_counts(vals, line, 10)

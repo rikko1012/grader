@@ -238,7 +238,7 @@ html[data-upgrade] .u-seg button[aria-pressed=true]{background:var(--u-gold);col
 html[data-upgrade] .u-leg{position:relative;display:grid;gap:1px;padding:9px 44px 9px 12px;border-bottom:1px solid #1f1f1f}
 html[data-upgrade] .u-leg.bad{background:#1a1010}
 html[data-upgrade] .u-leg-name{font-weight:600;font-size:13.5px}
-html[data-upgrade] .u-leg-name i{margin-left:6px;font:400 10px var(--u-mono);color:var(--u-faint)}
+html[data-upgrade] .u-leg-name>i{margin-left:6px;font:400 10px var(--u-mono);color:var(--u-faint)}
 html[data-upgrade] .u-leg-pick{font-size:13px}
 html[data-upgrade] .u-leg-meta{font-size:11.5px;color:var(--u-muted)}
 html[data-upgrade] .u-leg .u-x{position:absolute;right:8px;top:8px;width:30px;height:30px}

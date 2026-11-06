@@ -96,7 +96,47 @@ def test_feed_older_than_two_hours_is_not_graded_as_current():
     assert server.feed_current({"at": iso}, now) and server.feed_age_s({"at": iso}, now) == pytest.approx(120, abs=1)
     src = (ROOT / "server.py").read_text(encoding="utf-8")
     loop = src[src.index("def board_forever():"):src.index("def one(r):", src.index("def board_forever():"))]
-    assert "current = {bk_: feed_current(fb_) for bk_, fb_ in feeds.items()}" in loop and 'current.get(r.get("book") or "underdog", True)' in loop
+    assert "gradable = board_gradable(feeds)" in loop                                # the loop uses the tested gate
+
+
+def test_stale_feed_keeps_its_last_board_grade_while_the_other_feed_grades(monkeypatch):
+    """Follow-up 2026-11-06 (B1 behaviour, not source text): Underdog's last good read is 3 h old, PrizePicks' is 1 min."""
+    now = time.time()
+    start = datetime.fromtimestamp(now + 3600, timezone.utc).isoformat()
+    iso_now = datetime.fromtimestamp(now, timezone.utc).isoformat()
+    feeds = {"underdog": {"at": now - 3 * 3600, "rows": []}, "prizepicks": {"at": now - 60, "rows": []}}
+    ud = {"id": "ud:1", "book": "underdog", "alt": False, "start": start, "line": 38.5}
+    pp = {"id": "pp:1", "book": "prizepicks", "alt": False, "start": start, "line": 38.5}
+    gob = {"id": "pp:2", "book": "prizepicks", "alt": True, "start": start, "line": 30.5}
+    ud_alt = {"id": "ud:2", "book": "underdog", "alt": True, "start": start, "line": 30.5}
+    gradable = server.board_gradable(feeds, now)
+    assert not gradable(ud, iso_now)                                                 # stale feed: not regraded
+    assert gradable(pp, iso_now) and gradable(gob, iso_now)                          # the other feed keeps grading
+    assert not gradable(ud_alt, iso_now)                                             # Underdog alternates: never (as before)
+    started = dict(pp, start=datetime.fromtimestamp(now - 60, timezone.utc).isoformat())
+    assert not gradable(started, iso_now)
+    # the loop's todo selection: the stale feed's row is skipped, so its BOARD grade is the last one, untouched
+    kept = {"at": now - 9999, "grade": "B", "side": "More", "p": 0.58, "graded_line": 38.5}
+    monkeypatch.setattr(server, "BOARD", {"ud:1": dict(kept), "pp:1": dict(kept)})
+    todo = [r for r in (ud, pp) if gradable(r, iso_now) and now - server.BOARD[r["id"]]["at"] > server.BOARD_EVERY]
+    assert [r["id"] for r in todo] == ["pp:1"] and server.BOARD["ud:1"] == kept
+    # both fresh again: both grade
+    assert server.board_gradable({"underdog": {"at": now - 30}, "prizepicks": {"at": now - 30}}, now)(ud, iso_now)
+
+
+def test_prizepicks_read_time_reaches_the_board_gate(monkeypatch):
+    """A fresh PrizePicks read carries its read time ('at' = last_ok), so the gate grades it; a status with no last_ok is
+    reported 'stale' on the feed (never a silent stop) and its lines keep their last grade."""
+    import prizepicks
+    now = time.time()
+    s = dict(prizepicks._S, at=now, tried=now, busy=False, error=None, rows=[],
+             status={"ok": True, "lines": 3, "source": prizepicks.DIRECT_SOURCE, "error": None, "checked_at": now, "last_ok": now})
+    monkeypatch.setattr(prizepicks, "_S", s)
+    b = prizepicks.board(now=now)
+    assert b["at"] == now and server.feed_current(b, now)
+    s["status"] = dict(s["status"], last_ok=None)
+    b = prizepicks.board(now=now)
+    assert b["at"] is None and not server.feed_current(b, now) and b["state"] == "stale"
 
 
 def test_line_history_keeps_underdogs_change_time_for_the_current_line():
@@ -123,7 +163,8 @@ def _cs2_row(lam=41.0, sd=6.0, line=38.5, prop="kills"):
     pm = min(max(o / (o + u), 1 - grader.CONFIG["p_cap_kills"]), grader.CONFIG["p_cap_kills"]) if prop == "kills" else o / (o + u)
     side = "More" if round(pm, 3) > round(1 - pm, 3) else "Less"
     return {"id": "L1", "prop": prop, "line": line, "graded_line": line, "side": side, "p": round(pm if side == "More" else 1 - pm, 3),
-            "model_outcomes": {"over": round(o, 4), "under": round(u, 4), "push": round(q, 4)}, "dist": {"kind": "normal", "lam": lam, "sd": sd}}
+            "model_outcomes": {"over": round(o, 4), "under": round(u, 4), "push": round(q, 4)}, "dist": {"kind": "normal", "lam": lam, "sd": sd},
+            "perf_on": True}
 
 
 def test_cs2_chance_at_another_line_is_the_graders_own_read_of_the_same_distribution():
@@ -146,6 +187,10 @@ def test_cs2_chance_refuses_whatever_is_not_the_saved_distribution():
     assert line_chance.cs2_at(dict(x, p=round(x["p"] - 0.03, 3)), 37.5) is None    # printed chance not this distribution's read
     assert line_chance.cs2_at(dict(x, p_raw=x["p"], cal_v="ec-1:x"), 37.5) is None  # a display layer is never mixed with a raw read
     assert line_chance.cs2_at(dict(x, side="Less"), 37.5) is None
+    # follow-up 2026-11-06: the old pipeline's gap-trust shift depends on the line - no read at another line
+    assert line_chance.cs2_at(dict(x, perf_on=False), 37.5) is None
+    assert line_chance.cs2_at({k: v for k, v in x.items() if k != "perf_on"}, 37.5) is None
+    assert line_chance.cs2_at(dict(x, flags=["Projection 45.0 is 6.5 from the line - past 2.5 only half counts"]), 37.5) is None
 
 
 def test_cs2_headshot_distribution_reads_too():
@@ -156,7 +201,7 @@ def test_cs2_headshot_distribution_reads_too():
     p = o / (o + u)
     x = {"id": "H", "prop": "hs", "line": 17.5, "graded_line": 17.5, "side": "More" if p > 0.5 else "Less", "p": round(max(p, 1 - p), 3),
          "model_outcomes": {"over": round(o, 4), "under": round(u, 4), "push": 0.0},
-         "dist": line_chance.compact_dist({"kind": "hs_bb", "lam_kills": 40.0, "hs_per_kill": 0.45, "scope": "12", "c": None})}
+         "dist": line_chance.compact_dist({"kind": "hs_bb", "lam_kills": 40.0, "hs_per_kill": 0.45, "scope": "12", "c": None}), "perf_on": True}
     got = line_chance.cs2_at(x, 16.5)
     o2 = sum(v for k, v in pmf.items() if k > 16.5)
     u2 = sum(v for k, v in pmf.items() if k < 16.5)
@@ -266,8 +311,8 @@ def books(env, monkeypatch):
     row = _cs2_row(41.0, 6.0, 38.5)
     for r in (x, env.by("vargo", "prizepicks")):
         r.update(p=row["p"], side=row["side"], model_outcomes=row["model_outcomes"])
-    server.BOARD[x["id"]] = {"dist": row["dist"]}
-    server.BOARD[env.by("vargo", "prizepicks")["id"]] = {"dist": row["dist"]}
+    server.BOARD[x["id"]] = {"dist": row["dist"], "perf_on": True}
+    server.BOARD[env.by("vargo", "prizepicks")["id"]] = {"dist": row["dist"], "perf_on": True}
     now = time.time()
     off = lambda line, sid: {"provider": "sleeper", "book": "sleeper", "sport": "cs2", "raw_stat": "kills_maps_1_2", "stat": "kills", "period": "maps12",
                              "subject_id": sid, "player": "vargo", "player_norm": "vargo", "team": "Halcyon", "team_norm": "halcyon", "game_id": "g", "line": line,
@@ -358,7 +403,7 @@ def test_extra_lines_never_change_the_board_or_go_on_a_slip(books):
     assert "if(r.extra)return openCard(id,'overview')" in js                    # Info opens the research card (it only toasted)
     assert "'detail-add'(){const r=rec(H.detail);if(!r||r.extra)return;" in js   # never on a slip
     assert "const eligible=!r.extra&&" in js and "extraDetail(" not in js
-    assert "Scout\\u2019s chance at this line" in js
+    assert "Scout\\u2019s chance at this line" in js and ">Chance at this line</span>" in js   # short on the row, full on the card
 
 
 # ------------------------------------------------------------------------------------------------------------- LoL

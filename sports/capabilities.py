@@ -24,24 +24,23 @@ SUPPORTED = {
     "nfl": ("pass_yds", "rush_yds", "rec_yds", "rush_att", "rec"),
 }
 COMBOS = {"pra", "pr", "pa", "ra", "stocks", "rush_rec_yds", "pass_rush_yds"}
-ORDINARY_VARIANTS = {"standard", "balanced", "main", "ladder_rung"}
+# one_sided (audit 2026-11-05 S1/S2): an Underdog line that LISTS only one side (adapters.ud_offers). It is labelled by
+# its sides ("Over only", never Standard) on member pages, but its grading scope is UNCHANGED from before the audit:
+# a full-game one-sided line is graded, forecast and pickable exactly as when it was stored 'balanced' (the unlisted
+# side is still refused by the slip pool's "chosen side not offered" and picks' side check). Quarter / half lines are
+# refused by their scope. Narrowing what is graded is an owner decision (audit follow-up, 2026-11-06), not made here.
+ORDINARY_VARIANTS = {"standard", "balanced", "main", "ladder_rung", "one_sided"}
 CAPABILITY_VERSION = "cap-1"
 ONE_SIDED_PLATFORMS = {"underdog"}
 
 
 def variant_of(offer):
-    """The line's REAL type (audit 2026-11-05 S1/S2). An Underdog line that lists only one side (higher-only at a
-    changed payout, e.g. Austin Reaves 1Q Points 3.5 Over 0.86x) is a different market from the two-sided main line:
-    'one_sided', never ordinary. New rows are stored that way by adapters.ud_offers; rows stored before carry
-    'balanced' and are read as one_sided here, so no production row is rewritten. offer = OfferSnapshot or an offer
-    view dict (snapshots.offer_view: platform, variant, sides [{side, offered}])."""
+    """The line's stored type. 'one_sided' comes only from the adapter, which reads the sides Underdog LISTS (offered
+    or suspended), so a passing suspension of one side never changes the type (audit follow-up 2026-11-06: the
+    earlier re-read of stored 'balanced' rows by OFFERED sides flipped a two-sided line to one_sided while one side
+    was suspended). offer = OfferSnapshot or an offer view dict."""
     get = offer.get if isinstance(offer, dict) else (lambda k, d=None: getattr(offer, k, d))
-    v = get("variant")
-    if v != "balanced" or get("platform") not in ONE_SIDED_PLATFORMS:
-        return v
-    on = sum(1 for x in (get("sides") or ())
-             if (x.get("offered") if isinstance(x, dict) else getattr(x, "offered", False)))
-    return "one_sided" if on == 1 else v
+    return get("variant")
 
 
 def is_ordinary(offer):

@@ -383,11 +383,8 @@ def test_pool_policy_exclusions(con, monkeypatch):
     ex = p["excluded"]
     assert "research forecast only" not in ex
     for reason in ("held stake (0U)", "no grade", "no forecast for this exact line",
-                   "team unknown", "price not fresh", "started / locked"):
+                   "chosen side not offered", "team unknown", "price not fresh", "started / locked"):
         assert ex.get(reason), (reason, ex)
-    # audit 2026-11-05 S1/S2: an Underdog line that lists one side is its own market (one_sided), refused at the gate
-    # before the side check - the forecast naming the unlisted side never reaches the pool either way
-    assert ex.get("not gradable") and "chosen side not offered" not in ex, ex
     assert ex["no forecast for this exact line"] == 2                       # nofc + the moved line
     r = pool.build(con, "nba", "underdog", now=w.NOW, policy="research")
     assert any(l["research_only"] for l in r["legs"])

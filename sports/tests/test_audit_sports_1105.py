@@ -37,63 +37,75 @@ def test_underdog_quarter_and_one_sided_lines_keep_their_real_market():
     assert full.scope == "full_game" and full.variant == "balanced" and full.offered_sides() == ("over", "under")
     blocks = [r for r in b.records if r.source_stat == "blocks"]
     assert blocks and all(r.scope == "full_game" and r.variant == "one_sided" for r in blocks)   # higher-only, full game
-    for r in (reaves_q1, harden_q1, blocks[0]):
+    for r in (reaves_q1, harden_q1):
         ok, why = capabilities.gate(r)
-        assert not ok                                    # never graded, never an ordinary line
-    assert any("scope q1" in w for w in capabilities.gate(reaves_q1)[1])
-    assert any("one_sided" in w for w in capabilities.gate(blocks[0])[1])
+        assert not ok and any("scope q1" in w for w in why)          # quarter lines: never graded (scope)
+    # follow-up 2026-11-06: a FULL-GAME one-sided line keeps its pre-audit grading scope (owner decision pending):
+    # stored one_sided (labelled "Over only" by its sides), still gradable, so the board, slips and record agree
+    assert capabilities.is_ordinary(blocks[0])
+    assert not any("variant" in w for w in capabilities.gate(blocks[0])[1])   # (unresolved ids here: no resolver)
 
 
-def test_rows_stored_before_the_fix_read_one_sided_without_a_rewrite():
+def _suspend_lower(body, source_stat, line):
+    import copy
+    body = copy.deepcopy(body)
+    n = 0
+    for ln in body["over_under_lines"]:
+        st = (ln.get("over_under") or {}).get("appearance_stat") or {}
+        if st.get("stat") == source_stat and float(ln.get("stat_value")) == line:
+            for o in ln.get("options") or []:
+                if o.get("choice") == "lower":
+                    o["status"] = "suspended"
+                    n += 1
+    assert n, (source_stat, line)
+    return body
+
+
+def test_a_suspended_side_never_turns_a_two_sided_line_one_sided():
+    raw = fixture("ud_nba_period_20261105.json")
+    before = {(r.player_name, r.source_stat, r.line): r for r in adapters.ud_offers(raw, NBA, h.T0, None).records}
+    after = {(r.player_name, r.source_stat, r.line): r
+             for r in adapters.ud_offers(_suspend_lower(raw, "points", 21.5), NBA, h.T0, None).records}
+    k = ("Austin Reaves", "points", 21.5)
+    assert before[k].offered_sides() == ("over", "under") and after[k].offered_sides() == ("over",)
+    for o in (before[k], after[k]):                      # the Under is suspended, not unlisted: still the main line
+        assert o.variant == "balanced" and capabilities.variant_of(o) == "balanced" and capabilities.is_ordinary(o)
+        assert not any("variant" in w for w in capabilities.gate(o)[1])
+    # a stored 'balanced' row with one offered side is read as stored (no re-read by today's offered sides)
     old = h.offer(platform="underdog", oid="ud:old", variant="balanced",
                   sides=(SideQuote("over", True, "payout_multiplier", multiplier=0.86), SideQuote("under", False)))
-    assert old.variant == "balanced" and capabilities.variant_of(old) == "one_sided"
-    assert not capabilities.is_ordinary(old) and not capabilities.gate(old)[0]
-    two = h.offer(platform="underdog", oid="ud:two", variant="balanced")
-    assert capabilities.variant_of(two) == "balanced" and capabilities.is_ordinary(two)
-    pp_more_only = h.offer(variant="standard", sides=(SideQuote("over", True), SideQuote("under", False)))
-    assert capabilities.variant_of(pp_more_only) == "standard"        # only Underdog's one-sided lines are re-read
+    assert capabilities.variant_of(old) == "balanced" and capabilities.gate(old)[0]
     view = {"platform": "underdog", "variant": "balanced", "sides": [{"side": "over", "offered": True},
                                                                       {"side": "under", "offered": False}]}
-    assert capabilities.variant_of(view) == "one_sided"
-    assert not capabilities.compatible(old, two)[0]
+    assert capabilities.variant_of(view) == "balanced"
+    two = h.offer(platform="underdog", oid="ud:two", variant="balanced")
+    assert capabilities.compatible(old, two)[0]
 
 
-# ------------------------------------------------------------------------------------------------ S3 di-1
+def test_pick_refusal_uses_plain_member_words():
+    from sports import picks
+    for why, part in ((["scope q1: only full-game markets are graded"], "quarter or half line"),
+                      (["variant goblin: alternate payout line, kept apart from ordinary lines"], "pays differently"),
+                      (["promotional line: never graded or mixed with ordinary lines"], "promotional"),
+                      (["Combined stat: research only"], "does not track this stat")):
+        t = picks.plain_gate_reason(why)
+        assert t.startswith("Scout can't track this pick: ") and part in t
+        assert "variant" not in t and "one_sided" not in t and "scope" not in t
+
+
+# ------------------------------------------------------------------------------------------------ S3 di-1 removed
 def _games(stat, values):
     return [{"participation": "played", "values": {stat: v}, "season": 2026, "start_utc": f"2026-10-{30 - i:02d}T00:00:00Z"}
             for i, v in enumerate(values)]
 
 
-AUDIT_ROWS = [  # (player, stat, line the audit saw, a plausible recent run for that player)
-    ("Austin Reaves", "points", 3.5, [21, 24, 19, 26, 18, 22, 25, 20, 17, 23]),
-    ("Donovan Mitchell", "points", 5.5, [24, 30, 27, 21, 33, 25, 22, 28, 26, 29]),
-    ("LeBron James", "points", 4.5, [18, 22, 15, 25, 20, 17, 19, 23, 16, 21]),
-    ("James Harden", "points", 3.5, [17, 21, 15, 24, 19, 16, 20, 18, 22, 14]),
-    ("Luka Doncic", "points", 11.5, [34, 38, 29, 41, 33, 36, 31, 35, 39, 30]),
-    ("Shai Gilgeous-Alexander", "points", 9.5, [32, 35, 29, 31, 38, 30, 33, 34, 28, 36]),
-    ("Drake Maye", "pass_yds", 49.5, [230, 251, 198, 275, 240, 212, 263]),
-    ("Zach Charbonnet", "rush_yds", 6.5, [39, 52, 31, 44, 60, 28, 47]),
-    ("Jaxon Smith-Njigba", "rec_yds", 17.5, [92, 110, 74, 131, 88, 97, 63]),
-    ("Matthew Stafford", "pass_yds", 53.5, [251, 280, 233, 301, 244, 268, 219]),
-]
-
-
-@pytest.mark.parametrize("player,stat,line,vals", AUDIT_ROWS)
-def test_far_below_recent_output_is_a_different_market(player, stat, line, vals):
-    games = _games(stat, vals)
-    assert board_view.far_below_recent(stat, line, games), player
-    med, n = board_view.recent_median(games, stat)
-    assert board_view.far_below_recent(stat, med - 0.5, games) is False      # the real line stays
-
-
-def test_far_below_recent_needs_enough_games_and_volume():
-    assert not board_view.far_below_recent("points", 3.5, _games("points", [21, 24, 19, 26]))   # 4 games: too few
-    assert not board_view.far_below_recent("steals", 0.5, _games("steals", [1, 2, 1, 0, 1, 1, 2]))  # median 1 < 3
-    assert not board_view.far_below_recent("rec", 1.5, _games("rec", [2, 3, 2, 1, 4, 2, 3]))       # small counts
-    assert not board_view.far_below_recent("points", 10.5, _games("points", [20, 21, 19, 22, 20]))  # 10.5 >= half of 20
-    assert board_view.far_below_recent("points", 9.5, _games("points", [20, 21, 19, 22, 20]))
-    assert not board_view.far_below_recent("points", 3.5, [])                                    # no history: no hold
+def test_di1_median_hold_is_gone():
+    """Follow-up 2026-11-06: di-1 hid real lines (Tank Dell rec_yds 15.5 vs a 41 median, FanDuel 15.5 / Kalshi 14.5 /
+    Polymarket 19.5 on the same market) that stayed forecast and in the slip pool. No line is hidden by recent output."""
+    assert not hasattr(board_view, "far_below_recent") and not hasattr(board_view, "DI_VERSION")
+    assert not hasattr(sheets, "far_lines")
+    src = (ROOT / "sports" / "snapshots.py").read_text(encoding="utf-8")
+    assert 'q["di"]' not in src and 'q.get("di")' not in src
 
 
 # ------------------------------------------------------------------------------------------------ sheets
@@ -114,28 +126,40 @@ def _row(scope, quotes, alternates=(), stat="points"):
             "alternates": list(alternates), "market": None}
 
 
-def test_consistent_sheet_never_shows_quarter_one_sided_or_far_lines():
+def test_consistent_sheet_never_shows_quarter_or_one_sided_lines():
     hist = _games("points", [21, 24, 19, 26, 18, 22, 25, 20, 17, 23, 19, 24])
     pf = {"markets": [
-        _row("q1", [_q("ud-q1", 3.5, over=True, under=False, mult=0.86)]),           # the audit row: 1Q Points
-        _row("full_game", [_q("ud-old", 3.5, over=True, under=False, mult=0.86)]),   # stored before the fix
+        _row("q1", [_q("ud-q1", 3.5, over=True, under=False, mult=0.86)]),                        # the audit row: 1Q
+        _row("full_game", [_q("ud-one", 3.5, variant="one_sided", over=True, under=False, mult=0.86)]),  # listed one side
     ]}
     assert sheets.consistent_rows(pf, hist, EV, NOW) == []
-    pf = {"markets": [_row("full_game", [_q("pp-far", 3.5, plat="prizepicks", variant="standard")])]}
-    assert sheets.consistent_rows(pf, hist, EV, NOW) == []                          # S3: far below recent output
     pf = {"markets": [_row("full_game", [_q("ud-main", 21.5)])]}
     out = sheets.consistent_rows(pf, hist, EV, NOW)
     assert len(out) == 1 and out[0]["l"] == 21.5 and out[0]["plat"] == "underdog" and out[0]["r10"] < 1.0
+    # a main line whose Under is suspended right now is still the current line (listed type, not offered sides)
+    pf = {"markets": [_row("full_game", [_q("ud-susp", 21.5, under=False)])]}
+    assert [r["l"] for r in sheets.consistent_rows(pf, hist, EV, NOW)] == [21.5]
 
 
-def test_platform_sheet_leaves_out_quarter_rows_and_far_lines():
+def test_tank_dell_low_real_line_stays_on_the_sheets():
+    """The audit's di-1 case: Tank Dell rec_yds 15.5 (median of last 10 = 41) is a real full-game line (FanDuel 15.5)."""
+    hist = _games("rec_yds", [41, 38, 52, 44, 30, 47, 35, 60, 41, 29])
+    row = _row("full_game", [_q("pp-dell", 15.5, plat="prizepicks", variant="standard")],
+               [_q("pp-gob", 9.5, plat="prizepicks", variant="goblin")], stat="rec_yds")
+    out = sheets.consistent_rows({"markets": [row]}, hist, EV, NOW)
+    assert [(r["plat"], r["l"]) for r in out] == [("prizepicks", 15.5)]
+    m, _, _ = sheets.sheet_markets({"forecasts": {}, "forecast_detail": {}, "markets": [row]}, hist, "prizepicks", EV, NOW)
+    assert sorted(q["l"] for q in m[0]["q"]) == [9.5, 15.5]                       # goblin kept too
+
+
+def test_platform_sheet_leaves_out_quarter_rows():
     hist = _games("points", [21, 24, 19, 26, 18, 22, 25, 20, 17, 23])
     pf = {"forecasts": {}, "forecast_detail": {}, "markets": [
         _row("q1", [_q("ud-q1", 3.5, over=True, under=False)]),
-        _row("full_game", [_q("ud-main", 21.5)], [_q("ud-far", 3.5, variant="one_sided", under=False)])]}
+        _row("full_game", [_q("ud-main", 21.5)], [_q("ud-low", 3.5, variant="alternate")])]}
     m, _, view = sheets.sheet_markets(pf, hist, "underdog", EV, NOW)
     assert [x["k"].rsplit("|", 1)[-1] for x in m] == ["full_game"]
-    assert [q["l"] for q in m[0]["q"]] == [21.5]
+    assert sorted(q["l"] for q in m[0]["q"]) == [3.5, 21.5]                       # no median hold (di-1 removed)
     assert all(not k.endswith("|q1") for k in view)
 
 
@@ -167,7 +191,7 @@ def test_one_pick_per_player_stat_game():
     assert raw["settled"] == 7 and raw["forecasts"] == 7                          # forecast-level totals kept
 
 
-def test_record_excludes_quarter_and_underdog_one_sided_forecasts(monkeypatch):
+def test_record_excludes_quarter_forecasts_only(monkeypatch):
     from sports import settlement, snapshots, store
     fcs = {
         "full": SimpleNamespace(league="nba", scope="full_game", sides_available=("over", "under"), line=21.5),
@@ -186,7 +210,20 @@ def test_record_excludes_quarter_and_underdog_one_sided_forecasts(monkeypatch):
     import sports.model.shown as shown
     monkeypatch.setattr(shown, "get_many", lambda by_fc: {})
     rows = results_public._rows_from(None, "nba", setts)
-    assert [r["forecast_id"] for r in rows] == ["full"]
+    # quarter lines never count; a one-offered-side forecast keeps its record (today's offered sides are not the type)
+    assert sorted(r["forecast_id"] for r in rows) == ["full", "one"]
+
+
+def test_head_to_head_one_pair_per_scout_model_per_prop():
+    """A7 follow-up: sm-1 picks 15.5 (mean 15.6), mi-1 picks 16.5 (mean 16.4); mc-1 has both lines."""
+    rows = [_r("s155", 15.5, 15.6), _r("s165", 16.5, 15.6), _r("i155", 15.5, 16.4, model="mi-1"),
+            _r("i165", 16.5, 16.4, model="mi-1"), _r("m155", 15.5, 16.0, model="mc-1"), _r("m165", 16.5, 16.0, model="mc-1")]
+    reps = results_public.representative(rows)
+    by = {r["model"]: r["line"] for r in reps}
+    assert by["sm-1"] == 15.5 and by["mi-1"] == 16.5
+    hh = results_public.head_to_head(results_public.head_to_head_rows(rows, reps))
+    got = {(x["scout"], x["market"]): x["pairs"] for x in hh if x["stat"] == "all"}
+    assert got == {("sm-1", "mc-1"): 1, ("mi-1", "mc-1"): 1}, hh
 
 
 # ------------------------------------------------------------------------------------------------ B8 / A8

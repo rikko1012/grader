@@ -413,7 +413,7 @@ def chance_of(srv, sport, x, line):
         g = (getattr(srv, "BOARD", None) or {}).get(x.get("id")) or {}
         if not g.get("dist"):
             return None
-        return line_chance.cs2_at(dict(x, dist=g["dist"]), line)
+        return line_chance.cs2_at(dict(x, dist=g["dist"], perf_on=g.get("perf_on")), line)
     if sport == "lol":
         return line_chance.lol_at(x.get("lam"), x.get("nb"), x.get("fc_line") if x.get("fc_line") is not None else x.get("line"),
                                   x.get("po"), x.get("pu"), line)

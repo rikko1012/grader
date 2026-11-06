@@ -160,12 +160,14 @@ interplay A1-A4): `python -m pytest sports/tests -q` -> 485 passed, 10 skipped.
   full-game history: the "Most consistent" 100% rows (Reaves Points 3.5 Over 0.86x, Maye pass yds 49.5, ...) were 1Q
   lines. Now: only full-game markets reach the board files, the sheets and the workspace; quarter / half lines stay on
   the player page with their period. The forecast record (results_public rp-2 and the results ledger) skips them.
-- An Underdog line that lists ONE side (higher-only at a changed payout) is `one_sided` (contracts VARIANTS), never an
-  ordinary / Standard line: new rows are stored that way by adapters.ud_offers; rows stored earlier as `balanced` are
-  read as one_sided by capabilities.variant_of (no production row rewritten). gate() refuses it (not graded, not in
-  the slip pool); the sheet shows it as "Over only".
-- di-1 data-integrity hold (board_view.far_below_recent, NOT a grading factor): a full-game pick'em line below half
-  the median of the player's newest 10 played games (>= 5 games, median >= 3) is a different market under a
-  full-game name and is kept off the board table and the sheets.
+- An Underdog line that LISTS one side (higher-only at a changed payout) is stored `one_sided` by adapters.ud_offers
+  (contracts VARIANTS). Member pages label it by its sides ("Over only"), never Standard, and it is never the sheet's
+  'current line'. Follow-up 2026-11-06: its grading scope is UNCHANGED from before the audit (a full-game one-sided
+  line is graded, forecast and pickable as when it was stored `balanced`; the unlisted side stays refused by the
+  slip pool's "chosen side not offered"). Narrowing that is an owner decision. Stored rows are never re-read by
+  their offered sides, so a suspended side never changes a line's type, grading or record.
+- di-1 (median hold) was removed 2026-11-06: it hid real full-game lines (Tank Dell rec_yds 15.5 = FanDuel 15.5,
+  most deep goblins) while they stayed forecast and in the slip pool; the 1Q / 1H lines it targeted are already
+  left off by scope.
 - Results rp-2: one representative forecast per game x player x stat (pick'em main line before books before Kalshi,
   then the line closest to the forecast's own projection, newest first); raw forecast counts kept as raw_counts.

@@ -36,7 +36,7 @@ def setup(env, monkeypatch):
     for bk in ('underdog', 'prizepicks'):
         x = env.by('vargo', bk)
         x.update(p=row['p'], side=row['side'], model_outcomes=row['model_outcomes'])
-        server.BOARD[x['id']] = {'dist': row['dist']}
+        server.BOARD[x['id']] = {'dist': row['dist'], 'perf_on': True}
     old = (datetime.now(timezone.utc) - timedelta(hours=32)).isoformat(timespec='seconds')
     for r in env.rows:                       # B1: Underdog changed these lines 32 h ago; Scout read them just now
         if r['book'] == 'underdog':
@@ -79,7 +79,12 @@ def test_sleeper_line_has_chance_hits_and_the_full_card(browser, setup, size):
         p.wait_for_function("""()=>{const r=[...document.querySelectorAll('#hub-rows tr[data-record]')].find(t=>t.innerText.includes('vargo'));
                                     return r&&!r.querySelector('.h-s-l5 .h-hit.empty')&&!r.querySelector('.h-s-l5 .h-hit-wait');}""", timeout=20000)
         vt = v.inner_text()
-        assert 'chance at this line' in vt and 'Lean' not in vt                # Scout's chance at 37.5, no letter
+        assert 'Chance at this line' in vt and 'Lean' not in vt                # Scout's chance at 37.5, no letter
+        # follow-up 2026-11-06: the row label is whole (never cut) and the sort menu names the order on screen (no edges here)
+        lab = v.locator('.h-line-chance')
+        assert lab.evaluate('e => e.scrollWidth <= e.clientWidth + 1 && getComputedStyle(e).textOverflow !== "ellipsis"')
+        assert lab.get_attribute('title') == 'Scout’s chance at this line'
+        assert p.locator('#hub-sort').input_value() == 'start' and p.locator('#hub-sort-note').inner_text().strip() == ''
         assert v.locator('.h-s-l5 .h-hit').inner_text() != '—' and v.locator('.h-s-l20 .h-hit').inner_text() != '—'
         assert b.locator('.h-s-l5 .h-hit').inner_text() != '—'                 # same-line row: L5 / L20 too, not only the saved L10
         no_h_scroll(p)

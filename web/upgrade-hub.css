@@ -412,7 +412,7 @@ html[data-upgrade] .h-entry{position:static;inset:auto;z-index:auto;display:inli
 .u-leg-index{display:none}
 #hub-studio-body .u-leg-index{display:block;position:absolute;left:22px;top:24px;font:500 12px 'DM Mono',monospace;color:#7f94af}
 #hub-studio-body .u-leg-name{font-size:17px;line-height:1.4;letter-spacing:-.02em}
-#hub-studio-body .u-leg-name i{font-size:9px;border:1px solid #42506a;border-radius:3px;padding:2px 5px;color:#bdd0ea}
+#hub-studio-body .u-leg-name>i{font-size:9px;border:1px solid #42506a;border-radius:3px;padding:2px 5px;color:#bdd0ea}
 #hub-studio-body .u-leg-pick{margin-top:8px;color:#e3ebf8;font-size:14px}
 #hub-studio-body .u-leg-pick b{font-size:20px;font-weight:600;margin-inline:3px}
 #hub-studio-body .u-leg-meta{color:#9fb7d8;margin-top:6px}
@@ -877,6 +877,9 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 #u-hub #hub-table .h-player b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 #u-hub #hub-table .h-player small{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 #u-hub #hub-table .h-player small i{flex:none}
+#u-hub #hub-table>tbody>tr[data-record] .h-player small{display:flex;align-items:center;gap:6px;overflow:visible;text-overflow:clip;max-width:100%;min-width:0}   /* audit follow-up 2026-11-06: only the matchup text is cut, never the sport tag */
+#u-hub #hub-table>tbody>tr[data-record] .h-player small>.h-vs{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#u-hub #hub-table>tbody>tr[data-record] .h-player small>i{flex:none}
 #u-hub .h-mcell{display:flex;align-items:center;gap:6px;min-width:0}
 #u-hub .h-mcell>div{min-width:0;flex:1}
 #u-hub #hub-table .h-prop-toggle{flex:none;display:grid;place-items:center;min-width:40px;height:40px;margin:0;padding:0 6px;border-radius:999px;font:600 12px 'DM Mono',monospace}
@@ -888,6 +891,7 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 #u-hub .h-scout-grade{display:flex;align-items:center;gap:5px;min-width:0;white-space:nowrap}
 #u-hub .h-scout-grade .h-grade{height:22px;min-width:28px;font-size:12px}
 #u-hub .h-scout-grade .h-grade-text{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#u-hub .h-scout-grade .h-grade-text.h-line-chance{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.2}   /* follow-up 2026-11-06: never cut */
 #u-hub #hub-table .h-scout-grade .h-grade-tag{font-size:10px}
 #u-hub .h-scout .h-direction-options{display:grid;gap:1px;font-size:11px}
 /* the hit strip: L5 L10 L20 (H2H SZN), one shaded cell each, counts in the tooltip */
@@ -1191,7 +1195,7 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 @media(min-width:1101px) and (max-width:1400px){#u-hub #hub-table .h-c-line{width:100px}#u-hub #hub-table .h-c-add{width:64px}}
 /* faces: NBA / NFL headshot in a circle, the team logo in its corner, initials underneath when an image is missing */
 .u-face{position:relative;display:inline-grid;place-items:center;flex:0 0 var(--face,32px);width:var(--face,32px);height:var(--face,32px);border-radius:50%;background:#1d242e;border:1px solid #3a4555;color:#dfe7f2;font:600 calc(var(--face,32px) * .34) 'DM Mono',monospace;vertical-align:middle;box-sizing:border-box}
-.u-face>i{font-style:normal;line-height:1}
+.u-face>i{font:inherit;font-style:normal;line-height:1;margin:0;padding:0;border:0;color:inherit;letter-spacing:0;white-space:nowrap}   /* the initials: never styled as a sport tag (audit follow-up 2026-11-06) */
 .u-face>.u-face-shot{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;object-position:50% 20%;background:#1d242e}
 .u-face>.u-face-logo{position:absolute;right:-4px;bottom:-4px;width:calc(var(--face,32px) * .46);height:calc(var(--face,32px) * .46);border-radius:50%;background:#e8edf3;padding:1px;box-sizing:border-box;object-fit:contain}
 .u-face>[hidden]{display:none}

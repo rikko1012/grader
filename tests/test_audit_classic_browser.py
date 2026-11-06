@@ -148,6 +148,9 @@ def test_account_tray_clears_started_and_expired_legs_and_never_shows_a_held_let
             leg(3, sport="nba", start=now + timedelta(hours=5), label="A Over · Research grade"),   # NBA, letter since held, row not loaded
             leg(4, start=now + timedelta(hours=5), label="Lean Over")]                     # a Lean stays Lean
     c = context(browser, env, size)
+    c.add_init_script("""window.__toasts = []; new MutationObserver(() => document.querySelectorAll('.u-toast').forEach(t => {
+        if (t.textContent && !window.__toasts.includes(t.textContent)) window.__toasts.push(t.textContent); }))
+      .observe(document, {subtree: true, childList: true, characterData: true});""")
     try:
         p = open_page(c, env, "/lol?view=classic", size)
         ready(p, "lol")
@@ -162,6 +165,11 @@ def test_account_tray_clears_started_and_expired_legs_and_never_shows_a_held_let
                 break
             p.wait_for_timeout(250)
         assert sorted(saved) == ["Player3", "Player4"]
+        # follow-up 2026-11-06: "pick", never "leg"; the expired pick is never called started
+        p.wait_for_function("(window.__toasts || []).some(t => t.includes('Removed'))", timeout=10000)
+        said = " ".join(p.evaluate("window.__toasts"))
+        assert "Removed 1 started pick: Player1." in said and "Removed 1 expired pick (added more than 4 days ago): Player2." in said, said
+        assert " leg" not in said and "Player2." not in said.split("expired")[0], said
         p.locator("#u-tray-btn").click()
         body = p.locator("#u-tray-body")
         body.wait_for()
@@ -342,6 +350,43 @@ def test_classic_slip_drops_a_started_pick_with_a_toast(ctx, env):
     assert not p.errors
 
 
+def test_classic_slip_prune_has_undo_for_a_fast_device_clock(ctx, env):
+    """Follow-up 2026-11-06: the device clock runs 3 h fast, so a pick that starts in 2 h looks started; Undo keeps it for good."""
+    p = open_page(ctx, env, "/?view=classic#board")
+    p.wait_for_selector("#boardout .brow2.crow", timeout=30000)
+    p.evaluate("""() => { const real = Date.now(), soon = new Date(real + 2 * 3600e3).toISOString();
+      store.set('cs2s_slip', [{p: 'soon', bk: 'underdog', t: 'kills', sc: '12', l: 30.5, s: 'More', g: 'B', u: 1, pc: 0.6, st: soon}]);
+      const fast = real + 3 * 3600e3, base = performance.now(); Date.now = () => fast + (performance.now() - base); drawSlip(); }""")
+    assert p.evaluate("store.get('cs2s_slip', []).length") == 0
+    assert "Removed 1 started pick: soon" in p.locator("#toast").inner_text()
+    p.locator("#toast [data-undo-prune]").click()
+    kept = p.evaluate("store.get('cs2s_slip', [])")
+    assert [x["p"] for x in kept] == ["soon"] and kept[0]["ku"] == 1
+    p.evaluate("drawSlip()")                                                         # never removed by itself again
+    assert p.evaluate("store.get('cs2s_slip', []).map(x => x.p)") == ["soon"]
+    assert "Kept soon on your slip" in p.locator("#toast").inner_text()
+    assert "Started – remove" in p.locator("#slip").inner_text() or p.locator("#slip").is_hidden()   # the kept pick keeps its button
+    assert not p.errors
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK])
+def test_classic_prune_toast_with_undo_fits(browser, env, size):
+    c = context(browser, env, size)
+    try:
+        p = open_page(c, env, "/?view=classic#board", size)
+        p.wait_for_selector("#boardout .brow2.crow", timeout=30000)
+        p.evaluate("""() => { const past = new Date(Date.now() - 3600e3).toISOString();
+          store.set('cs2s_slip', [{p: 'old', bk: 'underdog', t: 'kills', sc: '12', l: 30.5, s: 'More', g: 'B', u: 1, pc: 0.6, st: past}]); drawSlip(); }""")
+        t = p.locator("#toast")
+        assert "Removed 1 started pick: old" in t.inner_text() and t.locator("[data-undo-prune]").is_visible()
+        box, vw = t.bounding_box(), p.viewport_size["width"]
+        assert box["x"] >= 0 and box["x"] + box["width"] <= vw, (box, vw)
+        shot(p, "classic-prune-undo")
+        assert not p.errors
+    finally:
+        c.close()
+
+
 # ------------------------------------------------------------------------------------------------ Tools: owner-only parts, Price check default
 
 @pytest.mark.parametrize("size", [PHONE, DESK])
@@ -418,6 +463,11 @@ def test_record_calendar_names_its_exact_window(browser, env, monkeypatch, size)
     p.wait_for_function("document.querySelectorAll('.h-record-card').length===1")
     head = p.locator("#hub-record-body .h-record-calendar h3").first.text_content()
     assert head.startswith("Last 30 days") and "Oct 7" in head and "Nov 5" in head and "Nov 6" not in head
+    # follow-up 2026-11-06: the cells read like the header ("Oct 7 – Nov 4", "Nov 5"), never "10-07"
+    cells = p.locator("#hub-record-body .h-record-calendar time").all_inner_texts()
+    assert cells == ["Oct 7 – Nov 4", "Nov 5"], cells
+    card = p.locator("#hub-record-body .h-record-card").first.inner_text()
+    assert "0 pushes counted apart" in card and "pushes separately" not in card
     p.locator("#hub-record-body .h-record-calendar").first.scroll_into_view_if_needed()
     shot(p, "record-calendar")
     assert not p.errors
