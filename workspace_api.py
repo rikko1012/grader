@@ -1346,10 +1346,11 @@ def _line_shared(h, srv, q):
 def _line_for(srv, sport, book, rid):
     """(status, body bytes) of one line's research doc (shared single flight), or None when it is not on a board now."""
     import book_providers
-    if book not in BOOKS and book in book_providers.providers():
-        # audit 2026-11-05 A2/B4: an extra book's line (Sleeper, Dabble) opens the board player's research doc at its own line
+    if book not in BOOKS and book in book_providers.providers() and str(rid).startswith("x-"):
+        # audit 2026-11-05 A2/B4: an extra book's line (Sleeper, Dabble) opens the board player's research doc at its own line.
+        # card-why 2026-11-06: NBA / NFL too; a FanDuel / BetRivers row of the sports board itself (no "x-" id) keeps its own doc
         p = book_providers.providers()[book]
-        if not book_providers.enabled(book) or sport not in p["sports"] or sport not in ("cs2", "lol") or not rid.startswith("x-"):
+        if not book_providers.enabled(book) or sport not in p["sports"]:
             return None
         import workspace_books
         fn = lambda: workspace_books.line_doc(srv, sport, book, rid)
