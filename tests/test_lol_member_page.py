@@ -47,8 +47,7 @@ def test_member_view_is_filtered_and_switch_defaults_off(tmp_path, monkeypatch):
 
 
 def test_member_view_unoffered_side_and_alternate_line(tmp_path, monkeypatch):
-    """A PrizePicks Demon line offers More only: os-1 (owner 2026-11-06) - it reads "Over only" with its Demon tag, no chance,
-    pick or letter (never playable), whichever side the model leans."""
+    """A PrizePicks Demon line offers More only: an Under pick is shown as not offered (not playable)."""
     monkeypatch.setattr(server, "LOL_CENTER", tmp_path)
     _board(tmp_path)
     b = json.loads((tmp_path / "board.json").read_text())
@@ -58,9 +57,8 @@ def test_member_view_unoffered_side_and_alternate_line(tmp_path, monkeypatch):
     (tmp_path / "board.json").write_text(json.dumps(b))
     server._LOL_MEMBER.update(mtime=None, body=None)
     row, = json.loads(server.lol_member_board())["rows"]
-    assert row["one_sided"] == "Over only" and row["pick_offered"] is False and row["line_type"] == "Demon"
-    assert row["grade"] is None and row["p_over"] is None and row["p_under"] is None and row["projection"] is None
-    assert row["stake_reason"] == "Over only: Scout grades lines that offer both sides." and "No bet" not in json.dumps(row)
+    assert row["pick"] == "Under 9.5" and row["pick_offered"] is False and row["line_type"] == "Demon"
+    assert row["grade"] is None                       # never a letter grade on a side the line does not offer
     assert [(x["side"], x["offered"]) for x in row["sides"]] == [("Over", True), ("Under", False)]
 
 

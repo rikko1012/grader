@@ -2239,18 +2239,19 @@ LOL_ONE_SIDED = {"over": "Over only", "under": "Under only"}
 
 def _lol_one_sided(platform, sides):
     """lol/center/forecast.one_sided, read here without importing lol (owner 2026-11-06, os-1): "Over only" / "Under only"
-    when the book offers that side only, else None. Underdog: one option listed. PrizePicks: exactly one side offered (a
-    goblin / demon line with no allowed sides sent is More only). Such a line shows its line and price, never a grade."""
+    when an Underdog line lists one option only, else None (owner scope "Underdog only": PrizePicks lines keep today's
+    grading). Such a line shows its line and price, never a grade."""
     sides = sides if isinstance(sides, dict) else {}
     if platform == "underdog":
         listed = [k for k in ("higher", "lower") if sides.get(k)]
         return LOL_ONE_SIDED["over" if listed[0] == "higher" else "under"] if len(listed) == 1 else None
-    o, u = ((sides.get("higher") or {}).get("offered") is True), ((sides.get("lower") or {}).get("offered") is True)
-    return LOL_ONE_SIDED["over"] if o and not u else (LOL_ONE_SIDED["under"] if u and not o else None)
+    return None                 # PrizePicks: unchanged (owner 2026-11-06 "Underdog only")
 
 
 def lol_one_sided_label(platform, sides, saved=None):
     """The label of a one-sided LoL line: the forecast's own (saved sides) or the current offer's - either one is enough."""
+    if platform != "underdog":
+        return None
     return LOL_ONE_SIDED.get(saved) or _lol_one_sided(platform, sides)
 
 

@@ -325,8 +325,8 @@ def test_lol_records_come_from_the_member_view(env):
     assert a["sport"] == "lol" and a["event"]["id"].startswith("lol-") and a["market"]["period"] == "maps13" and a["market"]["stat_label"] == "Kills"
     assert a["scout"]["units"] == 0.0 and a["scout"]["grade"] == "A-" and a["scout"]["side"] == "under" and "0U" in a["scout"]["stake_reason"]
     assert a["player"]["role"] and a["offer"]["over"]["offered"] and a["offer"]["under"]["offered"]
-    for k in r:                         # os-1: a line offering one side only carries no stake at all (never graded)
-        assert r[k]["scout"]["units"] == (None if (r[k]["scout"]["hold"] or {}).get("label") == "Over only" else 0.0)
+    for k in r:
+        assert r[k]["scout"]["units"] == 0.0
     for hidden in ("lol:player", "lol:series", "market_key", "ud:", "pp:"):       # the same line the member LoL board keeps
         assert hidden not in json.dumps(a), hidden
 

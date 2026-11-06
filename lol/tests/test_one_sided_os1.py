@@ -1,6 +1,6 @@
-"""os-1 (owner 2026-11-06): a LoL line the book offers on one side only - Underdog one option listed, PrizePicks one allowed side
-or a goblin / demon line with no allowed sides sent (More only) - is shown "Over only" / "Under only" and never graded, staked,
-put on a slip or counted in the record. The saved forecast row (raw chances) is kept as it was. Every name is a TEST FIXTURE."""
+"""os-1 (owner 2026-11-06, scope "Underdog only"): an Underdog LoL line listing one option is shown "Over only" / "Under only"
+and never graded, staked, put on a slip or counted in the record. PrizePicks lines (standard, goblin, demon) keep today's
+behaviour. The saved forecast row (raw chances) is kept as it was. Every name is a TEST FIXTURE."""
 import json
 
 from lol.center import forecast, learning, markets, slips
@@ -18,25 +18,30 @@ def test_one_sided_reading_for_both_books():
     assert forecast.one_sided("underdog", {"lower": {"status": "active"}}) == "under"
     assert forecast.one_sided("underdog", json.dumps(UD_OVER)) == "over"                   # the saved (text) sides read the same
     assert forecast.one_sided("underdog", UD_BOTH_SUSPENDED) is None                       # a suspended side is still listed: graded
-    assert forecast.one_sided("prizepicks", PP_GOBLIN) == "over"                           # goblin / demon: More only
-    assert forecast.one_sided("prizepicks", markets.pp_sides([], "demon", True)) == "over"
-    assert forecast.one_sided("prizepicks", PP_OVER) == "over"
-    assert forecast.one_sided("prizepicks", markets.pp_sides(["under"], "standard", False)) == "under"
+    # PrizePicks keeps today's behaviour (owner: "Underdog only"), goblin / demon More-only lines included
+    assert forecast.one_sided("prizepicks", PP_GOBLIN) is None
+    assert forecast.one_sided("prizepicks", markets.pp_sides([], "demon", True)) is None
+    assert forecast.one_sided("prizepicks", PP_OVER) is None
+    assert forecast.one_sided("prizepicks", markets.pp_sides(["under"], "standard", False)) is None
     assert forecast.one_sided("prizepicks", PP_BOTH) is None
     assert forecast.one_sided("prizepicks", {}) is None and forecast.one_sided("underdog", None) is None
 
 
 def test_shown_keeps_the_chance_and_drops_the_letter():
-    f = {"platform": "prizepicks", "sides": PP_GOBLIN, "p_over": 0.71, "p_under": 0.29, "p_push": 0.0, "model_side": "over",
+    f = {"platform": "underdog", "sides": UD_OVER, "p_over": 0.71, "p_under": 0.29, "p_push": 0.0, "model_side": "over",
          "grade": "A", "units_policy": 1.0}
     sh = forecast.shown(f)
     assert sh["one_sided"] == "over" and sh["grade"] is None and sh["grade_label"] == "Over only" and sh["units_policy"] == 0.0
     assert sh["p_over"] == 0.71 and sh["side"] == "over"                     # the saved chance itself is unchanged
-    two = forecast.shown(dict(f, sides=PP_BOTH))
+    two = forecast.shown(dict(f, sides=UD_BOTH_SUSPENDED))
     assert two["one_sided"] is None and two["grade"] == "A"
-    rec = {"platform": "prizepicks", "sides": PP_GOBLIN, "stat": "kills", "flags": [], "side_offered": 1, "units": 0.0}
+    pp = forecast.shown(dict(f, platform="prizepicks", sides=PP_GOBLIN))          # PrizePicks goblin: letter kept
+    assert pp["one_sided"] is None and pp["grade"] == "A"
+    rec = {"platform": "underdog", "sides": UD_OVER, "stat": "kills", "flags": [], "side_offered": 1, "units": 0.0}
     ok, why = forecast.slip_eligibility(rec)
     assert not ok and forecast.ONE_SIDED_REASON in why
+    _, why = forecast.slip_eligibility(dict(rec, platform="prizepicks", sides=PP_GOBLIN))
+    assert forecast.ONE_SIDED_REASON not in why
 
 
 def _one_sided_world(con, tmp_path, monkeypatch):
@@ -67,6 +72,11 @@ def test_record_leaves_out_one_sided_rows_and_keeps_them_saved(con, tmp_path, mo
     after = dict(con.execute("SELECT * FROM lol_forecasts").fetchone())
     assert {k: v for k, v in after.items() if k != "sides"} == {k: v for k, v in saved.items() if k != "sides"}   # row kept
     assert con.execute("SELECT COUNT(*) FROM lol_settlements").fetchone()[0] == 1
+    con.execute("UPDATE lol_forecasts SET platform='prizepicks', sides=?", (json.dumps(PP_GOBLIN),))   # PrizePicks: stays in
+    con.execute("UPDATE lol_settlements SET unit_key = 'prizepicks' || substr(unit_key, 9)")
+    con.commit()
+    pp = learning.dashboard(con)
+    assert pp["one_sided_lines"]["settled_by_status"] == {}
 
 
 def test_one_sided_forecast_is_saved_without_a_grade_and_never_a_slip_leg(con, tmp_path, monkeypatch):

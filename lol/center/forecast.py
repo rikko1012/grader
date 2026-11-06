@@ -260,11 +260,11 @@ ONE_SIDED_REASON = "the line offers one side only (Scout grades lines that offer
 
 
 def one_sided(platform, sides):
-    """Owner 2026-11-06 (LoL os-1, as sports cap-2): "over" / "under" when the book offers that side only, else None.
-    Underdog: the line lists one option only (a listed side whose status is suspended right now is still listed, so a
-    two-sided line keeps its grade). PrizePicks: exactly one side offered - allowed_wager_types naming one side, or a
-    goblin / demon line with no allowed sides sent (More only by PrizePicks' rule; lol/center/markets.pp_sides).
-    Such a line is shown with its line and price and never graded, staked, put on a slip, priced or counted in the record."""
+    """Owner 2026-11-06 (LoL os-1, as sports cap-2; scope "Underdog only"): "over" / "under" when an UNDERDOG line lists
+    one option only, else None. A listed side whose status is suspended right now is still listed, so a two-sided line
+    keeps its grade. PrizePicks lines (standard, goblin, demon) are never one-sided here: they keep today's grading,
+    record and slips. Such a line is shown with its line and price and never graded, staked, put on a slip, priced or
+    counted in the record."""
     if isinstance(sides, str):
         try:
             sides = json.loads(sides or "{}")
@@ -274,9 +274,7 @@ def one_sided(platform, sides):
     if platform == "underdog":
         listed = [k for k in ("higher", "lower") if sides.get(k)]
         return ("over" if listed[0] == "higher" else "under") if len(listed) == 1 else None
-    o = (sides.get("higher") or {}).get("offered") is True
-    u = (sides.get("lower") or {}).get("offered") is True
-    return "over" if o and not u else ("under" if u and not o else None)
+    return None                 # PrizePicks: owner 2026-11-06 "Underdog only" - unchanged
 
 
 def shown(f):
