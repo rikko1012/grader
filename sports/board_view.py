@@ -200,6 +200,32 @@ def played_values(games, stat):
     return out
 
 
+# di-1 data-integrity hold (audit 2026-11-05 S3) - NOT a grading factor: a full-game line far below what the player has
+# been producing for that stat is almost always a different market fed in under a full-game name (a 1st-quarter or
+# special line). Such a line is kept off the board and the sheets; it never changes a chance, a grade or a side.
+#   rule: >= FAR_MIN_GAMES of the newest 10 played games, their median >= FAR_MIN_MEDIAN, and line < FAR_RATIO x median
+DI_VERSION = "di-1"
+FAR_RATIO = 0.5
+FAR_MIN_GAMES = 5
+FAR_MIN_MEDIAN = 3.0
+
+
+def recent_median(games, stat, n=10):
+    vals = sorted(v for v, _, _ in played_values(games, stat)[:n])
+    if not vals:
+        return None, 0
+    k = len(vals)
+    return (vals[k // 2] if k % 2 else (vals[k // 2 - 1] + vals[k // 2]) / 2), k
+
+
+def far_below_recent(stat, line, games):
+    """di-1: True when this line is far below the player's recent output for the stat (a different market)."""
+    if line is None or not games:
+        return False
+    med, k = recent_median(games, stat)
+    return k >= FAR_MIN_GAMES and med is not None and med >= FAR_MIN_MEDIAN and float(line) < FAR_RATIO * med
+
+
 def hit_counts(values, line, n):
     """Strict counts over the first n values -> [over, under, push, n_used]."""
     w = values[:n]

@@ -11,7 +11,9 @@
   var SHEETS = [["prizepicks", "PrizePicks"], ["underdog", "Underdog"], ["consistent", "Most consistent"]];
   var PAGE = 150, LS = "scout.sports.sheets.v1";
   var VARIANT = {standard: "Standard", balanced: "Standard", main: "Standard", ladder_rung: "Standard",
-                 goblin: "Goblin", demon: "Demon", alternate: "Alternate"};
+                 goblin: "Goblin", demon: "Demon", alternate: "Alternate", over_only: "Over only", under_only: "Under only"};
+  // combined stats: Scout has no joint model for them yet (sports/capabilities.py COMBOS)
+  var COMBOS = {pra: 1, pr: 1, pa: 1, ra: 1, stocks: 1, rush_rec_yds: 1, pass_rush_yds: 1};
 
   // ------------------------------------------------------------------------------------------ pure helpers
   function nn(x) { return x !== null && x !== undefined && isFinite(x); }
@@ -37,7 +39,9 @@
       if (R.started(mm, now)) return;
       m.q.forEach(function (q) {
         var r = R.propRow(mm, q, {fc: D.fc || {}, view: D.view || {}, now: now});
-        r.variant = q.v || "standard"; r.statLabel = m.sl || m.st; r.mult = q.m || null; r.matchup = matchup(D.events, m.e, D.league);
+        r.variant = q.v === "one_sided" ? (q.o && !q.o[1] ? "over_only" : "under_only") : (q.v || "standard");
+        r.statLabel = m.sl || m.st; r.mult = q.m || null; r.matchup = matchup(D.events, m.e, D.league);
+        r.combo = !!COMBOS[m.st];
         out.push(r);
       });
     });
@@ -63,6 +67,38 @@
     avail: function (r) { return r.avail; },
     cplayer: function (r) { return (r.n || "").toLowerCase(); }
   };
+  // S4 (audit 2026-11-05): Edge is blank on every line until a market price exists - sorting by a blank column
+  // shows the sheet in file order. Then the sheet sorts by L10 instead (and says so).
+  function effectiveSort(rows, st) {
+    if ((st.sort || "edge") !== "edge") return {sort: st.sort, dir: st.dir, fallback: false};
+    var any = rows.some(function (r) { var v = KEYS.edge(r); return v !== null && v !== undefined && isFinite(v); });
+    return any ? {sort: "edge", dir: st.dir, fallback: false} : {sort: "l10", dir: "desc", fallback: true};
+  }
+  // A11: columns that are blank on every shown line are left out (Proj, Over, Under, Market, Edge, L10, Conf.)
+  var OPTIONAL = ["proj", "over", "under", "market", "edge", "l10", "conf"];
+  function underShown(r) { return !(r.offered && !r.offered[1]); }      // S4: no Under % on an Over-only line
+  function overShown(r) { return !(r.offered && !r.offered[0]); }
+  function hasValue(key, r) {
+    var sc = r.scout;
+    if (key === "proj") return !!(sc && nn(sc.mu));
+    if (key === "over") return !!(sc && nn(sc.po) && overShown(r));
+    if (key === "under") return !!(sc && nn(sc.pu) && underShown(r));
+    if (key === "market") return !!r.market;
+    if (key === "edge") return nn(r.edge);
+    if (key === "l10") return !!(r.hit && r.hit.l10 && r.hit.l10.n);
+    if (key === "conf") return !!r.conf;
+    return true;
+  }
+  function visibleCols(rows) {
+    var out = {};
+    OPTIONAL.forEach(function (k) { out[k] = rows.some(function (r) { return hasValue(k, r); }); });
+    return out;
+  }
+  function noChanceText(r) {
+    if (r.held) return r.held;
+    if (r.scout) return "No lean";
+    return r.combo ? "No Scout projection for combined stats yet" : "No Scout chance at this line";
+  }
   function sortRows(rows, key, dir) {                    // missing values always last, stable
     var f = KEYS[key] || KEYS.edge, sgn = dir === "asc" ? 1 : -1;
     return rows.map(function (r, i) { return [r, f(r), i]; }).sort(function (a, b) {
@@ -99,7 +135,8 @@
     });
   }
   var api = {SHEETS: SHEETS, variantLabel: variantLabel, edgeText: edgeText, leanText: leanText, buildRows: buildRows,
-             sortRows: sortRows, filterRows: filterRows, consistentFilter: consistentFilter,
+             sortRows: sortRows, filterRows: filterRows, consistentFilter: consistentFilter, effectiveSort: effectiveSort,
+             visibleCols: visibleCols, noChanceText: noChanceText, underShown: underShown,
              matchup: matchup, views: {sheets: true}, render: render};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
   root.SportsSheets = api;
@@ -173,7 +210,17 @@
   function drawPlatform(main, lg, sheet, D) {
     var st = ui(lg, sheet), shown = PAGE, all = buildRows(D);
     function paint() {
-      var rows = sortRows(filterRows(all, st), st.sort, st.dir);
+      var filtered = filterRows(all, st), es = effectiveSort(filtered, st), vis = visibleCols(filtered);
+      var rows = sortRows(filtered, es.sort, es.dir);
+      var ncol = 6 + OPTIONAL.filter(function (k) { return vis[k]; }).length;
+      var hs = {sort: es.sort, dir: es.dir};
+      main.querySelector("#shx-head").innerHTML = th("player", "Player", hs) + th("game", "Game", hs) + th("stat", "Stat", hs) + th("line", "Line", hs, 1) + th("type", "Type", hs) +
+        (vis.proj ? th("proj", "Proj", hs, 1) : "") + (vis.over ? th("over", "Over", hs, 1) : "") + (vis.under ? th("under", "Under", hs, 1) : "") +
+        (vis.market ? th("market", "Market", hs, 1) : "") + (vis.edge ? th("edge", "Edge (pts)", hs, 1) : "") + (vis.l10 ? th("l10", "L10", hs, 1) : "") +
+        th("lean", "Lean", hs) + (vis.conf ? th("conf", "Conf.", hs, 1) : "");
+      var note = main.querySelector("#shx-sortnote");
+      note.hidden = !es.fallback;
+      note.textContent = es.fallback ? "Sorted by L10: no line on this sheet has a market price for Edge yet." : "";
       var body = rows.slice(0, shown).map(function (r) {
         var sc = r.scout, mk = r.market;
         var mkt = mk ? "O " + pctTxt(mk.po) + " · U " + pctTxt(mk.pu) + ' <span class="sw-faint">(' + mk.n + ")</span>" : "—";
@@ -182,46 +229,38 @@
         var conf = r.conf ? '<span class="shx-conf" title="' + esc("cf-1 research confidence: " + r.conf.why.join("; ")) + '">' + r.conf.score + "/5</span>" : '<span class="sw-faint">—</span>';
         var Lg = root.SportsLabels;
         var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + (r.grade && Lg ? Lg.gradeHtml(r.grade, r.lean, r.notValidated) : esc(leanText(r))) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
-          : '<span class="sw-faint">' + (r.held ? esc(r.held) : sc ? "No lean" : "No Scout chance") + "</span>";
+          : '<span class="sw-faint">' + esc(noChanceText(r)) + "</span>";
         return "<tr>" +
           '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.pos].filter(Boolean).join(" · ")) + "</div>" + (root.SportsCompare ? root.SportsCompare.rowButton(r) : "") + "</th>" +   // HOOK (compare)
           '<td class="sw-small">' + esc(r.matchup) + "</td>" +
           "<td>" + esc(r.statLabel) + "</td>" +
           '<td class="num">' + lineTxt(r.line) + "</td>" +
           '<td><span class="shx-var shx-' + esc(variantLabel(r.variant).toLowerCase()) + '">' + esc(variantLabel(r.variant)) + "</span>" + '<div class="sw-faint sw-small">' + esc((offer + mult).trim()) + "</div></td>" +
-          '<td class="num">' + (sc && nn(sc.mu) ? sc.mu.toFixed(1) : "—") + "</td>" +
-          '<td class="num shx-o">' + pctTxt(sc && sc.po) + "</td>" +
-          '<td class="num shx-u">' + pctTxt(sc && sc.pu) + "</td>" +
-          '<td class="num sw-small">' + mkt + "</td>" +
-          '<td class="num' + (r.gap ? " shx-gap" : "") + '">' + edgeText(r.edge) + (r.gap ? '<div class="sw-small" title="Scout and the market differ by 10 points or more on Over">model vs market gap</div>' : "") + "</td>" +
-          '<td class="num sw-small">' + esc(r.hit ? R.hitText(r.hit.l10) : "—") + (r.hit && r.hit.l10.n ? ' <span class="sw-faint">(' + r.hit.l10.n + ")</span>" : "") + seasonsNote(r.hit, lg) + "</td>" +
+          (vis.proj ? '<td class="num">' + (sc && nn(sc.mu) ? sc.mu.toFixed(1) : "—") + "</td>" : "") +
+          (vis.over ? '<td class="num shx-o">' + (overShown(r) ? pctTxt(sc && sc.po) : '<span class="sw-faint sw-small">Under only</span>') + "</td>" : "") +
+          (vis.under ? '<td class="num shx-u">' + (underShown(r) ? pctTxt(sc && sc.pu) : '<span class="sw-faint sw-small">Over only</span>') + "</td>" : "") +
+          (vis.market ? '<td class="num sw-small">' + mkt + "</td>" : "") +
+          (vis.edge ? '<td class="num' + (r.gap ? " shx-gap" : "") + '">' + edgeText(r.edge) + (r.gap ? '<div class="sw-small" title="Scout and the market differ by 10 points or more on Over">model vs market gap</div>' : "") + "</td>" : "") +
+          (vis.l10 ? '<td class="num sw-small">' + esc(r.hit ? R.hitText(r.hit.l10) : "—") + (r.hit && r.hit.l10.n ? ' <span class="sw-faint">(' + r.hit.l10.n + ")</span>" : "") + seasonsNote(r.hit, lg) + "</td>" : "") +
           "<td>" + lean + "</td>" +
-          '<td class="num">' + conf + "</td></tr>";
+          (vis.conf ? '<td class="num">' + conf + "</td>" : "") + "</tr>";
       }).join("");
-      main.querySelector("#shx-body").innerHTML = body || '<tr><td colspan="13" class="sw-muted">No lines match these filters.</td></tr>';
+      main.querySelector("#shx-body").innerHTML = body || '<tr><td colspan="' + ncol + '" class="sw-muted">No lines match these filters.</td></tr>';
       main.querySelector("#shx-count").textContent = int(rows.length) + " of " + int(all.length) + " lines";
       var more = main.querySelector("#shx-more");
       more.hidden = rows.length <= shown;
       more.textContent = "Show " + Math.min(PAGE, rows.length - shown) + " more";
-      main.querySelectorAll("thead th").forEach(function (t) {
-        var b = t.querySelector("[data-sort]"); if (!b) return;
-        var k = b.getAttribute("data-sort"), on = k === st.sort;
-        t.setAttribute("aria-sort", on ? (st.dir === "asc" ? "ascending" : "descending") : "none");
-        b.textContent = b.textContent.replace(/ [▲▼]$/, "") + (on ? (st.dir === "asc" ? " ▲" : " ▼") : "");
-      });
     }
     main.innerHTML = head(lg, sheet) +
       '<p class="sw-sub">Every current ' + esc(sheet === "prizepicks" ? "PrizePicks" : "Underdog") + " line in one table. Scout chances are read at each exact line from one projected distribution. <b>Edge</b> = Scout chance minus the market's chance, in percentage points (not expected value). A lean is shown only when the chance and the projection agree. Every column means exactly what it means on the Prop board.</p>" +
       '<div class="shx-filters">' + sel("shx-stat", "Stat", statOpts(all, D), st.stat) + sel("shx-ev", "Game", evOpts(D), st.ev) +
-      sel("shx-variant", "Type", [["all", "All types"], ["standard", "Standard"], ["goblin", "Goblin"], ["demon", "Demon"], ["alternate", "Alternate"]], st.variant) +
+      sel("shx-variant", "Type", [["all", "All types"], ["standard", "Standard"], ["goblin", "Goblin"], ["demon", "Demon"], ["alternate", "Alternate"]].concat(sheet === "underdog" ? [["over only", "Over only"]] : []), st.variant) +
       sel("shx-lean", "Lean", [["any", "Any"], ["lean", "Has a lean"], ["over", "Lean Over"], ["under", "Lean Under"]], st.lean) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-gap"' + (st.gap ? " checked" : "") + "><span>Model vs market gap</span></label>" +
       '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" aria-keyshortcuts="/" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
       '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
-      '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">' + esc(sheet) + ' lines, sortable</caption><thead><tr>' +
-      th("player", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("type", "Type", st) +
-      th("proj", "Proj", st, 1) + th("over", "Over", st, 1) + th("under", "Under", st, 1) + th("market", "Market", st, 1) +
-      th("edge", "Edge (pts)", st, 1) + th("l10", "L10", st, 1) + th("lean", "Lean", st) + th("conf", "Conf.", st, 1) +
+      '<p class="sw-small sw-muted shx-sortnote" id="shx-sortnote" hidden></p>' +
+      '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">' + esc(sheet) + ' lines, sortable</caption><thead><tr id="shx-head">' +
       '</tr></thead><tbody id="shx-body"></tbody></table></div><button type="button" class="sw-btn" id="shx-more" hidden></button>' +
       '<details class="sw-more shx-method"><summary>How this sheet is built</summary><ul class="sw-list sw-small">' +
       Object.keys(D.method || {}).map(function (k) { return "<li><b>" + esc(k) + ":</b> " + esc(D.method[k]) + "</li>"; }).join("") +

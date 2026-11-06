@@ -170,7 +170,8 @@
     if (rec.n) {
       h += '<div class="rx-big"><span data-rx-wlp>' + escH(rec.wlp) + '</span> <span class="rx-unit">W-L-P</span></div>' +
         '<div class="rx-line"><b data-rx-rate>' + escH(rec.rateText) + "</b> hit rate on " + escH(int(rec.decided)) + " decided picks" +
-        (rec.range ? ' <span class="rx-range" data-rx-range>(95% range ' + escH(rec.range) + ")</span>" : "") + "</div>";
+        (rec.range ? ' <span class="rx-range" data-rx-range>(95% range ' + escH(rec.range) + ")</span>" : "") + "</div>" +
+        '<div class="rx-line sw-small sw-muted" data-rx-counting>One pick per player, stat and game.</div>';
     } else h += '<div class="rx-line sw-muted">No settled Scout picks yet.</div>';
     h += "</div>";
     if (!contained) h += '<div class="rx-gr"><div class="rx-k">Graded picks <span class="sw-grade-tag">Research grades</span></div><div class="rx-tiles">' +
@@ -181,9 +182,11 @@
       }).join("") + "</div></div>";
     h += "</section>";
     var v = h2hVerdict(pickH2H(opts.hh || (L && L.head_to_head)));
-    h += '<section class="sw-panel rx-cmp" aria-labelledby="rx-cmp-h" data-verdict="' + (v ? v.verdict : "none") + '"><h2 id="rx-cmp-h">Scout vs the market on the same props</h2>' +
+    // A7 (audit 2026-11-05): the page LEADS with Scout vs the market on the same props, then the record (one pick per
+    // game x player x stat, rp-2), then the recent list
+    h = '<section class="sw-panel rx-cmp" aria-labelledby="rx-cmp-h" data-verdict="' + (v ? v.verdict : "none") + '"><h2 id="rx-cmp-h">Scout vs the market on the same props</h2>' +
       (v ? '<p class="rx-cmp-head" data-rx-cmp-head><b>' + escH(v.headline) + '</b></p><p class="rx-cmp-word" data-rx-cmp><b>' + escH(v.word) + "</b>" + escH(v.detail.slice(v.word.length)) + "</p>"
-         : '<p class="sw-muted">No prop has settled with both a Scout chance and a market chance yet.</p>') + "</section>";
+         : '<p class="sw-muted">No prop has settled with both a Scout chance and a market chance yet.</p>') + "</section>" + h;
     h += '<section class="sw-panel rx-recent" aria-labelledby="rx-recent-h"><h2 id="rx-recent-h">Recent settled picks</h2><div data-rx-recent>' +
       recentHtml(L && L.recent, opts.statName, 0, contained) + "</div></section>";
     return h;

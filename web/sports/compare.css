@@ -53,3 +53,4 @@
   .sw .sw-cmp-grid{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:none;gap:10px;overflow-x:visible}
   .sw .sw-cmp-card{grid-row:auto;grid-template-rows:none}
 }
+.sw .sw-cmp-side{margin-top:10px}.sw .sw-cmp-side-cap{text-align:left;font-weight:600;padding:6px 0;caption-side:top}
