@@ -35,7 +35,8 @@ GEOM = """() => [...document.querySelectorAll('#hub-rows tr[data-record]')].filt
             text: v.textContent.trim(), lines, clip: v.scrollWidth > v.clientWidth + 1};
   });
   const rb = r.getBoundingClientRect(), tb = td.getBoundingClientRect();
-  return {key: r.dataset.record, rowW: rb.width, tdW: tb.width, tdLeft: tb.left - rb.left, cells};
+  return {key: r.dataset.record, rowW: rb.width, tdW: tb.width, tdLeft: tb.left - rb.left, cells, nohits: r.classList.contains('h-nohits'),
+          tdHidden: getComputedStyle(td).display === 'none', side: !!r.querySelector('td.h-c-scout .h-direction')};
 })"""
 
 
@@ -99,8 +100,13 @@ def check_phone_grid(p, where):
     assert rows, where
     for r in rows:
         cs = r['cells']
-        assert [c['label'] for c in cs] == WINDOWS, (where, r['key'])
-        assert [c['labelShown'] for c in cs] == WINDOWS, (where, r['key'])                     # the label is on screen
+        if r['nohits']:          # card-and-chips 2026-11-06: no result in any window = no strip line (not five dashes)
+            assert r['tdHidden'] and all(c['text'] == '—' for c in cs), (where, r['key'])
+            continue
+        # a row with no side shows Over-Under counts ("3-2"): its labels say so ("L5 O-U")
+        want = [w + ('' if r['side'] else ' O-U') for w in WINDOWS]
+        assert [c['label'] for c in cs] == want, (where, r['key'])
+        assert [c['labelShown'] for c in cs] == want, (where, r['key'])                        # the label is on screen
         # the strip owns its own line of the card: (almost) the full card width, not a squeeze beside Proj / Compare
         assert r['tdW'] >= r['rowW'] - 32, (where, r['key'], r['tdW'], r['rowW'])
         widths = [c['w'] for c in cs]

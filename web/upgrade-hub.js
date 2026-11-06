@@ -218,7 +218,10 @@ export function mount(C) {
     }
     return `<span class="h-hit h-tone-${Math.min(6,Math.floor(rate*7))}${few?' h-few':''}" style="--hit:${rate.toFixed(3)}" title="${esc(text)}" aria-label="${label}: ${esc(text)}">${Math.round(rate*100)}%</span>`;
   }
-  const stripHtml = r => `<div class="h-strip">${STRIP.map(([w,l])=>`<span class="h-strip-cell h-s-${w}" data-label="${l}">${stripCell(r,w,l)}</span>`).join('')}</div>`;
+  /* card-and-chips 2026-11-06: a row with no side shows "Over-Under" counts ("3-2"): its phone labels say so ("L5 O-U"); a row with no
+     past result in any window (and none still loading) gets no strip line on the phone card at all (h-nohits), not five dashes */
+  const stripHtml = r => `<div class="h-strip">${STRIP.map(([w,l])=>`<span class="h-strip-cell h-s-${w}" data-label="${l}${r.scout.side?'':' O-U'}">${stripCell(r,w,l)}</span>`).join('')}</div>`;
+  const noHits = r => STRIP.every(([w])=>!C.tallies(r)[w]?.n)&&!C.hitsPending(r);
   /* Edge vs break-even (owner 2026-11-05): the row's current Scout chance minus the platform's published per-pick break-even.
      Underdog standard at a 1.0x pick: the gradecore payout table (gradecore/payouts.py, Underdog's published payouts, the server sends
      the value and its source). With the parity payload (r.parity.be: Underdog's table and PrizePicks' help-center table, verified by
@@ -340,7 +343,9 @@ export function mount(C) {
   /* ONE Scout cell: side, chance and the letter (or Lean Over/Under) together. No published side = both chances, no side shown */
   function scoutCell(r) {
     const s=r.scout;
-    if(r.extra&&!s.side)return '<div class="h-scout"><div class="h-direction-options"><span>No saved chance at this line</span></div></div>';
+    /* an extra book's line with no saved chance: the cell stays empty (no status sentence, owner rule 2026-10-16); with both chances
+       it reads like any other row without a side */
+    if(r.extra&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return '';
     if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>${H.showEdge?'':belowChip(r)}</div>`;
     const both=num(s.p_over)&&num(s.p_under);
     return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
@@ -372,7 +377,7 @@ export function mount(C) {
     // the matchup sits on the game header row; without headers (another sort) the row names the opponent itself
     const vs=H.sortBy!=='start'&&r.player.opponent?` vs ${r.player.opponent}`:'', name=esc(r.player.name);
     const add=on?['On slip ✓',`On slip: show ${name} in the slip`]:choose?['Side',`Choose a side for ${name}`]:['+ Add',`Add ${name} ${sideWord(side)} ${esc(r.offer.line)} to slip`];
-    return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group?'':' is-sub'}">
+    return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group?'':' is-sub'}${noHits(r)?' h-nohits':''}">
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small><span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
       <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small></div>${toggle}</div></td>
@@ -496,8 +501,11 @@ export function mount(C) {
   /* an extra book's line in the full card (audit 2026-11-05 A2/B4): its own prices and Scout's read at this line, above the research */
   function extraOffer(r) {
     const o=r.offer,x=r.extra||{},price=sd=>!o[sd]?.offered?'Not offered':x.price_comparable===false?(num(o[sd].price)?esc(x.price_label||'App price')+' '+o[sd].price.toFixed(2)+' <small>(not what an entry pays)</small>':'Listed'):num(o[sd].price)?o[sd].price.toFixed(2)+' decimal':num(o[sd].payout)?o[sd].payout.toFixed(2)+'x pick multiplier':'Price unavailable';
-    const s=r.scout,read=x.same_line_as?`Same line as ${esc(x.same_line_as)}: ${s.side?esc(sideWord(s.side))+' '+pct(s.p_side):'no side'}`:s.line_chance&&s.side?`${esc(sideWord(s.side))} ${pct(s.p_side)}, Scout\u2019s chance at this line`:'No saved chance at this line';
-    return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(o.platform_label)} · ${esc(o.line)}</h4><small>Read ${esc(o.seen_at?age(o.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Over</dt><dd>${price('over')}</dd></div><div><dt>Under</dt><dd>${price('under')}</dd></div><div><dt>Scout's read</dt><dd>${read}</dd></div></dl>${s.line_chance?'<p class="h-history-note">Read from the same saved projection as this player\u2019s graded line. No letter or stake: those are set for the PrizePicks or Underdog entry only.</p>':''}</section>`;
+    /* Scout's read: the side and its chance, or both chances; nothing saved at this line = no row (no status sentence) */
+    const s=r.scout,both=num(s.p_over)&&num(s.p_under)?`Over ${pct(s.p_over)} · Under ${pct(s.p_under)}`:null;
+    const said=s.side?`${esc(sideWord(s.side))} ${pct(s.p_side)}`:both;
+    const read=!said?null:x.same_line_as?`Same line as ${esc(x.same_line_as)}: ${said}`:s.line_chance&&s.side?`${said}, Scout’s chance at this line`:said;
+    return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(o.platform_label)} · ${esc(o.line)}</h4><small>Read ${esc(o.seen_at?age(o.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Over</dt><dd>${price('over')}</dd></div><div><dt>Under</dt><dd>${price('under')}</dd></div>${read?`<div><dt>Scout's read</dt><dd>${read}</dd></div>`:''}</dl>${s.line_chance?'<p class="h-history-note">Read from the same saved projection as this player\u2019s graded line. No letter or stake: those are set for the PrizePicks or Underdog entry only.</p>':''}</section>`;
   }
   function refreshSlip() {
     if(!isOpen()) return;
@@ -792,14 +800,25 @@ export function mount(C) {
       ${r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
       ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
-  /* ---- "Why Scout leans Over / Under" (owner 2026-11-06: members could not see why to take a prop). 3-6 plain facts at the top
-     of the card, each with its number and its sample, then "What could go wrong" (definite facts only). Every figure is read from
-     what the card already loaded (the board record and its research doc): nothing is fetched, modelled or graded here.
-     Each fact says honestly whether it feeds the grade: filled dot = used in the grade (Scout's own projection / chance, the
-     model's own listed factors, map chances only when the saved forecast used them); hollow dot = context only, weight 0. ---- */
+  /* ---- "Why Scout leans Over / Under" (owner 2026-11-06: "people have no idea why they should take the props"). Plain facts at the
+     top of the card, each with its number and its sample, sorted honestly:
+       - Scout's own number (projection and chance; LoL's model factors; CS2 map chances only when the saved forecast used them),
+         its edge coloured by the chance on this side (under 50% is never green);
+       - "Other numbers that point to <side>": past results and prices that agree with the side (not part of the grade);
+       - "What could go wrong": facts against the side, the player's own definite injury status first;
+       - "Also good to know": even records, the format, other lines (no colour, never under "Why").
+     Dots only where a grade exists (filled = used in the grade, hollow = not used). NBA / NFL letters are held: no dots there.
+     Hedge statuses (day-to-day, questionable) are never shown. Every figure is read from what the card already loaded (the board
+     record and its research doc): nothing is fetched, modelled or graded here. ---- */
   const f1 = v => String(Math.round(v*10)/10);
   const ctxRows = doc => (doc?.context?.rows||[]).filter(f=>f&&f.label&&f.value!=null&&f.value!=='');
-  const ctxVal = (doc,label) => ctxRows(doc).find(f=>f.label===label)?.value;
+  const ctxRow = (doc,label) => ctxRows(doc).find(f=>f.label===label);
+  const ctxVal = (doc,label) => ctxRow(doc,label)?.value;
+  const DEFINITE = {out:'is listed out',injured_reserve:'is on injured reserve',suspended:'is suspended'};
+  /* a factor as plain words: 0.88 -> "12% fewer", 1.05 -> "5% more" */
+  const moreFewer = v => {const d=Math.round((v-1)*100);return d===0?'as many':`${Math.abs(d)}% ${d>0?'more':'fewer'}`;};
+  /* market sources in plain words ("margin removed" is jargon) */
+  const plainSource = t => String(t||'').replace(/,?\s*margin removed/i,', with the bookmaker’s cut taken out').replace(/^(\d+) market sources? at this line$/i,(m,n)=>`${n} sportsbook ${n==='1'?'price':'prices'} at this line`);
   /* NBA / NFL averages rows ("Minutes, L3", "Targets, Season 2026") -> {L3, L5, L10, Season} of the first measure that has them */
   function usageOf(doc,sport,stat) {
     const rows=ctxRows(doc).filter(f=>f.group==='Averages'&&num(Number(f.value)));
@@ -810,46 +829,69 @@ export function mount(C) {
     }
     return null;
   }
+  /* one LoL model factor (lol/center/forecast.py _drivers) in plain words, with the way it pushes this side; null = leave it out */
+  function lolDriver(d,r,side) {
+    const t=String(d), stat=esc(r.market.stat_label.toLowerCase()), opp=esc(r.player.opponent||'The opponent'), team=esc(r.player.team||'His team');
+    const push=v=>Math.abs(v-1)<0.005?0:(v>1)===(side==='over')?1:-1;
+    let m;
+    if((m=/^player (share of team output|per-game rate) ([\d.]+) \((\d+) earlier games\)/.exec(t)))
+      return {html:`His base rate: <b>${f1(+m[2])}</b> ${stat} a game${m[1].startsWith('share')?' at an average team’s pace':''} <small>(${esc(m[3])} earlier games)</small>`,dir:0};
+    if((m=/^team pace factor ([\d.]+)/.exec(t)))return {html:`${team} ${r.market.stat==='deaths'?'give up':'get'} <b>${moreFewer(+m[1])}</b> kills a game than an average team`,dir:push(+m[1])};
+    if((m=/^opponent factor ([\d.]+)/.exec(t)))return {html:`${opp} ${r.market.stat==='deaths'?'get':'give up'} <b>${moreFewer(+m[1])}</b> kills a game than an average team`,dir:push(+m[1])};
+    if((m=/^match-strength factor ([\d.]+) \(win chance (\d+)%\)/.exec(t)))
+      return Math.abs(+m[1]-1)<0.005?null:{html:`${team}’s <b>${esc(m[2])}%</b> win chance moves his number <b>${moreFewer(+m[1]).replace('more','up').replace('fewer','down')}</b>`,dir:push(+m[1])};
+    if(/^player's per-game average shrunk/.test(t))return {html:`His per-game average, pulled toward his role’s average <small>(${esc((/\((\d+) earlier games\)/.exec(t)||[])[1]||'')} earlier games)</small>`,dir:0};
+    if(/^whole-match simulation/.test(t))return {html:'Scout simulates the whole match: both teams’ kill pace, game length and the win chance',dir:0};
+    return null;
+  }
   function whyFacts(r) {
     const doc=H.detailDoc, s=r.scout, line=Number(r.offer.line), lean=s.side||null, side=lean||H.histSide, Side=sideWord(side);
-    const why=[], risk=[], add=(list,html,used,dir=0)=>list.push({html,used:!!used,dir});
+    const graded=!!s.grade&&!s.hold;     /* a grade exists: only then does a fact say whether it is used in it */
+    const out={scout:[],for:[],risk:[],also:[]};
+    const fact=(html,used,dir)=>({html,used:!!used&&graded,dir});
+    const add=(html,dir=0,first=false)=>{const l=dir>0?out.for:dir<0?out.risk:out.also;l[first?'unshift':'push'](fact(html,false,dir));};
     const toward=v=>side==='over'?v>line:v<line, away=v=>side==='over'?v<line:v>line;
+    const recDir=(k,n)=>k*2>n?1:k*2<n?-1:0;
     const stat=esc(r.market.stat_label);
-    /* 1. Scout's own number: the projection against the line and the chance on this side (this IS the grade) */
-    const chance=C.chanceOf(r,side);
+    /* 1. Scout's own number: the projection against the line and the chance on this side. The colour follows the chance */
+    const chance=C.chanceOf(r,side), cdir=num(chance)&&Math.abs(chance-.5)>1e-9?(chance>.5?1:-1):null;
     if(num(s.projection)&&Number.isFinite(line)){
       const gap=s.projection-line;
-      add(why,`Scout projects <b>${f1(s.projection)}</b> ${stat}, <b>${f1(Math.abs(gap))}</b> ${gap>=0?'above':'below'} the ${esc(r.offer.line)} line${chance!=null?` · <b>${pct(chance)}</b> chance ${Side}${s.line_chance?' at this line':''}`:''}`,true,toward(s.projection)?1:away(s.projection)?-1:0);
-    } else if(chance!=null) add(why,`Scout gives <b>${pct(chance)}</b> chance ${Side} ${esc(r.offer.line)}`,true,1);
-    /* 2. results at THIS line: L10 first, L5 / L20 / season beside it */
+      out.scout.push(fact(`Scout projects <b>${f1(s.projection)}</b> ${stat}, ${Math.abs(gap)<0.05?'right on':`<b>${f1(Math.abs(gap))}</b> ${gap>0?'above':'below'}`} the ${esc(r.offer.line)} line${num(chance)?` · <b>${pct(chance)}</b> chance ${Side}`:''}`,true,cdir??(toward(s.projection)?1:away(s.projection)?-1:0)));
+    } else if(num(chance)) out.scout.push(fact(`Scout gives <b>${pct(chance)}</b> chance ${Side} ${esc(r.offer.line)}`,true,cdir??0));
+    /* 2. results at THIS line: L10 first, L5 / L20 / season beside it (the card's own tiles) */
     const all=(doc?.history?.series||[]).filter(g=>num(g.value));
     const w={5:windowTally(r,all,5),10:windowTally(r,all,10),20:windowTally(r,all,20)}, se=C.tallies(r).season;
     const main=w[10]?.n?w[10]:w[5]?.n?w[5]:w[20]?.n?w[20]:null;
     if(main){
-      const k=countOf(main,side), rest=[[5,w[5]],[20,w[20]]].filter(([n,t])=>t?.n&&t!==main).map(([n,t])=>`L${n} ${countOf(t,side)}/${t.n}`);
+      const k=countOf(main,side), rest=[[5,w[5]],[20,w[20]]].filter(([n,t])=>t?.n&&t!==main&&t.n!==main.n).map(([n,t])=>`L${n} ${countOf(t,side)}/${t.n}`);
       if(se?.n)rest.push(`season ${countOf(se,side)}/${se.n}`);
-      add(k*2<main.n?risk:why,`Went ${Side} in <b>${k}</b> of the last <b>${main.n}</b> at ${esc(r.offer.line)}${rest.length?` <small>(${rest.join(' · ')})</small>`:''}`,false,k*2>main.n?1:k*2<main.n?-1:0);
+      add(`Went ${Side} in <b>${k}</b> of the last <b>${main.n}</b> at ${esc(r.offer.line)}${rest.length?` <small>(${rest.join(' · ')})</small>`:''}`,recDir(k,main.n));
       const l5=w[5];
-      if(l5?.n>=5&&main!==l5&&k*2>=main.n&&countOf(l5,side)*2<l5.n)add(risk,`Recent form turned: ${Side} in only <b>${countOf(l5,side)}</b> of the last <b>5</b>`,false,-1);
-      if(main.n<5)add(risk,`Small sample: only <b>${main.n}</b> past ${main.n===1?'result':'results'} on file for this market`,false,-1);
+      if(l5?.n>=5&&main!==l5&&k*2>main.n&&countOf(l5,side)*2<l5.n)add(`Recent form turned: ${Side} in only <b>${countOf(l5,side)}</b> of the last <b>5</b>`,-1);
+      if(main.n<5)add(`Small sample: only <b>${main.n}</b> past ${main.n===1?'result':'results'} on file for this market`,-1);
     }
-    /* 3. average and median of the last 10 (or fewer) results against the line */
+    /* 3. average and median of the last 10 (or fewer) results, on the line's own maps / period */
     const ten=all.slice(0,10);
     if(ten.length>=3&&Number.isFinite(line)){
       const avg=ten.reduce((a,g)=>a+g.value,0)/ten.length, srt=ten.map(g=>g.value).sort((a,b)=>a-b), m=Math.floor(srt.length/2), med=srt.length%2?srt[m]:(srt[m-1]+srt[m])/2;
       const text=`Averaged <b>${f1(avg)}</b>, median <b>${f1(med)}</b> over the last ${ten.length} · line ${esc(r.offer.line)}`;
-      if(toward(avg)&&toward(med))add(why,text,false,1);
-      else if(away(avg)&&away(med))add(risk,text,false,-1);
-      else add(risk,`${text}: the average and the median sit on opposite sides of the line`,false,-1);
-    } else if(num(r.history?.avg)&&Number.isFinite(line)){
-      const a=r.history.avg, dir=toward(a)?1:away(a)?-1:0;
-      add(dir<0?risk:why,`Averaged <b>${esc(a)}</b> over the last 10 · line ${esc(r.offer.line)}`,false,dir);
+      if(toward(avg)&&toward(med))add(text,1);
+      else if(away(avg)&&away(med))add(text,-1);
+      else add(`${text} <small>(the two do not agree on a side)</small>`,0);
+    } else if(r.sport==='cs2'&&!all.length&&num(r.history?.avg)&&Number.isFinite(line)){
+      /* CS2's saved recent average is on the line's own maps; LoL's board fallback is a per-game rate, never set against a series line */
+      const a=r.history.avg;
+      add(`Recent average <b>${esc(a)}</b> on ${esc(r.market.period_label)} · line ${esc(r.offer.line)}`,toward(a)?1:away(a)?-1:0);
     }
+    /* a Q1 / first-half line with no results at its own period: his full-game log as context, never counted against the line */
+    const fg=(doc?.history?.full_game||[]).filter(g=>num(g.value));
+    if(!all.length&&fg.length>=3)add(`Full game: averaged <b>${f1(fg.reduce((a,g)=>a+g.value,0)/fg.length)}</b> ${stat} over his last ${fg.length} games <small>(this line counts ${esc(r.market.period_label)} only)</small>`,0);
     /* 4. this opponent */
     const hh=doc?.h2h;
     if(hh?.opponent&&hh.n){
-      const k=countOf(hh,side), dir=hh.n>=2?(k*2>hh.n?1:k*2<hh.n?-1:0):0;
-      add(dir<0?risk:why,`Vs ${esc(hh.opponent)}: ${Side} in <b>${k}</b> of <b>${hh.n}</b> past ${hh.n===1?'meeting':'meetings'}${num(hh.avg)?`, average <b>${f1(hh.avg)}</b>`:''}`,false,dir);
+      const k=countOf(hh,side);
+      add(`Vs ${esc(hh.opponent)}: ${Side} in <b>${k}</b> of <b>${hh.n}</b> past ${hh.n===1?'meeting':'meetings'}${num(hh.avg)?`, average <b>${f1(hh.avg)}</b>`:''}`,hh.n>=2?recDir(k,hh.n):0);
     }
     /* 5. the matchup, per sport, from the doc's own blocks */
     if(r.sport==='cs2'){
@@ -857,36 +899,51 @@ export function mount(C) {
       if(mc&&(mc.maps||[]).length){
         const top=mc.maps.filter(x=>num(Number(x.pct))).slice(0,3), per=new Map();
         all.forEach(g=>(g.maps||[]).forEach((name,i)=>{if(!name||!g.values||!num(g.values[i]))return;const e=per.get(name)||{n:0,t:0};e.n++;e.t+=g.values[i];per.set(name,e);}));
-        const his=top.filter(x=>per.get(x.name)?.n).map(x=>{const e=per.get(x.name);return `${esc(x.name)} <b>${f1(e.t/e.n)}</b> <small>(${e.n} ${e.n===1?'map':'maps'})</small>`;});
-        add(why,`Likely maps: ${top.map(x=>`${esc(x.name)} <b>${esc(x.pct)}%</b>`).join(' · ')}${his.length?`. His ${stat} per map there: ${his.join(' · ')}`:''}`,used,0);
+        const norm=n=>String(n).toLowerCase().replace(/^de_/,'').replace(/\s+/g,'');
+        const mine=x=>[...per].find(([n])=>norm(n)===norm(x.name))?.[1];
+        const his=top.filter(x=>mine(x)?.n).map(x=>{const e=mine(x);return `${esc(x.name)} <b>${f1(e.t/e.n)}</b> <small>(${e.n} ${e.n===1?'map':'maps'})</small>`;});
+        const html=`Likely maps: ${top.map(x=>`${esc(x.name)} <b>${esc(x.pct)}%</b>`).join(' · ')}${his.length?`. His ${stat.toLowerCase()} a map there: ${his.join(' · ')}`:''}`;
+        if(used)out.scout.push(fact(html,true,0));else add(html,0);
       }
       const bo=r.event.best_of, days=ctxRows(doc).find(f=>f.key==='days_since_last_map')?.value;
-      if(num(Number(bo))&&Number(bo)>0)add(why,`Best of <b>${esc(bo)}</b> · ${esc(r.market.period_label)} count for this line`,false,0);
-      if(num(Number(days))&&Number(days)>=15)add(risk,`Last official map <b>${esc(days)} days</b> ago`,false,-1);
+      if(num(Number(bo))&&Number(bo)>0)add(`Best of <b>${esc(bo)}</b> · ${esc(r.market.period_label)} count for this line`,0);
+      if(num(Number(days))&&Number(days)>=15)add(`Last official map <b>${esc(days)} days</b> ago`,-1);
     } else if(r.sport==='lol'){
+      (doc?.context?.drivers||[]).filter(Boolean).map(d=>lolDriver(d,r,side)).filter(Boolean).slice(0,3).forEach(d=>out.scout.push(fact(d.html,true,d.dir)));
       const series=ctxVal(doc,'Series length'), counted=ctxVal(doc,'Maps counted');
-      if(series)add(why,`${esc(series)}${counted?` · ${esc(counted)}`:''}`,false,0);
-      const drivers=(doc?.context?.drivers||[]).filter(Boolean).slice(0,3);
-      if(drivers.length)add(why,`Scout's model factors: ${drivers.map(d=>esc(factText(d))).join(' · ')}`,true,0);
+      if(series)add(`${esc(series)}${counted?` · ${esc(String(counted).replace(/ added$/,''))} count for this line`:''}`,0);
+      const per=ctxVal(doc,'Recent per game'), rg=ctxVal(doc,'Recent games');
+      if(num(Number(per)))add(`Recent form: <b>${f1(Number(per))}</b> ${stat.toLowerCase()} a game${num(Number(rg))?` over his last ${esc(rg)} games`:''}`,0);
       const ts=ctxVal(doc,'Team win chance, Scout'), tm=ctxVal(doc,'Team win chance, market');
-      if(tm&&parseFloat(tm)<50&&ts&&parseFloat(ts)>=50)add(risk,`The betting market makes ${esc(r.player.team||'his team')} the underdog: <b>${esc(tm)}</b> to win (Scout ${esc(ts)})`,false,-1);
-      else if(ts||tm)add(why,`${esc(r.player.team||'His team')}'s win chance: ${ts?`Scout <b>${esc(ts)}</b>`:''}${ts&&tm?' · ':''}${tm?`market <b>${esc(tm)}</b>`:''}`,false,0);
+      if(tm&&parseFloat(tm)<50&&ts&&parseFloat(ts)>=50)add(`Betting markets make ${esc(r.player.team||'his team')} the underdog: <b>${esc(tm)}</b> to win (Scout <b>${esc(ts)}</b>)`,-1);
+      else if(ts||tm)add(`${esc(r.player.team||'His team')}’s win chance: ${ts?`Scout <b>${esc(ts)}</b>`:''}${ts&&tm?' · ':''}${tm?`betting markets <b>${esc(tm)}</b>`:''}`,0);
     } else {
+      /* the player's own status first, when it is definite (out / injured reserve / suspended); hedge statuses never show */
+      const inj=String(ctxVal(doc,'Injury report')||''), [st,...det]=inj.split(' · '), say=DEFINITE[String(st).trim().toLowerCase()];
+      if(say)add(`${esc(r.player.name)} ${say} on the injury report${det.length?` <small>(${esc(det.join(' · '))})</small>`:''}`,-1,true);
       const u=usageOf(doc,r.sport,r.market.stat);
       if(u){
-        const text=`${esc(u.name)}: <b>${f1(u.L3)}</b> last 3 · <b>${f1(u.L10)}</b> last 10${num(u.Season)?` · <b>${f1(u.Season)}</b> season`:''}`, drop=u.L3<u.L10*0.9, rise=u.L3>u.L10*1.1;
-        if((drop&&side==='over')||(rise&&side==='under'))add(risk,`${esc(u.name)} ${drop?'down':'up'}: ${text.slice(text.indexOf(':')+2)}`,false,-1);
-        else add(why,text,false,drop||rise?1:0);
+        const nums=`<b>${f1(u.L3)}</b> last 3 · <b>${f1(u.L10)}</b> last 10${num(u.Season)?` · <b>${f1(u.Season)}</b> season`:''}`, drop=u.L3<u.L10*0.9, rise=u.L3>u.L10*1.1;
+        if(drop||rise)add(`${esc(u.name)} ${drop?'down':'up'}: ${nums}`,(rise===(side==='over'))?1:-1);
+        else add(`${esc(u.name)}: ${nums}`,0);
       }
-      /* teammates out: only definite statuses on the saved injury report (never day-to-day or questionable) */
-      const rows=ctxRows(doc), i=rows.findIndex(f=>f.label==='Teammates on the injury report');
-      const outs=i<0?[]:rows.slice(i+1).filter(f=>f.group==='Matchup'&&/^(out|injured_reserve)$/i.test(String(f.value))).map(f=>f.label);
-      if(outs.length)add(why,`Teammates out: ${outs.slice(0,4).map(esc).join(', ')}${outs.length>4?` and ${outs.length-4} more`:''}`,false,0);
-      if(ctxVal(doc,'Back-to-back')==='Yes')add(risk,'Second game of a back-to-back',false,-1);
+      /* teammates out: the definite outs over the whole saved report (the server counts them); never day-to-day or questionable */
+      const to=ctxRow(doc,'Teammates out');
+      if(to&&Array.isArray(to.names)&&to.names.length){
+        const n=Number(to.value)||to.names.length, shown=to.names.slice(0,4);
+        add(`Teammates out: ${shown.map(esc).join(', ')}${n>shown.length?` and ${n-shown.length} more`:''}`,0);
+      } else if(!to){
+        /* a doc saved before the server counted them: only the rows it lists, worded as a partial list (no count) */
+        const rows=ctxRows(doc), i=rows.findIndex(f=>f.label==='Teammates on the injury report');
+        const outs=i<0?[]:rows.slice(i+1,i+7).filter(f=>f.group==='Matchup'&&/^(out|injured_reserve|suspended)$/i.test(String(f.value))).map(f=>f.label);
+        if(outs.length)add(`Teammates listed out include ${outs.slice(0,4).map(esc).join(', ')}`,0);
+      }
+      if(ctxVal(doc,'Back-to-back')==='Yes')add('Second game of a back-to-back',-1);
       const venue=ctxVal(doc,'Venue');
-      if(venue&&r.player.opponent)add(why,`${venue==='home'?'Home':'Away'} game vs ${esc(r.player.opponent)}`,false,0);
-      const inputs=rows.filter(f=>f.group==='Model inputs').slice(0,3);
-      if(inputs.length)add(why,`Scout's model inputs: ${inputs.map(f=>`${esc(f.label)} <b>${esc(factText(f.value))}</b>`).join(' · ')}`,true,0);
+      if(venue&&r.player.opponent)add(`${venue==='home'?'Home':'Away'} game vs ${esc(r.player.opponent)}`,0);
+      /* the factor engine's rows are context (weight 0): said so in the words, never listed as Scout's reasons */
+      const eng=ctxRows(doc).filter(f=>f.group&&(f.group.startsWith('Matchup numbers')||f.group==='Model inputs')).slice(0,2);
+      if(eng.length)add(`Matchup numbers Scout’s forecast does not use: ${eng.map(f=>`${esc(f.label)} <b>${esc(factText(f.value))}</b>`).join(' · ')}`,0);
     }
     /* 6. the line itself: moves since it opened, then where other books and the market sit */
     const from=r.offer.moved_from;
@@ -894,34 +951,35 @@ export function mount(C) {
     const was=from!=null?Number(from):num(opened)&&opened!==line?opened:null;
     if(was!=null&&Number.isFinite(line)&&was!==line){
       const against=side==='over'?line>was:line<was;
-      add(against?risk:why,`Line moved ${line>was?'up':'down'} from <b>${esc(was)}</b> to <b>${esc(r.offer.line)}</b> on ${esc(r.offer.platform_label)}${against?` (harder for the ${Side})`:` (easier for the ${Side})`}`,false,against?-1:1);
+      add(`Line moved ${line>was?'up':'down'} from <b>${esc(was)}</b> to <b>${esc(r.offer.line)}</b> on ${esc(r.offer.platform_label)} <small>(${against?'harder':'easier'} for the ${Side})</small>`,against?-1:1);
     }
     const others=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform||x.offer.line!==r.offer.line).slice(0,4);
-    if(others.length)add(why,`Other lines: ${others.map(x=>`${esc(x.offer.platform_label)}${kindOf(x)?' '+esc(kindOf(x)):''} <b>${esc(x.offer.line)}</b>`).join(' · ')}`,false,0);
+    if(others.length)add(`Other lines: ${others.map(x=>`${esc(x.offer.platform_label)}${kindOf(x)?' '+esc(kindOf(x)):''} <b>${esc(x.offer.line)}</b>`).join(' · ')}`,0);
+    const priceFact=(p,src)=>{const even=Math.abs(p-.5)<.02;   /* within 2 points of even: the prices take no side */
+      add(`${even?'Betting prices are close to even':p<.5?'Betting prices lean the other way':'Betting prices agree'}: <b>${pct(p)}</b> ${Side} <small>(${src})</small>`,even?0:p<.5?-1:1);};
     const mk=doc?.market;
-    if(mk?.available&&num(mk.p_over)&&num(mk.p_under)){
-      const p=side==='over'?mk.p_over:mk.p_under;
-      const even=Math.abs(p-.5)<.02;   /* within 2 points of even: the prices take no side */
-      add(!even&&p<.5?risk:why,`${even?'Market prices are close to even':p<.5?'Market prices lean the other way':'Market prices agree'}: <b>${pct(p)}</b> ${Side} <small>(${esc(mk.source||'market')})</small>`,false,even?0:p<.5?-1:1);
-    } else {
-      const b=(doc?.market_books?.same||[]).find(x=>num(x.chance));
-      if(b)add(why,`${esc(b.platform_label)} at ${esc(b.line)}: <b>${pct(side==='over'?b.chance:1-b.chance)}</b> ${Side} <small>(margin removed)</small>`,false,0);
+    if(mk?.available&&num(mk.p_over)&&num(mk.p_under))priceFact(side==='over'?mk.p_over:mk.p_under,esc(plainSource(mk.source||'betting market')));
+    else {
+      /* one sportsbook at this exact line: a no-cut price first; a prediction market's midpoint says it is a midpoint */
+      const same=(doc?.market_books?.same||[]).filter(x=>num(x.chance)), b=same.find(x=>x.kind==='devig')||same.find(x=>x.kind==='mid');
+      if(b&&Number(b.line)===line)priceFact(side==='over'?b.chance:1-b.chance,`${esc(b.platform_label)}${b.kind==='devig'?', with the bookmaker’s cut taken out':', midpoint price'}`);
     }
-    return {lean,side,why,risk};
+    return {lean,side,graded,...out};
   }
   function whyHtml(r) {
-    const {lean,side,why,risk}=whyFacts(r);
-    if(!why.length&&!risk.length)return '';
-    /* the forecast first, then facts that support the side, then context; at most six */
-    const top=[why[0],...why.slice(1).filter(f=>f.dir>0),...why.slice(1).filter(f=>f.dir<=0)].filter(Boolean).slice(0,6);
-    const dot=f=>f.used?'<i class="h-why-dot is-used" title="Used in the grade"></i><span class="u-sr">Used in the grade: </span>':'<i class="h-why-dot" title="Context only, not used in the grade"></i><span class="u-sr">Context only, not used in the grade: </span>';
-    const li=f=>`<li class="${f.dir>0?'is-for':f.dir<0?'is-against':''}">${dot(f)}<span>${f.html}</span></li>`;
-    const title=lean?`Why Scout leans ${sideWord(lean)} ${esc(r.offer.line)}`:`The numbers for ${sideWord(side)} ${esc(r.offer.line)}`;
-    return `<section class="h-why" aria-labelledby="hub-why-title"><div class="h-sec-head"><h4 id="hub-why-title">${title}</h4>${lean?'':'<small>Scout has no side at this line</small>'}</div>
-      <ul class="h-why-list">${top.map(li).join('')}</ul>
-      ${risk.length?`<h5 class="h-why-risk-head">What could go wrong</h5><ul class="h-why-list h-why-risk">${risk.slice(0,4).map(li).join('')}</ul>`:''}
+    const f=whyFacts(r), {lean,side,graded}=f, Side=sideWord(side);
+    if(!f.scout.length&&!f.for.length&&!f.risk.length&&!f.also.length)return '';
+    const dot=x=>!graded?'':x.used?'<i class="h-why-dot is-used" title="Used in the grade"></i><span class="u-sr">Used in the grade: </span>':'<i class="h-why-dot" title="Not used in the grade"></i><span class="u-sr">Not used in the grade: </span>';
+    const li=x=>`<li class="${x.dir>0?'is-for':x.dir<0?'is-against':''}${graded?'':' no-dot'}">${dot(x)}<span>${x.html}</span></li>`;
+    const list=(cls,xs)=>`<ul class="h-why-list ${cls}">${xs.map(li).join('')}</ul>`;
+    const title=lean?`Why Scout leans ${sideWord(lean)} ${esc(r.offer.line)}`:`The numbers for ${Side} ${esc(r.offer.line)}`;
+    return `<section class="h-why" aria-labelledby="hub-why-title"><div class="h-sec-head"><h4 id="hub-why-title">${title}</h4></div>
+      ${f.scout.length?list('h-why-scout',f.scout.slice(0,4)):''}
+      ${f.for.length?`<h5 class="h-why-sub h-why-for-head">${f.scout.length?'Other numbers that point':'What points'} to ${Side}</h5>${list('h-why-for',f.for.slice(0,5))}`:''}
+      ${f.risk.length?`<h5 class="h-why-risk-head">What could go wrong</h5>${list('h-why-risk',f.risk.slice(0,4))}`:''}
+      ${f.also.length?`<h5 class="h-why-sub">Also good to know</h5>${list('h-why-also',f.also.slice(0,4))}`:''}
       ${H.detailState==='loading'?'<p class="h-history-note">Loading the rest of this player’s research…</p>':''}
-      <p class="h-why-key"><span><i class="h-why-dot is-used"></i>Used in the grade</span><span><i class="h-why-dot"></i>Context only, not in the grade</span></p></section>`;
+      ${graded?'<p class="h-why-key"><span><i class="h-why-dot is-used"></i>Used in the grade</span><span><i class="h-why-dot"></i>Not used in the grade</span></p>':''}</section>`;
   }
   function overviewHtml(r) {
     const side=H.histSide, line=r.offer.line, doc=H.detailDoc;
@@ -929,7 +987,10 @@ export function mount(C) {
     const sorted=series.map(g=>g.value).sort((a,b)=>a-b), mid=Math.floor(sorted.length/2);
     const median=sorted.length?(sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2):null;
     const tile=(value,label,extra='',cls='')=>`<div class="h-tile${cls}"><b>${value}</b><span>${label}</span>${extra}</div>`;
-    const hitTiles=[5,10,20].map(n=>{
+    /* card-and-chips 2026-11-06: no result on file at any window (e.g. a Q1 line whose period has no saved results) = no row of
+       three dashes; the Why section names the full-game log instead */
+    const noTiles=[5,10,20].every(n=>!windowTally(r,all,n)&&!(n!==10&&C.hitsPending(r)));
+    const hitTiles=noTiles?'':[5,10,20].map(n=>{
       const t=windowTally(r,all,n), pending=!t&&n!==10&&C.hitsPending(r);
       return tile(t?`${countOf(t,side)}<em>/${t.n}</em>`:pending?'<i class="h-hit-wait" aria-hidden="true"></i>':'—',`L${n} · ${sideWord(side)} ${esc(line)}`,t&&t.n<n?`<small>${t.n} ${t.n===1?'game':'games'}${t.push?` · ${t.push} ${t.push===1?'push':'pushes'}`:''}</small>`:t?.push?`<small>${t.push} ${t.push===1?'push':'pushes'}</small>`:'',H.histN===n?' is-window':'');
     }).join('');

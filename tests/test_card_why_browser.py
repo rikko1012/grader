@@ -1,8 +1,8 @@
 """card-why (owner 2026-11-06) in a real browser at 1440 and 390, real Handler + fixture data (no network):
-- every sport's player card opens with "Why Scout leans Over / Under": 1-6 plain facts with their numbers, the forecast first and
-  marked as used in the grade, the rest marked context only; "What could go wrong" only from definite facts; the rest of the card
-  (hit tiles, chart, H2H, Lines, Stats, Ask) is still there, after it;
-- phone: the L5 / L10 / L20 / H2H / SZN chips get a full-width row of their own, evenly spaced (they were squeezed beside Proj/Edge).
+- every sport's player card opens with "Why Scout leans Over / Under" (or "The numbers for ..." without a side): Scout's own number
+  first, then the facts for the side, "What could go wrong" (definite facts only) and "Also good to know"; the rest of the card
+  (hit tiles, chart, H2H, Lines, Stats, Ask) is still there, after it. Dots (used / not used in the grade) only where a grade exists.
+  The phone strip layout is phone-hit-chips' (tests/test_phone_hit_chips_browser.py); card-and-chips 2026-11-06 dropped the second one.
 AUDIT_SHOTS=<folder> keeps a 390px and a 1440px screenshot of every card."""
 import os
 from pathlib import Path
@@ -53,9 +53,9 @@ def why(p):
       const items = l => [...w.querySelectorAll(l + ' > li')].map(li => ({text: li.querySelector(':scope > span:last-child').innerText.trim(), sr: li.querySelector('.u-sr')?.textContent || '', used: !!li.querySelector('.h-why-dot.is-used'),
         dot: !!li.querySelector('.h-why-dot'), cls: li.className}));
       const body = document.querySelector('#hub-card-body');
-      return {title: w.querySelector('h4').innerText, why: items('.h-why-list:not(.h-why-risk)'), risk: w.querySelector('.h-why-risk') ? items('.h-why-risk') : [],
+      return {title: w.querySelector('h4').innerText, why: [...items('.h-why-scout'), ...items('.h-why-for')], risk: items('.h-why-risk'), also: items('.h-why-also'),
               first: body.firstElementChild === w || body.firstElementChild.nextElementSibling === w && body.firstElementChild.classList.contains('h-warning'),
-              key: w.querySelector('.h-why-key').innerText, after: [...body.children].map(e => e.className).join(' ')}; }""")
+              key: w.querySelector('.h-why-key')?.innerText || '', after: [...body.children].map(e => e.className).join(' ')}; }""")
 
 
 @pytest.mark.parametrize('size', [DESK, PHONE], ids=['1440', '390'])
@@ -67,13 +67,16 @@ def test_every_sport_card_opens_with_why_scout_leans(ctx, env, sp, size):
     w = why(p)
     assert w['first'], w['after']                                    # the reason comes first on the card
     assert w['title'].startswith(('Why Scout leans Over', 'Why Scout leans Under', 'The numbers for')), w['title']
-    assert 1 <= len(w['why']) <= 6 and len(w['risk']) <= 4, w
-    assert all(x['dot'] for x in w['why'] + w['risk'])               # every fact says whether it feeds the grade
-    assert w['why'][0]['used'] and ('Scout projects' in w['why'][0]['text'] or 'Scout gives' in w['why'][0]['text']), w['why'][0]
-    ctx_only = [x for x in w['why'] + w['risk'] if not x['used']]
-    assert all(not t['text'].startswith('Scout projects') for t in ctx_only)
-    assert 'Used in the grade' in w['key'] and 'Context only' in w['key']
-    text = ' '.join(x['text'] for x in w['why'] + w['risk']).lower()
+    assert 1 <= len(w['why']) <= 9 and len(w['risk']) <= 4 and len(w['also']) <= 4, w
+    assert 'Scout projects' in w['why'][0]['text'] or 'Scout gives' in w['why'][0]['text'], w['why'][0]
+    facts = w['why'] + w['risk'] + w['also']
+    if w['key']:                                                     # a grade exists: every fact says whether it feeds it
+        assert all(x['dot'] for x in facts) and w['why'][0]['used']
+        assert 'Used in the grade' in w['key'] and 'Not used in the grade' in w['key']
+    else:                                                            # no grade (NBA / NFL held letters): no "used in the grade" dot at all
+        assert not any(x['dot'] for x in facts), facts
+    assert all(not x['used'] for x in facts if not x['text'].startswith(('Scout projects', 'Scout gives', 'His base rate', 'Likely maps')) and 'kills a game than' not in x['text'] and 'win chance moves' not in x['text'])
+    text = ' '.join(x['text'] for x in facts).lower()
     for word in ('unconfirmed', 'uncertain', 'questionable', 'day_to_day', 'nan', 'undefined', 'null'):
         assert word not in text.split() and word not in text.replace('.', ' ').split(), (word, text)
     # the rest of the card is still there, after the reason
@@ -97,25 +100,7 @@ def test_hit_rates_in_why_match_the_tiles(ctx, env):
         p.locator(f'#hub-decision [data-hub=history-side][data-id={side.lower()}]').click()
     tile = p.locator('#hub-detail .h-history-summary .h-tile').nth(1).locator('b').inner_text().replace('\n', '')
     k, n = tile.split('/')
-    went = [x['text'] for x in why(p)['why'] + why(p)['risk'] if x['text'].startswith('Went ')]
+    w = why(p)
+    went = [x['text'] for x in w['why'] + w['risk'] + w['also'] if x['text'].startswith('Went ')]
     assert went and f'{k} of the last {n}' in went[0], (tile, went)
-    assert not p.errors
-
-
-def test_phone_hit_strip_has_its_own_full_width_row(ctx, env):
-    p = board(ctx, env, PHONE)
-    sport(p, 'cs2')
-    m = p.evaluate("""() => { const tr = document.querySelector('#hub-rows tr[data-record]'), hits = tr.querySelector('td.h-c-hits'),
-      proj = tr.querySelector('td.h-c-proj'), cells = [...hits.querySelectorAll('.h-strip-cell')].map(c => c.getBoundingClientRect());
-      return {row: tr.getBoundingClientRect().width, hits: hits.getBoundingClientRect().width, top: hits.getBoundingClientRect().top,
-              proj: proj.getBoundingClientRect().top, cells: cells.map(c => [c.left, c.width]), labels: [...hits.querySelectorAll('.h-strip-cell')].map(c => c.dataset.label)}; }""")
-    assert m['labels'] == ['L5', 'L10', 'L20', 'H2H', 'SZN'], m
-    assert m['hits'] >= m['row'] - 30, m                              # the strip spans the row
-    widths = [w for _, w in m['cells']]
-    assert min(widths) >= 52 and max(widths) - min(widths) < 2, m     # five even chips, wide enough to read
-    gaps = [m['cells'][i + 1][0] - (m['cells'][i][0] + m['cells'][i][1]) for i in range(4)]
-    assert min(gaps) >= 6, gaps                                       # visibly apart, not clumped
-    assert m['proj'] > m['top'], m                                    # Proj moved under the strip, beside Compare
-    no_h_scroll(p)
-    shot(p, 'why-phone-board-strip')
     assert not p.errors

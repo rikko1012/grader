@@ -706,6 +706,9 @@ def series_of(hist, stat):
     return out
 
 
+ENGINE_GROUP = "Matchup numbers (not part of Scout's forecast)"
+
+
 def context_of(x, player, lg):
     rows = []
 
@@ -721,7 +724,13 @@ def context_of(x, player, lg):
     for c in (player or {}).get("context") or []:
         if c.get("key") == "teammates_out":
             add(c.get("label"), c.get("value"))
-            for i in (c.get("items") or [])[:6]:
+            items = c.get("items") or []
+            # card-and-chips 2026-11-06: the definite outs over the WHOLE report (the rows below keep only the first six), so the
+            # card's "teammates out" names and count are never cut short; day-to-day / questionable stay off it (no-hedge rule)
+            outs = [str(i.get("player")) for i in items if i.get("player") and str(i.get("status") or "").lower() in ("out", "injured_reserve", "suspended")]
+            if outs:
+                rows.append({"label": "Teammates out", "value": len(outs), "group": "Matchup", "names": outs[:12]})
+            for i in items[:6]:
                 add(i.get("player"), i.get("status"))
         elif isinstance(c.get("value"), bool):
             add(c.get("label"), "Yes" if c["value"] else "No")
@@ -731,9 +740,11 @@ def context_of(x, player, lg):
         for w in s.get("windows") or []:
             if w.get("window") and w.get("mean") is not None:
                 add(f"{s.get('label')}, {w['window']}", w["mean"], "Averages")
+    # the factor engine's rows are context (sports/player_context.py: weight 0, the Scout model does not use them): their heading
+    # says so, never "Model inputs" (grading-factor rule, card-and-chips 2026-11-06)
     for r in ((player or {}).get("engine") or {}).get("rows") or []:
         if r.get("label") and r.get("value") is not None:
-            add(r.get("label"), r.get("value"), "Model inputs")
+            add(r.get("label"), r.get("value"), ENGINE_GROUP)
     return {"rows": rows[:200]}
 
 
@@ -759,7 +770,14 @@ def line_doc(srv, lg, book, rid):
     forecast = {"id": x["fid"], "logged_at": x["at"], "model_version": x["model"], "p_saved": None} if x["fid"] else None
     tally = rec["history"]["l10"]
     avg = round(sum(s["value"] for s in series[:10]) / len(series[:10]), 1) if series else None
-    return 200, {"record": rec, "forecast": forecast, "history": {"tally": tally, "avg": avg, "series": series[:20] if series else None}, "books": books, "market_books": {"same": same, "other": other},
+    hist_out = {"tally": tally, "avg": avg, "series": series[:20] if series else None}
+    if series is None and hist:
+        # a Q1 / first-half line has no results at its own scope in the saved file: the card shows his full-game log beside it as
+        # context, labelled full game and never counted against this line (card-and-chips 2026-11-06; same file, no extra read)
+        fg = series_of(hist, x["st"])
+        if fg:
+            hist_out["full_game"] = fg[:10]
+    return 200, {"record": rec, "forecast": forecast, "history": hist_out, "books": books, "market_books": {"same": same, "other": other},
                  "h2h": workspace_h2h.h2h(series, rec["player"]["opponent"], x["l"]) if series else None,
                  "context": context_of(x, player, lg),
                  "market": {"available": True, "p_over": mk["p_over"], "p_under": mk["p_under"], "source": f"{mk['sources']} market sources at this line"} if mk else {"available": False, "reason": "No market price at this exact line."}}
