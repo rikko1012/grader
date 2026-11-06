@@ -14,7 +14,7 @@ upstream. Each poll:
   - retries: up to `tries` attempts inside one poll, only for network errors and 5xx, with a short growing gap;
   - backoff: after a failed poll the next one waits backoff_base_s x 2^(failures-1) (capped at backoff_max_s, +-20% jitter);
     a Retry-After header wins when it is longer. 429 / 403 are never retried inside the poll; a 403 (the site refuses this
-    server) waits refused_backoff_s and shows "refused" on the admin page: a refusal is never worked around;
+    server) waits refused_backoff_s and shows "refused" on the admin page;
   - freshness: offers carry observed_at (our last good read) and source_at (the provider's own update time). After
     stale_after_s without a good read the provider is "stale" and its lines are hidden, never shown as current
     (transient-failure rule: a blip hides a line, it never changes one).
