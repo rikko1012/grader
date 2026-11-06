@@ -189,28 +189,38 @@ export function mount(C) {
   const stripHtml = r => `<div class="h-strip">${STRIP.map(([w,l])=>`<span class="h-strip-cell h-s-${w}" data-label="${l}">${stripCell(r,w,l)}</span>`).join('')}</div>`;
   /* Edge vs break-even (owner 2026-11-05): the row's current Scout chance minus the platform's published per-pick break-even.
      Underdog standard at a 1.0x pick: the gradecore payout table (gradecore/payouts.py, Underdog's published payouts, the server sends
-     the value and its source). PrizePicks and goblin / demon lines publish no fixed per-pick payout here: their cell stays empty.
+     the value and its source). With the parity payload (r.parity.be: Underdog's table and PrizePicks' help-center table, verified by
+     owner sign-off 2026-11-05) the gap is measured against that row's own book break-even, so an unrated PrizePicks row shows its
+     points gap too. Goblin / demon / promo lines pay an unpublished multiplier: their cell stays empty.
      A fact about the chance against the payout, not a grade: a held or contained letter does not change it. */
   function edgeValue(r) {
     if(P('edge')&&evOf(r))return evOf(r).ev*100;     /* SCOUT_PARITY_EDGE: EV in % only where the slip check rates the line */
+    const par=edgeBe(r);
+    if(par)return (r.scout.p_side-par.be)*100;      /* not rated: the points gap against this row's own book break-even */
     const s=r.scout, be=COLS?.ud_standard_break_even, mult=s.side?r.offer[s.side]?.payout:null;
     if(r.offer.platform!=='underdog'||r.market.line_type!=='standard'||!s.side||!num(s.p_side)||!num(be)||!num(mult)||Math.abs(mult-1)>1e-9)
       return null;
     return (s.p_side-be)*100;
   }
-  const EDGE_WHY=()=>P('edge')?parEdgeWhy():`Scout chance minus the per-pick break-even of an ${COLS?.entry||'Underdog standard 2-pick'} entry`+(num(COLS?.ud_standard_break_even)?` (${(COLS.ud_standard_break_even*100).toFixed(1)}%`+(COLS?.source?`, from Underdog's published payouts${COLS.read_at?' read '+COLS.read_at:''}`:'')+')':'')+', in points. PrizePicks and goblin or demon lines publish no fixed per-pick payout, so their cells stay empty.';
+  const EDGE_WHY=()=>P('edge')?parEdgeWhy():`Scout chance minus the per-pick break-even of an ${COLS?.entry||'Underdog standard 2-pick'} entry`+(num(COLS?.ud_standard_break_even)?` (${(COLS.ud_standard_break_even*100).toFixed(1)}%`+(COLS?.source?`, from Underdog's published payouts${COLS.read_at?' read '+COLS.read_at:''}`:'')+')':'')+', in points. Rows that carry their own book break-even (PrizePicks from its help-center payout table) are measured against it. Goblin, demon and boosted lines publish no fixed per-pick payout, so their cells stay empty.';
   function edgeCell(r) {
     if(P('edge')&&evOf(r))return parEdgeCell(r);     /* otherwise the points gap below, as before */
     const d=edgeValue(r);
-    if(d==null)return `<span class="h-edge empty" title="${esc(r.offer.platform==='underdog'?'No fixed per-pick payout is published for this line type':'No fixed per-pick payout is published for this platform')}">—</span>`;
-    const be=COLS.ud_standard_break_even;
-    return `<span class="h-edge${d>0?' positive':''}" title="${esc(`Scout chance ${pct(r.scout.p_side)} against the ${(be*100).toFixed(1)}% break-even of an ${COLS.entry||'Underdog standard'} entry`)}"><b>${d>0?'+':d<0?'−':'±'}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
+    if(d==null)return `<span class="h-edge empty" title="${esc(r.market.line_type!=='standard'?'No fixed per-pick payout is published for this line type':!r.scout.side?'No Scout side on this line':'No published per-pick break-even for this line')}">—</span>`;
+    const par=edgeBe(r), be=par?par.be:COLS.ud_standard_break_even, entry=par?par.entry:(COLS.entry||'Underdog standard')+' entry';
+    const why=par&&P('edge')?' · not rated: Scout’s settled results don’t back this chance yet, so no EV is shown':'';
+    return `<span class="h-edge${d>0?' positive':''}" title="${esc(`Scout chance ${pct(r.scout.p_side)} against the ${(be*100).toFixed(1)}% break-even of a ${entry}${why}`)}"><b>${d>0?'+':d<0?'−':'±'}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
   }
   /* ---- 4.16 parity helpers: display of the server's numbers only ---- */
   const parOf = r => r.parity && typeof r.parity === 'object' && num(r.parity.be) ? r.parity : null;
   /* the server sends ev / band / sizes only for a line the live slip check would rate (CS2, letter not held, half-point line,
      a chance band that passed the settled-results check); every other row keeps the points gap and gets no band */
   const evOf = r => {const p=parOf(r);return p&&num(p.ev)?p:null;};
+  /* the row's own book break-even for the points gap: standard line, Scout side, a chance; never a goblin / demon / promo line */
+  const edgeBe = r => {const p=parOf(r), s=r.scout||{};
+    if(!p||r.market?.line_type!=='standard'||!s.side||!num(s.p_side))return null;
+    if(r.offer?.platform==='underdog'){const m=r.offer[s.side]?.payout;if(!num(m)||Math.abs(m-1)>1e-9)return null;}   /* Underdog: 1.0x picks only */
+    return p;};
   const evText = ev => `${ev>0?'+':ev<0?'−':'±'}${Math.abs(ev*100).toFixed(1)}%`;
   const beOdds = p => H.par.odds==='decimal'&&num(p.be_decimal)?p.be_decimal.toFixed(2):num(p.be_american)?(p.be_american>0?'+':'−')+Math.abs(p.be_american):pct(p.be);
   const SIZING=[['quarter','¼ Kelly'],['half','½ Kelly'],['flat','Flat 1%']];
@@ -224,7 +234,7 @@ export function mount(C) {
   }
   function parEdgeWhy() {
     const t=PAR?.break_even||{}, parts=Object.values(t).filter(v=>v&&num(v.be)).map(v=>`${v.entry} needs ${pct(v.be)} a pick`);
-    return 'On lines where Scout’s settled results back the chance: average return of one pick against its app’s published payout (Scout chance ÷ break-even − 1).'+(parts.length?' '+parts.join('; ')+'.':'')+' Other lines show Scout chance minus the break-even, in points. Goblin, demon and boosted lines have no published per-pick payout, so they show —.';
+    return 'On lines where Scout’s settled results back the chance: average return of one pick against its app’s published payout (Scout chance ÷ break-even − 1).'+(parts.length?' '+parts.join('; ')+'.':'')+' Other lines (not rated yet) show Scout chance minus their app’s break-even, in points. Goblin, demon and boosted lines have no published per-pick payout, so they show —.';
   }
   function parEdgeCell(r) {
     const p=evOf(r);

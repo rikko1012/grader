@@ -163,7 +163,7 @@ def test_board_flag_on_columns_countdown_edge_and_tones(ctx, env, monkeypatch, s
     assert cd.inner_text().startswith('in ') and 'h' in cd.inner_text()             # the fixture starts in about three hours
     p.locator('#hub-q').fill('')
     # Edge (owner 2026-11-05): the row's chance against Underdog's published per-pick break-even on every sport's Underdog standard
-    # line; PrizePicks publishes no fixed per-pick payout, so its cells stay empty
+    # line; with the parity flags off a PrizePicks row carries no break-even, so its cell stays empty
     for i in range(rows.count()):
         r = rows.nth(i)
         rid = r.get_attribute('data-record')
@@ -174,7 +174,7 @@ def test_board_flag_on_columns_countdown_edge_and_tones(ctx, env, monkeypatch, s
     assert all(re.fullmatch(r'[+−±]\d+\.\d', t.replace('pts', '').strip()) for t in ud.all_inner_texts())
     assert p.locator('#hub-rows .h-edge.negative').count() == 0                     # coloured only when above zero
     if size is DESK:
-        assert "PrizePicks and goblin or demon lines publish no fixed per-pick payout" in p.locator('#hub-table thead .h-c-edge').get_attribute('title')
+        assert "Goblin, demon and boosted lines publish no fixed per-pick payout" in p.locator('#hub-table thead .h-c-edge').get_attribute('title')
         p.locator('#hub-filters-toggle').click()
         p.locator('#hub-sort').select_option('edge')
         first = [e for e in p.locator('#hub-rows tr[data-record] td.h-c-edge .h-edge').all_inner_texts()][:3]
