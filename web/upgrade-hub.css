@@ -1226,3 +1226,20 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
  #u-hub #hub-table .h-strip .h-hit.h-hit-n{font-size:12px!important;letter-spacing:-.02em!important}
  #u-hub #hub-table .h-strip-cell:before{font-size:10px;margin-bottom:2px}
 }
+/* owner 2026-11-06 "on phone the L5/10/20 h2h look clumped together": on the phone / tablet card the hit windows get their own full-width
+   line under the line, Scout and projection, one labelled box per window (label above value), fixed equal widths and an 8px gap, so
+   "12/20" never squeezes or wraps. Same rows on every sport and book filter; the desktop one-line row is unchanged. Layout only. */
+@media(max-width:1100px){
+ #u-hub #hub-table>tbody>tr[data-record],#u-hub.h-cols #hub-table>tbody>tr[data-record]{grid-template-areas:"player player market watch" "line scout scout add" "proj scout scout compare" "hits hits hits hits"}
+ #u-hub #hub-table.h-has-edge>tbody>tr[data-record],#u-hub.h-cols #hub-table.h-has-edge>tbody>tr[data-record]{grid-template-areas:"player player market market watch" "line scout scout edge add" "proj scout scout edge compare" "hits hits hits hits hits"}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-scout,#u-hub #hub-table>tbody>tr[data-record]>td.h-c-edge{align-self:center}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-proj{align-self:center}
+ #u-hub #hub-table>tbody>tr[data-record]>td.h-c-hits{grid-column:1/-1;margin-top:2px;padding-top:8px;border-top:1px solid #253041}
+ #u-hub #hub-table td.h-c-hits .h-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;width:100%}
+ #u-hub #hub-table td.h-c-hits .h-strip-cell{display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;padding:5px 4px 4px;border:1px solid #283342;border-radius:8px;background:#10151d}
+ #u-hub #hub-table td.h-c-hits .h-strip-cell:before{content:attr(data-label);display:block;margin:0;font:600 10.5px/1.2 'DM Mono',monospace;letter-spacing:.06em;color:#9fb0c5;text-align:center}
+ #u-hub #hub-table td.h-c-hits .h-strip .h-hit,#u-hub #hub-table td.h-c-hits .h-strip .h-hit.h-hit-n{width:100%;height:28px;padding:0 2px 3px;font-size:14px!important;letter-spacing:0!important;white-space:nowrap;border-radius:5px}
+ #u-hub #hub-table td.h-c-hits .h-strip .h-hit.h-hit-both{font-size:13px!important}
+ #u-hub #hub-table td.h-c-hits .h-strip .h-hit.empty{color:#6c7b90}
+ #u-hub #hub-table td.h-c-hits .h-strip .h-hit.h-hit-wait{height:28px}
+}
