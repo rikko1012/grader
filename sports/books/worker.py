@@ -197,6 +197,21 @@ def _probe_blocked(db, now):
     return out
 
 
+def is_due(next_due_at, ladder, start, now):
+    """Is a game due on `ladder` at `now`? Never read, or its stored due time has passed - or that due time lies
+    further ahead than the game's CURRENT rung allows. A due time is written with the rung in force at the read
+    (next_due), so one set under a longer rung - the old "full" ladder before a deploy (2026-11-06: games 1-4 h out held
+    to a 30-min due time while the direct ladder says 3-5 min), SPORTS_BOOKS_LADDER changed, or a game crossing into a
+    shorter rung (8 h -> 2 h) - would otherwise keep the game back for up to that whole longer interval."""
+    every = schedule.interval_min(ladder, start, now)
+    if every is None:
+        return False
+    if not next_due_at:
+        return True
+    nd = dt(next_due_at)
+    return nd <= now or nd - now > timedelta(minutes=every)
+
+
 def pending(db, leagues=LEAGUES, now=None, provs=None, probe=True):
     """Would run_once send any request now? A cheap books.db-only check (no request, no canonical read, no lease) so
     the books job (sports.worker books, every minute on a game day) exits at once between due times. True when a
@@ -228,9 +243,7 @@ def pending(db, leagues=LEAGUES, now=None, provs=None, probe=True):
                             "ON s.provider = e.provider AND s.league = e.league AND s.provider_event_id = "
                             "e.provider_event_id WHERE e.provider = ? AND e.league = ? AND e.start > ?",
                             (name, key, iso(now))):
-                if schedule.interval_min(ladder, r["start"], now) is None:
-                    continue
-                if not r["next_due_at"] or dt(r["next_due_at"]) <= now:
+                if is_due(r["next_due_at"], ladder, r["start"], now):
                     return True
     if probe:
         for book in providers.BLOCKED:
@@ -281,8 +294,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                 for ev, event_key in games:
                     if schedule.interval_min(ladder, ev.start, now) is None:
                         continue
-                    nd = store.due(db, name, key, ev.provider_event_id)
-                    if nd and dt(nd) > now:
+                    if not is_due(store.due(db, name, key, ev.provider_event_id), ladder, ev.start, now):
                         continue
                     if prov.kind == "feed":
                         ok, why = _budget_ok(db, prov, lg, now)
