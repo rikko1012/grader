@@ -93,16 +93,26 @@ def test_flag_off_sends_no_header(env, monkeypatch):
     assert "slip_header" not in json.dumps(check(env, pair(env))[1])
 
 
-def test_flag_on_prizepicks_is_never_rated_its_payout_stays_unknown(env, monkeypatch):
-    """Owner rule 2026-11-04: PrizePicks payouts stay unknown, so the header rates nothing and repeats the live EV reason."""
+def test_flag_on_prizepicks_rates_power_on_its_verified_table(env, monkeypatch):
+    """Owner sign-off 2026-11-05: the PrizePicks help-center table is verified, so Power 2 is rated exactly where the live EV
+    check is (the same steps as Underdog); Flex 2-pick is not an entry the app offers, so it is not shown."""
     monkeypatch.setenv("SCOUT_SLIP_HEADER_V2", "1")
+    monkeypatch.delenv("SCOUT_SLIP_HEADER", raising=False)
+    before = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
+    pw = before["slip_header"]["types"]["power"]
+    assert pw["rated"] is False and pw["reason"] == before["ev"]["reason"] and "settled matches" in pw["reason"]   # 0 settled
+    assert pw["payout"] == 3.0 and pw["break_even"] == pytest.approx(3.0 ** -0.5, abs=1e-6) and "ev" not in pw
     monkeypatch.setattr(server, "_p1_export", calibrated_export)
-    e = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
+    st, doc = check(env, pair(env, "prizepicks"))
+    e = doc["entries"]["prizepicks"]
     h = e["slip_header"]
-    assert set(h["types"]) == {"power", "flex"}
-    for t in h["types"].values():
-        assert t["rated"] is False and t["reason"] == e["ev"]["reason"] and "only in its app" in t["reason"]
-        assert not {"win", "ev", "legs", "kelly_units", "payout", "break_even"} & set(t)
+    assert set(h["types"]) == {"power"}
+    pw = h["types"]["power"]
+    ps = [doc["legs"][l["id"]]["current"]["p_side"] for l in pair(env, "prizepicks")]
+    want = gsh.entry_header([{"p": p, "match_key": str(i)} for i, p in enumerate(ps)], "prizepicks", "power")
+    assert e["ev"]["available"] is True and pw["rated"] is True
+    assert pw["ev"] == pytest.approx(e["ev"]["ev"], abs=1e-3) == pytest.approx(want["ev"]) and pw["win"] == pytest.approx(want["win"])
+    assert "kelly_units" not in pw and "kelly_fraction" not in pw
 
 
 def test_flag_on_underdog_rates_only_where_the_live_ev_check_does(env, monkeypatch):

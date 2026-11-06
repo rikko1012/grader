@@ -6059,7 +6059,14 @@ DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBL
               "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK",
               # Phase 4, no keys needed (owner: "why do i have to turn them on in render")
               "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_DABBLE", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
-              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE")
+              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE",
+              # owner 2026-11-05 "Turn everything on": competitor-spec board fixes, line history, +EV board, slip header v2.
+              # SCOUT_PARITY_PREFS = Kelly sizing as a % of bankroll (display only, never a grader stake).
+              "SCOUT_PARITY_EDGE", "SCOUT_PARITY_EV_BAND", "SCOUT_PARITY_HIT_SAMPLES", "SCOUT_PARITY_HIT_SORT",
+              "SCOUT_PARITY_PLAYS", "SCOUT_PARITY_PREFS", "SCOUT_PARITY_REPORT", "SCOUT_LINE_HISTORY", "SCOUT_PICKEM_EV",
+              "SCOUT_SLIP_HEADER_V2")
+# NOT default-on (owner 2026-11-05, "dont turn on letter containment"): SCOUT_LETTER_CONTAINMENT stays OFF, so CS2 / LoL letters
+# show exactly as before. CS2_MAP_WEIGHTED stays OFF (shadow only); SCOUT_CAL_CHANCE / SPORTS_CHANCE_CAL stay OFF.
 # SCOUT_BOOK_DABBLE (owner 2026-11-05, "simply code it we are partnered"): api.dabble.com answered 200 without credentials, so it is
 # on like Sleeper. Betr (401 + location check), ParlayPlay (Cloudflare 403) and Boom (app only) are blocked in book_providers.json and
 # have no flag.

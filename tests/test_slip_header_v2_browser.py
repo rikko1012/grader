@@ -84,13 +84,14 @@ def test_v2_header_rated_entry_plain_words_and_red_line_below_break_even(ctx, en
     assert not p.errors
 
 
-def test_v2_header_prizepicks_payout_stays_unknown(ctx, env, monkeypatch):
+def test_v2_header_prizepicks_shows_its_verified_payout(ctx, env, monkeypatch):
+    """Owner sign-off 2026-11-05: the PrizePicks help-center table is verified - Power 2 pays 3x, each leg needs 57.7%."""
     monkeypatch.setenv("SCOUT_SLIP_HEADER_V2", "1")
     p = hub(ctx, env)
     build_pair(p, env, DESK, "prizepicks")
     p.wait_for_selector("#hub-studio-body .u-head2[data-entry=power]", timeout=20000)
     text = p.locator("#hub-studio-body .u-head2").first.inner_text()
-    assert "only in its app" in text and "Each leg needs" not in text and "×" not in text
+    assert "only in its app" not in text and "3×" in text and "57.7%" in text
     shot(p.locator("#hub-studio-body"), "slip_header_v2_prizepicks_1440.png")
     assert not p.errors
 
