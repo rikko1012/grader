@@ -19,20 +19,29 @@ def _formula_tables(reference_tables):
 
 
 # ----------------------------------------------------------------------------------------------- payout tables
-def test_tables_carry_source_and_read_date_and_prizepicks_stays_unverified():
+def test_tables_carry_source_and_read_date_and_prizepicks_is_verified_by_owner():
     raw = json.loads(payouts.PICKEM_FILE.read_text(encoding="utf-8"))
     for book in ("prizepicks", "underdog"):
         assert raw[book]["source"].startswith("https://")
         assert raw[book]["read_at"] and raw[book]["version"]
     assert raw["prizepicks"]["source"] == "https://www.prizepicks.com/help-center/payouts"
-    # owner rule 2026-11-04 (main c865e1b): unknown payouts stay unknown. No recorded in-app / partner-API evidence exists for
-    # the PrizePicks tiers (the partial Flex tiers and Flex 2-pick were never seen in-app), so the live config leaves it out.
-    assert raw["underdog"]["verified"] is True and raw["prizepicks"]["verified"] is False
+    # owner sign-off 2026-11-05 ("Mark the PrizePicks help-center payout table as verified so PrizePicks gets EV and
+    # break-even."), superseding the 2026-11-04 rule for this table; the status records the date, quote, source and page date
+    assert raw["underdog"]["verified"] is True and raw["prizepicks"]["verified"] is True
+    st = raw["prizepicks"]["status"]
+    assert "2026-11-05" in st and "Mark the PrizePicks help-center payout table as verified" in st
+    assert "https://www.prizepicks.com/help-center/payouts" in st and "2026-10-19" in st and raw["prizepicks"]["page_date"] == "2026-10-19"
     live = REAL_PICKEM_CONFIG()
-    assert live["prizepicks"]["entries"] == {"power": None, "flex": None}
-    assert payouts.entry_break_even("prizepicks", "power", 2, live) is None
-    assert payouts.entry_break_even("prizepicks", "flex", 4, live) is None
-    assert {e["book"] for e in payouts.entry_types(live)} == {"underdog"}
+    assert live["prizepicks"]["entries"]["power"] == PP_POWER
+    assert payouts.entry_break_even("prizepicks", "power", 2, live) == pytest.approx(3.0 ** -0.5)
+    assert payouts.entry_break_even("prizepicks", "flex", 4, live) is not None
+    assert {e["book"] for e in payouts.entry_types(live)} == {"prizepicks", "underdog"}
+    # the default CONFIG (letter containment, policy, break_even()) carries the same verified table
+    assert payouts.CONFIG["prizepicks"]["entries"]["power"] == PP_POWER
+    assert payouts.break_even("prizepicks", None, 2) == pytest.approx(3.0 ** -0.5)
+    # goblin / demon / promo lines still pay an unpublished multiplier
+    assert payouts.break_even("prizepicks", None, 2, variant="goblin") is None
+    assert payouts.break_even("prizepicks", None, 2, variant="demon") is None
 
 
 def test_prizepicks_tables_match_the_recorded_help_center_reference():
@@ -50,10 +59,12 @@ def test_underdog_tables_match_the_recorded_table():
     assert cfg["underdog"]["entries"]["flex"] == payouts.UD_FLEX
 
 
-def test_live_config_is_untouched():
-    """Live callers (letter_containment, policy) read CONFIG: PrizePicks stays None there."""
-    assert payouts.CONFIG["prizepicks"]["entries"]["power"] is None
-    assert payouts.break_even("prizepicks") is None
+def test_live_config_carries_the_verified_prizepicks_table():
+    """Owner sign-off 2026-11-05: live callers of CONFIG (letter_containment, policy) see the verified PrizePicks table too."""
+    assert payouts.CONFIG["prizepicks"]["entries"]["power"] == PP_POWER
+    assert payouts.break_even("prizepicks") == pytest.approx(3.0 ** -0.5)
+    assert payouts.break_even("prizepicks", variant="goblin") is None
+    assert not payouts.in_app("prizepicks", "flex", 2) and payouts.in_app("prizepicks", "flex", 3)
 
 
 def test_unverified_book_or_size_is_unavailable(tmp_path, monkeypatch):
@@ -61,7 +72,8 @@ def test_unverified_book_or_size_is_unavailable(tmp_path, monkeypatch):
     assert payouts.entry_break_even("sleeper", "power", 2) is None
     assert slip.entry_ev([0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6], "prizepicks", "power")["available"] is False
     raw = json.loads(payouts.PICKEM_FILE.read_text(encoding="utf-8"))
-    raw["underdog"]["verified"] = False                  # an unverified file entry adds nothing over CONFIG
+    raw["underdog"]["verified"] = False                  # an unverified file entry adds nothing over the coded tables
+    raw["prizepicks"]["verified"] = False
     f = tmp_path / "p.json"
     f.write_text(json.dumps(raw), encoding="utf-8")
     monkeypatch.setattr(payouts, "PICKEM_FILE", f)

@@ -361,7 +361,10 @@ def test_payout_only_where_published():
     assert sq.payout("underdog", "standard", legs[:2])["multiple"] == 3.5
     assert sq.payout("underdog", "flex", legs[:3])["multiple"] == 3.25
     assert sq.payout("underdog", "flex", legs[:4]) is None                   # two published 4-pick flex figures
-    assert sq.payout("prizepicks", "power", legs[:2]) is None                # PrizePicks payouts stay unknown
+    pp = sq.payout("prizepicks", "power", legs[:2])                          # verified help-center table (owner 2026-11-05)
+    assert pp["multiple"] == 3.0 and pp["source"] == "https://www.prizepicks.com/help-center/payouts"
+    assert sq.payout("prizepicks", "flex", legs[:2]) is None                 # Flex 2-pick: not offered in the app
+    assert sq.payout("prizepicks", "power", [dict(legs[0], line_type="goblin"), legs[1]]) is None
     boosted = [dict(legs[0], multiplier=1.1), legs[1]]
     assert sq.payout("underdog", "standard", boosted) is None
     s = sq.build(legs, {"platform": "underdog", "entry_type": "standard", "count": 1, "size": 2})["slips"][0]

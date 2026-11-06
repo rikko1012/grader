@@ -1,7 +1,9 @@
 """Published reference rates, not a quote for a member's specific lineup.
 
-Source explicitly permits contest-specific changes. No EV, stake or settlement
-may treat a reference rate as the actual accepted payout.
+Source explicitly permits contest-specific changes. Owner sign-off 2026-11-05 ("Mark the PrizePicks help-center payout
+table as verified so PrizePicks gets EV and break-even.") verified these standard-line rates for break-even and EV
+display (gradecore/pickem_payouts.json carries the record). Stakes and settlement still never read them; goblin / demon /
+promo / same-game lineups pay unpublished multipliers and stay unavailable.
 """
 PP_SOURCE = 'https://www.prizepicks.com/help-center/payouts'
 PP_PAGE_DATE = '2026-10-19'

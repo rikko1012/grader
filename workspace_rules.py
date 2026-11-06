@@ -7,7 +7,10 @@ valid and the member is told that fact. Sources and page dates are in TABLE and 
 
 The Underdog table is a copy of sports/payouts.py (CS2 never imports sports; tests/test_workspace_rules.py reads that file
 and checks the two match). EV is workspace-only: never on a receipt, never on Results."""
+import json
 import re
+from functools import lru_cache
+from pathlib import Path
 
 import results_view
 
@@ -218,6 +221,36 @@ def payout_multiple(entry_type, n):
     return UD_STANDARD.get(n) if entry_type == "standard" else None
 
 
+def pp_payout(entry_type, n):
+    """PrizePicks' verified standard-line payout (gradecore/pickem_payouts.json, owner sign-off 2026-11-05) for an n-pick power / flex
+    entry: {"multiple" (all-hit), "flex" (losses -> multiple, flex only), "source", "page_date"}; None when the table is not
+    verified or lists no such entry."""
+    b = _pp_file()
+    if not b.get("verified") is True or n in ((b.get("not_in_app") or {}).get(entry_type) or ()):   # Flex 2: not in the app
+        return None
+    row = ((b.get("entries") or {}).get(entry_type) or {}).get(str(n))
+    if row is None:
+        return None
+    src = {"source": b.get("source") or payout_reference.PP_SOURCE, "page_date": b.get("page_date") or payout_reference.PP_PAGE_DATE}
+    if isinstance(row, dict):
+        flex = {int(k): float(v) for k, v in row.items()}
+        return dict(src, multiple=flex.get(0, 0.0), flex=flex)
+    return dict(src, multiple=float(row))
+
+
+PP_FILE = Path(__file__).with_name("gradecore") / "pickem_payouts.json"
+
+
+@lru_cache(maxsize=1)
+def _pp_file():
+    """The PrizePicks entry of gradecore/pickem_payouts.json, read as data (this module imports no gradecore code). {} when
+    the file cannot be read: no payout, never a guess."""
+    try:
+        return json.loads(PP_FILE.read_text(encoding="utf-8")).get("prizepicks") or {}
+    except (OSError, ValueError):
+        return {}
+
+
 def band_of(cell, p):
     for b in (cell or {}).get("bands") or []:
         if b["lo"] <= p < b["hi"]:
@@ -237,27 +270,37 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
     def no(reason, **extra):
         return dict({"available": False, "reason": reason}, **extra)
 
+    n = len(legs)
+    flex_table = None
     if platform == 'prizepicks':
-        reference = payout_reference.prizepicks(entry_type or 'power', len(legs))
-        if any(str(l.get('line_type') or l.get('variant') or 'standard').lower() not in ('standard','normal') for l in legs):
+        # owner sign-off 2026-11-05: the PrizePicks help-center table is verified (gradecore/pickem_payouts.json); standard lines only
+        if any(str(l.get('line_type') or l.get('variant') or 'standard').lower() not in ('standard', 'normal') for l in legs):
             return no('Special-line payouts are set on the PrizePicks lineup screen.')
-        return no('PrizePicks shows lineup payouts only in its app.')      # owner rule: unknown payouts stay unknown (audit 2026-11-04)
-    if platform != 'underdog':
+        et = entry_type or "power"
+        pp = pp_payout(et, n)
+        if pp is None:
+            return no(f"PrizePicks lists no {et} payout for {n} picks.")
+        if any(l.get("multiplier") not in (None, 1, 1.0) for l in legs):
+            return no("PrizePicks does not publish the payout of a modified pick.")
+        base, flex_table = pp["multiple"], pp.get("flex")
+        payout = {"multiple": base, "entry_type": et, "platform": "prizepicks", "source": pp["source"], "page_date": pp["page_date"]}
+    elif platform != 'underdog':
         return no('No verified payout reference for this platform.')
-    n, et = len(legs), entry_type or "standard"
-    if et == "flex" and n == 4:
-        return no("Underdog's pages list two 4-pick flex payouts.")
-    base = payout_multiple(et, n)
-    if base is None:
-        return no(f"Underdog lists no {et} payout for {n} picks.")
-    if any(l.get("multiplier") is None and l.get("sport") != "cs2" for l in legs):
-        return no("Underdog sent no payout for a pick on this entry.")
-    if any(l.get("multiplier") != 1.0 for l in legs):
-        return no("Underdog does not publish how multipliers combine.")
+    else:
+        et = entry_type or "standard"
+        if et == "flex" and n == 4:
+            return no("Underdog's pages list two 4-pick flex payouts.")
+        base = payout_multiple(et, n)
+        if base is None:
+            return no(f"Underdog lists no {et} payout for {n} picks.")
+        if any(l.get("multiplier") is None and l.get("sport") != "cs2" for l in legs):
+            return no("Underdog sent no payout for a pick on this entry.")
+        if any(l.get("multiplier") != 1.0 for l in legs):
+            return no("Underdog does not publish how multipliers combine.")
+        payout = {"multiple": base, "entry_type": et, "source": UD_PAYOUTS, "page_date": UD_PAYOUT_PAGE}
     matches = [l.get("match") for l in legs]
     if any(m is None for m in matches) or len(set(matches)) < n:
         return no("Picks share a match: payouts shift, and no tested joint model exists.")
-    payout = {"multiple": base, "entry_type": et, "source": UD_PAYOUTS, "page_date": UD_PAYOUT_PAGE}
     if any(float(l.get("line") or 0).is_integer() for l in legs):
         return no("A whole-number line can push, and a push changes the payout tier.", payout=payout)
     held = next((l["held"] for l in legs if l.get("held")), None)
@@ -294,7 +337,10 @@ def ev_status(platform, entry_type, legs, gate, now_ts):
     hit = 1.0
     for p in probs:
         hit *= p
-    ev = (hit * base if et == "standard" else flex_return(probs)) - 1.0
+    if flex_table is not None:
+        ev = flex_return(probs, flex_table) - 1.0
+    else:
+        ev = (hit * base if et in ("standard", "power") else flex_return(probs)) - 1.0
     return {"available": True, "ev": round(ev, 4), "hit_chance": round(hit, 4), "payout": payout}
 
 
@@ -382,9 +428,19 @@ def leg_ev(p_win, decimal, p_push=0.0):
     return p_win * decimal + p_push - 1.0
 
 
-def header_payout(entry_type, n):
+def header_payout(entry_type, n, platform="underdog"):
     """payout(outcomes) -> the published gross multiple, or None where no page states it. Any push: Underdog re-prices the
-    entry on the remaining picks, which ev_status never lets through, so the header refuses rather than guess."""
+    entry on the remaining picks, which ev_status never lets through, so the header refuses rather than guess. PrizePicks:
+    its verified power / flex table (pp_payout)."""
+    if platform == "prizepicks":
+        pp = pp_payout(entry_type, n)
+        if pp is None:
+            return None
+        if pp.get("flex") is not None:
+            ptab = pp["flex"]
+            return lambda results: None if "push" in results else ptab.get(sum(x == "loss" for x in results), 0.0)
+        pbase = pp["multiple"]
+        return lambda results: None if "push" in results else (pbase if all(x == "win" for x in results) else 0.0)
     if entry_type == "standard":
         base = UD_STANDARD.get(n)
         if base is None:
@@ -402,17 +458,19 @@ def slip_header(ev, entry_type, legs, evaluate):
     No bankroll fraction (quarter-Kelly) is passed on: one stake per line, the grade's units (owner rule, review 2026-11-04)."""
     if not isinstance(ev, dict) or not ev.get("available") or not ev.get("payout"):
         return None
-    et, legs = entry_type or "standard", list(legs or ())
+    plat = ev["payout"].get("platform") or "underdog"
+    et, legs = entry_type or ("power" if plat == "prizepicks" else "standard"), list(legs or ())
     n = len(legs)
-    payout = header_payout(et, n)
-    if payout is None or ev["payout"].get("multiple") != payout_multiple(et, n):
+    payout = header_payout(et, n, plat)
+    listed = (pp_payout(et, n) or {}).get("multiple") if plat == "prizepicks" else payout_multiple(et, n)
+    if payout is None or ev["payout"].get("multiple") != listed:
         return None
     slip_legs = []
     for l in legs:
         p = l.get("p")
         if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 < p < 1 or l.get("match") is None:
             return None
-        slip_legs.append({"sport": l.get("sport") or "cs2", "book": "underdog", "player_id": str(l.get("name") or ""),
+        slip_legs.append({"sport": l.get("sport") or "cs2", "book": plat, "player_id": str(l.get("name") or ""),
                           "match_key": str(l["match"]), "offer_revision": str(l.get("line")),
                           "p_win": float(p), "p_loss": 1.0 - float(p), "p_push": 0.0})
     out = evaluate(slip_legs, payout)
@@ -422,7 +480,7 @@ def slip_header(ev, entry_type, legs, evaluate):
         return None
     head = {"payout_multiple": ev["payout"]["multiple"], "entry_type": et, "p_all_win": round(out["p_all_win"], 4),
             "pushes": "excluded", "expected_return": round(out["net_ev"], 4), "basis": out.get("basis")}
-    if et == "standard":
+    if et in ("standard", "power"):
         price = ev["payout"]["multiple"] ** (1.0 / n)
         head["leg_price"] = round(price, 4)
         head["legs"] = [{"index": i, "line": l.get("line"), "ev": round(leg_ev(l["p"], price), 4)} for i, l in enumerate(legs)]

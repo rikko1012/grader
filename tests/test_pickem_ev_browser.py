@@ -1,5 +1,5 @@
 """SCOUT_PICKEM_EV in a real browser at 1440 and 390: flag off = no Best prices route, card or link; flag on = the #/ev board with
-the app picker (verified payouts only: Underdog; PrizePicks stays unavailable), entry picker (need X%), market-priced legs with
+the app picker (verified payouts: PrizePicks since the owner's 2026-11-05 sign-off, and Underdog), entry picker (need X%), market-priced legs with
 expandable books, the hidden-plays banner, the filters drawer and the no-book-price list. Every control at least 40px tall, plain
 words only. Real Handler + the isolated fixtures of test_upgrade_browser (no network). Set PICKEM_EV_SHOTS=<folder> to keep
 screenshots."""
@@ -94,13 +94,19 @@ def test_ev_board(browser, env, ev_on, size):
     c = context(browser, env, size)
     try:
         p = ev_page(c, env, size)
+        # both verified apps are offered (owner sign-off 2026-11-05 for the PrizePicks help-center table); PrizePicks Power 2 first
+        assert p.locator('[data-ev="app"]').count() == 2 and p.locator('[data-ev="app"][data-id="prizepicks"]').count() == 1
+        assert 'need 57.7%' in p.locator('#hub-ev-body').inner_html()
+        assert p.evaluate("document.querySelector('#ev-entry').value").startswith('power-')
+        assert 'Flex 2-pick' not in p.locator('#ev-entry').inner_text()          # not an entry the PrizePicks app offers
+        shot(p, 'ev_board_prizepicks', size)
+        p.locator('[data-ev="app"][data-id="underdog"]').click()
+        p.wait_for_function("document.querySelector('#hub-ev-body').innerHTML.includes('need 53.5%')", timeout=30000)
+        p.wait_for_selector('#hub-ev-body .ev-row', timeout=30000)
         txt = p.locator('#hub-ev-body').inner_text()
         assert 'Best prices' in txt and 'need 53.5%' in p.locator('#hub-ev-body').inner_html()
         assert '2 plays hidden: 2 with only old prices.' in txt
-        # only the verified app is offered: PrizePicks payouts stay unavailable (owner rule 2026-11-04)
-        assert p.locator('[data-ev="app"]').count() == 1 and p.locator('[data-ev="app"][data-id="underdog"]').count() == 1
         assert p.evaluate("document.querySelector('#ev-entry').value").startswith('standard-')
-        assert 'Flex 2-pick' not in p.locator('#ev-entry').inner_text()
         # Underdog standard 2: Reaves Over beats the entry against the market (shown beside Scout's chance); the toggle hides the rest
         rows = p.locator('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row')
         assert rows.count() >= 1 and 'Austin Reaves' in rows.first.inner_text()

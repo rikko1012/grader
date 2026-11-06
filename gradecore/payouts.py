@@ -3,9 +3,10 @@ numbers, same maths); the tables now sit in CONFIG so a book or entry type is da
 
 UNDERDOG - published base payouts, read 2026-10-23 from UD_SOURCE; payouts include the returned entry fee. How several
   modifiers combine is NOT stated: payout = base x product(modifiers) is an ASSUMPTION (MODIFIER_RULE).
-PRIZEPICKS - published standard reference rates live in payout_reference.py. The actual lineup payout can differ.
-  CONFIG entries remain None until a verified applicable payout is supplied (load_config); a reference alone does not
-  authorize an EV, stake or settlement calculation for an individual contest.
+PRIZEPICKS - the help-center table (pickem_payouts.json, page dated 2026-10-19) is VERIFIED by owner sign-off 2026-11-05
+  ("Mark the PrizePicks help-center payout table as verified so PrizePicks gets EV and break-even."), so it is laid over
+  CONFIG at import (_apply_verified) and every caller of break_even() sees it. Standard lines only: goblin / demon / promo
+  and same-game lineups pay unpublished multipliers and stay None. A book the file marks unverified stays None.
 
 Break-even per pick (equal chance p on every pick, all modifiers 1.0):
   standard n-pick:  p^n * B_n = 1           ->  p* = B_n ** (-1/n)
@@ -41,6 +42,7 @@ CONFIG = {
     "prizepicks": {"default_entry": "power", "entries": {"power": None, "flex": None}, "status": PP_STATUS},
 }
 STANDARD_VARIANT = "standard"
+CODED_CONFIG = copy.deepcopy(CONFIG)                # the tables as coded, before pickem_payouts.json's verified books
 
 
 def _int_keys(t):
@@ -181,8 +183,8 @@ def kalshi_taker_fee(price, contracts=1.0, coefficient=0.07):
 
 # ------------------------------------------------------------------------------------------------ competitor spec, section 3
 # The verified pick'em tables (pickem_payouts.json: PrizePicks help center + the Underdog table above, each with its source
-# and read date) feed the new flagged features only. CONFIG stays as it was, so every live caller of break_even() (letter
-# containment, policy) is unchanged: PrizePicks there is still None until the owner switches a caller to pickem_config().
+# and read date). Every book the file marks verified is laid over CONFIG at import (owner sign-off 2026-11-05 for PrizePicks),
+# so break_even() callers (letter containment, policy) and pickem_config() callers read the same tables.
 PICKEM_FILE = Path(__file__).with_name("pickem_payouts.json")
 
 
@@ -197,7 +199,14 @@ def pickem_config():
     """CONFIG with every VERIFIED table from pickem_payouts.json laid over it (cached: read-only, copy before changing).
     A book whose file entry is not marked verified is left out, so its break-even stays None (unavailable, never guessed)."""
     verified = {b: c for b, c in _pickem_raw().items() if c.get("verified") is True}
-    return with_tables(verified)
+    return with_tables(verified, CODED_CONFIG)
+
+
+def in_app(book, entry, n):
+    """False for an entry the help center lists but the book's own app does not offer (pickem_payouts.json "not_in_app":
+    PrizePicks Flex 2-pick, not in the in-app view of 2026-11-05). Its table row stays; no member surface offers it."""
+    b = _pickem_raw().get(str(book or "").lower()) or {}
+    return int(n) not in ((b.get("not_in_app") or {}).get(entry) or ())
 
 
 def power_break_even(n, multiple):
@@ -271,3 +280,17 @@ def entry_types(config=None):
                             "american": None if be is None else american_of(be), "source": b.get("source"),
                             "read_at": b.get("read_at"), "version": b.get("version")})
     return out
+
+
+def _apply_verified():
+    """Lay every VERIFIED pickem_payouts.json table over CONFIG in place (import time). An unverified book is left as it was."""
+    try:
+        verified = {b: c for b, c in _pickem_raw().items() if c.get("verified") is True}
+    except (OSError, ValueError):                      # a missing / broken file leaves CONFIG as coded (unknown = None)
+        return
+    merged = with_tables(verified, CODED_CONFIG)
+    CONFIG.clear()
+    CONFIG.update(merged)
+
+
+_apply_verified()

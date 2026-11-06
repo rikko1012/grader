@@ -1089,8 +1089,8 @@ def test_slip_header_flag_on_stays_absent_without_a_verified_payout_and_validate
     monkeypatch.setenv("SCOUT_SLIP_HEADER", "1")
     ud = check(env, pair(env))[1]["entries"]["underdog"]["ev"]           # 0 settled matches: chances not validated
     assert ud["available"] is False and "header" not in ud and ud["payout"]["multiple"] == 3.5
-    pp = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]["ev"]    # payout unknown stays unknown
-    assert pp["available"] is False and "header" not in pp and "payout" not in pp
+    pp = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]["ev"]    # verified payout (owner 2026-11-05), chances not
+    assert pp["available"] is False and "header" not in pp and pp["payout"]["multiple"] == 3.0     # validated: no EV, no header
 
 
 def test_slip_header_failure_leaves_the_entry_unchanged(env, monkeypatch):
@@ -1107,8 +1107,8 @@ def test_ev_reason_comes_through_the_route(env):
     assert e["ev"]["available"] is False and "This model version has" in e["ev"]["reason"] and "of 300 settled matches" in e["ev"]["reason"]
     assert MODEL not in e["ev"]["reason"] and e["ev"]["payout"]["multiple"] == 3.5
     p = check(env, pair(env, "prizepicks"))[1]["entries"]["prizepicks"]
-    assert p['ev']['available'] is False
-    assert 'payout' not in p['ev'] and 'only in its app' in p['ev']['reason']      # unknown payouts stay unknown
+    assert p['ev']['available'] is False                                      # PrizePicks: the same steps on its verified table
+    assert p['ev']['payout']['multiple'] == 3.0 and "of 300 settled matches" in p['ev']['reason']
 
 
 def test_a_failed_export_read_is_named_as_that(env, monkeypatch):
@@ -1127,11 +1127,17 @@ def test_gate_is_read_once_and_only_when_an_entry_reaches_it(env, monkeypatch):
     real = server._p1_export
     monkeypatch.setattr(server, "_p1_export", lambda: calls.append(1) or real())
     legs, pp = pair(env), pair(env, "prizepicks")
+    pp[0]["line"] = 30.0                                # a whole-number line stops the EV check before the gate
     check(env, pp)
     assert calls == []
     check(env, legs)
     check(env, legs)
     assert calls == [1]
+    pp_ok = pair(env, "prizepicks")                     # (pair() rebuilds the board and clears the shared answers)
+    calls.clear()
+    check(env, pp_ok)                                   # PrizePicks reaches the gate too (verified 2026-11-05)...
+    check(env, pp_ok)
+    assert calls == [1]                                 # ...read once, then shared
 
 
 # ---- regressions from the 91bf2bf review

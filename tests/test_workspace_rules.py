@@ -147,6 +147,20 @@ def test_ev_available_with_the_published_formula():
     assert out["payout"]["source"] == R.UD_PAYOUTS
 
 
+def test_prizepicks_ev_on_the_owner_verified_table():
+    """Owner sign-off 2026-11-05: PrizePicks' help-center table is verified - Power 2 pays 3x, Flex by losses."""
+    out = ev(platform="prizepicks", et="power")
+    assert out["available"] and out["hit_chance"] == 0.36 and out["ev"] == pytest.approx(0.36 * 3.0 - 1, abs=1e-4)
+    assert out["payout"]["multiple"] == 3.0 and out["payout"]["platform"] == "prizepicks"
+    assert out["payout"]["source"] == "https://www.prizepicks.com/help-center/payouts" and out["payout"]["page_date"] == "2026-10-19"
+    legs = [ev_leg(i=i, multiplier=None) for i in range(3)]          # PrizePicks sends no per-pick multiplier on a standard line
+    out = ev(legs, platform="prizepicks", et="flex")
+    tab = {0: 3.0, 1: 1.0}
+    assert out["available"] and out["ev"] == pytest.approx(R.flex_return([0.6] * 3, tab) - 1, abs=1e-4)
+    out = ev([ev_leg(i=i) for i in range(6)], platform="prizepicks", et="power")
+    assert out["available"] and out["payout"]["multiple"] == 37.5
+
+
 def test_ev_flex_formula():
     legs = [ev_leg(i=i) for i in range(3)]
     out = ev(legs, et="flex")
@@ -154,7 +168,12 @@ def test_ev_flex_formula():
 
 
 @pytest.mark.parametrize("kw,gate,text", [
-    ({"platform": "prizepicks"}, None, "PrizePicks shows lineup payouts only in its app"),      # unknown payouts stay unknown
+    ({"platform": "prizepicks"}, None, "PrizePicks lists no standard payout for 2 picks"),     # PrizePicks entries: power / flex
+    ({"platform": "prizepicks", "et": "flex"}, None, "PrizePicks lists no flex payout for 2 picks"),   # Flex 2: not in the app
+    ({"platform": "prizepicks", "et": "power", "legs": [ev_leg(i=0, line_type="goblin"), ev_leg(i=1)]}, None,
+     "Special-line payouts are set on the PrizePicks lineup screen"),
+    ({"platform": "prizepicks", "et": "power", "legs": [ev_leg(i=0, multiplier=1.5), ev_leg(i=1)]}, None,
+     "PrizePicks does not publish the payout of a modified pick"),
     ({"legs": [ev_leg(i=i) for i in range(4)], "et": "flex"}, None, "two 4-pick flex payouts"),
     ({"legs": [ev_leg(i=0, multiplier=1.05), ev_leg(i=1)]}, None, "does not publish how multipliers combine"),
     ({"legs": [ev_leg(i=0, match="same"), ev_leg(i=1, match="same")]}, None, "no tested joint model"),

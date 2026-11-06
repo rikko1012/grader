@@ -474,8 +474,8 @@ def test_prizepicks_takes_a_mixed_entry_with_its_source(env):
     assert e["status"] == "valid" and e["ok"] and e["trackable"] and e["sports"] == ["lol", "nba"]
     keys = {r["rule"]: r for r in e["rules"]}
     assert keys["mixed_sports"]["source"].startswith("https://www.prizepicks.com") and "for the most part" in keys["mixed_sports"]["text"].lower() and "league_limits" in keys
-    assert e['ev']['available'] is False
-    assert 'payout' not in e['ev'] and 'only in its app' in e['ev']['reason']      # unknown payouts stay unknown
+    assert e['ev']['available'] is False                                     # verified payout (owner 2026-11-05) shown; LoL
+    assert e['ev']['payout']['multiple'] == 3.0 and 'LoL chances have no settled record' in e['ev']['reason']   # chances: no EV
 
 
 def test_underdog_says_why_a_mixed_entry_is_not_offered(env):
