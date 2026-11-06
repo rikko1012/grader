@@ -211,6 +211,7 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | ingest-kalshi | `sports.worker ingest nba nfl --bucket-min 1 --sources kalshi` | 20 min in a league's 2 h pre-tip window, else 60 min (SPORTS_KALSHI_HOT_S / _IDLE_S) | heavy | 240 | prod 70-84 | SPORTS_INGEST |
 | settle | `sports.worker settle nba nfl` (+ catch-up of unsettled games since SPORTS_SETTLE_FLOOR, 40 per run; then writes results.json streamed per event) | 60 min | heavy | 120 | 58 (+ ledger 71 on 80k settlements) | SPORTS_INGEST |
 | slips-settle | `sports.slips settle` | 60 min | light | 60 | 23 | SPORTS_INGEST |
+| pregame-news | `sports.pregame_news run nba nfl` (pgn-1 research archive: ESPN injury report + depth charts through the shared caches, game summaries of games starting within 2 h, max 20 per league; change-only rows in `pregame_news.db`; PREGAME_NEWS=0 turns it off) | 15 min | light | 80 | 38 local (30 depth teams, 15 games, 3 passes in 0.4 s) | SPORTS_INGEST |
 | grades-daily | `sports.model.daily run` (REGISTER A9a: cal-mi fit -> gradecheck -> containment; exits at once unless due: once per game-day, after 10:00 UTC, only when something new settled) | 30 min check | heavy | 300 | 72-96 synthetic (3.5k-10k props, 6-131 s) | SPORTS_INGEST |
 | model-forecast | `sports.worker train forecast nba nfl` (incremental: unchanged runs add 0 records) | 60 min | exclusive | 340 | 272-311 | SPORTS_TRAIN |
 | model-learn | `sports.worker train learn` | 60 min | heavy | 250 | 78-218 | SPORTS_TRAIN |

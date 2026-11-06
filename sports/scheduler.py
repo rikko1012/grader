@@ -201,6 +201,10 @@ def default_jobs():
                        # limit (320 MB) lets settlement finish but breaks that import. RSS remains watchdog-bound.
                        env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
                        if std else {}),
+        # pre-game news archive (pgn-1, pregame_news/): injury report + depth charts through the shared caches and the
+        # game summary of games starting within 2 h -> pregame_news.db, append-only, change-only. Research input only.
+        "pregame-news": dict(argv=_py("-m", "sports.pregame_news", "run", *lg), every_s=900, timeout_s=300,
+                             flag="SPORTS_INGEST", cap_mb=80, cls=LIGHT, prio=4, locks=("pregame-news",)),
         "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # member picks: spool -> picks.db
         "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=900 if std else 3600, timeout_s=600,

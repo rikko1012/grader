@@ -610,6 +610,7 @@ def run(con, db=None, now=None, market=None):
     todo = con.execute(q).fetchall()
     ids = lambda col: {store.canonical_id(con, r[col]) for r in todo}
     h = History(db, ids("pid"), ids("tid") | ids("opp_tid"), now=now)
+    news = []
     try:
         h.fit, h.sim_states = fit_json(), {}
         h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
@@ -646,6 +647,7 @@ def run(con, db=None, now=None, market=None):
                     from gradecore.capture import capture
                     capture(con, 'lol', rec, cursor.lastrowid, saved_at)
                 counts["saved"] = counts.get("saved", 0) + 1
+                news.append((saved_at, rec))
             except Exception as e:      # noqa: BLE001
                 k = f"error: {type(e).__name__}"
                 counts[k] = counts.get(k, 0) + 1
@@ -653,10 +655,52 @@ def run(con, db=None, now=None, market=None):
                 if len(errs) < 5:
                     errs.append({"market": f"{r['platform']}|{r['market_key']}", "error": f"{type(e).__name__}: {str(e)[:200]}"})
         con.commit()
+        counts.update(archive_news(news))
     finally:
         if db is None:
             h.db.close()
     return counts
+
+
+def news_path():
+    return os.environ.get("PREGAME_NEWS_LOL_DB") or str(store.db_path().parent / "pregame_news.db")
+
+
+def archive_news(saved):
+    """pgn-1 (pregame_news/): next to every saved forecast, the posted player's team + role and the lineup each team
+    fielded in its last game before the match day (the lineup the projection assumes) - change-only, append-only, observed
+    at the forecast's save time. Research input only; a failure never touches the forecasts (already committed)."""
+    if not saved:
+        return {}
+    try:
+        import pregame_news as core
+        if not core.enabled():
+            return {}
+        idx = _FF.get("index")
+        con = core.connect(news_path())
+        n = 0
+        try:
+            for at, rec in saved:
+                ev, start = rec.get("sid") or "", rec.get("series_start")
+                at_z = (at or "")[:19] + "Z" if at else None
+                r = core.observe(con, "lol", "lol", "player_role", "series", {(rec["pid"], ev): {
+                    "team": rec.get("tid"), "opponent": rec.get("opp_tid"), "role": rec.get("role"),
+                    "best_of": rec.get("best_of")}}, observed_at=at_z, source="lol data center", start_at=start, touch=False)
+                n += r.get("new", 0) + r.get("changed", 0)
+                if idx is not None and start:
+                    day = datetime.fromisoformat(start.replace("Z", "+00:00")).date().toordinal()
+                    for team in (rec.get("tid"), rec.get("opp_tid")):
+                        if team:
+                            lu = idx.last_lineup(team, day)
+                            r = core.observe(con, "lol", "lol", "lineup_assumed", "series", {(team, ev): {
+                                "lineup": dict(sorted(lu.items())) if lu else None, "basis": "last game fielded"}},
+                                observed_at=at_z, source="lol data center", start_at=start, touch=False)
+                            n += r.get("new", 0) + r.get("changed", 0)
+        finally:
+            con.close()
+        return {"news_rows": n} if n else {}
+    except Exception as e:      # noqa: BLE001
+        return {"news_error": f"{type(e).__name__}: {str(e)[:120]}"}
 
 
 def settle_all(con):

@@ -6038,6 +6038,12 @@ if __name__ == "__main__":
     # lc-1: the CS2 / LoL letter containment check, its own thread (reads the stored P1 export and the LoL worker's
     # learning.json every 6 h; requests only read the cached state)
     letter_containment.start(sys.modules[__name__], DATA_DIR)
+    # pgn-1 pre-game news archive (pregame_news/cs2_picks.py): its own thread reads the pick log read-only every 10 min
+    # and archives the roster facts each forecast saw - research only, nothing on a request path (PREGAME_NEWS=0 = off)
+    try:
+        __import__("pregame_news.cs2_picks").cs2_picks.start(Path(picklog.DB).parent)
+    except Exception:
+        traceback.print_exc()
     try:                                              # ec-1: when this artifact first went live (the record maps forecasts
         esports_cal.mark_live(DATA_DIR)               # logged after it at the calibrated chance; earlier ones stay as logged)
     except Exception:
