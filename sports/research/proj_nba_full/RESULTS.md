@@ -4,8 +4,7 @@
 
 Input: `cs2_scout_ops\data\exports_2026-11-06\gradecore_export_nba.json`, built by the owner in the Render Shell
 (read-only export, 10,210 rows, scanned 24,372; every row `sm-1:5ec8adf73a6dad18`; the earlier 8,657 rows are all
-inside it). Work copy: `cs2_scout_ops\data
-ba_fullerun_20261106\` (sha256 in its `MANIFEST.json`); nothing in
+inside it). Work copy: `cs2_scout_ops\data\nba_full\rerun_20261106\` (sha256 in its `MANIFEST.json`); nothing in
 production was written.
 
 - History: a copy of `history_ext.db` refreshed with the repo ESPN crawler (read-only GETs). The only newly settled
