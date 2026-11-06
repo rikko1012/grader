@@ -27,6 +27,7 @@ TTL = 30
 PICKEM = ("underdog", "prizepicks")
 PREF = ("underdog", "prizepicks")
 GAME_PERIODS = ("full_game", "game")
+ONE_SIDED_LABELS = ("Over only", "Under only")     # a pick'em line offering one side only (LoL os-1, sports cap-2)
 _PARSED = {}
 
 
@@ -167,6 +168,8 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
     """One display record for an extra book's line, built from the board's own records of that player and market.
     read(base record, line) -> (chance at this line or None, history at this line or None): line_chance + the game log."""
     base, is_same = _pick_base(recs, line, nearest=sport in ("cs2", "lol"))
+    if is_same and ((base.get("scout") or {}).get("hold") or {}).get("label") in ONE_SIDED_LABELS:
+        is_same = False             # os-1 / cap-2: an "Over only" app line's label is that app's, never copied to another book
     same = [base] if is_same else []
     chance, hist = None, None
     # NBA / NFL: a same-line row keeps the board's own counts (snapshot job) and reads the game log only for a window the board
@@ -227,7 +230,7 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
 
 def quote_stale_after(feed, recs, now):
     """Seconds after which a sports-service book quote is stale. With a "ladder" in the provider's feed config (the
-    sports books worker's own fetch schedule, sports/books/schedule.py LADDERS["full"]): 2 x the fetch interval for a
+    sports books worker's own fetch schedule, sports/books/schedule.py LADDERS["direct"], the SPORTS_BOOKS_LADDER default): 2 x the fetch interval for a
     game that far from its start, at least stale_min_s - the same rule the sports service applies, so a quote is never
     hidden between two scheduled fetches. Without a ladder or a known start: the fixed stale_after_s."""
     fixed = feed["stale_after_s"]

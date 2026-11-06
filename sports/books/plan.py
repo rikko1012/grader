@@ -61,10 +61,12 @@ def estimate(starts_by_league, now=None):
     now = now or datetime.now(timezone.utc)
     lists_per_day = 24 * 60 // schedule.EVENTS_EVERY_MIN
     out = {"games": {k: len(v) for k, v in starts_by_league.items()}, "direct": {}, "odds_api": {}, "per_game": {}}
+    direct = schedule.direct_ladder()                    # the books' own feeds' ladder (SPORTS_BOOKS_LADDER)
+    out["direct_ladder"] = direct
     for prov in ("fanduel", "betrivers"):
         req = 0
         for key, starts in starts_by_league.items():
-            f = sum(schedule.fetches_in("full", s, now) for s in starts)
+            f = sum(schedule.fetches_in(direct, s, now) for s in starts)
             req += f * requests_per_fetch(prov, key) + lists_per_day
         out["direct"][prov] = req
     for ladder in schedule.ORDER:

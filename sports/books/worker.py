@@ -1,10 +1,12 @@
 """The books job (FanDuel / BetRivers own feeds, OddsPapi when enabled, health probes of refusing books), run by the
-CANONICAL ingest loop (sports/worker.py `loop`, source "books") - not a scheduler of its own. Every successful game read
+sports scheduler's light "books" job (python -m sports.worker books, every minute on a game day; pending() decides in
+books.db alone whether anything is due) - or, with SPORTS_BOOKS_JOB=0, inside the canonical ingest cycle (source
+"books"). Not a scheduler of its own. Every successful game read
 is stored here (immutable quote history, books.db) AND handed to the sink, which writes the same quotes to the sc-1
 store the UI and the model read (books/bridge.py). The Odds API is not polled here: the canonical Odds API path is
 sports/books/sources.oddsapi_ingest (credit ledger, resolved events and players).
 
-    python -m sports.worker loop nba nfl          the scheduled collector (the sports service's ingest-loop child)
+    python -m sports.worker books nba nfl         the scheduled books job (scheduler "books")
     python -m sports.books.worker                 manual: ONE pass (books + game data), then exit
     python -m sports.books.worker --leagues nba   limit leagues
 
@@ -193,6 +195,49 @@ def _probe_blocked(db, now):
         store.set_setting(db, f"probe_at:{book}", iso(now), now=now)
         out[book] = "blocked" if res.blocked else ("ok" if res.error is None else res.error)
     return out
+
+
+def pending(db, leagues=LEAGUES, now=None, provs=None, probe=True):
+    """Would run_once send any request now? A cheap books.db-only check (no request, no canonical read, no lease) so
+    the books job (sports.worker books, every minute on a game day) exits at once between due times. True when a
+    configured provider that is not cooling down has a game list older than EVENTS_EVERY_MIN, a game inside its
+    ladder that is due or never read, a league read due (OddsPapi), a metered feed (always re-checked by run_once), or
+    a blocked-book probe due."""
+    now = now or _now()
+    for name, prov in (providers.PROVIDERS if provs is None else provs).items():
+        if not prov.configured()[0]:
+            continue
+        st = store.provider_state(db, name)
+        if st["cooldown_until"] and dt(st["cooldown_until"]) > now:
+            continue
+        mine = [k for k in leagues if k in prov.leagues]
+        if not mine:
+            continue
+        if prov.kind == "feed":
+            return True
+        if prov.kind == "feed_league":
+            if any(not store.due(db, name, k, "league") or dt(store.due(db, name, k, "league")) <= now for k in mine):
+                return True
+            continue
+        ladder = schedule.direct_ladder()
+        for key in mine:
+            last = store.setting(db, f"events_at:{name}:{key}")
+            if not last or dt(last) < now - timedelta(minutes=schedule.EVENTS_EVERY_MIN):
+                return True
+            for r in db.all("SELECT e.start, s.next_due_at FROM sports_book_events e LEFT JOIN sports_book_schedule s "
+                            "ON s.provider = e.provider AND s.league = e.league AND s.provider_event_id = "
+                            "e.provider_event_id WHERE e.provider = ? AND e.league = ? AND e.start > ?",
+                            (name, key, iso(now))):
+                if schedule.interval_min(ladder, r["start"], now) is None:
+                    continue
+                if not r["next_due_at"] or dt(r["next_due_at"]) <= now:
+                    return True
+    if probe:
+        for book in providers.BLOCKED:
+            last = store.setting(db, f"probe_at:{book}")
+            if not last or dt(last) <= now - timedelta(hours=providers.PROBE_EVERY_H):
+                return True
+    return False
 
 
 def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):

@@ -93,7 +93,7 @@ def test_schedule_names_every_worker_side_process_with_its_flag():
     s = service.schedule()
     want = {"assistant": "SPORTS_ASSISTANT", "prebuilt": "SPORTS_API", "ui-snapshots-nba": "SPORTS_INGEST", "ui-snapshots-nfl": "SPORTS_INGEST",
             "mapping-audit": "SPORTS_INGEST",
-            "slips-ingest": "SPORTS_INGEST", "ingest-nba": "SPORTS_INGEST", "ingest-nfl": "SPORTS_INGEST", "ingest-kalshi": "SPORTS_INGEST",
+            "slips-ingest": "SPORTS_INGEST", "ingest-nba": "SPORTS_INGEST", "ingest-nfl": "SPORTS_INGEST", "ingest-kalshi": "SPORTS_INGEST", "books": "SPORTS_INGEST",
             "settle": "SPORTS_INGEST", "slips-settle": "SPORTS_INGEST", "grades-daily": "SPORTS_INGEST", "model-forward": "SPORTS_FORECAST",
             "model-forecast": "SPORTS_TRAIN",
             "model-learn": "SPORTS_TRAIN", "model-snapshot": "SPORTS_TRAIN", "model-fit": "SPORTS_TRAIN",
@@ -123,7 +123,7 @@ def test_supervise_starts_one_scheduler_and_no_job_with_flags_off(monkeypatch):
     stop = threading.Event()
     sch = service.supervise(stop)
     time.sleep(0.6)
-    assert sch.running == {} and len(scheduler.JOBS) == 27 and not any(j["enabled"] for j in scheduler.JOBS.values())
+    assert sch.running == {} and len(scheduler.JOBS) == 28 and not any(j["enabled"] for j in scheduler.JOBS.values())
     stop.set()
 
 
