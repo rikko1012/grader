@@ -927,15 +927,16 @@
     var gs = games.slice().reverse();
     if (!gs.length) return "";
     var W = chartW(), H = 210, pad = 24, padR = 38, vals = gs.map(function (g) { return g.values[stat]; });   // line label in the right margin
-    var maxv = Math.max.apply(null, vals.concat([ln || 0])) * 1.18 || 1;
+    var hasLine = ln !== null && ln !== undefined && isFinite(ln);   // bug #48: no shown line -> neutral bars, no line drawn
+    var maxv = Math.max.apply(null, vals.concat([hasLine ? ln : 0])) * 1.18 || 1;
     var bw = (W - pad - padR) / gs.length;
     var step = Math.max(Math.ceil(46 / bw), gs.length > 12 ? Math.ceil(gs.length / 10) : 1);   // date / opponent labels never collide
     var valMode = 0;                                      // no per-bar values: the finals row above is the one list of finals (owner audit)
     var y = function (v) { return H - 34 - v / maxv * (H - 60); };
     var out = gs.map(function (g, i) {
       var v = g.values[stat], o = S.outcome(v, ln), x0 = pad + i * bw + bw * 0.15, w = bw * 0.7;
-      var col = o === "over" ? "var(--over)" : o === "under" ? "var(--under)" : "var(--push)";
-      var shape = o === "over" ? "▲" : o === "under" ? "▼" : "●";
+      var col = o === "over" ? "var(--over)" : o === "under" ? "var(--under)" : o === "push" ? "var(--push)" : "var(--faint)";
+      var shape = o === "over" ? "▲" : o === "under" ? "▼" : o === "push" ? "●" : "";
       var rect = '<rect x="' + x0.toFixed(1) + '" y="' + y(v).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(1, H - 34 - y(v)).toFixed(1) + '" ' +
         (o === "under" ? 'fill="none" stroke="' + col + '" stroke-width="2"' : 'fill="' + col + '"') + "/>";
       return rect + (valMode ? '<text class="sw-bar-val" x="' + (x0 + w / 2).toFixed(1) + '" y="' + (y(v) - 4).toFixed(1) + '" text-anchor="middle" style="fill:' + col + '">' + (valMode === 2 ? shape + " " : "") + S.num(v, 0) + "</text>" : "") +
@@ -950,10 +951,10 @@
       }
     }
     var s = S.windowSummary(games, stat, ln, null);
-    var label = "Last " + gs.length + " games against line " + S.line(ln) + ": " + s.over + " over, " + s.under + " under, " + s.push + " push.";
+    var label = hasLine ? "Last " + gs.length + " games against line " + S.line(ln) + ": " + s.over + " over, " + s.under + " under, " + s.push + " push." : "Last " + gs.length + " games. No line is shown for this stat.";
     if (breaks) label += " " + L.spansText(games, state.lg) + ".";
-    return '<svg class="sw-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' + out + breaks +
-      '<line x1="' + pad + '" x2="' + (W - padR + 2) + '" y1="' + lineY.toFixed(1) + '" y2="' + lineY.toFixed(1) + '" stroke="var(--text)" stroke-dasharray="5 4"/><text x="' + (W - 2) + '" y="' + (lineY + 4).toFixed(1) + '" text-anchor="end">' + esc(S.line(ln)) + "</text></svg>";
+    return '<svg class="sw-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' + out + breaks + (!hasLine ? "</svg>" :
+      '<line x1="' + pad + '" x2="' + (W - padR + 2) + '" y1="' + lineY.toFixed(1) + '" y2="' + lineY.toFixed(1) + '" stroke="var(--text)" stroke-dasharray="5 4"/><text x="' + (W - 2) + '" y="' + (lineY + 4).toFixed(1) + '" text-anchor="end">' + esc(S.line(ln)) + "</text></svg>");
   }
   function svgTrend(games, part, label) {
     var gs = games.filter(function (g) { return g.participation === "played" && g.parts[part] !== undefined && g.parts[part] !== null; }).slice(0, 20).reverse();
@@ -1149,15 +1150,15 @@
           (used.length ? '<p class="sw-finals" aria-label="Final ' + esc(mk.stat_label) + ', most recent first">' + used.map(function (g, gi) {
             var v = g.values[mk.stat], o = S.outcome(v, ln);
             var brk = gi > 0 && String(used[gi - 1].season) !== String(g.season) ? '<span class="sw-season-break" role="separator" aria-label="Season break: ' + esc(L.seasonLabel(g.season, state.lg)) + ' before, ' + esc(L.seasonLabel(used[gi - 1].season, state.lg)) + ' after">season break · ' + esc(L.seasonLabel(g.season, state.lg)) + "</span>" : "";
-            return brk + '<span class="sw-final sw-final-' + o + '" title="' + esc(S.shortDate(g.start_utc) + " " + (g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '"><b>' + S.num(v, 0) + "</b> " +
-              (o === "over" ? "▲" : o === "under" ? "▼" : "●") + ' <span class="sw-faint">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</span></span>";
+            return brk + '<span class="sw-final' + (o ? " sw-final-" + o : "") + '" title="' + esc(S.shortDate(g.start_utc) + " " + (g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '"><b>' + S.num(v, 0) + "</b> " +
+              (o === "over" ? "▲" : o === "under" ? "▼" : o === "push" ? "●" : "") + ' <span class="sw-faint">' + esc((g.home === false ? "@" : "") + (g.opponent ? g.opponent.abbr : "")) + "</span></span>";
           }).join("") + "</p>" : "") +
           svgGames(used, mk.stat, ln) +
           '<div class="sw-legend"><span style="color:var(--over)">▲ Over (filled)</span><span style="color:var(--under)">▼ Under (outline)</span><span style="color:var(--push)">● Push</span></div>' +
           '<details class="sw-more"><summary>Games as a table</summary><div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Date</th><th>Opp</th><th class="num">' + esc(mk.stat_label) + "</th><th>At " + S.line(ln) + "</th>" + (state.lg === "nba" ? '<th class="num">Min</th>' : "") + '<th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
           used.map(function (g, gi) {
             var o = S.outcome(g.values[mk.stat], ln);
-            return (gi > 0 && String(used[gi - 1].season) !== String(g.season) ? '<tr class="sw-season-row"><td colspan="' + (state.lg === "nba" ? 6 : 5) + '">season break · ' + esc(L.seasonLabel(g.season, state.lg)) + " below</td></tr>" : "") + "<tr><td>" + esc(S.shortDate(g.start_utc)) + "</td><td>" + esc((g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '</td><td class="num">' + S.num(g.values[mk.stat], 0) + "</td><td>" + esc(o === "over" ? "▲ Over" : o === "under" ? "▼ Under" : "● Push") + "</td>" +
+            return (gi > 0 && String(used[gi - 1].season) !== String(g.season) ? '<tr class="sw-season-row"><td colspan="' + (state.lg === "nba" ? 6 : 5) + '">season break · ' + esc(L.seasonLabel(g.season, state.lg)) + " below</td></tr>" : "") + "<tr><td>" + esc(S.shortDate(g.start_utc)) + "</td><td>" + esc((g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '</td><td class="num">' + S.num(g.values[mk.stat], 0) + "</td><td>" + esc(o === "over" ? "▲ Over" : o === "under" ? "▼ Under" : o === "push" ? "● Push" : "—") + "</td>" +
               (state.lg === "nba" ? '<td class="num">' + S.num(g.parts.min, 0) + "</td>" : "") + "<td>" + src({title: "Game " + S.shortDate(g.start_utc), "event record": g.event_record_id, source: g.source.join(", "), "stat records": Object.keys(g.record_ids).map(function (k) { return k + ": " + g.record_ids[k]; }), "observed by Scout": g.observed_at}) + "</td></tr>";
           }).join("") + "</tbody></table></div></details>";
         // splits

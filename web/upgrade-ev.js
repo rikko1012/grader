@@ -21,8 +21,14 @@ function query() {
 }
 async function fetchDoc() {
   const seq = ++S.seq; S.loading = true; S.error = null; render();
-  try { const d = await C.api('pickem-ev?' + query()); if (seq !== S.seq) return; S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; }
-  catch (e) { if (seq === S.seq) S.error = 'Prices could not be loaded.'; }
+  try { const d = await C.api('pickem-ev?' + query()); if (seq !== S.seq) return; S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; S.docP = JSON.parse(JSON.stringify(S.p)); }
+  catch (e) {
+    if (seq === S.seq) {
+      S.error = S.doc ? 'Prices could not be refreshed.' : 'Prices could not be loaded.';
+      // bug #54: the board on screen is the last good copy - its app / entry / filters stay the ones it was asked with
+      if (S.doc && S.docP) S.p = JSON.parse(JSON.stringify(S.docP));
+    }
+  }
   if (seq === S.seq) { S.loading = false; render(); }
 }
 
@@ -118,6 +124,7 @@ function render() {
     + `<div class="ev-bar"><label>Entry<select id="ev-entry">${entries.map(e => `<option value="${e.entry}-${e.n}"${e.entry === d.entry && e.n === d.n ? ' selected' : ''}>${ENTRY[e.entry] || e.entry} ${e.n}-pick · each leg needs ${pct(e.break_even)} (${odds(Math.round(e.american))})</option>`).join('')}</select></label>`
     + `<label class="ev-search">Search<input id="ev-q" type="search" value="${esc(S.f.q)}" placeholder="Player, team or market"></label>`
     + (sports > 1 ? `<label>Sport<select id="ev-sport">${sportOpts.map(([k, t]) => `<option value="${k}"${S.f.sport === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>` : '') + `</div>`
+    + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
     + filtersHtml(d) + banner
     + `<section aria-label="Market priced legs"><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
     + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.map(r => rowHtml(r, sports)).join('')}</ol>`
@@ -146,7 +153,7 @@ const CSS = '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;j
   + '#u-hub .ev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}#u-hub .ev-req,#u-hub .ev-weights{border:0;padding:0;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px 14px}'
   + '#u-hub .ev-req legend,#u-hub .ev-weights legend{font-size:12px;color:var(--u-muted);margin-bottom:4px}#u-hub .ev-req label{min-height:40px;display:inline-flex;align-items:center;gap:6px}'
   + '#u-hub .ev-drawer-foot{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}#u-hub .ev-drawer-foot span{color:var(--u-muted);font-size:12px}'
-  + '#u-hub .ev-banner{padding:10px 12px;border-radius:8px;border:1px solid var(--u-line);background:var(--u-panel);margin:0 0 12px}'
+  + '#u-hub .ev-banner{padding:10px 12px;border-radius:8px;border:1px solid var(--u-line);background:var(--u-panel);margin:0 0 12px}#u-hub .ev-err{border-color:var(--u-warn,#d97706)}'
   + '#u-hub .ev-wrap h3{font-size:16px;margin:14px 0 6px}#u-hub .ev-wrap h3 small{font-weight:400;color:var(--u-muted);font-size:12px;margin-left:6px}'
   + '#u-hub .ev-list{list-style:none;margin:0;padding:0;border:1px solid var(--u-line);border-radius:9px;overflow:hidden}'
   + '#u-hub .ev-row,#u-hub .ev-head{display:grid;grid-template-columns:minmax(180px,2.2fr) 1fr 1fr .8fr .8fr 1fr auto;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--u-line)}'

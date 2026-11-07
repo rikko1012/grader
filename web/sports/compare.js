@@ -211,7 +211,7 @@
   }
   // board table / sheets rows (r = SportsRows.propRow + r.rid / r.key): a small toggle next to the stat
   function rowButton(r) {
-    if (!r || !r.rid || !r.book || (r.variant && !STD.test(r.variant))) return "";
+    if (!r || !r.rid || !r.book || r.oneSided || (r.variant && !STD.test(r.variant))) return "";   // bug #49: same rule as afterActions
     var it = {p: r.book, o: offerIdOf(r.rid, r.book), l: r.line, r: r.rid, k: r.key, pid: r.pid, n: r.player, st: r.stat, e: r.event};
     return btnHtml(it).replace("sw-btn sw-btn-sm sw-cmp-add", "sw-cmp-add sw-cmp-mini");
   }

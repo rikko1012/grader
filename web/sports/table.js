@@ -118,6 +118,7 @@
              fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION,
              held: held ? held.t : null, heldCode: held ? held.b : null};
     if (q.p === "underdog" && typeof q.ud === "string" && UD_LINK_RE.test(q.ud)) r.ud = q.ud;
+    if (q.v) r.variant = q.v;   // bug #49: the quote's variant, so SportsCompare.rowButton's guard runs on the board table too
     // owner 2026-11-06 (cap-2): a line that lists one side is labelled by it and never graded (the server sends no
     // forecast for it; nothing here reads one either)
     if (q.v === "one_sided") {

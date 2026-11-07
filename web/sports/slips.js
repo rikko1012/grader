@@ -160,7 +160,8 @@
   }
   // a reply for another league / platform (the member switched while it loaded) or for a page that was left is dropped
   var SEQ = { pool: 0, check: 0, build: 0 };
-  function stale(kind, n, key, el) { return n !== SEQ[kind] || key !== draftKey() || !el || !el.isConnected; }
+  // bug #52: the page check runs first - once the studio markup is gone draftKey() (ctx() -> $("ss-league").value) would throw
+  function stale(kind, n, key, el) { return !el || !el.isConnected || !$("ss-league") || n !== SEQ[kind] || key !== draftKey(); }
   async function loadPool() {
     var el = $("ss-pool"); el.innerHTML = '<div class="ss-skel" aria-label="Loading picks"></div>';
     var n = ++SEQ.pool, key = draftKey();
