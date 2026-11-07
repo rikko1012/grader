@@ -294,6 +294,69 @@ def _teams(x):
     return sorted([str(a or ""), str(b or "")], key=str.lower)
 
 
+# N11 (site audit 2026-11-06): the board search finds a team by its other exact spellings: the book's own name for the row's team and
+# opponent (the board shows BO3.gg / HLTV's name when it has one), and the maintained aliases (team_aliases.json and
+# comparison.VERIFIED_TEAM_ALIASES, each pair with its proof). Whole names only, compared after the matchid normalisation (case, accents,
+# punctuation): never a substring or a guess, so an academy's name never joins its main team. Search text only: no identity, link,
+# grade or settlement reads it. The alias file is re-read when it changes (checked at most once a minute).
+_TEAM_AKA = {"sig": None, "map": {}, "checked": 0.0}
+
+
+def _akey(s):
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s or ""))
+    return re.sub(r"[^a-z0-9]", "", "".join(c for c in s if not unicodedata.combining(c)).lower())
+
+
+def _team_aka_map():
+    now = time.time()
+    if _TEAM_AKA["sig"] is not None and now - _TEAM_AKA["checked"] < 60:
+        return _TEAM_AKA["map"]
+    _TEAM_AKA["checked"] = now
+    path = Path(__file__).resolve().parent / "team_aliases.json"
+    try:
+        sig = path.stat().st_mtime_ns
+    except OSError:
+        sig = 0
+    if sig == _TEAM_AKA["sig"]:
+        return _TEAM_AKA["map"]
+    pairs = []
+    try:
+        pairs += [(e["name"], e["hltv_name"]) for e in json.loads(path.read_text(encoding="utf-8")).get("aliases", [])
+                  if isinstance(e, dict) and e.get("name") and e.get("hltv_name")]
+    except Exception:
+        pass
+    try:
+        import comparison
+        pairs += [(a, b) for a, b, _proof in comparison.VERIFIED_TEAM_ALIASES]
+    except Exception:
+        pass
+    groups = {}
+    for a, b in pairs:
+        ka, kb = _akey(a), _akey(b)
+        if not ka or not kb or ka == kb:
+            continue
+        g = groups.get(ka, set()) | groups.get(kb, set()) | {str(a), str(b)}
+        for n in g:
+            groups[_akey(n)] = g
+    _TEAM_AKA.update(sig=sig, map={k: tuple(sorted(v)) for k, v in groups.items()})
+    return _TEAM_AKA["map"]
+
+
+def _team_aka(x, shown):
+    """The other exact spellings of the row's two teams (the book's own names, then maintained aliases), for the board search."""
+    m, seen, out = _team_aka_map(), {_akey(s) for s in shown if s}, []
+    for name in (x.get("team"), x.get("opponent"), *shown):
+        if not name:
+            continue
+        for n in (name, *m.get(_akey(name), ())):
+            k = _akey(n)
+            if k and k not in seen:
+                seen.add(k)
+                out.append(str(n))
+    return out[:8]
+
+
 def _role(x):
     if x.get("awp") is True and x.get("awp_conf") in ("confirmed", "measured"):
         return "AWP"
@@ -325,7 +388,8 @@ def record_of(x):
             "event": {"id": eid, "id_kind": kind, "label": " vs ".join(t for t in teams if t), "teams": teams, "competition": x.get("event") or "",
                       "best_of": x.get("bo"), "start_utc": x.get("start"), "lock_utc": x.get("lock_at"), "status": "scheduled"},
             "player": {"id": x.get("player_id"), "key": _norm(nick), "name": nick, "team": x.get("team_name") or x.get("team") or "",
-                       "opponent": x.get("opp_name") or x.get("opponent") or "", "role": _role(x)},
+                       "opponent": x.get("opp_name") or x.get("opponent") or "", "role": _role(x),
+                       **({"aka": aka} if (aka := _team_aka(x, (x.get("team_name") or x.get("team"), x.get("opp_name") or x.get("opponent")))) else {})},
             "market": {"stat": prop, "stat_label": STAT.get(prop, prop), "period": period, "period_label": period_label, "line_type": lt},
             "offer": {"platform": book, "platform_label": LABEL.get(book, book), "offer_id": str(x.get("id")), "revision": offer_rev(x), "revision_kind": "derived",
                       "line": x.get("line"), "seen_at": _iso(x.get("seen_at") or x.get("updated_at")),

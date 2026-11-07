@@ -347,3 +347,7 @@ html[data-upgrade] .u-need b{font:500 12px var(--u-mono);color:var(--u-text)}
 html[data-upgrade] .u-cant{margin:0 0 6px;font-size:12px;color:var(--u-text)}
 html[data-upgrade] .u-leg.u-leg-below{box-shadow:inset 3px 0 0 var(--u-bad)}
 html[data-upgrade] .u-below{grid-column:1/-1;margin:3px 0 0;font-size:12px;color:var(--u-bad)}
+/* site audit 2026-11-06 (phone, classic CS2): the CS2 tool row scrolls sideways on a phone and its last item, "All sports research",
+   ended a few pixels past the screen edge. The entry now takes the room left in the row and wraps its own words when it is short of
+   room, so it is never cut; below ~330px the row still scrolls as before. */
+@media(max-width:640px){html[data-upgrade] .workspace-tools>.h-entry{flex:1 1 0!important;min-width:88px;white-space:normal!important;text-align:center;line-height:1.15}}

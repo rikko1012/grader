@@ -1356,3 +1356,48 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 @media(min-width:1101px){#u-hub #hub-table>thead>tr>th.h-c-medge .h-th-l{white-space:normal;text-align:center;line-height:1.15}}
 @media(min-width:1101px) and (max-width:1280px){#u-hub #hub-table>thead>tr>th.h-c-medge small{display:none}}
 @media(min-width:1101px){#u-hub #hub-table>tbody>tr[data-record]>td.h-c-medge{padding-inline:3px}#u-hub #hub-table td.h-c-medge .h-medge-scout{font:500 9.5px/12px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
+/* ==== site audit 2026-11-06, board UI (N10, N12, N13). Layout only: no number, grade or label changes ==== */
+/* N10: the save / alert dialog. On the CS2 page the classic sheet's global form grid split it in two columns and stretched Cancel /
+   Save to the height of the text beside them; the dialog lays out as one column with buttons at their own height */
+html[data-upgrade] .h-save.u-dialog form{display:block;background:none;border:0;border-radius:0;padding:0;margin:0;box-shadow:none}
+html[data-upgrade] .h-save.u-dialog form>div{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:16px}
+html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-height:40px}
+/* N12: the chip naming the one game the board is limited to; the cross removes the limit */
+#u-hub #hub-chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+#u-hub #hub-chips:empty{display:none}
+#u-hub #hub-chips .h-chip{display:inline-flex;align-items:center;gap:8px;min-height:40px;max-width:min(420px,100%);padding:4px 12px;border:1px solid #3d5a82;border-radius:20px;background:#17263a;color:#dbeaff;font-size:12px}
+#u-hub #hub-chips .h-chip span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#u-hub #hub-chips .h-chip b{flex:none;font-weight:600;color:#9fc3ff}
+#u-hub #hub-chips .h-chip:hover{background:#1d3048}
+#u-hub #hub-chips .h-chip:focus-visible{outline:2px solid #7aa2ff;outline-offset:2px}
+/* N13: one toolbar row on desktop. The search gives way first, then the platform buttons scroll inside their own segment; the
+   sport tabs (with their counts), Best prices, Filters, Views and Refresh keep their size */
+@media(min-width:1101px){
+ #u-hub .h-toolbar{flex-wrap:nowrap}
+ #u-hub .h-toolbar .h-sports{flex:none}
+ #u-hub .h-toolbar .h-search{flex:1 1 0;min-width:96px}
+ #u-hub .h-toolbar .h-platform{flex:0 1 auto;min-width:170px;overflow-x:auto;scrollbar-width:none}
+ #u-hub .h-toolbar .h-platform::-webkit-scrollbar{display:none}
+ #u-hub .h-toolbar .h-platform>button{flex:none}
+ #u-hub .h-toolbar>.h-pop-wrap,#u-hub .h-toolbar>.h-refresh,#u-hub .h-toolbar>.h-ev-link{flex:none}
+}
+/* N13: the player column. Names wrap at a space instead of ending in "...", and the other columns give it room: fixed market,
+   line, compare and add widths; on narrower desktops the row star steps aside (it stays on the player card), then the H2H / SZN
+   windows (on the card's Overview), then Compare (the card's Lines tab), so a name always has ~120px or more */
+@media(min-width:1101px){
+ #u-hub #hub-table .h-player b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:break-word;line-height:1.2}
+ #u-hub #hub-table .h-c-market{width:110px}#u-hub #hub-table .h-c-line{width:96px}#u-hub #hub-table .h-c-compare{width:84px}#u-hub #hub-table .h-c-add{width:60px}
+}
+@media(min-width:1401px){#u-hub #hub-table .h-c-market{width:116px}#u-hub #hub-table .h-c-proj{width:46px}#u-hub #hub-table .h-c-scout{width:108px}}
+@media(min-width:1101px) and (max-width:1400px){
+ #u-hub #hub-table .h-c-watch{width:0;padding:0!important;border:0}
+ #u-hub #hub-table .h-c-watch>*{display:none}
+}
+@media(min-width:1101px) and (max-width:1240px){
+ #u-hub.h-cols #hub-table .h-c-hits{width:104px}
+ #u-hub #hub-table .h-s-h2h,#u-hub #hub-table .h-s-season,#u-hub #hub-table .h-strip-th:has([data-id=h2h]),#u-hub #hub-table .h-strip-th:has([data-id=season]){display:none}
+}
+@media(min-width:1101px) and (max-width:1180px){#u-hub #hub-table .h-c-compare{display:none}}
+/* narrow desktops (one row would need ~1265px): the sport tabs take a row of their own and every control sits on the row under it,
+   aligned, instead of whichever control no longer fit dropping alone to a second row */
+@media(min-width:1101px) and (max-width:1270px){#u-hub .h-toolbar{flex-wrap:wrap}#u-hub .h-toolbar .h-sports{flex:1 1 100%}}
