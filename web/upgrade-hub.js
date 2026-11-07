@@ -57,7 +57,7 @@ export function mount(C) {
   /* owner 2026-11-05: the member's goblin rule for every slip Scout builds or suggests (generator and adder). Saved in prefs. */
   const LINE_RULES=[['no_goblins','No goblins'],['one_goblin','At most 1 goblin per slip'],['standard','No goblins or demons'],['all','Any lines']];
   const cleanLines=v=>LINE_RULES.some(r=>r[0]===v)?v:'no_goblins';
-  H.slipLines='no_goblins';T.slipLines=H.slipLines;
+  H.slipLines='no_goblins';T.slipLines=H.slipLines;H.slipLinesSet=false;
   H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',fresh:'all',sort:'ev',dense:false,stake:100,tab:null,moreOpen:false};
   try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
@@ -664,7 +664,7 @@ export function mount(C) {
       for(let i=0;i<3;i++) {
         const state=await api('state');
         try {
-          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
+          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,...(H.slipLinesSet?{slipLinesSet:true}:{}),...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
           H.saveError=false; break;
         } catch(e) { if(e.status!==409||i===2) throw e; }
       }
@@ -694,7 +694,10 @@ export function mount(C) {
       /* only a choice made in the Goblins control counts (prefs.researchHub.slipLines). A batch saved before it existed carries the old
          Lines select's 'all' (its first option and default), which is not a choice to allow goblins, so it reads as No goblins; the
          old 'Standard lines only' was a deliberate opt-out and carries over as No goblins or demons (review 2026-11-05). */
-      H.slipLines=cleanLines(p.slipLines||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
+      /* owner audit 2026-11-06 (T2): 'Any lines' is kept only when the member chose it in the Goblins control (slipLinesSet).
+         An 'all' saved without that mark came from the old batch carry-over (2026-11-05, 09:09-09:48) and reads as No goblins. */
+      H.slipLinesSet=p.slipLinesSet===true;
+      H.slipLines=cleanLines((p.slipLines==='all'&&!H.slipLinesSet?null:p.slipLines)||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
       if($('hub-generation-lines'))$('hub-generation-lines').value=H.slipLines;
       C.refreshAdvice?.();
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
@@ -1266,10 +1269,13 @@ export function mount(C) {
     sec.querySelectorAll('[data-studio-panel]').forEach(p=>{p.hidden=p.dataset.studioPanel!==H.studioTab;});
     const a=document.activeElement,u=box.contains(a)?a.dataset.u:null,id=u?a.dataset.id:null;
     box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks">View receipts','data-hub="receipts">View in My picks');
-    if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side. Or let Auto-build make slips for you.</p><div class="h-empty-acts"><button data-hub="section" data-id="board">Browse player props</button><button data-hub="studio-tab" data-id="build">Auto-build slips</button></div></div>';
+    if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side. Or let Auto-build make slips for you.</p><div class="h-empty-acts"><button data-hub="browse-props">Browse player props</button><button data-hub="studio-tab" data-id="build">Auto-build slips</button></div></div>';
     if(u)box.querySelector(`[data-u="${CSS.escape(u)}"]${id==null?'':`[data-id="${CSS.escape(id)}"]`}`)?.focus({preventScroll:true});
     if($('hub-slip-history'))$('hub-slip-history').innerHTML=C.picksTab();
     $('hub-studio-tab-n').textContent=String(T.legs.length);
+    /* owner audit 2026-11-06 (T9): the lineup image needs picks; on an empty slip the button is off and says so */
+    const share=sec.querySelector('[data-hub="share-card"]');
+    if(share){share.disabled=!T.legs.length;share.textContent=T.legs.length?'Download lineup image':'Download lineup image (add picks first)';}
     $('hub-studio-sync').textContent=T.saveFail?'Not yet synced. Your changes remain on this device.':T.pending||T.saving?'Saving your changes…':'Saved to your account · available on your other devices';
   }
   async function generate() {
@@ -1290,7 +1296,7 @@ export function mount(C) {
       if(!batch.slips.length)throw new Error(batch.note||'No combinations passed recheck. Widen your settings.');
       H.batch=batch;H.batchSaved=false;paintBatch();
       await saveBatch();
-      status.textContent=`${batch.slips.length} of ${options.count} slips generated and rechecked. ${batch.note||'Review them below; your slip is unchanged.'}`;
+      status.textContent=`${batch.slips.length} of ${options.count} ${options.count===1?'slip':'slips'} generated and rechecked. ${batch.note||'Review them below; your slip is unchanged.'}`;
     } catch(e){status.textContent=e.status?'Could not verify current offers. Your draft was kept. Try again.':e.message;}
     finally{H.generating=false;button.disabled=false;button.textContent='Generate slips';}
   }
@@ -1311,11 +1317,11 @@ export function mount(C) {
     const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
     const lineTag=l=>l.book==='prizepicks'&&C.lineKind?` <em class="h-line-tag">${esc(C.lineKind('prizepicks',l.gen?.line_type))}</em>`:l.gen?.line_type&&l.gen.line_type!=='standard'?` <em class="h-line-tag">${esc(l.gen.line_type[0].toUpperCase()+l.gen.line_type.slice(1))}</em>`:'';
     const legFace=l=>C.faceHtml?C.faceHtml(l.sport,{key:l.player_key,name:l.player,team:(R.boards[l.sport]?.recs.get(C.offerKey(l.book,l.row_id))?.player.team_abbr)||l.team,size:32,cls:'h-face'}):'';
-    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
+    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length===1?'1 slip':slips.length+' separate slips'}</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
       const metrics=[num(s.all_hit)?`<span>All-hit chance <b>${pct(s.all_hit)}</b></span>`:(s.same_match?'<span>Legs share a match <b>No all-hit chance</b></span>':''),
         s.payout&&num(s.payout.multiple)?`<span>All-hit payout <b>${esc(s.payout.multiple)}×</b></span>`:'',
         s.ev&&num(s.ev.ev)?`<span>Expected return <b>${pct(s.ev.ev)}</b></span>`:''].filter(Boolean).join('');
-      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header>${s.why?`<p class="h-batch-why">${esc(s.why)}</p>`:''}${metrics?`<div class="h-batch-range">${metrics}</div>`:''}<ol>${s.legs.map(l=>`<li${['nba','nfl'].includes(l.sport)?' class="h-leg-face"':''}>${legFace(l)}<div><strong>${esc(l.player)}</strong>${l.gen?.research?' <em class="h-line-tag">Research estimate</em>':''}<small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineTag(l)}</span>${l.gen?.record?`<small class="h-batch-record">${esc(l.gen.record)}</small>`:''}<small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace the '+esc(C.PLATFORMS[s.platform].label)+' entry in My slip':'Open in My slip'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
+      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header>${s.why?`<p class="h-batch-why">${esc(s.why)}</p>`:''}${metrics?`<div class="h-batch-range">${metrics}</div>`:''}<ol>${s.legs.map(l=>`<li${['nba','nfl'].includes(l.sport)?' class="h-leg-face"':''}>${legFace(l)}<div><strong>${esc(l.player)}</strong>${l.gen?.research?' <em class="h-line-tag">Research estimate</em>':''}<small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineTag(l)}</span>${l.gen?.record?`<small class="h-batch-record">${esc(l.gen.record)}</small>`:''}<small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} ${slips.length===1?'slip uses':'slips use'} this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace the '+esc(C.PLATFORMS[s.platform].label)+' entry in My slip':'Open in My slip'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
     }).join('')}</div>`;
   }
   async function useGenerated(id) {
@@ -1330,14 +1336,14 @@ export function mount(C) {
     return `<section class="h-generator" aria-label="Generate slips"><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your batch</h2><p>Each slip is built for the best chance that all its legs hit, ranked by how each chance band has done on settled results.</p><fieldset id="hub-generation-sports"><legend>Eligible sports</legend>${allowed().map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls">
       <label>Platform<select id="hub-generation-book"><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label>
       <label>Entry type<select id="hub-generation-type"><option value="power">Power</option><option value="flex">Flex</option></select></label>
-      <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} slips</option>`).join('')}</select></label>
+      <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} ${n===1?'slip':'slips'}</option>`).join('')}</select></label>
       <label>Picks per slip<select id="hub-generation-count">${[2,3,4,5,6].map(n=>`<option value="${n}">${n} picks</option>`).join('')}</select></label>
       <label>Sport mix<select id="hub-generation-mix"><option value="any">Any mix</option><option value="mixed">Mixed sports</option><option value="single">One sport</option></select></label>
       <label class="h-goblin-rule">Goblins<select id="hub-generation-lines" aria-describedby="hub-generation-lines-help">${LINE_RULES.map(([v,t])=>`<option value="${v}"${v===H.slipLines?' selected':''}>${t}</option>`).join('')}</select><small id="hub-generation-lines-help">Goblins are easier lines that pay less. Scout leaves them out unless you allow them.</small></label>
       <label>Game selection<select id="hub-generation-games"><option value="spread">One per match</option><option value="stacks">Same match (Underdog)</option></select></label>
       <label>Prop reuse<select id="hub-generation-repeats"><option value="allow">Allow across slips</option><option value="none">No repeat props</option></select></label>
       ${research?'<label>Research estimates<select id="hub-generation-research"><option value="leave">Leave out</option><option value="include">Include, marked</option></select></label>':''}
-      <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
+      <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. A slip is offered only when its all-hit chance clears the break-even of its payout: PrizePicks Power 2-pick pays 3x, so it needs 33.3%. When fewer slips clear than you asked for, Scout builds fewer and says how many cleared. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin’s lower payout is not published, so a generated PrizePicks slip never holds one; an Underdog pick paying under 1.0x is left out of generated slips for the same reason. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
   }
   /* 30 days of the record; a run of days with no decided pick folds into one quiet tile instead of a wall of dashes */
   function calendarHTML(doc){
@@ -1442,7 +1448,7 @@ export function mount(C) {
   function mtBooks(d){
     const out=new Map();
     for(const s of mtSports(d)){const x=d.sports[s]||{};
-      for(const r of (x.ev||[]).filter(r=>d.owner||mtBook(r)))out.set(r.book,r.book_label);
+      for(const r of [...(x.ev||[]),...(x.closest||[])].filter(r=>d.owner||mtBook(r)))out.set(r.book,r.book_label);
       for(const r of [...(x.arbitrage||[]),...(d.owner?x.flagged||[]:[])])for(const l of r.legs||[])out.set(l.book,l.book_label);}
     return [...out.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,label])=>({id,label}));
   }
@@ -1475,11 +1481,14 @@ export function mount(C) {
   const mtPick=x=>`<b>${esc(x.player)}</b><small>${x.side?esc(mtSide(x.side))+' ':''}${esc(x.line)} ${esc(x.stat_label||'')}${x.period_label?' · '+esc(x.period_label):''}</small><small>${esc(x.event||'')}${x.start_utc?' · '+esc(when(x.start_utc)):''}${mtSports(H.marketDoc).length>1?' · '+esc(SPORTS[x.sport]||x.sport):''}</small>`;
   const mtPrice=(label,american)=>`<span class="h-pc-nb">${esc(label)} ${esc(american||'')}</span>`;
   const mtFrom=x=>x.chance_from==='Scout'?'from Scout':/^Other books/.test(x.chance_from||'')?'from other books'+(x.chance_from.match(/\((.*)\)/)?' ('+x.chance_from.match(/\((.*)\)/)[1]+')':''):'';
-  function mtEvRow(x){
+  /* owner audit 2026-11-06 (T6): a price below its fair chance, shown in the closest list: the same row, the gap in plain money */
+  const mtSigned=v=>(Number(v)<0?'−':'+')+'$'+Math.abs(Number(v)).toFixed(2);
+  function mtEvRow(x,near){
     return `<li class="h-pc-row"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick(x)}</div>`
       +`<div class="h-pc-cell" data-label="Book & price">${mtPrice(x.book_label,x.american)}${x.kind==='prediction'?'<small>Prediction market</small>':''}${H.marketDoc?.owner&&(x.flags||[]).includes('Wide market')?'<small>Wide market (owner)</small>':''}</div>`
       +`<div class="h-pc-cell h-pc-fair" data-label="Fair chance vs needed"><span class="h-pc-wide">${pct(x.p_cal)} vs ${pct(x.needs)}</span><span class="h-pc-narrow">Fair ${pct(x.p_cal)} · needs ${pct(x.needs)}</span><small>${esc(mtFrom(x))}</small>${num(x.p_push)&&x.p_push>0?`<small>Exactly ${esc(x.line)} refunds the stake (${pct(x.p_push)})</small>`:''}</div>`
-      +`<div class="h-pc-cell h-pc-value" data-label="Expected per $100"><span class="h-pc-chip">+${mtMoney(x.per_100)}<i> / $100</i></span></div>`
+      +(near?`<div class="h-pc-cell h-pc-value" data-label="Per $100 against fair"><span class="h-pc-chip h-pc-short">${mtSigned(x.per_100)}<i> / $100</i></span></div>`
+        :`<div class="h-pc-cell h-pc-value" data-label="Expected per $100"><span class="h-pc-chip">+${mtMoney(x.per_100)}<i> / $100</i></span></div>`)
       +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}</div></li>`;
   }
   function mtArbRow(x){
@@ -1500,7 +1509,7 @@ export function mount(C) {
     const head=Number.isFinite(builtAge)&&builtAge>120?`<p class="h-mt-state" role="status">These prices were built ${ageText(builtAge)} ago. Refresh prices for the current sheet.</p>`:'';
     const ready=sports.filter(s=>d.sports[s]?.state!=='unavailable');
     if(sports.length&&!ready.length)return head+'<p class="h-mt-state" role="status">Prices could not be read just now. Use Refresh prices to try again.</p>';
-    let ev=[],arb=[],all=0,quotes=0,lines=0;
+    let ev=[],arb=[],near=[],all=0,quotes=0,lines=0;
     /* the server's own age limits, applied again on every draw: a sheet left open never shows a pair or price it would no longer
        build (review 2026-11-05). The tab also reloads the sheet when it comes back into view (see visibilitychange below). */
     const m0=d.method||{},evMax=Number(m0.ev_stale_s)||1800,arbMax=Number(m0.arb_max_age_s)||300;
@@ -1509,7 +1518,8 @@ export function mount(C) {
       quotes+=x.quotes_checked||0;lines+=x.markets_checked||0;
       const e=(x.ev||[]).filter(r=>mtBook(r)&&live(r)),a=(x.arbitrage||[]).filter(liveArb);all+=e.length+a.length;
       ev.push(...e.filter(r=>mtKeep(s,r,false)&&num(r.ev)&&r.ev>=Number(f.minEv)));
-      arb.push(...a.filter(r=>mtKeep(s,r,true)));}
+      arb.push(...a.filter(r=>mtKeep(s,r,true)));
+      near.push(...(x.closest||[]).filter(r=>mtBook(r)&&live(r)&&mtKeep(s,r,false)&&num(r.per_100)));}
     ev.sort((a,b)=>f.sort==='fresh'?(mtAge(a)??1e12)-(mtAge(b)??1e12):f.sort==='chance'?b.p_cal-a.p_cal:b.per_100-a.per_100);
     arb.sort((a,b)=>f.sort==='fresh'?mtLegsAge(a)-mtLegsAge(b):b.return_per_100-a.return_per_100||mtLegsAge(a)-mtLegsAge(b));
     const at=new Date(d.as_of),clock=Number.isFinite(at.getTime())?at.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'';
@@ -1517,6 +1527,11 @@ export function mount(C) {
     let body='';
     if(one&&!all&&!(d.sports[one]?.sections_possible?.ev||d.sports[one]?.sections_possible?.arb))
       body=`<p class="h-mt-state h-pc-none">No sportsbook offers ${esc(SPORTS[one])} prices right now, so there is nothing to check here. ${esc(SPORTS[one])} lines are on the Board.</p>`;
+    else if(!ev.length&&!arb.length&&!all&&near.length){
+      /* T6: nothing pays more than its fair chance, so the sheet lists what is closest, best first, instead of one empty line */
+      near.sort((a,b)=>f.sort==='fresh'?(mtAge(a)??1e12)-(mtAge(b)??1e12):f.sort==='chance'?b.p_cal-a.p_cal:b.per_100-a.per_100);
+      body=`<section class="h-pc-section h-pc-near" aria-label="Closest to their fair chance"><h3>Closest to their fair chance</h3><p class="h-pc-ask">No price pays more than its fair chance right now. Checked ${quotes.toLocaleString()} prices on ${lines.toLocaleString()} lines${clock?' at '+esc(clock):''}. These come closest, best first.</p>`
+        +`<ol class="h-pc-list h-pc-ev${f.dense?' is-compact':''}">${mtHead(['Pick','Book &amp; price','Fair chance vs needed','Per $100 against fair','Checked'])}${near.map(x=>mtEvRow(x,true)).join('')}</ol></section>`;}
     else if(!ev.length&&!arb.length)
       body=all?`<p class="h-mt-state h-pc-none">No prices match these filters. Clear a filter to see all ${all} rows.</p>`
         :`<p class="h-mt-state h-pc-none">Nothing worth acting on right now. Checked ${quotes.toLocaleString()} prices on ${lines.toLocaleString()} lines${clock?' at '+esc(clock):''}.</p>`;
@@ -1573,6 +1588,7 @@ export function mount(C) {
     +'#u-hub .h-pc-row:first-child{border-top:0}#u-hub .h-pc-head{font-size:11px;color:var(--u-muted);background:var(--u-panel);padding-top:8px;padding-bottom:8px}'
     +'#u-hub .h-pc-cell{min-width:0;overflow-wrap:anywhere}#u-hub .h-pc-cell small{display:block;color:var(--u-muted);font-size:12px}#u-hub .h-pc-dec{color:var(--u-muted)}'
     +'#u-hub .h-pc-narrow{display:none}#u-hub .h-pc-chip{display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(63,208,122,.12);color:#3FD07A;font-weight:600;white-space:nowrap}'
+    +'#u-hub .h-pc-chip.h-pc-short{background:rgba(148,163,184,.14);color:var(--u-text)}'
     +'#u-hub .h-pc-chip i{font-style:normal;font-weight:400;color:var(--u-muted)}#u-hub .h-pc-age{color:var(--u-muted);font-size:12px}'
     +'#u-hub .h-pc-list.is-compact .h-pc-row{padding-top:5px;padding-bottom:5px;font-size:12px}#u-hub .h-pc-list.is-compact .h-pc-cell small{display:inline;margin-left:6px}'
     +'#u-hub .h-pc-stake{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px;color:var(--u-muted)}#u-hub .h-pc-stake input{width:110px;min-height:40px}'
@@ -1674,7 +1690,7 @@ export function mount(C) {
   const openPop = () => Object.entries(POPS).find(([,[,pop]])=>!$(pop).hidden)?.[0]||null;
   const rec = id => H.records.find(r=>key(r)===id)||H.extraRecs.find(r=>key(r)===id);
   const actions={
-    'share-card'(){C.shareSlip();},
+    'share-card'(){if(!T.legs.length)return C.say('Add picks first.');C.shareSlip();},
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
     // By game keeps the board's filters: the games listed are the ones those filters show
     'game-board'(id){H.game=id;H.view='list';H.page=0;section('board');$('hub-center').scrollTop=0;},
@@ -1686,6 +1702,8 @@ export function mount(C) {
     'clear-filters'(){Object.assign(H,{book:'all',q:'',stat:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,game:'all',page:0});paintBoard();},
     view(id){H.view=id==='games'?'games':'list';H.page=0;section('board');},
     section(id){if(id==='board')H.view='list';if(id==='studio')H.studioTab='slip';section(id);},
+    /* owner audit 2026-11-06 (T10): "+ Add player props" / "Browse player props" open the board on All sports, not the last sport */
+    'browse-props'(){H.view='list';actions.sport('all');},
     'studio-open'(id){H.studioTab=['slip','build','tracked'].includes(id)?id:'slip';section('studio');},
     'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();sectionFocus('studio-tab',id);},
     sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;H.view==='games'?section('games'):section('board');scrollTop();load(false);},
@@ -1766,7 +1784,7 @@ export function mount(C) {
         <div id="hub-pagination" class="h-pagination"></div></section>
       <section id="hub-studio-section" hidden>
         <div class="h-studio-tabs" role="tablist" aria-label="Slips"><button role="tab" data-hub="studio-tab" data-id="slip" aria-selected="true">My slip <span id="hub-studio-tab-n" class="h-count-badge">0</span></button><button role="tab" data-hub="studio-tab" data-id="build" aria-selected="false" tabindex="-1">Auto-build</button><button role="tab" data-hub="studio-tab" data-id="tracked" aria-selected="false" tabindex="-1">Tracked</button></div>
-        <div data-studio-panel="slip" role="tabpanel" aria-label="My slip"><div class="h-studio-intro"><span id="hub-studio-sync" class="h-sync"></span><button data-hub="section" data-id="board">+ Add player props</button></div><section class="h-working-draft" aria-label="My slip"><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt of the line and forecast you chose. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">My picks →</button></div></div>
+        <div data-studio-panel="slip" role="tabpanel" aria-label="My slip"><div class="h-studio-intro"><span id="hub-studio-sync" class="h-sync"></span><button data-hub="browse-props">+ Add player props</button></div><section class="h-working-draft" aria-label="My slip"><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt of the line and forecast you chose. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">My picks →</button></div></div>
         <div data-studio-panel="build" role="tabpanel" aria-label="Auto-build" hidden>${generatorHtml()}<section id="hub-generated" aria-label="Generated slips"></section></div>
         <div data-studio-panel="tracked" role="tabpanel" aria-label="Tracked" hidden><section class="h-tracked-slips"><header><div><h2>Tracked slips</h2><p>Exact saved lines, grouped by entry. Each leg keeps its settlement receipt.</p></div><button data-hub="receipts">My picks →</button></header><div id="hub-slip-history"></div></section></div></section>
       <section id="hub-picks-section" hidden><div class="h-section-head"><div><p>Your tracked picks, with the line and chance saved when you tracked. Each settles at that line; pushes are counted apart.</p></div><div class="h-pick-filters" hidden><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status">${pickStatus.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label></div></div><div id="hub-picks-body"></div></section>
@@ -1879,7 +1897,7 @@ export function mount(C) {
     mixed.disabled=p==='underdog';if(mixed.disabled&&$('hub-generation-mix').value==='mixed')$('hub-generation-mix').value='any';
   }
   for(const id of ['book','type'])$('hub-generation-'+id).addEventListener('change',generationControls);
-  $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
+  $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);H.slipLinesSet=true;T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
   generationControls();
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});

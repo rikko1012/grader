@@ -546,22 +546,26 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     # without its goblin line the fixture pool (6 legs, 3 matches) builds 7 distinct pairs; eight need Any lines. The No goblins
-    # default is covered by test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed.
+    # default is covered by test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed. Owner audit 2026-11-06 (T1): only the
+    # pairs that clear Power 2-pick's break-even (3x, 33.3% all-hit) are handed out - 6 of the 8 asked for here - and the
+    # status says how many cleared.
     p.locator('#hub-generation-lines').select_option('all')
     p.locator('#hub-generate').click()
     p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
-    state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 8)
+    state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 6)
     slips = state['studio']['slips']
+    assert '6 of 8 slips generated and rechecked. 6 slips clear break-even on PrizePicks Power 2-pick right now.' in p.locator('#hub-generation-status').inner_text()
+    assert all(s['all_hit'] >= 1 / 3 for s in slips)
     assert not (state.get('slip') or {}).get('legs')
-    assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
+    assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 6
     assert all(len(s['legs']) == 2 for s in slips)
     assert state['studio']['generator'] == 'sq-1'
     assert all(s['why'] and all(l['gen']['record'] for l in s['legs']) for s in slips)          # one line per slip, a record per leg
     assert not [l for s in slips for l in s['legs'] if l['sport'] in ('nba', 'nfl')]           # research estimates stay out unless asked
     assert all(len({l['player_key'] for l in s['legs']}) == 2 for s in slips)
-    assert p.locator('.h-generated-card .h-batch-why').count() == 8
+    assert p.locator('.h-generated-card .h-batch-why').count() == 6
     assert all(len({(l['sport'], l['event_id']) for l in s['legs']}) == 2 for s in slips)
-    assert p.locator('.h-generated-card').count() == 8
+    assert p.locator('.h-generated-card').count() == 6
     p.locator('[data-hub=use-generated]').first.click()
     saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
     before = saved_state(p, lambda d: bool(d.get('slip')))['slip']
@@ -573,7 +577,7 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     try:
         q = open_page(c, env, '/#slips?tab=build')
         q.wait_for_selector('.h-generated-card', timeout=20000)
-        assert q.locator('.h-generated-card').count() == 8
+        assert q.locator('.h-generated-card').count() == 6
         assert q.locator('#hub-studio-body .u-leg').count() == 2
     finally:
         c.close()

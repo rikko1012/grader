@@ -27,6 +27,7 @@ FLAG = "SCOUT_PICKEM_EV"
 APPS = ("prizepicks", "underdog")
 APP_LABEL = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
 MARKET_SPORTS = ("nba", "nfl")
+MODEL_EV_HIDDEN = ("nba", "nfl")                # no return figure on a leg with no book price (owner audit 2026-11-06, T5)
 MODEL_SPORTS = ("cs2", "lol")
 PREDICTION = ("kalshi", "polymarket")
 MAX_ROWS = 400
@@ -289,7 +290,9 @@ def build(srv, p, allowed, now=None):
                     ev_model=None if p_np is None or be is None else round(fair.leg_ev(p_np, be), 4))
         if f is None:
             if base["p_model"] is not None:
-                model_rows.append(dict(base, basis="model only"))
+                # owner audit 2026-11-06 (T5): an NBA / NFL chance is a research estimate that has not held up on settled
+                # results (NFL 65%+ won 55.9%), so with no book price there is no return figure to show (hidden, not labelled)
+                model_rows.append(dict(base, basis="model only", **({"ev_model": None} if leg["sport"] in MODEL_EV_HIDDEN else {})))
             continue
         if f["p"] is None:
             hidden[why] = hidden.get(why, 0) + 1
@@ -304,7 +307,7 @@ def build(srv, p, allowed, now=None):
                                    for d in f["dropped"]]))
     key = lambda r: (r.get("ev") is None, -(r.get("ev") or 0.0))
     rows.sort(key=key)
-    model_rows.sort(key=lambda r: (r.get("ev_model") is None, -(r.get("ev_model") or 0.0)))
+    model_rows.sort(key=lambda r: (r.get("ev_model") is None, -(r.get("ev_model") or 0.0), -(r.get("p_model") or 0.0)))
     used = sorted({s["book"] for r in rows for s in r["sources"]} | set(labels))
     src = cfg.get(app) or {}
     verified = {e["app"] for e in entries()}
