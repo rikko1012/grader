@@ -267,18 +267,30 @@ def depth_index(lg, refresh=False):
     if lg["key"] not in DEPTH_LEAGUES:
         return {}
 
-    def load():
-        idx = {}
-        for t in teams(lg):
-            try:
-                body = net.get_json(f"{SITE}/{_path(lg)}/teams/{t['id']}/depthcharts")
-            except net.HttpError:
-                continue                               # one team failing leaves the others
-            for pk, row in parse_depth(body, lg["family"], t["abbr"]).items():
-                if pk not in idx or row["depth"] < idx[pk]["depth"]:
-                    idx[pk] = row
+    if not refresh:
+        hit = cache.get("espn:depth", lg["key"], 6 * 3600)
+        if hit is not None:
+            return hit
+    idx, failed = {}, set()
+    for t in teams(lg):
+        try:
+            body = net.get_json(f"{SITE}/{_path(lg)}/teams/{t['id']}/depthcharts")
+        except (net.HttpError, ValueError):
+            failed.add(t["abbr"])                      # one team failing leaves the others
+            continue
+        for pk, row in parse_depth(body, lg["family"], t["abbr"]).items():
+            if pk not in idx or row["depth"] < idx[pk]["depth"]:
+                idx[pk] = row
+    if not failed:
+        cache.put("espn:depth", lg["key"], idx)
         return idx
-    return cache.fetch("espn:depth", lg["key"], 6 * 3600, load, refresh=refresh)
+    # a failed team read is transient: never cached (owner rule; bug sweep 2026-11-06 #40). The failed teams keep
+    # their last good rows (any age) for this answer, and the next call reads them again.
+    prev = cache.get("espn:depth", lg["key"]) or {}
+    for pk, row in prev.items():
+        if row.get("team") in failed and (pk not in idx or row["depth"] < idx[pk]["depth"]):
+            idx[pk] = row
+    return idx
 
 
 def parse_splits(body):

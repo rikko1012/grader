@@ -225,8 +225,11 @@ def default_jobs():
                        locks=("canonical", "books", "games", "cache", "model-daily"),      # never beside a collector
                        # Settlement also imports the model scorecard's native libraries. The old collector VM
                        # limit (320 MB) lets settlement finish but breaks that import. RSS remains watchdog-bound.
-                       env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
-                       if std else {}),
+                       # the worker's own job limit just below this kill (bug sweep 2026-11-06 #12): the default 300 s
+                       # timed out every long settle and restarted it beside the still-running first attempt
+                       env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int)),
+                            "SPORTS_JOB_TIMEOUT_S": "1440"}
+                       if std else {"SPORTS_JOB_TIMEOUT_S": "840"}),
         # pre-game news archive (pgn-1, pregame_news/): injury report + depth charts through the shared caches and the
         # game summary of games starting within 2 h -> pregame_news.db, append-only, change-only. Research input only.
         "pregame-news": dict(argv=_py("-m", "sports.pregame_news", "run", *lg), every_s=900, timeout_s=300,

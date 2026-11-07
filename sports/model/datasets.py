@@ -337,6 +337,26 @@ def nba_crawl(con, budget_s=270, max_attempts=4, log=None):
 FILE_MAX_AGE_H = 20          # a downloaded release file is reused for this long (nflverse rebuilds nightly)
 
 
+def _write_atomic(local, data, gz=False):
+    """Write a downloaded file so a killed / failed write never leaves a fresh-looking partial file that is reused for
+    FILE_MAX_AGE_H (bug sweep 2026-11-06 #41): a temp file in the same folder (a gzip file must decompress to its
+    end-of-stream marker), then os.replace'd into place. A failure raises and keeps the old file (if any) untouched."""
+    import os
+    tmp = local.with_name(f".{local.name}.{os.getpid()}.part")
+    try:
+        tmp.write_bytes(data)
+        if gz:
+            with gzip.open(tmp, "rb") as f:          # EOFError / BadGzipFile on a truncated download
+                while f.read(1 << 20):
+                    pass
+        os.replace(tmp, local)
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
 def _download(con, name, url, gz=False):
     """GET one nflverse release file -> a text stream (decompressed on the fly). Records sha256 / size in table files.
     The raw file is kept under <SPORTS_DATA_DIR>/model/files/ and reused while younger than FILE_MAX_AGE_H (no repeated
@@ -346,7 +366,7 @@ def _download(con, name, url, gz=False):
     if not (local.exists() and time.time() - local.stat().st_mtime < FILE_MAX_AGE_H * 3600):
         data = net.get(url, timeout=180).content
         local.parent.mkdir(parents=True, exist_ok=True)
-        local.write_bytes(data)
+        _write_atomic(local, data, gz=gz)
         del data
     h, size = hashlib.sha256(), 0
     with local.open("rb") as f:

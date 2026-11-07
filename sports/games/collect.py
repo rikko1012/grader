@@ -74,8 +74,9 @@ def _venue(db, lg, venue_id):
     try:
         v = espn_game.venue_raw(lg, venue_id)
         info = {"indoor": v.get("indoor"), "grass": v.get("grass"), "name": v.get("fullName")}
-    except net.HttpError:
-        info = {"indoor": None}
+    except (net.HttpError, ValueError):
+        # a failed read (429 hold, 5xx, timeout, non-JSON answer) is transient: never cached, read again next time
+        return {"indoor": None}
     store.set_setting(db, key, json.dumps(info))
     return info
 
@@ -248,6 +249,10 @@ def _context(db, lg, games, now, clock):
             store.finish_fetch(db, fid, True, len(rows), now=now)
         except net.HttpError as err:
             store.finish_fetch(db, fid, False, http_status=err.status, error=str(err), now=now)
+        except Exception as err:            # one malformed game (non-JSON 200, unparseable prop target) never stalls
+            store.finish_fetch(db, fid, False,  # the league's other games or its Kalshi step
+                               error=f"{type(err).__name__}: {str(err)[:200]}", now=now)
+            out["errors"] = out.get("errors", 0) + 1
         _mark(db, key, now)
         out["games"] += 1
     return out
@@ -349,7 +354,7 @@ def tick(db, leagues=LEAGUES, now=None, clock=None):
     if not take_lease(db, now):
         return {"busy": True}
     out = {"at": iso(now)}
-    for r in db.all("SELECT key, value FROM sports_game_settings WHERE key LIKE 'hold:%'"):
+    for r in db.all("SELECT key, value FROM sports_game_settings WHERE key LIKE ?", ("hold:%",)):   # PG-safe (#39)
         t = dt(r["value"])                                 # a source's Retry-After from an earlier tick / process
         if t and t > now:
             net.hold(r["key"][len("hold:"):], t.timestamp())
