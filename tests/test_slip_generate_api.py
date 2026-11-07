@@ -64,6 +64,14 @@ def test_audit_t1_generate_hands_out_only_slips_that_clear_break_even(env):
     assert "ev" not in doc["slips"][0]                                        # no expected-return figure is added
 
 
+def test_audit_review_generate_same_match_never_skips_break_even(env):
+    """Review 2026-11-07: with Same match (Underdog) the route handed out same-match slips with no all-hit chance, skipping the
+    break-even check the member copy promises. Every generated slip now has an all-hit chance that clears its payout."""
+    st, doc = gen(env, platform="underdog", type="standard", slips=12, games="stacks")
+    assert st == 200 and doc["options"]["same_match"] is True
+    assert all(not s["same_match"] and s.get("all_hit") is not None and s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"])
+
+
 def test_no_repeat_props_and_shortage(env):
     st, doc = gen(env, slips=8, repeats="none")
     props = [(l["row_id"]) for s in doc["slips"] for l in s["legs"]]

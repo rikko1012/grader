@@ -292,7 +292,8 @@ def build(srv, p, allowed, now=None):
             if base["p_model"] is not None:
                 # owner audit 2026-11-06 (T5): an NBA / NFL chance is a research estimate that has not held up on settled
                 # results (NFL 65%+ won 55.9%), so with no book price there is no return figure to show (hidden, not labelled)
-                model_rows.append(dict(base, basis="model only", **({"ev_model": None} if leg["sport"] in MODEL_EV_HIDDEN else {})))
+                model_rows.append((p_np if p_np is not None else base["p_model"],
+                                   dict(base, basis="model only", **({"ev_model": None} if leg["sport"] in MODEL_EV_HIDDEN else {}))))
             continue
         if f["p"] is None:
             hidden[why] = hidden.get(why, 0) + 1
@@ -307,7 +308,9 @@ def build(srv, p, allowed, now=None):
                                    for d in f["dropped"]]))
     key = lambda r: (r.get("ev") is None, -(r.get("ev") or 0.0))
     rows.sort(key=key)
-    model_rows.sort(key=lambda r: (r.get("ev_model") is None, -(r.get("ev_model") or 0.0), -(r.get("p_model") or 0.0)))
+    # audit review 2026-11-07: the list is headed "ranked by Scout's chance", so every sport ranks by its chance (pushes off),
+    # whether or not it shows a return figure (T5 hid it on NBA / NFL, which had sorted them below every CS2 / LoL leg)
+    model_rows = [r for _, r in sorted(model_rows, key=lambda t: (-t[0], t[1]["key"], t[1]["side"]))]
     used = sorted({s["book"] for r in rows for s in r["sources"]} | set(labels))
     src = cfg.get(app) or {}
     verified = {e["app"] for e in entries()}

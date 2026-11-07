@@ -439,6 +439,85 @@ def test_break_even_underdog_multipliers():
     assert len(build(boost, platform="underdog", entry_type="standard", break_even=True)["slips"]) == 1
 
 
+# audit review 2026-11-07 (T1 follow-up): same-match legs, the node budget, and the count wording when the search stopped
+
+def test_audit_review_same_match_slip_is_never_offered_with_break_even_on():
+    """Two Underdog legs at 52% in ONE match, standard 2-pick (3.5x needs 28.6%): the review got one slip with no all-hit chance,
+    while the same legs in different matches got none. A same-match slip has no all-hit chance, so it is never shown to clear."""
+    same = [rec("a", "e1", .52, book="underdog", team="A"), rec("b", "e1", .52, book="underdog", team="B")]
+    b = build(same, platform="underdog", entry_type="standard", same_match=True, break_even=True)
+    assert b["slips"] == []
+    assert b["shortage"] == "The eligible legs for one sport on Underdog come from 1 matches at most; a 2-pick slip needs 2 different matches."
+    apart = [rec("a", "e1", .52, book="underdog"), rec("b", "e2", .52, book="underdog")]
+    assert build(apart, platform="underdog", entry_type="standard", same_match=True, break_even=True)["slips"] == []
+    # with legs that do clear, the member's same-match choice still yields one-per-match slips that clear
+    mixed = same + [rec("c", "e2", .62, book="underdog"), rec("d", "e3", .6, book="underdog")]
+    got = build(mixed, platform="underdog", entry_type="standard", same_match=True, break_even=True, count=4)["slips"]
+    assert got and all(not s["same_match"] and s["all_hit"] * 3.5 >= 1 for s in got)
+    # the research default (break-even off) still builds same-match legs on Underdog
+    assert build(same, platform="underdog", entry_type="standard", same_match=True)["slips"][0]["same_match"] is True
+
+
+def _near_break_even_pool(book, n=80, seed=7):
+    import random
+    rnd = random.Random(seed)
+    return [rec(f"p{i}", f"e{i // 2}", round(rnd.uniform(.50, .56), 4), book=book) for i in range(n)]
+
+
+@pytest.mark.parametrize("book,et,size", [("prizepicks", "flex", 6), ("prizepicks", "flex", 5), ("underdog", "flex", 6),
+                                          ("underdog", "flex", 5), ("prizepicks", "power", 6), ("prizepicks", "flex", 4)])
+def test_audit_review_break_even_batch_has_one_bounded_node_budget(book, et, size):
+    """The review's 80-leg pool at 50-56%: break-even searches ran 20,000 nodes per missing slip (60,031-100,035 nodes, 2-3 s
+    of request-thread CPU for one Flex 5/6 build). The whole batch now shares BUILD_NODE_LIMIT nodes."""
+    legs, _ = legs_of(_near_break_even_pool(book))
+    t = time.perf_counter()
+    b = sq.build(legs, {"platform": book, "entry_type": et, "count": 12, "size": size, "break_even": True, "lines": "no_goblins"})
+    took = time.perf_counter() - t
+    limit = getattr(sq, "BUILD_NODE_LIMIT", 6000)
+    assert b["search"]["nodes"] <= limit + sq.MAX_SLIPS and b["search"]["node_limit"] == limit
+    assert took < 1.0
+    for s in b["slips"]:
+        assert sq.clears_break_even(book, et, s["legs"])
+
+
+def test_audit_review_stopped_search_never_states_a_definite_count(monkeypatch):
+    """A search stopped at its node budget cannot back "N slips clear break-even ... right now": it says how many it built."""
+    monkeypatch.setattr(sq, "BUILD_NODE_LIMIT", 40, raising=False)
+    legs, _ = legs_of(_near_break_even_pool("underdog"))
+    b = sq.build(legs, {"platform": "underdog", "entry_type": "flex", "count": 12, "size": 6, "break_even": True, "lines": "no_goblins"})
+    assert b["search"]["exact"] is False and len(b["slips"]) < 12
+    n = len(b["slips"])
+    want = (f"Scout built {n} slip{'s' if n != 1 else ''} that clear{'s' if n == 1 else ''} break-even on Underdog Flex 6-pick." if n
+            else "Scout found no slip that clears break-even on Underdog Flex 6-pick right now.")
+    assert b["shortage"] == want
+    assert sq.break_even_text("underdog", "flex", 6, 1, exact=False) == "Scout built 1 slip that clears break-even on Underdog Flex 6-pick."
+    assert sq.break_even_text("underdog", "flex", 6, 3) == "3 slips clear break-even on Underdog Flex 6-pick right now."
+
+
+@pytest.mark.parametrize("book,et,size", [("prizepicks", "power", 2), ("prizepicks", "power", 3), ("prizepicks", "flex", 3),
+                                          ("prizepicks", "flex", 4), ("underdog", "standard", 3), ("underdog", "flex", 3)])
+@pytest.mark.parametrize("seed", range(4))
+def test_audit_review_bounded_search_still_finds_the_best_slip_that_clears(book, et, size, seed):
+    """The cuts never drop a slip that clears: on small pools the first slip is the best-scoring combination that clears, by
+    brute force over every combination (one leg per match, the platform's entry rules)."""
+    import random
+    rnd = random.Random(seed)
+    recs = [rec(f"p{i}", f"e{i // 2}", round(rnd.uniform(.50, .72), 4), book=book, team=f"T{i % 5}") for i in range(14)]
+    legs, _ = legs_of(recs)
+    b = sq.build(legs, {"platform": book, "entry_type": et, "count": 1, "size": size, "break_even": True, "lines": "no_goblins"})
+    ok = [c for c in combinations(legs, size)
+          if len({(l["sport"], l["event"]) for l in c}) == size and len({l["pkey"] for l in c}) == size
+          and len({sq._rule_leg(l)["team"] for l in c}) >= 2 and sq.clears_break_even(book, et, list(c))
+          and not sq.problems(list(c), book, et)]
+    assert b["search"]["exact"] is True
+    if not ok:
+        assert b["slips"] == []
+        return
+    best = max(math.fsum(math.log(l["rank_p"]) for l in c) for c in ok)
+    got = b["slips"][0]["legs"]
+    assert math.isclose(math.fsum(math.log(l["rank_p"]) for l in got), best, abs_tol=1e-9)
+
+
 # ------------------------------------------------------------------------------------------------------------- adder
 
 def slip_leg(r):
