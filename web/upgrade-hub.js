@@ -32,7 +32,7 @@ export function mount(C) {
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
     page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false, batch:null, batchSaved:false,
     cardTab:'overview', view:'list', studioTab:'slip'};
-  H.pendingOpen=null;
+  H.pendingOpen=null;H.graded=new Set();
   /* A6 (audit 2026-11-05): one sort for every sport, from the Sort menu or a column header. Default: Edge where the Edge column
      exists, else start time. The member's choice is remembered on their account (and on this device until it syncs). */
   const HAS_EDGE=!!COLS||P('edge');
@@ -93,19 +93,31 @@ export function mount(C) {
   function matches(r, f=H) {
     return (f.sport==='all'||r.sport===f.sport) && (f.book==='all'||r.offer.platform===f.book)
       && (!f.stat||f.stat==='all'||statKey(r)===f.stat) && (!f.game||f.game==='all'||gameKey(r)===f.game)
-      && (f.side==='all'||r.scout.side===f.side) && (!f.onlyDiff||different(r))
+      && (f.side==='all'||sideMatches(r,f.side)) && (!f.onlyDiff||different(r))
       && gradeMatches(r,f.minGrade)
       && (!f.watched||H.watch.includes(playerKey(r)))
       && (!f.freshOnly||!unavailableReason(r))
       && (!f.movedOnly||r.offer.moved_from!=null)
       && (!f.soonOnly||(Date.parse(r.event.start_utc)>Date.now()&&Date.parse(r.event.start_utc)-Date.now()<=3600000))
-      && (!f.q||[r.player.name,r.player.team,r.event.label,r.market.stat_label].join(' ').toLowerCase().includes(f.q.toLowerCase()));
+      && (!f.q||searchText(r).includes(f.q.toLowerCase()));
   }
+  /* N6 (site audit 2026-11-06): Side reads Scout's lean; a line with no lean (most NBA / NFL rows) is listed under each side its book
+     offers, so "Under" never empties a board that has Under lines. Minimum grade applies only where the tab has letters to rank: on a
+     tab with no graded line the control is hidden and the board ignores it (a saved alert keeps its own minimum). */
+  const sideMatches=(r,sd)=>r.scout.side?r.scout.side===sd:!!r.offer[sd]?.offered;
+  const graded=r=>gradeOrder.includes(r.scout.grade)&&!r.scout.hold;
+  const gradeFilterOn=(sport=H.sport)=>sport==='all'?H.graded.size>0:H.graded.has(sport);
+  /* the board's filters for one sport tab: the tab a member opens starts on All markets and all games (as the sport action does) */
+  const boardFilter=(sport=H.sport)=>({...filters(),sport,...(sport===H.sport?{}:{stat:'all',game:'all'}),minGrade:gradeFilterOn(sport)?H.minGrade:'all'});
+  /* N11: search reads the name, team, game and market, plus the exact other spellings the server sends for the row's two teams
+     (the book's own name and maintained team aliases: player.aka). Plain substring of those exact strings, nothing fuzzy. */
+  const searchText=r=>[r.player.name,r.player.team,r.event.label,r.market.stat_label,...(Array.isArray(r.player.aka)?r.player.aka:[])].join(' ').toLowerCase();
+  const boardSource=()=>isExtra(H.book)?H.extraRecs:H.records;
   function rows() {
     // owner rules (no unsure labels; transient failures hide the line): a row whose source is stale, failed or held is left off, never labelled
     // games stay together: start time, then the game, then the player (a game header row opens each run)
     // never sort by an empty column: with no edge on any shown line, Edge sorting falls back to start time and the sort control says so
-    const list=(isExtra(H.book)?H.extraRecs:H.records).filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r));
+    const f=boardFilter(), list=boardSource().filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r,f));
     const sort=SORT_KEYS.includes(H.sort)?H.sort:DEFAULT_SORT;
     H.sortFallback=(sort==='edge'&&!list.some(r=>edgeValue(r)!=null))||(sort==='medge'&&!list.some(r=>mxValue(r)!=null))||(sort==='hit'&&!list.some(r=>parOf(r)?.hit))||(WINDOWS.has(sort)&&!list.some(r=>sortValue(r,sort)!=null));
     H.sortBy=H.sortFallback?'start':sort;
@@ -136,7 +148,7 @@ export function mount(C) {
   }
   const sortName=k=>(SORTS.find(x=>x[0]===k)||[k,k])[1];
   /* the filters that live in the Filters pop-over; the count on its button. Search, sport and platform are on the toolbar itself */
-  const activeFilters = () => [H.stat!=='all',H.side!=='all',H.minGrade!=='all',H.onlyDiff,H.watched,H.freshOnly,H.soonOnly,H.movedOnly,H.game!=='all'].filter(Boolean).length;
+  const activeFilters = () => [H.stat!=='all',H.side!=='all',H.minGrade!=='all'&&gradeFilterOn(),H.onlyDiff,H.watched,H.freshOnly,H.soonOnly,H.movedOnly,H.game!=='all'].filter(Boolean).length;
   const BOOK_SHORT={prizepicks:'PP',underdog:'UD',...Object.fromEntries((EXTRA||[]).map(x=>[x.id,x.short||x.label]))};
   /* 'yes' = lines on this tab now; 'no' = the server counted 0 open lines on every sport here (or the book lists none of them);
      'unknown' = no count yet for a sport here (first read pending, or a feed blip with no earlier count). Unknown never moves a member
@@ -175,6 +187,8 @@ export function mount(C) {
     if(H.section==='board')paintBoard();else syncBooks();
   }
   function syncFields() {
+    H.graded=new Set(currentLines().filter(graded).map(r=>r.sport));
+    $('hub-minGrade').closest('label').hidden=!gradeFilterOn();
     for(const n of ['side','q','minGrade']) $('hub-'+n).value=H[n];
     $('hub-sort').value=SORT_KEYS.includes(H.sort)?H.sort:DEFAULT_SORT;
     const dirBtn=$('hub-sort-dir');if(dirBtn){const asc=H.sortDir==='asc';dirBtn.setAttribute('aria-label',`${sortName(H.sort)}: ${asc?'low to high':'high to low'}. Reverse order`);dirBtn.dataset.dir=asc?'asc':'desc';dirBtn.textContent=asc?'↑':'↓';}
@@ -184,7 +198,10 @@ export function mount(C) {
     $('hub-watch').setAttribute('aria-pressed',String(H.watched));
     if(V2)for(const f of ['freshOnly','soonOnly','movedOnly'])$('hub-'+f).setAttribute('aria-pressed',String(H[f]));
     const read=s=>s==='all'?allowed().every(x=>R.boards[x]?.at):!!R.boards[s]?.at;
-    $('hub-sports').innerHTML=['all',...allowed()].map(s=>`<button type="button" data-hub="sport" data-id="${s}" aria-pressed="${H.sport===s}">${s==='all'?'All':SPORTS[s]}${read(s)?`<span>${H.records.filter(r=>!C.started(r)&&(s==='all'||r.sport===s)).length}</span>`:'<span class="h-n-wait" aria-hidden="true"></span>'}</button>`).join('');
+    /* N13 (site audit 2026-11-06): a tab's count is the lines that tab lists, by the board's own rule (current lines only, the
+       toolbar's search, platform and filters), so the open tab always equals the count over the list */
+    const tabCount=s=>{const f=boardFilter(s);return boardSource().filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r,f)).length;};
+    $('hub-sports').innerHTML=['all',...allowed()].map(s=>`<button type="button" data-hub="sport" data-id="${s}" aria-pressed="${H.sport===s}">${s==='all'?'All':SPORTS[s]}${read(s)?`<span>${tabCount(s)}</span>`:'<span class="h-n-wait" aria-hidden="true"></span>'}</button>`).join('');
     const sportRows=H.records.filter(r=>!C.started(r)&&(H.sport==='all'||r.sport===H.sport));
     const markets=[...new Map(sportRows.map(r=>[statKey(r),r.market.stat_label+(H.sport==='all'?' · '+SPORTS[r.sport]:'')])).entries()];
     $('hub-stat').innerHTML='<option value="all">All markets</option>'+markets.sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
@@ -513,7 +530,7 @@ export function mount(C) {
   /* an empty board says only what the member can act on: how many current lines the filters hide (with Clear filters), or that no
      current line exists (with Refresh). Owner rule: a failed, stale or held line is left off, never labelled. */
   function emptyReasons() {
-    const hidden=currentLines().filter(r=>(H.sport==='all'||r.sport===H.sport)&&!matches(r)).length;
+    const f=boardFilter(), hidden=currentLines().filter(r=>(H.sport==='all'||r.sport===H.sport)&&!matches(r,f)).length;
     if(hidden)return `<b class="h-empty-title">${hidden.toLocaleString()} ${hidden===1?'line':'lines'} hidden by filters</b><button data-hub="clear-filters">Clear filters</button>`;
     return '<b class="h-empty-title">No current lines</b><button data-hub="refresh">Refresh</button>';
   }
@@ -543,6 +560,7 @@ export function mount(C) {
       return head+row(r,group)+(openPlayers.has(boardPlayerKey(r))?group.slice(1).map(x=>row(x)).join(''):'');}).join('');
     $('hub-count').textContent=`${players.length.toLocaleString()} ${players.length===1?'player':'players'} · ${list.length.toLocaleString()} ${list.length===1?'line':'lines'}`;
     $('hub-clear').hidden=!activeFilters()&&H.book==='all'&&!H.q;
+    $('hub-chips').innerHTML=gameChip();
     $('hub-sources').innerHTML=H.loading?$('hub-sources').innerHTML:sourcesHtml();
     /* lc-1 (SCOUT_LETTER_CONTAINMENT, off unless the owner turns it on): one plain-fact banner per visible sport whose letters
        the server holds; those rows read Lean Over/Under with the chance, no letter, 0U */
@@ -561,6 +579,13 @@ export function mount(C) {
     $('hub-views').innerHTML='<option value="">Choose a saved view</option>'+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
     paintStrip();
     restoreFocus();
+  }
+  /* N12 (site audit 2026-11-06): "Show this game's props" (By game) or a game header limits the board to one game; a chip by the
+     count names that game and removes the limit (the Filters badge alone did not say which filter was on) */
+  function gameChip() {
+    if(!H.game||H.game==='all')return '';
+    const r=H.records.find(x=>gameKey(x)===H.game)||H.extraRecs.find(x=>gameKey(x)===H.game), label=r?r.event.label:'One game';
+    return `<button class="h-chip" data-hub="game-clear" aria-label="${esc('Game: '+label+'. Remove this filter')}" title="Show all games"><span>Game: ${esc(label)}</span><b aria-hidden="true">✕</b></button>`;
   }
   function extraBanner() {
     const x=H.extraState,p=EXTRA.find(e=>e.id===H.book),label=esc(p?.label||H.book);
@@ -1585,6 +1610,15 @@ export function mount(C) {
     +'#u-hub .h-pc-wide{display:none}#u-hub .h-pc-narrow{display:inline}#u-hub .h-pc-fair small{display:inline;margin-left:6px}'
     +'#u-hub .h-pc-arb .h-pc-leg::before{content:attr(data-label) " · ";color:var(--u-muted);font-size:12px}#u-hub .h-pc-age{font-size:11px}}';
   function paintMarketResults(){const box=$('hub-market-results');if(box)box.innerHTML=marketHTML();}
+  /* N14: bring Tools' Alerts section to the top of the screen. The Price check above it fills in after its prices load and would
+     push Alerts back down, so until the member scrolls, clicks or types (or 15 s pass) each Price check paint brings it back */
+  function jumpAlerts(focus){
+    const box=$('hub-tools-alerts');if(!box||H.section!=='tools')return;
+    box.scrollIntoView({block:'start'});
+    const h=box.querySelector('h3');if(focus&&h){h.tabIndex=-1;h.focus({preventScroll:true});}
+  }
+  const stopJump=()=>{H.alertsJump=0;};
+  for(const t of ['wheel','touchmove','keydown','pointerdown'])document.addEventListener(t,stopJump,{passive:true,capture:true});
   function paintMarkets(){
     if(!R.me.features?.market_tools||H.section!=='tools')return;
     if(!$('hub-market-results')){
@@ -1604,6 +1638,7 @@ export function mount(C) {
     box.innerHTML=H.marketDoc?marketFilters():'';
     if(had)$(had)?.focus({preventScroll:true});
     paintMarketResults();
+    if(H.alertsJump&&Date.now()-H.alertsJump<15000)jumpAlerts(false);
   }
   function installV2() {
     if(!V2)return;
@@ -1635,6 +1670,12 @@ export function mount(C) {
     $('hub-title').textContent=TITLES[name]||'Player props';
     if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev')paintEv();else paintAlerts();
   }
+  /* old Sports links (site audit 2026-11-06): /sports#/board?lg=nba opened the board on All. A route's sport= wins, then the old
+     lg= (nba / nfl), then, for a bare board link on /sports, NBA as the classic sports page opened; else the tab kept */
+  function routeSport(m) {
+    const q=new URLSearchParams(m[2]||''),lg=q.get('lg');
+    return q.get('sport')||(['nba','nfl'].includes(lg)?lg:null)||(location.pathname==='/sports'&&m[1]==='board'?'nba':null)||H.sport;
+  }
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
     const csBoard=/^#board(?:\/(?:all|prizepicks|underdog))?$/.test(location.hash);
@@ -1644,7 +1685,7 @@ export function mount(C) {
     const open=!classic&&(location.hash==='#all-sports'||!!scout||!!modern||mainBoard||slips);
     if(open&&H.routeHash!==location.pathname+location.hash){
       H.routeHash=location.pathname+location.hash;
-      H.sport=modern?(new URLSearchParams(modern[2]||'').get('sport')||H.sport):scout?(new URLSearchParams(scout[2]||'').get('sport')||H.sport):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
+      H.sport=modern?routeSport(modern):scout?routeSport(scout):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
       if(!allowed().includes(H.sport))H.sport='all';
       const deep=R.me.features?.background_alerts?new URLSearchParams((modern?modern[2]:scout?scout[2]:'')||'').get('open'):null;
       if(deep&&deep.length<=300)H.pendingOpen=deep;
@@ -1669,9 +1710,18 @@ export function mount(C) {
   /* the Filters and Views pop-overs and the phone's More sheet: one open at a time; a click outside or Escape closes it */
   const POPS={filter:['hub-filters-toggle','hub-filter-pop'],views:['hub-views-toggle','hub-views-pop'],more:['hub-more-toggle','hub-more']};
   function togglePop(which) {
-    for(const [w,[btn,pop]] of Object.entries(POPS)){const open=w===which&&$(pop).hidden;$(pop).hidden=!open;$(btn).setAttribute('aria-expanded',String(open));}
+    for(const [w,[btn,pop]] of Object.entries(POPS)){const open=w===which&&$(pop).hidden;$(pop).hidden=!open;$(btn).setAttribute('aria-expanded',String(open));if(open)fitPop($(pop));}
+  }
+  /* N10 (site audit 2026-11-06): a pop-over anchored to a button that wrapped to the toolbar's left edge opened partly off screen
+     ("ed views"). After opening, it is moved sideways just enough to sit 8px inside the window on both sides. */
+  function fitPop(pop) {
+    pop.style.transform='';
+    const r=pop.getBoundingClientRect(),vw=document.documentElement.clientWidth,pad=8;
+    const dx=r.left<pad?pad-r.left:r.right>vw-pad?Math.max(pad-r.left,vw-pad-r.right):0;
+    if(dx)pop.style.transform=`translateX(${Math.round(dx)}px)`;
   }
   const openPop = () => Object.entries(POPS).find(([,[,pop]])=>!$(pop).hidden)?.[0]||null;
+  window.addEventListener('resize',()=>{const w=openPop();if(w)fitPop($(POPS[w][1]));});
   const rec = id => H.records.find(r=>key(r)===id)||H.extraRecs.find(r=>key(r)===id);
   const actions={
     'share-card'(){C.shareSlip();},
@@ -1685,12 +1735,15 @@ export function mount(C) {
     'mt-jump'(){$('hub-market-tools')?.scrollIntoView({block:'start'});$('hub-market-tools')?.querySelector('h2')?.focus?.({preventScroll:true});},
     'clear-filters'(){Object.assign(H,{book:'all',q:'',stat:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,game:'all',page:0});paintBoard();},
     view(id){H.view=id==='games'?'games':'list';H.page=0;section('board');},
+    /* N14 (site audit 2026-11-06): opens Tools scrolled to its Alerts section (it opened at the top of Tools) */
+    'manage-alerts'(){togglePop(null);section('tools');H.alertsJump=Date.now();jumpAlerts(true);},
     section(id){if(id==='board')H.view='list';if(id==='studio')H.studioTab='slip';section(id);},
     'studio-open'(id){H.studioTab=['slip','build','tracked'].includes(id)?id:'slip';section('studio');},
     'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();sectionFocus('studio-tab',id);},
     sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;H.view==='games'?section('games'):section('board');scrollTop();load(false);},
     'sort-col'(id){if(!SORT_KEYS.includes(id))return;setSort(id,H.sortBy===id&&H.sort===id?(H.sortDir==='asc'?'desc':'asc'):sortDirOf(id));document.querySelector(`#hub-table [data-hub="sort-col"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});},
     'sort-dir'(){setSort(H.sort,H.sortDir==='asc'?'desc':'asc');},
+    'game-clear'(){H.game='all';H.page=0;paintBoard();$('hub-filters-toggle')?.focus({preventScroll:true});},
     game(id){H.game=H.game===id?'all':id;H.page=0;paintBoard();document.querySelector(`#hub-rows [data-hub="game"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});},
     page(id){H.page+=Number(id);paintBoard();$('hub-table').scrollIntoView({block:'start'});},
     'player-props'(id){const open=rec(H.expanded);if(openPlayers.has(id)){openPlayers.delete(id);if(cardOpen()&&open&&boardPlayerKey(open)===id)closeCard(false);}else openPlayers.add(id);paintBoard();},
@@ -1756,11 +1809,11 @@ export function mount(C) {
               <div class="h-quick"><button id="hub-diff" data-hub="diff" aria-pressed="false">Lines differ</button><button id="hub-watch" data-hub="watched" aria-pressed="false">★ Watchlist</button></div>
               <div class="h-pop-foot"><button data-hub="clear-filters">Clear filters</button><button data-hub="filters">Done</button></div></div></div>
           <div class="h-pop-wrap"><button id="hub-views-toggle" data-hub="views-menu" aria-expanded="false" aria-controls="hub-views-pop">Views <span aria-hidden="true">▾</span></button>
-            <div id="hub-views-pop" class="h-pop h-pop-end" role="group" aria-label="Saved views and alerts" hidden><label>Saved views<select id="hub-views"><option value="">Choose a saved view</option></select></label><button data-hub="save-view">Save this view</button><button data-hub="save-alert">${BG?'Alert me on these filters':'Live highlight these filters'}</button><button data-hub="section" data-id="tools">Manage alerts →</button></div></div>
+            <div id="hub-views-pop" class="h-pop h-pop-end" role="group" aria-label="Saved views and alerts" hidden><label>Saved views<select id="hub-views"><option value="">Choose a saved view</option></select></label><button data-hub="save-view">Save this view</button><button data-hub="save-alert">${BG?'Alert me on these filters':'Live highlight these filters'}</button><button data-hub="manage-alerts">Manage alerts →</button></div></div>
           <button class="h-refresh" data-hub="refresh" aria-label="Refresh all boards" title="Refresh">↻</button>
         </div>
         <div id="hub-sources" class="h-sources" role="status"></div><div id="hub-health" class="h-health" role="status"></div>
-        <div class="h-table-title"><h2 class="u-sr">Available lines</h2><span id="hub-count"></span><button id="hub-clear" class="h-link" data-hub="clear-filters" hidden>Clear filters</button><div class="h-sortbar"><label for="hub-sort">Sort</label><select id="hub-sort">${SORTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select><button id="hub-sort-dir" class="h-sort-dir" data-hub="sort-dir" type="button">↓</button></div><small id="hub-sort-note" class="h-sort-note" role="status"></small><div class="h-segment h-viewmode" role="group" aria-label="Board view"><button data-hub="view" data-id="list" aria-pressed="true">List</button><button data-hub="view" data-id="games" aria-pressed="false">By game</button></div></div>
+        <div class="h-table-title"><h2 class="u-sr">Available lines</h2><span id="hub-count"></span><div id="hub-chips" class="h-chips"></div><button id="hub-clear" class="h-link" data-hub="clear-filters" hidden>Clear filters</button><div class="h-sortbar"><label for="hub-sort">Sort</label><select id="hub-sort">${SORTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select><button id="hub-sort-dir" class="h-sort-dir" data-hub="sort-dir" type="button">↓</button></div><small id="hub-sort-note" class="h-sort-note" role="status"></small><div class="h-segment h-viewmode" role="group" aria-label="Board view"><button data-hub="view" data-id="list" aria-pressed="true">List</button><button data-hub="view" data-id="games" aria-pressed="false">By game</button></div></div>
         <div class="h-table-wrap"><table id="hub-table" class="h-table"><thead></thead><tbody id="hub-rows"></tbody></table><div id="hub-empty" class="h-empty" role="status">Loading the available boards…</div></div>
         <div id="hub-games-body" class="h-game-grid" hidden></div>
         <div id="hub-pagination" class="h-pagination"></div></section>
@@ -1814,7 +1867,8 @@ export function mount(C) {
   $('hub-save-dialog').addEventListener('close',()=>{
     if($('hub-save-dialog').returnValue!=='save')return;
     const name=$('hub-save-name').value.trim();if(!name)return;
-    const v={id:Date.now().toString(36),name,filters:filters()};
+    /* N6: a view or alert saved where Minimum grade is hidden (no letters on the tab) saves what the board applies there */
+    const v={id:Date.now().toString(36),name,filters:{...filters(),minGrade:gradeFilterOn()?H.minGrade:'all'}};
     if(H.saveKind==='alert'){H.alerts=[...H.alerts,v].slice(-12);checkAlerts();}else H.views=[...H.views,v].slice(-12);
     savePreferences();paintBoard();C.say(H.saveKind==='alert'?(BG?'Alert saved. Turn on Whop delivery under Alerts to get it when Scout is closed.':'Live highlight saved for this research screen.'):'Research view saved.');
   });
