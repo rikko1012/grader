@@ -99,7 +99,7 @@ export function mount(C) {
       && (!f.freshOnly||!unavailableReason(r))
       && (!f.movedOnly||r.offer.moved_from!=null)
       && (!f.soonOnly||(Date.parse(r.event.start_utc)>Date.now()&&Date.parse(r.event.start_utc)-Date.now()<=3600000))
-      && (!f.q||searchText(r).includes(f.q.toLowerCase()));
+      && (!fold(f.q)||searchText(r).includes(fold(f.q)));
   }
   /* N6 (site audit 2026-11-06): Side reads Scout's lean; a line with no lean (most NBA / NFL rows) is listed under each side its book
      offers, so "Under" never empties a board that has Under lines. Minimum grade applies only where the tab has letters to rank: on a
@@ -111,7 +111,11 @@ export function mount(C) {
   const boardFilter=(sport=H.sport)=>({...filters(),sport,...(sport===H.sport?{}:{stat:'all',game:'all'}),minGrade:gradeFilterOn(sport)?H.minGrade:'all'});
   /* N11: search reads the name, team, game and market, plus the exact other spellings the server sends for the row's two teams
      (the book's own name and maintained team aliases: player.aka). Plain substring of those exact strings, nothing fuzzy. */
-  const searchText=r=>[r.player.name,r.player.team,r.event.label,r.market.stat_label,...(Array.isArray(r.player.aka)?r.player.aka:[])].join(' ').toLowerCase();
+  /* QOL 2026-11-07: case, accents and extra spaces never hide a row ("jokic" finds Jokić, " vargo  " finds vargo). The same exact
+     strings, only folded; one folded copy per record (records are replaced on every board read) */
+  const fold=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+  const SEARCH_TEXT=new WeakMap();
+  const searchText=r=>{let t=SEARCH_TEXT.get(r);if(t==null){t=fold([r.player.name,r.player.team,r.event.label,r.market.stat_label,...(Array.isArray(r.player.aka)?r.player.aka:[])].join(' '));SEARCH_TEXT.set(r,t);}return t;};
   const boardSource=()=>isExtra(H.book)?H.extraRecs:H.records;
   function rows() {
     // owner rules (no unsure labels; transient failures hide the line): a row whose source is stale, failed or held is left off, never labelled
@@ -576,9 +580,26 @@ export function mount(C) {
     if(H.loading)$('hub-empty').textContent='Loading the available boards…';
     else if(!list.length)$('hub-empty').innerHTML=emptyReasons();
     $('hub-pagination').innerHTML=games||!players.length?'':`<span>${H.page*size+1}–${Math.min((H.page+1)*size,players.length)} of ${players.length} players</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
-    $('hub-views').innerHTML='<option value="">Choose a saved view</option>'+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
+    /* QOL 2026-11-07: with nothing saved the menu says so and looks disabled (it offered "Choose a saved view" with nothing to choose) */
+    $('hub-views').innerHTML=`<option value="">${H.views.length?'Choose a saved view':'No saved views yet'}</option>`+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
+    $('hub-views').disabled=!H.views.length;
     paintStrip();
+    keepBoard();
     restoreFocus();
+  }
+  /* QOL 2026-11-07: the toolbar's search, platform and filters survive a reload or a trip back to this tab (this browser tab only,
+     sessionStorage; a new visit starts clean). The sport is already in the address; sort has its own saved choice. Display state only. */
+  const BOARD_SS=()=>'scout-board-state:'+(R.me?.member||'me');
+  const BOARD_KEEP=['q','book','side','minGrade','onlyDiff','watched','freshOnly','soonOnly','movedOnly'];
+  function keepBoard(){try{sessionStorage.setItem(BOARD_SS(),JSON.stringify(Object.fromEntries(BOARD_KEEP.map(k=>[k,H[k]]))));}catch(e){/* private mode: nothing kept */}}
+  function restoreBoard(){
+    let v=null;try{v=JSON.parse(sessionStorage.getItem(BOARD_SS())||'null');}catch(e){return;}
+    if(!v||typeof v!=='object')return;
+    if(typeof v.q==='string')H.q=v.q.slice(0,100);
+    if(['all','prizepicks','underdog',...(EXTRA||[]).map(x=>x.id)].includes(v.book))H.book=v.book;
+    if(['all','over','under'].includes(v.side))H.side=v.side;
+    if(v.minGrade==='all'||gradeOrder.includes(v.minGrade))H.minGrade=v.minGrade;
+    for(const k of ['onlyDiff','watched',...(V2?['freshOnly','soonOnly','movedOnly']:[])])if(typeof v[k]==='boolean')H[k]=v[k];
   }
   /* N12 (site audit 2026-11-06): "Show this game's props" (By game) or a game header limits the board to one game; a chip by the
      count names that game and removes the limit (the Filters badge alone did not say which filter was on) */
@@ -644,15 +665,17 @@ export function mount(C) {
   /* audit 2026-11-04 (polling): read only the sport(s) on screen. Another sport's board is read when its tab opens; the minute
      refresh runs only while the board is on screen and the page is visible; the browser revalidates each read with its ETag (304). */
   const visibleSports = () => H.sport==='all'?allowed():allowed().filter(s=>s===H.sport);
+  /* QOL 2026-11-07: the refresh button shows it is working while the boards are read (it gave no sign a click did anything) */
+  const busyRefresh = on => document.querySelectorAll('#u-hub .h-refresh').forEach(b=>{b.setAttribute('aria-busy',String(on));b.title=on?'Refreshing…':'Refresh';});
   async function load(force=false, sports=visibleSports()) {
     if(H.loading){H.queued=[...new Set([...(H.queued||[]),...sports])];H.queuedForce=H.queuedForce||force;return;}
-    H.loading=true; paintBoard();
+    H.loading=true; busyRefresh(true); paintBoard();
     await Promise.allSettled(sports.map(s=>C.loadBoard(s,force)));
     H.lastLoad=Date.now();
     H.records=allowed().flatMap(s=>[...R.boards[s].recs.values()]);
     const current=rec(H.detail),shown=H.detailDoc?.record;
     if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;paintDetail();}
-    H.loading=false; paintBoard(); checkAlerts();
+    H.loading=false; busyRefresh(false); paintBoard(); checkAlerts();
     if(isExtra(H.book))loadExtra();
     loadBookLines();
     loadMarketEdge(sports);
@@ -769,7 +792,12 @@ export function mount(C) {
     const same=cardOpen()&&H.expanded===id;
     H.cardTab=CARD_TABS.some(t=>t[0]===tab)?tab:'overview';
     if(same){paintDetail();return Promise.resolve();}
-    if(!cardOpen())H.cardFrom=document.activeElement;
+    if(!cardOpen()){
+      H.cardFrom=document.activeElement;
+      /* QOL 2026-11-07: on a phone the card fills the screen, so the phone's Back button closes it (it left the board for the page
+         before). One history entry at the same address; closing the card any other way takes that entry back off. */
+      if(!DESKTOP.matches&&!history.state?.hubCard){try{history.pushState({hubCard:1},'',location.href);H.cardPushed=true;}catch(e){}}
+    }
     const sd=r.scout.side;
     H.expanded=id;H.histN=10;H.histSide=sd&&r.offer[sd]?.offered?sd:r.offer.over.offered?'over':r.offer.under.offered?'under':(sd||'over');
     $('hub-card').hidden=false;$('u-hub').classList.add('h-card-open');
@@ -781,6 +809,9 @@ export function mount(C) {
     const id=H.expanded;
     H.expanded=null;H.detail=null;H.detailDoc=null;H.detailSeq++;
     $('hub-card').hidden=true;$('u-hub').classList.remove('h-card-open');$('hub-detail').innerHTML='';
+    /* closed in place (Back button, Escape, the row again): take the phone's extra history entry off, so Back then leaves as before.
+       Closed by moving to another page: the entry stays behind as a plain board entry (Back shows the board). */
+    if(H.cardPushed){H.cardPushed=false;if(restore&&history.state?.hubCard){H.popSkip=true;history.back();}}
     paintBoard();
     if(!restore)return;
     const back=id&&document.querySelector(`#hub-rows .h-player[data-id="${CSS.escape(id)}"]`);
@@ -1681,6 +1712,10 @@ export function mount(C) {
     if(!SECTIONS.includes(name))name='board';
     if(name!=='board'&&cardOpen())closeCard(false);
     togglePop(null);
+    /* QOL 2026-11-07: leaving the board for Slips, My picks, Record or Tools and coming back (tab bar, sidebar or Back) returns to the
+       same place in the list; it opened at the top. A sport tab or a game link still starts at the top (they reset it after this). */
+    const from=H.section,center=$('hub-center');
+    if(from==='board'&&name!=='board'&&center)H.boardScroll=center.scrollTop;
     H.section=name;
     const games=name==='board'&&H.view==='games';
     if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
@@ -1690,7 +1725,7 @@ export function mount(C) {
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('u-hub').classList.toggle('h-board-mode',name==='board');
     $('hub-title').textContent=TITLES[name]||'Player props';
-    if(name==='board')paintBoard();else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev')paintEv();else paintAlerts();
+    if(name==='board'){paintBoard();if(from!=='board'&&H.boardScroll!=null&&center){center.scrollTop=H.boardScroll;H.boardScroll=null;}}else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev')paintEv();else paintAlerts();
   }
   /* old Sports links (site audit 2026-11-06): /sports#/board?lg=nba opened the board on All. A route's sport= wins, then the old
      lg= (nba / nfl), then, for a bare board link on /sports, NBA as the classic sports page opened; else the tab kept */
@@ -1707,6 +1742,7 @@ export function mount(C) {
     const open=!classic&&(location.hash==='#all-sports'||!!scout||!!modern||mainBoard||slips);
     if(open&&H.routeHash!==location.pathname+location.hash){
       H.routeHash=location.pathname+location.hash;
+      const wasSport=H.sport;
       H.sport=modern?routeSport(modern):scout?routeSport(scout):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
       if(!allowed().includes(H.sport))H.sport='all';
       const deep=R.me.features?.background_alerts?new URLSearchParams((modern?modern[2]:scout?scout[2]:'')||'').get('open'):null;
@@ -1715,7 +1751,11 @@ export function mount(C) {
       if(csBoard&&['all','prizepicks','underdog'].includes(routeBook))H.book=routeBook;
       const tab=new URLSearchParams((modern?modern[2]:scout?scout[2]:location.hash.split('?')[1])||'').get('tab');
       if(['slip','build','tracked'].includes(tab))H.studioTab=tab;
-      H.stat='all';H.game='all';H.page=0;
+      /* QOL 2026-11-07: Back from Slips / My picks to the same sport keeps the market, game and page the member left (they were reset,
+         so Back lost the place). A different sport starts clean as before; By game always lists every game. */
+      if(H.sport!==wasSport||!H.routed){H.stat='all';H.game='all';H.page=0;}
+      else if((modern||scout)?.[1]==='games')H.game='all';
+      H.routed=true;
     }
     $('u-hub').hidden=!open; document.documentElement.classList.toggle('hub-open',open);
     // Original content remains mounted, but keyboard/screen readers cannot enter the hidden layer.
@@ -1752,7 +1792,8 @@ export function mount(C) {
     'game-board'(id){H.game=id;H.view='list';H.page=0;section('board');$('hub-center').scrollTop=0;},
     generate, 'use-generated':useGenerated, 'open-generated':i=>C.openGenerated(H.batch?.slips?.[Number(i)]), 'open-line':()=>C.openLine(rec(H.detail),H.histSide), 'save-batch':saveBatch,
     'player-market'(id){if(rec(id))openCard(id,H.cardTab);},
-    filters(){togglePop('filter');}, 'views-menu'(){togglePop('views');}, more(){togglePop('more');},
+    /* QOL 2026-11-07: Done inside the pop-over hands focus back to the Filters button (it stayed on the hidden Done button) */
+    filters(id,el){togglePop('filter');if(el?.closest('.h-pop'))$('hub-filters-toggle').focus({preventScroll:true});}, 'views-menu'(){togglePop('views');}, more(){togglePop('more');},
     book(id){if(!['all','prizepicks','underdog'].includes(id)&&!isExtra(id))return;if(!bookHasLines(id))return;H.book=id;H.page=0;paintBoard();if(isExtra(id))loadExtra();},
     'mt-jump'(){$('hub-market-tools')?.scrollIntoView({block:'start'});$('hub-market-tools')?.querySelector('h2')?.focus?.({preventScroll:true});},
     'clear-filters'(){Object.assign(H,{book:'all',q:'',stat:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,game:'all',page:0});paintBoard();},
@@ -1888,7 +1929,11 @@ export function mount(C) {
   /* LoL draws its filter bar after its data loads: the entry then moves from the sticky header (no room on a phone, where it
      hung below the header over the rows) into that bar, and back into it whenever the page redraws the bar (audit 2026-11-05) */
   if(document.body.classList.contains('ot-lol')){let q=0;new MutationObserver(()=>{if(q)return;q=requestAnimationFrame(()=>{q=0;const bar=document.querySelector('.ot-lol .bar');if(bar&&entry.parentNode!==bar)bar.appendChild(entry);});}).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});}
+  /* QOL 2026-11-07: Enter in the name box saves (the form's first button is Cancel, so Enter cancelled and nothing was saved) */
+  $('hub-save-name').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();$('hub-save-confirm').click();}});
   $('hub-save-dialog').addEventListener('close',()=>{
+    /* focus returns to the Views button the dialog was opened from (its menu item is hidden by then) */
+    if(isOpen()&&H.section==='board')$('hub-views-toggle').focus({preventScroll:true});
     if($('hub-save-dialog').returnValue!=='save')return;
     const name=$('hub-save-name').value.trim();if(!name)return;
     /* N6: a view or alert saved where Minimum grade is hidden (no letters on the tab) saves what the board applies there */
@@ -1941,9 +1986,14 @@ export function mount(C) {
   document.addEventListener('pointerdown',e=>{if(isOpen()&&openPop()&&!e.target.closest('.h-pop-wrap,#hub-more,#hub-more-toggle'))togglePop(null);});
   let chartWidth=0;window.addEventListener('resize',()=>{const el=document.querySelector('#hub-detail [data-hub-chart]');if(el&&Math.abs(el.clientWidth-chartWidth)>24){chartWidth=el.clientWidth;drawChart();}});
   for(const f of ['q','side','stat']) $('hub-'+f).addEventListener(f==='q'?'input':'change',()=>{H[f]=$('hub-'+f).value;H.page=0;paintBoard();});
+  /* QOL 2026-11-07: the phone keyboard's Search key puts the keyboard away so the results show (the board filters as you type) */
+  $('hub-q').enterKeyHint='search';
+  $('hub-q').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&!DESKTOP.matches){e.preventDefault();$('hub-q').blur();}});
   $('hub-sort').addEventListener('change',()=>{const k=$('hub-sort').value;if(SORT_KEYS.includes(k))setSort(k,sortDirOf(k));});
   $('hub-minGrade').addEventListener('change',()=>{H.minGrade=$('hub-minGrade').value;H.page=0;paintBoard();});
-  $('hub-views').addEventListener('change',()=>{const i=$('hub-views').value;if(i==='')return;const v=H.views[Number(i)];if(v){H.minGrade='all';for(const k of filterKeys) if(k in v.filters)H[k]=v.filters[k];H.page=0;paintBoard();}});
+  /* QOL 2026-11-07: a saved view on another sport opens that sport properly (its board is read and the address follows, so reload and
+     Back keep it; before, the tab changed but the address and the read did not), the menu closes and a short note names the view */
+  $('hub-views').addEventListener('change',()=>{const i=$('hub-views').value;if(i==='')return;const v=H.views[Number(i)];if(v){const was=H.sport;H.minGrade='all';for(const k of filterKeys) if(k in v.filters)H[k]=v.filters[k];H.page=0;H.view='list';togglePop(null);section('board');if(H.sport!==was){scrollTop();load(false);}$('hub-views-toggle').focus({preventScroll:true});C.say(`Showing your saved view: ${v.name}`);}});
   $('hub-record-sport').addEventListener('change',showRecord);
   function generationControls() {
     const p=$('hub-generation-book').value,old=$('hub-generation-type').value;
@@ -1962,13 +2012,19 @@ export function mount(C) {
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});
   window.addEventListener('hashchange',route);
-  window.addEventListener('popstate',route);
+  window.addEventListener('popstate',e=>{
+    if(H.popSkip){H.popSkip=false;return;}                                         /* the card's own entry, taken off by closeCard */
+    if(H.cardPushed&&cardOpen()&&!e.state?.hubCard){H.cardPushed=false;closeCard();return;}   /* phone Back closes the card */
+    route();
+  });
   window.addEventListener('keydown',e=>{
     if(!isOpen())return;
     if(e.key==='Escape'&&!document.querySelector('dialog[open]')){
       const pop=openPop();
       if(pop){togglePop(null);$(POPS[pop][0]).focus({preventScroll:true});e.preventDefault();return;}
       if(cardOpen()){closeCard();e.preventDefault();return;}
+      /* QOL 2026-11-07: Escape in the search box clears it in every browser (only some did); a second Escape leaves the box */
+      if(e.target.id==='hub-q'){e.preventDefault();if($('hub-q').value){$('hub-q').value='';H.q='';H.page=0;paintBoard();}else $('hub-q').blur();return;}
     }
     // arrow keys move between the card's tabs and the Slips page tabs, as tabs do
     if((e.key==='ArrowRight'||e.key==='ArrowLeft')&&e.target.matches?.('[role="tab"][data-hub]')){
@@ -1986,6 +2042,7 @@ export function mount(C) {
   const mtOld=()=>{const t=Date.parse(H.marketDoc?.as_of);return !Number.isFinite(t)||Date.now()-t>120000;};
   document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='tools'&&H.marketDoc&&!H.marketLoading&&mtOld())actions['refresh-markets']();});
   setInterval(()=>{const box=$('hub-market-results');if(!document.hidden&&H.section==='tools'&&H.marketDoc&&box&&!box.contains(document.activeElement))paintMarketResults();},60000);
+  restoreBoard();
   route();
   loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts'||H.section==='tools')paintAlerts();});
   return {refreshSlip};

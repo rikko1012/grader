@@ -1401,3 +1401,16 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
 /* narrow desktops (one row would need ~1265px): the sport tabs take a row of their own and every control sits on the row under it,
    aligned, instead of whichever control no longer fit dropping alone to a second row */
 @media(min-width:1101px) and (max-width:1270px){#u-hub .h-toolbar{flex-wrap:wrap}#u-hub .h-toolbar .h-sports{flex:1 1 100%}}
+/* QOL 2026-11-07 (board): the refresh button turns while the boards are read; reduced motion gets a dimmed button instead */
+@keyframes h-spin{to{transform:rotate(360deg)}}
+#u-hub .h-refresh[aria-busy=true]{color:#8ab6ff;cursor:progress}
+@media(prefers-reduced-motion:no-preference){#u-hub .h-refresh[aria-busy=true]{animation:h-spin 1s linear infinite}}
+@media(prefers-reduced-motion:reduce){#u-hub .h-refresh[aria-busy=true]{opacity:.6}}
+/* the saved-views menu with nothing saved looks disabled */
+#u-hub #hub-views:disabled{opacity:.6;cursor:not-allowed}
+/* the card's L5 / L10 / L20 window buttons are 40px wide as well as tall on a phone */
+#u-hub .h-card .h-history-controls .h-segment button{min-width:40px}
+/* phone: the game header keeps its start countdown (the matchup details are hidden there, and the countdown went with them) */
+@media(max-width:1100px){
+ #u-hub .h-game-head .h-countdown{display:inline-block;flex:none}
+}
