@@ -13,6 +13,16 @@ consensus (10 min) and EV pricing (30 min, gradecore/market_tools.py EV_STALE_S)
 fetch is faster: 3 min inside 2 h of the start, 5 min inside 8 h, 8 min inside 24 h. The books job (sports/scheduler.py
 "books", sports.worker books) checks every minute on a game day, so a quote is at most rung + ~1 min old when read.
 Earlier "full" (10 / 30 / 60 min) left NBA / NFL quotes 16-60 min old, over every one of those rules.
+Owner site audit 2026-11-06 N1: the 24-72 h rung was 180 min, so Sunday NFL games read on a Thursday / Friday held quotes up
+to ~3 h old and the board's Market edge, Best prices and Price check had nothing fresh to read (NFL showed no Market edge
+row). That rung is now 8 min too, so every game within 72 h stays inside the same rules (quote at most 8 min + one ~1-min
+job check old; Market edge / Best prices read workspace_ev.price_limits(), 29 min). The 72-168 h rung stays 12-hourly:
+books rarely list props that far out, and a 10-min read of every game of next week would multiply the requests for lines
+almost nobody prices yet. Request cost (books.plan.estimate, averaged over a week every 3 h: FanDuel 5 tabs per NBA game /
+3 per NFL game, BetRivers 1 per game; 10 NBA games a night + a 16-game NFL week): FanDuel ~590 -> ~1,330 requests/hour
+(peak ~880 -> ~1,590), BetRivers ~130 -> ~290 (peak ~230 -> ~375); both well under net.py's per-host spacing (FanDuel
+2/s = 7,200/h, Kambi 1/s = 3,600/h). The books job also checks every minute while a game is within 72 h (scheduler
+books_gameday_h).
 
 Stale = not seen within 2 x the current rung's interval (at least STALE_MIN_S). A quote is shown with its own
 observation time; it is never labelled current because it sits in storage.
@@ -22,7 +32,7 @@ from datetime import timedelta
 from .store import dt
 
 LADDERS = {
-    "direct": [(2, 3), (8, 5), (24, 8), (72, 180), (168, 720)],
+    "direct": [(2, 3), (8, 5), (24, 8), (72, 8), (168, 720)],
     "full": [(2, 10), (8, 30), (24, 60), (72, 180), (168, 720)],
     "standard": [(2, 20), (8, 60), (24, 180), (72, 720)],
     "lean": [(3, 60), (12, 180), (36, 720)],

@@ -21,7 +21,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
 
 LEAGUES = ("nba", "nfl")
@@ -91,6 +91,7 @@ def reset():
     """Tests: forget every board and the token."""
     for lg in LEAGUES:
         _SNAP[lg] = _empty()
+    _MOVES.clear()
     _TOKEN.update(token=None, exp=0.0, base=None)
     _BREAK["until"] = 0.0
 
@@ -507,7 +508,68 @@ def _part(srv, lg, part, etag):
     except Down:
         if part == "primary":
             raise
-        return {}, None                         # secondary markets or hit rates missing: the primary board still stands
+        return None, None                       # secondary markets or hit rates missing: None = this part's read failed
+
+
+KEEP_MIN = 20       # site audit N2: a pick'em platform that held at least this many lines and comes back with none is a failed read
+PART_KEEP_S = 10 * 60   # a secondary part (more markets / hit rates) that stays down longer than this: the partial board is taken
+
+
+def _keep_last(s, counts, failed):
+    """Owner site audit 2026-11-06 N2 (NBA board went to "0 players · 0 lines" until Refresh): a refresh that came back without a
+    pick'em platform's lines (PrizePicks or Underdog from many lines to none, the whole board empty included) keeps the last good
+    snapshot instead of replacing it, while that snapshot is under STALE_S old (its own board time); after that the new answer is
+    taken as it is, so a slate that really emptied never freezes the board. A refresh that failed part way (the secondary markets
+    or the hit rates did not answer) keeps it too, but only PART_KEEP_S past the last complete build, so a part that stays down
+    never holds the primary lines back for long (they are then shown without that part, as before). Transient-failure rule: a
+    failed read never becomes the board."""
+    if s["body"] is None:
+        return False
+    t = _ts(s["as_of"])
+    if t is None or (datetime.now(timezone.utc) - t).total_seconds() > STALE_S:
+        return False
+    if failed and time.time() - (s.get("good_at") or 0.0) < PART_KEEP_S:
+        return True
+    return any(n >= KEEP_MIN and not counts.get(p) for p, n in (s.get("counts") or {}).items() if p in PICKEM)
+
+
+# Site audit N7 (Filters > Line moved showed 0 of 5,641 NBA lines): the sports board carries no opening line, so this server
+# notes the first standard line it saw per platform / event / player / stat / period and the time it last changed. A line that
+# differs from that first sighting carries moved_from (that line) and moved_at, as the CS2 board does from its own open_line.
+# Only moves Scout itself observed (a restart starts again from the lines then on the board); display only, never a grade
+# input. Bounded: markets whose start is more than MOVES_KEEP_S past leave, and at most MOVES_MAX per league are held.
+MOVES_KEEP_S = 6 * 3600
+MOVES_MAX = 4 * 6000
+_MOVES = {}
+
+
+def _move_key(rec, x):
+    return (x["p"], x["e"], x["pkey"], x["st"], x["scope"]) if rec["market"]["line_type"] == "standard" else None
+
+
+def _note_move(lg, rec, x, now_iso, seen):
+    k = _move_key(rec, x)
+    if k is None or seen.get(k, 0) != 1:             # two standard lines on one platform market: no single opening line
+        return
+    line = x["l"]
+    moves = _MOVES.setdefault(lg, {})
+    m = moves.get(k)
+    if m is None:
+        m = moves[k] = {"open": line, "line": line, "at": None, "start": x.get("start")}
+    elif m["line"] != line:
+        m.update(line=line, at=now_iso, start=x.get("start"))
+    if m["open"] != line:
+        rec["offer"]["moved_from"], rec["offer"]["moved_at"] = m["open"], m["at"]
+
+
+def _prune_moves(lg, now):
+    moves = _MOVES.get(lg) or {}
+    cut = now - timedelta(seconds=MOVES_KEEP_S)
+    for k in [k for k, m in moves.items() if (_ts(m.get("start")) or now) < cut]:
+        moves.pop(k, None)
+    if len(moves) > MOVES_MAX:
+        for k in sorted(moves, key=lambda k: str(moves[k].get("start") or ""))[:len(moves) - MOVES_MAX]:
+            moves.pop(k, None)
 
 
 def _build(srv, lg):
@@ -526,7 +588,9 @@ def _build(srv, lg):
         head, tag = _part(srv, lg, "primary", None)
     more, m_tag = _part(srv, lg, "more", None)
     view = (v_doc or {}).get("rows") or {}
-    records, index, props, platforms = [], {}, {}, {}
+    records, index, props, platforms, counts, seen, built = [], {}, {}, {}, {}, {}, []
+    now = datetime.now(timezone.utc)
+    now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     for doc in (head, more or {}):
         for m in doc.get("markets") or []:
             if not full_game_key(m.get("k")):
@@ -540,19 +604,31 @@ def _build(srv, lg):
                     continue
                 board_parity.attach(rec)                # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
                 records.append(rec)
-                x["rec"] = json.dumps(rec, default=str, separators=(",", ":")).encode()
+                built.append((rec, x))
+                counts[q["p"]] = counts.get(q["p"], 0) + 1
+                mk = _move_key(rec, x)
+                if mk is not None:
+                    seen[mk] = seen.get(mk, 0) + 1
                 x["books"] = _book_rows(m.get("mk"), q.get("l"))
                 index[(q["p"], x["rid"])] = x
                 props.setdefault((x["e"], x["pkey"], x["st"], x["scope"]), []).append((q["p"], x["rid"]))
                 platforms.setdefault(q["p"], {"label": book_label(q["p"]), "short": book_short(q["p"]), "slip": q["p"] in PICKEM, "kind": _kind(q["p"]),
                                               **({"types": [["standard", "Standard"], ["flex", "Flex"]] if q["p"] == "underdog" else [["power", "Power"], ["flex", "Flex"]]} if q["p"] in PICKEM else {})})
+    for rec, x in built:                            # site audit N7: after the whole board is read, so a doubled line is known
+        _note_move(lg, rec, x, now_iso, seen)
+        x["rec"] = json.dumps(rec, default=str, separators=(",", ":")).encode()
+    _prune_moves(lg, now)
+    if _keep_last(s, counts, v_doc is None or more is None):
+        s["at"] = time.time()                       # the etags stay the last good build's: the next build reads every part again
+        return 200, s["body"]
     as_of = head.get("as_of") or head.get("built_at")
     feeds = _feeds(as_of, [p for p in PICKEM if p in platforms])
     body = json.dumps({"sport": lg, "version": head.get("version"), "board_at": as_of, "feeds": feeds, "platforms": platforms, "records": records}, default=str, separators=(",", ":")).encode()
     if s["body"] == body:
         body = s["body"]
     _SNAP[lg] = dict(s, at=time.time(), body=body, index=index, props=props, feeds=feeds, as_of=as_of, gen=s["gen"] + 1, injuries=head.get("injuries") or {},
-                     etags={"primary": tag, "view": v_tag, "more": m_tag})
+                     etags={"primary": tag, "view": v_tag, "more": m_tag}, counts=counts,
+                     good_at=time.time() if v_doc is not None and more is not None else s.get("good_at", 0.0))
     return 200, body
 
 

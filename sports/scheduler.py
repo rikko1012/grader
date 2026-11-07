@@ -203,7 +203,7 @@ def default_jobs():
         # (owner 2026-11-06, book-cadence): inside a ~4-minute ingest cycle that waited behind settle (~20 min) the
         # quotes were read every 36-60 min and failed every consumer's freshness rule (market chance 15 min, Tools +EV
         # 30 min). Every minute on a game day it checks books.db (no request) and reads only the games the direct
-        # ladder says are due (books/schedule.py: 3 / 5 / 8 min inside 2 / 8 / 24 h). Light: no heavy slot, so settle
+        # ladder says are due (books/schedule.py: 3 / 5 / 8 / 8 min inside 2 / 8 / 24 / 72 h). Light: no heavy slot, so settle
         # / board builds / sheets never hold it back; its writes are short per-game transactions (books.db under the
         # books worker's lease, sc-1 offers in BEGIN IMMEDIATE with a 30 s busy timeout). SPORTS_BOOKS_JOB=0 puts the
         # books source back into the ingest cycles (rollback).
@@ -389,6 +389,9 @@ def cadence_settings():
             "books_hot_s": _env_num("SPORTS_BOOKS_HOT_S", 60.0),
             "books_gameday_s": _env_num("SPORTS_BOOKS_GAMEDAY_S", 60.0),
             "books_idle_s": _env_num("SPORTS_BOOKS_IDLE_S", 180.0),
+            # site audit 2026-11-06 N1: the books job checks at its game-day pace while a game is within this many hours (the
+            # books ladder reads every game inside 72 h every 3-8 min, so a quote stays under the 10-min Price check rule)
+            "books_gameday_h": _env_num("SPORTS_BOOKS_GAMEDAY_H", 72.0),
             "kalshi_hot_s": _env_num("SPORTS_KALSHI_HOT_S", 600.0 if std else 1200.0),
             "kalshi_idle_s": _env_num("SPORTS_KALSHI_IDLE_S", 1800.0 if std else 3600.0)}
 
@@ -401,7 +404,7 @@ def _iso_ts(x):
         return None
 
 
-def league_phase(league, now_ts, snap_root=None):
+def league_phase(league, now_ts, snap_root=None, gameday_h=None):
     """'hot' (earliest upcoming tip within hot_h hours), 'gameday' (a tip within gameday_h hours or a game under way),
     'idle', or 'unknown' (no slate file yet). From the league's slate snapshot (<snapshots>/<league>/slate.json - a
     small file the board build writes), never the store."""
@@ -426,7 +429,7 @@ def league_phase(league, now_ts, snap_root=None):
             live = True
     if nxt is not None and nxt - now_ts <= c["hot_h"] * 3600:
         return "hot"
-    if live or (nxt is not None and nxt - now_ts <= c["gameday_h"] * 3600):
+    if live or (nxt is not None and nxt - now_ts <= (c["gameday_h"] if gameday_h is None else gameday_h) * 3600):
         return "gameday"
     return "idle"
 
@@ -440,6 +443,7 @@ def cadence_every(cadence, now_ts, snap_root=None):
     if kind == "kalshi":
         return c["kalshi_hot_s"] if "hot" in phases else c["kalshi_idle_s"]
     if kind == "books":                 # the check is a books.db read; requests follow the direct ladder, not this
+        phases = {league_phase(x, now_ts, snap_root, gameday_h=c["books_gameday_h"]) for x in leagues}
         if "hot" in phases:
             return c["books_hot_s"]
         return c["books_gameday_s"] if ("gameday" in phases or "unknown" in phases) else c["books_idle_s"]

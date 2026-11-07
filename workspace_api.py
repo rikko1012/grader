@@ -162,6 +162,7 @@ def reset():
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
     _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={}, sigs={})
+    _hits_reset()
     _SLIP_POOL.clear()
     _BOOK_LINES_GOOD.clear()
     _LINE_TYPE_CACHE.clear()
@@ -447,6 +448,8 @@ def _build(srv):
     if _SNAP["body"] == body:
         body = _SNAP["body"]                    # identical bytes: the same object, so nothing is compressed again
     _SNAP.update(at=time.time(), body=body, index=index, props=props, feeds=feeds, gen=_SNAP["gen"] + 1)
+    if _HITS_FILL["srv"] is not None:              # site audit N3: once /hits is read here, each new board is filled in the background
+        _hits_kick(srv, _SNAP)
     return 200, body
 
 
@@ -1527,70 +1530,180 @@ def _tally_of(ser, line, n):
     return {"over": sum(g["value"] > line for g in s), "under": sum(g["value"] < line for g in s), "push": sum(g["value"] == line for g in s), "n": len(s)}
 
 
-def _hits_doc(srv, snap):
-    """L5 and L20 of the CS2 board. A board row only carries L10, so the rest comes from the same HLTV rows /line reads, only when
-    they reproduce the saved L10. One pass at a time, HITS_BUDGET_S at most, one history slot at a time: a member never waits on
-    it, later passes go on from what the earlier ones left in the shared history cache, and rows it has not reached show L10."""
-    d = _HITS_DOC
+_HITS_EMPTY = b'{"rows":{},"complete":false}'
+
+
+def _hits_key(snap):
     items = list(snap['index'].items())
     key = tuple((book, rid, x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push')) for (book, rid), x in items)
     cols = workspace_h2h.board_enabled()              # SCOUT_BOARD_H2H: the H2H and Season columns ride on this same shared pass
-    if cols:
-        key = ("h2h",) + key
+    return items, (("h2h",) + key if cols else key), cols
+
+
+def _hits_doc(srv, snap):
+    """L5 and L20 of the CS2 board. A board row only carries L10, so the rest comes from the same HLTV rows /line reads, only when
+    they reproduce the saved L10. One pass at a time, HITS_BUDGET_S at most, one history slot at a time: a member never waits on
+    it, later passes go on from what the earlier ones left in the shared history cache, and rows it has not reached show L10.
+    Members' reads go through _hits_request (the background filler below runs these passes); this stays the one pass."""
+    d = _HITS_DOC
+    items, key, cols = _hits_key(snap)
     if d.get('key') == key and d["body"] is not None and time.time() - d["at"] < d["ttl"]:
         return d["body"]
     if not d["lock"].acquire(blocking=False):
-        return d["body"] or b'{"rows":{},"complete":false}'
+        return d["body"] or _HITS_EMPTY
     try:
-        # owner 2026-11-06 (phone screenshot, most CS2 rows L10 only): a moved line used to wipe every filled row and restart the
-        # pass, so on a busy board it rarely finished. Rows still on the board at the same line are KEPT; only new or moved rows
-        # are read, missing ones first, and the pass walks that short list.
-        if d.get('key') != key:
-            live = {f"{book}|{rid}": (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push')) for (book, rid), x in items}
-            sigs = d.get('sigs') or {}
-            kept = {k: v for k, v in (d.get('rows') or {}).items() if k in live and sigs.get(k) == live[k]}
-            d.update(key=key, cursor=0, rows=kept, sigs={k: sigs[k] for k in kept})
-        t0, rows, complete = time.time(), dict(d.get('rows', {})), True
-        todo = [it for it in items if f"{it[0][0]}|{it[0][1]}" not in rows]
-        start = 0
-        for i in range(start, len(todo)):
-            (book, rid), x = todo[i]
-            if i > start and time.time() - t0 > HITS_BUDGET_S:
-                complete = False
-                break
-            # owner 2026-11-04: L5 is never empty when L10 is shown, and L20 counts the games he has (e.g. 14/17), so the newest
-            # HLTV results count even when they do not reproduce the saved L10 exactly
-            ser = (_history(srv, x, full=True) or {}).get("ser")
-            if ser:
-                d.setdefault('sigs', {})[f"{book}|{rid}"] = (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push'))
-                rows[f"{book}|{rid}"] = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
-                if cols:
-                    rows[f"{book}|{rid}"].update(h2h=workspace_h2h.board_h2h(ser, x.get("opp_name") or x.get("opponent"), x.get("line")),
-                                                 season=workspace_h2h.board_season(ser, x.get("line")))
-        d['rows'] = rows
-        body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
-        if d["body"] == body:
-            body = d["body"]                    # identical bytes: the same object, so nothing is compressed again
-        d.update(body=body, at=time.time(), ttl=HITS_TTL if complete else HITS_FILL_TTL)
-        return body
+        return _hits_pass(srv, items, key, cols, HITS_BUDGET_S)[0]
     finally:
         d["lock"].release()
+
+
+def _hits_pass(srv, items, key, cols, budget):
+    """One budgeted pass under _HITS_DOC["lock"] -> (body, complete, rows still without a history)."""
+    d = _HITS_DOC
+    # owner 2026-11-06 (phone screenshot, most CS2 rows L10 only): a moved line used to wipe every filled row and restart the
+    # pass, so on a busy board it rarely finished. Rows still on the board at the same line are KEPT; only new or moved rows
+    # are read, missing ones first, and the pass walks that short list.
+    if d.get('key') != key:
+        live = {f"{book}|{rid}": (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push')) for (book, rid), x in items}
+        sigs = d.get('sigs') or {}
+        kept = {k: v for k, v in (d.get('rows') or {}).items() if k in live and sigs.get(k) == live[k]}
+        d.update(key=key, cursor=0, rows=kept, sigs={k: sigs[k] for k in kept})
+    t0, rows, complete, missing = time.time(), dict(d.get('rows', {})), True, 0
+    todo = [it for it in items if f"{it[0][0]}|{it[0][1]}" not in rows]
+    start = 0
+    for i in range(start, len(todo)):
+        (book, rid), x = todo[i]
+        if i > start and time.time() - t0 > budget:
+            complete = False
+            break
+        # owner 2026-11-04: L5 is never empty when L10 is shown, and L20 counts the games he has (e.g. 14/17), so the newest
+        # HLTV results count even when they do not reproduce the saved L10 exactly
+        ser = (_history(srv, x, full=True) or {}).get("ser")
+        if ser:
+            d.setdefault('sigs', {})[f"{book}|{rid}"] = (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push'))
+            rows[f"{book}|{rid}"] = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
+            if cols:
+                rows[f"{book}|{rid}"].update(h2h=workspace_h2h.board_h2h(ser, x.get("opp_name") or x.get("opponent"), x.get("line")),
+                                             season=workspace_h2h.board_season(ser, x.get("line")))
+        else:
+            missing += 1
+    d['rows'] = rows
+    body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
+    if d["body"] == body:
+        body = d["body"]                    # identical bytes: the same object, so nothing is compressed again
+    d.update(body=body, at=time.time(), ttl=HITS_TTL if complete else HITS_FILL_TTL)
+    return body, complete, missing
+
+
+# Owner site audit 2026-11-06 N3: L5 / L20 / H2H / SZN cells stayed blank on many CS2 rows until the player was opened (and the
+# "+N more props" rows started blank): the pass above only ran inside a member's /hits read, HITS_BUDGET_S of work at most once
+# every HITS_FILL_TTL s, so a full board took tens of minutes to fill. Now ONE background thread runs the passes back to back
+# (HITS_SLICE_S each, publishing after every slice) from the first /hits read on, and every new board build hands it the new
+# board at once, so the hit rates arrive with the board. A member's read never does that work: it returns the copy as it stands
+# (the very first read after a start waits at most HITS_BUDGET_S for the first slice). One history slot at a time (the other
+# _HIST_SLOTS stay free for cards being opened), the same shared history cache, no new query: safe at 700 members.
+HITS_SLICE_S = 2.0          # the filler publishes what it has read at least this often
+HITS_IDLE_S = 300           # with the board filled and no new board, the filler thread ends after this long (a read restarts it)
+HITS_RETRY_S, HITS_RETRIES = 5.0, 2     # rows left without a history (a busy slot) are tried again this soon, this many times
+_HITS_FILL = {"thread": None, "gen": 0, "srv": None, "snap": None, "done": None, "done_at": 0.0,
+              "wake": threading.Event(), "first": threading.Event(), "lock": threading.Lock()}
+
+
+def _hits_fill(gen):
+    f = _HITS_FILL
+    retries = 0
+    while f["gen"] == gen:
+        f["wake"].clear()
+        srv, snap = f["srv"], f["snap"]
+        idx = snap.get("index") if snap else None
+        if idx is None:
+            break
+        try:
+            with _HITS_DOC["lock"]:
+                if f["gen"] != gen:
+                    break
+                items, key, cols = _hits_key({"index": idx})
+                # the first slice after a start is HITS_BUDGET_S, so the first read (which waits that long) gets its rows
+                budget = HITS_BUDGET_S if _HITS_DOC["body"] is None else HITS_SLICE_S
+                _, complete, missing = _hits_pass(srv, items, key, cols, budget)
+        except Exception:                              # noqa: BLE001 - a failed slice keeps the copy as it stood; tried again
+            complete, missing = False, 0
+            time.sleep(HITS_RETRY_S)
+        f["first"].set()
+        if not complete:
+            time.sleep(0.05)                           # hand the GIL back between slices
+            continue
+        if missing and retries < HITS_RETRIES:
+            retries += 1
+            if f["wake"].wait(HITS_RETRY_S):
+                retries = 0
+            continue
+        retries = 0
+        with f["lock"]:
+            f["done"], f["done_at"] = idx, time.time()
+        if not f["wake"].wait(HITS_IDLE_S):
+            with f["lock"]:
+                if not f["wake"].is_set() and f["gen"] == gen:
+                    f["thread"] = None
+                    return
+    with f["lock"]:
+        if f["gen"] == gen:
+            f["thread"] = None
+
+
+def _hits_kick(srv, snap):
+    """Hand the filler this board (no read here). Wakes it only for a board it has not finished, or one finished HITS_TTL ago."""
+    f = _HITS_FILL
+    with f["lock"]:
+        f["srv"], f["snap"] = srv, snap
+        idx = snap.get("index")
+        if f["done"] is idx and time.time() - f["done_at"] < HITS_TTL and f["thread"] is not None:
+            return
+        f["wake"].set()
+        t = f["thread"]
+        if t is None or not t.is_alive():
+            t = f["thread"] = threading.Thread(target=_hits_fill, args=(f["gen"],), name="ws-hits-fill", daemon=True)
+            t.start()
+
+
+def _hits_reset():
+    f = _HITS_FILL
+    with f["lock"]:
+        f["gen"] += 1
+        f.update(thread=None, srv=None, snap=None, done=None, done_at=0.0)
+        f["wake"].set()
+        f["wake"] = threading.Event()
+        f["first"] = threading.Event()
+
+
+def _hits_request(srv, snap):
+    """What a member's /hits read returns: the filler's copy as it stands. No history is read on the request thread."""
+    _hits_kick(srv, snap)
+    if _HITS_DOC["body"] is None:                      # only the first reads after a start wait: about the old in-request budget
+        _HITS_FILL["first"].wait(max(0.0, HITS_BUDGET_S) + 0.5)
+    return _HITS_DOC["body"] or _HITS_EMPTY
 
 
 def get_hits(h, srv, q, member, scratch, name):
     snap = snapshot(srv)
     if snap is None:
         return h.send(503, {"error": "board_unavailable"})
-    return h.send_shared(("ws_hits",), 200, _hits_doc(srv, snap), keep=60)
+    return h.send_shared(("ws_hits",), 200, _hits_request(srv, snap), keep=60)
 
 
 def get_stated(h, srv, q, member, scratch, name):
     """CS2 stated against observed, by letter and by market, from the same stored export as Results."""
+    st_, body = stated_body(srv)
+    return h.send_shared(("ws_stated",), st_, body, keep=300)
+
+
+def stated_body(srv):
+    """(status, body) of the shared CS2 stated-against-observed build: one build every 300 s for the stated route and the Ask tab's
+    tier record (workspace_genie.tier_record) together."""
     def compute():
         import results_stated
         return 200, json.dumps(results_stated.stated_observed(getattr(srv, "_p1_export_printed", srv._p1_export)()), default=str, separators=(",", ":")).encode()
-    st_, body = srv.shared(("ws_stated",), compute, ttl=300)
-    return h.send_shared(("ws_stated",), st_, body, keep=300)
+    return srv.shared(("ws_stated",), compute, ttl=300)
 
 
 def get_rules(h, srv, q, member, scratch, name):
@@ -2114,6 +2227,16 @@ def post_genie(h, srv, q, member, scratch, name, n):
     rev = d.get("revision")
     if rev is not None and rev != (rec.get("offer") or {}).get("revision"):
         return h.send(409, {"error": "offer_changed"})
+    sport = qq["sport"]
+    try:                                        # site audit N9: every book's line and the letter's settled record, both read-only
+        import workspace_books
+        doc["extra_books"] = workspace_books.prop_lines(srv, sport, rec)
+    except Exception:                           # noqa: BLE001 - the answer stands on the line's own payload
+        doc["extra_books"] = []
+    try:
+        doc["tier_record"] = genie.tier_record(srv, sport, rec)
+    except Exception:                           # noqa: BLE001
+        doc["tier_record"] = None
     out = genie.answer(doc, question.strip(), side)
     if out["matched"]:
         try:

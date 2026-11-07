@@ -124,7 +124,7 @@
       "source": "sports_service",
       "platforms": ["fanduel"],
       "sports": ["nba", "nfl"],
-      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 3], [8, 5], [24, 8], [72, 180], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS direct, the SPORTS_BOOKS_LADDER default; 2026-11-06): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from FanDuel's own public feed (sbapi.oh.sportsbook.fanduel.com, Ohio). This server makes no FanDuel request."},
+      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 3], [8, 5], [24, 8], [72, 8], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS direct, the SPORTS_BOOKS_LADDER default; 2026-11-06, 24-72 h rung 8 min since the site audit N1): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from FanDuel's own public feed (sbapi.oh.sportsbook.fanduel.com, Ohio). This server makes no FanDuel request."},
       "rules": {
         "pick_price": "decimal price quoted by the book",
         "push": "not used: whole-number lines are priced only where a push chance is known",
@@ -139,7 +139,7 @@
       "source": "sports_service",
       "platforms": ["betrivers"],
       "sports": ["nba", "nfl"],
-      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 3], [8, 5], [24, 8], [72, 180], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS direct, the SPORTS_BOOKS_LADDER default; 2026-11-06): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from the Kambi offering API, operator rsiusoh (Ohio). This server makes no BetRivers request."},
+      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 3], [8, 5], [24, 8], [72, 8], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS direct, the SPORTS_BOOKS_LADDER default; 2026-11-06, 24-72 h rung 8 min since the site audit N1): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from the Kambi offering API, operator rsiusoh (Ohio). This server makes no BetRivers request."},
       "rules": {
         "pick_price": "decimal price quoted by the book",
         "push": "not used: whole-number lines are priced only where a push chance is known",

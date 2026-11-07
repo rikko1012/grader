@@ -80,6 +80,7 @@ def reset():
     _PARSED.clear()
     _LINES.clear()
     _BY_ID.clear()
+    _BY_PROP.clear()
 
 
 def subjects(recs):
@@ -495,6 +496,45 @@ def reader(srv, sport, s):
 
 
 _BY_ID = {}                                       # (sport, pid) -> (body bytes, {offer id: record}) of the last book board parsed
+_BY_PROP = {}                                     # (sport, pid) -> (body bytes, {prop key: [line rows]}) of the last book board parsed
+
+
+def _prop_key(r):
+    e, p, m = r.get("event") or {}, r.get("player") or {}, r.get("market") or {}
+    return "|".join(str(x) for x in (e.get("id"), p.get("key"), m.get("stat"), m.get("period")))
+
+
+def prop_lines(srv, sport, rec):
+    """Every enabled direct extra book's (Sleeper, Dabble) current lines for this board record's event / player / stat / period:
+    [{"platform", "platform_label", "line", "line_type"}]. Site audit 2026-11-06 N9: the Ask tab's "better line elsewhere" answer
+    named only the board's own books. Read from each book's shared board build, indexed once per build (no request per question);
+    a book whose feed is not current lists nothing (its lines are off the board too)."""
+    key, out = _prop_key(rec), []
+    for pid in bp.enabled_ids():
+        p = bp.providers().get(pid) or {}
+        if p.get("source") != "direct" or sport not in (p.get("sports") or ()):
+            continue
+        try:
+            st, body = board(srv, sport, pid)
+        except Exception:                          # noqa: BLE001 - one book failing never hides the others
+            continue
+        if st != 200:
+            continue
+        c = _BY_PROP.get((sport, pid))
+        if not c or c[0] is not body:
+            doc, idx = json.loads(body), {}
+            if (doc.get("feed") or {}).get("state") == "ok":
+                for r in doc.get("records") or ():
+                    if (r.get("event") or {}).get("status") == "started":
+                        continue
+                    o = r.get("offer") or {}
+                    idx.setdefault(_prop_key(r), []).append({"platform": o.get("platform"), "platform_label": o.get("platform_label"),
+                                                             "line": o.get("line"), "line_type": (r.get("market") or {}).get("line_type") or "standard",
+                                                             "lock": _lock_epoch(r)})
+            c = _BY_PROP[(sport, pid)] = (body, idx)
+        now = time.time()
+        out.extend({k: v for k, v in x.items() if k != "lock"} for x in c[1].get(key, ()) if x["lock"] is None or x["lock"] > now)
+    return out
 
 
 def record_by_id(srv, sport, pid, oid):

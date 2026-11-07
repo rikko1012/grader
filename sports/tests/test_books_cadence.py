@@ -271,6 +271,10 @@ def test_books_cadence_follows_the_slate(tmp_path):
     slate("nba", [t + 6 * 3600])
     assert scheduler.cadence_every(("books", ("nba", "nfl")), t, tmp_path) == 60          # game day
     slate("nba", [t + 2 * 86400])
+    # site audit 2026-11-06 N1: a game within 72 h keeps the 1-min check (the ladder reads it every 8 min)
+    assert scheduler.cadence_every(("books", ("nba", "nfl")), t, tmp_path) == 60
+    slate("nba", [t + 4 * 86400])
+    slate("nfl", [t + 4 * 86400])
     assert scheduler.cadence_every(("books", ("nba", "nfl")), t, tmp_path) == 180         # idle
 
 

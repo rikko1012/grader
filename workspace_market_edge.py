@@ -198,9 +198,16 @@ def _offers_of_record(r, cfg, limits, now):
         if book in APPS:
             mult = v.get("payout")
             needs = _app_needs(book, mult, cfg)
-            # the price on the row is the pick's own payout when it is not the entry's standard 1.00x (PrizePicks standard
-            # lines pay the entry table, so the line carries no per-pick price); `needs` says what it means either way
-            px = f"{float(mult):.2f}x" if book == "underdog" and _num(mult) and abs(float(mult) - 1.0) > 1e-9 else None
+            # the price is the one the card's Books and lines table prints for this side (upgrade.js priceText): the app's own
+            # decimal price when it sends one (Underdog's price_higher / price_lower), else the pick's payout when it is not the
+            # entry's standard 1.00x (site audit 2026-11-06 N8: Best line read "1.00x" beside Books and lines' 1.90 / 1.90).
+            # PrizePicks standard lines pay the entry table, so they carry no per-pick price; `needs` is the entry's either way
+            if _num(v.get("price")) and v["price"] > 1:
+                px = f"{float(v['price']):.2f}"
+            elif _num(mult) and abs(float(mult) - 1.0) > 1e-9:
+                px = f"{float(mult):.2f}x"
+            else:
+                px = None
         elif kind == "decimal" and _num(v.get("price")) and v["price"] > 1:
             needs, px = 1.0 / v["price"], f"{v['price']:.2f}"
         else:
@@ -252,7 +259,7 @@ def _extra_records(srv, sport):
             continue
         comparable = p.get("price_comparable", True)
         for r in doc.get("records") or ():
-            out.append((r, comparable, p.get("kind")))
+            out.append((r, comparable, p.get("kind"), p.get("price_label")))
     return out
 
 
@@ -267,7 +274,9 @@ def _better(a, b, side):
 
 
 def best_lines(srv, sport, recs, s, now):
-    """{prop key: {"over": best, "under": best, "ls": [[label, line, book], ...] standard lines, "n": books}}."""
+    """{prop key: {"over": best, "under": best, "ls": [[label, line, book], ...] standard lines, "n": books,
+    "bk": [[label, line, book, Over price, Under price], ...] every book and line counted in n (site audit N8: the card listed
+    two of "4 books"; Sleeper and Dabble lines live in their own book-board builds, so the card lists them from here)}}."""
     from gradecore import payouts
     cfg = payouts.pickem_config()
     limits = we.price_limits()
@@ -306,7 +315,7 @@ def best_lines(srv, sport, recs, s, now):
                 if (book, float(b["line"]) if _num(b.get("line")) else None) in per.get(pk, {}):
                     continue                             # the same book and line as a board row (a FanDuel row): counted once
                 add(pk, offers)
-    for r, comparable, kind in _extra_records(srv, sport):
+    for r, comparable, kind, price_label in _extra_records(srv, sport):
         if _started(r, now):
             continue
         o = r.get("offer") or {}
@@ -323,6 +332,10 @@ def best_lines(srv, sport, recs, s, now):
                 px, needs = f"{price:.2f}", 1.0 / price
             elif comparable and _num(v.get("payout")) and abs(float(v["payout"]) - 1.0) > 1e-9:
                 px, needs = f"{float(v['payout']):.2f}x", None
+            elif not comparable and _num(v.get("price")):
+                # Dabble: its own per-side number, never odds - named as the card's Books and lines names it (book_providers
+                # price_label), never a break-even
+                px, needs = f"{price_label or 'App price'} {float(v['price']):.2f}", None
             else:
                 px, needs = None, None
             offers.append((side, float(line), o.get("platform"), o.get("platform_label") or o.get("platform"), px, needs, True))
@@ -344,6 +357,12 @@ def best_lines(srv, sport, recs, s, now):
                       "needs": None if x[5] is None else round(x[5], 6)} for side, x in best.items()}
         ent["ls"] = sorted(([lab, ln, bk] for (bk, ln), lab in std.items()), key=lambda v: (v[1], v[0]))
         ent["n"] = len({bk for bk, _ln in d})
+        rows = {}
+        for (bk, ln), offers in d.items():
+            for x in offers:
+                row = rows.setdefault((bk, ln), [x[3], ln, bk, None, None])
+                row[3 if x[0] == "over" else 4] = x[4] or row[3 if x[0] == "over" else 4] or ""
+        ent["bk"] = sorted(rows.values(), key=lambda v: (v[1], v[0]))
         out[pk] = ent
     return out
 

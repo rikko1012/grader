@@ -165,7 +165,8 @@ books, then the game-data tick) or `python sports_scout.py books-run --once`. Th
 - **Lease:** one worker at a time; a second one finds the lease taken and does nothing.
 - **Game lists** are re-read every 30 min.
 - **Refresh ladder** (`schedule.py`): the books' own feeds use "direct" (2026-11-06): every 3 min inside 2 h, every
-  5 min inside 8 h, every 8 min inside 24 h, 3-hourly inside 3 days, 12-hourly inside 7 days, so a quote stays inside
+  5 min inside 8 h, every 8 min inside 24 h and inside 3 days (3-hourly until the 2026-11-06 site audit N1), 12-hourly
+  inside 7 days, so a quote stays inside
   the market chance's 15-min rule and the Tools +EV 30-min rule. ("full" - 10 / 30 / 60 min - remains one of the Odds
   API plan's choices.) Started games are never fetched. book_providers.json carries the same ladder
   (sports/tests/test_books_schedule_sync.py).
