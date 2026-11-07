@@ -1567,33 +1567,40 @@ def asks_at_cutoff(db_path):
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
     except sqlite3.Error:
         return out
+    # bug sweep 2026-11-06 #2: two streamed cursor passes, never .fetchall() - this runs inside the web process that
+    # serves members, and ~1M quote rows were ~480 MB as a list. Memory is bounded by `earliest` (one entry per match)
+    # and `last` (one per match x platform x side). One read transaction so both passes see the same rows.
+    where = "FROM ml_quotes WHERE match_id IS NOT NULL AND team_side IN ('a', 'b')"
+    earliest, last = {}, {}
     try:
         if not con.execute("SELECT 1 FROM sqlite_master WHERE name='ml_quotes'").fetchone():
             return out
-        rows = con.execute("SELECT match_id, platform, outcome_id, team_side, ask, received_ts, start, usable FROM ml_quotes "
-                           "WHERE match_id IS NOT NULL AND team_side IN ('a', 'b')").fetchall()
+        con.execute("BEGIN")
+        seen = set()
+        for mid, st in con.execute("SELECT DISTINCT match_id, start " + where):
+            seen.add(mid)
+            st = _ts(st)
+            if st is not None:
+                earliest[mid] = min(earliest.get(mid, st), st)
+        # bug sweep 2026-11-06 #21: the same earliest stated start forward_rows cuts at (every forward table)
         fwd = _earliest_starts(con)
+        for mid in seen:
+            if mid in fwd:
+                earliest[mid] = min(earliest.get(mid, fwd[mid]), fwd[mid])
+        del seen, fwd
+        for mid, plat, side, ask, rec, ok in con.execute(
+                "SELECT match_id, platform, team_side, ask, received_ts, usable " + where):
+            rec = _ts(rec)
+            if mid not in earliest or rec is None:
+                continue
+            cutoff = earliest[mid] - CUTOFF_MIN * 60
+            if rec > cutoff or rec < cutoff - MAX_AGE_H * 3600:
+                continue
+            k = (mid, plat, side)
+            if k not in last or rec > last[k][0]:
+                last[k] = (rec, ask if ok and ask is not None and 0 < ask < 1 else None)
     finally:
         con.close()
-    earliest = {}
-    for mid, _p, _o, _s, _a, _r, st, _u in rows:
-        st = _ts(st)
-        if st is not None:
-            earliest[mid] = min(earliest.get(mid, st), st)
-    for mid in {r[0] for r in rows}:
-        if mid in fwd:
-            earliest[mid] = min(earliest.get(mid, fwd[mid]), fwd[mid])
-    last = {}
-    for mid, plat, oid, side, ask, rec, _st, ok in rows:
-        rec = _ts(rec)
-        if mid not in earliest or rec is None:
-            continue
-        cutoff = earliest[mid] - CUTOFF_MIN * 60
-        if rec > cutoff or rec < cutoff - MAX_AGE_H * 3600:
-            continue
-        k = (mid, plat, side)
-        if k not in last or rec > last[k][0]:
-            last[k] = (rec, ask if ok and ask is not None and 0 < ask < 1 else None)
     for (mid, plat, side), (_rec, ask) in last.items():
         if ask is None:
             continue

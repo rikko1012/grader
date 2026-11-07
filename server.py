@@ -134,7 +134,8 @@ def warm_start():
             seen.add(slug)
         except Exception:
             pass
-        WARM_START["done"] += 1
+        finally:                                       # bug sweep 2026-11-06 #28: a repeat player still counts as done
+            WARM_START["done"] += 1
     WARM_START["finished"] = True
 
 
@@ -5222,7 +5223,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, {"candidates": cands, "ids_used": ids, "opponents": opps, "db_span": span})
                 finally:
                     con.close()
-            if u.path == "/admin/hltv_status" and self.authed(q.get("token")):
+            if u.path == "/admin/hltv_counts" and self.authed(q.get("token")):
+                # bug sweep 2026-11-06 #24: was a second /admin/hltv_status branch, never reached (the breaker/pool
+                # status answers that path first) - the HLTV DB coverage counts now have their own path
                 import hltv
                 con = hltv._connect()
                 try:
@@ -5442,6 +5445,8 @@ class Handler(BaseHTTPRequestHandler):
             if prev and time.time() - prev[0] < 3600 and prev[2] < 8:
                 keep = [h for h in prev[3] if ql in (h["nick"] or "").lower() or ql in (h["name"] or "").lower()]
                 body = json.dumps({"results": keep}).encode()
+                if len(_SEARCH) > 20000:               # bug sweep 2026-11-06 #27: same bound as the BO3.gg path
+                    _SEARCH.clear()
                 _SEARCH[ql] = (time.time(), body, len(keep), keep)
                 return self.send(200, body)
 
@@ -5980,7 +5985,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         """Same failure handling as do_GET (audit 54: an exception here dropped the connection with no response)."""
-        self._sent = False
+        self._t0 = time.time()                          # bug sweep 2026-11-06 #26: per request, as do_GET (kept-alive
+        self._sent = False                              # handler: server time was measured from the previous request)
         try:
             return self._do_post()
         except CLIENT_GONE:
@@ -6071,7 +6077,8 @@ class Handler(BaseHTTPRequestHandler):
             if not PP_OPEN_LINK or not self.authed(form.get("token")):
                 return self.send(403, {"error": "forbidden"})
             return self.send(*admin_ud_tail(form))
-        form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
+        # bug sweep 2026-11-06 #25: a non-UTF-8 body is a 403 like any other bad form, not a 500 (strict decode raised)
+        form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace")).items()}
         if u.path != "/admin/closing" or not self.authed(form.get("token")):
             return self.send(403, {"error": "forbidden"})
         try:
