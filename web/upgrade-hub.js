@@ -66,7 +66,8 @@ export function mount(C) {
   try{const v=JSON.parse(localStorage.getItem('scout-price-filters')||'null');if(v&&typeof v==='object')for(const [k,ok] of Object.entries(MT_KEEP))if(typeof v[k]==='string'&&ok(v[k]))H.mt[k]=v[k];}catch(e){/* storage blocked */}
   const mtRemember=()=>{try{localStorage.setItem('scout-price-filters',JSON.stringify(Object.fromEntries(Object.keys(MT_KEEP).map(k=>[k,String(H.mt[k])]))));}catch(e){/* storage blocked */}};
   /* QOL 2026-11-07: search ignores case and accents (Jokić = jokic) and matches every word typed, in any order */
-  const fold=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  /* one fold for the board search and the Price check search (merge 1107): case, accents and extra spaces folded */
+  const fold=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
   const textHas=(text,q)=>{const t=fold(text);return fold(q).split(/\s+/).filter(Boolean).every(w=>t.includes(w));};
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
   const key = r => [r.sport,r.offer.platform,r.offer.offer_id].join('|');
@@ -120,8 +121,7 @@ export function mount(C) {
   /* N11: search reads the name, team, game and market, plus the exact other spellings the server sends for the row's two teams
      (the book's own name and maintained team aliases: player.aka). Plain substring of those exact strings, nothing fuzzy. */
   /* QOL 2026-11-07: case, accents and extra spaces never hide a row ("jokic" finds Jokić, " vargo  " finds vargo). The same exact
-     strings, only folded; one folded copy per record (records are replaced on every board read) */
-  const fold=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+     strings, only folded (fold is defined once near the top of mount); one folded copy per record (records are replaced on every board read) */
   const SEARCH_TEXT=new WeakMap();
   const searchText=r=>{let t=SEARCH_TEXT.get(r);if(t==null){t=fold([r.player.name,r.player.team,r.event.label,r.market.stat_label,...(Array.isArray(r.player.aka)?r.player.aka:[])].join(' '));SEARCH_TEXT.set(r,t);}return t;};
   const boardSource=()=>isExtra(H.book)?H.extraRecs:H.records;
