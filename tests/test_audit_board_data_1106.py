@@ -393,7 +393,7 @@ def test_a_rebuilt_board_with_the_same_rows_does_not_wake_the_filler(hits, monke
     """Review of N3: every 5-s CS2 board build is a new index object, so the filler ran a pass on each one and never went idle."""
     items = {("underdog", str(i)): {"line": 5.5} for i in range(40)}
     api._hits_request(None, {"index": dict(items)})
-    assert _wait(lambda: api._HITS_FILL["ok"] is not None)
+    assert _wait(lambda: api._HITS_FILL["done_key"] is not None)
     passes = []
     real = api._hits_pass
     monkeypatch.setattr(api, "_hits_pass", lambda *a, **k: passes.append(1) or real(*a, **k))
@@ -413,7 +413,7 @@ def test_one_row_that_raises_never_blocks_the_other_rows(hits, monkeypatch, caps
     index[("underdog", "7")] = {"line": None}                     # _tally_of compares value > None: TypeError
     snap = {"index": index}
     api._hits_request(None, snap)
-    assert _wait(lambda: len(_rows()) == 49 and api._HITS_FILL["ok"] is index)
+    assert _wait(lambda: len(_rows()) == 49 and api._HITS_DOC["built_for"] is index and api._HITS_FILL["done_key"] is not None)
     assert "underdog|7" not in _rows()
     n = len(hits)
     time.sleep(0.4)

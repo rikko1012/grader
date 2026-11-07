@@ -161,7 +161,7 @@ def reset():
         _ST["sports"] = False
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
-    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={}, sigs={}, open=None)
+    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={}, sigs={}, open=None, built_for=None)
     _hits_reset()
     _SLIP_POOL.clear()
     _BOOK_LINES_GOOD.clear()
@@ -1552,13 +1552,14 @@ def _hits_doc(srv, snap):
     if not d["lock"].acquire(blocking=False):
         return d["body"] or _HITS_EMPTY
     try:
-        return _hits_pass(srv, items, key, cols, HITS_BUDGET_S)[0]
+        return _hits_pass(srv, items, key, cols, HITS_BUDGET_S, snap.get('index'))[0]
     finally:
         d["lock"].release()
 
 
-def _hits_pass(srv, items, key, cols, budget):
-    """One budgeted pass under _HITS_DOC["lock"] -> (body, complete, rows still without a history)."""
+def _hits_pass(srv, items, key, cols, budget, board=None):
+    """One budgeted pass under _HITS_DOC["lock"] -> (body, complete, rows still without a history). `board` (the board index the
+    pass read) is published in the same update as the copy (built_for), so a read can tell which board a copy belongs to."""
     d = _HITS_DOC
     # owner 2026-11-06 (phone screenshot, most CS2 rows L10 only): a moved line used to wipe every filled row and restart the
     # pass, so on a busy board it rarely finished. Rows still on the board at the same line are KEPT; only new or moved rows
@@ -1598,7 +1599,7 @@ def _hits_pass(srv, items, key, cols, budget):
     body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
     if d["body"] == body:
         body = d["body"]                    # identical bytes: the same object, so nothing is compressed again
-    d.update(body=body, at=time.time(), ttl=HITS_TTL if complete else HITS_FILL_TTL)
+    d.update(body=body, at=time.time(), ttl=HITS_TTL if complete else HITS_FILL_TTL, built_for=board)
     return body, complete, missing
 
 
@@ -1612,7 +1613,7 @@ def _hits_pass(srv, items, key, cols, budget):
 HITS_SLICE_S = 2.0          # the filler publishes what it has read at least this often
 HITS_IDLE_S = 300           # with the board filled and no new board, the filler thread ends after this long (a read restarts it)
 HITS_RETRY_S, HITS_RETRIES = 5.0, 2     # rows left without a history (a busy slot) are tried again this soon, this many times
-_HITS_FILL = {"thread": None, "gen": 0, "srv": None, "snap": None, "kicked": None, "ok": None, "done_key": None, "done_at": 0.0,
+_HITS_FILL = {"thread": None, "gen": 0, "srv": None, "snap": None, "kicked": None, "done_key": None, "done_at": 0.0,
               "logged": None, "wake": threading.Event(), "first": threading.Event(), "lock": threading.Lock()}
 
 
@@ -1641,7 +1642,7 @@ def _hits_fill(gen):
                 items, key, cols = _hits_key({"index": idx})
                 # the first slice after a start is HITS_BUDGET_S, so the first read (which waits that long) gets its rows
                 budget = HITS_BUDGET_S if _HITS_DOC["body"] is None else HITS_SLICE_S
-                _, complete, missing = _hits_pass(srv, items, key, cols, budget)
+                _, complete, missing = _hits_pass(srv, items, key, cols, budget, idx)
         except Exception as e:                         # noqa: BLE001 - a failed slice keeps the copy as it stood; tried again
             complete, missing = False, 0
             _hits_log(("slice", id(idx)), e)
@@ -1657,7 +1658,7 @@ def _hits_fill(gen):
             continue
         retries = 0
         with f["lock"]:
-            f["done_key"], f["ok"], f["done_at"] = key, idx, time.time()
+            f["done_key"], f["done_at"] = key, time.time()
         if not f["wake"].wait(HITS_IDLE_S):
             with f["lock"]:
                 if not f["wake"].is_set() and f["gen"] == gen:
@@ -1678,12 +1679,12 @@ def _hits_kick(srv, snap):
     with f["lock"]:
         f["srv"], f["snap"] = srv, snap
         t = f["thread"]
-        if f["kicked"] is idx and (f["ok"] is idx or (t is not None and t.is_alive())):
+        if f["kicked"] is idx and (_HITS_DOC.get("built_for") is idx or (t is not None and t.is_alive())):
             return
         f["kicked"] = idx
         key = _hits_key(snap)[1]
         if key == f["done_key"] and key == _HITS_DOC.get("key") and time.time() - f["done_at"] < HITS_TTL:
-            f["ok"] = idx                               # the same rows as the copy just finished: nothing to read
+            _HITS_DOC["built_for"] = idx                # the same rows as the copy just finished: nothing to read
             return
         f["wake"].set()
         t = f["thread"]
@@ -1696,7 +1697,7 @@ def _hits_reset():
     f = _HITS_FILL
     with f["lock"]:
         f["gen"] += 1
-        f.update(thread=None, srv=None, snap=None, kicked=None, ok=None, done_key=None, done_at=0.0, logged=None)
+        f.update(thread=None, srv=None, snap=None, kicked=None, done_key=None, done_at=0.0, logged=None)
         f["wake"].set()
         f["wake"] = threading.Event()
         f["first"] = threading.Event()
@@ -1721,10 +1722,11 @@ def _hits_answer(srv, snap):
     _hits_kick(srv, snap)
     if _HITS_DOC["body"] is None:                      # only the first reads after a start wait: about the old in-request budget
         _HITS_FILL["first"].wait(max(0.0, HITS_BUDGET_S) + 0.5)
+    board = _HITS_DOC.get("built_for")                 # read before the copy: a copy published in between is taken as not this board's
     body = _HITS_DOC["body"]
     if body is None:
         return ("ws_hits_open",), _HITS_EMPTY
-    if _HITS_FILL["ok"] is not snap.get("index"):
+    if board is not snap.get("index"):
         return ("ws_hits_open",), _hits_open(body)
     return ("ws_hits",), body
 
