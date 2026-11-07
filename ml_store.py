@@ -121,7 +121,10 @@ def _keep_rowids(con, now_ts, before=None):
         e_fwd = min(cands) if cands else None                       # forward_rows' earliest (per-table MIN, parsed)
         side_starts = [_ts(r[9]) for r in rows if r[3] in ("a", "b")]
         side_starts = [t for t in side_starts if t is not None]
-        e_ask = min(side_starts) if side_starts else None           # asks_at_cutoff's earliest
+        e_side = min(side_starts) if side_starts else None          # earliest start an a/b row states
+        # asks_at_cutoff's earliest = min(a/b rows' starts, forward_rows' earliest) since bug sweep 2026-11-06 #21
+        has_side = any(r[3] in ("a", "b") for r in rows)
+        e_ask = min((t for t in (e_side, e_fwd) if t is not None), default=None) if has_side else None
         starts = [t for t in (e_fwd, e_ask) if t is not None]
         if not starts or max(starts) > settled_before:
             keep.update(r[0] for r in rows)                         # not settled long ago (or no start): all stay
@@ -179,8 +182,8 @@ def _keep_rowids(con, now_ts, before=None):
         mine = [r for r in rows if r[0] in keep]
         if qmin is not None and not any(r[9] == qmin for r in mine):
             keep.add(next(r[0] for r in rows if r[9] == qmin))
-        if e_ask is not None and not any(r[3] in ("a", "b") and _ts(r[9]) == e_ask for r in mine):
-            keep.add(next(r[0] for r in rows if r[3] in ("a", "b") and _ts(r[9]) == e_ask))
+        if e_side is not None and not any(r[3] in ("a", "b") and _ts(r[9]) == e_side for r in mine):
+            keep.add(next(r[0] for r in rows if r[3] in ("a", "b") and _ts(r[9]) == e_side))
 
     cur = con.execute("SELECT rowid, match_id, source, team_side, team_a, team_b, prob_a, usable, scope, start, "
                       "captured_at, received_ts, platform FROM ml_quotes WHERE match_id IS NOT NULL ORDER BY match_id")
@@ -634,6 +637,7 @@ def match_eval(match_id, db=None, adir=None, frm=None, to=None):
     import ml_eval
     db, adir = _paths(db, adir)
     res = {"match_id": match_id, "window": [frm, to]}
+    e_fwd = None
     with tempfile.TemporaryDirectory(prefix="mlstore_eval_") as td:
         for name, kw in (("live_only", {"archive": False}), ("unified", {})):
             p = Path(td) / f"{name}.db"
@@ -642,6 +646,8 @@ def match_eval(match_id, db=None, adir=None, frm=None, to=None):
             fwd, why = ml_eval.forward_rows(str(p), ex)
             res[name] = {"quote_rows": n, "forward": fwd or [], "excluded": dict(ex), "why": why,
                          "asks": ml_eval.asks_at_cutoff(str(p)).get(match_id)}
+            if name == "unified":
+                e_fwd = ml_eval.earliest_starts(str(p)).get(match_id)
     rows = list(iter_quotes(match_id, frm=frm, to=to, db=db, adir=adir, origin=True))
     res["by_origin"] = dict(Counter("live" if o == "live" else "archive" for o, _ in rows))
     arc = [str(r.get("received_ts")) for o, r in rows if o != "live"]
@@ -657,6 +663,8 @@ def match_eval(match_id, db=None, adir=None, frm=None, to=None):
                      "stored_in": sorted(set(hit)) or ["ml_forecasts (live)"]})
     starts = [_ts(r.get("start")) for o, r in rows if r.get("team_side") in ("a", "b")]
     starts = [s for s in starts if s is not None]
+    if starts and e_fwd is not None:
+        starts.append(e_fwd)                                 # the same earliest start as asks_at_cutoff (#21)
     if starts:                                               # asks_at_cutoff's rows: latest per (platform, side) in window
         cut = min(starts) - ml_eval.CUTOFF_MIN * 60
         last = {}

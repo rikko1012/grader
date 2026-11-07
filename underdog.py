@@ -172,6 +172,13 @@ def _log_moves(rows):
     try:
         db = Path(os.environ.get("CS2_DATA_DIR") or Path(__file__).resolve().parent) / ".cache" / "ud_moves.db"
         db.parent.mkdir(parents=True, exist_ok=True)
+        # bounded memo (bug sweep 2026-11-06 #46): only lines on the current board or of matches that started within
+        # the last 3 days (the same cutoff as _opening) are remembered - older keys are dropped after every pass
+        old = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 3 * 86400))
+        board = {(norm(r["player"]), r["prop"], r.get("scope") or "12", r["start"]) for r in rows if not r["alt"]}
+
+        def _keep(k):
+            return k in board or (bool(k[3]) and str(k[3])[:19] >= old)
         if not _LAST_SEEN.get("_seeded") and db.exists():   # after a restart: the last logged state of each line
             con = sqlite3.connect(db, timeout=10)
             try:
@@ -181,7 +188,9 @@ def _log_moves(rows):
                 for pl, prop, scope, start, line, hi, lo in con.execute(
                         "SELECT player, prop, scope, start, line, higher, lower FROM moves WHERE rowid IN "
                         "(SELECT max(rowid) FROM moves WHERE scope IS NOT NULL GROUP BY player, prop, scope, start)"):
-                    _LAST_SEEN.setdefault((norm(pl), prop, scope, start), (line, hi, lo))
+                    k = (norm(pl), prop, scope, start)
+                    if _keep(k):
+                        _LAST_SEEN.setdefault(k, (line, hi, lo))
             except sqlite3.Error:
                 pass
             finally:
@@ -199,6 +208,8 @@ def _log_moves(rows):
                 new.append((now, r["player"], r["team"], r["opponent"], r["start"], r["prop"], r["line"],
                             r["higher"], r["lower"], r["id"], sc))
                 _LAST_SEEN[k] = v
+        for k in [k for k in _LAST_SEEN if k != "_seeded" and not _keep(k)]:
+            del _LAST_SEEN[k]
         if not new:
             return
         con = sqlite3.connect(db, timeout=10)

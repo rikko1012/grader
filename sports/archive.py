@@ -157,6 +157,10 @@ class _Files:
         parsed = _Lines(lines)
         with self.lock:
             self.stats["loads"] += 1
+            have = self.lru.get(key)
+            if have is not None:                        # another thread loaded the same file meanwhile: keep ITS entry,
+                self.lru.move_to_end(key)               # never count the bytes twice (bug sweep 2026-11-06 #32)
+                return have[0]
             self.lru[key] = (parsed, len(raw))
             self.size += len(raw)
             while self.size > LRU_BYTES and len(self.lru) > 1:
@@ -321,33 +325,47 @@ def fetch_order(con, rids, batch=400):
     return out
 
 
+def _heads(head):
+    """Every (kind, source, source_key) a record-id head 'kind:source:source_key' can stand for. A source may itself
+    contain ':' ('oddsapi:fanduel', 'oddspapi:draftkings'), so each split point is tried - the plain one first; the
+    index query then confirms the exact identity (bug sweep 2026-11-06 #31)."""
+    kind, sep, rest = head.partition(":")
+    if not sep:
+        return []
+    cuts = [i for i, ch in enumerate(rest) if ch == ":"]
+    return [(kind, rest[:i], rest[i + 1:]) for i in cuts]
+
+
 def row_by_record_id(con, record_id):
     """The archived row (records_all columns) for one record id, through the identity index - never a scan."""
     if not record_id or not _has_tables(con):
         return None
     rid = None
     parts = str(record_id).rsplit(":", 2)
-    if len(parts) == 3 and parts[1][:1] == "r" and parts[1][1:].isdigit():
-        head = parts[0].split(":", 2)
-        if len(head) == 3:
-            row = con.execute("SELECT a.rid FROM archive_rows a JOIN archive_dims dk ON dk.id = a.kind "
-                              "JOIN archive_dims ds ON ds.id = a.source WHERE dk.v = ? AND ds.v = ? AND "
-                              "a.source_key = ? AND a.revision = ? AND a.h10 = ? AND a.rid_text IS NULL",
-                              (head[0], head[1], head[2], int(parts[1][1:]), parts[2])).fetchone()
-            rid = row[0] if row else None
-    if rid is None and len(parts) == 3 and parts[1][:1] == "r" and parts[1][1:].isdigit() and _has2(con):
-        head = parts[0].split(":", 2)
-        if len(head) == 3:
-            try:
-                h = int(parts[2], 16)
-            except ValueError:
-                h = None
+    ok = len(parts) == 3 and parts[1][:1] == "r" and parts[1][1:].isdigit()
+    heads = _heads(parts[0]) if ok else []
+    for head in heads:
+        row = con.execute("SELECT a.rid FROM archive_rows a JOIN archive_dims dk ON dk.id = a.kind "
+                          "JOIN archive_dims ds ON ds.id = a.source WHERE dk.v = ? AND ds.v = ? AND "
+                          "a.source_key = ? AND a.revision = ? AND a.h10 = ? AND a.rid_text IS NULL",
+                          (head[0], head[1], head[2], int(parts[1][1:]), parts[2])).fetchone()
+        if row:
+            rid = row[0]
+            break
+    if rid is None and heads and _has2(con):
+        try:
+            h = int(parts[2], 16)
+        except ValueError:
+            h = None
+        for head in heads if h is not None else ():
             row = con.execute("SELECT r.rid FROM arch_segs g JOIN arch_revs r ON r.seg = g.id JOIN archive_dims dk ON "
                               "dk.id = g.kind JOIN archive_dims ds ON ds.id = g.source LEFT JOIN arch_text t ON "
                               "t.rid = r.rid WHERE dk.v = ? AND ds.v = ? AND g.source_key = ? AND r.revision = ? AND "
                               "r.h = ? AND t.record_id IS NULL",
-                              (head[0], head[1], head[2], int(parts[1][1:]), h)).fetchone() if h is not None else None
-            rid = row[0] if row else None
+                              (head[0], head[1], head[2], int(parts[1][1:]), h)).fetchone()
+            if row:
+                rid = row[0]
+                break
     if rid is None:
         row = con.execute("SELECT rid FROM archive_rows WHERE rid_text = ?", (record_id,)).fetchone()
         rid = row[0] if row else None

@@ -53,6 +53,17 @@ class SavedProjection:
         return 0.0 if (a.sport, a.event_id) != (b.sport, b.event_id) else None
 
 
+# The books' own names for their ORDINARY line: Underdog 'balanced' (LoL odds_type and the sports adapter), sports book
+# 'main'. They are the standard payout line, so the policy must see payouts.STANDARD_VARIANT, not an unknown alt
+# (bug sweep 2026-11-06 #15: every Underdog row read 'Alt line: payout unknown'). Other variants pass through unchanged.
+ORDINARY_VARIANTS = (None, '', 'standard', 'balanced', 'main')
+
+
+def ordinary_variant(variant):
+    from .payouts import STANDARD_VARIANT
+    return STANDARD_VARIANT if variant in ORDINARY_VARIANTS else variant
+
+
 def _make(sport, event, player, stat, scope, line, book, variant, start,
           raw, projection, model, artifact, fid, at, team, old_letter, old_p, rounded=False):
     if not all(str(x or '').strip() for x in (event, player, stat, scope, book, model, artifact, fid, at, start)):
@@ -72,7 +83,7 @@ def _make(sport, event, player, stat, scope, line, book, variant, start,
         'model_version':model, 'artifact_version':artifact,
         'probability_stage':'raw_distribution_rounded_4dp' if rounded else 'saved_model_before_board_calibration',
         'saved_probabilities':list(raw)})
-    offer = Offer(sport,sport,str(event),str(player),stat,str(scope),line,book,variant or 'standard',start)
+    offer = Offer(sport,sport,str(event),str(player),stat,str(scope),line,book,ordinary_variant(variant),start)
     return SavedProjection(sport,offer,prediction,str(fid),at,str(team or ''),old_letter,old_p)
 
 

@@ -295,23 +295,31 @@ def search(legs, st, node_limit=NODE_LIMIT):
 
 
 def count_combinations(legs, n, sides, max_per_event=1):
-    """Valid n-leg slips in the pool (one leg per game, side rule) - before the two-team and identical-slip checks."""
+    """Valid n-leg slips in the pool (at most max_per_event legs per game, side rule; a same-game pair needs distinct
+    players and no shared box-score part, as in the search) - before the two-team and identical-slip checks.
+    max_per_event 2 counts same-game pairs too (bug sweep 2026-11-06 #43: the argument used to be ignored)."""
     by_ev = {}
     for l in legs:
         if sides in ("over", "under") and l["side"] != sides:
             continue
-        o, u = by_ev.get(l["event_id"], (0, 0))
-        by_ev[l["event_id"]] = (o + (l["side"] == "over"), u + (l["side"] == "under"))
+        by_ev.setdefault(l["event_id"], []).append(l)
     dp = Counter({(0, False, False): 1})
-    for o, u in by_ev.values():
+    for ev_legs in by_ev.values():
+        # this game's ways to add legs: (legs added, has an Over, has an Under) -> count
+        ways = Counter()
+        for l in ev_legs:
+            ways[(1, l["side"] == "over", l["side"] == "under")] += 1
+        if max_per_event >= 2:
+            for a, b in combinations(ev_legs, 2):
+                if a.get("player_id") == b.get("player_id") or set(a.get("prop_keys") or ()) & set(b.get("prop_keys") or ()):
+                    continue
+                ss = {a["side"], b["side"]}
+                ways[(2, "over" in ss, "under" in ss)] += 1
         nxt = Counter(dp)
         for (k, ho, hu), c in dp.items():
-            if k >= n:
-                continue
-            if o:
-                nxt[(k + 1, True, hu)] += c * o
-            if u:
-                nxt[(k + 1, ho, True)] += c * u
+            for (add, wo, wu), m in ways.items():
+                if k + add <= n:
+                    nxt[(k + add, ho or wo, hu or wu)] += c * m
         dp = nxt
     if sides == "mixed":
         return dp[(n, True, True)]
@@ -354,9 +362,13 @@ def explain_shortage(all_legs, legs, st, built_by_size, truncated):
             continue
         valid = count_combinations(legs, n, st["sides"], st["max_per_event"])
         why = []
-        if events < n:
-            why.append(f"only {events} games have an eligible pick; a {n}-pick slip needs {n} different games")
-        if valid == 0 and events >= n:
+        per = st["max_per_event"]
+        if events * per < n:
+            why.append(f"only {events} games have an eligible pick; a {n}-pick slip needs {n} different games"
+                       if per == 1 else
+                       f"only {events} games have an eligible pick; a {n}-pick slip with at most {per} picks per game "
+                       f"needs {-(-n // per)} games")
+        if valid == 0 and events * per >= n:
             why.append(f"no {n}-pick combination meets the side rule ({st['sides']})")
         out.append({"size": n, "requested": c, "built": got, "valid_combinations": valid,
                     "eligible_legs": len(legs), "games": events, "reasons": why, "binding": binding,

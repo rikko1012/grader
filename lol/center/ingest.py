@@ -333,8 +333,8 @@ def run_unit(con, unit):
             for tbl in ("ScoreboardGames", "ScoreboardPlayers", "MatchScheduleGame"):
                 counts[tbl] = sweep(con, tbl, _d(today - timedelta(days=3)), _d(today + timedelta(days=1)))
             counts["MatchSchedule"] = sweep(con, "MatchSchedule", _d(today - timedelta(days=3)), _d(today + timedelta(days=15)))
-            agg = {k: sum(c.get(k, 0) for c in counts.values()) for k in ("rows", "new", "changed")}
-            _set_ck(con, "live", "done", counts)
+            agg = {k: sum(c.get(k, 0) for c in counts.values()) for k in ("rows", "new", "changed", "gone")}
+            _set_ck(con, "live", "done", counts)   # 'gone' too: an upstream deletion must mark the store dirty (#20)
         elif kind == "window":
             tbl, lo, hi = arg
             agg = sweep(con, tbl, lo, hi)
