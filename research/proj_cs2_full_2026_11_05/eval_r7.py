@@ -94,8 +94,7 @@ def line_frame(F, P, name):
     for stat, scope in CELLS:
         q = g[(g.stat == stat) & (g.scope == scope)]
         pr = P[(P.stat == stat) & (P.scope == scope)][["matchid", "playerid", "mu", "v"]]
-        r = q.merge(F[["matchid", "playerid", "day", "live_p2_lam1"] + [c for c in F.columns if c.startswith("live_")
-                                                                        and c != "live_p2_lam1"]],
+        r = q.merge(F[["matchid", "playerid", "day"] + [c for c in F.columns if c.startswith(("live_", "cm2_", "full_"))]],
                     on=["matchid", "playerid"]).merge(pr, on=["matchid", "playerid"])
         r = r[r.live_p2_lam1.notna()].reset_index(drop=True)
         if not len(r):
