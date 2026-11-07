@@ -569,13 +569,79 @@ def test_le_backfill_stops_cleanly_when_the_feed_refuses(con, monkeypatch):
     monkeypatch.setattr(riot, "_le", lambda: FakeLE)
     monkeypatch.setattr(riot, "store_match", lambda con, m, d: {"rows": 1, "new": 1, "changed": 0})
     monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(riot.time, "time", lambda: clock["t"])
     b = riot.run_backfill(con)
     assert b["failed"] == 1 and b["stopped"].startswith("feed refused HTTP 403") and b["matches"] == 0
     assert not riot._done(con, "M2") and not riot._done(con, "M3")              # nothing marked done that was not stored
     for _ in range(2):
+        clock["t"] += riot.FAIL_SPACING_S                  # failures spread over hours (bug sweep #1), not one outage
         riot.run_backfill(con)
-    assert riot._done(con, "M3") is not None or store.get_meta(con, "le_fail:M3") >= 3
+    assert riot._done(con, "M3")
     assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 1
+
+
+def test_le_backfill_outage_never_marks_matches_done(con, monkeypatch):
+    """Bug sweep 2026-11-06 #1: a few minutes of 5xx / timeouts used to quarantine and mark done (with no data, for good)
+    the same 15 matches after 3 back-to-back passes. Temporary failures now count at most once per FAIL_SPACING_S and
+    the loop backs off after an all-failed pass; the matches are stored once the feed recovers."""
+    from lol.center import riot
+    from lol.net import HttpError
+    down = {"on": True}
+    stored = []
+
+    class FakeLE:
+        MAJOR = ["x"]
+
+        @staticmethod
+        def matches_since(leagues, since):
+            return [{"match_id": f"M{i}", "start": f"2026-10-{i:02d}T10:00:00Z"} for i in range(1, 21)]
+
+        @staticmethod
+        def event_details(mid):
+            if down["on"]:
+                raise HttpError(None if mid.endswith("1") else 503, "https://feed.lolesports.com/x")
+            return {}
+    monkeypatch.setattr(riot, "_le", lambda: FakeLE)
+    monkeypatch.setattr(riot, "store_match", lambda con, m, d: stored.append(m["match_id"]) or {"rows": 1, "new": 1, "changed": 0})
+    monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    for _ in range(3):                                         # back to back, the way loop() used to run them
+        b = riot.run_backfill(con)
+        assert b["failed"] == 15 and b["matches"] == 0
+    assert not any(riot._done(con, f"M{i}") for i in range(1, 21))
+    assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 0
+    down["on"] = False
+    while riot.run_backfill(con):
+        pass
+    assert sorted(stored) == sorted(f"M{i}" for i in range(1, 21))
+
+
+def test_le_loop_backs_off_after_an_all_failed_pass(monkeypatch):
+    """Bug sweep #1: loop() slept only when the pass stopped; an all-failed pass now backs off too."""
+    from lol.center import riot
+    sleeps = []
+
+    class Stop(BaseException):
+        pass
+
+    def fake_sleep(s):
+        sleeps.append(s)
+        raise Stop
+    monkeypatch.setattr(riot.store, "connect", lambda: None)
+    monkeypatch.setattr(riot.store, "get_meta", lambda con, k, d=None: "9999")
+    passes = []
+
+    def all_failed(con):
+        passes.append(1)
+        if len(passes) > 3:                                      # the old loop spun with no sleep: fail, never hang
+            raise Stop
+        return {"failed": 15, "matches": 0}
+    monkeypatch.setattr(riot, "run_backfill", all_failed)
+    monkeypatch.setattr(riot.time, "sleep", fake_sleep)
+    state = {}
+    with pytest.raises(Stop):
+        riot.loop(state)
+    assert sleeps == [1800] and len(passes) == 1
 
 
 def _bad_rows(con):

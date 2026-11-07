@@ -24,6 +24,7 @@ from . import store
 LIVE_EVERY_S = 1800
 BACKFILL_GAP_S = float(__import__("os").environ.get("LOL_LE_BACKFILL_GAP", "2"))   # 2026-10-17 load test: unpaced backfill bursts cost the web server connections
 BATCH = 15
+FAIL_SPACING_S = 3600     # a temporary feed failure (5xx / no answer) counts toward "unavailable" at most once an hour
 BACKFILL_DAYS = int(__import__("os").environ.get("LOL_BACKFILL_DAYS", "245"))   # 8 months first
 
 
@@ -144,8 +145,17 @@ def run_backfill(con, leagues=None, days=BACKFILL_DAYS):
                 store.set_meta(con, "le_backfill_refused", {"at": store.now_iso(), "status": e.status, "match": m["match_id"]})
                 con.commit()
                 break
-            n = (store.get_meta(con, f"le_fail:{m['match_id']}", 0) or 0) + 1
-            store.set_meta(con, f"le_fail:{m['match_id']}", n)
+            # 2026-11-06 bug sweep #1: a few minutes of 5xx / timeouts used to reach 3 back-to-back passes and mark the
+            # match done with no data for good. A temporary failure (5xx or no answer) now counts at most once per
+            # FAIL_SPACING_S, so "unavailable at the source" needs failures spread over hours, not one outage.
+            key = f"le_fail:{m['match_id']}"
+            prev = store.get_meta(con, key, 0) or 0
+            n, last_at = (prev.get("n", 0), prev.get("at", 0)) if isinstance(prev, dict) else (int(prev), 0)
+            transient = e.status is None or e.status >= 500
+            now = time.time()
+            if not transient or now - (last_at or 0) >= FAIL_SPACING_S:
+                n += 1
+                store.set_meta(con, key, {"n": n, "at": now})
             if n >= 3:                                   # unavailable at the source: recorded, never stored as zeros
                 store.quarantine(con, "series", f"lolesports:{m['match_id']}", "source_unavailable", {"http": e.status, "tries": n})
                 _mark_done(con, m["match_id"])
@@ -182,6 +192,8 @@ def loop(state, stage=None):
                 time.sleep(300)
             elif b.get("stopped"):
                 time.sleep(1800)                             # the feed refused: back off, then resume where it stopped
+            elif b.get("failed") and not b.get("matches"):
+                time.sleep(1800)                             # every match failed (feed outage): back off, retry later
         except Exception as e:
             state["error"] = {"at": store.now_iso(), "error": f"{type(e).__name__}: {str(e)[:300]}"}
             try:

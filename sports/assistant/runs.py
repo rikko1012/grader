@@ -163,8 +163,14 @@ def _append(con, run_id, typ, data):
 
 
 def append(con, run_id, typ, data):
+    """Runner events. A run already ended (fail_stale failed it while the runner was blocked) takes no more events:
+    the member was told it failed, so no deltas / final follow the error (bug sweep 2026-11-06 #35)."""
     con.execute("BEGIN IMMEDIATE")
     try:
+        r = con.execute("SELECT state FROM runs WHERE run_id=?", (run_id,)).fetchone()
+        if r is not None and r["state"] in TERMINAL:
+            con.execute("COMMIT")
+            return None
         seq = _append(con, run_id, typ, data)
         con.execute("UPDATE runs SET heartbeat_at=? WHERE run_id=?", (now_utc(), run_id))
         con.execute("COMMIT")
@@ -232,22 +238,31 @@ def _refund(con, run_id):
 
 
 def finish(con, run_id, state, usage=None, error=None, model=None, refund=False):
+    """End a run once. A run already in a terminal state (fail_stale ended it while the runner was blocked) keeps its
+    state and is never refunded a second time; the tokens it spent are still counted (bug sweep 2026-11-06 #35).
+    -> True when this call ended the run."""
     usage = usage or {}
     con.execute("BEGIN IMMEDIATE")
     try:
-        con.execute("UPDATE runs SET state=?, finished_at=?, error=?, usage_in=?, usage_out=?, model=? WHERE run_id=?",
-                    (state, now_utc(), error, usage.get("input_tokens", 0), usage.get("output_tokens", 0), model,
-                     run_id))
+        cur = con.execute("UPDATE runs SET state=?, finished_at=?, error=?, usage_in=?, usage_out=?, model=? "
+                          "WHERE run_id=? AND state NOT IN (" + ",".join("?" * len(TERMINAL)) + ")",
+                          (state, now_utc(), error, usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+                           model, run_id, *TERMINAL))
+        ended = cur.rowcount > 0
+        if not ended and (usage.get("input_tokens") or usage.get("output_tokens")):
+            con.execute("UPDATE runs SET usage_in = usage_in + ?, usage_out = usage_out + ? WHERE run_id=?",
+                        (usage.get("input_tokens", 0), usage.get("output_tokens", 0), run_id))
         r = con.execute("SELECT member, quota_day FROM runs WHERE run_id=?", (run_id,)).fetchone()
         if r and r["quota_day"]:
             con.execute("UPDATE quota SET tokens = tokens + ? WHERE member=? AND day=?",
                         (usage.get("input_tokens", 0) + usage.get("output_tokens", 0), r["member"], r["quota_day"]))
-        if refund:
+        if refund and ended:
             _refund(con, run_id)
         con.execute("COMMIT")
     except Exception:
         con.execute("ROLLBACK")
         raise
+    return ended
 
 
 def fail_stale(con, timeout_s):
