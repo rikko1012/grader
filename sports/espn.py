@@ -262,6 +262,9 @@ def parse_depth(body, family, team_abbr=None):
     return out
 
 
+DEPTH_PARTIAL_TTL_S = 600                               # a read with a failed team is reused 10 min, never 6 h
+
+
 def depth_index(lg, refresh=False):
     """{player_key: role row} over every team's depth chart (cached 6 h; one request per team)."""
     if lg["key"] not in DEPTH_LEAGUES:
@@ -271,8 +274,14 @@ def depth_index(lg, refresh=False):
         hit = cache.get("espn:depth", lg["key"], 6 * 3600)
         if hit is not None:
             return hit
+        # bug sweep #40 review: while one team's read keeps failing, the partial answer is reused for a short time
+        # (DEPTH_PARTIAL_TTL_S) instead of ~32 ESPN reads on every call; the failed teams are read again after that.
+        hit = cache.get("espn:depth_partial", lg["key"], DEPTH_PARTIAL_TTL_S)
+        if hit is not None:
+            return hit
     idx, failed = {}, set()
-    for t in teams(lg):
+    read_teams = teams(lg)
+    for t in read_teams:
         try:
             body = net.get_json(f"{SITE}/{_path(lg)}/teams/{t['id']}/depthcharts")
         except (net.HttpError, ValueError):
@@ -285,11 +294,13 @@ def depth_index(lg, refresh=False):
         cache.put("espn:depth", lg["key"], idx)
         return idx
     # a failed team read is transient: never cached (owner rule; bug sweep 2026-11-06 #40). The failed teams keep
-    # their last good rows (any age) for this answer, and the next call reads them again.
+    # their last good rows (any age) for this answer, reused at most DEPTH_PARTIAL_TTL_S, then the teams are read again.
     prev = cache.get("espn:depth", lg["key"]) or {}
     for pk, row in prev.items():
         if row.get("team") in failed and (pk not in idx or row["depth"] < idx[pk]["depth"]):
             idx[pk] = row
+    if len(failed) < len(read_teams):                  # some teams answered: short-lived only (the 6 h copy stays the
+        cache.put("espn:depth_partial", lg["key"], idx)  # last full read); a total outage is retried on the next call
     return idx
 
 

@@ -2356,15 +2356,58 @@ def _lol_member_rebuild(path, mt):
 _LEARNING_SPAWN = threading.Lock()
 
 
+def _learning_os_lock():
+    """Non-blocking OS file lock next to learning.db (bug sweep #18 review): a second server process on the same disk
+    never starts a cycle beside this one. Released when the file is closed or the process ends. -> open file or None."""
+    import learning
+    path = Path(learning.DB_PATH).with_name("learning.cycle.lock")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fh = open(path, "a+b")
+    except OSError:
+        return None
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fh
+    except OSError:
+        fh.close()
+        return None
+
+
+def _learning_os_unlock(fh):
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    except OSError:
+        pass
+    finally:
+        fh.close()                                     # closing releases the lock on every platform
+
+
 def learning_cycle_once():
     """One learning cycle (learning._cycle_safe: child process, errors recorded) unless one is already running from
-    this server. -> True when it ran."""
+    this server or another server process on the same disk. -> True when it ran.
+    Known limit: a manual `python learning.py run` takes neither lock (learning.py is hash-frozen)."""
     import learning
     if not _LEARNING_SPAWN.acquire(blocking=False):
         return False
     try:
-        learning._cycle_safe()
-        return True
+        fh = _learning_os_lock()
+        if fh is None:
+            return False
+        try:
+            learning._cycle_safe()
+            return True
+        finally:
+            _learning_os_unlock(fh)
     finally:
         _LEARNING_SPAWN.release()
 

@@ -68,6 +68,27 @@ def test_18_two_quick_refresh_clicks_start_one_cycle(monkeypatch):
     _wait_for(lambda: not server._LEARNING_SPAWN.locked())
 
 
+def test_18_another_server_process_holding_the_cycle_lock_starts_nothing(monkeypatch, tmp_path):
+    """#18 review: the lock was per process only. A second server process on the same disk now sees the OS file lock
+    next to learning.db (simulated here by holding it through a second file handle)."""
+    import learning
+    import server
+    monkeypatch.setattr(learning, "DB_PATH", tmp_path / ".cache" / "learning.db")
+    started, release = _fake_children(monkeypatch)
+    release.set()
+    learning.STATE.update(running=False, last_error=None)
+    other = server._learning_os_lock()                                           # "the other process"
+    assert other is not None
+    try:
+        assert server.learning_cycle_once() is False and started == []
+    finally:
+        server._learning_os_unlock(other)
+    assert server.learning_cycle_once() is True and len(started) == 1
+    again = server._learning_os_lock()                                           # released after the cycle
+    assert again is not None
+    server._learning_os_unlock(again)
+
+
 # ---------------------------------------------------------------------------------------------------------- #22
 def test_22_a_failed_forecast_write_is_retried_on_the_next_refresh(monkeypatch, tmp_path):
     monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))

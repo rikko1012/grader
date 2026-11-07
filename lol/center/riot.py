@@ -24,7 +24,7 @@ from . import store
 LIVE_EVERY_S = 1800
 BACKFILL_GAP_S = float(__import__("os").environ.get("LOL_LE_BACKFILL_GAP", "2"))   # 2026-10-17 load test: unpaced backfill bursts cost the web server connections
 BATCH = 15
-FAIL_SPACING_S = 3600     # a temporary feed failure (5xx / no answer) counts toward "unavailable" at most once an hour
+FAIL_SPACING_S = 3600     # a definite feed answer (e.g. 404) counts toward "unavailable" at most once an hour; 5xx / no answer never counts
 BACKFILL_DAYS = int(__import__("os").environ.get("LOL_BACKFILL_DAYS", "245"))   # 8 months first
 
 
@@ -127,11 +127,19 @@ def run_backfill(con, leagues=None, days=BACKFILL_DAYS):
     leagues = leagues or le.MAJOR
     since = (datetime.now(timezone.utc) - timedelta(days=days)).date()
     ms = sorted(le.matches_since(leagues, since=since), key=lambda m: m.get("start") or "", reverse=True)
-    todo = [m for m in ms if not _done(con, m["match_id"])][:BATCH]
-    if not todo:
+    pending = [m for m in ms if not _done(con, m["match_id"])]
+    if not pending:
         return None
-    tot = {"rows": 0, "new": 0, "changed": 0, "matches": 0, "failed": 0,
-           "remaining": len([m for m in ms if not _done(con, m["match_id"])]) - len(todo)}
+    # a match whose last temporary failure is recent goes to the back of the line, so a few matches the feed keeps
+    # failing on never hold up the rest of the backfill (they are retried, never retired for a temporary failure)
+    t_now = time.time()
+
+    def _recent_transient(m):
+        f = store.get_meta(con, f"le_fail:{m['match_id']}", None)
+        return isinstance(f, dict) and t_now - (f.get("transient_at") or 0) < FAIL_SPACING_S
+    pending.sort(key=_recent_transient)                  # stable: newest first within each group
+    todo = pending[:BATCH]
+    tot = {"rows": 0, "new": 0, "changed": 0, "matches": 0, "failed": 0, "remaining": len(pending) - len(todo)}
     from ..net import HttpError
     for m in todo:
         try:
@@ -145,20 +153,34 @@ def run_backfill(con, leagues=None, days=BACKFILL_DAYS):
                 store.set_meta(con, "le_backfill_refused", {"at": store.now_iso(), "status": e.status, "match": m["match_id"]})
                 con.commit()
                 break
-            # 2026-11-06 bug sweep #1: a few minutes of 5xx / timeouts used to reach 3 back-to-back passes and mark the
-            # match done with no data for good. A temporary failure (5xx or no answer) now counts at most once per
-            # FAIL_SPACING_S, so "unavailable at the source" needs failures spread over hours, not one outage.
+            # 2026-11-06 bug sweep #1 (owner rule: a transient failure is never stored as permanent): a 5xx or no answer
+            # never counts toward "unavailable at the source", however long the outage. It is recorded (time + count, for
+            # the diagnostics and the back-of-the-line order above) and the match stays to do. Only a definite answer
+            # (4xx other than 403/429, e.g. 404) counts; 3 of those, at least FAIL_SPACING_S apart, retire the match.
             key = f"le_fail:{m['match_id']}"
             prev = store.get_meta(con, key, 0) or 0
-            n, last_at = (prev.get("n", 0), prev.get("at", 0)) if isinstance(prev, dict) else (int(prev), 0)
-            transient = e.status is None or e.status >= 500
+            rec = dict(prev) if isinstance(prev, dict) else {"n": int(prev or 0), "at": 0}
+            if isinstance(prev, dict) and "transient_at" not in prev and "definite" not in prev:
+                rec["n"] = 0                             # a count from the first #1 fix may hold transient strikes: drop it
+            if not isinstance(prev, dict):
+                rec["n"] = 0                             # a legacy integer count (before 2026-11-06) mixed in 5xx strikes too
             now = time.time()
-            if not transient or now - (last_at or 0) >= FAIL_SPACING_S:
-                n += 1
-                store.set_meta(con, key, {"n": n, "at": now})
-            if n >= 3:                                   # unavailable at the source: recorded, never stored as zeros
-                store.quarantine(con, "series", f"lolesports:{m['match_id']}", "source_unavailable", {"http": e.status, "tries": n})
-                _mark_done(con, m["match_id"])
+            if e.status is None or e.status >= 500:
+                rec["transient"] = int(rec.get("transient", 0)) + 1
+                rec["transient_at"] = now
+                rec["last_status"] = e.status
+                store.set_meta(con, key, rec)
+            else:
+                if now - (rec.get("at") or 0) >= FAIL_SPACING_S:
+                    rec["n"] = int(rec.get("n", 0)) + 1
+                    rec["at"] = now
+                rec["definite"] = True
+                rec["last_status"] = e.status
+                store.set_meta(con, key, rec)
+                if rec["n"] >= 3:                        # unavailable at the source: recorded, never stored as zeros
+                    store.quarantine(con, "series", f"lolesports:{m['match_id']}", "source_unavailable",
+                                     {"http": e.status, "tries": rec["n"]})
+                    _mark_done(con, m["match_id"])
             con.commit()
             tot["failed"] += 1
             continue

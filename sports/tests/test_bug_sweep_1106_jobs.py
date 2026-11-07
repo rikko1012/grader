@@ -125,6 +125,93 @@ def test_12_a_timed_out_job_is_never_retried_beside_its_running_thread():
         con.close()
 
 
+def _tracked_sleeper(secs):
+    live, peak, lock = [0], [0], threading.Lock()
+
+    def fn(*a, **k):
+        with lock:
+            live[0] += 1
+            peak[0] = max(peak[0], live[0])
+        time.sleep(secs)
+        with lock:
+            live[0] -= 1
+        return {}
+    return fn, live, peak
+
+
+def test_12_a_timed_out_league_settle_stops_the_rest_of_the_run(monkeypatch):
+    """#12 review: cmd_settle ran {lg: jobs.run(...)} league after league, so nfl's settle (then results and learning)
+    ran beside nba's timed-out thread on the same connection (peak 2). It now stops at the first still-running job."""
+    import argparse
+    from sports import flags, snapshots
+    from sports.model import learning
+    monkeypatch.setattr(flags, "require", lambda name: None)
+    fn, live, peak = _tracked_sleeper(1.0)
+    monkeypatch.setattr(worker, "settle_league", fn)
+    after = []
+    monkeypatch.setattr(snapshots, "write_results", lambda con, lg, **k: after.append(("results", lg)))
+    monkeypatch.setattr(learning, "on_settled", lambda con: after.append("learning"))
+    orig = worker.Jobs
+    monkeypatch.setattr(worker, "Jobs", lambda con: orig(con, attempts=3, timeout_s=0.3, sleep=lambda s: None))
+    con = store.connect()
+    try:
+        out = worker.cmd_settle(argparse.Namespace(leagues=["nba", "nfl"], since=None, bucket_min=60), con)
+        assert out["still_running"] is True and out["nba"]["still_running"] is True
+        assert out["nfl"]["state"] == "not_run" and after == []
+        time.sleep(1.2)
+        assert peak[0] == 1                                                              # was 2
+        assert worker._still_running(out)
+    finally:
+        time.sleep(0.1)
+        con.close()
+
+
+def test_12_loop_ends_when_a_job_is_still_running(monkeypatch):
+    """#12 review: `worker loop` went on to settle (and later ingest again) beside a timed-out job's thread."""
+    import argparse
+    from sports import flags
+    monkeypatch.setattr(flags, "require", lambda name: None)
+    monkeypatch.setattr(worker, "rss_mb", lambda: 10)
+    settled = []
+    monkeypatch.setattr(worker, "cmd_ingest", lambda a, con: {"nba": {"state": "failed", "still_running": True}})
+    monkeypatch.setattr(worker, "cmd_settle", lambda a, con: settled.append(1) or {})
+    monkeypatch.setattr(worker.time, "sleep", lambda s: (_ for _ in ()).throw(AssertionError("looped on")))
+    res = worker.cmd_loop(argparse.Namespace(leagues=["nba"], sources="espn", bucket_min=5, every=10, kalshi_every=30), None)
+    assert res == {"still_running": True, "step": "ingest"} and settled == []
+
+    monkeypatch.setattr(worker, "cmd_ingest", lambda a, con: {"nba": {"state": "done"}})
+    monkeypatch.setattr(worker, "cmd_settle", lambda a, con: {"still_running": True})
+    res = worker.cmd_loop(argparse.Namespace(leagues=["nba"], sources="espn", bucket_min=5, every=10, kalshi_every=30), None)
+    assert res == {"still_running": True, "step": "settle"}
+
+
+def test_12_timeout_never_waits_on_the_write_lock_its_job_holds():
+    """#12 review: the timeout path's ledger write took store._WRITE_LOCK, which the timed-out job held inside a
+    write_tx, so run() blocked until the job's batch ended. It now waits at most LEDGER_WAIT_S and writes later."""
+    con = store.connect()
+    try:
+        j = worker.Jobs(con, attempts=3, timeout_s=0.2, sleep=lambda s: None)
+        j.LEDGER_WAIT_S = 0.1
+        held = threading.Event()
+
+        def fn(ctx):
+            with store.write_tx(con):
+                held.set()
+                time.sleep(1.5)
+            return {}
+        t0 = time.time()
+        res = j.run("k12-lock", "settle", fn)
+        took = time.time() - t0
+        assert held.is_set() and took < 1.0                                              # was ~1.5 s (the tx length)
+        assert res["still_running"] and res.get("ledger_deferred") is True
+        time.sleep(1.5)
+        assert j.flush(wait_s=1.0) == 0
+        assert con.execute("SELECT state, error FROM jobs WHERE job_key = 'k12-lock'").fetchone()[0] == "failed"
+    finally:
+        time.sleep(0.1)
+        con.close()
+
+
 def test_12_settle_job_has_its_own_job_timeout_below_the_scheduler_kill(monkeypatch):
     from sports import scheduler
     for std in (True, False):
@@ -375,6 +462,34 @@ def test_40_one_failed_team_keeps_its_last_good_rows_uncached(monkeypatch):
     assert idx.get("x", {}).get("team") == "NYG"                                         # last good rows kept
     assert cache.get("espn:depth", "nfl", 6 * 3600) is None                             # the partial read not stored
     del sqlite3
+
+
+def test_40_one_failing_team_never_rereads_every_team_on_each_call(monkeypatch):
+    """#40 review: with one team failing every time, the 6 h cache was never written, so every call (board, pregame
+    news every 15 min) re-read all teams. The partial answer is now reused for DEPTH_PARTIAL_TTL_S only."""
+    from sports import cache, espn
+    nfl = config.league("nfl")
+    monkeypatch.setattr(espn, "teams", lambda lg: [{"id": str(i), "abbr": f"T{i}"} for i in range(1, 33)])
+    calls = []
+
+    def one_down(url, **k):
+        calls.append(url)
+        if "/teams/2/" in url:
+            raise net.HttpError(404, url)
+        return {}
+    monkeypatch.setattr(net, "get_json", one_down)
+    espn.depth_index(nfl)
+    assert len(calls) == 32
+    for _ in range(5):
+        espn.depth_index(nfl)
+    assert len(calls) == 32                                                              # was 32 more per call
+    assert cache.get("espn:depth", "nfl", 6 * 3600) is None                             # never the 6 h copy
+    with cache._WRITE:                                                                   # past the short reuse
+        cache._con().execute("UPDATE kv SET at = at - ? WHERE bucket = 'espn:depth_partial'",
+                             (espn.DEPTH_PARTIAL_TTL_S + 1,))
+        cache._con().commit()
+    espn.depth_index(nfl)
+    assert len(calls) == 64                                                              # read again after it
 
 
 # ---------------------------------------------------------------------------------------------------------- #41
