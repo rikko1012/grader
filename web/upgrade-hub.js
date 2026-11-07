@@ -811,6 +811,9 @@ export function mount(C) {
       H.cardFrom=document.activeElement;
       /* QOL 2026-11-07: on a phone the card fills the screen, so the phone's Back button closes it (it left the board for the page
          before). One history entry at the same address; closing the card any other way takes that entry back off. */
+      /* a marker left on this entry with no card open (a reload with the card up) is cleared first, so the new card still gets
+         its own entry and Back still closes it */
+      if(!DESKTOP.matches&&history.state?.hubCard&&!H.popSkip){try{history.replaceState(null,'',location.href);}catch(e){}}
       if(!DESKTOP.matches&&!history.state?.hubCard){try{history.pushState({hubCard:1},'',location.href);H.cardPushed=true;}catch(e){}}
     }
     const sd=r.scout.side;
@@ -825,8 +828,9 @@ export function mount(C) {
     H.expanded=null;H.detail=null;H.detailDoc=null;H.detailSeq++;
     $('hub-card').hidden=true;$('u-hub').classList.remove('h-card-open');$('hub-detail').innerHTML='';
     /* closed in place (Back button, Escape, the row again): take the phone's extra history entry off, so Back then leaves as before.
-       Closed by moving to another page: the entry stays behind as a plain board entry (Back shows the board). */
-    if(H.cardPushed){H.cardPushed=false;if(restore&&history.state?.hubCard){H.popSkip=true;history.back();}}
+       Closed by moving to another page: the entry stays behind as a plain board entry (Back shows the board) - its card marker is
+       cleared, or the next card would find it, add no entry of its own, and Back would leave the card open. */
+    if(H.cardPushed){H.cardPushed=false;if(history.state?.hubCard){if(restore){H.popSkip=true;history.back();}else{try{history.replaceState(null,'',location.href);}catch(e){}}}}
     paintBoard();
     if(!restore)return;
     const back=id&&document.querySelector(`#hub-rows .h-player[data-id="${CSS.escape(id)}"]`);

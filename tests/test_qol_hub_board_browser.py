@@ -233,3 +233,54 @@ def test_desktop_card_adds_no_history_entry(browser, env):
         assert not p.errors
     finally:
         c.close()
+
+
+def test_phone_back_still_closes_a_card_after_leaving_the_board_from_a_card(browser, env):
+    """Reviewer finding (2026-11-07): a card closed because the member moved to another page ("On slip ✓" -> Slips) left its history
+    entry marked as the card's. Back to the board landed on that marked entry, so the next card added no entry of its own and the
+    phone's Back left that card open. Now the leaving close clears the marker, and a marker found with no card open is cleared too."""
+    c = context(browser, env, PHONE)
+    try:
+        p = hub(c, env, PHONE)
+        p.locator('#hub-sports [data-id=cs2]').click()
+        p.wait_for_selector('#hub-rows tr[data-record]')
+        n = p.locator('#hub-rows .h-player').count()
+        added = False
+        for i in range(n):
+            p.locator('#hub-rows .h-player').nth(i).click()
+            p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
+            add = p.locator('#hub-detail [data-hub=detail-add]')
+            if add.count() and add.is_enabled():
+                add.click()
+                p.wait_for_function("document.querySelector('#hub-detail [data-hub=detail-add]')?.textContent === 'On slip ✓'", timeout=10000)
+                added = True
+                break
+            p.go_back()
+            p.wait_for_selector('#hub-card', state='hidden')
+        assert added, "no card in the fixture can be added to the slip"
+        p.locator('#hub-detail [data-hub=detail-add]').click()            # "On slip ✓" -> the Slips page, card closed
+        p.wait_for_selector('#hub-studio-section:not([hidden])')
+        assert p.locator('#hub-card').is_hidden()
+        p.go_back()                                                       # back on the board
+        p.wait_for_selector('#hub-board-section:not([hidden]) #hub-rows tr[data-record]')
+        assert not p.evaluate("!!(history.state && history.state.hubCard)")
+        url = p.url
+        p.locator('#hub-rows .h-player').first.click()
+        p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
+        p.go_back()                                                       # one Back closes this card and stays on the board
+        p.wait_for_selector('#hub-card', state='hidden')
+        assert p.url == url and p.locator('#hub-board-section').is_visible()
+        # a reload with the card up leaves a marked entry and no card: the next card still gets its own entry
+        p.locator('#hub-rows .h-player').first.click()
+        p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
+        p.reload()
+        p.wait_for_selector('#hub-rows tr[data-record]', timeout=30000)
+        assert p.locator('#hub-card').is_hidden()
+        p.locator('#hub-rows .h-player').first.click()
+        p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
+        p.go_back()
+        p.wait_for_selector('#hub-card', state='hidden')
+        assert p.locator('#hub-board-section').is_visible()
+        assert not p.errors
+    finally:
+        c.close()

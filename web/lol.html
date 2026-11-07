@@ -1009,7 +1009,8 @@ document.addEventListener("keydown", e => {
 // Back (the phone's gesture) with a card open closes the card; the page stays
 window.addEventListener("popstate", () => { if ($("#modal").classList.contains("open")) closeCard(true); });
 // a tab left in the background comes back to a fresh board: one load when it is shown again and the last load is over 2 minutes
-// old - never more often than the 2-minute poll, so 700 members cost no extra requests
+// old. The poll below skips its turn when this (or anything) loaded the board in the last 110 s, so a return never adds a
+// second read a few seconds later and 700 members cost no extra requests
 let lastLoad = 0, LOADING = false;
 function refreshIfStale() {
   if (document.visibilityState !== "visible" || GATED || !D || LOADING || Date.now() - lastLoad <= 120000) return false;
@@ -1039,6 +1040,6 @@ function openLinked() {
 // refresh every 2 minutes plus a random 0-20 s (700 members never ask together), skipped while the tab is hidden;
 // the browser re-checks its copy with the server (ETag), so an unchanged board costs a 304 with no body
 function poll() {
-  setTimeout(async () => { try { if (document.visibilityState !== "hidden" && !GATED) await load(false); } catch {} finally { if (!GATED) poll(); } }, 120000 + Math.floor(Math.random() * 20000));
+  setTimeout(async () => { try { if (document.visibilityState !== "hidden" && !GATED && !LOADING && Date.now() - lastLoad >= 110000) await load(false); } catch {} finally { if (!GATED) poll(); } }, 120000 + Math.floor(Math.random() * 20000));
 }
 </script></body></html>

@@ -1491,20 +1491,18 @@
   function setTitle(view, name) {
     document.title = (name ? name + " · " : VIEW_TITLE[view] ? VIEW_TITLE[view] + " · " : "") + state.lg.toUpperCase() + " · 1time Scout Sports";
   }
-  // QoL 1107: back on a tab left open for a while -> say how old the page is and offer one tap to reload it
-  // (no automatic refetch: nothing new polls the server; the member chooses)
+  // QoL 1107: back on a slate / board tab left open 10+ minutes -> reload it quietly, keeping the board's scroll and row
+  // count (no label, no polling: one read per return, the same as the member tapping Retry). Skipped while the member is
+  // typing in a box, and on pages with their own drafts or history (Slip Studio, picks, player, match).
   var loadedAt = Date.now(), hiddenAt = null, STALE_TAB_MS = 10 * 60000;
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) { hiddenAt = Date.now(); return; }
-    var v = route().view;
-    if (!hiddenAt || Date.now() - loadedAt < STALE_TAB_MS || v === "slips" || document.getElementById("sw-stale-tab")) return;
-    var mins = Math.round((Date.now() - loadedAt) / 60000);
-    banner.insertAdjacentHTML("afterbegin", '<div class="sw-banner warn" id="sw-stale-tab">This page was loaded ' + mins + ' min ago. Refresh for the latest lines. <button type="button" class="sw-btn sw-btn-sm" id="sw-stale-reload">Refresh now</button></div>');
-    document.getElementById("sw-stale-reload").addEventListener("click", function () {
-      Api.mem = {};
-      if (v === "board") { state.boardScroll = window.scrollY; state.boardShownSaved = state.boardShown; }
-      render();
-    });
+    var v = route().view, a = document.activeElement, tag = a && a.tagName;
+    if (!hiddenAt || Date.now() - loadedAt < STALE_TAB_MS || (v !== "slate" && v !== "board")) return;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    Api.mem = {};
+    if (v === "board") { state.boardScroll = window.scrollY; state.boardShownSaved = state.boardShown; }
+    render();
   });
   document.getElementById("sw-league").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-lg]"); if (!b) return;

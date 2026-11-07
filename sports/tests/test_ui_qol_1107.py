@@ -2,7 +2,7 @@
 Search ignores case / accents / spaces; the board table header stays in view; toasts can be dismissed and clear
 themselves; Escape closes the slip panel; the Source box closes on an outside tap and gives focus back; Enter saves a
 view; a reload keeps the board's scroll; sheets and the slate get a working Reset; Compare clear / remove can be undone;
-empty-slip buttons look off; the tab title names the page; a tab left open offers a refresh; phone Compare toggles reach
+empty-slip buttons look off; the tab title names the page; a slate / board tab left open reloads quietly; phone Compare toggles reach
 40 px. Node checks: ui_qol_1107_test.js. Browser flows: ui_mock harness (no server, no network). SHOTS_DIR=<folder>
 keeps screenshots. Every name / number here is a TEST FIXTURE."""
 import copy
@@ -354,25 +354,42 @@ def test_tab_title_follows_the_page(browser):
     ctx.close()
 
 
-# ---- a tab left open for 10+ minutes offers a refresh when the member comes back (no automatic refetch)
-def test_stale_tab_offers_a_refresh(browser):
-    ctx, page, errors = _page(browser, U._app_api())
+# ---- a slate / board tab left open for 10+ minutes reloads quietly when the member comes back: no label on the page
+# (owner rule: never a status / staleness label on member pages), one read per return, nothing before 10 minutes
+def test_stale_tab_reloads_quietly(browser):
+    reads = []
+
+    def slate(q):
+        reads.append(1)
+        return {"events": [U.EV, U.EV2]}
+    ctx, page, errors = _page(browser, U._app_api({"/api/sports/slate": slate}))
     page.clock.install()
     page.goto("/sports#/slate?lg=nba")
     page.wait_for_selector(".sw-game")
+    first = len(reads)
     hide = """h => { Object.defineProperty(document, 'hidden', {configurable: true, get: () => h});
                      document.dispatchEvent(new Event('visibilitychange')); }"""
     page.evaluate(hide, True)
     page.clock.fast_forward(5 * 60000)
     page.evaluate(hide, False)
-    assert page.locator("#sw-stale-tab").count() == 0                            # 5 min: nothing
+    page.wait_for_timeout(200)
+    assert len(reads) == first                                                   # 5 min: nothing
     page.evaluate(hide, True)
     page.clock.fast_forward(7 * 60000)
     page.evaluate(hide, False)
-    assert "loaded 12 min ago" in page.locator("#sw-stale-tab").inner_text()
-    page.click("#sw-stale-reload")
     page.wait_for_selector(".sw-game")
+    for _ in range(20):
+        if len(reads) > first:
+            break
+        page.wait_for_timeout(100)
+    assert len(reads) == first + 1                                               # 12 min: one quiet reload
+    body = page.locator("body").inner_text()
+    assert "min ago" not in body and "Refresh for the latest" not in body
     assert page.locator("#sw-stale-tab").count() == 0
+    page.evaluate(hide, True)                                                    # straight back: no second read
+    page.evaluate(hide, False)
+    page.wait_for_timeout(200)
+    assert len(reads) == first + 1
     assert not errors, errors
     ctx.close()
 

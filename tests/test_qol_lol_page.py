@@ -207,6 +207,28 @@ def test_a_tab_shown_again_refreshes_only_when_the_board_is_over_two_minutes_old
 
 
 @needs_node
+def test_poll_skips_its_turn_right_after_a_tab_return_load(tmp_path):
+    """A member back on the tab after 2+ minutes gets one load from refreshIfStale; the 2-minute poll timer that fires a few
+    seconds later must not send a second board read. A poll turn with no recent load still loads (the poll itself is unchanged)."""
+    out = run(tmp_path, "lol.html", """(async () => {
+      const flush = async () => { for (let i = 0; i < 300; i++) await Promise.resolve(); };
+      await flush();                                          // the page's own start-up load settles first
+      D = INPUT; let n = 0; fetch = async () => { n++; return {ok: true, status: 200, json: async () => INPUT}; };
+      let tick = null; setTimeout = f => { tick = f; return 0; };
+      GATED = false; poll(); const first = tick;
+      lastLoad = Date.now() - 130000; document.visibilityState = "visible";
+      const back = refreshIfStale();
+      await flush();
+      const afterReturn = n;
+      await first();                                          // the poll's timer fires seconds after the return load
+      const afterPoll = n, rescheduled = tick !== first;
+      lastLoad = Date.now() - 125000; const next = tick; await next();   // an ordinary poll turn still loads
+      return {back, afterReturn, afterPoll, rescheduled, afterNext: n};
+    })()""", {"rows": _rows(), "match_tables": []})
+    assert out == {"back": True, "afterReturn": 1, "afterPoll": 1, "rescheduled": True, "afterNext": 2}
+
+
+@needs_node
 def test_admin_pages_remember_the_tab_and_state_the_release(tmp_path):
     row = {"player": "Faker", "team": "T1", "opponent": "GEN", "stat": "kills", "scope": "Maps 1-2", "platform": "underdog", "odds_type": "standard",
            "line": 4.5, "sides": {}, "link": {"status": "matched"}, "forecast": {"current": True, "projection": None, "p_over": 0.6, "p_under": 0.4,
