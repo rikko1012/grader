@@ -193,8 +193,16 @@ def log_loaded(d):
 def read(path, last=5000):
     import collections
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             lines = collections.deque(f, maxlen=last)   # streamed: memory = `last` lines, never the whole log
     except OSError:
         return []
-    return [json.loads(x) for x in lines if x.strip()]
+    out = []
+    for x in lines:                                     # bug sweep 2026-11-06 #29: skip a cut-short line (like _seen)
+        if not x.strip():
+            continue
+        try:
+            out.append(json.loads(x))
+        except ValueError:
+            continue
+    return out

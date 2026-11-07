@@ -159,11 +159,15 @@ class FanDuel(Provider):
         except net.HttpError as e:
             res.requests, res.http_status, res.error = int(not e.held), e.status, str(e)
             res.blocked, res.not_before = e.status in (401, 403), e.not_before_iso
+        except (ValueError, KeyError, TypeError, AttributeError) as e:   # a 200 that is not JSON (CDN / geo page) or
+            res.requests = 1                                             # not the expected shape: a recorded failure
+            res.error = f"answer not readable: {type(e).__name__}: {str(e)[:120]}"   # (bug sweep #37)
         return res
 
     def props(self, lg, event):
         res = FetchResult()
         for tab in TABS.get(lg["key"], ()):
+            before = res.requests
             try:
                 body = net.get_json(f"{_base()}/event-page", headers=HEADERS, tries=1,
                                     params={"eventId": event.provider_event_id, "tab": tab, "_ak": AK})
@@ -175,4 +179,8 @@ class FanDuel(Provider):
                 res.http_status, res.error = e.status, f"{tab}: {e}"
                 res.blocked, res.not_before = e.status in (401, 403), e.not_before_iso
                 break                                          # one failed tab stops this game; the worker backs off
+            except (ValueError, KeyError, TypeError, AttributeError) as e:   # non-JSON 200 / bad odds (make_offer):
+                res.requests = before + 1                                    # a recorded failure, never an escape
+                res.error = f"{tab}: answer not readable: {type(e).__name__}: {str(e)[:120]}"   # (bug sweep #37)
+                break
         return res

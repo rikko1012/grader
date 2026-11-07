@@ -118,6 +118,13 @@
              fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION,
              held: held ? held.t : null, heldCode: held ? held.b : null};
     if (q.p === "underdog" && typeof q.ud === "string" && UD_LINK_RE.test(q.ud)) r.ud = q.ud;
+    if (q.v) r.variant = q.v;   // bug #49: the quote's variant, so SportsCompare.rowButton's guard runs on the board table too
+    // owner 2026-11-06 (cap-2): a line that lists one side is labelled by it and never graded (the server sends no
+    // forecast for it; nothing here reads one either)
+    if (q.v === "one_sided") {
+      r.oneSided = q.o && q.o[0] ? "Over only" : "Under only";
+      r.scout = sc = null; r.lean = lean = null; held = null; r.held = null; r.heldCode = null;
+    }
     // SPORTS_MARKET_FALLBACK (snapshot mk.fb, display only): the books' own readings at this exact line when none passed
     // the frozen 15-minute rule. Shown in the Market cell as a stale fallback; never a lean, edge, gap or sort input.
     var fb = m.mk && m.mk.fb;
@@ -147,7 +154,7 @@
       if (r.notValidated) { r.edge = null; r.sortKey = null; r.gapPts = null; r.gap = false; r.mLean = null; }
     }
     r.leanOffered = lean ? !!(q.o && q.o[lean === "over" ? 0 : 1]) : null;
-    r.conf = held || r.notValidated ? null : X ? serverConf(X, r, now) : confidence(r, now);
+    r.conf = held || r.notValidated || r.oneSided ? null : X ? serverConf(X, r, now) : confidence(r, now);
     return r;
   }
   // the one lean rule for a Scout chance + market chance pair (surfaces without a board row: slips, sheets)
@@ -285,6 +292,7 @@
       '><button type="button" class="sw-tb-sort" data-tsort="' + key + '">' + esc(label) + (on ? ' <span aria-hidden="true">' + (dir > 0 ? "▲" : "▼") + "</span>" : "") + "</button></th>";
   }
   function leanBadge(r) {
+    if (r.oneSided) return '<span class="sw-tb-lean none" data-onesided>' + esc(r.oneSided) + "</span>";
     if (!r.scout) return '<span class="sw-tb-lean none">No Scout chance</span>';
     if (r.held) return '<span class="sw-tb-lean none sw-tb-held" data-held="' + esc(r.heldCode) + '">' + esc(r.held) + "</span>";
     if (!r.lean) return '<span class="sw-tb-lean none"' + (r.noLean ? ' data-nolean="' + r.noLean.side + '" title="Scout favours ' + (r.noLean.side === "over" ? "Over" : "Under") + " but the market prices it higher (" + edgeText(r.noLean.edge) + ' pts)"' : "") + ">No lean</span>";
@@ -307,7 +315,7 @@
       '<td class="sw-tb-scout num" data-label="Scout">' + (sc ? '<span class="sw-tb-mu"' + (sc.via === "forecast" ? ' data-fc="' + esc(sc.fid) + '" data-fcside="mean"' : "") + ">" + (sc.mu !== null ? S.num(sc.mu, 1) : "—") + "</span> " +
         '<span class="sw-p over">O ' + S.pct0(sc.po) + '</span> <span class="sw-p under">U ' + S.pct0(sc.pu) + "</span>" : "—") + "</td>" +
       '<td class="sw-tb-mkt num" data-label="Market">' + (mk ? '<span title="Market estimate, ' + mk.n + (mk.n === 1 ? " book" : " books") + ' at this line">' + (r.lean ? (r.lean === "over" ? "O " : "U ") + S.pct0(r.mLean) : "O " + S.pct0(mk.po)) + "</span>" :
-        r.marketFallback ? '<span class="sw-tb-note warn" data-fallback="' + r.marketFallback.n + '" title="Books fallback (display only): ' + r.marketFallback.n + (r.marketFallback.n === 1 ? " book" : " books") + " priced this line but none passed the 15-minute rule" + (nn(r.marketFallback.age) ? ", oldest " + Math.round(r.marketFallback.age / 60) + " min" : "") + '. Not used for lean or edge.">O ' + S.pct0(r.marketFallback.po) + " · books, stale</span>" : "—") + "</td>" +
+        r.marketFallback ? '<span class="sw-tb-note warn" data-fallback="' + r.marketFallback.n + '" title="Books fallback (display only): ' + r.marketFallback.n + (r.marketFallback.n === 1 ? " book" : " books") + " priced this line but none passed the 15-minute rule" + (nn(r.marketFallback.age) ? ", oldest " + Math.round(r.marketFallback.age / 60) + " min" : "") + '. Not used for lean or edge.">O ' + S.pct0(r.marketFallback.po) + '<span class="sw-tb-note">older book prices</span></span>' : "—") + "</td>" +
       '<td class="sw-tb-edge num' + (nn(r.edge) ? (r.edge > 0 ? " pos" : r.edge < 0 ? " neg" : "") : "") + '" data-label="Edge (pts)" data-edge="' + (nn(r.edge) ? r.edge.toFixed(4) : "") + '">' + edgeText(r.edge) + "</td>" +
       '<td class="sw-tb-hit num" data-label="L10" data-hit="' + (h ? [h.l10.o, h.l10.u, h.l10.p, h.l10.n].join(",") : "") + '"' + (seasons ? ' title="Last 10 span ' + esc(seasons) + '"' : "") + ">" + hitText(h && h.l10) + (seasons ? '<span class="sw-tb-note">' + esc(seasons) + "</span>" : "") + "</td>" +
       '<td class="sw-tb-hit5 num" data-label="L5">' + hitText(h && h.l5) + "</td>" +

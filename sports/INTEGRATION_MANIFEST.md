@@ -14,7 +14,7 @@ nothing here is deployed or enabled for members.
 | Merge | merge commit **7c888b7** (`--no-ff`, no conflicts, d393292 merged unmodified; corrections are later commits) |
 | Contracts | `sc-1` (`sports/contracts/schema.py`) |
 | Store schema | migration level 1 (`sports/store.py`, `<SPORTS_DATA_DIR>/canonical.db`) |
-| Adapters | `ad-1`; capabilities `cap-1`; team aliases `ta-1`; Underdog payouts `ud-payouts-2026-10-23` |
+| Adapters | `ad-1`; capabilities `cap-2` (one-sided Underdog lines not graded, owner 2026-11-06); team aliases `ta-1`; Underdog payouts `ud-payouts-2026-10-23` |
 | Research versions | `sharp-1` (data branch, unchanged, importable via `legacy.py`), `sharp-2` (corrected market-only baseline, research only) |
 
 ## Esports baseline and non-regression

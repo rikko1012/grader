@@ -305,13 +305,17 @@ function matchName(x) { return x.match; }
 function pside(x) { return x.pick_side === "Over" ? x.p_over : x.p_under; }
 function offeredSide(x) { return x.sides.find(s => s.offered && s.side !== x.pick_side); }
 function gradeChip(x) {
+  if (x.one_sided) return `<span class="g off">${esc(x.one_sided)}</span>`;   // os-1: a line offering one side only is never graded
   if (!x.pick_offered) return `<span class="g off">No pick</span>`;          // never a letter grade on a side the line does not offer
   if (!x.grade) return NA;
   return `<span class="${String(x.grade).startsWith("Lean") ? "g lean" : "g"}">${esc(x.grade)}</span>`;
 }
+// bug #47: a one-sided line (os-1) is served with units=null - never print "nullU"; one helper for the table, card and Compare
+function stakeText(x) { return x.one_sided || x.units == null ? "–" : `${esc(x.units)}U`; }
 function startedTag(x) { return started(x) ? `<span class="tag">Started</span>` : ""; }
 function typeTag(t) { return t === "Standard" ? "" : `<span class="tag ${t === "Promo" ? "promo" : "alt"}">${esc(t)}</span>`; }
 function pickCell(x) {
+  if (x.one_sided) return `<span class="pick off">${esc(x.one_sided)}</span><span class="offnote">${esc(x.stake_reason || "")}</span>`;
   // lc-1: while LoL letters are held the side reads "Lean Over / Lean Under" (no letter, 0U)
   if (x.pick_offered) return `<span class="pick ${x.pick_side === "Over" ? "over" : "under"}">${x.letter_held ? "Lean " : ""}${esc(x.pick)}</span>`;
   const o = offeredSide(x);
@@ -326,7 +330,7 @@ function quoteIssue(x) {
   return Date.now() - at > 15 * 60000 ? "The line has not been checked in the last 15 minutes." : null;
 }
 function playable(x) { return !whyNot(x); }
-function whyNot(x) { return !Number.isFinite(Date.parse(x.start || "")) ? "The match start time is missing." : started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : quoteIssue(x); }
+function whyNot(x) { return x.one_sided ? x.stake_reason || `${x.one_sided}: Scout grades lines that offer both sides.` : !Number.isFinite(Date.parse(x.start || "")) ? "The match start time is missing." : started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : quoteIssue(x); }
 function legOf(x) { return {key: x.key, platform: x.platform, platform_label: x.platform_label, player: x.player, team: x.team, opponent: x.opponent,
   stat: x.stat, stat_name: x.stat_name, scope: x.scope, line: x.line, side: x.pick_side, line_type: x.line_type, match_key: matchKey(x), start: x.start, grade: x.grade}; }
 function legText(l) { return `${l.player} (${l.team}) vs ${l.opponent} - ${l.stat_name}, ${l.scope} - ${l.platform_label}${l.line_type !== "Standard" ? " " + l.line_type : ""} - ${l.side} ${l.line}`; }
@@ -475,10 +479,10 @@ function boardView() {
       <td><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""}</span></td><td>${esc(x.opponent || "")}</td>
       <td>${esc(x.stat_name)}<span class="sub">${esc(x.scope)}</span></td><td>${esc(x.platform_label)}${typeTag(x.line_type)}</td>
       <td class="num"><b>${x.line}</b></td><td class="num">${num(x.projection)}</td><td class="num">${pct(x.p_over)}</td><td class="num">${pct(x.p_under)}${x.p_push > 0 ? `<span class="ot-push">Push ${pct(x.p_push)}</span>` : ""}</td>
-      <td>${pickCell(x)}</td><td>${gradeChip(x)}${savedAgo(x) ? `<span class="sub saved">${esc(savedAgo(x))}</span>` : ""}</td><td class="num">${x.units}U</td><td>${ctBtnHtml(x)}</td></tr>`;
+      <td>${pickCell(x)}</td><td>${gradeChip(x)}${savedAgo(x) ? `<span class="sub saved">${esc(savedAgo(x))}</span>` : ""}</td><td class="num">${stakeText(x)}</td><td>${ctBtnHtml(x)}</td></tr>`;
     c += `<div class="mcw"><button type="button" class="mcard" data-k="${k}"><div class="card-meta"><span>${esc(x.platform_label)}</span><span>${esc(x.scope)}</span></div><div class="top"><div class="who"><b>${esc(x.player)}</b><span class="sub">${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} · vs ${esc(x.opponent || "")}</span><span class="sub">${when(x.start)}${startedTag(x)}</span></div><div>${gradeChip(x)}</div></div>
       <div class="card-market">${esc(x.stat_name)} ${typeTag(x.line_type)}</div><div style="margin-top:4px">${pickCell(x)}</div>
-      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="card-footer small muted">Stake ${esc(x.units)}U${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>${ctBtnHtml(x)}</div>`;
+      <div class="kv"><div><span class="k">Line</span><b>${x.line}</b></div><div><span class="k">Projection</span>${num(x.projection)}</div><div><span class="k">Over</span>${pct(x.p_over)}</div><div><span class="k">Under</span>${pct(x.p_under)}</div></div><span class="card-footer small muted">${x.one_sided ? esc(x.one_sided) : `Stake ${stakeText(x)}`}${savedAgo(x) ? " · " + esc(savedAgo(x)) : ""}</span>${x.p_push > 0 ? `<span class="ot-push">Exactly ${x.line}: ${pct(x.p_push)} push</span>` : ""}</button>${ctBtnHtml(x)}</div>`;
   }
   return t + `</tbody></table></div>` + c + `</div><div class="results-heading"><span class="small muted">Showing ${rs.length} of ${allRows.length} matching lines</span>${rs.length < allRows.length ? `<button type="button" class="btn" id="morelines">Show 48 more lines</button>` : ""}</div><p class="small faint" style="margin-top:10px">${esc(D.stake_note)} Projection = the model's expected total for the exact games in the prop. Chances are for this line.</p>`;
 }
@@ -486,7 +490,7 @@ function linesHtml(m) {
   return `<div class="lines">${m.lines.map(l => {
     const sides = l.sides.map(s => s.offered ? `${s.side}${s.payout ? " ×" + esc(s.payout) : ""}` : `<span class="faint">${s.side} not offered</span>`).join(" · ");
     const model = l.projection == null ? `<span class="faint">Projection unavailable</span>` :
-      `proj ${num(l.projection)} · Over ${pct(l.p_over)} · Under ${pct(l.p_under)}${l.p_push > 0 ? ` · Push ${pct(l.p_push)}` : ""}${!l.grade ? "" : (l.sides.find(z => z.side === l.pick_side) || {}).offered ? ` · <span class="g ${String(l.grade).startsWith("Lean") ? "lean" : ""}">${esc(l.grade)}</span>` : ` · <span class="faint">${esc(l.pick_side || "")} unavailable - no pick</span>`}`;
+      `proj ${num(l.projection)} · Over ${pct(l.p_over)} · Under ${pct(l.p_under)}${l.p_push > 0 ? ` · Push ${pct(l.p_push)}` : ""}${l.one_sided ? ` · ${esc(l.one_sided)}` : !l.grade ? "" : (l.sides.find(z => z.side === l.pick_side) || {}).offered ? ` · <span class="g ${String(l.grade).startsWith("Lean") ? "lean" : ""}">${esc(l.grade)}</span>` : ` · <span class="faint">${esc(l.pick_side || "")} unavailable - no pick</span>`}`;
     return `<div class="ln"><span>${esc(l.platform)}${typeTag(l.line_type)}</span><b>${l.line}</b><span class="small">${sides}</span><span class="small">${model}</span></div>`;
   }).join("")}</div>`;
 }
@@ -691,7 +695,7 @@ function ctColHtml(S, i) {
     ${f("Platform · line", `${esc(x.platform_label)} · <b class="ctline">${x.line}</b>${typeTag(x.line_type)}`)}
     ${f("Pick", pickCell(x))}
     ${f("Chance", x.pick_offered ? `<b>${pct(pside(x))}</b>${x.p_push > 0 ? ` <span class="faint">push ${pct(x.p_push)}</span>` : ""}` : `Over ${pct(x.p_over)} · Under ${pct(x.p_under)}`)}
-    ${f("Grade · stake", `${gradeChip(x)} · ${esc(x.units)}U`)}
+    ${f("Grade · stake", `${gradeChip(x)} · ${stakeText(x)}`)}
     ${f("Projection", num(x.projection))}
     ${f("Data", esc(savedAgo(x)) || "–")}
     <div class="actions"><button type="button" class="btn" data-ctslip="${i}" ${c.gone || why ? "disabled" : ""}>Add to slip</button><button type="button" class="btn" data-ctcard="${i}" ${c.gone ? "disabled" : ""}>Open card</button></div>
@@ -708,7 +712,7 @@ function ctHtml() {
   else {
     const w = S.R[S.win[0]].r;
     v = `<h3>${esc(w.player)} ${esc(w.pick)} ${esc(w.stat_name)} <span class="muted">· ${esc(w.scope)} · ${esc(w.platform_label)}</span>${typeTag(w.line_type)}</h3>
-      <p class="ctbig"><b>${pct(pside(w))}</b> · ${gradeChip(w)} · ${esc(w.units)}U</p>
+      <p class="ctbig"><b>${pct(pside(w))}</b> · ${gradeChip(w)} · ${stakeText(w)}</p>
       <div class="actions"><button type="button" class="btn primary" data-ctslip="${S.win[0]}" ${slipRule(w) ? "disabled" : ""}>Add to slip</button><button type="button" class="btn" data-ctcard="${S.win[0]}">Open card</button>${slipRule(w) ? `<span class="actmsg">${esc(slipRule(w))}</span>` : ""}</div>`;
   }
   const notes = S.pairs.map(pr => ctPairHtml(S, pr)).join("") + S.same.map(g => { const x0 = S.R[g[0]].r;
@@ -771,7 +775,7 @@ function card(k, focusBack) {
     <h4>The model</h4><div class="grid"><div><span class="k">Projection (expected total)</span><span class="big">${num(x.projection, 2)}</span></div><div><span class="k">Median · 80% range</span>${x.median ?? "–"} · ${(x.range80 || []).length ? x.range80.join("–") : NA}</div>
     <div><span class="k">Over ${x.line}</span><span class="big">${pct(x.p_over)}</span></div><div><span class="k">Under ${x.line}</span><span class="big">${pct(x.p_under)}</span></div>
     ${x.p_push ? `<div><span class="k">Exactly ${x.line} (push)</span>${pct(x.p_push)}</div>` : ""}
-    <div><span class="k">Pick</span>${pickCell(x)}</div><div><span class="k">Grade</span>${gradeChip(x)}</div><div><span class="k">Stake</span><b>${x.units}U</b></div></div>
+    <div><span class="k">Pick</span>${pickCell(x)}</div><div><span class="k">Grade</span>${gradeChip(x)}</div><div><span class="k">Stake</span><b>${stakeText(x)}</b></div></div>
     <div class="small muted" style="margin-top:8px">${esc(x.stake_reason)}</div>
     <div class="actions"><button type="button" class="btn primary" id="copypick" ${playable(x) ? "" : "disabled"}>Copy pick</button><button type="button" class="btn" id="addslip" ${slipRule(x) ? "disabled" : ""}>Add to slip</button>${udCardLink(x)}
       <button type="button" class="btn" id="copylink">Copy link</button>

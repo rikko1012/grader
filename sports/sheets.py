@@ -34,7 +34,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import board_view, snapshots
+from . import board_view, capabilities, snapshots
 from .contracts import now_utc
 
 VERSION = "sh-1"
@@ -86,6 +86,12 @@ def _reader(fid, forecasts, fdetail):
     return read
 
 
+# ------------------------------------------------------------------------------------------- market integrity
+def full_game(row):
+    """S1/S2: only full-game markets are sheet rows (the key's last part is the scope)."""
+    return (row.get("scope") or (row.get("key") or "").rsplit("|", 1)[-1] or "full_game") == "full_game"
+
+
 # ------------------------------------------------------------------------------------------------------ builders
 def _compact_fc(f):
     """The board's compact forecast (snapshots.compact_forecasts format) for one full forecast view."""
@@ -108,6 +114,8 @@ def sheet_markets(player_file, history_games, platform, events, now):
         ev = events.get(row.get("event_id"))
         if not ev or not ev.get("start_utc") or ev["start_utc"] <= now:
             continue                                  # started games leave the sheet
+        if not full_game(row):
+            continue                                  # S1/S2: quarter / half lines are a different market
         lines = [q for q in (row.get("quotes") or []) + (row.get("alternates") or [])
                  if isinstance(q, dict) and q.get("platform") == platform and not q.get("promotional")
                  and q.get("availability", "open") == "open"]
@@ -121,6 +129,11 @@ def sheet_markets(player_file, history_games, platform, events, now):
         for q in lines:
             cq = snapshots.compact_quote(dict(q, last_seen_at=q.get("last_seen_at") or q.get("observed_at"),
                                               gradable=bool(q.get("gradable"))))
+            if capabilities.is_one_sided(q):          # cap-2 (owner 2026-11-06): "Over only", no chance / edge / grade
+                cq.pop("f", None)
+                cq.pop("lr", None)
+                qs.append(cq)
+                continue
             own = forecasts.get(cq.get("f") or "")
             if own:
                 fc[own["forecast_id"]] = _compact_fc(own)
@@ -172,9 +185,13 @@ def sheet_markets(player_file, history_games, platform, events, now):
 
 
 def headline_line(row):
-    """CONSISTENT's current line: PrizePicks standard, else the Underdog main line."""
+    """CONSISTENT's current line: PrizePicks standard, else the Underdog main line - an ordinary line that lists BOTH
+    sides (S1/S2: a one-sided line is never the 'current line'). The type is the LISTED sides stored by the adapter
+    (variant one_sided), never today's offered sides, so a passing suspension of one side changes nothing."""
     for plat in PLATFORMS:
         for q in row.get("quotes") or []:
+            if q.get("variant") == "one_sided":
+                continue
             if q.get("platform") == plat and q.get("variant") in ORDINARY and not q.get("promotional"):
                 return plat, float(q["line"])
     return None, None
@@ -186,6 +203,8 @@ def consistent_rows(player_file, history_games, events, now):
         ev = events.get(row.get("event_id"))
         if not ev or not ev.get("start_utc") or ev["start_utc"] <= now:
             continue
+        if not full_game(row):
+            continue                                  # S1/S2: a 1Q / 1H line is never compared with full-game history
         plat, line = headline_line(row)
         if plat is None:
             continue

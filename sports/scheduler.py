@@ -137,6 +137,15 @@ def budget_mb(mem=None):
     return _env_num("SPORTS_CHILD_BUDGET_MB", int(mem * 0.75) - SERVICE_MB, int)
 
 
+BOOKS_CAP_MB = 60                   # Starter cap of the books job (x cap_scale); see the books row in sports/RUNBOOK.md
+
+
+def books_job_on(env=None):
+    """SPORTS_BOOKS_JOB (default on): the books' own feeds run as the light "books" job, not inside ingest-<league>."""
+    v = ((os.environ if env is None else env).get("SPORTS_BOOKS_JOB") or "1").strip().lower()
+    return v not in ("0", "false", "no", "off")
+
+
 def _py(*args):
     return [sys.executable, *args]
 
@@ -145,6 +154,7 @@ def default_jobs():
     """name -> spec. cap_mb from the 2026-10-24 measurements (sports/research/results/starter_2026-10-24) with margin.
     every_s None + trigger = on demand. Starter cadences (members see the freshness in RUNBOOK 'Starter')."""
     lg = os.environ.get("SPORTS_LEAGUES", "nba nfl").split()
+    books_job = books_job_on()
     std = standard()                    # Standard plan cadences (2026-10-25); Starter values after "else"
     J = {
         # on demand, member-facing first
@@ -177,7 +187,8 @@ def default_jobs():
         # tip, SPORTS_INGEST_GAMEDAY_S (600) on a game day, SPORTS_INGEST_IDLE_S (900) otherwise; each successful
         # cycle starts the board build at once ("then"). --bucket-min 1: a 5-minute cycle is never skipped as 'done'.
         **{f"ingest-{x}": dict(argv=_py("-m", "sports.worker", "ingest", x, "--bucket-min", "1", "--sources",
-                                        "espn,pp,ud,injuries,oddsapi,polymarket,books,games"),
+                                        "espn,pp,ud,injuries,oddsapi,polymarket," + ("" if books_job else "books,")
+                                        + "games"),
                                every_s=600 if std else 900, cadence=("gameday", (x,)), then=(f"ui-snapshots-{x}",), collector=True,
                                # 2026-10-31: a board shows only collected lines; 15 min overdue goes first (replay: 5 min
                                # stopped settle / forecasts, none left line gaps of 55 min)
@@ -188,6 +199,21 @@ def default_jobs():
                                # beside the old thread until this 900 s kill (ingest-nfl took 180-290 s, twice killed)
                                env={"SPORTS_WORKER_CONCURRENCY": "1", "SPORTS_JOB_TIMEOUT_S": "870"})
                             for x in lg},   # 191-197 MB both leagues
+        # the books' own feeds (FanDuel / BetRivers, + OddsPapi when its guard allows) as their OWN light job
+        # (owner 2026-11-06, book-cadence): inside a ~4-minute ingest cycle that waited behind settle (~20 min) the
+        # quotes were read every 36-60 min and failed every consumer's freshness rule (market chance 15 min, Tools +EV
+        # 30 min). Every minute on a game day it checks books.db (no request) and reads only the games the direct
+        # ladder says are due (books/schedule.py: 3 / 5 / 8 / 8 min inside 2 / 8 / 24 / 72 h). Light: no heavy slot, so settle
+        # / board builds / sheets never hold it back; its writes are short per-game transactions (books.db under the
+        # books worker's lease, sc-1 offers in BEGIN IMMEDIATE with a 30 s busy timeout). SPORTS_BOOKS_JOB=0 puts the
+        # books source back into the ingest cycles (rollback).
+        **({"books": dict(argv=_py("-m", "sports.worker", "books", *lg), every_s=60, cadence=("books", tuple(lg)),
+                          timeout_s=600, flag="SPORTS_INGEST", cap_mb=BOOKS_CAP_MB, cls=LIGHT, prio=2,
+                          locks=("books",), env={"SPORTS_WORKER_CONCURRENCY": "1"},
+                          # live 2026-11-06 22:19-22:25: a WAITING exclusive model-forward held every later start for
+                          # 6+ min (and a running one blocks all starts for up to 15 min) - so the books job runs
+                          # beside exclusive jobs; network-bound, 108 MB of the 1,200 MB budget on Standard
+                          beside_exclusive=True)} if books_job else {}),
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
                                        "kalshi"),
                               every_s=1800 if std else 3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
@@ -199,8 +225,15 @@ def default_jobs():
                        locks=("canonical", "books", "games", "cache", "model-daily"),      # never beside a collector
                        # Settlement also imports the model scorecard's native libraries. The old collector VM
                        # limit (320 MB) lets settlement finish but breaks that import. RSS remains watchdog-bound.
-                       env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
-                       if std else {}),
+                       # the worker's own job limit just below this kill (bug sweep 2026-11-06 #12): the default 300 s
+                       # timed out every long settle and restarted it beside the still-running first attempt
+                       env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int)),
+                            "SPORTS_JOB_TIMEOUT_S": "1440"}
+                       if std else {"SPORTS_JOB_TIMEOUT_S": "840"}),
+        # pre-game news archive (pgn-1, pregame_news/): injury report + depth charts through the shared caches and the
+        # game summary of games starting within 2 h -> pregame_news.db, append-only, change-only. Research input only.
+        "pregame-news": dict(argv=_py("-m", "sports.pregame_news", "run", *lg), every_s=900, timeout_s=300,
+                             flag="SPORTS_INGEST", cap_mb=80, cls=LIGHT, prio=4, locks=("pregame-news",)),
         "picks-ingest": dict(argv=_py("-m", "sports.picks", "ingest"), every_s=60, timeout_s=120,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # member picks: spool -> picks.db
         "picks-settle": dict(argv=_py("-m", "sports.picks", "settle"), every_s=900 if std else 3600, timeout_s=600,
@@ -353,6 +386,12 @@ def cadence_settings():
             "idle_s": _env_num("SPORTS_INGEST_IDLE_S", 600.0 if std else 900.0),
             "hot_h": _env_num("SPORTS_INGEST_HOT_H", 2.0),
             "gameday_h": _env_num("SPORTS_INGEST_GAMEDAY_H", 18.0),
+            "books_hot_s": _env_num("SPORTS_BOOKS_HOT_S", 60.0),
+            "books_gameday_s": _env_num("SPORTS_BOOKS_GAMEDAY_S", 60.0),
+            "books_idle_s": _env_num("SPORTS_BOOKS_IDLE_S", 180.0),
+            # site audit 2026-11-06 N1: the books job checks at its game-day pace while a game is within this many hours (the
+            # books ladder reads every game inside 72 h every 3-8 min, so a quote stays under the 10-min Price check rule)
+            "books_gameday_h": _env_num("SPORTS_BOOKS_GAMEDAY_H", 72.0),
             "kalshi_hot_s": _env_num("SPORTS_KALSHI_HOT_S", 600.0 if std else 1200.0),
             "kalshi_idle_s": _env_num("SPORTS_KALSHI_IDLE_S", 1800.0 if std else 3600.0)}
 
@@ -365,7 +404,7 @@ def _iso_ts(x):
         return None
 
 
-def league_phase(league, now_ts, snap_root=None):
+def league_phase(league, now_ts, snap_root=None, gameday_h=None):
     """'hot' (earliest upcoming tip within hot_h hours), 'gameday' (a tip within gameday_h hours or a game under way),
     'idle', or 'unknown' (no slate file yet). From the league's slate snapshot (<snapshots>/<league>/slate.json - a
     small file the board build writes), never the store."""
@@ -390,18 +429,24 @@ def league_phase(league, now_ts, snap_root=None):
             live = True
     if nxt is not None and nxt - now_ts <= c["hot_h"] * 3600:
         return "hot"
-    if live or (nxt is not None and nxt - now_ts <= c["gameday_h"] * 3600):
+    if live or (nxt is not None and nxt - now_ts <= (c["gameday_h"] if gameday_h is None else gameday_h) * 3600):
         return "gameday"
     return "idle"
 
 
 def cadence_every(cadence, now_ts, snap_root=None):
-    """Seconds between runs for a ('gameday' | 'kalshi', leagues) cadence: the fastest phase over its leagues."""
+    """Seconds between runs for a ('gameday' | 'kalshi' | 'books', leagues) cadence: the fastest phase over its
+    leagues."""
     kind, leagues = cadence
     c = cadence_settings()
     phases = {league_phase(x, now_ts, snap_root) for x in leagues}
     if kind == "kalshi":
         return c["kalshi_hot_s"] if "hot" in phases else c["kalshi_idle_s"]
+    if kind == "books":                 # the check is a books.db read; requests follow the direct ladder, not this
+        phases = {league_phase(x, now_ts, snap_root, gameday_h=c["books_gameday_h"]) for x in leagues}
+        if "hot" in phases:
+            return c["books_hot_s"]
+        return c["books_gameday_s"] if ("gameday" in phases or "unknown" in phases) else c["books_idle_s"]
     if "hot" in phases:
         return c["hot_s"]
     if "gameday" in phases or "unknown" in phases:
@@ -451,12 +496,14 @@ class Scheduler:
         return not (a.get("league") and a.get("league") == b.get("league"))
 
     def _fits(self, name):
+        """beside_exclusive (the books job, 2026-11-06): a light, network-bound job that may run beside an exclusive
+        model job and that an exclusive job does not wait for - the reservation total still holds both."""
         spec = self.specs[name]
-        classes = [self.specs[n]["cls"] for n in self.running]
-        if EXCLUSIVE in classes:
+        others = [n for n in self.running if not self.specs[n].get("beside_exclusive")]
+        if any(self.specs[n]["cls"] == EXCLUSIVE for n in self.running) and not spec.get("beside_exclusive"):
             return False
         if spec["cls"] == EXCLUSIVE:
-            return not self.running
+            return not others and (not self.running or self.reserved() + spec["cap_mb"] <= self.budget)
         if spec["cls"] == HEAVY:
             heavy = [self.specs[n] for n in self.running if self.specs[n]["cls"] == HEAVY]
             if len(heavy) >= self.max_heavy or not all(self._pairable(spec, h) for h in heavy):
@@ -605,7 +652,18 @@ class Scheduler:
         with _LOCK:
             STATS["peak_children_rss_mb"] = round(max(STATS["peak_children_rss_mb"], total), 1)
         held = None                                     # an urgent job waiting for a slot
+        excl = None                                     # an exclusive job waiting for everything else to finish
         for name in self.due():
+            if excl is not None:
+                # behind a waiting exclusive job only a beside_exclusive job may start, and only if the exclusive job
+                # still fits beside every beside_exclusive job once the others (which it waits for anyway) are done -
+                # so neither ever starves the other
+                spec = self.specs[name]
+                beside = sum(self.specs[n]["cap_mb"] for n in self.running if self.specs[n].get("beside_exclusive"))
+                if spec.get("beside_exclusive") and self._fits(name) and \
+                        beside + spec["cap_mb"] + self.specs[excl]["cap_mb"] <= self.budget:
+                    self.start(name)
+                continue
             if (held is None or self._may_pass(name, held)) and self._fits(name):
                 self.start(name)
                 continue
@@ -614,7 +672,8 @@ class Scheduler:
             with _LOCK:
                 STATS["deferred_ticks"] += 1
             if self.specs[name]["cls"] == EXCLUSIVE:
-                break                                   # hold everything behind a waiting exclusive job (no starvation)
+                excl = name                             # hold everything behind a waiting exclusive job (no starvation)
+                continue
             if held is None and self._urgent(name, t):
                 held = name                             # nothing may take the slot it is waiting for
 

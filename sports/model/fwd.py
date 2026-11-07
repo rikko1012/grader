@@ -399,6 +399,11 @@ def run(leagues=None, forecast_at=None, log=print):
                 out["nflv2_h2"] = nflv2.h2_check(hcon, forecast_at or started)
             except Exception as e:                      # noqa: BLE001 - never blocks sm-1
                 out["nflv2_h2"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+            try:                                        # sn-1 held-out (REGISTER A11 3): counts only, no interim look
+                from . import sn1
+                out["sn1_heldout"] = sn1.progress(hcon) if sn1.load() is not None else {"state": "no sn-1 artifact"}
+            except Exception as e:                      # noqa: BLE001 - never blocks sm-1
+                out["sn1_heldout"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     finally:
         hcon.close()
     out["forecasts_added"] = after - before
@@ -425,7 +430,8 @@ def _summary(out):
             "forecasts_added": out.get("forecasts_added"), "leagues": lg, "withheld_check": out.get("withheld_check"),
             "snapshot": out.get("snapshot"), "peak_rss_mb": out.get("peak_rss_mb"), "training": out["training"],
             "sm2_shadow": {k: r.get("shadow") for k, r in out["leagues"].items()}, "sm2_l2": out.get("sm2_l2"),
-            "nflv2_shadow": (out["leagues"].get("nfl") or {}).get("shadow_nflv2"), "nflv2_h2": out.get("nflv2_h2")}
+            "nflv2_shadow": (out["leagues"].get("nfl") or {}).get("shadow_nflv2"), "nflv2_h2": out.get("nflv2_h2"),
+            "sn1_shadow": (out["leagues"].get("nfl") or {}).get("shadow_sn1"), "sn1_heldout": out.get("sn1_heldout")}
 
 
 def main(argv=None):

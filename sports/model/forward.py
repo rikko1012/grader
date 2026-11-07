@@ -27,6 +27,23 @@ from .frame import Frame
 ART_DIR = Path(__file__).resolve().parent / "artifacts"
 TARGETS = ("prizepicks", "underdog")
 SPORT_MARKETS = {"nba": list(featurize.NBA_MARKETS), "nfl": list(featurize.NFL_MARKETS)}
+PROJ_MEAN_CODE = "proj_mean:pmf"
+
+
+def fix_proj_mean_on():
+    """SPORTS_FIX_PROJ_MEAN=1 (bug sweep 2026-11-06 #10, default OFF - it moves the board's leans, owner decides): the
+    sm-1 forecast's projection_mean is the mean of the calibrated PMF its chances come from (what gradecheck and the
+    tw-1 / mi-1 paths use), not the pre-calibration model mean. Off: unchanged. Forecasts written with it carry
+    the reason code proj_mean:pmf so replay recomputes the same mean."""
+    return os.environ.get("SPORTS_FIX_PROJ_MEAN", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def shown_projection_mean(pmf, ks, model_mean, tw=False):
+    """-> (projection_mean stored on the sm-1 forecast, extra reason code or None). Flag off (default) / tw-1 (whose
+    mean is already the PMF mean): the model mean, unchanged. SPORTS_FIX_PROJ_MEAN=1: the calibrated PMF's mean."""
+    if tw or not fix_proj_mean_on():
+        return model_mean, None
+    return float(dists.mean_of(np.asarray(pmf, float)[None, :], ks)[0]), PROJ_MEAN_CODE
 
 
 def _sha(obj):
@@ -138,7 +155,15 @@ def upcoming_rows(scon, hcon, league, now):
             gsis.setdefault(str(r["espn_id"]), []).append(r["gsis_id"])
     pos = {}
     tbl = "nba_pg" if league == "nba" else "nfl_pg"
-    for r in hcon.execute(f"SELECT player_id, position FROM {tbl} WHERE position IS NOT NULL AND position != ''"):
+    # SCOUT_NFL_TWO_WAY on (sanity 2026-11-05): most recent listing wins - the old query has no ORDER BY, so a player
+    # listed under two positions (FB/TE, RB/FB, ...) gets whichever row SQLite returns last; nfl_frame then replaces it
+    # with the most frequent mapped position over the player's last NFL_RECENT_POS rows. Off: unchanged.
+    sql = f"SELECT player_id, position FROM {tbl} WHERE position IS NOT NULL AND position != ''"
+    if league == "nfl" and featurize.nfl_two_way_on():
+        sql = (f"SELECT p.player_id, p.position FROM {tbl} p LEFT JOIN games g ON g.league = 'nfl' AND "
+               "g.game_id = p.game_id WHERE p.position IS NOT NULL AND p.position != '' "
+               "ORDER BY COALESCE(g.start_utc, ''), p.game_id")
+    for r in hcon.execute(sql):
         pos[r["player_id"]] = r["position"]
     rows, idmap, skipped = {}, {}, {}
     for rid, o in store.iter_offers(scon, league=league, limit=500000):
@@ -291,6 +316,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     icon = inputs_db()
     rec = _shadow_recorder(scon, hcon, league, forecast_at, absences, up)      # sm-2 SHADOW (REGISTER A5 7), never shown
     rec2 = _nflv2_recorder(scon, hcon, league, forecast_at, up, rec)           # sm-nfl-2 SHADOW (REGISTER A6 6)
+    rec3 = _sn1_recorder(league, forecast_at)                                  # sn-1 SHADOW (REGISTER A11 2)
     tw = _tw1(league, art["sha"])                                             # tw-1 per-market layer (REGISTER A7 8)
     if tw is not None:
         out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}
@@ -352,7 +378,10 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             if tw_m:                                     # tw-1 switched market (A7 8): exact version in the record
                 av, cv = f"{av}+tw-1:{tw['sha']}", _tw1_layer(tw, mk, base_of[gk], lo)[1]["calibration_version"]
                 codes.append("tw-1")
-            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, av, pmf, lo, mean, (rid,),
+            shown_mean, code = shown_projection_mean(pmf, ks, mean, bool(tw_m))
+            if code:
+                codes.append(code)
+            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, av, pmf, lo, shown_mean, (rid,),
                                      codes, data_version, cv, (("family_fit", am["family"]),))
             written.append(("sm-1", fc, pol, pmf, {"row": row}))
             sh_items.append((rid, o, gk, pol.get("chosen_p")))
@@ -412,12 +441,16 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             rec.market(mk, df, hl, rowpos, sh_items, events)
         if rec2 is not None:
             rec2.market(mk, df, hl, rowpos, sh_items, events, sm1_probs)
+        if rec3 is not None:
+            rec3.market(mk, df, hl, rowpos, sh_items, events, base_of, pmf_of)
         log({"league": league, "market": mk, "written": out["written"]})
     icon.close()
     if rec is not None:
         out["shadow"] = rec.close()
     if rec2 is not None:
         out["shadow_nflv2"] = rec2.close()
+    if rec3 is not None:
+        out["shadow_sn1"] = rec3.close()
     return out
 
 
@@ -452,6 +485,21 @@ def _nflv2_recorder(scon, hcon, league, forecast_at, up, rec=None):
             return None
         absences = rec.absences if rec is not None else shadow._report(scon, hcon, league, forecast_at, up)[1]
         return nflv2.Recorder(hcon, forecast_at, absences=absences, context=getattr(rec, "context", None), art=art)
+    except Exception:                                    # noqa: BLE001
+        return None
+
+
+def _sn1_recorder(league, forecast_at):
+    """The sn-1 shadow recorder for NFL, or None (other league / no verified artifact paired with this sm-1 /
+    SPORTS_SHADOW_SN1=0 / any error - sm-1 is never affected)."""
+    if league != "nfl":
+        return None
+    try:
+        from . import sn1
+        if not sn1.enabled():
+            return None
+        art = sn1.load()
+        return sn1.Recorder(forecast_at, art=art) if art is not None else None
     except Exception:                                    # noqa: BLE001
         return None
 
@@ -527,8 +575,11 @@ def replay(forecast_id, scon=None):
         mean = float(dists.mean_of(pmf[None, :], ks)[0])
         av, cv = f"{av}+tw-1:{tw['sha']}", meta["calibration_version"]
     if r["model_version"] == MODEL_VERSION:
+        shown_mean = mean
+        if PROJ_MEAN_CODE in (orig.reason_codes or ()) and "+tw-1:" not in (orig.artifact_version or ""):
+            shown_mean = float(dists.mean_of(pmf[None, :], ks)[0])      # written under SPORTS_FIX_PROJ_MEAN (#10)
         fc, _ = build_forecast(offer, r["offer_record_id"], r["forecast_at"], MODEL_VERSION, av, pmf,
-                               lo, mean, (r["offer_record_id"],), list(_codes(orig)), "ds-1:" + _sha(row)[:16],
+                               lo, shown_mean,(r["offer_record_id"],), list(_codes(orig)), "ds-1:" + _sha(row)[:16],
                                cv, (("family_fit", am["family"]),), vstate)
     else:
         per = {k: tuple(v) for k, v in json.loads(r["market_json"]).items()}

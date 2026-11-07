@@ -6,10 +6,11 @@ entry_result(platform, entry_type, legs, results) is pure: results[i] in win / l
             Flex reverts down one entry per void along U-FLEX's chain (3-pick flex -> 2-pick standard). The printed
             4-pick-flex revert (3x) conflicts with the 3-pick flex payout (3.25x): that all-correct payout is unknown.
             A leg multiplier other than 1.0 -> payout unknown (combination unpublished; the shift survives voids).
-  PrizePicks  DNP (void) and ties drop out, one tier each (P-DNP). DNPs that leave fewer than 2 picks or one team ->
+  PrizePicks  DNP (void) and ties drop out, one tier each along P-DNP's chain (n-pick Power -> (n-1)-pick Power,
+            Flex 6 -> 5 -> 4 -> 3, 3-pick Flex -> 2-pick Power). DNPs that leave fewer than 2 picks or one team ->
             refunded; ties never make the lineup ineligible (a lineup left with one pick by ties has no published
-            payout). Payout = the standard Minimum Guarantee rate (P-OUT), internal only: the lineup's own payout
-            can differ and a leaderboard win can pay more (or pay a lineup with a miss).
+            payout). Payout = the verified help-center table (payouts.PP_TABLE, gradecore/pickem_payouts.json, owner
+            sign-off 2026-11-05) for standard lines; a goblin / demon / promo pick -> payout not published.
   Both      a lost Higher/More pick may have been a Rescue / Reboot (left in the first half, did not return) - not
             visible in box scores, flagged in notes.
 
@@ -105,35 +106,56 @@ def _underdog(entry_type, legs, results):
     return _result(status, mult, True, basis=f"Underdog published payouts {payouts.UD_TABLE_VERSION}", **base)
 
 
+def pp_reverted(entry_type, picks, removed):
+    """P-DNP: the (entry, picks) a lineup pays as after `removed` DNPs / ties, one tier each (3-pick Flex -> 2-pick
+    Power). None = the chain ran out (a 2-pick lineup losing a pick)."""
+    at = (entry_type, picks)
+    for _ in range(removed):
+        at = rules.PP_REVERT.get(at)
+        if at is None:
+            return None
+    return at
+
+
 def _prizepicks(entry_type, legs, results):
+    """P-DNP + the verified payout table (payouts.PP_TABLE = gradecore/pickem_payouts.json). DNPs (void) and ties (push)
+    each drop the lineup one tier (pp_reverted); DNPs that leave fewer than 2 picks or one team refund it; ties never
+    make it ineligible, and a lineup left with one pick by ties has no published payout. Goblin / demon / promo picks:
+    the result is graded but the payout is not published."""
     dnp = [l for l, r in zip(legs, results) if r == "void"]
     ties = [l for l, r in zip(legs, results) if r == "push"]
     remaining = [l for l, r in zip(legs, results) if r != "void"]
     active = [(l, r) for l, r in zip(legs, results) if r in ("win", "loss")]
     correct = sum(1 for _, r in active if r == "win")
-    base = dict(active=len(active), removed=len(dnp) + len(ties), losses=len(active) - correct, rule="P-DNP/P-OUT",
-                member_display=False)
+    base = dict(active=len(active), removed=len(dnp) + len(ties), losses=len(active) - correct, rule="P-DNP/P-PAY")
     if dnp:
         nt = _teams(remaining)
         if len(remaining) < 2 or nt == 1:
             return _result("refunded", 1.0, True, reason="DNPs left fewer than 2 picks or one team", **base)
     m = len(active)
-    base["reverted_to"] = {"entry_type": entry_type, "picks": m}
-    if m < 2:
+    at = pp_reverted(entry_type, len(legs), len(dnp) + len(ties))
+    if at is None or m < 2:
+        base["reverted_to"] = None
         if m == 1 and correct == 0:
-            return _result("lost", 0.0, False, reason="no Minimum Guarantee; a leaderboard payout is not knowable",
-                           **base)
+            return _result("lost", 0.0, True, **base)
         return _result("graded_payout_unknown", None, False,
                        reason="ties left fewer than 2 picks: PrizePicks publishes no payout for that", **base)
-    basis = "PrizePicks standard Minimum Guarantee rate (P-OUT); the lineup's own rate can differ and a leaderboard " \
-            "win pays the higher amount"
-    if entry_type == "power":
-        if correct < m:
-            return _result("lost", 0.0, False, basis=basis + " (a leaderboard win can still pay)", **base)
-        return _result("won", rules.PP_STANDARD_POWER.get(m), False, basis=basis, **base)
-    mult = rules.PP_STANDARD_FLEX.get(m, {}).get(correct, 0.0)
+    etype, picks = at
+    base["reverted_to"] = {"entry_type": etype, "picks": picks}
+    tiers = payouts.pp_tiers(etype, picks)
+    if tiers is None:
+        return _result("graded_payout_unknown", None, False, reason="no verified PrizePicks payout for this lineup",
+                       **base)
+    mult = tiers.get(correct, 0.0)
     status = "won" if correct == m else ("partial" if mult > 0 else "lost")
-    return _result(status, mult, False, basis=basis, **base)
+    if etype == "power" and correct < m:
+        return _result("lost", 0.0, True, **base)
+    if not rules.pp_standard(legs):
+        return _result("graded_payout_unknown", None, False, reason="PrizePicks pays goblin, demon and promo picks "
+                                                                    "differently: the payout is not published", **base)
+    if mult == 0.0:
+        return _result("lost", 0.0, True, **base)
+    return _result(status, mult, True, basis=f"PrizePicks published payouts {payouts.PP_VERSION}", **base)
 
 
 def leg_status(settlement):

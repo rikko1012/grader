@@ -25,6 +25,15 @@ def test_research_estimates_stay_out_unless_asked_then_marked(env, monkeypatch):
     assert st == 200, doc
     assert not [l for l in legs(doc) if l["sport"] in ("nba", "nfl")]
     assert doc["pool"]["excluded"].get("research", 0) >= 1
+    # the live route offers only slips that clear break-even (owner audit 2026-11-06, T1): every one it hands out does
+    st, doc = gen(env, research=1, sports="cs2,nba", slips=8)
+    assert st == 200 and all(s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"] if s.get("payout"))
+    # the marking itself, with the break-even rule set aside: the fixture's research letters (ranked at half their distance
+    # from 50%) do not clear a 3x Power 2-pick next to its CS2 legs
+    build = sq.build
+    monkeypatch.setattr(workspace_api.sq, "build", lambda ls, o: build(ls, dict(o, break_even=False)))
+    for k in [k for k in server._RESULTS if k and k[0] == "ws_gen"]:
+        server._RESULTS.pop(k, None)                                   # the shared batch of the same options, built a moment ago
     st, doc = gen(env, research=1, sports="cs2,nba", slips=8)      # the fixture has one research letter per platform: it pairs with CS2
     assert st == 200
     research = [l for l in legs(doc) if l["research"]]

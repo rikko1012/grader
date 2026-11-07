@@ -34,8 +34,13 @@ sq-1, in plain words:
      Nothing is dropped or reordered: a replacement is only ever applied by the member, in place.
 
 Search: exact branch-and-bound per slip over the best POOL_CAP legs (NODE_LIMIT nodes, reported when reached). Payout: Underdog's
-published table when every pick is a 1.0x pick; PrizePicks payouts stay unknown. EV is never computed here (workspace_rules.
-ev_status decides it, only with a verified payout and validated chances)."""
+published table when every pick is a 1.0x pick; PrizePicks' verified help-center table (owner 2026-11-05) on standard lines.
+EV is never computed here (workspace_rules.
+ev_status decides it, only with a verified payout and validated chances). Break-even (owner audit 2026-11-06): the member
+route offers a slip only when its ranked all-hit chance clears the break-even of the lowest payout its leg mix can pay
+(clears_break_even); that check is a yes / no, never a shown figure. With it on, same-match legs are never combined (no
+all-hit chance to check), branches that cannot reach break-even are cut, and the whole batch shares BUILD_NODE_LIMIT nodes
+(audit review 2026-11-07: 700-member rule)."""
 import math
 from datetime import datetime, timezone
 
@@ -60,6 +65,7 @@ LEAD_S = 120                                        # a line that starts within 
 MIN_PICKS, MAX_PICKS, MAX_SLIPS = 2, 6, 12
 POOL_CAP = 60
 NODE_LIMIT = 20000
+BUILD_NODE_LIMIT = 6000                             # break-even on (member route): one budget for the whole batch, not per slip
 REUSE_PENALTY = 0.35                                # log-chance per earlier use of the same prop or player (repeats allowed)
 REPLACE_GAIN = 0.02                                 # a replacement is suggested when it ranks this much higher
 STAT_WORD = {"hs": "HS", "kills": "Kills", "assists": "Assists", "deaths": "Deaths"}
@@ -352,17 +358,149 @@ def _score(l, uses):
     return math.log(max(l["rank_p"], 1e-9)) - REUSE_PENALTY * uses(l)
 
 
-def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, goblin_cap=None):
-    """Exact branch-and-bound for one slip. -> (legs or None, nodes, exact)."""
+# ---------------------------------------------------------------------------------------------------------------- break-even
+# Owner audit 2026-11-06 (T1): Auto-build handed out PrizePicks Power 2-pick slips at 27-37% all-hit while Power 2 pays 3x
+# (break-even 33.3%), and goblins pay less than 3x. A generated slip is now offered only when its all-hit chance clears the
+# break-even of the lowest payout its leg mix can pay (gradecore/pickem_payouts.json via workspace_rules.pp_payout, and the
+# Underdog table). A goblin pays an unpublished LOWER multiple and an Underdog pick under 1.0x pays less by an unpublished
+# rule, so neither can be shown to clear and neither is offered; a demon or a boosted pick pays at least the table, so the
+# table is its floor. Same-match legs carry no all-hit chance and are not judged here (Underdog same-match only, marked).
+
+def payout_floor(platform, entry_type, n, legs=()):
+    """The lowest payout this leg mix can pay: {"multiple": all-hit multiple, "flex": {losses: multiple} or None}, or None
+    when it cannot be known (no published entry, a goblin, an Underdog pick under 1.0x or with no multiplier)."""
+    if platform == "prizepicks":
+        if any((l.get("line_type") or "standard") == "goblin" for l in legs):
+            return None
+        if any(l.get("multiplier") is not None and not l["multiplier"] >= 1.0 for l in legs):
+            return None
+        pp = rules.pp_payout(entry_type or "power", n)
+        return None if pp is None else {"multiple": pp["multiple"], "flex": pp.get("flex")}
+    if platform == "underdog":
+        if any(not isinstance(l.get("multiplier"), (int, float)) or not l["multiplier"] >= 1.0 for l in legs):
+            return None
+        if (entry_type or "standard") == "flex":
+            return {"multiple": rules.UD_FLEX[n][0], "flex": rules.UD_FLEX[n]} if n in rules.UD_FLEX_LISTED else None
+        m = rules.payout_multiple("standard", n)
+        return None if m is None else {"multiple": m, "flex": None}
+    return None
+
+
+def clears_break_even(platform, entry_type, legs):
+    """True when the slip's ranked chances (pushes already off) return at least the stake on average at its payout floor:
+    all-hit chance x multiple >= 1 on a fixed entry, the flex table's expected multiple >= 1 on a flex entry."""
+    floor = payout_floor(platform, entry_type, len(legs), legs)
+    if floor is None:
+        return False
+    probs = [l["rank_p"] for l in legs]
+    if floor["flex"]:
+        return rules.flex_return(probs, floor["flex"]) >= 1.0 - 1e-12
+    return math.prod(probs) * floor["multiple"] >= 1.0 - 1e-12
+
+
+def break_even_text(platform, entry_type, size, n, exact=True):
+    """A definite count only when the search checked every combination; a search stopped at its node budget says how many it
+    built, every one of which clears (audit review 2026-11-07)."""
+    entry = f"{rules.LABEL.get(platform, platform)} {(entry_type or '').title()} {size}-pick".replace("  ", " ")
+    if not exact:
+        if not n:
+            return f"Scout found no slip that clears break-even on {entry} right now."
+        return f"Scout built {n} slip{'s' if n != 1 else ''} that clear{'s' if n == 1 else ''} break-even on {entry}."
+    if not n:
+        return f"No slip clears break-even on {entry} right now."
+    return f"{n} slip{'s clear' if n != 1 else ' clears'} break-even on {entry} right now."
+
+
+def _leg_can_clear(l, platform):
+    """False for a leg whose payout is unpublished and lower than the table (a PrizePicks goblin, a pick under 1.0x, an Underdog
+    pick with no multiplier): a slip holding it can never be shown to clear break-even (payout_floor is None)."""
+    m = l.get("multiplier")
+    if platform == "underdog":
+        return isinstance(m, (int, float)) and m >= 1.0
+    return (l.get("line_type") or "standard") != "goblin" and not (m is not None and not m >= 1.0)
+
+
+def _non_increasing(table):
+    vals = [table[k] for k in sorted(table)]
+    return all(a >= b for a, b in zip(vals, vals[1:]))
+
+
+def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, goblin_cap=None, break_even=False, node_limit=NODE_LIMIT):
+    """Exact branch-and-bound for one slip. -> (legs or None, nodes, exact, break-even left a combination out)."""
+    if break_even:
+        # audit review 2026-11-07: legs that can never clear are not searched, and nothing is searched when the entry has no
+        # published payout (a slip that cannot clear must not cost the request thread a full node budget)
+        clearable = [l for l in cands if _leg_can_clear(l, platform)]
+        fl = payout_floor(platform, entry_type, size)
+        if fl is None or len(clearable) < size:
+            # break-even is the reason only when there is no published payout or it removed the legs a slip needed
+            return None, 0, True, fl is None or len(cands) >= size
+        cands = clearable
+    else:
+        fl = None
     scored = sorted(((_score(l, uses), l) for l in cands), key=lambda t: (-t[0], t[1]["key"]))[:POOL_CAP]
     scores = [s for s, _ in scored]
     legs = [l for _, l in scored]
     n = len(legs)
     best = {"score": -math.inf, "legs": None}
-    st = {"nodes": 0, "cut": False}
+    st = {"nodes": 0, "cut": False, "be": False}
     allow_same = same_match and same_match_allowed(platform)
     chosen, players, matches, sports = [], set(), {}, {}
     gob = [0]
+    # break-even bound (audit review 2026-11-07): a slip's return only rises with each leg's chance (fixed: all-hit chance x
+    # multiple; flex: a table that pays less for more misses), so a branch is cut when even the best chances still left after
+    # it (tops[i], the highest `size` ranked chances among legs[i:]) cannot reach break-even. Same-match slips are never built
+    # with break-even on (build), so the bound always holds.
+    tops = [[] for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        tops[i] = sorted(tops[i + 1] + [legs[i]["rank_p"]], reverse=True)[:size]
+    flex_tab = fl["flex"] if fl and fl["flex"] and _non_increasing(fl["flex"]) else None
+    need_log = -math.log(fl["multiple"]) - 1e-12 if fl and not fl["flex"] and fl["multiple"] > 0 else None
+    logs = [math.log(max(l["rank_p"], 1e-12)) for l in legs]
+    probs = []
+
+    # the same bound with one leg per match: the best chance of each match among legs[i:], best first (a match already in the
+    # slip cannot add a leg), so a branch is cut as soon as the matches still open cannot reach break-even
+    by_match = [None] * (n + 1)
+    acc = {}
+    by_match[n] = []
+    for i in range(n - 1, -1, -1):
+        mk = (legs[i]["sport"], legs[i]["event"])
+        if legs[i]["rank_p"] > acc.get(mk, -1.0):
+            acc[mk] = legs[i]["rank_p"]
+        by_match[i] = sorted(((p, m) for m, p in acc.items()), reverse=True) if break_even and not allow_same else []
+
+    def open_best(i, need):
+        if allow_same:
+            return tops[i][:need]
+        out = []
+        for p, m in by_match[i]:
+            if m not in matches:
+                out.append(p)
+                if len(out) == need:
+                    break
+        return out
+
+    def short_of_break_even(i, logp, need):
+        best_left = open_best(i, need)
+        if len(best_left) < need:
+            return True
+        if need_log is not None:
+            return logp + sum(math.log(max(p, 1e-12)) for p in best_left) < need_log
+        if flex_tab is not None:
+            return rules.flex_return(probs + best_left, flex_tab) < 1.0 - 1e-12
+        return False
+
+    def last_leg_min(logp):
+        """The lowest chance the last leg needs to bring the slip to break-even (a slip's return is linear in any one leg's chance),
+        or None when there is no bound; a leg under it is skipped without spending a node. The leaf still makes the exact check."""
+        if need_log is not None:
+            return math.exp(need_log - logp)
+        if flex_tab is not None:
+            a = rules.flex_return(probs + [0.0], flex_tab)
+            b = rules.flex_return(probs + [1.0], flex_tab) - a
+            return (1.0 - a) / b if b > 0 else (math.inf if a < 1.0 - 1e-12 else None)
+        return None
 
     def leaf(score):
         sig = frozenset(l["key"] for l in chosen)
@@ -372,13 +510,18 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, 
             return
         if len({_rule_leg(l)["team"] for l in chosen}) < 2:
             return
+        # the break-even yes / no is cheap, so it runs before the platform's entry rules (audit review 2026-11-07); a same-match
+        # slip has no all-hit chance and is never shown to clear
+        if break_even and (len({(l["sport"], l["event"]) for l in chosen}) < len(chosen) or not clears_break_even(platform, entry_type, chosen)):
+            st["be"] = True
+            return
         if problems(chosen, platform, entry_type, same_match):
             return
         best["score"], best["legs"] = score, list(chosen)
 
-    def dfs(i, score):
+    def dfs(i, score, logp):
         st["nodes"] += 1
-        if st["nodes"] > NODE_LIMIT:
+        if st["nodes"] > node_limit:
             st["cut"] = True
             return
         need = size - len(chosen)
@@ -388,7 +531,14 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, 
             return
         if n - i < need or score + sum(scores[i:i + need]) <= best["score"]:
             return
+        if break_even and short_of_break_even(i, logp, need):
+            st["be"] = True
+            return
+        p_min = last_leg_min(logp) if break_even and need == 1 else None
         for j in range(i, n):
+            if p_min is not None and legs[j]["rank_p"] < p_min - 1e-9:
+                st["be"] = True                             # this last leg cannot lift the slip to break-even: not entered
+                continue
             if n - j < need or score + sum(scores[j:j + need]) <= best["score"]:
                 return
             l = legs[j]
@@ -402,16 +552,16 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, 
             g = 1 if l.get("line_type") == "goblin" else 0
             if g and goblin_cap is not None and gob[0] >= goblin_cap:
                 continue                                    # the member's goblin rule: at most goblin_cap goblins per slip
-            chosen.append(l); players.add(pk); matches[mk] = matches.get(mk, 0) + 1; gob[0] += g
-            dfs(j + 1, score + scores[j])
-            chosen.pop(); players.discard(pk); matches[mk] -= 1; gob[0] -= g
+            chosen.append(l); players.add(pk); matches[mk] = matches.get(mk, 0) + 1; gob[0] += g; probs.append(l["rank_p"])
+            dfs(j + 1, score + scores[j], logp + logs[j])
+            chosen.pop(); players.discard(pk); matches[mk] -= 1; gob[0] -= g; probs.pop()
             if not matches[mk]:
                 del matches[mk]
             if st["cut"]:
                 return
 
-    dfs(0, 0.0)
-    return best["legs"], st["nodes"], not st["cut"]
+    dfs(0, 0.0, 0.0)
+    return best["legs"], st["nodes"], not st["cut"], st["be"]
 
 
 def all_hit(legs):
@@ -425,7 +575,14 @@ def all_hit(legs):
 
 
 def payout(platform, entry_type, legs):
-    """The published all-hit multiple, or None: Underdog's table when every pick is a 1.0x pick; PrizePicks stays unknown."""
+    """The published all-hit multiple, or None: Underdog's table when every pick is a 1.0x pick; PrizePicks' verified help-center
+    table (owner sign-off 2026-11-05) when every pick is a standard line with no modifier (goblin / demon / promo stay unknown)."""
+    if platform == "prizepicks":
+        if any((l.get("line_type") or "standard") != "standard" or l.get("multiplier") not in (None, 1, 1.0) for l in legs):
+            return None
+        pp = rules.pp_payout(entry_type or "power", len(legs))
+        return None if pp is None else {"multiple": pp["multiple"], "entry_type": entry_type or "power", "source": pp["source"],
+                                        "page_date": pp["page_date"]}
     if platform != "underdog" or any(l.get("multiplier") != 1.0 for l in legs):
         return None
     m = rules.payout_multiple(entry_type or "standard", len(legs))
@@ -445,24 +602,35 @@ def why_line(legs, pool_size, first, reused):
 def build(legs, opts):
     """One batch from a ranked pool. opts: {platform, entry_type, count, size, mix: any|mixed|single, same_match: bool,
     no_repeat: bool, lines: no_goblins|one_goblin|standard|all (missing = all, so the frozen research scripts reproduce;
-    the member routes always pass the member's rule)}. -> {slips, shortage, search}."""
+    the member routes always pass the member's rule), break_even: bool (missing = False for the same reason; the member
+    route passes True: a slip is offered only when it clears its payout's break-even, see clears_break_even)}.
+    -> {slips, shortage, search}."""
     platform, et = opts["platform"], opts.get("entry_type")
     size, count = int(opts["size"]), int(opts["count"])
     mix, same_match, no_repeat = opts.get("mix") or "any", bool(opts.get("same_match")), bool(opts.get("no_repeat"))
     lines = opts.get("lines") or "all"
+    be_on = bool(opts.get("break_even"))
+    # audit review 2026-11-07: same-match legs carry no all-hit chance, so a slip holding them cannot be shown to clear
+    # break-even; with break-even on the search takes one leg per match (the member's same-match choice stays in the options)
+    search_same = same_match and not be_on
     cap = max_goblins(lines)
     cands = [l for l in legs if l["book"] == platform and line_ok(l, lines)]
-    used_prop, used_player, taken, slips, nodes, exact = {}, {}, set(), [], 0, True
+    used_prop, used_player, taken, slips, nodes, exact, be_cut = {}, {}, set(), [], 0, True, False
 
     def uses(l):
         return 0 if no_repeat else used_prop.get(l["prop"], 0) + used_player.get((l["sport"], l["pkey"]), 0)
 
     for k in range(count):
         free = [l for l in cands if not (no_repeat and l["prop"] in used_prop)]
-        got, nn, ex = _best_slip(free, size, platform, et, same_match, mix, uses, taken, cap)
+        left = BUILD_NODE_LIMIT - nodes if be_on else NODE_LIMIT     # break-even: one node budget for the whole batch
+        if left <= 0:
+            exact = False
+            break
+        got, nn, ex, be = _best_slip(free, size, platform, et, search_same, mix, uses, taken, cap, be_on, min(NODE_LIMIT, left))
         nodes += nn
         exact = exact and ex
         if not got:
+            be_cut = be
             break
         reused = any(used_prop.get(l["prop"]) or used_player.get((l["sport"], l["pkey"])) for l in got)
         taken.add(frozenset(l["key"] for l in got))
@@ -484,15 +652,18 @@ def build(legs, opts):
             dropped = any(l["book"] == platform and not line_ok(l, lines) for l in legs)    # name the rule only when it removed a leg
             rule = {"no_goblins": " without goblins", "standard": " without goblins or demons"}.get(lines, "") if dropped else ""
             shortage = f"Only {len(cands)} eligible legs on {label}{rule} right now."
-        elif matches < size and not same_match:
+        elif matches < size and not search_same:
             where = f"one sport on {label}" if one_sport else label
             shortage = (f"The eligible legs for {where} come from {matches} matches at most; a {size}-pick slip needs {size} different matches."
                         if one_sport else f"The eligible legs on {label} come from {matches} matches; a {size}-pick slip needs {size} different matches.")
+        elif be_on and (be_cut or not exact):
+            shortage = break_even_text(platform, et, size, len(slips), exact)
         elif no_repeat:
             shortage = "No props were repeated: the unused eligible legs could not form more valid slips."
         else:
             shortage = "Every other valid combination of the eligible legs is already in this batch."
-    return {"slips": slips, "shortage": shortage, "search": {"nodes": nodes, "exact": exact, "node_limit": NODE_LIMIT, "pool_cap": POOL_CAP}}
+    return {"slips": slips, "shortage": shortage, "search": {"nodes": nodes, "exact": exact, "node_limit": BUILD_NODE_LIMIT if be_on else NODE_LIMIT,
+                                                             "pool_cap": POOL_CAP}}
 
 
 # ---------------------------------------------------------------------------------------------------------------- adder

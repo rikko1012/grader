@@ -146,7 +146,11 @@ def _extra(srv, now):
     for h in bp.health(now):
         st = h.get("state")
         st = {"via sports service": "ok"}.get(st, st)
-        detail = h.get("last_error") or h.get("note") or ("flag " + h["flag"] + " is off" if not h["enabled"] else None)
+        detail = h.get("last_error") or h.get("note") or ("flag " + h["flag"] + " is off" if not h["enabled"] and h.get("flag") else None)
+        if st == "blocked":                         # no flag, no poller: the evidence the config records
+            out.append(_row("Extra books", h["label"], st, None, h.get("note"), now, None, flag=None, enabled=False,
+                            checked_at=h.get("checked_at"), evidence=h.get("evidence")))
+            continue
         out.append(_row("Extra books", h["label"], st, h.get("last_ok"), detail, now, h.get("offers"),
                         stale_s=h.get("stale_after_s") or STALE_S, flag=h["flag"], enabled=h["enabled"],
                         median_staleness_s=h.get("median_staleness_s"), failures=h.get("failures"),
@@ -195,7 +199,8 @@ def _age(s):
     return f"{int(s)}s" if s < 90 else f"{int(s // 60)}m" if s < 5400 else f"{s / 3600:.1f}h"
 
 
-COLOR = {"ok": "#3FD07A", "stale": "#f5c842", "backoff": "#f5c842", "starting": "#8a8a8a", "off": "#8a8a8a", "failing": "#ff5a5a",
+COLOR = {"ok": "#3FD07A", "stale": "#f5c842", "backoff": "#f5c842", "starting": "#8a8a8a", "off": "#8a8a8a", "blocked": "#8a8a8a",
+         "refused": "#ff5a5a", "failing": "#ff5a5a",
          "unknown": "#ff5a5a"}
 
 
@@ -212,6 +217,7 @@ def page(doc):
             f"failures {r['failures']}" if r.get("failures") else "",
             f"backoff until {r['backoff_until']}" if r.get("backoff_until") else "",
             f"next poll in {_age(r['next_poll_in_s'])}" if r.get("next_poll_in_s") is not None else "",
+            f"checked {r['checked_at']}, evidence {r.get('evidence') or '—'}" if r.get("checked_at") else "",
             cov_txt) if x)
         rows.append(f"<tr><td>{e(r['group'])}</td><td>{e(r['source'])}</td><td><b style='color:{COLOR.get(r['state'], '#ccc')}'>{e(r['state'])}</b></td>"
                     f"<td>{e(_age(r.get('age_s')))}</td><td>{e(str(r['count'])) if r.get('count') is not None else '—'}</td>"

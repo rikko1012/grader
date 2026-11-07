@@ -42,5 +42,5 @@ def stated_observed(export, map1_min=MAP1_RESULTS_MIN_STAKED):
         return [dict(_line([x for x in picks if x[key] == k]), name=k, pushes=sum(1 for x in pushed if x[key] == k)) for k in names]
     letters = [k for k in LETTERS if any(x["letter"] == k for x in picks + pushed)]
     from gradecore.calendar import daily_record
-    return {"as_of": (export or {}).get("at"), 'calendar':daily_record(calendar_rows,(export or {}).get('at'),'Match start date · UTC'), "rule": f"The favoured side when its printed chance was {round(RULE * 100)}% or more",
+    return {"as_of": (export or {}).get("at"), 'calendar':daily_record(calendar_rows,(export or {}).get('at'),'Match start date · US Central','America/Chicago'), "rule": f"The favoured side when its printed chance was {round(RULE * 100)}% or more",
             "totals": dict(_line(picks), pushes=len(pushed)), "by_letter": group("letter", letters), "by_market": group("market", sorted({x["market"] for x in picks + pushed}))}

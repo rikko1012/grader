@@ -19,6 +19,13 @@ iso = lambda t: t.isoformat(timespec="seconds")
 REAL = datetime.now(timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def _real_now():
+    """REAL is 'now' for each test, not for module import: in a 20+ minute full run the +2 min start had already passed."""
+    global REAL
+    REAL = datetime.now(timezone.utc)
+
+
 # ================================================================ 1. the lock rule (server side)
 def test_lock_time_is_the_earlier_of_platform_and_graded_match_start():
     plat, graded = NOW + timedelta(minutes=10), NOW

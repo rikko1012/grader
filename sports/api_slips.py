@@ -255,9 +255,6 @@ def settle_view(req):
         by = settle.current_settlements(con, legs)
     res = settle.settle_slip({"platform": slip["platform"], "entry_type": slip.get("entry_type") or
                               rules.DEFAULT_ENTRY[slip["platform"]], "legs": legs}, by)
-    if res.get("member_display") is False:                 # PrizePicks standard rates are not this lineup's payout
-        res = dict(res, payout_multiple=None, payout_known=False, basis=None,
-                   payout_text="PrizePicks shows this lineup's payout in the app")
     return 200, res
 
 

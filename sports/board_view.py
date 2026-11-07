@@ -200,6 +200,12 @@ def played_values(games, stat):
     return out
 
 
+# di-1 (audit 2026-11-05 S3) was REMOVED on 2026-11-06 (audit follow-up): the fake 100% rows it targeted were quarter /
+# half lines, already left off by their scope (S1/S2), while the median rule hid real full-game lines (Tank Dell rec_yds
+# 15.5 with FanDuel 15.5, PrizePicks goblins) that stayed forecast and in the slip pool. No line is hidden by recent
+# output any more.
+
+
 def hit_counts(values, line, n):
     """Strict counts over the first n values -> [over, under, push, n_used]."""
     w = values[:n]
@@ -250,8 +256,10 @@ def line_key(ln):
     return str(int(round(ln))) if abs(ln - round(ln)) < 1e-9 else str(round(ln, 1))
 
 
-def player_rows(rows, games):
-    """Board rows of ONE player (snapshots markets_rows values) + his games -> {market key: summary}."""
+def player_rows(rows, games, opp_ids=None):
+    """Board rows of ONE player (snapshots markets_rows values) + his games -> {market key: summary}.
+    opp_ids {market key: tonight's opponent team id} adds the H2H and Season counts at every line (h2h_season_lines, display
+    only; audit 2026-11-05 B5: the member board's NBA / NFL H2H and SZN cells were empty because only the sheets path had them)."""
     out = {}
     for r in rows:
         scope = r.get('scope', 'full_game')
@@ -262,6 +270,8 @@ def player_rows(rows, games):
             continue
         lines = [q.get("line") for q in r.get("quotes", []) + r.get("kalshi", [])]
         out[r["key"]] = row_summary(r["stat"], lines, history)
+        if opp_ids is not None:
+            out[r["key"]].update(h2h_season_lines(r["stat"], lines, history, opp_ids.get(r["key"])))
     return out
 
 

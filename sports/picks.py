@@ -232,7 +232,7 @@ def check(con, item, now=None):
         raise Refused("side_not_offered", f"{side.title()} is not offered on this line")
     ok, why = capabilities.gate(o)
     if not ok:
-        raise Refused("not_gradable", "Scout cannot settle this line: " + "; ".join(why)[:120])
+        raise Refused("not_gradable", plain_gate_reason(why))
     ev = _event(con, o.event_id)
     start = ev.start_utc if ev is not None and ev.start_utc else (
         o.listed_start_utc if o.listed_time_kind == "start" else None)
@@ -692,6 +692,27 @@ def _group(items):
             "mean_displayed_chance": r4(sum(_pc(x) for x in with_p) / len(with_p)) if with_p else None,
             "brier": r4(_brier(with_p)), "brier_ci95_games": _cluster_ci(with_p, _brier),
             "log_loss": r4(_logloss(with_p)), "log_loss_ci95_games": _cluster_ci(with_p, _logloss)}
+
+
+def plain_gate_reason(why):
+    """capabilities.gate reasons -> one plain member sentence (audit 2026-11-05: no internal wording such as
+    'variant one_sided' on member pages). The full reason list stays in the offer view for the owner."""
+    w = " ".join(why or ()).lower()
+    if "one-sided" in w:                                # owner 2026-11-06: Over only / Under only lines are not graded
+        return "Scout doesn't grade or track this pick: the line offers one side only."
+    if "scope" in w:
+        part = "it is a quarter or half line, and Scout only tracks full-game lines"
+    elif "promotional" in w:
+        part = "it is a promotional line"
+    elif "variant" in w:
+        part = "it pays differently from the standard line"
+    elif "not resolved" in w:
+        part = "Scout could not match the game or the player"
+    elif "no side offered" in w or "offer " in w:
+        part = "the line is not open"
+    else:
+        part = "Scout does not track this stat"
+    return "Scout can't track this pick: " + part + "."
 
 
 def aggregate(con):

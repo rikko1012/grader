@@ -9,7 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 import book_providers as bp
 import workspace_books as wb
 import workspace_markets as wm
-from tests.test_workspace_api import env, API  # noqa: F401
+from tests.test_workspace_api import env, API, records  # noqa: F401
+from tests.test_pickem_readers import event_of
 
 
 @pytest.fixture
@@ -20,7 +21,7 @@ def big_queue(monkeypatch):
 
 
 def test_700_members_at_once(big_queue, env, monkeypatch):
-    for f in ("SCOUT_BOOK_SLEEPER", "SCOUT_MARKET_TOOLS", "SCOUT_GENIE", "SCOUT_GENIE_PERSONA"):
+    for f in ("SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_DABBLE", "SCOUT_MARKET_TOOLS", "SCOUT_GENIE", "SCOUT_GENIE_PERSONA"):
         monkeypatch.setenv(f, "1")
     bp.reset(); wb.reset()
     monkeypatch.setattr(bp, "start", lambda d: False)
@@ -32,6 +33,11 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
                                                 "team_norm": "halcyon", "game_id": "g", "line": 38.5,
                                                 "over": {"offered": True, "payout": 1.8, "price": None}, "under": {"offered": True, "payout": 1.76, "price": None},
                                                 "source_at": now - 60, "observed_at": now}])
+    bp.state("dabble").update(at=now, offers=[{"provider": "dabble", "book": "dabble", "sport": "cs2", "raw_stat": "total-kills-map-one-and-map-two",
+                                               "stat": "kills", "period": "maps12", "subject_id": "u7", "player": "vargo", "player_norm": "vargo",
+                                               "team": "Halcyon", "team_norm": "halcyon", "game_id": "f", "line": 37.5,
+                                               "over": {"offered": True, "payout": None, "price": 1.91}, "under": {"offered": True, "payout": None, "price": 2.1},
+                                               "source_at": None, "observed_at": now, **event_of(records(env)[("vargo", "underdog")])}])
     builds = {"books": 0, "sheet": 0}
     per_key = {}
     lock = threading.Lock()
@@ -47,7 +53,7 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
         return run
     monkeypatch.setattr(wb, "build", count("books", real_b))
     monkeypatch.setattr(wm, "build", count("sheet", real_s))
-    paths = ["me", "book-board?sport=cs2&book=sleeper", "book-lines", "market-tools"]
+    paths = ["me", "book-board?sport=cs2&book=sleeper", "book-board?sport=cs2&book=dabble", "book-lines", "market-tools"]
     codes = []
 
     def member(i):
@@ -75,6 +81,6 @@ def test_700_members_at_once(big_queue, env, monkeypatch):
     # shared boards for the member's own sports only (counts noted beside each build, no re-parse), so it adds at most one build per
     # (sport, book) and none per member
     assert max(per_key.values()) <= 2 and builds["sheet"] <= 2, per_key
-    assert builds["books"] <= 2 * len(bp.providers()["sleeper"]["sports"]), builds
+    assert builds["books"] <= 2 * sum(len(bp.providers()[p]["sports"]) for p in ("sleeper", "dabble")), builds
     assert not calls
     assert took < 120, took

@@ -546,7 +546,7 @@ def test_build_code_change_marks_a_rebuild(con, monkeypatch):
 
 def test_le_backfill_stops_cleanly_when_the_feed_refuses(con, monkeypatch):
     """2026-10-17 collector run: one HTTP 403 from feed.lolesports.com crashed the whole step. A refusal now stops the
-    pass with nothing lost (the match stays to do); another HTTP error is recorded and retried, quarantined after 3."""
+    pass with nothing lost (the match stays to do); a 5xx is recorded and retried, never quarantined (bug sweep #1)."""
     from lol.center import riot
     from lol.net import HttpError
     calls = {"n": 0}
@@ -569,13 +569,168 @@ def test_le_backfill_stops_cleanly_when_the_feed_refuses(con, monkeypatch):
     monkeypatch.setattr(riot, "_le", lambda: FakeLE)
     monkeypatch.setattr(riot, "store_match", lambda con, m, d: {"rows": 1, "new": 1, "changed": 0})
     monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(riot.time, "time", lambda: clock["t"])
     b = riot.run_backfill(con)
     assert b["failed"] == 1 and b["stopped"].startswith("feed refused HTTP 403") and b["matches"] == 0
     assert not riot._done(con, "M2") and not riot._done(con, "M3")              # nothing marked done that was not stored
-    for _ in range(2):
+    for _ in range(4):
+        clock["t"] += riot.FAIL_SPACING_S                  # failures spread over hours
         riot.run_backfill(con)
-    assert riot._done(con, "M3") is not None or store.get_meta(con, "le_fail:M3") >= 3
+    assert not riot._done(con, "M3")                       # bug sweep #1 review: a 5xx never retires a match
+    assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 0
+
+
+def test_le_backfill_outage_never_marks_matches_done(con, monkeypatch):
+    """Bug sweep 2026-11-06 #1: a few minutes of 5xx / timeouts used to quarantine and mark done (with no data, for good)
+    the same 15 matches after 3 back-to-back passes. Temporary failures now count at most once per FAIL_SPACING_S and
+    the loop backs off after an all-failed pass; the matches are stored once the feed recovers."""
+    from lol.center import riot
+    from lol.net import HttpError
+    down = {"on": True}
+    stored = []
+
+    class FakeLE:
+        MAJOR = ["x"]
+
+        @staticmethod
+        def matches_since(leagues, since):
+            return [{"match_id": f"M{i}", "start": f"2026-10-{i:02d}T10:00:00Z"} for i in range(1, 21)]
+
+        @staticmethod
+        def event_details(mid):
+            if down["on"]:
+                raise HttpError(None if mid.endswith("1") else 503, "https://feed.lolesports.com/x")
+            return {}
+    monkeypatch.setattr(riot, "_le", lambda: FakeLE)
+    monkeypatch.setattr(riot, "store_match", lambda con, m, d: stored.append(m["match_id"]) or {"rows": 1, "new": 1, "changed": 0})
+    monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    for _ in range(3):                                         # back to back, the way loop() used to run them
+        b = riot.run_backfill(con)
+        assert b["failed"] == 15 and b["matches"] == 0
+    assert not any(riot._done(con, f"M{i}") for i in range(1, 21))
+    assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 0
+    down["on"] = False
+    while riot.run_backfill(con):
+        pass
+    assert sorted(stored) == sorted(f"M{i}" for i in range(1, 21))
+
+
+def _fake_le_all(status_for, n=20):
+    from lol.net import HttpError
+
+    class FakeLE:
+        MAJOR = ["x"]
+
+        @staticmethod
+        def matches_since(leagues, since):
+            return [{"match_id": f"M{i}", "start": f"2026-10-{i:02d}T10:00:00Z"} for i in range(1, n + 1)]
+
+        @staticmethod
+        def event_details(mid):
+            st = status_for(mid)
+            if st == "ok":
+                return {}
+            raise HttpError(st, "https://feed.lolesports.com/x")
+    return FakeLE
+
+
+@pytest.mark.parametrize("status", [503, None])
+def test_le_backfill_long_outage_never_retires_a_match(con, monkeypatch, status):
+    """Bug sweep #1 review: the first fix only spaced 5xx strikes an hour apart, so a ~2 h outage (loop pass every
+    30 min) still retired 15 matches with no data. A 5xx / no answer now never counts, however long the outage."""
+    from lol.center import riot
+    state = {"down": True}
+    stored = []
+    monkeypatch.setattr(riot, "_le", lambda: _fake_le_all(lambda mid: status if state["down"] else "ok"))
+    monkeypatch.setattr(riot, "store_match", lambda con, m, d: stored.append(m["match_id"]) or {"rows": 1, "new": 1, "changed": 0})
+    monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(riot.time, "time", lambda: clock["t"])
+    for _ in range(12):                                    # 6 hours of passes, one every 30 min
+        riot.run_backfill(con)
+        clock["t"] += 1800
+    assert not any(riot._done(con, f"M{i}") for i in range(1, 21))
+    assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 0
+    state["down"] = False
+    while riot.run_backfill(con):
+        pass
+    assert sorted(stored) == sorted(f"M{i}" for i in range(1, 21))
+
+
+def test_le_backfill_legacy_integer_count_never_retires_on_a_5xx(con, monkeypatch):
+    """Bug sweep #1 review: a legacy integer le_fail (e.g. 2, from before the deploy) was read with last_at=0, so the
+    next 5xx counted at once and retired the match."""
+    from lol.center import riot
+    monkeypatch.setattr(riot, "_le", lambda: _fake_le_all(lambda mid: 503, n=1))
+    monkeypatch.setattr(riot, "store_match", lambda con, m, d: {"rows": 1, "new": 1, "changed": 0})
+    monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    riot.store.set_meta(con, "le_fail:M1", 2)
+    con.commit()
+    riot.run_backfill(con)
+    assert not riot._done(con, "M1")
+
+
+def test_le_backfill_definite_answer_still_retires_after_3_spaced(con, monkeypatch):
+    """A definite answer (404) keeps the 3-strike rule, strikes at least FAIL_SPACING_S apart."""
+    from lol.center import riot
+    monkeypatch.setattr(riot, "_le", lambda: _fake_le_all(lambda mid: 404 if mid == "M1" else "ok", n=1))
+    monkeypatch.setattr(riot, "store_match", lambda con, m, d: {"rows": 1, "new": 1, "changed": 0})
+    monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(riot.time, "time", lambda: clock["t"])
+    for _ in range(3):                                     # back to back: one strike only
+        riot.run_backfill(con)
+    assert not riot._done(con, "M1")
+    for _ in range(2):
+        clock["t"] += riot.FAIL_SPACING_S
+        riot.run_backfill(con)
+    assert riot._done(con, "M1")
     assert con.execute("SELECT COUNT(*) FROM quarantine WHERE reason = 'source_unavailable'").fetchone()[0] == 1
+
+
+def test_le_backfill_a_failing_match_never_holds_up_the_rest(con, monkeypatch):
+    """Since a 5xx never retires a match, matches the feed keeps failing on go to the back of the line."""
+    from lol.center import riot
+    bad = {f"M{i}" for i in range(16, 21)}               # the 5 newest always 5xx
+    stored = []
+    monkeypatch.setattr(riot, "_le", lambda: _fake_le_all(lambda mid: 503 if mid in bad else "ok", n=20))
+    monkeypatch.setattr(riot, "store_match", lambda con, m, d: stored.append(m["match_id"]) or {"rows": 1, "new": 1, "changed": 0})
+    monkeypatch.setattr(riot, "BACKFILL_GAP_S", 0)
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(riot.time, "time", lambda: clock["t"])
+    riot.run_backfill(con)
+    riot.run_backfill(con)
+    assert sorted(stored) == sorted(f"M{i}" for i in range(1, 16))
+    assert not any(riot._done(con, m) for m in bad)
+
+
+def test_le_loop_backs_off_after_an_all_failed_pass(monkeypatch):
+    """Bug sweep #1: loop() slept only when the pass stopped; an all-failed pass now backs off too."""
+    from lol.center import riot
+    sleeps = []
+
+    class Stop(BaseException):
+        pass
+
+    def fake_sleep(s):
+        sleeps.append(s)
+        raise Stop
+    monkeypatch.setattr(riot.store, "connect", lambda: None)
+    monkeypatch.setattr(riot.store, "get_meta", lambda con, k, d=None: "9999")
+    passes = []
+
+    def all_failed(con):
+        passes.append(1)
+        if len(passes) > 3:                                      # the old loop spun with no sleep: fail, never hang
+            raise Stop
+        return {"failed": 15, "matches": 0}
+    monkeypatch.setattr(riot, "run_backfill", all_failed)
+    monkeypatch.setattr(riot.time, "sleep", fake_sleep)
+    state = {}
+    with pytest.raises(Stop):
+        riot.loop(state)
+    assert sleeps == [1800] and len(passes) == 1
 
 
 def _bad_rows(con):

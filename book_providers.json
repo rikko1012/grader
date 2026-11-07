@@ -1,6 +1,6 @@
 {
-  "_doc": "Extra book providers for the board's book toggle and the Tools EV / arbitrage sheet (Phase 4). One flag per provider, every flag default off. Rules and payouts are read from here, each with its source; anything not stated by a source stays unknown. Owner (2026-11-04): 'We are partnered with the bookies, so you may scrape book lines as needed.' A book whose site refuses this server (DraftKings, BetMGM, Caesars: HTTP 403) is still never worked around; its prices come only through a documented feed (The Odds API).",
-  "version": "bp-1",
+  "_doc": "Extra book providers for the board's book toggle and the Tools EV / arbitrage sheet (Phase 4). One flag per provider, every flag default off. Rules and payouts are read from here, each with its source; anything not stated by a source stays unknown. Owner (2026-11-04): 'We are partnered with the bookies, so you may scrape book lines as needed.' Owner (2026-11-05), for Betr, ParlayPlay, Boom and Dabble: 'get these the same way we got the other apps simply code it we are partnered'. A book whose site refuses this server (DraftKings, BetMGM, Caesars: HTTP 403) is still never worked around; its prices come only through a documented feed (The Odds API). An app that refuses this server, needs a login or a location check, or has no board that answers without an account is listed under 'blocked' with its evidence: no flag, no poller.",
+  "version": "bp-2",
   "providers": {
     "sleeper": {
       "label": "Sleeper",
@@ -47,6 +47,75 @@
       },
       "stats_note": "Only stat names observed on the live feed are mapped (CS2, NFL and NBA threes_made, 2026-11-05). NBA points / rebounds / assists follow the same naming and are mapped whole; any other name is counted as unmapped and never guessed."
     },
+    "dabble": {
+      "label": "Dabble",
+      "short": "DB",
+      "kind": "pickem",
+      "flag": "SCOUT_BOOK_DABBLE",
+      "source": "direct",
+      "sports": ["cs2", "lol", "nba", "nfl"],
+      "match": {"team": "required", "event": "same teams or same start", "start_tolerance_s": 5400,
+                "note": "Dabble lists every open fixture inside 48 h and nicknames repeat across teams: a line joins a board record only when its teamName is that player's board team and its fixture is the board's match (the same two teams, or a start within start_tolerance_s). Otherwise it is left out and counted."},
+      "price_comparable": false,
+      "price_label": "Dabble price",
+      "price_note": "Dabble's per-side number is not what an entry pays (rules.pick_price): it is shown as its own unit, never as decimal odds, and never enters the +EV or arbitrage math.",
+      "feed": {
+        "base_url": "https://api.dabble.com",
+        "competitions_path": "/competitions/active/",
+        "fixtures_path": "/competitions/{id}/sport-fixtures",
+        "details_path": "/sportfixtures/details/{id}",
+        "competitions": {"cs2": {"name": "Counter-Strike 2", "id": "acd5b3f6-dd7a-484f-a4e5-a747badb32c6"}, "lol": {"name": "LoL", "id": "086211fd-5445-4955-be1b-9ed7ba84641d"}, "nba": {"name": "NBA", "id": "2acf8935-8d89-455b-bb4b-dbfba9c4ae3b"}, "nfl": {"name": "NFL", "id": "7f7c2f8f-ff04-4e5a-a3c8-d503a523d9ad"}},
+        "competitions_note": "A competition is found by its exact name in /competitions/active/; the id is used only when that name is absent. Never a fuzzy name.",
+        "poll_s": 180,
+        "fixtures_refresh_s": 1800,
+        "fixtures_min_refresh_s": 600,
+        "horizon_h": 48,
+        "max_fixtures_per_sport": 15,
+        "max_failures_in_a_row": 3,
+        "poll_budget_note": "One poll spends at most book_providers.poll_budget_s (a third of the shortest direct-feed stale_after_s, at most poll_s) and stops after max_failures_in_a_row network failures, so a slow Dabble never starves Sleeper on the shared poller thread. Fixtures not read in time keep their last read until stale; the least recently read go first next poll.",
+        "max_offers": 6000,
+        "stale_after_s": 900,
+        "timeout_s": 20,
+        "tries": 2,
+        "backoff_base_s": 60,
+        "backoff_max_s": 1800,
+        "refused_backoff_s": 21600,
+        "detail_gap_s": 0.5,
+        "checked_at": "2026-11-05T19:35:00Z",
+        "checked_note": "Plain GETs, honestly identified, no login, no cookies sent back: /competitions/active/, /competitions/{id}/sport-fixtures and /sportfixtures/details/{id} answered 200 from the owner's PC (Cloudflare ORD edge). cache-control public, max-age=2, stale-while-revalidate=2, weak ETag; no rate-limit or Retry-After header seen. The fixture list is heavy (NFL 4.2 MB), so it is re-read every fixtures_refresh_s; details (CS2 50 KB, NFL about 400 KB a fixture) every poll_s, conditional on the ETag. Not yet checked from the Render server's address: a 403 there is recorded as refused (backoff refused_backoff_s) and never worked around."
+      },
+      "rules": {
+        "pick_price": "per-side decimal price on each line (prices[].price). Dabble does not document its exact meaning; each pair is close to fair (sum of 1/price about 1.0 on 2026-11-05). Not a standalone bet.",
+        "entry_payout": "All In (rule 1.14), return per dollar by picks: 2=3X, 3=6X, 4=10X, 5=20X, 6=40X, 7=80X, 8=150X, 9=275X, 10=500X, 11=1000X, 12=1500X; at most $50,000 per lineup (1.18). Boosted / Shielded picks carry their own multipliers and change the slip multiplier.",
+        "all_in": {"2": 3, "3": 6, "4": 10, "5": 20, "6": 40, "7": 80, "8": 150, "9": 275, "10": 500, "11": 1000, "12": 1500},
+        "flex": "Hedge (rule 1.15): 3-16 picks (13-16 Hedge only), paid by the number of picks lost; table in hedge",
+        "hedge": {"3": [2.5, 1.25, 0], "4": [5, 1.5, 0], "5": [10, 1.5, 0.4], "6": [25, 1.5, 0.4], "7": [35, 2.5, 1], "8": [50, 5, 1.5], "9": [50, 10, 2, 0.4], "10": [75, 15, 4, 0.4], "11": [125, 20, 5, 1], "12": [250, 40, 7.5, 1], "13": [500, 100, 25, 3, 0.5], "14": [1000, 100, 25, 5, 1.5, 0.5], "15": [2500, 200, 50, 5, 2, 0.5], "16": [10000, 250, 20, 8, 3, 1, 0.5]},
+        "hedge_note": "Each list is the return per dollar with 0, 1, 2 ... picks lost.",
+        "min_picks": 2,
+        "lineup": "At least 2 different teams (1.1); one stat per player per lineup except NBA / MLB pick'em, up to 4 times (1.2); highly correlated picks are banned (1.16).",
+        "push": "A push drops the lineup to the next-lower scale; a 2-pick All In with 1 win and 1 push pays 1.5X, 1 loss and 1 push loses (1.5).",
+        "void": "A DNP or void drops the lineup to the next-lower scale; a 2-pick All In is refunded (1.4). Esports: a player withdrawn before the start voids that player's picks (6.3); postponed more than 24 h voids all picks (6.1.1).",
+        "esports": "Overtime counts unless a draw is quoted (6.5.1); kills count only kills of opponents (6.6.1).",
+        "sources": [
+          {"url": "https://help.dabblefantasy.com/en/articles/12051143-general-game-rules", "read_at": "2026-11-05", "note": "General Game Rules v1.29, updated 2026-09-02"},
+          {"url": "https://help.dabblefantasy.com/en/articles/12007106-1-500x-payouts", "read_at": "2026-11-05"},
+          {"url": "https://help.dabblefantasy.com/en/articles/12007118-adjusted-picks-boosts-and-shields", "read_at": "2026-11-05"},
+          {"url": "https://help.dabblefantasy.com/en/articles/17182592-20-000x-payouts-faq", "read_at": "2026-11-05"}
+        ]
+      },
+      "stats": {
+        "cs2": {"game-1-kills": ["kills", "map1"], "total-kills-map-one-and-map-two": ["kills", "maps12"], "game-1-headshots": ["hs", "map1"]},
+        "lol": {"game-1-kills": ["kills", "map1"], "game-1-assists": ["assists", "map1"]},
+        "nba": {"points": ["points", "game"], "rebounds": ["rebounds", "game"], "assists": ["assists", "game"], "three-made": ["threes", "game"],
+                "assists+points+rebounds": ["pra", "game"], "points+rebounds": ["pr", "game"], "assists+points": ["pa", "game"], "assists+rebounds": ["ra", "game"],
+                "steals": ["steals", "game"], "blocks": ["blocks", "game"], "blocks+steals": ["stocks", "game"], "turnovers": ["turnovers", "game"]},
+        "nfl": {"passing-yards": ["pass_yds", "game"], "passing-attempts": ["pass_att", "game"], "passing-completions": ["pass_cmp", "game"],
+                "passing-touchdowns": ["pass_td", "game"], "interceptions": ["pass_int", "game"], "rushing-yards": ["rush_yds", "game"],
+                "rushing-attempts": ["rush_att", "game"], "receptions": ["rec", "game"], "receiving-yards": ["rec_yds", "game"],
+                "receiving-yards+rushing-yards": ["rush_rec_yds", "game"], "passing-yards+rushing-yards": ["pass_rush_yds", "game"]}
+      },
+      "stats_note": "Only stat keys observed on the live feed (playerProps.stats, 2026-11-05) are mapped, each to a board market that exists. A combo is its stat keys joined with '+' in sorted order (the order the feed lists them). Game 2 esports markets, quarter / half markets, touchdowns, longest-play, kicking, defensive and shooting-split stats have no board market and are counted as unmapped, never guessed."
+    },
     "fanduel": {
       "label": "FanDuel",
       "short": "FD",
@@ -55,7 +124,7 @@
       "source": "sports_service",
       "platforms": ["fanduel"],
       "sports": ["nba", "nfl"],
-      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 10], [8, 30], [24, 60], [72, 180], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS full, the SPORTS_BOOKS_LADDER default): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from FanDuel's own public feed (sbapi.oh.sportsbook.fanduel.com, Ohio). This server makes no FanDuel request."},
+      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 3], [8, 5], [24, 8], [72, 8], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS direct, the SPORTS_BOOKS_LADDER default; 2026-11-06, 24-72 h rung 8 min since the site audit N1): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from FanDuel's own public feed (sbapi.oh.sportsbook.fanduel.com, Ohio). This server makes no FanDuel request."},
       "rules": {
         "pick_price": "decimal price quoted by the book",
         "push": "not used: whole-number lines are priced only where a push chance is known",
@@ -70,7 +139,7 @@
       "source": "sports_service",
       "platforms": ["betrivers"],
       "sports": ["nba", "nfl"],
-      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 10], [8, 30], [24, 60], [72, 180], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS full, the SPORTS_BOOKS_LADDER default): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from the Kambi offering API, operator rsiusoh (Ohio). This server makes no BetRivers request."},
+      "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2, 3], [8, 5], [24, 8], [72, 8], [168, 720]], "ladder_note": "The sports books worker's own fetch schedule (sports/books/schedule.py LADDERS direct, the SPORTS_BOOKS_LADDER default; 2026-11-06, 24-72 h rung 8 min since the site audit N1): a quote is stale after 2 x the interval for its game's distance from start, at least 20 min, the sports service's own rule. stale_after_s applies when the start is unknown.", "note": "Collected by the sports service's books worker from the Kambi offering API, operator rsiusoh (Ohio). This server makes no BetRivers request."},
       "rules": {
         "pick_price": "decimal price quoted by the book",
         "push": "not used: whole-number lines are priced only where a push chance is known",
@@ -94,8 +163,11 @@
     }
   },
   "not_added": {
-    "parlayplay": "parlayplay.io answered a plain request with a Cloudflare challenge (HTTP 403, 2026-11-05). A refusal is not worked around.",
-    "dabble": "api.dabble.com answers plain requests (competitions and fixtures, 2026-11-05); prop markets not yet mapped. Next candidate.",
     "draftkings_betmgm_caesars": "Own sites refuse this server (HTTP 403). Only via The Odds API."
+  },
+  "blocked": {
+    "betr": {"label": "Betr Picks", "short": "BT", "kind": "pickem", "status": "blocked", "checked_at": "2026-11-05T19:29:05Z", "reason": "Needs a login and a location check. Its only lines feed, POST https://api.fantasy.betr.app/graphql, answered a plain request with HTTP 401 Unauthorized (www-authenticate: Basic). The web app sends a Keycloak bearer token (account.betr.app, realm betr) and a JURISDICTION header, and logged out it stops at /AllowLocation (GeoComply) before any feed request. A login or a chosen jurisdiction is outside the rules, so it is not worked around.", "evidence": "cs2_scout_ops/data/readers/betr/betr_graphql_401_2026-11-05.json", "endpoints": [{"url": "https://api.fantasy.betr.app/graphql", "method": "POST", "status": 401}, {"url": "https://picks.betr.app/", "method": "GET", "status": 200, "note": "app shell; logged out it goes to /AllowLocation"}], "rules": {"entry_payout": "unknown (the terms state no multipliers and point to separate House Rules; entry rules are served to logged-in users only)", "sources": [{"url": "https://www.betr.app/terms-and-conditions/picks", "read_at": "2026-11-05"}]}},
+    "parlayplay": {"label": "ParlayPlay", "short": "PY", "kind": "pickem", "status": "blocked", "checked_at": "2026-11-05T19:28:54Z", "reason": "Refuses this server: GET https://parlayplay.io/api/v1/crossgame/search/?sport=All&league=&includeAlt=true answered HTTP 403 with Cloudflare's 'Sorry, you have been blocked' page (CF-Ray a55e43a4ae4be11c-ORD). A refusal is not worked around.", "evidence": "cs2_scout_ops/data/readers/parlayplay/blocked_evidence_2026-11-05.json", "endpoints": [{"url": "https://parlayplay.io/api/v1/crossgame/search/", "method": "GET", "status": 403}], "rules": {"pick_price": "each projection has its own multiplier (help center); the real per-pick multipliers are unknown without the feed", "entry_payout": "More/Less entries of 2-9 players, multipliers 1.75x to 1,000x, fixed when the entry is submitted; insured entries need every pick between 1.4x and 5x. Fixed tables published by third parties disagree and are not used.", "sources": [{"url": "https://intercom.help/parlayplay/en/articles/10155242-how-do-payouts-work", "read_at": "2026-11-05"}]}},
+    "boom": {"label": "Boom Fantasy", "short": "BM", "kind": "pickem", "status": "blocked", "checked_at": "2026-11-05T19:26:00Z", "reason": "App only: no board endpoint answers without an account. boomfantasy.com redirects to a marketing page with app-store links only; production-api.boomfantasy.com answers /healthz and 404 on every board path tried. The app's paths are not published and finding them would need a logged-in app session.", "evidence": "cs2_scout_ops/data/readers/boom/probe_2026-11-05.json", "endpoints": [{"url": "https://production-api.boomfantasy.com/healthz", "method": "GET", "status": 200}, {"url": "https://production-api.boomfantasy.com/v1/contests", "method": "GET", "status": 404}], "rules": {"pick_price": "each pick carries its own multiplier (e.g. 1.98x); the entry multiplier is their product, up to 500x", "min_picks": 2, "lineup": "2-8 athletes, at least 2 players from different teams", "push": "unknown (not stated by the source)", "flex": "unknown (not stated by the source)", "sources": [{"url": "https://intercom.help/boomsports/en/articles/9945146-pick-em", "read_at": "2026-11-05"}]}}
   }
 }

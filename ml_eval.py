@@ -1388,6 +1388,34 @@ def _forward_tables(con):
     return out
 
 
+def _earliest_starts(con, tables=None):
+    """{match_id: earliest start (epoch s) any forward table states} - the ONE 'earliest stated start' both forward_rows
+    and asks_at_cutoff cut at (another source's earlier start counts, e.g. ml_forecasts' HLTV start)."""
+    earliest = {}
+    for t, c in (_forward_tables(con) if tables is None else tables):
+        if c["match_id"]:
+            for mid, st in con.execute(f'SELECT "{c["match_id"]}", MIN("{c["start"]}") FROM "{t}" '
+                                       f'WHERE "{c["match_id"]}" IS NOT NULL GROUP BY "{c["match_id"]}"'):
+                st = _ts(st)
+                if st is not None:
+                    earliest[mid] = min(earliest.get(mid, st), st)
+    return earliest
+
+
+def earliest_starts(db_path):
+    """_earliest_starts for a snapshot DB path ({} when it cannot be read)."""
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
+    except sqlite3.Error:
+        return {}
+    try:
+        return _earliest_starts(con)
+    except sqlite3.Error:
+        return {}
+    finally:
+        con.close()
+
+
 def forward_rows(db_path, excluded=None):
     """Per (cohort, match): the LATEST snapshot at or before the cutoff (start - CUTOFF_MIN), chosen BEFORE looking at
     its availability - so a baseline that became unavailable before the cutoff is never replaced by an older available
@@ -1410,14 +1438,7 @@ def forward_rows(db_path, excluded=None):
         tables = _forward_tables(con)
         if not tables:
             return None, f"no table in {db_path} has team/probability/start/capture-time columns"
-        earliest = {}
-        for t, c in tables:
-            if c["match_id"]:
-                for mid, st in con.execute(f'SELECT "{c["match_id"]}", MIN("{c["start"]}") FROM "{t}" '
-                                           f'WHERE "{c["match_id"]}" IS NOT NULL GROUP BY "{c["match_id"]}"'):
-                    st = _ts(st)
-                    if st is not None:
-                        earliest[mid] = min(earliest.get(mid, st), st)
+        earliest = _earliest_starts(con, tables)
         best = {}
         order = ("team_a", "team_b", "p", "start", "at", "source", "scope", "usable", "match_id", "model_version", "bo", "side")
         for t, c in tables:
@@ -1537,35 +1558,49 @@ def forward_eval(db_path, hl):
 def asks_at_cutoff(db_path):
     """{match_id: {ask_a, ask_a_platform, ask_b, ask_b_platform}}: per side the lowest recorded ASK across platforms in
     the last usable quote at or before the cutoff (earliest stated start - CUTOFF_MIN), no older than MAX_AGE_H before
-    it. The prices a member could actually have paid - REVIEW_PLAN's return check uses only these."""
+    it. The prices a member could actually have paid - REVIEW_PLAN's return check uses only these.
+    The earliest stated start is forward_rows' own (_earliest_starts over every table, incl. ml_forecasts' HLTV start)
+    combined with the a/b rows' own starts, so the ask and the forecast it pairs with are cut at the same moment
+    (bug sweep 2026-11-06 #21)."""
     out = {}
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
     except sqlite3.Error:
         return out
+    # bug sweep 2026-11-06 #2: two streamed cursor passes, never .fetchall() - this runs inside the web process that
+    # serves members, and ~1M quote rows were ~480 MB as a list. Memory is bounded by `earliest` (one entry per match)
+    # and `last` (one per match x platform x side). One read transaction so both passes see the same rows.
+    where = "FROM ml_quotes WHERE match_id IS NOT NULL AND team_side IN ('a', 'b')"
+    earliest, last = {}, {}
     try:
         if not con.execute("SELECT 1 FROM sqlite_master WHERE name='ml_quotes'").fetchone():
             return out
-        rows = con.execute("SELECT match_id, platform, outcome_id, team_side, ask, received_ts, start, usable FROM ml_quotes "
-                           "WHERE match_id IS NOT NULL AND team_side IN ('a', 'b')").fetchall()
+        con.execute("BEGIN")
+        seen = set()
+        for mid, st in con.execute("SELECT DISTINCT match_id, start " + where):
+            seen.add(mid)
+            st = _ts(st)
+            if st is not None:
+                earliest[mid] = min(earliest.get(mid, st), st)
+        # bug sweep 2026-11-06 #21: the same earliest stated start forward_rows cuts at (every forward table)
+        fwd = _earliest_starts(con)
+        for mid in seen:
+            if mid in fwd:
+                earliest[mid] = min(earliest.get(mid, fwd[mid]), fwd[mid])
+        del seen, fwd
+        for mid, plat, side, ask, rec, ok in con.execute(
+                "SELECT match_id, platform, team_side, ask, received_ts, usable " + where):
+            rec = _ts(rec)
+            if mid not in earliest or rec is None:
+                continue
+            cutoff = earliest[mid] - CUTOFF_MIN * 60
+            if rec > cutoff or rec < cutoff - MAX_AGE_H * 3600:
+                continue
+            k = (mid, plat, side)
+            if k not in last or rec > last[k][0]:
+                last[k] = (rec, ask if ok and ask is not None and 0 < ask < 1 else None)
     finally:
         con.close()
-    earliest = {}
-    for mid, _p, _o, _s, _a, _r, st, _u in rows:
-        st = _ts(st)
-        if st is not None:
-            earliest[mid] = min(earliest.get(mid, st), st)
-    last = {}
-    for mid, plat, oid, side, ask, rec, _st, ok in rows:
-        rec = _ts(rec)
-        if mid not in earliest or rec is None:
-            continue
-        cutoff = earliest[mid] - CUTOFF_MIN * 60
-        if rec > cutoff or rec < cutoff - MAX_AGE_H * 3600:
-            continue
-        k = (mid, plat, side)
-        if k not in last or rec > last[k][0]:
-            last[k] = (rec, ask if ok and ask is not None and 0 < ask < 1 else None)
     for (mid, plat, side), (_rec, ask) in last.items():
         if ask is None:
             continue

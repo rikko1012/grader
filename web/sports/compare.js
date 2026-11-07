@@ -94,6 +94,18 @@
     if (r.leanOffered === false) return side(r.lean) + " is not offered on " + S.bookName(r.book);
     return null;
   }
+  // A10 (audit 2026-11-05): every compared prop side by side - Scout's chance at the line, the projection, the market's
+  // chance and the player's history at that line - whether or not it has a lean or a rank (NBA / NFL models that are
+  // not validated still show their projection and chances; only the edge and the rank stay out).
+  function sideBySide(rows) {
+    return rows.map(function (r) {
+      var sc = r.scout, mk = r.market, h = r.hit || {};
+      return {rid: r.rid, player: r.player, stat: r.stat, line: r.line, book: r.book,
+              po: sc && nn(sc.po) ? sc.po : null, pu: sc && nn(sc.pu) ? sc.pu : null, mu: sc && nn(sc.mu) ? sc.mu : null,
+              mo: mk && !r.held && nn(mk.po) ? mk.po : null, l10: h.l10 && h.l10.n ? h.l10 : null, l5: h.l5 && h.l5.n ? h.l5 : null,
+              lean: r.lean || null, rank: r.rank || null};
+    });
+  }
   function confScore(r) { return r.conf && nn(r.conf.score) ? r.conf.score : 0; }
   function cmpRows(a, b) {                            // cmp-1 order; the last keys only make it deterministic
     return (b.edge - a.edge) || (b.pLean - a.pLean) || (confScore(b) - confScore(a)) ||
@@ -157,7 +169,7 @@
     return {rows: rows, changed: changed};
   }
 
-  var api = {RULE: RULE, MAX: MAX, LS: LS, RULE_TEXT: RULE_TEXT, BOOK_RULE: BOOK_RULE, SAME_GAME: SAME_GAME,
+  var api = {RULE: RULE, MAX: MAX, LS: LS, RULE_TEXT: RULE_TEXT, BOOK_RULE: BOOK_RULE, SAME_GAME: SAME_GAME, sideBySide: sideBySide,
              offerIdOf: offerIdOf, itemFromBoard: itemFromBoard, itemFromPlayer: itemFromPlayer, same: same, has: has,
              add: add, remove: remove, shareItem: shareItem, shareString: shareString, parseShare: parseShare,
              indexBoard: indexBoard, resolve: resolve, noPickReason: noPickReason, rank: rank, sameGame: sameGame,
@@ -199,7 +211,7 @@
   }
   // board table / sheets rows (r = SportsRows.propRow + r.rid / r.key): a small toggle next to the stat
   function rowButton(r) {
-    if (!r || !r.rid || !r.book || (r.variant && !STD.test(r.variant))) return "";
+    if (!r || !r.rid || !r.book || r.oneSided || (r.variant && !STD.test(r.variant))) return "";   // bug #49: same rule as afterActions
     var it = {p: r.book, o: offerIdOf(r.rid, r.book), l: r.line, r: r.rid, k: r.key, pid: r.pid, n: r.player, st: r.stat, e: r.event};
     return btnHtml(it).replace("sw-btn sw-btn-sm sw-cmp-add", "sw-cmp-add sw-cmp-mini");
   }
@@ -271,7 +283,7 @@
         esc(S.localTime(r.start, {weekday: "short", hour: "numeric", minute: "2-digit"})) + (sg ? ' <span class="sw-cmp-sg">Same game</span>' : "") + "</div>";
     var scoutTxt = sc ? (s ? '<b class="sw-p ' + s + '" data-cmp-p="' + (s === "over" ? sc.po : sc.pu) + '">' + side(s) + " " + S.pct(s === "over" ? sc.po : sc.pu) + "</b> " : "") +
       '<span class="sw-faint">O ' + S.pct(sc.po) + " · U " + S.pct(sc.pu) + (sc.pp > 0.0005 ? " · Push " + S.pct(sc.pp) : "") + "</span>" : "—";
-    var mkTxt = mk && !r.notValidated && !r.held ? (s ? side(s) + " " + S.pct(r.mLean) : "O " + S.pct(mk.po)) + ' <span class="sw-faint">(' + mk.n + (mk.n === 1 ? " book" : " books") + ")</span>" : "—";
+    var mkTxt = mk && !r.held ? (s && !r.notValidated ? side(s) + " " + S.pct(r.mLean) : "O " + S.pct(mk.po) + " · U " + S.pct(mk.pu)) + ' <span class="sw-faint">(' + mk.n + (mk.n === 1 ? " book" : " books") + ")</span>" : "—";
     var proj = sc && nn(sc.mu) ? "<b>" + S.num(sc.mu, 1) + "</b>" + (sc.iv && nn(sc.iv[0]) && nn(sc.iv[1]) ? ' <span class="sw-faint">80% range ' + S.num(sc.iv[0], 1) + "–" + S.num(sc.iv[1], 1) + "</span>" : "") : "—";
     var fcAge = sc && sc.at ? "forecast " + S.age(sc.at, now) : "";
     var fresh = "line checked " + S.age(r.q.t, now) + (r.fresh ? "" : ' · <span class="sw-cmp-warn">not re-confirmed</span>') + (fcAge ? " · " + esc(fcAge) : "");
@@ -295,6 +307,18 @@
       field(r.rank ? "Verdict" : "Why not ranked", r.rank ? "Rank " + r.rank + " of the props that qualify" : '<span class="sw-cmp-why">' + esc(r.why || "") + "</span>", "sw-cmp-verdict") +
       '<div class="sw-cmp-f sw-cmp-acts">' + acts + "</div></article>";
   }
+  function sideHtml(B, rows) {
+    if (!rows.length) return "";
+    var hitTxt = function (x) { return x ? R.hitText(x) + ' <span class="sw-faint">(' + x.n + ")</span>" : "—"; };
+    return '<div class="sw-scroll sw-cmp-side"><table class="sw-mini" data-cmp-side><caption class="sw-cmp-side-cap">Side by side</caption><thead><tr>' +
+      '<th scope="col">Prop</th><th scope="col" class="num">Scout Over</th><th scope="col" class="num">Scout Under</th><th scope="col" class="num">Projection</th>' +
+      '<th scope="col" class="num">Market Over</th><th scope="col" class="num">L10</th><th scope="col" class="num">L5</th></tr></thead><tbody>' +
+      sideBySide(rows).map(function (x) {
+        return '<tr data-rid="' + esc(x.rid) + '"><th scope="row">' + esc(x.player) + ' <span class="sw-faint sw-small">' + esc(statName(B, x) + " " + S.line(x.line) + " · " + S.bookName(x.book)) + "</span></th>" +
+          '<td class="num">' + S.pct(x.po) + '</td><td class="num">' + S.pct(x.pu) + '</td><td class="num">' + (nn(x.mu) ? S.num(x.mu, 1) : "—") + "</td>" +
+          '<td class="num">' + (nn(x.mo) ? S.pct(x.mo) : "—") + '</td><td class="num">' + hitTxt(x.l10) + '</td><td class="num">' + hitTxt(x.l5) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
   function verdictHtml(B, res, rows, groups) {
     var h = '<section class="sw-panel sw-cmp-verdict-box" aria-labelledby="sw-cmp-vh"><h2 id="sw-cmp-vh">Better line</h2>';
     if (res.best) {
@@ -306,6 +330,7 @@
       h += '<p class="sw-cmp-best none" data-best="">No compared prop qualifies yet.</p>';
     }
     if (res.noPick.length) h += '<ul class="sw-cmp-nopick">' + res.noPick.map(function (x) { return '<li><b>Not ranked:</b> ' + esc(propTitle(B, x.row)) + " - " + esc(x.why) + "</li>"; }).join("") + "</ul>";
+    h += sideHtml(B, rows);
     groups.forEach(function (g) {
       h += '<p class="sw-banner warn sw-cmp-sgw" role="note"><b>' + SAME_GAME + "</b> (" + esc(g.matchup) + "): " + esc(g.rows.map(function (r) { return r.player + " " + statName(B, r); }).join(", ")) +
         ". One game drives all of them, so they tend to win or lose together. Scout does not combine their chances.</p>";

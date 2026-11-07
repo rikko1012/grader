@@ -136,6 +136,9 @@ line-correctness and Starter work); the Starter projection carries ~10-30 MB/day
   preserved forecasts) and `sports/research/forecasts/` exports.
 - Every offer revision (they may MOVE to verified archive files and stay readable); `books.db` quote history and
   `games.db` data (historical prices and lines cannot be fetched again); archive files and their manifest / index.
+- `pregame_news.db` (pgn-1, `pregame_news/`): pre-game news (injury report, depth charts, pre-game game injuries and
+  starter / active flags) as observed. Append-only by trigger, change-only, payload <= 4 KB, hard budget
+  PREGAME_NEWS_MAX_MB (default 256): at the budget new rows are skipped and counted, never deleted.
 
 ### T1 - bound at the source (proposal; collection detail - owner's decision; not in any commit)
 After an event's start, store no price-only revision of its offers (keep availability / status changes and the last

@@ -62,8 +62,9 @@ def test_payout_schedule_member_figures_only_when_published_for_this_entry():
     s = rules.schedule("underdog", "standard", [L(1, "NYK", 1, mult=1.2), L(2, "BOS", 2)])
     assert not s["figures_shown"] and all(r["multiple"] is None for r in s["member"])
     s = rules.schedule("prizepicks", "power", [dict(l, platform="prizepicks") for l in legs])
-    assert not s["figures_shown"] and all(r["multiple"] is None for r in s["member"])
-    assert s["internal"]["standard_rate"] == 6.0                               # internal only (P-OUT standard rate)
+    assert s["figures_shown"] and s["member"][0]["multiple"] == 6.0          # verified table (owner 2026-11-06)
+    gob = rules.schedule("prizepicks", "power", [dict(l, platform="prizepicks", variant="goblin") for l in legs])
+    assert not gob["figures_shown"] and all(r["multiple"] is None for r in gob["member"])
     flex = rules.schedule("underdog", "flex", legs)
     assert [r["multiple"] for r in flex["member"][:2]] == [3.25, 1.09]
 
@@ -137,7 +138,7 @@ PP = lambda legs: [dict(l, platform="prizepicks") for l in legs]
 def test_prizepicks_fixtures(etype, legs, results, status, mult):
     r = settle.entry_result("prizepicks", etype, legs, results)
     assert r["status"] == status and r["payout_multiple"] == mult
-    assert r.get("member_display") is False                              # standard rate, never shown as THE payout
+    assert "member_display" not in r and r["payout_known"] == (mult is not None)   # verified table (owner 2026-11-06)
 
 
 def test_prizepicks_dnp_to_one_team_refunds_but_a_tie_does_not():
@@ -516,7 +517,7 @@ def test_routes_errors_and_access(api):
     assert code == 200 and pv["eligible"] == 6
 
 
-def test_settle_route_hides_prizepicks_standard_rate(api, con):
+def test_settle_route_shows_the_verified_prizepicks_payout(api, con):
     offers = [w.offer(f"s{i}", f"T{i}", i, platform="prizepicks") for i in range(1, 3)]
     for o in offers:
         store.put(con, o)
@@ -524,7 +525,7 @@ def test_settle_route_hides_prizepicks_standard_rate(api, con):
     slip = {"platform": "prizepicks", "league": "nba", "entry_type": "power",
             "legs": [{"platform": "prizepicks", "offer_id": o.offer_id, "side": "over", "team": o.team} for o in offers]}
     code, r = _call(_req("/api/sports/slips/settle", {"slip": slip}))
-    assert code == 200 and r["status"] == "won" and r["payout_multiple"] is None and "app" in r["payout_text"]
+    assert code == 200 and r["status"] == "won" and r["payout_multiple"] == 3.0 and r["payout_known"]
 
 
 def test_spool_is_bounded_and_never_blocks(monkeypatch):
@@ -652,7 +653,7 @@ def test_published_return_applies_each_pick_multiplier_and_hides_the_figure():
     r = joint.published_return("underdog", "standard", legs)
     assert not r["shown"] and abs(r["value"] - 0.6 * 0.55 * 3.5 * 1.1 * 0.8) < 1e-12
     pp = joint.published_return("prizepicks", "power", [dict(l, platform="prizepicks") for l in legs])
-    assert pp["value"] is None and "not published" in pp["why"]
+    assert pp["shown"] and abs(pp["value"] - 0.6 * 0.55 * 3.0) < 1e-12        # verified PrizePicks table (2026-11-06)
 
 
 def test_leg_weight_uses_the_underdog_multiplier_only():
@@ -678,9 +679,9 @@ def test_build_ranks_by_expected_return_not_by_hit_chance():
     b2 = builder.build({"platform": "prizepicks", "league": "nba", "policy": "member", "snapshot_id": "ps",
                         "snapshot_at": w.OBS, "legs": pp, "excluded": {}},
                        {"sides": "both", "sizes": {2: 2}, "entry_type": "power"})
-    assert b2["ranking"]["by"] == "joint_chance" and "payout not published" in b2["ranking"]["note"]
-    js = [s["joint"]["p_all_win"] for s in b2["slips"]]
-    assert js == sorted(js, reverse=True) and all(s["expected_return"]["value"] is None for s in b2["slips"])
+    assert b2["ranking"]["by"] == "expected_return" and "PrizePicks' published payout" in b2["ranking"]["note"]
+    v2 = [s["expected_return"]["value"] for s in b2["slips"]]
+    assert v2 == sorted(v2, reverse=True) and all(s["expected_return"]["shown"] for s in b2["slips"])
 
 
 def test_copy_text_uses_the_market_label_not_the_book_raw_stat():

@@ -85,7 +85,7 @@ jobs:
 
   member-browser-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20  # the browser suite grew past 10 min on 2026-11-05 (job cancelled at the limit, no failing test)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -59,7 +59,8 @@
   function day(iso) { try { return new Date(iso).toLocaleDateString([], {month: "short", day: "numeric", year: "2-digit"}); } catch (e) { return iso; } }
   function pctOf(a, n) { return n ? Math.round(a / n * 100) + "%" : "—"; }
 
-  api.render = function (container, player, games) {
+  // opts (app.js): {stat, line, league} - the stat tab and line the player page shows; the panel starts there (bug #53)
+  api.render = function (container, player, games, opts) {
     if (!container || !player) return;
     var lg = (player.player_id || "").slice(0, 3), team = player.team && player.team.team_id;
     games = games || [];
@@ -69,13 +70,13 @@
     var key = lg + "|" + team;
     var load = CACHE[key] || (CACHE[key] = root.ScoutSportsApp.api.get("/api/sports/without", {league: lg, team: team})
       .then(function (r) { return r.data; }, function (e) { delete CACHE[key]; throw e; }));
-    load.then(function (idx) { draw(container, player, games, idx); }, function (e) {
+    load.then(function (idx) { draw(container, player, games, idx, opts); }, function (e) {
       container.querySelector(".gwx-panel").innerHTML = '<h2 id="gwx-h">Games without a teammate</h2><p class="sw-muted sw-small">' +
         (e && e.status === 404 ? "No final games of this team are in Scout’s box scores yet." : e && e.status === 503 ? "The team index is still being built - try again in a few minutes." : "The team index could not be loaded.") + "</p>";
     });
   };
 
-  function draw(container, player, games, idx) {
+  function draw(container, player, games, idx, opts) {
     var mates = teammates(idx, games, player.player_id);
     var stats = [], seen = {};
     (player.markets || []).forEach(function (m) { if (!seen[m.stat]) { seen[m.stat] = 1; stats.push([m.stat, m.stat_label || m.stat, m]); } });
@@ -86,12 +87,15 @@
       return;
     }
     function curLine(m) { var q = (m.quotes || [])[0] || (m.alternates || [])[0]; return q ? q.line : null; }
-    var st = {mate: mates[0].pid, stat: stats[0][0], line: curLine(stats[0][2])};
+    // bug #53: start from the page's stat (when this panel lists it) and its line (when finite); stats[0] only as the fallback
+    var o0 = opts || {}, hit = stats.filter(function (s) { return s[0] === o0.stat; })[0], s0 = hit || stats[0];
+    var l0 = o0.line === null || o0.line === undefined || o0.line === "" ? NaN : Number(o0.line);
+    var st = {mate: mates[0].pid, stat: s0[0], line: hit && isFinite(l0) ? l0 : curLine(s0[2])};
     panel.innerHTML = '<h2 id="gwx-h">Games without a teammate</h2>' +
       '<p class="sw-sub">His games when the chosen teammate did not play (box score: did not play / inactive, or on the roster with no stat line). History, not a prediction.</p>' +
       '<div class="gwx-controls"><label class="shx-field"><span>Teammate</span><select id="gwx-mate">' + mates.map(function (m) {
         return '<option value="' + esc(m.pid) + '">' + esc(m.name) + " (missed " + m.missed + ")</option>"; }).join("") + "</select></label>" +
-      '<label class="shx-field"><span>Stat</span><select id="gwx-stat">' + stats.map(function (s) { return '<option value="' + esc(s[0]) + '">' + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
+      '<label class="shx-field"><span>Stat</span><select id="gwx-stat">' + stats.map(function (s) { return '<option value="' + esc(s[0]) + '"' + (s[0] === st.stat ? " selected" : "") + ">" + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
       '<label class="shx-field"><span>Line</span><input id="gwx-line" type="number" step="0.5" min="0" inputmode="decimal" value="' + (st.line === null ? "" : st.line) + '"></label></div>' +
       '<div id="gwx-out" aria-live="polite"></div>';
     function paint() {

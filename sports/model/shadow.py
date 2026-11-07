@@ -172,6 +172,11 @@ def db(path=None):
     con.execute("""CREATE TABLE IF NOT EXISTS shadow_scorecard (shadow_id TEXT, settlement_id TEXT, model_version TEXT,
         league TEXT, stat TEXT, event_id TEXT, line REAL, side TEXT, p_side REAL, p_push REAL, status TEXT,
         value REAL, settled_at TEXT, PRIMARY KEY (shadow_id, settlement_id))""")
+    # additive (bug sweep 2026-11-06 #42): a corrected settlement supersedes the earlier row (learning._score_one rule)
+    if "superseded" not in {r[1] for r in con.execute("PRAGMA table_info(shadow_scorecard)")}:
+        con.execute("ALTER TABLE shadow_scorecard ADD COLUMN superseded INTEGER NOT NULL DEFAULT 0")
+    con.execute("CREATE TABLE IF NOT EXISTS shadow_meta (key TEXT PRIMARY KEY, value TEXT)")
+    con.commit()
     return con
 
 
@@ -478,15 +483,35 @@ def l2_score(sport, hcon, freeze, art):
 
 
 # ------------------------------------------------------------------------------------------------------ settling
-def settle(scon, path=None):
+CORRECTION_WINDOW_DAYS = 30            # first scan: settlements learned this far back (learning.on_settled's window)
+
+
+def settle(scon, path=None, now=None):
     """Score shadow forecasts whose offer has a settlement (same rule as learning._score_one: the forecast's OWN line
-    and chosen side), each under its OWN model_version (sm-2, sm-nfl-2). Idempotent."""
+    and chosen side), each under its OWN model_version (sm-2, sm-nfl-2). Idempotent.
+    A corrected settlement (new settlement_id) SUPERSEDES the forecast's earlier row (superseded=1) instead of adding a
+    second live row, and events are re-read when a settlement was learned since the last pass - also when every
+    forecast of the event is already scored (bug sweep 2026-11-06 #42)."""
+    from datetime import timedelta
     from .. import settlement, store
+    from ..contracts import now_utc, parse_utc
     con = db(path)
-    evs = [r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts f WHERE NOT EXISTS (SELECT 1 FROM "
-                                     "shadow_scorecard s WHERE s.shadow_id = f.shadow_id)")]
+    t_now = now or now_utc()
+    mark = (con.execute("SELECT value FROM shadow_meta WHERE key = 'settled_known_at'").fetchone() or [None])[0]
+    since = mark or (parse_utc(t_now) - timedelta(days=CORRECTION_WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    evs = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts f WHERE NOT EXISTS (SELECT 1 FROM "
+                                     "shadow_scorecard s WHERE s.shadow_id = f.shadow_id)")}
+    newest = since
+    shadow_evs = None
+    for ev, kn in scon.execute("SELECT event_id, MAX(known_at) FROM records WHERE kind='settlement' AND known_at >= ? "
+                               "AND event_id IS NOT NULL GROUP BY event_id", (since,)):
+        if shadow_evs is None:
+            shadow_evs = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts")}
+        if ev in shadow_evs:
+            evs.add(ev)
+        newest = max(newest, kn or newest)
     n = 0
-    for ev in evs:
+    for ev in sorted(evs):
         by_offer = {}
         for r in scon.execute("SELECT source, source_key, payload FROM records WHERE kind='settlement' AND event_id=? "
                               "ORDER BY source_key, revision", (ev,)):
@@ -506,11 +531,20 @@ def settle(scon, path=None):
             if not sts:
                 continue
             cur = max(sts, key=lambda x: x.revision)
+            if con.execute("SELECT 1 FROM shadow_scorecard WHERE shadow_id = ? AND settlement_id = ?",
+                           (sid, cur.settlement_id)).fetchone():
+                continue                                   # already scored against its current settlement
             status, _ = settlement.at_line(cur, line, side)
-            n += con.execute("INSERT OR IGNORE INTO shadow_scorecard VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            con.execute("UPDATE shadow_scorecard SET superseded = 1 WHERE shadow_id = ? AND settlement_id != ?",
+                        (sid, cur.settlement_id))
+            n += con.execute("INSERT OR IGNORE INTO shadow_scorecard (shadow_id, settlement_id, model_version, league, "
+                             "stat, event_id, line, side, p_side, p_push, status, value, settled_at, superseded) "
+                             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
                              (sid, cur.settlement_id, mv or VERSION, lg, st, ev, line, side, p_side, p_push, status,
                               cur.source_value, cur.settled_at)).rowcount
         con.commit()
+    con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('settled_known_at', ?)", (newest,))
+    con.commit()
     con.close()
     return {"shadow_scored": n}
 
@@ -520,7 +554,8 @@ def scorecard_rows(path=None):
     if not p.exists():
         return []
     con = db(p)
-    cur = con.execute("SELECT model_version, league, stat, event_id, p_side, p_push, status FROM shadow_scorecard")
+    cur = con.execute("SELECT model_version, league, stat, event_id, p_side, p_push, status FROM shadow_scorecard "
+                      "WHERE superseded = 0")
     names = [d[0] for d in cur.description]
     rows = [dict(zip(names, r)) for r in cur.fetchall()]
     con.close()
@@ -538,7 +573,8 @@ def status(path=None):
         for lg, st, n, ev in con.execute("SELECT league, stat, COUNT(*), COUNT(DISTINCT event_id) FROM shadow_forecasts "
                                          "GROUP BY 1, 2"):
             out["counts"][f"{lg}:{st}"] = {"forecasts": n, "events": ev}
-        for lg, st, n in con.execute("SELECT league, stat, COUNT(*) FROM shadow_scorecard GROUP BY 1, 2"):
+        for lg, st, n in con.execute("SELECT league, stat, COUNT(*) FROM shadow_scorecard WHERE superseded = 0 "
+                                     "GROUP BY 1, 2"):
             out["counts"].setdefault(f"{lg}:{st}", {})["settled"] = n
         con.close()
     return out

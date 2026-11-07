@@ -126,6 +126,8 @@ class BetRivers(Provider):
         except net.HttpError as e:
             res.requests, res.http_status, res.error, res.blocked = int(not e.held), e.status, str(e), e.status in (401, 403)
             res.not_before = e.not_before_iso
+        except (ValueError, KeyError, TypeError, AttributeError) as e:   # non-JSON 200 / unexpected shape (bug #37)
+            res.requests, res.error = 1, f"answer not readable: {type(e).__name__}: {str(e)[:120]}"
         return res
 
     def props(self, lg, event):
@@ -137,4 +139,7 @@ class BetRivers(Provider):
         except net.HttpError as e:
             res.requests, res.http_status, res.error, res.blocked = int(not e.held), e.status, str(e), e.status in (401, 403)
             res.not_before = e.not_before_iso
+        except (ValueError, KeyError, TypeError, AttributeError) as e:   # non-JSON 200 / bad odds (make_offer) (bug #37)
+            res.requests, res.offers = 1, []
+            res.error = f"answer not readable: {type(e).__name__}: {str(e)[:120]}"
         return res

@@ -297,9 +297,10 @@ class Store:
         except queue.Empty:
             with self._lock:
                 if self._n_readers < READ_SLOTS:
+                    # a slot is counted only once its connection really opened: a failed open (EMFILE, disk fault)
+                    # gives the slot back and closes a half-opened connection (bug sweep 2026-11-06 #57)
+                    con = self._open_reader()
                     self._n_readers += 1
-                    con = self._open()
-                    con.execute("PRAGMA query_only=ON")
         if con is None:
             try:
                 con = self._readers.get(timeout=wait)
@@ -316,13 +317,22 @@ class Store:
         with self._lock:
             con = self._page_cons.pop() if self._page_cons else None
         if con is None:
-            con = self._open()
-            con.execute("PRAGMA query_only=ON")
+            con = self._open_reader()
         try:
             yield con
         finally:
             with self._lock:
                 self._page_cons.append(con)
+
+    def _open_reader(self):
+        """A read-only connection, or the error with nothing left open."""
+        con = self._open()
+        try:
+            con.execute("PRAGMA query_only=ON")
+        except BaseException:
+            con.close()
+            raise
+        return con
 
     # ---- revisions: what keys a member's cached page. A cache hit reads no database.
     def _bump(self, con, member):

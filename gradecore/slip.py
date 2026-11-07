@@ -138,3 +138,176 @@ def evaluate(legs, payout, correlation=None, seed=SEED):
     out["kelly_fraction"] = _kelly(returns)
     out["quarter_kelly_fraction"] = out["kelly_fraction"] / 4
     return out
+
+
+# ------------------------------------------------------------------------------------------------ competitor spec, section 3
+# Pick'em entries by hit count. Each leg's chance is GIVEN NO PUSH (pushes removed, spec "Win (no push)"): a pushed leg
+# shrinks the entry instead of losing it, so it is left out of the win chance. Tiers = {hits: gross multiple} from
+# payouts.tiers() (verified tables only). Nothing here places, sizes a grader stake or changes a grade.
+COPULA_DRAWS = 20_000
+Z95 = 1.959963984540054
+KELLY_FRACTION = 0.25
+UNIT_SHARE = 0.01               # display: 1 unit = 1% of the entered bankroll, unless the member sets a unit size
+
+
+def _probs(probs):
+    out = []
+    for p in probs:
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or not 0 <= p <= 1:
+            raise ValueError("leg chances must be finite numbers between 0 and 1")
+        out.append(float(p))
+    if not out:
+        raise ValueError("a slip needs at least one leg")
+    return out
+
+
+def poisson_binomial(probs):
+    """P(k hits) for independent legs. DP: P_0 = 1; for each leg i: P_k <- P_k (1 - p_i) + P_{k-1} p_i."""
+    dist = [1.0]
+    for p in _probs(probs):
+        nxt = [0.0] * (len(dist) + 1)
+        for k, q in enumerate(dist):
+            nxt[k] += q * (1.0 - p)
+            nxt[k + 1] += q * p
+        dist = nxt
+    return dist
+
+
+def _payout_vector(tiers, n):
+    if not tiers:
+        raise ValueError("a payout table is required")
+    pay = [0.0] * (n + 1)
+    for k, m in tiers.items():
+        k = int(k)
+        if not 0 <= k <= n or isinstance(m, bool) or not isinstance(m, (int, float)) or not math.isfinite(m) or m < 0:
+            raise ValueError("payout tiers must map 0..n hits to finite nonnegative multiples")
+        pay[k] = float(m)
+    return pay
+
+
+def returns_of(hit_dist, tiers):
+    """[(probability, gross multiple)] of the entry, one row per hit count."""
+    n = len(hit_dist) - 1
+    pay = _payout_vector(tiers, n)
+    return [(p, pay[k]) for k, p in enumerate(hit_dist)]
+
+
+def slip_ev(probs, tiers):
+    """Independent legs: exact win chance and EV. EV = sum_k P(k) payout_k - 1.
+    -> {"n", "hit_dist", "p_all_hit", "p_paid", "expected_multiple", "ev", "multiple"}."""
+    dist = poisson_binomial(probs)
+    n = len(dist) - 1
+    pay = _payout_vector(tiers, n)
+    exp = sum(p * m for p, m in zip(dist, pay))
+    return {"n": n, "hit_dist": dist, "p_all_hit": dist[n], "p_paid": sum(p for p, m in zip(dist, pay) if m > 0),
+            "expected_multiple": exp, "ev": exp - 1.0, "multiple": pay[n], "basis": "exact; legs independent"}
+
+
+def entry_ev(probs, book, entry, config=None):
+    """slip_ev on a verified entry table, or an 'unavailable' answer when the table is not verified."""
+    from . import payouts
+    t = payouts.tiers(book, entry, len(probs), config)
+    if t is None:
+        return {"available": False, "reason": f"{book} {entry} {len(probs)}-pick payout is not verified"}
+    out = slip_ev(probs, t)
+    out.update(available=True, book=book, entry=entry, tiers=t,
+               break_even=payouts.entry_break_even(book, entry, len(probs), config))
+    return out
+
+
+def _corr_matrix(n, corr):
+    m = np.eye(n) if corr is None else np.array(corr, dtype=float)
+    if m.shape != (n, n) or not np.all(np.isfinite(m)) or not np.allclose(m, m.T) or not np.allclose(np.diag(m), 1):
+        raise ValueError("correlation must be a symmetric n x n matrix with ones on the diagonal")
+    if np.any(np.abs(m) > 1):
+        raise ValueError("correlations must lie between -1 and 1")
+    vals, vecs = np.linalg.eigh(m)
+    if vals.min() < -1e-8:
+        return None
+    return vecs @ np.diag(np.sqrt(np.maximum(vals, 0)))
+
+
+def correlation_matrix(legs, correlation):
+    """Build the latent matrix from adapter.correlation(a, b) (chosen-side latent correlation). Legs from different
+    match_keys get 0; a same-match pair with no validated estimate (None) -> None (the slip cannot be rated)."""
+    n = len(legs)
+    m = np.eye(n)
+    for i in range(n):
+        for j in range(i):
+            if legs[i].get("match_key") != legs[j].get("match_key"):
+                continue
+            rho = correlation(legs[i], legs[j]) if correlation is not None else None
+            if rho is None:
+                return None
+            m[i, j] = m[j, i] = float(rho)
+    return m
+
+
+def simulate(probs, tiers, corr=None, draws=COPULA_DRAWS, seed=SEED, chunk=500_000):
+    """Gaussian copula (identity = independent Monte Carlo): leg i hits when z_i < Phi^-1(p_i), z ~ N(0, corr), seeded.
+    -> {"ev", "ev_low", "ev_high" (95% interval of the simulation), "p_all_hit" (+ interval), "hit_dist", "draws",
+    "seed"} or {"available": False, "reason"} when the correlations do not form a valid joint model."""
+    p = _probs(probs)
+    n = len(p)
+    pay = np.array(_payout_vector(tiers, n))
+    factor = _corr_matrix(n, corr)
+    if factor is None:
+        return {"available": False, "reason": "correlation estimates do not form a valid joint model"}
+    nd = NormalDist()
+    cut = np.array([-np.inf if x <= 0 else np.inf if x >= 1 else nd.inv_cdf(x) for x in p])
+    rng = np.random.default_rng(seed)
+    counts = np.zeros(n + 1)
+    s1 = s2 = 0.0
+    left = int(draws)
+    if left < 2:
+        raise ValueError("at least 2 draws")
+    while left > 0:
+        m = min(chunk, left)
+        z = rng.standard_normal((m, n)) @ factor.T
+        hits = (z < cut).sum(axis=1)
+        counts += np.bincount(hits, minlength=n + 1)
+        r = pay[hits]
+        s1 += r.sum()
+        s2 += (r * r).sum()
+        left -= m
+    mean = s1 / draws
+    se = math.sqrt(max(s2 / draws - mean * mean, 0.0) / (draws - 1))
+    dist = (counts / draws).tolist()
+    pa = dist[n]
+    pse = math.sqrt(pa * (1 - pa) / draws)
+    return {"available": True, "ev": mean - 1.0, "ev_low": mean - 1.0 - Z95 * se, "ev_high": mean - 1.0 + Z95 * se,
+            "p_all_hit": pa, "p_all_hit_low": max(0.0, pa - Z95 * pse), "p_all_hit_high": min(1.0, pa + Z95 * pse),
+            "hit_dist": dist, "draws": int(draws), "seed": seed,
+            "basis": f"Gaussian copula; {int(draws)} draws; seed {seed}"}
+
+
+def kelly_fraction(returns):
+    """Full-Kelly bankroll fraction on a whole payout distribution [(prob, gross multiple)]: maximises E[log wealth]."""
+    return _kelly([(float(p), float(m)) for p, m in returns if p > 0])
+
+
+def stake(returns, mode="kelly", fraction=KELLY_FRACTION, bankroll=None, unit=None, flat_units=1.0, cap_units=None):
+    """A member's DISPLAY stake for a slip (spec: Kelly units; Outlier: % or $ from an entered bankroll). It never changes
+    a grader stake. mode 'kelly' = fraction x full Kelly (1/4 default, 1/2 etc. by `fraction`); 'flat' = flat_units.
+    Units: 1 unit = `unit` dollars, else UNIT_SHARE of the bankroll; without a bankroll a unit is 1% of an unnamed one.
+    cap_units = the gate cap (gates.evaluate(...).cap) - the stake never shows more.
+    -> {"full_kelly", "fraction", "units", "amount", "capped"}."""
+    full = kelly_fraction(returns)
+    if bankroll is not None and not (isinstance(bankroll, (int, float)) and bankroll > 0):
+        raise ValueError("bankroll must be a positive amount")
+    unit_dollars = float(unit) if unit else float(bankroll) * UNIT_SHARE if bankroll else None
+    if mode == "flat":
+        units = float(flat_units) if full > 0 else 0.0
+        frac = None
+    elif mode == "kelly":
+        if not 0 < fraction <= 1:
+            raise ValueError("Kelly fraction must be in (0, 1]")
+        frac = full * fraction
+        units = frac * float(bankroll) / unit_dollars if bankroll else frac / UNIT_SHARE
+    else:
+        raise ValueError("mode must be kelly or flat")
+    capped = cap_units is not None and units > cap_units
+    if capped:
+        units = float(cap_units)
+    return {"full_kelly": full, "fraction": frac, "units": units, "capped": capped,
+            "amount": None if unit_dollars is None else units * unit_dollars}

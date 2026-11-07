@@ -1,0 +1,407 @@
+{
+ "status": "success",
+ "data": {
+  "id": "01a0d7e8-f5e1-70eb-a738-fa92640645c1",
+  "name": "Dplus KIA vs Bilibili Gaming",
+  "status": "Open",
+  "advertisedStart": "2026-11-05T22:00:00.000Z",
+  "inplayAvailable": false,
+  "isDisplayed": true,
+  "competitionId": "086211fd-5445-4955-be1b-9ed7ba84641d",
+  "competitionName": "LoL",
+  "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+  "sportName": "Esports",
+  "actualClosedTime": "2026-11-01T01:22:21.135Z",
+  "markets": [
+   {
+    "id": "01a19cc9-b689-775d-932d-b2d36c5055ac",
+    "name": "Viper game 2 assists 5.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_2_player_assist_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   },
+   {
+    "id": "01a19cc9-becc-73b8-af87-7e5bbd7a7ecf",
+    "name": "Bin game 2 kills 2.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_2_player_kill_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   },
+   {
+    "id": "01a19cc9-9c03-70a6-ae67-910e2751e21f",
+    "name": "ShowMaker game 1 kills 3.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_1_player_kill_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   },
+   {
+    "id": "01a19cc9-9f3c-75fa-92d0-d0ca4502497f",
+    "name": "Bin game 1 assists 4.5",
+    "status": "open",
+    "isDisplayed": true,
+    "multiAllowed": true,
+    "resultingType": "pandascore_game_1_player_assist_over_under",
+    "isSgmAllowed": false,
+    "isDfsAllowed": true
+   }
+  ],
+  "marketGroups": [
+   {
+    "id": "efd5df1d-5e57-4833-9684-850acb94111c",
+    "name": "Game 1 Headshots",
+    "displayOrder": 4,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1 Headshots"
+   },
+   {
+    "id": "2bdcc82d-321d-4ede-8bc2-76fcc0431d90",
+    "name": "Game 2 Headshots",
+    "displayOrder": 5,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 2 Headshots"
+   },
+   {
+    "id": "49bf6e4e-88f7-49c5-9e55-d0461fb95e0e",
+    "name": "Game 2 Assists",
+    "displayOrder": 7,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 2 Assists"
+   },
+   {
+    "id": "0d805bbb-6192-40fe-adbe-d49eecdf9015",
+    "name": "Game 1 Assists",
+    "displayOrder": 6,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1 Assists"
+   },
+   {
+    "id": "516d2b83-eeed-4128-93e9-fd373ebb3d31",
+    "name": "Game 1+2 Kills",
+    "displayOrder": 3,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1+2 Kills"
+   },
+   {
+    "id": "fa36041c-5d2b-4a8b-8b1f-1838ce477029",
+    "name": "Game 1 Kills",
+    "displayOrder": 1,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 1 Kills"
+   },
+   {
+    "id": "04002483-3787-4cce-b8ef-16940d2d240f",
+    "name": "Game 2 Kills",
+    "displayOrder": 2,
+    "displayExpanded": true,
+    "isHidden": false,
+    "shortName": "Game 2 Kills"
+   }
+  ],
+  "marketGroupMappings": [
+   {
+    "name": "Game 2 Assists",
+    "displayOrder": 7,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a19cc9-b689-775d-932d-b2d36c5055ac",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   },
+   {
+    "name": "Game 1 Assists",
+    "displayOrder": 6,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a19cc9-9f3c-75fa-92d0-d0ca4502497f",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   },
+   {
+    "name": "Game 1 Kills",
+    "displayOrder": 1,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a19cc9-9c03-70a6-ae67-910e2751e21f",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   },
+   {
+    "name": "Game 2 Kills",
+    "displayOrder": 2,
+    "displayExpanded": true,
+    "markets": [
+     {
+      "id": "01a19cc9-becc-73b8-af87-7e5bbd7a7ecf",
+      "order": 1,
+      "type": "dfs"
+     }
+    ]
+   }
+  ],
+  "selections": [
+   {
+    "id": "01a19cc9-9d4d-75cc-8bac-a044ba58e90b",
+    "name": "ShowMaker game 1 kills 3.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a19cc9-9d91-75bb-8b19-81e17e557bc0",
+    "name": "ShowMaker game 1 kills 3.5 under",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a19cc9-9f61-7401-adad-4a6f22ffaea0",
+    "name": "Bin game 1 assists 4.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a19cc9-9f9e-7664-a190-ff5510b8c842",
+    "name": "Bin game 1 assists 4.5 under",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a19cc9-b6a7-7510-94aa-efdeafa312aa",
+    "name": "Viper game 2 assists 5.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a19cc9-b85e-7201-94db-eb9b5151f54e",
+    "name": "Viper game 2 assists 5.5 under",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a19cc9-bf0d-749a-8bc6-39988604495e",
+    "name": "Bin game 2 kills 2.5 over",
+    "isDisplayed": true
+   },
+   {
+    "id": "01a19cc9-c03a-7153-b3d6-48a97c9d560f",
+    "name": "Bin game 2 kills 2.5 under",
+    "isDisplayed": true
+   }
+  ],
+  "prices": [
+   {
+    "id": "01a19cc9-9f2b-76fb-bfab-349fd6f55069",
+    "selectionId": "01a19cc9-9d91-75bb-8b19-81e17e557bc0",
+    "marketId": "01a19cc9-9c03-70a6-ae67-910e2751e21f",
+    "price": 1.98
+   },
+   {
+    "id": "01a19cc9-9f2b-76fb-bfab-32de0e3450e1",
+    "selectionId": "01a19cc9-9d4d-75cc-8bac-a044ba58e90b",
+    "marketId": "01a19cc9-9c03-70a6-ae67-910e2751e21f",
+    "price": 2.02
+   },
+   {
+    "id": "01a19cc9-a0f1-75ad-bcda-3f2f5644092c",
+    "selectionId": "01a19cc9-9f61-7401-adad-4a6f22ffaea0",
+    "marketId": "01a19cc9-9f3c-75fa-92d0-d0ca4502497f",
+    "price": 1.98
+   },
+   {
+    "id": "01a19cc9-a0f1-75ad-bcda-42879ba1f215",
+    "selectionId": "01a19cc9-9f9e-7664-a190-ff5510b8c842",
+    "marketId": "01a19cc9-9f3c-75fa-92d0-d0ca4502497f",
+    "price": 2.02
+   },
+   {
+    "id": "01a19cc9-b898-73b8-a2f8-7e9ba4db7faf",
+    "selectionId": "01a19cc9-b85e-7201-94db-eb9b5151f54e",
+    "marketId": "01a19cc9-b689-775d-932d-b2d36c5055ac",
+    "price": 1.99
+   },
+   {
+    "id": "01a19cc9-b898-73b8-a2f8-79754626fdc7",
+    "selectionId": "01a19cc9-b6a7-7510-94aa-efdeafa312aa",
+    "marketId": "01a19cc9-b689-775d-932d-b2d36c5055ac",
+    "price": 2.01
+   },
+   {
+    "id": "01a19cc9-c09e-712b-884d-d3b3feb2ee2e",
+    "selectionId": "01a19cc9-bf0d-749a-8bc6-39988604495e",
+    "marketId": "01a19cc9-becc-73b8-af87-7e5bbd7a7ecf",
+    "price": 1.99
+   },
+   {
+    "id": "01a19cc9-c09e-712b-884d-d59c9b3ec781",
+    "selectionId": "01a19cc9-c03a-7153-b3d6-48a97c9d560f",
+    "marketId": "01a19cc9-becc-73b8-af87-7e5bbd7a7ecf",
+    "price": 2.01
+   }
+  ],
+  "playerProps": [
+   {
+    "playerId": "d71e175d-073b-48cf-9e76-56ae625b1c72",
+    "playerName": "ShowMaker",
+    "teamId": "f3325866-ee2e-4e6d-990f-3aaedd7a2558",
+    "teamName": "Dplus KIA",
+    "teamAbbreviation": "DK",
+    "marketId": "01a19cc9-9c03-70a6-ae67-910e2751e21f",
+    "selectionId": "01a19cc9-9d4d-75cc-8bac-a044ba58e90b",
+    "stats": [
+     "game-1-kills"
+    ],
+    "value": 3.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "d71e175d-073b-48cf-9e76-56ae625b1c72",
+    "playerName": "ShowMaker",
+    "teamId": "f3325866-ee2e-4e6d-990f-3aaedd7a2558",
+    "teamName": "Dplus KIA",
+    "teamAbbreviation": "DK",
+    "marketId": "01a19cc9-9c03-70a6-ae67-910e2751e21f",
+    "selectionId": "01a19cc9-9d91-75bb-8b19-81e17e557bc0",
+    "stats": [
+     "game-1-kills"
+    ],
+    "value": 3.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "63885e58-ecac-409c-9a6d-32e5379f9a67",
+    "playerName": "Bin",
+    "teamId": "a344b096-fff7-45cd-9795-3383480a7030",
+    "teamName": "Bilibili Gaming",
+    "teamAbbreviation": "BLG",
+    "marketId": "01a19cc9-9f3c-75fa-92d0-d0ca4502497f",
+    "selectionId": "01a19cc9-9f61-7401-adad-4a6f22ffaea0",
+    "stats": [
+     "game-1-assists"
+    ],
+    "value": 4.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "63885e58-ecac-409c-9a6d-32e5379f9a67",
+    "playerName": "Bin",
+    "teamId": "a344b096-fff7-45cd-9795-3383480a7030",
+    "teamName": "Bilibili Gaming",
+    "teamAbbreviation": "BLG",
+    "marketId": "01a19cc9-9f3c-75fa-92d0-d0ca4502497f",
+    "selectionId": "01a19cc9-9f9e-7664-a190-ff5510b8c842",
+    "stats": [
+     "game-1-assists"
+    ],
+    "value": 4.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "73ec605c-ed90-4e6e-8598-80631fb243ad",
+    "playerName": "Viper",
+    "teamId": "a344b096-fff7-45cd-9795-3383480a7030",
+    "teamName": "Bilibili Gaming",
+    "teamAbbreviation": "BLG",
+    "marketId": "01a19cc9-b689-775d-932d-b2d36c5055ac",
+    "selectionId": "01a19cc9-b6a7-7510-94aa-efdeafa312aa",
+    "stats": [
+     "game-2-assists"
+    ],
+    "value": 5.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "73ec605c-ed90-4e6e-8598-80631fb243ad",
+    "playerName": "Viper",
+    "teamId": "a344b096-fff7-45cd-9795-3383480a7030",
+    "teamName": "Bilibili Gaming",
+    "teamAbbreviation": "BLG",
+    "marketId": "01a19cc9-b689-775d-932d-b2d36c5055ac",
+    "selectionId": "01a19cc9-b85e-7201-94db-eb9b5151f54e",
+    "stats": [
+     "game-2-assists"
+    ],
+    "value": 5.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "63885e58-ecac-409c-9a6d-32e5379f9a67",
+    "playerName": "Bin",
+    "teamId": "a344b096-fff7-45cd-9795-3383480a7030",
+    "teamName": "Bilibili Gaming",
+    "teamAbbreviation": "BLG",
+    "marketId": "01a19cc9-becc-73b8-af87-7e5bbd7a7ecf",
+    "selectionId": "01a19cc9-bf0d-749a-8bc6-39988604495e",
+    "stats": [
+     "game-2-kills"
+    ],
+    "value": 2.5,
+    "lineType": "over",
+    "isOptimal": true,
+    "isDisplayed": true
+   },
+   {
+    "playerId": "63885e58-ecac-409c-9a6d-32e5379f9a67",
+    "playerName": "Bin",
+    "teamId": "a344b096-fff7-45cd-9795-3383480a7030",
+    "teamName": "Bilibili Gaming",
+    "teamAbbreviation": "BLG",
+    "marketId": "01a19cc9-becc-73b8-af87-7e5bbd7a7ecf",
+    "selectionId": "01a19cc9-c03a-7153-b3d6-48a97c9d560f",
+    "stats": [
+     "game-2-kills"
+    ],
+    "value": 2.5,
+    "lineType": "under",
+    "isOptimal": true,
+    "isDisplayed": true
+   }
+  ],
+  "selfMultiExtension": {
+   "allowSelfMulti": false
+  },
+  "teams": [
+   {
+    "id": "a344b096-fff7-45cd-9795-3383480a7030",
+    "name": "Bilibili Gaming",
+    "abbreviation": "BLG",
+    "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+    "createdAt": "2024-10-18T01:30:22.040Z"
+   },
+   {
+    "id": "f3325866-ee2e-4e6d-990f-3aaedd7a2558",
+    "name": "Dplus KIA",
+    "abbreviation": "DK",
+    "sportId": "0382d5ab-f62f-4c9c-9bb2-a41d0f9a515b",
+    "createdAt": "2025-01-15T16:14:03.494Z"
+   }
+  ]
+ }
+}

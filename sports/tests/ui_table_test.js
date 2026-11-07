@@ -235,7 +235,7 @@ assert.strictEqual(p2B.marketFallback, null);
 });
 assert.strictEqual(p2A.market, null);                                            // never a market chance for the signal
 const p2HtmlFb = p2TB.html(Object.assign({}, p2Opts, {rows: [p2WithFb]}), {view: "table", sort: "edge", dir: null, open: {}});
-assert.ok(/data-fallback="2"[^>]*>O 58\.0% · books, stale<\/span>/.test(p2HtmlFb), p2HtmlFb.slice(0, 1200));
+assert.ok(/data-fallback="2"[^>]*>O 58\.0%<span class="sw-tb-note">older book prices<\/span><\/span>/.test(p2HtmlFb), p2HtmlFb.slice(0, 1200));
 assert.ok(/Not used for lean or edge/.test(p2HtmlFb));
 const p2HtmlNoFb = p2TB.html(Object.assign({}, p2Opts, {rows: [p2NoFb]}), {view: "table", sort: "edge", dir: null, open: {}});
 assert.ok(!/data-fallback/.test(p2HtmlNoFb) && /data-label="Market">—<\/td>/.test(p2HtmlNoFb));

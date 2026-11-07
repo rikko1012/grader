@@ -30,3 +30,5 @@
 .sw .rp-gate{margin:0 0 10px;color:var(--warn)}.sw .rp-gate.ok{color:var(--over)}
 .sw .sw-panel h3{margin-top:14px}
 @media (max-width:640px){.sw .shx-field input[type=search]{min-width:0;width:100%}.sw .shx-filters .shx-field{flex:1 1 140px}}
+/* audit 2026-11-05: 'Show more' stays hidden when every line is already shown (.sw-btn display beat [hidden]) */
+.sw #shx-more[hidden]{display:none}

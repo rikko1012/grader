@@ -1,5 +1,35 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## Sports sm-1 fixes held behind default-OFF flags (bug sweep 2026-11-06 #9 / #10; branch claude/bugs-sports-jobs; NOT switched on; artifacts unchanged NBA `5ec8adf73a6dad18` / NFL `cc56aeb8b88c31d8`)
+
+- **SPORTS_FIX_PRIOR_GAMES=1 (#9):** an upcoming (unplayed) game is never a prior game of the same player's / team's later
+  upcoming game (featurize.split_upcoming: each layer of upcoming games is featurized on its own). Off = today.
+  Measured on exports_2026-11-06: 0 of 10,210 NBA / 4,072 NFL saved last-before-start forecasts change (by then the earlier
+  game has started). Exposure is the EARLIER forecasts of NBA back-to-backs (128 player-games / 1,044 lines with a game of
+  the same player <= 30 h before; NFL 0). Estimate on the packaged history for 116 such pairs / 958 lines: chance moves
+  median 0.75 pt (p90 4.5, max 10.5), lean changes on 56, the 55% / 60% step crossed on 69.
+- **SPORTS_FIX_PROJ_MEAN=1 (#10):** sm-1 projection_mean = the calibrated PMF's mean (what gradecheck, tw-1 and mi-1 use)
+  instead of the pre-calibration model mean; reason code `proj_mean:pmf`, replayed the same way. Chances unchanged; only the
+  board lean (lean_of's mean condition) moves. Measured on exports_2026-11-06 (model mean recovered from each saved chance;
+  NFL rush_yds mixture not measurable): NBA 9,663 measured -> lean appears 258 / disappears 81; NFL 2,854 measured -> appears
+  120 / disappears 54.
+- **Owner decides** whether either flag goes on.
+
+## sn-1 — NFL snap-trend challenger, shadow only (branch claude/nfl-two-way-position, 2026-11-05; NOT deployed; sm-1 NFL artifact unchanged: `cc56aeb8b88c31d8`; no grade change)
+
+- **What:** sm-1's frozen rec / rec_yds configuration plus `nfl.snap_trend` (L3 snap share - EW snap share). It is refit
+  on the same packaged history at sm-1's own data_as_of (2026-10-23T23:00Z); a plain sm-1 refit there reproduces
+  `cc56aeb8b88c31d8` exactly, and the fit rows are identical (9,928). Artifact `sn1_nfl.json` sha `c61887c3a4ba4bfb`,
+  `MANIFEST_SN1.json`. It loads only while the live sm-1 sha is the one it pairs with.
+- **Protocol:** REGISTER.md amendment A11 (registered as "A10" in 89e3e59 before the fit; renumbered A11 at the merge with main's A10 pc-1; the frozen sn1_nfl.json still says "A10" in its role text, hashed bytes left unchanged). Recorded in the forward job into
+  shadow.db (model_version `sn-1`) + `sn1_inputs`; never a store record, never displayed or graded. The held-out window
+  is games after the first recorded row: box CRPS once at >= 48 games; book logloss once per market at >= 150 props /
+  30 games. Any switch is an owner decision.
+- **Why:** two-way walk-forward, population result, as a second look (sports/research/two_way_position.md).
+- **Rollback / off:** `SPORTS_SHADOW_SN1=0` (read per forward run). Status: `python -m sports.model.sn1 status`; the
+  forward run summary carries `sn1_shadow` / `sn1_heldout`.
+- **Not in this entry:** SCOUT_NFL_TWO_WAY (same branch) stays off; it failed its walk-forward.
+
 ## ec-1 — printed chance = calibrated chance on every CS2 and LoL prop (owner decision 2026-11-05; branch claude/esports-calibrated-chance; NOT deployed; CS2 model tag unchanged `3007c59b74`)
 
 Owner: "we're grading every prop on the board these props will never hit 60% printed chance" -> CALIBRATE. This supersedes the

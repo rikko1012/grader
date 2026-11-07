@@ -1,10 +1,12 @@
 """The books job (FanDuel / BetRivers own feeds, OddsPapi when enabled, health probes of refusing books), run by the
-CANONICAL ingest loop (sports/worker.py `loop`, source "books") - not a scheduler of its own. Every successful game read
+sports scheduler's light "books" job (python -m sports.worker books, every minute on a game day; pending() decides in
+books.db alone whether anything is due) - or, with SPORTS_BOOKS_JOB=0, inside the canonical ingest cycle (source
+"books"). Not a scheduler of its own. Every successful game read
 is stored here (immutable quote history, books.db) AND handed to the sink, which writes the same quotes to the sc-1
 store the UI and the model read (books/bridge.py). The Odds API is not polled here: the canonical Odds API path is
 sports/books/sources.oddsapi_ingest (credit ledger, resolved events and players).
 
-    python -m sports.worker loop nba nfl          the scheduled collector (the sports service's ingest-loop child)
+    python -m sports.worker books nba nfl         the scheduled books job (scheduler "books")
     python -m sports.books.worker                 manual: ONE pass (books + game data), then exit
     python -m sports.books.worker --leagues nba   limit leagues
 
@@ -30,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from .. import config, net
 from . import events as canon
 from . import plan, providers, schedule, store
-from .base import Event
+from .base import Event, FetchResult
 from .store import dt, iso
 
 HOLDER = f"{socket.gethostname()}:{os.getpid()}"
@@ -41,7 +43,8 @@ LEAGUES = ("nba", "nfl")
 
 
 # a direct (credit-free) book game read that came back with NO props is re-read after this many minutes instead of the
-# ladder's next rung (24-72 h out = every 3 h): next-day props show up within ~30 min of being posted (owner audit bug 4)
+# ladder's next rung when that is longer (72-168 h out = every 12 h; 24-72 h was every 3 h until the 2026-11-06 site audit
+# N1 made it 8 min): props show up within ~30 min of being posted (owner audit bug 4)
 NOT_POSTED_RECHECK_MIN = float(os.environ.get("SPORTS_BOOKS_NOT_POSTED_RECHECK_MIN", "30"))
 
 def _now():
@@ -59,9 +62,20 @@ def _cooldown(failures, blocked, now, not_before=None):
     return max(until, nb) if nb else until
 
 
+def _guarded(call, *args):
+    """One provider call -> its FetchResult; an unexpected exception (a non-JSON 200, a parse error) becomes a recorded
+    failure (error set, so the fetch row is finished and the provider backs off) instead of aborting the whole pass
+    and every later provider (bug sweep 2026-11-06 #37)."""
+    try:
+        return call(*args)
+    except Exception as e:                              # noqa: BLE001 - recorded as the provider's failure
+        return FetchResult(error=f"{type(e).__name__}: {str(e)[:200]}")
+
+
 def load_holds(db, now):
     """Retry-After holds saved by an earlier pass (or process) -> net.hold, so no request goes out before them."""
-    for r in db.all("SELECT key, value FROM sports_book_settings WHERE key LIKE 'hold:%'"):
+    # the pattern is a PARAMETER: a literal '%' with a params tuple breaks psycopg2 on the Postgres backend (bug #39)
+    for r in db.all("SELECT key, value FROM sports_book_settings WHERE key LIKE ?", ("hold:%",)):
         t = dt(r["value"])
         if t and t > now:
             net.hold(r["key"][len("hold:"):], t.timestamp())
@@ -90,7 +104,7 @@ def _league_reads(db, name, prov, leagues, now, info, sink=None, fixed=True):
         if nd and dt(nd) > now:
             continue
         fid = store.start_fetch(db, name, key, "league", now=now)
-        res = prov.read(db, lg, now)
+        res = _guarded(prov.read, db, lg, now)
         if res.budget_denied:
             store.finish_fetch(db, fid, res, now=now)
             info.setdefault("budget", {})[key] = res.budget_denied
@@ -133,7 +147,7 @@ def _games(db, prov, lg, now):
     last = store.setting(db, key)
     if not last or dt(last) < now - timedelta(minutes=schedule.EVENTS_EVERY_MIN):
         fid = store.start_fetch(db, prov.name, lg["key"], "events", now=now)
-        res = prov.events(lg)
+        res = _guarded(prov.events, lg)
         keys = canon.keys_for(lg, prov.name, res.events) if res.events else {}
         if res.error is None:
             store.record_events(db, prov.name, lg["key"], res.events, keys, now=now)
@@ -195,6 +209,62 @@ def _probe_blocked(db, now):
     return out
 
 
+def is_due(next_due_at, ladder, start, now):
+    """Is a game due on `ladder` at `now`? Never read, or its stored due time has passed - or that due time lies
+    further ahead than the game's CURRENT rung allows. A due time is written with the rung in force at the read
+    (next_due), so one set under a longer rung - the old "full" ladder before a deploy (2026-11-06: games 1-4 h out held
+    to a 30-min due time while the direct ladder says 3-5 min), SPORTS_BOOKS_LADDER changed, or a game crossing into a
+    shorter rung (8 h -> 2 h) - would otherwise keep the game back for up to that whole longer interval."""
+    every = schedule.interval_min(ladder, start, now)
+    if every is None:
+        return False
+    if not next_due_at:
+        return True
+    nd = dt(next_due_at)
+    return nd <= now or nd - now > timedelta(minutes=every)
+
+
+def pending(db, leagues=LEAGUES, now=None, provs=None, probe=True):
+    """Would run_once send any request now? A cheap books.db-only check (no request, no canonical read, no lease) so
+    the books job (sports.worker books, every minute on a game day) exits at once between due times. True when a
+    configured provider that is not cooling down has a game list older than EVENTS_EVERY_MIN, a game inside its
+    ladder that is due or never read, a league read due (OddsPapi), a metered feed (always re-checked by run_once), or
+    a blocked-book probe due."""
+    now = now or _now()
+    for name, prov in (providers.PROVIDERS if provs is None else provs).items():
+        if not prov.configured()[0]:
+            continue
+        st = store.provider_state(db, name)
+        if st["cooldown_until"] and dt(st["cooldown_until"]) > now:
+            continue
+        mine = [k for k in leagues if k in prov.leagues]
+        if not mine:
+            continue
+        if prov.kind == "feed":
+            return True
+        if prov.kind == "feed_league":
+            if any(not store.due(db, name, k, "league") or dt(store.due(db, name, k, "league")) <= now for k in mine):
+                return True
+            continue
+        ladder = schedule.direct_ladder()
+        for key in mine:
+            last = store.setting(db, f"events_at:{name}:{key}")
+            if not last or dt(last) < now - timedelta(minutes=schedule.EVENTS_EVERY_MIN):
+                return True
+            for r in db.all("SELECT e.start, s.next_due_at FROM sports_book_events e LEFT JOIN sports_book_schedule s "
+                            "ON s.provider = e.provider AND s.league = e.league AND s.provider_event_id = "
+                            "e.provider_event_id WHERE e.provider = ? AND e.league = ? AND e.start > ?",
+                            (name, key, iso(now))):
+                if is_due(r["next_due_at"], ladder, r["start"], now):
+                    return True
+    if probe:
+        for book in providers.BLOCKED:
+            last = store.setting(db, f"probe_at:{book}")
+            if not last or dt(last) <= now - timedelta(hours=providers.PROBE_EVERY_H):
+                return True
+    return False
+
+
 def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
     """One pass. -> summary dict. Returns {"busy": holder} when another worker holds the lease. sink(provider, lg,
     event_key, offers, complete, observed_at) receives every successful game read - the canonical ingest
@@ -204,8 +274,8 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
     if not store.take_lease(db, HOLDER, LEASE_TTL_S, now=now):
         return {"busy": True}
     summary = {"at": iso(now), "providers": {}}
-    load_holds(db, now)
     try:
+        load_holds(db, now)                             # inside the try: the lease is released whatever happens
         for name, prov in (providers.PROVIDERS if provs is None else provs).items():
             info = summary["providers"].setdefault(name, {"fetched": 0, "offers": 0, "new_quotes": 0, "removed": 0})
             ok, why = prov.configured()
@@ -236,8 +306,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                 for ev, event_key in games:
                     if schedule.interval_min(ladder, ev.start, now) is None:
                         continue
-                    nd = store.due(db, name, key, ev.provider_event_id)
-                    if nd and dt(nd) > now:
+                    if not is_due(store.due(db, name, key, ev.provider_event_id), ladder, ev.start, now):
                         continue
                     if prov.kind == "feed":
                         ok, why = _budget_ok(db, prov, lg, now)
@@ -245,7 +314,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                             info["budget"] = why
                             break
                     fid = store.start_fetch(db, name, key, "props", ev.provider_event_id, event_key, now=now)
-                    res = prov.props(lg, ev)
+                    res = _guarded(prov.props, lg, ev)
                     seen = _seen_at(now, fixed)
                     complete = res.error is None
                     new, removed = store.save_offers(db, fid, name, key, ev.provider_event_id, event_key, res.offers,
@@ -264,7 +333,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                         break
                     nd = schedule.next_due(ladder, ev.start, now)
                     if not res.offers and prov.kind != "feed":          # props not posted yet (night before): a free
-                        nd = min(nd, now + timedelta(minutes=NOT_POSTED_RECHECK_MIN))  # feed is re-checked soon, not in 3 h
+                        nd = min(nd, now + timedelta(minutes=NOT_POSTED_RECHECK_MIN))  # feed is re-checked soon, not at a long rung
                     store.set_due(db, name, key, ev.provider_event_id, nd)
                     store.take_lease(db, HOLDER, LEASE_TTL_S, now=_now() if now is None else now)
                 if failed is not None:

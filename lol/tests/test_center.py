@@ -162,6 +162,11 @@ def test_kills_mismatch_and_order_conflict_flagged(con):
     g = con.execute("SELECT team1_kills, team1_kills_raw, team_kills_status FROM c_games WHERE lp_game_id = 'M1_2'").fetchone()
     assert tuple(g) == (4, 9, "raw_total_differs_from_player_sum")
     assert con.execute("SELECT COUNT(*) FROM c_player_games WHERE gid = (SELECT gid FROM c_games WHERE lp_game_id = 'M1_2')").fetchone()[0] == 10
+    # bug sweep 2026-11-06 #19: the coverage column counts the flag the build writes (it read 0 for every competition)
+    from lol.center import coverage
+    cov = coverage.compute(con)
+    assert cov["game_flags"].get("team_total_differs_from_player_sum") == 1
+    assert sum((d.get("kills_mismatch") or 0) for d in cov["by_competition"].values()) == 1
 
 
 def test_rename_keeps_player_id_and_ambiguous_link_is_quarantined(con):

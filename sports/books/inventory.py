@@ -123,7 +123,7 @@ def capture(source, league, getter=None, key=None):
         return {"source": source, "league": league, "status": "not a Sports source"}
     at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     env = SOURCES[source]["key_env"]
-    key = key if key is not None else os.environ.get(env or "")
+    key = key if key is not None else srcs.source_key(source)      # OddsPapi: its odds_papi_api alias too (#38)
     out = {"source": source, "league": league, "captured_at": at, "verified": SOURCES[source]["verified"],
            "checklist": list(CHECKLIST), "answers": []}
     if not key and getter is None:

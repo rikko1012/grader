@@ -247,7 +247,9 @@ def test_extra_lines_never_enter_the_slip_generator_pool(env, monkeypatch):
 
 def test_book_quote_staleness_follows_the_sports_fetch_ladder():
     """A FanDuel / BetRivers quote is stale on the sports service's own rule (2 x the fetch interval, >= 20 min), so a
-    game 14 h out (fetched hourly) keeps its quote for 2 h instead of disappearing between fetches."""
+    quote never disappears between two scheduled fetches. Direct ladder (2026-11-06): every game within 24 h is read
+    every 3-8 min, so the 20-min floor applies; since the 2026-11-06 site audit N1 so does a game 48 h out (8-min rung, was
+    3-hourly with a 6-h stale limit); a game 100 h out (12-hourly) keeps its quote for 24 h."""
     import book_providers as bp
     import workspace_books as wb
     feed = bp.providers()["fanduel"]["feed"]
@@ -257,9 +259,10 @@ def test_book_quote_staleness_follows_the_sports_fetch_ladder():
         from datetime import datetime, timezone
         iso = datetime.fromtimestamp(now + hours * 3600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return [{"event": {"start_utc": iso}}]
-    assert wb.quote_stale_after(feed, rec(14), now) == 7200          # hourly rung
-    assert wb.quote_stale_after(feed, rec(1), now) == 1200           # 10-min rung -> the 20-min floor
-    assert wb.quote_stale_after(feed, rec(48), now) == 6 * 3600      # 3-hourly rung
+    assert wb.quote_stale_after(feed, rec(14), now) == 1200          # 8-min rung -> the 20-min floor
+    assert wb.quote_stale_after(feed, rec(1), now) == 1200           # 3-min rung -> the 20-min floor
+    assert wb.quote_stale_after(feed, rec(48), now) == 1200          # 8-min rung (site audit N1) -> the 20-min floor
+    assert wb.quote_stale_after(feed, rec(100), now) == 24 * 3600    # 12-hourly rung
     assert wb.quote_stale_after(feed, [], now) == feed["stale_after_s"]
     assert wb.quote_stale_after(feed, rec(-1), now) == feed["stale_after_s"]   # started: the fixed rule
 

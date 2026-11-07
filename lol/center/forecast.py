@@ -255,6 +255,28 @@ def side_offered(platform, sides, side):
     return s.get("offered")
 
 
+ONE_SIDED_LABEL = {"over": "Over only", "under": "Under only"}
+ONE_SIDED_REASON = "the line offers one side only (Scout grades lines that offer both sides)"
+
+
+def one_sided(platform, sides):
+    """Owner 2026-11-06 (LoL os-1, as sports cap-2; scope "Underdog only"): "over" / "under" when an UNDERDOG line lists
+    one option only, else None. A listed side whose status is suspended right now is still listed, so a two-sided line
+    keeps its grade. PrizePicks lines (standard, goblin, demon) are never one-sided here: they keep today's grading,
+    record and slips. Such a line is shown with its line and price and never graded, staked, put on a slip, priced or
+    counted in the record."""
+    if isinstance(sides, str):
+        try:
+            sides = json.loads(sides or "{}")
+        except ValueError:
+            sides = {}
+    sides = sides if isinstance(sides, dict) else {}
+    if platform == "underdog":
+        listed = [k for k in ("higher", "lower") if sides.get(k)]
+        return ("over" if listed[0] == "higher" else "under") if len(listed) == 1 else None
+    return None                 # PrizePicks: owner 2026-11-06 "Underdog only" - unchanged
+
+
 def shown(f):
     """THE chance members see for one saved forecast record (dict) - every LoL surface reads it here: board.json rows and
     match tables (member board, cards, compare, copy-pick and slip checks), slips, the slip line check, learning.
@@ -294,9 +316,13 @@ def shown(f):
         grade, units_policy = f["grade"], f["units_policy"]
     if f.get("model_side") == rside and f.get("grade") and not f.get("cal_version"):
         rgrade = f["grade"]
+    one = one_sided(f.get("platform"), sides)
+    label = f"Lean {side.title()}" if grade == "Lean" else grade
+    if one:                     # os-1: shown with its line and price, never graded (the saved chances stay in the record row)
+        grade, label, units_policy = None, ONE_SIDED_LABEL[one], 0.0
     return {"p_over": po, "p_under": pu, "p_push": float(pp), "side": side, "p_side": p_side,
             "side_offered": None if off is None else int(bool(off)), "grade": grade,
-            "grade_label": f"Lean {side.title()}" if grade == "Lean" else grade, "units_policy": units_policy, "cal": v,
+            "grade_label": label, "units_policy": units_policy, "cal": v, "one_sided": one,
             "raw": {"p_over": raw[0], "p_under": raw[1], "p_push": raw[2], "side": rside, "grade": rgrade}}
 
 
@@ -523,7 +549,9 @@ def slip_eligibility(rec):
             why.append(f"{rec['platform']} rule not confirmed: {name}")
     if "format_scope_mismatch" in rec["flags"]:
         why.append("line scope does not match the series format")
-    if rec["side_offered"] != 1:
+    if one_sided(rec["platform"], rec.get("sides")):
+        why.append(ONE_SIDED_REASON)
+    elif rec["side_offered"] != 1:
         why.append("the model's side is not offered on this line" if rec["side_offered"] == 0 else "offered sides not confirmed by the feed")
     if any(f.startswith("no history") for f in rec["flags"]):
         why.append("no stored history for the player")
@@ -562,7 +590,9 @@ def slip_check(con, legs, now=None):
             why.append(f"leg {r['id']}: series start missing")
         elif _when(r["series_start"]) <= now:
             why.append(f"leg {r['id']}: series started")
-        if not r["slip_eligible"]:
+        if one_sided(r["platform"], r.get("sides")):
+            why.append(f"leg {r['id']}: {ONE_SIDED_REASON}")
+        elif not r["slip_eligible"]:
             why.append(f"leg {r['id']}: not eligible ({'; '.join(json.loads(r['slip_reasons'] or '[]'))})")
     return {"eligible": not why, "reasons": why, "legs": len(rows)}
 
@@ -610,6 +640,7 @@ def run(con, db=None, now=None, market=None):
     todo = con.execute(q).fetchall()
     ids = lambda col: {store.canonical_id(con, r[col]) for r in todo}
     h = History(db, ids("pid"), ids("tid") | ids("opp_tid"), now=now)
+    news = []
     try:
         h.fit, h.sim_states = fit_json(), {}
         h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
@@ -646,6 +677,7 @@ def run(con, db=None, now=None, market=None):
                     from gradecore.capture import capture
                     capture(con, 'lol', rec, cursor.lastrowid, saved_at)
                 counts["saved"] = counts.get("saved", 0) + 1
+                news.append((saved_at, rec))
             except Exception as e:      # noqa: BLE001
                 k = f"error: {type(e).__name__}"
                 counts[k] = counts.get(k, 0) + 1
@@ -653,10 +685,52 @@ def run(con, db=None, now=None, market=None):
                 if len(errs) < 5:
                     errs.append({"market": f"{r['platform']}|{r['market_key']}", "error": f"{type(e).__name__}: {str(e)[:200]}"})
         con.commit()
+        counts.update(archive_news(news))
     finally:
         if db is None:
             h.db.close()
     return counts
+
+
+def news_path():
+    return os.environ.get("PREGAME_NEWS_LOL_DB") or str(store.db_path().parent / "pregame_news.db")
+
+
+def archive_news(saved):
+    """pgn-1 (pregame_news/): next to every saved forecast, the posted player's team + role and the lineup each team
+    fielded in its last game before the match day (the lineup the projection assumes) - change-only, append-only, observed
+    at the forecast's save time. Research input only; a failure never touches the forecasts (already committed)."""
+    if not saved:
+        return {}
+    try:
+        import pregame_news as core
+        if not core.enabled():
+            return {}
+        idx = _FF.get("index")
+        con = core.connect(news_path())
+        n = 0
+        try:
+            for at, rec in saved:
+                ev, start = rec.get("sid") or "", rec.get("series_start")
+                at_z = (at or "")[:19] + "Z" if at else None
+                r = core.observe(con, "lol", "lol", "player_role", "series", {(rec["pid"], ev): {
+                    "team": rec.get("tid"), "opponent": rec.get("opp_tid"), "role": rec.get("role"),
+                    "best_of": rec.get("best_of")}}, observed_at=at_z, source="lol data center", start_at=start, touch=False)
+                n += r.get("new", 0) + r.get("changed", 0)
+                if idx is not None and start:
+                    day = datetime.fromisoformat(start.replace("Z", "+00:00")).date().toordinal()
+                    for team in (rec.get("tid"), rec.get("opp_tid")):
+                        if team:
+                            lu = idx.last_lineup(team, day)
+                            r = core.observe(con, "lol", "lol", "lineup_assumed", "series", {(team, ev): {
+                                "lineup": dict(sorted(lu.items())) if lu else None, "basis": "last game fielded"}},
+                                observed_at=at_z, source="lol data center", start_at=start, touch=False)
+                            n += r.get("new", 0) + r.get("changed", 0)
+        finally:
+            con.close()
+        return {"news_rows": n} if n else {}
+    except Exception as e:      # noqa: BLE001
+        return {"news_error": f"{type(e).__name__}: {str(e)[:120]}"}
 
 
 def settle_all(con):
@@ -741,14 +815,16 @@ def board(con, now=None):
             "link": {"status": r.get("link_status"), "reason": r.get("link_reason"), "sid": r.get("sid"), "pid": r.get("pid")},
             "forecast": None if not f else {
                 # the shown chance (lc-1 when on, else raw) - side, grade and offered check follow it; raw kept for admin
-                "id": f["id"], "at": f["forecast_at"], "line": f["line"], "projection": f["lambda"], "p_over": sh["p_over"],
+                "id": f["id"], "at": f["forecast_at"], "line": f["line"], "projection": f["lambda"],
+                # the saved NB spread (display: the workspace reads another book's line from this same distribution)
+                "nb_size": f["nb_size"] if "nb_size" in f.keys() else None, "p_over": sh["p_over"],
                 "p_under": sh["p_under"], "p_push": sh["p_push"], "model_side": sh["side"], "side_offered": sh["side_offered"],
                 "model": f"{f['model_version']} ({f['form']}, fit {f['fit_sha']})", "inputs": json.loads(f["inputs"] or "{}"),
                 "flags": json.loads(f["flags"] or "[]"), "slip_eligible": bool(f["slip_eligible"]),
                 "slip_reasons": json.loads(f["slip_reasons"] or "[]"), "current": f["line"] == r["line"],
                 "grade": sh["grade_label"], "units": f["units"], "units_policy": sh["units_policy"],
                 "stake_restriction": LOL_STAKE_RESTRICTION if sh["units_policy"] > 0 else None,
-                "calibration": sh["cal"], "raw": sh["raw"]},
+                "calibration": sh["cal"], "raw": sh["raw"], "one_sided": sh["one_sided"]},
             "grade": sh.get("grade_label"), "stake": (f or {}).get("units")})
     tables = {}
     for x in rows:
@@ -763,6 +839,7 @@ def board(con, now=None):
                  "p_over": (x["forecast"] or {}).get("p_over"), "p_under": (x["forecast"] or {}).get("p_under"),
                  "p_push": (x["forecast"] or {}).get("p_push"),
                  "model_side": (x["forecast"] or {}).get("model_side"), "grade": (x["forecast"] or {}).get("grade"),
+                 "one_sided": (x["forecast"] or {}).get("one_sided"),
                  "current": (x["forecast"] or {}).get("current"),
                  "market": ((x["forecast"] or {}).get("inputs") or {}).get("market")})
     settled = [dict(r) for r in con.execute("SELECT * FROM lol_settlements WHERE settled_at >= ? ORDER BY id DESC LIMIT 500",

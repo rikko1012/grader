@@ -30,7 +30,8 @@ def test_generate_builds_rule_correct_slips_from_board_legs(env):
         assert len({r["event"]["id"] for r in recs}) == 2                     # one leg per match
         assert len({r["player"]["key"] for r in recs}) == 2                   # one leg per player
         assert all(l["side"] == r["scout"]["side"] and l["p"] == r["scout"]["p_side"] for l, r in zip(s["legs"], recs))
-        assert s["why"] and "all_hit" in s and "payout" not in s and "ev" not in s    # PrizePicks payouts stay unknown
+        assert s["why"] and "all_hit" in s and "ev" not in s                  # PrizePicks payout: verified table (2026-11-05)
+        assert s["payout"]["multiple"] == 3.0 and s["payout"]["source"] == "https://www.prizepicks.com/help-center/payouts"
     first = {l["player"] for l in doc["slips"][0]["legs"]}
     assert first == {"vargo", "orlo"}                                         # the two best legs of different matches
     sigs = [frozenset((l["book"], l["row_id"]) for l in s["legs"]) for s in doc["slips"]]
@@ -50,6 +51,25 @@ def test_underdog_payout_is_the_published_table(env):
     assert st == 200 and doc["slips"][0]["payout"]["multiple"] == 3.5
     assert doc["slips"][0]["payout"]["source"].startswith("https://help.underdogsports.com/")
     assert "ev" not in doc["slips"][0]                                        # no settled-results gate on the fixture
+
+
+def test_audit_t1_generate_hands_out_only_slips_that_clear_break_even(env):
+    """Owner audit 2026-11-06 T1: Power 2-pick pays 3x, so a slip needs a 33.3% all-hit chance. The fixture's second-best pair
+    (brandr 58.1% x orlo 57.1% = 33.2%) is below it and is no longer handed out; the member is told how many cleared."""
+    st, doc = gen(env, slips=4)
+    assert st == 200 and doc["slips"]
+    assert all(s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"])
+    assert {frozenset(l["player"] for l in s["legs"]) for s in doc["slips"]} == {frozenset({"vargo", "orlo"})}
+    assert doc["shortage"] == "1 slip clears break-even on PrizePicks Power 2-pick right now."
+    assert "ev" not in doc["slips"][0]                                        # no expected-return figure is added
+
+
+def test_audit_review_generate_same_match_never_skips_break_even(env):
+    """Review 2026-11-07: with Same match (Underdog) the route handed out same-match slips with no all-hit chance, skipping the
+    break-even check the member copy promises. Every generated slip now has an all-hit chance that clears its payout."""
+    st, doc = gen(env, platform="underdog", type="standard", slips=12, games="stacks")
+    assert st == 200 and doc["options"]["same_match"] is True
+    assert all(not s["same_match"] and s.get("all_hit") is not None and s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"])
 
 
 def test_no_repeat_props_and_shortage(env):
@@ -73,6 +93,7 @@ def test_exclude_leaves_a_line_out(env):
     ({"picks": 7}, "Choose 1-12 slips and 2-6 picks per slip."),
     ({"slips": 13}, "Choose 1-12 slips and 2-6 picks per slip."),
     ({"platform": "underdog", "type": "flex", "picks": 2}, "Underdog Flex needs at least 3 picks."),
+    ({"platform": "prizepicks", "type": "flex", "picks": 2}, "PrizePicks Flex needs at least 3 picks."),   # not offered in the app
     ({"platform": "underdog", "type": "standard", "mix": "mixed", "sports": "cs2,lol"}, "Underdog does not publish mixed-sport entries. Choose PrizePicks or one sport."),
     ({"games": "stacks"}, "PrizePicks keeps its same-match limits in its app. Scout builds same-match legs on Underdog only."),
     ({"sports": "chess"}, "Choose at least one sport."),
@@ -121,6 +142,31 @@ def test_research_and_lean_lines_stay_out(env):
     assert doc["pool"]["excluded"]["grade"] >= 1
 
 
+def test_zero_unit_rows_stay_out_of_slips_while_containment_is_off(env):
+    """Owner 2026-11-05 "dont turn on letter containment": the slip pool is the live (origin/main) pool. A B row the grader set to
+    0U (BO3.gg-route gate, sample under 5 maps) is never a slip leg, never relabelled 'Lean', never ranked ahead of staked letters."""
+    s = env.rows[0]["start"]
+    env.rows.append(row("pp:7300", "prizepicks", "routeman", "Zeta", "Omega", 20.5, "More", .60, 960, s,
+                        units=0.0, stake_reason="Provisional projection (BO3.gg route)"))
+    env.rows.append(row("pp:7301", "prizepicks", "thinman", "Ion", "Quark", 21.5, "More", .62, 961, s,
+                        units=0.0, stake_reason="Sample under 5 maps"))
+    fresh()
+    for q in ({}, {"picks": 3}, {"type": "flex", "picks": 3}):
+        st, doc = gen(env, slips=12, **q)
+        assert st == 200
+        players = {l["player"] for x in doc["slips"] for l in x["legs"]}
+        assert not players & {"routeman", "thinman"}
+        assert all(not l.get("chance") and not str(l["record"]).startswith("Lean") for x in doc["slips"] for l in x["legs"])
+        assert doc["pool"]["excluded"].get("stake", 0) >= 2
+    board = keys_on_board(env)
+    by = {(r["player"]["name"], b): r for (b, _), r in board.items()}
+    legs = [dict(leg_of(r), stat=r["market"]["stat"], period=r["market"]["period"], player_key=r["player"]["key"], player=r["player"]["name"],
+                 team=r["player"]["team"], event=r["event"]["id"]) for r in (by[("routeman", "prizepicks")], by[("vargo", "prizepicks")])]
+    st, adv = post(env, "slip-advice", {"legs": legs, "entry_types": {"prizepicks": "power"}})
+    assert st == 200 and [r["in_pool"] for r in adv["legs"]] == [False, True]
+    assert all("slip_side" not in (r.get("scout") or {}) for r in board.values())
+
+
 def test_advice_keeps_order_names_same_match_and_suggests_a_fitting_replacement(env):
     env.rows.append(row("pp:7200", "prizepicks", "ace", "Orbit", "Comet", 25.5, "More", .70, 902, env.rows[0]["start"]))
     board = keys_on_board(env)
@@ -162,7 +208,10 @@ def test_generate_leaves_goblins_out_unless_allowed(env):
     assert st == 200 and doc["slips"] and "goblin" not in _line_types(doc)
     assert doc["options"]["lines"] == "no_goblins"
     st, doc = gen(env, slips=4, lines="all")
-    assert st == 200 and "goblin" in _line_types(doc)                          # the old behaviour stays one choice away
+    # owner audit 2026-11-06 (T1): goblins are allowed into the search, but a goblin pays an unpublished LOWER multiple than
+    # the 3x table, so a PrizePicks slip holding one can never be shown to clear break-even and is never handed out
+    assert st == 200 and doc["slips"] and "goblin" not in _line_types(doc)
+    assert all(s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"])
     st, doc = gen(env, slips=4, lines="one_goblin")
     assert st == 200 and max([l["line_type"] for l in s["legs"]].count("goblin") for s in doc["slips"]) <= 1
     st, doc = gen(env, slips=4, lines="standard")

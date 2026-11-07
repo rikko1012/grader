@@ -98,8 +98,10 @@ def test_four_sport_calendars_show_pushes_and_empty_days(ctx,env,size):
     # a run of days with no decided pick folds into one tile: 28 days before the result, the day itself, the day after
     assert p.locator('.h-calendar-grid summary').count()==4
     assert p.locator('.h-cal-gap').count()==8 and '28 days' in p.locator('.h-cal-gap').first.inner_text()
-    p.locator('.h-calendar-grid summary[aria-label^="2026-11-02"]').first.click()
-    assert '1 wins · 0 losses · 1 pushes' in p.locator('.h-calendar-grid details[open]').inner_text()
+    p.locator('.h-calendar-grid summary[aria-label^="Nov 2:"]').first.click()
+    assert '1 win · 0 losses · 1 push' in p.locator('.h-calendar-grid details[open]').inner_text()
+    import re                                       # follow-up 2026-11-06: cells read like the header ("Nov 2"), never "11-02"
+    assert not any(re.search(r'\b\d\d-\d\d\b', t) for t in p.locator('.h-calendar-grid time').all_inner_texts())
     assert 'Accuracy only, not profit.' in p.locator('#hub-record-body').inner_text()
     no_h_scroll(p)
 
@@ -503,7 +505,8 @@ def test_slip_studio_uses_the_shared_account_draft_on_every_sport_route(ctx,env,
     assert p.locator('#hub-studio-body .u-leg').count()==4
     p.locator('#hub-studio-body [data-u=check]').click()
     p.wait_for_selector('#hub-studio-body .u-status b:has-text("ready")',timeout=20000)
-    assert 'PrizePicks shows lineup payouts only in its app.' in p.locator('#hub-studio-body').inner_text()      # unknown payouts stay unknown
+    # owner sign-off 2026-11-05: the PrizePicks help-center table is verified, so the entry shows its payout (4-pick Power 10x)
+    assert 'All-hit payout' in p.locator('#hub-studio-body').inner_text() and 'only in its app' not in p.locator('#hub-studio-body').inner_text()
     assert 'Published payout tiers' not in p.locator('#hub-studio-body').inner_text()
     assert not p.errors
 
@@ -543,22 +546,26 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     p.locator('.h-sidebar [data-id=studio]').click()
     p.locator('[role=tab][data-hub=studio-tab][data-id=build]').click()
     # without its goblin line the fixture pool (6 legs, 3 matches) builds 7 distinct pairs; eight need Any lines. The No goblins
-    # default is covered by test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed.
+    # default is covered by test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed. Owner audit 2026-11-06 (T1): only the
+    # pairs that clear Power 2-pick's break-even (3x, 33.3% all-hit) are handed out - 6 of the 8 asked for here - and the
+    # status says how many cleared.
     p.locator('#hub-generation-lines').select_option('all')
     p.locator('#hub-generate').click()
     p.wait_for_function("document.querySelector('#hub-generation-status').textContent.includes('slips generated')", timeout=30000)
-    state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 8)
+    state = saved_state(p, lambda d: len((d.get('studio') or {}).get('slips', [])) == 6)
     slips = state['studio']['slips']
+    assert '6 of 8 slips generated and rechecked. 6 slips clear break-even on PrizePicks Power 2-pick right now.' in p.locator('#hub-generation-status').inner_text()
+    assert all(s['all_hit'] >= 1 / 3 for s in slips)
     assert not (state.get('slip') or {}).get('legs')
-    assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 8
+    assert len({tuple(sorted(l['id'] for l in s['legs'])) for s in slips}) == 6
     assert all(len(s['legs']) == 2 for s in slips)
     assert state['studio']['generator'] == 'sq-1'
     assert all(s['why'] and all(l['gen']['record'] for l in s['legs']) for s in slips)          # one line per slip, a record per leg
     assert not [l for s in slips for l in s['legs'] if l['sport'] in ('nba', 'nfl')]           # research estimates stay out unless asked
     assert all(len({l['player_key'] for l in s['legs']}) == 2 for s in slips)
-    assert p.locator('.h-generated-card .h-batch-why').count() == 8
+    assert p.locator('.h-generated-card .h-batch-why').count() == 6
     assert all(len({(l['sport'], l['event_id']) for l in s['legs']}) == 2 for s in slips)
-    assert p.locator('.h-generated-card').count() == 8
+    assert p.locator('.h-generated-card').count() == 6
     p.locator('[data-hub=use-generated]').first.click()
     saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 2)
     before = saved_state(p, lambda d: bool(d.get('slip')))['slip']
@@ -570,7 +577,7 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     try:
         q = open_page(c, env, '/#slips?tab=build')
         q.wait_for_selector('.h-generated-card', timeout=20000)
-        assert q.locator('.h-generated-card').count() == 8
+        assert q.locator('.h-generated-card').count() == 6
         assert q.locator('#hub-studio-body .u-leg').count() == 2
     finally:
         c.close()
@@ -675,7 +682,8 @@ def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, si
     p.wait_for_selector('#hub-detail .h-stat-group h5', timeout=15000)
     assert p.locator('#hub-detail .h-full-research a').get_attribute('href').startswith('/sports?view=classic#/player/')
     heads = p.locator('#hub-detail .h-stat-group h5').all_inner_texts()
-    assert {'MATCHUP', 'AVERAGES', 'MODEL INPUTS'} <= {h.upper() for h in heads}, heads
+    # card-and-chips 2026-11-06: factor-engine rows (weight 0) are headed as not part of Scout's forecast, never "Model inputs"
+    assert {'MATCHUP', 'AVERAGES', "MATCHUP NUMBERS (NOT PART OF SCOUT'S FORECAST)"} <= {h.upper() for h in heads} and 'MODEL INPUTS' not in {h.upper() for h in heads}, heads
     no_h_scroll(p)
     assert not p.errors
 

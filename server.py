@@ -47,6 +47,7 @@ import records
 import roles
 import underdog
 import grade_display
+import line_chance
 import perf_shadow
 import whop_auth
 import bo3
@@ -133,7 +134,8 @@ def warm_start():
             seen.add(slug)
         except Exception:
             pass
-        WARM_START["done"] += 1
+        finally:                                       # bug sweep 2026-11-06 #28: a repeat player still counts as done
+            WARM_START["done"] += 1
     WARM_START["finished"] = True
 
 
@@ -397,6 +399,29 @@ BOARD_WORKERS = 3       # lines graded side by side (one at a time left most of 
 BOARD_EVERY = 15 * 60   # re-grade a line at most this often (members' grades are cached anyway)
 BOARD_TTL = 5           # /api/board: one answer per platform shared by every member for 5 s
 HLTV_RETRY = 90         # a line graded while the HLTV database was unreachable is tried again this soon
+
+FEED_GRADE_MAX_S = 2 * 3600   # audit 2026-11-05 B1: a platform whose last good read is older than this is not graded as current (its
+                              # lines keep their last grade; the workspace hides them as stale); a feed blip shorter than this changes nothing
+
+
+def feed_age_s(fb, now=None):
+    """Seconds since this platform feed's last good read ({"at": epoch or ISO}), or None when it has never been read."""
+    at = (fb or {}).get("at")
+    if isinstance(at, str):
+        try:
+            t = datetime.fromisoformat(at.replace("Z", "+00:00"))
+            at = (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).timestamp()
+        except ValueError:
+            return None
+    if not isinstance(at, (int, float)) or at <= 0:
+        return None
+    return max(0.0, (time.time() if now is None else now) - float(at))
+
+
+def feed_current(fb, now=None):
+    """True while this feed's last good read is recent enough to grade its lines as current."""
+    a = feed_age_s(fb, now)
+    return a is not None and a <= FEED_GRADE_MAX_S
 
 
 def _hltv_status(public=False):
@@ -2177,6 +2202,7 @@ def _lol_key(platform, market_key):
 
 LOL_SLIP_REASON = {"stake 0U": "LoL stakes are 0U until LoL picks have a settled record at real lines - no slip is suggested until then",
                    "the model's side is not offered": "the pick's side is not offered on that line",
+                   "the line offers one side only": "lines that offer one side only are not graded: Scout grades lines that offer both sides",
                    "offered sides not": "the feed does not list the pick's side as offered",
                    "rule not": "the platform's settlement rule for that prop is not on file",
                    "not offered as a slip leg": "that stat is not used in slips",
@@ -2209,6 +2235,30 @@ def _lol_member_slips(sm):
     return out
 
 
+LOL_ONE_SIDED = {"over": "Over only", "under": "Under only"}
+
+
+def _lol_one_sided(platform, sides):
+    """lol/center/forecast.one_sided, read here without importing lol (owner 2026-11-06, os-1): "Over only" / "Under only"
+    when an Underdog line lists one option only, else None (owner scope "Underdog only": PrizePicks lines keep today's
+    grading). Such a line shows its line and price, never a grade."""
+    sides = sides if isinstance(sides, dict) else {}
+    if platform == "underdog":
+        listed = [k for k in ("higher", "lower") if sides.get(k)]
+        return LOL_ONE_SIDED["over" if listed[0] == "higher" else "under"] if len(listed) == 1 else None
+    return None                 # PrizePicks: unchanged (owner 2026-11-06 "Underdog only")
+
+
+def lol_one_sided_label(platform, sides, saved=None):
+    """The label of a one-sided LoL line: the forecast's own (saved sides) or the current offer's - either one is enough."""
+    if platform != "underdog":
+        return None
+    return LOL_ONE_SIDED.get(saved) or _lol_one_sided(platform, sides)
+
+
+LOL_ONE_SIDED_NOTE = "{}: Scout grades lines that offer both sides."
+
+
 def _lol_side_offered(platform, sides, model_side):
     name = {"over": "Over", "under": "Under"}.get(model_side)
     return any(x["side"] == name and x["offered"] for x in _lol_sides(platform, sides))
@@ -2234,6 +2284,7 @@ def _lol_member_rebuild(path, mt):
         pick_offered = next(s["offered"] for s in sides if s["side"] == side)
         lt, lt_note = _lol_line_type(x.get("platform"), x.get("odds_type"), inp.get("market"))
         rec = inp.get("recent") or {}
+        one = lol_one_sided_label(x.get("platform"), x.get("sides"), f.get("one_sided"))
         rows.append({"key": _lol_key(x.get("platform"), x.get("market_key")),
                      "platform": x.get("platform"), "platform_label": LOL_PLATFORM.get(x.get("platform"), x.get("platform")),
                      "player": x.get("player"), "team": x.get("team"), "role": x.get("role"), "opponent": x.get("opponent"),
@@ -2250,6 +2301,12 @@ def _lol_member_rebuild(path, mt):
                      "line_seen": x.get("quote_seen_at"), "line_checked": x.get("quote_checked_at") or x.get("quote_seen_at"),
                      "forecast_at": f.get("at"), "drivers": inp.get("drivers") or [], "not_modelled": inp.get("unknowns") or [],
                      "model_version": str(f.get("model") or "").split(" ")[0] or None, "factors": inp.get("factors"), "team_win": inp.get("team_win")})
+        if one:         # os-1: the line and its price only - no chance, projection, pick, letter or stake
+            side_one = "Over" if one == LOL_ONE_SIDED["over"] else "Under"
+            rows[-1].update(one_sided=one, pick_side=side_one, pick=f"{side_one} {x.get('line')}", pick_offered=False, grade=None,
+                            units=None, stake_reason=LOL_ONE_SIDED_NOTE.format(one), p_over=None, p_under=None, p_push=None,
+                            projection=None, median=None, range80=None, drivers=[], factors=None, model_version=None,
+                            forecast_at=None)
         if PP_OPEN_LINK and x.get("platform") == "prizepicks":     # the PrizePicks projection id of the CURRENT offer (lineup link)
             rows[-1]["pp_projection_id"] = pplink.projection_id(x.get("line_id"))
         if PP_OPEN_LINK and x.get("platform") == "underdog":       # Underdog's link to this line's market screen (2026-10-29)
@@ -2267,14 +2324,16 @@ def _lol_member_rebuild(path, mt):
             lines = []
             for ln in m.get("lines") or []:
                 lt, _ = _lol_line_type(ln.get("platform"), ln.get("odds_type"), ln.get("market"))
-                fc = ln.get("projection") is not None and ln.get("current") is not False
+                one = lol_one_sided_label(ln.get("platform"), ln.get("sides"), ln.get("one_sided"))
+                fc = ln.get("projection") is not None and ln.get("current") is not False and not one
                 lines.append({"platform": LOL_PLATFORM.get(ln.get("platform"), ln.get("platform")), "line_type": lt, "line": ln.get("line"),
                               "sides": _lol_sides(ln.get("platform"), ln.get("sides")), "checked": ln.get("checked_at"),
                               "projection": ln.get("projection") if fc else None, "p_over": ln.get("p_over") if fc else None,
                               "p_under": ln.get("p_under") if fc else None,
                               "p_push": ln.get("p_push") if fc else None,
                               "grade": ln.get("grade") if fc and _lol_side_offered(ln.get("platform"), ln.get("sides"), ln.get("model_side")) else None,
-                              "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None)})
+                              "pick_side": ({"over": "Over", "under": "Under"}.get(ln.get("model_side")) if fc else None),
+                              **({"one_sided": one} if one else {})})
             lines.sort(key=lambda z: (z["line"] if z["line"] is not None else 1e9, z["platform"]))
             markets.append({"player": m.get("player"), "team": m.get("team"), "role": m.get("role"), "stat": m.get("stat"),
                             "stat_name": LOL_STAT.get(m.get("stat"), m.get("stat")), "scope": m.get("scope"), "lines": lines})
@@ -2288,6 +2347,92 @@ def _lol_member_rebuild(path, mt):
     body = json.dumps(letter_containment.lol_member_doc(doc)).encode()     # lc-1: held letters read Lean (display only)
     _LOL_MEMBER.update(mtime=mt, body=body)
     return body
+
+
+# Learning cycles (bug sweep 2026-11-06 #18): learning.forever() spawned a child every 15 min without checking a cycle
+# already running, and /admin/learning.json?fresh=1 checked STATE['running'] before the thread set it, so two
+# `learning.py run --child` processes could run on learning.db together. learning.py is a hash-frozen model file
+# (tests/test_workspace_api.py), so the server owns ONE non-blocking lock that both starters take atomically.
+_LEARNING_SPAWN = threading.Lock()
+
+
+def _learning_os_lock():
+    """Non-blocking OS file lock next to learning.db (bug sweep #18 review): a second server process on the same disk
+    never starts a cycle beside this one. Released when the file is closed or the process ends. -> open file or None."""
+    import learning
+    path = Path(learning.DB_PATH).with_name("learning.cycle.lock")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fh = open(path, "a+b")
+    except OSError:
+        return None
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fh
+    except OSError:
+        fh.close()
+        return None
+
+
+def _learning_os_unlock(fh):
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    except OSError:
+        pass
+    finally:
+        fh.close()                                     # closing releases the lock on every platform
+
+
+def learning_cycle_once():
+    """One learning cycle (learning._cycle_safe: child process, errors recorded) unless one is already running from
+    this server or another server process on the same disk. -> True when it ran.
+    Known limit: a manual `python learning.py run` takes neither lock (learning.py is hash-frozen)."""
+    import learning
+    if not _LEARNING_SPAWN.acquire(blocking=False):
+        return False
+    try:
+        fh = _learning_os_lock()
+        if fh is None:
+            return False
+        try:
+            learning._cycle_safe()
+            return True
+        finally:
+            _learning_os_unlock(fh)
+    finally:
+        _LEARNING_SPAWN.release()
+
+
+def learning_forever():
+    """= learning.forever (LEARNING=0 off, START_DELAY_S, then every CYCLE_S) through learning_cycle_once."""
+    import learning
+    if os.environ.get("LEARNING", "1") == "0":
+        learning.STATE["disabled"] = True
+        return
+    time.sleep(learning.START_DELAY_S)
+    while True:
+        learning_cycle_once()
+        time.sleep(learning.CYCLE_S)
+
+
+def learning_http(path, q):
+    """learning.http, with the fresh=1 cycle started through the shared lock (a second click, or the timer, while a
+    cycle runs starts nothing)."""
+    import learning
+    if path == "/admin/learning.json" and q.get("fresh") == "1":
+        if not _LEARNING_SPAWN.locked():
+            threading.Thread(target=learning_cycle_once, daemon=True, name="learning-now").start()
+        q = {k: v for k, v in q.items() if k != "fresh"}
+    return learning.http(path, q, WEB)
 
 
 def lol_center_supervise():
@@ -3291,6 +3436,18 @@ _DIAG = {}
 _DIAG_LOCK = threading.Lock()       # one diagnostics rebuild at a time (a second admin tab waits, never builds twice)
 
 
+def board_gradable(feeds, now_ts=None):
+    """The board loop's per-row gate (audit 2026-11-05 B1): r -> may this row be (re)graded now. A feed with no good
+    read for FEED_GRADE_MAX_S (or none at all) has its lines skipped, so they keep their last BOARD grade (transient
+    failures never change grades); the other feed keeps grading. Underdog alternates stay ungraded."""
+    current = {bk_: feed_current(fb_, now_ts) for bk_, fb_ in feeds.items()}
+
+    def gradable(r, now_):
+        return ((not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now_)
+                and current.get(r.get("book") or "underdog", True))
+    return gradable
+
+
 def board_forever():
     """Grade every Underdog CS2 line in the background (gives way to members), so the Board tab is
     instant. Each graded line is also logged (test=2: not a member's pick) so it settles and the
@@ -3317,7 +3474,8 @@ def board_forever():
             moved = lambda r: (((BOARD.get(r["id"]) or {}).get("graded_line") is not None
                                 and float(BOARD[r["id"]]["graded_line"]) != float(r.get("line") or -1))
                                or side_opened(BOARD.get(r["id"]), r))
-            gradable = lambda r, now_: (not r["alt"] or r.get("book") == "prizepicks") and (not r.get("start") or r["start"] > now_)
+            # audit 2026-11-05 B1: lines of a feed with no good read for FEED_GRADE_MAX_S are not graded as current (last grade kept)
+            gradable = board_gradable(feeds)
             todo = [r for r in rows if gradable(r, now)
                     and (time.time() - (BOARD.get(r["id"]) or {}).get("at", 0) > BOARD_EVERY or moved(r))]
             # lines from an older model version first, then soonest matches; one match's lines and each player's kills /
@@ -3383,6 +3541,13 @@ def board_forever():
                                       "graded_line": r["line"], "graded_model": picklog.MODEL_VERSION,   # slips: exact line + model
                                       "grade": v.get("grade"), "side": v.get("side"), "p": v.get("p"),
                                       "model_outcomes": copy.deepcopy(g.get("probs_raw")),
+                                      # the exact distribution behind this grade (grader.py "dist", display only, server side: never
+                                      # in a member payload - protect_recipe): the workspace reads another book's line from it
+                                      # (line_chance.cs2_at), never a new model or a shrink
+                                      "dist": line_chance.compact_dist(g.get("dist")),
+                                      # performance-model projection: no line-dependent gap-trust shift or margin, so another
+                                      # line is a plain read of the same distribution (audit follow-up B1, line_chance.cs2_at)
+                                      "perf_on": not str(g.get("projection_source") or "legacy").startswith("legacy"),
                                       "units": v.get("units"), "proj": g.get("lambda_final"), "state": v.get("state"),
                                       "reason": v.get("reason"), "nick": (pb.get("player") or {}).get("nick"),
                                       # projection minus the line (the cut the grade uses since the 2026-10-07 continuity fix)
@@ -4016,6 +4181,7 @@ def memory_mb():
 
 _PAGE = {"mtime": None, "data": b""}
 _WEBFILES = {}                                          # name -> {"mtime", "data"} for the other member pages
+_FILE_LOCK = threading.Lock()
 
 
 def page():
@@ -4023,7 +4189,9 @@ def page():
     f = WEB / "index.html"
     mt = f.stat().st_mtime
     if _PAGE["mtime"] != mt:
-        _PAGE["data"], _PAGE["mtime"] = f.read_bytes(), mt
+        with _FILE_LOCK:                                # single flight: 700 cold requests share ONE bytes object (follow-up
+            if _PAGE["mtime"] != mt:                    # 2026-11-06: each racing read made its own copy, build and gzip)
+                _PAGE["data"], _PAGE["mtime"] = f.read_bytes(), mt
     return _PAGE["data"]
 
 
@@ -4067,7 +4235,10 @@ def web_file(name):
     mt = f.stat().st_mtime
     c = _WEBFILES.get(name)
     if not c or c["mtime"] != mt:
-        c = _WEBFILES[name] = {"mtime": mt, "data": f.read_bytes()}
+        with _FILE_LOCK:                                # single flight, as page()
+            c = _WEBFILES.get(name)
+            if not c or c["mtime"] != mt:
+                c = _WEBFILES[name] = {"mtime": mt, "data": f.read_bytes()}
     return c["data"]
 
 
@@ -4114,7 +4285,9 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
                   "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8")}
 UPGRADE_API = "/api/upgrade/"
 _UPGRADE_MEMO = {}                                      # (id(page bytes), name, tokens) -> (page bytes, upgraded page)
+_UPGRADE_LOCK = threading.Lock()
 UI_TOKENS_ROUTE = "/upgrade/tokens.css"                 # SCOUT_UI_TOKENS=1 only; off = the unknown-route answer
+PICKEM_EV_ROUTE = "/upgrade/ev.js"                      # SCOUT_PICKEM_EV=1 only (the +EV board's page script); off = unknown route
 
 
 def ui_tokens_on():
@@ -4123,13 +4296,47 @@ def ui_tokens_on():
     return os.environ.get("SCOUT_UI_TOKENS", "").strip() == "1"
 
 
+def classic_lazy_on():
+    """audit 2026-11-05: on the upgraded CS2 page the classic page is built only when it is shown (?view=classic, a classic route such
+    as #matches, or the research board unavailable). Until then it waits in a <template>: not in the page, not read by screen readers,
+    its scripts not run. SCOUT_CLASSIC_LAZY=0 sends it built at once, as before."""
+    return os.environ.get("SCOUT_CLASSIC_LAZY", "").strip() != "0"
+
+
+# Builds the template's classic page in place: scripts are recreated so they run, in page order, once every node is in. The research
+# board's routes keep it unbuilt; upgrade.js / hub.js call scoutClassicMount() when the board is not shown after all. The classic
+# sign-in lock (body.locked, lifted by the classic script) waits with it, so its rules never hide the board's own header.
+CLASSIC_MOUNT = br"""<script>(function(){
+var t=document.getElementById('scout-classic');
+window.scoutClassicMount=function(){
+if(!t||!t.parentNode)return false;
+var b=document.body;if(b.dataset.classicLocked){b.classList.add('locked');delete b.dataset.classicLocked;}
+var f=document.importNode(t.content,true),list=f.querySelectorAll('script');
+for(var i=0;i<list.length;i++){var o=list[i],n=document.createElement('script');for(var a=0;a<o.attributes.length;a++)n.setAttribute(o.attributes[a].name,o.attributes[a].value);n.text=o.text;o.parentNode.replaceChild(n,o);}
+var p=t.parentNode;p.insertBefore(f,t);p.removeChild(t);t=null;
+document.dispatchEvent(new Event('scout-classic-mount'));
+return true;};
+var h=location.hash;
+if(window.scoutClassic||!(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|record|tools|picks|alerts|ev)(?:[?\/]|$))/.test(h)))window.scoutClassicMount();
+else if(document.body.classList.contains('locked')){document.body.classList.remove('locked');document.body.dataset.classicLocked='1';}
+})();</script>"""
+
+
 def upgrade_page(body, name):
     """The upgraded copy of a member page. Memoised per page OBJECT, as sports_nav is: send_shared caches the ETag + gzip by body
     identity, so a fresh copy per request would recompress the page every time."""
-    tokens = ui_tokens_on()
-    hit = _UPGRADE_MEMO.get((id(body), name, tokens))
+    tokens, lazy = ui_tokens_on(), name == "cs2" and classic_lazy_on()
+    hit = _UPGRADE_MEMO.get((id(body), name, tokens, lazy))
     if hit is not None and hit[0] is body:
         return hit[1]
+    with _UPGRADE_LOCK:                                 # single flight (follow-up 2026-11-06: 700 members on a cold page built it
+        hit = _UPGRADE_MEMO.get((id(body), name, tokens, lazy))      # 3 times, each copy ~0.5 MB and its own gzip)
+        if hit is not None and hit[0] is body:
+            return hit[1]
+        return _upgrade_build(body, name, tokens, lazy)
+
+
+def _upgrade_build(body, name, tokens, lazy):
     # Runs in the head, before the original board can paint. Classic keeps its
     # tools and renderers; a failed workspace load always releases the page.
     head = br'''<style>
@@ -4159,11 +4366,16 @@ const link=document.createElement('link');link.rel='stylesheet';link.href=href;l
     i, j = body.rfind(b"</head>"), body.rfind(b"</body>")
     out = body
     if 0 <= i < j:                                      # a page without its markers goes out as it is
-        out = body[:i] + head + body[i:j] + tail + body[j:]
+        k = body.find(b"<body", i)
+        k = body.find(b">", k) + 1 if 0 <= k < j else 0
+        if lazy and 0 < k <= j:                         # the classic CS2 page waits in a template until it is shown
+            out = body[:i] + head + body[i:k] + b'<template id="scout-classic">' + body[k:j] + b"</template>" + CLASSIC_MOUNT + tail + body[j:]
+        else:
+            out = body[:i] + head + body[i:j] + tail + body[j:]
         out = out.replace(b"<html ", mark.encode(), 1)
     if len(_UPGRADE_MEMO) > 16:                         # a handful of pages; old versions drop when a file changes
         _UPGRADE_MEMO.clear()
-    _UPGRADE_MEMO[(id(body), name, tokens)] = (body, out)
+    _UPGRADE_MEMO[(id(body), name, tokens, lazy)] = (body, out)
     return out
 
 
@@ -4423,6 +4635,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(("upgrade", name), 200, web_file(name), ctype, keep=600)
             if u.path == UI_TOKENS_ROUTE and ui_tokens_on() and self._upgrade_on(q):    # SCOUT_UI_TOKENS only
                 return self.send_shared(("upgrade", "upgrade-tokens.css"), 200, web_file("upgrade-tokens.css"), "text/css; charset=utf-8", keep=600)
+            if u.path == PICKEM_EV_ROUTE and os.environ.get("SCOUT_PICKEM_EV", "").strip() == "1" and self._upgrade_on(q):
+                return self.send_shared(("upgrade", "upgrade-ev.js"), 200, web_file("upgrade-ev.js"), "text/javascript; charset=utf-8", keep=600)
             if u.path.startswith(UPGRADE_API) and self._upgrade_on(q):
                 return self._workspace_api("GET", u.path, q, prefix=UPGRADE_API)
             if u.path in ("/", "/index.html"):
@@ -4658,8 +4872,8 @@ class Handler(BaseHTTPRequestHandler):
             if (u.path == "/admin/lol.json" or u.path.startswith("/admin/lol/")) and self.authed(q.get("token")):
                 return self.send(200, lol_center_admin(u.path, q))     # LoL data center (backend only, not released)
             if (u.path in ("/admin/learning", "/admin/learning.json") or u.path.startswith("/admin/learning/")) and self.authed(q.get("token")):
-                import learning                           # continuous measurement dashboard (shadow; never changes a grade)
-                return self.send(*learning.http(u.path, q, WEB))
+                # continuous measurement dashboard (shadow; never changes a grade); one cycle at a time (#18)
+                return self.send(*learning_http(u.path, q))
             if u.path == "/admin/comparison_audit" and self.authed(q.get("token")):
                 # ONE cohort at ONE timestamp: every Underdog offer now, and for every graded board line whether the
                 # comparison finds its own offer (by id / name) or why not
@@ -5052,7 +5266,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, {"candidates": cands, "ids_used": ids, "opponents": opps, "db_span": span})
                 finally:
                     con.close()
-            if u.path == "/admin/hltv_status" and self.authed(q.get("token")):
+            if u.path == "/admin/hltv_counts" and self.authed(q.get("token")):
+                # bug sweep 2026-11-06 #24: was a second /admin/hltv_status branch, never reached (the breaker/pool
+                # status answers that path first) - the HLTV DB coverage counts now have their own path
                 import hltv
                 con = hltv._connect()
                 try:
@@ -5272,6 +5488,8 @@ class Handler(BaseHTTPRequestHandler):
             if prev and time.time() - prev[0] < 3600 and prev[2] < 8:
                 keep = [h for h in prev[3] if ql in (h["nick"] or "").lower() or ql in (h["name"] or "").lower()]
                 body = json.dumps({"results": keep}).encode()
+                if len(_SEARCH) > 20000:               # bug sweep 2026-11-06 #27: same bound as the BO3.gg path
+                    _SEARCH.clear()
                 _SEARCH[ql] = (time.time(), body, len(keep), keep)
                 return self.send(200, body)
 
@@ -5810,7 +6028,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         """Same failure handling as do_GET (audit 54: an exception here dropped the connection with no response)."""
-        self._sent = False
+        self._t0 = time.time()                          # bug sweep 2026-11-06 #26: per request, as do_GET (kept-alive
+        self._sent = False                              # handler: server time was measured from the previous request)
         try:
             return self._do_post()
         except CLIENT_GONE:
@@ -5901,7 +6120,8 @@ class Handler(BaseHTTPRequestHandler):
             if not PP_OPEN_LINK or not self.authed(form.get("token")):
                 return self.send(403, {"error": "forbidden"})
             return self.send(*admin_ud_tail(form))
-        form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
+        # bug sweep 2026-11-06 #25: a non-UTF-8 body is a 403 like any other bad form, not a 500 (strict decode raised)
+        form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace")).items()}
         if u.path != "/admin/closing" or not self.authed(form.get("token")):
             return self.send(403, {"error": "forbidden"})
         try:
@@ -5993,8 +6213,20 @@ def unsubscribe_page(member, token, confirm=False):
 DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBLIC_RECORD", "SCOUT_PUBLIC_RECORD_SLIPS",
               "SCOUT_RECORD_RELIABILITY", "SCOUT_RECORD_STATUS", "SCOUT_CLOSING_LINES", "SCOUT_ALERT_DEEPLINK",
               # Phase 4, no keys needed (owner: "why do i have to turn them on in render")
-              "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
-              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE")
+              "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_DABBLE", "SCOUT_BOOK_FANDUEL", "SCOUT_BOOK_BETRIVERS", "SCOUT_MARKET_TOOLS",
+              "SCOUT_GENIE_PERSONA", "SCOUT_ADMIN_COVERAGE",
+              # owner 2026-11-05 "Turn everything on": competitor-spec board fixes, line history, +EV board, slip header v2.
+              # SCOUT_PARITY_PREFS = Kelly sizing as a % of bankroll (display only, never a grader stake).
+              "SCOUT_PARITY_EDGE", "SCOUT_PARITY_EV_BAND", "SCOUT_PARITY_HIT_SAMPLES", "SCOUT_PARITY_HIT_SORT",
+              "SCOUT_PARITY_PLAYS", "SCOUT_PARITY_PREFS", "SCOUT_PARITY_REPORT", "SCOUT_LINE_HISTORY", "SCOUT_PICKEM_EV",
+              "SCOUT_SLIP_HEADER_V2",
+              # owner site audit 2026-11-06: Market edge column + best line per side + discrepancy chip on every sport (display only)
+              "SCOUT_MARKET_EDGE")
+# NOT default-on (owner 2026-11-05, "dont turn on letter containment"): SCOUT_LETTER_CONTAINMENT stays OFF, so CS2 / LoL letters
+# show exactly as before. CS2_MAP_WEIGHTED stays OFF (shadow only); SCOUT_CAL_CHANCE / SPORTS_CHANCE_CAL stay OFF.
+# SCOUT_BOOK_DABBLE (owner 2026-11-05, "simply code it we are partnered"): api.dabble.com answered 200 without credentials, so it is
+# on like Sleeper. Betr (401 + location check), ParlayPlay (Cloudflare 403) and Boom (app only) are blocked in book_providers.json and
+# have no flag.
 # ec-1 calibrated printed chance (SCOUT_CAL_CHANCE) is OFF by default again: owner 2026-11-05 after go-live, "yeah you've
 # ruined the grader". Render SCOUT_CAL_CHANCE=1 turns it back on; the layer and its artifact stay in the code.
 
@@ -6024,7 +6256,7 @@ if __name__ == "__main__":
     # research tools last (matchid tables, then the moneyline refreshers): their own thread, failures isolated
     threading.Thread(target=start_research, daemon=True, name="research").start()
     # continuous learning (learning.py): measures settled matches every 15 min - shadow only, never touches grading
-    threading.Thread(target=lambda: __import__("learning").forever(), daemon=True, name="learning").start()
+    threading.Thread(target=learning_forever, daemon=True, name="learning").start()   # one cycle at a time (#18)
     # LoL data center: one supervised low-priority child process (line archive + Leaguepedia); not released to members
     threading.Thread(target=lol_center_supervise, daemon=True, name="lol-center").start()
     import workspace_alerts
@@ -6032,6 +6264,12 @@ if __name__ == "__main__":
     # lc-1: the CS2 / LoL letter containment check, its own thread (reads the stored P1 export and the LoL worker's
     # learning.json every 6 h; requests only read the cached state)
     letter_containment.start(sys.modules[__name__], DATA_DIR)
+    # pgn-1 pre-game news archive (pregame_news/cs2_picks.py): its own thread reads the pick log read-only every 10 min
+    # and archives the roster facts each forecast saw - research only, nothing on a request path (PREGAME_NEWS=0 = off)
+    try:
+        __import__("pregame_news.cs2_picks").cs2_picks.start(Path(picklog.DB).parent)
+    except Exception:
+        traceback.print_exc()
     try:                                              # ec-1: when this artifact first went live (the record maps forecasts
         esports_cal.mark_live(DATA_DIR)               # logged after it at the calibrated chance; earlier ones stay as logged)
     except Exception:

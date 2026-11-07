@@ -46,6 +46,18 @@ def _norm(b):
     return {"type": t}
 
 
+def _usage(msg):
+    """Token counts of a (final or partial) message; zeros when there is none."""
+    try:
+        u = getattr(msg, "usage", None)
+    except Exception:                                   # a partial snapshot the SDK cannot build
+        u = None
+    return {"input_tokens": int(getattr(u, "input_tokens", 0) or 0)
+            + int(getattr(u, "cache_read_input_tokens", 0) or 0)
+            + int(getattr(u, "cache_creation_input_tokens", 0) or 0),
+            "output_tokens": int(getattr(u, "output_tokens", 0) or 0)}
+
+
 class AnthropicLLM:
     name = "anthropic"
 
@@ -75,7 +87,14 @@ class AnthropicLLM:
                   tools=tools, messages=messages, thinking={"type": "adaptive"},
                   output_config={"effort": config.effort()})
         json_retries = 0
+        # Bug sweep 2026-11-06 #34: a re-issued turn streams its opening text again. `sent` is what the member already
+        # received this turn; a retry skips that many characters of its own text (no repeat), and the failed
+        # attempt's tokens still count toward usage.
+        sent = {"n": 0}
+        failed = {"input_tokens": 0, "output_tokens": 0}
         while True:
+            stream = None
+            skip = {"n": sent["n"]}
             try:
                 if config.fallbacks_on():
                     ctx = self.client.beta.messages.stream(betas=["server-side-fallback-2026-07-01"],
@@ -87,10 +106,19 @@ class AnthropicLLM:
                         if should_cancel():
                             return TurnResult([], [], "cancelled", cancelled=True)
                         if getattr(event, "type", None) == "text":
-                            on_text(event.text)
+                            t = event.text or ""
+                            if skip["n"]:
+                                cut = min(skip["n"], len(t))
+                                skip["n"] -= cut
+                                t = t[cut:]
+                            if t:
+                                sent["n"] += len(t)
+                                on_text(t)
                     msg = stream.get_final_message()
                 break
             except ValueError:                          # tool JSON the SDK could not parse: re-issue the turn
+                for k, v in _usage(getattr(stream, "current_message_snapshot", None)).items():
+                    failed[k] += v
                 json_retries += 1
                 if json_retries > 2:
                     raise LLMError("invalid_tool_json", "the model produced unreadable tool input three times")
@@ -102,11 +130,7 @@ class AnthropicLLM:
                 raise LLMError(f"api_error_{e.status_code}", str(getattr(e, "message", "")) or "") from None
             except conn:
                 raise LLMError("connection_error", "could not reach the Claude API") from None
-        u = getattr(msg, "usage", None)
-        usage = {"input_tokens": int(getattr(u, "input_tokens", 0) or 0)
-                 + int(getattr(u, "cache_read_input_tokens", 0) or 0)
-                 + int(getattr(u, "cache_creation_input_tokens", 0) or 0),
-                 "output_tokens": int(getattr(u, "output_tokens", 0) or 0)}
+        usage = {k: v + failed[k] for k, v in _usage(msg).items()}
         return TurnResult(list(msg.content), [_norm(b) for b in msg.content], msg.stop_reason or "end_turn", usage)
 
 

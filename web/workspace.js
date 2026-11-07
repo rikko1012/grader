@@ -158,7 +158,8 @@
   const rowFlag = (row) => (started(row.lead) ? "started" : "");
   const chanceOf = (rec, side) => (side === "under" ? rec.scout.p_under : side === "over" ? rec.scout.p_over : null);
   function verdict(rec, side) {
-    const s = rec.scout, sd = side || s.side;
+    const s = rec.scout, sd = side || s.side, one = s.hold && ["Over only", "Under only"].includes(s.hold.label) ? s.hold.label : null;
+    if (one) return { html: `<span class="verdict">${one}</span>`, text: one };          /* LoL os-1 / sports cap-2: never graded */
     if (!sd) return { html: '<span class="verdict">No lean</span>', text: "No lean" };
     if (s.side && sd !== s.side) return { html: `<span class="verdict">Scout side is ${cap(s.side)}</span>`, text: `Scout side is ${cap(s.side)}` };
     if (s.hold) return { html: `<span class="verdict">${cap(sd)}</span>`, text: `Research estimate ${cap(sd)}` };
@@ -166,8 +167,9 @@
     return { html: `<span class="verdict">Lean ${cap(sd)}</span>`, text: `Lean ${cap(sd)}` };
   }
   const decimalOf = (o, side) => {                              /* a decimal price, the one number two books can compare on */
-    const v = o.offer[side];
-    return D.platforms[o.offer.platform].kind === "decimal" ? v.payout : v.price;
+    const v = o.offer[side], P = D.platforms[o.offer.platform];
+    if (P.price_comparable === false) return null;              /* Dabble: its own unit, not what an entry pays: never compared as odds */
+    return P.kind === "decimal" ? v.payout : v.price;
   };
   function priceText(o, side) {
     const v = o.offer[side], dec = decimalOf(o, side);

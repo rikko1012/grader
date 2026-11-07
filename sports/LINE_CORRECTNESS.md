@@ -153,3 +153,25 @@ interplay A1-A4): `python -m pytest sports/tests -q` -> 485 passed, 10 skipped.
   deployed service runs one ingest-loop child that takes leagues in turn, so no league is starved).
 - books.db / games.db on Postgres (SPORTS_DB_DSN) use a transaction-scoped advisory lock; only the SQLite path is
   exercised by the tests (no Postgres in CI).
+
+## Audit 2026-11-05 (S1/S2, S3, A7) - the line's real market
+- Underdog period lines (`appearance_stat.stat` `period_1_points` = display "1Q Points", `period_1_2_*` = 1H) are
+  stored with their real scope (q1 / first_half) since sc-1. The sheets ignored the scope and compared them with
+  full-game history: the "Most consistent" 100% rows (Reaves Points 3.5 Over 0.86x, Maye pass yds 49.5, ...) were 1Q
+  lines. Now: only full-game markets reach the board files, the sheets and the workspace; quarter / half lines stay on
+  the player page with their period. The forecast record (results_public rp-2 and the results ledger) skips them.
+- An Underdog line that LISTS one side (higher-only at a changed payout) is stored `one_sided` by adapters.ud_offers
+  (contracts VARIANTS). Member pages label it by its sides ("Over only"), never Standard, and it is never the sheet's
+  'current line'. Owner decision 2026-11-06 (capabilities cap-2): a one-sided line is NOT graded. It stays on the
+  board row with its line and price, labelled "Over only" / "Under only" (board table Lean cell, card, player page,
+  sheets, workspace hold label), and capabilities.gate refuses it, so it gets no forecast, Scout chance, grade,
+  letter, stake, slip leg, tracked pick or EV; a forecast saved for one before cap-2 is never attached
+  (snapshots.build, same_line_forecasts, sheets line reads) and is left out of the public record (rp-2) and the
+  results ledger (snapshots.one_sided_forecast, by the stored offer variant). gradecheck never counts one as "as
+  shown". The plain market chance at the line stays, as on other ungraded rows. Stored rows are never re-read by
+  their offered sides, so a suspended side never changes a line's type, grading or record.
+- di-1 (median hold) was removed 2026-11-06: it hid real full-game lines (Tank Dell rec_yds 15.5 = FanDuel 15.5,
+  most deep goblins) while they stayed forecast and in the slip pool; the 1Q / 1H lines it targeted are already
+  left off by scope.
+- Results rp-2: one representative forecast per game x player x stat (pick'em main line before books before Kalshi,
+  then the line closest to the forecast's own projection, newest first); raw forecast counts kept as raw_counts.

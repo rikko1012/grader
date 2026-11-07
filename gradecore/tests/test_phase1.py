@@ -276,14 +276,15 @@ def test_break_evens_match_sports_payouts():
 
 
 def test_prizepicks_is_unknown_until_a_table_is_supplied(tmp_path):
-    assert payouts.CONFIG["prizepicks"]["entries"]["power"] is None
-    assert payouts.break_even("prizepicks") is None
+    # the coded tables carry no PrizePicks payout; the verified file table (owner sign-off 2026-11-05) is what supplies it
+    assert payouts.CODED_CONFIG["prizepicks"]["entries"]["power"] is None
+    assert payouts.break_even("prizepicks", config=payouts.CODED_CONFIG) is None
+    assert payouts.break_even("prizepicks") == pytest.approx(3.0 ** -0.5)                   # CONFIG: the verified table
     f = tmp_path / "pp.json"
     f.write_text(json.dumps({"prizepicks": {"entries": {"power": {"2": 3.0}}, "version": "test"}}), encoding="utf-8")
-    cfg = payouts.load_config(f)
+    cfg = payouts.load_config(f, payouts.CODED_CONFIG)
     assert payouts.break_even("prizepicks", config=cfg) == pytest.approx(3.0 ** -0.5)
     assert payouts.break_even("prizepicks", "power", 3, config=cfg) is None
-    assert payouts.break_even("prizepicks") is None                                         # the default is untouched
     assert payouts.break_even("underdog", config=cfg) == pytest.approx(3.5 ** -0.5)
 
 
@@ -336,8 +337,12 @@ def test_straight_ev_and_fee_ported():
 def test_table_lists_every_entry_and_marks_prizepicks_unknown():
     t = payouts.break_even_table()
     assert len([r for r in t["rows"] if r["book"] == "underdog"]) == 7 + 6
-    assert [r["break_even"] for r in t["rows"] if r["book"] == "prizepicks"] == [None, None]
-    assert t["books"]["prizepicks"]["status"] == payouts.PP_STATUS
+    pp = [r for r in t["rows"] if r["book"] == "prizepicks"]      # verified by owner sign-off 2026-11-05: Power 2-6, Flex 2-6
+    assert len(pp) == 5 + 5 and all(r["break_even"] is not None for r in pp)
+    assert t["books"]["prizepicks"]["status"].startswith("VERIFIED by owner sign-off 2026-11-05")
+    t0 = payouts.break_even_table(payouts.CODED_CONFIG)
+    assert [r["break_even"] for r in t0["rows"] if r["book"] == "prizepicks"] == [None, None]
+    assert t0["books"]["prizepicks"]["status"] == payouts.PP_STATUS
 
 
 # ------------------------------------------------------------------------------------------------- gates
@@ -460,8 +465,9 @@ def test_alt_line_with_a_multiplier_is_graded():
 
 
 def test_prizepicks_gets_no_letter_until_its_table_is_supplied():
-    g = policy.grade(0.70, "prizepicks")
+    g = policy.grade(0.70, "prizepicks", config=payouts.CODED_CONFIG)
     assert g.letter is None and g.stake_units == 0 and "Break-even unknown" in g.reasons[0]
+    assert policy.grade(0.70, "prizepicks").letter == "A"           # the verified table (owner sign-off 2026-11-05)
     cfg = payouts.with_tables({"prizepicks": {"entries": {"power": {2: 3.0}}}})
     assert policy.grade(0.70, "prizepicks", config=cfg).letter == "A"
 

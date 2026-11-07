@@ -57,8 +57,10 @@ def process(run, llm, runs_path=None, store_path=None, now=None):
             emit("error", {"code": "run_timeout", "message": "The answer took too long and was stopped."})
             runs.finish(con, run["run_id"], "failed", out.get("usage"), "run_timeout", llm.model, refund=True)
             return "failed"
-        runs.finish(con, run["run_id"], out["state"], out.get("usage"), out.get("error"), llm.model,
-                    refund=out["state"] == "failed")
+        ended = runs.finish(con, run["run_id"], out["state"], out.get("usage"), out.get("error"), llm.model,
+                            refund=out["state"] == "failed")
+        if not ended:                                   # fail_stale ended it meanwhile: its state stands (#35)
+            return runs.get_run(con, run["run_id"])["state"]
         if out["state"] == "done" and out.get("cacheable") and run.get("cache_key"):
             evs = [{"type": e["type"], "data": e["data"]} for e in runs.events_after(con, run["run_id"], 0, 1000)
                    if e["type"] in CACHED_TYPES]

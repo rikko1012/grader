@@ -515,10 +515,13 @@ def quarantine(con, kind, source, source_key, reason, payload=None, league=None,
 
 
 def quarantine_many(con, items, league=None, observed_at=None):
-    for x in items:
-        quarantine(con, x["kind"], x["source"], x.get("source_key"), x["reason"], x.get("payload"), league,
-                   observed_at, commit=False)
-    con.commit()
+    # the inserts AND the commit under the write lock: an unlocked commit on a shared connection cut another thread's
+    # BEGIN IMMEDIATE batch short (bug sweep 2026-11-06 #45). Another thread's write_tx holds this lock end to end.
+    with _WRITE_LOCK:
+        for x in items:
+            quarantine(con, x["kind"], x["source"], x.get("source_key"), x["reason"], x.get("payload"), league,
+                       observed_at, commit=False)
+        con.commit()
     return len(items)
 
 

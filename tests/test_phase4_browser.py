@@ -10,6 +10,7 @@ import pytest
 import book_providers as bp
 import workspace_alerts
 import workspace_books as wb
+from tests.test_pickem_readers import event_of  # noqa: E402
 from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 
 SHOTS_DIR = Path(os.environ['PHASE4_SHOTS']) if os.environ.get('PHASE4_SHOTS') else None
@@ -69,15 +70,19 @@ def test_book_toggle_flag_on_shows_view_only_sleeper_lines(browser, env, sleeper
         assert '61' in v.inner_text()                                       # the saved Underdog chance at the same line, unchanged
         assert 'Lean' not in v.inner_text() or 'Lean' in p.locator('#hub-rows').inner_text()
         assert v.locator('.h-add').inner_text() == 'Info'
-        v.locator('.h-add').click()
-        p.wait_for_function("document.body.innerText.includes('Sleeper lines are view only')")
+        v.locator('.h-add').click()                                         # audit 2026-11-05: Info opens the research card (it only toasted)
+        p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
+        assert p.locator('#hub-detail [role="tab"]').count() >= 3 and 'L5' in p.locator('#hub-detail').inner_text()
+        assert 'View only' in p.locator('#hub-decision').inner_text() and p.locator('#hub-decision [data-hub="detail-add"]').count() == 0
         assert p.locator('#hub-slip-count').inner_text() == '0'            # nothing reached the slip (one book per slip)
+        p.locator('#hub-detail [data-hub="card-close"]').click()
         assert 'view only' in p.locator('#hub-health').inner_text().lower()
         b.locator('.h-player').click()
         p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
-        assert 'No saved chance at this line' in b.inner_text()                # the one Scout cell says so too
+        # card-and-chips 2026-11-06 (no status labels): no saved chance = an empty Scout cell and no "Scout's read" row, no sentence
+        assert b.locator('td.h-c-scout').inner_text().strip() == '' and 'saved chance' not in b.inner_text()
         detail = p.locator('#hub-detail').inner_text()
-        assert '1.80x pick multiplier' in detail and 'No saved chance at this line' in detail
+        assert '1.80x pick multiplier' in detail and 'No saved chance' not in detail and "Scout's read" not in p.locator('#hub-detail .h-extra-detail').inner_text()
         no_h_scroll(p)
         shot(p, 'board_sleeper', size)
         p.locator('#hub-detail [data-hub="card-close"]').click()
@@ -188,6 +193,49 @@ def test_book_toggle_refuses_a_book_with_no_lines_here(ctx, env, sleeper, monkey
     p.evaluate("document.querySelector('#hub-platform [data-id=\"fanduel\"]').click()")          # hidden, so only a script can press it
     assert p.locator('#hub-platform [data-id="all"]').get_attribute('aria-pressed') == 'true'
     assert 'could not be loaded' not in p.locator('#hub-health').inner_text()
+    assert not p.errors
+
+
+def test_book_toggle_shows_dabble_beside_sleeper_with_its_price(ctx, env, sleeper, monkeypatch):
+    """Readers added 2026-11-05: Dabble comes through the same generic toggle, short code DB, view only, its per-side price shown as its own unit (never decimal odds)."""
+    monkeypatch.setenv('SCOUT_BOOK_DABBLE', '1')
+    rows = [dict(offer('vargo', 'Halcyon', 38.5), provider='dabble', book='dabble', raw_stat='total-kills-map-one-and-map-two', source_at=None,
+                 over={"offered": True, "payout": None, "price": 1.91}, under={"offered": True, "payout": None, "price": 2.1}),
+            dict(offer('brandr', 'Norrland', 33.5, sid='2'), provider='dabble', book='dabble', raw_stat='total-kills-map-one-and-map-two', source_at=None,
+                 over={"offered": True, "payout": None, "price": 2.05}, under={"offered": True, "payout": None, "price": 1.95})]
+    real = wb.records
+
+    def with_events(srv, sport):                    # Dabble lines carry their fixture's teams and start: copy the board match's
+        recs, s = real(srv, sport)
+        for o in rows:
+            rec = next((r for r in recs or () if r['player']['name'] == o['player']), None)
+            if rec:
+                o.update(event_of(rec))
+        return recs, s
+    monkeypatch.setattr(wb, 'records', with_events)
+    bp.state('dabble').update(at=time.time(), offers=rows)
+    p = page(ctx, env)
+    lines_read(p, '/')
+    p.wait_for_function(f"{SHOWN_BOOKS}.includes('dabble')", timeout=20000)
+    assert p.evaluate(SHOWN_BOOKS) == ['all', 'prizepicks', 'underdog', 'sleeper', 'dabble']
+    p.locator('#hub-platform [data-hub="book"][data-id="dabble"]').click()
+    assert p.locator('#hub-platform [data-id="dabble"]').get_attribute('aria-pressed') == 'true'
+    p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
+    text = p.locator('#hub-rows').inner_text()
+    assert 'DB' in text and 'vargo' in text and 'brandr' in text
+    v = p.locator('#hub-rows tr[data-record]', has_text='vargo').first
+    assert '61' in v.inner_text() and v.locator('.h-add').inner_text() == 'Info'
+    v.locator('.h-add').click()                                             # Info opens the research card, never the slip
+    p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
+    assert p.locator('#hub-slip-count').inner_text() == '0'
+    p.locator('#hub-detail [data-hub="card-close"]').click()
+    b = p.locator('#hub-rows tr[data-record]', has_text='brandr').first
+    b.locator('.h-player').click()
+    p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
+    detail = p.locator('#hub-detail').inner_text()
+    assert 'Dabble price 2.05' in detail and 'not what an entry pays' in detail and '2.05 decimal' not in detail
+    assert 'No saved chance' not in detail and "Scout's read" not in p.locator('#hub-detail .h-extra-detail').inner_text()
+    no_h_scroll(p)
     assert not p.errors
 
 

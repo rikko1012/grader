@@ -428,7 +428,7 @@ def t_player_game_log(ctx, a):
 
 
 def _group(o):
-    if o.variant not in capabilities.ORDINARY_VARIANTS or o.promotional or not o.event_id or not o.player_id \
+    if not capabilities.is_ordinary(o) or o.promotional or not o.event_id or not o.player_id \
             or not o.stat:
         return None
     return "cg-" + hashlib.sha256(f"{o.league}|{o.event_id}|{o.player_id}|{o.stat}|{o.scope}".encode()).hexdigest()[:12]
@@ -474,8 +474,13 @@ def t_forecasts(ctx, a):
         raise ToolError("give player_id or event_id")
     lim = a.get("limit") or 10
     rows = []
+    # truncated only when a row was really left out (bug sweep 2026-11-06 #36: exactly `limit` forecasts read as cut):
+    # collect up to lim + 1, and also when the store's own 200-row read may have cut rows
+    scanned, STORE_LIMIT = 0, 200
     for fid, f in store.forecasts(ctx.con, league=a["league"], event_id=a.get("event_id"),
-                                  player_id=a.get("player_id"), model_version=a.get("model_version"), limit=200):
+                                  player_id=a.get("player_id"), model_version=a.get("model_version"),
+                                  limit=STORE_LIMIT):
+        scanned += 1
         if f.forecast_at > ctx.now:
             continue
         rows.append({"forecast_id": f.forecast_id, "record_id": fid, "as_of": ctx.now, "forecast_at": f.forecast_at,
@@ -490,11 +495,13 @@ def t_forecasts(ctx, a):
                      "p_under_given_no_push": _r(f.p_under_given_no_push, 4),
                      "sides_available": list(f.sides_available), "chosen_side": f.chosen_side, "grade": f.grade,
                      "research_only": f.research_only, "offer_snapshot_ids": list(f.offer_snapshot_ids)[:5]})
-        if len(rows) >= lim:
+        if len(rows) > lim:
             break
+    truncated = len(rows) > lim or scanned >= STORE_LIMIT
+    rows = rows[:lim]
     notes = ["p_over / p_under / p_push are unconditional (sum to 1); *_given_no_push are conditional and named so",
              "research_only = true means the version has not passed its validation gate - say so"]
-    return _result(ctx, "forecasts", a, rows, notes=notes, truncated=len(rows) >= lim)
+    return _result(ctx, "forecasts", a, rows, notes=notes, truncated=truncated)
 
 
 def t_player_context(ctx, a):

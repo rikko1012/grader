@@ -12,6 +12,7 @@ the last question. Only an answered question counts; an unmatched question or a 
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
@@ -161,6 +162,8 @@ def _verdict(rec, side):
         return f"Scout side is {_cap(s['side'])}"
     if s.get("hold"):
         return f"Research estimate {_cap(sd)}"
+    if s.get("line_chance"):                     # another book's line, read from the saved distribution: no letter
+        return f"Scout's chance at this line: {_cap(sd)}"
     if s.get("grade"):
         return f"{s['grade']} {_cap(sd)}" + (" · Research grade" if rec.get("sport") in ("nba", "nfl") else "")
     return f"Lean {_cap(sd)}"
@@ -213,6 +216,10 @@ def _say(topic, doc, side, q):
         out = [_read(rec, side, f" on {book} {line}")]
         if _num(p):
             out.append(f"The saved chance for {_cap(side)} {line} is {_pct(p)}.")
+        t = doc.get("tier_record") or {}
+        if t and s.get("grade") == t.get("name") and (not side or side == s.get("side")):
+            # site audit N9: the letter's own settled record beside it, as the record page counts it (a fact, with its sample)
+            out.append(f"Settled {t['name']} picks have won {t['wins']} of {t['decided']} ({_pct(t['observed'])}).")
         return out
     if topic == "projection":
         if not _num(s.get("projection")):
@@ -257,15 +264,32 @@ def _say(topic, doc, side, q):
             out.append(f"The average in those meetings is {_tenth(hh['avg'])}.")
         return out
     if topic == "books":
+        # site audit N9: every book that lists this player, stat and period - the board's books, the market books and the extra
+        # books (Sleeper, Dabble; doc["extra_books"]) - each named once with its lines, then the easiest standard line for the side
         mine = (offer.get("platform"), str(offer.get("offer_id")))
         others = [b for b in (doc.get("books") or []) if (b.get("platform"), str(b.get("row_id"))) != mine]
         mb = doc.get("market_books") or {}
         extra = [b for b in (mb.get("same") or []) + (mb.get("other") or []) if b.get("platform") != offer.get("platform")]
-        rows = [f"{b.get('platform_label') or b.get('platform')} lists {b.get('line')}" + (f" ({b.get('line_type')})" if b.get("line_type") not in (None, "standard") else "")
-                for b in (others + extra)[:6]]
-        if not rows:
+        by, seen = {}, set()
+        for b in others + extra + list(doc.get("extra_books") or []):
+            lab, ln, lt = b.get("platform_label") or b.get("platform"), b.get("line"), b.get("line_type")
+            if not lab or not _num(ln) or (lab, ln, lt) in seen:
+                continue
+            seen.add((lab, ln, lt))
+            by.setdefault(lab, []).append(_tenth(ln) + (f" ({lt})" if lt not in (None, "standard") else ""))
+        if not by:
             return ["No other book lists this exact player, stat and period right now."]
-        return ["; ".join(rows) + ".", "A different line or payout type is a different pick with its own forecast."]
+        out = ["; ".join(f"{lab} lists {', '.join(v[:4])}" for lab, v in by.items()) + "."]
+        std = [(b.get("platform_label") or b.get("platform"), b.get("line")) for b in others + extra + list(doc.get("extra_books") or [])
+               if _num(b.get("line")) and b.get("line_type") in (None, "standard") and (b.get("platform_label") or b.get("platform"))]
+        if _num(line) and side in ("over", "under") and std:
+            lab, ln = (min if side == "over" else max)(std, key=lambda v: v[1])
+            if (side == "over" and ln < line) or (side == "under" and ln > line):
+                out.append(f"The easiest {_cap(side)} line listed is {_tenth(ln)} on {lab}, against {line} on {book}.")
+            else:
+                out.append(f"No other book lists an easier {_cap(side)} line than {line} on {book}.")
+        out.append("A different line or payout type is a different pick with its own forecast.")
+        return out
     if topic == "market":
         m = doc.get("market") or {}
         if not m.get("available"):
@@ -301,6 +325,47 @@ PERSONA_OPEN = {"pick": "🧞 Your wish: Scout's read on this line.", "projectio
                 "books": "🧞 I checked the other books for you.", "market": "🧞 The market prices on file.",
                 "move": "🧞 The line's travels so far.", "stats": "🧞 The saved stats, as recorded.",
                 "start": "🧞 When the lamp says go."}
+
+
+TIER_TTL = 300
+
+
+def _tier_rows(srv, sport):
+    """{letter: {"name", "wins", "losses", "decided", "observed"}} from the same record data the record page reads."""
+    if sport == "cs2":
+        import workspace_api                       # the stated route's own shared build: no second read of the export
+        st, body = workspace_api.stated_body(srv)
+        if st != 200:
+            raise RuntimeError("stated")
+        rows = json.loads(body).get("by_letter") or []
+    elif sport == "lol":
+        import workspace_lol
+        rows = (workspace_lol.results(srv).get("groups") or {}).get("chance") or []
+    else:
+        import workspace_sports
+        rows = workspace_sports.results(srv, sport).get("letters") or []
+    out = {}
+    for r in rows:
+        w, l, obs = r.get("wins"), r.get("losses"), r.get("observed")
+        if r.get("name") and isinstance(w, int) and isinstance(l, int) and w + l > 0 and _num(obs):
+            out[str(r["name"])] = {"name": str(r["name"]), "wins": w, "losses": l, "decided": w + l, "observed": round(float(obs), 4)}
+    return out
+
+
+def tier_record(srv, sport, rec):
+    """The settled record of this line's letter (site audit N9), or None. One read per sport every TIER_TTL s for every member
+    (srv.shared); a read that fails is not kept, and the answer then simply leaves the sentence out."""
+    g = (rec.get("scout") or {}).get("grade")
+    if not g:
+        return None
+
+    def compute():
+        try:
+            return 200, json.dumps(_tier_rows(srv, sport)).encode()
+        except Exception:                          # noqa: BLE001 - no record data: no sentence, never a guess
+            return 503, b"{}"
+    st, body = srv.shared(("genie_tiers", sport), compute, ttl=TIER_TTL)
+    return json.loads(body).get(g) if st == 200 else None
 
 
 def persona_on():

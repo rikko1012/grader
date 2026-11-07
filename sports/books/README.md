@@ -160,12 +160,16 @@ mc-1 / mi-1 keep their registered sources. The UI shows them in every row's quot
 
 ## Worker (`worker.py`)
 
-Scheduled: the canonical collector calls `run_once` each cycle. Manual: `python -m sports.books.worker` (ONE pass:
+Scheduled: the sports scheduler's light `books` job (`python -m sports.worker books nba nfl`, every minute on a game day, 2026-11-06) checks `pending()` (books.db only, no request) and calls `run_once` when something is due; with `SPORTS_BOOKS_JOB=0` the canonical collector calls it each cycle as before. Manual: `python -m sports.books.worker` (ONE pass:
 books, then the game-data tick) or `python sports_scout.py books-run --once`. There is no second forever-loop.
 - **Lease:** one worker at a time; a second one finds the lease taken and does nothing.
 - **Game lists** are re-read every 30 min.
-- **Refresh ladder** (`schedule.py`): "full" is every 10 min inside 2 h, every 30 min inside 8 h, hourly inside 24 h,
-  3-hourly inside 3 days, 12-hourly inside 7 days. Started games are never fetched.
+- **Refresh ladder** (`schedule.py`): the books' own feeds use "direct" (2026-11-06): every 3 min inside 2 h, every
+  5 min inside 8 h, every 8 min inside 24 h and inside 3 days (3-hourly until the 2026-11-06 site audit N1), 12-hourly
+  inside 7 days, so a quote stays inside
+  the market chance's 15-min rule and the Tools +EV 30-min rule. ("full" - 10 / 30 / 60 min - remains one of the Odds
+  API plan's choices.) Started games are never fetched. book_providers.json carries the same ladder
+  (sports/tests/test_books_schedule_sync.py).
 - **Markets are batched:** one Odds API call per game; FanDuel needs one request per stat tab, BetRivers one per game.
 - **Rate limits:** 1 request per second per host (`net.py`).
 - **Backoff:** errors back off 60 s doubling to 30 min; a 401/403 refusal waits 6 h.
@@ -185,6 +189,8 @@ books, then the game-data tick) or `python sports_scout.py books-run --once`. Th
 | Offers at first sight, per NFL game two days out | FanDuel ~65, BetRivers ~170 (both post more nearer kickoff) |
 | Share of offers whose price changed between two fetches 10-17 min apart, ~2 h before tip | FanDuel 11.8%, BetRivers 8.0% |
 | Bytes per stored quote row, SQLite, including indexes | ~700 |
+| Re-reading unchanged prices (2026-11-06, 17-game slate, local) | books.db +0.0 MB, canonical +0.0 MB per pass (only last_seen moves) |
+| A changed price, both stores (same measurement, 12% of 28.6k sides changed) | books.db ~0.3 KB + canonical sc-1 revision ~0.8 KB |
 
 Estimate for ~9 NBA and ~2 NFL games a day, both direct books, alternates included. A changed price is a new row
 (immutable history):
@@ -208,7 +214,8 @@ first and last price per offer) is a decision to make before it is needed.
 | `SPORTS_ODDS_API_MONTHLY_CREDITS` | Same | 500 (Starter) |
 | `SPORTS_ODDS_API_RESERVE` | Same | 10% of the month |
 | `SPORTS_ODDS_API_ALTERNATES` | Same | `0` (standard markets only) |
-| `SPORTS_BOOKS_LADDER` | Same: refresh density of the books' own feeds (`full` / `standard` / `lean` / `minimal`) | `full` |
+| `SPORTS_BOOKS_LADDER` | Same: refresh density of the books' own feeds (`direct` / `full` / `standard` / `lean` / `minimal`) | `direct` |
+| `SPORTS_BOOKS_JOB` | Same: `0` folds the books back into the ingest-<league> cycles (rollback of the light job) | `1` |
 | `SPORTS_FANDUEL_STATE` | Same | `oh` |
 | `SPORTS_BETRIVERS_OPERATOR` | Same | `rsiusoh` |
 | `SPORTS_DB_DSN` | Worker **and** web service, only for the separate-service option | unset = SQLite |

@@ -1,8 +1,10 @@
 """SCOUT_MARKET_TOOLS (default off): the Tools route's +EV feed and arbitrage sheet over prices this server already holds.
 
 Inputs (no provider request is made here): the NBA / NFL snapshots' book rows (FanDuel, BetRivers, The Odds API books,
-Kalshi, Polymarket, collected by the sports service) and, when SCOUT_BOOK_SLEEPER is on, Sleeper's per-pick multipliers
-(book_providers). All math is gradecore.market_tools / gradecore.devig.
+Kalshi, Polymarket, collected by the sports service) and every enabled direct pick'em reader whose price is a documented payout
+(book_providers: Sleeper per-pick multipliers). Dabble's per-side number is undocumented and not what an entry pays
+("price_comparable": false), so it never enters this math. Pick'em prices are never a standalone bet: flagged, kept out of the
+consensus and out of the member view. All math is gradecore.market_tools / gradecore.devig.
 
 +EV feed. EV = p_cal x decimal_odds - 1, push-adjusted (gradecore.market_tools.ev_push_adjusted); never a probability gap.
   p_cal, in this order:
@@ -26,6 +28,7 @@ flagged pairs (stale / prediction-market / pick'em legs), exclusion counts and t
 markets_checked, and sections_possible says whether a sport's prices can produce each section at all.
 
 For 700 members: one build every TTL s for everyone (srv.shared); each member's answer is that build cut to the sports they see."""
+import heapq
 import json
 import time
 
@@ -34,10 +37,19 @@ import workspace_books as wb
 
 TTL = 30
 PREDICTION = ("kalshi", "polymarket")
-PICKEM = ("underdog", "prizepicks", "sleeper")
+BOARD_PICKEM = ("underdog", "prizepicks")
+
+
+def direct_pickem():
+    """Direct pick'em readers in the config (Sleeper, Dabble, ...): their quotes are pick'em prices, never sportsbook prices."""
+    return tuple(pid for pid, p in bp.providers().items() if p.get("kind") == "pickem" and pid in bp.POLLERS)
+
+
+PICKEM = BOARD_PICKEM + ("sleeper", "dabble")
 CONSENSUS_MAX_AGE_S = 10 * 60
 MIN_BOOKS = 2
 MAX_ROWS = 300
+CLOSEST_ROWS = 25        # owner audit 2026-11-06 (T6): with nothing above its fair chance, the sheet lists the closest prices
 FRESH_FILTERS = [[120, "2 min"], [600, "10 min"], [1800, "30 min"]]
 
 
@@ -55,7 +67,7 @@ def american(d):
 def kind_of(platform):
     if platform in PREDICTION:
         return "prediction"
-    if platform in PICKEM:
+    if platform in PICKEM or platform in direct_pickem():
         return "pickem"
     return "sportsbook"
 
@@ -99,8 +111,8 @@ def _label(p):
     import workspace_sports
     if isinstance(p, str) and p.startswith("oddsapi:"):
         return workspace_sports.book_label(p.split(":", 1)[1]) + " · The Odds API"
-    if p == "sleeper":
-        return "Sleeper"
+    if p in bp.providers() and p in bp.POLLERS:
+        return bp.providers()[p]["label"]
     return workspace_sports.book_label(p)
 
 
@@ -131,16 +143,24 @@ def groups(srv, sport, now):
                 g["quotes"].append(q)
                 continue
             g["quotes"].append(_quote(plat, _num(b.get("over")), _num(b.get("under")), wb._ts(b.get("seen_at")), "sports service · " + _label(plat)))
-    if bp.enabled("sleeper"):
-        subj = wb.subjects(recs)
-        for o in bp.offers("sleeper", sport, now):
-            got, _ = wb.match(subj, o)
+    subj = None
+    for pid in direct_pickem():
+        if not bp.enabled(pid) or bp.providers()[pid].get("price_comparable") is False:
+            # Dabble: its per-side number is not what an entry pays (book_providers.json rules.pick_price). Priced as decimal odds
+            # it makes every near-fair side look +EV, so it stays out of the +EV feed and the arbitrage sheet entirely.
+            continue
+        if subj is None:
+            subj = wb.subjects(recs)
+        label = bp.providers()[pid]["label"]
+        for o in bp.offers(pid, sport, now):
+            got, _ = wb.match(subj, o, bp.providers()[pid].get("match"))
             if not got:
                 continue
             r0 = got[0]
             k = (r0["event"]["id"], r0["player"]["key"], r0["market"]["stat"], wb._per(r0["market"]["period"]), o["line"])
             g = out.setdefault(k, {"recs": got, "line": o["line"], "quotes": []})
-            g["quotes"].append(_quote("sleeper", o["over"]["payout"], o["under"]["payout"], o["observed_at"], "Sleeper feed", mult=True))
+            # only a documented per-pick payout (Sleeper's multiplier) is a pick'em price here
+            g["quotes"].append(_quote(pid, o["over"].get("payout"), o["under"].get("payout"), o["observed_at"], label + " feed", mult=True))
     return out
 
 
@@ -188,7 +208,7 @@ def sheet(srv, sport, now):
     gs = groups(srv, sport, now)
     if gs is None:
         return {"state": "unavailable", "error": "Board not loaded yet", "ev": [], "arbitrage": [], "flagged": [], "excluded": {}}
-    ev, arb, flagged, excluded, newest, n_quotes = [], [], [], {}, None, 0
+    ev, arb, flagged, excluded, newest, n_quotes, near = [], [], [], {}, None, 0, []
     excluded_lines, possible = {}, {"ev": False, "arb": False}
     here = {}
 
@@ -242,14 +262,12 @@ def sheet(srv, sport, now):
                     value = mt.ev_push_adjusted(p, price, pp)
                 except ValueError:
                     ex("Invalid price or chance"); continue
-                if value <= 0:
-                    continue
                 flags = []
                 if own and own["wide"]:
                     flags.append("Wide market")
                 if q["multiplier"]:
                     flags.append("Pick'em multiplier: needs 2+ picks")
-                ev.append(dict(_row_base(g, sport), side=side, book=q["book"], book_label=q["book_label"], kind=q["kind"],
+                (ev if value > 0 else near).append(dict(_row_base(g, sport), side=side, book=q["book"], book_label=q["book_label"], kind=q["kind"],
                                odds=round(price, 3), p_cal=round(p, 4), p_push=round(pp, 4), p_source=p_source, ev=round(value, 4),
                                width=own, consensus_width=round(cwidth, 4) if cwidth is not None else None,
                                age_s=round(age, 1), seen_at=wb._iso(q["seen"]), source=q["source"], flags=flags,
@@ -318,8 +336,11 @@ def sheet(srv, sport, now):
     ev.sort(key=lambda x: -x["ev"])
     arb.sort(key=lambda x: -x["margin_pct"])
     flagged.sort(key=lambda x: -x["margin_pct"])
+    # T6: the priced single bets that fall short of their fair chance, closest first (members: sportsbook / prediction rows only,
+    # cut in for_member). Same row shape as "ev"; their ev / per_100 are 0 or below and are never counted as worth acting on.
+    closest = heapq.nlargest(CLOSEST_ROWS, (x for x in near if x["kind"] in ("sportsbook", "prediction")), key=lambda x: (x["ev"], -x["age_s"]))
     return {"state": "ready" if n_quotes else "empty", "as_of": wb._iso(now), "newest_quote_at": wb._iso(newest),
-            "quotes_checked": n_quotes, "markets_checked": len(gs), "ev": ev[:MAX_ROWS], "arbitrage": arb[:MAX_ROWS],
+            "quotes_checked": n_quotes, "markets_checked": len(gs), "ev": ev[:MAX_ROWS], "closest": closest, "arbitrage": arb[:MAX_ROWS],
             "flagged": flagged[:MAX_ROWS], "excluded": excluded, "excluded_lines": excluded_lines, "sections_possible": possible}
 
 
@@ -371,7 +392,8 @@ def for_member(body, allowed, owner=False):
     if not owner:
         for d in doc["sports"].values():
             d["ev"] = [r for r in d.get("ev", []) if r.get("kind") in ("sportsbook", "prediction")]
-            for r in d["ev"]:
+            d["closest"] = [r for r in d.get("closest", []) if r.get("kind") in ("sportsbook", "prediction")]
+            for r in d["ev"] + d["closest"]:
                 r.pop("p_source", None)
             d["arbitrage"] = [r for r in d.get("arbitrage", []) if all(l.get("kind") == "sportsbook" and not l.get("flags") for l in r.get("legs", []))]
             for k in MEMBER_HIDDEN:

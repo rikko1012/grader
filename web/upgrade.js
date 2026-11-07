@@ -31,6 +31,33 @@
     underdog: { label: "Underdog", short: "UD", slip: true, kind: "multiplier", types: [["standard", "Standard"], ["flex", "Flex"]] }
   };
   const STATUS = { hit: "Hit", miss: "Miss", push: "Push", void: "Void", pending: "Pending" };
+  /* NBA / NFL faces (audit 2026-11-05): ESPN headshots and team logos, as the classic sports board shows them. The ESPN id is read
+     from the player id ("nba:player:espn:4432194") or the normalized key the board and receipts carry ("nbaplayerespn4432194").
+     Lazy images over the initials: a missing image hides itself and the initials show. Esports get no face. */
+  const FACE_LG = { nba: 1, nfl: 1 };
+  function espnIdOf(sport, id, key) {
+    if (!FACE_LG[sport]) return null;
+    const m = /:espn:(\d+)$/.exec(String(id || "")) || /^(?:nba|nfl)playerespn(\d+)$/.exec(String(key || ""));
+    return m ? m[1] : null;
+  }
+  const headshotUrl = (sport, id, key) => { const n = espnIdOf(sport, id, key); return n ? `https://a.espncdn.com/i/headshots/${sport}/players/full/${n}.png` : null; };
+  const logoUrl = (sport, abbr) => (FACE_LG[sport] && /^[A-Za-z]{2,4}$/.test(String(abbr || "")) ? `https://a.espncdn.com/i/teamlogos/${sport}/500/${String(abbr).toLowerCase()}.png` : null);
+  const initialsOf = (n) => String(n || "").split(/\s+/).filter(Boolean).map((x) => x[0]).slice(0, 2).join("").toUpperCase();
+  function faceHtml(sport, o) {
+    if (!FACE_LG[sport]) return "";
+    const size = o.size || 32, shot = headshotUrl(sport, o.id, o.key), logo = logoUrl(sport, o.team), team = String(o.team || "").toUpperCase();
+    return `<span class="u-face${o.cls ? " " + o.cls : ""}" style="--face:${size}px"><i aria-hidden="true">${esc(initialsOf(o.name))}</i>`
+      + (shot ? `<img class="u-face-shot" src="${esc(shot)}" alt="${esc(o.name)} headshot" width="${size}" height="${size}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-face>` : "")
+      + (logo ? `<img class="u-face-logo" src="${esc(logo)}" alt="${esc(team)} logo" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-face>` : "") + "</span>";
+  }
+  /* a face image that fails (no headshot, blocked, offline) hides itself; the initials under it stay */
+  document.addEventListener("load", (e) => { const t = e.target; if (t && t.tagName === "IMG" && t.hasAttribute("data-face")) t.classList.add("is-in"); }, true);
+  document.addEventListener("error", (e) => { const t = e.target; if (t && t.tagName === "IMG" && t.hasAttribute("data-face")) { t.hidden = true; t.closest(".u-face")?.classList.add(t.classList.contains("u-face-logo") ? "u-face-nologo" : "u-face-fb"); } }, true);
+  /* a leg's face: its board row when loaded (team abbreviation from the event), else what the leg saved */
+  const legFace = (l, size) => { const r = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id)); return faceHtml(l.sport, { id: r && r.player.id, key: l.player_key || l.nick, name: l.player, team: (r && r.player.team_abbr) || l.team, size }); };
+  /* PrizePicks lines always say which kind they are (audit 2026-11-05, B3): Goblin, Demon or Standard */
+  const lineKind = (book, lt) => (book !== "prizepicks" ? "" : lt === "goblin" ? "Goblin" : lt === "demon" ? "Demon" : "Standard");
+  const lineKindHtml = (book, lt) => { const k = lineKind(book, lt); return k ? ` <em class="u-lt u-lt-${k.toLowerCase()}">${k}</em>` : ""; };
   const CHECKS = ["Game not started", "Offer available and unchanged", "Forecast belongs to this event, line and period", "Platform accepts this combination", "No duplicates or conflicts"];
   const MAX_LEGS = 8, BOARD_KEEP = 45000, HITS_RETRY = 10000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, DRAFT_MAX_MS = 86400000;
 
@@ -105,6 +132,9 @@
         const read = await boardRead(sport === "cs2" ? "board" : "board?sport=" + sport, b.at && !b.error ? b.etag : null);
         if (read.same) { Object.assign(b, { at: Date.now(), error: false }); b.busy = null; return b; }
         const doc = read.doc;
+        /* site audit 2026-11-06 N2: the server keeps the last good NBA / NFL board when a refresh fails or comes back empty
+           (workspace_sports._keep_last; CS2 / LoL keep their last rows when a read fails), so an answer is taken as it is here: an
+           empty one is a slate that really emptied, never shown as a failed refresh */
         b.etag = read.etag;
         Object.entries(doc.platforms || {}).forEach(([p, v]) => { if (!own(PLATFORMS, p)) PLATFORMS[p] = v; });
         const recs = new Map(), props = new Map(), keys = new Map();
@@ -134,7 +164,8 @@
     const saved = R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)];
     return (!R.hitsAt || !R.hitsComplete) && !(saved && saved.line === rec.offer.line);
   };
-  const siblings = (rec) => (R.boards[rec.sport].props.get(propKey(rec)) || [rec]);
+  /* an extra book's line (Sleeper, Dabble) sits with the board's lines of that player and market, first, so its card can switch between them */
+  const siblings = (rec) => { const b = R.boards[rec.sport].props.get(propKey(rec)) || []; return rec.extra ? [rec, ...b.filter((x) => x !== rec)] : (b.length ? b : [rec]); };
   const tallies = (rec) => {
     const h = rec.history || {}, saved = rec.sport === "cs2" ? R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)] || {} : {}, more = saved.line === rec.offer.line ? saved : {};
     return { l5: h.l5 || more.l5 || null, l10: h.l10 || null, l20: h.l20 || more.l20 || null, h2h: h.h2h || more.h2h || null, season: h.season || more.season || null };   /* h2h / season: SCOUT_BOARD_H2H only */
@@ -146,15 +177,22 @@
   const held = (r) => r.state.kind === "held";
   const slipOffer = (r) => !!(PLATFORMS[r.offer.platform] || {}).slip;
   const chanceOf = (rec, side) => (side === "under" ? rec.scout.p_under : side === "over" ? rec.scout.p_over : null);
+  /* LoL os-1 / sports cap-2 (owner 2026-11-06): a line the book offers on one side only reads "Over only" / "Under only" with its
+     line and price - no chance, side, letter, stake, slip or EV. The label is the server's (scout.hold.label), never worked out here */
+  const ONE_SIDED = ["Over only", "Under only"];
+  const oneSided = (rec) => { const l = rec && rec.scout && rec.scout.hold && rec.scout.hold.label; return ONE_SIDED.includes(l) ? l : null; };
+  const oneSidedNote = (rec) => `${oneSided(rec)}: Scout grades lines that offer both sides.`;
   function verdictText(rec, side) {
     const s = rec.scout, sd = side || s.side;
+    if (oneSided(rec)) return oneSided(rec);
     if (!sd) return "No lean";
     if (s.side && sd !== s.side) return `Scout side is ${cap(s.side)}`;
     if (s.hold) return `Research estimate ${cap(sd)}`;
+    if (s.line_chance) return `Scout's chance at this line: ${cap(sd)}`;      /* another book's line, read from the saved distribution: no letter */
     if (s.grade) return `${s.grade} ${cap(sd)}${rec.sport === "nba" || rec.sport === "nfl" ? " · Research grade" : ""}`;      /* as classic sports */
     return `Lean ${cap(sd)}`;
   }
-  const decimalOf = (o, side) => { const v = o.offer[side]; return (PLATFORMS[o.offer.platform] || {}).kind === "decimal" ? v.payout : v.price; };
+  const decimalOf = (o, side) => { const v = o.offer[side], P = PLATFORMS[o.offer.platform] || {}; if (P.price_comparable === false) return null; /* Dabble: own unit, never odds */ return P.kind === "decimal" ? v.payout : v.price; };
   function priceText(o, side) {
     const v = o.offer[side], dec = decimalOf(o, side);
     if (!v.offered) return null;
@@ -167,13 +205,15 @@
     return {
       id: legId(r, side), key: r.key, sport: r.sport, book: r.offer.platform, row_id: r.offer.offer_id, side, line: r.offer.line, rev: r.offer.revision, read_rev: r.scout.read_rev || null, shown_p: chanceOf(r, side),
       event_id: r.event.id, event_label: r.event.label, player: r.player.name, player_key: r.player.key, team: r.player.team, stat: r.market.stat, stat_label: r.market.stat_label,
-      period: r.market.period, period_label: r.market.period_label, platform_label: r.offer.platform_label, shown_label: verdictText(r, side), added_at: addedAt || new Date().toISOString()
+      period: r.market.period, period_label: r.market.period_label, platform_label: r.offer.platform_label, shown_label: verdictText(r, side), added_at: addedAt || new Date().toISOString(),
+      start_utc: r.event.lock_utc || r.event.start_utc || null      /* audit 2026-11-05: the tray clears the leg once this has passed */
     };
   }
   const wireLeg = (l) => ({ id: l.id, sport: l.sport, book: l.book, row_id: l.row_id, side: l.side, line: l.line, rev: l.rev, read_rev: l.read_rev, shown_p: l.shown_p, team: l.team, player: l.player, event: l.event_id });
   const LEG_TEXT = ["id", "key", "book", "row_id", "event_id", "event_label", "player", "player_key", "team", "stat", "stat_label", "period", "period_label", "platform_label", "rev", "shown_label"];
   const cleanLeg = (l) => isObj(l) && LEG_TEXT.every((k) => isStr(l[k])) && own(SPORTS, l.sport) && own(PLATFORMS, l.book) && (l.side === "over" || l.side === "under") && isNum(l.line)
-    && (l.shown_p == null || isNum(l.shown_p)) && (l.read_rev == null || isStr(l.read_rev)) && isStr(l.added_at) && Number.isFinite(Date.parse(l.added_at));
+    && (l.shown_p == null || isNum(l.shown_p)) && (l.read_rev == null || isStr(l.read_rev)) && isStr(l.added_at) && Number.isFinite(Date.parse(l.added_at))
+    && (l.start_utc == null || isStr(l.start_utc));
 
   /* ---- account slip: the workspace's saved slip. Every device merges three ways against the copy it last synced ---- */
   const T = {
@@ -279,6 +319,7 @@
       T.saveFail = false;
       if (T.pending) saveSoon();
       paintTray();
+      removeStarted();                                  /* a leg left from an earlier day never reaches the tray */
       if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
     } catch (e) { T.saveFail = true; paintTray(); }
   }
@@ -293,6 +334,7 @@
   function addRefusal(rec, side) {
     if (started(rec)) return `${startWord(rec)} at ${when(rec.event.start_utc)}.`;
     if (!slipOffer(rec)) return `${rec.offer.platform_label} is shown for comparison. Slips cover PrizePicks and Underdog.`;
+    if (oneSided(rec)) return oneSidedNote(rec);
     if (!side) return "Choose a side first.";
     if (!rec.offer[side].offered) return `${cap(side)} is not offered on ${rec.offer.platform_label}.`;
     if (held(rec)) return "The grade on this line is held.";
@@ -434,6 +476,7 @@
     T.checking = false;
     if (sig() !== before) scheduleCheck();
     paintTray();
+    removeStarted();                                    /* a "started" answer clears that leg at once */
   }
   const scheduleCheck = debounce(runCheck, CHECK_DEBOUNCE);
   function slipPhase() {
@@ -538,19 +581,33 @@
     paintTray();
   }
 
+  /* audit 2026-11-05 S5/A9: a started or expired leg leaves every tray by itself (classic pages and the board's slip read this one
+     account slip). It is identified positively: the leg's current row, else its saved start time, else the server check's "Match /
+     Game started" answer. A missing row alone may be a feed outage and never removes a leg; only a leg saved before legs carried a
+     start time, and older than LEG_EXPIRE_MS, is treated as expired. */
+  const LEG_EXPIRE_MS = 4 * 86400000;
+  /* -> "started" | "expired" | false (follow-up 2026-11-06: an expired pick is never announced as started) */
+  function legGone(l, now) {
+    const r = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
+    if (r && r.event.id === l.event_id) return started(r) ? "started" : false;
+    const t = Date.parse(l.start_utc || "");
+    if (Number.isFinite(t)) return t <= now ? "started" : false;
+    const c = T.check && T.check.legs && T.check.legs[l.id];
+    if (c && (c.problems || []).some((p) => p.code === "locked")) return "started";
+    const at = Date.parse(l.added_at);
+    return Number.isFinite(at) && now - at > LEG_EXPIRE_MS ? "expired" : false;
+  }
+  const picksWord = (n, kind) => `${n} ${kind} ${n === 1 ? "pick" : "picks"}`;   /* the classic slip's wording: "Removed 1 started pick: X." */
   function removeStarted() {
-    if (!R.me?.features?.workspace_v2 || !T.ready || T.saving || T.checking) return;
-    // Remove only a positively identified, currently loaded event. A missing row
-    // may be a feed outage, so it is left for the authoritative server recheck.
-    const gone = T.legs.filter(l => {
-      const r = R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
-      return r && r.event.id === l.event_id && started(r);
-    });
+    if (!T.ready || T.saving || T.checking) return;
+    const now = Date.now(), why = new Map(T.legs.map((l) => [l.id, legGone(l, now)])), gone = T.legs.filter((l) => why.get(l.id));
     if (!gone.length) return;
     const ids = new Set(gone.map(l=>l.id));
     T.legs = T.legs.filter(l=>!ids.has(l.id));
     slipChanged();
-    say(`Removed ${gone.length} started ${gone.length===1?'leg':'legs'}: ${gone.map(l=>l.player).join(', ')}.`);
+    const st = gone.filter((l) => why.get(l.id) === "started"), ex = gone.filter((l) => why.get(l.id) === "expired");
+    say([st.length ? `Removed ${picksWord(st.length, "started")}: ${st.map(l=>l.player).join(', ')}.` : "",
+         ex.length ? `Removed ${picksWord(ex.length, "expired")} (added more than 4 days ago): ${ex.map(l=>l.player).join(', ')}.` : ""].filter(Boolean).join(" "));
   }
 
   async function shareSlip() {
@@ -562,10 +619,20 @@
     const g=canvas.getContext('2d');
     g.fillStyle='#10151d';g.fillRect(0,0,canvas.width,canvas.height);
     g.fillStyle='#77adff';g.fillRect(0,0,canvas.width,8);
-    const text=(value,y,size,color='#f4f7fc')=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>960)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'…',60,y);};
+    const text=(value,y,size,color='#f4f7fc',x=60)=>{g.font=`${size}px sans-serif`;g.fillStyle=color;let s=String(value);while(s.length&&g.measureText(s).width>1020-x)s=s.slice(0,-1);g.fillText(s===String(value)?s:s.slice(0,-1)+'…',x,y);};
+    /* NBA / NFL legs carry the player's headshot and team logo (audit 2026-11-05); an image that cannot load in time, or that ESPN
+       does not share with this page, leaves the initials circle. Esports legs are drawn as before. */
+    const loadImg=url=>!url?Promise.resolve(null):new Promise(res=>{const im=new Image();let done=false;const end=v=>{if(!done){done=true;res(v);}};im.crossOrigin='anonymous';im.referrerPolicy='no-referrer';im.onload=()=>end(im);im.onerror=()=>end(null);setTimeout(()=>end(null),2500);im.src=url;});
+    const faces=await Promise.all(legs.map(l=>{if(!FACE_LG[l.sport])return null;const r=R.boards[l.sport].recs.get(offerKey(l.book,l.row_id));return Promise.all([loadImg(headshotUrl(l.sport,r&&r.player.id,l.player_key)),loadImg(logoUrl(l.sport,(r&&r.player.team_abbr)||l.team))]);}));
     text('1TIME SCOUT',74,34);text(`${list[0].label} · ${legs.length} picks · ${typeOf(list[0])}`,126,25,'#bbcee8');
     text('RESEARCH LINEUP',166,18,'#94a7bf');
-    legs.forEach((l,i)=>{const y=220+i*140;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27);text(`${cap(l.side)} ${l.line} ${l.stat_label} · ${l.period_label}`,y+53,24,'#c5dbfb');text(l.event_label,y+86,18,'#99acc4');});
+    legs.forEach((l,i)=>{const y=220+i*140,f=faces[i],x=f?170:60;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();
+      if(f){const cx=105,cy=y+40,rad=44;g.save();g.beginPath();g.arc(cx,cy,rad,0,Math.PI*2);g.fillStyle='#1d242e';g.fill();g.clip();
+        if(f[0]){try{g.drawImage(f[0],cx-rad*1.3,cy-rad*1.05,rad*2.6,rad*1.9);}catch(e){f[0]=null;}}
+        g.restore();if(!f[0]){g.font='600 30px sans-serif';g.fillStyle='#dfe7f2';g.textAlign='center';g.fillText(initialsOf(l.player),cx,cy+11);g.textAlign='left';}
+        if(f[1]){try{g.drawImage(f[1],cx+rad-30,cy+rad-30,34,34);}catch(e){}}}
+      const lr=R.boards[l.sport].recs.get(offerKey(l.book,l.row_id)),kind=lineKind(l.book,l.line_type||(lr&&lr.market.line_type));
+      text(`${SPORTS[l.sport]}  /  ${l.player}`,y+14,27,undefined,x);text(`${cap(l.side)} ${l.line} ${l.stat_label} · ${l.period_label}${kind?' · '+kind:''}`,y+53,24,'#c5dbfb',x);text(l.event_label,y+86,18,'#99acc4',x);});
     text(`Lines checked ${when(check.checked_at)}. Recheck in the app before use.`,canvas.height-65,18,'#aebed1');
     text('No stake, combined win chance or return is implied.',canvas.height-32,17,'#aebed1');
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
@@ -592,18 +659,46 @@
     const vals = Object.values(T.check.entries), ready = vals.filter((e) => e.ok).length;
     return `<b>${ready} of ${vals.length} ${vals.length === 1 ? "entry" : "entries"} ready.</b> Checked ${clock(T.check.checked_at)}.`;
   }
-  function legHtml(l, phase, link, position, legEv) {
+  /* SCOUT_SLIP_HEADER_V2 (server flag, default off): spec 4.3. The server sends every entry type of the platform at once, so the
+     Power / Flex toggle repaints from the last answer for the same legs at once, before the recheck returns. */
+  const signed = (x) => (typeof x !== "number" ? "--" : (x > 0 ? "+" : x < 0 ? "−" : "") + (Math.abs(x) * 100).toFixed(1) + "%");
+  const legsKey = (e) => e.platform + "|" + e.legs.map((l) => [l.id, l.rev, l.read_rev, l.shown_p].join(":")).join(";");
+  function head2Of(e, c) {
+    T.head2 = T.head2 || {};
+    const k = legsKey(e);
+    if (c) { if (c.slip_header) T.head2[k] = c.slip_header; else delete T.head2[k]; }   /* a fresh answer without one clears it */
+    const h = T.head2[k];
+    return h && h.types ? h.types[typeOf(e)] || null : null;
+  }
+  function head2Html(t) {
+    const metric = (value, label, cls) => `<div><b${cls ? ` class="${cls}"` : ""}>${value}</b><span>${label}</span></div>`;
+    const need = t.break_even != null ? `<p class="u-need">Each leg needs <b>≥ ${pct(t.break_even)}</b>${t.break_even_american != null ? ` (${t.break_even_american > 0 ? "+" : ""}${esc(t.break_even_american)})` : ""}</p>` : "";
+    if (!t.rated) return `<div class="u-head2" data-entry="${esc(t.entry)}">${t.payout != null ? `<div class="u-slip-metrics u-slip-head">${metric(esc(t.payout) + "×", "Payout")}</div>` : ""}${need}<p class="u-cant">${esc(t.reason || "Can't rate this entry.")}</p></div>`;
+    const values = metric(esc(t.payout) + "×", "Payout") + metric(pct(t.win), "Chance all hit")
+      + metric(signed(t.ev), "Average return", t.ev > 0 ? "u-pos" : t.ev < 0 ? "u-neg" : "");
+    return `<div class="u-head2" data-entry="${esc(t.entry)}"><div class="u-slip-metrics u-slip-head">${values}</div>${need}<p class="u-dim">From the chances Scout shows on each pick. Average return is per entry, not a win chance.</p></div>`;
+  }
+  /* audit 2026-11-05: the read a leg shows comes from its current row (a letter that is held now reads as held). With no current row
+     the saved letter is not repeated, since it may since have been held; the side and the saved chance stay. Lean stays Lean. */
+  function legLabel(l) {
+    const r = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id));
+    if (r && r.event.id === l.event_id) return verdictText(r, l.side);
+    return /^[A-F][+-]? /.test(l.shown_label) ? cap(l.side) : l.shown_label;
+  }
+  function legHtml(l, phase, link, position, legEv, leg2) {
     const c = phase === "fresh" ? T.check.legs[l.id] : null;
-    const evText = legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
+    const evText = leg2 ? "" : legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
+    const below = leg2 && leg2.below, need2 = below ? `<p class="u-below">Below the ${pct(leg2.need)} each leg needs</p>` : "";
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
-    const against = l.shown_label.startsWith("Scout side"), read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
+    const label = legLabel(l), against = label.startsWith("Scout side"), read = against ? esc(label) : `${esc(label)} ${pct(l.shown_p)}`;
     const notes = legNotes(l), adv = T.advice && T.advice.sig === sig() ? T.advice.legs[l.id] : null, rep = adv && adv.replacement;
     const noteHtml = notes.length ? `<div class="u-leg-notes">${notes.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
     const advHtml = adv && (adv.band || rep) ? `<p class="u-leg-advice">${adv.band ? esc(adv.band) + "." : ""}${rep ? ` ${adv.in_pool ? "Ranks higher here" : "Best replacement"}: ${esc(rep.player)} ${cap(rep.side)} ${esc(rep.line)} ${esc(rep.stat_label)}, ${esc(rep.period_label)} · ${pct(rep.p)}<button class="u-btn" type="button" data-u="replace" data-id="${esc(l.id)}">Swap in</button>` : ""}</p>` : "";
-    return `<div class="u-leg${c && !c.ok ? " bad" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
-      <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}</span>
+    const lr = R.boards[l.sport] && R.boards[l.sport].recs.get(offerKey(l.book, l.row_id)), lt = l.line_type || (lr && lr.market.line_type);
+    return `<div class="u-leg${c && !c.ok ? " bad" : ""}${below ? " u-leg-below" : ""}${FACE_LG[l.sport] ? " u-leg-face" : ""}"><span class="u-leg-index" aria-hidden="true">${String(position).padStart(2,'0')}</span><span class="u-leg-name">${legFace(l, 28)}${esc(l.player)}<i>${esc(SPORTS[l.sport])}</i></span>
+      <span class="u-leg-pick">${cap(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineKindHtml(l.book, lt)}</span>
       <span class="u-leg-meta">${read}${evText}${safeBookLink(link,l.book) ? ` · <button class="u-btn" data-u="open-leg" data-id="${esc(l.id)}">Open this line</button>` : ""}</span>
-      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${noteHtml}${advHtml}${problems}</div>`;
+      <button class="u-x" type="button" aria-label="Remove ${esc(l.player)} ${cap(l.side)} ${esc(l.line)}" data-u="leg-x" data-id="${esc(l.id)}">${X_ICON}</button>${need2}${noteHtml}${advHtml}${problems}</div>`;
   }
   /* an entry that only needs more picks is in progress, not refused: its size and two-team rules read as the next step, in
      neutral text; red stays for real conflicts. null = at least one problem is a real conflict (or a leg did not pass). */
@@ -631,9 +726,10 @@
       : (ev?.payout ? metric(esc(ev.payout.multiple)+'×',ev.payout.reference_only?'Base all-hit payout':'All-hit payout') : '')
       + (ev?.available ? metric(pct(ev.hit_chance),'Win chance')+metric(pct(ev.ev),'Expected return') : '');
     const tiers = ev?.payout?.reference_only&&ev.payout.tiers ? `<details class="u-det"><summary>Published payout tiers</summary><ul>${Object.entries(ev.payout.tiers).map(([losses,multiple])=>`<li>${e.legs.length-Number(losses)} of ${e.legs.length} correct: ${esc(multiple)}× entry fee</li>`).join('')}</ul><p>Base player-pick rates, checked ${esc(ev.payout.read_at)}. Ties, reboots and DNPs change the tier.</p><a href="https://www.prizepicks.com/help-center/payouts" target="_blank" rel="noopener">PrizePicks payout rules</a></details>` : '';
-    const math = prog ? "" : `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
+    const t2 = prog ? null : head2Of(e, c);
+    const math = prog ? "" : t2 ? `${head2Html(t2)}${tiers}` : `${values?`<div class="u-slip-metrics${head?' u-slip-head':''}">${values}</div>`:''}<p class="u-dim">${esc(ev ? ev.available ? 'Server-checked probabilities and payout. Expected return is not a win chance.' : ev.reason : 'Recheck to verify the payout and probability inputs.')}</p>${tiers}`;
     return `<section class="u-entry${ready ? " ready" : ""}${c && !c.ok && !prog ? " refused" : ""}${prog ? " building" : ""}" aria-label="${esc(e.label)} entry"><div class="u-entry-h"><span>${esc(e.label)}<small>${esc([...new Set(e.legs.map((l) => SPORTS[l.sport]))].join(" + "))} · ${plural(e.legs.length, "pick")}</small></span>${seg}</div>
-      ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1, head && head.legs ? head.legs[i] : null)).join("")}
+      ${e.legs.map((l, i) => legHtml(l, phase, c && c.open && c.open.legs ? c.open.legs[i] : null, i + 1, head && head.legs ? head.legs[i] : null, t2 && t2.legs ? t2.legs[i] : null)).join("")}
       <div class="u-entry-foot">${math}${entryP}${rules}${open}
         <div class="u-acts"><button class="u-btn${!open && can ? " u-gold" : ""}" type="button" ${can && !busy ? "" : "disabled"} data-u="track" data-id="${esc(e.key)}">${busy ? "Tracking" : "Track"}</button><button class="u-btn" type="button" ${ready ? "" : "disabled"} data-u="copy" data-id="${esc(e.key)}">${T.copyBusy ? "Checking" : "Copy"}</button></div></div></section>`;
   }
@@ -653,7 +749,7 @@
     const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
       ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label], ["Tracked", when(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="u-pick-body"><dl class="u-kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><ol class="u-time">${(r.timeline || []).map((t) => `<li><time>${esc(when(t.at))}</time>${esc(t.text)}</li>`).join("")}</ol></div>` : "";
-    return `<article class="u-pick"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}"><span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)} · ${esc(r.matchup)}</small></span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
+    return `<article class="u-pick${FACE_LG[r.sport] ? " u-pick-face" : ""}"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}">${faceHtml(r.sport, { key: r.nick, name: r.player, team: r.team, size: 32 })}<span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)}${r.platform === "prizepicks" ? " · " + lineKind(r.platform, r.line_type) : ""} · ${esc(r.matchup)}</small></span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
   }
   function picksTab() {
     const d = T.mine;
@@ -708,7 +804,9 @@
     return { over: list.filter((g) => g.value > line).length, under: list.filter((g) => g.value < line).length, push: list.filter((g) => g.value === line).length, n: list.length };
   }
   function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), n = x / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
-  function chartSvg(results, line, side, w) {
+  function chartSvg(results, line, side, w, opts) {
+    line = Number(line);
+    const median = opts && typeof opts.median === "number" && Number.isFinite(opts.median) ? opts.median : null;
     /* opponent names in full where they fit, each game's date under its name (audit 2026-11-04); otherwise angled as one
        "name · date" label, so a name is never cut to "benche" */
     const dateOf = (d) => (d.date ? shortDate(String(d.date)) : "");
@@ -717,19 +815,36 @@
     const slot0 = (w - 36) / Math.max(1, results.length), angled = flat * 6.2 > slot0 - 4;
     const longest = angled ? Math.max(0, ...results.map((d, i) => Math.min(names[i].length, 14) + (dates[i] ? dates[i].length + 3 : 0))) : flat;
     const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 184, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 38 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
-    const vals = data.map((d) => d.value), top = Math.max(line, ...vals, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
+    const vals = data.map((d) => d.value), closes = data.map((d) => d.closing).filter((c) => typeof c === "number"), top = Math.max(line, ...vals, ...closes, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
     const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
     const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
     let out = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`;
+    const boxes = [], CH = 6.4;                                   /* bars and value labels: the "Line" label never sits on them */
     for (let t = 0; t <= top; t += step) out += `<line class="grid" x1="${m.l}" x2="${w - m.r}" y1="${y(t)}" y2="${y(t)}"/><text x="${m.l - 6}" y="${y(t) + 3.5}" text-anchor="end">${Math.round(t * 10) / 10}</text>`;
     data.forEach((d, i) => {
       const x = m.l + slot * i + (slot - bw) / 2, yv = y(d.value), push = d.value === line, over = d.value > line, cls = push ? "b-push" : (side === "over" ? over : !over) ? "b-hit" : "b-miss";
       out += `<rect class="${cls}" x="${x}" y="${yv}" width="${bw}" height="${Math.max(base - yv, 1)}" rx="3"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${d.value}`)}</title></rect>`;
+      boxes.push([x - 2, yv - 1, x + bw + 2, base]);
+      if (i === data.length - 1) { const tw = String(d.value).length * CH; boxes.push([x + bw / 2 - tw / 2 - 2, yv - 15, x + bw / 2 + tw / 2 + 2, yv - 2]); }
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
+      if (typeof d.closing === "number") out += `<line class="close-mark" x1="${x - 3}" x2="${x + bw + 3}" y1="${y(d.closing)}" y2="${y(d.closing)}"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: closed at ${d.closing}, finished ${d.value}`)}</title></line>`;   /* lh-1: the line this game closed at */
       const day = dateOf(d);
       if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")) + (day ? " · " + day : ""))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 21}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>${day ? `<text class="date" x="${x + bw / 2}" y="${h - 7}" text-anchor="middle">${esc(day)}</text>` : ""}`;
     });
-    return out + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${y(line)}" y2="${y(line)}"/><text class="line-lab" x="${w - m.r}" y="${m.t - 10}" text-anchor="end">Line ${esc(line)}</text></svg>`;
+    /* audit 2026-11-05 (B6): the dashed line IS the offered line, labelled on the line itself; the median of the games shown is its
+       own dotted line with its own label, so the two never read as one */
+    const ly = y(line), my = median != null ? y(median) : null, near = my != null && Math.abs(my - ly) < 13;
+    const lyLab = Math.max(m.t - 4, ly - 4), myLab = my == null ? null : near && my >= ly ? Math.min(base - 3, my + 12) : Math.max(m.t - 4, my - 4);
+    const medTxt = median == null ? "" : `Median ${Math.round(median * 10) / 10}`;
+    const med = my == null ? "" : `<line class="median-mark" x1="${m.l}" x2="${w - m.r}" y1="${my}" y2="${my}"/><text class="median-lab" x="${m.l + 4}" y="${myLab}">${esc(medTxt)}</text>`;
+    if (my != null) boxes.push([m.l + 2, myLab - 11, m.l + 6 + medTxt.length * CH, myLab + 3]);
+    /* follow-up 2026-11-06 (B6): the "Line" label goes on the line, right then left, above then below - the first spot that covers
+       no bar, no value and no median label; when the bars fill every spot it sits in the top margin, over the plot */
+    const lt = `Line ${line}`, lw = lt.length * CH, hits = (b) => boxes.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+    const spot = (anchor, yb) => { const x0 = anchor === "end" ? w - m.r - lw : m.l + 4; return { anchor, x: anchor === "end" ? w - m.r : m.l + 4, y: yb, box: [x0, yb - 10, x0 + lw, yb + 3] }; };
+    const cands = [spot("end", lyLab), spot("end", ly + 12), spot("start", lyLab), spot("start", ly + 12)].filter((c) => c.box[1] >= m.t - 14 && c.box[3] <= base - 1);
+    const pick = cands.find((c) => !hits(c.box)) || spot("end", m.t - 8);
+    return out + med + `<line class="line-mark" x1="${m.l}" x2="${w - m.r}" y1="${ly}" y2="${ly}"/><text class="line-lab" x="${pick.x}" y="${pick.y}" text-anchor="${pick.anchor}">${esc(lt)}</text></svg>`;
   }
   function tilesHtml(rec, side) {
     const s = rec.scout, ln = P.doc, m = ln && ln.market && ln.market.available ? (side === "under" ? ln.market.p_under : ln.market.p_over) : null;
@@ -802,10 +917,12 @@
   }
   /* SCOUT_GENIE (features.genie, owner switch): one question about this line, answered by the server from this line's payload only,
      every number checked there; a daily cap per member. Off, the tab is the evidence guide alone, unchanged. */
-  const G = { key: null, q: "", busy: false, ans: null, err: null, quota: null };
+  /* seq: one number per question; a reply whose seq is no longer current is dropped (bug sweep 2026-11-06 #14: a line change
+     mid-question left busy=true for good, a skeleton on every line until a reload) */
+  const G = { key: null, q: "", busy: false, ans: null, err: null, quota: null, seq: 0 };
   function askHtml(rec) {
     const k = rec.key + "|" + rec.offer.platform + "|" + P.side;
-    if (G.key !== k) Object.assign(G, { key: k, ans: null, err: null });
+    if (G.key !== k) { Object.assign(G, { key: k, ans: null, err: null, busy: false }); G.seq++; }
     const left = G.quota ? `<p class="u-dim">${G.quota.remaining_questions} of ${G.quota.questions_limit} questions left today.</p>` : "";
     const sugg = ["What is the projection?", "How often did this line hit?", "What is the head-to-head?", "Is there a better line elsewhere?"];
     // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
@@ -820,19 +937,19 @@
     if (!rec || G.busy) return;
     G.q = q;
     if (!q) { G.err = "Type a question about this line first."; paintDrawer(); return; }
-    const k = G.key;
+    const tok = ++G.seq;
     Object.assign(G, { busy: true, err: null, ans: null }); paintDrawer();
     try {
       const d = await api("genie", { sport: rec.sport, book: rec.offer.platform, id: rec.offer.offer_id, revision: rec.offer.revision, side: P.side, question: q });
-      if (G.key !== k) return;
+      if (G.seq !== tok) return;
       G.ans = d.sentences; G.quota = d.quota; G.intro = d.intro || null;
     } catch (e) {
-      if (G.key !== k) return;
+      if (G.seq !== tok) return;
       const c = e instanceof ApiError ? e.status : 0;
       if (c === 429 && e.doc && e.doc.quota) G.quota = e.doc.quota;
       G.err = c === 429 ? (e.doc && e.doc.error === "daily_limit_reached" ? (R.me?.features?.genie_persona ? "\u{1F9DE} Your wishes are spent for today. They reset at midnight UTC." : "You have used today's questions. They reset at midnight UTC.") : "Too many questions in a minute. Try again shortly.")
         : c === 409 ? "This line changed. Reopen it to ask about the current offer." : c === 413 ? "Keep the question under 300 characters." : "The Genie is unavailable right now.";
-    } finally { if (G.key === k) { G.busy = false; paintDrawer(); } }
+    } finally { if (G.seq === tok) { G.busy = false; paintDrawer(); } }
   }
   function genieHtml(rec) {
     const doc=P.doc, s=rec.scout, side=P.side, t=tallyOf(rec,10), list=siblings(rec), other=list.filter(r=>r.offer.platform!==rec.offer.platform);
@@ -852,9 +969,14 @@
     const picker = distinct.length > 1 ? `<span class="u-lines" role="group" aria-label="Lines on this prop">${distinct.map((o) => `<button type="button" aria-pressed="${o.offer.line === rec.offer.line}" data-u="pline" data-id="${esc(offerKey(o.offer.platform, o.offer.offer_id))}">${esc(o.offer.line)}</button>`).join("")}</span>` : `<b class="u-line">${esc(rec.offer.line)}</b>`;
     const refusal = addRefusal(rec, side), inSlip = T.legs.find((l) => l.id === legId(rec, side)), note = started(rec) ? `<p class="u-note">${esc(startWord(rec))} at ${esc(when(rec.event.start_utc))}</p>` : "";
     const scroll = $("u-drawer-body") ? $("u-drawer-body").scrollTop : 0;
+    /* bug #56: the drawer is modal, so its toasts live inside it (as the tray's do); the same node is kept across repaints so a
+       toast raised just before a repaint (padd: say() then paintDrawer()) stays on screen */
+    let toast = box.querySelector(".u-toast");
+    if (!toast) { toast = document.createElement("div"); toast.className = "u-toast"; toast.setAttribute("role", "status"); toast.setAttribute("aria-live", "polite"); }
     keepFocus(box, () => { box.innerHTML = `<div class="u-d-head"><div><h2 id="u-drawer-title">${esc(rec.player.name)}</h2>${picker}<p>${esc(SPORTS[rec.sport])} · ${esc(rec.market.stat_label)} · ${esc(rec.market.period_label)} · ${esc(rec.offer.platform_label)}</p><p>${esc(rec.player.team)}${rec.player.role ? " " + esc(rec.player.role) : ""} · ${esc(rec.event.label)}${rec.event.competition ? " · " + esc(rec.event.competition) : ""} · ${esc(when(rec.event.start_utc))}${rec.event.best_of ? ` · BO${esc(rec.event.best_of)}` : ""}${rec.offer.moved_from != null ? ` · Moved from ${esc(rec.offer.moved_from)}` : ""}</p></div><button class="u-x" type="button" aria-label="Close research" data-u="pclose">${X_ICON}</button></div>
       <div class="u-tabs" role="tablist" aria-label="Research sections">${tabs}</div><div class="u-d-body" id="u-drawer-body" tabindex="0">${note}${body}</div>
       <div class="u-d-foot">${refusal && !inSlip ? `<p class="u-dim" role="status">${esc(refusal)}</p>` : ""}<div class="u-acts">${R.me.features?.book_links&&rec.offer.platform==='underdog'&&!refusal?'<button class="u-btn" type="button" data-u="open-line">Open in Underdog</button>':''}<button class="u-btn" type="button" data-u="tray">Slip tray · ${T.legs.length}</button><button class="u-btn u-gold" type="button" ${refusal && !inSlip ? 'aria-disabled="true"' : ""} data-u="padd">${inSlip ? "Remove from slip tray" : `Add ${cap(side)} ${esc(rec.offer.line)} on ${esc(rec.offer.platform_label)}`}</button></div></div>`; });
+    box.appendChild(toast);
     $("u-drawer-body").scrollTop = scroll;
     const res = seriesOf();
     if (res) box.querySelectorAll("[data-chart]").forEach((el) => { el.innerHTML = chartSvg(res.slice(0, +el.dataset.n), rec.offer.line, side, Math.max(240, Math.round(el.clientWidth))); });
@@ -917,6 +1039,21 @@
     };
     place();
     wide.addEventListener("change", place);
+    /* phone: the bar sits on top of a fixed bottom nav (CS2 sections) or the Sports slip-draft bar when one is on screen */
+    const lift = () => {
+      let h = 0;
+      for (const el of [$("modes"), $("sw-tray")]) {
+        if (!el || el.hidden) continue;
+        const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+        if (cs.position === "fixed" && cs.display !== "none" && r.height && r.bottom >= innerHeight - 2) h = Math.max(h, Math.round(r.height));
+      }
+      document.documentElement.style.setProperty("--u-tray-lift", h + "px");
+    };
+    lift();
+    addEventListener("resize", guard(lift));
+    new MutationObserver(guard(lift)).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    document.addEventListener("scout-classic-mount", guard(lift));
+    setInterval(guard(lift), 2000);
     const head = document.querySelector("header.sw-top");
     if (head) new MutationObserver(() => { if (wide.matches && !head.contains($("u-tray-btn"))) place(); }).observe(head, { childList: true });
   }
@@ -1106,13 +1243,14 @@
   function lolRow(x, sub, alts) {
     const rec = LOL.rec(x), side = x.pick_side === "Over" ? "over" : x.pick_side === "Under" ? "under" : null;
     const p = side === "under" ? x.p_under : x.p_over, letter = lolGrade(x), lean = /^Lean/.test(letter) || !letter;
-    const pick = !x.pick_offered ? `<span class="u-dim">${esc(x.pick_side || "No pick")}${x.pick_side ? " not offered" : ""}</span>` : `${lean ? "Lean " : ""}${esc(x.pick_side)} <b>${pct(p)}</b>`;
+    const pick = x.one_sided ? `<span class="u-dim" title="${esc(x.stake_reason || "")}">${esc(x.one_sided)}</span>`           /* os-1: never graded */
+      : !x.pick_offered ? `<span class="u-dim">${esc(x.pick_side || "No pick")}${x.pick_side ? " not offered" : ""}</span>` : `${lean ? "Lean " : ""}${esc(x.pick_side)} <b>${pct(p)}</b>`;
     return `<div class="u-row u-lol${sub ? " u-sub" : ""}" data-k="${esc(x.key)}" tabindex="0" role="button" aria-label="${esc(x.player + " " + x.stat_name + " " + x.scope + " " + x.platform_label + " " + x.line)}">
-      <span class="u-g${lean ? " lean" : ""}">${esc(lean ? "L" : letter)}</span>
+      <span class="u-g${lean ? " lean" : ""}">${x.one_sided ? "--" : esc(lean ? "L" : letter)}</span>
       <div class="u-who"><b>${esc(x.player)}</b><small>${esc(x.team || "")}${x.role ? " · " + esc(x.role) : ""} vs ${esc(x.opponent || "")}</small><small>${esc(new Date(x.start).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }))}</small>${alts || ""}</div>
       <div class="u-mkt">${esc(x.stat_name)}<small>${esc(x.scope)} · ${esc(x.platform_label)}${x.line_type !== "Standard" ? " · " + esc(x.line_type) : ""}</small></div>
       <div class="u-num"><span class="u-k">Line</span><b>${esc(x.line)}</b></div><div class="u-num"><span class="u-k">Proj</span>${x.projection == null ? "--" : Number(x.projection).toFixed(1)}</div>
-      <div class="u-pick-c">${pick}</div>${hitsHtml(rec, side)}${booksCell(rec)}<div class="u-stake">${esc(letter || "--")} · ${esc(x.units)}U</div>
+      <div class="u-pick-c">${pick}</div>${hitsHtml(rec, side)}${booksCell(rec)}<div class="u-stake">${x.one_sided ? esc(x.one_sided) : `${esc(letter || "--")} · ${esc(x.units)}U`}</div>
       <div class="u-act">${researchBtn()}${trayBtn(rec)}${typeof ctBtnHtml === "function" ? ctBtnHtml(x) : ""}</div></div>`;
   }
   function lolRows() {
@@ -1322,13 +1460,13 @@
     mountShell();
     (PAGE === "cs2" ? hookCs2 : PAGE === "lol" ? hookLol : hookSports)();     /* on before the first await: a draw in the meantime is not missed */
     try { R.me = await api("me"); } catch (e) { R.me = null; }
-    if (!R.me) { $("u-tray-btn").hidden = true; window.scoutBootDone?.(); return; }        /* not a member the API knows: the page stays as it is */
+    if (!R.me) { $("u-tray-btn").hidden = true; window.scoutClassicMount?.(); window.scoutBootDone?.(); return; }        /* not a member the API knows: the page stays as it is */
     try {
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, shareSlip });
-    } catch (e) { console.warn("Research hub unavailable; original tools remain available"); }
+        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
+    } catch (e) { window.scoutClassicMount?.(); console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();
     paintTray();
@@ -1336,5 +1474,9 @@
     else if (PAGE === "lol") startLol();
     else if (PAGE === "sports") startSports();
   }
-  start().catch(() => { window.scoutBootDone?.(); console.warn("Workspace unavailable; original tools remain available"); });
+  /* audit 2026-11-05: on the CS2 page the classic page is built only when it is shown (server.upgrade_page). Built later in this visit,
+     it gets the same hooks the page start gives it. */
+  let started2 = false;
+  document.addEventListener("scout-classic-mount", guard(() => { if (PAGE !== "cs2") return; hookCs2(); if (started2) startCs2(); }));
+  start().then(() => { started2 = true; }, () => { window.scoutClassicMount?.(); window.scoutBootDone?.(); console.warn("Workspace unavailable; original tools remain available"); });
 })();

@@ -208,10 +208,15 @@ def row_view(targets, items, event, now, league, dnp, fallback=False):
     books = book_list(head, items, event, now, dnp)
     at = {}
     cache = {}
+    lists = {head.line: books}
     for rid, t in targets:
-        key = (t.line, t.platform if any(b["p"] == t.platform and b["in"] for b in books) else None)
+        # the exclusion is decided on the book list actually used at t.line (bug sweep 2026-11-06 #8): the head's list
+        # can hold a different (stale) quote of t's platform, which let t's own book into its own consensus
+        if t.line not in lists:
+            lists[t.line] = book_list(t, items, event, now, dnp)
+        tb = lists[t.line]
+        key = (t.line, t.platform if any(b["p"] == t.platform and b["in"] for b in tb) else None)
         if key not in cache:
-            tb = books if t.line == head.line else book_list(t, items, event, now, dnp)
             cache[key] = consensus_at(t, tb, league, exclude=key[1])
         at[rid] = cache[key]
     head_c = at[pick[0][0]]

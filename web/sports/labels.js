@@ -100,6 +100,7 @@
     if (/^scope /.test(s)) return "Part-game line (only full games are settled)";
     if (/^promotional/.test(s)) return "Promotional line (never settled with ordinary lines)";
     if (/^variant /.test(s)) return "Alternate payout line (kept apart)";
+    if (/^one-sided line/.test(s)) return "One side only (not graded)";     // cap-2, owner 2026-11-06
     if (/event not resolved/.test(s)) return "Game not matched yet";
     if (/player not resolved/.test(s)) return "Player not matched yet";
     if (/^no side offered/.test(s)) return "No side open";

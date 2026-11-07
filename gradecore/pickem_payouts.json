@@ -1,0 +1,46 @@
+{
+  "_about": "Pick'em payout tables (only books marked verified are used) for the competitor-spec features (SCOUT_PICKEM_EV, SCOUT_BEST_SLIPS, SCOUT_SLIP_HEADER math). Read by gradecore.payouts: every book marked verified here is laid over gradecore.payouts.CONFIG and pickem_config(). Flex tables are keyed by LOSSES -> gross payout multiple (entry fee included). Standard lines only: goblin / demon / promo lines and same-game combinations can pay differently and stay unavailable unless their payout is supplied.",
+  "prizepicks": {
+    "default_entry": "power",
+    "entries": {
+      "power": {"2": 3.0, "3": 6.0, "4": 10.0, "5": 20.0, "6": 37.5},
+      "flex": {
+        "2": {"0": 2.0, "1": 0.5},
+        "3": {"0": 3.0, "1": 1.0},
+        "4": {"0": 6.0, "1": 1.5},
+        "5": {"0": 10.0, "1": 2.0, "2": 0.4},
+        "6": {"0": 25.0, "1": 2.0, "2": 0.4}
+      }
+    },
+    "source": "https://www.prizepicks.com/help-center/payouts",
+    "page_date": "2026-10-19",
+    "read_at": "2026-11-05",
+    "version": "pp-payouts-2026-10-19",
+    "verified": true,
+    "verified_at": "2026-11-05",
+    "verified_by": "owner sign-off",
+    "not_in_app": {"flex": [2]},
+    "status": "VERIFIED by owner sign-off 2026-11-05 (verbatim: \"Mark the PrizePicks help-center payout table as verified so PrizePicks gets EV and break-even.\"). Source https://www.prizepicks.com/help-center/payouts, page dated 2026-10-19: Power 2-6 = 3/6/10/20/37.5x, Flex tiers as in entries.flex. This sign-off supersedes the 2026-11-04 rule (main c865e1b) for this table only. Standard lines only: goblin / demon / promo lines and same-game lineups pay unpublished multipliers and stay unavailable.",
+    "caveats": ["DNPs and reboots reduce the pick count (lower multiplier)", "ties can lower the payout one level", "goblin / demon / promo / same-game lineups can pay differently", "Flex 2-pick appears on the help center but not in the in-app view of 2026-11-05"]
+  },
+  "underdog": {
+    "default_entry": "standard",
+    "entries": {
+      "standard": {"2": 3.5, "3": 6.5, "4": 12.0, "5": 20.0, "6": 35.0, "7": 65.0, "8": 120.0},
+      "flex": {
+        "3": {"0": 3.25, "1": 1.09},
+        "4": {"0": 6.0, "1": 1.4},
+        "5": {"0": 10.0, "1": 2.5},
+        "6": {"0": 25.0, "1": 2.6, "2": 0.25},
+        "7": {"0": 40.0, "1": 2.75, "2": 0.5},
+        "8": {"0": 80.0, "1": 3.0, "2": 1.0}
+      }
+    },
+    "source": "https://help.underdogsports.com/en/articles/13780101-pick-em-standard-flex-entry-payouts",
+    "read_at": "2026-10-23T20:35:00Z",
+    "version": "ud-payouts-2026-10-23",
+    "verified": true,
+    "status": "Verified from the Underdog help center on 2026-10-23 (recorded in gradecore/payouts.py UD_*). A re-read on 2026-11-05 was refused by the site (HTTP 403) and was not worked around; the 2026-10-23 table stands.",
+    "caveats": ["how several pick modifiers combine is not published (payouts.MODIFIER_RULE is an assumption)"]
+  }
+}

@@ -104,7 +104,7 @@ def test_bug3_started_or_moved_research_legs_block_copy(tmp_path):
       const res = {};
       store.set("cs2s_slip", [leg("a"), leg("b", {bk: null, st: past, now: {status: "research", note: ""}})]);
       """ + COPY_CLICK + FLUSH + """
-      res.started = {copied: C.length, asks: A.slice(), state: store.get("cs2s_slip", [])[1].now.status};
+      res.started = {copied: C.length, asks: A.slice(), left: store.get("cs2s_slip", []).map(x => x.p), toasts: T.slice()};
       store.set("cs2s_slip", [leg("a"), leg("c", {bk: null, now: {status: "research", note: "Kept at 30.5; Underdog shows 32.5"}})]);
       """ + COPY_CLICK + FLUSH + """
       res.moved = {copied: C.length, asks: A.slice()};
@@ -114,7 +114,9 @@ def test_bug3_started_or_moved_research_legs_block_copy(tmp_path):
       res.checks = F.filter(u => u.includes("line_check")).length;
       return res;
     })()""")
-    assert out["started"]["copied"] == 0 and out["started"]["state"] == "started", out
+    # audit 2026-11-05 S5: the started leg blocks that Copy and then leaves the slip by itself, named in a toast
+    assert out["started"]["copied"] == 0 and out["started"]["left"] == ["a"], out
+    assert any(t.startswith("Removed 1 started pick: b") for t in out["started"]["toasts"]), out
     assert out["moved"]["copied"] == 0 and len(out["moved"]["asks"]) == 2, out
     assert out["typed"]["copied"] == 1                                   # a plain research line copies on the server's OK
     assert out["checks"] == 3          # one check per platform leg per Copy; started / research legs are never fetched
@@ -213,11 +215,11 @@ def test_u11_u13_u5_slip_panel_content(tmp_path):
       return {panel: $("#slip").innerHTML, page: $("#myslip").innerHTML, out: SLIP_OUT.reduced[0]};
     })()""")
     h = out["panel"]
-    assert "<h4>Slip · Underdog · 3-pick</h4>" in h and "Bet slip" not in h                          # U13
+    assert "<h4>Slip · Underdog · 2-pick</h4>" in h and "Bet slip" not in h                          # U13 (the started third leg removed)
     assert "slippay" not in h and "payout" not in h.lower()                                            # U11
-    assert "starts in 1h 20m" in h and "first lock in 1h" in h and "2 Overs · 1 Under" in h            # U5 / U4
-    assert "Started – remove" in h and 'class="slipfoot"' in h and "Est. chance" in h                  # U5 / U1 footer
-    assert "Your slip · Underdog · 3-pick" in out["page"] and 'id="slipcopy"' not in out["page"]      # U1 page card, no duplicate ids
+    assert "starts in 1h 20m" in h and "first lock in 1h" in h and "1 Over · 1 Under" in h             # U5 / U4
+    assert "Started – remove" not in h and "c</b>" not in h and 'class="slipfoot"' in h and "Est. chance" in h   # U5 / U1 footer; audit 2026-11-05: the started leg is gone
+    assert "Your slip · Underdog · 2-pick" in out["page"] and 'id="slipcopy"' not in out["page"]      # U1 page card, no duplicate ids
     assert out["out"] == ""                                                                            # U13 neutral push/void pill
 
 

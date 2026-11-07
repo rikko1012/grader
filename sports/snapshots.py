@@ -497,7 +497,8 @@ def status_label(e, now):
 
 def offer_view(rid, o, meta):
     ok, why = capabilities.gate(o)
-    return {"record_id": rid, "platform": o.platform, "offer_id": o.offer_id, "line": o.line, "variant": o.variant,
+    return {"record_id": rid, "platform": o.platform, "offer_id": o.offer_id, "line": o.line,
+            "variant": capabilities.variant_of(o),          # S1/S2: a stored one-sided Underdog line reads one_sided
             "promotional": o.promotional, "availability": o.availability, "scope": o.scope,
             "source_stat": o.source_stat, "rule_version": o.rule_version, "revision": meta["revision"],
             "sides": [{"side": s.side, "offered": s.offered, "price_format": s.price_format, "price": s.price,
@@ -754,7 +755,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
             players[pid] = rs[0][1]
     cur_team = {}
     team_players = defaultdict(set)
-    for _, m, _ in _latest(con, "membership", "", (), now):
+    # ESPN roster memberships of THIS league only, filtered in SQL: the history job's one-game memberships (one per
+    # player per game, source espn_gamelog) are never decoded on a board build (bug sweep 2026-11-06 #44)
+    for _, m, _ in _latest(con, "membership", "source = 'espn' AND player_id LIKE ?", [f"{league}:%"], now):
         if m.valid_to is None and m.team_id in teams and m.source == "espn":
             cur_team[m.player_id] = m.team_id
             team_players[m.team_id].add(m.player_id)
@@ -801,10 +804,12 @@ def build(con, league, now=None, base=None, history=True, results=True):
         if row["team"] is None and o.team:              # N9: the first offer may carry no team (Kalshi); any later one does
             row["team"] = o.team
         row_items[key].append((rid, o, m))
-        if not o.promotional and o.platform != "kalshi" and o.variant in capabilities.ORDINARY_VARIANTS:
+        if not o.promotional and o.platform != "kalshi" and capabilities.is_ordinary(o):
             row_targets[key].append((rid, o))
         v = offer_view(rid, o, m)
-        ch = _choose(attached.get(rid, []))
+        # owner 2026-11-06: a one-sided line (Over only / Under only) is shown with no forecast - a forecast saved for
+        # it before cap-2 is never attached, so it shows no Scout chance, grade, letter or stake
+        ch = None if capabilities.is_one_sided(o) else _choose(attached.get(rid, []))
         if ch:
             fc, frid, frev = ch[0]
             v["forecast_id"] = fc.forecast_id
@@ -815,7 +820,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
             row["promotional"].append(v)
         elif o.platform == "kalshi":
             row["kalshi"].append(v)
-        elif o.variant in capabilities.ORDINARY_VARIANTS:
+        elif capabilities.is_ordinary(o):
             row["quotes"].append(v)
         else:
             row["alternates"].append(v)
@@ -833,6 +838,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
     mv_stats = {"rows": 0, "with_consensus": 0, "books_listed": 0, "books_in_consensus": 0}
     for row in markets_rows.values():
         if events[row["event_id"]][1].start_utc <= now:     # started games leave the board (shown as started on the slate)
+            continue
+        if row.get("scope", "full_game") != "full_game":
+            # S1/S2 (audit 2026-11-05): quarter / half lines (Underdog period_1_points = 1Q Points) keep their real
+            # scope in the store and on the player page, but never sit on the full-game board, sheets or workspace
             continue
         ev_ = events[row["event_id"]][1]
         if row["team_id"] not in (ev_.home_team_id, ev_.away_team_id):
@@ -916,7 +925,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
         for r in rows:
             for q in r["quotes"]:
                 plat[q["platform"]] += 1
-            plat["kalshi"] += r["kalshi_rungs"]
+            if r["kalshi_rungs"]:                       # B8: a source with nothing on this game is not listed (no "Kalshi 0")
+                plat["kalshi"] += r["kalshi_rungs"]
         inj = []
         for tid in (e.away_team_id, e.home_team_id):
             for pid in sorted(team_players.get(tid, ())):
@@ -1023,7 +1033,12 @@ def build(con, league, now=None, base=None, history=True, results=True):
                        "opponent": _team_view(teams, e.away_team_id if tid == e.home_team_id else e.home_team_id)
                        if tid in (e.home_team_id, e.away_team_id) else None}
         games = player_games(con, league, pid, now, teams, ev_cache) if history else []
-        vrows = board_view.player_rows(rows, games)
+        opp_ids = {}                                     # tonight's opponent per row: the board's H2H column (display only)
+        for r in rows:
+            e_ = events[r["event_id"]][1]
+            t_ = r.get("team_id")
+            opp_ids[r["key"]] = (e_.away_team_id if t_ == e_.home_team_id else e_.home_team_id) if t_ in (e_.home_team_id, e_.away_team_id) else None
+        vrows = board_view.player_rows(rows, games, opp_ids)
         view_out.add(vrows)
         for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
             # sg-2 history rules (thin / stale) read the bv-1 row only when the history was actually read
@@ -1139,7 +1154,8 @@ def compact_row(r, league=None):
     nv = board_view.contain_reason(league, r["stat"]) if league else None
     return {**({"nv": nv} if nv else {}), "k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
             "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
-            "q": [_ud_quote(compact_quote(q), q, league) for q in r["quotes"]], "kn": [compact_quote(q) for q in r["kalshi_near"]],
+            "q": [_ud_quote(compact_quote(q), q, league) for q in r["quotes"]],
+            "kn": [compact_quote(q) for q in r["kalshi_near"]],
             "kr": r["kalshi_rungs"], "alt": r["alternates"], "promo": r["promotional"], "mk": r.get("market"),
             "sc": r.get("sc", 0), "hid": scout_chance.hidden_reason(r)}
 
@@ -1378,7 +1394,7 @@ def same_line_forecasts(row, forecasts):
                 by_line[k] = f["forecast_id"]
     n = 0
     for q in row.get("quotes") or []:
-        if q.get("forecast_id"):
+        if q.get("forecast_id") or capabilities.is_one_sided(q):    # owner 2026-11-06: one-sided lines stay ungraded
             continue
         fid = by_line.get(round(float(q["line"]), 3))
         if fid:
@@ -1414,6 +1430,10 @@ def no_forecast_reason(row, q, run):
     if row.get("capability") != "supported":
         return "Market not supported by the Scout model" + (f": {row['capability_reason']}" if row.get(
             "capability_reason") else "")
+    if capabilities.is_one_sided(q):                   # owner 2026-11-06: labelled by its side, never graded
+        side = capabilities.only_side(q)
+        return ("Over only" if side == "over" else "Under only" if side == "under" else "One side only") + \
+            " line - Scout grades lines that offer both sides"
     if not q.get("gradable"):
         why = q.get("not_gradable_because") or []
         return "Line not modelled: " + (why[0] if why else "not an ordinary line")
@@ -1611,6 +1631,25 @@ def settled_forecast_links(con, setts):
     return links, fcs
 
 
+def one_sided_forecast(con, fc, cache=None):
+    """Owner 2026-11-06 (cap-2): True for a forecast made for a STORED one-sided Underdog line (Over only / Under only).
+    Such lines are not graded, so a forecast saved for one before cap-2 never enters the record or the ledger. Only a
+    forecast listing exactly one side can be one: just those decode their offer record (bounded, read-only)."""
+    if len(tuple(getattr(fc, "sides_available", ()) or ())) != 1:
+        return False
+    cache = {} if cache is None else cache
+    for orid in getattr(fc, "offer_snapshot_ids", ()) or ():
+        if orid not in cache:
+            try:
+                o = store.get(con, orid)
+            except Exception:                           # noqa: BLE001 - an unreadable revision is not evidence
+                o = None
+            cache[orid] = bool(o is not None and getattr(o, "KIND", None) == "offer" and capabilities.is_one_sided(o))
+        if cache[orid]:
+            return True
+    return False
+
+
 def results_view(con, league, setts, now, base_meta, rows_only=False):
     """One ledger row per (forecast, settled offer side pair). Projection accuracy and probability accuracy are computed
     per forecast; returns appear only where a settlement records an actual stake and payout."""
@@ -1620,12 +1659,17 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
     for s in setts:
         by_offer[(s.platform, s.offer_id)].append(s)
     links, fcs = settled_forecast_links(con, setts)
+    os_cache = {}
     for (plat, oid), ss in by_offer.items():
         for s in ss[:1]:
             for fid in links.get((plat, oid), ()):
                 fc = fcs.get(fid)
                 if fc is None or fid in seen:
                     continue
+                if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
+                    continue                            # S1/S2: quarter / half lines never count
+                if plat == "underdog" and one_sided_forecast(con, fc, os_cache):
+                    continue                            # cap-2 (owner 2026-11-06): one-sided lines are not graded
                 seen.add(fid)
                 sides = {x.side: x for x in ss}
                 any_s = ss[0]

@@ -272,11 +272,15 @@ def ud_offers(body, lg, observed_at, resolver=None) -> Batch:
         if promo:
             extras.append(("non_discounted_stat_value", _f(ln.get("non_discounted_stat_value"))))
         lt = ln.get("line_type") or "balanced"
+        listed = {x.get("choice") for x in ln.get("options") or []} & {"higher", "lower"}
+        variant = "balanced" if lt == "balanced" else "alternate"
+        if variant == "balanced" and len(listed) == 1:
+            variant = "one_sided"              # S1/S2: a higher-only (or lower-only) line is its own market, not Standard
         b.add(OfferSnapshot(
             platform="underdog", offer_id=f"ud:{key}", market_id=ln.get("entry_stable_id"), league=league,
             event_id=eid, event_ref=title or None, player_id=pid, player_name=name, player_key=names.key(name),
             team=team, stat=stat, source_stat=st.get("stat") or "", scope=scope, line=value, sides=tuple(sides),
-            variant="balanced" if lt == "balanced" else "alternate", promotional=promo,
+            variant=variant, promotional=promo,
             availability="open" if ln.get("status") == "active" else "suspended",
             rule_version=RULE_VERSIONS["underdog"], listed_start_utc=start, listed_time_kind="start",
             source_updated_at=max(upd) if upd else None, observed_at=observed_at, source_time_unknown=not upd,

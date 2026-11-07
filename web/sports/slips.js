@@ -13,7 +13,15 @@
   function store(k, v) { try { if (v === undefined) return JSON.parse(LS.getItem(k) || "null"); LS.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
   function ctx() { return { league: $("ss-league").value, platform: $("ss-platform").value, entry_type: $("ss-entry").value }; }
   function draftKey() { var c = ctx(); return "ss:draft:" + c.league + ":" + c.platform; }
-  function getDraft() { return store(draftKey()) || { legs: [] }; }
+  var prunedNote = "";
+  function getDraft() {                       // audit 2026-11-05 S5: a started pick leaves the draft by itself (tray.js pruneStarted)
+    var d = store(draftKey()) || { legs: [] }, T = window.SportsTray;
+    if (T && T.pruneStarted && d.legs && d.legs.length) {
+      var r = T.pruneStarted(d);
+      if (r.gone.length) { store(draftKey(), r.draft); d = r.draft; prunedNote = T.goneText(r.gone); lastCheck = null; }   // leg positions moved
+    }
+    return d;
+  }
   function setDraft(d) { d.saved_at = new Date().toISOString(); store(draftKey(), d); renderDraft(); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function int(n) { return n == null || !isFinite(n) ? "-" : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
@@ -152,7 +160,8 @@
   }
   // a reply for another league / platform (the member switched while it loaded) or for a page that was left is dropped
   var SEQ = { pool: 0, check: 0, build: 0 };
-  function stale(kind, n, key, el) { return n !== SEQ[kind] || key !== draftKey() || !el || !el.isConnected; }
+  // bug #52: the page check runs first - once the studio markup is gone draftKey() (ctx() -> $("ss-league").value) would throw
+  function stale(kind, n, key, el) { return !el || !el.isConnected || !$("ss-league") || n !== SEQ[kind] || key !== draftKey(); }
   async function loadPool() {
     var el = $("ss-pool"); el.innerHTML = '<div class="ss-skel" aria-label="Loading picks"></div>';
     var n = ++SEQ.pool, key = draftKey();
@@ -222,13 +231,13 @@
       return "<li><span>" + esc(r.outcome) + "</span><span class=ss-num>" + (r.multiple != null ? esc(r.multiple) + "x" : esc(r.text || "")) + (r.multiple != null && r.text ? " - " + esc(r.text) : "") + "</span></li>";
     }).join("") + "</ul>";
   }
-  // N8: expected return at the published payout (Underdog), or why there is none (PrizePicks: in-app payouts only)
+  // N8: expected return at the published payout (Underdog table; PrizePicks' verified help-center table), or why there is none
   function mult2(x) { return (Math.round(x * 100) / 100).toFixed(2) + "x"; }
   function returnText(er, platform) {
-    if (platform === "prizepicks") return '<p class="ss-er">Payout not published<small>PrizePicks shows lineup payouts in the app only.</small></p>';
     if (!er) return "";
-    if (er.value != null && er.shown) return '<p class="ss-er">Expected return at the published payout - research estimate: <strong class="ss-num">' + mult2(er.value) + "</strong> the entry<small>From each pick's chance and Underdog's published payout table; picks assumed independent. Not a profit figure.</small></p>";
-    return '<p class="ss-er">Expected return at the published payout: not shown<small>' + esc(er.why || "Underdog adjusts this payout for the picks' multipliers; the app shows the exact figure") + "</small></p>";
+    var book = platform === "prizepicks" ? "PrizePicks" : "Underdog", owns = platform === "prizepicks" ? "PrizePicks'" : "Underdog's";
+    if (er.value != null && er.shown) return '<p class="ss-er">Expected return at the published payout - research estimate: <strong class="ss-num">' + mult2(er.value) + "</strong> the entry<small>From each pick's chance and " + owns + " published payout table; picks assumed independent. Not a profit figure.</small></p>";
+    return '<p class="ss-er">Expected return at the published payout: not shown<small>' + esc(er.why || (book + " adjusts this payout for the picks; the app shows the exact figure")) + "</small></p>";
   }
   function rankingNote(b) {
     var r = b.ranking;
@@ -279,11 +288,12 @@
     var d = getDraft(), c = ctx(), el = $("ss-draft");
     $("ss-draft-ctx").textContent = "- " + LABEL[c.platform] + " " + c.league.toUpperCase() + " " + (d.entry_type || c.entry_type);
     pplSync();
-    if (!d.legs.length) { el.innerHTML = '<p class="ss-empty">Empty. Use a suggestion to start a slip.</p>'; $("ss-copy").disabled = true; return; }
+    var note = prunedNote ? '<p class="ss-note" role="status">' + esc(prunedNote) + "</p>" : ""; prunedNote = "";
+    if (!d.legs.length) { el.innerHTML = note + '<p class="ss-empty">Empty. Use a suggestion to start a slip.</p>'; $("ss-copy").disabled = true; return; }
     $("ss-copy").disabled = false;
     var probs = {};
     (lastCheck && lastCheck.problems || []).forEach(function (p) { if (p.leg != null) (probs[p.leg] = probs[p.leg] || []).push(p); });
-    el.innerHTML = '<ul class="ss-legs">' + d.legs.map(function (l, i) {
+    el.innerHTML = note + '<ul class="ss-legs">' + d.legs.map(function (l, i) {
       var extra = '<span class="ss-meta">' + udLegLink(i, l) + '<button class="ss-btn ss-small ss-quiet" type="button" data-rm="' + i + '">Remove</button> ' +
         '<label>Try line <input type="number" step="0.5" data-line="' + i + '" value="' + esc(l.line) + '" aria-label="Custom line for ' + esc(l.player) + '"></label>';
       var cur = lastCheck && lastCheck.current && lastCheck.current[i];

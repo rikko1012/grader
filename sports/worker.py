@@ -5,6 +5,7 @@ at import time. Run it as its own service / cron:
   python -m sports.worker ingest nba nfl [--sources espn,pp,ud,kalshi,injuries,oddsapi,polymarket,books,games]
                                                         one cycle                                     (SPORTS_INGEST)
   python -m sports.worker loop nba nfl --every 10       ingest every N minutes + settle hourly       (SPORTS_INGEST)
+  python -m sports.worker books nba nfl                 the books job alone, when a game is due      (SPORTS_INGEST)
   python -m sports.worker settle [nba nfl]              settle stored offers of final games           (SPORTS_INGEST)
   python -m sports.worker verify nba --date YYYY-MM-DD  Kalshi settled values vs ESPN box scores      (SPORTS_INGEST)
   python -m sports.worker forecast [nba nfl]            sharp-2 market-only research forecasts         (SPORTS_INGEST)
@@ -28,7 +29,10 @@ This is the ONE scheduled collector (the sports service's ingest-loop child). Ea
   oddsapi      The Odds API through books/sources.oddsapi_ingest (credit ledger; events and players resolved)
   polymarket   books/sources.polymarket_ingest
   books        FanDuel / BetRivers own feeds (+ OddsPapi when its guard allows): books/worker.run_once, each game
-               read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch
+               read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch. Scheduled as
+               its OWN light job (`books` command, scheduler "books", every minute on a game day; 2026-11-06) so the
+               direct ladder (3 / 5 / 8 min inside 2 / 8 / 24 h) is kept; the ingest-<league> cycles leave it out
+               unless SPORTS_BOOKS_JOB=0
   games        sports/games collect.tick: pre-game context (pickcenter, predictor, NWS weather), ESPN-supplied
                DraftKings prop lines, Kalshi game ladders, BPI / FPI, rosters / injuries through the same cached reads
                as above (no second request)
@@ -144,16 +148,56 @@ class Jobs:
     def __init__(self, con, attempts=JOB_ATTEMPTS, timeout_s=JOB_TIMEOUT_S, sleep=time.sleep):
         self.con, self.attempts, self.timeout_s, self.sleep = con, attempts, timeout_s, sleep
         self.lock = threading.Lock()
+        self._deferred = {}                              # key -> ledger fields a timed-out attempt could not write yet
 
     def _row(self, key):
         r = self.con.execute("SELECT * FROM jobs WHERE job_key = ?", (key,)).fetchone()
         return dict(r) if r else None
 
     def _set(self, key, **kw):
-        with self.lock:
-            cols = ", ".join(f"{k} = ?" for k in kw)
-            self.con.execute(f"UPDATE jobs SET {cols} WHERE job_key = ?", list(kw.values()) + [key])
-            self.con.commit()
+        # the store's write lock first (same order as write_tx callers): a ledger commit can never land inside another
+        # thread's BEGIN IMMEDIATE batch on the shared connection (bug sweep 2026-11-06 #12)
+        with store._WRITE_LOCK, self.lock:
+            self._flush_deferred_locked()
+            self._write_locked(key, kw)
+
+    def _write_locked(self, key, kw):
+        cols = ", ".join(f"{k} = ?" for k in kw)
+        self.con.execute(f"UPDATE jobs SET {cols} WHERE job_key = ?", list(kw.values()) + [key])
+        self.con.commit()
+
+    def _flush_deferred_locked(self):
+        while self._deferred:
+            k, kw = self._deferred.popitem()
+            self._write_locked(k, kw)
+
+    LEDGER_WAIT_S = 2.0                                  # longest a timed-out run() waits for the write lock
+
+    def _set_nowait(self, key, wait_s=None, **kw):
+        """Record without blocking the caller for long (bug sweep #12 review): the timed-out job's thread may hold the
+        store write lock inside a long write_tx. If the lock is not free within wait_s, the fields are kept in memory
+        and written by the next ledger write (or flush()). -> True if written now."""
+        if not store._WRITE_LOCK.acquire(timeout=self.LEDGER_WAIT_S if wait_s is None else wait_s):
+            with self.lock:
+                self._deferred[key] = dict(self._deferred.get(key, {}), **kw)
+            return False
+        try:
+            with self.lock:
+                self._flush_deferred_locked()
+                self._write_locked(key, kw)
+            return True
+        finally:
+            store._WRITE_LOCK.release()
+
+    def flush(self, wait_s=0.0):
+        """Write any deferred ledger rows if the store write lock is free within wait_s. -> rows still deferred."""
+        if self._deferred and store._WRITE_LOCK.acquire(timeout=max(wait_s, 0.001)):
+            try:
+                with self.lock:
+                    self._flush_deferred_locked()
+            finally:
+                store._WRITE_LOCK.release()
+        return len(self._deferred)
 
     def cursor(self, key):
         r = self._row(key)
@@ -164,8 +208,11 @@ class Jobs:
 
     def run(self, key, job, fn):
         """Run fn(ctx) once for job_key. done -> skipped (idempotent). failed / dead 'running' -> retried (resumable:
-        ctx.cursor holds the saved progress). -> {"state", "result"|"error", "attempts"}."""
-        with self.lock:
+        ctx.cursor holds the saved progress). -> {"state", "result"|"error", "attempts"}.
+        A TIMED-OUT attempt is never retried in this process: its thread cannot be stopped and is still running on the
+        shared connection, so a retry would run beside it (bug sweep 2026-11-06 #12). The job is recorded failed and a
+        later run (a new process) resumes it from its cursor."""
+        with store._WRITE_LOCK, self.lock:
             r = self._row(key)
             if r is None:
                 self.con.execute("INSERT INTO jobs (job_key, job, state, attempts, created_at) VALUES (?,?,?,?,?)",
@@ -185,6 +232,11 @@ class Jobs:
                 result = ex.submit(fn, ctx).result(timeout=self.timeout_s)
             except FutTimeout:
                 last_err = f"timeout after {self.timeout_s}s"
+                written = self._set_nowait(key, state="failed", error=last_err, finished_at=now_utc())
+                out = {"state": "failed", "error": last_err, "attempts": attempts, "still_running": True}
+                if not written:
+                    out["ledger_deferred"] = True        # the job still holds the write lock; written on the next write
+                return out
             except (BudgetExceeded, flags.FlagOff) as e:
                 self._set(key, state="failed", error=str(e)[:500], finished_at=now_utc(), attempts=self.attempts)
                 return {"state": "failed", "error": str(e), "attempts": attempts}
@@ -309,8 +361,11 @@ def build_resolver(con, lg, observed_at, out):
 
 
 def _latest_memberships(con, league):
+    # ESPN roster memberships only: the history job's dated one-game rows (source espn_gamelog, one per player per
+    # game) are closed intervals the resolver never uses and were decoded every cycle (bug sweep 2026-11-06 #44)
     rows = con.execute("SELECT r.* FROM records r JOIN (SELECT source, source_key, MAX(revision) rv FROM records "
-                       "WHERE late = 0 AND kind='membership' AND player_id LIKE ? GROUP BY source, source_key) z ON "
+                       "WHERE late = 0 AND kind='membership' AND source = 'espn' AND player_id LIKE ? "
+                       "GROUP BY source, source_key) z ON "
                        "r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
                        "WHERE r.kind='membership'", (f"{league}:%",)).fetchall()
     return [(r["record_id"], store._rec(r)) for r in rows]
@@ -431,6 +486,49 @@ def _ingest_books(con, lg, resolver):
             return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
         finally:
             bdb.close()
+
+
+def books_league(con, league, now=None):
+    """The books job for one league (scheduler "books"): exits at once - no provider request, no ESPN read, no canonical
+    write - unless books.worker.pending says a game list, a game on the direct ladder or a probe is due. Otherwise the
+    same pass the ingest cycle made before (_ingest_books): the canonical resolver first (ESPN events / rosters through
+    the shared caches), then books.worker.run_once with the sc-1 sink."""
+    from .books import store as book_store, worker as book_worker
+    with _COLLECT_LOCK:
+        bdb = book_store.connect()
+        try:
+            due = book_worker.pending(bdb, (league,), now=now)
+        finally:
+            bdb.close()
+    if not due:
+        return {"league": league, "due": False}
+    _check_budget()                                     # store cap + DISK_FREE_FLOOR_MB, as every ingest cycle
+    lg = config.league(league)
+    observed_at = now_utc()
+    out = {"league": league, "due": True, "observed_at": observed_at}
+    resolver = build_resolver(con, lg, observed_at, out)
+    out["books"] = _ingest_books(con, lg, resolver)
+    return out
+
+
+def cmd_books(a, con):
+    """python -m sports.worker books nba nfl: FanDuel / BetRivers (+ OddsPapi when its guard allows) on the direct
+    ladder (books/schedule.py), the scheduler's light "books" job. Exit 3 when ingestion is paused (store cap / disk
+    floor), so the scheduler records a failure instead of a silent success."""
+    flags.require("SPORTS_INGEST")
+    out = {}
+    for lg in a.leagues:
+        try:
+            out[lg] = books_league(con, lg)
+        except BudgetExceeded as e:
+            out[lg] = {"state": "failed", "error": str(e)}
+        except Exception as e:                          # noqa: BLE001 - one league never stops the other
+            out[lg] = {"state": "failed", "error": f"{type(e).__name__}: {str(e)[:200]}"}
+    out["rss_mb"] = rss_mb()
+    _print(out)
+    if a.leagues and all("ingestion paused" in str((out.get(lg) or {}).get("error") or "") for lg in a.leagues):
+        raise SystemExit(3)
+    return out
 
 
 def _ingest_games(lg):
@@ -576,13 +674,22 @@ def cmd_settle(a, con):
         since += "T00:00:00Z"
     leagues = a.leagues or ["nba", "nfl"]
     t0, stage_s = time.time(), []
-    if since:                                           # explicit backfill: its own job key (never 'done' by an hourly run)
-        out = {lg: jobs.run(f"settle-backfill:{lg}:{since}:{bucket(10)}", "settle",
-                            lambda ctx, lg=lg: settle_league(con, lg, ctx, since=since, max_catchup=10 ** 6))
-               for lg in leagues}
-    else:
-        out = {lg: jobs.run(f"settle:{lg}:{bucket(getattr(a, 'bucket_min', None) or 60)}", "settle",
-                            lambda ctx, lg=lg: settle_league(con, lg, ctx)) for lg in leagues}
+    out = {}
+    for i, lg in enumerate(leagues):
+        if since:                                       # explicit backfill: its own job key (never 'done' by an hourly run)
+            out[lg] = jobs.run(f"settle-backfill:{lg}:{since}:{bucket(10)}", "settle",
+                               lambda ctx, lg=lg: settle_league(con, lg, ctx, since=since, max_catchup=10 ** 6))
+        else:
+            out[lg] = jobs.run(f"settle:{lg}:{bucket(getattr(a, 'bucket_min', None) or 60)}", "settle",
+                               lambda ctx, lg=lg: settle_league(con, lg, ctx))
+        if out[lg].get("still_running"):
+            # bug sweep #12 review: the timed-out settle's thread is still writing on this connection. Nothing else
+            # (the next league, results, learning) runs beside it; the caller ends the process (main -> os._exit).
+            for rest in leagues[i + 1:]:
+                out[rest] = {"state": "not_run", "error": f"{lg} settle still running after its timeout"}
+            out["still_running"] = True
+            _print(out)
+            return out
     stage_s.append(["settle", round(time.time() - t0, 1)])
     from . import snapshots                             # Results ledger right after settling (never breaks settlement)
     out["results"] = {}
@@ -608,6 +715,13 @@ def cmd_settle(a, con):
     return out
 
 
+def _still_running(res):
+    """True when a job of this step timed out and its thread is still running on the shared connection."""
+    if not isinstance(res, dict):
+        return False
+    return bool(res.get("still_running")) or any(isinstance(v, dict) and v.get("still_running") for v in res.values())
+
+
 def cmd_loop(a, con):
     """ingest every --every minutes; Kalshi only every --kalshi-every minutes (its quotes are the store's largest
     writer: ~2,700 price revisions per league per read on 2026-10-23); settle hourly."""
@@ -625,9 +739,13 @@ def cmd_loop(a, con):
                 srcs = tuple(x for x in base if x != "kalshi")
             elif "kalshi" in base:
                 last_kalshi = time.time()
-            cmd_ingest(argparse.Namespace(leagues=a.leagues, sources=",".join(srcs), bucket_min=a.bucket_min), con)
+            res = cmd_ingest(argparse.Namespace(leagues=a.leagues, sources=",".join(srcs), bucket_min=a.bucket_min), con)
+            if _still_running(res):                     # bug sweep #12 review: never a second writer beside it
+                return {"still_running": True, "step": "ingest"}
             if time.time() - last_settle > 3600:
-                cmd_settle(argparse.Namespace(leagues=a.leagues), con)
+                res = cmd_settle(argparse.Namespace(leagues=a.leagues), con)
+                if _still_running(res):
+                    return {"still_running": True, "step": "settle"}
                 last_settle = time.time()
         except BudgetExceeded as e:
             print(str(e), file=sys.stderr, flush=True)
@@ -672,6 +790,8 @@ def main(argv=None):
         if name == "loop":
             s.add_argument("--every", type=int, default=10)
             s.add_argument("--kalshi-every", type=int, default=30)
+    s = sub.add_parser("books")
+    s.add_argument("leagues", nargs="+")
     s = sub.add_parser("settle")
     s.add_argument("leagues", nargs="*")
     s.add_argument("--since", help="backfill: settle every stored game started since this date (YYYY-MM-DD)")
@@ -689,7 +809,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     if a.cmd == "train":
         flags.require("SPORTS_TRAIN")                   # a refused command sets no memory cap on its process
-    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "settle", "train") else None
+    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "settle", "train") else None
     if a.cmd == "train":
         from .model import jobs as model_jobs           # model agent's registered training jobs (sports/model/jobs.py)
         return model_jobs.main(a.rest)
@@ -699,8 +819,16 @@ def main(argv=None):
             return
         if cap:
             print(f"memory cap: {cap}", file=sys.stderr)
-        return {"ingest": cmd_ingest, "loop": cmd_loop, "settle": cmd_settle, "coverage": cmd_coverage,
-                "verify": cmd_verify, "forecast": cmd_forecast, "jobs": lambda a, con: _print(Jobs(con).list())}[a.cmd](a, con)
+        res = {"ingest": cmd_ingest, "loop": cmd_loop, "books": cmd_books, "settle": cmd_settle,
+               "coverage": cmd_coverage, "verify": cmd_verify, "forecast": cmd_forecast, "jobs": lambda a, con: _print(Jobs(con).list())}[a.cmd](a, con)
+        if a.cmd in ("ingest", "loop", "settle") and _still_running(res):
+            # bug sweep #12 review: a timed-out job's thread is still writing on this connection. End the process now
+            # (no close of the connection under it, no wait on it); SQLite rolls back its open batch, and the job is
+            # resumed from its cursor by the next run.
+            print("a timed-out job is still running: exiting for a clean restart", file=sys.stderr, flush=True)
+            sys.stdout.flush()
+            os._exit(4)
+        return res
 
 
 if __name__ == "__main__":

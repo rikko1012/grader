@@ -34,7 +34,8 @@
   }
   $("lab-login").addEventListener("click", login);
 
-  function overview() {
+  // bug #50: the 5-second poll (poll = true) refreshes the sources and the list only - never the admin's half-filled form
+  function overview(poll) {
     return apiJson("overview").then(function (o) {
       if (o._status !== 200) throw new Error(o.error || ("lab " + o._status));
       S.ov = o; status("");
@@ -44,18 +45,24 @@
         (reg.missing ? " <span class='lab-bad'>(" + esc(reg.missing) + ")</span>" : "") +
         (reg.versions || []).map(function (v) { return "<br><code>" + esc(v.name || v.model_version) + " = " + esc(v.value || v.role) + "</code>"; }).join("") +
         "<br>Feature registry " + esc(o.feature_registry) + " (no lab feature has a validated effect; experiments report their own test results).";
-      fillForm(); list(o.experiments);
+      if (poll !== true) fillForm();
+      list(o.experiments);
     });
   }
 
   function fillForm() {
     var f = $("lab-form"), o = S.ov;
     var lg = f.league.value, src = f.source.value;
-    f.stat.innerHTML = (o.targets[lg] || []).map(function (s) { return "<option>" + esc(s) + "</option>"; }).join("");
+    var keepStat = f.stat.value, keepFeats = {};             // bug #50: a rebuild keeps what the admin chose when it still applies
+    f.querySelectorAll("input[name=feat]:checked").forEach(function (c) { keepFeats[c.value] = true; });
+    var stats = o.targets[lg] || [];
+    f.stat.innerHTML = stats.map(function (s) { return "<option>" + esc(s) + "</option>"; }).join("");
+    if (keepStat && stats.indexOf(keepStat) >= 0) f.stat.value = keepStat;
     if (!f.algorithm.options.length) f.algorithm.innerHTML = Object.keys(o.algorithms).map(function (a) { return "<option value='" + esc(a) + "'>" + esc(o.algorithms[a]) + "</option>"; }).join("");
     $("lab-feats").innerHTML = o.features.filter(function (x) { return x.sports.indexOf(lg) >= 0 && x.sources.indexOf(src) >= 0; })
       .map(function (x) { return "<label><input type='checkbox' name='feat' value='" + esc(x.name) + "'><span><strong>" + esc(x.name) +
         "</strong> - " + esc(x.definition) + "<br><span class='lab-meta'>Missing: " + esc(x.missing) + "</span></span></label>"; }).join("");
+    f.querySelectorAll("input[name=feat]").forEach(function (c) { if (keepFeats[c.value]) c.checked = true; });
     f.algorithm.dispatchEvent(new Event("change"));
   }
   $("lab-form").algorithm.addEventListener("change", function () {
@@ -101,7 +108,7 @@
       tr.addEventListener("keydown", function (e) { if (e.key === "Enter") open(); });
     });
     clearTimeout(S.timer);
-    if (xs.some(function (x) { return x.state === "queued" || x.state === "running"; })) S.timer = setTimeout(overview, 5000);
+    if (xs.some(function (x) { return x.state === "queued" || x.state === "running"; })) S.timer = setTimeout(function () { overview(true); }, 5000);
   }
 
   function reliability(bins) {

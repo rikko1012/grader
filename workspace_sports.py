@@ -11,6 +11,7 @@ staking recommendation. This adapter never upgrades the model's validation statu
 For 700 members: one snapshot per league every BOARD_TTL s, single flight, revalidated by ETag so an unchanged board costs one
 small request per part and no parse. A live pick check is shared per exact leg for CHECK_TTL s behind CHECK_SLOTS. The index keeps
 each record as bytes: at most MAX_RECORDS records per league are held."""
+import board_parity
 import gzip
 import hashlib
 import workspace_h2h
@@ -20,7 +21,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse
 
 LEAGUES = ("nba", "nfl")
@@ -28,7 +29,33 @@ PICKEM = ("underdog", "prizepicks")
 LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
 BOOK_LABEL = {"fanduel": "FanDuel", "betrivers": "BetRivers", "kalshi": "Kalshi", "polymarket": "Polymarket", "pinnacle": "Pinnacle", "draftkings": "DraftKings",
               "betmgm": "BetMGM", "caesars": "Caesars", "bovada": "Bovada", "fanatics": "Fanatics", "espnbet": "ESPN BET", "hardrockbet": "Hard Rock", "bet365": "bet365"}
-PERIOD = {"full_game": "Full game", "1h": "First half", "2h": "Second half", "1q": "First quarter"}
+PERIOD = {"full_game": "Full game", "1h": "First half", "2h": "Second half", "1q": "First quarter",
+          "first_half": "First half", "second_half": "Second half", "q1": "First quarter", "q2": "Second quarter",
+          "q3": "Third quarter", "q4": "Fourth quarter"}        # sports scopes (contracts SCOPES) + the older short keys
+ORDINARY_V = {None, "", "standard", "balanced", "main", "ladder_rung"}
+
+
+def line_type_of(q):
+    """The line's real type for members (audit 2026-11-05 S1/S2): 'standard' only for an ordinary line that lists
+    both sides; an Underdog higher-only line is 'over only', never Standard; goblin / demon / alternate as named."""
+    v, o = q.get("v"), q.get("o") or [1, 1]
+    if v == "one_sided" or (v in ORDINARY_V and q.get("p") == "underdog" and len(o) == 2 and o[0] != o[1]):
+        return "over only" if o and o[0] else "under only"
+    return "standard" if v in ORDINARY_V else str(v).replace("_", " ")
+
+
+def one_sided_label(q):
+    """Owner 2026-11-06 (sports cap-2): "Over only" / "Under only" for a STORED one-sided line (variant one_sided), else
+    None. Such a line is shown with its line and price and never graded, staked, put on a slip or tracked. A two-sided
+    line whose other side is suspended right now keeps its grading (its type is the stored variant)."""
+    if q.get("v") != "one_sided":
+        return None
+    o = q.get("o") or [0, 0]
+    return "Over only" if o and o[0] else "Under only"
+
+
+def full_game_key(k):
+    return ((k or "").rsplit("|", 1)[-1] or "full_game") == "full_game"
 HOLD_LABEL = "Research estimate"
 HOLD_DETAIL = "{LG} grades are held until forward results clear review."
 SERVICE_USER = "workspace-reader"       # the hook's member for reads no one member owns: shared boards, settled results
@@ -64,6 +91,7 @@ def reset():
     """Tests: forget every board and the token."""
     for lg in LEAGUES:
         _SNAP[lg] = _empty()
+    _MOVES.clear()
     _TOKEN.update(token=None, exp=0.0, base=None)
     _BREAK["until"] = 0.0
 
@@ -92,6 +120,31 @@ class _Hook:
 
     def send(self, code, body=b"", ctype="application/json", headers=None):
         self.out = (code, body, ctype, headers or {})
+
+
+class _AdminHook(_Hook):
+    """The owner's own server-to-server read (workspace_api grade-review, owner audit 2026-11-06 T8): the hook mints an st1
+    token of role admin, which the sports service requires on /api/sports/admin/*. Used only on an owner-only route."""
+
+    def member(self):
+        return {"user": "owner-grade-review"}
+
+    def authed(self, token):
+        return True
+
+
+def admin_token(srv):
+    """A short-lived st1 admin token minted by server.py's one sports hook (never cached, never logged), or None when the
+    hook cannot mint one (SPORTS_TOKEN_SECRET not set, sports down). Call ONLY after the owner check."""
+    hk = _AdminHook()
+    try:
+        srv.Handler._sports_route(hk, urlparse("/api/sports/token"), {})
+    except Exception:                               # noqa: BLE001 - the caller says the report is unavailable
+        return None
+    if hk.out is None or hk.out[0] != 200:
+        return None
+    tok = (_json(hk.out[1]) or {}).get("token")
+    return tok if isinstance(tok, str) and tok.startswith("st1.") else None
 
 
 def _hook(srv, path, query=None):
@@ -300,8 +353,25 @@ def line_key(x):
     return str(int(round(x))) if abs(x - round(x)) < 1e-9 else str(round(x, 1))
 
 
-def _team(v):
-    return (v or {}).get("abbr") or (v or {}).get("name") or ""
+# B8 (audit 2026-11-05): ONE team code per team on every surface - the same table as sports/names.py TEAM_ABBR and
+# web/sports/labels.js TEAM_ABBR (this module never imports sports; sports/tests/test_audit_sports_1105.py keeps the
+# three equal). The board's event teams carry ESPN's codes (logo URLs use them); members always read UTA, never UTAH.
+TEAM_ABBR = {
+    "nba": {"GS": "GSW", "NY": "NYK", "SA": "SAS", "NO": "NOP", "UTAH": "UTA", "WSH": "WAS"},
+    "nfl": {"WSH": "WAS"},
+}
+
+
+def team_code(lg, abbr):
+    if not abbr:
+        return abbr
+    a = str(abbr).strip().upper()
+    return TEAM_ABBR.get(lg, {}).get(a, a)
+
+
+def _team(v, lg=None):
+    a = (v or {}).get("abbr")
+    return team_code(lg, a) if a and lg else (a or (v or {}).get("name") or "")
 
 
 def _hash(*fields):
@@ -331,16 +401,20 @@ def _side_prices(q, i):
 def record_of(lg, doc, m, q, view):
     """One display record from one quote of one market row: the row's values only, nothing recomputed."""
     ev = (doc.get("events") or {}).get(m.get("e")) or {}
-    home, away = _team(ev.get("home")), _team(ev.get("away"))
-    team = m.get("tm") or ""
+    home, away = _team(ev.get("home"), lg), _team(ev.get("away"), lg)
+    team = team_code(lg, m.get("tm")) or ""
     tid = m.get("tid")
     opp = away if tid and tid == (ev.get("home") or {}).get("team_id") else home if tid and tid == (ev.get("away") or {}).get("team_id") else ""
+    # the player's own team as the event names it (ESPN's abbreviation): the board's team logo (audit 2026-11-05), display only
+    # raw ESPN abbreviation (GS, UTAH...), not the display code: ESPN's logo files are named by it
+    tabbr = _team(ev.get("home")) if tid and tid == (ev.get("home") or {}).get("team_id") else _team(ev.get("away")) if tid and tid == (ev.get("away") or {}).get("team_id") else ""
     scope = (m.get("k") or "").rsplit("|", 1)[-1] or "full_game"
     p = q.get("p")
     fc = doc.get("fc") or {}
-    sc = scout_at(q, fc)
+    one = one_sided_label(q)
+    sc = None if one else scout_at(q, fc)       # owner 2026-11-06: a one-sided line is shown, never graded
     mkc = market_at(m.get("mk"), q)
-    lean, held = lean_and_hold(m, q, sc, mkc)
+    lean, held = (None, None) if one else lean_and_hold(m, q, sc, mkc)
     held = None if held is None else held or HOLD_DETAIL.format(LG=lg.upper())
     # Letters are published by Sports, never reconstructed from probabilities here.
     # The owner's containment switch can only hold research letters (sports/containment.py ct-1a);
@@ -349,7 +423,9 @@ def record_of(lg, doc, m, q, view):
     grade = signal.get("gr") if held is None and lean and signal.get("v") == "cf-2" else None
     if grade not in ("A", "B", "C", "Lean"):
         grade = None
-    if held is not None:
+    if one:
+        reason = f"{one}: Scout grades lines that offer both sides."
+    elif held is not None:
         reason = held
     elif not sc:
         reason = "A matching forecast is not available for this line yet."
@@ -359,7 +435,7 @@ def record_of(lg, doc, m, q, view):
         reason = "The forecast does not give a clear direction at this line."
     else:
         reason = "A published grade is not available for this forecast yet."
-    hold = None if grade else {"label": HOLD_LABEL, "reason": reason}
+    hold = None if grade else {"label": one or HOLD_LABEL, "reason": reason}
     line = q.get("l")
     v = view.get(m.get("k")) or {}
     a = (v.get("lines") or {}).get(line_key(line)) if line is not None else None
@@ -370,14 +446,14 @@ def record_of(lg, doc, m, q, view):
     rec = {"sport": lg, "key": ".".join(str(k) for k in (lg, m.get("e"), pkey, m.get("st"), scope, line)),
            "event": {"id": m.get("e"), "id_kind": "canonical", "label": f"{away} at {home}" if away and home else f"{team or lg.upper()} game", "teams": [away, home], "competition": lg.upper(),
                      "best_of": None, "start_utc": ev.get("start_utc"), "lock_utc": ev.get("start_utc"), "status": "started" if ev.get("started") or ev.get("locked") else "scheduled"},
-           "player": {"id": m.get("pid"), "key": pkey, "name": m.get("n") or "", "team": team, "opponent": opp, "role": m.get("pos") or ""},
-           "market": {"stat": m.get("st"), "stat_label": (doc.get("stats") or {}).get(m.get("st"), m.get("st")), "period": scope, "period_label": period_label, "line_type": "standard"},
+           "player": {"id": m.get("pid"), "key": pkey, "name": m.get("n") or "", "team": team, "opponent": opp, "role": m.get("pos") or "", "team_abbr": tabbr},
+           "market": {"stat": m.get("st"), "stat_label": (doc.get("stats") or {}).get(m.get("st"), m.get("st")), "period": scope, "period_label": period_label, "line_type": line_type_of(q)},
            "offer": {"platform": p, "platform_label": book_label(p), "offer_id": rid, "revision": offer_rev(q), "revision_kind": "exact", "line": line, "seen_at": q.get("t"),
                      "over": _side_prices(q, 0), "under": _side_prices(q, 1), "moved_from": None, "moved_at": None},
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
-                     "validation": {"kind": "research", "label": "Research grade" if grade else HOLD_LABEL,
+                     "validation": {"kind": "research", "label": "Research grade" if grade else (one or HOLD_LABEL),
                                     "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else reason}},
            "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None,
                        **(_board_columns(v, line, opp) if workspace_h2h.board_enabled() else {})},
@@ -386,7 +462,8 @@ def record_of(lg, doc, m, q, view):
     x = {"r": q.get("r"), "p": p, "l": line, "o": q.get("o"), "m": q.get("m"), "g": q.get("g"), "ud": q.get("ud"), "fid": sc.get("fid") if sc else None, "po": sc["po"] if sc else None,
          "pu": sc["pu"] if sc else None, "pp": sc["pp"] if sc else None, "mu": sc.get("mu") if sc else None, "model": sc.get("model") if sc else None, "at": sc.get("at") if sc else None,
          "lean": lean, "start": ev.get("start_utc"), "started": bool(ev.get("started") or ev.get("locked")), "e": m.get("e"), "pid": m.get("pid"), "name": m.get("n") or "", "team": team, "st": m.get("st"),
-         "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey, "variant":q.get('v')}
+         "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey, "variant":q.get('v'),
+         "line_type": rec["market"]["line_type"]}
     return rec, x
 
 
@@ -431,7 +508,86 @@ def _part(srv, lg, part, etag):
     except Down:
         if part == "primary":
             raise
-        return {}, None                         # secondary markets or hit rates missing: the primary board still stands
+        return None, None                       # secondary markets or hit rates missing: None = this part's read failed
+
+
+KEEP_MIN = 20       # site audit N2: a pick'em platform that held at least this many lines and comes back with none is a failed read
+PART_KEEP_S = 10 * 60   # a secondary part (more markets / hit rates) down longer than this past its last good read: built without it
+
+
+def _keep_last(s, counts):
+    """Owner site audit 2026-11-06 N2 (NBA board went to "0 players · 0 lines" until Refresh): a refresh that came back without a
+    pick'em platform's lines (PrizePicks or Underdog from many lines to none, the whole board empty included) keeps the last good
+    snapshot instead of replacing it, while that snapshot is under STALE_S old (its own board time); after that the new answer is
+    taken as it is, so a slate that really emptied never freezes the board. Transient-failure rule: a failed read never becomes
+    the board. (A secondary part that failed never holds the primary lines back: see _part_or_last.)"""
+    if s["body"] is None:
+        return False
+    t = _ts(s["as_of"])
+    if t is None or (datetime.now(timezone.utc) - t).total_seconds() > STALE_S:
+        return False
+    return any(n >= KEEP_MIN and not counts.get(p) for p, n in (s.get("counts") or {}).items() if p in PICKEM)
+
+
+def _part_or_last(s, name, doc, now):
+    """-> (this build's copy of a secondary part, the time it was read). Site audit N2 review: when the more-markets or hit-rate
+    part fails, the primary lines read in the same build are still served at once (a moved or pulled line is never held back);
+    only the failed part is the last good copy, read under PART_KEEP_S ago (hit rates are keyed by line, so a kept copy never
+    puts one line's counts on another). Past that the board is built without it, as before. A failed read is never kept.
+    The last good copy is held compressed (_pack: a few hundred KB per part, not the parsed doc), unpacked only on a failure."""
+    if doc is not None:
+        return doc, now
+    last = (s.get("parts") or {}).get(name)
+    if last and now - last[1] < PART_KEEP_S:
+        return json.loads(gzip.decompress(last[0])), last[1]
+    return None, None
+
+
+def _pack(s, name, doc, at):
+    """(compressed doc, read time) of a part for the next build; a part kept from earlier keeps its own blob (no re-pack)."""
+    last = (s.get("parts") or {}).get(name)
+    if last and last[1] == at:
+        return last
+    return gzip.compress(json.dumps(doc, default=str, separators=(",", ":")).encode(), 1), at
+
+
+# Site audit N7 (Filters > Line moved showed 0 of 5,641 NBA lines): the sports board carries no opening line, so this server
+# notes the first standard line it saw per platform / event / player / stat / period and the time it last changed. A line that
+# differs from that first sighting carries moved_from (that line) and moved_at, as the CS2 board does from its own open_line.
+# Only moves Scout itself observed (a restart starts again from the lines then on the board); display only, never a grade
+# input. Bounded: markets whose start is more than MOVES_KEEP_S past leave, and at most MOVES_MAX per league are held.
+MOVES_KEEP_S = 6 * 3600
+MOVES_MAX = 4 * 6000
+_MOVES = {}
+
+
+def _move_key(rec, x):
+    return (x["p"], x["e"], x["pkey"], x["st"], x["scope"]) if rec["market"]["line_type"] == "standard" else None
+
+
+def _note_move(lg, rec, x, now_iso, seen):
+    k = _move_key(rec, x)
+    if k is None or seen.get(k, 0) != 1:             # two standard lines on one platform market: no single opening line
+        return
+    line = x["l"]
+    moves = _MOVES.setdefault(lg, {})
+    m = moves.get(k)
+    if m is None:
+        m = moves[k] = {"open": line, "line": line, "at": None, "start": x.get("start")}
+    elif m["line"] != line:
+        m.update(line=line, at=now_iso, start=x.get("start"))
+    if m["open"] != line:
+        rec["offer"]["moved_from"], rec["offer"]["moved_at"] = m["open"], m["at"]
+
+
+def _prune_moves(lg, now):
+    moves = _MOVES.get(lg) or {}
+    cut = now - timedelta(seconds=MOVES_KEEP_S)
+    for k in [k for k, m in moves.items() if (_ts(m.get("start")) or now) < cut]:
+        moves.pop(k, None)
+    if len(moves) > MOVES_MAX:
+        for k in sorted(moves, key=lambda k: str(moves[k].get("start") or ""))[:len(moves) - MOVES_MAX]:
+            moves.pop(k, None)
 
 
 def _build(srv, lg):
@@ -449,10 +605,21 @@ def _build(srv, lg):
     if head is _NOT_MODIFIED:
         head, tag = _part(srv, lg, "primary", None)
     more, m_tag = _part(srv, lg, "more", None)
+    t_read = time.time()
+    v_doc, v_at = _part_or_last(s, "view", v_doc, t_read)
+    more, m_at = _part_or_last(s, "more", more, t_read)
+    if v_at != t_read:
+        v_tag = None                                # a kept part is read in full again next build
+    if m_at != t_read:
+        m_tag = None
     view = (v_doc or {}).get("rows") or {}
-    records, index, props, platforms = [], {}, {}, {}
+    records, index, props, platforms, counts, seen, built = [], {}, {}, {}, {}, {}, []
+    now = datetime.now(timezone.utc)
+    now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     for doc in (head, more or {}):
         for m in doc.get("markets") or []:
+            if not full_game_key(m.get("k")):
+                continue                                # S1/S2: quarter / half lines are not full-game board rows
             for q in m.get("q") or []:
                 if len(records) >= MAX_RECORDS or q.get("l") is None:
                     continue
@@ -460,20 +627,33 @@ def _build(srv, lg):
                 rec, x = record_of(lg, d, m, q, view)
                 if not rec["event"]["start_utc"]:
                     continue
+                board_parity.attach(rec)                # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
                 records.append(rec)
-                x["rec"] = json.dumps(rec, default=str, separators=(",", ":")).encode()
+                built.append((rec, x))
+                counts[q["p"]] = counts.get(q["p"], 0) + 1
+                mk = _move_key(rec, x)
+                if mk is not None:
+                    seen[mk] = seen.get(mk, 0) + 1
                 x["books"] = _book_rows(m.get("mk"), q.get("l"))
                 index[(q["p"], x["rid"])] = x
                 props.setdefault((x["e"], x["pkey"], x["st"], x["scope"]), []).append((q["p"], x["rid"]))
                 platforms.setdefault(q["p"], {"label": book_label(q["p"]), "short": book_short(q["p"]), "slip": q["p"] in PICKEM, "kind": _kind(q["p"]),
                                               **({"types": [["standard", "Standard"], ["flex", "Flex"]] if q["p"] == "underdog" else [["power", "Power"], ["flex", "Flex"]]} if q["p"] in PICKEM else {})})
+    for rec, x in built:                            # site audit N7: after the whole board is read, so a doubled line is known
+        _note_move(lg, rec, x, now_iso, seen)
+        x["rec"] = json.dumps(rec, default=str, separators=(",", ":")).encode()
+    _prune_moves(lg, now)
+    if _keep_last(s, counts):
+        s["at"] = time.time()                       # the etags stay the last good build's: the next build reads every part again
+        return 200, s["body"]
     as_of = head.get("as_of") or head.get("built_at")
     feeds = _feeds(as_of, [p for p in PICKEM if p in platforms])
     body = json.dumps({"sport": lg, "version": head.get("version"), "board_at": as_of, "feeds": feeds, "platforms": platforms, "records": records}, default=str, separators=(",", ":")).encode()
     if s["body"] == body:
         body = s["body"]
     _SNAP[lg] = dict(s, at=time.time(), body=body, index=index, props=props, feeds=feeds, as_of=as_of, gen=s["gen"] + 1, injuries=head.get("injuries") or {},
-                     etags={"primary": tag, "view": v_tag, "more": m_tag})
+                     etags={"primary": tag, "view": v_tag, "more": m_tag}, counts=counts,
+                     parts={k: _pack(s, k, d, at) for k, d, at in (("view", v_doc, v_at), ("more", more, m_at)) if d is not None})
     return 200, body
 
 
@@ -540,7 +720,9 @@ def check_leg(srv, leg, lg, now):
         problems.append(_pr(1, "moved", f"Line moved from {_n(leg['line'])} to {_n(x['l'])}." if moved else f"This offer changed on {label}.", swap=True))
     if not (x["o"] or [0, 0])[0 if side == "over" else 1]:
         problems.append(_pr(1, "side", f"{SIDE_WORD[side]} is not offered on {label}."))
-    if not x["g"]:
+    if x.get("variant") == "one_sided":          # owner 2026-11-06: shown, never on a slip or tracked
+        problems.append(_pr(1, "not_gradable", f"{one_sided_label({'v': 'one_sided', 'o': x['o']})}: Scout grades lines that offer both sides."))
+    elif not x["g"]:
         problems.append(_pr(1, "not_gradable", "Scout cannot settle this line."))
     if not x["fid"]:
         problems.append(_pr(2, "no_forecast", "No saved forecast for this line, so it cannot be tracked."))
@@ -581,7 +763,7 @@ def payload(x, leg, res, e):
 def receipt_fields(x, leg, lg, res, e):
     side, oid = leg["side"], offer_id(x["r"], x["p"])
     mult = (x["m"] or [None, None])[0 if side == "over" else 1]
-    return {"sport": lg, "row_id": x["rid"], "offer_rev": x["rev"], "side": side, "line": x["l"], "line_type": "standard", "pick_id": None, "forecast_id": x["fid"], "match_slug": x["e"], "match_id": x["e"],
+    return {"sport": lg, "row_id": x["rid"], "offer_rev": x["rev"], "side": side, "line": x["l"], "line_type": x.get("line_type") or "standard", "pick_id": None, "forecast_id": x["fid"], "match_slug": x["e"], "match_id": x["e"],
             "match_key": x["e"], "nick": x["pkey"], "prop": x["st"], "scope": x["scope"], "start_utc": x["start"], "model_version": x["model"], "payload": payload(x, leg, res, e),
             "settle_key": f"{lg}|{x['p']}|{oid}|{side}|{x['l']}", "settle_ref": {"league": lg, "platform": x["p"], "offer_id": oid, "side": side, "line": x["l"], "team": x["team"], "multiplier": mult}}
 
@@ -647,7 +829,8 @@ def _player(srv, lg, pid, path):
 def trim(doc):
     """Only what research reads, so a cached player costs little."""
     if "games" in doc:
-        return {"games": [{"start_utc": g.get("start_utc"), "opponent": _team(g.get("opponent")), "home": g.get("home"), "played": g.get("participation") == "played", "values": g.get("values") or {},
+        lg = {"basketball": "nba", "football": "nfl"}.get(doc.get("family"))      # B8: one team code
+        return {"games": [{"start_utc": g.get("start_utc"), "opponent": _team(g.get("opponent"), lg), "home": g.get("home"), "played": g.get("participation") == "played", "values": g.get("values") or {},
                            "season": g.get("season")} for g in (doc.get("games") or [])[:RESEARCH_MAX_GAMES]]}
     f = doc.get("factors") or {}
     return {"position": doc.get("position"), "status": doc.get("status"), "injury": doc.get("injury"), "next_event": doc.get("next_event"), "context": f.get("context") or [], "stats": f.get("stats") or [],
@@ -662,6 +845,9 @@ def series_of(hist, stat):
         if g.get("played") and v is not None:
             out.append({"date": str(g.get("start_utc") or "")[:10], "opponent": g.get("opponent") or "", "value": v})
     return out
+
+
+ENGINE_GROUP = "Matchup numbers (not part of Scout's forecast)"
 
 
 def context_of(x, player, lg):
@@ -679,7 +865,13 @@ def context_of(x, player, lg):
     for c in (player or {}).get("context") or []:
         if c.get("key") == "teammates_out":
             add(c.get("label"), c.get("value"))
-            for i in (c.get("items") or [])[:6]:
+            items = c.get("items") or []
+            # card-and-chips 2026-11-06: the definite outs over the WHOLE report (the rows below keep only the first six), so the
+            # card's "teammates out" names and count are never cut short; day-to-day / questionable stay off it (no-hedge rule)
+            outs = [str(i.get("player")) for i in items if i.get("player") and str(i.get("status") or "").lower() in ("out", "injured_reserve", "suspended")]
+            if outs:
+                rows.append({"label": "Teammates out", "value": len(outs), "group": "Matchup", "names": outs[:12]})
+            for i in items[:6]:
                 add(i.get("player"), i.get("status"))
         elif isinstance(c.get("value"), bool):
             add(c.get("label"), "Yes" if c["value"] else "No")
@@ -689,9 +881,11 @@ def context_of(x, player, lg):
         for w in s.get("windows") or []:
             if w.get("window") and w.get("mean") is not None:
                 add(f"{s.get('label')}, {w['window']}", w["mean"], "Averages")
+    # the factor engine's rows are context (sports/player_context.py: weight 0, the Scout model does not use them): their heading
+    # says so, never "Model inputs" (grading-factor rule, card-and-chips 2026-11-06)
     for r in ((player or {}).get("engine") or {}).get("rows") or []:
         if r.get("label") and r.get("value") is not None:
-            add(r.get("label"), r.get("value"), "Model inputs")
+            add(r.get("label"), r.get("value"), ENGINE_GROUP)
     return {"rows": rows[:200]}
 
 
@@ -710,14 +904,21 @@ def line_doc(srv, lg, book, rid):
         o = snap["index"].get((bk, i))
         if o is not None:
             r = json.loads(o["rec"])
-            books.append({"platform": bk, "platform_label": r["offer"]["platform_label"], "row_id": i, "key": r["key"], "line": o["l"], "line_type": "standard", "over": r["offer"]["over"], "under": r["offer"]["under"],
+            books.append({"platform": bk, "platform_label": r["offer"]["platform_label"], "row_id": i, "key": r["key"], "line": o["l"], "line_type": o.get("line_type") or "standard", "over": r["offer"]["over"], "under": r["offer"]["under"],
                           "seen_at": r["offer"]["seen_at"], "scout_side": o["lean"], "p_side": r["scout"]["p_side"], "grade": r["scout"]["grade"]})
     same, other = x.get("books") or ([], [])
     mk = rec.get("market_chance")
     forecast = {"id": x["fid"], "logged_at": x["at"], "model_version": x["model"], "p_saved": None} if x["fid"] else None
     tally = rec["history"]["l10"]
     avg = round(sum(s["value"] for s in series[:10]) / len(series[:10]), 1) if series else None
-    return 200, {"record": rec, "forecast": forecast, "history": {"tally": tally, "avg": avg, "series": series[:20] if series else None}, "books": books, "market_books": {"same": same, "other": other},
+    hist_out = {"tally": tally, "avg": avg, "series": series[:20] if series else None}
+    if series is None and hist:
+        # a Q1 / first-half line has no results at its own scope in the saved file: the card shows his full-game log beside it as
+        # context, labelled full game and never counted against this line (card-and-chips 2026-11-06; same file, no extra read)
+        fg = series_of(hist, x["st"])
+        if fg:
+            hist_out["full_game"] = fg[:10]
+    return 200, {"record": rec, "forecast": forecast, "history": hist_out, "books": books, "market_books": {"same": same, "other": other},
                  "h2h": workspace_h2h.h2h(series, rec["player"]["opponent"], x["l"]) if series else None,
                  "context": context_of(x, player, lg),
                  "market": {"available": True, "p_over": mk["p_over"], "p_under": mk["p_under"], "source": f"{mk['sources']} market sources at this line"} if mk else {"available": False, "reason": "No market price at this exact line."}}

@@ -26,6 +26,24 @@ DEFINITIONS
                     when none did, the member text "<LG> model not validated" (board_view.NOT_VALIDATED_TEXT).
   tracked picks     member picks (sports/picks.py aggregate, test picks excluded): wins / losses / pushes / voids,
                     hit rate with the same game-clustered interval. Never a return.
+  ONE PICK PER PROP rp-2 (audit 2026-11-05 A7): Sports forecasts every listed line of a prop (pick'em main lines,
+                    every book's alternates, Kalshi rungs), so counting forecasts counted the same game x player x stat
+                    up to hundreds of times (31,882 "picks" in ~11 days). Every count, hit rate, band, grade, calendar
+                    and recent row now uses ONE representative forecast per (game, player, stat):
+                      1. per line, the newest forecast of that line (the last one before the game);
+                      2. a line settled on a pick'em app (PrizePicks / Underdog, any line type: standard, goblin,
+                         demon, alternate) before a sportsbook line, before a Kalshi rung only;
+                      3. then the line CLOSEST TO THE FORECAST'S OWN PROJECTION (|line - projection mean|, what the
+                         model saw at forecast time); ties: newest forecast, then forecast id. This is result-blind
+                         but it is NOT necessarily the board's headline line: it is the line where that model leaned
+                         least, so stated hit rates lean toward closer-to-even lines (said in COUNTING);
+                      4. across Scout models the board's model order (snapshots.models_pref) decides; a Scout model
+                         before a market-only model.
+                    Per model tables use step 1-3 inside each model. The head-to-head pairs EACH Scout model with
+                    the market on THAT model's own representative line only (one pair per model per prop).
+                    raw_counts keeps the forecast-level totals for the owner.
+                    Excluded entirely: quarter / half forecasts (S1/S2) and forecasts saved for a stored one-sided
+                    Underdog line (cap-2, owner 2026-11-06: Over only / Under only lines are not graded).
 """
 from __future__ import annotations
 
@@ -38,7 +56,8 @@ from pathlib import Path
 from . import snapshots, store
 from .contracts import now_utc
 
-VERSION = "rp-1"
+VERSION = "rp-2"
+PICKEM = ("prizepicks", "underdog")
 GATE = 300
 GATE_RULE = ("Pass rule (registered gate F): at least 300 settled props from 100+ games at real offered lines; "
              "Scout's chance on its side within 3 points of how often that side hit (game-clustered interval "
@@ -153,9 +172,17 @@ def _rows_from(con, league, setts):
         seen = _shown.get_many(by_fc)
     except Exception:                                   # noqa: BLE001 - results never break on the side store
         seen = {}
+    os_cache = {}
     for fid, ss in by_fc.items():
         fc = fcs.get(fid) or store.get(con, fid)
         if fc is None or getattr(fc, "league", league) != league:
+            continue
+        if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
+            continue                                    # S1/S2: a quarter / half line is never in the record
+        plats = sorted({s.platform for s in ss if getattr(s, "platform", None)})
+        # cap-2 (owner 2026-11-06): a one-sided line is not graded, so a forecast saved for one is not in the record.
+        # Read from the STORED offer variant, never today's offered sides (a suspended side never drops a line)
+        if "underdog" in plats and snapshots.one_sided_forecast(con, fc, os_cache):
             continue
         outcome = None
         for s in ss:
@@ -168,7 +195,7 @@ def _rows_from(con, league, setts):
         r = {"forecast_id": fid, "model": fc.model_version, "event_id": fc.event_id, "player_id": fc.player_id,
              "stat": fc.stat, "line": float(fc.line), "mean": fc.projection_mean, "p_over": fc.p_over,
              "p_under": fc.p_under, "p_push": fc.p_push, "research_only": fc.research_only,
-             "forecast_at": fc.forecast_at, "actual": actual,
+             "forecast_at": fc.forecast_at, "actual": actual, "platforms": plats,
              "settled_at": max((x.settled_at or "") for x in ss) or None,
              "status": "void" if void else ("settled" if outcome else "unresolved"), "outcome": outcome,
              "error": (actual - fc.projection_mean) if (outcome and actual is not None and fc.projection_mean is not None)
@@ -185,6 +212,67 @@ def _rows_from(con, league, setts):
             r["lean_p"] = ps / (ps + po_) if ps + po_ > 0 else None
         rows.append(r)
     return rows
+
+
+def _source_rank(r):
+    ps = r.get("platforms") or ()
+    if any(p in PICKEM for p in ps):
+        return 0
+    if any(p != "kalshi" for p in ps):
+        return 1
+    return 2 if ps else 1
+
+
+def _closeness(r):
+    mu = r.get("mean")
+    return abs(float(r["line"]) - float(mu)) if mu is not None else float("inf")
+
+
+def representative(rows):
+    """rp-2 steps 1-3: one forecast per (game, player, stat, model) - see the module doc."""
+    newest = {}
+    for r in rows:
+        k = (r["event_id"], r["player_id"], r["stat"], r.get("model"), round(float(r["line"]), 3))
+        if k not in newest or ((r.get("forecast_at") or ""), r["forecast_id"]) > \
+                ((newest[k].get("forecast_at") or ""), newest[k]["forecast_id"]):
+            newest[k] = r
+    # newest first, then a stable sort on (source rank, closeness): ties keep the newer forecast, then the forecast id
+    cands = sorted(newest.values(), key=lambda r: r["forecast_id"])
+    cands.sort(key=lambda r: r.get("forecast_at") or "", reverse=True)
+    cands.sort(key=lambda r: (_source_rank(r), _closeness(r)))
+    best = {}
+    for r in cands:
+        best.setdefault((r["event_id"], r["player_id"], r["stat"], r.get("model")), r)
+    return list(best.values())
+
+
+def one_per_prop(rows, pref=None):
+    """rp-2 step 4: one forecast per (game, player, stat) across models (input: representative() rows)."""
+    from .forecast_detail import kind
+    if pref is None:
+        try:
+            pref = tuple(snapshots.models_pref())
+        except Exception:                               # noqa: BLE001
+            pref = ()
+    order = {m: i for i, m in enumerate(pref)}
+
+    def rank(r):
+        m = r.get("model") or ""
+        return (1 if kind(m) == "market" else 0, order.get(m, len(order)), m)
+    best = {}
+    for r in rows:
+        k = (r["event_id"], r["player_id"], r["stat"])
+        if k not in best or rank(r) < rank(best[k]):
+            best[k] = r
+    return list(best.values())
+
+
+def raw_counts(rows):
+    """Forecast-level totals (before rp-2), kept for the owner."""
+    rr = [r for r in rows if r["status"] == "settled"]
+    return {"forecasts": len(rows), "settled": len(rr), "leans": sum(1 for r in rr if r["lean"]),
+            "games": len({r["event_id"] for r in rr}),
+            "per_game": round(len(rr) / max(1, len({r["event_id"] for r in rr})), 1)}
 
 
 def summarize(rows):
@@ -340,13 +428,16 @@ def build(con, now=None, base=None):
     now = now or now_utc()
     leagues = {}
     for lg in snapshots.LEAGUES:
-        rows = rows_for(con, lg)
+        all_rows = rows_for(con, lg)
+        reps = representative(all_rows)                 # rp-2: one forecast per game x player x stat x model
+        rows = one_per_prop(reps)                       # ... and one per game x player x stat for the record
         s = summarize(rows)
         models = {}
-        for mv in sorted({r["model"] for r in rows}):
-            mr = [r for r in rows if r["model"] == mv]
+        for mv in sorted({r["model"] for r in reps}):
+            mr = [r for r in reps if r["model"] == mv]
             models[mv] = dict(summarize(mr), research_only=all(r["research_only"] for r in mr))
         stats = {st: summarize([r for r in rows if r["stat"] == st]) for st in sorted({r["stat"] for r in rows})}
+        hh_rows = head_to_head_rows(all_rows, reps)
         rec = recent(rows, league=lg)
         try:
             names = snapshots.player_names(con, {r["player_id"] for r in rec if r.get("player_id")}, now)
@@ -359,8 +450,9 @@ def build(con, now=None, base=None):
                                      "rule": GATE_RULE},
                        "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows, lg),
                        "recent": rec, "model_gate": model_gate(lg),
-                       'calendar':daily_record(({'at':r.get('settled_at'),'status':r.get('lean_result')} for r in rows), now, 'Settlement date · UTC'),
-                       "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(rows)}}
+                       'calendar':daily_record(({'at':r.get('settled_at'),'status':r.get('lean_result')} for r in rows), now, 'Settlement date · US Central', 'America/Chicago'),
+                       "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(hh_rows)},
+                       "raw_counts": raw_counts(all_rows), "counting": COUNTING}
     doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
            "grades": "research grades rg-1 (owner 2026-10-25): sports-gp-1 bands of the unrounded lean-side chance - "
                      "A >= 60%, B >= 55.59%, C >= 53.45%, else Lean; research, not validated; stakes 0",
@@ -378,6 +470,29 @@ def build(con, now=None, base=None):
     size = snapshots._write(path(base), doc)
     return {"ok": True, "bytes": size, "build_s": round(time.time() - t0, 2),
             **{lg: leagues[lg]["gate"]["text"] for lg in leagues}}
+
+
+COUNTING = ("one pick per game x player x stat (rp-2): a pick'em app line (any type) before a sportsbook line, then "
+            "the line closest to Scout's projection at forecast time - so the counted line is often a near-even line, "
+            "not always the board's headline line; raw_counts = every forecast of every listed line, kept for the owner")
+
+
+def head_to_head_rows(all_rows, reps):
+    """A7 (follow-up 2026-11-06): each Scout model's forecasts ONLY at that model's own representative line, plus the
+    market forecasts at those lines. Before, the union of every Scout model's lines paired each model once per line in
+    the union (sm-1 @15.5 and mi-1 @16.5 -> 2 pairs each); now head_to_head yields one pair per model per prop."""
+    own = {(r["event_id"], r["player_id"], r["stat"], r.get("model")): round(float(r["line"]), 3)
+           for r in reps if r.get("model") in SCOUT}
+    lines = {(k[0], k[1], k[2], ln) for k, ln in own.items()}
+    out = []
+    for r in all_rows:
+        mv = r.get("model") or r.get("model_version") or ""
+        ln = round(float(r["line"]), 3)
+        if (r["event_id"], r["player_id"], r["stat"], ln) not in lines:
+            continue
+        if _is_market(mv) or own.get((r["event_id"], r["player_id"], r["stat"], mv)) == ln:
+            out.append(r)
+    return out
 
 
 def build_if_stale(con, force=False, base=None):

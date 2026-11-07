@@ -138,7 +138,8 @@ def test_coverage_off_is_404_and_on_lists_every_source(env, monkeypatch):
     assert ud['state'] == 'ok' and ud['count'] >= 1 and ud['age_s'] is not None
     sl = next(r for r in doc['rows'] if r['source'] == 'Sleeper')
     assert sl['state'] == 'off' and sl['flag'] == 'SCOUT_BOOK_SLEEPER'
-    assert all(r['state'] in ('ok', 'stale', 'failing', 'backoff', 'starting', 'off', 'unknown') for r in doc['rows'])
+    assert all(r['state'] in ('ok', 'stale', 'failing', 'backoff', 'refused', 'starting', 'off', 'blocked', 'unknown') for r in doc['rows'])
+    assert {r['source'] for r in doc['rows'] if r['state'] == 'blocked'} == {'Betr Picks', 'ParlayPlay', 'Boom Fantasy'}
     st, body = raw(env, 'GET', f'/admin/coverage?token={ADMIN}')
     assert st == 200 and 'Source health' in body and 'Underdog (board)' in body and ADMIN not in body
 
