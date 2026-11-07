@@ -122,7 +122,8 @@ def test_new_page_text_has_no_banned_hedges():
 
 def test_lol_push_uses_the_existing_probability():
     lol = (server.WEB / "lol.html").read_text(encoding="utf-8")
-    assert "pct(x.p_push)" in lol and "Stake ${esc(x.units)}U" in lol
+    # bug sweep 2026-11-06 #47: the stake goes through one stakeText helper ("–" for one-sided / missing units)
+    assert "pct(x.p_push)" in lol and "Stake ${stakeText(x)}" in lol and '`${esc(x.units)}U`' in lol
 
 
 @needs_node
