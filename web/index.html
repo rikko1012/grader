@@ -2404,10 +2404,15 @@ function bookStatus(b) {
 async function loadBoard(force, quiet) {
   if (bbook === "moneylines") { holdBanner([]); return loadMoneylines(force); }
   const need = bbook === "compare" || bbook === "all" ? ["underdog", "prizepicks"] : [bbook];
-  if (!force && need.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); $("#bstatus").textContent = need.map(bookStatus).join(" · "); holdBanner(need); return drawBoard(); }
+  // audit 2026-11-06 C3: "Lines differ" and the ≠ chip compare a line with the OTHER platform's line - a one-platform view
+  // read only its own platform, so opened straight on PrizePicks (or Underdog) the filter found nothing, and later the other
+  // platform's lines were never refreshed. The other platform is read with it (the server's shared board answer); only the
+  // shown platform's failure, status, marks and watchlist notes count, as before
+  const other = ["underdog", "prizepicks"].filter(b => !need.includes(b));
+  if (!force && need.every(b => BK[b].loaded) && other.every(b => BK[b].loaded)) { boardRows = viewRows(bbook); $("#bstatus").textContent = need.map(bookStatus).join(" · "); holdBanner(need); return drawBoard(); }
   if (!quiet) $("#bstatus").textContent = need.some(b => BK[b].loaded) ? "Refreshing… (showing the current lines)" : "Loading the board…";
   const before = Object.fromEntries(need.map(b => [b, BK[b].loaded ? BK[b].rows : null]));
-  try { await Promise.all(need.map(fetchBook)); AUTO.last = Date.now(); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
+  try { await Promise.all([...need.map(fetchBook), ...other.map(b => fetchBook(b).catch(() => {}))]); AUTO.last = Date.now(); } catch (e) { $("#bstatus").textContent = `Couldn't refresh (${e.message})`; }
   assignMatchKeys([...BK.underdog.rows, ...BK.prizepicks.rows]);
   boardRows = viewRows(bbook); boardAt = BK.underdog.at; boardVer = BK.underdog.ver || BK.prizepicks.ver || "";
   $("#bstatus").textContent = need.map(bookStatus).join(" · ");
@@ -2873,13 +2878,18 @@ $("#bside").onclick = e => { const b = e.target.closest("button"); if (!b) retur
 $("#bbets").onchange = drawBoard; $("#bflag").onchange = drawBoard; $("#cdiff").onchange = drawBoard; $("#csort").onchange = drawBoard; $("#mlusable").onchange = drawBoard;
 $("#bview").onclick = e => { const b = e.target.closest("button"); if (!b) return; bview = b.dataset.v;
   [...$("#bview").children].forEach(x => x.classList.toggle("on", x === b)); drawBoard(); };
+// Reset = the board's opening view: every filter, quick chip and floor cleared, Bets only back on (its default since the
+// 2026-10-06 review) and the platform back to All Books (audit 2026-11-06 C2: Reset on PrizePicks kept PrizePicks - "19 of 108
+// lines" instead of the whole board). The Board / Matches grouping (the route) is kept, and so are Compare and Moneylines:
+// those are their own pages with their own controls, not a platform filter.
 function resetBFilters() {
-  bprop = "kills"; bside = "both"; bscope = "12";   // the platform and the Board / Matches grouping (the route) are kept
+  bprop = "kills"; bside = "both"; bscope = "12";
   $("#bsort").value = "g"; $("#bbets").checked = true; $("#bsearch").value = ""; $("#bflag").checked = false;
   $("#csort").value = "t"; $("#cdiff").checked = false; $("#mlusable").checked = true;
   $("#bgrade").value = ""; $("#bchance").value = ""; for (const k of Object.keys(bquick)) bquick[k] = false; quickMark();
   for (const [id, v] of [["#bprop", bprop], ["#bside", bside], ["#bscope", bscope], ["#bview", bview]]) [...$(id).children].forEach(x => x.classList.toggle("on", x.dataset.v === v));
-  drawBoard();
+  if (bbook === "underdog" || bbook === "prizepicks") setBook("all");     // reads / draws All Books (and updates the address)
+  else drawBoard();
 }
 $("#breset").onclick = resetBFilters;
 const QUICK_TXT = {bump: "Bumped", gap: "Lines differ", fresh: "New in the last hour", watch: "Watchlist"};

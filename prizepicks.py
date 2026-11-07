@@ -17,7 +17,7 @@ import json
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import hltv
@@ -265,6 +265,70 @@ def _copy_snapshot():
     return SNAPSHOT.with_name(SNAPSHOT.stem + "_copy" + SNAPSHOT.suffix)
 
 
+_FIRST = {"path": None, "by": {}}   # market -> Scout's first direct read of it {"at": ISO UTC, "line": that read's line}; _first_seen
+
+
+def _first_path():
+    """Scout's own first sightings, next to SNAPSHOT (the last direct board)."""
+    return SNAPSHOT.with_name(SNAPSHOT.stem + "_first" + SNAPSHOT.suffix)
+
+
+def _when(v):
+    try:
+        t = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_seen(rows, now, observe=True):
+    """Audit 2026-11-06 C3 ("New <1h" and "Bumped" empty on PrizePicks): a line's first sighting and opening line came only
+    from the scraper's copy (about hourly), matched by line id - a line Scout had read directly but the scraper had not yet
+    had neither, so it was never "new" (and counted as new up to an hour late), and a move before the scraper's first read
+    of it was never a bump. Scout now keeps its own first DIRECT read of each market (the market key: a re-posted line id
+    keeps it) with that read's line, in a file next to SNAPSHOT, like Underdog's first observed line (underdog._opening).
+    The earlier sighting wins: when Scout's is earlier (or the copy has none), the row's first_seen and open_line are
+    Scout's; otherwise the copy's stay. observe=False (a scraper-copy read) only applies sightings already kept. Display
+    only - the New / Bumped filters and line history; never a grading input. Never raises."""
+    try:
+        at = datetime.fromtimestamp(now, timezone.utc)
+        path = _first_path()
+        with _HLOCK:
+            if _FIRST["path"] != path:
+                try:
+                    by = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    by = {}
+                _FIRST.update(path=path, by=by if isinstance(by, dict) else {})
+            by, changed = _FIRST["by"], False
+            for r in rows:
+                k = r.get("market")
+                if not k:
+                    continue
+                if not isinstance(by.get(k), dict) and observe:
+                    by[k] = {"at": at.isoformat(timespec="seconds"), "line": r.get("line")}
+                    changed = True
+                e = by.get(k) if isinstance(by.get(k), dict) else {}
+                mine, theirs = _when(e.get("at")), _when(r.get("first_seen"))
+                if mine is None or (theirs is not None and theirs <= mine):
+                    continue                                        # the scraper's copy saw it first: its values stay
+                r["first_seen"] = mine.isoformat(timespec="seconds")
+                if e.get("line") is not None and (theirs is not None or r.get("open_line") is None):
+                    r["open_line"] = float(e["line"])
+            old = (at - timedelta(days=3)).date().isoformat()      # the market key's match day (lines long over drop out)
+            for k in [k for k in by if (k.split("|") + [""] * 4)[3][:10] < old]:
+                del by[k]
+                changed = True
+            if changed:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(by), encoding="utf-8")
+                tmp.replace(path)
+    except Exception:
+        pass
+    return rows
+
+
 def _history(rows, now, snap=None, read=None):
     """Append what changed since the last observed board of the same kind of read (snap: the direct board by default):
     open / move / id change / removed (still upcoming)."""
@@ -410,7 +474,7 @@ def _load():
             raise RuntimeError(f"PrizePicks: direct read failed ({direct_err}); scraper copy unavailable ({db_err or 'no database'})")
         if status.get("source") == DIRECT_SOURCE:
             enrich(records, db_records)
-        rows = rows_from(records)
+        rows = _first_seen(rows_from(records), now, observe=status.get("source") == DIRECT_SOURCE)
         prev = _S["status"] or {}
         _S.update(at=now, rows=rows, status=status, error=None)
         ev = []
