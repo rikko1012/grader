@@ -387,18 +387,6 @@ def etag_matches(header, etag):
 PLAUSIBLE_MAX = {"kills": {"1": 50, "12": 90, "123": 130}, "hs": {"1": 35, "12": 60, "123": 90}}   # line sanity (see /api/grade)
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")   # set on Railway; no token = admin page disabled
 
-
-def sports_admin_token():
-    """A short-lived st1 token of role admin for the owner's server-to-server sports reads (workspace_api grade-review; owner
-    audit 2026-11-06 T8: the sports service admits /api/sports/admin/* only with one). The esports server is the only issuer
-    (sports/authtoken.py); None when SPORTS_TOKEN_SECRET is not set. The token itself is never logged."""
-    try:
-        from sports import authtoken
-        return authtoken.mint("owner-grade-review", "admin", ttl=120)["token"]
-    except Exception:                                  # noqa: BLE001 - not configured: the report says it is unavailable
-        return None
-
-
 PRELOAD_STATUS = {"enabled": PRELOAD, "players_ready": 0, "last_pass": None, "current": None, "errors": 0}
 
 

@@ -50,25 +50,36 @@ def _shadow(path, sport, player, event):
     db.close()
 
 
+def _st1_claims(tok):
+    """The st1 token's claims when its signature checks against the test secret (sports/authtoken.py's format, re-checked here
+    because tests/ may not import sports: sports/tests/test_sports_isolation.py), else None."""
+    import base64
+    import hashlib
+    import hmac
+    parts = (tok or "").split(".")
+    if len(parts) != 3 or parts[0] != "st1":
+        return None
+    mac = base64.urlsafe_b64encode(hmac.new(SECRET.encode(), f"st1.{parts[1]}".encode(), hashlib.sha256).digest()).decode().rstrip("=")
+    if not hmac.compare_digest(mac, parts[2]):
+        return None
+    return json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+
+
 @pytest.mark.parametrize("league", ["nba", "nfl"])
-def test_t8_nba_nfl_comparison_reaches_the_sports_admin_route(tmp_path, monkeypatch, league):
+def test_t8_nba_nfl_comparison_reaches_the_sports_admin_route(monkeypatch, league):
     """Audit: NBA / NFL showed "Comparison unavailable" on every retry. The request carried X-Admin-Token, which the sports
-    service accepts on /api/sports/admin/ops only; every other admin route needs an st1 token of role admin. The fake opener
-    below applies the service's own check (sports/service.py) and route table (sports/web.dispatch)."""
-    from sports import authtoken, config, web
+    service accepts on /api/sports/admin/ops only; every other admin route needs an st1 token of role admin. The token is
+    minted by server.py's one sports hook (the real Handler._sports_route); the fake service below admits only a correctly
+    signed admin token. The service's own route check is sports/tests/test_audit_slips_tools_1106_sports.py."""
     monkeypatch.setenv("SPORTS_TOKEN_SECRET", SECRET)
     monkeypatch.setenv("SPORTS_API_BASE", "https://sports.example.test")
     monkeypatch.setenv("ADMIN_TOKEN", "owner-token")
-    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
-    _shadow(tmp_path / "canonical.db", league, "Fixture Guard", "e-1")
     seen = []
+    doc = {"sport": league, "rows": [{"player": "Fixture Guard"}]}
 
     class Resp:
-        def __init__(self, raw):
-            self.raw = raw
-
         def read(self, n=-1):
-            return self.raw
+            return json.dumps(doc).encode()
 
         def __enter__(self):
             return self
@@ -81,31 +92,31 @@ def test_t8_nba_nfl_comparison_reaches_the_sports_admin_route(tmp_path, monkeypa
             import urllib.error
             from urllib.parse import parse_qs, urlparse
             seen.append(req)
-            tok = authtoken.bearer(req.get_header("Authorization"))
-            claims = None
-            if tok:
-                try:
-                    claims = authtoken.verify(tok)
-                except authtoken.TokenError:
-                    claims = None
-            if claims is None:
-                raise urllib.error.HTTPError(req.full_url, 401, "members_only", {}, None)
+            auth = req.get_header("Authorization") or ""
+            claims = _st1_claims(auth[7:] if auth.startswith("Bearer ") else None)
             u = urlparse(req.full_url)
-            code, data, _ = web.dispatch(web.Request(path=u.path, query={k: v[0] for k, v in parse_qs(u.query).items()},
-                                                     method="GET", body=b"", member=claims["sub"], role=claims["role"]))
-            if code != 200:
-                raise urllib.error.HTTPError(req.full_url, code, "refused", {}, None)
-            return Resp(data)
+            if (claims or {}).get("role") != "admin" or claims.get("exp", 0) <= time.time():
+                raise urllib.error.HTTPError(req.full_url, 401, "members_only", {}, None)
+            assert u.path == "/api/sports/admin/model/gradecore-comparison" and parse_qs(u.query)["league"] == [league]
+            return Resp()
 
     import urllib.request
     monkeypatch.setattr(urllib.request, "build_opener", lambda *a: Opener())
     h = _H()
-    workspace_api.get_grade_review(h, SimpleNamespace(sports_admin_token=server.sports_admin_token), {"sport": league, "token": "owner-token"}, None, None, "grade-review")
-    code, doc = h.sent
-    assert code == 200, doc
-    assert doc["sport"] == league and [r["player"] for r in doc["rows"]] == ["Fixture Guard"]
+    workspace_api.get_grade_review(h, server, {"sport": league, "token": "owner-token"}, None, None, "grade-review")
+    code, got = h.sent
+    assert code == 200, got
+    assert got["sport"] == league and [r["player"] for r in got["rows"]] == ["Fixture Guard"]
     assert seen and seen[0].get_header("X-admin-token") is None                       # the admin secret is never forwarded
-    assert authtoken.verify(authtoken.bearer(seen[0].get_header("Authorization")))["role"] == "admin"
+    assert _st1_claims(seen[0].get_header("Authorization")[7:])["role"] == "admin"
+
+
+def test_t8_without_a_token_secret_the_report_says_unavailable(monkeypatch):
+    monkeypatch.delenv("SPORTS_TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("SPORTS_API_BASE", "https://sports.example.test")
+    h = _H()
+    workspace_api.get_grade_review(h, server, {"sport": "nba", "token": "owner-token"}, None, None, "grade-review")
+    assert h.sent[0] == 503
 
 
 def test_t8_grade_review_still_refuses_members(tmp_path, monkeypatch):

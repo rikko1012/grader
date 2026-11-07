@@ -121,6 +121,31 @@ class _Hook:
         self.out = (code, body, ctype, headers or {})
 
 
+class _AdminHook(_Hook):
+    """The owner's own server-to-server read (workspace_api grade-review, owner audit 2026-11-06 T8): the hook mints an st1
+    token of role admin, which the sports service requires on /api/sports/admin/*. Used only on an owner-only route."""
+
+    def member(self):
+        return {"user": "owner-grade-review"}
+
+    def authed(self, token):
+        return True
+
+
+def admin_token(srv):
+    """A short-lived st1 admin token minted by server.py's one sports hook (never cached, never logged), or None when the
+    hook cannot mint one (SPORTS_TOKEN_SECRET not set, sports down). Call ONLY after the owner check."""
+    hk = _AdminHook()
+    try:
+        srv.Handler._sports_route(hk, urlparse("/api/sports/token"), {})
+    except Exception:                               # noqa: BLE001 - the caller says the report is unavailable
+        return None
+    if hk.out is None or hk.out[0] != 200:
+        return None
+    tok = (_json(hk.out[1]) or {}).get("token")
+    return tok if isinstance(tok, str) and tok.startswith("st1.") else None
+
+
 def _hook(srv, path, query=None):
     qs = urlencode(query or {})
     hk = _Hook()

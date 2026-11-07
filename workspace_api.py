@@ -1654,8 +1654,10 @@ def get_grade_review(h, srv, q, member, scratch, name):
             base = os.getenv('SPORTS_API_BASE', '').rstrip('/')
             # owner audit 2026-11-06 (T8): the sports service admits /api/sports/admin/* only with an st1 token of role admin
             # (sports/service.py; X-Admin-Token opens /admin/ops alone), so every NBA / NFL request here was refused. The
-            # esports server is the token issuer (server.sports_admin_token): short-lived, minted only on this owner-only route.
-            token = getattr(srv, 'sports_admin_token', lambda: None)()
+            # esports server is the token issuer, through server.py's one sports hook (workspace_sports.admin_token): short-lived,
+            # minted only on this owner-only route.
+            import workspace_sports
+            token = workspace_sports.admin_token(srv)
             if not base.startswith('https://') or not token:
                 return h.send(503, {'error': 'Sports report connection unavailable'})
             query = {'league': sport}
