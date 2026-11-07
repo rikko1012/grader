@@ -755,7 +755,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
             players[pid] = rs[0][1]
     cur_team = {}
     team_players = defaultdict(set)
-    for _, m, _ in _latest(con, "membership", "", (), now):
+    # ESPN roster memberships of THIS league only, filtered in SQL: the history job's one-game memberships (one per
+    # player per game, source espn_gamelog) are never decoded on a board build (bug sweep 2026-11-06 #44)
+    for _, m, _ in _latest(con, "membership", "source = 'espn' AND player_id LIKE ?", [f"{league}:%"], now):
         if m.valid_to is None and m.team_id in teams and m.source == "espn":
             cur_team[m.player_id] = m.team_id
             team_players[m.team_id].add(m.player_id)

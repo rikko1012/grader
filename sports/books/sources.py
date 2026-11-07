@@ -49,8 +49,18 @@ _PM_MARKET = ("id", "sportsMarketType", "question", "line", "outcomes", "bestBid
               "acceptingOrders", "gameStartTime", "updatedAt", "liquidityNum", "volumeNum", "lastTradePrice")
 
 
+def source_key(source):
+    """The API key a source would use here. OddsPapi reads it through its provider's own lookup (ODDSPAPI_API_KEY or
+    the Railway name odds_papi_api), so capture / key_state / inventory agree with the provider (bug sweep #38)."""
+    if source == "oddspapi":
+        from . import oddspapi
+        return oddspapi.api_key()
+    env = (SOURCES.get(source) or {}).get("key_env")
+    return os.environ.get(env) if env else None
+
+
 def key_state():
-    return {s: ("no key needed" if not v["key_env"] else ("key set" if os.environ.get(v["key_env"]) else
+    return {s: ("no key needed" if not v["key_env"] else ("key set" if source_key(s) else
                                                           "key not set here")) for s, v in SOURCES.items()}
 
 
@@ -290,8 +300,7 @@ def capture(source, league):
     """Capture-only inventory of an unverified source (no offers). -> dict for coverage."""
     if source not in SOURCES:
         return {"source": source, "status": "not a Sports source"}
-    env = SOURCES[source]["key_env"]
-    k = os.environ.get(env or "")
+    k = source_key(source)
     if not k:
         return {"source": source, "status": "key not set here"}
     inv = {"source": source, "status": "captured (unverified format)", "answers": []}

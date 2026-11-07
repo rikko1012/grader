@@ -1295,6 +1295,7 @@ def log_forecasts(sources=None, now=None):
     srcs = SOURCES if sources is None else sources
     now = now or _utcnow()
     rows, extra, tp_rows = [], [], []
+    pend, pend_tp = {}, {}      # applied to _FC_LAST / _FC_LAST_TP only after the write commits (bug sweep #22)
     with _FC_LOCK:
         pol = tp_policy()
         for m in _assemble(srcs, now):
@@ -1308,7 +1309,7 @@ def log_forecasts(sources=None, now=None):
                 rows.append((mid, MODEL_VERSION, _iso(now), b["platform"], b["prob_a"], m["teams"]["a"]["name"],
                              m["teams"]["b"]["name"], m["start"], int(b["prob_a"] is not None), int(m["disagreement"]),
                              b["reason"], b["rule"], b["platform"], EXCHANGE_POLICY))
-                _FC_LAST[mid] = (now.timestamp(),) + sig
+                pend[mid] = (now.timestamp(),) + sig
                 cand = _candidate_row(m, _iso(now))
                 if cand:                # ml-candidate-1 reads this same baseline price: its source + policy recorded
                     extra.append(tuple(cand[:12]) + (cand[3], EXCHANGE_POLICY))
@@ -1318,7 +1319,7 @@ def log_forecasts(sources=None, now=None):
                 last2 = _FC_LAST_TP.get(mid)
                 if not (last2 and last2[1:] == sig2 and now.timestamp() - last2[0] < FORECAST_EVERY):
                     tp_rows.append(r)
-                    _FC_LAST_TP[mid] = (now.timestamp(),) + sig2
+                    pend_tp[mid] = (now.timestamp(),) + sig2
         if rows or tp_rows:
             with _DB_LOCK:
                 con = _connect()
@@ -1331,6 +1332,10 @@ def log_forecasts(sources=None, now=None):
                     con.commit()
                 finally:
                     con.close()
+            # only rows that really reached the store count as written: a failed write (database locked, disk error)
+            # raises above and the next refresh writes them again instead of waiting 30 min
+            _FC_LAST.update(pend)
+            _FC_LAST_TP.update(pend_tp)
     return len(rows)
 
 

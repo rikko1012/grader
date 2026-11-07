@@ -154,7 +154,9 @@ class Jobs:
         return dict(r) if r else None
 
     def _set(self, key, **kw):
-        with self.lock:
+        # the store's write lock first (same order as write_tx callers): a ledger commit can never land inside another
+        # thread's BEGIN IMMEDIATE batch on the shared connection (bug sweep 2026-11-06 #12)
+        with store._WRITE_LOCK, self.lock:
             cols = ", ".join(f"{k} = ?" for k in kw)
             self.con.execute(f"UPDATE jobs SET {cols} WHERE job_key = ?", list(kw.values()) + [key])
             self.con.commit()
@@ -168,8 +170,11 @@ class Jobs:
 
     def run(self, key, job, fn):
         """Run fn(ctx) once for job_key. done -> skipped (idempotent). failed / dead 'running' -> retried (resumable:
-        ctx.cursor holds the saved progress). -> {"state", "result"|"error", "attempts"}."""
-        with self.lock:
+        ctx.cursor holds the saved progress). -> {"state", "result"|"error", "attempts"}.
+        A TIMED-OUT attempt is never retried in this process: its thread cannot be stopped and is still running on the
+        shared connection, so a retry would run beside it (bug sweep 2026-11-06 #12). The job is recorded failed and a
+        later run (a new process) resumes it from its cursor."""
+        with store._WRITE_LOCK, self.lock:
             r = self._row(key)
             if r is None:
                 self.con.execute("INSERT INTO jobs (job_key, job, state, attempts, created_at) VALUES (?,?,?,?,?)",
@@ -189,6 +194,8 @@ class Jobs:
                 result = ex.submit(fn, ctx).result(timeout=self.timeout_s)
             except FutTimeout:
                 last_err = f"timeout after {self.timeout_s}s"
+                self._set(key, state="failed", error=last_err, finished_at=now_utc())
+                return {"state": "failed", "error": last_err, "attempts": attempts, "still_running": True}
             except (BudgetExceeded, flags.FlagOff) as e:
                 self._set(key, state="failed", error=str(e)[:500], finished_at=now_utc(), attempts=self.attempts)
                 return {"state": "failed", "error": str(e), "attempts": attempts}
@@ -313,8 +320,11 @@ def build_resolver(con, lg, observed_at, out):
 
 
 def _latest_memberships(con, league):
+    # ESPN roster memberships only: the history job's dated one-game rows (source espn_gamelog, one per player per
+    # game) are closed intervals the resolver never uses and were decoded every cycle (bug sweep 2026-11-06 #44)
     rows = con.execute("SELECT r.* FROM records r JOIN (SELECT source, source_key, MAX(revision) rv FROM records "
-                       "WHERE late = 0 AND kind='membership' AND player_id LIKE ? GROUP BY source, source_key) z ON "
+                       "WHERE late = 0 AND kind='membership' AND source = 'espn' AND player_id LIKE ? "
+                       "GROUP BY source, source_key) z ON "
                        "r.source = z.source AND r.source_key = z.source_key AND r.revision = z.rv "
                        "WHERE r.kind='membership'", (f"{league}:%",)).fetchall()
     return [(r["record_id"], store._rec(r)) for r in rows]

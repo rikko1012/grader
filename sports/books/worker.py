@@ -32,7 +32,7 @@ from datetime import datetime, timedelta, timezone
 from .. import config, net
 from . import events as canon
 from . import plan, providers, schedule, store
-from .base import Event
+from .base import Event, FetchResult
 from .store import dt, iso
 
 HOLDER = f"{socket.gethostname()}:{os.getpid()}"
@@ -61,9 +61,20 @@ def _cooldown(failures, blocked, now, not_before=None):
     return max(until, nb) if nb else until
 
 
+def _guarded(call, *args):
+    """One provider call -> its FetchResult; an unexpected exception (a non-JSON 200, a parse error) becomes a recorded
+    failure (error set, so the fetch row is finished and the provider backs off) instead of aborting the whole pass
+    and every later provider (bug sweep 2026-11-06 #37)."""
+    try:
+        return call(*args)
+    except Exception as e:                              # noqa: BLE001 - recorded as the provider's failure
+        return FetchResult(error=f"{type(e).__name__}: {str(e)[:200]}")
+
+
 def load_holds(db, now):
     """Retry-After holds saved by an earlier pass (or process) -> net.hold, so no request goes out before them."""
-    for r in db.all("SELECT key, value FROM sports_book_settings WHERE key LIKE 'hold:%'"):
+    # the pattern is a PARAMETER: a literal '%' with a params tuple breaks psycopg2 on the Postgres backend (bug #39)
+    for r in db.all("SELECT key, value FROM sports_book_settings WHERE key LIKE ?", ("hold:%",)):
         t = dt(r["value"])
         if t and t > now:
             net.hold(r["key"][len("hold:"):], t.timestamp())
@@ -92,7 +103,7 @@ def _league_reads(db, name, prov, leagues, now, info, sink=None, fixed=True):
         if nd and dt(nd) > now:
             continue
         fid = store.start_fetch(db, name, key, "league", now=now)
-        res = prov.read(db, lg, now)
+        res = _guarded(prov.read, db, lg, now)
         if res.budget_denied:
             store.finish_fetch(db, fid, res, now=now)
             info.setdefault("budget", {})[key] = res.budget_denied
@@ -135,7 +146,7 @@ def _games(db, prov, lg, now):
     last = store.setting(db, key)
     if not last or dt(last) < now - timedelta(minutes=schedule.EVENTS_EVERY_MIN):
         fid = store.start_fetch(db, prov.name, lg["key"], "events", now=now)
-        res = prov.events(lg)
+        res = _guarded(prov.events, lg)
         keys = canon.keys_for(lg, prov.name, res.events) if res.events else {}
         if res.error is None:
             store.record_events(db, prov.name, lg["key"], res.events, keys, now=now)
@@ -262,8 +273,8 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
     if not store.take_lease(db, HOLDER, LEASE_TTL_S, now=now):
         return {"busy": True}
     summary = {"at": iso(now), "providers": {}}
-    load_holds(db, now)
     try:
+        load_holds(db, now)                             # inside the try: the lease is released whatever happens
         for name, prov in (providers.PROVIDERS if provs is None else provs).items():
             info = summary["providers"].setdefault(name, {"fetched": 0, "offers": 0, "new_quotes": 0, "removed": 0})
             ok, why = prov.configured()
@@ -302,7 +313,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
                             info["budget"] = why
                             break
                     fid = store.start_fetch(db, name, key, "props", ev.provider_event_id, event_key, now=now)
-                    res = prov.props(lg, ev)
+                    res = _guarded(prov.props, lg, ev)
                     seen = _seen_at(now, fixed)
                     complete = res.error is None
                     new, removed = store.save_offers(db, fid, name, key, ev.provider_event_id, event_key, res.offers,

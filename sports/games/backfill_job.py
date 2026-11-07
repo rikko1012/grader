@@ -112,8 +112,11 @@ def run(db, leagues=LEAGUES, budget_s=DEFAULT_BUDGET_S, now=None, clock=time.mon
                         c["errors"] += 1
                         unplayed = 0
                 if complete:
-                    store.set_setting(db, k, json.dumps({"listed_at": now.isoformat(), "done": finished,
-                                                         "games": len(ids)}))
+                    # a finished season is done for good only when no game in the pass failed: a held / failed read
+                    # (ESPN Retry-After, outage) is transient and must never become a permanent "done" (owner rule)
+                    store.set_setting(db, k, json.dumps({"listed_at": now.isoformat(),
+                                                         "done": bool(finished and c["errors"] == 0),
+                                                         "games": len(ids), "errors": c["errors"]}))
                 else:
                     out["budget"] = "spent"
                     return out

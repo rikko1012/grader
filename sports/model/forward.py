@@ -27,6 +27,23 @@ from .frame import Frame
 ART_DIR = Path(__file__).resolve().parent / "artifacts"
 TARGETS = ("prizepicks", "underdog")
 SPORT_MARKETS = {"nba": list(featurize.NBA_MARKETS), "nfl": list(featurize.NFL_MARKETS)}
+PROJ_MEAN_CODE = "proj_mean:pmf"
+
+
+def fix_proj_mean_on():
+    """SPORTS_FIX_PROJ_MEAN=1 (bug sweep 2026-11-06 #10, default OFF - it moves the board's leans, owner decides): the
+    sm-1 forecast's projection_mean is the mean of the calibrated PMF its chances come from (what gradecheck and the
+    tw-1 / mi-1 paths use), not the pre-calibration model mean. Off: unchanged. Forecasts written with it carry
+    the reason code proj_mean:pmf so replay recomputes the same mean."""
+    return os.environ.get("SPORTS_FIX_PROJ_MEAN", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def shown_projection_mean(pmf, ks, model_mean, tw=False):
+    """-> (projection_mean stored on the sm-1 forecast, extra reason code or None). Flag off (default) / tw-1 (whose
+    mean is already the PMF mean): the model mean, unchanged. SPORTS_FIX_PROJ_MEAN=1: the calibrated PMF's mean."""
+    if tw or not fix_proj_mean_on():
+        return model_mean, None
+    return float(dists.mean_of(np.asarray(pmf, float)[None, :], ks)[0]), PROJ_MEAN_CODE
 
 
 def _sha(obj):
@@ -361,7 +378,10 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             if tw_m:                                     # tw-1 switched market (A7 8): exact version in the record
                 av, cv = f"{av}+tw-1:{tw['sha']}", _tw1_layer(tw, mk, base_of[gk], lo)[1]["calibration_version"]
                 codes.append("tw-1")
-            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, av, pmf, lo, mean, (rid,),
+            shown_mean, code = shown_projection_mean(pmf, ks, mean, bool(tw_m))
+            if code:
+                codes.append(code)
+            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, av, pmf, lo, shown_mean, (rid,),
                                      codes, data_version, cv, (("family_fit", am["family"]),))
             written.append(("sm-1", fc, pol, pmf, {"row": row}))
             sh_items.append((rid, o, gk, pol.get("chosen_p")))
@@ -555,8 +575,11 @@ def replay(forecast_id, scon=None):
         mean = float(dists.mean_of(pmf[None, :], ks)[0])
         av, cv = f"{av}+tw-1:{tw['sha']}", meta["calibration_version"]
     if r["model_version"] == MODEL_VERSION:
+        shown_mean = mean
+        if PROJ_MEAN_CODE in (orig.reason_codes or ()) and "+tw-1:" not in (orig.artifact_version or ""):
+            shown_mean = float(dists.mean_of(pmf[None, :], ks)[0])      # written under SPORTS_FIX_PROJ_MEAN (#10)
         fc, _ = build_forecast(offer, r["offer_record_id"], r["forecast_at"], MODEL_VERSION, av, pmf,
-                               lo, mean, (r["offer_record_id"],), list(_codes(orig)), "ds-1:" + _sha(row)[:16],
+                               lo, shown_mean,(r["offer_record_id"],), list(_codes(orig)), "ds-1:" + _sha(row)[:16],
                                cv, (("family_fit", am["family"]),), vstate)
     else:
         per = {k: tuple(v) for k, v in json.loads(r["market_json"]).items()}

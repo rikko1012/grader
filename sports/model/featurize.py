@@ -54,6 +54,52 @@ def _team_frame(con, table, league):
     return t.sort("team", "ts")
 
 
+def fix_prior_games_on():
+    """SPORTS_FIX_PRIOR_GAMES=1 (bug sweep 2026-11-06 #9, default OFF - it changes live inputs, owner decides): an
+    upcoming (unplayed) game is never a prior game of the same player's / team's LATER upcoming game. Off: unchanged."""
+    return os.environ.get("SPORTS_FIX_PRIOR_GAMES", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def split_upcoming(upcoming):
+    """Upcoming rows -> layers in which no team and no player has more than one upcoming game; games in start order,
+    each in the first layer that has room (one layer when nothing repeats)."""
+    games = {}
+    for r in upcoming:
+        games.setdefault(r["game_id"], []).append(r)
+    layers = []                                     # [(teams, players, rows)]
+    for gid in sorted(games, key=lambda g: (min(str(r["start_utc"]) for r in games[g]), str(g))):
+        rows = games[gid]
+        teams = {t for r in rows for t in (r["team"], r["opp"])}
+        players = {r["player_id"] for r in rows}
+        for lt, lp, lr in layers:
+            if not (teams & lt) and not (players & lp):
+                lt |= teams
+                lp |= players
+                lr.extend(rows)
+                break
+        else:
+            layers.append((set(teams), set(players), list(rows)))
+    return [lr for _, _, lr in layers]
+
+
+def _layered(build, upcoming, with_lags):
+    """build(upcoming_layer) per layer; the first layer's whole frame + every later layer's upcoming rows, sorted by
+    (player, time) as the frame contract requires. None when no layering is needed (flag off / one layer / lags)."""
+    if not upcoming or with_lags or not fix_prior_games_on():
+        return None
+    layers = split_upcoming(upcoming)
+    if len(layers) < 2:
+        return None
+    out = build(layers[0])
+    for lay in layers[1:]:
+        d = build(lay)
+        out = concat(out, d[np.flatnonzero(d["is_up"] == 1)])
+        del d
+    out = out.sort("player_id", "ts")
+    out.attrs["prior_games_fix"] = len(layers)
+    return out
+
+
 # ================================================================================================================ NBA
 def _with_upcoming(pg, league, as_of, upcoming, team_like=None):
     """Point-in-time cut (rows known at as_of) + the upcoming rows to forecast (stats unknown = NaN, is_up = 1)."""
@@ -90,6 +136,10 @@ def _team_upcoming(tg, league, as_of, up_keys, upcoming):
 def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None, with_lags=True):
     """absences: {(game_id, team): [player_id, ...] | None} for UPCOMING games - the players the injury report lists
     as Out (forward source: ESPN injury report in the store). None / missing = no report -> unknown (NaN)."""
+    lay = _layered(lambda u: nba_frame(con, h_min, h_rate, upcoming=u, as_of=as_of, absences=absences,
+                                       with_lags=with_lags), upcoming, with_lags)
+    if lay is not None:
+        return lay
     pg = Frame.from_sql(con, "SELECT p.*, g.start_utc, g.season, g.season_type, g.spread_home, g.total_line "
                              "FROM nba_pg p JOIN games g ON g.league='nba' AND g.game_id = p.game_id "
                              "WHERE g.status = 'final'")
@@ -302,6 +352,9 @@ def nfl_positions(pg, recent=NFL_RECENT_POS):
 
 
 def nfl_frame(con, h_opp=4, upcoming=None, as_of=None, with_lags=True):
+    lay = _layered(lambda u: nfl_frame(con, h_opp, upcoming=u, as_of=as_of, with_lags=with_lags), upcoming, with_lags)
+    if lay is not None:
+        return lay
     two_way = nfl_two_way_on()
     # two-way (sanity 2026-11-05): nflverse lists Travis Hunter (JAX WR/CB) as CB in all 13 rows, so the offensive-only
     # filter dropped his whole history and his upcoming row kept "CB" (no fitted prior) -> PMF collapsed onto 0 (0.05

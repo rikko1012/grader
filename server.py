@@ -2348,6 +2348,49 @@ def _lol_member_rebuild(path, mt):
     return body
 
 
+# Learning cycles (bug sweep 2026-11-06 #18): learning.forever() spawned a child every 15 min without checking a cycle
+# already running, and /admin/learning.json?fresh=1 checked STATE['running'] before the thread set it, so two
+# `learning.py run --child` processes could run on learning.db together. learning.py is a hash-frozen model file
+# (tests/test_workspace_api.py), so the server owns ONE non-blocking lock that both starters take atomically.
+_LEARNING_SPAWN = threading.Lock()
+
+
+def learning_cycle_once():
+    """One learning cycle (learning._cycle_safe: child process, errors recorded) unless one is already running from
+    this server. -> True when it ran."""
+    import learning
+    if not _LEARNING_SPAWN.acquire(blocking=False):
+        return False
+    try:
+        learning._cycle_safe()
+        return True
+    finally:
+        _LEARNING_SPAWN.release()
+
+
+def learning_forever():
+    """= learning.forever (LEARNING=0 off, START_DELAY_S, then every CYCLE_S) through learning_cycle_once."""
+    import learning
+    if os.environ.get("LEARNING", "1") == "0":
+        learning.STATE["disabled"] = True
+        return
+    time.sleep(learning.START_DELAY_S)
+    while True:
+        learning_cycle_once()
+        time.sleep(learning.CYCLE_S)
+
+
+def learning_http(path, q):
+    """learning.http, with the fresh=1 cycle started through the shared lock (a second click, or the timer, while a
+    cycle runs starts nothing)."""
+    import learning
+    if path == "/admin/learning.json" and q.get("fresh") == "1":
+        if not _LEARNING_SPAWN.locked():
+            threading.Thread(target=learning_cycle_once, daemon=True, name="learning-now").start()
+        q = {k: v for k, v in q.items() if k != "fresh"}
+    return learning.http(path, q, WEB)
+
+
 def lol_center_supervise():
     """Keep one LoL data-center worker running (python -m lol.center.worker, low priority); restart it with backoff
     (1 min doubling to 30 min; reset after an hour up). LOL_DATA=0 starts nothing."""
@@ -4785,8 +4828,8 @@ class Handler(BaseHTTPRequestHandler):
             if (u.path == "/admin/lol.json" or u.path.startswith("/admin/lol/")) and self.authed(q.get("token")):
                 return self.send(200, lol_center_admin(u.path, q))     # LoL data center (backend only, not released)
             if (u.path in ("/admin/learning", "/admin/learning.json") or u.path.startswith("/admin/learning/")) and self.authed(q.get("token")):
-                import learning                           # continuous measurement dashboard (shadow; never changes a grade)
-                return self.send(*learning.http(u.path, q, WEB))
+                # continuous measurement dashboard (shadow; never changes a grade); one cycle at a time (#18)
+                return self.send(*learning_http(u.path, q))
             if u.path == "/admin/comparison_audit" and self.authed(q.get("token")):
                 # ONE cohort at ONE timestamp: every Underdog offer now, and for every graded board line whether the
                 # comparison finds its own offer (by id / name) or why not
@@ -6163,7 +6206,7 @@ if __name__ == "__main__":
     # research tools last (matchid tables, then the moneyline refreshers): their own thread, failures isolated
     threading.Thread(target=start_research, daemon=True, name="research").start()
     # continuous learning (learning.py): measures settled matches every 15 min - shadow only, never touches grading
-    threading.Thread(target=lambda: __import__("learning").forever(), daemon=True, name="learning").start()
+    threading.Thread(target=learning_forever, daemon=True, name="learning").start()   # one cycle at a time (#18)
     # LoL data center: one supervised low-priority child process (line archive + Leaguepedia); not released to members
     threading.Thread(target=lol_center_supervise, daemon=True, name="lol-center").start()
     import workspace_alerts
