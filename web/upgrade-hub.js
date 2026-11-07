@@ -60,6 +60,14 @@ export function mount(C) {
   H.slipLines='no_goblins';T.slipLines=H.slipLines;H.slipLinesSet=false;
   H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',fresh:'all',sort:'ev',dense:false,stake:100,tab:null,moreOpen:false};
   try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
+  /* QOL 2026-11-07: Price check's Book / Side / Minimum / Checked within / Sort are kept on this device across reloads (Sport still
+     follows the board's sport tab; a saved book with no row today falls back to All books when the sheet draws) */
+  const MT_KEEP={book:v=>/^[\w:.-]{1,40}$/.test(v),side:v=>['all','over','under'].includes(v),minEv:v=>['0','0.01','0.02','0.05'].includes(v),fresh:v=>v==='all'||/^\d{1,6}$/.test(v),sort:v=>['ev','chance','fresh'].includes(v)};
+  try{const v=JSON.parse(localStorage.getItem('scout-price-filters')||'null');if(v&&typeof v==='object')for(const [k,ok] of Object.entries(MT_KEEP))if(typeof v[k]==='string'&&ok(v[k]))H.mt[k]=v[k];}catch(e){/* storage blocked */}
+  const mtRemember=()=>{try{localStorage.setItem('scout-price-filters',JSON.stringify(Object.fromEntries(Object.keys(MT_KEEP).map(k=>[k,String(H.mt[k])]))));}catch(e){/* storage blocked */}};
+  /* QOL 2026-11-07: search ignores case and accents (Jokić = jokic) and matches every word typed, in any order */
+  const fold=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const textHas=(text,q)=>{const t=fold(text);return fold(q).split(/\s+/).filter(Boolean).every(w=>t.includes(w));};
   const allowed = () => Object.keys(SPORTS).filter(s => R.me.sports && R.me.sports[s]);
   const key = r => [r.sport,r.offer.platform,r.offer.offer_id].join('|');
   const playerKey = r => r.sport+'|'+r.player.key;
@@ -642,6 +650,11 @@ export function mount(C) {
     const read=!said?null:x.same_line_as?`Same line as ${esc(x.same_line_as)}: ${said}`:s.line_chance&&s.side?`${said}, Scout’s chance at this line`:said;
     return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(o.platform_label)} · ${esc(o.line)}</h4><small>Read ${esc(o.seen_at?age(o.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Over</dt><dd>${price('over')}</dd></div><div><dt>Under</dt><dd>${price('under')}</dd></div>${read?`<div><dt>Scout's read</dt><dd>${read}</dd></div>`:''}</dl>${s.line_chance?'<p class="h-history-note">Read from the same saved projection as this player\u2019s graded line. No letter or stake: those are set for the PrizePicks or Underdog entry only.</p>':''}</section>`;
   }
+  const clearArmed=()=>!!H.clearArmed&&Date.now()-H.clearArmed<5000;
+  function armClear(){
+    const on=clearArmed()&&T.legs.length>0,n=T.legs.length;
+    document.querySelectorAll('#u-hub [data-u="clear"]').forEach(b=>{b.textContent=on?`Clear ${n} ${n===1?'pick':'picks'}?`:'Clear';b.classList.toggle('h-armed',on);b.setAttribute('aria-label',on?`Press again to remove all ${n} ${n===1?'pick':'picks'} from your slip`:'Clear slip');});
+  }
   function refreshSlip() {
     if(!isOpen()) return;
     const box=$('hub-slip-content'), top=box.scrollTop;
@@ -661,6 +674,8 @@ export function mount(C) {
     paintBoard();
     if(H.section==='picks')paintPicks();
     if(H.section==='studio')paintStudio();
+    if(H.clearArmed)armClear();
+    evSlipSync();
   }
   /* audit 2026-11-04 (polling): read only the sport(s) on screen. Another sport's board is read when its tab opens; the minute
      refresh runs only while the board is on screen and the page is visible; the browser revalidates each read with its ETag (304). */
@@ -774,7 +789,7 @@ export function mount(C) {
       ${full?(R.me.features?.background_alerts?`<div class="h-alert"><div><b>Whop notifications</b><p>${H.delivery?.enabled?`Enabled for this account, including when Scout is closed. At most ${H.delivery.daily_cap??12} a day, one every ${Math.round((H.delivery.cooldown_s??900)/60)} minutes; each opens the prop. Every message has a one-tap stop link.`:'Opt in to personal Whop notifications while Scout is closed. Uses your Whop account for delivery; consent expires after 30 days.'}</p>${H.delivery?.status?.startsWith('delivery_')?'<p class="h-warning">The last delivery could not be confirmed. Live highlight still works on this screen.</p>':''}</div><button data-hub="toggle-delivery" ${H.deliveryBusy?'disabled':''}>${H.delivery?.enabled?'Turn off':'Enable Whop alerts'}</button></div>`:''):''}
       ${full&&H.deliveryError?`<p class="h-warning" role="status">${esc(H.deliveryError)}</p>`:''}
       ${H.saveError?'<p class="h-warning">Preferences have not synced. <button data-hub="save-retry">Retry save</button></p>':''}
-      <h3>${BG?'Your alerts':'Your saved filters'}</h3>${H.alerts.length?H.alerts.map((a,i)=>`<div class="h-alert"><b>${esc(a.name)}</b><span>${esc(a.filters.sport==='all'?'All sports':SPORTS[a.filters.sport]||a.filters.sport)} · ${esc(a.filters.book)}</span><button data-hub="delete-alert" data-id="${i}">Remove</button></div>`).join(''):`<p>Nothing saved yet. Set your board filters, then choose Views › ${BG?'Alert me on these filters':'Live highlight these filters'}.</p>`}
+      <h3>${BG?'Your alerts':'Your saved filters'}</h3>${H.alerts.length?H.alerts.map((a,i)=>`<div class="h-alert"><b>${esc(a.name)}</b><span>${esc(a.filters.sport==='all'?'All sports':SPORTS[a.filters.sport]||a.filters.sport)} · ${esc(a.filters.book)}</span><button data-hub="delete-alert" data-id="${i}" aria-label="Remove ${esc(a.name)}">Remove</button></div>`).join(''):`<p>Nothing saved yet. Set your board filters, then choose Views › ${BG?'Alert me on these filters':'Live highlight these filters'}.</p><button class="h-alert-new" data-hub="alerts-new">Set filters on the board</button>`}
       <h3>Live highlight · this visit</h3>${H.notices.length?H.notices.map(n=>`<button class="h-notice" data-hub="research" data-id="${esc(n.id)}"><b>${esc(n.name)}</b><span>${esc(n.text)}</span><small>${esc(n.view)} · ${new Date(n.at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</small></button>`).join(''):'<p>New matches will appear here after the next refresh. The first load establishes your baseline.</p>'}`;
   }
   function paintAlerts() {
@@ -1224,8 +1239,8 @@ export function mount(C) {
     // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
     const persona=genie&&R.me.features?.genie_persona===true;
     const out=G.busy?'<p class="h-detail-loading">Checking this line’s saved numbers…</p>':G.err?`<p>${esc(G.err)}</p>`:G.ans?(persona&&G.intro?`<p class="h-genie-intro">${esc(G.intro)}</p>`:'')+G.ans.map(x=>`<p>${esc(x)}</p>`).join(''):'';
-    const form=genie?`${persona?`<p class="h-genie-intro">\u{1F9DE} Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat.</p>`:''}<form class="h-ask" id="hub-ask" novalidate><label for="hub-ask-q">${persona?'Make a wish about this line':'Ask about this line'}</label><div class="h-ask-row"><input id="hub-ask-q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button type="submit"${G.busy?' aria-disabled="true"':''}>Ask</button></div>
-      <div class="h-ask-sugg" role="group" aria-label="Suggested questions">${SUGGEST.map(x=>`<button type="button" data-hub="genie-ask" data-id="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+    const form=genie?`${persona?`<p class="h-genie-intro">\u{1F9DE} Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat.</p>`:''}<form class="h-ask" id="hub-ask" novalidate><label for="hub-ask-q">${persona?'Make a wish about this line':'Ask about this line'}</label><div class="h-ask-row"><input id="hub-ask-q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button type="submit"${G.busy?' aria-disabled="true"':''}>${G.busy?'Checking…':'Ask'}</button></div>
+      <div class="h-ask-sugg" role="group" aria-label="Suggested questions">${SUGGEST.map(x=>`<button type="button" data-hub="genie-ask" data-id="${esc(x)}"${G.busy?' aria-disabled="true"':''}>${esc(x)}</button>`).join('')}</div>
       <div class="h-ask-out" id="hub-ask-out" role="status" aria-live="polite">${out}</div>${G.quota?`<p class="h-history-note">${Number(G.quota.remaining_questions)} of ${Number(G.quota.questions_limit)} questions left today.</p>`:''}</form>`:'';
     return `${form}<details class="h-guide"${genie?'':' open'}><summary>Scout evidence guide</summary><p class="h-history-note">Answers use this offer's saved forecast and research data only.</p>
       <h5>What supports this pick?</h5><p>${esc(r.player.name)} has a saved projection of ${num(s.projection)?esc(s.projection.toFixed(1)):'unavailable'} for ${esc(r.market.period_label)} ${esc(r.market.stat_label)}. ${chance==null?'No probability was saved for the selected side.':`The saved chance for ${sideWord(side)} ${esc(r.offer.line)} is ${pct(chance)}.`}${s.hold?' This is a research estimate; the validation gate has not released official grades.':''}</p>
@@ -1332,6 +1347,7 @@ export function mount(C) {
     const a=document.activeElement,u=box.contains(a)?a.dataset.u:null,id=u?a.dataset.id:null;
     box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks">View receipts','data-hub="receipts">View in My picks');
     if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side. Or let Auto-build make slips for you.</p><div class="h-empty-acts"><button data-hub="browse-props">Browse player props</button><button data-hub="studio-tab" data-id="build">Auto-build slips</button></div></div>';
+    if(H.clearArmed)armClear();
     if(u)box.querySelector(`[data-u="${CSS.escape(u)}"]${id==null?'':`[data-id="${CSS.escape(id)}"]`}`)?.focus({preventScroll:true});
     if($('hub-slip-history'))$('hub-slip-history').innerHTML=C.picksTab();
     $('hub-studio-tab-n').textContent=String(T.legs.length);
@@ -1359,8 +1375,39 @@ export function mount(C) {
       H.batch=batch;H.batchSaved=false;paintBatch();
       await saveBatch();
       status.textContent=`${batch.slips.length} of ${options.count} ${options.count===1?'slip':'slips'} generated and rechecked. ${batch.note||'Review them below; your slip is unchanged.'}`;
+      /* QOL 2026-11-07: the new slips sat below the whole form (two screens down on a phone). The result line moves to the top of
+         the screen with the slips right under it, and focus goes to their heading */
+      if(H.section==='studio'&&H.studioTab==='build'){status.scrollIntoView({block:'start'});const h=$('hub-generated')?.querySelector('h2');if(h){h.tabIndex=-1;h.focus({preventScroll:true});}}
     } catch(e){status.textContent=e.status?'Could not verify current offers. Your draft was kept. Try again.':e.message;}
-    finally{H.generating=false;button.disabled=false;button.textContent='Generate slips';}
+    finally{H.generating=false;button.textContent='Generate slips';syncGenerate();}
+  }
+  /* QOL 2026-11-07: with no sport ticked, Generate is off and the line under it says why (it used to wait for a press to say so) */
+  const NO_SPORT='Choose at least one sport to build slips.';
+  function syncGenerate(){
+    const b=$('hub-generate'),status=$('hub-generation-status');if(!b||H.generating)return;
+    const none=!document.querySelector('#hub-generation-sports input:checked');
+    b.disabled=none;
+    if(none)status.textContent=NO_SPORT;else if(status.textContent===NO_SPORT||status.textContent==='Choose at least one sport.')status.textContent='';
+  }
+  /* QOL 2026-11-07: Auto-build's settings are kept on this device, so a reload does not reset them to 8 PrizePicks Power 2-picks.
+     Goblins stays on the account (savePreferences). Only the member's own choices are kept; nothing about the slips themselves. */
+  const AB_KEY='scout-autobuild',AB_IDS=['book','type','slips','count','mix','games','repeats','research'];
+  function saveAutobuild(){
+    try{const v={off:[...document.querySelectorAll('#hub-generation-sports input')].filter(e=>!e.checked).map(e=>e.value)};
+      for(const id of AB_IDS){const el=$('hub-generation-'+id);if(el)v[id]=el.value;}
+      localStorage.setItem(AB_KEY,JSON.stringify(v));}catch(e){/* storage blocked */}
+  }
+  function restoreAutobuild(){
+    let v=null;try{v=JSON.parse(localStorage.getItem(AB_KEY)||'null');}catch(e){/* storage blocked */}
+    if(v&&typeof v==='object'){
+      const set=id=>{const el=$('hub-generation-'+id);if(el&&typeof v[id]==='string'&&[...el.options].some(o=>o.value===v[id]&&!o.disabled))el.value=v[id];};
+      set('book');generationControls();set('type');generationControls();
+      for(const id of ['slips','count','mix','games','repeats','research'])set(id);
+      generationControls();
+      const boxes=[...document.querySelectorAll('#hub-generation-sports input')];
+      if(Array.isArray(v.off)&&boxes.some(e=>!v.off.includes(e.value)))boxes.forEach(e=>{e.checked=!v.off.includes(e.value);});
+    }
+    syncGenerate();
   }
   async function saveBatch() {
     try {
@@ -1389,7 +1436,7 @@ export function mount(C) {
   async function useGenerated(id) {
     const s=H.batch?.slips?.[Number(id)];if(!s||H.usingBatch)return;
     H.usingBatch=true;
-    try {await C.useGenerated(s);paintBatch();$('hub-batch-message-'+id).textContent='Rechecked and opened in My slip.';H.studioTab='slip';refreshSlip();C.say('Rechecked and opened in My slip.');}
+    try {await C.useGenerated(s);paintBatch();$('hub-batch-message-'+id).textContent='Rechecked and opened in My slip.';H.studioTab='slip';refreshSlip();studioHash();C.say('Rechecked and opened in My slip.');}
     catch(e){$('hub-batch-message-'+id).textContent=e.status?'Could not recheck this slip. Your draft was kept.':e.message;}
     finally{H.usingBatch=false;}
   }
@@ -1497,14 +1544,14 @@ export function mount(C) {
   // Filters only hide rows. The sheet follows the hub sport tab; its Sport filter can still widen it.
   const mtAge=x=>{const t=Date.parse(x?.seen_at);return Number.isFinite(t)?Math.max(0,(Date.now()-t)/1000):null;};
   const mtLegsAge=a=>Math.max(...(a.legs||[]).map(l=>mtAge(l)??Infinity));
-  const mtText=x=>[x.player,x.team,x.event,x.stat_label,x.book_label,...(x.legs||[]).map(l=>l.book_label)].join(' ').toLowerCase();
+  const mtText=x=>[x.player,x.team,x.event,x.stat_label,x.book_label,...(x.legs||[]).map(l=>l.book_label)].join(' ');
   const mtSports=d=>Object.keys(d?.sports||{}).filter(s=>H.mt.league==='all'||H.mt.league===s);
   const mtBook=x=>x.kind!=='pickem';   /* a single bet: sportsbook or prediction market (pick'em multipliers are owner-only) */
   function mtKeep(sport,x,legs){
     const f=H.mt,books=legs?x.legs.map(l=>l.book):[x.book],sides=legs?x.legs.map(l=>l.side):[x.side];
     const age=legs?mtLegsAge(x):(mtAge(x)??Infinity);
     return (f.league==='all'||f.league===sport)&&(f.book==='all'||books.includes(f.book))&&(f.side==='all'||sides.includes(f.side))
-      &&(f.fresh==='all'||age<=Number(f.fresh))&&(!f.q||mtText(x).includes(f.q.toLowerCase()));
+      &&(f.fresh==='all'||age<=Number(f.fresh))&&(!f.q||textHas(mtText(x),f.q));
   }
   /* the Book list follows the Sport filter: only books with a row in the sports in view (a book with no CS2 or LoL row never shows there) */
   function mtBooks(d){
@@ -1563,12 +1610,15 @@ export function mount(C) {
   const mtHead=cols=>`<li class="h-pc-row h-pc-head" aria-hidden="true">${cols.map(c=>`<div class="h-pc-cell">${c}</div>`).join('')}</li>`;
   function marketHTML(){
     if(H.marketLoading&&!H.marketDoc)return '<p class="h-mt-state" role="status">Checking current prices…</p>';
-    if(H.marketError)return `<p class="h-mt-state h-warning" role="status">${esc(H.marketError)} Use Refresh prices to try again.</p>`;
+    if(H.marketError&&!H.marketDoc)return `<p class="h-mt-state h-warning" role="status">${esc(H.marketError)} Use Refresh prices to try again.</p>`;
     if(!H.marketDoc)return '<p class="h-mt-state">Choose Refresh prices to read the latest prices.</p>';
     const d=H.marketDoc,f=H.mt,sports=mtSports(d),owner=!!d.owner;
     const ageText=t=>t==null||!Number.isFinite(t)?'—':t<60?Math.round(t)+'s':t<5400?Math.floor(t/60)+'m':(t/3600).toFixed(1)+'h';
     const builtAge=(Date.now()-Date.parse(d.as_of))/1000;
-    const head=Number.isFinite(builtAge)&&builtAge>120?`<p class="h-mt-state" role="status">These prices were built ${ageText(builtAge)} ago. Refresh prices for the current sheet.</p>`:'';
+    /* QOL 2026-11-07: a refresh that fails keeps the last good sheet on screen under a warning (it used to blank the whole section);
+       the server's age limits below still drop any price or pair that is too old */
+    const head=H.marketError?`<p class="h-mt-state h-warning" role="status">Prices could not be refreshed. Showing the sheet built ${Number.isFinite(builtAge)?ageText(Math.max(0,builtAge))+' ago':'earlier'}. Use Refresh prices to try again.</p>`
+      :Number.isFinite(builtAge)&&builtAge>120?`<p class="h-mt-state" role="status">These prices were built ${ageText(builtAge)} ago. Refresh prices for the current sheet.</p>`:'';
     const ready=sports.filter(s=>d.sports[s]?.state!=='unavailable');
     if(sports.length&&!ready.length)return head+'<p class="h-mt-state" role="status">Prices could not be read just now. Use Refresh prices to try again.</p>';
     let ev=[],arb=[],near=[],all=0,quotes=0,lines=0;
@@ -1595,7 +1645,7 @@ export function mount(C) {
       body=`<section class="h-pc-section h-pc-near" aria-label="Closest to their fair chance"><h3>Closest to their fair chance</h3><p class="h-pc-ask">No price pays more than its fair chance right now. Checked ${quotes.toLocaleString()} prices on ${lines.toLocaleString()} lines${clock?' at '+esc(clock):''}. These come closest, best first.</p>`
         +`<ol class="h-pc-list h-pc-ev${f.dense?' is-compact':''}">${mtHead(['Pick','Book &amp; price','Fair chance vs needed','Per $100 against fair','Checked'])}${near.map(x=>mtEvRow(x,true)).join('')}</ol></section>`;}
     else if(!ev.length&&!arb.length)
-      body=all?`<p class="h-mt-state h-pc-none">No prices match these filters. Clear a filter to see all ${all} rows.</p>`
+      body=all?`<p class="h-mt-state h-pc-none">No prices match these filters. Clear a filter to see all ${all} rows. <button type="button" data-hub="mt-clear">Clear filters</button></p>`
         :`<p class="h-mt-state h-pc-none">Nothing worth acting on right now. Checked ${quotes.toLocaleString()} prices on ${lines.toLocaleString()} lines${clock?' at '+esc(clock):''}.</p>`;
     if(ev.length){const x=ev[0];
       body+=`<section class="h-pc-section" aria-label="Prices better than the fair chance"><h3>Prices better than the fair chance</h3><p class="h-pc-ask">Which single bets pay more than their real chance is worth?</p>`
@@ -1658,6 +1708,10 @@ export function mount(C) {
     +'#u-hub .h-mt-method ul{margin:6px 0;padding-left:18px}#u-hub .h-mt-method li{margin:4px 0}'
     +'#u-hub .h-market-tools .h-table-wrap{overflow-x:auto;margin:6px 0 14px}#u-hub .h-owner-table{width:100%;border-collapse:collapse}#u-hub .h-owner-table small{display:block}#u-hub .h-owner-table .h-num{white-space:nowrap}'
     +'#u-hub .h-market-tools details{margin:6px 0 12px}#u-hub .h-market-tools summary{min-height:40px;display:flex;align-items:center;cursor:pointer;font-weight:600}'
+    /* QOL 2026-11-07: Refresh prices kept its own height (it stretched to the heading block, ~110px tall on desktop); the both-sides
+       "Either way you get" figure wraps inside its column instead of running into Checked; the no-match Clear filters is a real target */
+    +'#u-hub .h-market-tools>.h-section-head>button{align-self:flex-start;min-height:40px;white-space:nowrap}'
+    +'#u-hub .h-pc-arb .h-pc-value .h-pc-chip{white-space:normal}#u-hub .h-pc-none button{min-height:40px;margin-left:6px}'
     +'@media(max-width:639px){#u-hub .h-pc-head{display:none}#u-hub .h-pc-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:12px}'
     +'#u-hub .h-pc-row>.h-pc-cell{grid-column:1}#u-hub .h-pc-row>.h-pc-value{grid-column:2;grid-row:1;align-self:start;text-align:right}'
     +'#u-hub .h-pc-wide{display:none}#u-hub .h-pc-narrow{display:inline}#u-hub .h-pc-fair small{display:inline;margin-left:6px}'
@@ -1679,7 +1733,7 @@ export function mount(C) {
       if(!$('hub-mt-style'))document.head.insertAdjacentHTML('beforeend',`<style id="hub-mt-style">${MT_CSS}</style>`);
       ($('hub-tools-alerts')||$('hub-tools-body')).insertAdjacentHTML($('hub-tools-alerts')?'beforebegin':'beforeend',`<section class="h-market-tools" id="hub-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2 tabindex="-1">Price check</h2><p>Prices that pay more than they should, and lines where two books let you bet both sides and win either way.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><p class="h-pc-lede">Each row is a single bet at one book. Green is what the price pays over its fair chance, per $100.</p><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
       const box=$('hub-market-filters');
-      const read=e=>{const id=(e.target.id||'').replace('hub-mt-','');if(!(id in H.mt)||id==='dense')return;H.mt[id]=e.target.value;paintMarketResults();};
+      const read=e=>{const id=(e.target.id||'').replace('hub-mt-','');if(!(id in H.mt)||id==='dense')return;H.mt[id]=e.target.value;if(id in MT_KEEP)mtRemember();paintMarketResults();};
       box.addEventListener('input',e=>{if(e.target.id==='hub-mt-q')read(e);});
       box.addEventListener('change',e=>{if(e.target.id!=='hub-mt-q')read(e);if(e.target.id==='hub-mt-league')paintMarkets();});
       box.addEventListener('toggle',e=>{if(e.target.classList?.contains('h-mt-more'))H.mt.moreOpen=e.target.open;},true);
@@ -1687,6 +1741,9 @@ export function mount(C) {
       if(!H.marketDoc&&!H.marketLoading&&!H.marketError)actions['refresh-markets']();
     }
     mtFollowTab();
+    /* QOL 2026-11-07: while a refresh is out the button says so and does nothing (a second press sent a second request) */
+    const rb=document.querySelector('#hub-market-tools [data-hub="refresh-markets"]');
+    if(rb){rb.disabled=!!H.marketLoading;rb.textContent=H.marketLoading?'Checking prices…':'Refresh prices';}
     const box=$('hub-market-filters'),had=box.contains(document.activeElement)?document.activeElement.id:null;
     box.innerHTML=H.marketDoc?marketFilters():'';
     if(had)$(had)?.focus({preventScroll:true});
@@ -1700,13 +1757,24 @@ export function mount(C) {
     document.querySelector('#hub-studio-section .h-studio-intro').insertAdjacentHTML('beforeend','<button data-hub="share-card">Download lineup image</button>');
   }
 
+  /* QOL 2026-11-07: the Slips tab in view (My slip / Auto-build / Tracked) is kept in the address (?tab=build), replacing the entry
+     rather than adding one, so a reload or a Back into Slips reopens the same tab; route() already reads ?tab= */
+  function studioHash(){
+    if(H.section!=='studio')return;
+    const hash=(V2?'#/slips':'#scout/studio')+(H.studioTab!=='slip'?'?tab='+H.studioTab:'');
+    if(location.hash!==hash){history.replaceState(history.state,'',hash);H.routeHash=location.pathname+location.hash;}
+  }
   const SECTIONS=['board','studio','record','alerts','picks','tools',...(EVB?['ev']:[])];
   const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:'Best prices'};
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev')return;
-    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
+    H.evSlipSig=T.legs.map(l=>l.id).join();
+    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,slipSide(id){const r=rec(id);return r&&C.onSlip(r)?(T.legs.find(l=>l.sport===r.sport&&l.key===r.key&&l.book===r.offer.platform)?.side||null):null;},addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
     catch(e){box.innerHTML='<p class="h-mt-state">Best prices could not be loaded. Use Refresh to try again.</p>';}
   }
+  /* QOL 2026-11-07: Best prices' "+ Slip" buttons follow the slip (a pick removed in the slip column turns back into "+ Slip");
+     redrawn only when the set of picks changes, never on the slip's routine rechecks */
+  function evSlipSync(){if(EVB&&H.section==='ev'&&H.evSlipSig!==T.legs.map(l=>l.id).join())paintEv();}
   function section(name,navigate=true) {
     if(name==='games'){H.view='games';name='board';}
     if(!SECTIONS.includes(name))name='board';
@@ -1718,7 +1786,7 @@ export function mount(C) {
     if(from==='board'&&name!=='board'&&center)H.boardScroll=center.scrollTop;
     H.section=name;
     const games=name==='board'&&H.view==='games';
-    if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
+    if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'')+(name==='studio'&&H.studioTab!=='slip'?'?tab='+H.studioTab:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
     for(const n of SECTIONS)$('hub-'+n+'-section').hidden=n!==name;
     const here=name==='alerts'||name==='ev'?'tools':name;
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
@@ -1804,7 +1872,7 @@ export function mount(C) {
     /* owner audit 2026-11-06 (T10): "+ Add player props" / "Browse player props" open the board on All sports, not the last sport */
     'browse-props'(){H.view='list';actions.sport('all');},
     'studio-open'(id){H.studioTab=['slip','build','tracked'].includes(id)?id:'slip';section('studio');},
-    'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();sectionFocus('studio-tab',id);},
+    'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();studioHash();sectionFocus('studio-tab',id);},
     sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;H.view==='games'?section('games'):section('board');scrollTop();load(false);},
     'sort-col'(id){if(!SORT_KEYS.includes(id))return;setSort(id,H.sortBy===id&&H.sort===id?(H.sortDir==='asc'?'desc':'asc'):sortDirOf(id));document.querySelector(`#hub-table [data-hub="sort-col"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});},
     'sort-dir'(){setSort(H.sort,H.sortDir==='asc'?'desc':'asc');},
@@ -1831,17 +1899,23 @@ export function mount(C) {
     skip(){$('hub-title').focus();},
     'market-density'(){H.mt.dense=!H.mt.dense;try{localStorage.setItem('scout-market-density',H.mt.dense?'compact':'comfortable');}catch(e){}$('hub-mt-dense')?.setAttribute('aria-pressed',String(H.mt.dense));paintMarketResults();},
     async 'refresh-markets'(){
+      if(H.marketLoading)return;
+      const refocus=document.activeElement?.dataset?.hub==='refresh-markets';
       H.marketLoading=true;H.marketError=null;paintMarkets();
       try{H.marketDoc=await api('market-tools');}catch(e){H.marketError='Prices could not be loaded.';}
-      finally{H.marketLoading=false;paintMarkets();}
+      finally{H.marketLoading=false;paintMarkets();if(refocus)document.querySelector('#hub-market-tools [data-hub="refresh-markets"]')?.focus({preventScroll:true});}
     },
+    /* QOL 2026-11-07: "No prices match these filters" clears them in one press (Sport keeps following the board's sport tab) */
+    'mt-clear'(){Object.assign(H.mt,{q:'',book:'all',side:'all',minEv:'0',fresh:'all'});mtRemember();paintMarkets();$('hub-mt-q')?.focus({preventScroll:true});},
+    /* QOL 2026-11-07: the empty alerts list's button opens the board with the Views menu open on "Alert me on these filters" */
+    'alerts-new'(){if(cardOpen())closeCard(false);H.view='list';section('board');togglePop('views');$('hub-views-pop').querySelector('[data-hub="save-alert"]')?.focus({preventScroll:true});},
     async 'toggle-delivery'(){
       H.deliveryBusy=true;H.deliveryError=null;paintAlerts();
       try{H.delivery=await api('alert-delivery',{enabled:!H.delivery?.enabled});}
       catch(e){H.deliveryError=e.message||'Could not update delivery. Try again.';}
       finally{H.deliveryBusy=false;paintAlerts();}
     },
-    'delete-alert'(i){const a=H.alerts.splice(Number(i),1)[0];if(a)H.seen.delete(a.id);savePreferences();paintAlerts();},
+    'delete-alert'(i){const a=H.alerts.splice(Number(i),1)[0];if(a)H.seen.delete(a.id);savePreferences();paintAlerts();if(a)C.say(`Removed ${a.name}.`);},
     'record-retry':showRecord,
     'report-open'(){const r=rec(H.detail);if(!P('report')||!r)return;H.reportFor=r;$('hub-report-what').textContent=`${r.player.name} · ${r.market.stat_label} ${r.offer.line} · ${r.offer.platform_label}`;$('hub-report-reason').value='line';$('hub-report-note').value='';$('hub-report-dialog').showModal();$('hub-report-reason').focus();},
   };
@@ -1979,6 +2053,16 @@ export function mount(C) {
     actions[b.dataset.hub]?.(b.dataset.id,b);
     if(inMore)togglePop(null);
   });
+  /* QOL 2026-11-07: Clear in the slip column and on My slip emptied every pick in one press with no way back. The first press turns
+     it into "Clear 3 picks?" for 5 seconds; a second press clears (the slip code's own clear runs only then). The slip code listens
+     on the document's capture phase, so this listens one step earlier, on the window's. */
+  window.addEventListener('click',e=>{
+    const b=e.target.closest?.('[data-u="clear"]');if(!b||b.disabled||!$('u-hub').contains(b))return;
+    if(clearArmed()){H.clearArmed=0;clearTimeout(H.clearTimer);return;}
+    e.preventDefault();e.stopPropagation();
+    H.clearArmed=Date.now();armClear();b.focus({preventScroll:true});
+    clearTimeout(H.clearTimer);H.clearTimer=setTimeout(()=>{H.clearArmed=0;armClear();},5000);
+  },true);
   $('hub-more').addEventListener('click',e=>{if(e.target.closest('a'))togglePop(null);});
   $('u-hub').addEventListener('change',e=>{if(e.target.id==='hub-card-line'&&rec(e.target.value))selectDetail(e.target.value);});
   $('u-hub').addEventListener('submit',e=>{if(e.target.id==='hub-ask'){e.preventDefault();genieAsk();}});
@@ -2009,6 +2093,8 @@ export function mount(C) {
   for(const id of ['book','type'])$('hub-generation-'+id).addEventListener('change',generationControls);
   $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);H.slipLinesSet=true;T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
   generationControls();
+  restoreAutobuild();
+  document.querySelector('#hub-studio-section .h-generator').addEventListener('change',e=>{if(e.target.id==='hub-generation-lines')return;saveAutobuild();syncGenerate();});
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});
   window.addEventListener('hashchange',route);
