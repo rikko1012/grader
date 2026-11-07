@@ -122,10 +122,10 @@ html[data-upgrade] .sw .sw-tb-stat .u-res-btn,html[data-upgrade] .sw .sw-tb-stat
   html[data-upgrade] .sw .sw-tb{table-layout:fixed}
   html[data-upgrade] .sw .sw-tb th,html[data-upgrade] .sw .sw-tb td{padding-left:6px;padding-right:6px;overflow-wrap:anywhere}
   html[data-upgrade] .sw .sw-tb thead th{white-space:normal;letter-spacing:0;font-size:10.5px}
-  html[data-upgrade] .sw .sw-tb thead th:first-child{width:20%}
-  html[data-upgrade] .sw .sw-tb thead th:nth-child(2){width:14%}
+  html[data-upgrade] .sw .sw-tb thead th:first-child{width:18%}
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(2){width:13%}
   html[data-upgrade] .sw .sw-tb thead th:nth-child(3){width:14%}
-  html[data-upgrade] .sw .sw-tb thead th:nth-child(4){width:14%}
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(4){width:13%}
   html[data-upgrade] .sw .sw-tb-player{min-width:0}
   html[data-upgrade] .sw .sw-tb-who>div{min-width:0}
   html[data-upgrade] .sw .sw-tb-line{white-space:normal}
@@ -133,6 +133,24 @@ html[data-upgrade] .sw .sw-tb-stat .u-res-btn,html[data-upgrade] .sw .sw-tb-stat
   html[data-upgrade] .sw .sw-tb-conf,html[data-upgrade] .sw .sw-tb-research{white-space:normal;overflow-wrap:anywhere}
   html[data-upgrade] .sw .sw-tb-stat .u-row-acts{flex-wrap:wrap}
   html[data-upgrade] .sw .sw-tb .sw-grade-tag,html[data-upgrade] .sw .sw-tb .sw-grade-nv{white-space:normal}
+  /* C1 (audit 2026-11-06): in the fixed table the Scout cell was 50-80 px wide but its mean + Over + Under ran on one ~160 px
+     line into the Market column. They stack on their own lines (as on phones); Scout and Market keep a width their numbers
+     fit in (the first four columns gave up 2 + 1 + 1 points for it); the book chips and the market's fallback note wrap
+     inside their own cells, and a long L10 / L5 tally wraps instead of running into the next column */
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(5),html[data-upgrade] .sw .sw-tb thead th:nth-child(6){width:68px}
+  html[data-upgrade] .sw .sw-tb-scout .sw-tb-mu,html[data-upgrade] .sw .sw-tb-scout .sw-p{display:block;line-height:1.35}
+  html[data-upgrade] .sw .sw-tb-mkt .sw-tb-note{white-space:normal}
+  html[data-upgrade] .sw .sw-tb-line .u-bk{white-space:normal;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
+  html[data-upgrade] .sw .sw-tb-hit,html[data-upgrade] .sw .sw-tb-hit5{white-space:normal}
+}
+@media(min-width:761px) and (max-width:1099px){
+  html[data-upgrade] .sw .sw-tb thead th:first-child{width:16%}
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(2),html[data-upgrade] .sw .sw-tb thead th:nth-child(4){width:12%}
+  html[data-upgrade] .sw .sw-tb thead th:nth-child(3){width:13%}
+}
+@media(max-width:760px){       /* C1 at 390 px: the row's buttons and book chips wrap inside their own grid cell */
+  html[data-upgrade] .sw .sw-tb-stat .u-row-acts{flex-wrap:wrap}
+  html[data-upgrade] .sw .sw-tb-line .u-bk{white-space:normal;flex-wrap:wrap;max-width:100%}
 }
 html[data-upgrade] .sw .sw-field label{margin-bottom:2px}
 html[data-upgrade] .ot-lol .overview{background:var(--u-panel);border:1px solid var(--u-line);border-radius:6px}
