@@ -446,6 +446,8 @@ def test_lol_flag_off_draws_exactly_the_base_page(tmp_path):
     data = {"d": {"rows": LROWS, "match_tables": [], "slips": {}, "stake_note": "n"}, "slips": LSLIPS}
     now = run_file(tmp_path, CUR("lol.html"), LDRAW, data)
     base = run_file(tmp_path, _base_page(tmp_path, "lol.html"), LDRAW, data)
+    from tests.test_qol_lol_page import qol_1107_norm      # the 2026-11-07 QoL Slip-tab changes, folded out of both sides
+    now, base = ({k: qol_1107_norm(v) for k, v in x.items()} for x in (now, base))
     assert now == base and "openslip" not in json.dumps(now)
 
 

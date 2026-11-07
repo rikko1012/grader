@@ -256,6 +256,16 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 .ctf{display:grid;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.ctf .k{margin:0}.ctv{overflow-wrap:anywhere}.ctline{font:700 18px var(--display)}.ctcol .actions .btn{min-height:40px}
 @media(max-width:760px){.ctbtn{right:14px;bottom:14px}#ctmodal{padding:0;background:var(--panel)}.ctsheet{border-radius:0!important;min-height:100vh;border:0!important;padding:14px 12px 80px!important}
   .ctgrid{grid-auto-flow:row;grid-template-columns:minmax(0,1fr);grid-auto-columns:auto;overflow:visible}.ctf{grid-template-columns:minmax(96px,38%) minmax(0,1fr);gap:8px;align-items:baseline}}
+/* QoL 2026-11-07: tap targets of 40px or more; the card's Compare button matches its neighbours; a Clear filters button in the bar;
+   the Slip tab's bar holds no filter that does nothing there; a slip leg opens its card; the floating Compare button sits above the
+   upgraded page's Slip tray (a floating button on tablets, a full-width bar on phones) instead of under it */
+.lcmp{min-height:40px}.actions .lcmp{min-height:44px}.ctx{min-width:40px;min-height:40px}
+.bar .clearf{margin:0;min-height:40px;padding:0 14px;font-size:12.5px}.bar.slipbar:empty{display:none}
+.legopen{display:block;width:100%;min-height:40px;background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.legopen:hover{color:var(--accent-2);text-decoration:underline}
+:root:has(#u-tray-btn:not(.u-docked)) .ctbtn{bottom:76px}
+@media(max-width:640px){.bar .filter-toggle{min-height:40px}
+  :root:has(#u-tray-btn:not(.u-docked)) .ctbtn{bottom:calc(var(--u-tray-lift,0px) + 58px + env(safe-area-inset-bottom))}:root:has(#u-tray-btn:not(.u-docked)) .ctnote{bottom:calc(var(--u-tray-lift,0px) + 116px)}}
 </style><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/scout-ui.css?v=3">
 </head><body class="ot-lol"><a class="scout-skip" href="#app">Skip to content</a>
@@ -281,7 +291,7 @@ let NOTE = null;                                // a one-time notice drawn above
 let visibleLimit = 48;
 let filtersOpen = false;
 const SLIPKEY = "scout.lol.slip", MAXLEGS = {underdog: 8, prizepicks: 6};
-let SLIP = {legs: []}, CHECK = {}, SENT = {};       // SENT: the last "Send to my slip" result, shown under that suggested slip
+let SLIP = {legs: []}, CHECK = {}, SENT = {}, CLEARED = null;   // CLEARED: the legs of a slip just cleared, for one Undo       // SENT: the last "Send to my slip" result, shown under that suggested slip
 try { SLIP = Object.assign({legs: []}, JSON.parse(localStorage.getItem(SLIPKEY) || "{}")); } catch {}
 const saveSlip = () => { try { localStorage.setItem(SLIPKEY, JSON.stringify(SLIP)); } catch {} };
 try { Object.assign(F, JSON.parse(localStorage.getItem(FKEY) || "{}")); } catch {}
@@ -297,9 +307,43 @@ function savedAgo(x) {
   const d = Math.floor(m / 1440); return `Forecast saved ${d} day${d > 1 ? "s" : ""} ago`;
 }
 function gradeRank(x) { return x.pick_offered && x.grade in GRANK ? GRANK[x.grade] : x.pick_offered && x.grade ? 6 : 7; }
-function hit(x, q) { return !q || [x.player, x.team, x.opponent].some(v => String(v || "").toLowerCase().includes(q)); }
-const lineUrl = (k) => `${location.origin}/lol?line=${encodeURIComponent(k)}`;
-function setUrl(k) { try { history.replaceState(null, "", k ? `/lol?line=${encodeURIComponent(k)}` : "/lol"); } catch {} }
+// search ignores case, accents and repeated spaces ("Señor" = "senor")
+const fold = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ");
+function hit(x, q) { return !q || [x.player, x.team, x.opponent].some(v => fold(v).includes(q)); }
+// QoL 2026-11-07: the page's address keeps its other parameters (?view=classic on the upgraded page), so a reload, Back or a copied
+// card link comes back to this board, never the research hub that would cover the card
+function pageUrl(k) {
+  let p = null; try { p = new URLSearchParams(location.search); } catch {}
+  if (!p) return k ? `/lol?line=${encodeURIComponent(k)}` : "/lol";
+  p.delete("line"); if (k) p.set("line", k);
+  const s = p.toString(); return "/lol" + (s ? "?" + s : "") + (location.hash || "");
+}
+const lineUrl = (k) => `${location.origin}${pageUrl(k).split("#")[0]}`;
+function setUrl(k) { try { history.replaceState(null, "", pageUrl(k)); } catch {} }
+// a card's address is pushed, so the phone's Back gesture closes the card instead of leaving the page
+let CARDPUSH = false;
+function pushCardUrl(k) {
+  try {
+    if (!$("#modal").classList.contains("open") && history.pushState) { history.pushState({lolCard: k}, "", pageUrl(k)); CARDPUSH = true; }
+    else history.replaceState(history.state, "", pageUrl(k));
+  } catch {}
+}
+// an old shared card link (/lol?line=<key>) where the research hub would open over this board (window.scoutClassic === false,
+// set only when the hub is in front) opens on this board instead, so the card is seen
+function classicForLink() {
+  let p = null; try { p = new URLSearchParams(location.search); } catch {}
+  if (window.scoutClassic !== false || !p || !p.get("line") || p.get("view") === "classic") return false;
+  p.set("view", "classic");
+  try { location.replace("/lol?" + p.toString()); return true; } catch { return false; }
+}
+// the filters in force on this view (sort, layout and the view itself are not filters)
+function activeFilters() {
+  if (F.view === "slip") return 0;
+  const keys = F.view === "board" ? ["plat", "stat", "match", "scope", "side", "type", "floor"] : ["plat", "stat", "match", "scope", "side"];
+  return keys.filter(k => F[k] !== DEF[k]).length + (qText() ? 1 : 0) + (F.view === "board" && F.playable ? 1 : 0);
+}
+function resetFilters() { F = Object.assign({}, DEF, {view: F.view, layout: F.layout, sort: F.sort}); visibleLimit = 48; save(); render(); }
+const shortWhen = (s) => { const d = new Date(s); return !s || isNaN(d) ? "" : " · " + d.toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"}); };
 function matchKey(x) { return `${x.start}|${x.match}`; }
 function matchName(x) { return x.match; }
 function pside(x) { return x.pick_side === "Over" ? x.p_over : x.p_under; }
@@ -454,7 +498,7 @@ async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch {}
   try { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; } catch { return false; }
 }
-function qText() { return String(F.q || "").trim().toLowerCase(); }
+function qText() { return fold(F.q).trim(); }
 function rows() {
   let rs = (D.rows || []).filter(x => (F.plat === "all" || x.platform === F.plat) && (F.stat === "all" || x.stat === F.stat) &&
     (F.type === "all" || (F.type === "standard" ? x.line_type === "Standard" : x.line_type !== "Standard")) &&
@@ -470,7 +514,7 @@ function rows() {
 function boardView() {
   if (!(D.rows || []).length) return `<div class="empty"><b>No graded LoL lines right now.</b><p class="small">Lines appear here when Underdog or PrizePicks post League of Legends kills, assists or deaths props for a match we can forecast, and the pre-match forecast has been saved.</p>${(D.match_tables || []).length ? `<button type="button" data-go="tables">See the posted lines</button>` : ""}</div>`;
   const allRows = rows(), rs = allRows.slice(0, visibleLimit);
-  if (!rs.length) return `<div class="empty"><b>No lines match these filters.</b><br><button type="button" id="reset">Reset filters</button></div>`;
+  if (!rs.length) return `<div class="empty"><b>No lines match these filters.</b><p class="small">${(D.rows || []).length} line${(D.rows || []).length === 1 ? " is" : "s are"} on the board - reset the filters to see ${(D.rows || []).length === 1 ? "it" : "them"}.</p><button type="button" id="reset">Reset filters</button></div>`;
   let t = `<div class="tablebox board ${F.layout === "cards" ? "hide-table" : ""}"><table><thead><tr><th>Start</th><th>Player</th><th>Opponent</th><th>Prop</th><th>Book</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Over</th><th class="num">Under</th><th>Pick</th><th>Grade</th><th class="num">Stake</th><th><span class="sr">Compare</span></th></tr></thead><tbody>`;
   let c = `<div class="cards ${F.layout === "cards" ? "card-grid" : ""}">`;
   for (const x of rs) {
@@ -499,7 +543,7 @@ function tablesView() {
   if (F.match !== "all") ts = ts.filter(t => `${t.start}|${t.teams}` === F.match);
   let h = "";
   for (const t of ts) {
-    const q = qText(), teamHit = q && String(t.teams || "").toLowerCase().includes(q);
+    const q = qText(), teamHit = q && fold(t.teams).includes(q);
     let ms = t.markets.filter(m => (F.stat === "all" || m.stat_name.toLowerCase() === F.stat) && (F.plat === "all" || m.lines.some(l => l.platform.toLowerCase() === F.plat)) &&
       (teamHit || hit(m, q)));
     ms = ms.filter(m => F.scope === "all" || m.scope === F.scope).map(m => ({...m,
@@ -510,7 +554,9 @@ function tablesView() {
     for (const m of ms) h += `<tr><td><b>${esc(m.player)}</b><span class="sub">${esc(m.team || "")}${m.role ? " · " + esc(m.role) : ""}</span></td><td>${esc(m.stat_name)}<span class="sub">${esc(m.scope)}</span></td><td>${linesHtml(m)}</td></tr>`;
     h += `</tbody></table></div></section>`;
   }
-  return (h || `<div class="empty"><b>No posted LoL lines match these filters.</b>${(D.match_tables || []).length ? `<br><button type="button" id="reset">Reset filters</button>` : ""}</div>`) +
+  // no posted line at all is not a filter problem: say so, and only offer Reset when filters hide lines
+  const none = `<div class="empty"><b>No LoL lines are posted right now.</b><p class="small">Every book's line for the same player, prop and games shows here side by side once Underdog or PrizePicks post League of Legends props for a match.</p></div>`;
+  return (h || ((D.match_tables || []).length ? `<div class="empty"><b>No posted LoL lines match these filters.</b><br><button type="button" id="reset">Reset filters</button></div>` : none)) +
     `<p class="small faint">Underdog payouts (×) are per-pick payout modifiers, not odds. PrizePicks Goblin and Demon are alternate lines with different payouts.</p>`;
 }
 function slipView() {
@@ -520,7 +566,7 @@ function slipView() {
       h += `<div class="plhead"><b>${esc(pl)}</b>: ${d.recommended.length} slip${d.recommended.length > 1 ? "s" : ""}</div>`;
       d.recommended.forEach((sl, i) => {
         const id = `${pl}|${i}`, m = SENT.d === D ? SENT[id] : null;      // a result for this board only (the poll may replace it)
-        h += `<div class="sugg"><div class="sugghead"><span>${sl.legs.length} picks</span>${sl.model_chance_all_hit != null ? `<span>Est. chance all hit <b>${pct(sl.model_chance_all_hit)}</b></span>` : ""}</div>
+        h += `<div class="sugg"><div class="sugghead"><span>${sl.legs.length} picks</span>${sl.model_chance_all_hit != null ? `<span>Chance all hit <b>${pct(sl.model_chance_all_hit)}</b></span>` : ""}</div>
           <ul>${sl.legs.map(l => { const x = (D.rows || []).find(r => r.key === l.key); return `<li>${x ? esc(legText(legOf(x))) : "line no longer on the board"}</li>`; }).join("")}</ul>
           <div class="actions"><button type="button" class="btn" data-send="${esc(id)}">Send to my slip</button>${m ? `<span class="actmsg ${m.ok ? "ok" : "bad"}">${esc(m.text)}</span>` : ""}</div></div>`;
       });
@@ -529,11 +575,14 @@ function slipView() {
     }
   }
   if (!Object.keys(D.slips || {}).length) h += `<div class="small muted">No slip information yet.</div>`;
-  h += `<p class="small faint" style="margin:8px 0 0">Suggestions never repeat a prop or a match across slips and are never padded with extra picks. Est. chance all hit = each pick's chance multiplied (every pick is from a different match).</p></section>`;
+  h += `<p class="small faint" style="margin:8px 0 0">Suggestions never repeat a prop or a match across slips and are never padded with extra picks. Chance all hit = each pick's chance multiplied (every pick is from a different match).</p></section>`;
   h += `<section class="panel"><h3>Your slip${SLIP.legs.length ? ` · ${esc(SLIP.legs[0].platform_label)}` : ""}</h3>`;
-  if (!SLIP.legs.length) h += `<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
+  if (SLIP.legs.length) CLEARED = null;           // Undo is offered only on the slip that was just cleared
+  if (!SLIP.legs.length) h += `${CLEARED ? `<div class="actions" style="margin:0 0 10px"><span class="actmsg">Slip cleared (${CLEARED.length} pick${CLEARED.length > 1 ? "s" : ""}).</span><button type="button" class="btn" id="undoclear">Undo</button></div>` : ""}<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
   else {
-    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); const ul = PPL.on && c && c.ok && udLinkOk(ULEGS[l.key]) ? ULEGS[l.key] : null; return `<div class="slipleg"><div>${esc(legText(l))}</div>${ul ? `<span>${udA(ul, "Open")} ` : ""}<button type="button" class="btn" data-rm="${i}">Remove</button>${ul ? "</span>" : ""}${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
+    // a leg still on the board opens its card (one tap to recheck it); a leg that left the board stays plain text
+    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); const ul = PPL.on && c && c.ok && udLinkOk(ULEGS[l.key]) ? ULEGS[l.key] : null;
+      const onBoard = (D.rows || []).some(r => r.key === l.key); return `<div class="slipleg"><div>${onBoard ? `<button type="button" class="legopen" data-legk="${esc(l.key)}" title="Open this pick's card">${esc(legText(l))}</button>` : esc(legText(l))}</div>${ul ? `<span>${udA(ul, "Open")} ` : ""}<button type="button" class="btn" data-rm="${i}">Remove</button>${ul ? "</span>" : ""}${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
       <div class="actions"><button type="button" class="btn primary" id="copyslip">Recheck lines &amp; copy slip</button>${pplButton()}<button type="button" class="btn" id="clearslip">Clear</button><span class="actmsg" id="slipmsg"></span></div>
       <p class="small faint" style="margin:8px 0 0">${esc(D.stake_note)} Your slip is your own selection; it is not a suggestion.</p>`;
   }
@@ -728,11 +777,26 @@ function ctFloat() {
   let b = $("#ctbtn"); if (!b) return;
   b.hidden = !CT.length; b.textContent = `⇄ Compare (${CT.length})`;
 }
+let ctBack = null;                                 // QoL: where focus goes back to when Compare closes (the button that opened it)
 function ctOpen() {
+  ctBack = document.activeElement;
   $("#ctsheet").innerHTML = ctHtml(); $("#ctmodal").classList.add("open"); document.body.style.overflow = "hidden";
   const c = $("#ctclose"); if (c && c.focus) c.focus();
 }
-function ctClose() { $("#ctmodal").classList.remove("open"); if (!$("#modal").classList.contains("open")) document.body.style.overflow = ""; ctFloat(); }
+function ctClose(keepFocus) {
+  $("#ctmodal").classList.remove("open"); if (!$("#modal").classList.contains("open")) document.body.style.overflow = ""; ctFloat();
+  if (keepFocus) return;
+  const back = ctBack && document.body.contains(ctBack) && ctBack.getClientRects && ctBack.getClientRects().length ? ctBack : $("#ctbtn");
+  ctBack = null; if (back && !back.hidden && back.focus) back.focus();
+}
+// Tab stays inside an open dialog (the card and Compare)
+function trapTab(e, box) {
+  const els = [...box.querySelectorAll('button:not(:disabled),a[href],input,select,summary,[tabindex="0"]')].filter(el => el.getClientRects().length);
+  if (!els.length) return;
+  const first = els[0], last = els[els.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
 function ctClick(e) {
   if (e.target.id === "ctmodal" || e.target.closest("[data-ctclose]")) return ctClose();
   const rm = e.target.closest("[data-ctrm]");
@@ -748,7 +812,7 @@ function ctClick(e) {
     return;
   }
   const cd = e.target.closest("[data-ctcard]");
-  if (cd) { const it = CT[+cd.dataset.ctcard]; if (it) { ctClose(); card(it.k); } }
+  if (cd) { const it = CT[+cd.dataset.ctcard]; if (it) { ctClose(true); card(it.k, $("#ctbtn")); } }   // closing that card returns to the Compare button
 }
 // the Compare buttons (board rows, phone cards, the player card): toggle in place, no redraw of the board
 function ctWire() {
@@ -790,12 +854,12 @@ function card(k, focusBack) {
   h += `<h4>Times</h4><div class="grid small"><div><span class="k">Line posted at this number</span>${when(x.line_seen)}</div><div><span class="k">Line last checked</span>${when(x.line_checked)}</div><div><span class="k">Forecast saved</span>${when(x.forecast_at)}</div></div>
     <div class="closebar"><button type="button" class="btn" id="closecardbottom">Back to board</button></div>`;
   $("#card").innerHTML = h;
+  pushCardUrl(k);                                // this card's own address: /lol?line=<line key> (pushed: Back closes the card)
   $("#modal").classList.add("open");
   document.body.style.overflow = "hidden";
-  $("#closecard").onclick = closeCard;
-  $("#closecardbottom").onclick = closeCard;
+  $("#closecard").onclick = () => closeCard();
+  $("#closecardbottom").onclick = () => closeCard();
   $("#modal").scrollTop = 0;
-  setUrl(k);                                     // this card's own address: /lol?line=<line key>
   $("#copylink").onclick = async () => {
     const ok = await copyText(lineUrl(k)), msg = $("#actmsg");
     msg.className = ok ? "actmsg ok" : "actmsg bad"; msg.textContent = ok ? "Link copied - it opens this line's card." : "Copy failed in this browser.";
@@ -817,8 +881,12 @@ function card(k, focusBack) {
   ctWire();
   $("#closecard").focus();
 }
-function closeCard() {
-  $("#modal").classList.remove("open"); document.body.style.overflow = ""; openRow = null; setUrl(null);
+function closeCard(fromPop) {
+  $("#modal").classList.remove("open"); document.body.style.overflow = ""; openRow = null;
+  // the card's pushed address goes back off the history (Back after closing leaves the page, as before); Back itself already did it
+  if (fromPop === true) CARDPUSH = false;
+  else if (CARDPUSH) { CARDPUSH = false; try { history.back(); } catch { setUrl(null); } }
+  else setUrl(null);
   // the data may have been replaced while the card was open (poll, Copy pick, Add to slip): redraw so rows, lines and the slip count match it
   const k = lastFocus && lastFocus.dataset ? lastFocus.dataset.k : null;
   if (D !== shownD || SLIP.legs.length !== shownSlip) { render(); if (k != null) lastFocus = [...document.querySelectorAll("[data-k]")].find(el => el.dataset.k === k && el.tagName === lastFocus.tagName) || lastFocus; }
@@ -848,43 +916,52 @@ function render() {
   const ae = document.activeElement, typing = ae && ae.id === "q" ? [ae.selectionStart] : null;   // a redraw (typing, the poll) keeps the search box focused
   const y = window.scrollY, tb = $(".tablebox.board"), sl = tb ? tb.scrollLeft : 0;
   const ms = new Map();
-  for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)} · ${new Date(x.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
-  for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams} · ${new Date(t.start).toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"})}`);
+  for (const x of D.rows || []) ms.set(matchKey(x), `${matchName(x)}${shortWhen(x.start)}`);       // no "Invalid Date" for a missing start
+  for (const t of D.match_tables || []) if (!ms.has(`${t.start}|${t.teams}`)) ms.set(`${t.start}|${t.teams}`, `${t.teams}${shortWhen(t.start)}`);
   if (F.match !== "all" && !ms.has(F.match)) F.match = "all";
   let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>Read the match. Find your pick.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${holdBanner()}${staleBanner()}${NOTE ? `<div class="banner" role="status">${esc(NOTE)}</div>` : ""}`;
   NOTE = null;
-  h += `<div class="workspace-nav">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}</div><div class="bar ${filtersOpen ? "filters-open" : ""}">${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
+  const nf = activeFilters();
+  h += `<div class="workspace-nav">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}</div>`;
+  // the Slip tab is the member's own slip: no board filter changes it, so its bar carries none (QoL 2026-11-07)
+  if (F.view === "slip") h += `<div class="bar slipbar"></div>`;
+  else h += `<div class="bar ${filtersOpen ? "filters-open" : ""}">${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
     <button type="button" class="btn filter-toggle" id="filtertoggle" aria-expanded="${filtersOpen}">${filtersOpen ? "Fewer filters" : "More filters"}${[F.match, F.scope, F.type, F.floor].filter(v => v !== "all").length ? " · filters active" : ""}</button>
     <select id="s" aria-label="Prop"><option value="all">All props</option><option value="kills">Kills</option><option value="assists">Assists</option><option value="deaths">Deaths</option></select>
     <select id="m" aria-label="Match"><option value="all">All matches</option>${[...ms].map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
-    ${F.view !== "slip" ? `<select id="scope" aria-label="Map scope"><option value="all">All map scopes</option>${[...new Set((D.rows || []).map(x => x.scope).concat((D.match_tables || []).flatMap(t => t.markets.map(m => m.scope))))].sort().map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select>
-    <select id="side" aria-label="Model side"><option value="all">Overs + Unders</option><option value="Over">Overs</option><option value="Under">Unders</option></select><input type="search" id="q" placeholder="Player or team" aria-label="Search a player or team" autocomplete="off" value="${esc(F.q || "")}">` : ""}
+    <select id="scope" aria-label="Map scope"><option value="all">All map scopes</option>${[...new Set((D.rows || []).map(x => x.scope).concat((D.match_tables || []).flatMap(t => t.markets.map(m => m.scope))))].sort().map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select>
+    <select id="side" aria-label="Model side"><option value="all">Overs + Unders</option><option value="Over">Overs</option><option value="Under">Unders</option></select><input type="search" id="q" placeholder="Player or team" aria-label="Search a player or team" autocomplete="off" value="${esc(F.q || "")}">
     ${F.view === "board" ? `<select id="t" aria-label="Line type"><option value="all">All line types</option><option value="standard">Standard lines</option><option value="alt">Goblin / Demon / adjusted</option></select>
     <select id="g" aria-label="Grade floor">${FLOORS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
     <select id="o" aria-label="Sort"><option value="start">Sort: start time</option><option value="grade">Sort: best grade</option><option value="chance">Sort: chance</option></select>
-    <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}</div>`;
+    <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}
+    ${nf ? `<button type="button" class="btn clearf" id="clearf">Clear filters (${nf})</button>` : ""}</div>`;
   $("#app").innerHTML = h + (F.view === "board" ? overview() + boardView() : F.view === "slip" ? slipView() : tablesView());
   document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { SLIP.legs.splice(+b.dataset.rm, 1); saveSlip(); CHECK = {}; render(); });
-  if ($("#clearslip")) $("#clearslip").onclick = () => { SLIP.legs = []; saveSlip(); CHECK = {}; render(); };
+  if ($("#clearslip")) $("#clearslip").onclick = () => { CLEARED = SLIP.legs.slice(); SLIP.legs = []; saveSlip(); CHECK = {}; render(); const u = $("#undoclear"); if (u && u.focus) u.focus(); };
+  if ($("#undoclear")) $("#undoclear").onclick = () => { if (CLEARED && !SLIP.legs.length) { SLIP.legs = CLEARED; saveSlip(); CHECK = {}; } CLEARED = null; render(); };
+  document.querySelectorAll("[data-legk]").forEach(b => b.onclick = () => card(b.dataset.legk, b));
   if ($("#copyslip")) $("#copyslip").onclick = copySlip;
   if (PPL.on && $("#openslip")) $("#openslip").onclick = () => openSlip($("#openslip").dataset.open);
   document.querySelectorAll("[data-send]").forEach(b => b.onclick = () => sendSuggested(b.dataset.send));
-  $("#s").value = F.stat; $("#m").value = F.match; if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; $("#g").value = F.floor; }
+  if ($("#s")) { $("#s").value = F.stat; $("#m").value = F.match; } if ($("#t")) { $("#t").value = F.type; $("#o").value = F.sort; $("#g").value = F.floor; }
   const set = (k, v) => { F[k] = v; visibleLimit = 48; save(); render(); };
-  $("#filtertoggle").onclick = () => { filtersOpen = !filtersOpen; render(); };
+  if ($("#filtertoggle")) $("#filtertoggle").onclick = () => { filtersOpen = !filtersOpen; render(); };
+  if ($("#clearf")) $("#clearf").onclick = () => { resetFilters(); const q = $("#q"); if (q && q.focus) q.focus(); };
   if ($("#morelines")) $("#morelines").onclick = () => { visibleLimit += 48; render(); };
   for (const id of ["scope", "side"]) if ($("#" + id)) { $("#" + id).value = F[id]; $("#" + id).onchange = e => set(id, e.target.value); }
   if ($("#layout")) $("#layout").onclick = e => { const b = e.target.closest("button"); if (b) set("layout", b.dataset.v); };
   const qi = $("#q");
   if (qi) {
     qi.oninput = e => { F.q = e.target.value; save(); render(); };       // redraw as the member types
+    qi.onkeydown = e => { if (e.key === "Escape" && qi.value) { e.preventDefault(); F.q = ""; save(); render(); } };   // Escape clears the search
     if (typing) { qi.focus(); try { qi.setSelectionRange(typing[0], typing[0]); } catch {} }   // ... keeping the cursor in the box
   }
   if ($("#g")) $("#g").onchange = e => set("floor", e.target.value);
-  for (const [id, k] of [["#v", "view"], ["#p", "plat"]]) $(id).onclick = e => { const b = e.target.closest("button"); if (b) set(k, b.dataset.v); };
-  $("#s").onchange = e => set("stat", e.target.value); $("#m").onchange = e => set("match", e.target.value);
+  for (const [id, k] of [["#v", "view"], ["#p", "plat"]]) if ($(id)) $(id).onclick = e => { const b = e.target.closest("button"); if (b && b.dataset.v) set(k, b.dataset.v); };
+  if ($("#s")) { $("#s").onchange = e => set("stat", e.target.value); $("#m").onchange = e => set("match", e.target.value); }
   if ($("#t")) { $("#t").onchange = e => set("type", e.target.value); $("#o").onchange = e => set("sort", e.target.value); $("#pl").onchange = e => set("playable", e.target.checked); }
-  const r = $("#reset"); if (r) r.onclick = () => { F = Object.assign({}, DEF, {view: F.view}); save(); render(); };
+  const r = $("#reset"); if (r) r.onclick = resetFilters;                 // filters only: the view, layout and sort stay as chosen
   const go = document.querySelector("[data-go]"); if (go) go.onclick = () => set("view", go.dataset.go);
   document.querySelectorAll("[data-k]").forEach(el => {
     el.onclick = () => card(el.dataset.k, el);
@@ -896,6 +973,10 @@ function render() {
 }
 let GATED = false;
 async function load(first) {
+  LOADING = true;
+  try { return await loadOnce(first); } finally { LOADING = false; }
+}
+async function loadOnce(first) {
   let r;
   try { r = await fetch("/api/lol/board", {cache: "no-cache"}); } catch { r = null; }
   if (r && r.status === 401) { GATED = true; gate(await r.json().catch(() => ({}))); return false; }
@@ -911,7 +992,7 @@ async function load(first) {
     const b = $("#retry"); if (b) b.onclick = () => load(true);
     return false;
   }
-  D = d;
+  D = d; lastLoad = Date.now();
   if (openRow == null) render();
   if (first) { try { const y = +sessionStorage.getItem(SKEY); if (y) window.scrollTo(0, y); } catch {} }
   return true;
@@ -920,21 +1001,26 @@ function gate(s) {
   $("#app").innerHTML = `<div class="gate"><h2>Members only</h2><p class="muted">Sign in with Whop to see the LoL board.</p><p><a href="/auth/login">Sign in</a>${s.upgrade ? ` · <a href="${esc(s.upgrade)}">Join on Whop</a>` : ""}</p></div>`;
 }
 document.addEventListener("keydown", e => {
-  if ($("#ctmodal").classList.contains("open")) { if (e.key === "Escape") ctClose(); return; }
+  if ($("#ctmodal").classList.contains("open")) { if (e.key === "Escape") ctClose(); else if (e.key === "Tab") trapTab(e, $("#ctsheet")); return; }
   if (!$("#modal").classList.contains("open")) return;
   if (e.key === "Escape") closeCard();
-  if (e.key === "Tab") {
-    const els = [...$("#card").querySelectorAll('button:not(:disabled),a[href],input,select,summary,[tabindex="0"]')].filter(el => el.getClientRects().length);
-    const first = els[0], last = els[els.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-  }
+  if (e.key === "Tab") trapTab(e, $("#card"));
 });
+// Back (the phone's gesture) with a card open closes the card; the page stays
+window.addEventListener("popstate", () => { if ($("#modal").classList.contains("open")) closeCard(true); });
+// a tab left in the background comes back to a fresh board: one load when it is shown again and the last load is over 2 minutes
+// old - never more often than the 2-minute poll, so 700 members cost no extra requests
+let lastLoad = 0, LOADING = false;
+function refreshIfStale() {
+  if (document.visibilityState !== "visible" || GATED || !D || LOADING || Date.now() - lastLoad <= 120000) return false;
+  load(false).catch(() => {}); return true;
+}
+document.addEventListener("visibilitychange", refreshIfStale);
 $("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeCard(); });
 $("#ctmodal").addEventListener("click", ctClick);
 $("#ctbtn").addEventListener("click", ctOpen);
 window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, String(window.scrollY)); } catch {} }, {passive: true});
-(async () => {
+if (!classicForLink()) (async () => {
   const s = await fetch("/auth/me").then(r => r.json()).catch(() => ({}));
   if (s.required && !s.member) { gate(s); return; }
   if (s.name) $("#who").innerHTML = `${esc(s.name)} · <a href="/auth/logout">Sign out</a>`;
@@ -946,7 +1032,8 @@ window.addEventListener("scroll", () => { try { sessionStorage.setItem(SKEY, Str
 function openLinked() {
   let k = null; try { k = new URLSearchParams(location.search).get("line"); } catch {}
   if (!k) return;
-  if ((D.rows || []).some(r => r.key === k)) card(k);
+  // the board's address goes under the card's, so Back from a shared card lands on the board instead of leaving
+  if ((D.rows || []).some(r => r.key === k)) { setUrl(null); card(k); }
   else { NOTE = "That line is no longer on the board."; setUrl(null); render(); }
 }
 // refresh every 2 minutes plus a random 0-20 s (700 members never ask together), skipped while the tab is hidden;

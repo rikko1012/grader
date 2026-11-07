@@ -42,14 +42,21 @@ const tok = new URLSearchParams(location.search).get("token");
 const $ = s => document.querySelector(s), esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const pc = x => x == null ? "–" : (x * 100).toFixed(1) + "%", n2 = x => x == null ? "–" : (+x).toFixed(2);
 let D = null, cohort = "eval";
+// QoL 2026-11-07: the cohort and the four filters survive a reload (this browser only)
+const PKEY = "scout.diag.view", PIDS = ["#fsrc", "#fprop", "#fscope", "#fver"];
+let PREF = {}; try { PREF = JSON.parse(localStorage.getItem(PKEY) || "{}") || {}; } catch {}
+const savePref = () => { try { localStorage.setItem(PKEY, JSON.stringify(Object.assign({cohort}, ...PIDS.map(id => ({[id]: $(id).value}))))); } catch {} };
+function setVal(id, v) { const el = $(id); if (v != null && [...el.options].some(o => o.value === v)) el.value = v; }
+const failNote = (text) => { $("#out").innerHTML = `${esc(text)} <button type="button" id="retry">Try again</button>`; $("#retry").onclick = () => { $("#out").textContent = "Loading…"; load(); }; };
 async function load() {
   let r;
   try { r = await fetch("/admin/diagnostics.json?token=" + encodeURIComponent(tok)); D = await r.json(); }
-  catch (e) { $("#out").textContent = "Couldn't load diagnostics: " + e.message; return; }
+  catch (e) { failNote("Couldn't load diagnostics: " + e.message); return; }
   if (!r.ok || !D || D.error || !D.cohorts) {      // an error body (e.g. the build failed) - say so, never hang on Loading
-    $("#out").textContent = "Couldn't load diagnostics: " + ((D && D.error) || ("server answered " + r.status)); D = null; return; }
+    failNote("Couldn't load diagnostics: " + ((D && D.error) || ("server answered " + r.status))); D = null; return; }
   const vers = new Set(); for (const c of ["first", "eval"]) (D.cohorts[c]?.summary || []).forEach(s => vers.add(s.version));
   $("#fver").innerHTML = `<option value="">All versions</option>` + [...vers].map(v => `<option>${esc(v)}</option>`).join("");
+  PIDS.forEach(id => setVal(id, PREF[id]));            // a saved version that no longer exists falls back to All versions
   $("#gen").textContent = "generated " + D.generated; draw();
 }
 function draw() {
@@ -104,8 +111,11 @@ function fwdHs() {
       <div class="scroll"><table><thead><tr><th>Chance of Over</th><th>Lines</th><th>Matches</th><th>Predicted</th><th>Actual</th><th>Actual 95%</th></tr></thead><tbody>
       ${m.bands.map(b => `<tr><td>${b.band}</td><td>${b.n}</td><td>${b.matches}</td><td>${pc(b.predicted)}</td><td>${pc(b.actual)}</td><td>${b.actual_ci ? `${pc(b.actual_ci[0])}–${pc(b.actual_ci[1])}` : "–"}</td></tr>`).join("")}</tbody></table></div></div>`).join("")}`;
 }
-$("#cohort").onclick = e => { const b = e.target.closest("button"); if (!b) return; cohort = b.dataset.v; [...$("#cohort").children].forEach(x => x.classList.toggle("on", x === b)); draw(); };
-for (const id of ["#fsrc", "#fprop", "#fscope", "#fver"]) $(id).onchange = draw;
+function showCohort() { [...$("#cohort").children].forEach(x => { x.classList.toggle("on", x.dataset.v === cohort); x.setAttribute("aria-pressed", String(x.dataset.v === cohort)); }); }
+if (["eval", "first", "slips"].includes(PREF.cohort)) cohort = PREF.cohort;
+showCohort();
+$("#cohort").onclick = e => { const b = e.target.closest("button"); if (!b) return; cohort = b.dataset.v; showCohort(); savePref(); draw(); };
+for (const id of PIDS) $(id).onchange = () => { savePref(); draw(); };
 load();
 // moneyline quote store (admin only): alert flags, archive, and the recorded gaps (ml_gaps rows are immutable)
 async function loadStore() {
