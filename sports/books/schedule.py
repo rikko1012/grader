@@ -20,8 +20,8 @@ job check old; Market edge / Best prices read workspace_ev.price_limits(), 29 mi
 books rarely list props that far out, and a 10-min read of every game of next week would multiply the requests for lines
 almost nobody prices yet. Request cost (books.plan.estimate, averaged over a week every 3 h: FanDuel 5 tabs per NBA game /
 3 per NFL game, BetRivers 1 per game; 10 NBA games a night + a 16-game NFL week): FanDuel ~590 -> ~1,330 requests/hour
-(peak ~880 -> ~1,590), BetRivers ~130 -> ~290 (peak ~230 -> ~375); both well under net.py's per-host spacing (FanDuel
-2/s = 7,200/h, Kambi 1/s = 3,600/h). The books job also checks every minute while a game is within 72 h (scheduler
+(peak ~880 -> ~1,590), BetRivers ~130 -> ~290 (peak ~230 -> ~375); both under net.py's per-host spacing (FanDuel
+1/s = 3,600/h, set in fanduel.py, so ~2.3x headroom at the peak; Kambi 1/s = 3,600/h). The books job also checks every minute while a game is within 72 h (scheduler
 books_gameday_h).
 
 Stale = not seen within 2 x the current rung's interval (at least STALE_MIN_S). A quote is shown with its own

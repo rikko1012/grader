@@ -512,25 +512,43 @@ def _part(srv, lg, part, etag):
 
 
 KEEP_MIN = 20       # site audit N2: a pick'em platform that held at least this many lines and comes back with none is a failed read
-PART_KEEP_S = 10 * 60   # a secondary part (more markets / hit rates) that stays down longer than this: the partial board is taken
+PART_KEEP_S = 10 * 60   # a secondary part (more markets / hit rates) down longer than this past its last good read: built without it
 
 
-def _keep_last(s, counts, failed):
+def _keep_last(s, counts):
     """Owner site audit 2026-11-06 N2 (NBA board went to "0 players · 0 lines" until Refresh): a refresh that came back without a
     pick'em platform's lines (PrizePicks or Underdog from many lines to none, the whole board empty included) keeps the last good
     snapshot instead of replacing it, while that snapshot is under STALE_S old (its own board time); after that the new answer is
-    taken as it is, so a slate that really emptied never freezes the board. A refresh that failed part way (the secondary markets
-    or the hit rates did not answer) keeps it too, but only PART_KEEP_S past the last complete build, so a part that stays down
-    never holds the primary lines back for long (they are then shown without that part, as before). Transient-failure rule: a
-    failed read never becomes the board."""
+    taken as it is, so a slate that really emptied never freezes the board. Transient-failure rule: a failed read never becomes
+    the board. (A secondary part that failed never holds the primary lines back: see _part_or_last.)"""
     if s["body"] is None:
         return False
     t = _ts(s["as_of"])
     if t is None or (datetime.now(timezone.utc) - t).total_seconds() > STALE_S:
         return False
-    if failed and time.time() - (s.get("good_at") or 0.0) < PART_KEEP_S:
-        return True
     return any(n >= KEEP_MIN and not counts.get(p) for p, n in (s.get("counts") or {}).items() if p in PICKEM)
+
+
+def _part_or_last(s, name, doc, now):
+    """-> (this build's copy of a secondary part, the time it was read). Site audit N2 review: when the more-markets or hit-rate
+    part fails, the primary lines read in the same build are still served at once (a moved or pulled line is never held back);
+    only the failed part is the last good copy, read under PART_KEEP_S ago (hit rates are keyed by line, so a kept copy never
+    puts one line's counts on another). Past that the board is built without it, as before. A failed read is never kept.
+    The last good copy is held compressed (_pack: a few hundred KB per part, not the parsed doc), unpacked only on a failure."""
+    if doc is not None:
+        return doc, now
+    last = (s.get("parts") or {}).get(name)
+    if last and now - last[1] < PART_KEEP_S:
+        return json.loads(gzip.decompress(last[0])), last[1]
+    return None, None
+
+
+def _pack(s, name, doc, at):
+    """(compressed doc, read time) of a part for the next build; a part kept from earlier keeps its own blob (no re-pack)."""
+    last = (s.get("parts") or {}).get(name)
+    if last and last[1] == at:
+        return last
+    return gzip.compress(json.dumps(doc, default=str, separators=(",", ":")).encode(), 1), at
 
 
 # Site audit N7 (Filters > Line moved showed 0 of 5,641 NBA lines): the sports board carries no opening line, so this server
@@ -587,6 +605,13 @@ def _build(srv, lg):
     if head is _NOT_MODIFIED:
         head, tag = _part(srv, lg, "primary", None)
     more, m_tag = _part(srv, lg, "more", None)
+    t_read = time.time()
+    v_doc, v_at = _part_or_last(s, "view", v_doc, t_read)
+    more, m_at = _part_or_last(s, "more", more, t_read)
+    if v_at != t_read:
+        v_tag = None                                # a kept part is read in full again next build
+    if m_at != t_read:
+        m_tag = None
     view = (v_doc or {}).get("rows") or {}
     records, index, props, platforms, counts, seen, built = [], {}, {}, {}, {}, {}, []
     now = datetime.now(timezone.utc)
@@ -618,7 +643,7 @@ def _build(srv, lg):
         _note_move(lg, rec, x, now_iso, seen)
         x["rec"] = json.dumps(rec, default=str, separators=(",", ":")).encode()
     _prune_moves(lg, now)
-    if _keep_last(s, counts, v_doc is None or more is None):
+    if _keep_last(s, counts):
         s["at"] = time.time()                       # the etags stay the last good build's: the next build reads every part again
         return 200, s["body"]
     as_of = head.get("as_of") or head.get("built_at")
@@ -628,7 +653,7 @@ def _build(srv, lg):
         body = s["body"]
     _SNAP[lg] = dict(s, at=time.time(), body=body, index=index, props=props, feeds=feeds, as_of=as_of, gen=s["gen"] + 1, injuries=head.get("injuries") or {},
                      etags={"primary": tag, "view": v_tag, "more": m_tag}, counts=counts,
-                     good_at=time.time() if v_doc is not None and more is not None else s.get("good_at", 0.0))
+                     parts={k: _pack(s, k, d, at) for k, d, at in (("view", v_doc, v_at), ("more", more, m_at)) if d is not None})
     return 200, body
 
 

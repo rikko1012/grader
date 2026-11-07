@@ -59,7 +59,7 @@
   const lineKind = (book, lt) => (book !== "prizepicks" ? "" : lt === "goblin" ? "Goblin" : lt === "demon" ? "Demon" : "Standard");
   const lineKindHtml = (book, lt) => { const k = lineKind(book, lt); return k ? ` <em class="u-lt u-lt-${k.toLowerCase()}">${k}</em>` : ""; };
   const CHECKS = ["Game not started", "Offer available and unchanged", "Forecast belongs to this event, line and period", "Platform accepts this combination", "No duplicates or conflicts"];
-  const MAX_LEGS = 8, BOARD_KEEP = 45000, EMPTY_KEEP = 1800000, HITS_RETRY = 10000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, DRAFT_MAX_MS = 86400000;
+  const MAX_LEGS = 8, BOARD_KEEP = 45000, HITS_RETRY = 10000, CHECK_DEBOUNCE = 350, SAVE_DEBOUNCE = 800, DRAFT_MAX_MS = 86400000;
 
   /* ---- requests ---- */
   class ApiError extends Error { constructor(status, doc) { super("api " + status); this.status = status; this.doc = doc; } }
@@ -123,7 +123,6 @@
       } finally { clearTimeout(t); }
     }
   }
-  const emptyRead = (doc, b, now) => !((doc && doc.records) || []).length && b.recs.size > 0 && now - (b.goodAt || 0) < EMPTY_KEEP;
   async function loadBoard(sport, force) {
     const b = R.boards[sport];
     if (b.busy) return b.busy;
@@ -131,11 +130,11 @@
     b.busy = (async () => {
       try {
         const read = await boardRead(sport === "cs2" ? "board" : "board?sport=" + sport, b.at && !b.error ? b.etag : null);
-        if (read.same) { Object.assign(b, { at: Date.now(), goodAt: Date.now(), error: false }); b.busy = null; return b; }
+        if (read.same) { Object.assign(b, { at: Date.now(), error: false }); b.busy = null; return b; }
         const doc = read.doc;
-        /* site audit 2026-11-06 N2: an answer with no lines while this page holds a board read in the last EMPTY_KEEP is a refresh
-           that did not complete: the last good lines stay on screen and the board is read again soon. Past that, it is taken as is */
-        if (emptyRead(doc, b, Date.now())) throw new Error("empty board");
+        /* site audit 2026-11-06 N2: the server keeps the last good NBA / NFL board when a refresh fails or comes back empty
+           (workspace_sports._keep_last; CS2 / LoL keep their last rows when a read fails), so an answer is taken as it is here: an
+           empty one is a slate that really emptied, never shown as a failed refresh */
         b.etag = read.etag;
         Object.entries(doc.platforms || {}).forEach(([p, v]) => { if (!own(PLATFORMS, p)) PLATFORMS[p] = v; });
         const recs = new Map(), props = new Map(), keys = new Map();
@@ -147,7 +146,7 @@
           props.get(k).push(r);
         });
         props.forEach((l) => l.sort((a, b2) => a.offer.line - b2.offer.line));
-        Object.assign(b, { at: Date.now(), goodAt: Date.now(), recs, props, keys, feeds: doc.feeds || {}, error: false });
+        Object.assign(b, { at: Date.now(), recs, props, keys, feeds: doc.feeds || {}, error: false });
       } catch (e) { b.error = true; b.at = Date.now() - BOARD_KEEP + 10000; }     /* stale rows stay labelled, never silently current */
       b.busy = null;
       return b;

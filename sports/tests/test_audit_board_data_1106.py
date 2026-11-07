@@ -162,3 +162,17 @@ def test_rollback_still_puts_the_books_source_inside_the_ingest_cycles(monkeypat
     for lg in ("nba", "nfl"):
         argv = j[f"ingest-{lg}"]["argv"]
         assert "books" in argv[argv.index("--sources") + 1].split(",")
+
+
+def test_the_cadence_note_states_the_real_book_request_spacing():
+    """Review of N1: the note said FanDuel 2/s = 7,200/h; fanduel.py spaces FanDuel at 1 request / second (3,600/h), so later
+    cadence changes start from the real headroom."""
+    from sports import net
+    from sports.books import fanduel
+    host = fanduel._base().split("/")[2]
+    note = re.search(r"FanDuel\s+(\d+)/s = ([\d,]+)/h", schedule.__doc__)
+    assert note, "the note names FanDuel's request spacing"
+    per_s = 1.0 / net._GAPS[host]
+    assert float(note.group(1)) == per_s and int(note.group(2).replace(",", "")) == round(per_s * 3600)
+    kambi = re.search(r"Kambi\s+(\d+)/s = ([\d,]+)/h", schedule.__doc__)
+    assert float(kambi.group(1)) == 1.0 / net._GAPS["eu-offering-api.kambicdn.com"]

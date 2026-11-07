@@ -18,6 +18,7 @@ import copy
 import hashlib
 import json
 import statistics
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -520,21 +521,41 @@ def prop_lines(srv, sport, rec):
             continue
         if st != 200:
             continue
+        now = time.time()
+        out.extend({k: v for k, v in x.items() if k != "lock"} for x in _props_of(sport, pid, body).get(key, ()) if x["lock"] is None or x["lock"] > now)
+    return out
+
+
+_PROP_LOCK = threading.Lock()
+
+
+def _note_props(sport, pid, body, doc):
+    """The prop index of one book board build, made inside board()'s single-flight compute (review of N9: every Ask question
+    arriving just after a rebuild parsed the whole book board again, one parse per concurrent request)."""
+    idx = {}
+    if (doc.get("feed") or {}).get("state") == "ok":
+        for r in doc.get("records") or ():
+            if (r.get("event") or {}).get("status") == "started":
+                continue
+            o = r.get("offer") or {}
+            idx.setdefault(_prop_key(r), []).append({"platform": o.get("platform"), "platform_label": o.get("platform_label"),
+                                                     "line": o.get("line"), "line_type": (r.get("market") or {}).get("line_type") or "standard",
+                                                     "lock": _lock_epoch(r)})
+    _BY_PROP[(sport, pid)] = (body, idx)
+
+
+def _props_of(sport, pid, body):
+    """The prop index of this body: the one noted at build; a body this process did not note (after reset) is parsed once, by one
+    thread, while the others wait for that copy."""
+    c = _BY_PROP.get((sport, pid))
+    if c and c[0] is body:
+        return c[1]
+    with _PROP_LOCK:
         c = _BY_PROP.get((sport, pid))
         if not c or c[0] is not body:
-            doc, idx = json.loads(body), {}
-            if (doc.get("feed") or {}).get("state") == "ok":
-                for r in doc.get("records") or ():
-                    if (r.get("event") or {}).get("status") == "started":
-                        continue
-                    o = r.get("offer") or {}
-                    idx.setdefault(_prop_key(r), []).append({"platform": o.get("platform"), "platform_label": o.get("platform_label"),
-                                                             "line": o.get("line"), "line_type": (r.get("market") or {}).get("line_type") or "standard",
-                                                             "lock": _lock_epoch(r)})
-            c = _BY_PROP[(sport, pid)] = (body, idx)
-        now = time.time()
-        out.extend({k: v for k, v in x.items() if k != "lock"} for x in c[1].get(key, ()) if x["lock"] is None or x["lock"] > now)
-    return out
+            _note_props(sport, pid, body, json.loads(body))
+            c = _BY_PROP[(sport, pid)]
+        return c[1]
 
 
 def record_by_id(srv, sport, pid, oid):
@@ -617,6 +638,7 @@ def board(srv, sport, pid):
         body = json.dumps(doc, default=str, separators=(",", ":")).encode()
         if st == 200:
             _note_lines(sport, pid, body, doc)
+            _note_props(sport, pid, body, doc)
         return st, body
     return srv.shared(("ws_books", sport, pid), compute, ttl=TTL)
 

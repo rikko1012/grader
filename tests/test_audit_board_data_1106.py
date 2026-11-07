@@ -72,16 +72,40 @@ def test_an_empty_board_is_taken_once_the_last_good_one_is_past_its_age(feed):
     assert _records(body) == []
 
 
-def test_a_refresh_whose_hit_rates_failed_keeps_the_last_good_board_for_a_while(feed):
+def test_a_refresh_whose_hit_rates_failed_keeps_the_last_hit_rates_for_a_while(feed):
     st, good = ws._build(None, "nba")
+    assert all(r["history"]["l10"] for r in _records(good))
     feed.view = None                                              # the hit-rate part did not answer
     st, body = ws._build(None, "nba")
-    assert body is good                                           # was a board with every hit rate blank
-    ws._SNAP["nba"]["good_at"] = time.time() - ws.PART_KEEP_S - 1
-    feed.primary = copy.deepcopy(feed.primary)
-    feed.primary["markets"][0]["q"][0]["l"] = 21.5               # the primary lines moved meanwhile
+    assert all(r["history"]["l10"] for r in _records(body))       # was a board with every hit rate blank
+    ws._SNAP["nba"]["parts"]["view"] = (ws._SNAP["nba"]["parts"]["view"][0], time.time() - ws.PART_KEEP_S - 1)
     st, body = ws._build(None, "nba")
-    assert body is not good and len(_records(body)) == 60         # a part that stays down never holds the lines back
+    assert len(_records(body)) == 60 and not any(r["history"]["l10"] for r in _records(body))   # a part that stays down is left out
+
+
+def test_a_failed_hit_rate_or_more_markets_read_never_holds_back_the_primary_lines(feed):
+    """Review of N2: a secondary part failing kept the whole last board up to 10 min, so a moved or pulled primary line read in
+    the same build was not served (a member could add a line that had already moved)."""
+    feed.more = {"version": "ui-snap-1", "part": "secondary", "markets": [copy.deepcopy(feed.primary["markets"][0])], "fc": {}}
+    feed.more["markets"][0]["st"] = "rebounds"
+    feed.more["markets"][0]["k"] = feed.more["markets"][0]["k"].replace("points", "rebounds")
+    for q in feed.more["markets"][0]["q"]:
+        q["r"] += "-reb"
+    st, good = ws._build(None, "nba")
+    assert len(_records(good)) == 62
+    feed.view, feed.more = None, None                             # both secondary parts down
+    feed.primary = copy.deepcopy(feed.primary)
+    ud = next(q for q in feed.primary["markets"][3]["q"] if q["p"] == "underdog")
+    ud["l"] = 23.5                                                # a moved line
+    feed.primary["markets"].pop(7)                                # a pulled prop
+    st, body = ws._build(None, "nba")
+    recs = _records(body)
+    assert body is not good and len(recs) == 60                   # 58 primary + the kept secondary market's 2
+    assert any(r["offer"]["platform"] == "underdog" and r["offer"]["line"] == 23.5 for r in recs)
+    assert sum(r["market"]["stat"] == "rebounds" for r in recs) == 2   # the more-markets part: last good copy
+    kept = [r for r in recs if r["offer"]["line"] == 20.5 and r["market"]["stat"] == "points"]
+    assert kept and all(r["history"]["l10"] for r in kept)        # hit rates: last good copy, matched by line
+    assert all(r["history"]["l10"] is None for r in recs if r["offer"]["line"] == 23.5)   # never another line's counts
 
 
 def test_sports_lines_that_moved_carry_their_first_line(feed):
@@ -138,18 +162,30 @@ def test_a_book_quote_read_on_the_new_cadence_counts_as_fresh_on_the_board_and_i
 # ---------------------------------------------------------------------------------------------------------------- N2 client
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
-def test_the_page_keeps_its_lines_when_a_read_comes_back_empty(tmp_path):
+def test_the_page_takes_an_empty_answer_as_it_is_without_a_failed_refresh(tmp_path):
+    """Review of N2: the page's own empty-board keep set the board's error flag, so the hub hid every kept row ('No current lines')
+    and showed 'the last refresh did not complete' for up to 30 min even when the slate really emptied (CS2 / LoL too). The
+    server keeps the last good board (workspace_sports._keep_last); the page takes the answer as it is."""
     src = (ROOT / "web" / "upgrade.js").read_text(encoding="utf-8")
-    keep = re.search(r"EMPTY_KEEP = (\d+)", src).group(1)
-    fn = re.search(r"  const emptyRead = .*\n", src).group(0)
-    assert "emptyRead(doc, b, Date.now())" in src and 'throw new Error("empty board")' in src
-    js = (f"const EMPTY_KEEP = {keep};\n{fn}\nconst now = 1e12, held = {{recs: new Map([[1, 1]]), goodAt: now - 60000}};\n"
-          "console.log(JSON.stringify([emptyRead({records: []}, held, now), emptyRead({records: [{}]}, held, now),"
-          " emptyRead({records: []}, {recs: new Map()}, now), emptyRead({records: []}, {...held, goodAt: now - EMPTY_KEEP - 1}, now)]));")
+    fn = src[src.index("  async function loadBoard("):src.index("  async function loadHits(")]
+    js = ("const BOARD_KEEP = 45000, PLATFORMS = {}, own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);\n"
+          "const offerKey = (p, i) => p + '|' + i, sportKey = (...a) => a.join('|'), propKey = (r) => r.player.key;\n"
+          "let answer = null; const boardRead = async () => answer;\n"
+          "const R = {boards: {nba: {at: 0, recs: new Map(), props: new Map(), keys: new Map(), feeds: {}, error: false}}};\n"
+          + fn +
+          "\n(async () => {\n"
+          "  const rec = {offer: {platform: 'underdog', offer_id: '1', line: 20.5}, event: {id: 'e'}, player: {key: 'p'}, market: {stat: 'points', period: 'full_game'}};\n"
+          "  answer = {doc: {records: [rec], platforms: {}, feeds: {}}, etag: 'a'};\n"
+          "  const b = await loadBoard('nba', true); const first = [b.recs.size, b.error];\n"
+          "  answer = {doc: {records: [], platforms: {}, feeds: {}}, etag: 'b'};\n"
+          "  await loadBoard('nba', true);\n"
+          "  console.log(JSON.stringify([first, [b.recs.size, b.error]]));\n"
+          "})();\n")
     (tmp_path / "t.js").write_text(js, encoding="utf-8")
     out = subprocess.run([NODE, str(tmp_path / "t.js")], capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
-    assert json.loads(out.stdout) == [True, False, False, False]
+    assert json.loads(out.stdout) == [[1, False], [0, False]]     # was [1, true]: kept rows hidden behind a failure banner
+    assert "EMPTY_KEEP" not in src and "emptyRead" not in src
 
 
 # ---------------------------------------------------------------------------------------------------------------- N3
@@ -219,7 +255,7 @@ def test_the_board_build_hands_each_new_board_to_the_filler(monkeypatch):
     src = (ROOT / "workspace_api.py").read_text(encoding="utf-8")
     build = src[src.index("def _build(srv):"):src.index("\ndef ", src.index("def _build(srv):") + 10)]
     assert "_hits_kick(srv, _SNAP)" in build
-    assert "_hits_request(srv, snap)" in src[src.index("def get_hits("):src.index("def get_stated(")]
+    assert "_hits_answer(srv, snap)" in src[src.index("def get_hits("):src.index("def get_stated(")]
 
 
 # ---------------------------------------------------------------------------------------------------------------- N8
@@ -327,4 +363,109 @@ def test_extra_book_lines_are_read_from_their_shared_board(monkeypatch):
     assert got == [{"platform": "dabble", "platform_label": "Dabble", "line": 30.5, "line_type": "standard"}]
     other = dict(_ask_doc()["record"], player={"key": "p2"})
     assert wb.prop_lines(None, "cs2", other) == []
+    wb.reset()
+
+
+# ---------------------------------------------------------------------------------------------------------------- review fixes
+
+def test_a_hits_read_right_after_a_new_board_is_never_marked_complete(hits, monkeypatch):
+    """Review of N3: a /hits read between a board rebuild and the filler's first slice got the previous board's complete:true
+    copy, so the page waited 45 s (BOARD_KEEP) before reading the new rows' L5 / L20."""
+    snap = {"index": {("underdog", str(i)): {"line": 5.5} for i in range(10)}}
+    api._hits_request(None, snap)
+    assert _wait(lambda: json.loads(api._hits_request(None, snap))["complete"])
+    gate = threading.Event()
+
+    def slow(srv, x, full=False):
+        gate.wait(10)
+        return {"ser": [{"value": v} for v in (4, 5, 6, 7, 8, 9)]}
+    monkeypatch.setattr(api, "_history", slow)
+    new = {"index": {**snap["index"], ("prizepicks", "m1"): {"line": 6.5}}}
+    first = json.loads(api._hits_request(None, new))
+    assert first["complete"] is False and "prizepicks|m1" not in first["rows"]   # was the old copy, complete: true
+    assert len(first["rows"]) == 10                                # the rows already filled still show
+    gate.set()
+    assert _wait(lambda: json.loads(api._hits_request(None, new))["complete"])
+    assert "prizepicks|m1" in json.loads(api._hits_request(None, new))["rows"]
+
+
+def test_a_rebuilt_board_with_the_same_rows_does_not_wake_the_filler(hits, monkeypatch):
+    """Review of N3: every 5-s CS2 board build is a new index object, so the filler ran a pass on each one and never went idle."""
+    items = {("underdog", str(i)): {"line": 5.5} for i in range(40)}
+    api._hits_request(None, {"index": dict(items)})
+    assert _wait(lambda: api._HITS_FILL["ok"] is not None)
+    passes = []
+    real = api._hits_pass
+    monkeypatch.setattr(api, "_hits_pass", lambda *a, **k: passes.append(1) or real(*a, **k))
+    for _ in range(10):
+        snap = {"index": {k: dict(v) for k, v in items.items()}}    # what each _build hands over: same rows, new objects
+        api._hits_kick(None, snap)
+        assert json.loads(api._hits_request(None, snap))["complete"] is True
+    time.sleep(0.3)
+    assert passes == []                                           # was one pass per rebuild
+
+
+def test_one_row_that_raises_never_blocks_the_other_rows(hits, monkeypatch, capsys):
+    """Review of N3: one row whose tally raised threw away the whole slice, so no row was ever published, retried forever and
+    logged nothing."""
+    monkeypatch.setattr(api, "HITS_RETRY_S", 0.05)
+    index = {("underdog", str(i)): {"line": 5.5} for i in range(50)}
+    index[("underdog", "7")] = {"line": None}                     # _tally_of compares value > None: TypeError
+    snap = {"index": index}
+    api._hits_request(None, snap)
+    assert _wait(lambda: len(_rows()) == 49 and api._HITS_FILL["ok"] is index)
+    assert "underdog|7" not in _rows()
+    n = len(hits)
+    time.sleep(0.4)
+    assert len(hits) == n                                         # the filler went idle: no endless retry
+    err = capsys.readouterr().err
+    assert err.count("hit rates: a row could not be filled: TypeError") == 1
+
+
+def _ask_books(monkeypatch, wb, loads):
+    import types
+    import book_providers as bp
+
+    def slow_loads(b, *a, **k):
+        loads.append(1)
+        time.sleep(0.05)
+        return json.loads(b, *a, **k)
+    monkeypatch.setattr(wb, "json", types.SimpleNamespace(loads=slow_loads, dumps=json.dumps))
+    monkeypatch.setattr(bp, "enabled_ids", lambda: ["dabble"])
+    monkeypatch.setattr(bp, "providers", lambda: {"dabble": {"source": "direct", "sports": ["cs2"]}})
+
+
+def test_ask_questions_arriving_together_parse_a_book_board_once(monkeypatch):
+    """Review of N9: every Ask question arriving just after a book board rebuild parsed the whole board again (no single flight)."""
+    import workspace_books as wb
+    wb.reset()
+    dab = _rec("dabble", 30.5, {"price": 1.85}, {"price": 1.92}, "Dabble")
+    doc = {"feed": {"state": "ok"}, "records": [dab] + [dict(dab, player={"key": f"x{i}"}) for i in range(500)]}
+    body = json.dumps(doc).encode()
+    loads = []
+    _ask_books(monkeypatch, wb, loads)
+    monkeypatch.setattr(wb, "board", lambda srv, sport, pid: (200, body))
+    rec, out, gate = _ask_doc()["record"], [], threading.Barrier(40)
+
+    def ask():
+        gate.wait()
+        out.append(wb.prop_lines(None, "cs2", rec))
+    ts = [threading.Thread(target=ask) for _ in range(40)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    want = [{"platform": "dabble", "platform_label": "Dabble", "line": 30.5, "line_type": "standard"}]
+    assert len(out) == 40 and all(o == want for o in out)
+    assert len(loads) == 1                                        # was one parse per question
+    wb.reset()
+
+
+def test_the_book_board_build_notes_the_ask_index_itself(monkeypatch):
+    import workspace_books as wb
+    wb.reset()
+    dab = _rec("dabble", 30.5, {"price": 1.85}, {"price": 1.92}, "Dabble")
+    loads = []
+    _ask_books(monkeypatch, wb, loads)
+    monkeypatch.setattr(wb, "build", lambda srv, sport, pid: (200, {"feed": {"state": "ok"}, "records": [dab]}))
+    assert wb.prop_lines(_Srv(), "cs2", _ask_doc()["record"])[0]["line"] == 30.5
+    assert loads == []                                            # a question after a rebuild parses nothing
     wb.reset()

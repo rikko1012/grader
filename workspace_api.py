@@ -161,7 +161,7 @@ def reset():
         _ST["sports"] = False
     _PRIVATE.clear()
     _SNAP.update(at=0.0, body=None, index={}, props={}, last={}, doc=None, gen=0, feeds={})
-    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={}, sigs={})
+    _HITS_DOC.update(body=None, at=0.0, ttl=HITS_TTL, key=None, cursor=0, rows={}, sigs={}, open=None)
     _hits_reset()
     _SLIP_POOL.clear()
     _BOOK_LINES_GOOD.clear()
@@ -1568,7 +1568,7 @@ def _hits_pass(srv, items, key, cols, budget):
         sigs = d.get('sigs') or {}
         kept = {k: v for k, v in (d.get('rows') or {}).items() if k in live and sigs.get(k) == live[k]}
         d.update(key=key, cursor=0, rows=kept, sigs={k: sigs[k] for k in kept})
-    t0, rows, complete, missing = time.time(), dict(d.get('rows', {})), True, 0
+    t0, rows, complete, missing, failed = time.time(), dict(d.get('rows', {})), True, 0, None
     todo = [it for it in items if f"{it[0][0]}|{it[0][1]}" not in rows]
     start = 0
     for i in range(start, len(todo)):
@@ -1578,15 +1578,22 @@ def _hits_pass(srv, items, key, cols, budget):
             break
         # owner 2026-11-04: L5 is never empty when L10 is shown, and L20 counts the games he has (e.g. 14/17), so the newest
         # HLTV results count even when they do not reproduce the saved L10 exactly
-        ser = (_history(srv, x, full=True) or {}).get("ser")
-        if ser:
-            d.setdefault('sigs', {})[f"{book}|{rid}"] = (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push'))
-            rows[f"{book}|{rid}"] = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
-            if cols:
-                rows[f"{book}|{rid}"].update(h2h=workspace_h2h.board_h2h(ser, x.get("opp_name") or x.get("opponent"), x.get("line")),
-                                             season=workspace_h2h.board_season(ser, x.get("line")))
-        else:
+        try:                                # review of N3: one row that raises is left out (shows L10), never the whole fill
+            ser = (_history(srv, x, full=True) or {}).get("ser")
+            if ser:
+                row = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
+                if cols:
+                    row.update(h2h=workspace_h2h.board_h2h(ser, x.get("opp_name") or x.get("opponent"), x.get("line")),
+                               season=workspace_h2h.board_season(ser, x.get("line")))
+                d.setdefault('sigs', {})[f"{book}|{rid}"] = (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push'))
+                rows[f"{book}|{rid}"] = row
+            else:
+                missing += 1
+        except Exception as e:              # noqa: BLE001
             missing += 1
+            failed = failed or e
+    if failed is not None:
+        _hits_log(key, failed)
     d['rows'] = rows
     body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
     if d["body"] == body:
@@ -1605,8 +1612,17 @@ def _hits_pass(srv, items, key, cols, budget):
 HITS_SLICE_S = 2.0          # the filler publishes what it has read at least this often
 HITS_IDLE_S = 300           # with the board filled and no new board, the filler thread ends after this long (a read restarts it)
 HITS_RETRY_S, HITS_RETRIES = 5.0, 2     # rows left without a history (a busy slot) are tried again this soon, this many times
-_HITS_FILL = {"thread": None, "gen": 0, "srv": None, "snap": None, "done": None, "done_at": 0.0,
-              "wake": threading.Event(), "first": threading.Event(), "lock": threading.Lock()}
+_HITS_FILL = {"thread": None, "gen": 0, "srv": None, "snap": None, "kicked": None, "ok": None, "done_key": None, "done_at": 0.0,
+              "logged": None, "wake": threading.Event(), "first": threading.Event(), "lock": threading.Lock()}
+
+
+def _hits_log(key, e):
+    """A hit-rate row or slice that raised: logged once per board (its exception type and a short message), never per row."""
+    f = _HITS_FILL
+    if f["logged"] == key:
+        return
+    f["logged"] = key
+    sys.stderr.write(f"  hit rates: a row could not be filled: {type(e).__name__}: {str(e)[:200]}\n")
 
 
 def _hits_fill(gen):
@@ -1626,8 +1642,9 @@ def _hits_fill(gen):
                 # the first slice after a start is HITS_BUDGET_S, so the first read (which waits that long) gets its rows
                 budget = HITS_BUDGET_S if _HITS_DOC["body"] is None else HITS_SLICE_S
                 _, complete, missing = _hits_pass(srv, items, key, cols, budget)
-        except Exception:                              # noqa: BLE001 - a failed slice keeps the copy as it stood; tried again
+        except Exception as e:                         # noqa: BLE001 - a failed slice keeps the copy as it stood; tried again
             complete, missing = False, 0
+            _hits_log(("slice", id(idx)), e)
             time.sleep(HITS_RETRY_S)
         f["first"].set()
         if not complete:
@@ -1640,7 +1657,7 @@ def _hits_fill(gen):
             continue
         retries = 0
         with f["lock"]:
-            f["done"], f["done_at"] = idx, time.time()
+            f["done_key"], f["ok"], f["done_at"] = key, idx, time.time()
         if not f["wake"].wait(HITS_IDLE_S):
             with f["lock"]:
                 if not f["wake"].is_set() and f["gen"] == gen:
@@ -1652,12 +1669,21 @@ def _hits_fill(gen):
 
 
 def _hits_kick(srv, snap):
-    """Hand the filler this board (no read here). Wakes it only for a board it has not finished, or one finished HITS_TTL ago."""
+    """Hand the filler this board (no read here). Wakes it only for a board whose rows it has not filled, or filled HITS_TTL ago.
+    Review of N3: each 5-s CS2 board build is a new index object, so the old identity check woke the filler on every build; a
+    build with the same rows (board key) as the copy just finished is marked filled at once instead. A member's read of a board
+    already handed over returns at the first check (no per-request work)."""
     f = _HITS_FILL
+    idx = snap.get("index")
     with f["lock"]:
         f["srv"], f["snap"] = srv, snap
-        idx = snap.get("index")
-        if f["done"] is idx and time.time() - f["done_at"] < HITS_TTL and f["thread"] is not None:
+        t = f["thread"]
+        if f["kicked"] is idx and (f["ok"] is idx or (t is not None and t.is_alive())):
+            return
+        f["kicked"] = idx
+        key = _hits_key(snap)[1]
+        if key == f["done_key"] and key == _HITS_DOC.get("key") and time.time() - f["done_at"] < HITS_TTL:
+            f["ok"] = idx                               # the same rows as the copy just finished: nothing to read
             return
         f["wake"].set()
         t = f["thread"]
@@ -1670,25 +1696,49 @@ def _hits_reset():
     f = _HITS_FILL
     with f["lock"]:
         f["gen"] += 1
-        f.update(thread=None, srv=None, snap=None, done=None, done_at=0.0)
+        f.update(thread=None, srv=None, snap=None, kicked=None, ok=None, done_key=None, done_at=0.0, logged=None)
         f["wake"].set()
         f["wake"] = threading.Event()
         f["first"] = threading.Event()
 
 
-def _hits_request(srv, snap):
-    """What a member's /hits read returns: the filler's copy as it stands. No history is read on the request thread."""
+def _hits_open(body):
+    """The copy marked complete:false (made once per copy): the browser reads it again in HITS_RETRY instead of BOARD_KEEP."""
+    d = _HITS_DOC
+    c = d.get("open")
+    if c and c[0] is body:
+        return c[1]
+    tail = b'"complete":true}'
+    out = body[:-len(tail)] + b'"complete":false}' if body.endswith(tail) else body
+    d["open"] = (body, out)
+    return out
+
+
+def _hits_answer(srv, snap):
+    """(shared key, body) of a member's /hits read: the filler's copy as it stands. No history is read on the request thread.
+    Review of N3: a copy filled from an earlier board (the filler has not finished the board just built) says complete:false,
+    so new or moved rows are read again in HITS_RETRY, not BOARD_KEEP (45 s)."""
     _hits_kick(srv, snap)
     if _HITS_DOC["body"] is None:                      # only the first reads after a start wait: about the old in-request budget
         _HITS_FILL["first"].wait(max(0.0, HITS_BUDGET_S) + 0.5)
-    return _HITS_DOC["body"] or _HITS_EMPTY
+    body = _HITS_DOC["body"]
+    if body is None:
+        return ("ws_hits_open",), _HITS_EMPTY
+    if _HITS_FILL["ok"] is not snap.get("index"):
+        return ("ws_hits_open",), _hits_open(body)
+    return ("ws_hits",), body
+
+
+def _hits_request(srv, snap):
+    return _hits_answer(srv, snap)[1]
 
 
 def get_hits(h, srv, q, member, scratch, name):
     snap = snapshot(srv)
     if snap is None:
         return h.send(503, {"error": "board_unavailable"})
-    return h.send_shared(("ws_hits",), 200, _hits_request(srv, snap), keep=60)
+    key, body = _hits_answer(srv, snap)
+    return h.send_shared(key, 200, body, keep=60)
 
 
 def get_stated(h, srv, q, member, scratch, name):
