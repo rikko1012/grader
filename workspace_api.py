@@ -1603,6 +1603,37 @@ def get_diagnostics(h, srv, q, member, scratch, name):
     return h.send(200, store().diagnostics())
 
 
+def _lol_review_names(path, doc):
+    """Owner audit 2026-11-06 (T8): LoL comparison rows carry the data center's ids (lol:player:N, lol:series:N). Put the player's
+    name and the series' teams in their place, read from the same lol.db (one bounded read per page of at most 200 rows); an id
+    with no saved name stays as it is."""
+    import sqlite3
+    rows = doc.get('rows') or []
+    pids = sorted({r['player'] for r in rows if str(r.get('player') or '').startswith('lol:player:')})
+    sids = sorted({r['event'] for r in rows if str(r.get('event') or '').startswith('lol:series:')})
+    if not (pids or sids) or not Path(path).exists():
+        return doc
+    names, series = {}, {}
+    try:
+        with sqlite3.connect(Path(path).resolve().as_uri() + '?mode=ro', uri=True, timeout=2) as db:
+            db.execute('PRAGMA query_only=ON')
+            if pids:
+                names = dict(db.execute('SELECT eid, label FROM entities WHERE eid IN (%s) AND label IS NOT NULL AND label != ""'
+                                        % ','.join('?' * len(pids)), pids).fetchall())
+            if sids:
+                series = {sid: (a, b) for sid, a, b in db.execute('SELECT sid, team1_name, team2_name FROM c_series WHERE sid IN (%s)'
+                                                                   % ','.join('?' * len(sids)), sids).fetchall()}
+    except sqlite3.Error:
+        return doc
+    for r in rows:
+        if names.get(r.get('player')):
+            r['player'] = names[r['player']]
+        a, b = series.get(r.get('event')) or (None, None)
+        if a and b:
+            r['event'] = f'{a} vs {b}'
+    return doc
+
+
 def get_grade_review(h, srv, q, member, scratch, name):
     if not (_token_in_use(h, q) or h._sports_owner()):
         return h.send(404, {'error': 'not found'})
@@ -1615,17 +1646,22 @@ def get_grade_review(h, srv, q, member, scratch, name):
             from gradecore.reporting import comparisons
             path = Path(srv.LOL_CENTER) / 'lol.db' if sport == 'lol' else Path(srv.picklog.DB)
             doc = comparisons(path, sport, before=before)
+            if sport == 'lol':
+                _lol_review_names(path, doc)
         else:
             import urllib.request
             from urllib.parse import urlencode
             base = os.getenv('SPORTS_API_BASE', '').rstrip('/')
-            token = os.getenv('ADMIN_TOKEN', '')
+            # owner audit 2026-11-06 (T8): the sports service admits /api/sports/admin/* only with an st1 token of role admin
+            # (sports/service.py; X-Admin-Token opens /admin/ops alone), so every NBA / NFL request here was refused. The
+            # esports server is the token issuer (server.sports_admin_token): short-lived, minted only on this owner-only route.
+            token = getattr(srv, 'sports_admin_token', lambda: None)()
             if not base.startswith('https://') or not token:
                 return h.send(503, {'error': 'Sports report connection unavailable'})
             query = {'league': sport}
             if before is not None: query['before'] = before
             request = urllib.request.Request(base + '/api/sports/admin/model/gradecore-comparison?' + urlencode(query),
-                                             headers={'X-Admin-Token': token})
+                                             headers={'Authorization': 'Bearer ' + token})
             # Never forward credentials through redirects.
             class NoRedirect(urllib.request.HTTPRedirectHandler):
                 def redirect_request(self, *args, **kwargs): return None
@@ -1810,7 +1846,7 @@ def _generate(srv, o):
         for k, v in got[1].items():
             why[k] = why.get(k, 0) + v
     legs = _ranked(legs)
-    b = sq.build(legs, o)
+    b = sq.build(legs, dict(o, break_even=True))      # owner audit 2026-11-06: only slips that clear their payout's break-even
     mine = [l for l in legs if l["book"] == o["platform"]]
     doc = {"version": sq.VERSION, "built_at": now.isoformat(timespec="seconds"), "options": dict(o, sports=list(o["sports"]), exclude=len(o["exclude"])),
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,

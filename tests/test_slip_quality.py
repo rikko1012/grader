@@ -371,6 +371,74 @@ def test_payout_only_where_published():
     assert s["payout"]["multiple"] == 3.5 and "ev" not in s                  # EV is never computed here
 
 
+# ------------------------------------------------------------------------------------------------------------- break-even (owner audit 2026-11-06, T1)
+
+AUDIT_PP = (.62, .61, .60, .59, .58, .57, .56, .55, .54, .53, .52, .51, .505, .50, .50, .50)   # all-hit 38% down to 25%
+
+
+def test_audit_t1_power2_slips_below_break_even_are_never_handed_out():
+    """Auto-build built 8 PrizePicks Power 2-pick slips at 36.6..27.2% all-hit; Power 2 pays 3x (33.3% break-even)."""
+    recs = [rec(f"p{i}", f"e{i}", p) for i, p in enumerate(AUDIT_PP)]
+    old = build(recs, count=8, size=2, no_repeat=True)                        # the library default (research reruns) is unchanged
+    assert len(old["slips"]) == 8 and min(s["all_hit"] for s in old["slips"]) < 1 / 3
+    b = build(recs, count=8, size=2, no_repeat=True, break_even=True)
+    assert b["slips"] and all(s["all_hit"] * 3.0 >= 1 for s in b["slips"])
+    assert [round(s["all_hit"], 4) for s in b["slips"]] == [round(.62 * .61, 4), round(.60 * .59, 4)]   # fresh first, then fewer
+    n = len(b["slips"])
+    assert b["shortage"] == f"{n} slip{'s clear' if n != 1 else ' clears'} break-even on PrizePicks Power 2-pick right now."
+    assert "Expected return" not in b["shortage"] and "%" not in b["shortage"]  # a plain count, no return figure
+
+
+def test_break_even_none_clear_says_so():
+    recs = [rec(f"p{i}", f"e{i}", .55) for i in range(6)]                     # 30.3% all-hit
+    b = build(recs, count=4, size=2, break_even=True)
+    assert b["slips"] == [] and b["shortage"] == "No slip clears break-even on PrizePicks Power 2-pick right now."
+    one = build(recs + [rec("a", "ea", .7), rec("b", "eb", .5)], count=4, size=2, no_repeat=True, break_even=True)
+    assert len(one["slips"]) == 1 and one["shortage"] == "1 slip clears break-even on PrizePicks Power 2-pick right now."
+
+
+def test_break_even_search_still_finds_every_slip_that_clears():
+    recs = [rec(f"p{i}", f"e{i}", p) for i, p in enumerate(AUDIT_PP)]
+    legs, _ = legs_of(recs)
+    clear = [c for c in combinations(legs, 2) if math.prod(l["rank_p"] for l in c) * 3 >= 1 and not sq.problems(list(c), "prizepicks", "power")]
+    b = sq.build(legs, {"platform": "prizepicks", "entry_type": "power", "count": 12, "size": 2, "break_even": True})
+    assert len(b["slips"]) == min(12, len(clear))
+
+
+def test_break_even_counts_goblins_and_demons_by_what_they_pay():
+    """A goblin pays an unpublished multiple below the table: never shown to clear, so never handed out, however likely.
+    A demon pays at least the table: judged against the table."""
+    gob = [rec("g1", "e1", .9, line_type="goblin", line=14.5), rec("g2", "e2", .9, line_type="goblin", line=14.5), rec("s", "e3", .55)]
+    b = build(gob, count=2, size=2, lines="all", break_even=True)
+    assert b["slips"] == [] and b["shortage"].startswith("No slip clears break-even")
+    assert build(gob, count=2, size=2, lines="all")["slips"]                  # without the rule the goblins would be built
+    dem = [rec("d1", "e1", .62, line_type="demon"), rec("d2", "e2", .6, line_type="demon")]
+    b = build(dem, count=1, size=2, lines="all", break_even=True)
+    assert len(b["slips"]) == 1
+    legs, _ = legs_of(gob)
+    assert sq.payout_floor("prizepicks", "power", 2, legs[:2]) is None
+    assert sq.payout_floor("prizepicks", "power", 2, [dict(legs[2], multiplier=0.9)] * 2) is None
+
+
+def test_break_even_flex_uses_the_flex_table():
+    recs = [rec(f"p{i}", f"e{i}", .6) for i in range(3)]
+    legs, _ = legs_of(recs)
+    # PrizePicks Flex 3: 3x all hit, 1x with one miss -> 0.216 * 3 + 0.432 * 1 = 1.08 (clears), at .55: 0.499 + 0.408 = 0.907 (does not)
+    assert sq.clears_break_even("prizepicks", "flex", legs)
+    low = [dict(l, rank_p=.55) for l in legs]
+    assert not sq.clears_break_even("prizepicks", "flex", low)
+    assert len(build(recs, count=1, size=3, entry_type="flex", break_even=True)["slips"]) == 1
+
+
+def test_break_even_underdog_multipliers():
+    ud = [rec(f"p{i}", f"e{i}", .56, book="underdog") for i in range(2)]      # 31.4% all-hit x 3.5 = 1.10 -> clears
+    assert len(build(ud, platform="underdog", entry_type="standard", break_even=True)["slips"]) == 1
+    cut = [rec(f"p{i}", f"e{i}", .56, book="underdog", mult=0.85) for i in range(2)]   # pays less by an unpublished rule
+    assert build(cut, platform="underdog", entry_type="standard", break_even=True)["slips"] == []
+    boost = [rec(f"p{i}", f"e{i}", .56, book="underdog", mult=1.05) for i in range(2)]  # pays at least the table
+    assert len(build(boost, platform="underdog", entry_type="standard", break_even=True)["slips"]) == 1
+
+
 # ------------------------------------------------------------------------------------------------------------- adder
 
 def slip_leg(r):

@@ -28,6 +28,7 @@ flagged pairs (stale / prediction-market / pick'em legs), exclusion counts and t
 markets_checked, and sections_possible says whether a sport's prices can produce each section at all.
 
 For 700 members: one build every TTL s for everyone (srv.shared); each member's answer is that build cut to the sports they see."""
+import heapq
 import json
 import time
 
@@ -48,6 +49,7 @@ PICKEM = BOARD_PICKEM + ("sleeper", "dabble")
 CONSENSUS_MAX_AGE_S = 10 * 60
 MIN_BOOKS = 2
 MAX_ROWS = 300
+CLOSEST_ROWS = 25        # owner audit 2026-11-06 (T6): with nothing above its fair chance, the sheet lists the closest prices
 FRESH_FILTERS = [[120, "2 min"], [600, "10 min"], [1800, "30 min"]]
 
 
@@ -206,7 +208,7 @@ def sheet(srv, sport, now):
     gs = groups(srv, sport, now)
     if gs is None:
         return {"state": "unavailable", "error": "Board not loaded yet", "ev": [], "arbitrage": [], "flagged": [], "excluded": {}}
-    ev, arb, flagged, excluded, newest, n_quotes = [], [], [], {}, None, 0
+    ev, arb, flagged, excluded, newest, n_quotes, near = [], [], [], {}, None, 0, []
     excluded_lines, possible = {}, {"ev": False, "arb": False}
     here = {}
 
@@ -260,14 +262,12 @@ def sheet(srv, sport, now):
                     value = mt.ev_push_adjusted(p, price, pp)
                 except ValueError:
                     ex("Invalid price or chance"); continue
-                if value <= 0:
-                    continue
                 flags = []
                 if own and own["wide"]:
                     flags.append("Wide market")
                 if q["multiplier"]:
                     flags.append("Pick'em multiplier: needs 2+ picks")
-                ev.append(dict(_row_base(g, sport), side=side, book=q["book"], book_label=q["book_label"], kind=q["kind"],
+                (ev if value > 0 else near).append(dict(_row_base(g, sport), side=side, book=q["book"], book_label=q["book_label"], kind=q["kind"],
                                odds=round(price, 3), p_cal=round(p, 4), p_push=round(pp, 4), p_source=p_source, ev=round(value, 4),
                                width=own, consensus_width=round(cwidth, 4) if cwidth is not None else None,
                                age_s=round(age, 1), seen_at=wb._iso(q["seen"]), source=q["source"], flags=flags,
@@ -336,8 +336,11 @@ def sheet(srv, sport, now):
     ev.sort(key=lambda x: -x["ev"])
     arb.sort(key=lambda x: -x["margin_pct"])
     flagged.sort(key=lambda x: -x["margin_pct"])
+    # T6: the priced single bets that fall short of their fair chance, closest first (members: sportsbook / prediction rows only,
+    # cut in for_member). Same row shape as "ev"; their ev / per_100 are 0 or below and are never counted as worth acting on.
+    closest = heapq.nlargest(CLOSEST_ROWS, (x for x in near if x["kind"] in ("sportsbook", "prediction")), key=lambda x: (x["ev"], -x["age_s"]))
     return {"state": "ready" if n_quotes else "empty", "as_of": wb._iso(now), "newest_quote_at": wb._iso(newest),
-            "quotes_checked": n_quotes, "markets_checked": len(gs), "ev": ev[:MAX_ROWS], "arbitrage": arb[:MAX_ROWS],
+            "quotes_checked": n_quotes, "markets_checked": len(gs), "ev": ev[:MAX_ROWS], "closest": closest, "arbitrage": arb[:MAX_ROWS],
             "flagged": flagged[:MAX_ROWS], "excluded": excluded, "excluded_lines": excluded_lines, "sections_possible": possible}
 
 
@@ -389,7 +392,8 @@ def for_member(body, allowed, owner=False):
     if not owner:
         for d in doc["sports"].values():
             d["ev"] = [r for r in d.get("ev", []) if r.get("kind") in ("sportsbook", "prediction")]
-            for r in d["ev"]:
+            d["closest"] = [r for r in d.get("closest", []) if r.get("kind") in ("sportsbook", "prediction")]
+            for r in d["ev"] + d["closest"]:
                 r.pop("p_source", None)
             d["arbitrage"] = [r for r in d.get("arbitrage", []) if all(l.get("kind") == "sportsbook" and not l.get("flags") for l in r.get("legs", []))]
             for k in MEMBER_HIDDEN:

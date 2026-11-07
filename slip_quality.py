@@ -36,7 +36,9 @@ sq-1, in plain words:
 Search: exact branch-and-bound per slip over the best POOL_CAP legs (NODE_LIMIT nodes, reported when reached). Payout: Underdog's
 published table when every pick is a 1.0x pick; PrizePicks' verified help-center table (owner 2026-11-05) on standard lines.
 EV is never computed here (workspace_rules.
-ev_status decides it, only with a verified payout and validated chances)."""
+ev_status decides it, only with a verified payout and validated chances). Break-even (owner audit 2026-11-06): the member
+route offers a slip only when its ranked all-hit chance clears the break-even of the lowest payout its leg mix can pay
+(clears_break_even); that check is a yes / no, never a shown figure."""
 import math
 from datetime import datetime, timezone
 
@@ -353,17 +355,72 @@ def _score(l, uses):
     return math.log(max(l["rank_p"], 1e-9)) - REUSE_PENALTY * uses(l)
 
 
-def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, goblin_cap=None):
-    """Exact branch-and-bound for one slip. -> (legs or None, nodes, exact)."""
+# ---------------------------------------------------------------------------------------------------------------- break-even
+# Owner audit 2026-11-06 (T1): Auto-build handed out PrizePicks Power 2-pick slips at 27-37% all-hit while Power 2 pays 3x
+# (break-even 33.3%), and goblins pay less than 3x. A generated slip is now offered only when its all-hit chance clears the
+# break-even of the lowest payout its leg mix can pay (gradecore/pickem_payouts.json via workspace_rules.pp_payout, and the
+# Underdog table). A goblin pays an unpublished LOWER multiple and an Underdog pick under 1.0x pays less by an unpublished
+# rule, so neither can be shown to clear and neither is offered; a demon or a boosted pick pays at least the table, so the
+# table is its floor. Same-match legs carry no all-hit chance and are not judged here (Underdog same-match only, marked).
+
+def payout_floor(platform, entry_type, n, legs=()):
+    """The lowest payout this leg mix can pay: {"multiple": all-hit multiple, "flex": {losses: multiple} or None}, or None
+    when it cannot be known (no published entry, a goblin, an Underdog pick under 1.0x or with no multiplier)."""
+    if platform == "prizepicks":
+        if any((l.get("line_type") or "standard") == "goblin" for l in legs):
+            return None
+        if any(l.get("multiplier") is not None and not l["multiplier"] >= 1.0 for l in legs):
+            return None
+        pp = rules.pp_payout(entry_type or "power", n)
+        return None if pp is None else {"multiple": pp["multiple"], "flex": pp.get("flex")}
+    if platform == "underdog":
+        if any(not isinstance(l.get("multiplier"), (int, float)) or not l["multiplier"] >= 1.0 for l in legs):
+            return None
+        if (entry_type or "standard") == "flex":
+            return {"multiple": rules.UD_FLEX[n][0], "flex": rules.UD_FLEX[n]} if n in rules.UD_FLEX_LISTED else None
+        m = rules.payout_multiple("standard", n)
+        return None if m is None else {"multiple": m, "flex": None}
+    return None
+
+
+def clears_break_even(platform, entry_type, legs):
+    """True when the slip's ranked chances (pushes already off) return at least the stake on average at its payout floor:
+    all-hit chance x multiple >= 1 on a fixed entry, the flex table's expected multiple >= 1 on a flex entry."""
+    floor = payout_floor(platform, entry_type, len(legs), legs)
+    if floor is None:
+        return False
+    probs = [l["rank_p"] for l in legs]
+    if floor["flex"]:
+        return rules.flex_return(probs, floor["flex"]) >= 1.0 - 1e-12
+    return math.prod(probs) * floor["multiple"] >= 1.0 - 1e-12
+
+
+def break_even_text(platform, entry_type, size, n):
+    entry = f"{rules.LABEL.get(platform, platform)} {(entry_type or '').title()} {size}-pick".replace("  ", " ")
+    if not n:
+        return f"No slip clears break-even on {entry} right now."
+    return f"{n} slip{'s clear' if n != 1 else ' clears'} break-even on {entry} right now."
+
+
+def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, goblin_cap=None, break_even=False):
+    """Exact branch-and-bound for one slip. -> (legs or None, nodes, exact, break-even left a combination out)."""
     scored = sorted(((_score(l, uses), l) for l in cands), key=lambda t: (-t[0], t[1]["key"]))[:POOL_CAP]
     scores = [s for s, _ in scored]
     legs = [l for _, l in scored]
     n = len(legs)
     best = {"score": -math.inf, "legs": None}
-    st = {"nodes": 0, "cut": False}
+    st = {"nodes": 0, "cut": False, "be": False}
     allow_same = same_match and same_match_allowed(platform)
     chosen, players, matches, sports = [], set(), {}, {}
     gob = [0]
+    # break-even bound (fixed entries): a slip clears only if its all-hit chance reaches 1 / the table multiple, so a branch
+    # whose log chance plus the best remaining log chances falls short can be cut (the flex check is made at the leaf only)
+    logs = [math.log(max(l["rank_p"], 1e-12)) for l in legs]
+    top = [0.0]
+    for v in sorted(logs, reverse=True)[:size]:
+        top.append(top[-1] + v)
+    fl = payout_floor(platform, entry_type, size) if break_even else None
+    need_log = -math.log(fl["multiple"]) - 1e-12 if fl and not fl["flex"] and fl["multiple"] > 0 else None
 
     def leaf(score):
         sig = frozenset(l["key"] for l in chosen)
@@ -375,9 +432,12 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, 
             return
         if problems(chosen, platform, entry_type, same_match):
             return
+        if break_even and len({(l["sport"], l["event"]) for l in chosen}) == len(chosen) and not clears_break_even(platform, entry_type, chosen):
+            st["be"] = True
+            return
         best["score"], best["legs"] = score, list(chosen)
 
-    def dfs(i, score):
+    def dfs(i, score, logp):
         st["nodes"] += 1
         if st["nodes"] > NODE_LIMIT:
             st["cut"] = True
@@ -388,6 +448,9 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, 
                 leaf(score)
             return
         if n - i < need or score + sum(scores[i:i + need]) <= best["score"]:
+            return
+        if need_log is not None and not allow_same and logp + top[min(need, len(top) - 1)] < need_log:
+            st["be"] = True
             return
         for j in range(i, n):
             if n - j < need or score + sum(scores[j:j + need]) <= best["score"]:
@@ -404,15 +467,15 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, 
             if g and goblin_cap is not None and gob[0] >= goblin_cap:
                 continue                                    # the member's goblin rule: at most goblin_cap goblins per slip
             chosen.append(l); players.add(pk); matches[mk] = matches.get(mk, 0) + 1; gob[0] += g
-            dfs(j + 1, score + scores[j])
+            dfs(j + 1, score + scores[j], logp + logs[j])
             chosen.pop(); players.discard(pk); matches[mk] -= 1; gob[0] -= g
             if not matches[mk]:
                 del matches[mk]
             if st["cut"]:
                 return
 
-    dfs(0, 0.0)
-    return best["legs"], st["nodes"], not st["cut"]
+    dfs(0, 0.0, 0.0)
+    return best["legs"], st["nodes"], not st["cut"], st["be"]
 
 
 def all_hit(legs):
@@ -453,24 +516,28 @@ def why_line(legs, pool_size, first, reused):
 def build(legs, opts):
     """One batch from a ranked pool. opts: {platform, entry_type, count, size, mix: any|mixed|single, same_match: bool,
     no_repeat: bool, lines: no_goblins|one_goblin|standard|all (missing = all, so the frozen research scripts reproduce;
-    the member routes always pass the member's rule)}. -> {slips, shortage, search}."""
+    the member routes always pass the member's rule), break_even: bool (missing = False for the same reason; the member
+    route passes True: a slip is offered only when it clears its payout's break-even, see clears_break_even)}.
+    -> {slips, shortage, search}."""
     platform, et = opts["platform"], opts.get("entry_type")
     size, count = int(opts["size"]), int(opts["count"])
     mix, same_match, no_repeat = opts.get("mix") or "any", bool(opts.get("same_match")), bool(opts.get("no_repeat"))
     lines = opts.get("lines") or "all"
+    be_on = bool(opts.get("break_even"))
     cap = max_goblins(lines)
     cands = [l for l in legs if l["book"] == platform and line_ok(l, lines)]
-    used_prop, used_player, taken, slips, nodes, exact = {}, {}, set(), [], 0, True
+    used_prop, used_player, taken, slips, nodes, exact, be_cut = {}, {}, set(), [], 0, True, False
 
     def uses(l):
         return 0 if no_repeat else used_prop.get(l["prop"], 0) + used_player.get((l["sport"], l["pkey"]), 0)
 
     for k in range(count):
         free = [l for l in cands if not (no_repeat and l["prop"] in used_prop)]
-        got, nn, ex = _best_slip(free, size, platform, et, same_match, mix, uses, taken, cap)
+        got, nn, ex, be = _best_slip(free, size, platform, et, same_match, mix, uses, taken, cap, be_on)
         nodes += nn
         exact = exact and ex
         if not got:
+            be_cut = be
             break
         reused = any(used_prop.get(l["prop"]) or used_player.get((l["sport"], l["pkey"])) for l in got)
         taken.add(frozenset(l["key"] for l in got))
@@ -496,6 +563,8 @@ def build(legs, opts):
             where = f"one sport on {label}" if one_sport else label
             shortage = (f"The eligible legs for {where} come from {matches} matches at most; a {size}-pick slip needs {size} different matches."
                         if one_sport else f"The eligible legs on {label} come from {matches} matches; a {size}-pick slip needs {size} different matches.")
+        elif be_cut:
+            shortage = break_even_text(platform, et, size, len(slips))
         elif no_repeat:
             shortage = "No props were repeated: the unused eligible legs could not form more valid slips."
         else:

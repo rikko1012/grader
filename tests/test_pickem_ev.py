@@ -94,8 +94,24 @@ def test_model_only_rows_rank_apart(fake):
     d = we.build(None, we.params({}, []), ALL)
     mo = d["model_only"]
     assert {r["sport"] for r in mo} == {"nba", "cs2"} and all(r["basis"] == "model only" and "p_market" not in r for r in mo)
-    evs = [r["ev_model"] for r in mo]
-    assert evs == sorted(evs, reverse=True)
+    evs = [r["ev_model"] for r in mo if r["ev_model"] is not None]          # NBA / NFL: no return figure (T5), ranked after
+    assert evs == sorted(evs, reverse=True) and evs
+    assert [r["ev_model"] is None for r in mo] == sorted(r["ev_model"] is None for r in mo)
+
+
+def test_audit_t5_nba_nfl_legs_with_no_book_price_carry_no_return_figure(fake):
+    """Owner audit 2026-11-06 T5: "Show legs with no book price" ranked NBA / NFL legs by Scout's chance with an average return
+    (Scout 76.2% at +154) while NFL 65%+ picks hit 55.9%. The figure is hidden for NBA / NFL; nothing is labelled instead."""
+    d = we.build(None, we.params({}, []), ALL)
+    mo = d["model_only"]
+    nba = [r for r in mo if r["sport"] in ("nba", "nfl")]
+    assert nba and all(r["ev_model"] is None for r in nba)
+    assert all(r["p_model"] is not None for r in nba)                        # Scout's chance itself is still shown
+    nba_p = [r["p_model"] for r in mo if r["sport"] in ("nba", "nfl")]
+    assert nba_p == sorted(nba_p, reverse=True)                              # ranked by Scout's chance, as the heading says
+    assert any(r["ev_model"] is not None for r in mo if r["sport"] == "cs2")  # esports legs keep theirs
+    blob = json.dumps(d).lower()
+    assert "unvalidated" not in blob and "estimate" not in blob
     assert not any(r["sport"] == "cs2" for r in d["rows"])                    # esports never in the market list
     # goblin and started lines never appear
     assert not any(r["key"].endswith(("p6", "p7")) for r in d["rows"] + mo)

@@ -3,14 +3,24 @@
  * line_shift.py). The page only filters and sorts what it is given; filters that change the fair chance are sent back as
  * parameters. Saved views live in this browser only (a per-viewer convenience). */
 const KEY = 'scout-ev-view';
-const S = {doc: null, loading: false, error: null, seq: 0, open: new Set(), showModel: false,
-  p: {app: 'prizepicks', entry: 'power', n: 2, preset: 'equal', method: 'worst', min_books: 1, req: [], w: {}, min_liq: 0, max_width: 0.1},
-  f: {q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: true}};
+/* the default filters (Reset, Clear all, and the fall-back when a saved view would hide every leg) */
+const DEF_P = () => ({preset: 'equal', method: 'worst', min_books: 1, req: [], w: {}, min_liq: 0, max_width: 0.1});
+const DEF_F = () => ({q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: true});
+const S = {doc: null, loading: false, error: null, seq: 0, open: new Set(), showModel: false, restored: false, notice: '',
+  p: Object.assign({app: 'prizepicks', entry: 'power', n: 2}, DEF_P()), f: DEF_F()};
 let C = null, box = null;
 
 function load() {
-  try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); if (v && v.p && v.f) { Object.assign(S.p, v.p); Object.assign(S.f, v.f); return true; } } catch (e) { /* storage blocked */ }
+  try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); if (v && v.p && v.f) { Object.assign(S.p, v.p); Object.assign(S.f, v.f); S.restored = true; return true; } } catch (e) { /* storage blocked */ }
   return false;
+}
+/* owner audit 2026-11-06 (T3): a saved view of Required books FanDuel + Polymarket and Sport NBA opened on "0 of 0 legs". A view
+   whose filters (not the market) leave no priced leg is never saved, and never restored: the page opens on the defaults instead. */
+const serverFiltered = () => { const p = S.p, d = DEF_P(); return p.req.length > 0 || p.preset !== d.preset || p.min_books !== d.min_books || p.min_liq !== d.min_liq || p.max_width !== d.max_width; };
+const clientFiltered = () => { const f = S.f; return f.sport !== 'all' || !!f.q || f.lo !== '' || f.hi !== '' || !!f.quick; };
+function filtersHideAll(d) {
+  if (!d || d.rows.some(keep)) return false;                 // a priced leg passes the filters (Only picks that beat the entry aside)
+  return (clientFiltered() && d.rows.length > 0) || (serverFiltered() && !!(d.hidden && d.hidden.count));
 }
 function query() {
   const p = S.p, out = new URLSearchParams({app: p.app, entry: p.entry, n: String(p.n), preset: p.preset, method: p.method, min_books: String(p.min_books),
@@ -21,7 +31,17 @@ function query() {
 }
 async function fetchDoc() {
   const seq = ++S.seq; S.loading = true; S.error = null; render();
-  try { const d = await C.api('pickem-ev?' + query()); if (seq !== S.seq) return; S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; S.docP = JSON.parse(JSON.stringify(S.p)); }
+  try {
+    const d = await C.api('pickem-ev?' + query()); if (seq !== S.seq) return; S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; S.docP = JSON.parse(JSON.stringify(S.p));
+    if (S.restored) {
+      S.restored = false;
+      if (filtersHideAll(d)) {
+        Object.assign(S.p, DEF_P()); S.f = DEF_F();
+        S.notice = 'Your saved view showed no legs right now, so the default view is shown.';
+        S.loading = false; return fetchDoc();
+      }
+    }
+  }
   catch (e) {
     if (seq === S.seq) {
       S.error = S.doc ? 'Prices could not be refreshed.' : 'Prices could not be loaded.';
@@ -40,6 +60,7 @@ const evClass = x => typeof x === 'number' ? (x > 0 ? ' is-pos' : ' is-neg') : '
 const age = s => typeof s !== 'number' ? '—' : s < 90 ? Math.round(s) + 's' : s < 5400 ? Math.round(s / 60) + 'm' : Math.round(s / 3600) + 'h';
 const side = s => s === 'over' ? 'Over' : 'Under';
 const ENTRY = {power: 'Power', flex: 'Flex', standard: 'Standard'};
+const MODEL_EV_HIDDEN = ['nba', 'nfl'];
 const REASON = {stale: 'older than its limit', 'one-sided': 'one side priced only', wide: 'book cut too large', 'different line too far': 'line too far from the app\'s line',
   'different line and no line-shift shape': 'different line, no shape for this stat', 'no valid quote time': 'no time on the price'};
 const reason = r => REASON[r] || (r.startsWith('exchange spread') ? 'buy-sell gap too wide' : r.includes('liquidity') ? 'less money on it than your minimum' : r);
@@ -92,15 +113,42 @@ function modelRowHtml(r, sports) {
   return `<li class="ev-row ev-model-row"><div class="ev-cell ev-play" data-label="Play">${play(r, sports)}</div>`
     + `<div class="ev-cell" data-label="App leg">${legOdds(r)}</div>`
     + `<div class="ev-cell ev-hit" data-label="Scout"><b>${pct(r.p_model)}</b> <span class="ev-badge">No book price</span></div>`
-    + `<div class="ev-cell ev-ev${evClass(r.ev_model)}" data-label="Average return on Scout's chance"><b>${evText(r.ev_model)}</b></div>`
+    /* owner audit 2026-11-06 (T5): an NBA / NFL research chance has not held up on settled results (NFL 65%+ won 55.9%), so a leg
+       with no book price shows no return figure there; the server sends none either (workspace_ev.build) */
+    + (MODEL_EV_HIDDEN.includes(r.sport) || typeof r.ev_model !== 'number' ? '<div class="ev-cell ev-ev"></div>'
+      : `<div class="ev-cell ev-ev${evClass(r.ev_model)}" data-label="Average return on Scout's chance"><b>${evText(r.ev_model)}</b></div>`)
     + `<div class="ev-cell ev-act">${addBtn(r)}</div></li>`;
+}
+/* T3: every filter that differs from the defaults, as a chip above the list; the x removes that one filter */
+function chips(d) {
+  const p = S.p, f = S.f, D = DEF_P(), out = [];
+  const label = b => ((d.options.books || []).find(x => x.id === b) || {}).label || b;
+  p.req.forEach(b => out.push(['req:' + b, label(b) + ' required']));
+  if (p.preset === 'sharp') out.push(['quick:sharp', 'Top books only']);
+  if (p.preset === 'custom') out.push(['preset', 'Each book counted your way']);
+  if (p.min_books !== D.min_books) out.push(['min_books', 'At least ' + p.min_books + ' books']);
+  if (p.min_liq !== D.min_liq) out.push(['min_liq', 'At least $' + Number(p.min_liq).toLocaleString() + ' on an exchange price']);
+  if (p.max_width !== D.max_width) out.push(['max_width', 'Book cut up to ' + (p.max_width * 100).toFixed(0) + '%']);
+  if (f.sport !== 'all') out.push(['sport', C.SPORTS[f.sport] || f.sport]);
+  if (f.q) out.push(['q', 'Search: ' + f.q]);
+  if (f.lo !== '') out.push(['lo', 'To hit from ' + f.lo + '%']);
+  if (f.hi !== '') out.push(['hi', 'To hit up to ' + f.hi + '%']);
+  if (f.quick === 'favorites') out.push(['quick:favorites', 'Favorites']);
+  if (f.quick === 'longshots') out.push(['quick:longshots', 'Longshots']);
+  return out;
+}
+function chipsHtml(d) {
+  const c = chips(d);
+  if (!c.length) return '';
+  return `<div class="ev-chips" role="group" aria-label="Active filters"><span>Filters on:</span>${c.map(([k, t]) => `<button class="ev-chip-on" data-ev="unchip" data-id="${esc(k)}" aria-label="Remove filter ${esc(t)}">${esc(t)} <span aria-hidden="true">×</span></button>`).join('')}`
+    + (c.length > 1 ? '<button class="ev-link" data-ev="clearall">Clear all</button>' : '') + '</div>';
 }
 function filtersHtml(d) {
   const p = S.p, f = S.f, o = d.options, books = o.books || [];
   const sel = (id, label, opts, v) => `<label>${label}<select id="ev-${id}">${opts.map(([k, t]) => `<option value="${esc(k)}"${String(k) === String(v) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
   const w = p.preset === 'custom' ? `<fieldset class="ev-weights"><legend>How much each book counts</legend>${books.map(b => sel('w-' + b.id, b.label, o.weight_choices.map(x => [x, x === 0 ? 'Off' : x + 'x']), p.w[b.id] ?? 1)).join('')}</fieldset>` : '';
   return `<details class="ev-drawer"${S.drawer ? ' open' : ''}><summary>Filters</summary><div class="ev-drawer-body">`
-    + `<div class="ev-quick" role="group" aria-label="Quick filters">${[['sharp', 'Top books only'], ['favorites', 'Favorites'], ['longshots', 'Longshots']].map(([k, t]) => `<button data-ev="quick" data-id="${k}" aria-pressed="${f.quick === k || (k === 'sharp' && p.preset === 'sharp')}">${t}</button>`).join('')}`
+    + `<div class="ev-quick" role="group" aria-label="Quick filters">${[['sharp', 'Top books only'], ['favorites', 'Favorites'], ['longshots', 'Longshots']].map(([k, t]) => { const on = k === 'sharp' ? p.preset === 'sharp' : f.quick === k; return `<button data-ev="quick" data-id="${k}" aria-pressed="${on}">${on ? '<span aria-hidden="true">✓ </span>' : ''}${t}</button>`; }).join('')}`
     + `<button data-ev="evonly" aria-pressed="${f.evOnly}">Only picks that beat the entry</button></div>`
     + `<div class="ev-grid">${sel('preset', 'How books count', o.presets.map(x => [x, x === 'equal' ? 'All the same' : x === 'sharp' ? 'Top books count more' : 'Choose for each book']), p.preset)}`
     + sel('min_books', 'Fewest books', Array.from({length: o.min_books_max}, (_, i) => [i + 1, String(i + 1)]), p.min_books)
@@ -125,7 +173,8 @@ function render() {
     + `<label class="ev-search">Search<input id="ev-q" type="search" value="${esc(S.f.q)}" placeholder="Player, team or market"></label>`
     + (sports > 1 ? `<label>Sport<select id="ev-sport">${sportOpts.map(([k, t]) => `<option value="${k}"${S.f.sport === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>` : '') + `</div>`
     + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
-    + filtersHtml(d) + banner
+    + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
+    + filtersHtml(d) + chipsHtml(d) + banner
     + `<section aria-label="Market priced legs"><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
     + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.map(r => rowHtml(r, sports)).join('')}</ol>`
       : `<p class="ev-state">${d.rows_total ? 'No leg beats the entry right now with these filters.' : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
@@ -150,6 +199,9 @@ const CSS = '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;j
   + '#u-hub .ev-bar select,#u-hub .ev-bar input,#u-hub .ev-grid select,#u-hub .ev-grid input{min-height:40px;max-width:100%}#u-hub .ev-search{flex:1 1 200px}'
   + '#u-hub .ev-drawer{border:1px solid var(--u-line);border-radius:9px;background:var(--u-panel);margin:0 0 12px}#u-hub .ev-drawer summary{min-height:42px;display:flex;align-items:center;padding:0 12px;cursor:pointer;font-weight:600}'
   + '#u-hub .ev-drawer-body{padding:4px 12px 12px}#u-hub .ev-quick{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}#u-hub .ev-quick button{min-height:40px}'
+  + '#u-hub .ev-quick button[aria-pressed="true"]{border-color:var(--u-accent,#3b82f6);background:rgba(59,130,246,.18);box-shadow:inset 0 0 0 1px var(--u-accent,#3b82f6);font-weight:600}'
+  + '#u-hub .ev-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px}#u-hub .ev-chips>span{font-size:12px;color:var(--u-muted)}'
+  + '#u-hub .ev-chip-on{min-height:40px;border-radius:999px;padding:0 12px;border:1px solid var(--u-accent,#3b82f6);background:rgba(59,130,246,.12)}'
   + '#u-hub .ev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}#u-hub .ev-req,#u-hub .ev-weights{border:0;padding:0;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px 14px}'
   + '#u-hub .ev-req legend,#u-hub .ev-weights legend{font-size:12px;color:var(--u-muted);margin-bottom:4px}#u-hub .ev-req label{min-height:40px;display:inline-flex;align-items:center;gap:6px}'
   + '#u-hub .ev-drawer-foot{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}#u-hub .ev-drawer-foot span{color:var(--u-muted);font-size:12px}'
@@ -177,17 +229,33 @@ function onClick(e) {
   if (a === 'books') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); return render(); }
   if (a === 'model') { S.showModel = !S.showModel; return render(); }
   if (a === 'evonly') { S.f.evOnly = !S.f.evOnly; return render(); }
-  if (a === 'quick') {
+  if (a === 'quick') {                     /* T4: each is a toggle - a second press turns it off, and the button shows it is on */
     if (id === 'sharp') { const on = S.p.preset !== 'sharp'; S.p.preset = on ? 'sharp' : 'equal'; S.p.min_books = on ? Math.max(2, S.p.min_books) : 1; S.drawer = true; return fetchDoc(); }
+    if (id !== 'favorites' && id !== 'longshots') return;
     S.f.quick = S.f.quick === id ? '' : id; S.drawer = true; return render();
   }
+  if (a === 'unchip') {
+    const [k, v] = String(id).split(/:(.*)/), D = DEF_P(), F = DEF_F();
+    S.notice = '';
+    if (k === 'req') { S.p.req = S.p.req.filter(x => x !== v); return fetchDoc(); }
+    if (k === 'quick' && v === 'sharp') { S.p.preset = 'equal'; S.p.min_books = 1; return fetchDoc(); }
+    if (k === 'preset') { S.p.preset = D.preset; S.p.w = {}; return fetchDoc(); }
+    if (['min_books', 'min_liq', 'max_width'].includes(k)) { S.p[k] = D[k]; return fetchDoc(); }
+    if (k === 'quick') { S.f.quick = ''; return render(); }
+    if (['sport', 'q', 'lo', 'hi'].includes(k)) { S.f[k] = F[k]; return render(); }
+    return;
+  }
+  if (a === 'clearall') { S.notice = ''; const keepEv = S.f.evOnly; Object.assign(S.p, DEF_P()); S.f = Object.assign(DEF_F(), {evOnly: keepEv}); return fetchDoc(); }
   if (a === 'save') {
+    const m = box.querySelector('#ev-saved');
+    if (S.loading || JSON.stringify(S.p) !== JSON.stringify(S.docP)) { if (m) m.textContent = 'Wait for the prices to load, then save.'; return; }
+    if (filtersHideAll(S.doc)) { if (m) m.textContent = 'This view shows no legs right now, so it was not saved.'; return; }
     let ok = true; try { localStorage.setItem(KEY, JSON.stringify({p: S.p, f: S.f})); } catch (err) { ok = false; }
-    const m = box.querySelector('#ev-saved'); if (m) m.textContent = ok ? 'Saved in this browser.' : 'This browser does not allow saving.'; return;
+    if (m) m.textContent = ok ? 'Saved in this browser.' : 'This browser does not allow saving.'; return;
   }
   if (a === 'reset') {
     try { localStorage.removeItem(KEY); } catch (err) { /* storage blocked */ }
-    Object.assign(S.p, {preset: 'equal', method: 'worst', min_books: 1, req: [], w: {}, min_liq: 0, max_width: 0.1}); Object.assign(S.f, {q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: true});
+    Object.assign(S.p, DEF_P()); S.f = DEF_F(); S.notice = '';
     return fetchDoc();
   }
   if (a === 'add') return C.addLeg(id, b.dataset.side);
