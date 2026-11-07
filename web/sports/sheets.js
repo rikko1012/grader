@@ -111,8 +111,11 @@
       return a[2] - b[2];
     }).map(function (x) { return x[0]; });
   }
+  // QoL 1107: the board's search rule (case, accents and extra spaces ignored) - one fold for every surface
+  var St = root.SportsStats || (typeof require !== "undefined" ? require("./stats.js") : null);
+  function has(hay, q) { return St.fold(hay).indexOf(q) >= 0; }
   function filterRows(rows, f) {
-    var q = (f.q || "").trim().toLowerCase();
+    var q = St.fold(f.q);
     return rows.filter(function (r) {
       if (f.stat && f.stat !== "all" && r.stat !== f.stat) return false;
       if (f.ev && f.ev !== "all" && r.event !== f.ev) return false;
@@ -121,23 +124,33 @@
       if (f.lean === "over" && r.lean !== "over") return false;
       if (f.lean === "under" && r.lean !== "under") return false;
       if (f.gap && !r.gap) return false;                // the board's "model vs market gap" flag
-      if (q && (r.player || "").toLowerCase().indexOf(q) < 0 && (r.team || "").toLowerCase().indexOf(q) < 0) return false;
+      if (q && !has(r.player || "", q) && !has(r.team || "", q)) return false;
       return true;
     });
   }
   function consistentFilter(rows, f) {
-    var q = (f.q || "").trim().toLowerCase(), min = +(f.min || 0) / 100;
+    var q = St.fold(f.q), min = +(f.min || 0) / 100;
     return rows.filter(function (r) {
       if (f.stat && f.stat !== "all" && r.st !== f.stat) return false;
       if (f.ev && f.ev !== "all" && r.e !== f.ev) return false;
       if (f.dir && f.dir !== "any" && r.side !== f.dir) return false;
       if (min && !(r.r10 >= min - 1e-9)) return false;
       if (f.l20 && r.r20 === null) return false;
-      if (q && (r.n || "").toLowerCase().indexOf(q) < 0 && (r.tm || "").toLowerCase().indexOf(q) < 0) return false;
+      if (q && !has(r.n || "", q) && !has(r.tm || "", q)) return false;
       return true;
     });
   }
+  // QoL 1107: one place for each sheet's default filters, so "Reset filters" knows what to restore (the sort stays)
+  function filterDefaults(sheet) {
+    return sheet === "consistent" ? {stat: "all", ev: "all", dir_: "any", min: "70", q: "", l20: false}
+                                  : {stat: "all", ev: "all", variant: "all", lean: "any", q: "", gap: false};
+  }
+  function filtersAtDefault(st, sheet) {
+    var d = filterDefaults(sheet);
+    return Object.keys(d).every(function (k) { return k === "q" ? !String(st.q || "").trim() : typeof d[k] === "boolean" ? !st[k] === !d[k] : String(st[k]) === String(d[k]); });
+  }
   var api = {SHEETS: SHEETS, variantLabel: variantLabel, edgeText: edgeText, leanText: leanText, buildRows: buildRows,
+             filterDefaults: filterDefaults, filtersAtDefault: filtersAtDefault,
              sortRows: sortRows, filterRows: filterRows, consistentFilter: consistentFilter, effectiveSort: effectiveSort,
              visibleCols: visibleCols, noChanceText: noChanceText, underShown: underShown,
              matchup: matchup, views: {sheets: true}, render: render};
@@ -152,9 +165,11 @@
   function save() { try { localStorage.setItem(LS, JSON.stringify(UI)); } catch (e) { /* storage off */ } }
   function ui(lg, sheet) {
     var k = lg + ":" + sheet;
-    if (!UI[k]) UI[k] = sheet === "consistent" ? {sort: "r10", dir: "desc", stat: "all", ev: "all", dir_: "any", min: "70", q: ""}
-                                               : {sort: "edge", dir: "desc", stat: "all", ev: "all", variant: "all", lean: "any", q: ""};
+    if (!UI[k]) UI[k] = Object.assign(sheet === "consistent" ? {sort: "r10", dir: "desc"} : {sort: "edge", dir: "desc"}, filterDefaults(sheet));
     return UI[k];
+  }
+  function resetBtn(st, sheet) {
+    return '<button type="button" class="sw-btn sw-btn-sm shx-reset" id="shx-reset"' + (filtersAtDefault(st, sheet) ? " disabled" : "") + ">Reset filters</button>";
   }
   function sel(id, label, opts, cur) {
     return '<label class="shx-field"><span>' + esc(label) + '</span><select id="' + id + '">' + opts.map(function (o) {
@@ -248,7 +263,9 @@
           "<td>" + lean + "</td>" +
           (vis.conf ? '<td class="num">' + conf + "</td>" : "") + "</tr>";
       }).join("");
-      main.querySelector("#shx-body").innerHTML = body || '<tr><td colspan="' + ncol + '" class="sw-muted">No lines match these filters.</td></tr>';
+      main.querySelector("#shx-body").innerHTML = body || '<tr><td colspan="' + ncol + '" class="sw-muted">No lines match these filters. ' +
+        (filtersAtDefault(st, sheet) ? "" : '<button type="button" class="sw-btn sw-btn-sm" data-shx-reset>Reset filters</button>') + "</td></tr>";
+      main.querySelector("#shx-reset").disabled = filtersAtDefault(st, sheet);
       main.querySelector("#shx-count").textContent = int(rows.length) + " of " + int(all.length) + " lines";
       var more = main.querySelector("#shx-more");
       more.hidden = rows.length <= shown;
@@ -260,20 +277,20 @@
       sel("shx-variant", "Type", [["all", "All types"], ["standard", "Standard"], ["goblin", "Goblin"], ["demon", "Demon"], ["alternate", "Alternate"]].concat(sheet === "underdog" ? [["over only", "Over only"]] : []), st.variant) +
       sel("shx-lean", "Lean", [["any", "Any"], ["lean", "Has a lean"], ["over", "Lean Over"], ["under", "Lean Under"]], st.lean) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-gap"' + (st.gap ? " checked" : "") + "><span>Model vs market gap</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" aria-keyshortcuts="/" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
-      '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" aria-keyshortcuts="/" autocomplete="off" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
+      '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span>' + resetBtn(st, sheet) + '<span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<p class="sw-small sw-muted shx-sortnote" id="shx-sortnote" hidden></p>' +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">' + esc(sheet) + ' lines, sortable</caption><thead><tr id="shx-head">' +
       '</tr></thead><tbody id="shx-body"></tbody></table></div><button type="button" class="sw-btn" id="shx-more" hidden></button>' +
       '<details class="sw-more shx-method"><summary>How this sheet is built</summary><ul class="sw-list sw-small">' +
       Object.keys(D.method || {}).map(function (k) { return "<li><b>" + esc(k) + ":</b> " + esc(D.method[k]) + "</li>"; }).join("") +
       "<li>Market shows only books with a usable price now; goblin / demon lines have no market price.</li></ul></details>";
-    bind(main, st, paint, function () { shown += PAGE; });
+    bind(main, st, paint, function () { shown += PAGE; }, false, function () { Object.assign(st, filterDefaults(sheet)); save(); drawPlatform(main, lg, sheet, D); });
     paint();
   }
 
   function drawConsistent(main, lg, D) {
-    var st = ui(lg, "consistent"), shown = PAGE;
+    var sheet = "consistent", st = ui(lg, sheet), shown = PAGE;
     function rate(w, side) { return w && w.n ? (side === "under" ? w.u : w.o) + "/" + w.n : "—"; }
     function paint() {
       var f = {stat: st.stat, ev: st.ev, dir: st.dir_, min: st.min, q: st.q, l20: st.l20};
@@ -287,7 +304,9 @@
           '<td class="num">' + (r.r20 === null ? '<span class="sw-faint">— (' + r.l20.n + " games)</span>" : pctTxt(r.r20) + ' <span class="sw-faint sw-small">' + rate(r.l20, r.side) + "</span>") + "</td>" +
           '<td class="sw-small sw-mono">' + esc((r.l10.last || []).map(lineTxt).join(" ")) + "</td>" +
           '<td class="num">' + r.avail + "</td></tr>";
-      }).join("") || '<tr><td colspan="9" class="sw-muted">No players match these filters.</td></tr>';
+      }).join("") || '<tr><td colspan="9" class="sw-muted">No players match these filters. ' +
+        (filtersAtDefault(st, "consistent") ? "" : '<button type="button" class="sw-btn sw-btn-sm" data-shx-reset>Reset filters</button>') + "</td></tr>";
+      main.querySelector("#shx-reset").disabled = filtersAtDefault(st, "consistent");
       main.querySelector("#shx-count").textContent = int(rows.length) + " of " + int(D.count) + " player lines with 10+ games";
       var more = main.querySelector("#shx-more");
       more.hidden = rows.length <= shown;
@@ -305,19 +324,26 @@
       sel("shx-dir", "Direction", [["any", "Over or Under"], ["over", "Over"], ["under", "Under"]], st.dir_) +
       sel("shx-min", "L10 at least", [["0", "Any"], ["60", "60%"], ["70", "70%"], ["80", "80%"], ["90", "90%"]], st.min) +
       '<label class="shx-field shx-check"><input type="checkbox" id="shx-l20"' + (st.l20 ? " checked" : "") + "><span>Has 20 games</span></label>" +
-      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" aria-keyshortcuts="/" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
-      '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span><span class="sw-faint sw-small">' + built(D) + "</span></div>" +
+      '<label class="shx-field"><span>Player or team</span><input id="shx-q" type="search" aria-keyshortcuts="/" autocomplete="off" value="' + esc(st.q) + '" placeholder="' + esc(root.SportsLabels ? root.SportsLabels.searchPlaceholder(lg) : "Search") + '"></label></div>' +
+      '<div class="shx-meta"><span id="shx-count" aria-live="polite"></span>' + resetBtn(st, sheet) + '<span class="sw-faint sw-small">' + built(D) + "</span></div>" +
       '<div class="sw-scroll shx-wrap"><table class="sw-mini shx-table"><caption class="sw-sr">Most consistent players, sortable</caption><thead><tr>' +
       th("cplayer", "Player", st) + th("game", "Game", st) + th("stat", "Stat", st) + th("line", "Line", st, 1) + th("dir", "Side", st) +
       th("r10", "L10", st, 1) + th("r20", "L20", st, 1) + '<th scope="col">Last 10 (newest first)</th>' + th("avail", "Games", st, 1) +
       '</tr></thead><tbody id="shx-body"></tbody></table></div><button type="button" class="sw-btn" id="shx-more" hidden></button>' +
       '<details class="sw-more shx-method"><summary>Exact definition</summary><ul class="sw-list sw-small">' +
       Object.keys(D.method || {}).map(function (k) { return "<li><b>" + esc(k) + ":</b> " + esc(D.method[k]) + "</li>"; }).join("") + "</ul></details>";
-    bind(main, st, paint, function () { shown += PAGE; }, true);
+    bind(main, st, paint, function () { shown += PAGE; }, true, function () { Object.assign(st, filterDefaults(sheet)); save(); drawConsistent(main, lg, D); });
     paint();
   }
 
-  function bind(main, st, paint, more, cons) {
+  function bind(main, st, paint, more, cons, reset) {
+    function doReset(e) {                               // QoL 1107: one click back to the sheet's default filters
+      if (!e.target.closest("#shx-reset, [data-shx-reset]")) return;
+      reset();
+      var q0 = main.querySelector("#shx-q"); if (q0) q0.focus();
+    }
+    main.querySelector(".shx-meta").addEventListener("click", doReset);
+    main.querySelector("#shx-body").addEventListener("click", doReset);
     main.querySelector("thead").addEventListener("click", function (e) {
       var b = e.target.closest("[data-sort]"); if (!b) return;
       var k = b.getAttribute("data-sort");

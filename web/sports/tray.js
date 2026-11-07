@@ -151,6 +151,15 @@
         render(lg); var t = el.querySelector("[data-tray-toggle]"); if (t) t.focus();
       }
     });
+    // QoL 1107: Escape closes the open slip panel and puts focus back on its bar (not while typing in a page field)
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || e.defaultPrevented || !open || el.hidden || document.querySelector("dialog[open]")) return;
+      var t = e.target, typing = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && !el.contains(t);
+      if (typing) return;
+      e.preventDefault();
+      open = false; try { sessionStorage.setItem("sw:tray:open", "0"); } catch (x) {}
+      render(league()); var b = el.querySelector("[data-tray-toggle]"); if (b) b.focus();
+    });
     window.addEventListener("storage", function (e) { if (!e.key || e.key === "ss:ctx" || e.key.indexOf("ss:draft:") === 0) render(league()); });
     return el;
   }

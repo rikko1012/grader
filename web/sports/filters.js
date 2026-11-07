@@ -178,6 +178,11 @@
         notice("View saved. Your filters are ready to reuse."); input.value = "";
       } catch (e) { notice(e.name === "Error" ? e.message : "This browser could not save your view. Check browser storage settings."); }
     });
+    // QoL 1107: Enter in the name box saves the view (the form itself never submits)
+    form.querySelector("#sw-view-name").addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault(); form.querySelector("#sw-save-view").click();
+    });
     form.querySelector("#sw-view-list").addEventListener("click", function (event) {
       var load = event.target.closest("[data-load-view]"), del = event.target.closest("[data-delete-view]");
       if (!load && !del) return;

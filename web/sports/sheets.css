@@ -32,3 +32,8 @@
 @media (max-width:640px){.sw .shx-field input[type=search]{min-width:0;width:100%}.sw .shx-filters .shx-field{flex:1 1 140px}}
 /* audit 2026-11-05: 'Show more' stays hidden when every line is already shown (.sw-btn display beat [hidden]) */
 .sw #shx-more[hidden]{display:none}
+/* QoL 1107: Reset filters sits next to the line count; disabled while every filter is at its default */
+.sw .shx-meta{align-items:center}
+.sw .shx-meta .shx-reset{margin-right:auto}
+.sw .shx-table td .sw-btn{margin-left:8px}
+@media(max-width:640px){.sw .shx-sort{min-height:40px}}   /* QoL 1107: phone sort headers reach 40 px */
