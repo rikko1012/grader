@@ -65,6 +65,9 @@ const REASON = {stale: 'older than its limit', 'one-sided': 'one side priced onl
   'different line and no line-shift shape': 'different line, no shape for this stat', 'no valid quote time': 'no time on the price'};
 const reason = r => REASON[r] || (r.startsWith('exchange spread') ? 'buy-sell gap too wide' : r.includes('liquidity') ? 'less money on it than your minimum' : r);
 
+/* QOL 2026-11-07: search ignores case and accents (Jokić = jokic) and matches every word typed, in any order ("reaves points") */
+const fold = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const textHas = (text, q) => { const t = fold(text); return fold(q).split(/\s+/).filter(Boolean).every(w => t.includes(w)); };
 function quickOk(r) {
   const p = r.basis === 'market' ? r.p_market : r.p_model;
   if (S.f.quick === 'favorites') return typeof p === 'number' && p >= 0.6;
@@ -74,7 +77,7 @@ function quickOk(r) {
 function keep(r) {
   const f = S.f, p = r.basis === 'market' ? r.p_market : r.p_model;
   if (f.sport !== 'all' && r.sport !== f.sport) return false;
-  if (f.q && ![r.player, r.team, r.event, r.stat_label].join(' ').toLowerCase().includes(f.q.toLowerCase())) return false;
+  if (f.q && !textHas([r.player, r.team, r.event, r.stat_label].join(' '), f.q)) return false;
   if (f.lo !== '' && !(typeof p === 'number' && p * 100 >= Number(f.lo))) return false;
   if (f.hi !== '' && !(typeof p === 'number' && p * 100 <= Number(f.hi))) return false;
   return quickOk(r);
@@ -88,8 +91,12 @@ function legOdds(r) {
   const m = typeof r.multiplier === 'number' && Math.abs(r.multiplier - 1) > 1e-9 ? `<small>${esc(r.multiplier)}x pick</small>` : '';
   return `<b>${odds(r.american)}</b><small>needs ${pct(r.be)}</small>${m}`;
 }
+/* QOL 2026-11-07: a leg already on the slip says so, in the board's words ("On slip ✓"); a press shows it in the slip, as before.
+   The other side of a line on the slip reads "Over on slip" / "Under on slip" (one side per line). */
 function addBtn(r) {
-  return `<button class="ev-add" data-ev="add" data-id="${esc(r.key)}" data-side="${esc(r.side)}" aria-label="Add ${esc(r.player)} ${esc(side(r.side))} ${esc(r.line)} to slip">+ Slip</button>`;
+  const on = C.slipSide ? C.slipSide(r.key) : null, what = `${esc(r.player)} ${esc(side(r.side))} ${esc(r.line)}`;
+  if (on) return `<button class="ev-add is-on" data-ev="add" data-id="${esc(r.key)}" data-side="${esc(r.side)}" aria-label="${on === r.side ? `${what} is on your slip. Show it` : `${esc(side(on))} ${esc(r.line)} is on your slip. Show it`}">${on === r.side ? 'On slip ✓' : esc(side(on)) + ' on slip'}</button>`;
+  return `<button class="ev-add" data-ev="add" data-id="${esc(r.key)}" data-side="${esc(r.side)}" aria-label="Add ${what} to slip">+ Slip</button>`;
 }
 function sourcesHtml(r) {
   const rows = r.sources.map(s => `<tr><td>${esc(s.label)}${s.kind === 'exchange' ? ' <small>exchange</small>' : ''}</td><td class="ev-num">${esc(s.line)}${s.shifted ? ` <small>read at ${esc(r.line)}</small>` : ''}</td>`
@@ -159,8 +166,23 @@ function filtersHtml(d) {
     + `<fieldset class="ev-req"><legend>Required books (up to 2)</legend>${books.map(b => `<label><input type="checkbox" data-ev-req="${esc(b.id)}"${p.req.includes(b.id) ? ' checked' : ''}${!p.req.includes(b.id) && p.req.length >= 2 ? ' disabled' : ''}> ${esc(b.label)}</label>`).join('') || '<span>No books right now</span>'}</fieldset>${w}`
     + `<div class="ev-drawer-foot"><button data-ev="save">Save as my view</button><button data-ev="reset">Reset</button><span id="ev-saved" role="status"></span></div></div></details>`;
 }
+/* QOL 2026-11-07: every redraw rebuilt the page and dropped keyboard focus (a press on "1 book ▾", "+ Slip", a filter chip or a
+   checkbox left focus nowhere). The control in focus is found again after the redraw. */
+const cssEsc = s => window.CSS.escape(String(s));   /* the module's own CSS (its stylesheet text) hides the global CSS */
+function focusKey(a) {
+  if (!a || !box.contains(a)) return null;
+  if (a.id) return '#' + cssEsc(a.id);
+  if (a.dataset.evReq) return `[data-ev-req="${cssEsc(a.dataset.evReq)}"]`;
+  if (!a.dataset.ev) return null;
+  return `[data-ev="${cssEsc(a.dataset.ev)}"]` + (a.dataset.id != null ? `[data-id="${cssEsc(a.dataset.id)}"]` : '') + (a.dataset.side ? `[data-side="${cssEsc(a.dataset.side)}"]` : '');
+}
 function render() {
   if (!box) return;
+  const fk = focusKey(document.activeElement);
+  paintBox();
+  if (fk && !box.contains(document.activeElement)) { const el = box.querySelector(fk); if (el && !el.disabled) el.focus({preventScroll: true}); }
+}
+function paintBox() {
   const d = S.doc;
   if (!d) { box.innerHTML = head() + `<p class="ev-state" role="status">${S.error ? esc(S.error) + ' Use Refresh to try again.' : 'Checking current prices…'}</p>`; return; }
   const sports = (d.sports || []).length, rows = d.rows.filter(r => keep(r) && (!S.f.evOnly || (typeof r.ev === 'number' && r.ev > 0)));
@@ -212,7 +234,7 @@ const CSS = '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;j
   + '#u-hub .ev-list-model .ev-row,#u-hub .ev-list-model .ev-head{grid-template-columns:minmax(180px,2.2fr) 1fr 1.2fr 1fr auto}'
   + '#u-hub .ev-head{border-top:0;font-size:12px;color:var(--u-muted);background:var(--u-panel)}#u-hub .ev-cell small{display:block;color:var(--u-muted);font-size:12px}'
   + '#u-hub .ev-play b{display:block}#u-hub .ev-ev.is-pos b{color:var(--u-good,#16a34a)}#u-hub .ev-ev.is-neg b{color:var(--u-muted)}#u-hub .ev-na{color:var(--u-muted);font-size:12px}'
-  + '#u-hub .ev-books,#u-hub .ev-add,#u-hub .ev-refresh button,#u-hub .ev-drawer-foot button{min-height:40px}#u-hub .ev-badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--u-line);color:var(--u-muted)}'
+  + '#u-hub .ev-add.is-on{border-color:var(--u-good,#16a34a);color:var(--u-good,#16a34a)}#u-hub .ev-books,#u-hub .ev-add,#u-hub .ev-refresh button,#u-hub .ev-drawer-foot button{min-height:40px}#u-hub .ev-badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--u-line);color:var(--u-muted)}'
   + '#u-hub .ev-src{grid-column:1/-1;overflow-x:auto}#u-hub .ev-src table{width:100%;border-collapse:collapse;font-size:13px}#u-hub .ev-src th,#u-hub .ev-src td{text-align:left;padding:4px 6px;border-top:1px solid var(--u-line)}'
   + '#u-hub .ev-src .ev-num{white-space:nowrap}#u-hub .ev-left{margin:8px 0 2px;font-size:12px;color:var(--u-muted)}#u-hub .ev-left-list{margin:0;padding-left:18px;font-size:12px;color:var(--u-muted);opacity:.75}'
   + '#u-hub .ev-state{color:var(--u-muted)}#u-hub .ev-link{background:none;border:0;padding:0 4px;min-height:40px;color:var(--u-accent,#3b82f6);text-decoration:underline;cursor:pointer}'
@@ -258,7 +280,7 @@ function onClick(e) {
     Object.assign(S.p, DEF_P()); S.f = DEF_F(); S.notice = '';
     return fetchDoc();
   }
-  if (a === 'add') return C.addLeg(id, b.dataset.side);
+  if (a === 'add') { C.addLeg(id, b.dataset.side); return render(); }
 }
 function onChange(e) {
   const t = e.target, id = t.id || '';
@@ -276,7 +298,7 @@ function onInput(e) {
   const q = box.querySelector('#ev-q'); if (q) { q.focus({preventScroll: true}); try { q.setSelectionRange(pos, pos); } catch (err) { /* type=search */ } }
 }
 
-/* ctx: {api, esc, when, SPORTS, addLeg(key, side)} from the hub. paint() is called each time the #/ev section opens. */
+/* ctx: {api, esc, when, SPORTS, addLeg(key, side), slipSide(key)} from the hub. paint() is called each time the #/ev section opens. */
 export function paint(el, ctx) {
   C = ctx;
   if (box !== el) {
