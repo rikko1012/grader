@@ -2,9 +2,19 @@
 "Forecast saved X min ago" on each row (from the row's own forecast_at), and a link to a single card by the line's key
 with a Copy link button. Stakes stay 0U; rows keep their data-k keys and the started-match handling (audit 60 / 61).
 The page's own script runs in node against the stub DOM (tests/test_audit_h_web.py)."""
+import re
 from datetime import datetime, timedelta, timezone
 
 from tests.test_audit_h_web import FUTURE, PAST, _lol_row, needs_node, run
+
+
+def qol_1107_norm(html):
+    """The three deliberate Slip-tab changes of the 2026-11-07 QoL pass, folded out so the PP_OPEN_LINK flag-off parity tests
+    (tests/test_pplink.py, tests/test_udlink.py) still prove the flag adds nothing: the Slip tab's bar (it now carries no board
+    filter), a leg drawn as a button that opens its card, and "Est. chance all hit" -> "Chance all hit"."""
+    html = re.sub(r'<div class="bar[^"]*">.*?</div>(?=<section class="panel">)', "", html, flags=re.S)
+    html = re.sub(r'<button type="button" class="legopen" data-legk="[^"]*" title="[^"]*">(.*?)</button>', r"\1", html, flags=re.S)
+    return html.replace("Est. chance all hit", "Chance all hit")
 
 
 def _ago(minutes):
@@ -61,6 +71,7 @@ def test_card_link_opens_by_key_and_copies(tmp_path):
     out = run(tmp_path, "lol.html", """(async () => {
       D = INPUT; render();
       const urls = []; history.replaceState = (a, b, u) => urls.push(u);
+      history.pushState = (a, b, u) => urls.push("push " + u); history.back = () => urls.push("back");
       let copied = null; navigator.clipboard.writeText = async t => { copied = t; };
       location.search = "?line=k-b"; openLinked();
       const opened = openRow, html = $("#card").innerHTML;
@@ -74,7 +85,9 @@ def test_card_link_opens_by_key_and_copies(tmp_path):
     })()""", {"rows": _rows(), "match_tables": []})
     assert out["opened"] == "k-b" and '<h2 id="cardtitle">Bravo</h2>' in out["html"] and 'id="copylink"' in out["html"]
     assert out["copied"] == "https://x/lol?line=k-b" and out["msg"].startswith("Link copied")
-    assert out["urls"] == ["/lol?line=k-b", "/lol", "/lol"]         # open -> the card's address; close / gone -> the board
+    # QoL 2026-11-07: a shared link puts the board's address under the card's (pushed), so Back - or closing the card, which
+    # steps back - lands on the board; a line that left the board -> the board's address (was replace-only: Back left the page)
+    assert out["urls"] == ["/lol", "push /lol?line=k-b", "back", "/lol"]
     assert out["after"] is None and "That line is no longer on the board." in out["board"]
     assert "no longer on the board" not in out["again"]             # the notice shows once
 
@@ -89,3 +102,126 @@ def test_bar_has_floor_and_grade_sort_and_the_poll_is_jittered(tmp_path):
     })()""", {"rows": _rows(), "match_tables": []})
     assert 'id="g"' in out["bar"] and "B+ and up" in out["bar"] and 'value="grade"' in out["bar"]
     assert all(120000 <= w < 140000 for w in out["waits"]) and len(set(out["waits"])) > 1
+
+
+# ---------------------------------------------------------------- QoL 2026-11-07 (display and navigation only)
+@needs_node
+def test_search_ignores_accents_and_escape_clears_it(tmp_path):
+    rs = _rows(); rs[0]["player"] = "Señor"
+    out = run(tmp_path, "lol.html", """(() => {
+      D = INPUT; const keys = () => rows().map(x => x.key);
+      F.q = "senor"; const plain = keys();
+      F.q = "  SEÑOR  "; const upper = keys();
+      F.q = "gen  "; const team = keys();
+      F.q = "zzz"; render(); $("#q").value = "zzz";
+      let prevented = false; $("#q").onkeydown({key: "Escape", preventDefault() { prevented = true; }});
+      return {plain, upper, team, q: F.q, prevented, saved: JSON.parse(localStorage.getItem("scout.lol.filters")).q};
+    })()""", {"rows": rs, "match_tables": []})
+    assert out["plain"] == ["k-a"] and out["upper"] == ["k-a"] and sorted(out["team"]) == ["k-a", "k-b"]    # GEN: Alpha's opponent, Bravo's team
+    assert out["q"] == "" and out["prevented"] and out["saved"] == ""
+
+
+@needs_node
+def test_clear_filters_counts_this_views_filters_and_keeps_layout_sort_and_view(tmp_path):
+    out = run(tmp_path, "lol.html", """(() => {
+      D = INPUT; F.plat = "underdog"; F.q = "t1"; F.layout = "table"; F.sort = "grade"; render();
+      const bar = $("#app").innerHTML, n = activeFilters();
+      resetFilters(); const after = Object.assign({}, F), barAfter = $("#app").innerHTML;
+      F.view = "tables"; F.floor = "A-"; F.playable = true; const tablesN = activeFilters();   // board-only filters are not counted there
+      F.view = "slip"; render(); const slip = $("#app").innerHTML;
+      F.view = "board"; F.floor = "all"; F.playable = false; F.q = "zzz"; render(); const empty = $("#app").innerHTML;
+      return {bar, n, after, barAfter, tablesN, slip, empty};
+    })()""", {"rows": _rows(), "match_tables": []})
+    assert out["n"] == 2 and 'id="clearf"' in out["bar"] and "Clear filters (2)" in out["bar"]
+    a = out["after"]
+    assert a["plat"] == "all" and a["q"] == "" and a["layout"] == "table" and a["sort"] == "grade" and a["view"] == "board"
+    assert 'id="clearf"' not in out["barAfter"] and out["tablesN"] == 0
+    # the Slip tab draws no board filter (none of them changes the member's slip)
+    assert 'class="bar slipbar"' in out["slip"] and 'id="s"' not in out["slip"] and 'id="p"' not in out["slip"] and 'id="q"' not in out["slip"]
+    assert "No lines match these filters." in out["empty"] and "6 lines are on the board" in out["empty"]
+
+
+@needs_node
+def test_compare_books_says_nothing_is_posted_instead_of_blaming_filters(tmp_path):
+    tables = [{"teams": "T1 vs GEN", "start": FUTURE, "markets": [{"player": "Alpha", "team": "T1", "stat_name": "Kills", "scope": "Maps 1-2",
+               "lines": [{"platform": "Underdog", "line": 4.5, "line_type": "Standard", "sides": [{"side": "Over", "offered": True}], "projection": 5.0,
+                          "p_over": 0.6, "p_under": 0.4, "pick_side": "Over", "grade": "B"}]}]}]
+    out = run(tmp_path, "lol.html", """(() => {
+      D = INPUT.none; F.view = "tables"; const none = tablesView();
+      D = INPUT.some; F.q = "zzz"; const filtered = tablesView();
+      return {none, filtered};
+    })()""", {"none": {"rows": [], "match_tables": []}, "some": {"rows": [], "match_tables": tables}})
+    assert "No LoL lines are posted right now." in out["none"] and "match these filters" not in out["none"] and 'id="reset"' not in out["none"]
+    assert "No posted LoL lines match these filters." in out["filtered"] and 'id="reset"' in out["filtered"]
+
+
+@needs_node
+def test_slip_clear_has_undo_and_a_leg_opens_its_card(tmp_path):
+    out = run(tmp_path, "lol.html", """(() => {
+      D = INPUT; F.view = "slip"; SLIP.legs = [legOf(D.rows[0]), Object.assign(legOf(D.rows[1]), {key: "gone"})]; render();
+      const view = $("#app").innerHTML;
+      $("#clearslip").onclick(); const cleared = $("#app").innerHTML, n0 = SLIP.legs.length, stored0 = JSON.parse(localStorage.getItem("scout.lol.slip")).legs.length;
+      $("#undoclear").onclick(); const back = SLIP.legs.map(l => l.key), html = $("#app").innerHTML;
+      $("#clearslip").onclick(); SLIP.legs.push(legOf(D.rows[2])); render(); const added = $("#app").innerHTML;   // a new pick ends the Undo
+      return {view, cleared, n0, stored0, back, html, added, legs: SLIP.legs.length};
+    })()""", {"rows": _rows(), "match_tables": []})
+    assert 'data-legk="k-a"' in out["view"] and 'data-legk="gone"' not in out["view"]   # a leg off the board stays plain text
+    assert out["n0"] == 0 and out["stored0"] == 0 and "Slip cleared (2 picks)." in out["cleared"] and 'id="undoclear"' in out["cleared"]
+    assert out["back"] == ["k-a", "gone"] and 'id="undoclear"' not in out["html"]
+    assert 'id="undoclear"' not in out["added"] and out["legs"] == 1
+    assert "Est." not in out["view"] and "Chance all hit" in out["view"]
+
+
+@needs_node
+def test_card_address_keeps_the_classic_view_and_old_links_open_on_the_board(tmp_path):
+    out = run(tmp_path, "lol.html", """(() => {
+      D = INPUT; render();
+      const urls = []; history.replaceState = (a, b, u) => urls.push(u);
+      history.pushState = (a, b, u) => urls.push("push " + u); history.back = () => urls.push("back");
+      location.search = "?view=classic"; card("k-a"); const link = lineUrl("k-a");
+      closeCard(); card("k-b"); closeCard(true);                 // Back already left the card's address: no second step back
+      const r = []; location.replace = u => r.push(u);
+      location.search = "?line=k-a"; window.scoutClassic = undefined; const plain = classicForLink();
+      window.scoutClassic = false; const hub = classicForLink();
+      location.search = "?view=classic&line=k-a"; const classic = classicForLink();
+      location.search = ""; const noLine = classicForLink();
+      return {urls, link, plain, hub, classic, noLine, r};
+    })()""", {"rows": _rows(), "match_tables": []})
+    assert out["urls"] == ["push /lol?view=classic&line=k-a", "back", "push /lol?view=classic&line=k-b"]
+    assert out["link"] == "https://x/lol?view=classic&line=k-a"
+    assert out["hub"] is True and out["r"] == ["/lol?line=k-a&view=classic"]      # only where the hub would cover the card
+    assert out["plain"] is False and out["classic"] is False and out["noLine"] is False
+
+
+@needs_node
+def test_a_tab_shown_again_refreshes_only_when_the_board_is_over_two_minutes_old(tmp_path):
+    out = run(tmp_path, "lol.html", """(() => {
+      D = INPUT; let n = 0; fetch = async () => { n++; return {ok: true, status: 200, json: async () => INPUT}; };
+      lastLoad = Date.now(); const fresh = refreshIfStale();
+      lastLoad = Date.now() - 130000; document.visibilityState = "hidden"; const hidden = refreshIfStale();
+      document.visibilityState = "visible"; LOADING = true; const busy = refreshIfStale();
+      LOADING = false; const old = refreshIfStale();
+      return {fresh, hidden, busy, old, n};
+    })()""", {"rows": _rows(), "match_tables": []})
+    assert out == {"fresh": False, "hidden": False, "busy": False, "old": True, "n": 1}
+
+
+@needs_node
+def test_admin_pages_remember_the_tab_and_state_the_release(tmp_path):
+    row = {"player": "Faker", "team": "T1", "opponent": "GEN", "stat": "kills", "scope": "Maps 1-2", "platform": "underdog", "odds_type": "standard",
+           "line": 4.5, "sides": {}, "link": {"status": "matched"}, "forecast": {"current": True, "projection": None, "p_over": 0.6, "p_under": 0.4,
+                                                                                   "model_side": "over", "grade": "B", "units": 0}}
+    out = run(tmp_path, "lol_admin.html", """(() => {
+      B = INPUT; S = {released_to_members: true};
+      const board = boardView();                                   // no counts, no projection: draws, never throws
+      document.getElementById("tabs").onclick({target: {dataset: {v: "status"}}});
+      render();
+      return {board, saved: localStorage.getItem("scout.lol.admin.view"), view, rel: document.getElementById("rel").textContent};
+    })()""", {"rows": [row], "match_tables": []})
+    assert "1 open lines" in out["board"] and "<tr onclick" in out["board"] and 'tabindex="0"' in out["board"]
+    assert out["saved"] == "status" and out["view"] == "status" and out["rel"] == "Released to members."
+    diag = run(tmp_path, "diagnostics.html", """(() => {
+      $("#cohort").onclick({target: {closest: () => ({dataset: {v: "first"}})}});
+      return {cohort, saved: JSON.parse(localStorage.getItem("scout.diag.view"))};
+    })()""")
+    assert diag["cohort"] == "first" and diag["saved"]["cohort"] == "first"

@@ -15,20 +15,25 @@ th{background:#19263a;color:var(--muted);font-size:10px;text-transform:uppercase
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 18px}
 .k{color:var(--muted);font-size:12px}#modal{position:fixed;inset:0;background:#000a;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
 #modal .card{max-width:820px;width:100%}
+button{min-height:40px}button:focus-visible,tr:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 </style></head><body><div class="wrap">
 <div class="eyebrow">League of Legends · data center · admin only</div>
 <h1>LoL board <span class="muted small" id="gen"></span></h1>
-<div class="note small">Not released to members. Probabilities are model estimates; grades use the published bands; stakes are held at 0U until the projection is validated at real offered lines (lol/EVALUATION.md). One saved pre-match forecast per line feeds this board, the match tables, the cards and the slip check.</div>
+<div class="note small"><span id="rel"></span> Probabilities are model estimates; grades use the published bands; stakes are held at 0U until the projection is validated at real offered lines (lol/EVALUATION.md). One saved pre-match forecast per line feeds this board, the match tables, the cards and the slip check.</div>
 <div class="bar" id="tabs"><button data-v="board" class="on">Board</button><button data-v="tables">Match tables</button><button data-v="settled">Settled</button><button data-v="status">Data center</button><button data-v="cal">Calibration (lc-1)</button></div>
 <div id="out" class="muted">Loading…</div>
 </div>
-<div id="modal" onclick="if(event.target===this)this.style.display='none'"><div class="card" id="card"></div></div>
+<div id="modal" role="dialog" aria-modal="true" aria-label="Line detail" onclick="if(event.target===this)closeCard()"><div class="card" id="card"></div></div>
 <script>
 const tok = new URLSearchParams(location.search).get("token");
 const q = (p) => fetch(p + (p.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(tok || "")).then(r => r.json());
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = (x) => x == null ? "–" : (100 * x).toFixed(1) + "%";
-let B = null, S = null, L = null, view = "board";
+const fx = (x, d = 2) => x == null || !Number.isFinite(+x) ? "–" : (+x).toFixed(d);   // a missing projection prints "–", never breaks the page
+// QoL 2026-11-07: the chosen tab survives a reload (this browser only)
+const VKEY = "scout.lol.admin.view", VIEWS = ["board", "tables", "settled", "status", "cal"];
+let B = null, S = null, L = null, view = "board", lastRow = null;
+try { const v = localStorage.getItem(VKEY); if (VIEWS.includes(v)) view = v; } catch {}
 function sides(x) {
   const s = x.sides || {}; const o = [];
   for (const k of ["higher", "lower"]) { const v = s[k]; if (!v) continue;
@@ -38,15 +43,16 @@ function sides(x) {
 }
 function boardView() {
   const rows = B.rows || [];
-  let h = `<div class="small muted">${B.counts.offers} open lines · ${B.counts.linked} linked to a canonical series and player · ${B.counts.with_forecast} with a saved forecast</div>`;
+  const n = B.counts || {};                            // a board written without counts still draws its rows
+  let h = `<div class="small muted">${n.offers ?? rows.length} open lines · ${n.linked ?? "–"} linked to a canonical series and player · ${n.with_forecast ?? "–"} with a saved forecast</div>`;
   h += `<div class="scroll"><table><thead><tr><th>Start (UTC)</th><th>Player</th><th>Team</th><th>Role</th><th>Opponent</th><th>Competition</th><th>Stat</th><th>Scope</th><th>Platform</th><th class="num">Line</th><th>Sides</th><th class="num">Projection</th><th class="num">P(over)</th><th class="num">P(under)</th><th>Model side</th><th>Grade</th><th>Stake</th><th>Slip leg</th><th>Freshness</th></tr></thead><tbody>`;
   rows.forEach((x, i) => {
     // a forecast saved for an earlier line is never shown as this line's chances (audit 62: the members' board drops these rows)
     const f0 = x.forecast, f = f0 && f0.current !== false ? f0 : null;
     const why = x.link.status !== "matched" ? `not linked: ${x.link.reason || x.link.status || "pending"}`
       : f0 && !f ? `line moved: latest forecast is for line ${f0.line}, none at ${x.line}` : (!f ? "no forecast yet" : "");
-    h += `<tr onclick="card(${i})"><td>${esc((x.series_start || "").replace("T", " ").slice(0, 16))}</td><td>${esc(x.player)}</td><td>${esc(x.team)}</td><td>${esc(x.role || "–")}</td><td>${esc(x.opponent)}</td><td>${esc(x.competition || "–")}${x.best_of ? " · BO" + x.best_of : ""}</td><td>${esc(x.stat)}${x.market_type === "combo" ? " <span class=flag>combo</span>" : ""}</td><td>${esc(x.scope)}</td><td>${esc(x.platform)} <span class=muted>${esc(x.odds_type)}</span></td><td class="num">${x.line}</td><td class=small>${esc(sides(x))}</td>`
-      + (f ? `<td class="num">${f.projection.toFixed(2)}</td><td class="num">${pct(f.p_over)}</td><td class="num">${pct(f.p_under)}</td><td>${esc(f.model_side)}${f.side_offered === 0 ? " <span class=flag>side not offered</span>" : ""}</td>`
+    h += `<tr onclick="card(${i})" tabindex="0"><td>${esc((x.series_start || "").replace("T", " ").slice(0, 16))}</td><td>${esc(x.player)}</td><td>${esc(x.team)}</td><td>${esc(x.role || "–")}</td><td>${esc(x.opponent)}</td><td>${esc(x.competition || "–")}${x.best_of ? " · BO" + x.best_of : ""}</td><td>${esc(x.stat)}${x.market_type === "combo" ? " <span class=flag>combo</span>" : ""}</td><td>${esc(x.scope)}</td><td>${esc(x.platform)} <span class=muted>${esc(x.odds_type)}</span></td><td class="num">${x.line}</td><td class=small>${esc(sides(x))}</td>`
+      + (f ? `<td class="num">${fx(f.projection)}</td><td class="num">${pct(f.p_over)}</td><td class="num">${pct(f.p_under)}</td><td>${esc(f.model_side)}${f.side_offered === 0 ? " <span class=flag>side not offered</span>" : ""}</td>`
            : `<td colspan=4 class="muted small">${esc(why)}</td>`)
       + `<td>${f ? esc(f.grade || "–") : "–"}</td><td>${f ? (f.units ?? 0) + "U" + (f.units_policy ? ` <span class=muted>(policy ${f.units_policy}U)</span>` : "") : "–"}</td><td>${f ? (f.slip_eligible ? "eligible" : `<span class=muted>no</span>`) : "–"}</td><td class="small muted">quote ${esc((x.quote_seen_at || "").slice(11, 16))}${f ? " · history to " + esc(((f.inputs || {}).history_last_game || "").slice(0, 10)) : ""}</td></tr>`;
   });
@@ -57,7 +63,7 @@ function tablesView() {
   for (const t of B.match_tables || []) {
     h += `<div class="card"><b>${esc(t.competition || "")}</b> <span class=muted>BO${t.best_of || "?"} · ${esc((t.start || "").replace("T", " ").slice(0, 16))} UTC · ${esc(t.sid)}</span><div class="scroll"><table><thead><tr><th>Player</th><th>Team</th><th>Role</th><th>Stat</th><th>Scope</th><th>Lines (platform · type · line · projection · P(over))</th></tr></thead><tbody>`;
     for (const m of Object.values(t.markets)) {
-      h += `<tr><td>${esc(m.player)}</td><td>${esc(m.team)}</td><td>${esc(m.role || "–")}</td><td>${esc(m.stat)}</td><td>${esc(m.scope)}</td><td class=small>${m.lines.map(l => `${esc(l.platform)} · ${esc(l.odds_type)} · ${l.line}${l.current === false ? " · no forecast at this line (latest is for an earlier line)" : l.projection != null ? " · " + l.projection.toFixed(2) + " · " + pct(l.p_over) : ""}`).join("<br>")}</td></tr>`;
+      h += `<tr><td>${esc(m.player)}</td><td>${esc(m.team)}</td><td>${esc(m.role || "–")}</td><td>${esc(m.stat)}</td><td>${esc(m.scope)}</td><td class=small>${m.lines.map(l => `${esc(l.platform)} · ${esc(l.odds_type)} · ${l.line}${l.current === false ? " · no forecast at this line (latest is for an earlier line)" : l.projection != null ? " · " + fx(l.projection) + " · " + pct(l.p_over) : ""}`).join("<br>")}</td></tr>`;
     }
     h += "</tbody></table></div></div>";
   }
@@ -78,14 +84,20 @@ function statusView() {
   h += `<div><div class=k>Leaguepedia login</div>${esc(((st.leaguepedia_login || {}).result) || "–")}</div><div><div class=k>Last build</div>${esc((st.last_build || {}).built_at || "–")} · ${(st.last_build || {}).games || 0} games</div><div><div class=k>History export</div>${(st.last_export || {}).games || 0} games · ${(st.last_export || {}).player_rows || 0} player rows</div><div><div class=k>Worker</div>${S && S.worker && S.worker.running ? "running" : "not running"}</div></div>`;
   return h + `<pre class="small muted" style="white-space:pre-wrap">${esc(JSON.stringify({ingest: st.ingest, riot: st.riot, links: st.links, forecasts: st.forecasts, quarantine: st.quarantine}, null, 1))}</pre>`;
 }
+function closeCard() {
+  document.getElementById("modal").style.display = "none";
+  if (lastRow && document.body.contains(lastRow) && lastRow.focus) lastRow.focus();      // focus goes back to the row
+  lastRow = null;
+}
 function card(i) {
   const x = B.rows[i], f = x.forecast;
+  lastRow = document.activeElement;
   let h = `<div class="eyebrow">${esc(x.platform)} · ${esc(x.stat_label || x.stat)}</div><h2 style="margin-top:6px">${esc(x.player)} <span class=muted>${esc(x.team)} · ${esc(x.role || "")}</span></h2>`;
   h += `<div class=grid><div><div class=k>Match</div>vs ${esc(x.opponent)} · ${esc(x.competition || "")} BO${x.best_of || "?"}</div><div><div class=k>Start</div>${esc(x.series_start)}</div><div><div class=k>Line</div>${x.line} (${esc(x.odds_type)}) · ${esc(sides(x))}</div><div><div class=k>Canonical ids</div><span class=small>${esc(x.link.sid || "–")} · ${esc(x.link.pid || "–")}</span></div></div>`;
   if (f) {
     const inp = f.inputs || {};
     if (f.current === false) h += `<div class="note small">This forecast is for line ${esc(f.line)}; the offer is now ${esc(x.line)}. No forecast exists at the current line, so these numbers are not its chances.</div>`;
-    h += `<h2>Forecast${f.current === false ? " for line " + esc(f.line) : ""} <span class="muted small">saved ${esc(f.at)} · ${esc(f.model)}</span></h2><div class=grid><div><div class=k>Projection</div>${f.projection.toFixed(2)}</div><div><div class=k>P(over) / P(under) / push</div>${pct(f.p_over)} / ${pct(f.p_under)} / ${pct(f.p_push)}</div><div><div class=k>Model side</div>${esc(f.model_side)} ${f.side_offered === 1 ? "(offered)" : f.side_offered === 0 ? "(not offered)" : "(not confirmed)"}</div><div><div class=k>Grade · stake</div>${esc(f.grade || "–")} · ${f.units ?? 0}U${f.units_policy ? " (published policy " + f.units_policy + "U)" : ""}</div>${f.stake_restriction ? `<div><div class=k>Stake restriction</div>${esc(f.stake_restriction)}</div>` : ""}`;
+    h += `<h2>Forecast${f.current === false ? " for line " + esc(f.line) : ""} <span class="muted small">saved ${esc(f.at)} · ${esc(f.model)}</span></h2><div class=grid><div><div class=k>Projection</div>${fx(f.projection)}</div><div><div class=k>P(over) / P(under) / push</div>${pct(f.p_over)} / ${pct(f.p_under)} / ${pct(f.p_push)}</div><div><div class=k>Model side</div>${esc(f.model_side)} ${f.side_offered === 1 ? "(offered)" : f.side_offered === 0 ? "(not offered)" : "(not confirmed)"}</div><div><div class=k>Grade · stake</div>${esc(f.grade || "–")} · ${f.units ?? 0}U${f.units_policy ? " (published policy " + f.units_policy + "U)" : ""}</div>${f.stake_restriction ? `<div><div class=k>Stake restriction</div>${esc(f.stake_restriction)}</div>` : ""}`;
     h += `<div><div class=k>Mean · median · 80% range</div>${inp.mean ?? "–"} · ${inp.median ?? "–"} · ${(inp.range80 || []).join("–")}</div>`;
     for (const k of ["form", "player_rate", "team_factor", "opp_factor", "strength_factor", "p_win", "history_games", "team_games", "opponent_games", "league", "data_quality", "history_last_game"]) if (inp[k] != null) h += `<div><div class=k>${esc(k)}</div>${esc(inp[k])}</div>`;
     h += `</div><h2>Measured drivers</h2><ul class=small>${(inp.drivers || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul><div class="small muted">Unknowns: ${esc((inp.unknowns || []).join("; "))}</div>`;
@@ -93,8 +105,9 @@ function card(i) {
     h += `<h2>Market fields</h2><div class=small>${esc(mk.price_status || "–")}${mk.undocumented_no_vig_p_over != null ? " · undocumented two-sided prices, margin-removed P(over) " + pct(mk.undocumented_no_vig_p_over) + " (research only, not in the grade)" : ""}${mk.payout_modifiers ? " · payout modifiers " + esc(JSON.stringify(mk.payout_modifiers)) + " (not probabilities)" : ""}</div><div class=grid>`;
     h += `</div><div style="margin-top:8px">${(f.flags || []).map(z => `<span class=flag>${esc(z)}</span>`).join("")}</div><h2>Slip leg</h2><div>${f.slip_eligible ? "eligible" : "not eligible"}</div><ul class=small>${(f.slip_reasons || []).map(z => `<li>${esc(z)}</li>`).join("")}</ul>`;
   } else h += `<div class="note small">${esc(x.link.status !== "matched" ? "Not linked: " + (x.link.reason || "pending") : "No forecast yet")}</div>`;
-  document.getElementById("card").innerHTML = h + `<div class=bar><button onclick="document.getElementById('modal').style.display='none'">Close</button></div>`;
+  document.getElementById("card").innerHTML = h + `<div class=bar><button id="closecard" onclick="closeCard()">Close</button></div>`;
   document.getElementById("modal").style.display = "flex";
+  const c = document.getElementById("closecard"); if (c && c.focus) c.focus();
 }
 function calView() {
   if (!L) { q("/admin/lol/learning.json").then(x => { L = x || {}; render(); }).catch(e => { L = {note: "Could not load: " + e}; render(); }); return "Loading…"; }
@@ -112,12 +125,28 @@ function calView() {
   return h + `</tbody></table></div><div class="small muted">Log: ${esc(c.log || "")}</div>`;
 }
 function render() {
+  [...document.querySelectorAll("#tabs button")].forEach(b => { b.classList.toggle("on", b.dataset.v === view); b.setAttribute("aria-pressed", String(b.dataset.v === view)); });
+  const rel = document.getElementById("rel");          // the release state from the server, not a fixed sentence
+  if (rel && S) rel.textContent = S.released_to_members === true ? "Released to members." : S.released_to_members === false ? "Not released to members." : "";
   if (view === "cal") { document.getElementById("out").innerHTML = calView(); return; }
-  document.getElementById("out").innerHTML = !B || B.note ? esc((B || {}).note || "Not written yet") : ({board: boardView, tables: tablesView, settled: settledView, status: statusView}[view])();
+  // an error body (a wrong token, a failed read) says what happened instead of breaking the page
+  document.getElementById("out").innerHTML = !B || B.note || B.error || !Array.isArray(B.rows) ? esc((B || {}).error || (B || {}).note || "Not written yet") : ({board: boardView, tables: tablesView, settled: settledView, status: statusView}[view])();
   document.getElementById("gen").textContent = B && B.at ? "· board " + B.at : "";
 }
 document.getElementById("tabs").onclick = (e) => { const v = e.target.dataset.v; if (!v) return; view = v;
-  [...document.querySelectorAll("#tabs button")].forEach(b => b.classList.toggle("on", b.dataset.v === v)); render(); };
-Promise.all([q("/admin/lol/board.json"), q("/admin/lol.json")]).then(([b, s]) => { B = b; S = s; render(); })
-  .catch(e => document.getElementById("out").textContent = "Could not load: " + e);
+  try { localStorage.setItem(VKEY, v); } catch {}
+  render(); };
+// Enter or Space on a focused board row opens its card; Escape closes the card
+document.getElementById("out").addEventListener("keydown", (e) => {
+  const tr = e.target.closest && e.target.closest("tr[onclick]");
+  if (tr && e.target === tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); tr.click(); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && document.getElementById("modal").style.display === "flex") closeCard(); });
+function boot() {
+  document.getElementById("out").textContent = "Loading…";
+  Promise.all([q("/admin/lol/board.json"), q("/admin/lol.json")]).then(([b, s]) => { B = b; S = s; render(); })
+    .catch(e => { document.getElementById("out").innerHTML = `Could not load: ${esc(String(e))} <button type="button" id="retry">Try again</button>`;
+      document.getElementById("retry").onclick = boot; });
+}
+boot();
 </script></body></html>

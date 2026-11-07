@@ -47,7 +47,8 @@ def test_suggested_slip_shows_chance_and_sends_through_the_add_rules(tmp_path):
       const s4 = SLIP.legs.map(l => l.key), v4 = $("#app").innerHTML;
       return {view, s1, v1, s2, v2, s3, v3, s4, v4, stored: localStorage.getItem("scout.lol.slip")};
     })()""", _board())
-    assert "Est. chance all hit <b>42.0%</b>" in out["view"] and "Est. chance all hit <b>21.6%</b>" in out["view"]
+    # QoL 2026-11-07: "Chance all hit", the slip tray's own words (was "Est. chance all hit"; no hedge words on member pages)
+    assert "Chance all hit <b>42.0%</b>" in out["view"] and "Chance all hit <b>21.6%</b>" in out["view"] and "Est." not in out["view"]
     assert out["view"].count('data-send="') == 4 and 'data-send="Underdog|0"' in out["view"] and "Send to my slip" in out["view"]
     assert out["s1"] == ["k-a", "k-b"] and "Sent 2 picks to your Underdog slip." in out["v1"]
     assert out["s2"] == ["k-a", "k-b", "k-c"]
