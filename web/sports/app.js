@@ -156,6 +156,7 @@
   }
 
   // --------------------------------------------------------------------------------------------- common pieces
+  var srcOpener = null;
   function src(obj, label) { SRC.push(obj); return '<button type="button" class="sw-srcbtn" data-src="' + (SRC.length - 1) + '" aria-label="' + esc(obj.title || "Source") + '">' + esc(label || "Source") + "</button>"; }
   function openSrc(i) {
     var o = SRC[i]; if (!o) return;
@@ -170,9 +171,21 @@
     }).join("") + "</dl>";
     if (d.showModal) d.showModal(); else d.setAttribute("open", "");
   }
+  (function () {                                        // QoL 1107: a tap outside the Source box closes it (Escape already does)
+    var d = document.getElementById("sw-src");
+    if (d) d.addEventListener("close", function () {     // focus goes back to the Source button that opened it (Safari too)
+      var b = srcOpener; srcOpener = null;
+      if (b && b.isConnected) try { b.focus({preventScroll: true}); } catch (x) {}
+    });
+    if (d) d.addEventListener("click", function (e) {
+      if (e.target !== d || !d.open) return;
+      var r = d.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close ? d.close() : d.removeAttribute("open");
+    });
+  })();
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("[data-src]");
-    if (b) { e.preventDefault(); openSrc(+b.getAttribute("data-src")); }
+    if (b) { e.preventDefault(); srcOpener = b; openSrc(+b.getAttribute("data-src")); }
   });
   function bookName(p) { return S.bookName(p); }
   // ------------------------------------------------------------- market view (every book on the identical market)
@@ -436,10 +449,10 @@
       var body = document.getElementById("sw-slatebody");
       function draw() {
         SRC = []; LEGS = [];
-        var q = (f.slateQ || "").toLowerCase();
-        var evs = d.events.filter(function (e) {
-          if (!q) return true;
-          return [e.home.abbr, e.home.name, e.away.abbr, e.away.name].join(" ").toLowerCase().indexOf(q) >= 0;
+        var rb = document.getElementById("sw-sreset");
+        if (rb) rb.disabled = !S.fold(f.slateQ);            // QoL 1107: Reset looks off while there is nothing to reset
+        var evs = d.events.filter(function (e) {           // QoL 1107: case, accents and extra spaces ignored (the board's rule)
+          return S.textMatch([e.home.abbr, e.home.name, e.away.abbr, e.away.name, teamAbbr(e.home), teamAbbr(e.away)].join(" "), f.slateQ);
         });
         if (!d.events.length) { body.innerHTML = stateBox("No games on the slate", "Scout lists " + state.lg.toUpperCase() + " games from today through the next days once the schedule is published."); return; }
         // games that started / finished leave the main list (owner: the slate shows what can still be played);
@@ -462,7 +475,7 @@
               (e.injuries.length ? '<details class="sw-more"><summary>' + S.plural(e.injuries.length, "player") + " on the injury report</summary><ul class=\"sw-list\">" + e.injuries.map(function (i) {
                 return "<li>" + esc(i.player) + " (" + esc(L.teamTag(i.team, state.lg)) + ") " + injuryHtml(i) + (i.as_of ? ' <span class="sw-faint sw-small">as of ' + esc(S.shortDate(i.as_of)) + "</span>" : "") + "</li>";
               }).join("") + "</ul></details>" : '<div class="sw-faint sw-small">No player of either team on the ESPN injury report.</div>') +
-              '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div>' +
+              '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?lg=' + state.lg + '&ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div>' +
               '<details class="sw-more sw-gdetails"><summary>Details</summary><p class="sw-small sw-faint">Start from ' + esc(e.start_source || "the schedule") + " · checked " + esc(S.age(e.observed_at)) +
               ((e.reschedules || []).length ? " · rescheduled " + e.reschedules.length + "x" : "") + " " + src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status), "observed by Scout": S.localTime(e.observed_at), reschedules: (e.reschedules || []).map(function (r) { return r.from_utc + " -> " + r.to_utc; })}) + "</p></details></article>";
         }
@@ -478,7 +491,7 @@
         body.innerHTML = out;
       }
       function bindReset() { var b = document.getElementById("sw-sreset2"); if (b) b.onclick = reset; }
-      function reset() { f.slateQ = ""; saveFilters(); document.getElementById("sw-sq").value = ""; draw(); }
+      function reset() { f.slateQ = ""; saveFilters(); var sq = document.getElementById("sw-sq"); sq.value = ""; draw(); sq.focus(); }
       document.getElementById("sw-sq").addEventListener("input", function (ev) { f.slateQ = ev.target.value; saveFilters(); draw(); });
       document.getElementById("sw-sreset").addEventListener("click", reset);
       draw();
@@ -520,6 +533,32 @@
     var t = document.getElementById("sw-toast");
     t.innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="' + SLIP_PAGE + '">Open Slip Studio</a>' : "") + "</div>";
   }
+  // QoL 1107: every status toast (slip, track, compare, saved view) sticks under the header while scrolling; it now has
+  // a Dismiss button, clears itself after 10 s (paused while the pointer or focus is on it) and on Escape.
+  (function toastLife() {
+    var t = document.getElementById("sw-toast"), timer = null, held = false, TOAST_MS = 10000;
+    if (!t || !window.MutationObserver) return;
+    function clear() { if (timer) clearTimeout(timer); timer = null; t.innerHTML = ""; }
+    function arm() { if (timer) clearTimeout(timer); timer = held ? null : setTimeout(clear, TOAST_MS); }
+    new MutationObserver(function () {
+      if (!t.textContent.trim()) { if (timer) clearTimeout(timer); timer = null; return; }
+      if (!t.querySelector(".sw-toast-x")) {
+        var host = t.querySelector(".sw-banner") || t, x = document.createElement("button");
+        x.type = "button"; x.className = "sw-toast-x"; x.setAttribute("aria-label", "Dismiss this message"); x.textContent = "×";
+        host.appendChild(x);
+      }
+      arm();
+    }).observe(t, {childList: true, subtree: true, characterData: true});
+    t.addEventListener("click", function (e) { if (e.target.closest(".sw-toast-x")) { clear(); try { main.focus({preventScroll: true}); } catch (x) {} } });
+    t.addEventListener("mouseenter", function () { held = true; arm(); });
+    t.addEventListener("mouseleave", function () { held = t.contains(document.activeElement); arm(); });
+    t.addEventListener("focusin", function () { held = true; arm(); });
+    t.addEventListener("focusout", function (e) { held = t.matches(":hover") || t.contains(e.relatedTarget); arm(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || e.defaultPrevented || !t.textContent.trim() || document.querySelector("dialog[open]")) return;
+      clear();
+    });
+  })();
   function pickToast(text, ok) {
     document.getElementById("sw-toast").innerHTML = '<div class="sw-banner ' + (ok ? "info" : "warn") + '">' + esc(text) + (ok ? ' <a href="#/picks">My picks</a>' : "") + "</div>";
   }
@@ -713,6 +752,24 @@
     var a = e.target.closest && e.target.closest("#sw-bbody a[href^='#/']");
     if (a && route().view === "board") { state.boardScroll = window.scrollY; state.boardShownSaved = state.boardShown; }
   }, true);
+  // QoL 1107: a reload (or a phone browser that drops the tab) keeps the board where the member was - the scroll and
+  // how many rows were open, for the same board address (league + filters). This tab only (sessionStorage).
+  var BOARD_POS = "sw:board:pos", posTimer = null;
+  function saveBoardPos() {
+    posTimer = null;
+    if (route().view !== "board" || !document.getElementById("sw-bbody")) return;
+    try { sessionStorage.setItem(BOARD_POS, JSON.stringify({hash: location.hash, y: Math.round(window.scrollY), shown: state.boardShown})); } catch (e) {}
+  }
+  window.addEventListener("scroll", function () { if (!posTimer) posTimer = setTimeout(saveBoardPos, 300); }, {passive: true});
+  window.addEventListener("pagehide", saveBoardPos);
+  function restoreBoardPos() {                           // first render only: the reload case
+    try {
+      var p = JSON.parse(sessionStorage.getItem(BOARD_POS) || "null");
+      if (!p || p.hash !== location.hash || !(p.y > 0 || p.shown > BOARD_PAGE)) return;
+      state.boardScroll = Math.max(0, +p.y || 0);
+      state.boardShown = Math.max(BOARD_PAGE, Math.min(+p.shown || BOARD_PAGE, BOARD_PAGE * 20));
+    } catch (e) { /* storage off: start at the top */ }
+  }
   // Prop board table (web/sports/table.js): view / sort saved per device (scout.sports.board.v1); default table, edge
   var R = window.SportsRows, TB = window.SportsTable.state();
   function setTbPref() { try { var p = JSON.parse(localStorage.getItem("scout.sports.board.v1") || "{}") || {}; p.sort = TB.sort; p.dir = TB.dir; localStorage.setItem("scout.sports.board.v1", JSON.stringify(p)); } catch (e) {} }
@@ -764,7 +821,8 @@
         if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
           cnt.innerHTML += '<div class="sw-banner">Scout chances are not published yet. The board shows every book’s line, the Market chance (every fresh book that prices the identical market, combined; each book’s own chance is listed under it), and each player’s game history (open a player).</div>';
         if (!rows.length) {
-          body.innerHTML = stateBox("No props match these filters", "Try another stat or book, or reset the filters.", '<button type="button" class="sw-btn" id="sw-reset2">Reset filters</button>');
+          body.innerHTML = stateBox("No props match these filters", (S.fold(ff.q) ? "Nothing on the board matches “" + esc(ff.q.trim()) + "” with these filters. Check the spelling, try" : "Try") +
+            " another stat or book, or reset the filters.", '<button type="button" class="sw-btn" id="sw-reset2">Reset filters</button>');
           document.getElementById("sw-reset2").onclick = reset; return;
         }
         var pb = document.getElementById("sw-prefbook");
@@ -1002,6 +1060,7 @@
         var det = sel && sel.forecast_id ? P.forecast_detail[sel.forecast_id] : null;
         var ln = ps.customLine !== undefined && ps.customLine !== null ? ps.customLine : (sel ? sel.line : null);
         var ev = P.next_event;
+        setTitle("player", P.player);
         var h = '<p class="sw-crumbs"><a href="#/board">Prop board</a>' + (m.event_id ? ' › <a href="#/game/' + encodeURIComponent(m.event_id) + '">Match context</a>' : "") + " › " + esc(P.player) + "</p>";
         h += '<div class="sw-phead"><div><div class="sw-eyebrow">' + state.lg.toUpperCase() + " · Player workspace</div><h1 class=\"sw-h1\">" + esc(P.player) + "</h1>" +
           '<div class="sw-muted">' + esc([P.position, P.team && P.team.name].filter(Boolean).join(" · ")) +
@@ -1387,8 +1446,11 @@
     if (r.params.get("lg") === "nba" || r.params.get("lg") === "nfl") state.lg = r.params.get("lg");
     if (r.view === "player" && r.arg && r.arg.indexOf(state.lg + ":") !== 0) state.lg = r.arg.slice(0, 3);
     setNav(r.view);
+    if (!render.count && r.view === "board") restoreBoardPos();
+    setTitle(r.view);
     banner.innerHTML = "";
     document.getElementById("sw-toast").innerHTML = "";
+    loadedAt = Date.now();
     if (window.SportsTray) window.SportsTray.render(state.lg);                    // HOOK (ux): slip tray for this league
     document.body.classList.toggle("sw-on-slips", r.view === "slips");            // Slip Studio shows the draft itself
     if (r.view === "board") renderBoard(r.params);
@@ -1405,6 +1467,45 @@
     if (render.count++) { try { top.focus({preventScroll: true}); } catch (e) {} window.scrollTo(0, 0); }
   }
   render.count = 0;
+  // QoL 1107: on a wide screen the board / sheet table header stays in view under the site header while scrolling a long
+  // list. The header could not stick inside its sideways-scroll box, so a table that fits its box drops that box
+  // (.sw-fit); a table too wide for the screen keeps its sideways scroll and a normal header.
+  var fitQueued = false;
+  function fitTables() {
+    fitQueued = false;
+    var top = document.getElementById("sw-top"), cs = top && getComputedStyle(top);
+    var h = cs && (cs.position === "sticky" || cs.position === "fixed") ? Math.round(top.getBoundingClientRect().height) : 0;
+    document.body.style.setProperty("--sw-top-h", h + "px");
+    main.querySelectorAll(".sw-tb-wrap, .shx-wrap").forEach(function (w) {
+      var t = w.querySelector("table"); if (!t) return;
+      w.classList.remove("sw-fit");
+      w.classList.toggle("sw-fit", t.scrollWidth <= w.clientWidth + 1);
+    });
+  }
+  function queueFit() { if (!fitQueued) { fitQueued = true; (window.requestAnimationFrame || setTimeout)(fitTables); } }
+  if (window.MutationObserver) new MutationObserver(queueFit).observe(main, {childList: true, subtree: true});
+  window.addEventListener("resize", queueFit);
+  // QoL 1107: the browser tab / history names the page and league ("Prop board · NBA"), not one title for every view
+  var VIEW_TITLE = {slate: "Slate", board: "Prop board", sheets: "Sheets", compare: "Compare", results: "Results", picks: "My picks",
+                    slips: "Slip Studio", player: "Player", game: "Match context"};
+  function setTitle(view, name) {
+    document.title = (name ? name + " · " : VIEW_TITLE[view] ? VIEW_TITLE[view] + " · " : "") + state.lg.toUpperCase() + " · 1time Scout Sports";
+  }
+  // QoL 1107: back on a tab left open for a while -> say how old the page is and offer one tap to reload it
+  // (no automatic refetch: nothing new polls the server; the member chooses)
+  var loadedAt = Date.now(), hiddenAt = null, STALE_TAB_MS = 10 * 60000;
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    var v = route().view;
+    if (!hiddenAt || Date.now() - loadedAt < STALE_TAB_MS || v === "slips" || document.getElementById("sw-stale-tab")) return;
+    var mins = Math.round((Date.now() - loadedAt) / 60000);
+    banner.insertAdjacentHTML("afterbegin", '<div class="sw-banner warn" id="sw-stale-tab">This page was loaded ' + mins + ' min ago. Refresh for the latest lines. <button type="button" class="sw-btn sw-btn-sm" id="sw-stale-reload">Refresh now</button></div>');
+    document.getElementById("sw-stale-reload").addEventListener("click", function () {
+      Api.mem = {};
+      if (v === "board") { state.boardScroll = window.scrollY; state.boardShownSaved = state.boardShown; }
+      render();
+    });
+  });
   document.getElementById("sw-league").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-lg]"); if (!b) return;
     state.lg = b.getAttribute("data-lg"); saveFilters();

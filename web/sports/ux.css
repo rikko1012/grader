@@ -119,3 +119,5 @@
 .sw .sw-mp-dl dd{margin:0;overflow-wrap:anywhere}
 .sw .sw-mp-sum .sw-kv{font-size:13px}
 @media(max-width:640px){.sw .sw-mp-dl{grid-template-columns:repeat(2,minmax(0,1fr))}.sw .sw-mp-row .sw-card-top{flex-direction:column}.sw .sw-mp-res{text-align:left}}
+/* QoL 1107: phone tap targets - the validation and saved-view toggles reach 40 px */
+@media(max-width:640px){.sw .sw-validation-details>summary,.sw .sw-saved-views summary{min-height:40px}}

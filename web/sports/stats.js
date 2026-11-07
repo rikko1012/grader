@@ -270,12 +270,17 @@
     return b.in ? "in the market chance" : "not counted: " + (b.why || "not eligible");
   }
 
+  // QoL 1107: search ignores case, accents and extra spaces ("jokic" finds "Jokić", "  bos " finds BOS)
+  var FOLD_EXTRA = {"ø": "o", "ł": "l", "đ": "d", "ß": "ss", "æ": "ae", "œ": "oe", "ı": "i"};
+  function fold(s) {
+    var t = String(s === null || s === undefined ? "" : s).toLowerCase();
+    if (t.normalize) t = t.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    return t.replace(/[øłđßæœı]/g, function (c) { return FOLD_EXTRA[c]; }).replace(/\s+/g, " ").trim();
+  }
+  function textMatch(hay, q) { var n = fold(q); return !n || fold(hay).indexOf(n) >= 0; }
+
   function matchesFilters(row, f) {       // row = decoded board market
-    if (f.q) {
-      var q = f.q.toLowerCase();
-      var hay = (row.n + " " + (row.tm || "") + " " + (row.matchup || "")).toLowerCase();
-      if (hay.indexOf(q) < 0) return false;
-    }
+    if (f.q && !textMatch(row.n + " " + (row.tm || "") + " " + (row.matchup || ""), f.q)) return false;
     if (f.stat && f.stat !== "all" && row.st !== f.stat) return false;
     if (f.ev && f.ev !== "all" && row.e !== f.ev) return false;
     var quotes = row.q.concat(row.kn);
@@ -310,7 +315,7 @@
              marketShown: marketShown, plural: plural, modelSource: modelSource, pct0: pct0, kindOf: kindOf,
              kindLabel: kindLabel, KIND_LABEL: KIND_LABEL, wholeLine: wholeLine, validationText: validationText,
              validationState: validationState, GATE_N: GATE_N, GATE_RULE: GATE_RULE, int: int,
-             orderQuotes: orderQuotes, injuryLabel: injuryLabel};
+             orderQuotes: orderQuotes, injuryLabel: injuryLabel, fold: fold, textMatch: textMatch};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SportsStats = api;
 })(this);

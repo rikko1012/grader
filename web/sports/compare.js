@@ -425,6 +425,14 @@
       bindPage(main, ctx, lg, items, shared);
     }).catch(ctx.fail);
   }
+  // QoL 1107: Remove / Clear comparison on this page can be undone from the toast (the list is only on this device)
+  function undoToast(ctx, lg, before, text) {
+    toast(text, true, '<button type="button" class="sw-btn sw-btn-sm" id="sw-cmp-undo">Undo</button>');
+    var u = document.getElementById("sw-cmp-undo");
+    if (u) u.addEventListener("click", function () {
+      save(lg, before); render(ctx); toast("Comparison restored (" + S.plural(before.length, "prop") + ").", true);
+    });
+  }
   function bindPage(main, ctx, lg, items, shared) {
     var box = main.querySelector(".sw-cmp");
     if (!box) return;
@@ -433,14 +441,16 @@
       if (rm || use) {
         var it; try { it = JSON.parse((rm || use).getAttribute(rm ? "data-cmp-rm" : "data-cmp-use")); } catch (x) { return; }
         if (shared) return;
-        var cur = remove(list(lg), it);
+        var before = list(lg), cur = remove(before, it);
         if (use) {
           var to = parseFloat(use.getAttribute("data-to"));
           if (nn(to)) cur.push(Object.assign({}, it, {l: to}));
         }
-        save(lg, cur); render(ctx); return;
+        save(lg, cur); render(ctx);
+        if (rm) undoToast(ctx, lg, before, "Removed from Compare: " + (it.n || "prop") + " " + S.line(it.l) + " on " + S.bookName(it.p) + ".");
+        return;
       }
-      if (e.target.id === "sw-cmp-clear") { save(lg, []); render(ctx); return; }
+      if (e.target.id === "sw-cmp-clear") { var all = list(lg); save(lg, []); render(ctx); undoToast(ctx, lg, all, "Cleared " + S.plural(all.length, "prop") + " from Compare."); return; }
       if (e.target.id === "sw-cmp-keep") { save(lg, items); location.hash = "#/compare?lg=" + lg; return; }
       if (e.target.id === "sw-cmp-share") {
         var url = location.origin + location.pathname + "#/compare?lg=" + lg + "&c=" + encodeURIComponent(shareString(list(lg)));

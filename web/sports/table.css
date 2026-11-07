@@ -87,10 +87,10 @@
 .sw .sw-grade-nv{color:var(--muted)}
 .sw .sw-grade-banner{margin:0 0 8px;font-size:12.5px;color:var(--muted)}
 .sw .sw-grade-line{margin:4px 0 0;font-size:12.5px}
-/* QoL (audit 2026-10-26): wide screens - the table fits, so its header sticks under the 68 px site header while the
-   page scrolls (inside an overflow box it could only stick to the box) */
+/* QoL (audit 2026-10-26): wide screens - the table fits, so its header sticks under the site header while the page
+   scrolls (inside an overflow box it could only stick to the box). QoL 1107: "fits" is now measured (.sw-fit, set by
+   fitTables in app.js, rules in sports.css) and the offset is the header's real height - the fixed 68 px slid under
+   the 72 px header, and from 1100 px up a table wider than its column pushed the whole page sideways. */
 @media(min-width:1100px){
-  .sw .sw-tb-wrap{overflow:visible}
-  .sw .sw-tb thead th{top:68px;z-index:3}
   .sw .sw-tb thead th:first-child{border-top-left-radius:12px}.sw .sw-tb thead th:last-child{border-top-right-radius:12px}
 }

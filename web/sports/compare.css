@@ -54,3 +54,5 @@
   .sw .sw-cmp-card{grid-row:auto;grid-template-rows:none}
 }
 .sw .sw-cmp-side{margin-top:10px}.sw .sw-cmp-side-cap{text-align:left;font-weight:600;padding:6px 0;caption-side:top}
+/* QoL 1107: phone tap targets - the Compare toggle on board / sheet rows reaches 40 px */
+@media(max-width:640px){.sw .sw-cmp-mini{min-height:40px;padding:0 12px;font-size:12px}}
