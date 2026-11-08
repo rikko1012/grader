@@ -164,7 +164,7 @@ def test_lean_badge_wraps_on_phones_instead_of_covering_the_line(browser):
     ctx, page, errors = _page(browser, api, width=360)
     page.goto("/sports#/board?lg=nba")
     page.wait_for_selector(".sw-tb-row")
-    assert page.locator(".sw-tb-lean .sw-grade-tag").count() >= 2
+    assert page.locator(".sw-tb-lean .sw-grade").count() >= 2 and page.locator(".sw-tb-lean .sw-grade-tag").count() == 0
     hits = page.evaluate("""() => [...document.querySelectorAll('.sw-tb-row:not([hidden])')].map(tr => {
         const a = tr.querySelector('.sw-tb-line').getBoundingClientRect(), lean = tr.querySelector('.sw-tb-lean');
         const boxes = [lean, ...lean.querySelectorAll('*')].map(e => e.getBoundingClientRect()).filter(r => r.width);

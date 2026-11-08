@@ -63,7 +63,7 @@ NOT_VALIDATED_TEXT = "{LG} model not validated"
 # rg-1 research grade: the letter of sports-gp-1 band() on the UNROUNDED Scout chance of the chosen (lean) side; only for
 # a row with a lean (cf-2 / N4), never for a held row (vg-1 when contained, sg-1). Stakes stay 0.
 GRADE_VERSION = "rg-1"
-GRADE_TAG = "Research grade"            # ct-1b (owner 2026-11-08): no "not validated" text beside released letters
+GRADE_TAG = "Scout grade"               # ct-1b (owner 2026-11-08): no research / "not validated" text beside released letters
 
 
 def research_grade(p_side):

@@ -235,7 +235,7 @@
 
   // rg-1 research grade (owner 2026-10-25): the letter is computed server-side (sports/board_view.research_grade, the
   // sports-gp-1 band of the unrounded lean-side chance); pages only render it. "Lean" keeps the "Lean Over/Under" words.
-  var GRADE_TAG = "Research grade";              // ct-1b (owner 2026-11-08): released letters carry no "not validated" text
+  var GRADE_TAG = "Scout grade";                 // ct-1b (owner 2026-11-08): released letters carry no research / not validated text
   var GRADE_BANDS = "A: Scout chance 60% or more · B: 55.59% or more · C: 53.45% or more · Lean: above 50%";
   function gradeWords(g, side) {
     if (!g) return "";
@@ -246,7 +246,7 @@
     if (!g) return "";
     var e = function (x) { return String(x).replace(/[&<>"']/g, function (c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); };
     return '<span class="sw-grade sw-grade-' + (g === "Lean" ? "lean" : g.toLowerCase()) + '" data-grade="' + e(g) + '" title="' + e(GRADE_TAG + " (" + GRADE_BANDS + "). Stake 0.") + '">' +
-      e(gradeWords(g, side)) + '</span> <span class="sw-grade-tag">Research grade</span>' + (nv ? ' <span class="sw-grade-nv">' + e(nv) + "</span>" : "");
+      e(gradeWords(g, side)) + "</span>" + (nv ? ' <span class="sw-grade-nv">' + e(nv) + "</span>" : "");
   }
 
   // ------------------------------------------- same-game injury reconciliation (SPORTS_CONTEXT_RECONCILE, ctx-rec-1)

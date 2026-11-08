@@ -147,11 +147,11 @@ def test_sports_rows_name_the_game_once_and_never_cut_research_grade(ctx, env, s
     p.locator('#hub-sort').select_option('start')
     heads = p.locator('#hub-rows .h-game-head > span:not(.h-countdown)').all_inner_texts() if size == DESK else []
     assert all(not t.startswith('NBA · NBA') for t in heads) and (size != DESK or all(t.startswith('NBA · ') for t in heads)), heads
-    tags = p.locator('#hub-rows .h-grade-tag')
-    assert tags.count() >= 1
-    for i in range(tags.count()):
-        assert tags.nth(i).inner_text().replace('\n', ' ') == 'Research grade'
-        assert tags.nth(i).evaluate('e => e.scrollWidth <= e.clientWidth + 1 && getComputedStyle(e).textOverflow !== "ellipsis"')
+    letters = p.locator('#hub-rows .h-grade')                  # ct-1b (owner 2026-11-08): released letters, no tag
+    assert letters.count() >= 1
+    assert 'Research grade' not in p.locator('#hub-rows').inner_text()
+    for i in range(letters.count()):
+        assert letters.nth(i).evaluate('e => e.scrollWidth <= e.clientWidth + 1 && getComputedStyle(e).textOverflow !== "ellipsis"')
     if size == DESK:
         h = p.evaluate("[...document.querySelectorAll('#hub-rows tr[data-record]')].map(r => Math.round(r.getBoundingClientRect().height))")
         assert all(56 <= x <= 64 for x in h), h

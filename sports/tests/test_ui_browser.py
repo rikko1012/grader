@@ -620,7 +620,7 @@ def test_uiqa_cards_compare_charts_fit(pw, shots, width):
     (the old 6-column compare table pushed Over / Under / Track pick out of view), card text keeps the card padding,
     chart labels are legible (>= 9.5 px) and never overlap (per-bar values thin out on narrow screens), buttons and
     nav items never wrap, and no raw grade code (gp_band:*) reaches a member page - the research letter (rg-1) is
-    rendered instead, with its "Research grade" tag (owner decision 2026-10-25)."""
+    rendered instead (ct-1b, owner 2026-11-08: released letters carry no "Research grade" tag)."""
     ctx, page, errors = _page(pw, width, 900, has_touch=width < 768, is_mobile=width < 768)
     page.goto(URL + "/sports#/board?lg=nba")
     page.wait_for_selector(".sw-research-card", timeout=20000)
@@ -649,7 +649,7 @@ def test_uiqa_cards_compare_charts_fit(pw, shots, width):
     for g in page.locator("#sw-main .sw-grade").all():                          # rendered letters only
         assert re.match(r"^(A|B|C|Lean) (Over|Under)$", g.inner_text().strip()), g.inner_text()
     if page.locator("#sw-main .sw-grade").count():
-        assert "research grade" in main_text.lower()
+        assert "research grade" not in main_text.lower() and "under review" not in main_text.lower()   # ct-1b
     cur = page.locator("#sw-views a[aria-current=page]").bounding_box()
     nav = page.locator("#sw-views").bounding_box()
     assert cur["x"] >= nav["x"] - 1 and cur["x"] + cur["width"] <= nav["x"] + nav["width"] + 1, (cur, nav)   # current view in sight

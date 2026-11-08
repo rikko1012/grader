@@ -144,7 +144,7 @@
     return '<ol class="rx-picks" data-shown="' + k + '">' + rows.slice(0, k).map(function (r) { return recentItem(r, statName, noGrade); }).join("") + "</ol>" +
       (rows.length > k ? '<button type="button" class="sw-btn rx-more" data-rx-more>Show more (' + int(Math.min(RECENT_STEP, rows.length - k)) + ")</button>" : "") +
       (noGrade ? '<p class="sw-faint sw-small">One row per prop: Scout’s side at the line it was made for.</p>'
-                : '<p class="sw-faint sw-small">Grades are research letters. One row per prop: Scout’s side at the line it was made for.</p>');
+                : '<p class="sw-faint sw-small">Grades are Scout’s letters. One row per prop: Scout’s side at the line it was made for.</p>');
   }
   // collapsed technical sections: [{id, title, sub, html}] -> <details> each, closed by default
   function detailsHtml(sections) {
@@ -174,7 +174,7 @@
         '<div class="rx-line sw-small sw-muted" data-rx-counting>One pick per player, stat and game: the app line closest to Scout’s projection.</div>';
     } else h += '<div class="rx-line sw-muted">No settled Scout picks yet.</div>';
     h += "</div>";
-    if (!contained) h += '<div class="rx-gr"><div class="rx-k">Graded picks <span class="sw-grade-tag">Research grades</span></div><div class="rx-tiles">' +
+    if (!contained) h += '<div class="rx-gr"><div class="rx-k">Graded picks</div><div class="rx-tiles">' +
       tiles.map(function (t) {
         return '<div class="rx-tile" data-grade="' + t.grade + '"><div class="rx-tile-g rx-g rx-g-' + t.grade.toLowerCase() + '">' + t.grade + "</div>" +
           '<div class="rx-tile-v" data-rx-grate>' + escH(t.n ? t.rateText : "—") + '</div><div class="rx-tile-n">n = <span data-rx-gn>' + escH(int(t.n)) + "</span></div>" +
@@ -250,14 +250,14 @@
 
   function leagueDetails(lg, L, P) {                 // everything technical, collapsed (rx-1)
     var out = [];
-    out.push({id: "validation", title: "How validation works", sub: "Grades and leans stay research until a registered review passes.",
+    out.push({id: "validation", title: "How validation works", sub: "The registered forward review of stated chances against results.",
               html: '<p class="rp-gate' + (L.gate.validated ? " ok" : "") + '"><b>' + esc(gateText(L.gate)) + "</b></p>" +
                 (L.gate.rule ? '<p class="sw-small">' + esc(L.gate.rule) + "</p>" : "") +
                 '<p class="sw-small sw-muted">' + int(L.settled) + " settled forecasts · " + int(L.games) + " games · " + int(L.unresolved) + " unresolved · " + int(L.void) + " void.</p>"});
     if (!L.settled) return out;
     out.push({id: "h2h", title: "Scout vs the market: full table", sub: BRIER_SUB + " Log loss score: lower is better. Score difference below 0 = Scout closer; hit-rate difference above 0 = Scout hit more often.",
               html: h2hHtml(L.head_to_head)});
-    out.push({id: "grades", title: "Graded picks in full", sub: "Research letters of each settled lean (A 60%+, B 55.59%+, C 53.45%+, else Lean). Not validated; stakes 0.",
+    out.push({id: "grades", title: "Graded picks in full", sub: "Letters of each settled lean (A 60%+, B 55.59%+, C 53.45%+, else Lean). Stakes 0.",
               html: !isContained(L) && L.grades && L.grades.rows && L.grades.rows.length ? gradeTable(L.grades.rows, "hit_rate_ci95") : ""});
     out.push({id: "models", title: "Accuracy by model", sub: "Average miss (MAE): how far the final stat landed from the projection - lower is better. Bias: above 0 = finals ran higher than projected.",
               html: table(SUMMARY_HEAD, [summaryRow("All", L)].concat(Object.keys(L.models).map(function (m) { return summaryRow(m + (L.models[m].research_only ? " (research)" : ""), L.models[m]); })))});

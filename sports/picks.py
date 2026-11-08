@@ -629,7 +629,7 @@ def _cluster_ci(items, stat, reps=1000, seed=7):
     return [round(vals[int(0.025 * (len(vals) - 1))], 4), round(vals[int(0.975 * (len(vals) - 1))], 4)]
 
 
-GRADE_TABLE_LABEL = "Research grade: hit rate by the grade shown when each pick was tracked"
+GRADE_TABLE_LABEL = "Scout grade: hit rate by the grade shown when each pick was tracked"
 
 
 def grade_table(items):

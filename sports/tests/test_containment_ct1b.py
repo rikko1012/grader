@@ -205,14 +205,21 @@ def test_unreleased_league_still_follows_the_verdict(released, monkeypatch):
 def test_no_hedge_text_for_released_leagues_in_member_pages():
     web = ROOT / "web"
     labels = (web / "sports" / "labels.js").read_text(encoding="utf-8")
-    assert 'var GRADE_TAG = "Research grade";' in labels
-    for f in ("sports/picks.js", "sports/slips.js", "sports/results_public.js", "upgrade-hub.js"):
+    assert 'var GRADE_TAG = "Scout grade";' in labels and "Research grade" not in labels
+    for f in ("sports/picks.js", "sports/slips.js", "sports/results_public.js", "upgrade-hub.js", "sports/app.js",
+              "sports/labels.js"):
         s = (web / f).read_text(encoding="utf-8")
-        for bad in ('"NFL model not validated"', "Research grade - not validated", "grades are not validated",
+        for bad in ('"NFL model not validated"', "Research grade", "grades are not validated", "Research letters",
+                    "Grades are research letters", "grades are research grades", "<b>Research estimates.</b>",
+                    "S.validationText(", "Grades and leans stay research",
                     "calibration has not passed validation", "validation gate has not released",
                     "has not yet passed its check", "has not passed its live-line check", "(not validated)"):
             assert bad not in s, (f, bad)
-    assert board_view.GRADE_TAG == "Research grade" and "not validated" not in picks.GRADE_TABLE_LABEL
+    # My picks: the per-pick validation state ("Projection only - model not yet validated") is not printed
+    assert "(p.validation_state ? \"\" : esc(p.validation_text" in (web / "sports" / "picks.js").read_text(encoding="utf-8")
+    assert board_view.GRADE_TAG == "Scout grade" and "research" not in picks.GRADE_TABLE_LABEL.lower()
+    src = (ROOT / "workspace_sports.py").read_text(encoding="utf-8")       # read as text: sports imports no hub module
+    assert "Research grade" not in src and 'HOLD_DETAIL = "{LG} grades are switched off."' in src
     from sports.slips import validate
     legs = [{"player": "P", "team": "NY", "league": "nba", "event_ref": "A @ B", "start_utc": "2099-01-01T00:00:00Z",
              "stat": "points", "side": "over", "line": 20.5, "research_only": True}]
@@ -231,7 +238,7 @@ def test_grade_html_has_no_not_validated_text(tmp_path):
 const L = require(%s);
 for (const g of ["A", "B", "C", "Lean"]) {
   const h = L.gradeHtml(g, "over", null);
-  if (/not validated/i.test(h)) throw new Error(h);
+  if (/not validated|research|grade-tag/i.test(h)) throw new Error(h);
   if (h.indexOf(g === "Lean" ? "Lean Over" : g + " Over") < 0) throw new Error(h);
 }
 console.log("ok");

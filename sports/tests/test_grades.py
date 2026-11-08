@@ -139,7 +139,7 @@ def test_same_letter_on_board_sheet_slip_and_tracked_pick(gw):
     got = {p["record_id"]: p for p in mine["picks"]}
     assert got[r1]["grade_shown"] == "A" and got[r1]["result"]["status"] == "win"
     G = {r["grade"]: r for r in mine["by_grade"]["rows"]}
-    assert list(G) == ["A", "B", "C", "Lean"] and mine["by_grade"]["label"].startswith("Research grade:")
+    assert list(G) == ["A", "B", "C", "Lean"] and mine["by_grade"]["label"].startswith("Scout grade:")
     assert G["A"]["n"] == 1 and G["A"]["hit_rate"] == 1.0 and "hit_rate_ci95_games" in G["A"]
     assert mine["by_grade"]["ungraded"] == 1
     agg = picks.aggregate(picks.connect_ro())
@@ -184,7 +184,7 @@ const qh = Object.assign({}, q, {x: {b: "ratio_low", t: "Held"}});
 r = R.propRow(Object.assign({}, base, {q: [qh]}), qh, {fc, view: {}, now: Date.now()});
 if (r.grade) throw new Error("held row graded");
 const h = SportsLabels.gradeHtml("Lean", "under", "NFL model not validated");
-if (h.indexOf("Lean Under") < 0 || h.indexOf("Research grade") < 0 || h.indexOf("NFL model not validated") < 0) throw new Error(h);
+if (h.indexOf("Lean Under") < 0 || /research|not validated|grade-tag/i.test(h.replace("NFL model not validated", "")) || h.indexOf("NFL model not validated") < 0) throw new Error(h);
 if (SportsLabels.gradeWords("B", "over") !== "B Over") throw new Error("words");
 console.log("ok");
 """, encoding="utf-8")
@@ -228,7 +228,7 @@ def test_slip_leg_and_my_picks_render_the_letter(browser):
     page.wait_for_selector(".ss-card")
     gs = [g.inner_text().strip() for g in page.locator(".ss-card .sw-grade").all()]
     assert gs == ["A Over", "Lean Over"], gs
-    assert "research grade" in page.locator(".ss-card").first.inner_text().lower()
+    assert "research grade" not in page.locator(".ss-card").first.inner_text().lower()   # ct-1b: no tag beside a released letter
     assert not errors, errors
     ctx.close()
 
@@ -246,7 +246,7 @@ def test_slip_leg_and_my_picks_render_the_letter(browser):
     page.goto("/sports#/picks?lg=nba")
     page.wait_for_selector(".sw-mp-grades")
     body = page.locator("#sw-main").inner_text()
-    assert "Hit rate by grade" in body and "research grade" in body.lower() and "not validated" not in body.lower()
+    assert "Hit rate by grade" in body and "research" not in body.lower() and "not validated" not in body.lower()
     page.locator('[data-mptab="settled"]').click()
     assert page.locator(".sw-mp-row .sw-grade").first.inner_text().strip() == "B Over"
     assert "gp_band:" not in body
@@ -272,7 +272,7 @@ def test_board_table_renders_letter_banner_and_nfl_label(browser):
     }""")
     page.set_content("<div class='sw'>" + html + "</div>")
     leans = [c.inner_text().strip() for c in page.locator(".sw-tb-leanc").all()]
-    assert leans[0].startswith("A Over") and "research grade" in leans[0].lower(), leans
+    assert leans[0].startswith("A Over") and "research" not in leans[0].lower(), leans
     assert leans[1].startswith("Lean Over") and "nfl model not validated" in leans[1].lower(), leans
     assert leans[2].startswith("Held") and page.locator(".sw-tb-leanc").nth(2).locator(".sw-grade").count() == 0
     assert page.locator(".sw-tb-row").nth(1).locator(".sw-tb-edge").inner_text().strip() == "—"

@@ -453,10 +453,10 @@ def record_of(lg, doc, m, q, view):
            "offer": {"platform": p, "platform_label": book_label(p), "offer_id": rid, "revision": offer_rev(q), "revision_kind": "exact", "line": line, "seen_at": q.get("t"),
                      "over": _side_prices(q, 0), "under": _side_prices(q, 1), "moved_from": None, "moved_at": None},
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
-                     "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
+                     "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Stakes remain 0." if grade else None,
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
-                     "validation": {"kind": "research", "label": "Research grade" if grade else (one or HOLD_LABEL),
-                                    "detail": "Research grade. Stakes remain 0." if grade else reason}},
+                     "validation": {"kind": "research", "label": "Scout grade" if grade else (one or HOLD_LABEL),
+                                    "detail": "Scout grade. Stakes remain 0." if grade else reason}},
            "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None,
                        **(_board_columns(v, line, opp) if workspace_h2h.board_enabled() else {})},
            "market_chance": {"p_over": mkc["po"], "p_under": mkc["pu"], "sources": mkc.get("n")} if mkc else None,
@@ -757,7 +757,7 @@ def payload(x, leg, res, e):
     grade = rec["scout"].get("grade") if leg["side"] == x["lean"] else None
     return {"player": rec["player"]["name"], "team": rec["player"]["team"], "opponent": rec["player"]["opponent"], "matchup": rec["event"]["label"], "competition": rec["event"]["competition"],
             "stat_label": rec["market"]["stat_label"], "period_label": rec["market"]["period_label"], "platform_label": rec["offer"]["platform_label"], "scout_side": x["lean"], "on_side": leg["side"] == x["lean"],
-            "displayed_p": p_shown, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
+            "displayed_p": p_shown, "grade": grade, "units": 0 if grade else None, "stake_reason": "Stakes remain 0." if grade else None,
             "research": True, "hold": (rec["scout"].get("hold") or {}).get("label"), "projection": x["mu"], "forecast_p": p_shown,
             "forecast_at": x["at"], "forecast_grade": grade, "forecast_units": 0 if grade else None, "l10": rec["history"]["l10"], "feed_at": rec["offer"]["seen_at"], "rules_version": e.get("rules_version"), "entry_type": e.get("entry_type")}
 
