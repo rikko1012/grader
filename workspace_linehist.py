@@ -272,20 +272,27 @@ def _hltv_key(mid):
     return f"hltv:{m.group(1)}" if m else s or None
 
 
-def closing_marks(ser, mids, closing_rows, stale=None):
+def closing_marks(ser, mids, closing_rows, stale=None, note=None):
     """Each of the newest MARKS_MAX past games with the closing line saved for THAT match on this app (stale closings left off,
-    as in L10 vs closing). {"marks": [{date, opponent, closing}], "avg_l10": mean of the last 10 games' closings}."""
-    by = {}
+    as in L10 vs closing). {"marks": [{date, opponent, closing}], "avg_l10": mean of the last 10 games' closings}.
+    note(open_line, closing, actual) (closing_lines.move_note for this app, SCOUT_LINE_MOVE_NOTES): a mark whose line was
+    bumped from its opening line also carries `opened` and `move`, against that game's own result (wording only)."""
+    by, opened = {}, {}
     for c in closing_rows or []:
         k = _hltv_key(c.get("event_id"))
         if k and k not in by and _num(c.get("line")) is not None and not (stale and stale(c)):
             by[k] = _num(c["line"])
+            opened[k] = _num(c.get("open_line"))
     marks, l10 = [], []
     for i, (s, mid) in enumerate(list(zip(ser or [], mids or []))[:MARKS_MAX]):
         cl = by.get(_hltv_key(mid))
         if cl is None:
             continue
-        marks.append({"date": s.get("date"), "opponent": s.get("opponent"), "closing": cl})
+        m = {"date": s.get("date"), "opponent": s.get("opponent"), "closing": cl}
+        mv = note(opened.get(_hltv_key(mid)), cl, s.get("value")) if note else None
+        if mv:
+            m.update(opened=opened.get(_hltv_key(mid)), move=mv)
+        marks.append(m)
         if i < 10:
             l10.append(cl)
     return {"marks": marks, "avg_l10": round(sum(l10) / len(l10), 2) if l10 else None, "n_l10": len(l10)}
@@ -313,7 +320,9 @@ def block(srv, x, siblings, full, closing_args=None, now=None):
         try:
             import closing_lines as cl
             rows = srv.shared(("ws_closing",) + tuple(closing_args), lambda: (200, cl.rows_for(*closing_args)), ttl=cl.CACHE_TTL)[1]
-            marks = closing_marks(full["ser"], full["mids"], rows or [], stale=cl.is_stale)
+            bk = _book(x)
+            note = (lambda o, c, a: cl.move_note(o, c, a, bk)) if cl.move_notes_on() else None
+            marks = closing_marks(full["ser"], full["mids"], rows or [], stale=cl.is_stale, note=note)
         except Exception:
             pass
     if not apps and not marks["marks"]:

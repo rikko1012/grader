@@ -44,6 +44,8 @@ def reset():
     """Tests: forget the board."""
     _SNAP.clear()
     _SNAP.update(_empty())
+    with _MOVES_LOCK:
+        _MOVES.clear()
 
 
 class Down(Exception):
@@ -447,6 +449,66 @@ def settle(srv, rows):
             continue
         res, actual = result_of(r, w["ref"]["side"])
         out[w["settle_key"]] = {"result": res, "actual": actual, "actual_maps": r["games"], "source": "lol_settlements", "settled_at": r["settled_at"], "final": res is not None, "mark": _hash(r["version"], r["status"], r["actual"])}
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------------------- line moves
+# SCOUT_LINE_MOVE_NOTES (workspace_api._receipt_moves, wording only): a settled LoL receipt's opening and closing line, from the
+# worker's append-only market_events. Opening = the market's first event, only when that event is its "open"; closing = the last
+# line observed at or before the start. One indexed read (me_key) per market, bounded, behind a bounded cache.
+MOVE_EVENTS_MAX = 500
+MOVES_MAX = 20000
+MOVES_MISS_TTL = 300
+_MOVES = {}
+_MOVES_LOCK = threading.Lock()
+
+
+def _moves_of(rows, start):
+    st = _ts(start)
+    if not rows or st is None or rows[0]["event"] != "open":
+        return None
+    pre = [r for r in rows if r["line"] is not None and _ts(r["observed_at"]) is not None and _ts(r["observed_at"]) <= st]
+    if not pre or pre[0] is not rows[0] or (len(rows) >= MOVE_EVENTS_MAX and pre[-1] is rows[-1]):
+        return None                             # opened after the start, or more events than read: the closing line is not known
+    return float(pre[0]["line"]), float(pre[-1]["line"])
+
+
+def line_moves(srv, keys, now=None):
+    """{(platform, market_key, start): (opening, closing)} for the markets whose opening line is known. Nothing for a market
+    without an open event, or when lol.db cannot be read."""
+    now = time.time() if now is None else now
+    out, need = {}, []
+    for k in dict.fromkeys(keys):
+        with _MOVES_LOCK:
+            e = _MOVES.get(k)
+        if e is not None and (e[0] is not None or now - e[1] <= MOVES_MISS_TTL):
+            if e[0] is not None:
+                out[k] = e[0]
+        else:
+            need.append(k)
+    if not need:
+        return out
+    try:
+        con = _open(srv)
+    except Down:
+        return out
+    try:
+        for k in need:
+            platform, market_key, start = k
+            rows = con.execute("SELECT event, line, observed_at FROM market_events WHERE platform = ? AND market_key = ? ORDER BY id LIMIT ?",
+                               (platform, market_key, MOVE_EVENTS_MAX)).fetchall()
+            oc = _moves_of(rows, start)
+            st = _ts(start)
+            if oc is not None and st is not None and st.timestamp() <= now:   # events before a passed start never change
+                out[k] = oc
+            with _MOVES_LOCK:
+                _MOVES[k] = (oc if st is not None and st.timestamp() <= now else None, now)
+                while len(_MOVES) > MOVES_MAX:
+                    _MOVES.pop(next(iter(_MOVES)))
+    except sqlite3.Error:
+        pass
+    finally:
+        con.close()
     return out
 
 

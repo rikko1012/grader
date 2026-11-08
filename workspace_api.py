@@ -1092,7 +1092,7 @@ def _closing(srv, x, full):
             return None
         args = (cl.norm(_nick(x)), x.get("prop"), str(x.get("scope") or "12"), _book(x), line_type_of(x))
         rows = srv.shared(("ws_closing",) + args, lambda: (200, cl.rows_for(*args)), ttl=cl.CACHE_TTL)[1]
-        return cl.l10_vs_closing(full["ser"], full["mids"], rows or [], platform_label=LABEL.get(_book(x), _book(x)))
+        return cl.l10_vs_closing(full["ser"], full["mids"], rows or [], platform_label=LABEL.get(_book(x), _book(x)), book=_book(x))
     except Exception:
         return None
 
@@ -1486,11 +1486,66 @@ def get_mine(h, srv, q, member, scratch, name):
     if _limited(h, srv, "mine", member, MINE_PER_MIN):  # only a read that reaches the database counts
         return None
     doc = st.mine(member, before, limit)
+    _receipt_moves(srv, doc.get("receipts") or [])
     doc.update(as_of=wstore.iso(), rev=rev)
     ent = _entry(json.dumps(doc, default=str, separators=(",", ":")).encode(), rev)
     if newest:
         _PRIVATE.put((member, "mine"), ent)
     return _send_private(h, srv, ent)
+
+
+SETTLED = ("hit", "miss", "push")
+
+
+def _receipt_ident(r, match_key):
+    """closing_lines.ident of the offer a CS2 receipt was tracked on, from the receipt's own frozen fields (the same rule:
+    match_key is event_id(x)[0], the platform is the book, the line type is line_type_of(x)). None for a row-<hash> key."""
+    if not match_key or str(match_key).startswith("row-") or not r.get("nick") or not r.get("prop"):
+        return None
+    book = r.get("platform") or "underdog"
+    lt = r.get("line_type") if book == "prizepicks" and r.get("line_type") in ("goblin", "demon") else "standard"
+    return "|".join(("cs2", book, str(match_key), _norm(r["nick"]), str(r["prop"]), str(r.get("scope") or "12"), lt))
+
+
+def _lol_unit(settle_key):
+    """(platform, market_key) from a LoL receipt's settle_key "lol|<platform>|<market_key>|<line>|<side>"."""
+    parts = str(settle_key or "").split("|")
+    if len(parts) < 5 or parts[0] != "lol":
+        return None
+    return parts[1], "|".join(parts[2:-2])
+
+
+def _receipt_moves(srv, receipts):
+    """SCOUT_LINE_MOVE_NOTES (wording only): a settled receipt whose market was bumped between its opening and closing line
+    gets `line_move` (closing_lines.move_note) - "Opened 15.5 (Over won) · closed 16 (push)". status, final and every count stay
+    exactly as settled at the member's own line. Only when the opening line is known for that offer (CS2: the closing row saved
+    at lock; LoL: the market's first event was its open) and the member's line sits between the two. Runs once per member rev
+    (the page is cached by rev); reads are indexed, chunked and behind bounded caches. Never breaks My picks."""
+    keys = [(r, r.pop("_match_key", None), r.pop("_settle_key", None)) for r in receipts]
+    try:
+        import closing_lines as cl
+        if not cl.move_notes_on():
+            return
+        settled = [(r, mk, sk) for r, mk, sk in keys if r.get("status") in SETTLED and isinstance(r.get("final"), (int, float))
+                   and isinstance(r.get("line"), (int, float))]
+        cs2 = [(r, _receipt_ident(r, mk)) for r, mk, _ in settled if r.get("sport") == "cs2"]
+        cs2 = [(r, i) for r, i in cs2 if i]
+        rows = cl.lookup_idents([i for _, i in cs2]) if cs2 else {}
+        for r, i in cs2:
+            mv = cl.row_note(rows.get(i), r["line"], r["final"], r.get("platform"))
+            if mv:
+                r["line_move"] = mv
+        lol = [(r, _lol_unit(sk)) for r, _, sk in settled if r.get("sport") == "lol"]
+        lol = [(r, u) for r, u in lol if u]
+        if lol:
+            moves = _adapter("lol").line_moves(srv, [(u[0], u[1], r.get("start_utc")) for r, u in lol])
+            for r, u in lol:
+                oc = moves.get((u[0], u[1], r.get("start_utc")))
+                mv = cl.row_note({"open_line": oc[0], "line": oc[1]}, r["line"], r["final"], u[0]) if oc else None
+                if mv:
+                    r["line_move"] = mv
+    except Exception:
+        pass
 
 
 def get_results(h, srv, q, member, scratch, name):

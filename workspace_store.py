@@ -482,6 +482,8 @@ class Store:
         finally:
             self._pages.release()
         views = [receipt_view(r, revs.get(r["receipt_id"], [])) for r in page]
+        for v, r in zip(views, page):           # the offer's identity for workspace_api.get_mine's line-move note; never sent
+            v["_match_key"], v["_settle_key"] = r["match_key"], r.get("settle_key")
         by_slip = {}
         for v in views:
             by_slip.setdefault(v["slip_id"], []).append(v)

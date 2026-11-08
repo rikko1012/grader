@@ -743,13 +743,29 @@
     return `${done}<div class="u-status"><p>${statusLine(phase)} ${retry}</p><button class="u-link" type="button" data-u="clear">Clear</button></div>${saved}${checks}${entries().map((e) => entryHtml(e, phase)).join("")}`;
   }
   const countsText = (c) => Object.entries(c || {}).filter(([, n]) => n).map(([k, n]) => `${n} ${STATUS[k] ? STATUS[k].toLowerCase() : k}`).join(" · ");
+  /* SCOUT_LINE_MOVE_NOTES (owner 2026-11-07): a settled row whose line was bumped between opening and close says so, from the
+     server's closing_lines.move_note - never worked out here. Both lines read differently: "▲ bumped Opened 15.5 (Over won) ·
+     closed 16 (push)"; both the same: the board's own "▲ bumped from 15.5" chip. The result beside it is unchanged. */
+  function moveHtml(m) {
+    if (!m || !m.chip) return "";
+    return `<span class="u-bump ${m.dir === "down" ? "down" : "up"}" title="${esc(m.tip)}">${esc(m.chip)}</span>${m.kind === "flip" ? ` <span class="u-move-t">${esc(m.text)}</span>` : ""}`;
+  }
+  /* date|opponent -> move for the card's past games (closing markers, else L10 vs closing) */
+  function movesOf(doc) {
+    const out = new Map(), h = doc && doc.history;
+    const put = (list) => (list || []).forEach((g) => { if (g && g.move && !out.has(g.date + "|" + g.opponent)) out.set(g.date + "|" + g.opponent, g.move); });
+    put(h && h.line_history && h.line_history.closing_marks);
+    put(h && h.closing && h.closing.games);
+    return out;
+  }
+  const moveRow = (m, cols, cls) => (m ? `<tr class="${cls || "u-moved"}"><td colspan="${cols}">${moveHtml(m)}</td></tr>` : "");
   function receiptHtml(r) {
     const st = r.status, open = T.openPick === r.id, scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;
     const read = `${r.grade || r.hold || (r.research ? "Research estimate" : "Lean")} ${scoutSide}`.trim();
     const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
       ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label], ["Tracked", when(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="u-pick-body"><dl class="u-kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><ol class="u-time">${(r.timeline || []).map((t) => `<li><time>${esc(when(t.at))}</time>${esc(t.text)}</li>`).join("")}</ol></div>` : "";
-    return `<article class="u-pick${FACE_LG[r.sport] ? " u-pick-face" : ""}"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}">${faceHtml(r.sport, { key: r.nick, name: r.player, team: r.team, size: 32 })}<span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)}${r.platform === "prizepicks" ? " · " + lineKind(r.platform, r.line_type) : ""} · ${esc(r.matchup)}</small></span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
+    return `<article class="u-pick${FACE_LG[r.sport] ? " u-pick-face" : ""}"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}">${faceHtml(r.sport, { key: r.nick, name: r.player, team: r.team, size: 32 })}<span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)}${r.platform === "prizepicks" ? " · " + lineKind(r.platform, r.line_type) : ""} · ${esc(r.matchup)}</small>${r.line_move ? `<small class="u-move">${moveHtml(r.line_move)}</small>` : ""}</span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
   }
   function picksTab() {
     const d = T.mine;
@@ -827,7 +843,9 @@
       boxes.push([x - 2, yv - 1, x + bw + 2, base]);
       if (i === data.length - 1) { const tw = String(d.value).length * CH; boxes.push([x + bw / 2 - tw / 2 - 2, yv - 15, x + bw / 2 + tw / 2 + 2, yv - 2]); }
       if (i === data.length - 1) out += `<text x="${x + bw / 2}" y="${yv - 5}" text-anchor="middle">${esc(d.value)}</text>`;
-      if (typeof d.closing === "number") out += `<line class="close-mark" x1="${x - 3}" x2="${x + bw + 3}" y1="${y(d.closing)}" y2="${y(d.closing)}"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: closed at ${d.closing}, finished ${d.value}`)}</title></line>`;   /* lh-1: the line this game closed at */
+      /* lh-1: the line this game closed at; SCOUT_LINE_MOVE_NOTES: where it opened when it was bumped, and the result at each */
+      const mv = d.move, moveTxt = mv ? `opened ${mv.opened}, closed at ${d.closing}, finished ${d.value} (${mv.at_open === mv.at_close ? `${mv.at_open} at both lines` : `${mv.at_open} at ${mv.opened}, ${mv.at_close} at ${mv.closing}`})` : "";
+      if (typeof d.closing === "number") out += `<line class="close-mark" x1="${x - 3}" x2="${x + bw + 3}" y1="${y(d.closing)}" y2="${y(d.closing)}"><title>${esc(`${shortDate(d.date)} v ${d.opponent}: ${mv ? moveTxt : `closed at ${d.closing}, finished ${d.value}`}`)}</title></line>`;
       const day = dateOf(d);
       if ((data.length - 1 - i) % every === 0) out += angled ? `<text class="opp" x="${x + bw / 2 + 3}" y="${base + 12}" text-anchor="end" transform="rotate(-40 ${x + bw / 2 + 3} ${base + 12})">${esc(label(String(d.opponent || "")) + (day ? " · " + day : ""))}</text>` : `<text class="opp" x="${x + bw / 2}" y="${h - 21}" text-anchor="middle">${esc(String(d.opponent || ""))}</text>${day ? `<text class="date" x="${x + bw / 2}" y="${h - 7}" text-anchor="middle">${esc(day)}</text>` : ""}`;
     });
@@ -861,7 +879,7 @@
     }
     const n = full ? P.histN : 10, list = res.slice(0, n), line = rec.offer.line;
     const seg = full ? `<div class="u-seg" role="group" aria-label="Games shown">${[5, 10, 20].filter((v) => v <= Math.max(res.length, 5)).map((v) => `<button type="button" aria-pressed="${P.histN === v}" data-u="hist" data-id="${v}">L${v}</button>`).join("")}</div>` : `<button class="u-link" type="button" data-u="ptab" data-id="history">Open history</button>`;
-    const table = full ? `<details class="u-det" open><summary>Results as a table</summary><table class="u-tbl"><thead><tr><th scope="col">Played</th><th scope="col">Opponent</th><th scope="col">Final</th><th scope="col">Against ${esc(line)}</th></tr></thead><tbody>${list.map((g) => `<tr><td>${esc(shortDate(g.date))}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${g.value === line ? "Push" : g.value > line ? "Over" : "Under"}</td></tr>`).join("")}</tbody></table></details>` : "";
+    const table = full ? `<details class="u-det" open><summary>Results as a table</summary><table class="u-tbl"><thead><tr><th scope="col">Played</th><th scope="col">Opponent</th><th scope="col">Final</th><th scope="col">Against ${esc(line)}</th></tr></thead><tbody>${(() => { const mv = movesOf(P.doc); return list.map((g) => `<tr><td>${esc(shortDate(g.date))}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${g.value === line ? "Push" : g.value > line ? "Over" : "Under"}</td></tr>${moveRow(mv.get(g.date + "|" + g.opponent), 4)}`).join(""); })()}</tbody></table></details>` : "";
     return `<div class="u-sec-h"><h3>Past results at this line</h3>${seg}</div><div class="u-chart" data-chart data-n="${n}" role="img" aria-label="${list.length} past results against the line ${esc(line)}"></div><div class="u-legend"><span><i class="h"></i>Hit for ${cap(side)}</span><span><i></i>Miss</span><span><i class="p"></i>Push</span><span><i class="l"></i>Line ${esc(line)}</span></div>${table}`;
   }
   function mapsHtml() {
@@ -912,7 +930,7 @@
   function contextHtml(rec) {
     if (!P.doc) return P.state === "loading" ? '<div class="u-skel"></div><div class="u-skel"></div>' : '<p class="u-dim">Context is unavailable right now.</p>';
     const list = (P.doc.context && P.doc.context.rows) || [], drivers = (P.doc.context && P.doc.context.drivers) || [], hh = P.doc.h2h, ln = rec.offer.line;
-    const h2h = !hh || !hh.opponent ? "" : `<div class="u-sec-h"><h3>Head-to-head vs ${esc(hh.opponent)}</h3></div>${hh.n ? `<dl class="u-kv"><div><dt>Over ${esc(ln)}</dt><dd>${hh.over} of ${hh.n}</dd></div><div><dt>Under ${esc(ln)}</dt><dd>${hh.under} of ${hh.n}</dd></div><div><dt>Average</dt><dd>${hh.avg == null ? "—" : esc(hh.avg)}</dd></div>${hh.series.map((g) => `<div><dt>${esc(g.date)}</dt><dd>${esc(g.value)} · ${g.value === ln ? "Push" : g.value > ln ? "Over" : "Under"}</dd></div>`).join("")}</dl><p class="u-dim">Past meetings at today's line. Not a predicted chance.</p>` : `<p class="u-dim">No past meetings with ${esc(hh.opponent)} in this player's saved results.</p>`}`;
+    const h2h = !hh || !hh.opponent ? "" : `<div class="u-sec-h"><h3>Head-to-head vs ${esc(hh.opponent)}</h3></div>${hh.n ? `<dl class="u-kv"><div><dt>Over ${esc(ln)}</dt><dd>${hh.over} of ${hh.n}</dd></div><div><dt>Under ${esc(ln)}</dt><dd>${hh.under} of ${hh.n}</dd></div><div><dt>Average</dt><dd>${hh.avg == null ? "—" : esc(hh.avg)}</dd></div>${(() => { const mv = movesOf(P.doc); return hh.series.map((g) => { const m = mv.get(g.date + "|" + (g.opponent || hh.opponent)); return `<div><dt>${esc(g.date)}</dt><dd>${esc(g.value)} · ${g.value === ln ? "Push" : g.value > ln ? "Over" : "Under"}${m ? `<small class="u-move">${moveHtml(m)}</small>` : ""}</dd></div>`; }).join(""); })()}</dl><p class="u-dim">Past meetings at today's line. Not a predicted chance.</p>` : `<p class="u-dim">No past meetings with ${esc(hh.opponent)} in this player's saved results.</p>`}`;
     return `${h2h}<div class="u-sec-h"><h3>${rec.sport === "cs2" ? "Player stats and saved inputs" : "Context"}</h3></div>${list.length ? `<dl class="u-kv">${list.map((r) => `<div><dt>${esc(r.label)}</dt><dd>${esc(r.value)}</dd></div>`).join("")}</dl>` : `<p class="u-dim">${rec.sport === "cs2" ? "This forecast saved no context inputs." : "No context is on file for this line."}</p>`}${drivers.length ? `<div class="u-sec-h"><h3>What moved this forecast</h3></div><ul class="u-list">${drivers.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}`;
   }
   /* SCOUT_GENIE (features.genie, owner switch): one question about this line, answered by the server from this line's payload only,
@@ -1465,7 +1483,7 @@
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
+        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, moveHtml, movesOf, moveRow, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
     } catch (e) { window.scoutClassicMount?.(); console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();

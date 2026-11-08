@@ -224,6 +224,7 @@ ul.flags{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px} ul.flag
 .aslip .lg{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 8px;font-size:13.5px;padding:4px 0;border-bottom:1px dashed var(--line)}
 .aslip .lg:last-of-type{border-bottom:0} .aslip .nums{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0;font-size:13px}
 .aslip .nums b{font-family:var(--mono)} .aslip .lg .m{color:var(--muted);font-size:12px}
+.aslip .lg .lmove{flex:1 0 100%;font-size:12px;color:var(--text);overflow-wrap:anywhere}.aslip .lg .lmove .lbump{margin-right:4px}
 @media (max-width:760px){
   .brow{grid-template-columns:40px 1fr auto;grid-template-areas:"g who add" "pick pick pick" "st st st";gap:8px 10px;padding:11px}
   .brow .gtag{grid-area:g} .brow .who{grid-area:who;min-width:0} .brow .bslip{grid-area:add}
@@ -4915,11 +4916,14 @@ function drawSlipHistory() {
   const cur = STUDIO.batch && STUDIO.batch.batch_id;
   const groups = (d.batches || []).map(b => ({b, slips: (b.slips || []).filter(s => b.batch_id !== cur || s.started)})).filter(g => g.slips.length);
   if (!groups.length) { el.innerHTML = `<h3 class="res-h">History</h3><div class="small muted">No started or earlier slips yet.</div>`; return; }
-  const leg = (l, r) => `<div class="lg"><span><b>${esc(l.nick || l.player)}</b> ${l.side === "More" ? "Over" : "Under"} ${esc(l.line)} ${propWord(l.prop)}${mapsWord(l.scope)}</span>
-    <span class="m">${r ? `<span class="pill ${LEG_RES[r][0]}">${LEG_RES[r][1]}</span>` : `<span class="muted">waiting for the result</span>`} · ${esc(l.team || "")} vs ${esc(l.opponent || "")}</span></div>`;
+  // SCOUT_LINE_MOVE_NOTES (owner 2026-11-07): a settled leg whose line was bumped between opening and close says so beside its
+  // result (the server's closing_lines.move_note; the leg's own result is unchanged)
+  const moveNote = mv => !mv || !mv.chip ? "" : `<span class="lmove"><span class="lbump ${mv.dir === "down" ? "down" : "up"}" title="${esc(mv.tip)}" data-tip="${esc(mv.tip)}" tabindex="0">${esc(mv.chip)}</span>${mv.kind === "flip" ? ` ${esc(mv.text)}` : ""}</span>`;
+  const leg = (l, r, mv) => `<div class="lg"><span><b>${esc(l.nick || l.player)}</b> ${l.side === "More" ? "Over" : "Under"} ${esc(l.line)} ${propWord(l.prop)}${mapsWord(l.scope)}</span>
+    <span class="m">${r ? `<span class="pill ${LEG_RES[r][0]}">${LEG_RES[r][1]}</span>` : `<span class="muted">waiting for the result</span>`} · ${esc(l.team || "")} vs ${esc(l.opponent || "")}</span>${moveNote(mv)}</div>`;
   const slip = s => { const o = SLIP_OUT[s.outcome] || ["", s.outcome];
     return `<div class="aslip hist"><div class="small"><span class="pill ${o[0]}">${esc(o[1])}</span> <span class="muted">${bookName(s.book)} · ${s.n}-pick · slip ${esc(String(s.slip_id || "").split("/").slice(1).join("/"))}${s.status && s.status !== "live" ? " · " + esc(s.status) : ""}</span></div>
-      ${(s.legs || []).map((l, i) => leg(l, (s.leg_results || [])[i])).join("")}</div>`; };
+      ${(s.legs || []).map((l, i) => leg(l, (s.leg_results || [])[i], (s.leg_moves || [])[i])).join("")}</div>`; };
   el.innerHTML = `<h3 class="res-h">History</h3>` + groups.map((g, i) => `<details class="histbatch" ${i === 0 ? "open" : ""}><summary>${g.b.batch_id === cur ? "Current batch – started slips" : "Batch of " + esc(shortWhen(g.b.created_at).split(" · ")[0])} · ${g.slips.length} slip${g.slips.length === 1 ? "" : "s"}</summary>
     ${g.slips.map(slip).join("")}</details>`).join("")
     + `<div class="small muted" style="margin-top:6px">A leg settles from official stats, as on the board. No payouts are assumed.</div>`;

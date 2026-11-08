@@ -10,6 +10,9 @@ What it does
   closing line moved toward the logged side (the convention of picklog.set_closing). Line points only: no returns.
 - l10_vs_closing(): the research drawer. The player's last 10 results, each against the closing line saved for THAT
   match on the same platform. Nothing is returned when no game has a saved closing line.
+- move_note() (SCOUT_LINE_MOVE_NOTES, wording only): a settled prop whose line was bumped between opening and close says so -
+  "Opened 15.5 (Over won) · closed 16 (push)" when the two lines read differently, the board's "bumped from" chip when both
+  read the same. Built from the open_line already saved on the closing row; the counted result never changes.
 
 Never a grade input: nothing here is read by the grader, the stake, the forecast log or settlement. Flag off: observe()
 returns at once, no database is created and no response gains a field.
@@ -38,6 +41,12 @@ REPORT_DAYS = 30
 REPORT_CLOSING_MAX = 50000     # bounded diagnostics reads
 REPORT_PICKS_MAX = 100000
 CACHE_TTL = 300
+MOVE_FLAG = "SCOUT_LINE_MOVE_NOTES"   # settled rows say when the line was bumped (wording only; needs SCOUT_CLOSING_LINES too)
+LOOKUP_MAX = 20000             # closing rows remembered for settled-row notes (append-only: a hit never changes)
+MISS_TTL = 300                 # an ident with no closing row is asked again after this
+IN_CHUNK = 200
+LEG_WINDOW_S = 12 * 3600       # a studio leg without its ident: its closing row locked within this of the leg's start
+BOOK_LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
 
 _LOCK = threading.Lock()       # the in-memory pending / done maps
 _WLOCK = threading.Lock()      # one writer
@@ -45,6 +54,8 @@ _PENDING = OrderedDict()       # ident -> last pre-lock observation
 _DONE = OrderedDict()
 _SCHEMA_OK = [None]
 _REPORT = {"at": 0.0, "doc": None, "lock": threading.Lock()}
+_LOOKUP = OrderedDict()        # ident (or a studio-leg key) -> (row or None, cached at)
+_LOOKUP_LOCK = threading.Lock()
 _HLTV_SLUG_RE = re.compile(r"hltv-(\d+)")
 
 SCHEMA = """
@@ -104,6 +115,8 @@ def reset():
         _DONE.clear()
     _SCHEMA_OK[0] = None
     _REPORT.update(at=0.0, doc=None)
+    with _LOOKUP_LOCK:
+        _LOOKUP.clear()
 
 
 # ------------------------------------------------------------------------------------------------ identity
@@ -272,7 +285,7 @@ def rows_for(player_key, prop, scope, book, line_type, limit=DRAWER_LIMIT):
         return []
     try:
         return [dict(r) for r in con.execute(
-            "SELECT event_id, line, lock_utc, last_seen_at FROM closing_lines WHERE player_key = ? AND prop = ? AND scope = ? "
+            "SELECT event_id, line, open_line, lock_utc, last_seen_at FROM closing_lines WHERE player_key = ? AND prop = ? AND scope = ? "
             "AND book = ? AND line_type = ? ORDER BY lock_utc DESC LIMIT ?",
             (player_key, prop, str(scope), book, line_type, int(limit)))]
     except sqlite3.Error:
@@ -294,15 +307,18 @@ def is_stale(c):
     return lk is not None and ls is not None and lk - ls > STALE_S
 
 
-def l10_vs_closing(ser, mids, closing_rows, window=10, platform_label=None):
-    """The newest `window` results, each against the closing line saved for that match. None when no game has one."""
+def l10_vs_closing(ser, mids, closing_rows, window=10, platform_label=None, notes=None, book=None):
+    """The newest `window` results, each against the closing line saved for that match. None when no game has one.
+    notes (default: move_notes_on()): a game whose line was bumped from its opening line carries `move` (move_note)."""
     if not ser or not mids or not closing_rows:
         return None
-    by = {}
+    notes = move_notes_on() if notes is None else notes
+    by, opened = {}, {}
     for c in closing_rows:
         k = _hltv_key(c.get("event_id"))
         if k and k not in by and _num(c.get("line")) is not None and not is_stale(c):
             by[k] = c["line"]          # a closing line last seen more than STALE_S before lock is left off, never labelled
+            opened[k] = c.get("open_line")
     games, over, under, push = [], 0, 0, 0
     for s, mid in list(zip(ser, mids))[:window]:
         cl = by.get(_hltv_key(mid))
@@ -318,11 +334,154 @@ def l10_vs_closing(ser, mids, closing_rows, window=10, platform_label=None):
         else:
             push += 1
             at = "Push"
-        games.append({"date": s.get("date"), "opponent": s.get("opponent"), "value": s.get("value"), "closing": cl, "at": at})
+        g = {"date": s.get("date"), "opponent": s.get("opponent"), "value": s.get("value"), "closing": cl, "at": at}
+        mv = move_note(opened.get(_hltv_key(mid)), cl, v, book) if notes else None
+        if mv:
+            g["move"] = mv         # wording only: "at" and every count above stay on the closing line
+        games.append(g)
     if not games:
         return None
     return {"window": window, "n": len(games), "over": over, "under": under, "push": push, "games": games,
             "platform_label": platform_label, "source": "Closing line saved at lock"}
+
+
+# ------------------------------------------------------------------------------------------------ settled rows: the line move
+
+def move_notes_on():
+    """SCOUT_LINE_MOVE_NOTES and SCOUT_CLOSING_LINES both on (server.DEFAULT_ON turns both on; "0" on Render turns one off)."""
+    return enabled() and os.environ.get(MOVE_FLAG) == "1"
+
+
+def fmt_line(v):
+    """15.5 -> "15.5", 16.0 -> "16"."""
+    return ("%.2f" % float(v)).rstrip("0").rstrip(".")
+
+
+def at_line(line, actual):
+    """The result at one line: "Over won", "Under won" or "push"."""
+    return "Over won" if actual > line else "Under won" if actual < line else "push"
+
+
+def move_note(open_line, closing, actual, book=None, stale=False):
+    """A settled prop whose line moved between opening and close, or None (nothing to say: no opening line known, no closing
+    line, not settled, not moved, or a stale closing row). kind "flip" = the two lines read differently (a push at either one
+    counts): the full "Opened X (...) · closed Y (...)" sentence. kind "bump" = both lines read the same: the board's chip only.
+    Wording only: the result shown beside it, and every count, stay on the line they use today."""
+    o, c, a = _num(open_line), _num(closing), _num(actual)
+    if o is None or c is None or a is None or o == c or stale:
+        return None
+    ao, ac, up = at_line(o, a), at_line(c, a), c > o
+    O, C = fmt_line(o), fmt_line(c)
+    arrow, d = ("▲", "up") if up else ("▼", "down")
+    who = f"{BOOK_LABEL.get(book, book)} opened this line at {O}" if book else f"This line opened at {O}"
+    tip = f"Bumped {d}: {who}; it closed at {C}."
+    if ao == ac:
+        chip = f"{arrow} bumped from {O}"
+        return {"kind": "bump", "dir": d, "opened": o, "closing": c, "at_open": ao, "at_close": ac, "text": chip, "chip": chip,
+                "tip": f"{tip} {ao[0].upper() + ao[1:]} at both lines."}
+    return {"kind": "flip", "dir": d, "opened": o, "closing": c, "at_open": ao, "at_close": ac,
+            "text": f"Opened {O} ({ao}) · closed {C} ({ac})", "chip": f"{arrow} bumped", "tip": tip}
+
+
+def in_band(line, row):
+    """The settled line sits on the market's own move (between its opening and closing line): an alternate or another ladder
+    line that maps to the same identity never borrows its note."""
+    o, c, ln = _num(row.get("open_line")), _num(row.get("line")), _num(line)
+    return o is not None and c is not None and ln is not None and min(o, c) <= ln <= max(o, c)
+
+
+def row_note(row, line, actual, book):
+    """move_note for one settled line against one closing row (None off the band or on a stale row)."""
+    if not row or not in_band(line, row):
+        return None
+    return move_note(row.get("open_line"), row.get("line"), actual, book, stale=is_stale(row))
+
+
+def _cached(k, now):
+    """(True, row-or-None) when the lookup cache answers for k, else (False, None)."""
+    with _LOOKUP_LOCK:
+        e = _LOOKUP.get(k)
+        if e is None:
+            return False, None
+        row, at = e
+        if row is None and now - at > MISS_TTL:
+            del _LOOKUP[k]
+            return False, None
+        _LOOKUP.move_to_end(k)
+        return True, row
+
+
+def _remember(k, row, now):
+    with _LOOKUP_LOCK:
+        _LOOKUP[k] = (row, now)
+        _LOOKUP.move_to_end(k)
+        while len(_LOOKUP) > LOOKUP_MAX:
+            _LOOKUP.popitem(last=False)
+
+
+def lookup_idents(idents, now=None):
+    """{ident: closing row} for the idents that have one. Indexed reads (the UNIQUE ident), IN_CHUNK at a time, behind a
+    bounded cache: a saved row is append-only, so a hit is kept; a miss is asked again after MISS_TTL. No database = {}."""
+    now = time.time() if now is None else now
+    out, need = {}, []
+    for k in dict.fromkeys(i for i in idents if i):
+        hit, row = _cached(k, now)
+        if hit:
+            if row is not None:
+                out[k] = row
+        else:
+            need.append(k)
+    if not need:
+        return out
+    con = _reader()
+    if con is None:
+        return out
+    found = {}
+    try:
+        for i in range(0, len(need), IN_CHUNK):
+            part = need[i:i + IN_CHUNK]
+            for r in con.execute(f"SELECT ident, line, open_line, lock_utc, last_seen_at FROM closing_lines WHERE ident IN "
+                                 f"({','.join('?' * len(part))})", part):
+                found[r["ident"]] = dict(r)
+    except sqlite3.Error:
+        return out
+    finally:
+        con.close()
+    for k in need:
+        _remember(k, found.get(k), now)
+        if k in found:
+            out[k] = found[k]
+    return out
+
+
+def find_for_leg(player_key, prop, scope, book, line_type, slug, start, now=None):
+    """A studio leg whose ident has no closing row: the closing row for the same player / stat / maps / platform / line type that
+    locked within LEG_WINDOW_S of the leg's start and was saved under the leg's EXACT match slug (never a fuzzy match). One
+    indexed (ix_cl_player), bounded read behind the lookup cache. None unless exactly one row matches."""
+    now = time.time() if now is None else now
+    st = _ts(start)
+    if not slug or st is None or not player_key or not prop:
+        return None
+    k = ("leg", player_key, prop, str(scope), book, line_type, slug, int(st // 60))
+    hit, row = _cached(k, now)
+    if hit:
+        return row
+    con = _reader()
+    if con is None:
+        return None
+    try:
+        rows = [dict(r) for r in con.execute(
+            "SELECT ident, line, open_line, lock_utc, last_seen_at, match_slug, settle_slug FROM closing_lines WHERE player_key = ? "
+            "AND prop = ? AND scope = ? AND book = ? AND line_type = ? AND lock_utc >= ? AND lock_utc <= ? LIMIT 20",
+            (player_key, prop, str(scope), book, line_type, _iso(st - LEG_WINDOW_S), _iso(st + LEG_WINDOW_S)))]
+    except sqlite3.Error:
+        return None
+    finally:
+        con.close()
+    same = [r for r in rows if slug in (r.get("match_slug"), r.get("settle_slug"))]
+    row = same[0] if len(same) == 1 else None
+    _remember(k, row, now)
+    return row
 
 
 # ------------------------------------------------------------------------------------------------ admin diagnostics: CLV

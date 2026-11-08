@@ -850,6 +850,8 @@ export function mount(C) {
   }
   /* card helpers: windows, head-to-head, grouped stats, the chart, HLTV map chances */
   const atLine = (v,line) => v===line?'Push':v>line?'Over':'Under';
+  /* SCOUT_LINE_MOVE_NOTES: a bumped past game's opening -> closing line in a full-width row under it (upgrade.js renders it) */
+  const movedRow = (m,cols) => C.moveRow?C.moveRow(m,cols,'h-moved'):'';
   const tallyOf = (list,line) => ({n:list.length,over:list.filter(g=>g.value>line).length,under:list.filter(g=>g.value<line).length,push:list.filter(g=>g.value===line).length});
   /* a window from the loaded games when they cover it, else the board's own count (the newest results, n may be below the window) */
   function windowTally(r,all,n) {
@@ -858,12 +860,12 @@ export function mount(C) {
     return saved&&saved.n?saved:null;
   }
   /* head-to-head vs tonight's opponent at tonight's line (owner 2026-11-04: as on the classic CS2 card); past results, not a chance */
-  function h2hHtml(hh,line,side) {
+  function h2hHtml(hh,line,side,moves) {
     if(!hh||!hh.opponent)return '';
     const head=`<div class="h-sec-head"><h4>Head-to-head vs ${esc(hh.opponent)}</h4></div>`;
     if(!hh.n)return `<section class="h-h2h">${head}<p class="h-history-note">No past meetings with ${esc(hh.opponent)} in this player's saved results.</p></section>`;
     return `<section class="h-h2h">${head}<div class="h-mini-tiles"><div><b>${countOf(hh,side)}<em>/${hh.n}</em></b><span>${sideWord(side)} ${esc(line)}${hh.push?` · ${hh.push} ${hh.push===1?'push':'pushes'}`:''}</span></div><div><b>${num(hh.avg)?hh.avg.toFixed(1):'—'}</b><span>Average in ${hh.n} ${hh.n===1?'meeting':'meetings'}</span></div></div>
-      <table class="h-h2h-table"><thead><tr><th>Date</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${hh.series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table>
+      <table class="h-h2h-table"><thead><tr><th>Date</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${hh.series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>${movedRow(moves?.get(g.date+'|'+(g.opponent||hh.opponent)),3)}`).join('')}</tbody></table>
       <p class="h-history-note">Past meetings at today's line. Not a predicted chance.</p></section>`;
   }
   const factText = v => typeof v==='object'?JSON.stringify(v):String(v);
@@ -888,8 +890,8 @@ export function mount(C) {
   function drawChart() {
     const box=$('hub-detail'), el=box?.querySelector('[data-hub-chart]'), r=rec(H.detail);
     if(!el||!r)return;
-    const lh=H.detailDoc?.history?.line_history, cm=new Map((lh?.closing_marks||[]).map(m=>[m.date+'|'+m.opponent,m.closing]));
-    const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN).map(g=>cm.has(g.date+'|'+g.opponent)?{...g,closing:cm.get(g.date+'|'+g.opponent)}:g);
+    const lh=H.detailDoc?.history?.line_history, cm=new Map((lh?.closing_marks||[]).map(m=>[m.date+'|'+m.opponent,m]));
+    const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN).map(g=>{const m=cm.get(g.date+'|'+g.opponent);return m?{...g,closing:m.closing,...(m.move?{move:m.move}:{})}:g;});
     const sorted=list.map(g=>g.value).sort((a,b)=>a-b),mid=Math.floor(sorted.length/2),median=sorted.length?(sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2):null;
     if(list.length)el.innerHTML=C.chartSvg(list,r.offer.line,H.histSide,Math.max(260,Math.round(el.clientWidth)||560),{median});
     const lel=box.querySelector('[data-hub-lh]');
@@ -1150,7 +1152,7 @@ export function mount(C) {
       ${graded?'<p class="h-why-key"><span><i class="h-why-dot is-used"></i>Used in the grade</span><span><i class="h-why-dot"></i>Not used in the grade</span></p>':''}</section>`;
   }
   function overviewHtml(r) {
-    const side=H.histSide, line=r.offer.line, doc=H.detailDoc;
+    const side=H.histSide, line=r.offer.line, doc=H.detailDoc, moves=C.movesOf?C.movesOf(doc):new Map();   /* SCOUT_LINE_MOVE_NOTES: a bumped past game says so under its row */
     const all=(doc?.history?.series||[]).filter(g=>num(g.value)), series=all.slice(0,H.histN);
     const sorted=series.map(g=>g.value).sort((a,b)=>a-b), mid=Math.floor(sorted.length/2);
     const median=sorted.length?(sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2):null;
@@ -1167,10 +1169,10 @@ export function mount(C) {
     /* L10 vs closing (SCOUT_CLOSING_LINES): only when the server sent past games with a closing line saved at lock */
     const cl=doc?.history?.closing, clCount=cl?.n?(side==='under'?cl.under:cl.over):null;
     const closingTile=cl?.n?tile(`${clCount}<em>/${cl.n}</em>`,`L10 vs closing · ${sideWord(side)}`,`<small>${cl.n} ${cl.n===1?'game':'games'} with a closing line${cl.push?` · ${cl.push} ${cl.push===1?'push':'pushes'}`:''}</small>`,' is-closing'):'';
-    const closingTable=cl?.n?`<details class="h-history-table h-closing-table"><summary>L10 vs closing lines${cl.platform_label?` · ${esc(cl.platform_label)}`:''}</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Closing line</th><th>At closing</th></tr></thead><tbody>${(cl.games||[]).map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${esc(g.closing)}</td><td class="h-at-${esc(String(g.at).toLowerCase())}">${esc(g.at)}</td></tr>`).join('')}</tbody></table></div></details>`:'';
+    const closingTable=cl?.n?`<details class="h-history-table h-closing-table"><summary>L10 vs closing lines${cl.platform_label?` · ${esc(cl.platform_label)}`:''}</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Closing line</th><th>At closing</th></tr></thead><tbody>${(cl.games||[]).map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td>${esc(g.closing)}</td><td class="h-at-${esc(String(g.at).toLowerCase())}">${esc(g.at)}</td></tr>${movedRow(g.move,5)}`).join('')}</tbody></table></div></details>`:'';
     const chart=H.detailState==='loading'?'<p class="h-detail-loading">Loading this player’s saved results…</p>'
       :H.detailState==='error'?''
-      :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span>${median!=null?`<span><i class="median"></i>Median ${esc(Math.round(median*10)/10)}</span>`:''}</div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>`).join('')}</tbody></table></div></details>`
+      :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span>${median!=null?`<span><i class="median"></i>Median ${esc(Math.round(median*10)/10)}</span>`:''}</div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>${movedRow(moves.get(g.date+'|'+g.opponent),4)}`).join('')}</tbody></table></div></details>`
       :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
     const lh=doc?.history?.line_history, avgClose=num(lh?.avg_closing_l10)?tile(esc(lh.avg_closing_l10),'Avg closing line',`<small>last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'} · ${esc(lh.closing_platform)}</small>`,' is-closing'):'';
     return `${whyHtml(r)}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
@@ -1178,7 +1180,7 @@ export function mount(C) {
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
       ${lineHistHtml(doc?.history?.line_history)}
-      ${h2hHtml(hh,line,side)}${P('report')&&!r.extra?'<p class="h-report-row"><button class="h-link" data-hub="report-open">Report a problem with this line</button></p>':''}`;
+      ${h2hHtml(hh,line,side,moves)}${P('report')&&!r.extra?'<p class="h-report-row"><button class="h-link" data-hub="report-open">Report a problem with this line</button></p>':''}`;
   }
   /* Lines: the card's Compare lines and the old drawer's Books table in one place: every book and line for this prop, its prices,
      the Scout read, when the offer was seen; then the market books and the market chance when the server has them */

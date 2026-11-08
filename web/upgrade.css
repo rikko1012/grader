@@ -273,6 +273,15 @@ html[data-upgrade] .u-pick button{display:flex;justify-content:space-between;gap
 html[data-upgrade] .u-pick small{display:block;font-size:11px;color:var(--u-faint)}
 html[data-upgrade] .u-st{flex:none;font:400 12px var(--u-mono);color:var(--u-muted)}
 html[data-upgrade] .u-st.hit{color:var(--u-gold)}
+html[data-upgrade] .u-st.push{color:#d8c79a}
+/* SCOUT_LINE_MOVE_NOTES: a settled row whose line was bumped (the board's bump chip colours) */
+html[data-upgrade] .u-bump{display:inline-block;margin-right:2px;padding:1px 6px;border-radius:5px;font:600 10.5px Inter,system-ui,sans-serif;white-space:nowrap;cursor:help;vertical-align:baseline}
+html[data-upgrade] .u-bump.up{color:#7fd8be;background:#7fd8be14;border:1px solid #7fd8be55}
+html[data-upgrade] .u-bump.down{color:#ff9b8a;background:#ff9b8a14;border:1px solid #ff9b8a55}
+html[data-upgrade] .u-move{display:block;margin-top:3px;font-size:11.5px;line-height:1.45;color:var(--u-muted);white-space:normal;overflow-wrap:anywhere}
+html[data-upgrade] .u-move-t{color:var(--u-text)}
+html[data-upgrade] tr.u-moved td,html[data-upgrade] tr.h-moved td{padding-top:0;font-size:11.5px;line-height:1.45;color:var(--u-muted);white-space:normal;overflow-wrap:anywhere}
+html[data-upgrade] tr.h-moved td .u-move-t,html[data-upgrade] tr.u-moved td .u-move-t{color:var(--u-text)}
 html[data-upgrade] .u-pick-body{padding:10px 12px}
 html[data-upgrade] .u-time{margin:10px 0 0;padding-left:16px;font-size:12px;color:var(--u-muted)}
 html[data-upgrade] .u-time time{margin-right:8px;color:var(--u-faint)}

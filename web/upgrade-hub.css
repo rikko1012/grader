@@ -660,6 +660,10 @@ html[data-upgrade] .h-entry{position:static;inset:auto;z-index:auto;display:inli
 #u-hub .h-card table th{font:500 10px 'DM Mono',monospace;letter-spacing:.04em;text-transform:uppercase;color:#93a4b9;background:#18202b;padding:7px 8px;text-align:left;white-space:nowrap}
 #u-hub .h-card table td{padding:7px 8px;border-bottom:1px solid #263142;color:#dbe4ef;vertical-align:middle}
 #u-hub .h-card .h-at-over{color:#a4dec2}#u-hub .h-card .h-at-under{color:#e4aaaa}#u-hub .h-card .h-at-push{color:#d8c79a}
+/* SCOUT_LINE_MOVE_NOTES: a bumped past game's opening -> closing line, directly under its row (one row visually) */
+#u-hub .h-card table tr:has(+ tr.h-moved)>td{border-bottom-color:transparent}
+#u-hub .h-card table tr.h-moved>td{padding:0 8px 7px;font-size:11.5px;line-height:1.45;color:#a9b7c9;white-space:normal;overflow-wrap:anywhere}
+#u-hub .h-card table tr.h-moved .u-move-t{color:#dbe4ef}
 .h-mini-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px}
 .h-mini-tiles>div{padding:8px 10px;border:1px solid #2b3646;border-radius:7px;background:#161d27}
 .h-mini-tiles b{display:block;font:600 19px 'DM Mono',monospace;color:#f2f7ff}.h-mini-tiles b em{font-style:normal;font-size:12px;color:#8fa2ba}

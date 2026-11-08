@@ -358,3 +358,20 @@ def leg_result_from_picks(picks):
             return "void"
         return None
     return f
+
+
+def leg_actual_from_picks(picks):
+    """leg -> the final stat leg_result_from_picks decided that leg on (same rows, same order), or None. Display only: the
+    studio history's line-move note (server.studio_history_payload) reads it; no result is decided here."""
+    idx = {}
+    for r in picks:
+        idx.setdefault(((r.get("player") or "").lower(), r.get("prop"), r.get("scope") or "12", r.get("match_slug")), []).append(r)
+
+    def f(l):
+        if not l.get("match_slug"):
+            return None
+        rows = idx.get(((l.get("nick") or l.get("player") or "").lower(), l.get("prop"), l.get("scope") or "12", l["match_slug"]), [])
+        done = sorted((r for r in rows if r.get("status") in ("settled", "push") and r.get("actual") is not None and not _held(r)),
+                      key=lambda r: '"source": "hltv"' not in str(r.get("result") or ""))
+        return done[0]["actual"] if done else None
+    return f

@@ -1134,18 +1134,69 @@ def ops_checks(now=None):
     return res
 
 
+STUDIO_MOVE_LOOKUPS = 300      # settled studio legs given a line-move note per request
+STUDIO_MOVE_FALLBACKS = 100    # of those, legs looked up by exact slug when their ident has no closing row
+
+
+def _studio_moves(batches, picks, res):
+    """SCOUT_LINE_MOVE_NOTES (wording only): {(id(slip), leg index): closing_lines.move_note} for the settled studio legs whose
+    line was bumped between opening and close, the leg's own line sitting between the two. Each leg's result (res) and every
+    slip outcome stay as they are. Closing rows: the leg's ident (canonical match id, platform, line type) in one chunked,
+    indexed read; a leg without one by its EXACT match slug (closing_lines.find_for_leg). Both behind the bounded lookup cache.
+    None with the flag off; {} when anything fails (the history still shows)."""
+    try:
+        import closing_lines as cl
+        if not cl.move_notes_on():
+            return None
+        actual = slip_batches.leg_actual_from_picks(picks)
+        items = []
+        for b in batches:
+            for ss in (b.get("slips") or {}).values():
+                for s_ in ss:
+                    for i, l in enumerate(s_.get("legs") or []):
+                        if len(items) >= STUDIO_MOVE_LOOKUPS or l.get("prop") == "moneyline" or res(l) not in ("hit", "miss", "push"):
+                            continue
+                        a = actual(l)
+                        if not isinstance(a, (int, float)):
+                            continue
+                        book = l.get("book") or s_.get("book") or "underdog"
+                        et = s_.get("entry_type")
+                        x = {"book": book, "odds_type": et if book == "prizepicks" and et in ("goblin", "demon") else "standard",
+                             "match_id": l.get("match_id"), "match_slug": l.get("match_slug"), "nick": l.get("nick") or l.get("player"),
+                             "prop": l.get("prop"), "scope": l.get("scope") or "12"}
+                        items.append(((id(s_), i), l, x, cl.ident(x), a))
+        rows = cl.lookup_idents([k for _, _, _, k, _ in items if k])
+        out, fallbacks = {}, 0
+        for key, l, x, k, a in items:
+            row = rows.get(k)
+            if row is None and fallbacks < STUDIO_MOVE_FALLBACKS:
+                fallbacks += 1
+                row = cl.find_for_leg(cl.norm(x["nick"]), x["prop"], x["scope"], x["book"], x["odds_type"], l.get("match_slug"),
+                                      l.get("start") or l.get("match_start"))
+            mv = cl.row_note(row, l.get("line"), a, x["book"])
+            if mv:
+                out[key] = mv
+        return out
+    except Exception:
+        return {}
+
+
 def studio_history_payload(batches, now=None):
     """Leg results and slip outcomes for member_batches() (pure apart from the pick-log read)."""
     import slip_builder
     now = now or datetime.now(timezone.utc)
     legs = [l for b in batches for ss in (b.get("slips") or {}).values() for s_ in ss for l in s_.get("legs") or []]
-    res = slip_batches.leg_result_from_picks(picklog.rows_for_matches({l.get("match_slug") for l in legs}))
+    picks = picklog.rows_for_matches({l.get("match_slug") for l in legs})
+    res = slip_batches.leg_result_from_picks(picks)
+    moves = _studio_moves(batches, picks, res)
     out = []
     for b in batches:
         slips = []
         for ss in (b.get("slips") or {}).values():
             for s_ in ss:
                 rs = [res(l) if l.get("prop") != "moneyline" else None for l in s_.get("legs") or []]
+                if moves is not None:          # SCOUT_LINE_MOVE_NOTES: parallel to leg_results, wording only
+                    s_ = dict(s_, leg_moves=[moves.get((id(s_), i)) for i in range(len(s_.get("legs") or []))])
                 # the ONE lock rule (slip_builder.lock_time: listed start, graded match start, saved lock - 2026-10-26
                 # audit: only the listed start counted, so a slip locked at the graded start read 'not started')
                 started = any((lt_ := slip_builder.lock_time(l)) is not None and lt_ <= now for l in s_.get("legs") or [])
@@ -6221,7 +6272,10 @@ DEFAULT_ON = ("SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_PUBL
               "SCOUT_PARITY_PLAYS", "SCOUT_PARITY_PREFS", "SCOUT_PARITY_REPORT", "SCOUT_LINE_HISTORY", "SCOUT_PICKEM_EV",
               "SCOUT_SLIP_HEADER_V2",
               # owner site audit 2026-11-06: Market edge column + best line per side + discrepancy chip on every sport (display only)
-              "SCOUT_MARKET_EDGE")
+              "SCOUT_MARKET_EDGE",
+              # owner 2026-11-07 ("it should clearly state line movement and closing line"): settled rows say when the line was
+              # bumped - opening -> closing and the result at each (wording only; needs SCOUT_CLOSING_LINES)
+              "SCOUT_LINE_MOVE_NOTES")
 # NOT default-on (owner 2026-11-05, "dont turn on letter containment"): SCOUT_LETTER_CONTAINMENT stays OFF, so CS2 / LoL letters
 # show exactly as before. CS2_MAP_WEIGHTED stays OFF (shadow only); SCOUT_CAL_CHANCE / SPORTS_CHANCE_CAL stay OFF.
 # SCOUT_BOOK_DABBLE (owner 2026-11-05, "simply code it we are partnered"): api.dabble.com answered 200 without credentials, so it is
