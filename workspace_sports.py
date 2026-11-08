@@ -448,7 +448,7 @@ def record_of(lg, doc, m, q, view):
     rec = {"sport": lg, "key": ".".join(str(k) for k in (lg, m.get("e"), pkey, m.get("st"), scope, line)),
            "event": {"id": m.get("e"), "id_kind": "canonical", "label": f"{away} at {home}" if away and home else f"{team or lg.upper()} game", "teams": [away, home], "competition": lg.upper(),
                      "best_of": None, "start_utc": ev.get("start_utc"), "lock_utc": ev.get("start_utc"), "status": "started" if ev.get("started") or ev.get("locked") else "scheduled"},
-           "player": {"id": m.get("pid"), "key": pkey, "name": m.get("n") or "", "team": team, "opponent": opp, "role": m.get("pos") or "", "team_abbr": tabbr},
+           "player": {"id": m.get("pid"), "key": pkey, "name": m.get("n") or "", "team": team, "opponent": opp, "role": m.get("ro") or m.get("pos") or "", "team_abbr": tabbr},
            "market": {"stat": m.get("st"), "stat_label": (doc.get("stats") or {}).get(m.get("st"), m.get("st")), "period": scope, "period_label": period_label, "line_type": line_type_of(q)},
            "offer": {"platform": p, "platform_label": book_label(p), "offer_id": rid, "revision": offer_rev(q), "revision_kind": "exact", "line": line, "seen_at": q.get("t"),
                      "over": _side_prices(q, 0), "under": _side_prices(q, 1), "moved_from": None, "moved_at": None},
