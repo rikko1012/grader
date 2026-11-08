@@ -5,25 +5,25 @@
  "lineup_players": 1115,
  "teams": 253,
  "counts": {
-  "": 624,
-  "AWPer": 199,
   "Star rifler": 25,
-  "IGL": 100,
-  "Support": 30,
-  "Entry": 94,
-  "Lurker": 43
+  "": 623,
+  "AWPer": 199,
+  "Entry": 93,
+  "Lurker": 43,
+  "IGL": 101,
+  "Support": 31
  },
  "lineups_5plus": 172,
  "collisions": {},
- "igl_teams": 100,
+ "igl_teams": 101,
  "map_notes": 0,
  "stat_roles": {
-  "": 677,
-  "AWPer": 208,
   "Star rifler": 27,
-  "Support": 47,
+  "": 676,
+  "AWPer": 208,
   "Entry": 111,
-  "Lurker": 45
+  "Lurker": 45,
+  "Support": 48
  },
  "top30": [
   {
@@ -620,8 +620,8 @@
    "players": [
     [
      "HooXi",
-     "Entry",
-     "Entry",
+     "Support",
+     "Support",
      null
     ],
     [
@@ -632,8 +632,8 @@
     ],
     [
      "siuhy",
-     null,
-     null,
+     "IGL",
+     "Entry",
      null
     ],
     [
@@ -1132,7 +1132,7 @@
   }
  ],
  "top30_players": 154,
- "top30_with_role": 86,
+ "top30_with_role": 87,
  "board": {
   "names_30d": 53,
   "in_lineups": 53,
@@ -1517,8 +1517,8 @@
      "IGL"
     ],
     "conf": "Med",
-    "role": "Entry",
-    "stat_role": "Entry",
+    "role": "Support",
+    "stat_role": "Support",
     "note": null,
     "verdict": "miss",
     "pct": {
@@ -2089,8 +2089,8 @@
  },
  "split_half": {
   "stats": {
-   "a_shown": 147,
-   "b_same": 67,
+   "a_shown": 148,
+   "b_same": 68,
    "b_other": 10,
    "b_blank": 70
   },

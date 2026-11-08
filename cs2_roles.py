@@ -7,14 +7,19 @@ igl.csv or a row's d["is_igl"]; grader.py's own "role" (rating rank primary/seco
 
 Where each role comes from (one primary role per player at most; blank when nothing clearly stands out - never "unknown",
 never a hedge such as "likely"). Within one lineup a role is given once at most (IGL, AWPer, Entry, Lurker, Support, Star
-rifler), so a 5-man lineup never shows two of the same role.
+rifler), so a 5-man lineup never shows two of the same role. Each one-per-team pick goes to a CURRENT player first (last
+map within RECENT_DAYS of the team's last map) - a player who left is still inside the 30-day lineup window for a while and
+must not take the slot (review 2026-11-07: Astralis HooXi blocked siuhy's IGL, LFO 10 tvs took L00m1's AWPer).
   IGL          a real listing only: the scraper's Liquipedia roles (player_roles.is_igl, team_match, status ok) for the
-               team's current lineup, and only when exactly ONE lineup player is flagged (a past IGL still listed on a
-               second player would otherwise give a team two). A Liquipedia team-page `igl=y` marker (roles.parse_igls,
-               already cached by roles.py) may break a tie. Never from stats.
+               team's current lineup, and only when exactly ONE (current) lineup player is flagged (a past IGL still
+               listed on a second player would otherwise give a team two). A Liquipedia team-page `igl=y` marker
+               (roles.parse_igls, already cached by roles.py) may break a tie. Never from stats.
   AWPer        a real weapon field: HLTV share of kills with the AWP (player_awp, 90 days, >= 100 kills) >= 0.25 -
                roles.py's own AWP_SHARE / AWP_MIN_KILLS, copied here, never changed. The team's highest share only. With
-               no share on file, a Liquipedia AWP listing for the current team (one player only).
+               no share on file, a Liquipedia AWP listing for the current team (one player only) - never over a rifler
+               share on file (<= RIFLE_SHARE, at any kill count).
+  card_role() also takes the row's own x["awp"] / x["igl"] labels (roles.py; the offer desk prints them) and shows no role
+  when its role would contradict them - one role answer per page (agrees_with_desk).
   Listed role  (owner: "where no listed role exists, use stat-based roles") the Liquipedia infobox's entry / lurk /
                support for the current team, shown when the player's stats do not contradict it (Entry: T-side opening
                share >= league median; Lurker: <= median; Support: kill share <= p80).
@@ -57,6 +62,8 @@ HALF_LIFE_DAYS = 90       # a map 90 days old counts half: follows roster / role
 MIN_MAPS = 30             # a player needs 30 maps in the window for any stat role
 ACTIVE_DAYS = 45          # ... and a map within 45 days of the newest data
 LINEUP_DAYS = 30          # lineup = players whose latest team is the team, last map within 30 days of the team's last map
+RECENT_DAYS = 3           # ... and "current" = last map within 3 days of the team's last map: a player who has left (still
+                          # inside LINEUP_DAYS) never takes a one-per-team slot (AWPer, IGL, a role) from a current one
 MAP_MIN = 10              # maps on one map before it counts toward "holds across most maps"
 MAP_HOLD = 2 / 3          # the role's pattern must hold on >= 2/3 of those maps (and >= 2 of them)
 MAP_NOTES = False         # map note off: not reproducible on split halves (results.json split_half); NOTE_* kept for a re-test
@@ -202,6 +209,12 @@ def build(rows, awp=None, listed=None, ref_date=None, team_igl_marks=None):
             return None
         return float(a[1])
 
+    def low_share(p):
+        """The weapon field says rifler (share <= RIFLE_SHARE), whatever the kill count: a Liquipedia AWP listing never
+        overrides it."""
+        a = awp.get(p)
+        return bool(a) and a[1] is not None and float(a[1]) <= RIFLE_SHARE
+
     def listed_awper(p):
         x = listed.get(p) or {}
         return bool(x.get("team_match")) and "awp" in [str(v).strip().lower() for v in (x.get("roles") or [])]
@@ -246,12 +259,19 @@ def build(rows, awp=None, listed=None, ref_date=None, team_igl_marks=None):
         roles = {p: None for p in members}
         notes = {}
         src = {}
-        # AWPer: the real weapon field (HLTV AWP share); the team's highest share only. No share on file: a Liquipedia
-        # AWP listing for the current team stands in, unless the field says otherwise (share <= RIFLE_SHARE)
-        aw = sorted((awp_of(p), p) for p in members if (awp_of(p) or 0) >= AWP_SHARE)
-        awper = aw[-1][1] if aw else None
+
+        def cur(cs):
+            """Current players first: when any candidate played within RECENT_DAYS of the team's last map, only those."""
+            now_ = [p for p in cs if (team_last[tid] - info[p]["last"]).days <= RECENT_DAYS]
+            return now_ or cs
+
+        # AWPer: the real weapon field (HLTV AWP share); the team's highest share among its current players. No share on
+        # file: a Liquipedia AWP listing for the current team stands in, unless the field says otherwise (share <=
+        # RIFLE_SHARE, at any kill count)
+        aw = cur([p for p in members if (awp_of(p) or 0) >= AWP_SHARE])
+        awper = max(aw, key=lambda p: (awp_of(p), p)) if aw else None
         if awper is None:
-            la = [p for p in members if awp_of(p) is None and listed_awper(p)]
+            la = cur([p for p in members if awp_of(p) is None and not low_share(p) and listed_awper(p)])
             awper = la[0] if len(la) == 1 else None
             if awper is not None:
                 src[awper] = "liquipedia"
@@ -260,13 +280,14 @@ def build(rows, awp=None, listed=None, ref_date=None, team_igl_marks=None):
             src.setdefault(awper, "hltv-awp")
         # riflers: no AWP signal (share known <= RIFLE_SHARE, or no share and no Liquipedia AWP listing)
         riflers = [p for p in members if p != awper and (
-            (awp_of(p) is not None and awp_of(p) <= RIFLE_SHARE) or (awp_of(p) is None and not listed_awper(p)))]
+            (awp_of(p) is not None and awp_of(p) <= RIFLE_SHARE)
+            or (awp_of(p) is None and (low_share(p) or not listed_awper(p))))]
         taken = set()
 
         # 1) a listed role (Liquipedia infobox: entry / lurk / support, current team) where the stats do not contradict it
         for role, (key, high), agrees in LISTED_ROLES:
-            cs = [p for p in riflers if roles[p] is None and listed_role(p) == role and S[p][key] is not None
-                  and agrees(pct[p])]
+            cs = cur([p for p in riflers if roles[p] is None and listed_role(p) == role and S[p][key] is not None
+                      and agrees(pct[p])])
             if cs:
                 p = (max if high else min)(cs, key=lambda q: S[q][key])
                 roles[p], src[p], notes[p] = role, "liquipedia", note(p, mkey(key), high)
@@ -276,19 +297,20 @@ def build(rows, awp=None, listed=None, ref_date=None, team_igl_marks=None):
         for role, (key, high), gate, ok in STAT_ROLES:
             if role in taken:
                 continue
-            cs = [p for p in riflers if roles[p] is None and S[p][key] is not None and gate(pct[p])
-                  and holds(p, mkey(key), ok)]
+            cs = cur([p for p in riflers if roles[p] is None and S[p][key] is not None and gate(pct[p])
+                      and holds(p, mkey(key), ok)])
             if cs:
                 p = (max if high else min)(cs, key=lambda q: S[q][key])
                 roles[p], src[p], notes[p] = role, "stats", note(p, mkey(key), high)
                 taken.add(role)
 
-        # IGL: exactly one listed lineup player (a team-page igl=y marker may pick one of several)
+        # IGL: exactly one listed current lineup player (a past IGL who has left does not count when a current one is
+        # listed; a team-page igl=y marker may pick one of several)
         def is_listed_igl(p):
             x = listed.get(p) or {}
             return bool(x.get("is_igl")) and bool(x.get("team_match")) and (x.get("status") in (None, "ok")) and (
                 not x.get("hltv_team") or _norm(x["hltv_team"]) == _norm(info[p]["team"]))
-        igls = [p for p in members if is_listed_igl(p)]
+        igls = cur([p for p in members if is_listed_igl(p)])
         if len(igls) > 1:
             mk = marks.get(_norm(info[members[0]]["team"])) or set()
             igls = [p for p in igls if _norm(info[p]["nick"]) in mk] if mk else []
@@ -473,10 +495,32 @@ def maybe_refresh(now=None):
         return False
 
 
-def card_role(nick, team=None, benched=False):
-    """The one accessor for a card payload: {"role", "stat_role", "map_note"} or None. A dictionary lookup on the precomputed artifact.
-    Benched players (BO3.gg status 2 / not in the board lineup) get nothing. The team must match (exact name, or hltv.py's
-    same_team name variants) - never a fuzzy / academy match."""
+def agrees_with_desk(role, awp=None, igl=None):
+    """One role source per page: the row's own labels (server.py x["awp"] from awp_role, x["igl"] from roles.igl_role -
+    True / False / None = not known; the offer desk prints them as "AWP" / "IGL") must not contradict the card role.
+    A contradiction shows NO card role (never a different one):
+      the desk says IGL and the card role is not IGL (e.g. a team with two listed IGLs, where this module names neither);
+      the card role is IGL and the desk says not IGL;
+      the desk says AWP and the card role is a rifler role (Entry / Lurker / Support / Star rifler) - an IGL may AWP;
+      the card role is AWPer and the desk says not an AWPer (rifler share / listing)."""
+    if not role:
+        return False
+    if igl is True and role != "IGL":
+        return False
+    if igl is False and role == "IGL":
+        return False
+    if awp is True and role not in ("AWPer", "IGL"):
+        return False
+    if awp is False and role == "AWPer":
+        return False
+    return True
+
+
+def card_role(nick, team=None, benched=False, awp=None, igl=None):
+    """The one accessor for a card payload: {"role", "stat_role", "map_note"} or None. A dictionary lookup on the precomputed
+    artifact. Benched players (BO3.gg status 2 / not in the board lineup) get nothing. The team must match (exact name, or
+    hltv.py's same_team name variants) - never a fuzzy / academy match. awp / igl: the row's own x["awp"] / x["igl"] labels;
+    when the role here contradicts them the card shows no role (agrees_with_desk), so a page never shows two role answers."""
     if benched or not nick:
         return None
     if not _STATE["loaded"]:
@@ -497,7 +541,7 @@ def card_role(nick, team=None, benched=False):
         hit = same[0] if len(same) == 1 else None
     elif len(rows) == 1:
         hit = rows[0]
-    if not hit or not hit.get("role"):
+    if not hit or not agrees_with_desk(hit.get("role"), awp, igl):
         return None
     return {"role": hit["role"], "stat_role": hit.get("stat_role"), "map_note": hit.get("map_note")}
 

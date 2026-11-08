@@ -270,17 +270,107 @@ def test_read_and_build_streams_the_aggregate(monkeypatch):
     assert roles_of(art)["Sniper"] == "AWPer" and roles_of(art)["Opener"] == "Entry"
 
 
+def departed(alpha=ALPHA, who=("p7", "Oldhand", "awp"), days=20):
+    """The league plus a player who left Alpha `days` ago (still inside LINEUP_DAYS): his rows from a five-man map set
+    whose other four rows are dropped, so his own team shares stay realistic."""
+    old = date.fromordinal(REF.toordinal() - days)
+    extra = [r for r in team_rows("t1", "Alpha", [who] + [(f"z{i}", f"gone{i}", "avg") for i in range(4)], last=old)
+             if r["pid"] == who[0]]
+    return league(alpha=alpha) + extra
+
+
+def test_a_departed_player_never_takes_a_current_players_slot():
+    # he out-AWPs the current AWPer and is a listed IGL: the current lineup keeps its AWPer and its one listed IGL
+    listed = {pid: {"roles": ["igl"], "is_igl": True, "team_match": True, "status": "ok", "hltv_team": "Alpha"}
+              for pid in ("p4", "p7")}
+    art = cs2_roles.build(departed(), dict(AWP, p7=(900, 0.60)), listed, ref_date=REF)
+    assert "p7" in art["teams"]["t1"]                                         # still inside the 30-day lineup window
+    r = roles_of(art)
+    assert r["Sniper"] == "AWPer" and r["Flasher"] == "IGL" and r["Oldhand"] is None
+    assert art["players"]["p4"]["stat_role"] == "Support"
+    # the departed player is the only listed IGL: nobody current competes, so the listing still names him (his card
+    # never shows for Alpha - he is not in its lineup on the board, and card_role(benched=True) is None)
+    art = cs2_roles.build(departed(), dict(AWP, p7=(900, 0.60)), {"p7": listed["p7"]}, ref_date=REF)
+    assert roles_of(art)["Oldhand"] == "IGL" and roles_of(art)["Sniper"] == "AWPer"
+    # a departed stat-role passer never takes the role from a current one
+    art = cs2_roles.build(departed(who=("p7", "Oldhand", "entry")), dict(AWP, p7=(900, 0.0)), {}, ref_date=REF)
+    assert roles_of(art)["Opener"] == "Entry" and roles_of(art)["Oldhand"] != "Entry"
+
+
+def test_liquipedia_awp_listing_never_overrides_a_rifler_share():
+    awp = dict(AWP, p1=(60, 0.05))                       # < 100 kills, so no AWPer from the share - but a rifler share
+    listed = {"p1": {"roles": ["awp"], "is_igl": False, "team_match": True, "status": "ok", "hltv_team": "Alpha"}}
+    assert roles_of(cs2_roles.build(league(), awp, listed, ref_date=REF))["Sniper"] != "AWPer"
+    awp = {k: v for k, v in AWP.items() if k != "p1"}    # no share on file at all: the listing stands in
+    art = cs2_roles.build(league(), awp, listed, ref_date=REF)
+    assert roles_of(art)["Sniper"] == "AWPer" and art["players"]["p1"]["source"] == "liquipedia"
+
+
+def test_card_role_never_contradicts_the_rows_own_awp_igl_labels(fresh_state):
+    listed = {"p4": {"roles": ["igl"], "is_igl": True, "team_match": True, "status": "ok", "hltv_team": "Alpha"}}
+    cs2_roles._install(cs2_roles.build(league(), AWP, listed, ref_date=REF), 1.0)
+    assert cs2_roles.card_role("Opener", "Alpha", awp=False, igl=False)["role"] == "Entry"   # agree
+    assert cs2_roles.card_role("Opener", "Alpha", awp=None, igl=None)["role"] == "Entry"     # not known: no conflict
+    assert cs2_roles.card_role("Opener", "Alpha", igl=True) is None           # desk IGL, card Entry: no role, never Entry
+    assert cs2_roles.card_role("Opener", "Alpha", awp=True) is None           # desk AWP, card a rifler role
+    assert cs2_roles.card_role("Sniper", "Alpha", awp=False) is None          # card AWPer, desk not an AWPer
+    assert cs2_roles.card_role("Sniper", "Alpha", awp=True)["role"] == "AWPer"
+    assert cs2_roles.card_role("Flasher", "Alpha", igl=False) is None         # card IGL, desk not IGL
+    assert cs2_roles.card_role("Flasher", "Alpha", awp=True, igl=True)["role"] == "IGL"   # an IGL may AWP
+
+
+SERVER_CALLS = ("card_role", "maybe_refresh", "status", "agrees_with_desk")
+DISPLAY_KEY = re.compile(r"""\[\s*["'][a-z_]*role[a-z_]*["']\s*\]\s*=|["'][a-z_]*role[a-z_]*["']\s*:""")
+
+
+def server_line_ok(code):
+    """A server.py line (comment stripped) that names cs2_roles: `import cs2_roles`, or only calls to the accessor /
+    refresh / status, and a card_role() call goes into a display key (x["card_role"] = ... / "card_role": ...)."""
+    code = code.split("#", 1)[0]
+    if re.fullmatch(r"\s*import cs2_roles\s*", code):
+        return True
+    uses = re.findall(r"cs2_roles(\.\w+)?(\()?", re.sub(r"""(["'])[^"']*\1""", '""', code))   # not inside a string
+    if not uses or any(not (attr and attr[1:] in SERVER_CALLS and call) for attr, call in uses):
+        return False
+    return "cs2_roles.card_role(" not in code or bool(DISPLAY_KEY.search(code))
+
+
 def test_never_a_model_input():
-    """Display only: no grading / chance / projection / stake / slip module imports it, and it is not a hashed model file."""
-    graded = ["grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py",
-              "market_odds.py", "pick_verdict.py", "roles.py", "cm1.py", "cm2.py", "platform_rules.py", "learning.py",
-              "picklog.py", "slip_builder.py", "slips.py", "slip_batches.py", "line_chance.py", "grade_display.py",
-              "esports_cal.py", "map_weighted.py", "server.py"]
-    for f in graded:
-        p = os.path.join(ROOT, f)
-        if os.path.exists(p):
-            with open(p, encoding="utf-8") as fh:
-                assert "cs2_roles" not in fh.read(), f
+    """Display only: no module but the server's payload code references it (no grading / chance / projection / stake / slip
+    module), the server only calls the accessor / refresh / status and puts card_role() into a display key, and it is not a
+    hashed model file."""
+    skip = {"tests", "research", ".claude", ".git", "node_modules", "venv", ".venv", "__pycache__"}
+    for d, dirs, files in os.walk(ROOT):
+        dirs[:] = [x for x in dirs if x not in skip]
+        for f in files:
+            if not f.endswith(".py") or f == "cs2_roles.py":
+                continue
+            p = os.path.join(d, f)
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                lines = fh.read().splitlines()
+            hits = [ln for ln in lines if "cs2_roles" in ln]
+            if os.path.relpath(p, ROOT) != "server.py":
+                assert not hits, p
+                continue
+            for ln in hits:
+                code = re.sub(r"""(["'])[^"']*\1""", '""', ln.split("#", 1)[0])
+                if "cs2_roles" in code:                                        # (a comment or string may name it)
+                    assert server_line_ok(ln), ln
+    # (picklog.py is in the walk above: the model-version hash never names this file)
+
+
+def test_the_server_check_allows_the_planned_wiring_only():
+    ok = ['import cs2_roles', 'import cs2_roles   # display only', '        cs2_roles.maybe_refresh()   # daily, background',
+          '        x["card_role"] = cs2_roles.card_role(nick, team, benched=b, awp=x.get("awp"), igl=x.get("igl"))',
+          '    "cs2_roles": cs2_roles.status(),']
+    bad = ['    p = grader.prob(row, role=cs2_roles.card_role(nick, team))', 'from cs2_roles import build',
+           'import cs2_roles as cr', '    cs2_roles.build(rows)', '    units = stake(cs2_roles._STATE)',
+           '    x["card_role"] = cs2_roles.card_role(n, t) or cs2_roles._STATE["art"]', '    f = cs2_roles.card_role']
+    assert all(server_line_ok(ln) for ln in ok)
+    assert not any(server_line_ok(ln) for ln in bad)
+
+
+def test_the_module_writes_nothing_to_the_database():
     src = open(os.path.join(ROOT, "cs2_roles.py"), encoding="utf-8").read()
     assert "INSERT" not in src.upper().replace("INSERTED", "") and "UPDATE " not in src.upper() and "DELETE" not in src.upper()
     assert not re.search(r"is_igl\"\]\s*=|igl\.csv\"?\s*,\s*['\"]w", src)
