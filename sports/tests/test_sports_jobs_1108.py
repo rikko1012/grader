@@ -386,7 +386,7 @@ def test_sheets_job_skips_results_and_results_public_is_its_own_job(monkeypatch)
     assert "--skip-results" in J["sheets"]["argv"]
     rp_job = J["results-public"]
     assert rp_job["argv"][-3:] == ["--only", "results", "--force"] and rp_job["cls"] == scheduler.HEAVY
-    assert rp_job["every_s"] == rp.REFRESH_S and rp_job["locks"] == ("results-public",)
+    assert rp_job["every_s"] == rp.REFRESH_S and rp_job["locks"] == ("results-public", "season-results")
     assert scheduler.Scheduler._pairable(J["sheets"], rp_job)       # never one heavy slot held by both
 
 
@@ -401,6 +401,98 @@ def test_settle_runs_without_post_and_starts_settle_post(monkeypatch):
     assert not scheduler.Scheduler._pairable(s, p)                  # never beside the settle run it follows
     assert not scheduler.Scheduler._pairable(p, J["grades-daily"])  # nor the daily fit reading learning.db
     assert scheduler._child_env(p)["SPORTS_WORKER_MAX_VM_MB"] == scheduler._child_env(s)["SPORTS_WORKER_MAX_VM_MB"]
+
+
+def _prod_scheduler(monkeypatch, names=None):
+    """Production sizing (Standard 2 GB, owner budget 1,200 MB -> cap_scale 1.8, two heavy slots), fake children."""
+    import copy
+    monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
+    monkeypatch.setenv("SPORTS_CHILD_BUDGET_MB", "1200")
+    monkeypatch.setenv("SPORTS_LEAGUES", "nba nfl")
+    monkeypatch.setenv("SPORTS_INGEST", "1")
+    for k in ("SPORTS_MAX_HEAVY", "SPORTS_HEAVY_SLOTS", "SPORTS_JOB_SETTLE_POST_CAP_MB"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(scheduler, "JOBS", {})
+    monkeypatch.setattr(scheduler, "STATS", copy.deepcopy(scheduler.STATS))
+    J = scheduler.default_jobs()
+    if names:
+        J = {k: J[k] for k in names}
+    assert scheduler.cap_scale() == pytest.approx(1.8)
+    return J
+
+
+def test_settle_post_reservation_leaves_a_board_build_and_the_light_jobs_room(monkeypatch):
+    """Review 2026-11-08: settle-post reserved 340 x 1.8 = 612 MB (~8x its measured 56-76 MB peak). While it ran a
+    board build (540) did not fit once books or picks-ingest (108 each, every 60 s) was running, and neither light
+    job fit beside settle-post + a board build. The old settle reservation (432) allowed all of it."""
+    J = _prod_scheduler(monkeypatch)
+    sch = scheduler.Scheduler(jobs=J, budget=scheduler.budget_mb(), max_heavy_n=scheduler.max_heavy())
+    assert J["settle-post"]["cap_mb"] <= J["settle"]["cap_mb"]
+
+    def fits(running, name):
+        sch.running = {r: (None, 0.0) for r in running}
+        try:
+            return sch._fits(name)
+        finally:
+            sch.running = {}
+    for lg in ("nba", "nfl"):
+        build = f"ui-snapshots-{lg}"
+        assert fits(["settle-post", "books"], build) and fits(["settle-post", "picks-ingest"], build)
+        assert fits(["settle-post", build], "books") and fits(["settle-post", build], "picks-ingest")
+        assert fits(["settle-post", build, "books"], "picks-ingest")
+        assert fits(["settle-post"], f"ingest-{lg}")
+        assert fits(["settle-post", f"ingest-{lg}", "books"], "picks-ingest")
+
+
+def test_heavy_maintenance_jobs_declare_locks_and_get_a_slot_beside_back_to_back_board_builds(monkeypatch):
+    """Review 2026-11-08: a lockless heavy job starts only when NO heavy job runs, and a freed slot is always
+    backfilled by the next pairable job - with a board build always running, mapping-audit / archive never started
+    (mapping-audit sat 4 h). settle-post and results-public, both full-season builds, may not fill both slots."""
+    J = _prod_scheduler(monkeypatch)
+    pair = scheduler.Scheduler._pairable
+    lockless = sorted(n for n, sp in J.items() if sp["cls"] == scheduler.HEAVY and not sp.get("locks"))
+    assert lockless == ["model-learn", "model-snapshot"], lockless          # SPORTS_TRAIN only
+    for n in ("mapping-audit", "archive", "archive-verify"):
+        assert pair(J[n], J["ui-snapshots-nba"]) and pair(J[n], J["ui-snapshots-nfl"]) and pair(J[n], J["sheets"])
+    for writer in ("ingest-nba", "ingest-nfl", "ingest-kalshi", "settle", "history"):
+        assert not pair(J["archive"], J[writer]) and not pair(J["archive-verify"], J[writer])   # store writers
+    assert not pair(J["archive"], J["archive-verify"])
+    assert not pair(J["settle-post"], J["results-public"])
+
+    names = ("ui-snapshots-nba", "ui-snapshots-nfl", "mapping-audit", "archive", "archive-verify")
+    J = _prod_scheduler(monkeypatch, names)
+
+    class P:
+        n = 0
+
+        def __init__(self):
+            P.n += 1
+            self.pid, self.rc = 70000 + P.n, None
+
+        def poll(self):
+            return self.rc
+    monkeypatch.setattr(scheduler, "rss_mb", lambda pid: 10.0)
+    monkeypatch.setattr(scheduler, "spawn", lambda spec: P())
+    clock = [1_794_000_000.0]
+    sch = scheduler.Scheduler(jobs=J, budget=scheduler.budget_mb(), now=lambda: clock[0], max_heavy_n=2)
+    for n in names:
+        scheduler.JOBS[n]["next_start"] = clock[0]
+    builds = ("ui-snapshots-nba", "ui-snapshots-nfl")
+    for _ in range(400):                       # 400 x 5 s; a board build ends only while another heavy job still runs,
+        for n, (p, t0) in list(sch.running.items()):    # so a heavy slot is never empty (production at 60 s cadence)
+            others = [m for m, (q, _t) in sch.running.items() if m != n and q.rc is None]
+            if clock[0] - t0 >= 40 and (n not in builds or others):
+                p.rc = 0
+        sch.tick()
+        for n in builds:                                                    # always due again at once
+            if n not in sch.running:
+                scheduler.JOBS[n]["next_start"] = min(scheduler.JOBS[n]["next_start"], clock[0])
+        heavy = [n for n in sch.running if J[n]["cls"] == scheduler.HEAVY]
+        assert len(heavy) <= 2 and sch.reserved() <= sch.budget
+        clock[0] += 5
+    for n in ("mapping-audit", "archive", "archive-verify"):
+        assert scheduler.JOBS[n]["starts"] >= 1, (n, dict(scheduler.JOBS[n]))
+    assert scheduler.JOBS["ui-snapshots-nba"]["starts"] >= 10 and scheduler.JOBS["ui-snapshots-nfl"]["starts"] >= 10
 
 
 def test_sheets_cli_skip_results_and_only_results(monkeypatch, tmp_path):

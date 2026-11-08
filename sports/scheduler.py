@@ -182,11 +182,17 @@ def default_jobs():
         # public Results (sports/results_public.py) as its OWN job (2026-11-08): inside sheets its ~230 s full-season
         # build was killed over the sheets cap (361 > 360 MB) every 5 minutes and took sheets / the heavy slot with it.
         # Every 30 min (results_public.REFRESH_S); read-only store, writes only results_public.json
+        # "season-results" (review 2026-11-08): never beside settle-post, the other full-season build, so the two
+        # never hold both heavy slots at once
         "results-public": dict(argv=_py("-m", "sports.sheets", "build", *lg, "--only", "results", "--force"),
                                every_s=1800, timeout_s=900, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=4,
-                               locks=("results-public",)),
+                               locks=("results-public", "season-results")),
+        # locks (review 2026-11-08): a heavy job without locks starts only when NO heavy job runs, and the other slot is
+        # always backfilled first - mapping-audit sat 4 h unstarted. It reads the store and writes only its own
+        # snapshots/<lg>/mapping_audit.json, so it pairs like sheets
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
-                              flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
+                              flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3,
+                              locks=("mapping-audit",)),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
                              flag="SPORTS_INGEST", cap_mb=60, cls=LIGHT, prio=2),    # 23 MB
         # collection: the one collector, one job PER LEAGUE on a GAME-DAY cadence (fresh 2026-10-24, owner audit bug 1):
@@ -245,9 +251,12 @@ def default_jobs():
         # only; never writes a settlement. Each event's scoring commits with its progress mark, so a killed run resumes
         # where it stopped; the scorecards go first so a killed ledger never starves them. model-daily: never beside
         # settle (whose settlements it reads) or the daily fit (which reads learning.db)
+        # cap 150 (x1.8 = 270 MB on Standard, review 2026-11-08): measured peaks scorecards 56 MB, ledger 69-76 MB
+        # (spill, flat with the season). The former 340 (612 MB) left no room for a board build (540) beside a light
+        # job while settle-post ran - and it runs most of the time
         "settle-post": dict(argv=_py("-m", "sports.worker", "settle-post", *lg), every_s=900 if std else 3600,
-                            timeout_s=2400 if std else 1800, flag="SPORTS_INGEST", cap_mb=340 if std else 160,
-                            cls=HEAVY, prio=5, locks=("model-daily", "settle-post"),
+                            timeout_s=2400 if std else 1800, flag="SPORTS_INGEST", cap_mb=150,
+                            cls=HEAVY, prio=5, locks=("model-daily", "settle-post", "season-results"),
                             env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
                             if std else {}),
         # pre-game news archive (pgn-1, pregame_news/): injury report + depth charts through the shared caches and the
@@ -297,10 +306,15 @@ def default_jobs():
         "history": dict(argv=_py("-m", "sports.snapshots", "history", *lg, "--max-players", "60"), every_s=900,
                         timeout_s=900, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6,
                         locks=("canonical", "cache")),                         # 107 MB @ 40 players
+        # locks (review 2026-11-08): lockless, both waited for an empty heavy pair that backfill never leaves (a starved
+        # archive lets the hot records table grow). They write canonical.db (archive moves cold offers in one
+        # transaction, verify stamps verified_at): "canonical" keeps them off every store writer (collectors, settle,
+        # history, kalshi), "archive" off each other; beside the read-only heavies (board builds, sheets, results)
         "archive": dict(argv=_py("-m", "sports.archive", "pass"), every_s=6 * 3600, timeout_s=1800,
-                        flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6),      # 140 MB (80k rows)
+                        flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6,
+                        locks=("canonical", "archive")),      # 140 MB (80k rows)
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,
-                               flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=8),
+                               flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=8, locks=("canonical", "archive")),
     }
     scale, two = cap_scale(), max_heavy() >= 2
     for name, spec in J.items():
