@@ -315,11 +315,15 @@ def build(rows, awp=None, listed=None, ref_date=None, team_igl_marks=None):
             mk = marks.get(_norm(info[members[0]]["team"])) or set()
             igls = [p for p in igls if _norm(info[p]["nick"]) in mk] if mk else []
         igl = igls[0] if len(igls) == 1 else None
+        # the team's IGL slot is settled elsewhere (another player is its one IGL) or contested (several listed, none picked):
+        # a display listing of IGL for anyone else on this team is not shown (role_display.cs2_label, one IGL per team)
+        igl_open = igl is None and not any(is_listed_igl(p) for p in members)
 
         for p in members:
             i, s = info[p], S[p]
             out[p] = {"nick": i["nick"], "team": i["team"], "tid": tid,
                       "role": "IGL" if p == igl else roles[p], "stat_role": roles[p], "igl": p == igl,
+                      "igl_block": p != igl and not igl_open,
                       "map_note": notes.get(p), "source": src.get(p), "maps": i["maps"], "last": i["last"].isoformat(),
                       "signals": {k: (round(v, 4) if v is not None else None) for k, v in s.items()},
                       "pct": {k: (round(v) if v is not None else None) for k, v in pct[p].items()},
@@ -348,15 +352,19 @@ WITH s AS (
   GROUP BY 1, 2, 3, 4
 )
 SELECT g.*, p.name, t.name FROM g JOIN players p ON p.playerid = g.playerid LEFT JOIN teams t ON t.teamid = g.teamid
+LIMIT %(cap)s
 """
 _LISTED_SQL = """
 SELECT coalesce(r.playerid, a.playerid), r.roles, r.is_igl, r.team_match, r.status, r.hltv_team, a.kills, a.awp_share
 FROM player_roles r FULL JOIN player_awp a ON a.playerid = r.playerid
+LIMIT %d
 """
 TTL = 24 * 3600           # one rebuild a day
 RETRY = 30 * 60           # a failed rebuild is tried again after 30 minutes (the last good artifact stays meanwhile)
 MIN_GOOD = 200            # an artifact with fewer players than this is treated as a failed read, never swapped in
 STATEMENT_MS = 60000
+MAX_AGG_ROWS = 200000     # bounded reads: the aggregate is ~42k rows (2026-11-07); past a cap the read counts as failed (the
+MAX_LISTED_ROWS = 50000   # last good artifact stays) - a truncated read would give some players wrong or missing roles
 
 
 def _path():
@@ -409,24 +417,31 @@ def read_and_build(ref=None, team_igl_marks=None):
     try:
         with con.cursor() as cur:
             cur.execute("SET statement_timeout = %d" % STATEMENT_MS)   # the pool resets it before reuse (hltv._TAINTED)
-            cur.execute(_LISTED_SQL)
+            cur.execute(_LISTED_SQL % (MAX_LISTED_ROWS + 1))
+            got = cur.fetchall()
+            if len(got) > MAX_LISTED_ROWS:
+                raise ValueError("player_roles / player_awp read past its cap")
             awp, listed = {}, {}
-            for pid, roles_, igl, tmatch, status, hteam, kills, share in cur.fetchall():
+            for pid, roles_, igl, tmatch, status, hteam, kills, share in got:
                 pid = str(pid)
                 if share is not None:
                     awp[pid] = (kills, float(share))
                 if roles_ is not None or igl is not None:
                     listed[pid] = {"roles": [x.strip() for x in (roles_ or "").split(",") if x.strip()], "is_igl": igl,
                                    "team_match": tmatch, "status": status, "hltv_team": hteam}
-            cur.execute(_AGG_SQL, {"ref": ref.isoformat(), "since": since.isoformat(), "hl": float(HALF_LIFE_DAYS)})
+            cur.execute(_AGG_SQL, {"ref": ref.isoformat(), "since": since.isoformat(), "hl": float(HALF_LIFE_DAYS),
+                                   "cap": MAX_AGG_ROWS + 1})
             return build(_as_dicts(iter(cur.fetchone, None)), awp, listed, ref_date=ref, team_igl_marks=team_igl_marks)
     finally:
         con.close()
 
 
 def _as_dicts(rows):
-    """The aggregate tuples, one dict at a time (build() keeps only its accumulators)."""
-    for (pid, tid, mp, sideid, n, last, w, k, a, fa, d, td, ok, od, cl, rt, tk, tat, tfa, nick, team) in rows:
+    """The aggregate tuples, one dict at a time (build() keeps only its accumulators). Past MAX_AGG_ROWS: raises (a failed
+    read - refresh() keeps the last good artifact)."""
+    for i, (pid, tid, mp, sideid, n, last, w, k, a, fa, d, td, ok, od, cl, rt, tk, tat, tfa, nick, team) in enumerate(rows):
+        if i >= MAX_AGG_ROWS:
+            raise ValueError("cs2 roles aggregate read past its cap")
         yield {"pid": str(pid), "tid": str(tid), "map": mp, "side": "ct" if sideid == 1 else "t", "n": int(n),
                "last": last, "w": w, "k": k, "a": a, "fa": fa, "d": d, "td": td, "ok": ok, "od": od, "cl": cl, "rt": rt,
                "tk": tk, "tat": tat, "tfa": tfa, "nick": nick, "team": team}
@@ -516,11 +531,16 @@ def agrees_with_desk(role, awp=None, igl=None):
     return True
 
 
-def card_role(nick, team=None, benched=False, awp=None, igl=None):
+def card_role(nick, team=None, benched=False, awp=None, igl=None, facts=False):
     """The one accessor for a card payload: {"role", "stat_role", "map_note"} or None. A dictionary lookup on the precomputed
     artifact. Benched players (BO3.gg status 2 / not in the board lineup) get nothing. The team must match (exact name, or
     hltv.py's same_team name variants) - never a fuzzy / academy match. awp / igl: the row's own x["awp"] / x["igl"] labels;
-    when the role here contradicts them the card shows no role (agrees_with_desk), so a page never shows two role answers."""
+    when the role here contradicts them the card shows no role (agrees_with_desk), so a page never shows two role answers.
+    facts=True (server.py -> role_display.cs2_label, which combines this entry with the Liquipedia listing into the ONE role
+    text of the board row, card, matchroom desk and hub card - the desk pill is that text too, so there is no second desk
+    label to agree with): the matched entry even when it has no role of its own - {"role", "stat_role", "map_note", "igl",
+    "igl_block", "awp_share", "source"} - so the listing can be checked against the HLTV AWP share and the one-IGL-per-team
+    rule. None when benched or not matched."""
     if benched or not nick:
         return None
     if not _STATE["loaded"]:
@@ -541,6 +561,10 @@ def card_role(nick, team=None, benched=False, awp=None, igl=None):
         hit = same[0] if len(same) == 1 else None
     elif len(rows) == 1:
         hit = rows[0]
+    if hit and facts:
+        return {"role": hit.get("role"), "stat_role": hit.get("stat_role"), "map_note": hit.get("map_note"),
+                "igl": bool(hit.get("igl")), "igl_block": bool(hit.get("igl_block")), "awp_share": hit.get("awp_share"),
+                "source": hit.get("source")}
     if not hit or not agrees_with_desk(hit.get("role"), awp, igl):
         return None
     return {"role": hit["role"], "stat_role": hit.get("stat_role"), "map_note": hit.get("map_note")}

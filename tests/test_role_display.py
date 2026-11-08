@@ -35,6 +35,8 @@ def state(monkeypatch):
     monkeypatch.setitem(roles._STATE, "data", {"teams": {}, "players": {}})
     monkeypatch.setattr(roles, "refresh", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no fetch on a display read")))
     monkeypatch.setattr(roles, "refresh_hltv", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no fetch on a display read")))
+    import cs2_roles                                    # no stat-role entries here (tests/test_roles_combined.py has them)
+    monkeypatch.setattr(cs2_roles, "_STATE", {"art": None, "by_nick": {}, "at": 0.0, "tried": 0.0, "error": None, "loaded": True})
     return roles
 
 
@@ -122,7 +124,8 @@ def test_kill_switch(state, monkeypatch):
 
 
 def test_stat_readings_are_never_a_role(state):
-    """AWP share / KNOWN_AWP / HS% move the AWP chip (slips, HS stake) - never the role tag"""
+    """AWP share / KNOWN_AWP / HS% move the AWP chip (slips, HS stake) - never the role tag on their own (an AWPer from the
+    share comes only from the stat-role entry: the team's highest share, tests/test_roles_combined.py)"""
     state._HLTV["rows"] = {"zywoo": [dict(hrow("Vitality", [], team_match=False), kills=900, awp_share=0.6, end="2026-11-01")]}
     assert roles.awp_role("zywoo", "Vitality")[0] is True                                # the slip reading is there ...
     assert rd.cs2_label("zywoo", "Vitality") is None                                    # ... but no source role: no tag
