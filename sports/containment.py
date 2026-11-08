@@ -1,21 +1,31 @@
-"""ct-1: THE research-letter containment source per league (REGISTER.md amendment A9a 4). Pure python, no numpy.
+"""ct-1 / ct-1b: THE research-letter containment source per league (REGISTER.md amendments A9a 4 and A9b). Pure
+python, no numpy.
 
     contained(league, stat) -> True = no lean / letter / edge for that market anywhere (board, cards, compare, sheets,
                                slips, tracked picks, public results) - members see the existing contained wording
                                (board_view.GATE_TEXT).
 
+ct-1b (owner decision 2026-11-08, in chat: "drop grades for NFL and NBA" = publish them): NBA and NFL letters and leans
+are RELEASED by the owner (OWNER_RELEASE). The daily check keeps computing its A9 5 verdict and logging it (file "log",
+admin gradecheck view: snapshot()["verdict"] beside snapshot()["letters"]), but neither its league verdict, its per-stat
+"contain:<stat>" verdicts nor the pc-1 held-out result (A10) hides an owner-released league's letters. Data-integrity
+holds are not containment and stay as they are (sg-2 sanity holds, one-sided lines, no matching forecast).
+
 Order (first that answers wins):
-  1. env SPORTS_CONTAIN_NBA / SPORTS_CONTAIN_NFL = 1 (contained) - the owner's override. It can only CONTAIN (owner
-     absolute rule "Never force letters on", Scout upgrade prompt v2 Phase 0 item 2, ct-1a): 0 / off / false is logged
-     as asked and ignored, so a league the daily check holds stays held. Release comes only from the daily verdict;
-  2. <SPORTS_DATA_DIR>/model/containment.json - written by the daily grade check (sports/model/daily.py, A9 5 verdict);
-  3. the committed seed sports/model/artifacts/containment_default.json (owner-run gradecheck 2026-10-28: NBA + NFL
+  1. env SPORTS_CONTAIN_NBA / SPORTS_CONTAIN_NFL = 1 (contained) - the owner's kill switch; it always contains.
+     0 / off / false asks for nothing the owner release does not already give: logged as asked, no change applied;
+  2. OWNER_RELEASE (ct-1b): the league's letters are shown;
+  3. pc-1 held-out failure (A10, chance_cal.letters_held) - only for a league the owner has not released;
+  4. <SPORTS_DATA_DIR>/model/containment.json - written by the daily grade check (sports/model/daily.py, A9 5 verdict);
+  5. the committed seed sports/model/artifacts/containment_default.json (owner-run gradecheck 2026-10-28: NBA + NFL
      contained);
-  4. the legacy rule: board_view.VG_CONTAIN_LEAN and the stat failed its registered gate.
+  6. the legacy rule: board_view.VG_CONTAIN_LEAN and the stat failed its registered gate.
+For an owner-released league steps 3-6 are still read and reported (the verdict), never applied.
 
 State per league: {"contained": bool, "stats": [stat, ...]} - the league as a whole, or only the named stats (A9 5
-"contain:<stat>"). Every decision is appended to the file's "log" (date, verdict, n, hit, stated, CI, before / after).
-The file's mtime is re-checked every CHECK_S seconds, so a daily decision reaches the next board build without a deploy.
+"contain:<stat>"). Every decision is appended to the file's "log" (date, verdict, n, hit, stated, CI, before / after,
+"applied" = what members see). The file's mtime is re-checked every CHECK_S seconds, so a daily decision reaches the
+next board build without a deploy.
 """
 from __future__ import annotations
 
@@ -25,8 +35,16 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-VERSION = "ct-1"
+VERSION = "ct-1"                        # the state FILE format (containment.json); unchanged by ct-1b
+RULE = "ct-1b"
 REGISTER = "sports/research/REGISTER.md A9a"
+# ct-1b (REGISTER A9b amendment): the owner released these leagues' letters on this date. SPORTS_CONTAIN_<LG>=1 still
+# contains (kill switch). Removing a league here returns it to the daily verdict / pc-1 rule (a deploy).
+_OWNER_WHY = "owner decision 2026-11-08 (chat): publish the NBA and NFL grades"
+OWNER_RELEASE = {
+    "nba": {"rule": RULE, "date": "2026-11-08", "by": "owner", "why": _OWNER_WHY},
+    "nfl": {"rule": RULE, "date": "2026-11-08", "by": "owner", "why": _OWNER_WHY},
+}
 LEAGUES = ("nba", "nfl")
 FILE_NAME = "containment.json"
 DEFAULT_PATH = Path(__file__).resolve().parent / "model" / "artifacts" / "containment_default.json"
@@ -40,7 +58,8 @@ def path():
     return config.DATA_DIR / "model" / FILE_NAME
 
 
-ENV_RULE = "ct-1a: SPORTS_CONTAIN_<LG>=1 contains; 0 / off / false is ignored - release comes only from the daily verdict"
+ENV_RULE = ("ct-1b: SPORTS_CONTAIN_<LG>=1 contains (owner kill switch); 0 / off / false changes nothing - NBA and NFL "
+            "letters are released by owner decision 2026-11-08; the daily verdict is computed and logged, not applied")
 
 
 def env_override(league):
@@ -65,7 +84,9 @@ def _log_env(league, st, log=print):
     try:
         log(f"[containment {VERSION}] {league.upper()}: SPORTS_CONTAIN_{league.upper()}={st.get('env_value')!r} asked to "
             f"{asked}; applied: {'contained' if st['contained'] else 'letters shown'} (source {st['source']})"
-            + ("" if st.get("env_applied") else " - the switch can only contain; release comes from the daily verdict"),
+            + ("" if st.get("env_applied") else
+               " - the switch can only contain; " + ("the owner released this league (ct-1b)" if league in OWNER_RELEASE
+                                                     else "release comes from the daily verdict")),
             flush=True)
     except Exception:                                   # noqa: BLE001 - a log line never breaks the board
         pass
@@ -154,16 +175,19 @@ def _resolve(league):
             st = {"contained": s["contained"], "stats": sorted(s.get("stats") or []), "source": src}
         else:
             st = {"contained": None, "stats": [], "source": "legacy"}
+    if st["source"] != "env" and league in OWNER_RELEASE:   # ct-1b: reported beside the verdict state
+        st["owner_release"] = dict(OWNER_RELEASE[league])
     if ov is not None:
         st.update(env_asked="contain" if ov else "release", env_applied=bool(ov),
                   env_value=os.environ.get(f"SPORTS_CONTAIN_{league.upper()}"))
-        _log_env(league, dict(st, contained=letters_word(st, league) != "live"))
+        _log_env(league, dict(st, contained=_letters_of(league, st) != "live"))
     return st
 
 
 def pc_held(league):
     """REGISTER A10 (pc-1): True when the printed-chance calibration in use failed its held-out test for this league -
-    letters stay held there (the printed chance is still the calibrated one). It can only contain, never release."""
+    letters stay held there (the printed chance is still the calibrated one). It can only contain, never release.
+    ct-1b: reported, not applied, for an owner-released league."""
     try:
         from .model import chance_cal
         return chance_cal.letters_held(league)
@@ -171,27 +195,58 @@ def pc_held(league):
         return False
 
 
+def released(league):
+    """ct-1b: True when the owner released this league's letters and the kill switch (SPORTS_CONTAIN_<LG>=1) is off."""
+    return bool(league) and league in OWNER_RELEASE and league_state(league)["source"] != "env"
+
+
 def contained(league, stat):
-    """THE containment rule for one market (A9a 4, plus A10: a failed pc-1 held-out test holds the league)."""
+    """THE containment rule for one market (A9a 4; A10: a failed pc-1 held-out test holds the league; ct-1b: NBA / NFL
+    are released by the owner - only SPORTS_CONTAIN_<LG>=1 contains them)."""
     if not league:
+        return False
+    st = league_state(league)
+    if st["source"] == "env":                           # the owner's kill switch always contains
+        return True
+    if league in OWNER_RELEASE:                         # ct-1b: released; the daily / pc-1 verdicts are logged only
         return False
     if pc_held(league):                                 # pc-1: a league whose held-out calibration test failed
         return True
-    st = league_state(league)
     if st["source"] != "legacy":
         return bool(st["contained"]) or stat in st["stats"]
     from . import board_view                            # legacy: VG_CONTAIN_LEAN + failed registered gate
     return bool(board_view.VG_CONTAIN_LEAN) and board_view.gate_reason(league, stat) is not None
 
 
+def _verdict_word(league, st):
+    """What the daily verdict / pc-1 result alone would apply ('contained' | 'contained (stat, ...)' | 'live')."""
+    return "contained" if pc_held(league) else letters_word(st, league)
+
+
+def _letters_of(league, st):
+    if st.get("source") == "env":
+        return "contained"
+    if league in OWNER_RELEASE:
+        return "live"
+    return _verdict_word(league, st)
+
+
+def letters(league):
+    """What members see for this league: 'contained' | 'contained (stat, ...)' | 'live' (ct-1b: owner release)."""
+    return _letters_of(league, league_state(league))
+
+
 def snapshot():
-    """Admin / gradecheck view: per league state + the env switches and where the state came from."""
+    """Admin / gradecheck view: per league state + the env switches and where the state came from. "letters" = what
+    members see; "verdict" = what the daily check / pc-1 alone would apply - logged, not applied, for a league in
+    "owner_release" (ct-1b)."""
     obj, src = load()
     leagues = {lg: league_state(lg) for lg in LEAGUES}
-    return {"version": VERSION, "source": src, "updated_at": (obj or {}).get("updated_at"), "leagues": leagues,
+    return {"version": VERSION, "rule": RULE, "source": src, "updated_at": (obj or {}).get("updated_at"), "leagues": leagues,
             "env": {f"SPORTS_CONTAIN_{lg.upper()}": os.environ.get(f"SPORTS_CONTAIN_{lg.upper()}") for lg in LEAGUES},
-            "env_rule": ENV_RULE, "letters": {lg: ("contained" if pc_held(lg) else letters_word(leagues[lg], lg))
-                                              for lg in LEAGUES},
+            "env_rule": ENV_RULE, "letters": {lg: _letters_of(lg, leagues[lg]) for lg in LEAGUES},
+            "verdict": {lg: _verdict_word(lg, leagues[lg]) for lg in LEAGUES},
+            "owner_release": {lg: OWNER_RELEASE.get(lg) for lg in LEAGUES},
             "pc1_held": {lg: pc_held(lg) for lg in LEAGUES},
             "env_requests": {lg: {"name": f"SPORTS_CONTAIN_{lg.upper()}", "value": os.environ.get(f"SPORTS_CONTAIN_{lg.upper()}"),
                                   "asked": leagues[lg].get("env_asked"), "applied": bool(leagues[lg].get("env_applied"))}
@@ -252,8 +307,10 @@ def apply_verdicts(gc_result, day, source, out=None):
         log.append({"date": day, "at": at, "league": lg, "verdict": v.get("verdict"), "why": v.get("why"),
                     "n": v.get("n"), "games": v.get("games"), "game_days": v.get("game_days"), "hit": v.get("hit"),
                     "stated": v.get("stated"), "ci": v.get("ci"), "before": before, "after": after,
-                    "changed": changed, "source": source})
-        summary[lg] = {"verdict": v.get("verdict"), "before": before, "after": after, "changed": changed}
+                    "changed": changed, "source": source,
+                    "applied": "owner release ct-1b: verdict logged, letters shown" if lg in OWNER_RELEASE else "applied"})
+        summary[lg] = {"verdict": v.get("verdict"), "before": before, "after": after, "changed": changed,
+                       **({"owner_release": RULE} if lg in OWNER_RELEASE else {})}
     doc = {"version": VERSION, "register": REGISTER, "updated_at": at, "leagues": leagues, "log": log[-LOG_MAX:]}
     p = Path(out) if out else path()
     p.parent.mkdir(parents=True, exist_ok=True)

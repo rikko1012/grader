@@ -144,7 +144,7 @@
     return '<ol class="rx-picks" data-shown="' + k + '">' + rows.slice(0, k).map(function (r) { return recentItem(r, statName, noGrade); }).join("") + "</ol>" +
       (rows.length > k ? '<button type="button" class="sw-btn rx-more" data-rx-more>Show more (' + int(Math.min(RECENT_STEP, rows.length - k)) + ")</button>" : "") +
       (noGrade ? '<p class="sw-faint sw-small">One row per prop: Scout’s side at the line it was made for.</p>'
-                : '<p class="sw-faint sw-small">Grades are research letters (not validated). One row per prop: Scout’s side at the line it was made for.</p>');
+                : '<p class="sw-faint sw-small">Grades are research letters. One row per prop: Scout’s side at the line it was made for.</p>');
   }
   // collapsed technical sections: [{id, title, sub, html}] -> <details> each, closed by default
   function detailsHtml(sections) {

@@ -390,18 +390,23 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
    `model/gradecheck.json` + `model/gradecheck/gradecheck_<day>.json` (30 kept); (3) letters per league from the A9 5
    verdict (release = shown, contain = hidden, contain:<stat> = that stat hidden, keep / insufficient = unchanged) ->
    `model/containment.json` with its decision log. Seed (no file yet): NBA + NFL contained (owner-run gradecheck
-   2026-10-28). Read it: cs2-scout `/admin/diagnostics?token=...` -> "Sports grade check" (verdict, letters stated vs
+   2026-10-28). Since ct-1b (owner decision 2026-11-08, REGISTER A9b note) NBA and NFL letters are RELEASED by the
+   owner: the verdict above is still computed and logged (`containment.verdict` beside `containment.letters`; log
+   entries say "owner release ct-1b: verdict logged, letters shown") but it no longer hides letters, nor does a failed
+   pc-1 held-out test. Read it: cs2-scout `/admin/diagnostics?token=...` -> "Sports grade check" (verdict, letters stated vs
    hit, n, CI, letters shown / hidden); JSON: `GET /api/sports/admin/model/gradecheck` (admin st1 token; `?part=headline`
    for the summary) or `python -m sports.model.daily status` in the Shell. Switches: `SPORTS_CAL_AUTOFIT=0` (no daily
    fit; manual `fit` still works), `SPORTS_GRADECHECK_DAILY=0` (no daily gradecheck / containment change),
-   `SPORTS_CONTAIN_NBA=1` / `SPORTS_CONTAIN_NFL=1` (hide letters, wins over everything; since ct-1a 2026-11-04 a 0 is
-   logged and IGNORED - the switch can only contain, release comes only from the daily verdict; gradecheck.json
-   `containment.env_requests` shows what was asked and what applied),
+   `SPORTS_CONTAIN_NBA=1` / `SPORTS_CONTAIN_NFL=1` (the owner's kill switch: hides that league's letters, wins over
+   everything incl. the ct-1b release; a 0 is logged and changes nothing; gradecheck.json `containment.env_requests`
+   shows what was asked and what applied; members see letters again within one ui-snapshots / sheets cycle after the
+   service restarts),
    `SPORTS_DAILY_AFTER_UTC_H` (default 10). Run now from the Shell: `python -m sports.model.daily run --force`.
 8. Printed chance pc-1 (REGISTER A10, default ON, no Render variable needed). Every NBA / NFL sm-1 chance on the
    board, cards, sheets, slips, tracked picks and EV is the calibrated chance (`sports/model/chance_cal.py`, committed
    parameters `sports/model/artifacts/chance_cal_pc1.json`); the raw chance stays in the forecast record, `ca.raw`
-   and `model/shown.db`. A league whose held-out test failed keeps its letters held. Status: `python -m
+   and `model/shown.db`. A league whose held-out test failed keeps its letters held - except an owner-released league
+   (ct-1b: NBA and NFL since 2026-11-08), where the result is reported only. Status: `python -m
    sports.model.chance_cal status`. Refit in the Shell (writes `model/chance_cal.json`, which wins over the committed
    file): build the exports (`python -m sports.model.gradecore_export --data-dir /sports-data --league nba|nfl`),
    then `python -m sports.model.chance_cal fit --nba <export> --nfl <export> --test-from <first held-out game-day>

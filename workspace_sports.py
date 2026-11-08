@@ -57,7 +57,7 @@ def one_sided_label(q):
 def full_game_key(k):
     return ((k or "").rsplit("|", 1)[-1] or "full_game") == "full_game"
 HOLD_LABEL = "Research estimate"
-HOLD_DETAIL = "{LG} grades are held until forward results clear review."
+HOLD_DETAIL = "{LG} grades are switched off."     # only under the owner's kill switch SPORTS_CONTAIN_<LG>=1 (ct-1b)
 SERVICE_USER = "workspace-reader"       # the hook's member for reads no one member owns: shared boards, settled results
 BOARD_TTL, CHECK_TTL, PLAYER_TTL, RESULTS_TTL = 20, 5, 120, 300
 CALL_TIMEOUT, CHECK_TIMEOUT = 5.0, 3.0
@@ -419,8 +419,8 @@ def record_of(lg, doc, m, q, view):
     lean, held = (None, None) if one else lean_and_hold(m, q, sc, mkc)
     held = None if held is None else held or HOLD_DETAIL.format(LG=lg.upper())
     # Letters are published by Sports, never reconstructed from probabilities here.
-    # The owner's containment switch can only hold research letters (sports/containment.py ct-1a);
-    # release comes only from the daily verdict. Stakes stay 0. Sanity/market holds still win.
+    # ct-1b (owner 2026-11-08): NBA and NFL letters are released; only the owner's kill switch SPORTS_CONTAIN_<LG>=1
+    # holds them (sports/containment.py; the quote then carries x.b "gate"). Stakes stay 0. Sanity/market holds still win.
     signal = q.get("x") or {}
     grade = signal.get("gr") if held is None and lean and signal.get("v") == "cf-2" else None
     if grade not in ("A", "B", "C", "Lean"):
@@ -456,7 +456,7 @@ def record_of(lg, doc, m, q, view):
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Research grade; stakes remain 0." if grade else None,
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
                      "validation": {"kind": "research", "label": "Research grade" if grade else (one or HOLD_LABEL),
-                                    "detail": "Research grade — not forward-validated. Stakes remain 0." if grade else reason}},
+                                    "detail": "Research grade. Stakes remain 0." if grade else reason}},
            "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None,
                        **(_board_columns(v, line, opp) if workspace_h2h.board_enabled() else {})},
            "market_chance": {"p_over": mkc["po"], "p_under": mkc["pu"], "sources": mkc.get("n")} if mkc else None,
@@ -1029,7 +1029,7 @@ def results(srv, lg):
     by_stat = [_line(k, v.get("leans") or {}, None, v.get("games")) for k, v in sorted((d.get("stats") or {}).items()) if (v.get("leans") or {}).get("n")]
     hh = next((h for h in (d.get("head_to_head") or {}).get("rows") or [] if h.get("stat") == "all"), None)
     return {"sport": lg, "label": f"{lg.upper()} research record", "as_of": doc.get("as_of"), 'calendar':d.get('calendar'),
-            "population": "Saved forward Scout forecasts with a lean, each scored at its own line from the final box score. These are research estimates, with grades held.",
+            "population": "Saved forward Scout forecasts with a lean, each scored at its own line from the final box score." + ("" if _letters(d) else " These are research estimates, with grades held."),
             "rule": "Over when its chance of Over is above 50% and its projection is above the line, Under mirrored. Hit rate is wins over wins plus losses. Pushes stay apart, voids and unresolved props stay out.",
             "totals": {"picks": leans.get("n") or 0, "wins": leans.get("wins"), "losses": leans.get("losses"), "pushes": leans.get("pushes"), "observed": leans.get("hit_rate"), "ci": leans.get("hit_rate_ci95"),
                        "printed": stated, "matches": d.get("games"), "void": d.get("void"), "match_word": "games"},

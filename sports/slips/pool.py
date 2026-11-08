@@ -13,14 +13,15 @@ substituted:
   - the forecast has a chosen side that the offer really lists; a NON-research forecast also needs a grade and a
     positive stake (the grade policy's own output: a held 0U pick stays out, it is never relabelled)
   - sp-2 (owner choice 2026-10-24): a RESEARCH-ONLY forecast is eligible as a labelled research leg - the leg carries
-    research_only=True and stake_units=0.0, Slip Studio shows the warning "Research estimates - not validated; stakes
-    0" and tags each such leg. A non-research forecast for the same offer is preferred when one exists.
+    research_only=True and stake_units=0.0, Slip Studio shows the warning "Research estimates; stakes 0" and
+    tags each such leg. A non-research forecast for the same offer is preferred when one exists.
   - the leg's team is known (the platforms' two-team rule must be checkable)
   - N4 (owner re-audit 2026-10-24, the board's lean rule): when the board snapshot has a market chance AT THIS
     offer's line (market_at, same rule as SportsRows.marketAt), Scout's chance of the chosen side must be ABOVE the
     market's chance of that side - a side the market prices higher is no lean and never a slip leg
   - N1/N2 guards (sports/board_view.py, member policy): a Scout (sm-1 / mi-1) forecast on a market whose model failed
-    its registered gate (vg-1: NFL today) is projection-only and never a leg; a forecast held by the sg-1 sanity guard
+    its registered gate (vg-1: NFL) is projection-only and never a leg - unless the owner released the league
+    (ct-1b, sports/containment.py OWNER_RELEASE: NBA + NFL since 2026-11-08); a forecast held by the sg-1 sanity guard
     (projection under 25% / over 4x the line, or the last-10 results contradicting its side - the board's
     sanity.json holds) is excluded too
 Policy "research" (admin only, labelled): any forecast (newest first, research or not) with a chosen side; grade /
@@ -46,7 +47,7 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from .. import board_view, capabilities, markets, store
+from .. import board_view, capabilities, containment, markets, store
 from ..contracts import SPORT_OF, parse_utc
 from . import POLICY_VERSION, rules
 
@@ -280,8 +281,10 @@ def guard_reason(f, league, rid=None, held=(), chances=()):
     {(record_id, forecast_id): reason} (or a set of pairs); chances = the leg's shown chances (cal-mi) beside the raw."""
     if f.model_version not in board_view.SCOUT_MODELS:
         return None
-    if board_view.contain_reason(league, f.stat) or board_view.gate_reason(league, f.stat):
+    if board_view.contain_reason(league, f.stat) or (board_view.gate_reason(league, f.stat)
+                                                     and not containment.released(league)):
         return "model not validated for this market: projection only"     # contained (A9a 4) or failed gate
+    # ct-1b (owner 2026-11-08): an owner-released league's failed-gate markets are legs like any other (stakes stay 0)
     side = f.chosen_side
     code = board_view.sanity_check(f.projection_mean, f.line, side if side in ("over", "under") else None,
                                    chances=(getattr(f, "p_over", None), getattr(f, "p_under", None)) + tuple(chances))

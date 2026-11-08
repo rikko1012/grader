@@ -706,6 +706,23 @@ verbatim on the service, once a day. Nothing in the A9 5 rule itself (numbers, s
 3. Reported in `gradecheck.json` (`leagues.<lg>.guards.containment.env_asked / env_applied`) and the admin view
    (`containment.env_requests`, `containment.letters`). No band, gate, chance or logged forecast changes.
 
+### A9b amendment note - ct-1b: owner release of NBA and NFL letters (owner decision 2026-11-08)
+
+4. Owner, 2026-11-08, in chat: publish the NBA and NFL grades ("drop grades for NFL and NBA"). Rule id ct-1b
+   (`sports/containment.py` `OWNER_RELEASE`): NBA and NFL letters and leans are shown on every member surface (hub
+   board, classic board and cards, compare, sheets, slips, tracked picks, public results). This is an owner release,
+   not a model validation, and it supersedes "release happens only through the daily verdict" (1) for these two leagues.
+5. Order now: `SPORTS_CONTAIN_<LG>=1` contains (the owner's kill switch, unchanged) -> owner release (shown) -> pc-1
+   held-out failure (A10 5) -> daily verdict file -> seed -> legacy. For a released league the daily A9 5 verdict
+   (league and per-stat `contain:<stat>`) and the pc-1 held-out result are still computed and LOGGED - the file log
+   carries `"applied": "owner release ct-1b: verdict logged, letters shown"`, the admin view shows
+   `containment.verdict` beside `containment.letters` and `containment.owner_release` - but they do not hide letters.
+   A 0 / off / false switch still changes nothing.
+6. Unchanged: projections, the printed chance (pc-1 / cal-mi calibrated, exactly as before), the sports-gp-1 bands,
+   0U stakes (sports-sp-1), "Lean Over / Under" wording, and the data-integrity holds (sg-2 sanity holds, one-sided
+   lines, no matching forecast). Failed-gate markets (vg-1, NFL) keep their edges, confidence and rank withheld (A9 5)
+   but are slip legs again while released. Member pages carry no "not validated" / "held" text beside released letters.
+
 ## Amendment A10 - pc-1: the printed NBA / NFL chance is the calibrated chance (owner decision 2026-11-05)
 
 Owner, 2026-11-05: "we're grading every prop on the board these props will never hit 60% printed chance" -> CALIBRATE.
@@ -727,7 +744,8 @@ stakes to compensate, forcing Over / Under balance.
    Under-leaning rows separately, |stated - hit| <= 3 pts or the stated chance inside the hit interval.
 5. **Letters.** Letters come only from the printed (calibrated) chance with the sports-gp-1 thresholds; rows under
    C stay "Lean Over / Under". A league that FAILED (4) keeps its letters held (`containment.contained` -> True, the
-   existing contained wording) while its printed chance is still calibrated. A league that passed keeps the A9a 4
+   existing contained wording) while its printed chance is still calibrated (since ct-1b, 2026-11-08: reported, not
+   applied, for the owner-released NBA and NFL - A9b note 5). A league that passed keeps the A9a 4
    containment rule (release only from the daily verdict). The daily grade check scores the pc-1 chance walk-forward
    (refit per game-day on props settled before that day's first forecast, >= 300 decided rows), so its verdict judges
    the chance members see.

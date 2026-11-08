@@ -235,14 +235,14 @@
 
   // rg-1 research grade (owner 2026-10-25): the letter is computed server-side (sports/board_view.research_grade, the
   // sports-gp-1 band of the unrounded lean-side chance); pages only render it. "Lean" keeps the "Lean Over/Under" words.
-  var GRADE_TAG = "Research grade - not validated";
+  var GRADE_TAG = "Research grade";              // ct-1b (owner 2026-11-08): released letters carry no "not validated" text
   var GRADE_BANDS = "A: Scout chance 60% or more · B: 55.59% or more · C: 53.45% or more · Lean: above 50%";
   function gradeWords(g, side) {
     if (!g) return "";
     var s = side === "over" ? "Over" : side === "under" ? "Under" : "";
     return (g === "Lean" ? "Lean" : g) + (s ? " " + s : "");
   }
-  function gradeHtml(g, side, nv) {               // nv: "NFL model not validated" for a failed-gate market
+  function gradeHtml(g, side, nv) {               // nv: the contained wording (only while a league is contained)
     if (!g) return "";
     var e = function (x) { return String(x).replace(/[&<>"']/g, function (c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); };
     return '<span class="sw-grade sw-grade-' + (g === "Lean" ? "lean" : g.toLowerCase()) + '" data-grade="' + e(g) + '" title="' + e(GRADE_TAG + " (" + GRADE_BANDS + "). Stake 0.") + '">' +

@@ -139,7 +139,7 @@ def test_same_letter_on_board_sheet_slip_and_tracked_pick(gw):
     got = {p["record_id"]: p for p in mine["picks"]}
     assert got[r1]["grade_shown"] == "A" and got[r1]["result"]["status"] == "win"
     G = {r["grade"]: r for r in mine["by_grade"]["rows"]}
-    assert list(G) == ["A", "B", "C", "Lean"] and mine["by_grade"]["label"].startswith("Research grade - not validated")
+    assert list(G) == ["A", "B", "C", "Lean"] and mine["by_grade"]["label"].startswith("Research grade:")
     assert G["A"]["n"] == 1 and G["A"]["hit_rate"] == 1.0 and "hit_rate_ci95_games" in G["A"]
     assert mine["by_grade"]["ungraded"] == 1
     agg = picks.aggregate(picks.connect_ro())
@@ -246,7 +246,7 @@ def test_slip_leg_and_my_picks_render_the_letter(browser):
     page.goto("/sports#/picks?lg=nba")
     page.wait_for_selector(".sw-mp-grades")
     body = page.locator("#sw-main").inner_text()
-    assert "Hit rate by grade" in body and "research grade - not validated" in body.lower()
+    assert "Hit rate by grade" in body and "research grade" in body.lower() and "not validated" not in body.lower()
     page.locator('[data-mptab="settled"]').click()
     assert page.locator(".sw-mp-row .sw-grade").first.inner_text().strip() == "B Over"
     assert "gp_band:" not in body

@@ -37,7 +37,7 @@ def test_pool_route_counts_research_legs_and_copy_text_warns(api, con):  # noqa:
     assert p["research_legs"] == len(res) == 1 and res[0]["stake_units"] == 0.0 and res[0]["grade"] is None
     assert "research forecast only" not in p["excluded"]
     text = validate.copy_text("underdog", "standard", [dict(res[0])])
-    assert "Research estimates - not validated; stakes 0." in text and "not entered" in text
+    assert "Research estimates; stakes 0." in text and "not entered" in text and "not validated" not in text
     plain = validate.copy_text("underdog", "standard", [dict(l) for l in p["legs"] if not l["research_only"]][:2])
     assert "Research estimates" not in plain
     log.drain()
@@ -116,7 +116,8 @@ def test_slip_studio_research_legs_warn_and_tag(browser):
     ctx, page, errors = _page(browser, _slips_api(POOL_RESEARCH))
     _open_slips(page)
     banner = page.locator("#ss-research")
-    assert banner.is_visible() and "Research estimates - not validated; stakes 0" in banner.inner_text()
+    assert banner.is_visible() and "Research estimates; stakes 0" in banner.inner_text()
+    assert "not validated" not in banner.inner_text() and "not yet passed" not in banner.inner_text()
     pool = page.locator("#ss-pool").inner_text()
     assert "3" in pool and "research estimates (stake 0)" in pool
     page.locator("#ss-pool summary").click()
