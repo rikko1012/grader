@@ -63,7 +63,7 @@ NOT_VALIDATED_TEXT = "{LG} model not validated"
 # rg-1 research grade: the letter of sports-gp-1 band() on the UNROUNDED Scout chance of the chosen (lean) side; only for
 # a row with a lean (cf-2 / N4), never for a held row (vg-1 when contained, sg-1). Stakes stay 0.
 GRADE_VERSION = "rg-1"
-GRADE_TAG = "Research grade - not validated"
+GRADE_TAG = "Scout grade"               # ct-1b (owner 2026-11-08): no research / "not validated" text beside released letters
 
 
 def research_grade(p_side):
@@ -73,8 +73,9 @@ def research_grade(p_side):
 
 def contain_reason(league, stat):
     """The contained-league hold text (GATE_TEXT, the existing wording) when this market's letters are contained, else
-    None. THE one source: sports/containment.py (env SPORTS_CONTAIN_<LG> > daily A9 5 decision > committed seed >
-    the legacy VG_CONTAIN_LEAN + failed-gate rule) - REGISTER A9a 4."""
+    None. THE one source: sports/containment.py (env SPORTS_CONTAIN_<LG>=1 > owner release ct-1b (NBA + NFL since
+    2026-11-08) > pc-1 held-out failure > daily A9 5 decision > committed seed > the legacy VG_CONTAIN_LEAN +
+    failed-gate rule) - REGISTER A9a 4 / A9b."""
     from . import containment
     if not containment.contained(league, stat):
         return None

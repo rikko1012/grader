@@ -24,8 +24,9 @@ errors cannot cancel) the hit interval reaches the stated chance or |stated - hi
 are the same spec refitted on every settled row (fit + held-out); the held-out verdict travels with them.
 
 A league whose held-out test FAILED keeps its letters held (containment.contained -> True for that league) but its
-printed chance is still the calibrated one. A league that passed keeps the existing containment rule (daily A9 verdict;
-"never force letters on"). Letters always come from the printed (calibrated) chance with the sports-gp-1 thresholds.
+printed chance is still the calibrated one - except a league the owner released (ct-1b, sports/containment.py
+OWNER_RELEASE: NBA + NFL since 2026-11-08), where letters_held() is reported only. A league that passed keeps the
+existing containment rule. Letters always come from the printed (calibrated) chance with the sports-gp-1 thresholds.
 
 Serving (pure python): adjust(league, stat, po, pu, pp) -> {"po", "pu", "pp", "raw": [po, pu, pp], "v": "pc-1:<sha>",
 "mode": "P", "src"} or None (off / league not fitted). Parameters: <SPORTS_DATA_DIR>/model/chance_cal.json (a Shell

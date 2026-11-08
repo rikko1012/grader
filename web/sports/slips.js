@@ -148,7 +148,7 @@
 
   /* ---------------------------------------------------------------- pool */
   var L = window.SportsLabels || { slipReason: function (x) { return x; }, statOf: function (l) { return l.stat_label || l.stat; } };
-  var RESEARCH_TEXT = "Research estimates - not validated; stakes 0";
+  var RESEARCH_TEXT = "Research estimates; stakes 0";
   function researchBanner(show) {                     // owner choice (sp-2): research legs allowed, always labelled
     var b = $("ss-research");
     if (!b) return;
@@ -222,7 +222,7 @@
       '<span class="ss-meta">' + esc(L.statOf(l)) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
       (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
       (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
-      (!l.custom && l.research_grade && L.gradeHtml ? " " + L.gradeHtml(l.research_grade, l.side, (l.league || ctx().league) === "nfl" ? "NFL model not validated" : null) : "") +
+      (!l.custom && l.research_grade && L.gradeHtml ? " " + L.gradeHtml(l.research_grade, l.side, null) : "") +
       (l.research_only ? ' <span class="ss-tag ss-research" title="' + esc(RESEARCH_TEXT) + '">Research estimate · stake 0</span>' : "") + "</span>" + (extra || "") + "</li>";
   }
   function payoutList(p) {
@@ -271,7 +271,7 @@
         returnText(s.expected_return, s.platform) + jointText(s.joint) + payoutList(s.payout) + "</article>";
     }).join("") + "</div>";
     var anyRes = b.slips.some(function (s) { return s.legs.some(function (l) { return l.research_only; }); });
-    if (anyRes) h = '<p class="ss-banner ss-warnmsg" role="note"><strong>' + esc(RESEARCH_TEXT) + ".</strong> Picks tagged Research estimate come from a model that has not passed its live-line check.</p>" + h;
+    if (anyRes) h = '<p class="ss-banner ss-warnmsg" role="note"><strong>' + esc(RESEARCH_TEXT) + ".</strong> Picks tagged Research estimate carry stake 0.</p>" + h;
     h += '<p class="ss-note">Prices as of ' + esc(when(b.snapshot_at)) + (b.search && !b.search.exact ? " - the search stopped at its limit (best found shown)" : "") + "</p>" +
       '<details class="ss-details"><summary>Details</summary><p class="ss-note">Builder ' + esc(b.builder_version) + " - leg policy " + esc(b.policy_version) + " - rules " + esc(b.rules_version || "") + "</p></details>";
     out.innerHTML = h;
@@ -392,8 +392,8 @@
     '  </header>',
     '',
     '  <p class="ss-banner" id="ss-net" role="status" hidden></p>',
-    '  <p class="ss-banner ss-warnmsg" id="ss-research" role="note" hidden><strong>Research estimates - not validated; stakes 0.</strong>',
-    '    Picks tagged "Research estimate" come from a Scout model that has not yet passed its check on live lines. Track them, don\'t size them.</p>',
+    '  <p class="ss-banner ss-warnmsg" id="ss-research" role="note" hidden><strong>Research estimates; stakes 0.</strong>',
+    '    Picks tagged "Research estimate" carry stake 0: track them, don\'t size them.</p>',
     '',
     '  <div class="ss-grid">',
     '    <section class="ss-panel" aria-labelledby="ss-build-h">',

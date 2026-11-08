@@ -32,6 +32,10 @@ def private_sports_data(monkeypatch, tmp_path):
     # NFL contained) unless they write a state; the committed seed (both contained) is checked in test_containment
     from sports import containment
     monkeypatch.setattr(containment, "DEFAULT_PATH", tmp_path / "no_containment_seed.json")
+    # ct-1b (owner release of NBA + NFL, 2026-11-08): the verdict machinery below it is still live for any league not
+    # released, so tests exercise it with no release unless they opt in (sports/tests/test_containment_ct1b.py checks
+    # the shipped OWNER_RELEASE and every member surface with the release on)
+    monkeypatch.setattr(containment, "OWNER_RELEASE", {})
     containment.reset_cache()
     # pc-1 printed-chance calibration (REGISTER A10): tests see the raw / cal-mi chance unless they write parameters
     # (sports/tests/test_chance_cal.py checks the committed artifact and the default-on wiring)

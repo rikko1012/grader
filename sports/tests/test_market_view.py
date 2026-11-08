@@ -185,7 +185,7 @@ def test_app_never_says_kalshi_market_chance_and_labels_every_number():
         assert bad not in app
     assert "S.marketLabel" in app and "mkBooks(m.mk, true, true)" in app and "mkBooks(m.market, true)" in app
     assert "scoutBlock(m, q, f, B) + marketBlock(m, q, f, B)" in app and "S.kindLabel" in app
-    assert "Projection unavailable: " in app and "S.validationText" in app
+    assert "Projection unavailable: " in app and "settledText(" in app and "S.validationText" not in app
     # every book row goes through the usable-price filter (no row without a price)
     assert "S.quoteShown(q, Date.now())" in app and "S.usableBooks(mk, Date.now())" in app
     # item 4: aligned comparisons, alternates apart, member-chosen preferred book (no fixed order)

@@ -607,8 +607,10 @@
     }
     return '<div class="sw-chances">' + sp("over", "Over", po) + sp("under", "Under", pu) + (S.wholeLine(line) || pp > 0 ? sp("push", "Push", pp) : "") + "</div>";
   }
-  // model / version / record text sits behind one "Details" toggle per block (owner audit 2026-10-24); validation state
-  // is shown once at the top of the board (validationLine)
+  // model / version / record text sits behind one "Details" toggle per block (owner audit 2026-10-24)
+  // ct-1b (owner 2026-11-08): NBA and NFL letters are released - the forward record is a plain count, never a
+  // "research estimate" / "under review" status beside a letter
+  function settledText(n) { return "forward record: " + S.int(n || 0) + " settled"; }
   function techDetails(lines, buttons) {
     var ls = lines.filter(Boolean);
     if (!ls.length && !buttons) return "";
@@ -639,14 +641,14 @@
         '<div class="sw-proj">' + (f.mu !== null && f.mu !== undefined ? 'Projected: <b data-fc="' + esc(f.id) + '" data-fcside="mean">' + S.num(f.mu, 1) + "</b> " + esc(stat) +
           (f.iv ? ' <span class="sw-faint">· 80% range ' + f.iv[0] + "–" + f.iv[1] + "</span>" : "") : '<span class="sw-faint">Projection unavailable: this record stores chances only</span>') + "</div>" +
         (q.ca && q.ca.f === q.f ? threeChances(q.ca.po, q.ca.pu, q.ca.pp, q.l, f.id) : threeChances(f.po, f.pu, f.pp, q.l, f.id)) + gradeLine(q) +
-        techDetails([esc(f.m) + " · " + esc(S.validationText(settledOf(B, f.m))), runLine(B) ? esc(runLine(B)) : ""], fcSource(q.f, f, q)) + "</div>";
+        techDetails([esc(f.m) + " · " + esc(settledText(settledOf(B, f.m))), runLine(B) ? esc(runLine(B)) : ""], fcSource(q.f, f, q)) + "</div>";
     }
     if (q.lr) {
       var src0 = B.fc[q.lr.f];
       return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div>' +
         (src0 && src0.mu !== null && src0.mu !== undefined ? '<div class="sw-proj">Projected: <b>' + S.num(src0.mu, 1) + "</b> " + esc(stat) + (src0.iv ? ' <span class="sw-faint">· 80% range ' + src0.iv[0] + "–" + src0.iv[1] + "</span>" : "") + "</div>" : "") +
         (q.ca ? threeChances(q.ca.po, q.ca.pu, q.ca.pp, q.l, null) : threeChances(q.lr.po, q.lr.pu, q.lr.pp, q.l, null)) + gradeLine(q) +
-        techDetails(["sm-1 · read at this line from the forecast at " + S.line(q.lr.ln), esc(S.validationText(settledOf(B, "sm-1")))], src0 ? fcSource(q.lr.f, src0, q) : "") + "</div>";
+        techDetails(["sm-1 · read at this line from the forecast at " + S.line(q.lr.ln), esc(settledText(settledOf(B, "sm-1")))], src0 ? fcSource(q.lr.f, src0, q) : "") + "</div>";
     }
     if (q.nf) return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div><p class="sw-small">Projection unavailable: ' + esc(q.nf) + "</p></div>";
     return "";
@@ -773,11 +775,11 @@
   // Prop board table (web/sports/table.js): view / sort saved per device (scout.sports.board.v1); default table, edge
   var R = window.SportsRows, TB = window.SportsTable.state();
   function setTbPref() { try { var p = JSON.parse(localStorage.getItem("scout.sports.board.v1") || "{}") || {}; p.sort = TB.sort; p.dir = TB.dir; localStorage.setItem("scout.sports.board.v1", JSON.stringify(p)); } catch (e) {} }
-  function validationLine(B) {                           // validation state ONCE per board (not on every card)
+  function validationLine(B) {                           // forward record ONCE per board (not on every card); ct-1b: a plain
     var ms = (B.board.models || []).filter(function (x) { return x.forecasts > 0 && S.kindOf(x.model_version) !== "market"; });
-    if (!ms.length) return "";
-    return '<p class="sw-tb-valid" id="sw-validation"><b>Research estimates.</b> Forward validation: ' + ms.map(function (x) {
-      return esc(S.kindLabel(x.model_version)) + " " + esc(S.validationState(x.settled)); }).join(" · ") +
+    if (!ms.length) return "";                           // count - no research / under-review status above released letters
+    return '<p class="sw-tb-valid" id="sw-validation">Forward record: ' + ms.map(function (x) {
+      return esc(S.kindLabel(x.model_version)) + " " + esc(S.int(x.settled || 0)) + " settled"; }).join(" · ") +
       ". Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>" +
       '<details class="sw-validation-details"><summary>How validation works</summary><p class="sw-small sw-faint sw-tb-rule">' + esc(S.GATE_RULE) + "</p></details>";
   }
@@ -1141,7 +1143,7 @@
           (dt.interval ? '<div class="sw-small sw-muted">80% range ' + dt.interval[0] + "–" + dt.interval[1] + (dt.median !== undefined ? " · median " + dt.median : "") + "</div>" : "") +
           '<div class="sw-small sw-muted">Projected ' + esc(S.localTime(fc.forecast_at)) + (man && man.forecast_run && man.forecast_run.history_through ? " · games through " + esc(S.localTime(man.forecast_run.history_through, {month: "short", day: "numeric"})) : "") + "</div>" +
           '<details class="sw-more sw-fcdetails"><summary>Details</summary><p class="sw-small sw-faint">Model ' + esc(fc.model_version) + " " + fcSource(fc.forecast_id, fc, {r: q.record_id}) + "</p></details>" +
-          '<div class="sw-small sw-faint">' + esc(S.validationText(model ? model.settled : 0)) + " · stake 0</div>" + gradeLine(q) + "</div>";
+          '<div class="sw-small sw-faint">Stake 0 · ' + esc(settledText(model ? model.settled : 0)) + "</div>" + gradeLine(q) + "</div>";
         h += '<div class="sw-sides">' + sideBox("over", "Over " + S.line(fc.line), n.over) + sideBox("under", "Under " + S.line(fc.line), n.under) + sideBox("push", "Push", n.push) + "</div>";
         h += slipButtons(q, fc);
         var chart = svgDist(det, fc, fc.line);
@@ -1417,7 +1419,7 @@
           var sd = L.scoutSide(r), stat = statName(r.stat);
           return "<tr><td>" + esc(S.shortDate(r.settled_at)) + "</td><td>" + esc(L.ledgerName(r)) + (r.books.length > 1 ? ' <span class="sw-faint sw-small">' + esc(r.books.map(bookName).join(", ")) + "</span>" : "") + "</td><td>" + esc(stat) + '</td><td class="num">' + S.line(r.line) + '</td><td class="num">' + S.num(r.projection_mean, 1) + '</td><td class="num">' + S.num(r.actual, 0) + "</td><td>" + esc(r.status === "settled" ? L.words(r.outcome || "") : L.words(r.status || "")) + '</td><td class="num">' + (sd ? esc(sd.label) + " " + S.pct(sd.p) : "—") + '</td><td class="num">' + S.num(r.brier, 3) + "</td><td>" + src({title: "Settlement", "forecast id": r.forecast_id, model: r.model_version, books: r.books.map(bookName).join(", "), "settlement records": r.settlement_ids, revision: r.settlement_revision, rule: r.rule_version, "Over / Under / Push given": S.pct(r.p_over) + " / " + S.pct(r.p_under) + " / " + S.pct(r.p_push), "chance of the settled outcome": S.pct(r.p_outcome)}) + "</td></tr>";
         }).join("") + "</tbody></table></div><p class=\"sw-faint sw-small\">" + esc(R.method.brier) + ". " + esc(R.method.ci) + ".</p>"});
-      if (PL && PL.gate) det.push({id: "validation", title: "How validation works", sub: "Grades and leans stay research until a registered review passes.",
+      if (PL && PL.gate) det.push({id: "validation", title: "How validation works", sub: "The registered forward review of stated chances against results.",
         html: '<p class="sw-small">' + esc(PL.gate.rule || "") + "</p>"});
       if (R.method) det.push({id: "definitions", title: "Exact definitions", sub: "How every number on this page is computed.",
         html: '<ul class="sw-list sw-small">' + Object.keys(R.method).map(function (k) { return "<li><b>" + esc(k) + ":</b> " + esc(R.method[k]) + "</li>"; }).join("") + "</ul>"});

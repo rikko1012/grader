@@ -348,14 +348,14 @@ export function mount(C) {
   const faceOf = (r,size) => C.faceHtml?C.faceHtml(r.sport,{id:r.player.id,key:r.player.key,name:r.player.name,team:r.player.team_abbr||r.player.team,size,cls:'h-face'}):'';
   const kindOf = r => C.lineKind?C.lineKind(r.offer.platform,r.market.line_type):'';
   const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
-  /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters say Research grade */
+  /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters carry no tag (ct-1b, owner 2026-11-08: released) */
   function gradeChip(r) {
     const s=r.scout;
     if(C.oneSided(r)) return `<span class="h-grade-text h-one-sided">${esc(C.oneSided(r))}</span>`;
     if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
     if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
     if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance" title="Scout\u2019s chance at this line">Chance at this line</span>';   /* short on the row (follow-up 2026-11-06: was cut off); the card keeps the full sentence */   /* audit 2026-11-05: another book's line, same saved distribution */
-    if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>${['nba','nfl'].includes(r.sport)?'<small class="h-grade-tag">Research grade</small>':''}`;
+    if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>`;
     if(s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span>`;
     return '';
   }
@@ -581,7 +581,7 @@ export function mount(C) {
        the server holds; those rows read Lean Over/Under with the chance, no letter, 0U */
     const heldSports=[...new Set(list.filter(r=>r.scout.letter_held).map(r=>r.sport))];
     // the Sports grades note belongs to the NBA and NFL boards only
-    $('hub-health').innerHTML=(isExtra(H.book)?extraBanner():'')+heldSports.map(sp=>`<p class="h-letter-hold" role="status">${esc(SPORTS[sp]||sp.toUpperCase())} letters are held until stated chances match results.</p>`).join('')+(['nba','nfl'].includes(H.sport)&&list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About ${esc(SPORTS[H.sport])} grades</summary><p>Published letters rank the model’s current picks. NBA and NFL calibration has not passed validation; see Record for stated chances and actual results.</p></details>`:'');
+    $('hub-health').innerHTML=(isExtra(H.book)?extraBanner():'')+heldSports.map(sp=>`<p class="h-letter-hold" role="status">${esc(SPORTS[sp]||sp.toUpperCase())} letters are held until stated chances match results.</p>`).join('')+(['nba','nfl'].includes(H.sport)&&list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About ${esc(SPORTS[H.sport])} grades</summary><p>Published letters rank the model’s current picks. Stakes are 0. See Record for stated chances and actual results.</p></details>`:'');
     const games=H.view==='games';
     $('hub-board-section').classList.toggle('h-by-game',games);
     $('hub-board-section').querySelectorAll('[data-hub="view"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===(games?'games':'list'))));
@@ -1253,7 +1253,7 @@ export function mount(C) {
       <div class="h-ask-sugg" role="group" aria-label="Suggested questions">${SUGGEST.map(x=>`<button type="button" data-hub="genie-ask" data-id="${esc(x)}"${G.busy?' aria-disabled="true"':''}>${esc(x)}</button>`).join('')}</div>
       <div class="h-ask-out" id="hub-ask-out" role="status" aria-live="polite">${out}</div>${G.quota?`<p class="h-history-note">${Number(G.quota.remaining_questions)} of ${Number(G.quota.questions_limit)} questions left today.</p>`:''}</form>`:'';
     return `${form}<details class="h-guide"${genie?'':' open'}><summary>Scout evidence guide</summary><p class="h-history-note">Answers use this offer's saved forecast and research data only.</p>
-      <h5>What supports this pick?</h5><p>${esc(r.player.name)} has a saved projection of ${num(s.projection)?esc(s.projection.toFixed(1)):'unavailable'} for ${esc(r.market.period_label)} ${esc(r.market.stat_label)}. ${chance==null?'No probability was saved for the selected side.':`The saved chance for ${sideWord(side)} ${esc(r.offer.line)} is ${pct(chance)}.`}${s.hold?' This is a research estimate; the validation gate has not released official grades.':''}</p>
+      <h5>What supports this pick?</h5><p>${esc(r.player.name)} has a saved projection of ${num(s.projection)?esc(s.projection.toFixed(1)):'unavailable'} for ${esc(r.market.period_label)} ${esc(r.market.stat_label)}. ${chance==null?'No probability was saved for the selected side.':`The saved chance for ${sideWord(side)} ${esc(r.offer.line)} is ${pct(chance)}.`}${s.hold?' This line has no published grade.':''}</p>
       <h5>How often did this line hit?</h5><p>${t?.n?`${countOf(t,side)} of the last ${t.n} results hit ${sideWord(side)} at today's line of ${esc(r.offer.line)}; ${t.push||0} pushed.`:'Comparable past-game results are not available for this line.'} <button class="h-link" data-hub="card-tab" data-id="overview">See each result</button></p>
       <h5>Is there a better line elsewhere?</h5><p>${other.length?other.slice(0,8).map(x=>`${esc(x.offer.platform_label)} lists ${esc(x.offer.line)} (${esc(x.market.line_type)}), seen ${esc(when(x.offer.seen_at))}.`).join(' '):'No other platform offer is available for this exact event, player, stat and period.'} <button class="h-link" data-hub="card-tab" data-id="lines">Compare lines</button></p>
       <h5>What should I verify before tracking?</h5><p>Confirm ${esc(r.market.period_label)}, the ${esc(r.offer.platform_label)} line and offered side, the start time, and any player context. Scout rechecks the exact revision when you track.${s.stake_reason?' '+esc(s.stake_reason):''} <button class="h-link" data-hub="card-tab" data-id="stats">See saved stats</button></p></details>`;

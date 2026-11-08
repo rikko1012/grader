@@ -210,7 +210,7 @@ def test_held_grades_never_become_letters_or_stakes(env):
 def test_a_contained_market_shows_its_chance_and_no_lean(env):
     r = recs(env, "nfl")[("Sam Field", "underdog")]
     assert r["scout"]["side"] is None and r["scout"]["p_side"] is None and r["scout"]["p_over"] == 0.5614
-    assert r["scout"]["hold"]["reason"] == "NFL grades are held until forward results clear review."
+    assert r["scout"]["hold"]["reason"] == "NFL grades are switched off."      # ct-1b: only the owner's kill switch gates a league
 
 
 def test_a_sanity_hold_has_no_lean_and_says_why(env):
