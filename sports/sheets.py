@@ -341,11 +341,14 @@ def main(argv=None):
     s.add_argument("--now", default=None)
     s.add_argument("--only", choices=("sheets", "without", "results"), default=None)
     s.add_argument("--force", action="store_true", help="rebuild without / results even when fresh")
+    # 2026-11-08: public Results runs as its own scheduler job ("results-public", --only results); inside the 5-minute
+    # sheets job its ~4-minute build was killed over the sheets cap every run, taking the sheets job down with it
+    s.add_argument("--skip-results", action="store_true", help="sheets + without only (results: its own job)")
     a = p.parse_args(argv)
     from . import flags
     flags.require("SPORTS_INGEST")
     from . import config
-    st = Stages(config.DATA_DIR / "sheets_stages.json")
+    st = Stages(config.DATA_DIR / ("results_stages.json" if a.only == "results" else "sheets_stages.json"))
     out = {}
     for lg in a.leagues:
         if lg not in snapshots.LEAGUES:
@@ -358,7 +361,7 @@ def main(argv=None):
             if a.only in (None, "without"):
                 out["without"] = {lg: st.run(f"without:{lg}", lambda lg=lg: without.build_if_stale(con, lg, force=a.force))
                                   for lg in a.leagues}
-            if a.only in (None, "results"):
+            if a.only == "results" or (a.only is None and not a.skip_results):
                 out["results"] = st.run("results", lambda: results_public.build_if_stale(con, force=a.force))
     st.done()
     print(json.dumps(out, indent=1, default=str))

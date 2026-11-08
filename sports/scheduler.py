@@ -176,8 +176,15 @@ def default_jobs():
                                      league=x, locks=(f"snapshots:{x}",)) for x in lg},
         # locks (2026-10-31): a heavy job without them runs alone, so the other slot sat empty and sheets / settle / history
         # waited 50 min. sheets reads the store read-only and writes only its own files; 420 s because a partner slows it
-        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg), every_s=300, timeout_s=600 if std else 300,
+        "sheets": dict(argv=_py("-m", "sports.sheets", "build", *lg, "--skip-results"), every_s=300,
+                       timeout_s=600 if std else 300,
                        flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=3, locks=("sheets",)),   # 388 s on 2026-11-02, killed twice at 420; 67 / 126 / 26 MB measured (synthetic 400-player league)
+        # public Results (sports/results_public.py) as its OWN job (2026-11-08): inside sheets its ~230 s full-season
+        # build was killed over the sheets cap (361 > 360 MB) every 5 minutes and took sheets / the heavy slot with it.
+        # Every 30 min (results_public.REFRESH_S); read-only store, writes only results_public.json
+        "results-public": dict(argv=_py("-m", "sports.sheets", "build", *lg, "--only", "results", "--force"),
+                               every_s=1800, timeout_s=900, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=4,
+                               locks=("results-public",)),
         "mapping-audit": dict(argv=_py("-m", "sports.mapping_audit", *lg), every_s=3600, timeout_s=240,
                               flag="SPORTS_INGEST", cap_mb=250, cls=HEAVY, prio=3),  # one offer scan per league / hour
         "slips-ingest": dict(argv=_py("-m", "sports.slips", "ingest"), every_s=300, timeout_s=300,
@@ -219,8 +226,11 @@ def default_jobs():
                               every_s=1800 if std else 3600, cadence=("kalshi", tuple(lg)), then=tuple(f"ui-snapshots-{x}" for x in lg),
                               timeout_s=900, flag="SPORTS_INGEST", cap_mb=240, cls=HEAVY, prio=3,
                               locks=("canonical", "cache"), env={"SPORTS_WORKER_CONCURRENCY": "1", "SPORTS_JOB_TIMEOUT_S": "870"}),   # 70-84 MB (production 2026-10-25)
-        "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg), every_s=900 if std else 3600,
+        # --no-post (2026-11-08): settling only (~64 s + ESPN reads); the results ledger + model / shadow scorecards
+        # (~1,000 s and growing) made every run hit the 1,500 s kill - they run as "settle-post", started right after
+        "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg, "--no-post"), every_s=900 if std else 3600,
                        timeout_s=1500 if std else 900,      # 764 s beside a partner on 2026-11-01, still rising
+                       then=("settle-post",),
                        flag="SPORTS_INGEST", cap_mb=240 if std else 120, cls=HEAVY, prio=4,
                        locks=("canonical", "books", "games", "cache", "model-daily"),      # never beside a collector
                        # Settlement also imports the model scorecard's native libraries. The old collector VM
@@ -230,6 +240,16 @@ def default_jobs():
                        env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int)),
                             "SPORTS_JOB_TIMEOUT_S": "1440"}
                        if std else {"SPORTS_JOB_TIMEOUT_S": "840"}),
+        # after each settle run (then=) and on its own cadence: the model + shadow scorecards (learning.db / shadow.db),
+        # then results.json per league (streamed through a spill file: memory flat with the season). Reads the store
+        # only; never writes a settlement. Each event's scoring commits with its progress mark, so a killed run resumes
+        # where it stopped; the scorecards go first so a killed ledger never starves them. model-daily: never beside
+        # settle (whose settlements it reads) or the daily fit (which reads learning.db)
+        "settle-post": dict(argv=_py("-m", "sports.worker", "settle-post", *lg), every_s=900 if std else 3600,
+                            timeout_s=2400 if std else 1800, flag="SPORTS_INGEST", cap_mb=340 if std else 160,
+                            cls=HEAVY, prio=5, locks=("model-daily", "settle-post"),
+                            env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
+                            if std else {}),
         # pre-game news archive (pgn-1, pregame_news/): injury report + depth charts through the shared caches and the
         # game summary of games starting within 2 h -> pregame_news.db, append-only, change-only. Research input only.
         "pregame-news": dict(argv=_py("-m", "sports.pregame_news", "run", *lg), every_s=900, timeout_s=300,

@@ -171,10 +171,41 @@ builds; a league collector goes first at 15 min overdue (5 min stopped settle an
 
 **Books job (2026-11-06, owner: "pull FanDuel and BetRivers every 5-10 min, every 2-3 min in the 2 hours before games, so they stay under the 30-min stale cutoff").** Inside the ingest cycle the books were read every 36-60 min (the cycle waits behind settle, which shares its locks and ran ~20 min), so no NBA / NFL row had a market chance (15-min rule) and the Tools +EV sheet dropped ~1,000-2,000 quotes as older than 30 min. The freshness rules stay; the books now run as the light `books` job (no heavy slot, no shared lock: its writes are short per-game transactions) on the direct ladder. Politeness: one request per tab / game at 1 req/s per host (net.py), no retry inside a call, a 429 / 5xx cools the provider down 60 s doubling to 30 min, a 401 / 403 for 6 h, Retry-After obeyed in full - and the minute check sends nothing while a provider cools down.
 
+**Sports jobs fix (2026-11-08).** Live ops at 13.8 h uptime: sheets killed over its cap 13 times (361 > 360 MB, in the
+results step), settle timed out 5 times in a row at 1,500 s (4 h backoff: settlement every ~4.5 h), model-forward
+exited 1 four times. Causes and fixes (no grade, chance, stake, side, projection or settlement change; equality tests in
+`sports/tests/test_sports_jobs_1108.py`):
+- *results (public Results file)*: one ~1.5 KB dict per forecast revision of the season, both leagues alive at once, and
+  a bootstrap that copied every sampled row per draw. Now the rows are reduced as they stream (newest per line key), one
+  league at a time, the bootstrap works from per-game values (same draws, same sums - bit-identical), archived offer
+  identities come from the metadata view (no archive file decode), and it is its own `results-public` job (sheets runs
+  with `--skip-results`). The file is identical apart from `built_at`.
+- *review follow-up (same day)*: the in-memory reduction still kept one row per line key of the season (~0.6 MB per
+  game; a full NBA season ~740 MB against the 360 MB cap) and the settle-post ledger (`snapshots.write_results`) still
+  held every ledger row (~2 MB per game). Both now spill to a throwaway SQLite file in `<DATA_DIR>/tmp`
+  (`sports/spill.py`: no journal, 2 MB page cache, deleted at the end, a killed run's file swept after 6 h): rows go to
+  disk as they stream, the newest-per-key choices and every ordering run in SQL with the list code's tie rules (the
+  sorts carry keys only), and the summaries are fed one decoded row at a time (per-game numbers + the means' value
+  lists; the ledger's means are `sum()` over an ordered SQL read). Both files are identical to ecfa81a's (frozen
+  copies in `sports/tests/ref_*_ecfa81a.py`). Process peak on synthetic seasons of 9 / 27 / 81 games: Results 64 / 65 /
+  66 MB (ecfa81a 65 / 91 / 182), ledger 69 / 71 / 76 MB (ecfa81a 71 / 118 / 270); the store read alone peaks ~60 MB.
+  settle-post now runs the scorecards (resumable per event) BEFORE the ledger, so a killed ledger cannot starve them.
+- *settle*: settling took ~64 s; the results ledger + model scorecard after it ~1,000 s and growing (every event of the
+  last 30 days re-decoded each run; the shadow scorecard's mark was only saved at the end, so a killed run started over).
+  `settle --no-post` now settles only and starts `settle-post`; the scorecards skip unchanged events (index-only
+  signature: settlement + forecast record count / newest rid / rid sum; shadow adds its forecast rows) and commit
+  per-event progress. Scorecard rows are identical to the full re-read.
+- *model-forward*: its offer loop kept a streaming read cursor open across `store.put`; once the books job
+  (beside_exclusive since 2026-11-06) committed, the stale WAL snapshot could not become a write transaction
+  (SQLITE_BUSY_SNAPSHOT, "database is locked", no busy wait) and the run exited 1. The offers are now read into a list
+  first (same rows, same order).
+Check after deploy: ops `scheduler.jobs` settle / settle-post / sheets / results-public / model-forward `last_ok_at` set
+and `failures_in_a_row` 0; `settle_post_stages` well inside 2,400 s; `results_stages.last_ok`.
+
 **Standard cadences (code defaults when the plan is >= 1.5 GB, 2026-10-25; Starter in brackets):** collector per
 league 3 / 5 / 10 min near tip / game day / otherwise [5 / 10 / 15]; Kalshi 10 / 30 min [20 / 60]; board build per
-league every 60 s and right after each collector cycle [180 s]; slip pool 45 s [90 s]; settle (+ results ledger),
-picks-settle, slips-settle every 15 min [60 min]. Model-forward stays 30 min (exclusive: on 1 CPU a 15-min cycle
+league every 60 s and right after each collector cycle [180 s]; slip pool 45 s [90 s]; settle, settle-post (results
+ledger + scorecards), picks-settle, slips-settle every 15 min [60 min]; results-public 30 min. Model-forward stays 30 min (exclusive: on 1 CPU a 15-min cycle
 would pause every other job ~20% of the time). The board build runs beside the OTHER league's collector, so pages keep
 updating while lines are collected.
 
@@ -212,7 +243,10 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | books | `sports.worker books nba nfl` (FanDuel / BetRivers own feeds + OddsPapi when its guard allows; 2026-11-06 book-cadence). Each run first checks books.db (`books.worker.pending`, no request) and exits in ~1 s unless a game list, a game on the **direct** ladder (3 / 5 / 8 / 8 min inside 2 / 8 / 24 / 72 h of the start, then 12 h inside 7 days; the 24-72 h rung was 3 h until the 2026-11-06 site audit N1) or a blocked-book probe is due; then the ESPN resolver (shared caches) and one `run_once` pass. Store cap / `SPORTS_DISK_FREE_FLOOR_MB` checked before any write (exit 3 when paused). `SPORTS_BOOKS_JOB=0` = rollback (books back inside ingest-<league>) | every 60 s when a league is hot or has a game within 72 h (SPORTS_BOOKS_GAMEDAY_H, site audit N1), 180 s otherwise (SPORTS_BOOKS_HOT_S / _GAMEDAY_S / _IDLE_S) | light | 60 | 46 local, full 17-game NBA slate at real volume (28.6k side quotes, fake feeds); due check 35 MB / 0.6 s | SPORTS_INGEST |
 | ingest-nba / ingest-nfl | `sports.worker ingest <league> --bucket-min 1 --sources espn,pp,ud,injuries,oddsapi,polymarket,games` (one job per league; `books` only with SPORTS_BOOKS_JOB=0) | GAME-DAY cadence per league: 5 min from 2 h before its earliest upcoming tip, 10 min on a game day (tip within 18 h or a game under way), 15 min otherwise (SPORTS_INGEST_HOT_S / _GAMEDAY_S / _IDLE_S / _HOT_H / _GAMEDAY_H) | exclusive | 300 | prod 191-197 both leagues together | SPORTS_INGEST |
 | ingest-kalshi | `sports.worker ingest nba nfl --bucket-min 1 --sources kalshi` | 20 min in a league's 2 h pre-tip window, else 60 min (SPORTS_KALSHI_HOT_S / _IDLE_S) | heavy | 240 | prod 70-84 | SPORTS_INGEST |
-| settle | `sports.worker settle nba nfl` (+ catch-up of unsettled games since SPORTS_SETTLE_FLOOR, 40 per run; then writes results.json streamed per event) | 60 min | heavy | 120 | 58 (+ ledger 71 on 80k settlements) | SPORTS_INGEST |
+| settle | `sports.worker settle nba nfl --no-post` (+ catch-up of unsettled games since SPORTS_SETTLE_FLOOR, 40 per run); settling only since 2026-11-08 - starts `settle-post` when it exits 0 | 60 min | heavy | 120 | 58 | SPORTS_INGEST |
+| settle-post | `sports.worker settle-post nba nfl`: the model + shadow scorecards (learning.on_settled / shadow.settle), then results.json per league (streamed per event through a spill file, sports/spill.py). Reads the store only; an event whose settlement / forecast records are unchanged since its last full pass is skipped without decoding, and each event's mark commits with its rows (a killed run resumes). Locks model-daily (never beside settle or grades-daily). Stages: ops `settle_post_stages` | 60 min and right after each settle | heavy | 160 (Standard 340) | synthetic season (180k forecasts, 116 games, 2026-11-08): scorecards 56 MB / 38 s first pass, 0.5 s once events are marked (old: 25 s every run); ledger before the spill 302 MB, after: process peak flat with the season (69 / 71 / 76 MB at 9 / 27 / 81 games, ecfa81a 71 / 118 / 270) | SPORTS_INGEST |
+| sheets | `sports.sheets build nba nfl --skip-results` (pick sheets + "without" files; ops `sheets_stages`) | 5 min | heavy | 200 | 52 (sheets steps, 2026-11-08 prod) | SPORTS_INGEST |
+| results-public | `sports.sheets build nba nfl --only results --force` (public Results page file `results_public.json`; own job since 2026-11-08, ops `results_stages`) | 30 min | heavy | 200 | process peak flat with the season since the spill (64 / 65 / 66 MB at 9 / 27 / 81 synthetic games; ecfa81a 65 / 91 / 182; prod old in-sheets path 361-365 MB, ~230 s). Spill file ~0.8 MB per game on disk while it runs | SPORTS_INGEST |
 | slips-settle | `sports.slips settle` | 60 min | light | 60 | 23 | SPORTS_INGEST |
 | pregame-news | `sports.pregame_news run nba nfl` (pgn-1 research archive: ESPN injury report + depth charts through the shared caches, game summaries of games starting within 2 h, max 20 per league; change-only rows in `pregame_news.db`; PREGAME_NEWS=0 turns it off) | 15 min | light | 80 | 38 local (30 depth teams, 15 games, 3 passes in 0.4 s) | SPORTS_INGEST |
 | grades-daily | `sports.model.daily run` (REGISTER A9a: cal-mi fit -> gradecheck -> containment; exits at once unless due: once per game-day, after 10:00 UTC, only when something new settled) | 30 min check | heavy | 300 | 72-96 synthetic (3.5k-10k props, 6-131 s) | SPORTS_INGEST |

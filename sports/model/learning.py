@@ -43,7 +43,21 @@ def db():
         created_at TEXT, reviewed INTEGER DEFAULT 0, PRIMARY KEY (forecast_id, settlement_id, kind))""")
     con.execute("""CREATE TABLE IF NOT EXISTS fits (sport TEXT, artifact_sha TEXT, fitted_at TEXT, data_as_of TEXT,
         settled_rows INTEGER, role TEXT, PRIMARY KEY (sport, artifact_sha))""")
+    # per-event progress of on_settled (2026-11-08): the event's stored settlement + forecast records (count, newest
+    # rid, rid sum) at its last full pass - an unchanged event is a no-op and is skipped without decoding anything
+    con.execute("CREATE TABLE IF NOT EXISTS learn_events (event_id TEXT PRIMARY KEY, sig TEXT, scored_at TEXT)")
     return con
+
+
+def event_sig(scon, ev):
+    """What one event's scoring reads from the store: its settlement and forecast records, as (count, newest rid,
+    rid sum) each (records are append-only - a correction, a late result or a new forecast is a new row). Index-only."""
+    out = []
+    for kind in ("settlement", "forecast"):
+        n, top, tot = scon.execute("SELECT COUNT(*), MAX(rid), SUM(rid) FROM records WHERE kind=? AND event_id=?",
+                                   (kind, ev)).fetchone()
+        out.append(f"{n}:{top}:{tot}")
+    return "|".join(out)
 
 
 def _pit(fc, value, pmf_row=None, lo=None):
@@ -67,8 +81,17 @@ def on_settled(scon, log=None, now=None, days=30):
     cutoff = (parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     evs = [r[0] for r in scon.execute("SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND known_at >= ? "
                                       "AND event_id IS NOT NULL ORDER BY event_id", (cutoff,))]
-    n_new = n_diag = 0
+    n_new = n_diag = n_skip = 0
+    done = dict(lcon.execute("SELECT event_id, sig FROM learn_events"))
     for ev in evs:
+        # Skip an event whose records are exactly those of its last full pass: every forecast it could score is
+        # already in the scorecard against its current settlement, so the body below would add nothing. The mark is
+        # committed with the event's rows, so a run killed mid-way keeps what it finished (settle 1,500 s timeouts,
+        # 2026-11-08: each run re-decoded every forecast of the season before its already-scored check).
+        sig = event_sig(scon, ev)
+        if done.get(ev) == sig:
+            n_skip += 1
+            continue
         by_offer = {}
         for r in scon.execute("SELECT source, source_key, payload FROM records WHERE kind='settlement' AND event_id=? "
                               "ORDER BY source_key, revision", (ev,)):
@@ -98,9 +121,12 @@ def on_settled(scon, log=None, now=None, days=30):
             a, d = _score_one(lcon, icon, fid, fc, offer, cur)
             n_new += a
             n_diag += d
+        lcon.execute("INSERT OR REPLACE INTO learn_events (event_id, sig, scored_at) VALUES (?,?,?)",
+                     (ev, sig, now_utc()))
         lcon.commit()
     lcon.commit()
-    out = {"scorecard_rows_added": n_new, "diagnostics_added": n_diag, "events_read": len(evs), "retrain": {}}
+    out = {"scorecard_rows_added": n_new, "diagnostics_added": n_diag, "events_read": len(evs),
+           "events_unchanged": n_skip, "retrain": {}}
     for sport in ("nba", "nfl"):
         out["retrain"][sport] = retrain_due(sport, lcon)
     try:                                                # sm-2 shadow scorecard (REGISTER A5); never blocks sm-1
