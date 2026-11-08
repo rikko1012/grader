@@ -1,0 +1,2110 @@
+{
+ "ref_date": "2026-11-05",
+ "raw_side_rows": 259238,
+ "aggregate_rows": 42464,
+ "lineup_players": 1115,
+ "teams": 253,
+ "counts": {
+  "": 624,
+  "AWPer": 199,
+  "Star rifler": 25,
+  "IGL": 100,
+  "Support": 30,
+  "Entry": 94,
+  "Lurker": 43
+ },
+ "lineups_5plus": 172,
+ "collisions": {},
+ "igl_teams": 100,
+ "map_notes": 0,
+ "stat_roles": {
+  "": 677,
+  "AWPer": 208,
+  "Star rifler": 27,
+  "Support": 47,
+  "Entry": 111,
+  "Lurker": 45
+ },
+ "top30": [
+  {
+   "rank": 1,
+   "team": "MOUZ",
+   "players": [
+    [
+     "torzsi",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "Spinx",
+     "Lurker",
+     "Lurker",
+     null
+    ],
+    [
+     "xertioN",
+     "IGL",
+     "Entry",
+     null
+    ],
+    [
+     "PR",
+     null,
+     null,
+     null
+    ],
+    [
+     "xelex",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 2,
+   "team": "Vitality",
+   "players": [
+    [
+     "ropz",
+     "Lurker",
+     "Lurker",
+     null
+    ],
+    [
+     "ZywOo",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "flameZ",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "mezii",
+     null,
+     null,
+     null
+    ],
+    [
+     "jL",
+     null,
+     null,
+     null
+    ],
+    [
+     "apEX",
+     "IGL",
+     "Support",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 3,
+   "team": "FURIA",
+   "players": [
+    [
+     "yuurih",
+     null,
+     null,
+     null
+    ],
+    [
+     "YEKINDAR",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "KSCERATO",
+     "Lurker",
+     "Lurker",
+     null
+    ],
+    [
+     "FalleN",
+     "IGL",
+     "Support",
+     null
+    ],
+    [
+     "molodoy",
+     "AWPer",
+     "AWPer",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 4,
+   "team": "BETBOOM",
+   "players": [
+    [
+     "Boombl4",
+     "IGL",
+     "Entry",
+     null
+    ],
+    [
+     "zorte",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "S1ren",
+     null,
+     null,
+     null
+    ],
+    [
+     "d1Ledez",
+     null,
+     null,
+     null
+    ],
+    [
+     "Magnojez",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 5,
+   "team": "Spirit",
+   "players": [
+    [
+     "sh1ro",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "magixx",
+     "IGL",
+     "Support",
+     null
+    ],
+    [
+     "tN1R",
+     null,
+     null,
+     null
+    ],
+    [
+     "zont1x",
+     null,
+     null,
+     null
+    ],
+    [
+     "donk",
+     "Entry",
+     "Entry",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 6,
+   "team": "Aurora",
+   "players": [
+    [
+     "Jimpphat",
+     "Support",
+     "Support",
+     null
+    ],
+    [
+     "kyxsan",
+     "IGL",
+     null,
+     null
+    ],
+    [
+     "Wicadia",
+     null,
+     null,
+     null
+    ],
+    [
+     "XANTARES",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "woxic",
+     "AWPer",
+     "AWPer",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 7,
+   "team": "Falcons",
+   "players": [
+    [
+     "TeSeS",
+     null,
+     null,
+     null
+    ],
+    [
+     "m0NESY",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "kyousuke",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "NiKo",
+     null,
+     null,
+     null
+    ],
+    [
+     "karrigan",
+     "IGL",
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 8,
+   "team": "Natus Vincere",
+   "players": [
+    [
+     "iM",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "b1t",
+     "Support",
+     "Support",
+     null
+    ],
+    [
+     "w0nderful",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "makazze",
+     null,
+     null,
+     null
+    ],
+    [
+     "Aleksib",
+     "IGL",
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 9,
+   "team": "The MongolZ",
+   "players": [
+    [
+     "nin9",
+     null,
+     null,
+     null
+    ],
+    [
+     "bLitz",
+     null,
+     null,
+     null
+    ],
+    [
+     "Techno",
+     null,
+     null,
+     null
+    ],
+    [
+     "910",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "cobrazera",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 10,
+   "team": "FUT",
+   "players": [
+    [
+     "SunPayus",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "xfl0ud",
+     "Support",
+     "Support",
+     null
+    ],
+    [
+     "dem0n",
+     "Star rifler",
+     "Star rifler",
+     null
+    ],
+    [
+     "Krabeni",
+     "IGL",
+     null,
+     null
+    ],
+    [
+     "dziugss",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 11,
+   "team": "PARIVISION",
+   "players": [
+    [
+     "FL1T",
+     null,
+     null,
+     null
+    ],
+    [
+     "Jame",
+     "IGL",
+     "AWPer",
+     null
+    ],
+    [
+     "xiELO",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "zweih",
+     null,
+     null,
+     null
+    ],
+    [
+     "HObbit",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 12,
+   "team": "Nemiga",
+   "players": [
+    [
+     "KaiR0N-",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "Xant3r",
+     null,
+     null,
+     null
+    ],
+    [
+     "robo",
+     null,
+     null,
+     null
+    ],
+    [
+     "khaN",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "syph0",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 13,
+   "team": "Legacy",
+   "players": [
+    [
+     "arT",
+     "IGL",
+     "Entry",
+     null
+    ],
+    [
+     "dumau",
+     null,
+     null,
+     null
+    ],
+    [
+     "latto",
+     "Star rifler",
+     "Star rifler",
+     null
+    ],
+    [
+     "n1ssim",
+     "Lurker",
+     "Lurker",
+     null
+    ],
+    [
+     "try",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "ksloks",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 14,
+   "team": "G2",
+   "players": [
+    [
+     "r1nkle",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "HeavyGod",
+     null,
+     null,
+     null
+    ],
+    [
+     "MATYS",
+     null,
+     null,
+     null
+    ],
+    [
+     "huNter-",
+     "IGL",
+     null,
+     null
+    ],
+    [
+     "NertZ",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 15,
+   "team": "1win",
+   "players": [
+    [
+     "Ax1Le",
+     null,
+     null,
+     null
+    ],
+    [
+     "nafany",
+     "IGL",
+     "Entry",
+     null
+    ],
+    [
+     "BELCHONOKK",
+     null,
+     null,
+     null
+    ],
+    [
+     "fame",
+     null,
+     null,
+     null
+    ],
+    [
+     "ArtFr0st",
+     "AWPer",
+     "AWPer",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 16,
+   "team": "Liquid",
+   "players": [
+    [
+     "malbsMd",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "JT",
+     "IGL",
+     "Support",
+     null
+    ],
+    [
+     "Jorko",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "NAF",
+     "Lurker",
+     "Lurker",
+     null
+    ],
+    [
+     "EliGE",
+     "Star rifler",
+     "Star rifler",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 17,
+   "team": "Astralis",
+   "players": [
+    [
+     "HooXi",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "phzy",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "siuhy",
+     null,
+     null,
+     null
+    ],
+    [
+     "jabbi",
+     null,
+     null,
+     null
+    ],
+    [
+     "Staehr",
+     null,
+     null,
+     null
+    ],
+    [
+     "ryu",
+     null,
+     null,
+     null
+    ],
+    [
+     "cmtry",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 18,
+   "team": "Ninjas in Pyjamas",
+   "players": [
+    [
+     "stavn",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "sjuush",
+     "Support",
+     "Support",
+     null
+    ],
+    [
+     "Krimbo",
+     "IGL",
+     "Lurker",
+     null
+    ],
+    [
+     "adamb",
+     null,
+     null,
+     null
+    ],
+    [
+     "xKacpersky",
+     "Entry",
+     "Entry",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 19,
+   "team": "HEROIC",
+   "players": [
+    [
+     "Brollan",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "nilo",
+     null,
+     null,
+     null
+    ],
+    [
+     "susp",
+     null,
+     null,
+     null
+    ],
+    [
+     "MartinezSa",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "Chr1zN",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 20,
+   "team": "MIBR",
+   "players": [
+    [
+     "LNZ",
+     "IGL",
+     "Support",
+     null
+    ],
+    [
+     "nqz",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "insani",
+     "Star rifler",
+     "Star rifler",
+     null
+    ],
+    [
+     "venomzera",
+     null,
+     null,
+     null
+    ],
+    [
+     "tomaszin",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 21,
+   "team": "FaZe",
+   "players": [
+    [
+     "Twistzz",
+     "IGL",
+     null,
+     null
+    ],
+    [
+     "Neityu",
+     null,
+     null,
+     null
+    ],
+    [
+     "jcobbb",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "JBOEN",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "frozen",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 22,
+   "team": "100 Thieves",
+   "players": [
+    [
+     "Gizmy",
+     null,
+     null,
+     null
+    ],
+    [
+     "sirah",
+     null,
+     null,
+     null
+    ],
+    [
+     "poiii",
+     null,
+     null,
+     null
+    ],
+    [
+     "device",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "rain",
+     "Entry",
+     "Entry",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 23,
+   "team": "Eternal Fire",
+   "players": [
+    [
+     "MisteM",
+     "IGL",
+     "Support",
+     null
+    ],
+    [
+     "regali",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "soulfly",
+     null,
+     null,
+     null
+    ],
+    [
+     "Kvem",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "jottAAA",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 24,
+   "team": "B8",
+   "players": [
+    [
+     "alex666",
+     null,
+     null,
+     null
+    ],
+    [
+     "npl",
+     null,
+     null,
+     null
+    ],
+    [
+     "kensizor",
+     null,
+     null,
+     null
+    ],
+    [
+     "esenthial",
+     null,
+     null,
+     null
+    ],
+    [
+     "s1zzi",
+     "AWPer",
+     "AWPer",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 25,
+   "team": "M80",
+   "players": [
+    [
+     "slaxz-",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "Swisher",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "s1n",
+     "IGL",
+     null,
+     null
+    ],
+    [
+     "JBa",
+     null,
+     null,
+     null
+    ],
+    [
+     "Lake",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 26,
+   "team": "fnatic",
+   "players": [
+    [
+     "fEAR",
+     null,
+     null,
+     null
+    ],
+    [
+     "jambo",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "jackasmo",
+     null,
+     null,
+     null
+    ],
+    [
+     "cairne",
+     null,
+     null,
+     null
+    ],
+    [
+     "mazay",
+     "Entry",
+     "Entry",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 27,
+   "team": "HOTU",
+   "players": [
+    [
+     "n0rb3r7",
+     "Support",
+     "Support",
+     null
+    ],
+    [
+     "kade0",
+     null,
+     null,
+     null
+    ],
+    [
+     "mizu",
+     null,
+     null,
+     null
+    ],
+    [
+     "dwushka",
+     null,
+     null,
+     null
+    ],
+    [
+     "frontales",
+     "AWPer",
+     "AWPer",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 28,
+   "team": "9z",
+   "players": [
+    [
+     "max",
+     "IGL",
+     null,
+     null
+    ],
+    [
+     "dgt",
+     "Lurker",
+     "Lurker",
+     null
+    ],
+    [
+     "meyern",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "luchov",
+     "Entry",
+     "Entry",
+     null
+    ],
+    [
+     "HUASOPEEK",
+     null,
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 29,
+   "team": "DENDELE",
+   "players": [
+    [
+     "gafolo",
+     "IGL",
+     null,
+     null
+    ],
+    [
+     "koala",
+     null,
+     null,
+     null
+    ],
+    [
+     "maxxkor",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "rdnzao",
+     null,
+     null,
+     null
+    ],
+    [
+     "doc",
+     "Star rifler",
+     "Star rifler",
+     null
+    ]
+   ]
+  },
+  {
+   "rank": 30,
+   "team": "BIG",
+   "players": [
+    [
+     "JDC",
+     "Support",
+     "Support",
+     null
+    ],
+    [
+     "faveN",
+     null,
+     null,
+     null
+    ],
+    [
+     "blameF",
+     "IGL",
+     "Star rifler",
+     null
+    ],
+    [
+     "gr1ks",
+     "AWPer",
+     "AWPer",
+     null
+    ],
+    [
+     "tabseN",
+     null,
+     null,
+     null
+    ]
+   ]
+  }
+ ],
+ "top30_players": 154,
+ "top30_with_role": 86,
+ "board": {
+  "names_30d": 53,
+  "in_lineups": 53,
+  "with_role": 31
+ },
+ "ground_truth": {
+  "total": 33,
+  "shown": 27,
+  "hits": 26,
+  "rows": [
+   {
+    "player": "zywoo",
+    "team": "Vitality",
+    "truth": [
+     "AWPer",
+     "Star rifler"
+    ],
+    "conf": "High",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 36,
+     "k_share": 99,
+     "fa_pr": 93,
+     "td_share": 48,
+     "tk_ratio": 16,
+     "rating": 100
+    },
+    "awp_share": 0.368,
+    "listed": [
+     "awp",
+     "rifle"
+    ]
+   },
+   {
+    "player": "m0nesy",
+    "team": "Falcons",
+    "truth": [
+     "AWPer"
+    ],
+    "conf": "High",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 40,
+     "k_share": 99,
+     "fa_pr": 92,
+     "td_share": 16,
+     "tk_ratio": 8,
+     "rating": 99
+    },
+    "awp_share": 0.515,
+    "listed": [
+     "awp"
+    ]
+   },
+   {
+    "player": "w0nderful",
+    "team": "Natus Vincere",
+    "truth": [
+     "AWPer"
+    ],
+    "conf": "High",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 7,
+     "k_share": 98,
+     "fa_pr": 88,
+     "td_share": 14,
+     "tk_ratio": 21,
+     "rating": 97
+    },
+    "awp_share": 0.456,
+    "listed": [
+     "awp"
+    ]
+   },
+   {
+    "player": "torzsi",
+    "team": "MOUZ",
+    "truth": [
+     "AWPer"
+    ],
+    "conf": "High",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 1,
+     "k_share": 61,
+     "fa_pr": 93,
+     "td_share": 33,
+     "tk_ratio": 3,
+     "rating": 82
+    },
+    "awp_share": 0.505,
+    "listed": [
+     "awp"
+    ]
+   },
+   {
+    "player": "sh1ro",
+    "team": "Spirit",
+    "truth": [
+     "AWPer"
+    ],
+    "conf": "High",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 1,
+     "k_share": 74,
+     "fa_pr": 79,
+     "td_share": 40,
+     "tk_ratio": 24,
+     "rating": 86
+    },
+    "awp_share": 0.446,
+    "listed": [
+     "awp"
+    ]
+   },
+   {
+    "player": "910",
+    "team": "The MongolZ",
+    "truth": [
+     "AWPer"
+    ],
+    "conf": "High",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 26,
+     "k_share": 98,
+     "fa_pr": 76,
+     "td_share": 10,
+     "tk_ratio": 76,
+     "rating": 95
+    },
+    "awp_share": 0.494,
+    "listed": [
+     "awp"
+    ]
+   },
+   {
+    "player": "molodoy",
+    "team": "FURIA",
+    "truth": [
+     "AWPer"
+    ],
+    "conf": "High",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 38,
+     "k_share": 95,
+     "fa_pr": 71,
+     "td_share": 24,
+     "tk_ratio": 50,
+     "rating": 90
+    },
+    "awp_share": 0.482,
+    "listed": [
+     "awp"
+    ]
+   },
+   {
+    "player": "ultimate",
+    "team": "Betclic",
+    "truth": [
+     "AWPer"
+    ],
+    "conf": "Med",
+    "role": "AWPer",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 48,
+     "k_share": 90,
+     "fa_pr": 72,
+     "td_share": 4,
+     "tk_ratio": 81,
+     "rating": 51
+    },
+    "awp_share": 0.426,
+    "listed": [
+     "awp"
+    ]
+   },
+   {
+    "player": "jame",
+    "team": "PARIVISION",
+    "truth": [
+     "AWPer",
+     "IGL"
+    ],
+    "conf": "High",
+    "role": "IGL",
+    "stat_role": "AWPer",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 5,
+     "k_share": 69,
+     "fa_pr": 90,
+     "td_share": 5,
+     "tk_ratio": 13,
+     "rating": 50
+    },
+    "awp_share": 0.565,
+    "listed": [
+     "igl",
+     "awp"
+    ]
+   },
+   {
+    "player": "apex",
+    "team": "Vitality",
+    "truth": [
+     "IGL"
+    ],
+    "conf": "High",
+    "role": "IGL",
+    "stat_role": "Support",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 75,
+     "k_share": 4,
+     "fa_pr": 99,
+     "td_share": 64,
+     "tk_ratio": 28,
+     "rating": 11
+    },
+    "awp_share": 0.003,
+    "listed": [
+     "igl"
+    ]
+   },
+   {
+    "player": "aleksib",
+    "team": "Natus Vincere",
+    "truth": [
+     "IGL"
+    ],
+    "conf": "High",
+    "role": "IGL",
+    "stat_role": null,
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 12,
+     "k_share": 0,
+     "fa_pr": 89,
+     "td_share": 96,
+     "tk_ratio": 77,
+     "rating": 6
+    },
+    "awp_share": 0.004,
+    "listed": [
+     "igl"
+    ]
+   },
+   {
+    "player": "karrigan",
+    "team": "Falcons",
+    "truth": [
+     "IGL"
+    ],
+    "conf": "High",
+    "role": "IGL",
+    "stat_role": null,
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 73,
+     "k_share": 0,
+     "fa_pr": 63,
+     "td_share": 88,
+     "tk_ratio": 13,
+     "rating": 0
+    },
+    "awp_share": 0.007,
+    "listed": [
+     "igl",
+     "entry"
+    ]
+   },
+   {
+    "player": "blitz",
+    "team": "The MongolZ",
+    "truth": [
+     "IGL"
+    ],
+    "conf": "High",
+    "role": null,
+    "stat_role": null,
+    "note": null,
+    "verdict": "blank",
+    "pct": {
+     "t_open": 72,
+     "k_share": 47,
+     "fa_pr": 84,
+     "td_share": 55,
+     "tk_ratio": 8,
+     "rating": 49
+    },
+    "awp_share": 0.021,
+    "listed": [
+     "igl",
+     "rifle"
+    ]
+   },
+   {
+    "player": "fallen",
+    "team": "FURIA",
+    "truth": [
+     "IGL"
+    ],
+    "conf": "High",
+    "role": "IGL",
+    "stat_role": "Support",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 31,
+     "k_share": 2,
+     "fa_pr": 89,
+     "td_share": 91,
+     "tk_ratio": 4,
+     "rating": 9
+    },
+    "awp_share": 0.053,
+    "listed": [
+     "igl",
+     "rifle"
+    ]
+   },
+   {
+    "player": "tabsen",
+    "team": "BIG",
+    "truth": [
+     "IGL"
+    ],
+    "conf": "High",
+    "role": null,
+    "stat_role": null,
+    "note": null,
+    "verdict": "blank",
+    "pct": {
+     "t_open": 83,
+     "k_share": 10,
+     "fa_pr": 80,
+     "td_share": 95,
+     "tk_ratio": 2,
+     "rating": 23
+    },
+    "awp_share": 0.009,
+    "listed": [
+     "rifle"
+    ]
+   },
+   {
+    "player": "hooxi",
+    "team": "Astralis",
+    "truth": [
+     "IGL"
+    ],
+    "conf": "Med",
+    "role": "Entry",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "miss",
+    "pct": {
+     "t_open": 60,
+     "k_share": 1,
+     "fa_pr": 96,
+     "td_share": 78,
+     "tk_ratio": 75,
+     "rating": 14
+    },
+    "awp_share": 0.007,
+    "listed": [
+     "igl",
+     "entry"
+    ]
+   },
+   {
+    "player": "flamez",
+    "team": "Vitality",
+    "truth": [
+     "Entry"
+    ],
+    "conf": "High",
+    "role": "Entry",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 96,
+     "k_share": 54,
+     "fa_pr": 61,
+     "td_share": 99,
+     "tk_ratio": 30,
+     "rating": 84
+    },
+    "awp_share": 0.001,
+    "listed": [
+     "entry"
+    ]
+   },
+   {
+    "player": "donk",
+    "team": "Spirit",
+    "truth": [
+     "Entry",
+     "Star rifler"
+    ],
+    "conf": "High",
+    "role": "Entry",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 97,
+     "k_share": 100,
+     "fa_pr": 1,
+     "td_share": 65,
+     "tk_ratio": 81,
+     "rating": 100
+    },
+    "awp_share": 0.007,
+    "listed": [
+     "entry"
+    ]
+   },
+   {
+    "player": "xertion",
+    "team": "MOUZ",
+    "truth": [
+     "Entry",
+     "IGL"
+    ],
+    "conf": "High",
+    "role": "IGL",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 95,
+     "k_share": 59,
+     "fa_pr": 63,
+     "td_share": 96,
+     "tk_ratio": 7,
+     "rating": 73
+    },
+    "awp_share": 0.003,
+    "listed": [
+     "igl",
+     "entry"
+    ]
+   },
+   {
+    "player": "kyousuke",
+    "team": "Falcons",
+    "truth": [
+     "Entry"
+    ],
+    "conf": "Med",
+    "role": "Entry",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 84,
+     "k_share": 93,
+     "fa_pr": 2,
+     "td_share": 89,
+     "tk_ratio": 73,
+     "rating": 83
+    },
+    "awp_share": 0.023,
+    "listed": [
+     "entry"
+    ]
+   },
+   {
+    "player": "malbsmd",
+    "team": "Liquid",
+    "truth": [
+     "Entry"
+    ],
+    "conf": "Med",
+    "role": "Entry",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 96,
+     "k_share": 60,
+     "fa_pr": 17,
+     "td_share": 93,
+     "tk_ratio": 27,
+     "rating": 62
+    },
+    "awp_share": 0.001,
+    "listed": [
+     "entry"
+    ]
+   },
+   {
+    "player": "xantares",
+    "team": "Aurora",
+    "truth": [
+     "Entry"
+    ],
+    "conf": "Med",
+    "role": "Entry",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 91,
+     "k_share": 42,
+     "fa_pr": 19,
+     "td_share": 55,
+     "tk_ratio": 15,
+     "rating": 20
+    },
+    "awp_share": 0.007,
+    "listed": []
+   },
+   {
+    "player": "brollan",
+    "team": "HEROIC",
+    "truth": [
+     "Entry"
+    ],
+    "conf": "Med",
+    "role": "Entry",
+    "stat_role": "Entry",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 84,
+     "k_share": 57,
+     "fa_pr": 63,
+     "td_share": 71,
+     "tk_ratio": 61,
+     "rating": 86
+    },
+    "awp_share": 0.009,
+    "listed": [
+     "igl",
+     "entry"
+    ]
+   },
+   {
+    "player": "ropz",
+    "team": "Vitality",
+    "truth": [
+     "Lurker"
+    ],
+    "conf": "High",
+    "role": "Lurker",
+    "stat_role": "Lurker",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 24,
+     "k_share": 66,
+     "fa_pr": 22,
+     "td_share": 7,
+     "tk_ratio": 88,
+     "rating": 84
+    },
+    "awp_share": 0.028,
+    "listed": [
+     "lurk"
+    ]
+   },
+   {
+    "player": "kscerato",
+    "team": "FURIA",
+    "truth": [
+     "Lurker",
+     "Star rifler"
+    ],
+    "conf": "Med",
+    "role": "Lurker",
+    "stat_role": "Lurker",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 38,
+     "k_share": 87,
+     "fa_pr": 64,
+     "td_share": 34,
+     "tk_ratio": 52,
+     "rating": 96
+    },
+    "awp_share": 0.008,
+    "listed": [
+     "lurk"
+    ]
+   },
+   {
+    "player": "spinx",
+    "team": "MOUZ",
+    "truth": [
+     "Lurker"
+    ],
+    "conf": "Med",
+    "role": "Lurker",
+    "stat_role": "Lurker",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 28,
+     "k_share": 58,
+     "fa_pr": 21,
+     "td_share": 57,
+     "tk_ratio": 51,
+     "rating": 94
+    },
+    "awp_share": 0.002,
+    "listed": [
+     "lurk"
+    ]
+   },
+   {
+    "player": "frozen",
+    "team": "FaZe",
+    "truth": [
+     "Lurker",
+     "Star rifler"
+    ],
+    "conf": "Low",
+    "role": null,
+    "stat_role": null,
+    "note": null,
+    "verdict": "blank",
+    "pct": {
+     "t_open": 43,
+     "k_share": 65,
+     "fa_pr": 28,
+     "td_share": 86,
+     "tk_ratio": 36,
+     "rating": 88
+    },
+    "awp_share": 0.005,
+    "listed": [
+     "rifle"
+    ]
+   },
+   {
+    "player": "mezii",
+    "team": "Vitality",
+    "truth": [
+     "Support"
+    ],
+    "conf": "High",
+    "role": null,
+    "stat_role": null,
+    "note": null,
+    "verdict": "blank",
+    "pct": {
+     "t_open": 21,
+     "k_share": 7,
+     "fa_pr": 60,
+     "td_share": 67,
+     "tk_ratio": 1,
+     "rating": 54
+    },
+    "awp_share": 0.0,
+    "listed": [
+     "rifle"
+    ]
+   },
+   {
+    "player": "zont1x",
+    "team": "Spirit",
+    "truth": [
+     "Support"
+    ],
+    "conf": "Med",
+    "role": null,
+    "stat_role": null,
+    "note": null,
+    "verdict": "blank",
+    "pct": {
+     "t_open": 47,
+     "k_share": 6,
+     "fa_pr": 49,
+     "td_share": 51,
+     "tk_ratio": 53,
+     "rating": 30
+    },
+    "awp_share": 0.003,
+    "listed": [
+     "rifle"
+    ]
+   },
+   {
+    "player": "b1t",
+    "team": "Natus Vincere",
+    "truth": [
+     "Star rifler",
+     "Support"
+    ],
+    "conf": "Med",
+    "role": "Support",
+    "stat_role": "Support",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 34,
+     "k_share": 77,
+     "fa_pr": 47,
+     "td_share": 72,
+     "tk_ratio": 13,
+     "rating": 90
+    },
+    "awp_share": 0.027,
+    "listed": [
+     "support"
+    ]
+   },
+   {
+    "player": "jimpphat",
+    "team": "Aurora",
+    "truth": [
+     "Support"
+    ],
+    "conf": "Med",
+    "role": "Support",
+    "stat_role": "Support",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 6,
+     "k_share": 71,
+     "fa_pr": 12,
+     "td_share": 31,
+     "tk_ratio": 65,
+     "rating": 80
+    },
+    "awp_share": 0.012,
+    "listed": [
+     "support"
+    ]
+   },
+   {
+    "player": "niko",
+    "team": "Falcons",
+    "truth": [
+     "Star rifler"
+    ],
+    "conf": "High",
+    "role": null,
+    "stat_role": null,
+    "note": null,
+    "verdict": "blank",
+    "pct": {
+     "t_open": 32,
+     "k_share": 65,
+     "fa_pr": 58,
+     "td_share": 26,
+     "tk_ratio": 50,
+     "rating": 79
+    },
+    "awp_share": 0.0,
+    "listed": [
+     "entry"
+    ]
+   },
+   {
+    "player": "elige",
+    "team": "Liquid",
+    "truth": [
+     "Star rifler"
+    ],
+    "conf": "Med",
+    "role": "Star rifler",
+    "stat_role": "Star rifler",
+    "note": null,
+    "verdict": "hit",
+    "pct": {
+     "t_open": 77,
+     "k_share": 97,
+     "fa_pr": 19,
+     "td_share": 75,
+     "tk_ratio": 8,
+     "rating": 83
+    },
+    "awp_share": 0.011,
+    "listed": []
+   }
+  ]
+ },
+ "stats_only_riflers": {
+  "total": 16,
+  "shown": 8,
+  "hits": 6,
+  "rows": [
+   {
+    "player": "flamez",
+    "truth": [
+     "Entry"
+    ],
+    "stat_only": "Entry",
+    "verdict": "hit"
+   },
+   {
+    "player": "donk",
+    "truth": [
+     "Entry",
+     "Star rifler"
+    ],
+    "stat_only": "Star rifler",
+    "verdict": "hit"
+   },
+   {
+    "player": "kyousuke",
+    "truth": [
+     "Entry"
+    ],
+    "stat_only": "Star rifler",
+    "verdict": "miss"
+   },
+   {
+    "player": "malbsmd",
+    "truth": [
+     "Entry"
+    ],
+    "stat_only": "Entry",
+    "verdict": "hit"
+   },
+   {
+    "player": "xantares",
+    "truth": [
+     "Entry"
+    ],
+    "stat_only": "Entry",
+    "verdict": "hit"
+   },
+   {
+    "player": "brollan",
+    "truth": [
+     "Entry"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "ropz",
+    "truth": [
+     "Lurker"
+    ],
+    "stat_only": "Lurker",
+    "verdict": "hit"
+   },
+   {
+    "player": "kscerato",
+    "truth": [
+     "Lurker",
+     "Star rifler"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "spinx",
+    "truth": [
+     "Lurker"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "frozen",
+    "truth": [
+     "Lurker",
+     "Star rifler"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "mezii",
+    "truth": [
+     "Support"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "zont1x",
+    "truth": [
+     "Support"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "b1t",
+    "truth": [
+     "Star rifler",
+     "Support"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "jimpphat",
+    "truth": [
+     "Support"
+    ],
+    "stat_only": "Lurker",
+    "verdict": "miss"
+   },
+   {
+    "player": "niko",
+    "truth": [
+     "Star rifler"
+    ],
+    "stat_only": null,
+    "verdict": "blank"
+   },
+   {
+    "player": "elige",
+    "truth": [
+     "Star rifler"
+    ],
+    "stat_only": "Star rifler",
+    "verdict": "hit"
+   }
+  ]
+ },
+ "split_half": {
+  "stats": {
+   "a_shown": 147,
+   "b_same": 67,
+   "b_other": 10,
+   "b_blank": 70
+  },
+  "liquipedia": {
+   "a_shown": 70,
+   "b_same": 62,
+   "b_other": 1,
+   "b_blank": 7
+  },
+  "notes": {
+   "pairs": 70,
+   "named_maps": 140,
+   "in_other_half_top2": 70,
+   "chance_expected": 66.7
+  }
+ }
+}
