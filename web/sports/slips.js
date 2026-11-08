@@ -289,9 +289,8 @@
     $("ss-draft-ctx").textContent = "- " + LABEL[c.platform] + " " + c.league.toUpperCase() + " " + (d.entry_type || c.entry_type);
     pplSync();
     var note = prunedNote ? '<p class="ss-note" role="status">' + esc(prunedNote) + "</p>" : ""; prunedNote = "";
-    // QoL 1107: Check result and Clear look off on an empty slip too (they did nothing), like Copy slip
-    ["ss-copy", "ss-result", "ss-clear"].forEach(function (id) { var b = $(id); if (b) b.disabled = !d.legs.length; });
-    if (!d.legs.length) { el.innerHTML = note + '<p class="ss-empty">Empty. Pick a suggestion, or use Add to slip on the Prop board or a player page.</p>'; return; }
+    if (!d.legs.length) { el.innerHTML = note + '<p class="ss-empty">Empty. Use a suggestion to start a slip.</p>'; $("ss-copy").disabled = true; return; }
+    $("ss-copy").disabled = false;
     var probs = {};
     (lastCheck && lastCheck.problems || []).forEach(function (p) { if (p.leg != null) (probs[p.leg] = probs[p.leg] || []).push(p); });
     el.innerHTML = note + '<ul class="ss-legs">' + d.legs.map(function (l, i) {

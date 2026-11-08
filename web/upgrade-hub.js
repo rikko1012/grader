@@ -57,7 +57,7 @@ export function mount(C) {
   /* owner 2026-11-05: the member's goblin rule for every slip Scout builds or suggests (generator and adder). Saved in prefs. */
   const LINE_RULES=[['no_goblins','No goblins'],['one_goblin','At most 1 goblin per slip'],['standard','No goblins or demons'],['all','Any lines']];
   const cleanLines=v=>LINE_RULES.some(r=>r[0]===v)?v:'no_goblins';
-  H.slipLines='no_goblins';T.slipLines=H.slipLines;H.slipLinesSet=false;
+  H.slipLines='no_goblins';T.slipLines=H.slipLines;
   H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',fresh:'all',sort:'ev',dense:false,stake:100,tab:null,moreOpen:false};
   try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
   /* QOL 2026-11-07: Price check's Book / Side / Minimum / Checked within / Sort are kept on this device across reloads (Sport still
@@ -650,11 +650,6 @@ export function mount(C) {
     const read=!said?null:x.same_line_as?`Same line as ${esc(x.same_line_as)}: ${said}`:s.line_chance&&s.side?`${said}, Scout’s chance at this line`:said;
     return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(o.platform_label)} · ${esc(o.line)}</h4><small>Read ${esc(o.seen_at?age(o.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Over</dt><dd>${price('over')}</dd></div><div><dt>Under</dt><dd>${price('under')}</dd></div>${read?`<div><dt>Scout's read</dt><dd>${read}</dd></div>`:''}</dl>${s.line_chance?'<p class="h-history-note">Read from the same saved projection as this player\u2019s graded line. No letter or stake: those are set for the PrizePicks or Underdog entry only.</p>':''}</section>`;
   }
-  const clearArmed=()=>!!H.clearArmed&&Date.now()-H.clearArmed<5000;
-  function armClear(){
-    const on=clearArmed()&&T.legs.length>0,n=T.legs.length;
-    document.querySelectorAll('#u-hub [data-u="clear"]').forEach(b=>{b.textContent=on?`Clear ${n} ${n===1?'pick':'picks'}?`:'Clear';b.classList.toggle('h-armed',on);b.setAttribute('aria-label',on?`Press again to remove all ${n} ${n===1?'pick':'picks'} from your slip`:'Clear slip');});
-  }
   function refreshSlip() {
     if(!isOpen()) return;
     const box=$('hub-slip-content'), top=box.scrollTop;
@@ -674,8 +669,6 @@ export function mount(C) {
     paintBoard();
     if(H.section==='picks')paintPicks();
     if(H.section==='studio')paintStudio();
-    if(H.clearArmed)armClear();
-    evSlipSync();
   }
   /* audit 2026-11-04 (polling): read only the sport(s) on screen. Another sport's board is read when its tab opens; the minute
      refresh runs only while the board is on screen and the page is visible; the browser revalidates each read with its ETag (304). */
@@ -727,7 +720,7 @@ export function mount(C) {
       for(let i=0;i<3;i++) {
         const state=await api('state');
         try {
-          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,...(H.slipLinesSet?{slipLinesSet:true}:{}),...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
+          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
           H.saveError=false; break;
         } catch(e) { if(e.status!==409||i===2) throw e; }
       }
@@ -757,10 +750,7 @@ export function mount(C) {
       /* only a choice made in the Goblins control counts (prefs.researchHub.slipLines). A batch saved before it existed carries the old
          Lines select's 'all' (its first option and default), which is not a choice to allow goblins, so it reads as No goblins; the
          old 'Standard lines only' was a deliberate opt-out and carries over as No goblins or demons (review 2026-11-05). */
-      /* owner audit 2026-11-06 (T2): 'Any lines' is kept only when the member chose it in the Goblins control (slipLinesSet).
-         An 'all' saved without that mark came from the old batch carry-over (2026-11-05, 09:09-09:48) and reads as No goblins. */
-      H.slipLinesSet=p.slipLinesSet===true;
-      H.slipLines=cleanLines((p.slipLines==='all'&&!H.slipLinesSet?null:p.slipLines)||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
+      H.slipLines=cleanLines(p.slipLines||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
       if($('hub-generation-lines'))$('hub-generation-lines').value=H.slipLines;
       C.refreshAdvice?.();
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
@@ -1353,14 +1343,10 @@ export function mount(C) {
     sec.querySelectorAll('[data-studio-panel]').forEach(p=>{p.hidden=p.dataset.studioPanel!==H.studioTab;});
     const a=document.activeElement,u=box.contains(a)?a.dataset.u:null,id=u?a.dataset.id:null;
     box.innerHTML=C.slipTab().replace('data-u="tab" data-id="picks">View receipts','data-hub="receipts">View in My picks');
-    if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side. Or let Auto-build make slips for you.</p><div class="h-empty-acts"><button data-hub="browse-props">Browse player props</button><button data-hub="studio-tab" data-id="build">Auto-build slips</button></div></div>';
-    if(H.clearArmed)armClear();
+    if(!T.legs.length&&!T.tracked)box.innerHTML='<div class="h-empty"><h3>Your slip is empty</h3><p>Choose a prop from any sport, review the line, then add your side. Or let Auto-build make slips for you.</p><div class="h-empty-acts"><button data-hub="section" data-id="board">Browse player props</button><button data-hub="studio-tab" data-id="build">Auto-build slips</button></div></div>';
     if(u)box.querySelector(`[data-u="${CSS.escape(u)}"]${id==null?'':`[data-id="${CSS.escape(id)}"]`}`)?.focus({preventScroll:true});
     if($('hub-slip-history'))$('hub-slip-history').innerHTML=C.picksTab();
     $('hub-studio-tab-n').textContent=String(T.legs.length);
-    /* owner audit 2026-11-06 (T9): the lineup image needs picks; on an empty slip the button is off and says so */
-    const share=sec.querySelector('[data-hub="share-card"]');
-    if(share){share.disabled=!T.legs.length;share.textContent=T.legs.length?'Download lineup image':'Download lineup image (add picks first)';}
     $('hub-studio-sync').textContent=T.saveFail?'Not yet synced. Your changes remain on this device.':T.pending||T.saving?'Saving your changes…':'Saved to your account · available on your other devices';
   }
   async function generate() {
@@ -1381,40 +1367,9 @@ export function mount(C) {
       if(!batch.slips.length)throw new Error(batch.note||'No combinations passed recheck. Widen your settings.');
       H.batch=batch;H.batchSaved=false;paintBatch();
       await saveBatch();
-      status.textContent=`${batch.slips.length} of ${options.count} ${options.count===1?'slip':'slips'} generated and rechecked. ${batch.note||'Review them below; your slip is unchanged.'}`;
-      /* QOL 2026-11-07: the new slips sat below the whole form (two screens down on a phone). The result line moves to the top of
-         the screen with the slips right under it, and focus goes to their heading */
-      if(H.section==='studio'&&H.studioTab==='build'){status.scrollIntoView({block:'start'});const h=$('hub-generated')?.querySelector('h2');if(h){h.tabIndex=-1;h.focus({preventScroll:true});}}
+      status.textContent=`${batch.slips.length} of ${options.count} slips generated and rechecked. ${batch.note||'Review them below; your slip is unchanged.'}`;
     } catch(e){status.textContent=e.status?'Could not verify current offers. Your draft was kept. Try again.':e.message;}
-    finally{H.generating=false;button.textContent='Generate slips';syncGenerate();}
-  }
-  /* QOL 2026-11-07: with no sport ticked, Generate is off and the line under it says why (it used to wait for a press to say so) */
-  const NO_SPORT='Choose at least one sport to build slips.';
-  function syncGenerate(){
-    const b=$('hub-generate'),status=$('hub-generation-status');if(!b||H.generating)return;
-    const none=!document.querySelector('#hub-generation-sports input:checked');
-    b.disabled=none;
-    if(none)status.textContent=NO_SPORT;else if(status.textContent===NO_SPORT||status.textContent==='Choose at least one sport.')status.textContent='';
-  }
-  /* QOL 2026-11-07: Auto-build's settings are kept on this device, so a reload does not reset them to 8 PrizePicks Power 2-picks.
-     Goblins stays on the account (savePreferences). Only the member's own choices are kept; nothing about the slips themselves. */
-  const AB_KEY='scout-autobuild',AB_IDS=['book','type','slips','count','mix','games','repeats','research'];
-  function saveAutobuild(){
-    try{const v={off:[...document.querySelectorAll('#hub-generation-sports input')].filter(e=>!e.checked).map(e=>e.value)};
-      for(const id of AB_IDS){const el=$('hub-generation-'+id);if(el)v[id]=el.value;}
-      localStorage.setItem(AB_KEY,JSON.stringify(v));}catch(e){/* storage blocked */}
-  }
-  function restoreAutobuild(){
-    let v=null;try{v=JSON.parse(localStorage.getItem(AB_KEY)||'null');}catch(e){/* storage blocked */}
-    if(v&&typeof v==='object'){
-      const set=id=>{const el=$('hub-generation-'+id);if(el&&typeof v[id]==='string'&&[...el.options].some(o=>o.value===v[id]&&!o.disabled))el.value=v[id];};
-      set('book');generationControls();set('type');generationControls();
-      for(const id of ['slips','count','mix','games','repeats','research'])set(id);
-      generationControls();
-      const boxes=[...document.querySelectorAll('#hub-generation-sports input')];
-      if(Array.isArray(v.off)&&boxes.some(e=>!v.off.includes(e.value)))boxes.forEach(e=>{e.checked=!v.off.includes(e.value);});
-    }
-    syncGenerate();
+    finally{H.generating=false;button.disabled=false;button.textContent='Generate slips';}
   }
   async function saveBatch() {
     try {
@@ -1433,17 +1388,17 @@ export function mount(C) {
     const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
     const lineTag=l=>l.book==='prizepicks'&&C.lineKind?` <em class="h-line-tag">${esc(C.lineKind('prizepicks',l.gen?.line_type))}</em>`:l.gen?.line_type&&l.gen.line_type!=='standard'?` <em class="h-line-tag">${esc(l.gen.line_type[0].toUpperCase()+l.gen.line_type.slice(1))}</em>`:'';
     const legFace=l=>C.faceHtml?C.faceHtml(l.sport,{key:l.player_key,name:l.player,team:(R.boards[l.sport]?.recs.get(C.offerKey(l.book,l.row_id))?.player.team_abbr)||l.team,size:32,cls:'h-face'}):'';
-    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length===1?'1 slip':slips.length+' separate slips'}</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
+    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
       const metrics=[num(s.all_hit)?`<span>All-hit chance <b>${pct(s.all_hit)}</b></span>`:(s.same_match?'<span>Legs share a match <b>No all-hit chance</b></span>':''),
         s.payout&&num(s.payout.multiple)?`<span>All-hit payout <b>${esc(s.payout.multiple)}×</b></span>`:'',
         s.ev&&num(s.ev.ev)?`<span>Expected return <b>${pct(s.ev.ev)}</b></span>`:''].filter(Boolean).join('');
-      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header>${s.why?`<p class="h-batch-why">${esc(s.why)}</p>`:''}${metrics?`<div class="h-batch-range">${metrics}</div>`:''}<ol>${s.legs.map(l=>`<li${['nba','nfl'].includes(l.sport)?' class="h-leg-face"':''}>${legFace(l)}<div><strong>${esc(l.player)}</strong>${l.gen?.research?' <em class="h-line-tag">Research estimate</em>':''}<small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineTag(l)}</span>${l.gen?.record?`<small class="h-batch-record">${esc(l.gen.record)}</small>`:''}<small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} ${slips.length===1?'slip uses':'slips use'} this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace the '+esc(C.PLATFORMS[s.platform].label)+' entry in My slip':'Open in My slip'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
+      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header>${s.why?`<p class="h-batch-why">${esc(s.why)}</p>`:''}${metrics?`<div class="h-batch-range">${metrics}</div>`:''}<ol>${s.legs.map(l=>`<li${['nba','nfl'].includes(l.sport)?' class="h-leg-face"':''}>${legFace(l)}<div><strong>${esc(l.player)}</strong>${l.gen?.research?' <em class="h-line-tag">Research estimate</em>':''}<small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineTag(l)}</span>${l.gen?.record?`<small class="h-batch-record">${esc(l.gen.record)}</small>`:''}<small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace the '+esc(C.PLATFORMS[s.platform].label)+' entry in My slip':'Open in My slip'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
     }).join('')}</div>`;
   }
   async function useGenerated(id) {
     const s=H.batch?.slips?.[Number(id)];if(!s||H.usingBatch)return;
     H.usingBatch=true;
-    try {await C.useGenerated(s);paintBatch();$('hub-batch-message-'+id).textContent='Rechecked and opened in My slip.';H.studioTab='slip';refreshSlip();studioHash();C.say('Rechecked and opened in My slip.');}
+    try {await C.useGenerated(s);paintBatch();$('hub-batch-message-'+id).textContent='Rechecked and opened in My slip.';H.studioTab='slip';refreshSlip();C.say('Rechecked and opened in My slip.');}
     catch(e){$('hub-batch-message-'+id).textContent=e.status?'Could not recheck this slip. Your draft was kept.':e.message;}
     finally{H.usingBatch=false;}
   }
@@ -1452,14 +1407,14 @@ export function mount(C) {
     return `<section class="h-generator" aria-label="Generate slips"><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your batch</h2><p>Each slip is built for the best chance that all its legs hit, ranked by how each chance band has done on settled results.</p><fieldset id="hub-generation-sports"><legend>Eligible sports</legend>${allowed().map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls">
       <label>Platform<select id="hub-generation-book"><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label>
       <label>Entry type<select id="hub-generation-type"><option value="power">Power</option><option value="flex">Flex</option></select></label>
-      <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} ${n===1?'slip':'slips'}</option>`).join('')}</select></label>
+      <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} slips</option>`).join('')}</select></label>
       <label>Picks per slip<select id="hub-generation-count">${[2,3,4,5,6].map(n=>`<option value="${n}">${n} picks</option>`).join('')}</select></label>
       <label>Sport mix<select id="hub-generation-mix"><option value="any">Any mix</option><option value="mixed">Mixed sports</option><option value="single">One sport</option></select></label>
       <label class="h-goblin-rule">Goblins<select id="hub-generation-lines" aria-describedby="hub-generation-lines-help">${LINE_RULES.map(([v,t])=>`<option value="${v}"${v===H.slipLines?' selected':''}>${t}</option>`).join('')}</select><small id="hub-generation-lines-help">Goblins are easier lines that pay less. Scout leaves them out unless you allow them.</small></label>
       <label>Game selection<select id="hub-generation-games"><option value="spread">One per match</option><option value="stacks">Same match (Underdog)</option></select></label>
       <label>Prop reuse<select id="hub-generation-repeats"><option value="allow">Allow across slips</option><option value="none">No repeat props</option></select></label>
       ${research?'<label>Research estimates<select id="hub-generation-research"><option value="leave">Leave out</option><option value="include">Include, marked</option></select></label>':''}
-      <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. A slip is offered only when its all-hit chance clears the break-even of its payout: PrizePicks Power 2-pick pays 3x, so it needs 33.3%. When fewer slips clear than you asked for, Scout builds fewer and says how many cleared. Legs that share a match have no all-hit chance, so a same-match slip cannot be shown to clear: generated slips keep one leg per match, Same match (Underdog) included. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin’s lower payout is not published, so a generated PrizePicks slip never holds one; an Underdog pick paying under 1.0x is left out of generated slips for the same reason. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
+      <button id="hub-generate" data-hub="generate">Generate slips</button></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
   }
   /* 30 days of the record; a run of days with no decided pick folds into one quiet tile instead of a wall of dashes */
   function calendarHTML(doc){
@@ -1764,24 +1719,13 @@ export function mount(C) {
     document.querySelector('#hub-studio-section .h-studio-intro').insertAdjacentHTML('beforeend','<button data-hub="share-card">Download lineup image</button>');
   }
 
-  /* QOL 2026-11-07: the Slips tab in view (My slip / Auto-build / Tracked) is kept in the address (?tab=build), replacing the entry
-     rather than adding one, so a reload or a Back into Slips reopens the same tab; route() already reads ?tab= */
-  function studioHash(){
-    if(H.section!=='studio')return;
-    const hash=(V2?'#/slips':'#scout/studio')+(H.studioTab!=='slip'?'?tab='+H.studioTab:'');
-    if(location.hash!==hash){history.replaceState(history.state,'',hash);H.routeHash=location.pathname+location.hash;}
-  }
   const SECTIONS=['board','studio','record','alerts','picks','tools',...(EVB?['ev']:[])];
   const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:'Best prices'};
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev')return;
-    H.evSlipSig=T.legs.map(l=>l.id).join();
-    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,slipSide(id){const r=rec(id);return r&&C.onSlip(r)?(T.legs.find(l=>l.sport===r.sport&&l.key===r.key&&l.book===r.offer.platform)?.side||null):null;},addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
+    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
     catch(e){box.innerHTML='<p class="h-mt-state">Best prices could not be loaded. Use Refresh to try again.</p>';}
   }
-  /* QOL 2026-11-07: Best prices' "+ Slip" buttons follow the slip (a pick removed in the slip column turns back into "+ Slip");
-     redrawn only when the set of picks changes, never on the slip's routine rechecks */
-  function evSlipSync(){if(EVB&&H.section==='ev'&&H.evSlipSig!==T.legs.map(l=>l.id).join())paintEv();}
   function section(name,navigate=true) {
     if(name==='games'){H.view='games';name='board';}
     if(!SECTIONS.includes(name))name='board';
@@ -1793,7 +1737,7 @@ export function mount(C) {
     if(from==='board'&&name!=='board'&&center)H.boardScroll=center.scrollTop;
     H.section=name;
     const games=name==='board'&&H.view==='games';
-    if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'')+(name==='studio'&&H.studioTab!=='slip'?'?tab='+H.studioTab:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
+    if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
     for(const n of SECTIONS)$('hub-'+n+'-section').hidden=n!==name;
     const here=name==='alerts'||name==='ev'?'tools':name;
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
@@ -1861,7 +1805,7 @@ export function mount(C) {
   window.addEventListener('resize',()=>{const w=openPop();if(w)fitPop($(POPS[w][1]));});
   const rec = id => H.records.find(r=>key(r)===id)||H.extraRecs.find(r=>key(r)===id);
   const actions={
-    'share-card'(){if(!T.legs.length)return C.say('Add picks first.');C.shareSlip();},
+    'share-card'(){C.shareSlip();},
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
     // By game keeps the board's filters: the games listed are the ones those filters show
     'game-board'(id){H.game=id;H.view='list';H.page=0;section('board');$('hub-center').scrollTop=0;},
@@ -1876,10 +1820,8 @@ export function mount(C) {
     /* N14 (site audit 2026-11-06): opens Tools scrolled to its Alerts section (it opened at the top of Tools) */
     'manage-alerts'(){togglePop(null);section('tools');H.alertsJump=Date.now();jumpAlerts(true);},
     section(id){if(id==='board')H.view='list';if(id==='studio')H.studioTab='slip';section(id);},
-    /* owner audit 2026-11-06 (T10): "+ Add player props" / "Browse player props" open the board on All sports, not the last sport */
-    'browse-props'(){H.view='list';actions.sport('all');},
     'studio-open'(id){H.studioTab=['slip','build','tracked'].includes(id)?id:'slip';section('studio');},
-    'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();studioHash();sectionFocus('studio-tab',id);},
+    'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();sectionFocus('studio-tab',id);},
     sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;H.view==='games'?section('games'):section('board');scrollTop();load(false);},
     'sort-col'(id){if(!SORT_KEYS.includes(id))return;setSort(id,H.sortBy===id&&H.sort===id?(H.sortDir==='asc'?'desc':'asc'):sortDirOf(id));document.querySelector(`#hub-table [data-hub="sort-col"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});},
     'sort-dir'(){setSort(H.sort,H.sortDir==='asc'?'desc':'asc');},
@@ -1965,7 +1907,7 @@ export function mount(C) {
         <div id="hub-pagination" class="h-pagination"></div></section>
       <section id="hub-studio-section" hidden>
         <div class="h-studio-tabs" role="tablist" aria-label="Slips"><button role="tab" data-hub="studio-tab" data-id="slip" aria-selected="true">My slip <span id="hub-studio-tab-n" class="h-count-badge">0</span></button><button role="tab" data-hub="studio-tab" data-id="build" aria-selected="false" tabindex="-1">Auto-build</button><button role="tab" data-hub="studio-tab" data-id="tracked" aria-selected="false" tabindex="-1">Tracked</button></div>
-        <div data-studio-panel="slip" role="tabpanel" aria-label="My slip"><div class="h-studio-intro"><span id="hub-studio-sync" class="h-sync"></span><button data-hub="browse-props">+ Add player props</button></div><section class="h-working-draft" aria-label="My slip"><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt of the line and forecast you chose. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">My picks →</button></div></div>
+        <div data-studio-panel="slip" role="tabpanel" aria-label="My slip"><div class="h-studio-intro"><span id="hub-studio-sync" class="h-sync"></span><button data-hub="section" data-id="board">+ Add player props</button></div><section class="h-working-draft" aria-label="My slip"><div id="hub-studio-body"></div></section><div class="h-studio-explain"><h3>Before you track</h3><p>Scout rechecks the event, line revision, offered side and platform rules. Tracking saves a receipt of the line and forecast you chose. Unsupported combinations stay blocked, with the reason beside that entry.</p><button data-hub="receipts">My picks →</button></div></div>
         <div data-studio-panel="build" role="tabpanel" aria-label="Auto-build" hidden>${generatorHtml()}<section id="hub-generated" aria-label="Generated slips"></section></div>
         <div data-studio-panel="tracked" role="tabpanel" aria-label="Tracked" hidden><section class="h-tracked-slips"><header><div><h2>Tracked slips</h2><p>Exact saved lines, grouped by entry. Each leg keeps its settlement receipt.</p></div><button data-hub="receipts">My picks →</button></header><div id="hub-slip-history"></div></section></div></section>
       <section id="hub-picks-section" hidden><div class="h-section-head"><div><p>Your tracked picks, with the line and chance saved when you tracked. Each settles at that line; pushes are counted apart.</p></div><div class="h-pick-filters" hidden><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status">${pickStatus.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label></div></div><div id="hub-picks-body"></div></section>
@@ -2060,16 +2002,6 @@ export function mount(C) {
     actions[b.dataset.hub]?.(b.dataset.id,b);
     if(inMore)togglePop(null);
   });
-  /* QOL 2026-11-07: Clear in the slip column and on My slip emptied every pick in one press with no way back. The first press turns
-     it into "Clear 3 picks?" for 5 seconds; a second press clears (the slip code's own clear runs only then). The slip code listens
-     on the document's capture phase, so this listens one step earlier, on the window's. */
-  window.addEventListener('click',e=>{
-    const b=e.target.closest?.('[data-u="clear"]');if(!b||b.disabled||!$('u-hub').contains(b))return;
-    if(clearArmed()){H.clearArmed=0;clearTimeout(H.clearTimer);return;}
-    e.preventDefault();e.stopPropagation();
-    H.clearArmed=Date.now();armClear();b.focus({preventScroll:true});
-    clearTimeout(H.clearTimer);H.clearTimer=setTimeout(()=>{H.clearArmed=0;armClear();},5000);
-  },true);
   $('hub-more').addEventListener('click',e=>{if(e.target.closest('a'))togglePop(null);});
   $('u-hub').addEventListener('change',e=>{if(e.target.id==='hub-card-line'&&rec(e.target.value))selectDetail(e.target.value);});
   $('u-hub').addEventListener('submit',e=>{if(e.target.id==='hub-ask'){e.preventDefault();genieAsk();}});
@@ -2098,10 +2030,8 @@ export function mount(C) {
     mixed.disabled=p==='underdog';if(mixed.disabled&&$('hub-generation-mix').value==='mixed')$('hub-generation-mix').value='any';
   }
   for(const id of ['book','type'])$('hub-generation-'+id).addEventListener('change',generationControls);
-  $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);H.slipLinesSet=true;T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
+  $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
   generationControls();
-  restoreAutobuild();
-  document.querySelector('#hub-studio-section .h-generator').addEventListener('change',e=>{if(e.target.id==='hub-generation-lines')return;saveAutobuild();syncGenerate();});
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});
   window.addEventListener('hashchange',route);

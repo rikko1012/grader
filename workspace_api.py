@@ -2085,7 +2085,7 @@ def _generate(srv, o):
         for k, v in got[1].items():
             why[k] = why.get(k, 0) + v
     legs = _ranked(legs)
-    b = sq.build(legs, dict(o, break_even=True))      # owner audit 2026-11-06: only slips that clear their payout's break-even
+    b = sq.build(legs, o)
     mine = [l for l in legs if l["book"] == o["platform"]]
     doc = {"version": sq.VERSION, "built_at": now.isoformat(timespec="seconds"), "options": dict(o, sports=list(o["sports"]), exclude=len(o["exclude"])),
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,

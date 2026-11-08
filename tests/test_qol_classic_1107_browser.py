@@ -4,8 +4,8 @@ chance, stake or slip leg choice:
 - board / Compare / Moneylines search ignores case and accents; a search with no match offers Clear search
 - the player card is a real modal: focus moves to Close, Tab stays inside, closing returns focus to the row; rows open with Enter
 - a failed card request offers Try again
-- phone / tablet: the page's Slip button, slip sheet and the card's action bar sit above the Slip tray bar; Esc closes the sheet
-- Clear and ✕ on the slip can be undone
+- phone / tablet: the page's Slip button, slip sheet and the card's action bar sit above the Slip tray bar
+(the slip sheet's Esc and the Undo on Clear / ✕ were rolled back on the owner's 2026-11-07 request, Slip studio as on 2f96bab)
 - the filters shown / hidden choice survives a reload; a section picked from the nav opens at its own scroll place
 - Single prop brings its progress line into view on a phone; Slate grades with Ctrl+Enter and says what to type when empty
 - Matchroom closes on a backdrop click; phone tap targets on the board are 40px or more
@@ -140,7 +140,7 @@ def test_a_name_the_member_must_fix_gets_no_try_again(browser, env):
 # ------------------------------------------------------------------------------------------------ phone / tablet slip vs the Slip tray
 
 @pytest.mark.parametrize("width", [390, 700, 900])
-def test_slip_button_and_sheet_sit_above_the_slip_tray_and_esc_closes_the_sheet(browser, env, width):
+def test_slip_button_and_sheet_sit_above_the_slip_tray(browser, env, width):
     size = {"width": width, "height": 844}
     c = context(browser, env, size)
     try:
@@ -156,9 +156,6 @@ def test_slip_button_and_sheet_sit_above_the_slip_tray_and_esc_closes_the_sheet(
         p.wait_for_function("!document.querySelector('#slip').hidden")
         assert not overlap(p.evaluate(RECT, "#slip"), p.evaluate(RECT, "#u-tray-btn"))
         shot(p, "slip-sheet")
-        p.keyboard.press("Escape")
-        p.wait_for_function("document.querySelector('#slip').hidden")
-        assert p.evaluate("document.activeElement.id") == "slipbtn"
         no_h_scroll(p)
         assert not p.errors
     finally:
@@ -183,33 +180,6 @@ def test_phone_card_actions_stay_above_the_slip_tray(browser, env):
         p.wait_for_timeout(2300)
         tray, modes = p.evaluate(RECT, "#u-tray-btn"), p.evaluate(RECT, "#modes")
         assert modes and tray[3] <= modes[1] + 1                              # the nav is back, the tray above it again
-        assert not p.errors
-    finally:
-        c.close()
-
-
-# ------------------------------------------------------------------------------------------------ undo on the slip
-
-def test_clear_and_remove_on_the_slip_can_be_undone(browser, env):
-    c = context(browser, env, DESK)
-    try:
-        p = board(c, env, DESK)
-        p.evaluate("""() => { const fut = new Date(Date.now() + 3 * 3600e3).toISOString();
-          store.set('cs2s_slip', [{p: 'vargo', bk: 'underdog', t: 'kills', sc: '12', l: 30.5, s: 'More', g: 'B', u: 1, pc: 0.6, st: fut, m: 'a-b', vs: 'Bravo', tm: 'Alpha'},
-                                  {p: 'orlo', bk: 'underdog', t: 'kills', sc: '12', l: 31.5, s: 'Less', g: 'B', u: 1, pc: 0.6, st: fut, m: 'c-d', vs: 'Delta', tm: 'Charlie'}]); drawSlip(); }""")
-        p.wait_for_selector("#slip [data-rmleg]")
-        p.locator("#slip [data-rmleg]").first.click()
-        assert p.evaluate("store.get('cs2s_slip', []).map(x => x.p)") == ["orlo"]
-        assert "Removed vargo from your slip" in p.locator("#toast").inner_text()
-        p.locator("#toast [data-undo-slip]").click()
-        assert p.evaluate("store.get('cs2s_slip', []).map(x => x.p)") == ["vargo", "orlo"]
-        p.locator("#slipclear").click()
-        assert p.evaluate("store.get('cs2s_slip', []).length") == 0
-        assert "Cleared your slip (2 picks)" in p.locator("#toast").inner_text()
-        shot(p, "slip-undo")
-        p.locator("#toast [data-undo-slip]").click()
-        assert p.evaluate("store.get('cs2s_slip', []).map(x => x.p)") == ["vargo", "orlo"]
-        assert "Slip restored" in p.locator("#toast").inner_text()
         assert not p.errors
     finally:
         c.close()

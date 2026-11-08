@@ -53,25 +53,6 @@ def test_underdog_payout_is_the_published_table(env):
     assert "ev" not in doc["slips"][0]                                        # no settled-results gate on the fixture
 
 
-def test_audit_t1_generate_hands_out_only_slips_that_clear_break_even(env):
-    """Owner audit 2026-11-06 T1: Power 2-pick pays 3x, so a slip needs a 33.3% all-hit chance. The fixture's second-best pair
-    (brandr 58.1% x orlo 57.1% = 33.2%) is below it and is no longer handed out; the member is told how many cleared."""
-    st, doc = gen(env, slips=4)
-    assert st == 200 and doc["slips"]
-    assert all(s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"])
-    assert {frozenset(l["player"] for l in s["legs"]) for s in doc["slips"]} == {frozenset({"vargo", "orlo"})}
-    assert doc["shortage"] == "1 slip clears break-even on PrizePicks Power 2-pick right now."
-    assert "ev" not in doc["slips"][0]                                        # no expected-return figure is added
-
-
-def test_audit_review_generate_same_match_never_skips_break_even(env):
-    """Review 2026-11-07: with Same match (Underdog) the route handed out same-match slips with no all-hit chance, skipping the
-    break-even check the member copy promises. Every generated slip now has an all-hit chance that clears its payout."""
-    st, doc = gen(env, platform="underdog", type="standard", slips=12, games="stacks")
-    assert st == 200 and doc["options"]["same_match"] is True
-    assert all(not s["same_match"] and s.get("all_hit") is not None and s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"])
-
-
 def test_no_repeat_props_and_shortage(env):
     st, doc = gen(env, slips=8, repeats="none")
     props = [(l["row_id"]) for s in doc["slips"] for l in s["legs"]]
@@ -208,10 +189,7 @@ def test_generate_leaves_goblins_out_unless_allowed(env):
     assert st == 200 and doc["slips"] and "goblin" not in _line_types(doc)
     assert doc["options"]["lines"] == "no_goblins"
     st, doc = gen(env, slips=4, lines="all")
-    # owner audit 2026-11-06 (T1): goblins are allowed into the search, but a goblin pays an unpublished LOWER multiple than
-    # the 3x table, so a PrizePicks slip holding one can never be shown to clear break-even and is never handed out
-    assert st == 200 and doc["slips"] and "goblin" not in _line_types(doc)
-    assert all(s["all_hit"] * s["payout"]["multiple"] >= 1 for s in doc["slips"])
+    assert st == 200 and "goblin" in _line_types(doc)                          # the old behaviour stays one choice away
     st, doc = gen(env, slips=4, lines="one_goblin")
     assert st == 200 and max([l["line_type"] for l in s["legs"]].count("goblin") for s in doc["slips"]) <= 1
     st, doc = gen(env, slips=4, lines="standard")

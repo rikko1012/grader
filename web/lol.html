@@ -257,12 +257,10 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 @media(max-width:760px){.ctbtn{right:14px;bottom:14px}#ctmodal{padding:0;background:var(--panel)}.ctsheet{border-radius:0!important;min-height:100vh;border:0!important;padding:14px 12px 80px!important}
   .ctgrid{grid-auto-flow:row;grid-template-columns:minmax(0,1fr);grid-auto-columns:auto;overflow:visible}.ctf{grid-template-columns:minmax(96px,38%) minmax(0,1fr);gap:8px;align-items:baseline}}
 /* QoL 2026-11-07: tap targets of 40px or more; the card's Compare button matches its neighbours; a Clear filters button in the bar;
-   the Slip tab's bar holds no filter that does nothing there; a slip leg opens its card; the floating Compare button sits above the
-   upgraded page's Slip tray (a floating button on tablets, a full-width bar on phones) instead of under it */
+   the floating Compare button sits above the upgraded page's Slip tray (a floating button on tablets, a full-width bar on phones)
+   instead of under it */
 .lcmp{min-height:40px}.actions .lcmp{min-height:44px}.ctx{min-width:40px;min-height:40px}
-.bar .clearf{margin:0;min-height:40px;padding:0 14px;font-size:12.5px}.bar.slipbar:empty{display:none}
-.legopen{display:block;width:100%;min-height:40px;background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
-.legopen:hover{color:var(--accent-2);text-decoration:underline}
+.bar .clearf{margin:0;min-height:40px;padding:0 14px;font-size:12.5px}
 :root:has(#u-tray-btn:not(.u-docked)) .ctbtn{bottom:76px}
 @media(max-width:640px){.bar .filter-toggle{min-height:40px}
   :root:has(#u-tray-btn:not(.u-docked)) .ctbtn{bottom:calc(var(--u-tray-lift,0px) + 58px + env(safe-area-inset-bottom))}:root:has(#u-tray-btn:not(.u-docked)) .ctnote{bottom:calc(var(--u-tray-lift,0px) + 116px)}}
@@ -291,7 +289,7 @@ let NOTE = null;                                // a one-time notice drawn above
 let visibleLimit = 48;
 let filtersOpen = false;
 const SLIPKEY = "scout.lol.slip", MAXLEGS = {underdog: 8, prizepicks: 6};
-let SLIP = {legs: []}, CHECK = {}, SENT = {}, CLEARED = null;   // CLEARED: the legs of a slip just cleared, for one Undo       // SENT: the last "Send to my slip" result, shown under that suggested slip
+let SLIP = {legs: []}, CHECK = {}, SENT = {};       // SENT: the last "Send to my slip" result, shown under that suggested slip
 try { SLIP = Object.assign({legs: []}, JSON.parse(localStorage.getItem(SLIPKEY) || "{}")); } catch {}
 const saveSlip = () => { try { localStorage.setItem(SLIPKEY, JSON.stringify(SLIP)); } catch {} };
 try { Object.assign(F, JSON.parse(localStorage.getItem(FKEY) || "{}")); } catch {}
@@ -577,12 +575,9 @@ function slipView() {
   if (!Object.keys(D.slips || {}).length) h += `<div class="small muted">No slip information yet.</div>`;
   h += `<p class="small faint" style="margin:8px 0 0">Suggestions never repeat a prop or a match across slips and are never padded with extra picks. Chance all hit = each pick's chance multiplied (every pick is from a different match).</p></section>`;
   h += `<section class="panel"><h3>Your slip${SLIP.legs.length ? ` · ${esc(SLIP.legs[0].platform_label)}` : ""}</h3>`;
-  if (SLIP.legs.length) CLEARED = null;           // Undo is offered only on the slip that was just cleared
-  if (!SLIP.legs.length) h += `${CLEARED ? `<div class="actions" style="margin:0 0 10px"><span class="actmsg">Slip cleared (${CLEARED.length} pick${CLEARED.length > 1 ? "s" : ""}).</span><button type="button" class="btn" id="undoclear">Undo</button></div>` : ""}<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
+  if (!SLIP.legs.length) h += `<div class="small muted">Open a pick on the board and choose <b>Add to slip</b>. One platform per slip; one pick per match and per player; only sides the line offers.</div>`;
   else {
-    // a leg still on the board opens its card (one tap to recheck it); a leg that left the board stays plain text
-    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); const ul = PPL.on && c && c.ok && udLinkOk(ULEGS[l.key]) ? ULEGS[l.key] : null;
-      const onBoard = (D.rows || []).some(r => r.key === l.key); return `<div class="slipleg"><div>${onBoard ? `<button type="button" class="legopen" data-legk="${esc(l.key)}" title="Open this pick's card">${esc(legText(l))}</button>` : esc(legText(l))}</div>${ul ? `<span>${udA(ul, "Open")} ` : ""}<button type="button" class="btn" data-rm="${i}">Remove</button>${ul ? "</span>" : ""}${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
+    h += `<div>${SLIP.legs.map((l, i) => { const c = CHECK[l.key] || (started(l) ? {ok: false, text: "This match has started - remove it."} : null); const ul = PPL.on && c && c.ok && udLinkOk(ULEGS[l.key]) ? ULEGS[l.key] : null; return `<div class="slipleg"><div>${esc(legText(l))}</div>${ul ? `<span>${udA(ul, "Open")} ` : ""}<button type="button" class="btn" data-rm="${i}">Remove</button>${ul ? "</span>" : ""}${c ? `<div class="st ${c.ok ? "ok" : "bad"}">${esc(c.text)}</div>` : ""}</div>`; }).join("")}</div>
       <div class="actions"><button type="button" class="btn primary" id="copyslip">Recheck lines &amp; copy slip</button>${pplButton()}<button type="button" class="btn" id="clearslip">Clear</button><span class="actmsg" id="slipmsg"></span></div>
       <p class="small faint" style="margin:8px 0 0">${esc(D.stake_note)} Your slip is your own selection; it is not a suggestion.</p>`;
   }
@@ -922,25 +917,20 @@ function render() {
   let h = `<div class="intro"><div><div class="eyebrow">League of Legends · Underdog + PrizePicks</div><h2>Read the match. Find your pick.</h2><p>Every posted kills, assists and deaths line with the model's projection for the exact games in the prop, the chance of each side, and the grade.</p></div><div class="feeds">${feedsLine()}</div></div>${holdBanner()}${staleBanner()}${NOTE ? `<div class="banner" role="status">${esc(NOTE)}</div>` : ""}`;
   NOTE = null;
   const nf = activeFilters();
-  h += `<div class="workspace-nav">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}</div>`;
-  // the Slip tab is the member's own slip: no board filter changes it, so its bar carries none (QoL 2026-11-07)
-  if (F.view === "slip") h += `<div class="bar slipbar"></div>`;
-  else h += `<div class="bar ${filtersOpen ? "filters-open" : ""}">${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
+  h += `<div class="workspace-nav">${seg("v", F.view, [["board", "Board"], ["tables", "Compare books"], ["slip", `Slip${SLIP.legs.length ? " (" + SLIP.legs.length + ")" : ""}`]])}</div><div class="bar ${filtersOpen ? "filters-open" : ""}">${seg("p", F.plat, [["all", "All books"], ["underdog", "Underdog"], ["prizepicks", "PrizePicks"]])}
     <button type="button" class="btn filter-toggle" id="filtertoggle" aria-expanded="${filtersOpen}">${filtersOpen ? "Fewer filters" : "More filters"}${[F.match, F.scope, F.type, F.floor].filter(v => v !== "all").length ? " · filters active" : ""}</button>
     <select id="s" aria-label="Prop"><option value="all">All props</option><option value="kills">Kills</option><option value="assists">Assists</option><option value="deaths">Deaths</option></select>
     <select id="m" aria-label="Match"><option value="all">All matches</option>${[...ms].map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join("")}</select>
-    <select id="scope" aria-label="Map scope"><option value="all">All map scopes</option>${[...new Set((D.rows || []).map(x => x.scope).concat((D.match_tables || []).flatMap(t => t.markets.map(m => m.scope))))].sort().map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select>
-    <select id="side" aria-label="Model side"><option value="all">Overs + Unders</option><option value="Over">Overs</option><option value="Under">Unders</option></select><input type="search" id="q" placeholder="Player or team" aria-label="Search a player or team" autocomplete="off" value="${esc(F.q || "")}">
+    ${F.view !== "slip" ? `<select id="scope" aria-label="Map scope"><option value="all">All map scopes</option>${[...new Set((D.rows || []).map(x => x.scope).concat((D.match_tables || []).flatMap(t => t.markets.map(m => m.scope))))].sort().map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("")}</select>
+    <select id="side" aria-label="Model side"><option value="all">Overs + Unders</option><option value="Over">Overs</option><option value="Under">Unders</option></select><input type="search" id="q" placeholder="Player or team" aria-label="Search a player or team" autocomplete="off" value="${esc(F.q || "")}">` : ""}
     ${F.view === "board" ? `<select id="t" aria-label="Line type"><option value="all">All line types</option><option value="standard">Standard lines</option><option value="alt">Goblin / Demon / adjusted</option></select>
     <select id="g" aria-label="Grade floor">${FLOORS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
     <select id="o" aria-label="Sort"><option value="start">Sort: start time</option><option value="grade">Sort: best grade</option><option value="chance">Sort: chance</option></select>
-    <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}
-    ${nf ? `<button type="button" class="btn clearf" id="clearf">Clear filters (${nf})</button>` : ""}</div>`;
+    <label class="chk"><input type="checkbox" id="pl" ${F.playable ? "checked" : ""}> Offered picks only</label>` : ""}${nf ? `
+    <button type="button" class="btn clearf" id="clearf">Clear filters (${nf})</button>` : ""}</div>`;
   $("#app").innerHTML = h + (F.view === "board" ? overview() + boardView() : F.view === "slip" ? slipView() : tablesView());
   document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { SLIP.legs.splice(+b.dataset.rm, 1); saveSlip(); CHECK = {}; render(); });
-  if ($("#clearslip")) $("#clearslip").onclick = () => { CLEARED = SLIP.legs.slice(); SLIP.legs = []; saveSlip(); CHECK = {}; render(); const u = $("#undoclear"); if (u && u.focus) u.focus(); };
-  if ($("#undoclear")) $("#undoclear").onclick = () => { if (CLEARED && !SLIP.legs.length) { SLIP.legs = CLEARED; saveSlip(); CHECK = {}; } CLEARED = null; render(); };
-  document.querySelectorAll("[data-legk]").forEach(b => b.onclick = () => card(b.dataset.legk, b));
+  if ($("#clearslip")) $("#clearslip").onclick = () => { SLIP.legs = []; saveSlip(); CHECK = {}; render(); };
   if ($("#copyslip")) $("#copyslip").onclick = copySlip;
   if (PPL.on && $("#openslip")) $("#openslip").onclick = () => openSlip($("#openslip").dataset.open);
   document.querySelectorAll("[data-send]").forEach(b => b.onclick = () => sendSuggested(b.dataset.send));

@@ -998,12 +998,10 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 #u-hub .h-ask-sugg{display:flex;flex-wrap:wrap;gap:6px}
 #u-hub .h-ask-sugg button{font-size:12px}
 #u-hub .h-ask-out p{margin:4px 0;color:#dbe4ef;font-size:13px;line-height:1.55}
-/* QOL 2026-11-07 (Slips and Tools): the Genie's Ask and suggestions look off while a question is being checked; the empty alerts
-   list's "Set filters on the board" and the armed "Clear 3 picks?" read as the buttons they are */
+/* QOL 2026-11-07 (Tools): the Genie's Ask and suggestions look off while a question is being checked; the empty alerts list's
+   "Set filters on the board" reads as the button it is */
 #u-hub .h-ask [aria-disabled="true"]{opacity:.45;cursor:progress}
 #u-hub .h-alert-new{min-height:40px;margin:2px 0 8px}
-#u-hub #hub-generation-status{scroll-margin-top:12px}
-#u-hub [data-u="clear"].h-armed{color:#ffd0d0;text-decoration:none;font-weight:600}
 #u-hub .h-guide h5{margin:12px 0 2px;font-size:12px;color:#c9d4e2}
 #u-hub .h-guide p{margin:0;font-size:12px;line-height:1.6}
 #u-hub .h-guide .h-link{min-height:40px;padding:0 4px}

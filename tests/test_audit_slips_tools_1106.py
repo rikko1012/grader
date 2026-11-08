@@ -1,6 +1,7 @@
 """Owner site audit 2026-11-06 (5:40-6:05 PM CST), Slips and Tools items: regression tests for each one that reproduced on
-origin/main 2f96bab. T1 (break-even) and T5 (no return figure on NBA / NFL legs with no book price) are covered in
-tests/test_slip_quality.py, tests/test_slip_generate_api.py and tests/test_pickem_ev.py; this file holds T2-T4, T6 and T8-T11.
+origin/main 2f96bab. T5 (no return figure on NBA / NFL legs with no book price) is covered in tests/test_pickem_ev.py; this
+file holds T3, T4, T6 and T8. The Slips items (T1 break-even, T2 goblins carry-over, T9-T11) were rolled back on the owner's
+2026-11-07 request (Slip studio as it was on 2f96bab), with their tests.
 Server checks call the real routes; browser checks use the real Handler with the fixtures of test_upgrade_browser (no network,
 no production data). Every player, team and number is a TEST FIXTURE."""
 import json
@@ -284,59 +285,4 @@ def test_t5_nba_leg_with_no_book_price_shows_no_return_figure(ctx, env, ev_on):
     assert "%" in row.locator(".ev-hit").inner_text()                                    # Scout's chance itself stays
     low = p.locator("#hub-ev-body").inner_text().lower()
     assert "unvalidated" not in low and "estimate" not in low and "beta" not in low
-    assert not p.errors
-
-
-# ------------------------------------------------------------------------------------------------ T2 / T9 / T10 / T11 Slips
-
-def slips_page(ctx, env, path="/#/slips", prefs=None):
-    if prefs is not None:
-        def state(route):
-            r = route.fetch()
-            d = r.json()
-            if route.request.method == "GET":
-                d["prefs"] = dict(d.get("prefs") or {}, researchHub=prefs)
-            route.fulfill(response=r, json=d)
-        ctx.route("**/api/upgrade/state*", state)
-    p = open_page(ctx, env, path)
-    p.wait_for_selector("#hub-generation-lines", state="attached", timeout=30000)
-    return p
-
-
-def test_t2_goblins_default_is_no_goblins_even_with_an_unmarked_saved_any_lines(ctx, env, monkeypatch):
-    """Audit: Auto-build > Goblins read "Any lines" while the help says Scout leaves goblins out unless you allow them. The
-    'all' came from the 2026-11-05 batch carry-over, saved without a choice in the Goblins control."""
-    monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
-    p = slips_page(ctx, env, prefs={"slipLines": "all"})
-    p.wait_for_timeout(600)
-    assert p.locator("#hub-generation-lines").input_value() == "no_goblins"
-    assert not p.errors
-
-
-def test_t2_any_lines_chosen_in_the_goblins_control_is_kept(ctx, env, monkeypatch):
-    monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
-    p = slips_page(ctx, env, prefs={"slipLines": "all", "slipLinesSet": True})
-    p.wait_for_function("document.getElementById('hub-generation-lines').value === 'all'", timeout=10000)
-    assert not p.errors
-
-
-def test_t9_t10_t11_empty_slip_image_button_props_link_and_slip_count(ctx, env, monkeypatch):
-    monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
-    p = open_page(ctx, env, "/#/board?sport=lol")
-    p.wait_for_selector("#u-hub", timeout=30000)
-    p.wait_for_timeout(600)
-    p.locator('#u-hub [data-hub="section"][data-id="studio"]').locator("visible=true").first.click()
-    p.wait_for_selector('#hub-studio-section [data-hub="browse-props"]')
-    # T9: an empty slip has no lineup image to make, and the button says so
-    share = p.locator('#hub-studio-section [data-hub="share-card"]')
-    assert share.count() == 1 and share.is_disabled() and "add picks first" in share.inner_text().lower()
-    # T11: one slip reads "1 slip"
-    opts = p.locator("#hub-generation-slips option").all_inner_texts()
-    assert "1 slip" in opts and "1 slips" not in opts and "8 slips" in opts
-    # T10: "+ Add player props" opens the board on All sports, with one # in the address
-    p.locator('#hub-studio-section .h-studio-intro [data-hub="browse-props"]').click()
-    p.wait_for_function("location.hash.startsWith('#/board')")
-    href = p.evaluate("location.href")
-    assert href.endswith("#/board?sport=all") and href.count("#") == 1, href
-    assert not p.locator("#hub-board-section").is_hidden()
     assert not p.errors

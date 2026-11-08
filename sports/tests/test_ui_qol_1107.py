@@ -1,9 +1,9 @@
 """QoL pass 2026-11-07, classic sports site (NBA / NFL): day-to-day friction fixed without touching any number.
 Search ignores case / accents / spaces; the board table header stays in view; toasts can be dismissed and clear
-themselves; Escape closes the slip panel; the Source box closes on an outside tap and gives focus back; Enter saves a
-view; a reload keeps the board's scroll; sheets and the slate get a working Reset; Compare clear / remove can be undone;
-empty-slip buttons look off; the tab title names the page; a slate / board tab left open reloads quietly; phone Compare toggles reach
-40 px. Node checks: ui_qol_1107_test.js. Browser flows: ui_mock harness (no server, no network). SHOTS_DIR=<folder>
+themselves; the Source box closes on an outside tap and gives focus back; Enter saves a view; a reload keeps the board's
+scroll; sheets and the slate get a working Reset; Compare clear / remove can be undone; the tab title names the page; a slate /
+board tab left open reloads quietly; phone Compare toggles reach 40 px. (The slip panel's Escape and Slip Studio's empty-slip
+buttons were rolled back on the owner's 2026-11-07 request, Slip studio as it was on 2f96bab, with their tests.) Node checks: ui_qol_1107_test.js. Browser flows: ui_mock harness (no server, no network). SHOTS_DIR=<folder>
 keeps screenshots. Every name / number here is a TEST FIXTURE."""
 import copy
 import json
@@ -263,25 +263,6 @@ def test_board_reload_keeps_scroll(browser):
     ctx.close()
 
 
-# ---- Escape closes the open slip panel; focus returns to its bar
-def test_escape_closes_the_slip_tray(browser):
-    leg = {"platform": "prizepicks", "record_id": "offer:prizepicks:a1:r1:ab", "side": "over", "player": "Fixture Alpha",
-           "player_id": "nba:player:espn:a", "team": "BOS", "line": 20.5, "start_utc": "2099-01-01T00:00:00Z", "stat": "points"}
-    init = ("try { localStorage.setItem('ss:draft:nba:prizepicks', JSON.stringify({legs: [%s]}));"
-            " localStorage.setItem('ss:ctx', JSON.stringify({league: 'nba', platform: 'prizepicks'}));"
-            " sessionStorage.setItem('sw:tray:open', '1'); } catch (e) {}") % json.dumps(leg)
-    ctx, page, errors = _page(browser, _board_api(C._fixture_board()), 390, init=init + TABLE_VIEW)
-    page.goto("/sports#/board?lg=nba")
-    page.wait_for_selector("#sw-tray.sw-tray-open")
-    page.locator("#sw-tray .sw-tray-h").focus()
-    page.keyboard.press("Escape")
-    assert page.locator("#sw-tray.sw-tray-open").count() == 0
-    assert page.evaluate("document.activeElement.hasAttribute('data-tray-toggle')")
-    assert page.evaluate("sessionStorage.getItem('sw:tray:open')") == "0"
-    assert not errors, errors
-    ctx.close()
-
-
 # ---- the Source box: an outside tap closes it and focus returns to its button
 def test_source_dialog_outside_click_and_focus_return(browser):
     ctx, page, errors = _page(browser, U._app_api())
@@ -321,19 +302,6 @@ def test_compare_clear_and_remove_undo(browser):
     assert "Removed from Compare" in page.locator("#sw-toast").inner_text()
     page.click("#sw-cmp-undo")
     page.wait_for_function("document.querySelectorAll('.sw-cmp-card').length === 2")
-    assert not errors, errors
-    ctx.close()
-
-
-# ---- Slip Studio: on an empty slip, Copy / Check result / Clear all look off
-def test_empty_slip_buttons_are_disabled(browser):
-    ctx, page, errors = _page(browser, U._slips_api(U.POOL_RESEARCH))
-    page.goto("/sports#/slips?lg=nba")
-    page.wait_for_selector("#ss-pool p")
-    for b in ("#ss-copy", "#ss-result", "#ss-clear"):
-        assert page.locator(b).is_disabled(), b
-    assert not page.locator("#ss-recheck").is_disabled()                         # still reloads the pool
-    assert "Add to slip" in page.locator("#ss-draft").inner_text()
     assert not errors, errors
     ctx.close()
 

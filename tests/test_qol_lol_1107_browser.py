@@ -5,7 +5,7 @@ network). Display and navigation only - no grade, chance, stake or letter change
 - an old shared card link (/lol?line=<key>) opens that card on the classic board (before: the hub opened over a hidden card);
 - the floating Compare button can be tapped on a phone (before: the upgraded page's Slip tray bar covered it) and closing Compare
   puts focus back on it;
-- the Slip tab carries no board filter; nothing scrolls sideways; no page errors.
+- nothing scrolls sideways; no page errors. (The Slip tab's changes were rolled back on the owner's 2026-11-07 request.)
 Every name is a TEST FIXTURE (tests/fixtures/workspace_lol_board.json)."""
 import pytest
 
@@ -83,26 +83,5 @@ def test_compare_button_is_tappable_above_the_slip_tray_and_gets_focus_back(ctx,
     p.wait_for_selector(".cards .mcw > .lcmp")
     assert p.evaluate("Math.min(...[...document.querySelectorAll('.mcw > .lcmp')].filter(e => e.getClientRects().length)"
                       ".map(e => e.getBoundingClientRect().height))") >= 40           # tap target of 40px or more
-    no_h_scroll(p)
-    assert not p.errors, p.errors
-
-
-@pytest.mark.parametrize("size", [DESK, PHONE], ids=["1440", "390"])
-def test_slip_tab_has_no_board_filters_and_clear_has_undo(ctx, env, size):
-    p = classic(ctx, env, size)
-    open_first(p)
-    p.locator("#addslip").click()
-    p.keyboard.press("Escape")
-    p.locator("#v button[data-v=slip]").click()
-    p.wait_for_selector("#copyslip")
-    assert p.locator("#app .bar select, #app .bar input, #p").count() == 0
-    p.locator("[data-legk]").first.click()                                         # a leg opens its card
-    p.wait_for_selector("#modal.open #cardtitle")
-    p.keyboard.press("Escape")
-    p.locator("#clearslip").click()
-    p.wait_for_selector("#undoclear")
-    p.locator("#undoclear").click()
-    p.wait_for_selector("#copyslip")
-    assert p.evaluate("JSON.parse(localStorage.getItem('scout.lol.slip')).legs.length") == 1
     no_h_scroll(p)
     assert not p.errors, p.errors

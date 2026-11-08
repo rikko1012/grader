@@ -91,12 +91,8 @@ function legOdds(r) {
   const m = typeof r.multiplier === 'number' && Math.abs(r.multiplier - 1) > 1e-9 ? `<small>${esc(r.multiplier)}x pick</small>` : '';
   return `<b>${odds(r.american)}</b><small>needs ${pct(r.be)}</small>${m}`;
 }
-/* QOL 2026-11-07: a leg already on the slip says so, in the board's words ("On slip ✓"); a press shows it in the slip, as before.
-   The other side of a line on the slip reads "Over on slip" / "Under on slip" (one side per line). */
 function addBtn(r) {
-  const on = C.slipSide ? C.slipSide(r.key) : null, what = `${esc(r.player)} ${esc(side(r.side))} ${esc(r.line)}`;
-  if (on) return `<button class="ev-add is-on" data-ev="add" data-id="${esc(r.key)}" data-side="${esc(r.side)}" aria-label="${on === r.side ? `${what} is on your slip. Show it` : `${esc(side(on))} ${esc(r.line)} is on your slip. Show it`}">${on === r.side ? 'On slip ✓' : esc(side(on)) + ' on slip'}</button>`;
-  return `<button class="ev-add" data-ev="add" data-id="${esc(r.key)}" data-side="${esc(r.side)}" aria-label="Add ${what} to slip">+ Slip</button>`;
+  return `<button class="ev-add" data-ev="add" data-id="${esc(r.key)}" data-side="${esc(r.side)}" aria-label="Add ${esc(r.player)} ${esc(side(r.side))} ${esc(r.line)} to slip">+ Slip</button>`;
 }
 function sourcesHtml(r) {
   const rows = r.sources.map(s => `<tr><td>${esc(s.label)}${s.kind === 'exchange' ? ' <small>exchange</small>' : ''}</td><td class="ev-num">${esc(s.line)}${s.shifted ? ` <small>read at ${esc(r.line)}</small>` : ''}</td>`
@@ -234,7 +230,7 @@ const CSS = '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;j
   + '#u-hub .ev-list-model .ev-row,#u-hub .ev-list-model .ev-head{grid-template-columns:minmax(180px,2.2fr) 1fr 1.2fr 1fr auto}'
   + '#u-hub .ev-head{border-top:0;font-size:12px;color:var(--u-muted);background:var(--u-panel)}#u-hub .ev-cell small{display:block;color:var(--u-muted);font-size:12px}'
   + '#u-hub .ev-play b{display:block}#u-hub .ev-ev.is-pos b{color:var(--u-good,#16a34a)}#u-hub .ev-ev.is-neg b{color:var(--u-muted)}#u-hub .ev-na{color:var(--u-muted);font-size:12px}'
-  + '#u-hub .ev-add.is-on{border-color:var(--u-good,#16a34a);color:var(--u-good,#16a34a)}#u-hub .ev-books,#u-hub .ev-add,#u-hub .ev-refresh button,#u-hub .ev-drawer-foot button{min-height:40px}#u-hub .ev-badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--u-line);color:var(--u-muted)}'
+  + '#u-hub .ev-books,#u-hub .ev-add,#u-hub .ev-refresh button,#u-hub .ev-drawer-foot button{min-height:40px}#u-hub .ev-badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:999px;border:1px solid var(--u-line);color:var(--u-muted)}'
   + '#u-hub .ev-src{grid-column:1/-1;overflow-x:auto}#u-hub .ev-src table{width:100%;border-collapse:collapse;font-size:13px}#u-hub .ev-src th,#u-hub .ev-src td{text-align:left;padding:4px 6px;border-top:1px solid var(--u-line)}'
   + '#u-hub .ev-src .ev-num{white-space:nowrap}#u-hub .ev-left{margin:8px 0 2px;font-size:12px;color:var(--u-muted)}#u-hub .ev-left-list{margin:0;padding-left:18px;font-size:12px;color:var(--u-muted);opacity:.75}'
   + '#u-hub .ev-state{color:var(--u-muted)}#u-hub .ev-link{background:none;border:0;padding:0 4px;min-height:40px;color:var(--u-accent,#3b82f6);text-decoration:underline;cursor:pointer}'
@@ -280,7 +276,7 @@ function onClick(e) {
     Object.assign(S.p, DEF_P()); S.f = DEF_F(); S.notice = '';
     return fetchDoc();
   }
-  if (a === 'add') { C.addLeg(id, b.dataset.side); return render(); }
+  if (a === 'add') return C.addLeg(id, b.dataset.side);
 }
 function onChange(e) {
   const t = e.target, id = t.id || '';
@@ -298,7 +294,7 @@ function onInput(e) {
   const q = box.querySelector('#ev-q'); if (q) { q.focus({preventScroll: true}); try { q.setSelectionRange(pos, pos); } catch (err) { /* type=search */ } }
 }
 
-/* ctx: {api, esc, when, SPORTS, addLeg(key, side), slipSide(key)} from the hub. paint() is called each time the #/ev section opens. */
+/* ctx: {api, esc, when, SPORTS, addLeg(key, side)} from the hub. paint() is called each time the #/ev section opens. */
 export function paint(el, ctx) {
   C = ctx;
   if (box !== el) {

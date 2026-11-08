@@ -2218,37 +2218,12 @@ async function shareSlip() {
   await copy(slipLink(s)); toast("Slip link copied – it opens these picks against the current board", 3000);
 }
 $("#slipbtn").onclick = () => { $("#slip").hidden ? openSlip() : ($("#slip").hidden = true); };
-// QoL 2026-11-07: the phone / tablet slip sheet closes with Esc (or Close) and the keyboard goes back to the Slip button
-const closeSlipSheet = () => { $("#slip").hidden = true; const b = $("#slipbtn"); if (b && !b.hidden && b.getClientRects().length) try { b.focus({preventScroll: true}); } catch {} };
-document.addEventListener("keydown", e => {
-  if (e.key !== "Escape" || innerWidth >= 1180 || $("#slip").hidden || !$("#cardpop").hidden || !$("#cttray").hidden || document.querySelector(".askwrap")) return;
-  closeSlipSheet();
-});
-// QoL 2026-11-07: Clear and ✕ on the slip can be undone for a few seconds (a stray tap on a phone no longer loses the slip)
-function slipUndoToast(msg, prev) {
-  toast(msg, 6000);
-  const t = $("#toast");
-  if (!t || t.textContent !== msg) return;
-  t.innerHTML = `<span>${esc(msg)}</span> <button type="button" class="toast-undo" data-undo-slip="1">Undo</button>`;
-  t.classList.add("on", "has-undo"); clearTimeout(toast.t);
-  t.querySelector("[data-undo-slip]").onclick = () => {
-    store.set("cs2s_slip", prev);
-    t.classList.remove("on", "has-undo"); t.textContent = "";
-    drawSlip(); try { if (!$("#board").hidden) drawBoard(); } catch {}
-    toast("Slip restored");
-  };
-  toast.t = setTimeout(() => t.classList.remove("on", "has-undo"), 6000);
-}
 function slipClick(e) {
   if (e.target.closest("[data-udopen]")) return;            // an Underdog line link: the browser opens it
   const rm = e.target.closest("[data-rmleg]");
-  if (rm) { const s = store.get("cs2s_slip", []), prev = s.slice(), [x] = s.splice(+rm.dataset.rmleg, 1); store.set("cs2s_slip", s); drawSlip();
-    try { if (!$("#board").hidden) drawBoard(); } catch {}
-    if (x) slipUndoToast(`Removed ${x.p} from your slip`, prev); return; }
-  if (e.target.closest("#slipclear") || e.target.closest("[data-slipclear]")) { const prev = store.get("cs2s_slip", []); store.set("cs2s_slip", []); drawSlip();
-    try { if (!$("#board").hidden) drawBoard(); } catch {}
-    if (prev.length) slipUndoToast(`Cleared your slip (${prev.length} pick${prev.length === 1 ? "" : "s"})`, prev); return; }
-  if (e.target.closest("#slipclose")) { closeSlipSheet(); return; }
+  if (rm) { const s = store.get("cs2s_slip", []); s.splice(+rm.dataset.rmleg, 1); store.set("cs2s_slip", s); return drawSlip(); }
+  if (e.target.closest("#slipclear") || e.target.closest("[data-slipclear]")) { store.set("cs2s_slip", []); return drawSlip(); }
+  if (e.target.closest("#slipclose")) { $("#slip").hidden = true; return; }
   const sw = e.target.closest("[data-swap]"); if (sw) return swapLeg(+sw.dataset.swap);
   const pl = e.target.closest("[data-pinleg]");
   if (pl) { const x = store.get("cs2s_slip", [])[+pl.dataset.pinleg]; if (x) pinPick(x.rid, x.bk, `${x.p} ${sideTxt(x.s)} ${x.l} ${propWord(x.t)}${mapsWord(x.sc)}`); return; }

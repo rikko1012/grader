@@ -9,11 +9,10 @@ from tests.test_audit_h_web import FUTURE, PAST, _lol_row, needs_node, run
 
 
 def qol_1107_norm(html):
-    """The three deliberate Slip-tab changes of the 2026-11-07 QoL pass, folded out so the PP_OPEN_LINK flag-off parity tests
-    (tests/test_pplink.py, tests/test_udlink.py) still prove the flag adds nothing: the Slip tab's bar (it now carries no board
-    filter), a leg drawn as a button that opens its card, and "Est. chance all hit" -> "Chance all hit"."""
-    html = re.sub(r'<div class="bar[^"]*">.*?</div>(?=<section class="panel">)', "", html, flags=re.S)
-    html = re.sub(r'<button type="button" class="legopen" data-legk="[^"]*" title="[^"]*">(.*?)</button>', r"\1", html, flags=re.S)
+    """The one deliberate Slip-tab change of the 2026-11-07 QoL pass that stays, folded out so the PP_OPEN_LINK flag-off parity
+    tests (tests/test_pplink.py, tests/test_udlink.py) still prove the flag adds nothing: "Est. chance all hit" -> "Chance all hit"
+    (no hedge word on member pages). The Slip tab's bar, Clear's Undo and the leg-opens-card button were rolled back on the
+    owner's 2026-11-07 request (Slip studio as it was on 2f96bab)."""
     return html.replace("Est. chance all hit", "Chance all hit")
 
 
@@ -136,8 +135,8 @@ def test_clear_filters_counts_this_views_filters_and_keeps_layout_sort_and_view(
     a = out["after"]
     assert a["plat"] == "all" and a["q"] == "" and a["layout"] == "table" and a["sort"] == "grade" and a["view"] == "board"
     assert 'id="clearf"' not in out["barAfter"] and out["tablesN"] == 0
-    # the Slip tab draws no board filter (none of them changes the member's slip)
-    assert 'class="bar slipbar"' in out["slip"] and 'id="s"' not in out["slip"] and 'id="p"' not in out["slip"] and 'id="q"' not in out["slip"]
+    # the Slip tab keeps the bar it had on 2f96bab (owner 2026-11-07 roll-back) and never offers Clear filters there
+    assert 'id="clearf"' not in out["slip"] and 'id="s"' in out["slip"] and 'id="q"' not in out["slip"]
     assert "No lines match these filters." in out["empty"] and "6 lines are on the board" in out["empty"]
 
 
@@ -153,23 +152,6 @@ def test_compare_books_says_nothing_is_posted_instead_of_blaming_filters(tmp_pat
     })()""", {"none": {"rows": [], "match_tables": []}, "some": {"rows": [], "match_tables": tables}})
     assert "No LoL lines are posted right now." in out["none"] and "match these filters" not in out["none"] and 'id="reset"' not in out["none"]
     assert "No posted LoL lines match these filters." in out["filtered"] and 'id="reset"' in out["filtered"]
-
-
-@needs_node
-def test_slip_clear_has_undo_and_a_leg_opens_its_card(tmp_path):
-    out = run(tmp_path, "lol.html", """(() => {
-      D = INPUT; F.view = "slip"; SLIP.legs = [legOf(D.rows[0]), Object.assign(legOf(D.rows[1]), {key: "gone"})]; render();
-      const view = $("#app").innerHTML;
-      $("#clearslip").onclick(); const cleared = $("#app").innerHTML, n0 = SLIP.legs.length, stored0 = JSON.parse(localStorage.getItem("scout.lol.slip")).legs.length;
-      $("#undoclear").onclick(); const back = SLIP.legs.map(l => l.key), html = $("#app").innerHTML;
-      $("#clearslip").onclick(); SLIP.legs.push(legOf(D.rows[2])); render(); const added = $("#app").innerHTML;   // a new pick ends the Undo
-      return {view, cleared, n0, stored0, back, html, added, legs: SLIP.legs.length};
-    })()""", {"rows": _rows(), "match_tables": []})
-    assert 'data-legk="k-a"' in out["view"] and 'data-legk="gone"' not in out["view"]   # a leg off the board stays plain text
-    assert out["n0"] == 0 and out["stored0"] == 0 and "Slip cleared (2 picks)." in out["cleared"] and 'id="undoclear"' in out["cleared"]
-    assert out["back"] == ["k-a", "gone"] and 'id="undoclear"' not in out["html"]
-    assert 'id="undoclear"' not in out["added"] and out["legs"] == 1
-    assert "Est." not in out["view"] and "Chance all hit" in out["view"]
 
 
 @needs_node
