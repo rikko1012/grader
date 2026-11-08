@@ -20,7 +20,6 @@ import os
 
 import roles
 
-CS2_ORDER = ("IGL", "AWPer", "Rifler", "Entry", "Lurker", "Support")
 _CS2_WORD = {"igl": "IGL", "awp": "AWPer", "awper": "AWPer", "rifle": "Rifler", "rifler": "Rifler", "entry": "Entry",
              "entry fragger": "Entry", "lurk": "Lurker", "lurker": "Lurker", "support": "Support"}
 CS2_MAX = 2
@@ -31,16 +30,16 @@ def cs2_enabled():
 
 
 def normalize_cs2(roles_list, igl_flag=False):
-    """['igl', 'rifle'] -> 'IGL · Rifler'. Coach / unknown words dropped, duplicates once, fixed order, at most 2. None if empty."""
-    got = set()
+    """['rifle', 'awp'] -> 'Rifler · AWPer'. The source's own order (Liquipedia lists the main role first), IGL moved to the front
+    when listed or flagged, coach / unknown words dropped, duplicates once, at most 2. None if empty."""
+    out = []
     for r in roles_list or ():
         w = _CS2_WORD.get(str(r or "").strip().lower())
-        if w:
-            got.add(w)
-    if igl_flag:
-        got.add("IGL")
-    out = [w for w in CS2_ORDER if w in got][:CS2_MAX]
-    return " · ".join(out) or None
+        if w and w not in out:
+            out.append(w)
+    if igl_flag or "IGL" in out:
+        out = ["IGL"] + [w for w in out if w != "IGL"]
+    return " · ".join(out[:CS2_MAX]) or None
 
 
 def _usable_team(t):

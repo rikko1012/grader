@@ -211,3 +211,37 @@ def test_instant_card_and_hero_carry_the_rows_role(tmp_path):
     assert re.sub(r"<[^>]+>", " ", out["bare"]).count("AWP") == 0
     assert f'Vitality · <span class="rtag">{CS2_ROLE}</span>' in out["card"]
     assert "rtag" not in out["nocard"] and "IGL reference list" not in out["card"] + out["nocard"]
+
+
+AWP_NOTES = {
+    "none": None,                                                                     # ZywOo, no reading: no "AWPer" from a list
+    "hltv": "AWPer (HLTV weapon stats: 27% of 1204 kills with the AWP (90 days to 2026-11-06))",
+    "rifle": "Rifler (HLTV weapon stats: 0% of 880 kills with the AWP (90 days to 2026-11-06))",
+    "liq": "Rifler (Liquipedia via HLTV scraper (cxzi: rifle, awp, igl), checked 2026-11-06)",
+    "bo3": "AWPer (body-shot kill rate 0.61 >= 0.55)",
+    "hs": "AWPer (Maps 1-2 HS% 31 < 35 with KPR 0.81)",
+    "unsure": "AWPer status unclear (body-shot kill rate 0.48, between 0.4 and 0.55)",
+    "unknown": "AWP: unknown (only 12 body-shot kills on record)",
+}
+
+
+@needs_node
+def test_card_checks_show_the_awp_reading_never_a_role_word(tmp_path):
+    """review 1107: the Checks row printed "AWPer" for a known-AWPer nick and "AWPer / Rifler (HLTV weapon stats ...)" from the AWP kill
+    share - a second role word on the card that could contradict the tag. Now: the stat alone, or no row."""
+    base = dict(_outage_card(dict(KEPT, side="More"), {"rows": [], "causes": []}), role_label="Rifler · AWPer")
+    data = {k: dict(base, player_block=dict(base["player_block"], awp_note=v)) for k, v in AWP_NOTES.items()}
+    out = run_page(tmp_path, r"""(() => { const r = {};
+      for (const k of Object.keys(INPUT)) { try { render(INPUT[k]); } catch (e) { if (!/nextSibling/.test(e.message)) throw e; }
+        const h = $("#out").innerHTML, m = /<span>AWP use \(HS stake\)<\/span><span>([^<]*)<\/span>/.exec(h);
+        r[k] = {row: m ? m[1] : null, tags: (h.match(/class="rtag"/g) || []).length, words: (h.replace(/<[^>]+>/g, " ").match(/\b(AWPer|Rifler)\b/g) || [])}; }
+      return r; })()""", data)
+    assert out["hltv"]["row"] == "HLTV weapon stats: 27% of 1204 kills with the AWP (90 days to 2026-11-06)"
+    assert out["rifle"]["row"] == "HLTV weapon stats: 0% of 880 kills with the AWP (90 days to 2026-11-06)"
+    assert out["bo3"]["row"] == "body-shot kill rate 0.61 &gt;= 0.55"
+    assert out["hs"]["row"] == "Maps 1-2 HS% 31 &lt; 35 with KPR 0.81"
+    for k in ("none", "liq", "unsure", "unknown"):
+        assert out[k]["row"] is None, (k, out[k])
+    for k, v in out.items():
+        assert v["tags"] == 1, (k, v)
+        assert v["words"] == ["Rifler", "AWPer"], (k, v)                                 # the tag's two words, nowhere else

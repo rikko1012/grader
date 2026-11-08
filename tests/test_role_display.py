@@ -46,8 +46,22 @@ def test_normalize_words_order_and_cap():
     assert rd.normalize_cs2(["coach"]) is None and rd.normalize_cs2([]) is None and rd.normalize_cs2(None) is None
     assert rd.normalize_cs2(["rifle", "rifler", "Rifle"]) == "Rifler"                     # dedupe
     assert rd.normalize_cs2(["star", "rifle", "analyst"]) == "Rifler"                    # unknown words dropped
-    assert rd.normalize_cs2(["support", "lurk", "entry", "rifle", "awp", "igl"]) == "IGL · AWPer"   # fixed order, at most 2
+    assert rd.normalize_cs2(["support", "lurk", "entry", "rifle", "awp", "igl"]) == "IGL · Support"  # IGL first, then source order, 2
     assert rd.normalize_cs2(["Entry Fragger", "lurker"]) == "Entry · Lurker"
+
+
+def test_normalize_keeps_the_source_order_with_igl_first():
+    """review 1107: Liquipedia lists the main role first - a fixed AWPer-first order turned ['rifle', 'awp'] (latto, dumau, senzu:
+    under 2% AWP kills) into "AWPer · Rifler" and dropped Rifler from cxzi's ['rifle', 'awp', 'igl']"""
+    assert rd.normalize_cs2(["rifle", "awp"]) == "Rifler · AWPer"
+    assert rd.normalize_cs2(["awp", "rifle"]) == "AWPer · Rifler"
+    assert rd.normalize_cs2(["rifle", "awp", "igl"], True) == "IGL · Rifler"
+    assert rd.normalize_cs2(["rifle", "awp", "igl"]) == "IGL · Rifler"                  # listed IGL counts without the flag
+    assert rd.normalize_cs2(["awp", "igl"], True) == "IGL · AWPer"
+    assert rd.normalize_cs2(["lurk", "awp"]) == "Lurker · AWPer"
+    assert rd.normalize_cs2(["entry", "awp"]) == "Entry · AWPer"
+    assert rd.normalize_cs2(["lurk", "igl"], True) == "IGL · Lurker"
+    assert rd.normalize_cs2(["awp", "coach"]) == "AWPer"
 
 
 # ------------------------------------------------------------------------------------------------ cs2_label
@@ -157,6 +171,18 @@ def test_stand_in_card_uses_the_same_own_team_retry(state, monkeypatch):
     row = _board(monkeypatch, _g("orlo", "Mix Five", ["Vanta"]), _feed("orlo", "Mix Five"))[0]
     card = {"player_block": {"player": {"nick": "orlo"}, "playing_for": "Mix Five", "current_team": "Vanta", "profile_team": None}}
     assert row["role_label"] == server.card_role_label(card) == "AWPer"
+
+
+def test_row_without_a_player_team_shows_no_role_like_its_card(state, monkeypatch):
+    """review 1107: the board fell back to the feed's team when the player block had none, the card has no feed team - board
+    "Rifler", card nothing. Both read team_name (playing_for or current_team) + own_teams now."""
+    state._HLTV["rows"] = {"vargo": [hrow("Halcyon", ["rifle"])]}
+    row = _board(monkeypatch, _g("vargo", None, []), _feed("vargo", "Halcyon"))[0]
+    card = {"player_block": {"player": {"nick": "vargo"}, "playing_for": None, "current_team": None, "profile_team": None}}
+    assert row["role_label"] is None and server.card_role_label(card) is None
+    row = _board(monkeypatch, _g("vargo", None, ["Halcyon"]), _feed("vargo", "Halcyon"))[0]
+    card["player_block"]["profile_team"] = "Halcyon"
+    assert row["role_label"] == server.card_role_label(card) == "Rifler"
 
 
 def test_no_source_means_no_role_anywhere(state, monkeypatch):

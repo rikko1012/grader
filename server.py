@@ -1301,8 +1301,9 @@ def board_payload(book="underdog"):
         x["awp_conf"] = (None if x["awp"] is None else "confirmed" if src.startswith(("hltv", "liquipedia"))
                          else "measured" if src.startswith("bo3") else "inferred")
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
-        # role tag (display only, role_display.py): explicit Liquipedia roles, never inferred from stats; None = no source
-        x["role_label"] = role_display.cs2_label(nick, x.get("team_name") or x.get("team"), g.get("own_teams") or ())
+        # role tag (display only, role_display.py): explicit Liquipedia roles, never inferred from stats; None = no source.
+        # team_name only (no feed-team fallback): the card (card_role_label) has no feed team, so both read the same inputs
+        x["role_label"] = role_display.cs2_label(nick, x.get("team_name"), g.get("own_teams") or ())
     for x in rows:
         x["book"] = x.get("book") or "underdog"
         x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked

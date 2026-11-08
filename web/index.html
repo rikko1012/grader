@@ -1455,10 +1455,12 @@ const noteOf = (d, x) => { const v = d?.verdict || {}, g = d?.grade || {};
   if (g.withheld) return v.side ? `graded ${clockTxt(v.graded_at) || "earlier"}` : "grading…";
   return lineWarn(g.prop || x?.prop, g.line ?? x?.line, marketOk(d)) || ((v.units || 0) === 0 && /0 units: (.+)$/.exec(v.reason || "")?.[1])
     || ((v.units || 0) > 0 && v.cap_reason ? `max ${v.units}U: ${v.cap_reason}` : "") || ""; };
-// display only: well-known main AWPers, shown when BO3.gg has no weapon data (the grade doesn't use this list)
 // owner 2026-10-16: hedge wording never reaches the member page (the grade and stake are unchanged - only the label is left out)
 const UNSURE = /not confirmed|unconfirmed|unavailable|unreachable|provisional|\bstale\b|unknown|unclear|uncertain|not verified|unverified|not validated|hard to predict|not in HLTV|out of date/i;
-const KNOWN_AWP = new Set(["zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame", "molodoy", "910", "ultimate"]);
+// the HS-stake AWP reading as a stat, without the "AWPer" / "Rifler" verdict word: the player's role is the hero tag alone
+// (role_display.py, source-listed). A Liquipedia role listing is that tag already, and a hedged reading is never shown.
+const awpReading = note => { const m = /^(?:AWPer|Rifler)\s*\((.+)\)\s*$/i.exec(note || "");
+  return !m || UNSURE.test(note) || /^Liquipedia/i.test(m[1]) || /\b(AWPer|Rifler)\b/i.test(m[1]) ? "" : m[1]; };
 const mapsWord = sc => sc === "123" ? " (Maps 1–3)" : sc === "1" ? " (Map 1)" : "";
 function pickLine(d) {
   const g = d.grade || {}, v = d.verdict || {}, nick = d.player_block?.player?.nick || "";
@@ -4219,8 +4221,7 @@ function render(d) {
     </div></section>
     <section class="card"><h2>Checks</h2>
       ${pb.roster_confirmed || pb.standin_for ? `<div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Stand-in"}${pb.roster_confirmed && pb.standin_for ? " · stand-in" : ""}</span></div>` : ""}${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
-      ${(() => { const kn = KNOWN_AWP.has((pb.player?.nick || "").toLowerCase()), un = !pb.awp_note || UNSURE.test(pb.awp_note);
-        return un && !kn ? "" : `<div class="kv"><span>AWP use (HS stake)</span><span>${esc(un ? "AWPer" : pb.awp_note)}</span></div>`; })()}
+      ${awpReading(pb.awp_note) ? `<div class="kv"><span>AWP use (HS stake)</span><span>${esc(awpReading(pb.awp_note))}</span></div>` : ""}
       ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round</span></div>` : ""}
       ${pb.opening?.kills_per_round != null ? `<div class="kv"><span>Opening kills</span><span>${num(pb.opening.kills_per_round,3)}/round · ${pct(pb.opening.duel_win,0)} duels won</span></div>` : ""}
       ${o.flags?.length ? `<div class="kv"><span>Sample</span><span>${esc(o.flags.join("; "))}</span></div>` : ""}
