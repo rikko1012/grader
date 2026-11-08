@@ -891,7 +891,8 @@ export function mount(C) {
     const box=$('hub-detail'), el=box?.querySelector('[data-hub-chart]'), r=rec(H.detail);
     if(!el||!r)return;
     const lh=H.detailDoc?.history?.line_history, cm=new Map((lh?.closing_marks||[]).map(m=>[m.date+'|'+m.opponent,m]));
-    const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN).map(g=>{const m=cm.get(g.date+'|'+g.opponent);return m?{...g,closing:m.closing,...(m.move?{move:m.move}:{})}:g;});
+    const mv=C.movesOf?C.movesOf(H.detailDoc):new Map();   /* the move only through movesOf: a same-day rematch gets none */
+    const list=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,H.histN).map(g=>{const m=cm.get(g.date+'|'+g.opponent),k=mv.get(g.date+'|'+g.opponent);return m?{...g,closing:m.closing,...(k?{move:k}:{})}:g;});
     const sorted=list.map(g=>g.value).sort((a,b)=>a-b),mid=Math.floor(sorted.length/2),median=sorted.length?(sorted.length%2?sorted[mid]:(sorted[mid-1]+sorted[mid])/2):null;
     if(list.length)el.innerHTML=C.chartSvg(list,r.offer.line,H.histSide,Math.max(260,Math.round(el.clientWidth)||560),{median});
     const lel=box.querySelector('[data-hub-lh]');

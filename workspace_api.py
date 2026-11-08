@@ -1519,8 +1519,9 @@ def _receipt_moves(srv, receipts):
     """SCOUT_LINE_MOVE_NOTES (wording only): a settled receipt whose market was bumped between its opening and closing line
     gets `line_move` (closing_lines.move_note) - "Opened 15.5 (Over won) · closed 16 (push)". status, final and every count stay
     exactly as settled at the member's own line. Only when the opening line is known for that offer (CS2: the closing row saved
-    at lock; LoL: the market's first event was its open) and the member's line sits between the two. Runs once per member rev
-    (the page is cached by rev); reads are indexed, chunked and behind bounded caches. Never breaks My picks."""
+    at lock; LoL: the market's first event was its open; NBA / NFL: the offer's first stored revision, from the sports API) and
+    the member's line sits between the two. Runs once per member rev (the page is cached by rev); reads are indexed, chunked
+    and behind bounded caches (NBA / NFL: at most workspace_sports.MOVE_CALLS short sports-API reads). Never breaks My picks."""
     keys = [(r, r.pop("_match_key", None), r.pop("_settle_key", None)) for r in receipts]
     try:
         import closing_lines as cl
@@ -1530,7 +1531,7 @@ def _receipt_moves(srv, receipts):
                    and isinstance(r.get("line"), (int, float))]
         cs2 = [(r, _receipt_ident(r, mk)) for r, mk, _ in settled if r.get("sport") == "cs2"]
         cs2 = [(r, i) for r, i in cs2 if i]
-        rows = cl.lookup_idents([i for _, i in cs2]) if cs2 else {}
+        rows = cl.lookup_idents([i for _, i in cs2], starts={i: r.get("start_utc") for r, i in cs2}) if cs2 else {}
         for r, i in cs2:
             mv = cl.row_note(rows.get(i), r["line"], r["final"], r.get("platform"))
             if mv:
@@ -1538,14 +1539,30 @@ def _receipt_moves(srv, receipts):
         lol = [(r, _lol_unit(sk)) for r, _, sk in settled if r.get("sport") == "lol"]
         lol = [(r, u) for r, u in lol if u]
         if lol:
-            moves = _adapter("lol").line_moves(srv, [(u[0], u[1], r.get("start_utc")) for r, u in lol])
+            moves = _adapter("lol").line_moves(srv, [u for _, u in lol])
             for r, u in lol:
-                oc = moves.get((u[0], u[1], r.get("start_utc")))
+                oc = moves.get(u)
                 mv = cl.row_note({"open_line": oc[0], "line": oc[1]}, r["line"], r["final"], u[0]) if oc else None
+                if mv:
+                    r["line_move"] = mv
+        sp = [(r, _sports_offer(r, sk)) for r, _, sk in settled if r.get("sport") in ("nba", "nfl")]
+        sp = [(r, o) for r, o in sp if o]
+        if sp:
+            moves = _adapter("nba").line_moves(srv, [(o[0], o[1], r.get("start_utc")) for r, o in sp])
+            for r, o in sp:
+                oc = moves.get(o)
+                mv = cl.row_note({"open_line": oc[0], "line": oc[1]}, r["line"], r["final"], o[0]) if oc else None
                 if mv:
                     r["line_move"] = mv
     except Exception:
         pass
+
+
+def _sports_offer(r, settle_key):
+    """(platform, offer_id) of an NBA / NFL receipt, from its settle_key (workspace_sports.settle_key_offer), its league matching."""
+    import workspace_sports
+    u = workspace_sports.settle_key_offer(settle_key)
+    return (u[1], u[2]) if u and u[0] == r.get("sport") else None
 
 
 def get_results(h, srv, q, member, scratch, name):

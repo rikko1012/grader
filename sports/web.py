@@ -93,6 +93,7 @@ ROUTES = {
     "/api/sports/without": ("sports.api_sheets:without_view", MEMBER, ("GET",)),
     "/api/sports/results/public": ("sports.api_sheets:results_view", MEMBER, ("GET",)),
     "/api/sports/compare/check": ("sports.api_compare:check", MEMBER, ("GET",)),
+    "/api/sports/offers/moves": ("sports.api_line_moves:view", MEMBER, ("GET",)),
 }
 # ---------------------------------------------------------------------------------------------------- end of table
 

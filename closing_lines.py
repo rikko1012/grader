@@ -43,7 +43,8 @@ REPORT_PICKS_MAX = 100000
 CACHE_TTL = 300
 MOVE_FLAG = "SCOUT_LINE_MOVE_NOTES"   # settled rows say when the line was bumped (wording only; needs SCOUT_CLOSING_LINES too)
 LOOKUP_MAX = 20000             # closing rows remembered for settled-row notes (append-only: a hit never changes)
-MISS_TTL = 300                 # an ident with no closing row is asked again after this
+MISS_TTL = 300                 # an ident with no closing row is asked again after this (while its start is recent)
+FINAL_AFTER_S = 12 * 3600      # ... and never again once it started this long ago (a closing row is written around lock or never)
 IN_CHUNK = 200
 LEG_WINDOW_S = 12 * 3600       # a studio leg without its ident: its closing row locked within this of the leg's start
 BOOK_LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
@@ -398,31 +399,61 @@ def row_note(row, line, actual, book):
 
 
 def _cached(k, now):
-    """(True, row-or-None) when the lookup cache answers for k, else (False, None)."""
+    """(True, row-or-None) when the lookup cache answers for k, else (False, None). A hit is kept (append-only rows); a miss
+    marked final (its lock is long past: no closing row can still be written) is kept too; any other miss expires after
+    MISS_TTL."""
     with _LOOKUP_LOCK:
         e = _LOOKUP.get(k)
         if e is None:
             return False, None
-        row, at = e
-        if row is None and now - at > MISS_TTL:
+        row, at, final = e
+        if row is None and not final and now - at > MISS_TTL:
             del _LOOKUP[k]
             return False, None
         _LOOKUP.move_to_end(k)
         return True, row
 
 
-def _remember(k, row, now):
+def _remember(k, row, now, final=False):
     with _LOOKUP_LOCK:
-        _LOOKUP[k] = (row, now)
+        _LOOKUP[k] = (row, now, bool(final))
         _LOOKUP.move_to_end(k)
         while len(_LOOKUP) > LOOKUP_MAX:
             _LOOKUP.popitem(last=False)
 
 
-def lookup_idents(idents, now=None):
+def _final(start, now, extra=0.0):
+    """A miss for an offer that started more than FINAL_AFTER_S (+ extra) ago is final: the closing row is written around lock
+    or never (a restart drops the pending sighting), so asking again cannot find one."""
+    st = _ts(start)
+    return st is not None and now - st > FINAL_AFTER_S + extra
+
+
+class Reader:
+    """One read-only connection for a whole request, opened on first use (none when every answer is cached). close() always."""
+
+    def __init__(self):
+        self.con, self.tried = None, False
+
+    def get(self):
+        if not self.tried:
+            self.tried = True
+            self.con = _reader()
+        return self.con
+
+    def close(self):
+        if self.con is not None:
+            self.con.close()
+            self.con = None
+
+
+def lookup_idents(idents, now=None, starts=None, reader=None):
     """{ident: closing row} for the idents that have one. Indexed reads (the UNIQUE ident), IN_CHUNK at a time, behind a
-    bounded cache: a saved row is append-only, so a hit is kept; a miss is asked again after MISS_TTL. No database = {}."""
+    bounded cache: a saved row is append-only, so a hit is kept; a miss is asked again after MISS_TTL, unless starts
+    ({ident: start}) shows the offer started more than FINAL_AFTER_S ago (then the miss is kept). No database = {}.
+    reader: a shared Reader (the caller closes it); else one connection is opened and closed here."""
     now = time.time() if now is None else now
+    starts = starts or {}
     out, need = {}, []
     for k in dict.fromkeys(i for i in idents if i):
         hit, row = _cached(k, now)
@@ -433,11 +464,13 @@ def lookup_idents(idents, now=None):
             need.append(k)
     if not need:
         return out
-    con = _reader()
-    if con is None:
-        return out
+    own = reader is None
+    rd = Reader() if own else reader
     found = {}
     try:
+        con = rd.get()
+        if con is None:
+            return out
         for i in range(0, len(need), IN_CHUNK):
             part = need[i:i + IN_CHUNK]
             for r in con.execute(f"SELECT ident, line, open_line, lock_utc, last_seen_at FROM closing_lines WHERE ident IN "
@@ -446,30 +479,47 @@ def lookup_idents(idents, now=None):
     except sqlite3.Error:
         return out
     finally:
-        con.close()
+        if own:
+            rd.close()
     for k in need:
-        _remember(k, found.get(k), now)
+        _remember(k, found.get(k), now, final=k not in found and _final(starts.get(k), now))
         if k in found:
             out[k] = found[k]
     return out
 
 
-def find_for_leg(player_key, prop, scope, book, line_type, slug, start, now=None):
-    """A studio leg whose ident has no closing row: the closing row for the same player / stat / maps / platform / line type that
-    locked within LEG_WINDOW_S of the leg's start and was saved under the leg's EXACT match slug (never a fuzzy match). One
-    indexed (ix_cl_player), bounded read behind the lookup cache. None unless exactly one row matches."""
-    now = time.time() if now is None else now
+def leg_key(player_key, prop, scope, book, line_type, slug, start):
+    """The lookup-cache key of find_for_leg (None when the leg cannot be looked up)."""
     st = _ts(start)
     if not slug or st is None or not player_key or not prop:
         return None
-    k = ("leg", player_key, prop, str(scope), book, line_type, slug, int(st // 60))
+    return ("leg", player_key, prop, str(scope), book, line_type, slug, int(st // 60))
+
+
+def leg_cached(key, now=None):
+    """(True, row-or-None) when find_for_leg would answer `key` from the cache (no read), else (False, None)."""
+    return _cached(key, time.time() if now is None else now) if key else (True, None)
+
+
+def find_for_leg(player_key, prop, scope, book, line_type, slug, start, now=None, reader=None):
+    """A studio leg whose ident has no closing row: the closing row for the same player / stat / maps / platform / line type that
+    locked within LEG_WINDOW_S of the leg's start and was saved under the leg's EXACT match slug (never a fuzzy match). One
+    indexed (ix_cl_player), bounded read behind the lookup cache (a miss past the window + FINAL_AFTER_S is kept). None unless
+    exactly one row matches. reader: a shared Reader for every fallback of one request (the caller closes it)."""
+    now = time.time() if now is None else now
+    k = leg_key(player_key, prop, scope, book, line_type, slug, start)
+    if k is None:
+        return None
     hit, row = _cached(k, now)
     if hit:
         return row
-    con = _reader()
-    if con is None:
-        return None
+    st = _ts(start)
+    own = reader is None
+    rd = Reader() if own else reader
     try:
+        con = rd.get()
+        if con is None:
+            return None
         rows = [dict(r) for r in con.execute(
             "SELECT ident, line, open_line, lock_utc, last_seen_at, match_slug, settle_slug FROM closing_lines WHERE player_key = ? "
             "AND prop = ? AND scope = ? AND book = ? AND line_type = ? AND lock_utc >= ? AND lock_utc <= ? LIMIT 20",
@@ -477,10 +527,11 @@ def find_for_leg(player_key, prop, scope, book, line_type, slug, start, now=None
     except sqlite3.Error:
         return None
     finally:
-        con.close()
+        if own:
+            rd.close()
     same = [r for r in rows if slug in (r.get("match_slug"), r.get("settle_slug"))]
     row = same[0] if len(same) == 1 else None
-    _remember(k, row, now)
+    _remember(k, row, now, final=row is None and _final(start, now, LEG_WINDOW_S))
     return row
 
 

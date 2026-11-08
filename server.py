@@ -1134,27 +1134,29 @@ def ops_checks(now=None):
     return res
 
 
-STUDIO_MOVE_LOOKUPS = 300      # settled studio legs given a line-move note per request
-STUDIO_MOVE_FALLBACKS = 100    # of those, legs looked up by exact slug when their ident has no closing row
+STUDIO_MOVE_LOOKUPS = 300      # different closing rows looked up by ident per request (every copy of a leg shares its lookup)
+STUDIO_MOVE_FALLBACKS = 100    # different legs looked up by exact slug when their ident has no closing row (cache misses only)
 
 
-def _studio_moves(batches, picks, res):
+def _studio_moves(batches, picks, res, now=None):
     """SCOUT_LINE_MOVE_NOTES (wording only): {(id(slip), leg index): closing_lines.move_note} for the settled studio legs whose
     line was bumped between opening and close, the leg's own line sitting between the two. Each leg's result (res) and every
     slip outcome stay as they are. Closing rows: the leg's ident (canonical match id, platform, line type) in one chunked,
-    indexed read; a leg without one by its EXACT match slug (closing_lines.find_for_leg). Both behind the bounded lookup cache.
-    None with the flag off; {} when anything fails (the history still shows)."""
+    indexed read; a leg without one by its EXACT match slug (closing_lines.find_for_leg). Both behind the bounded lookup cache,
+    on one read-only connection per request. The caps count DIFFERENT lookups, so a leg repeated across many slips gets its
+    note on every one of them. None with the flag off; {} when anything fails (the history still shows)."""
     try:
         import closing_lines as cl
         if not cl.move_notes_on():
             return None
+        now_ts = time.time() if now is None else now.timestamp()
         actual = slip_batches.leg_actual_from_picks(picks)
         items = []
         for b in batches:
             for ss in (b.get("slips") or {}).values():
                 for s_ in ss:
                     for i, l in enumerate(s_.get("legs") or []):
-                        if len(items) >= STUDIO_MOVE_LOOKUPS or l.get("prop") == "moneyline" or res(l) not in ("hit", "miss", "push"):
+                        if l.get("prop") == "moneyline" or res(l) not in ("hit", "miss", "push"):
                             continue
                         a = actual(l)
                         if not isinstance(a, (int, float)):
@@ -1165,18 +1167,39 @@ def _studio_moves(batches, picks, res):
                              "match_id": l.get("match_id"), "match_slug": l.get("match_slug"), "nick": l.get("nick") or l.get("player"),
                              "prop": l.get("prop"), "scope": l.get("scope") or "12"}
                         items.append(((id(s_), i), l, x, cl.ident(x), a))
-        rows = cl.lookup_idents([k for _, _, _, k, _ in items if k])
-        out, fallbacks = {}, 0
-        for key, l, x, k, a in items:
-            row = rows.get(k)
-            if row is None and fallbacks < STUDIO_MOVE_FALLBACKS:
-                fallbacks += 1
-                row = cl.find_for_leg(cl.norm(x["nick"]), x["prop"], x["scope"], x["book"], x["odds_type"], l.get("match_slug"),
-                                      l.get("start") or l.get("match_start"))
-            mv = cl.row_note(row, l.get("line"), a, x["book"])
-            if mv:
-                out[key] = mv
-        return out
+        idents = list(dict.fromkeys(k for _, _, _, k, _ in items if k))[:STUDIO_MOVE_LOOKUPS]
+        starts = {}
+        for _, l, _, k, _ in items:
+            if k and k not in starts:
+                starts[k] = l.get("start") or l.get("match_start")
+        reader = cl.Reader()
+        try:
+            rows = cl.lookup_idents(idents, now=now_ts, starts=starts, reader=reader)
+            asked, out, fallbacks, by_leg = set(idents), {}, 0, {}
+            for key, l, x, k, a in items:
+                if k and k not in asked:
+                    continue                   # past the cap of different lookups: no note rather than a guessed one
+                row = rows.get(k) if k else None
+                if row is None:
+                    args = (cl.norm(x["nick"]), x["prop"], x["scope"], x["book"], x["odds_type"], l.get("match_slug"),
+                            l.get("start") or l.get("match_start"))
+                    lk = cl.leg_key(*args)
+                    if lk in by_leg:
+                        row = by_leg[lk]
+                    else:
+                        hit, row = cl.leg_cached(lk, now_ts)
+                        if not hit:
+                            if fallbacks >= STUDIO_MOVE_FALLBACKS:
+                                continue
+                            fallbacks += 1     # only a read counts: a cached answer is free
+                            row = cl.find_for_leg(*args, now=now_ts, reader=reader)
+                        by_leg[lk] = row
+                mv = cl.row_note(row, l.get("line"), a, x["book"])
+                if mv:
+                    out[key] = mv
+            return out
+        finally:
+            reader.close()
     except Exception:
         return {}
 
@@ -1188,7 +1211,7 @@ def studio_history_payload(batches, now=None):
     legs = [l for b in batches for ss in (b.get("slips") or {}).values() for s_ in ss for l in s_.get("legs") or []]
     picks = picklog.rows_for_matches({l.get("match_slug") for l in legs})
     res = slip_batches.leg_result_from_picks(picks)
-    moves = _studio_moves(batches, picks, res)
+    moves = _studio_moves(batches, picks, res, now)
     out = []
     for b in batches:
         slips = []

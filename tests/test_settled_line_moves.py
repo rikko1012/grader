@@ -403,3 +403,62 @@ def test_the_flag_is_on_in_the_running_server_and_off_on_import():
     env_ = {}
     server.apply_default_flags(env_)
     assert env_[cl.MOVE_FLAG] == "1"
+
+
+# ---------------------------------------------------------------------------------------------------- review 1107: caps and misses
+def _many(n_slips, legs_per_slip, leg):
+    """n_slips slips, each holding the same leg plus filler legs (different players, no closing row)."""
+    slips = []
+    for j in range(n_slips):
+        legs = [dict(leg)] + [_leg(f"filler{j}_{k}", 10.5, prop="kills") for k in range(legs_per_slip - 1)]
+        slips.append({"slip_id": f"b1/s{j}", "n": legs_per_slip, "book": "prizepicks", "entry_type": "standard", "legs": legs})
+    return [{"batch_id": "b1", "created_at": iso(T0 - 7200), "slips": {str(legs_per_slip): slips}}]
+
+
+def test_a_leg_repeated_across_many_slips_gets_its_note_on_every_slip(data, monkeypatch):
+    """Reviewer 2 (#1): the caps count DIFFERENT lookups, not every copy of a leg - 100 slips x 4 legs, all 100 get the B1eany note."""
+    b1 = {"book": "prizepicks", "match_id": "hltv:2400317", "nick": "b1elany", "prop": "hs", "scope": "12", "odds_type": "standard"}
+    put(cl.ident(b1), 16, 15.5, event_id="hltv:2400317", player="b1elany", prop="hs", book="prizepicks", match_slug="hltv-2400304")
+    fill = [_pick(f"filler{j}_{k}", 12, prop="kills") for j in range(100) for k in range(3)]
+    _picks(monkeypatch, [_pick("b1elany", 16)] + fill)
+    out = server.studio_history_payload(_many(100, 4, _leg("b1elany", 15.5)), now=datetime.fromtimestamp(T0, timezone.utc))
+    slips = out["batches"][0]["slips"]
+    assert len(slips) == 100
+    assert all(s["leg_moves"][0] and s["leg_moves"][0]["text"] == "Opened 15.5 (Over won) · closed 16 (push)" for s in slips)
+    assert all(s["leg_results"][0] == "hit" for s in slips)           # Over 15.5 finished 16: settled at the member's own line
+
+
+def test_studio_fallbacks_share_one_connection_and_count_only_reads(data, monkeypatch):
+    """Reviewer 2 (#2): every fallback of one request shares one read-only connection, and a cached answer is not counted."""
+    for k in range(3):
+        put(f"pp-x{k}", 16, 15.5, event_id="hltv:2400317", player=f"p{k}", prop="hs", book="prizepicks", match_slug="hltv-2400304",
+            lock=T0 - 1800)
+    legs = [_leg(f"p{k}", 15.5, match_id=None) for k in range(3)]
+    _picks(monkeypatch, [_pick(f"p{k}", 16) for k in range(3)])
+    opens = []
+    real = cl._reader
+    monkeypatch.setattr(cl, "_reader", lambda: opens.append(1) or real())
+    now = datetime.fromtimestamp(T0, timezone.utc)
+    s = server.studio_history_payload(_batch(legs), now=now)["batches"][0]["slips"][0]
+    assert [m and m["kind"] for m in s["leg_moves"]] == ["flip", "flip", "flip"] and len(opens) == 1
+    monkeypatch.setattr(server, "STUDIO_MOVE_FALLBACKS", 0)            # every answer cached: no read, so no cap applies
+    s = server.studio_history_payload(_batch(legs), now=now)["batches"][0]["slips"][0]
+    assert [m and m["kind"] for m in s["leg_moves"]] == ["flip", "flip", "flip"] and len(opens) == 1
+
+
+def test_a_miss_long_after_the_start_is_kept_a_recent_one_is_asked_again(data, monkeypatch):
+    opens = []
+    real = cl._reader
+    put("other", 16, 15.5)
+    monkeypatch.setattr(cl, "_reader", lambda: opens.append(1) or real())
+    old, recent = iso(T0 - cl.FINAL_AFTER_S - 60), iso(T0 - 600)
+    cl.lookup_idents(["gone", "soon"], now=T0, starts={"gone": old, "soon": recent})
+    assert len(opens) == 1
+    cl.lookup_idents(["gone"], now=T0 + 10 * cl.MISS_TTL, starts={"gone": old})
+    assert len(opens) == 1                                             # final: never asked again
+    cl.lookup_idents(["soon"], now=T0 + cl.MISS_TTL + 1, starts={"soon": recent})
+    assert len(opens) == 2                                             # recent: asked again after MISS_TTL
+    late = T0 - cl.LEG_WINDOW_S - cl.FINAL_AFTER_S - 60
+    assert cl.find_for_leg("nobody", "hs", "12", "prizepicks", "standard", "hltv-1", iso(late), now=T0) is None and len(opens) == 3
+    assert cl.find_for_leg("nobody", "hs", "12", "prizepicks", "standard", "hltv-1", iso(late), now=T0 + 10 * cl.MISS_TTL) is None
+    assert len(opens) == 3

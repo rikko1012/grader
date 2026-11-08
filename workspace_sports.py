@@ -92,6 +92,8 @@ def reset():
     for lg in LEAGUES:
         _SNAP[lg] = _empty()
     _MOVES.clear()
+    with _SETTLED_LOCK:
+        _SETTLED_MOVES.clear()
     _TOKEN.update(token=None, exp=0.0, base=None)
     _BREAK["until"] = 0.0
 
@@ -806,6 +808,66 @@ def settle(srv, lg, rows, now=None):
                 res = RESULT.get(lr.get("status"))
                 out[w["settle_key"]] = {"result": res, "actual": lr.get("value"), "source": "espn", "settled_at": None, "final": res is not None,
                                         "mark": _hash(lr.get("status"), lr.get("value"), lr.get("settlement_id"), lr.get("revision"))}
+    return out
+
+
+# ---------------------------------------------------------------------------------------------------------------- line moves
+# SCOUT_LINE_MOVE_NOTES (workspace_api._receipt_moves, wording only): a settled NBA / NFL receipt's opening and closing line, from
+# the sports API's stored offer revisions (GET /api/sports/offers/moves - sports/line_moves.py: opening = the offer's first stored
+# revision, closing = the last one before the game's real start). Never the in-memory first sightings above (_MOVES): those reset
+# on a restart and leave 6 h after the start. At most MOVE_CALLS reads of MOVE_KEYS offers per My picks build, behind a bounded
+# cache: an answer for a game that started more than MOVES_FINAL_S ago is kept, anything else is asked again after MOVES_TTL.
+MOVE_KEYS, MOVE_CALLS, MOVE_TIMEOUT = 60, 2, 2.5
+MOVES_TTL, MOVES_FINAL_S, MOVES_CACHE_MAX = 300, 24 * 3600, 20000
+_SETTLED_MOVES = {}
+_SETTLED_LOCK = threading.Lock()
+
+
+def settle_key_offer(settle_key):
+    """(league, platform, offer_id) from a receipt's settle_key "<league>|<platform>|<offer_id>|<side>|<line>", or None."""
+    parts = str(settle_key or "").split("|")
+    if len(parts) < 5 or parts[0] not in LEAGUES or not parts[1] or not parts[2]:
+        return None
+    return parts[0], parts[1], "|".join(parts[2:-2])
+
+
+def line_moves(srv, keys, now=None):
+    """{(platform, offer_id): (opening, closing)} for the offers the sports API knows both lines of. keys: (platform, offer_id,
+    start). The sports API down (or slow) = nothing new to say; what is cached still answers."""
+    now = time.time() if now is None else now
+    out, need, seen = {}, [], set()
+    for platform, oid, start in keys:
+        k = (platform, oid)
+        if k in seen:
+            continue
+        seen.add(k)
+        with _SETTLED_LOCK:
+            e = _SETTLED_MOVES.get(k)
+        if e is not None and (e[2] or now - e[1] <= MOVES_TTL):
+            if e[0] is not None:
+                out[k] = e[0]
+        else:
+            need.append((k, start))
+    for i in range(0, min(len(need), MOVE_KEYS * MOVE_CALLS), MOVE_KEYS):
+        part = need[i:i + MOVE_KEYS]
+        try:
+            doc, _ = call(srv, "/api/sports/offers/moves", {"keys": json.dumps([list(k) for k, _ in part], separators=(",", ":"))},
+                          timeout=MOVE_TIMEOUT)
+        except Down:
+            break
+        got = {}
+        for m in (doc or {}).get("moves") or []:
+            if isinstance(m, list) and len(m) == 4 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in m[2:]):
+                got[(m[0], m[1])] = (float(m[2]), float(m[3]))
+        with _SETTLED_LOCK:
+            for k, start in part:
+                st = _ts(start)
+                _SETTLED_MOVES.pop(k, None)
+                _SETTLED_MOVES[k] = (got.get(k), now, st is not None and now - st.timestamp() > MOVES_FINAL_S)
+                while len(_SETTLED_MOVES) > MOVES_CACHE_MAX:
+                    _SETTLED_MOVES.pop(next(iter(_SETTLED_MOVES)))
+                if got.get(k) is not None:
+                    out[k] = got[k]
     return out
 
 

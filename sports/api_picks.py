@@ -100,7 +100,9 @@ def mine(req):
         league = q.get("league") if q.get("league") in ("nba", "nfl") else None
         include_test = q.get("include_test") in ("1", "true") and req.role == "admin"   # test records: admin only
         try:
-            return 200, picks.mine(con, req.member, league=league, include_test=include_test)
+            from . import line_moves                        # SCOUT_LINE_MOVE_NOTES: settled picks say when the line was bumped
+            return 200, picks.mine(con, req.member, league=league, include_test=include_test,
+                                   moves_opener=web.store_ro if line_moves.enabled() else None)
         except sqlite3.OperationalError as e:
             if "no such table" in str(e):
                 return 200, {"version": picks.VERSION, "picks": [], "total": 0, "shown": 0, "stake_units": 0}

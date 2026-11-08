@@ -114,6 +114,10 @@
 .sw .sw-mp-pick{color:var(--text)}
 .sw .sw-mp-res{text-align:right;font-size:12.5px;min-width:0}
 .sw .sw-mp-res.win b{color:var(--over)}.sw .sw-mp-res.loss b{color:var(--under)}.sw .sw-mp-res.push b{color:var(--push)}
+/* SCOUT_LINE_MOVE_NOTES: a settled pick whose line was bumped (the board's bump chip colours) */
+.sw .sw-mp-move{margin-top:3px;color:var(--text);overflow-wrap:anywhere}
+.sw .sw-mp-bump{display:inline-block;margin-right:2px;padding:1px 6px;border-radius:5px;font-weight:600;font-size:10.5px;white-space:nowrap;cursor:help}
+.sw .sw-mp-bump.up{color:#7fd8be;background:#7fd8be14;border:1px solid #7fd8be55}.sw .sw-mp-bump.down{color:#ff9b8a;background:#ff9b8a14;border:1px solid #ff9b8a55}
 .sw .sw-mp-dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 12px;margin:10px 0 6px;font-size:12px}
 .sw .sw-mp-dl dt{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
 .sw .sw-mp-dl dd{margin:0;overflow-wrap:anywhere}

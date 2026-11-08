@@ -165,6 +165,7 @@ class Sports:
         self.down = False
         self.answers = {}                       # record id -> {ok: False, code, text}
         self.settled = {}                       # (offer id, side) -> leg result
+        self.moves = {}                         # (platform, offer id) -> (opening, closing): GET /api/sports/offers/moves
         self.calls = {}
         self.etag_hits = 0
         self.tokens = set()
@@ -248,6 +249,9 @@ class Sports:
         if path == "/api/sports/slips/settle":
             slip = json.loads(q["slip"])
             return {"status": "pending", "leg_results": [dict(self.settled.get((l["offer_id"], l["side"]), {"status": None, "value": None}), offer_id=l["offer_id"], side=l["side"]) for l in slip["legs"]]}
+        if path == "/api/sports/offers/moves":
+            keys = json.loads(q["keys"])
+            return {"moves": [[p, o, *self.moves[(p, o)]] for p, o in keys if (p, o) in self.moves]}
         return None
 
     def env(self):

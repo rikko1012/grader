@@ -565,11 +565,12 @@ def _row_league(row, payload):
     return lg or payload.get("league")
 
 
-def mine(con, member, limit=200, league=None, include_test=False):
+def mine(con, member, limit=200, league=None, include_test=False, moves_opener=None):
     """The member's own picks, newest first. league: "nba" | "nfl" | None (all). Test / scratch records (scratch_reason:
     admin token, marked test, SPORTS_PICKS_SCRATCH preview) are HIDDEN unless include_test (the API allows that for an
     admin token only); hidden_test counts them. record: W-L-P per league over the member's non-test picks (no money,
-    no EV, no returns)."""
+    no EV, no returns). moves_opener (SCOUT_LINE_MOVE_NOTES, sports/line_moves.annotate): a settled pick whose offer was bumped
+    between its opening and closing line gains `line_move` - wording only, its result and the record unchanged."""
     mh = member_hash(member)
     rows = con.execute("SELECT * FROM picks WHERE member=? ORDER BY tracked_at DESC LIMIT ?", (mh, RECORD_SCAN)).fetchall()
     record, hidden, kept, graded = {}, 0, [], []
@@ -597,6 +598,9 @@ def mine(con, member, limit=200, league=None, include_test=False):
     for v, r in zip(out, kept):
         if not v.get("league"):
             v["league"] = r["league"]
+    if moves_opener is not None:
+        from . import line_moves
+        line_moves.annotate(out, [(r["platform"], r["offer_id"]) for r in kept[:limit]], moves_opener)
     by_grade = grade_table(graded)
     return {"version": VERSION, "picks": out, "total": len(kept), "shown": len(out), "stake_units": 0,
             "by_grade": by_grade,

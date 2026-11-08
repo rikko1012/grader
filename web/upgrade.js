@@ -750,12 +750,16 @@
     if (!m || !m.chip) return "";
     return `<span class="u-bump ${m.dir === "down" ? "down" : "up"}" title="${esc(m.tip)}">${esc(m.chip)}</span>${m.kind === "flip" ? ` <span class="u-move-t">${esc(m.text)}</span>` : ""}`;
   }
-  /* date|opponent -> move for the card's past games (closing markers, else L10 vs closing) */
+  /* date|opponent -> move for the card's past games (closing markers, else L10 vs closing). Past games carry a day, not a match id,
+     so a day with two meetings of the same opponent (a group-stage rematch) gets NO note: never one game's note on the other. */
   function movesOf(doc) {
-    const out = new Map(), h = doc && doc.history;
-    const put = (list) => (list || []).forEach((g) => { if (g && g.move && !out.has(g.date + "|" + g.opponent)) out.set(g.date + "|" + g.opponent, g.move); });
-    put(h && h.line_history && h.line_history.closing_marks);
-    put(h && h.closing && h.closing.games);
+    const out = new Map(), h = doc && doc.history, key = (g) => g.date + "|" + g.opponent;
+    const many = (list) => { const n = new Map(); (list || []).forEach((g) => { if (g) n.set(key(g), (n.get(key(g)) || 0) + 1); }); return n; };
+    const seen = many(h && h.series), marks = h && h.line_history && h.line_history.closing_marks, games = h && h.closing && h.closing.games;
+    const dup = new Set([seen, many(marks), many(games)].flatMap((n) => [...n].filter(([, c]) => c > 1).map(([k]) => k)));
+    const put = (list) => (list || []).forEach((g) => { if (g && g.move && !dup.has(key(g)) && !out.has(key(g))) out.set(key(g), g.move); });
+    put(marks);
+    put(games);
     return out;
   }
   const moveRow = (m, cols, cls) => (m ? `<tr class="${cls || "u-moved"}"><td colspan="${cols}">${moveHtml(m)}</td></tr>` : "");

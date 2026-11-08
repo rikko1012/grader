@@ -364,7 +364,9 @@
         graded_payout_unknown: "Graded - payout not published", graded_rule_unchecked: "Graded - team rule not checked" };
       var h = "<p><strong>" + esc(words[r.status] || r.status) + "</strong>" + (r.payout_multiple != null ? " - " + esc(r.payout_multiple) + "x" : (r.payout_text ? " - " + esc(r.payout_text) : "")) + "</p>";
       h += '<ul class="ss-pay">' + (r.leg_results || []).map(function (x, i) {
-        return "<li><span>" + esc(d.legs[i].player) + "</span><span>" + esc(x.status || "open") + (x.value != null ? " (" + esc(x.value) + ")" : "") + "</span></li>"; }).join("") + "</ul>";
+        // SCOUT_LINE_MOVE_NOTES: a settled leg whose line was bumped between opening and close says so (the server's note)
+        var mv = x.line_move && x.line_move.chip ? '<span class="ss-move"><span class="ss-bump ' + (x.line_move.dir === "down" ? "down" : "up") + '" title="' + esc(x.line_move.tip || "") + '">' + esc(x.line_move.chip) + "</span>" + (x.line_move.kind === "flip" ? " " + esc(x.line_move.text) : "") + "</span>" : "";
+        return "<li><span>" + esc(d.legs[i].player) + "</span><span>" + esc(x.status || "open") + (x.value != null ? " (" + esc(x.value) + ")" : "") + "</span>" + mv + "</li>"; }).join("") + "</ul>";
       (r.notes || []).forEach(function (n) { h += '<p class="ss-note">' + esc(n) + "</p>"; });
       box.innerHTML = h;
     } catch (e) { box.innerHTML = '<p class="ss-banner ss-bad">' + esc(e.message) + "</p>"; }

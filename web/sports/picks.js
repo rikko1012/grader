@@ -70,6 +70,14 @@
     if (r.status === "void") return {status: "Void", detail: (r.value !== null && r.value !== undefined ? v + " · " : "") + "did not play / voided by the platform"};
     return {status: RESULT_WORD[r.status] || r.status, detail: v + " vs " + side + " " + line(p.line)};
   }
+  // SCOUT_LINE_MOVE_NOTES (owner 2026-11-07): a settled pick whose line was bumped between opening and close says so, from the
+  // server's note (sports/line_moves.annotate -> closing_lines.move_note) - never worked out here. The result above is unchanged.
+  // Both lines read differently: "▲ bumped Opened 15.5 (Over won) · closed 16 (push)"; both the same: "▲ bumped from 15.5".
+  function moveText(p) {
+    var m = p && p.line_move;
+    if (!m || !m.chip || !p.result || ["win", "loss", "push"].indexOf(p.result.status) < 0) return null;
+    return {chip: m.chip, dir: m.dir === "down" ? "down" : "up", tip: m.tip || "", text: m.kind === "flip" ? m.text : ""};
+  }
   function recordLine(r) {                             // {win, loss, push, void, open, decided, hit_rate} -> "3-2-1"
     r = r || {};
     return (r.win || 0) + "-" + (r.loss || 0) + "-" + (r.push || 0);
@@ -93,7 +101,7 @@
   }
 
   var api = {GATE_N: GATE_N, HELP: HELP, sideChoices: sideChoices, preselect: preselect, tabOf: tabOf, summary: summary,
-             trackedText: trackedText, chanceText: chanceText, resultText: resultText, validationLines: validationLines,
+             trackedText: trackedText, chanceText: chanceText, resultText: resultText, moveText: moveText, validationLines: validationLines,
              records: records, recordLine: recordLine, onlyLeague: onlyLeague};
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
 
@@ -192,6 +200,11 @@
       G.rows.map(function (r) { return '<tr><th scope="row" data-grade="' + esc(r.grade) + '">' + esc(r.grade) + '</th><td class="num">' + r.n + '</td><td class="num">' + r.wins + "-" + r.losses + "-" + r.pushes + '</td><td class="num">' + (r.hit_rate === null || r.hit_rate === undefined ? "—" : pct(r.hit_rate)) + '<span class="sw-faint sw-small">' + esc(ci(r.hit_rate_ci95_games)) + "</span></td></tr>"; }).join("") +
       '</tbody></table></div><p class="sw-faint sw-small">The grade each pick showed when you tracked it. Research only - grades are not validated; stakes are 0.' + (G.ungraded ? " " + G.ungraded + " picks had no grade." : "") + "</p></section>";
   }
+  function moveHtml(p) {
+    var m = moveText(p);
+    return m ? '<div class="sw-small sw-mp-move"><span class="sw-mp-bump ' + m.dir + '" title="' + esc(m.tip) + '">' + esc(m.chip) + "</span>" +
+      (m.text ? " " + esc(m.text) : "") + "</div>" : "";
+  }
   function row(p, src) {
     var c = chanceText(p), r = resultText(p), side = p.side === "over" ? "Over" : "Under";
     var corr = p.result && p.result.corrected;
@@ -199,7 +212,7 @@
       '<span class="sw-mp-pick">' + esc(side + " " + line(p.line) + " " + statOf(p)) + "</span>" + (p.test ? ' <span class="sw-tag">test</span>' : "") +
       '<div class="sw-faint sw-small">' + esc(bookName(p.platform)) + (p.event_ref ? " · " + esc(p.event_ref) : "") + (p.league ? " · " + esc(String(p.league).toUpperCase()) : "") + "</div></div>" +
       '<div class="sw-mp-res ' + esc(p.result ? p.result.status : "open") + '"><b>' + esc(r.status) + "</b>" + (corr ? ' <span class="sw-tag">Corrected (revision ' + esc(p.result.revision) + ")</span>" : "") +
-      '<div class="sw-small sw-muted">' + esc(r.detail) + "</div></div></div>" +
+      '<div class="sw-small sw-muted">' + esc(r.detail) + "</div>" + moveHtml(p) + "</div></div>" +
       '<dl class="sw-mp-dl"><div><dt>Recorded line</dt><dd>' + esc(side + " " + line(p.line)) + "</dd></div>" +
       "<div><dt>Tracked</dt><dd>" + esc(trackedText(p.tracked_at)) + "</dd></div>" +
       "<div><dt>Chance shown</dt><dd>" + esc(c.chance) + ' <span class="sw-faint">(' + esc(c.source) + ")</span></dd></div>" +

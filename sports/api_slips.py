@@ -255,6 +255,14 @@ def settle_view(req):
         by = settle.current_settlements(con, legs)
     res = settle.settle_slip({"platform": slip["platform"], "entry_type": slip.get("entry_type") or
                               rules.DEFAULT_ENTRY[slip["platform"]], "legs": legs}, by)
+    from . import line_moves                    # SCOUT_LINE_MOVE_NOTES: a settled leg says when its line was bumped (wording only)
+    if line_moves.enabled():
+        views = [{"result": {"status": lr.get("status"), "value": lr.get("value")}, "line": l.get("line")}
+                 for l, lr in zip(legs, res.get("leg_results") or [])]
+        line_moves.annotate(views, [(l["platform"], l["offer_id"]) for l in legs], web.store_ro)
+        for lr, v in zip(res.get("leg_results") or [], views):
+            if v.get("line_move"):
+                lr["line_move"] = v["line_move"]
     return 200, res
 
 
