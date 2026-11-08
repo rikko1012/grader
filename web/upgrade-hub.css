@@ -456,6 +456,9 @@ html[data-upgrade] .h-entry{position:static;inset:auto;z-index:auto;display:inli
 #u-hub .h-generated-card .h-batch-why{margin:0;padding:12px 18px;border-bottom:1px solid #303c4c;font-size:12px;line-height:1.55;color:#c9d6e8;overflow-wrap:anywhere;max-width:none}
 .h-generated-card small.h-batch-record{color:#9fc0ec}
 .h-line-tag{display:inline-block;font-style:normal;font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#d8e6fb;background:#26364c;border:1px solid #3b5272;border-radius:4px;padding:0 5px;margin-left:6px;vertical-align:1px}
+/* player role tag (owner 2026-11-07): under the name on the player card. Not on the board rows: the player column has no
+   room for it at 1440 with the slip open (the name broke per letter) - rows only if it fits without crowding */
+.h-role{display:inline-block;font-style:normal;font-size:10px;letter-spacing:.3px;color:#d8e6fb;background:#26364c;border:1px solid #3b5272;border-radius:4px;padding:0 5px;line-height:15px;white-space:nowrap}
 .h-generated-card ol{list-style:none;margin:0;padding:0}
 .h-generated-card li{display:flex;gap:12px;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #2b3747}
 .h-generated-card li>div{min-width:0;flex:1}

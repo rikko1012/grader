@@ -46,7 +46,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import (board_view, cache, capabilities, config, context_reconcile, fair, flags, forecast_detail, game_lines,
-               identity, market_view, markets, scout_chance, store)
+               identity, market_view, markets, role_display, scout_chance, store)
 from .names import team_abbr
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
@@ -775,6 +775,16 @@ def build(con, league, now=None, base=None, history=True, results=True):
         if rs:
             all_inj_players[pid] = rs[0][1]
 
+    depth_idx = role_display.depth_cached(league)           # cache-only read: never an ESPN request on a build
+    roles_ = {}
+
+    def role_of(pid, name, roster_pos, offer_team):
+        if pid not in roles_:
+            tid_ = cur_team.get(pid)
+            ab = team_abbr(league, teams[tid_].abbr) if tid_ in teams else team_abbr(league, offer_team)
+            roles_[pid] = role_display.role(league, name, ab, roster_pos, depth_idx)
+        return roles_[pid]
+
     forecasts = {}
     markets_rows = {}
     row_items = defaultdict(list)                           # market key -> every offer of it (market view, mv-1)
@@ -795,6 +805,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
             row = markets_rows[key] = {
                 "key": key, "event_id": o.event_id, "player_id": o.player_id,
                 "player": p.name if p else o.player_name, "position": p.position if p else None,
+                # role tag (display only, sports/role_display.py): ESPN depth chart (cache only) / roster position
+                "role": role_of(o.player_id, p.name if p else o.player_name, p.position if p else None, o.team),
                 "team": o.team, "team_id": cur_team.get(o.player_id), "stat": o.stat,
                 "stat_label": (markets.market(fam, o.stat) or {}).get("label", o.stat), "scope": o.scope,
                 "primary": o.stat in PRIMARY_STATS.get(league, ()) and o.scope == "full_game",
@@ -1068,7 +1080,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                 fdetail[fid] = {"ladder": lad, "ladder_withheld": why, "pmf": chart}
         pfile = {
             **base_meta, "player_id": pid, "player": p.name if p else (rows[0]["player"] if rows else pid),
-            "position": p.position if p else None, "player_record_id": None, "status": p.status if p else None,
+            "position": p.position if p else None, "role": roles_.get(pid), "player_record_id": None, "status": p.status if p else None,
             "team": _team_view(teams, tid) if tid else None, "injury": injuries.get(pid), "next_event": next_ev,
             "markets": rows, "forecast_detail": fdetail,
             "forecasts": {fid: forecasts[fid] for fid in fdetail if fid in forecasts},
@@ -1153,6 +1165,7 @@ def _ud_quote(cq, q, league):
 def compact_row(r, league=None):
     nv = board_view.contain_reason(league, r["stat"]) if league else None
     return {**({"nv": nv} if nv else {}), "k": r["key"], "e": r["event_id"], "pid": r["player_id"], "n": r["player"], "pos": r["position"],
+            **({"ro": r["role"]} if r.get("role") else {}),
             "tm": r["team"], "tid": r.get("team_id"), "st": r["stat"], "pr": 1 if r["primary"] else 0, "cap": r["capability"],
             "q": [_ud_quote(compact_quote(q), q, league) for q in r["quotes"]],
             "kn": [compact_quote(q) for q in r["kalshi_near"]],

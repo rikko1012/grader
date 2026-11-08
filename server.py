@@ -45,6 +45,7 @@ import comparison
 import prizepicks
 import records
 import roles
+import role_display
 import underdog
 import grade_display
 import line_chance
@@ -1300,6 +1301,8 @@ def board_payload(book="underdog"):
         x["awp_conf"] = (None if x["awp"] is None else "confirmed" if src.startswith(("hltv", "liquipedia"))
                          else "measured" if src.startswith("bo3") else "inferred")
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
+        # role tag (display only, role_display.py): explicit Liquipedia roles, never inferred from stats; None = no source
+        x["role_label"] = role_display.cs2_label(nick, x.get("team_name") or x.get("team"), g.get("own_teams") or ())
     for x in rows:
         x["book"] = x.get("book") or "underdog"
         x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked
@@ -1328,6 +1331,14 @@ def board_payload(book="underdog"):
                            source=None if not src else "PrizePicks (direct)" if src == prizepicks.DIRECT_SOURCE
                            else "PrizePicks via the scraper's copy")
     return out
+
+
+def card_role_label(res):
+    """The card's role tag: the same inputs, in the same order, as its board row (board_payload: nick, team_name =
+    playing_for or current_team, own_teams) - one text on the board and the card. Display only; None = no source."""
+    pb = res.get("player_block") or {}
+    return role_display.cs2_label((pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team"),
+                                  [t for t in (pb.get("profile_team"), pb.get("current_team")) if t])
 
 
 KNOWN_AWP = {"zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame",
@@ -5918,6 +5929,7 @@ class Handler(BaseHTTPRequestHandler):
                     res["hltv_outage"] = {"rows": [], "causes": cs_, "odds_note": None, "unavailable": True}
                 withhold_temporary(res)
             res["veto"] = card_veto(res)                 # map veto panel: the background's stored answer (display only)
+            res["role_label"] = card_role_label(res)     # role tag (display only, after the pick log; role_display.py)
             res["map_chances"] = card_map_chances(res)   # HLTV map chances (display only, weight 0; after the pick log)
             res = letter_containment.cs2_card(res)       # lc-1: after the pick log - a held market reads Lean, 0U (display only)
             t0 = time.time()

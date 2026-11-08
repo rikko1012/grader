@@ -112,7 +112,7 @@
     // no lean, edge, gap flag, confidence or edge rank
     var held = sc ? (q.x && q.x.b ? q.x : (m.nv ? {b: "gate", t: m.nv} : null)) : null;
     var lean = held ? null : leanOf(sc, q.l);
-    var r = {key: m.k, pid: m.pid, player: m.n, team: m.tm, pos: m.pos, stat: m.st, event: m.e,
+    var r = {key: m.k, pid: m.pid, player: m.n, team: m.tm, pos: m.pos, ro: m.ro, stat: m.st, event: m.e,
              start: m.ev && m.ev.start_utc, line: q.l, book: q.p, rid: q.r, offered: q.o, scout: sc, lean: lean,
              pLean: null, market: mkc, mLean: null, edge: null, gapPts: null, gap: false,
              fresh: S.fresh(q.t, now), hit: hitAt(ctx.view, m.k, q.l), version: VERSION,
@@ -333,7 +333,7 @@
       var who = '<th scope="rowgroup" class="sw-tb-player" rowspan="' + (open ? g.rows.length : 1) + '"><div class="sw-tb-who">' +
         img(headshotUrl(lg, g.pid), g.player + " headshot", "sw-tb-head", initials(g.player)) +
         '<div><a class="sw-tb-name" href="' + esc(opts.href(m, null)) + '">' + esc(g.player) + "</a>" +
-        '<div class="sw-tb-sub">' + (ab ? img(logoUrl(lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([teamTagOf(m, lg), m.pos].filter(Boolean).join(" · ")) + " · " +
+        '<div class="sw-tb-sub">' + (ab ? img(logoUrl(lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([teamTagOf(m, lg), m.ro || m.pos].filter(Boolean).join(" · ")) + " · " +
         '<a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup || "") + "</a> · " + esc(S.localTime(g.start, {weekday: "short", hour: "numeric", minute: "2-digit"})) + "</div>" +
         (more ? '<button type="button" class="sw-tb-exp" data-tgroup="' + esc(g.id) + '" aria-expanded="' + open + '" aria-controls="' + gid + '">' + (open ? "Hide other stats" : "+" + more + (more === 1 ? " more stat" : " more stats")) + "</button>" : "") +
         "</div></div></th>";

@@ -124,6 +124,7 @@ details.how p{margin:0 0 10px;color:#c4cbd8} details.how b{color:var(--text)}
 .hero .sub{color:var(--muted);margin-top:3px}
 .hero .sub b{color:var(--text)}
 .pill{display:inline-block;font-size:12px;font-weight:500;padding:3px 10px;border-radius:99px;border:1px solid var(--line-2);color:var(--muted);margin:7px 6px 0 0}
+.pill.role{color:var(--text);border-color:var(--accent);font-size:11px;padding:1px 7px;margin:0 0 0 4px;white-space:nowrap} .rtag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--text);border:1px solid var(--line-2);border-radius:4px;padding:0 5px;line-height:1.5}
 .pill.good{color:var(--good);border-color:var(--good);background:var(--good-bg)} .pill.bad{color:var(--bad);border-color:var(--bad);background:var(--bad-bg)} .pill.warn{color:var(--warn);border-color:var(--warn);background:var(--warn-bg)}
 .sides{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .side{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
@@ -1245,7 +1246,7 @@ function instantHtml(r) {
   const sub = !r.side ? "" : gone ? `<span class="pill bad">${esc(gone)}</span>`
     : `${chance(r.p, r.prop)} ${pu != null ? `model estimate, excluding pushes · push ${pct(pu)}` : "model estimate"}${coinFlip(r.p)} · ${+(+r.units || 0).toFixed(2)}U${zeroWhy(r)}${capChip(r, team)}`;
   return `<section class="card herocard ${hc}" data-instant="1"><div class="hero"><div class="badge ${hc}">${esc(lab)}</div><div><h3>${esc(head)}</h3>
-    <div class="sub">${esc(r.nick || r.player)} · ${esc(team || "")}${opp ? ` vs ${esc(opp)}${r.start ? ` · ${shortWhen(r.start)}` : ""}` : ""} · ${esc(r.line)} ${r.prop === "hs" ? "headshots" : "kills"}${mapsWord(r.scope) || " (Maps 1–2)"} · ${esc(gradeType(r))} · <span class="muted">${esc(bookName(r.book || "underdog"))} line (a betting line)</span></div>
+    <div class="sub">${esc(r.nick || r.player)} · ${esc(team || "")}${r.role_label ? ` · <span class="rtag">${esc(r.role_label)}</span>` : ""}${opp ? ` vs ${esc(opp)}${r.start ? ` · ${shortWhen(r.start)}` : ""}` : ""} · ${esc(r.line)} ${r.prop === "hs" ? "headshots" : "kills"}${mapsWord(r.scope) || " (Maps 1–2)"} · ${esc(gradeType(r))} · <span class="muted">${esc(bookName(r.book || "underdog"))} line (a betting line)</span></div>
     <div class="sub">${sub}</div></div></div></section>`;
 }
 $("#f").onsubmit = async e => {
@@ -2799,7 +2800,7 @@ function drawBoard() {
     const whyB = r.side ? `<button type="button" class="bwhy" data-bwhy="1" aria-expanded="${wOpen}" title="Why this grade and stake">Why</button>` : "";
     return `<div class="brow2 crow" data-bl="${esc(bl)}" tabindex="0">
       <span class="gtag ${!r.side || r.state === "SCOUT" || gone ? "g-scout" : gClass(mGrade(r))}" title="${esc(gone || ltl)}" data-tip="${esc(gone || ltl)}">${esc(lab)}</span>
-      <div class="c-who"><button type="button" class="bstar${isWatched(r, wl) ? " on" : ""}" data-bstar="${esc(nick)}" aria-pressed="${isWatched(r, wl)}" title="${isWatched(r, wl) ? "On your watchlist – tap to remove" : "Add to your watchlist"}" aria-label="Watchlist: ${esc(nick)}">${isWatched(r, wl) ? "★" : "☆"}</button><b>${esc(nick)}</b>${markChip(r)}${lockChip(r)}${r.awp ? ` <span class="pill" title="${esc(r.awp_src || "")}">AWP</span>` : ""}${r.igl ? ` <span class="pill" title="${esc(r.igl_src || "")}">IGL</span>` : ""}
+      <div class="c-who"><button type="button" class="bstar${isWatched(r, wl) ? " on" : ""}" data-bstar="${esc(nick)}" aria-pressed="${isWatched(r, wl)}" title="${isWatched(r, wl) ? "On your watchlist – tap to remove" : "Add to your watchlist"}" aria-label="Watchlist: ${esc(nick)}">${isWatched(r, wl) ? "★" : "☆"}</button><b>${esc(nick)}</b>${markChip(r)}${lockChip(r)}${r.role_label ? ` <span class="pill role">${esc(r.role_label)}</span>` : ""}
         <span class="muted c-match">${esc(team || "")}${opp ? " vs " + esc(opp) : ""}${showMatch ? " · " + shortWhen(r.start) : ""}</span></div>
       <div class="c-mkt"><span class="pill c-book">${bookName(r.book || "underdog")}</span> ${propWord(r.prop)}${mapsWord(r.scope)}${mktTag(r)}${ds ? ` <span class="dstat ${ds[0]}" title="${esc((r.dstat || [])[1] || "")}" data-tip="${esc((r.dstat || [])[1] || ds[1])}">${ds[1]}</span>` : ""}${bump(r)}${lineGap(r)}</div>
       <div class="c-num"><span class="k">Line</span><b>${r.line}</b></div>
@@ -4014,7 +4015,7 @@ function render(d) {
   h += `<section class="card herocard ${hc}"><div class="hero">
     <div class="badge ${hc}" title="${esc(!v.side ? "No grade" : v.state === "SCOUT" ? "No match scheduled – research only" : mGrade(v) === "LEAN" ? "Lean – 0 units" : "Grade " + mGrade(v) + (+v.units > 0 ? "" : " – 0 units"))}">${esc(!v.side || v.state === "SCOUT" ? "–" : mGrade(v) === "LEAN" ? "L" : (mGrade(v) || "L").slice(0, 2))}</div>
     <div><h3>${esc(head)}</h3>
-      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>${outageNote(d)}
+      <div class="sub">${esc(pb.player?.nick || "")} · ${pb.standin_for ? `${esc(pb.current_team || "")} → <b>stand-in for ${esc(pb.standin_for)}</b>` : esc(pb.current_team || "")}${d.role_label ? ` · <span class="rtag">${esc(d.role_label)}</span>` : ""}${nm?.opponent ? ` vs ${esc(nm.opponent)}${nm.start ? ` · ${shortWhen(nm.start)}` : ""}` : ""} · ${g.line} ${stat}${mapsWord(g.scope) || " (Maps 1–2)"} · ${esc(g.line_type || "")} · <span class="muted">${esc(lineSource(d))}</span></div>${outageNote(d)}
       <div class="sub">${sub}</div>${ysel}
       ${d.letter_hold && d.letter_hold.banner ? `<div class="lhold small" role="status">${esc(d.letter_hold.banner)}</div>` : ""}
       ${gateStop ? `<span class="pill bad">${esc(g.reason || g.status)}</span>` : ""}
@@ -4219,8 +4220,7 @@ function render(d) {
     <section class="card"><h2>Checks</h2>
       ${pb.roster_confirmed || pb.standin_for ? `<div class="kv"><span>Roster</span><span>${pb.roster_confirmed ? "Confirmed" : "Stand-in"}${pb.roster_confirmed && pb.standin_for ? " · stand-in" : ""}</span></div>` : ""}${pb.team_note ? `<div class="small muted" style="margin:-2px 0 6px">${esc(pb.team_note)}</div>` : ""}
       ${(() => { const kn = KNOWN_AWP.has((pb.player?.nick || "").toLowerCase()), un = !pb.awp_note || UNSURE.test(pb.awp_note);
-        return un && !kn ? "" : `<div class="kv"><span>AWP</span><span>${esc(un ? "AWPer" : pb.awp_note)}</span></div>`; })()}
-      <div class="kv" title="The card's local IGL reference list is not a complete roster-role database"><span>IGL reference list</span><span>${pb.is_igl ? "Listed" : "Not listed"}</span></div>
+        return un && !kn ? "" : `<div class="kv"><span>AWP use (HS stake)</span><span>${esc(un ? "AWPer" : pb.awp_note)}</span></div>`; })()}
       ${pb.trade_pr != null ? `<div class="kv"><span>Trade kills</span><span>${num(pb.trade_pr,3)}/round</span></div>` : ""}
       ${pb.opening?.kills_per_round != null ? `<div class="kv"><span>Opening kills</span><span>${num(pb.opening.kills_per_round,3)}/round · ${pct(pb.opening.duel_win,0)} duels won</span></div>` : ""}
       ${o.flags?.length ? `<div class="kv"><span>Sample</span><span>${esc(o.flags.join("; "))}</span></div>` : ""}
@@ -4734,7 +4734,7 @@ function otOpenDesk(key, opener) {
   };
   dlg.innerHTML = `<div class="ot-desk-head"><div><span class="eyebrow">MATCHROOM · ${esc((SCOPE_TXT[bscope] || 'Maps 1–2'))}</span><h2 id="ot-desk-title">${esc(first.team_name || first.team)} vs ${esc(first.opp_name || first.opponent)}</h2><p>${first.event ? esc(first.event) + ' · ' : ''}${otDeskRows.length} posted lines in this platform view</p></div><button type="button" class="ot-desk-close" data-ot-close>Close</button></div>
     <div class="ot-desk-content">${otStartNotice(otDeskRows)}<div class="ot-veto" id="ot-veto"></div><p class="small muted">Players with posted lines in this view. Each offer keeps its own projection, probability, grade and stake. Select an offer for its full player analysis.</p>
-    ${[...teams.entries()].map(([team,players])=>`${team ? `<h3>${esc(team)}</h3>` : ''}<div class="ot-desk-list">${[...players.values()].map(entries=>`<div class="ot-desk-row"><div class="ot-desk-player"><strong>${esc(entries[0].r.nick || entries[0].r.player)}</strong><small>${entries[0].r.awp?'AWP':entries[0].r.igl?'IGL':'Player'}</small></div><div class="ot-offers">${entries.sort((a,b)=>propOrder(a.r.prop)-propOrder(b.r.prop)).map(offer).join('')}</div></div>`).join('')}</div>`).join('')}
+    ${[...teams.entries()].map(([team,players])=>`${team ? `<h3>${esc(team)}</h3>` : ''}<div class="ot-desk-list">${[...players.values()].map(entries=>`<div class="ot-desk-row"><div class="ot-desk-player"><strong>${esc(entries[0].r.nick || entries[0].r.player)}</strong>${entries[0].r.role_label?`<small class="rtag">${esc(entries[0].r.role_label)}</small>`:''}</div><div class="ot-offers">${entries.sort((a,b)=>propOrder(a.r.prop)-propOrder(b.r.prop)).map(offer).join('')}</div></div>`).join('')}</div>`).join('')}
     <p class="small muted" style="margin-top:20px">Book lines are thresholds, not independent projections. Picks from this match share match conditions.</p></div>`;
   dlg.showModal();
   dlg.querySelector('[data-ot-close]').focus();

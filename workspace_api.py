@@ -359,9 +359,9 @@ def _team_aka(x, shown):
 
 
 def _role(x):
-    if x.get("awp") is True and x.get("awp_conf") in ("confirmed", "measured"):
-        return "AWP"
-    return "IGL" if x.get("igl") is True else ""
+    # the board row's role tag (role_display.py): explicit Liquipedia roles only, the same text as the board and the card.
+    # Never the AWP chip (a kill-share / HS% reading) - that stays a slip / stake input, not a role.
+    return x.get("role_label") or ""
 
 
 def _push(x):

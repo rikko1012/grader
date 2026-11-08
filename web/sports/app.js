@@ -736,7 +736,7 @@
       var h = '<article class="sw-research-card" aria-label="' + esc(m.n + ', ' + g.ms.map(function (x) { return B.stats[x.st] || x.st; }).join(', ')) + '">' +
         '<div class="sw-research-head"><div class="sw-avatar">' + T.img(R.headshotUrl(state.lg, m.pid), m.n + " headshot", "sw-tb-head", T.initials(m.n)) +
         '</div><div><a class="sw-player-name" href="' + marketHref(m, null) + '">' + esc(m.n) + '</a>' +
-        '<div class="sw-small sw-faint">' + (ab ? T.img(R.logoUrl(state.lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([T.teamTagOf(m, state.lg), m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<div class="sw-small sw-faint">' + (ab ? T.img(R.logoUrl(state.lg, ab), ab + " logo", "sw-tb-logo", "") : "") + esc([T.teamTagOf(m, state.lg), m.ro || m.pos].filter(Boolean).join(' · ')) + '</div></div>' +
         (inj ? '<span class="sw-tag inj">' + esc(S.injuryLabel(inj.status)) + '</span>' : '') + '</div>' +
         '<div class="sw-matchline"><a href="#/game/' + encodeURIComponent(m.e) + '">' + esc(m.matchup) + '</a><span>' +
         esc(S.localTime(m.ev && m.ev.start_utc, {weekday:'short',hour:'numeric',minute:'2-digit'})) + '</span></div>';
@@ -1063,7 +1063,7 @@
         setTitle("player", P.player);
         var h = '<p class="sw-crumbs"><a href="#/board">Prop board</a>' + (m.event_id ? ' › <a href="#/game/' + encodeURIComponent(m.event_id) + '">Match context</a>' : "") + " › " + esc(P.player) + "</p>";
         h += '<div class="sw-phead"><div><div class="sw-eyebrow">' + state.lg.toUpperCase() + " · Player workspace</div><h1 class=\"sw-h1\">" + esc(P.player) + "</h1>" +
-          '<div class="sw-muted">' + esc([P.position, P.team && P.team.name].filter(Boolean).join(" · ")) +
+          '<div class="sw-muted">' + esc([P.role || P.position, P.team && P.team.name].filter(Boolean).join(" · ")) +
           (P.injury ? " " + injuryHtml(P.injury) : "") + "</div>" +
           (ev ? '<div class="sw-small" style="margin-top:4px">Next: <b>' + (ev.home === false ? "at " : ev.home ? "vs " : "") + esc(ev.opponent ? (ev.opponent.name || ev.opponent.abbr) : "") + "</b> · " + esc(S.localTime(ev.start_utc)) + ' · <a href="#/game/' + encodeURIComponent(ev.event_id) + '">Match context</a></div>' : "") +
           "</div></div>";

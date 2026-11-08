@@ -249,7 +249,7 @@
         var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + (r.grade && Lg ? Lg.gradeHtml(r.grade, r.lean, r.notValidated) : esc(leanText(r))) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
           : '<span class="sw-faint">' + esc(noChanceText(r)) + "</span>";
         return "<tr>" +
-          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.pos].filter(Boolean).join(" · ")) + "</div>" + (root.SportsCompare ? root.SportsCompare.rowButton(r) : "") + "</th>" +   // HOOK (compare)
+          '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.ro || r.pos].filter(Boolean).join(" · ")) + "</div>" + (root.SportsCompare ? root.SportsCompare.rowButton(r) : "") + "</th>" +   // HOOK (compare)
           '<td class="sw-small">' + esc(r.matchup) + "</td>" +
           "<td>" + esc(r.statLabel) + "</td>" +
           '<td class="num">' + lineTxt(r.line) + "</td>" +
@@ -296,7 +296,7 @@
       var f = {stat: st.stat, ev: st.ev, dir: st.dir_, min: st.min, q: st.q, l20: st.l20};
       var rows = sortRows(consistentFilter(D.rows, f), st.sort, st.dir, D.events);
       main.querySelector("#shx-body").innerHTML = rows.slice(0, shown).map(function (r) {
-        return '<tr><th scope="row"><a href="' + playerHref(lg, r) + '">' + esc(r.n) + '</a><div class="sw-faint sw-small">' + esc([tag(r.tm, lg), r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
+        return '<tr><th scope="row"><a href="' + playerHref(lg, r) + '">' + esc(r.n) + '</a><div class="sw-faint sw-small">' + esc([tag(r.tm, lg), r.ro || r.pos].filter(Boolean).join(" · ")) + "</div></th>" +
           '<td class="sw-small">' + esc(matchup(D.events, r.e, D.league)) + "</td><td>" + esc(statOf(r)) + "</td>" +
           '<td class="num">' + lineTxt(r.l) + ' <span class="sw-faint sw-small">' + esc(r.plat === "prizepicks" ? "PP" : "UD") + "</span></td>" +
           '<td><span class="shx-lean shx-' + r.side + '">' + (r.side === "over" ? "Over" : "Under") + "</span></td>" +
