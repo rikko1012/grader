@@ -212,7 +212,7 @@ def test_card_sections_go_to_their_tab_and_the_chart_is_guarded(tmp_path):
     out = run_page(tmp_path, """(() => ({
       tabs: ["Last 10 matches · Maps 1–2", "Head-to-head vs X", "Stats · Maps 1–2 only", "HLTV", "FACEIT form", "Match", "Match players · A vs B",
              "Match simulation · 20,000 runs", "Role · rifler", "Checks", "Projection comparison", "Notes", "Model distribution",
-             "Round simulation · 20,000 runs"].map(cardTab),
+             "Round simulation · 20,000 runs", "Teammate ratings · 30.0% of team kills"].map(cardTab),
       rounds: roundSim({maps: 2, rounds_mean: 43.5, rounds_p10: 36, rounds_p90: 53, per_round: 0.69, runs: 20000,
                         rows: [{label: "Overtime", note: "a map to OT", chance: 0.233, rounds: 52.9, avg: 38.8, p_over: 0.894}]}, {line: 31.5}, "kills"),
       noRounds: roundSim(null, {line: 31.5}, "kills"),
@@ -222,7 +222,7 @@ def test_card_sections_go_to_their_tab_and_the_chart_is_guarded(tmp_path):
     }))()""")
     # owner 2026-10-20: the simulations ("sim") render on Overview right under the model distribution (cardTabs)
     assert out["tabs"] == ["history", "history", "history", "history", "history", "match", "match", "sim", "match", "match", "markets", "match",
-                           "overview", "sim"]
+                           "overview", "sim", "match"]
     assert "Round simulation · 20,000 runs" in out["rounds"] and "Over 31.5" in out["rounds"] and "89.4%" in out["rounds"] and out["noRounds"] == ""
     assert out["none"] == ""
     assert "Push at 26 20.0%" in out["chart"] and 'role="img"' in out["chart"] and "line 26" in out["chart"] and "8 in 10" in out["chart"]

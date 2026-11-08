@@ -45,6 +45,8 @@ import comparison
 import prizepicks
 import records
 import roles
+import role_display
+import cs2_roles
 import underdog
 import grade_display
 import line_chance
@@ -1374,6 +1376,11 @@ def board_payload(book="underdog"):
         x["awp_conf"] = (None if x["awp"] is None else "confirmed" if src.startswith(("hltv", "liquipedia"))
                          else "measured" if src.startswith("bo3") else "inferred")
         x["igl"], x["igl_src"] = roles.igl_role(nick, x.get("team_name") or x.get("team"))
+        # role tag (display only, role_display.py): the Liquipedia listing first, cs2_roles' stat role where none (one text on
+        # the board row, card, matchroom desk and hub card); None = no role. team_name only (no feed-team fallback): the card
+        # (card_role_label) has no feed team, so both read the same inputs. Benched (BO3.gg status 2) = none.
+        tn, bn = x.get("team_name"), bool(g.get("role_benched"))
+        x["role_label"] = role_display.cs2_label(nick, tn, g.get("own_teams") or (), bn, cs2_roles.card_role(nick, tn, benched=bn, facts=True))
     for x in rows:
         x["book"] = x.get("book") or "underdog"
         x["match_id"] = _row_match_id(x)         # canonical match id (matchid.py): the same on every platform; None = unlinked
@@ -1402,6 +1409,23 @@ def board_payload(book="underdog"):
                            source=None if not src else "PrizePicks (direct)" if src == prizepicks.DIRECT_SOURCE
                            else "PrizePicks via the scraper's copy")
     return out
+
+
+def role_benched(pb):
+    """The player is on his team's BO3.gg page as benched (status 2; player_block["benched"]): no role tag (display only)."""
+    nick = str((pb.get("player") or {}).get("nick") or "").lower()
+    return bool(nick) and nick in {str(b or "").lower() for b in pb.get("benched") or ()}
+
+
+def card_role_label(res):
+    """The card's role tag (sets and returns res["role_label"]): the same inputs, in the same order, as its board row
+    (board_payload: nick, team_name = playing_for or current_team, own_teams, benched, the stat-role entry) - one text on
+    the board and the card. Display only; None = no role."""
+    pb = res.get("player_block") or {}
+    nick, tn, bn = (pb.get("player") or {}).get("nick"), pb.get("playing_for") or pb.get("current_team"), role_benched(pb)
+    own = [t for t in (pb.get("profile_team"), pb.get("current_team")) if t]
+    res["role_label"] = role_display.cs2_label(nick, tn, own, bn, cs2_roles.card_role(nick, tn, benched=bn, facts=True))
+    return res["role_label"]
 
 
 KNOWN_AWP = {"zywoo", "m0nesy", "sh1ro", "broky", "w0nderful", "torzsi", "woro2k", "hallzerk", "s1mple", "device", "jame",
@@ -3630,6 +3654,7 @@ def board_forever():
                                       "hs_pct": fw.get("hs_pct"), "p_win": (g.get("detail") or {}).get("p_win"),
                                       "snip": pb.get("sniping_equiv"), "awp_note": pb.get("awp_note"),
                                       "own_teams": [t for t in (pb.get("profile_team"), pb.get("current_team")) if t],
+                                      "role_benched": role_benched(pb),   # role tag only (display): benched = no role
                                       "market": g.get("market_quality"),
                                       "team_name": pb.get("playing_for") or pb.get("current_team"),
                                       "opp_name": (res.get("next_match") or {}).get("opponent"),
@@ -3741,6 +3766,7 @@ def board_forever():
                 roles.refresh_hltv()
             except Exception:
                 traceback.print_exc()
+            cs2_roles.maybe_refresh()                 # display-only stat roles: daily, in a background thread; never raises
             try:
                 roles.refresh([((BOARD.get(r["id"]) or {}).get("nick") or r["player"],
                                 (BOARD.get(r["id"]) or {}).get("team_name") or r.get("team")) for r in rows])
@@ -4894,6 +4920,7 @@ class Handler(BaseHTTPRequestHandler):
                                  {"Cache-Control": "no-store"})
             if u.path == "/admin/slips.json" and self.authed(q.get("token")):
                 return self.send(200, {"builder": slips.BUILDER_VERSION, "data_dir": str(DATA_DIR), "hltv_roles": roles.hltv_status(),
+                                       "cs2_roles": cs2_roles.status(),
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
@@ -5992,6 +6019,7 @@ class Handler(BaseHTTPRequestHandler):
                     res["hltv_outage"] = {"rows": [], "causes": cs_, "odds_note": None, "unavailable": True}
                 withhold_temporary(res)
             res["veto"] = card_veto(res)                 # map veto panel: the background's stored answer (display only)
+            res["role_label"] = card_role_label(res)     # role tag (display only, after the pick log; role_display.py)
             res["map_chances"] = card_map_chances(res)   # HLTV map chances (display only, weight 0; after the pick log)
             res = letter_containment.cs2_card(res)       # lc-1: after the pick log - a held market reads Lean, 0U (display only)
             t0 = time.time()

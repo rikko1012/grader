@@ -22,7 +22,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from . import rules, settle, store
-from .names import ROLE_LABEL
+from . import role_display
 
 SCOPE = {"maps_1": "1", "maps_1_2": "12", "maps_1_2_3": "123"}
 # the site's published grade bands and unit policy (the same numbers members see on CS2: A+ 80%, A 74%, A- 68%, B+ 63%,
@@ -805,7 +805,8 @@ def board(con, now=None):
         s = series.get(r.get("sid")) or {}
         rows.append({
             "platform": r["platform"], "market_key": r["market_key"], "player": r["player"], "team": lab(r.get("tid")) or r["team"],
-            "role": ROLE_LABEL.get(r.get("role")) if r.get("role") else None, "opponent": lab(r.get("opp_tid")) or r["opponent"],
+            # role tag (display only, owner 2026-11-07): the linked role, else the latest forecast's (game data); Bot reads "ADC"
+            "role": role_display.label(r.get("role"), (f or {}).get("role") if r.get("pid") else None), "opponent": lab(r.get("opp_tid")) or r["opponent"],
             "competition": s.get("tournament") or (s.get("tournament_page") or "").replace("LE:", ""), "best_of": s.get("best_of"),
             "series_start": s.get("scheduled_utc") or r["start_time"], "stat": r["stat"], "scope": SCOPE_LABEL.get(SCOPE.get(r["scope"] or ""), r["stat_label"]),
             "stat_label": r["stat_label"], "market_type": r["market_type"], "odds_type": r["odds_type"], "line": r["line"],

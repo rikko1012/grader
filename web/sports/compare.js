@@ -279,7 +279,7 @@
               : '<span class="sw-cmp-rank none" data-rank="none">Not ranked</span>') +
       '<button type="button" class="sw-cmp-x" data-cmp-rm="' + esc(JSON.stringify(r.item)) + '" aria-label="Remove ' + esc(propTitle(B, r)) + ' from Compare">Remove</button></div>' +
       '<h3 class="sw-cmp-who"><a href="#/player/' + encodeURIComponent(r.pid) + "?lg=" + lg + "&stat=" + encodeURIComponent(r.stat) + "&q=" + encodeURIComponent(r.rid) + '">' + esc(r.player) + "</a></h3>" +
-      '<div class="sw-cmp-sub">' + esc([teamTag(r, lg), r.pos].filter(Boolean).join(" · ")) + " · " + '<a href="#/game/' + encodeURIComponent(r.event) + '">' + esc(m.matchup || "") + "</a> · " +
+      '<div class="sw-cmp-sub">' + esc([teamTag(r, lg), r.ro || r.pos].filter(Boolean).join(" · ")) + " · " + '<a href="#/game/' + encodeURIComponent(r.event) + '">' + esc(m.matchup || "") + "</a> · " +
         esc(S.localTime(r.start, {weekday: "short", hour: "numeric", minute: "2-digit"})) + (sg ? ' <span class="sw-cmp-sg">Same game</span>' : "") + "</div>";
     var scoutTxt = sc ? (s ? '<b class="sw-p ' + s + '" data-cmp-p="' + (s === "over" ? sc.po : sc.pu) + '">' + side(s) + " " + S.pct(s === "over" ? sc.po : sc.pu) + "</b> " : "") +
       '<span class="sw-faint">O ' + S.pct(sc.po) + " · U " + S.pct(sc.pu) + (sc.pp > 0.0005 ? " · Push " + S.pct(sc.pp) : "") + "</span>" : "—";

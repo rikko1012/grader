@@ -177,7 +177,7 @@ def sheet_markets(player_file, history_games, platform, events, now):
                                             raw=raw, view=vr if history_games is not None else None, now=now)
         markets_out.append({**({"nv": nv} if nv else {}), "k": row["key"], "e": row["event_id"], "pid": row["player_id"],
                             "n": row.get("player"),
-                            "pos": row.get("position"), "tm": row.get("team"), "tid": row.get("team_id"),
+                            "pos": row.get("position"), **({"ro": row["role"]} if row.get("role") else {}), "tm": row.get("team"), "tid": row.get("team_id"),
                             "st": row["stat"], "sl": row.get("stat_label"), "pr": 1 if row.get("primary") else 0,
                             "cap": row.get("capability"), "mk": row.get("market"), "q": qs})
         view[row["key"]] = vr
@@ -218,6 +218,7 @@ def consistent_rows(player_file, history_games, events, now):
         r10 = max(o10, u10) / n10
         r20 = ((o20 if side == "over" else u20) / n20) if n20 >= 20 else None
         out.append({"k": row["key"], "pid": row["player_id"], "n": row.get("player"), "pos": row.get("position"),
+                    **({"ro": row["role"]} if row.get("role") else {}),
                     "tm": row.get("team"), "e": row["event_id"], "st": row["stat"], "sl": row.get("stat_label"),
                     "pr": 1 if row.get("primary") else 0, "plat": plat, "l": line, "side": side, "r10": _r(r10, 4),
                     "r20": _r(r20, 4), "l10": {"n": n10, "o": o10, "u": u10, "p": p10, "last": vals[:10],
