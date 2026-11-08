@@ -21,7 +21,9 @@ CS2 - ONE role text per player, shown the same on the board row, the card, the m
     though Liquipedia lists rifle first); when the share says rifler (<= roles.RIFLE_SHARE with >= roles.AWP_MIN_KILLS
     kills) a Liquipedia AWP listing is dropped.
   IGL - first when listed / flagged, one per team: the stat roles' IGL is shown; a listed IGL is not shown when they have
-  another player as that team's IGL or the team has several listed and none picked (igl_block).
+  another player as that team's IGL or the team has several listed and none picked (igl_block - also handed in for a board
+  player who is not in the stat roles when his team's IGL slot is taken there), nor when the team (not in the stat roles)
+  has two or more team_match IGL listings and the Liquipedia team page does not mark exactly him (_igl_contested).
   Contradiction - the listing names one specific rifle role (Entry / Lurker / Support) and the stat role another, or
   Support against Star rifler: both are dropped (the agreed part is shown, or nothing) - never two different roles on
   one page.
@@ -106,6 +108,63 @@ def _listing_for(nick, team):
     return None
 
 
+_IGLS = {"rows": None, "at": None, "teams": {}, "names": {}, "memo": {}}   # replaced whole on a rebuild (never half-built)
+
+
+def _listed_igls(team):
+    """{normalized nick} of every team_match IGL listing in roles.py's HLTV rows for this board team (exact name or
+    hltv.same_team variants, as roles._team_ok). The per-team index is rebuilt once per roles.refresh_hltv load (keyed on
+    its load time and the rows object it holds) and the name-variant lookup is memoized per board team: memory only, never a request."""
+    rows, at = roles._HLTV.get("rows") or {}, roles._HLTV.get("at")
+    idx = _IGLS
+    if idx["rows"] is not rows or idx["at"] != at:
+        teams, names = {}, {}
+        for nk, lst in list(rows.items()):
+            for r in lst or ():
+                t = r.get("team")
+                if not (t and r.get("team_match")):
+                    continue
+                if r.get("igl") or "igl" in {str(x).strip().lower() for x in r.get("roles") or ()}:
+                    k = roles._norm(t)
+                    teams.setdefault(k, set()).add(nk)
+                    names.setdefault(k, t)
+        idx = {"rows": rows, "at": at, "teams": teams, "names": names, "memo": {}}
+        globals()["_IGLS"] = idx
+    nt = roles._norm(team)
+    if not nt:
+        return set()
+    memo = idx["memo"]
+    if nt in memo:
+        return memo[nt]
+    got = set(idx["teams"].get(nt) or ())
+    try:
+        import hltv
+        for k, raw in idx["names"].items():
+            if k != nt and hltv.same_team(team, raw):
+                got |= idx["teams"][k]
+    except Exception:
+        pass
+    if len(memo) < 5000:
+        memo[nt] = got
+    return got
+
+
+def _igl_contested(nick, team):
+    """The board team has two or more listed IGLs (Liquipedia via the HLTV scraper, team_match) and the Liquipedia team page
+    does not mark exactly this player among them: the listed IGL is not shown (one IGL per team; the stat roles' own pick,
+    st["igl"], is checked by the caller). Never raises."""
+    try:
+        listed = _listed_igls(team)
+        if len(listed) < 2:
+            return False
+        t = (roles._load().get("teams") or {}).get(roles._norm(team)) or {}
+        marks = {roles._norm(x) for x in t.get("igl") or ()} if t.get("page") else set()
+        picked = [n for n in listed if n in marks]
+        return picked != [roles._norm(nick)]
+    except Exception:
+        return True
+
+
 def _share_for(nick, team):
     try:
         h = roles._hltv(nick, team)
@@ -157,6 +216,8 @@ def cs2_label(nick, team, own_teams=(), benched=False, stat=None):
                 break
         if not listing and not stat:
             return None
+        if listing and listing[1] and not (stat or {}).get("igl") and _igl_contested(nick, used):
+            listing = (listing[0], False)             # two or more listed IGLs on this team, none picked: no IGL word
         share = _share_for(nick, used) if used else None
         return combine(listing, stat, share)
     except Exception:

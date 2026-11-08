@@ -4217,7 +4217,9 @@ function render(d) {
   if ((pb.per_map || []).length) h += `<div class="stats" style="margin-top:8px">${pb.per_map.map(m => `<div class="stat"><div class="k">${mapName(m.map)} KPR</div><div class="v">${num(m.kpr,3)}</div><div class="n">${m.maps_played ?? 0} maps</div></div>`).join("")}</div>`;
   h += `</section>`;
 
-  h += `<div class="two sc"><section class="card"><h2>Role · ${esc(det.role || "–")}${pb.team_kill_share != null ? ` · ${pct(pb.team_kill_share)} of team kills` : ""}</h2><div class="mates">
+  // the teammate-rating bars: never headed "Role" (owner 2026-11-07: one role text per player - the hero tag, role_display.py).
+  // The grader's own rank ("primary" / "#4 on team" / its "unconfirmed" hedge) is a grade input, not a role, and is not shown.
+  h += `<div class="two sc"><section class="card"><h2>Teammate ratings${pb.team_kill_share != null ? ` · ${pct(pb.team_kill_share)} of team kills` : ""}</h2><div class="mates">
     ${mates.map(m => `<div class="mate ${m.me ? "me" : ""}"><span>${esc(m.n)}</span><div class="bar"><i style="width:${(m.r || 0) / maxR * 100}%"></i></div><span class="num">${num(m.r)}</span></div>`).join("")}
     </div></section>
     <section class="card"><h2>Checks</h2>
@@ -4779,7 +4781,7 @@ function cardTab(title) {
   if (/^(Last |Head-to-head|Stats|HLTV|FACEIT|Second source)/.test(t)) return "history";
   if (/^Projection comparison/.test(t)) return "markets";
   if (/^(Match simulation|Round simulation)/.test(t)) return "sim";     // Overview, right under the model distribution
-  if (/^(Match|Role|Checks|Notes)/.test(t)) return "match";
+  if (/^(Match|Role|Teammate|Checks|Notes)/.test(t)) return "match";
   return "overview";
 }
 // HS% (owner 2026-10-20, display only): headshots / kills of each last-10 series (server: series_hs - the same maps as

@@ -372,7 +372,7 @@ def _path():
     return Path(DATA_DIR) / "cs2_roles.json"
 
 
-_STATE = {"art": None, "by_nick": {}, "at": 0.0, "tried": 0.0, "error": None, "loaded": False}
+_STATE = {"art": None, "by_nick": {}, "team_igl": {}, "team_memo": {}, "at": 0.0, "tried": 0.0, "error": None, "loaded": False}
 _LOCK = threading.Lock()
 _RUN = threading.Lock()
 
@@ -384,10 +384,43 @@ def _index(art):
     return by
 
 
+def _team_igl(art):
+    """{normalized team name: its IGL slot is taken} - True when one of its artifact players is its one IGL (igl) or the slot
+    is settled / contested for the others (igl_block). For a board player who is not in the artifact (a new signing, under
+    MIN_MAPS): his listed IGL is then not shown (card_role facts -> igl_block), so a team never shows two IGLs."""
+    out = {}
+    for e in (art.get("players") or {}).values():
+        k = _norm(e.get("team"))
+        if k:
+            out[k] = out.get(k, False) or bool(e.get("igl")) or bool(e.get("igl_block"))
+    return out
+
+
 def _install(art, at):
-    by = _index(art)
+    by, ti = _index(art), _team_igl(art)
     with _LOCK:
-        _STATE.update(art=art, by_nick=by, at=at, loaded=True)
+        _STATE.update(art=art, by_nick=by, team_igl=ti, team_memo={}, at=at, loaded=True)
+
+
+def _team_taken(team):
+    """The board team's IGL slot is taken in the artifact (exact name, else hltv.same_team variants - never fuzzy). Memory
+    only; the name-variant scan is memoized per board team until the next artifact swap (bounded by the board's teams)."""
+    ti, memo = _STATE.get("team_igl") or {}, _STATE.get("team_memo")
+    nt = _norm(team)
+    if not nt or not ti:
+        return False
+    if nt in ti:
+        return ti[nt]
+    if memo is not None and nt in memo:
+        return memo[nt]
+    try:
+        import hltv
+        hit = any(v for k, v in ti.items() if v and hltv.same_team(team, k))
+    except Exception:
+        hit = False
+    if memo is not None and len(memo) < 5000:
+        memo[nt] = hit
+    return hit
 
 
 def _load_saved():
@@ -540,14 +573,15 @@ def card_role(nick, team=None, benched=False, awp=None, igl=None, facts=False):
     text of the board row, card, matchroom desk and hub card - the desk pill is that text too, so there is no second desk
     label to agree with): the matched entry even when it has no role of its own - {"role", "stat_role", "map_note", "igl",
     "igl_block", "awp_share", "source"} - so the listing can be checked against the HLTV AWP share and the one-IGL-per-team
-    rule. None when benched or not matched."""
+    rule. A board player with no entry on this team (new signing, under MIN_MAPS) whose team's IGL slot is taken here gets a
+    no-role entry with igl_block=True (his listed IGL is not shown: one IGL per team). None when benched or not matched."""
     if benched or not nick:
         return None
     if not _STATE["loaded"]:
         _load_saved()
     rows = _STATE["by_nick"].get(_norm(nick)) or []
     if not rows:
-        return None
+        return _blocked(team) if facts else None
     hit = None
     if team:
         nt = _norm(team)
@@ -565,9 +599,20 @@ def card_role(nick, team=None, benched=False, awp=None, igl=None, facts=False):
         return {"role": hit.get("role"), "stat_role": hit.get("stat_role"), "map_note": hit.get("map_note"),
                 "igl": bool(hit.get("igl")), "igl_block": bool(hit.get("igl_block")), "awp_share": hit.get("awp_share"),
                 "source": hit.get("source")}
+    if facts and not hit:
+        return _blocked(team)
     if not hit or not agrees_with_desk(hit.get("role"), awp, igl):
         return None
     return {"role": hit["role"], "stat_role": hit.get("stat_role"), "map_note": hit.get("map_note")}
+
+
+def _blocked(team):
+    """facts for a board player with no artifact entry on this team: no role of his own, and igl_block when the team's IGL
+    slot is taken in the artifact (one IGL per team). None otherwise."""
+    if team and _team_taken(team):
+        return {"role": None, "stat_role": None, "map_note": None, "igl": False, "igl_block": True, "awp_share": None,
+                "source": None}
+    return None
 
 
 def status():

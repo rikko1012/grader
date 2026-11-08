@@ -263,3 +263,80 @@ def test_a_capped_read_keeps_the_last_good_artifact(env, monkeypatch):
     monkeypatch.setattr(cs2_roles, "_team_marks", lambda: {})
     assert cs2_roles.refresh(now=5.0) is False
     assert cs2_roles.card_role("orlo", "Vanta")["role"] == "Entry"
+
+
+
+# ------------------------------------------------------------------------------------------------ one IGL per team (review 1107)
+def _igls(team, nicks):
+    return [n for n in nicks if (label(n, team) or "").startswith("IGL")]
+
+
+def test_unlisted_signing_gets_no_igl_when_the_team_slot_is_taken(env):
+    """review: OG's cadiaN (not in the stat roles) and bodyy (their IGL) both showed "IGL" - the slot is taken: one IGL"""
+    roles._HLTV["rows"] = {"cadian": [hrow("OG", ["igl", "awp"], igl=True, kills=900, share=0.40)],
+                           "bodyy": [hrow("OG", ["igl", "rifle"], igl=True)]}
+    env(entry("bodyy", "OG", stat_role="Support", igl=True), entry("nexa", "OG", stat_role="Entry", igl_block=True))
+    assert label("bodyy", "OG") == "IGL · Support"
+    assert label("cadiaN", "OG") == "AWPer"                         # his listed AWP stays (share 40%), the IGL word does not
+    assert _igls("OG", ["cadiaN", "bodyy", "nexa"]) == ["bodyy"]
+    st = cs2_roles.card_role("cadiaN", "OG", facts=True)
+    assert st == {"role": None, "stat_role": None, "map_note": None, "igl": False, "igl_block": True, "awp_share": None,
+                  "source": None}
+    assert cs2_roles.card_role("cadiaN", "OG") is None             # the plain accessor is unchanged: no entry, no role
+    # in the stat roles but on another team (moved): no entry on OG -> the same block
+    env(entry("bodyy", "OG", stat_role="Support", igl=True), entry("cadian", "Elsewhere", stat_role="AWPer"))
+    assert cs2_roles.card_role("cadiaN", "OG", facts=True)["igl_block"] is True
+    assert _igls("OG", ["cadiaN", "bodyy"]) == ["bodyy"]
+
+
+def test_contested_slot_blocks_an_unlisted_igl(env):
+    # the stat roles found the team's slot contested (several listed, none picked): every player there has igl_block
+    roles._HLTV["rows"] = {"quix": [hrow("Lilmix", ["igl"], igl=True)], "p1ke": [hrow("Lilmix", ["igl"], igl=True)]}
+    env(entry("p1ke", "Lilmix", stat_role="Entry", igl_block=True), entry("mojo", "Lilmix", stat_role="Lurker", igl_block=True))
+    assert _igls("Lilmix", ["quix", "p1ke", "mojo"]) == []
+    assert label("quix", "Lilmix") is None and label("p1ke", "Lilmix") == "Entry"
+
+
+def test_open_slot_keeps_the_one_listed_igl(env):
+    roles._HLTV["rows"] = {"sirius": [hrow("Openers", ["igl"], igl=True)]}
+    env(entry("chanky", "Openers", stat_role="Entry"))                  # in the stat roles, no IGL there: slot open
+    assert label("sirius", "Openers") == "IGL"
+    assert cs2_roles.card_role("sirius", "Openers", facts=True) is None
+
+
+def test_two_listed_igls_on_a_team_outside_the_stat_roles_show_neither(env):
+    """review: INFURITY (sirius + CHANKY) and Glitch (shaiK + Brillo) have no stat-role lineup - both showed "IGL" """
+    roles._HLTV["rows"] = {"sirius": [hrow("INFURITY", ["igl"], igl=True)], "chanky": [hrow("INFURITY", ["igl"], igl=True)],
+                           "shaik": [hrow("Glitch", ["igl", "awp"], igl=True, kills=800, share=0.35)],
+                           "brillo": [hrow("Glitch", ["igl"], igl=True)]}
+    assert label("sirius", "INFURITY") is None and label("CHANKY", "INFURITY") is None
+    assert label("shaiK", "Glitch") == "AWPer" and label("Brillo", "Glitch") is None
+    # the Liquipedia team page marks exactly one of them: he is the IGL, the other is not
+    roles._STATE["data"]["teams"]["infurity"] = {"at": 1, "page": "INFURITY", "igl": ["sirius"]}
+    assert _igls("INFURITY", ["sirius", "CHANKY"]) == ["sirius"]
+    # a new HLTV load (the per-team index is rebuilt, no stale answer): CHANKY's listing gone -> sirius alone, still IGL
+    roles._HLTV["rows"] = {"sirius": [hrow("INFURITY", ["igl"], igl=True)]}
+    roles._STATE["data"]["teams"].pop("infurity")
+    assert label("sirius", "INFURITY") == "IGL"
+
+
+def test_the_igl_checks_are_memory_lookups(env, monkeypatch):
+    """per request: the per-team IGL index is built once per HLTV load and each board team's name-variant scan runs once
+    (memoized until the next load / artifact swap) - never a database or network read"""
+    roles._HLTV["rows"] = {f"p{i}": [hrow(f"Team{i % 40}", ["igl"] if i % 3 == 0 else ["rifle"], igl=i % 3 == 0)]
+                           for i in range(200)}
+    env(*[entry(f"p{i}", f"Team{i % 40}", stat_role="Entry", igl=i < 40) for i in range(120)])
+    scans = []
+    for i in range(200):
+        label(f"p{i}", f"Team{i % 40}")
+        label(f"new{i}", f"Other{i % 7}")
+    idx = rd._IGLS
+    seen_rd, seen_cr = sorted(idx["memo"]), sorted(cs2_roles._STATE["team_memo"])
+    assert seen_rd and set(seen_cr) == {f"other{i}" for i in range(7)}
+    import hltv
+    monkeypatch.setattr(hltv, "same_team", lambda a, b: scans.append((a, b)) or False)
+    for t in seen_rd:
+        rd._listed_igls(t)
+    for t in seen_cr:
+        cs2_roles._team_taken(t)
+    assert rd._IGLS is idx and scans == []                               # warm: no rebuild, no name-variant scan

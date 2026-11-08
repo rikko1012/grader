@@ -359,7 +359,8 @@ def _team_aka(x, shown):
 
 
 def _role(x):
-    # the board row's role tag (role_display.py): explicit Liquipedia roles only, the same text as the board and the card.
+    # the board row's role tag (role_display.py): the one combined CS2 role text (team-matched Liquipedia listing first, the
+    # stat role where there is none) - the same text as the board row, the card and the matchroom desk.
     # Never the AWP chip (a kill-share / HS% reading) - that stays a slip / stake input, not a role.
     return x.get("role_label") or ""
 
