@@ -2,8 +2,9 @@
 wherever it'll fit - Like IGL, Star rifler, Top mid, Sf PF, WR"). Real Handler + fixtures (no network), 1440 / 390 / 360 / 414:
 - the hub card header carries the role under the name for CS2 ("IGL · Rifler"), LoL ("ADC"), NBA ("PG") and NFL ("WR"): the
   same text as the board record the row is drawn from;
-- the hub rows stay as they were (no tag - at 1440 with the slip open the player column had no room and the name broke per
-  letter) and compact (<= 72 px) on a desktop; no sideways scroll at 360 / 390 / 414;
+- the hub rows carry the same tag on the player cell's second line (owner 2026-11-08 "i dont see players roles"; it sits before the
+  matchup, never beside the name) and stay compact (<= 72 px) on a desktop; no sideways scroll at 360 / 390 / 414
+  (tests/test_role_hub_rows_browser.py covers widths, sub-rows and By game);
 - a player with no role source has no tag element and no placeholder text ("unknown", "Player", "AWP" from a stat reading);
 - classic CS2: one role pill on the board row (in place of the AWP / IGL pills), the same text in the card hero and the
   matchroom desk; the card's "IGL reference list" row is gone.
@@ -100,7 +101,7 @@ def test_hub_card_carries_the_records_role_and_rows_stay_compact(browser, roles_
         for sp, name, want in CASES:
             sport(p, sp)
             row = hub_row(p, name)
-            assert row["tag"] is None and want not in row["text"], (sp, name, row)    # rows unchanged: the card carries it
+            assert row["tag"] == want, (sp, name, row)                                # owner 2026-11-08: the row carries it too
             if size["width"] > 1100:
                 assert row["h"] <= 72, (sp, row)                                      # the compact desktop row
             shot(p, f"row-{sp}")
@@ -129,7 +130,7 @@ def test_phone_cards_carry_the_tag_and_never_scroll_sideways(browser, roles_env,
         for sp, name, want in CASES:
             sport(p, sp)
             row = hub_row(p, name)
-            assert row["tag"] is None
+            assert row["tag"] == want
             no_h_scroll(p)
             card = hub_card(p, name)
             assert card["tag"] == want

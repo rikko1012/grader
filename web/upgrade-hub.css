@@ -887,6 +887,9 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
 #u-hub #hub-table>tbody>tr[data-record] .h-player small{display:flex;align-items:center;gap:6px;overflow:visible;text-overflow:clip;max-width:100%;min-width:0}   /* audit follow-up 2026-11-06: only the matchup text is cut, never the sport tag */
 #u-hub #hub-table>tbody>tr[data-record] .h-player small>.h-vs{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #u-hub #hub-table>tbody>tr[data-record] .h-player small>i{flex:none}
+/* owner 2026-11-08: the role tag opens the second line (the card's text and colours, one size smaller). The matchup gives way first;
+   the tag is cut only when it alone is wider than the line, so the row stays one compact line and the name above keeps its width */
+#u-hub #hub-table>tbody>tr[data-record] .h-player small>.h-row-role{display:block;flex:none;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:9.5px;line-height:12px;padding:0 4px}
 #u-hub .h-mcell{display:flex;align-items:center;gap:6px;min-width:0}
 #u-hub .h-mcell>div{min-width:0;flex:1}
 #u-hub #hub-table .h-prop-toggle{flex:none;display:grid;place-items:center;min-width:40px;height:40px;margin:0;padding:0 6px;border-radius:999px;font:600 12px 'DM Mono',monospace}

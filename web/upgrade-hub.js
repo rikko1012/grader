@@ -485,6 +485,9 @@ export function mount(C) {
     }
     return `<button class="h-compare${different(r)?' differ':''}" data-hub="books" data-id="${esc(key(r))}" title="${esc(full)}" aria-label="Compare books and lines for ${esc(r.player.name)}: ${esc(full)}"><b>${esc(main)}</b><small>${esc(sub)}</small></button>`;
   }
+  /* owner 2026-11-08 ("i dont see players roles"): the row's second line opens with the player's role, the same text as the card's
+     tag (r.player.role, every sport); no role, no tag. It sits before the matchup, which is cut first, so the name keeps its width. */
+  const rowRole = r => r.player.role?`<em class="h-role h-row-role">${esc(r.player.role)}</em>`:'';
   function row(r, group=null) {
     const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r)||H.detail===key(r);
     const choose=!side||!r.offer[side]?.offered;
@@ -496,7 +499,7 @@ export function mount(C) {
     const add=on?['On slip ✓',`On slip: show ${name} in the slip`]:choose?['Side',`Choose a side for ${name}`]:['+ Add',`Add ${name} ${sideWord(side)} ${esc(r.offer.line)} to slip`];
     return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group?'':' is-sub'}${noHits(r)?' h-nohits':''}">
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
-      <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small><span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
+      <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${rowRole(r)}<span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
       <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
       <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?` · was ${esc(r.offer.moved_from)}`:''}</small></td>
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
@@ -592,9 +595,19 @@ export function mount(C) {
     $('hub-views').innerHTML=`<option value="">${H.views.length?'Choose a saved view':'No saved views yet'}</option>`+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
     $('hub-views').disabled=!H.views.length;
     paintStrip();
+    fitGameRows();
     keepBoard();
     restoreFocus();
   }
+  /* 2026-11-08: a game header row spans only the columns on screen. The desktop hides Edge (1101-1280px), Compare (1101-1180px) or
+     Market edge (1281px+ with Edge); counted in the header row's colspan, a hidden column became an empty extra column that took the
+     player column's width (on a start-time board names and role tags were cut, at 1101-1280px hidden). Display only; refit on resize. */
+  function fitGameRows() {
+    const head=$('hub-table')?.tHead?.rows[0], rows=document.querySelectorAll('#hub-rows tr.h-game-row>td');if(!head||!rows.length)return;
+    const n=[...head.cells].filter(c=>getComputedStyle(c).display!=='none').length||1;
+    rows.forEach(td=>{if(td.colSpan!==n)td.colSpan=n;});
+  }
+  window.addEventListener('resize',fitGameRows);
   /* QOL 2026-11-07: the toolbar's search, platform and filters survive a reload or a trip back to this tab (this browser tab only,
      sessionStorage; a new visit starts clean). The sport is already in the address; sort has its own saved choice. Display state only. */
   const BOARD_SS=()=>'scout-board-state:'+(R.me?.member||'me');

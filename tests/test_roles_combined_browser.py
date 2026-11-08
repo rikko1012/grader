@@ -103,9 +103,9 @@ def test_hub_card_shows_the_combined_text(browser, combined, size):
         sport(p, "cs2")
         for nick, want in WANT.items():
             row = hub_row(p, nick)
-            assert row["tag"] is None                                       # rows unchanged: the card carries it
+            assert row["tag"] == want, (nick, row)                          # owner 2026-11-08: the hub row carries it too
             card = hub_card(p, nick)
-            assert card["tag"] == want == record_role(p, "cs2", nick), (nick, card)
+            assert card["tag"] == want == row["tag"] == record_role(p, "cs2", nick), (nick, card)
             no_h_scroll(p)
             shot(p, f"combined-hub-card-{nick}")
             close_card(p)
