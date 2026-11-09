@@ -1,0 +1,40 @@
+{
+ "export_rows": 10210,
+ "export_built_at": "2026-11-06T05:21:25Z",
+ "stream_rows_unique_cursor": 49895,
+ "stream_rows_in_scope": 47091,
+ "overlap_keys": 1431,
+ "result_agree": 1.0,
+ "forecast_at_equal": 0.20964360587002095,
+ "duplicate_keys_dropped": 0,
+ "rows": 12513,
+ "rows_decided": 12217,
+ "push": 122,
+ "void": 174,
+ "games": 114,
+ "props": 5424,
+ "first_start": "2026-10-24T22:00:00Z",
+ "last_start": "2026-11-09T02:00:00Z",
+ "by_window": {
+  "E": {
+   "rows": 8657,
+   "games": 75
+  },
+  "S": {
+   "rows": 3856,
+   "games": 39
+  }
+ },
+ "by_book": {
+  "underdog": 6735,
+  "prizepicks": 5778
+ },
+ "with_other_app_line": 8012,
+ "with_D1": 2293,
+ "with_D2": 379,
+ "same_run_pairs_rows": 5148,
+ "with_bump": 3309,
+ "with_big_bump": 1513,
+ "with_price": 440,
+ "with_price_side": 297
+}
