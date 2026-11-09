@@ -28,8 +28,6 @@ This is the ONE scheduled collector (the sports service's ingest-loop child). Ea
   espn / injuries / pp / ud / kalshi   ESPN events + rosters, the injury report, the pick'em boards, Kalshi props
   oddsapi      The Odds API through books/sources.oddsapi_ingest (credit ledger; events and players resolved)
   polymarket   books/sources.polymarket_ingest
-  novig / gemini  books/exchanges.ingest - DISPLAY-ONLY exchanges (never in a market chance); kill switches NOVIG=0 /
-               GEMINI=0; a successful read withdraws what it no longer lists, a failed read keeps the last quote
   books        FanDuel / BetRivers own feeds (+ OddsPapi when its guard allows): books/worker.run_once, each game
                read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch. Scheduled as
                its OWN light job (`books` command, scheduler "books", every minute on a game day; 2026-11-06) so the
@@ -92,7 +90,7 @@ SETTLE_LOOKBACK_DAYS = 4                 # box scores re-read for corrections th
 SETTLE_FLOOR = os.environ.get("SPORTS_SETTLE_FLOOR", "2026-10-20T00:00:00Z")   # catch-up reaches back to here
 SETTLE_CATCHUP_MAX = int(os.environ.get("SPORTS_SETTLE_CATCHUP_MAX", "40"))  # older unsettled games per run
 WINDOW_DAYS = {"nba": 2, "wnba": 2, "cbb": 2, "nfl": 7, "cfb": 7}
-SOURCES = ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi", "polymarket", "novig", "gemini", "books", "games")
+SOURCES = ("espn", "pp", "ud", "kalshi", "injuries", "oddsapi", "polymarket", "books", "games")
 # cmd_ingest runs leagues on parallel threads; the books job and the game tick share per-process leases and
 # league-independent work (blocked-book probes, holds), so they run one league at a time, as one pass did before
 _COLLECT_LOCK = threading.Lock()
@@ -467,14 +465,6 @@ def ingest_league(con, league, sources=SOURCES):
     if "polymarket" in sources:
         from .books import sources as book_sources
         out["polymarket"] = book_sources.polymarket_ingest(con, league, observed_at, resolver)
-    for venue in ("novig", "gemini"):                # display-only exchanges (books/exchanges.py)
-        if venue in sources:
-            from .books import exchanges
-            try:
-                teams_raw = _espn_teams(lg) if venue == "novig" else ()
-            except (net.HttpError, ValueError):
-                teams_raw = ()
-            out[venue] = exchanges.ingest(con, venue, league, observed_at, resolver, teams_raw, _store_offers)
     if "books" in sources:
         out["books"] = _ingest_books(con, lg, resolver)
     if "games" in sources:

@@ -38,7 +38,6 @@ MARKET_SPORTS = we.MARKET_SPORTS
 APPS = we.APPS
 ENTRY = {"underdog": ("standard", 2, "Underdog standard 2-pick"), "prizepicks": ("power", 2, "PrizePicks Power 2-pick")}
 SHORT = {"prizepicks": "PP", "underdog": "UD", "fanduel": "FD", "betrivers": "BR", "kalshi": "Kalshi", "polymarket": "Poly",
-         "novig": "Novig", "gemini": "Gemini",
          "draftkings": "DK", "betmgm": "MGM", "caesars": "CZR", "pinnacle": "PIN", "fanatics": "FAN", "espnbet": "ESPN",
          "bovada": "BOV", "hardrockbet": "HR", "bet365": "365", "sleeper": "SL", "dabble": "DB"}
 ESPORTS_WHY = "Sportsbooks price only the match winner for this game, not player props, so there is no books' chance to compare."

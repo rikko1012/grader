@@ -66,11 +66,6 @@ def in_consensus(source):
     return source in ("kalshi", "polymarket") or source.startswith("oddsapi:")
 
 
-def _display_only(platform):
-    from ..books import display_only
-    return display_only(platform)
-
-
 def consensus_sources(per_source):
     return {s: v for s, v in per_source.items() if in_consensus(s)}
 
@@ -146,8 +141,6 @@ def eligible_quotes(target, quotes, events, forecast_at, dnp_share):
         last_src = item[3] if len(item) > 3 else None
         if q.platform == target.platform:
             continue                                         # target's own price never anchors it
-        if _display_only(q.platform):
-            continue                                         # display-only exchange (Novig, Gemini): never a source
         ok, why = capabilities.compatible(target, q)
         if not ok:
             reasons.append(f"{q.platform}: {why}")

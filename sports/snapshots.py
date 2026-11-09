@@ -993,8 +993,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                         "per source, nearest line moved with dispersion.json); target platform excluded",
                                 "sources": "every verified source: kalshi, polymarket, oddsapi:<book>, fanduel, "
                                            "betrivers (owner decision 2026-10-23); registered mc-1 forecasts keep "
-                                           "REGISTER.md 10; novig / gemini are listed with their own price, display "
-                                           "only, never counted (owner 2026-11-09)"},
+                                           "REGISTER.md 10"},
                 "sources": source_coverage(platform_seen, last_read),
                 "scout_chance": {"definition": scout_chance.DEFINITION, "models": list(scout_chance.MODELS),
                                  "text": scout_chance.TEXT,

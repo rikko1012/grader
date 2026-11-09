@@ -141,7 +141,6 @@
 
   // ------------------------------------------------------------------------------------------------- filters
   var BOOKS = {prizepicks: "PrizePicks", underdog: "Underdog", kalshi: "Kalshi", polymarket: "Polymarket",
-               novig: "Novig", gemini: "Gemini",
                fanduel: "FanDuel", betrivers: "BetRivers", oddspapi: "OddsPapi",
                oddsapi: "The Odds API"};
   var FEED_BOOKS = {draftkings: "DraftKings", fanduel: "FanDuel", betmgm: "BetMGM", williamhill_us: "Caesars",
@@ -254,7 +253,7 @@
                none: "no price"};
   function dec(x) { return x === null || x === undefined ? "—" : (Math.round(x * 100) / 100).toFixed(2); }
   function bookPrice(b) {                 // the book's own price, as the book gives it
-    if (b.p === "kalshi" || b.p === "polymarket" || b.p === "novig" || b.p === "gemini") {
+    if (b.p === "kalshi" || b.p === "polymarket") {
       var o = b.over || [];
       return "YES " + cents(o[0]) + " / " + cents(o[1]);
     }

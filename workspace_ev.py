@@ -29,10 +29,7 @@ APP_LABEL = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
 MARKET_SPORTS = ("nba", "nfl")
 MODEL_EV_HIDDEN = ("nba", "nfl")                # no return figure on a leg with no book price (owner audit 2026-11-06, T5)
 MODEL_SPORTS = ("cs2", "lol")
-PREDICTION = ("kalshi", "polymarket", "novig", "gemini")
-# display-only exchanges (sports/books/exchanges.py, owner 2026-11-09): shown with their own price (Books and lines, best
-# line), never an input of the fair chance here
-DISPLAY_ONLY = ("novig", "gemini")
+PREDICTION = ("kalshi", "polymarket")
 MAX_ROWS = 400
 MAX_MODEL_ROWS = 200
 MAX_REQUIRED = 2
@@ -154,8 +151,6 @@ def quotes_of(rows):
         seen = wb._ts(b.get("seen_at"))
         seen = float("nan") if seen is None else seen
         book = base_book(plat)
-        if book in DISPLAY_ONLY:
-            continue
         if kind == "mid" or plat in PREDICTION:
             bid, ask = _exchange(b.get("over"))
             out.append(Quote(book=book, line=float(b["line"]), observed_at=seen, kind="exchange", bid=bid, ask=ask, cluster=book))
