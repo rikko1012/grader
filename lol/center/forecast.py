@@ -413,21 +413,29 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         lo, hi = m.interval(pj["lambda"], pj["nb_size"], 0.8)
         med = _nb_median(m, pj["lambda"], pj["nb_size"])
         lam_shown = pj["lambda"]
-    # lpf-1 (flag LOL_LPF1, default off; answers from a child process, lol/lpf1_client.py): the full-history distribution started from the live per-game
-    # projection above replaces the chance, the projection, the median and the 80% range for the stats it covers. The
-    # book line is never an input. No projector this cycle = no new forecast (the last saved one stands), never another
-    # model's grade.
+    # lpf-1 (live for kills + assists since 2026-11-09, owner "yes turn lpf on"; LOL_LPF1=0 = rollback to lol-1f; answers from
+    # ONE short-lived child process, lol/lpf1_client.py): the full-history distribution started from the live per-game
+    # projection above replaces the chance, the projection, the median and the 80% range for the stats it covers. The book
+    # line is never an input. No lpf-1 answer this cycle (child failed / timed out / busy / artifact missing): when the
+    # line's last saved forecast is an lpf-1 one at the same line it stands (a transient failure never changes a grade); a line with no
+    # lpf-1 forecast yet gets the live lol-1f forecast above (labelled lol-1f) - never an error, never a hidden line.
     lp = getattr(h, "lpf1", None)
     lpf1_inputs = None
+    r1 = None
     if lp is not None and stat in lp["stats"]:
-        if lp.get("proj") is None:
-            return {"skip": "lpf-1 projector unavailable this cycle (the last saved forecast stands)"}
-        t = lp["proj"].target(link["sid"], pid, tid, opp, role, day, league, tour or s["tournament"],
-                              bo or {"1": 1, "12": 3, "123": 5}[scope], s["tournament_page"])
-        try:
-            r1 = lp["proj"].project(t, stat, scope, pj["lambda_game"], offer["line"])
-        except Exception:      # noqa: BLE001 - pending / no answer this cycle: skip, the last saved forecast stands
-            return {"skip": "lpf-1 projector unavailable this cycle (the last saved forecast stands)"}
+        if lp.get("proj") is not None:
+            t = lp["proj"].target(link["sid"], pid, tid, opp, role, day, league, tour or s["tournament"],
+                                  bo or {"1": 1, "12": 3, "123": 5}[scope], s["tournament_page"])
+            try:
+                r1 = lp["proj"].project(t, stat, scope, pj["lambda_game"], offer["line"])
+            except Exception:      # noqa: BLE001 - pending (pre-pass) / no answer this cycle
+                r1 = None
+        if r1 is None:
+            if lp.get("prepass"):
+                return {"skip": "lpf-1 request collected"}
+            if _last_model(con, offer) == (lp["version"], offer["line"]):
+                return {"skip": "lpf-1 answer unavailable this cycle (the last saved lpf-1 forecast stands)"}
+    if r1 is not None:
         po, pu, push = r1["p_over"], r1["p_under"], r1["p_push"]
         lpf1_inputs = {"version": lp["version"], "artifact": lp["sha"], "cutoff": r1.get("cutoff", lp.get("cutoff")), "lambda_lol1f": round(lam_shown, 4),
                        "lambda_game_lol1f": round(pj["lambda_game"], 4), "p_win_series_model": round(r1["p_win"], 4),
@@ -655,14 +663,30 @@ def _sha(rec):
     return store.sha({k: rec.get(k) for k in keys})
 
 
+def _last_model(con, offer):
+    """(model_version, line) of the offer's last saved forecast (None when it has none)."""
+    try:
+        r = con.execute("SELECT model_version, line FROM lol_forecasts WHERE platform = ? AND market_key = ? ORDER BY id DESC LIMIT 1",
+                        (offer.get("platform"), offer.get("market_key"))).fetchone()
+    except Exception:          # noqa: BLE001
+        return None
+    return (r[0], float(r[1]) if r[1] is not None else None) if r else None
+
+
+def lpf1_on():
+    """lpf-1 is live by default (owner 2026-11-09); LOL_LPF1=0 is the rollback switch (back to lol-1f)."""
+    return os.environ.get("LOL_LPF1", "1").strip() != "0"
+
+
 def lpf1_state(con, h, todo=(), now=None, market=None):
-    """None when LOL_LPF1 is off (the default: nothing about the forecast changes; the lpf-1 modules are never imported).
-    On: the lpf-1 answers for this cycle's lines, computed OUTSIDE this process (lol/lpf1_client.py: one short-lived child
+    """None when LOL_LPF1=0 (rollback: nothing about the forecast changes; the lpf-1 modules are never imported).
+    On (the default since 2026-11-09): the lpf-1 answers for this cycle's lines, computed OUTSIDE this process (lol/lpf1_client.py: one short-lived child
     that builds the projector from the history database, answers, writes a small JSON and exits - the worker's memory does
     not grow). A pre-pass over the offers collects the lines lpf-1 must answer; answers are reused while the history version
     and the artifact are unchanged, so a quiet cycle starts no child. No answer (child failed / timed out / artifact
-    missing) = those lines are skipped this cycle and the last saved forecast stands - never another model's grade."""
-    if os.environ.get("LOL_LPF1", "0") != "1":
+    missing / another child running) = a line whose last saved forecast is lpf-1 keeps it; any other line gets the live
+    lol-1f forecast (forecast_one)."""
+    if not lpf1_on():
         return None
     from .. import lpf1_client as C
     st = {"proj": None, "stats": C.live_stats(), "version": C.VERSION, "sha": C.artifact_sha(), "cutoff": None}
@@ -672,7 +696,7 @@ def lpf1_state(con, h, todo=(), now=None, market=None):
     ver = (h.last_game, len(h.md), st["sha"])
     proj = C.RequestProjector(dict(C.answers_for(ver)))
     st["proj"] = proj
-    pre = {"proj": proj, "stats": st["stats"], "version": st["version"], "sha": st["sha"], "cutoff": None}
+    pre = {"proj": proj, "stats": st["stats"], "version": st["version"], "sha": st["sha"], "cutoff": None, "prepass": True}
     h.lpf1 = pre
     for r in todo:
         try:
@@ -710,7 +734,12 @@ def run(con, db=None, now=None, market=None):
     try:
         h.fit, h.sim_states = fit_json(), {}
         h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
-        h.lpf1 = lpf1_state(con, h, todo, now, market) if todo else None
+        try:
+            h.lpf1 = lpf1_state(con, h, todo, now, market) if todo else None
+        except Exception as e:      # noqa: BLE001 - never stops the cycle: no lpf-1 answers this cycle (fallback rule in forecast_one)
+            from .. import lpf1_client as C
+            h.lpf1 = {"proj": None, "stats": C.live_stats(), "version": C.VERSION, "sha": None, "cutoff": None,
+                      "error": f"{type(e).__name__}: {str(e)[:200]}"}
         if h.lpf1 and h.lpf1.get("error"):
             counts["lpf1_error"] = h.lpf1["error"]
         if h.lpf1 and h.lpf1.get("child"):

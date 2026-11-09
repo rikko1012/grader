@@ -1,10 +1,12 @@
-"""lpf-1 from the LoL worker without loading it (flag LOL_LPF1; default off). Memory rule (2026-11-09): the esports container
+"""lpf-1 from the LoL worker without loading it (LIVE for kills + assists since 2026-11-09: LOL_LPF1 unset = on; LOL_LPF1=0 =
+rollback to lol-1f). Memory rule (2026-11-09): the esports container
 sits at its limit, so the lpf-1 history store, features and trees (build peak ~300 MB) never enter the web process or the
 LoL worker. The worker's forecast cycle (lol/center/forecast.run) asks for the lines it needs; ONE short-lived child process
 (`python -m lol.lpf1_live predict`) builds the projector from the history database, answers every request, writes a small
 JSON and exits. Answers are reused while the history version and the artifact stay the same, so a quiet cycle starts no
-child. A failed / timed-out child answers nothing: those lines are skipped for the cycle and the last saved forecast stands
-(never another model's grade, never a cached failure).
+child. A failed / timed-out child answers nothing (never a cached failure): a line whose last saved forecast is lpf-1 at the
+same line keeps it; any other line gets the live lol-1f forecast (lol/center/forecast.forecast_one). Only ONE child runs at a
+time (an exclusive lock file; a second caller gets no answers instead of a second child).
 
 This module is stdlib only (no numpy, no lol.lpf / lp1) so importing it costs the worker nothing.
 """
@@ -14,6 +16,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -25,7 +28,7 @@ CHILD_TIMEOUT_S = int(os.environ.get("LOL_LPF1_CHILD_TIMEOUT_S", "600"))
 
 
 def enabled():
-    return os.environ.get("LOL_LPF1", "0") == "1"
+    return os.environ.get("LOL_LPF1", "1").strip() != "0"
 
 
 def live_stats():
@@ -85,10 +88,60 @@ def history_path(hdb):
     return None
 
 
+LOCK = Path(tempfile.gettempdir()) / "lpf1_child.lock"
+_THREAD_LOCK = threading.Lock()
+
+
+class _OneChild:
+    """Exclusive, non-blocking: at most one lpf-1 child on the machine (thread lock + flock on POSIX). busy -> acquired False."""
+
+    def __init__(self, path=None):
+        self.path, self.fh, self.acquired = Path(path or LOCK), None, False
+
+    def __enter__(self):
+        if not _THREAD_LOCK.acquire(blocking=False):
+            return self
+        try:
+            import fcntl
+        except ImportError:            # Windows (tests): the thread lock alone
+            self.acquired = True
+            return self
+        try:
+            self.fh = open(self.path, "a+")
+            fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.acquired = True
+        except OSError:
+            if self.fh:
+                self.fh.close()
+                self.fh = None
+            _THREAD_LOCK.release()
+        return self
+
+    def __exit__(self, *exc):
+        if self.acquired:
+            if self.fh:
+                self.fh.close()        # closing releases the flock
+            _THREAD_LOCK.release()
+        return False
+
+
 def run_child(requests, history_db, center_db, artifact=None, timeout=None, runner=None):
-    """-> (answers {key: result or None}, info). The child gets the requests in a temp file and writes its answers to another."""
-    runner = runner or subprocess.run
+    """-> (answers {key: result or None}, info). The child gets the requests in a temp file and writes its answers to another.
+    Another lpf-1 child already running -> no answers (error "busy"), never a second child."""
     info = {"requests": len(requests)}
+    with _OneChild() as lk:
+        if not lk.acquired:
+            info["error"] = "busy: another lpf-1 child is running"
+            return {k: None for k in requests}, info
+        try:
+            return _run_child(requests, history_db, center_db, artifact, timeout, runner, info)
+        except Exception as e:         # noqa: BLE001 - spawn failure / unreadable output: no answers, never an error
+            info["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+            return {k: None for k in requests}, info
+
+
+def _run_child(requests, history_db, center_db, artifact, timeout, runner, info):
+    runner = runner or subprocess.run
     with tempfile.TemporaryDirectory(prefix="lpf1_") as d:
         rq, out = Path(d) / "req.json", Path(d) / "out.json"
         rq.write_text(json.dumps(requests), encoding="utf-8")

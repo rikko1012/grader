@@ -1,6 +1,6 @@
 """lpf-1 live path (lol/lpf1_live.py, flag LOL_LPF1, default off): the numpy tree evaluator equals lightgbm, the
 mixture arithmetic equals the research harness, the projector on production-shaped history equals the research
-walk-forward, the flag off changes nothing, and the flag on saves the lpf-1 chance (or skips, never a fallback grade).
+walk-forward, LOL_LPF1=0 changes nothing, and on (the default) saves the lpf-1 chance; no answer = the saved lpf-1 forecast stands, else the live lol-1f.
 Every team, player and number is a TEST FIXTURE."""
 import gzip
 import json
@@ -128,8 +128,17 @@ class _Stub:
                 "p_win": 0.6, "p_decider": 0.4}
 
 
-def test_flag_off_is_the_default_and_changes_nothing(con, tmp_path, monkeypatch):
+def test_on_is_the_default_and_0_is_the_rollback(monkeypatch):
     monkeypatch.delenv("LOL_LPF1", raising=False)
+    assert forecast.lpf1_on() and C.enabled()
+    monkeypatch.setenv("LOL_LPF1", "1")
+    assert forecast.lpf1_on() and C.enabled()
+    monkeypatch.setenv("LOL_LPF1", "0")
+    assert not forecast.lpf1_on() and not C.enabled()
+
+
+def test_rollback_switch_changes_nothing(con, tmp_path, monkeypatch):
+    monkeypatch.setenv("LOL_LPF1", "0")
     assert forecast.lpf1_state(con, object()) is None
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
     assert forecast.run(con, db)["saved"] == 1
@@ -148,22 +157,62 @@ def test_flag_on_saves_the_lpf1_chance_and_projection(con, tmp_path, monkeypatch
     assert abs(f["lambda"] - (f["line"] + 2.0)) < 1e-9 and inp["lpf1"]["artifact"] == "abc" and inp["lpf1"]["lambda_lol1f"] > 0
 
 
-def test_flag_on_without_a_projector_skips_never_falls_back(con, tmp_path, monkeypatch):
+def _no_answers(c, h, *a, **k):
+    return {"proj": None, "stats": ("kills",), "version": "lpf-1", "sha": None, "cutoff": None, "error": "RuntimeError: x"}
+
+
+def test_flag_on_without_a_projector_falls_back_to_the_live_lol1f(con, tmp_path, monkeypatch):
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
-    monkeypatch.setattr(forecast, "lpf1_state", lambda c, h, *a, **k: {"proj": None, "stats": ("kills",), "version": "lpf-1", "sha": None,
-                                                               "cutoff": None, "error": "RuntimeError: x"})
+    monkeypatch.setattr(forecast, "lpf1_state", _no_answers)
     out = forecast.run(con, db)
-    assert "saved" not in out and any(k.startswith("skip: lpf-1 projector unavailable") for k in out)
-    assert con.execute("SELECT COUNT(*) FROM lol_forecasts").fetchone()[0] == 0
+    assert out.get("saved") == 1 and out["lpf1_error"] == "RuntimeError: x"     # never hidden, never an error
+    f = dict(con.execute("SELECT * FROM lol_forecasts").fetchone())
+    assert f["model_version"] != "lpf-1" and "lpf1" not in json.loads(f["inputs"]) and f["grade_label"]
 
 
-def test_flag_on_with_a_broken_artifact_reports_and_skips(con, tmp_path, monkeypatch):
-    monkeypatch.setenv("LOL_LPF1", "1")
+def test_a_saved_lpf1_forecast_stands_through_a_failure(con, tmp_path, monkeypatch):
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    monkeypatch.setattr(forecast, "lpf1_state", lambda c, h, *a, **k: {"proj": _Stub(), "stats": ("kills",), "version": "lpf-1",
+                                                               "sha": "abc", "cutoff": "2026-11-09"})
+    assert forecast.run(con, db)["saved"] == 1
+    monkeypatch.setattr(forecast, "lpf1_state", _no_answers)
+    out = forecast.run(con, db)
+    assert "saved" not in out and any(k.startswith("skip: lpf-1 answer unavailable") for k in out)
+    rows = con.execute("SELECT model_version, p_over FROM lol_forecasts").fetchall()
+    assert [tuple(r) for r in rows] == [("lpf-1", 0.71)]             # the transient failure changed no grade
+
+
+def test_lpf1_state_raising_never_stops_the_cycle(con, tmp_path, monkeypatch):
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+
+    def boom(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(forecast, "lpf1_state", boom)
+    out = forecast.run(con, db)
+    assert out.get("saved") == 1 and "boom" in out["lpf1_error"]
+
+
+def test_flag_on_with_a_broken_artifact_reports_and_falls_back(con, tmp_path, monkeypatch):
+    monkeypatch.delenv("LOL_LPF1", raising=False)                   # the default: on
     from lol import lpf1_client as C
     monkeypatch.setattr(C, "ARTIFACT", tmp_path / "missing.json.gz")
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
     out = forecast.run(con, db)
-    assert "artifact missing" in out.get("lpf1_error", "") and "saved" not in out
+    assert "artifact missing" in out.get("lpf1_error", "") and out.get("saved") == 1
+    assert con.execute("SELECT model_version FROM lol_forecasts").fetchone()[0] != "lpf-1"
+
+
+def test_only_one_child_at_a_time(tmp_path, monkeypatch):
+    seen = []
+
+    def runner(cmd, **k):
+        a2, info = C.run_child({"k2": {}}, None, tmp_path / "c.db", runner=lambda *x, **y: None)    # nested = a second caller
+        seen.append(info.get("error"))
+        raise OSError("spawn failed")
+    ans, info = C.run_child({"k1": {}}, None, tmp_path / "c.db", runner=runner)
+    assert seen and seen[0].startswith("busy") and ans == {"k1": None} and "spawn failed" in info["error"]
+    ans, info = C.run_child({"k3": {}}, None, tmp_path / "c.db", runner=lambda *a, **k: (_ for _ in ()).throw(OSError("x")))
+    assert "busy" not in info["error"]                                # the lock was released
 
 
 def test_shipped_artifact_loads_and_has_the_accepted_configuration():
@@ -221,7 +270,7 @@ def test_flag_on_runs_the_real_child_once_and_reuses_its_answers(con, tmp_path, 
     assert "lpf1_child" not in out2 and out2.get("unchanged") == 1
 
 
-def test_a_failed_child_skips_the_line_and_is_retried_next_cycle(con, tmp_path, monkeypatch):
+def test_a_failed_child_falls_back_and_is_retried_next_cycle(con, tmp_path, monkeypatch):
     monkeypatch.setenv("LOL_LPF1", "1")
     monkeypatch.setenv("LOL_LPF1_STATS", "kills")
     monkeypatch.setattr(C, "_ANS", {"version": None, "map": {}})
@@ -233,7 +282,7 @@ def test_a_failed_child_skips_the_line_and_is_retried_next_cycle(con, tmp_path, 
     monkeypatch.setattr(C, "run_child", dead)
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
     out = forecast.run(con, db)
-    assert "saved" not in out and "timeout" in out["lpf1_error"]
-    assert con.execute("SELECT COUNT(*) FROM lol_forecasts").fetchone()[0] == 0
+    assert out.get("saved") == 1 and "timeout" in out["lpf1_error"]
+    assert con.execute("SELECT model_version FROM lol_forecasts").fetchone()[0] != "lpf-1"
     forecast.run(con, db)
     assert calls == [1, 1]                              # the failure was not cached: asked again

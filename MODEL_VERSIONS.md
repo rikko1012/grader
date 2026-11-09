@@ -1,5 +1,19 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## LoL lpf-1 LIVE for kills + assists (owner "yes turn lpf on", 2026-11-09; branch claude/lpf1-on-1109; CS2 model tag unchanged; deaths stay lol-1)
+
+- **What:** LoL kills and assists forecasts take lpf-1's chance, projection, median and 80% range (full-history booster started
+  from the live lol-1f per-game projection; artifact `lol/lpf1_model.json.gz`, cutoff 2026-11-09). The book line is never an
+  input. Saved with `model_version = lpf-1` and `inputs.lpf1` (artifact sha, cutoff, lol-1f lambda) so forward records are
+  separable. Evidence: lol/EVALUATION.md "lpf-1 live path" and cs2_scout_ops/logs/esports_hit_2026-11-09.md (walk-forward hit
+  56.0 -> 59.5 [+3.45, -0.1..+7.1]; Overs 48.0 -> 52.8; Unders 60.3 -> 63.4; every line keeps a side; letters -7.8%).
+- **Rollback:** `LOL_LPF1=0` on the cs2-scout service (read each worker cycle; lol-1f records byte-identical to before).
+- **Fallback:** no lpf-1 answer this cycle -> the saved lpf-1 forecast at the same line stands; otherwise the live lol-1f
+  forecast (labelled lol-1f). Never an error, never a hidden line, failures never cached.
+- **Memory:** lpf-1 runs only in ONE short-lived child (`python -m lol.lpf1_live predict`, oom_score_adj 1000, ~366 MB for
+  seconds) started by the LoL worker's forecast cycle when lines / history changed; one child at a time (lock); never in the
+  web process.
+
 ## Sports sm-1 fixes held behind default-OFF flags (bug sweep 2026-11-06 #9 / #10; branch claude/bugs-sports-jobs; NOT switched on; artifacts unchanged NBA `5ec8adf73a6dad18` / NFL `cc56aeb8b88c31d8`)
 
 - **SPORTS_FIX_PRIOR_GAMES=1 (#9):** an upcoming (unplayed) game is never a prior game of the same player's / team's later

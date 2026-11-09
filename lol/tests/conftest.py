@@ -20,6 +20,8 @@ def private_lol_data(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "OUT_DIR", tmp_path / "output")
     monkeypatch.setattr(cache, "_local", threading.local())
     monkeypatch.delenv("LOL_DB_DSN", raising=False)
+    # lpf-1 is live by default (LOL_LPF1 unset = on); the lol-1f tests pin the rollback path, the lpf-1 tests set it explicitly
+    monkeypatch.setenv("LOL_LPF1", "0")
 
     def offline(*a, **k):
         raise ConnectionError("network disabled in tests")

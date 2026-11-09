@@ -926,7 +926,7 @@ settle, once per UTC day from 06:00, child process, single BLAS thread, 900 s ti
 markets OFF (child peak working set 37.9 MB on Windows; 47.6 MB on a 4,800-row synthetic record in the test) and the second run
 logged "skip". Admin: `/admin/lol/learning.json` -> `lc1`; admin LoL page tab "Calibration (lc-1)". Switch `LOL_CAL_AUTOFIT=0`.
 
-## lpf-1 live path (2026-11-09) - accepted under the owner's hit-rate rule, wired behind LOL_LPF1 (default OFF)
+## lpf-1 live path (2026-11-09) - accepted under the owner's hit-rate rule; LIVE for kills + assists (owner "yes turn lpf on")
 
 Owner 2026-11-09: a projection change is accepted when it raises the hit rate at the real offered lines (side = Scout's lean,
 every graded line) on a walk-forward test, keeps every line graded, does not make the Over / Under split more lopsided and does
@@ -968,3 +968,14 @@ reused while the history version and the artifact are unchanged (a quiet cycle s
 366 MB for 2.5 s, calling process +0.5 MB; `lol/lpf1_client.py` is stdlib only (a test checks numpy / lpf never load).
 Letters fall ~8% and the mean printed chance ~2.4 pts: a projection change, not a calibration layer, but members will see
 fewer letters.
+
+**Switched ON (2026-11-09, owner "yes turn lpf on"; branch claude/lpf1-on-1109):** `LOL_LPF1` unset = on; **`LOL_LPF1=0` is the
+rollback** (back to lol-1f, byte-identical records). LoL kills / assists forecasts saved from the switch carry
+`model_version = lpf-1` (board "model" field `lpf-1 (...)`, `inputs.lpf1` = artifact sha + cutoff + the lol-1f projection it
+started from), so forward records are separable from lol-1f; deaths stay lol-1. **Fallback rule:** no lpf-1 answer in a cycle
+(child failed / timed out / another child running / artifact missing / any error in the pre-pass) = a line whose last saved
+forecast is lpf-1 at the same line keeps it (a transient failure never changes a grade); a line with no lpf-1 forecast yet gets
+the live lol-1f forecast, labelled lol-1f - never an error, never a hidden line, failures never cached (asked again next
+cycle). Only ONE child at a time (`lol/lpf1_client.py` thread lock + exclusive flock on `$TMPDIR/lpf1_child.lock`; a second
+caller gets no answers, never a second child); the child is started only by the worker's forecast cycle (every 10 min, and only
+when a line / the history changed), never per request and never by the web process.
