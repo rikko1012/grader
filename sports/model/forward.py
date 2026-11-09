@@ -317,6 +317,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     rec = _shadow_recorder(scon, hcon, league, forecast_at, absences, up)      # sm-2 SHADOW (REGISTER A5 7), never shown
     rec2 = _nflv2_recorder(scon, hcon, league, forecast_at, up, rec)           # sm-nfl-2 SHADOW (REGISTER A6 6)
     rec3 = _sn1_recorder(league, forecast_at)                                  # sn-1 SHADOW (REGISTER A11 2)
+    rec4 = _nrm1_recorder(league, forecast_at)                                 # nrm-1 SHADOW (REGISTER A12 2)
     tw = _tw1(league, art["sha"])                                             # tw-1 per-market layer (REGISTER A7 8)
     if tw is not None:
         out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}
@@ -447,6 +448,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             rec2.market(mk, df, hl, rowpos, sh_items, events, sm1_probs)
         if rec3 is not None:
             rec3.market(mk, df, hl, rowpos, sh_items, events, base_of, pmf_of)
+        if rec4 is not None:
+            rec4.market(mk, df, hl, rowpos, sh_items, events, base_of, pmf_of)
         log({"league": league, "market": mk, "written": out["written"]})
     icon.close()
     if rec is not None:
@@ -455,6 +458,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         out["shadow_nflv2"] = rec2.close()
     if rec3 is not None:
         out["shadow_sn1"] = rec3.close()
+    if rec4 is not None:
+        out["shadow_nrm1"] = rec4.close()
     return out
 
 
@@ -504,6 +509,21 @@ def _sn1_recorder(league, forecast_at):
             return None
         art = sn1.load()
         return sn1.Recorder(forecast_at, art=art) if art is not None else None
+    except Exception:                                    # noqa: BLE001
+        return None
+
+
+def _nrm1_recorder(league, forecast_at):
+    """The nrm-1 shadow recorder for NFL rush_att / rec, or None (other league / no verified artifact paired with this
+    sm-1 / SPORTS_SHADOW_NRM1=0 / any error - sm-1 is never affected)."""
+    if league != "nfl":
+        return None
+    try:
+        from . import nrm1
+        if not nrm1.enabled():
+            return None
+        art = nrm1.load()
+        return nrm1.Recorder(forecast_at, art=art) if art is not None else None
     except Exception:                                    # noqa: BLE001
         return None
 
