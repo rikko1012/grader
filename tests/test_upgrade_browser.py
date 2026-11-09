@@ -376,25 +376,29 @@ def test_lol_row_opens_its_card_and_research_opens_the_drawer(ctx, env):
     assert not p.errors
 
 
-def test_lol_results_tab_shows_stated_and_observed(ctx, env):
+def test_no_member_nav_shows_results(ctx, env):
+    """Owner 2026-11-09: no member-facing Results page. No link, tab or button in the classic CS2 nav and rail, the LoL nav,
+    the Sports tabs or the hub sidebar leads to one (the hub's Record and My picks stay)."""
+    def no_results(p, sel):
+        p.wait_for_selector(sel, state="attached", timeout=20000)
+        bad = p.evaluate(r"""(sel) => [...document.querySelectorAll(sel)].flatMap((n) => [...n.querySelectorAll('a,button')])
+          .filter((e) => /\bresults?\b/i.test(e.textContent + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.getAttribute('title') || ''))
+            || /(^|[#/])results(\.html)?([/?#]|$)/.test(e.getAttribute('href') || '') || /results/.test(e.dataset.v || e.dataset.view || e.dataset.u || e.dataset.scoutRoute || ''))
+          .map((e) => e.outerHTML.slice(0, 120))""", sel)
+        assert not bad, bad
+    p = cs2_board(ctx, env)
+    no_results(p, "#mode, .scout-rail, .tools-nav")
     p = lol_board(ctx, env)
-    p.locator("#v [data-u=lol-results]").click()
-    # The board's background refresh can replace this panel between two reads.
-    # Check the complete result in one browser turn, retrying until it is ready.
-    # A missing section still fails; seeing an earlier table is not sufficient.
-    p.wait_for_function("""() => {
-      const panel = document.querySelector('.u-lol-results');
-      const text = panel?.innerText.toUpperCase() || '';
-      return !!panel?.querySelector('.u-res-tbl') &&
-        ['BY LETTER', 'BY MARKET', 'STATED', 'OBSERVED', 'SAMPLE', 'PUSHES']
-          .every(word => text.includes(word));
-    }""", timeout=10000)
-    shot(p, "lol-results")
-    assert p.locator("#app > .bar").is_hidden() and p.locator(".u-rows").count() == 0
-    p.locator("#v button[data-v=board]").click()
-    p.wait_for_selector(".u-board .u-lol")
-    assert p.locator(".u-lol-results").count() == 0 and p.locator("#app > .bar").is_visible()
-    assert not p.errors
+    p.wait_for_timeout(300)
+    no_results(p, ".workspace-nav")
+    assert p.locator("[data-u=lol-results]").count() == 0
+    p = nba_board(ctx, env)
+    no_results(p, "nav.sw-tabs")
+    assert p.locator("#sw-views a").count() >= 5            # Slate, Prop board, Sheets, Compare, My picks, Slip Studio stay
+    p = open_page(ctx, env, "/#all-sports")
+    p.wait_for_selector(".h-sidebar nav a, .h-sidebar nav button", timeout=30000)
+    no_results(p, ".h-sidebar nav")
+    assert "Record" in p.locator(".h-sidebar nav").inner_text()
 
 
 def test_sports_board_keeps_its_table_and_adds_books_and_research(ctx, env):
@@ -436,11 +440,12 @@ def test_sports_cards_and_the_other_league_get_research_and_the_tray(ctx, env):
     assert not p.errors
 
 
-def test_the_public_sports_results_page_gets_both_leagues(ctx, env):
+def test_the_sports_results_page_sends_a_member_to_the_slate(ctx, env):
+    """Owner 2026-11-09: /sports/results is admin only; a member's old link lands on the Sports slate."""
     p = open_page(ctx, env, "/sports/results")
-    p.wait_for_selector(".u-res-box .u-res-tbl", timeout=20000)
-    assert "NBA STATED AND OBSERVED" in p.locator(".u-res-box").first.inner_text().upper()
-    assert p.locator(".u-res-box").count() == 2 and p.locator("#u-tray-btn").count() == 0
+    p.wait_for_selector("#sw-views", timeout=20000)
+    assert p.url.endswith("/sports#/slate") and p.locator("#rp-main").count() == 0
+    assert "Results" not in p.locator("#sw-views").inner_text()
 
 
 def test_sports_results_add_stated_and_observed_above_the_page(ctx, env):
@@ -502,11 +507,6 @@ def test_phone_pages_have_no_sideways_scroll(browser, env):
         q.locator(".u-lol .u-res-btn").first.click()
         q.wait_for_selector("#u-drawer[open] .u-tiles")
         shot(q, "lol-drawer")
-        q = lol_board(c, env)
-        q.locator("#v [data-u=lol-results]").click()
-        q.wait_for_selector(".u-lol-results .u-res-tbl", timeout=10000)
-        no_h_scroll(q)
-        shot(q, "lol-results")
         q = nba_board(c, env)
         no_h_scroll(q)
         shot(q, "sports-board")

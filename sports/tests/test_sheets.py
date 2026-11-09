@@ -273,8 +273,13 @@ def test_results_page_alias_and_public_api_base(monkeypatch):
     from sports import gateway
     monkeypatch.setenv("SPORTS_API_BASE", "https://sports.example")
     code, body, ctype, _ = gateway.handle_get("/sports/results", "", {}, member=lambda: None, allowed=lambda: False,
-                                              admin=lambda: False, headers={})
+                                              admin=lambda: True, headers={})
     assert code == 200 and b"results_public.js" in body and ctype.startswith("text/html")
+    # owner 2026-11-09: no member Results page - everyone but the admin is sent to the slate (alias and file name alike)
+    for path in ("/sports/results", "/sports/results.html"):
+        code, body, _, hdrs = gateway.handle_get(path, "", {}, member=lambda: "m1", allowed=lambda: True,
+                                                 admin=lambda: False, headers={})
+        assert code == 302 and hdrs["Location"] == "/sports#/slate" and body == b""
     code, body, _, _ = gateway.handle_get("/api/sports/token", "", {}, member=lambda: None, allowed=lambda: False,
                                           admin=lambda: False, headers={})
     assert code == 401 and json.loads(body) == {"error": "members_only", "api_base": "https://sports.example"}

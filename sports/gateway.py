@@ -44,7 +44,7 @@ PLACEHOLDER = (b"<!doctype html><meta charset=utf-8><meta name=viewport content=
                b"<title>Scout Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Scout Sports</h1>"
                b"<p>Sports is being built and is not available yet.</p></body>")
 MODES = ("service", "proxy", "inprocess")
-PAGE_ALIASES = {"results": "results.html"}          # /sports/results = the linkable Results page (sheets agent)
+PAGE_ALIASES = {"results": "results.html"}          # /sports/results: admin only since 2026-11-09 (members -> /sports#/slate)
 
 
 def mode():
@@ -300,7 +300,10 @@ def handle_get(path, raw_query, query, member, allowed, admin, headers):
     (SPORTS_UI for /sports and /sports/<asset>, SPORTS_API for /api/sports/*)."""
     if path == "/sports" or path.startswith("/sports/"):
         rel = "" if path == "/sports" else path[len("/sports/"):]
-        got = _static(PAGE_ALIASES.get(rel, rel))
+        rel = PAGE_ALIASES.get(rel, rel)
+        if rel == "results.html" and not admin():   # owner 2026-11-09: no member Results page; the admin token still opens it
+            return 302, b"", "text/html; charset=utf-8", {"Location": "/sports#/slate"}
+        got = _static(rel)
         if got is None:
             return _j(404, {"error": "not found"})
         _bump("pages")

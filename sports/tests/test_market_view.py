@@ -195,8 +195,9 @@ def test_app_never_says_kalshi_market_chance_and_labels_every_number():
     assert 'esc(label || "src")' not in app and '"Forecast record"' in app and '"Quote record"' in app
     assert "S.injuryLabel(" in app and "esc(inj.status)" not in app
     slips = (WEB / "slips.html").read_text(encoding="utf-8")
-    for href in ("/sports#/slate", "/sports#/board", "/sports#/results", "/sports#/picks"):
+    for href in ("/sports#/slate", "/sports#/board", "/sports#/picks"):
         assert href in slips
+    assert "#/results" not in slips and ">Results<" not in slips          # owner 2026-11-09: no member Results page
     # the ux agent's mount point
     assert 'class="sw-actions-slot"' in app and "hooks: HOOKS" in app
 

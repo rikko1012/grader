@@ -1289,7 +1289,7 @@
     if (!app || !nav || typeof D === "undefined" || !D) return;
     loadBoard("lol");                                             /* the page's next draw picks it up */
     nav.querySelector("[data-u='lol-results']")?.remove();
-    nav.insertAdjacentHTML("beforeend", `<button type="button" data-u="lol-results" aria-pressed="${LOL.results}" class="${LOL.results ? "on" : ""}">Results</button>`);
+    /* owner 2026-11-09: no member Results page - the LoL nav gets no Results button (any old one is removed above) */
     if (LOL.results) nav.querySelectorAll("button[data-v]").forEach((b) => { b.classList.remove("on"); b.setAttribute("aria-pressed", "false"); });
     app.querySelector(".u-lol-results")?.remove();
     app.querySelector(".u-board")?.remove();

@@ -818,7 +818,7 @@
           (!ff.more && B.board.secondary_markets ? "<span>" + S.int(B.board.secondary_markets) + " more under “More stats”</span>" : "") + "</p>";
         if (!total) {                                   // match context: a started game is not "no lines yet"
           var gev = onlyEvent && B.board.events[onlyEvent], gone = gev && R.started({ev: gev}, nowMs);
-          body.innerHTML = gone ? stateBox("This game has started", "Props close at the start, so none are listed. Settled picks appear on the Results page after the final.", '<a class="sw-btn" href="#/results">Results</a>')
+          body.innerHTML = gone ? stateBox("This game has started", "Props close at the start, so none are listed. Picks you tracked settle in My picks after the final.", '<a class="sw-btn" href="#/picks">My picks</a>')
             : onlyEvent ? stateBox("No lines yet", "Books have not posted props for this game yet. They appear here as soon as they do.")
             : stateBox("No lines yet", "No " + state.lg.toUpperCase() + " props are on the board right now.");
           return;
@@ -929,7 +929,7 @@
         src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status)}) + "</p></details></section>" +
         '<section aria-labelledby="sw-gp-h"><h2 id="sw-gp-h" style="font-size:16px;margin:0 0 10px">Every prop in this game</h2><div id="sw-gameprops">' + skeleton(4) + "</div></section>";
       if (gameDone(e)) {                                // props close at the start: say so instead of "No lines yet"
-        document.getElementById("sw-gameprops").innerHTML = stateBox("This game has started", "Props close at the start, so none are listed. Settled picks appear on the Results page after the final.", '<a class="sw-btn" href="#/results">Results</a>');
+        document.getElementById("sw-gameprops").innerHTML = stateBox("This game has started", "Props close at the start, so none are listed. Picks you tracked settle in My picks after the final.", '<a class="sw-btn" href="#/picks">My picks</a>');
       } else renderBoard(null, eid);
     }).catch(fail);
   }

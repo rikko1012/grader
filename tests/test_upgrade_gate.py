@@ -80,12 +80,15 @@ def test_flag_off_pages_are_the_files_byte_for_byte(env):
 
 def test_sports_pages_are_the_files_off_and_carry_the_tags_on(env, monkeypatch):
     monkeypatch.setenv("SPORTS_UI", "1")
-    for path, name in (("/sports", "sports.html"), ("/sports/results", "sports/results.html")):
-        st, body, _ = get(env.base, path, "good-u1")
-        assert st == 200 and body == (ROOT / "web" / name).read_bytes(), path
+    admin = {"X-Admin-Token": "owner-token"}                # owner 2026-11-09: the Results page is admin only
+    st, body, _ = get(env.base, "/sports", "good-u1")
+    assert st == 200 and body == (ROOT / "web" / "sports.html").read_bytes()
+    monkeypatch.setenv("SCOUT_UPGRADE", "off")           # the admin passes the owner gate, so the plain file is checked flag off
+    st, body, _ = get(env.base, "/sports/results", "good-u1", admin)
+    assert st == 200 and body == (ROOT / "web" / "sports" / "results.html").read_bytes()
     monkeypatch.setenv("SCOUT_UPGRADE", "1")
     assert b'data-page="sports"' in get(env.base, "/sports", "good-u1")[1]
-    assert b'data-page="sports-results"' in get(env.base, "/sports/results", "good-u1")[1]
+    assert b'data-page="sports-results"' in get(env.base, "/sports/results", "good-u1", admin)[1]
     st, body, _ = get(env.base, "/sports/app.js", "good-u1")
     assert st == 200 and body == (ROOT / "web" / "sports" / "app.js").read_bytes()
 
@@ -387,3 +390,24 @@ def test_member_pages_carry_no_does_not_place_line():
     for name in ("upgrade.js", "upgrade-hub.js", "record.html", "record.js"):
         text = (ROOT / "web" / name).read_text(encoding="utf-8").lower()
         assert not re.search(r"does not place|not a bet placement|not financial advice|not betting advice", text), name
+
+
+def test_members_never_reach_the_sports_results_page(env, monkeypatch):
+    """Owner 2026-11-09: no member-facing Results page. /sports/results (and its file name) send a member to the slate; the
+    admin token still opens it for diagnostics."""
+    import http.client
+    from urllib.parse import urlparse
+    monkeypatch.setenv("SPORTS_UI", "1")
+    monkeypatch.setenv("SCOUT_UPGRADE", "1")
+    u = urlparse(env.base)
+    for path in ("/sports/results", "/sports/results.html"):
+        c = http.client.HTTPConnection(u.hostname, u.port, timeout=20)
+        try:
+            c.request("GET", path, headers={"Cookie": f"{whop_auth.COOKIE}=good-u1"})
+            r = c.getresponse()
+            assert r.status == 302 and r.getheader("Location") == "/sports#/slate", path
+            assert b"results_public.js" not in r.read()
+        finally:
+            c.close()
+    st, body, _ = get(env.base, "/sports/results", "good-u1", {"X-Admin-Token": "owner-token"})
+    assert st == 200 and b"results_public.js" in body

@@ -92,13 +92,37 @@ def test_phone_layout_hooks():
               'id="scout-filters"', "Filters${n ? ` (${n} active)` : \"\"}", "add m13 for Maps 1–3 or bo1 for Map 1"):
         assert k in HTML
     assert 'id="scout-expand"' not in HTML and 'id="scout-collapse"' not in HTML
-    # one nav order everywhere (2026-10-18 release): Board, Matches, Moneylines, Slips, Results, then the tools
+    # one nav order everywhere (2026-10-18 release): Board, Matches, Moneylines, Slips, then the tools. Owner 2026-11-09: no
+    # member Results page - neither the section nav nor the rail links to one.
     m = re.search(r'<nav class="seg" id="mode"[^>]*>(.*?)</nav>', HTML)
-    order = [m.group(1).index(f'data-v="{v}"') for v in ("board", "matches", "moneylines", "slips", "results", "one", "slate")]
+    order = [m.group(1).index(f'data-v="{v}"') for v in ("board", "matches", "moneylines", "slips", "one", "slate")]
     assert order == sorted(order)
     rail = HTML[HTML.index('class="scout-rail"'):HTML.index('<div class="rail-bottom">')]
-    assert [rail.index(f'data-scout-route="{v}"') for v in ("board", "matches", "moneylines", "slips", "results", "one", "slate")] == \
-        sorted(rail.index(f'data-scout-route="{v}"') for v in ("board", "matches", "moneylines", "slips", "results", "one", "slate"))
+    assert [rail.index(f'data-scout-route="{v}"') for v in ("board", "matches", "moneylines", "slips", "one", "slate")] == \
+        sorted(rail.index(f'data-scout-route="{v}"') for v in ("board", "matches", "moneylines", "slips", "one", "slate"))
+    for nav in (m.group(1), rail):
+        assert "results" not in nav.lower(), nav
+
+
+def test_no_member_nav_links_to_a_results_page():
+    """Owner 2026-11-09: no member-facing Results page (cohorts live in admin diagnostics). The classic CS2 nav and rail, the
+    LoL nav (classic page and upgrade.js), the Sports tabs, Slip Studio's stub nav and the hub sidebar never link to one;
+    Record and My picks are not the Results page and stay."""
+    web = Path(__file__).resolve().parents[1] / "web"
+    sports_html = (web / "sports.html").read_text(encoding="utf-8")
+    tabs = re.search(r'<div class="sw-views" id="sw-views">(.*?)</div>', sports_html, re.S).group(1)
+    assert "results" not in tabs.lower() and 'data-view="picks"' in tabs
+    slips = (web / "sports" / "slips.html").read_text(encoding="utf-8")
+    assert "#/results" not in slips and ">Results<" not in slips
+    app = (web / "sports" / "app.js").read_text(encoding="utf-8")
+    assert 'href="#/results"' not in app and "Results page" not in app
+    assert ">Results</button>" not in (web / "upgrade.js").read_text(encoding="utf-8")
+    lol = (web / "lol.html").read_text(encoding="utf-8")
+    assert not re.search(r"<(a|button)[^>]*>\s*Results\s*<", lol) and "#results" not in lol
+    nav = re.search(r"const NAV=\[(.*?)\];", (web / "upgrade-hub.js").read_text(encoding="utf-8")).group(1)
+    assert "Results" not in nav and "'Record'" in nav and "'My picks'" in nav
+    landing = (web / "landing.html").read_text(encoding="utf-8")
+    assert "/sports/results" not in landing and "#results" not in landing
 
 
 def test_no_unsure_badges_or_notes_on_the_member_page():
