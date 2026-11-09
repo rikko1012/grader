@@ -19,6 +19,7 @@ import statistics
 from datetime import timedelta
 
 from .. import capabilities, store
+from ..books import display_only
 from ..contracts import parse_utc
 from . import features as freg
 
@@ -75,6 +76,8 @@ def _offer_lines(league, stat, cutoff):
             for rid, o in store.offers(con, league=league, stat=stat, as_of=cutoff, limit=200000):
                 if o.scope != "full_game" or o.promotional or not capabilities.is_ordinary(o):
                     continue
+                if display_only(o.platform):
+                    continue                            # Novig / Gemini ladder rungs: never the lab's offered line
                 if o.event_id and o.player_id:
                     out.setdefault((o.event_id, o.player_id), []).append((o.known_at or o.observed_at, o.line, rid))
     except FileNotFoundError:

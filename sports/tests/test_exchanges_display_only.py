@@ -63,7 +63,7 @@ def novig_answers(monkeypatch):
     fx = _fx("novig_nba_catalog.json")
     calls = []
 
-    def fake_get(source, url, params=None, timeout=20.0):
+    def fake_get(source, url, params=None, timeout=20.0, deadline=None):
         calls.append((source, url, dict(params or {})))
         assert source == "novig" and url.startswith(x.NOVIG)
         return _Resp(fx["events_answer"] if url.endswith("/events") else fx["markets_answer"])
@@ -131,7 +131,7 @@ def test_gemini_raw_pages_by_offset_and_keeps_the_league(monkeypatch):
     fx = _fx("gemini_nfl_props.json")
     seen = []
 
-    def fake_get(source, url, params=None, timeout=20.0):
+    def fake_get(source, url, params=None, timeout=20.0, deadline=None):
         seen.append(params["offset"])
         return _Resp({"data": fx["data"] if params["offset"] == 0 else [], "pagination": {"total": 3}})
     monkeypatch.setattr(x, "_get", fake_get)
@@ -173,7 +173,7 @@ def test_a_successful_read_is_stored_by_the_venue_only_writer(novig_answers, mon
     monkeypatch.setenv("GEMINI", "0")
     calls = []
 
-    def store_venue(con, venue, league, batch, observed_at):
+    def store_venue(con, venue, league, batch, observed_at, **kw):
         calls.append((venue, league, len(batch.records)))
         return {"inserted": len(batch.records)}
     monkeypatch.setattr(x, "store_venue", store_venue)
@@ -185,14 +185,14 @@ def test_requests_per_cycle_are_bounded(monkeypatch, no_resolver):
     fx_n, fx_g = _fx("novig_nba_catalog.json"), _fx("gemini_nfl_props.json")
     calls = []
 
-    def fake_get(source, url, params=None, timeout=20.0):
+    def fake_get(source, url, params=None, timeout=20.0, deadline=None):
         calls.append(source)
         assert timeout <= 20.0
         if source == "gemini":
             return _Resp({"data": fx_g["data"], "pagination": {"total": 3}})
         return _Resp(fx_n["events_answer"] if url.endswith("/events") else fx_n["markets_answer"])
     monkeypatch.setattr(x, "_get", fake_get)
-    monkeypatch.setattr(x, "store_venue", lambda *a: {})
+    monkeypatch.setattr(x, "store_venue", lambda *a, **k: {})
     for v in ("NOVIG", "GEMINI"):
         monkeypatch.delenv(v, raising=False)
     x.run(None, ["nba", "nfl"], observed_at=OBS)
@@ -206,7 +206,7 @@ def test_the_time_budget_skips_what_would_start_after_it(novig_answers, monkeypa
         t[0] += 25.0                                       # every step "takes" 25 s
         return t[0]
     wrote = []
-    monkeypatch.setattr(x, "store_venue", lambda con, v, lg, b, obs: wrote.append((lg, v)) or {})
+    monkeypatch.setattr(x, "store_venue", lambda con, v, lg, b, obs, **kw: wrote.append((lg, v)) or {})
     for v in ("NOVIG", "GEMINI"):
         monkeypatch.delenv(v, raising=False)
     out = x.run(None, ["nba", "nfl"], budget_s=60, clock=clock, observed_at=OBS)
@@ -220,7 +220,7 @@ def test_run_due_keeps_the_cadence_and_records_the_attempt_first(monkeypatch, tm
     from sports import config
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     ran = []
-    monkeypatch.setattr(x, "run", lambda con, lgs, budget_s=None: ran.append(lgs) or {"ran_s": 1.0})
+    monkeypatch.setattr(x, "run", lambda con, lgs, budget_s=None, mem_ok=None: ran.append(lgs) or {"ran_s": 1.0})
     assert x.run_due(None, ["nba"], now=1000.0)["due"] is True
     assert x.run_due(None, ["nba"], now=1000.0 + x.EVERY_S - 1)["due"] is False
     assert x.run_due(None, ["nba"], now=1000.0 + x.EVERY_S)["due"] is True
@@ -237,7 +237,7 @@ def test_the_books_job_step_never_fails_the_books_job(monkeypatch):
     monkeypatch.setenv("SPORTS_JOB_BOOKS_CAP_MB", "108")
     monkeypatch.setattr(worker, "_check_budget", lambda: None)
 
-    def boom(*a):
+    def boom(*a, **k):
         raise RuntimeError("x")
     monkeypatch.setattr(exchanges, "run_due", boom)
     assert worker._exchanges_step(None, ["nba"]) == {"ok": False, "error": "RuntimeError: x"}

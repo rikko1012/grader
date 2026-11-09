@@ -63,6 +63,10 @@ BOARD_TTL, CHECK_TTL, PLAYER_TTL, RESULTS_TTL = 20, 5, 120, 300
 CALL_TIMEOUT, CHECK_TIMEOUT = 5.0, 3.0
 RESP_MAX = 16 * 1024 * 1024
 MAX_RECORDS = 6000
+# display-only exchanges (sports/books/exchanges.py): their own budget, so they never take a record slot from a pick'em
+# or book line (sorted by platform, 'gemini' / 'novig' come before 'prizepicks' / 'underdog' in every market)
+DISPLAY_ONLY = ("novig", "gemini")
+MAX_DISPLAY_RECORDS = 1500
 STALE_S = 30 * 60                       # the board's own build older than this: lines are shown with their time, nothing is tracked
 CHECK_SLOTS, PLAYER_SLOTS = 6, 3
 SETTLE_LEGS = 8                         # sports/slips/validate MAX_LEGS: one settle read per this many legs
@@ -616,6 +620,7 @@ def _build(srv, lg):
         m_tag = None
     view = (v_doc or {}).get("rows") or {}
     records, index, props, platforms, counts, seen, built = [], {}, {}, {}, {}, {}, []
+    n_main = n_disp = 0
     now = datetime.now(timezone.utc)
     now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     for doc in (head, more or {}):
@@ -623,12 +628,17 @@ def _build(srv, lg):
             if not full_game_key(m.get("k")):
                 continue                                # S1/S2: quarter / half lines are not full-game board rows
             for q in m.get("q") or []:
-                if len(records) >= MAX_RECORDS or q.get("l") is None:
+                disp = str(q.get("p") or "").split(":")[-1] in DISPLAY_ONLY
+                if q.get("l") is None or (n_disp >= MAX_DISPLAY_RECORDS if disp else n_main >= MAX_RECORDS):
                     continue
                 d = doc if doc.get("events") else head
                 rec, x = record_of(lg, d, m, q, view)
                 if not rec["event"]["start_utc"]:
                     continue
+                if disp:
+                    n_disp += 1
+                else:
+                    n_main += 1
                 board_parity.attach(rec)                # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
                 records.append(rec)
                 built.append((rec, x))

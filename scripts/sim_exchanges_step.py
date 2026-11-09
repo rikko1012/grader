@@ -2,8 +2,10 @@
 model-forward, settle or the collectors start? Paired over jitter seeds with the production job table
 (sports/tests/sched_sim.py), books run time 25 s as in production vs:
   noise floor      every books run 1 s longer (what any timing change does to this chaotic schedule)
-  realistic        +10 s every 10th books run (one pass every 10 min; measured 4.3 s for both leagues, x2 margin)
-  budget           +30 s every 10th books run (the step's hard SPORTS_EXCHANGES_BUDGET_S)
+  realistic        +10 s every 5th books run (one pass every 5 min, SPORTS_EXCHANGES_EVERY_S 300; measured 4.3 s for
+                   both leagues, x2 margin)
+  budget           +30 s every 5th books run (the step's hard SPORTS_EXCHANGES_BUDGET_S, now enforced per request)
+  budget + retry   +30 s every 5th run and +30 s on the run 2 later (a failed pass's one early retry, RETRY_S 120)
 Prints the paired difference of each job's longest due-but-not-started wait (minutes, mean +- 2 standard errors).
 
     python scripts/sim_exchanges_step.py [seeds=40]
@@ -27,8 +29,9 @@ def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 40
     b0 = sim.RUN_S["books"]
     variants = {"noise floor (+1 s every books run)": lambda k: b0 + 1,
-                "realistic (+10 s every 10th books run)": lambda k: b0 + (10 if k % 10 == 0 else 0),
-                "budget (+30 s every 10th books run)": lambda k: b0 + (30 if k % 10 == 0 else 0)}
+                "realistic (+10 s every 5th books run)": lambda k: b0 + (10 if k % 5 == 0 else 0),
+                "budget (+30 s every 5th books run)": lambda k: b0 + (30 if k % 5 == 0 else 0),
+                "budget + retry (+30 s every 5th and the run 2 later)": lambda k: b0 + (30 if k % 5 in (0, 2) else 0)}
     for scen, kw in (("ok", {}), ("warm", {"warm": True})):
         base = [sim.simulate(cur, seed=sd, **kw) for sd in range(n)]
         for name, fn in variants.items():

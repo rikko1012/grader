@@ -50,6 +50,15 @@ const mkx = {bk: [{p: "fanduel", t: fresh, in: true, kind: "devig"}, {p: "betriv
                   {p: "kalshi", t: fresh, in: false, kind: "one_sided", why: "not a two-sided priced pair"}, {p: "polymarket", t: fresh, in: false, kind: "mid", why: "spread > 0.05"}]};
 assert.deepStrictEqual(S.usableBooks(mkx, NOW).map(b => b.p), ["fanduel", "kalshi"]);
 assert.deepStrictEqual(S.hiddenBooks(mkx, NOW).map(b => b.p), ["betrivers", "polymarket"]);
+// display-only exchanges (Novig, Gemini): a fresh in-spread price is listed with the books (never counted, no
+// contradictory "not shown" line); stale or wide is hidden like any book
+const dsp = "display only: its price is shown, never counted in the market chance";
+const mkd = {bk: [{p: "novig", t: fresh, in: false, kind: "mid", c: 0.515, over: [0.5, 0.53], why: dsp},
+                  {p: "gemini", t: stale, in: false, kind: "mid", c: 0.515, over: [0.5, 0.53], why: dsp},
+                  {p: "gemini", t: fresh, in: false, kind: "mid", c: 0.4, over: [0.3, 0.5], why: dsp}]};
+assert.deepStrictEqual(S.usableBooks(mkd, NOW).map(b => b.p), ["novig"]);
+assert.strictEqual(S.hiddenBooks(mkd, NOW).length, 2);
+assert.strictEqual(S.bookStatus(mkd.bk[0]), "not counted in the market chance");
 // three probability types
 assert.strictEqual(S.kindLabel("sm-1"), "Scout model");
 assert.strictEqual(S.kindLabel("mi-1"), "Market-informed model");

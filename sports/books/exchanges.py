@@ -26,14 +26,17 @@ Gemini Predictions (api.gemini.com, read 2026-11-09, anonymous): GET /v1/predict
 Kept only: an open, pre-game, two-sided market inside the frozen exchange spread (MAX_SPREAD, as Kalshi / Polymarket).
 At most MAX_RUNGS lines per player and stat (nearest even). A wider or one-sided market is not stored and a successful
 read withdraws a stored one ('removed' revision, hidden); a failed read writes nothing, so the last quote stays (and ages
-on the board) - a transient failure never changes a grade. A step of the light books job every 10 min (run_due() below;
+on the board) - a transient failure never changes a grade. A step of the light books job every 5 min (run_due() below;
 never inside ingest-<league>). Kill switches: NOVIG=0 / GEMINI=0 (default on; no key is needed).
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import time
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from .. import adapters, identity, names, net
 from ..contracts import OfferSnapshot, SideQuote
@@ -71,17 +74,58 @@ def _iso_ms(ms):
         return None
 
 
-def _get(source, url, params=None, timeout=20.0):
-    ok, why = ledger.reserve(source, 1.0, url.split("?")[0][-80:], wait_s=5.0)
+class Stop(Exception):
+    """A venue read stopped before it finished (time budget, memory guard): nothing of it is written."""
+
+
+CONNECT_S = 5.0
+READ_S = 15.0                        # longest wait for any one socket read; the whole answer is bounded by the deadline
+
+
+class _Body:
+    __slots__ = ("status_code", "_buf")
+
+    def __init__(self, status_code, buf):
+        self.status_code, self._buf = status_code, buf
+
+    def json(self):
+        return json.loads(self._buf)
+
+
+def _get(source, url, params=None, timeout=20.0, deadline=None):
+    """One GET inside the step's deadline (time.monotonic()): nothing is sent with under a second left, a Retry-After
+    hold on the host fails at once (never slept inside the step), the ledger's pacing wait and every socket wait are
+    cut to the time left, and the answer is streamed so a slow or trickling body stops at the deadline."""
+    def rem():
+        return float("inf") if deadline is None else deadline - time.monotonic()
+    if rem() < 1.0:
+        raise Stop("time budget")
+    nb = net.holds().get(urlsplit(url).netloc)
+    if nb:
+        raise net.HttpError(429, url, "", not_before=nb, held=True)
+    ok, why = ledger.reserve(source, 1.0, url.split("?")[0][-80:], wait_s=max(0.0, min(5.0, rem() - 1.0)))
     if not ok:
         raise net.HttpError(None, url, f"budget: {why}")
+    if rem() < 1.0:
+        raise Stop("time budget")
+    t = (min(CONNECT_S, rem()), max(1.0, min(timeout, READ_S, rem())))
+    hdr = {"Accept": "application/json"}
     try:
-        r = net.get(url, params=params, headers={"Accept": "application/json"}, timeout=timeout, tries=1)
+        r = net._request(url, params, hdr, t, 1, (200,),
+                         lambda: net.session().get(url, params=params, headers=hdr, timeout=t, stream=True))
     except net.HttpError as e:
         ledger.report(source, e.status)
         raise
     ledger.report(source, r.status_code)
-    return r
+    buf = bytearray()
+    try:
+        for chunk in r.iter_content(65536):
+            buf += chunk
+            if rem() <= 0:
+                raise Stop("time budget (answer still arriving)")
+    finally:
+        r.close()
+    return _Body(r.status_code, buf)
 
 
 def _priced(bid, ask):
@@ -135,36 +179,59 @@ _NV_KEEP = ("marketId", "description", "eventId", "marketType", "strike", "statu
             "volume", "openInterest")
 
 
-def _nv_pages(path, params, timeout=20.0):
+def _guard(deadline, mem_ok):
+    """Before every request: stop the venue read when the budget is spent or the process nears its memory cap."""
+    if deadline is not None and deadline - time.monotonic() < 1.0:
+        raise Stop("time budget")
+    if mem_ok is not None and not mem_ok():
+        raise Stop("memory")
+
+
+def _dicts(xs):
+    return [x for x in xs if isinstance(x, dict)] if isinstance(xs, list) else []
+
+
+def _nv_pages(path, params, timeout=20.0, deadline=None, mem_ok=None, state=None):
+    """Pages of items; state["complete"] = False when the page limit is reached with a `next` cursor still set."""
     after = None
     for _ in range(NV_MAX_PAGES):
+        _guard(deadline, mem_ok)
         body = _get("novig", f"{NOVIG}{path}", params={**params, "limit": NV_PAGE, **({"after": after} if after else {})},
-                    timeout=timeout)
+                    timeout=timeout, deadline=deadline)
         data = body.json()
         del body
-        yield data.get("items") or []
+        if not isinstance(data, dict):
+            raise ValueError(f"novig {path}: the answer is not an object")
+        items = _dicts(data.get("items"))
+        yield items
         after = data.get("next")
-        if not after or not data.get("items"):
+        if not after or not items:
             return
+    if state is not None:
+        state["complete"] = False
 
 
-def novig_raw(league, timeout=20.0):
-    """{"events": {eventId: event}, "markets": [trimmed prop market]} of the league's pre-game catalog."""
+def novig_raw(league, timeout=20.0, deadline=None, mem_ok=None):
+    """{"events": {eventId: event}, "markets": [trimmed prop market], "complete", "items"} of the league's pre-game
+    catalog; complete is False when a page limit left part of it unread, items = markets read before the type filter."""
     lg, stats = NV_LEAGUE[league], NV_STAT[league]
+    state = {"complete": True}
     events = {}
-    for items in _nv_pages("/events", {"league": lg, "status": "OPEN_PREGAME"}, timeout):
+    for items in _nv_pages("/events", {"league": lg, "status": "OPEN_PREGAME"}, timeout, deadline, mem_ok, state):
         for e in items:
             if e.get("eventId"):
                 events[str(e["eventId"])] = {k: e.get(k) for k in ("eventId", "description", "league", "status",
                                                                     "startsTs")}
-    markets = []
-    for items in _nv_pages("/markets", {"league": lg, "eventStatus": "OPEN_PREGAME"}, timeout):
+    markets, n = [], 0
+    for items in _nv_pages("/markets", {"league": lg, "eventStatus": "OPEN_PREGAME"}, timeout, deadline, mem_ok, state):
+        n += len(items)
         markets += [{k: m.get(k) for k in _NV_KEEP} for m in items if m.get("marketType") in stats]
-    return {"events": events, "markets": markets}
+    return {"events": events, "markets": markets, "complete": state["complete"], "items": n}
 
 
 def _nv_bid(outcome):
-    return _f(((outcome or {}).get("bid") or {}).get("price"))
+    bid = outcome.get("bid") if isinstance(outcome, dict) else None
+    return _f(bid.get("price")) if isinstance(bid, dict) else None
 
 
 def novig_offers(raw, league, observed_at, resolver=None, teams_raw=()):
@@ -229,11 +296,15 @@ def _nearest_even(b, keep=None):
     groups = {}
     for r in b.records:
         groups.setdefault((r.market_id, r.player_key, r.stat), []).append(r)
-    kept = []
+    kept, capped = [], set()
     for rs in groups.values():
         rs.sort(key=lambda r: (abs((r.side("over").bid + r.side("over").ask) / 2 - 0.5), r.line))
         kept += rs[:keep]
+        capped.update(r.offer_id for r in rs[keep:])
     b.records = sorted(kept, key=lambda r: r.offer_id)
+    # still listed and priced, only past the cap: never withdrawn (a 3rd / 4th rung swap would otherwise write a
+    # 'removed' revision plus a re-insert each pass); not re-sighted, it ages off the board by the 15-minute rule
+    b.capped = capped
     return b
 
 
@@ -254,25 +325,42 @@ _GM_EVENT = ("id", "ticker", "title", "status", "isLive", "startTime", "particip
 _GM_CONTRACT = ("id", "label", "ticker", "instrumentSymbol", "marketState", "status", "strike", "prices")
 
 
-def gemini_raw(league, timeout=20.0):
+class Events(list):
+    """gemini_raw's events. complete is False when the page limit was reached or the listing's total changed between
+    pages (offset paging over a moving list can skip an event); items = events read before the league filter."""
+    complete = True
+    items = 0
+
+
+def gemini_raw(league, timeout=20.0, deadline=None, mem_ok=None):
     """Every active prop event of the league's sport (trimmed), its ticker starting with the league."""
-    out, offset, total = [], 0, None
+    out, offset, total, first = Events(), 0, None, None
     for _ in range(GM_MAX_PAGES):
+        _guard(deadline, mem_ok)
         r = _get("gemini", GEMINI, params={"status": "active", "category": "Sports", "sport": GM_SPORT[league],
                                            "sports_market_type": "prop", "limit": GM_PAGE, "offset": offset},
-                    timeout=timeout)
+                    timeout=timeout, deadline=deadline)
         body = r.json()
         del r
-        data = body.get("data") or []
-        total = (body.get("pagination") or {}).get("total")
+        if not isinstance(body, dict):
+            raise ValueError("gemini: the answer is not an object")
+        data = _dicts(body.get("data"))
+        pg = body.get("pagination")
+        total = pg.get("total") if isinstance(pg, dict) else None
+        first = total if first is None else first
+        if total != first:
+            out.complete = False
+        out.items += len(data)
         for e in data:
             if str(e.get("ticker") or "").startswith(league.upper() + "-"):
                 t = {k: e.get(k) for k in _GM_EVENT}
-                t["contracts"] = [{k: c.get(k) for k in _GM_CONTRACT} for c in e.get("contracts") or []]
+                t["contracts"] = [{k: c.get(k) for k in _GM_CONTRACT} for c in _dicts(e.get("contracts"))]
                 out.append(t)
         offset += GM_PAGE
         if not data or total is None or offset >= int(total):
             break
+    else:
+        out.complete = False
     return out
 
 
@@ -280,7 +368,7 @@ def gemini_offers(events, league, observed_at, resolver=None):
     b = adapters.Batch()
     stats = GM_STAT[league]
     for e in events or []:
-        sm = e.get("sportsMarket") or {}
+        sm = e.get("sportsMarket") if isinstance(e.get("sportsMarket"), dict) else {}
         metric = sm.get("metric")
         if metric in GM_SKIP:
             continue
@@ -288,7 +376,9 @@ def gemini_offers(events, league, observed_at, resolver=None):
             b.q("offer", "gemini", f"gemini:{e.get('ticker')}", "metric_not_mapped", {"metric": metric})
             continue
         # isLive is NOT in-play (2026-11-09: true on a game a day away) - a started game is left out by its startTime
-        if (sm.get("scope") or {}).get("type") not in (None, "full_contest") or e.get("status") != "active":
+        scope = sm.get("scope")
+        if (scope.get("type") if isinstance(scope, dict) else scope) not in (None, "full_contest") or \
+                e.get("status") != "active":
             continue
         tk = _GM_TICKER.match(str(e.get("ticker") or ""))
         sides_ = {p.get("side"): p.get("abbreviation") for p in e.get("participants") or [] if isinstance(p, dict)}
@@ -303,7 +393,7 @@ def gemini_offers(events, league, observed_at, resolver=None):
             continue                                  # started (or no start): never a pre-game quote
         for c in e.get("contracts") or []:
             key = f"gemini:{c.get('instrumentSymbol') or c.get('id')}"
-            st = c.get("strike") or {}
+            st = c.get("strike") if isinstance(c.get("strike"), dict) else {}
             line = _f(st.get("value"))
             lab = _GM_LABEL.match(str(c.get("label") or ""))
             if st.get("type") != "over" or line is None or not lab or abs(int(lab.group("n")) - 0.5 - line) > 1e-9:
@@ -311,7 +401,7 @@ def gemini_offers(events, league, observed_at, resolver=None):
                 continue
             if c.get("marketState") != "open":
                 continue
-            p = c.get("prices") or {}
+            p = c.get("prices") if isinstance(c.get("prices"), dict) else {}
             px = _priced(_f(p.get("bestBid")), _f(p.get("bestAsk")))
             if px is None:
                 continue
@@ -338,7 +428,9 @@ def gemini_offers(events, league, observed_at, resolver=None):
 #   - a step of the light books job (worker._exchanges_step -> run_due, every EVERY_S), never inside ingest-<league>,
 #     no 'canonical' scheduler lock, no reservation of its own (a separate light job took budget room from the heavy
 #     pair: sched_sim showed the collectors waiting ~3 min longer);
-#   - a hard time budget (BUDGET_S): each step starts only inside it, requests time out within it, the rest is skipped;
+#   - a hard time budget (BUDGET_S): one deadline checked before every request, page and write chunk; the ledger's
+#     pacing wait, connect / read timeouts and SQLite's busy wait are cut to the time left; an answer is streamed and
+#     stopped at the deadline; a Retry-After hold is never slept inside the step (that venue fails at once);
 #   - requests bounded: Novig 2 per league (events + markets; NV_MAX_PAGES pages at most), Gemini 1 per league
 #     (GM_MAX_PAGES at most);
 #   - the withdrawal read is the venue's OWN identities through the (kind, source, ...) index - never a league scan;
@@ -346,8 +438,12 @@ def gemini_offers(events, league, observed_at, resolver=None):
 #     lines per player and stat, so a read writes only the quotes whose price moved.
 MAX_RUNGS = 3
 BUDGET_S = float(os.environ.get("SPORTS_EXCHANGES_BUDGET_S", "30"))   # measured pass: 4.3 s (both leagues)
-# the board shows a book row while its last sighting is under 15 min old (web/sports/stats.js STALE_S)
-EVERY_S = float(os.environ.get("SPORTS_EXCHANGES_EVERY_S", "600"))
+# the board shows a book row while its last sighting is under 15 min old (web/sports/stats.js STALE_S), and a new
+# sighting reaches members only with the next ui-snapshots build (up to ~6-7 min later): a 10-min cadence left no
+# margin (rows blinked out between passes, and for 5-10+ min after one failed pass). Every 5 min, and a pass in which
+# a venue failed or was skipped is retried once after RETRY_S instead of the full cadence.
+EVERY_S = float(os.environ.get("SPORTS_EXCHANGES_EVERY_S", "300"))
+RETRY_S = float(os.environ.get("SPORTS_EXCHANGES_RETRY_S", "120"))
 WRITE_CHUNK = 200
 WITHDRAW_WINDOW_H = 72
 
@@ -364,52 +460,94 @@ def _current_of_venue(con, venue, league, since):
     return {r["source_key"]: r for r in rows}
 
 
-def store_venue(con, venue, league, batch, observed_at):
+class _BusyCap:
+    """SQLite's busy wait cut to the time left before each chunk (a BEGIN IMMEDIATE otherwise waits up to the
+    connection's 30 s behind ingest-<league> / settle / model-forward); the connection's own value is restored."""
+
+    def __init__(self, con, deadline):
+        self.con, self.deadline, self.old = con, deadline, None
+
+    def __enter__(self):
+        if self.deadline is not None:
+            self.old = int(self.con.execute("PRAGMA busy_timeout").fetchone()[0])
+        return self
+
+    def set(self):
+        if self.old is not None:
+            ms = int(max(0.5, self.deadline - time.monotonic()) * 1000)
+            self.con.execute(f"PRAGMA busy_timeout={min(self.old, ms)}")
+
+    def __exit__(self, *exc):
+        if self.old is not None:
+            self.con.execute(f"PRAGMA busy_timeout={self.old}")
+        return False
+
+
+def store_venue(con, venue, league, batch, observed_at, complete=True, deadline=None):
     """A SUCCESSFUL read of one venue + league -> stored offers (short batched writes), and a 'removed' revision for each
-    of its own offers the read no longer lists whose game has not started (hidden from the board)."""
+    of its own offers the read no longer lists whose game has not started (hidden from the board). Withdrawals only
+    after a COMPLETE read (every page read, a non-empty answer), never for rungs left out only by the MAX_RUNGS cap.
+    The deadline (time.monotonic()) is checked before every chunk: what is left waits for the next pass."""
     from datetime import timedelta
 
     from .. import store
     from ..contracts import parse_utc
+
+    def late():
+        return deadline is not None and deadline - time.monotonic() < 0.5
     res = {"inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0}
     recs = batch.records
-    for i in range(0, len(recs), WRITE_CHUNK):
-        got = store.put_many(con, recs[i:i + WRITE_CHUNK])
-        for k in res:
-            res[k] += got.get(k, 0)
-    if batch.quarantine:
-        store.quarantine_many(con, batch.quarantine, league, observed_at)
-    since = (parse_utc(observed_at) - timedelta(hours=WITHDRAW_WINDOW_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    seen = {r.offer_id for r in recs}
-    stale = []
-    for oid, row in _current_of_venue(con, venue, league, since).items():
-        if oid in seen:
-            continue
-        o = store._rec(row)
-        if o.availability == "removed":
-            continue
-        if o.listed_start_utc and o.listed_time_kind == "start" and o.listed_start_utc <= observed_at:
-            continue                                  # started: it left because the game began
-        stale.append(store.withdrawn(o, observed_at))
-    removed = 0
-    for i in range(0, len(stale), WRITE_CHUNK):
-        removed += store.put_many(con, stale[i:i + WRITE_CHUNK])["revision"]
+    with _BusyCap(con, deadline) as busy:
+        for i in range(0, len(recs), WRITE_CHUNK):
+            if late():
+                return {**res, "removed": 0, "stopped": "time budget (the rest next pass)"}
+            busy.set()
+            got = store.put_many(con, recs[i:i + WRITE_CHUNK])
+            for k in res:
+                res[k] += got.get(k, 0)
+        if batch.quarantine and not late():
+            busy.set()
+            store.quarantine_many(con, batch.quarantine, league, observed_at)
+        if not complete:
+            return {**res, "removed": 0, "withdrawals": "skipped: partial or empty read",
+                    "quarantined": len(batch.quarantine)}
+        if late():
+            return {**res, "removed": 0, "stopped": "time budget (withdrawals next pass)"}
+        since = (parse_utc(observed_at) - timedelta(hours=WITHDRAW_WINDOW_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        seen = {r.offer_id for r in recs} | set(getattr(batch, "capped", None) or ())
+        stale = []
+        for oid, row in _current_of_venue(con, venue, league, since).items():
+            if oid in seen:
+                continue
+            o = store._rec(row)
+            if o.availability == "removed":
+                continue
+            if o.listed_start_utc and o.listed_time_kind == "start" and o.listed_start_utc <= observed_at:
+                continue                                  # started: it left because the game began
+            stale.append(store.withdrawn(o, observed_at))
+        removed = 0
+        for i in range(0, len(stale), WRITE_CHUNK):
+            if late():
+                return {**res, "removed": removed, "stopped": "time budget (withdrawals next pass)"}
+            busy.set()
+            removed += store.put_many(con, stale[i:i + WRITE_CHUNK])["revision"]
     return {**res, "removed": removed, "quarantined": len(batch.quarantine)}
 
 
-def run(con, leagues, budget_s=None, clock=None, observed_at=None):
-    """The scheduler's light "exchanges" job: every enabled venue for every league inside one hard time budget. A step
-    that would start after the budget is skipped (reported); a failed read writes nothing (the last quote stays)."""
-    import time
-
+def run(con, leagues, budget_s=None, clock=None, observed_at=None, mem_ok=None):
+    """The books job's exchanges step: every enabled venue for every league inside one hard time budget (one deadline
+    passed down to every request and write chunk). A step that would start after the budget is skipped (reported); a
+    failed read writes nothing (the last quote stays); any error is that venue's alone, the others still run.
+    mem_ok() (optional) is checked before every request: False stops that venue's read (nothing written)."""
     from ..contracts import now_utc
     from .sources import resolver_from_store
     clock = clock or time.monotonic
     budget_s = BUDGET_S if budget_s is None else budget_s
     t0 = clock()
+    deadline = time.monotonic() + budget_s
 
     def left():
-        return budget_s - (clock() - t0)
+        return min(budget_s - (clock() - t0), deadline - time.monotonic())
     out = {"budget_s": budget_s}
     for league in leagues:
         venues = [v for v in VENUES if enabled(v) and league in (NV_LEAGUE if v == "novig" else GM_SPORT)]
@@ -432,26 +570,41 @@ def run(con, leagues, budget_s=None, clock=None, observed_at=None):
                 continue
             t = clock()
             obs = observed_at or now_utc()
+            dl = time.monotonic() + max(0.0, left())
             try:
                 if v == "novig":
-                    raw = novig_raw(league, timeout=max(1.0, min(20.0, left())))
+                    raw = novig_raw(league, timeout=20.0, deadline=dl, mem_ok=mem_ok)
                     b = novig_offers(raw, league, obs, resolver, teams_raw)
                     seen = {"events": len(raw["events"]), "markets": len(raw["markets"])}
+                    complete = raw["complete"] and raw["items"] > 0
                 else:
-                    evs = gemini_raw(league, timeout=max(1.0, min(20.0, left())))
+                    evs = gemini_raw(league, timeout=20.0, deadline=dl, mem_ok=mem_ok)
                     b = gemini_offers(evs, league, obs, resolver)
                     seen = {"events": len(evs)}
+                    complete = evs.complete and evs.items > 0
+            except Stop as e:
+                lo[v] = {"ok": False, "skipped": str(e), "read_s": round(clock() - t, 3)}
+                continue
             except (net.HttpError, ValueError) as e:
                 lo[v] = {"ok": False, "error": str(e)[:160], "read_s": round(clock() - t, 3)}
+                continue
+            except Exception as e:                      # noqa: BLE001 - odd answer shape / cut body: this venue only
+                lo[v] = {"ok": False, "error": f"{type(e).__name__}: {str(e)[:140]}", "read_s": round(clock() - t, 3)}
                 continue
             read_s = round(clock() - t, 3)
             if left() <= 0:
                 lo[v] = {"ok": False, "skipped": "time budget (read, not written)", "read_s": read_s}
                 continue
             t = clock()
-            r = store_venue(con, v, league, b, obs)
-            r.update(seen, ok=True, offers=len(b.records), resolved_players=sum(1 for x in b.records if x.player_id),
-                     read_s=read_s, write_s=round(clock() - t, 3))
+            try:
+                r = store_venue(con, v, league, b, obs, complete=complete,
+                                deadline=time.monotonic() + max(0.0, left()))
+            except Exception as e:                      # noqa: BLE001 - e.g. 'database is locked': this venue only
+                lo[v] = {"ok": False, "error": f"write: {type(e).__name__}: {str(e)[:140]}", "read_s": read_s}
+                continue
+            r.update(seen, ok="stopped" not in r, offers=len(b.records),
+                     resolved_players=sum(1 for x in b.records if x.player_id), read_s=read_s,
+                     write_s=round(clock() - t, 3))
             if v == "novig":
                 r["key"] = "set (not needed: public catalog)" if novig_key_present() else "not set (not needed)"
             lo[v] = r
@@ -464,24 +617,41 @@ def _state_path():
     return config.DATA_DIR / "books" / "exchanges_state.json"
 
 
-def run_due(con, leagues, now=None, budget_s=None):
-    """run() when EVERY_S has passed since the last ATTEMPT (recorded before the pass, so a failing venue is never
-    re-read faster than the cadence), else {"due": False, "next_in_s": ...}."""
-    import json
-    import time
+def _failed(out):
+    """A venue that failed or was skipped (not by its kill switch) in this pass."""
+    return any(isinstance(v, dict) and v.get("ok") is False
+               for lo in out.values() if isinstance(lo, dict) for v in lo.values())
+
+
+def _write_state(p, state):
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state), encoding="utf-8")
+    tmp.replace(p)
+
+
+def run_due(con, leagues, now=None, budget_s=None, mem_ok=None):
+    """run() when EVERY_S has passed since the last ATTEMPT (recorded before the pass, so a killed pass is never re-run
+    in a tight loop) - or RETRY_S after a pass in which a venue failed or was skipped: ONE early retry (not chained), so
+    a single bad pass does not age every row past the 15-minute rule. Else {"due": False, "next_in_s": ...}."""
     now = time.time() if now is None else now
     p = _state_path()
     try:
-        last = float(json.loads(p.read_text(encoding="utf-8")).get("last_at") or 0)
-    except (OSError, ValueError, AttributeError):
-        last = 0.0
-    if now - last < EVERY_S:
-        return {"due": False, "next_in_s": round(EVERY_S - (now - last), 1)}
+        st = json.loads(p.read_text(encoding="utf-8"))
+        last, retry = float(st.get("last_at") or 0), bool(st.get("retry"))
+    except (OSError, ValueError, AttributeError, TypeError):
+        last, retry = 0.0, False
+    every = RETRY_S if retry else EVERY_S
+    if now - last < every:
+        return {"due": False, "next_in_s": round(every - (now - last), 1)}
     try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"last_at": now}), encoding="utf-8")
-        tmp.replace(p)
+        _write_state(p, {"last_at": now})
     except OSError:
         return {"due": True, "skipped": "state file not writable"}
-    return {"due": True, **run(con, leagues, budget_s=budget_s)}
+    out = run(con, leagues, budget_s=budget_s, mem_ok=mem_ok)
+    if _failed(out) and not retry:
+        try:
+            _write_state(p, {"last_at": now, "retry": True})
+        except OSError:
+            pass
+    return {"due": True, **out}

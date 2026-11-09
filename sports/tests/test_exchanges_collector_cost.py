@@ -135,7 +135,7 @@ def _full_catalog(n_markets=3700):
 def test_one_league_cycle_costs_well_under_ten_seconds_at_production_volume(stores, monkeypatch):
     con = stores[100_000]
     evs, mkts = _full_catalog()
-    monkeypatch.setattr(x, "_get", lambda source, url, params=None, timeout=20.0: B_resp(evs if url.endswith("/events")
+    monkeypatch.setattr(x, "_get", lambda source, url, params=None, timeout=20.0, deadline=None: B_resp(evs if url.endswith("/events")
                                                                                           else mkts))
     from sports.books import sources
     monkeypatch.setattr(sources, "resolver_from_store", lambda con, lg: (None, ()))

@@ -535,12 +535,16 @@ def cmd_books(a, con):
 
 
 EXCHANGES_HEADROOM_MB = 35          # measured 2026-11-09: one exchanges pass adds ~25 MB to the process (Novig NBA answer)
+EXCHANGES_PAGE_HEADROOM_MB = 30     # one answer page parsed (a full 5,000-market Novig page ~25 MB)
 
 
 def _exchanges_step(con, leagues):
     """The display-only exchanges (Novig, Gemini; books/exchanges.run_due) inside the books job's process: every
-    SPORTS_EXCHANGES_EVERY_S (600), one hard SPORTS_EXCHANGES_BUDGET_S (30 s) budget, skipped when the process could
-    pass the books job's memory cap or ingestion is paused. Never raises: the books job's own result stands."""
+    SPORTS_EXCHANGES_EVERY_S (300), one hard SPORTS_EXCHANGES_BUDGET_S (30 s) budget, skipped when the process could
+    pass the books job's memory cap or ingestion is paused. The real RSS is re-checked before EVERY request (so the
+    per-league resolver and the pages already kept are counted): a venue stops, nothing written, when one more page
+    could reach the cap - the watchdog's over-cap kill (a books failure + books backoff) is never risked for a
+    display-only step. Never raises: the books job's own result stands."""
     from . import scheduler
     from .books import exchanges
     try:
@@ -548,7 +552,7 @@ def _exchanges_step(con, leagues):
         if rss_mb() + EXCHANGES_HEADROOM_MB > cap:
             return {"skipped": f"memory: {rss_mb():.0f} + {EXCHANGES_HEADROOM_MB} MB > books cap {cap:.0f} MB"}
         _check_budget()
-        return exchanges.run_due(con, leagues)
+        return exchanges.run_due(con, leagues, mem_ok=lambda: rss_mb() + EXCHANGES_PAGE_HEADROOM_MB <= cap)
     except BudgetExceeded as e:
         return {"skipped": str(e)[:200]}
     except Exception as e:                              # noqa: BLE001 - never fails the books job
@@ -608,6 +612,7 @@ def settle_league(con, league, ctx=None, now=None, since=None, max_catchup=None)
     run (oldest first), so a gap heals itself without re-reading every old game every hour. Idempotent: settlement.record
     stores an unchanged result once."""
     from . import espn
+    from .books import display_only
     lg = config.league(league)
     now = now or now_utc()
     done = set((ctx.cursor or {}).get("done", [])) if ctx else set()
@@ -653,8 +658,9 @@ def settle_league(con, league, ctx=None, now=None, since=None, max_catchup=None)
             sts = []
             for _, o in store.offers(con, event_id=e.event_id, limit=100000):
                 if o.player_id is None or o.platform.startswith(("oddsapi", "oddspapi")) or \
-                        o.platform in ("fanduel", "betrivers"):
+                        o.platform in ("fanduel", "betrivers") or display_only(o.platform):
                     continue                            # book prices are market references, never settled offers
+                    #                                     (display-only exchanges: Novig, Gemini - books/exchanges.py)
                 sts += settlement.settle_offer(o, obs.get(o.player_id, {}), e, observed_at)
             c = settlement.record(con, sts)
             for k, v in c.items():

@@ -183,9 +183,16 @@
   function quoteShown(q, now) {           // pick'em lines always; a book row only with a usable, fresh price
     return !isBook(q.p) || (quoteHasPrice(q) && fresh(q.t, now));
   }
-  function bookUsable(b, now) {           // per-book list entry: counted, or a fresh one-sided price (shown as price)
-    if (!fresh(b.t, now)) return false;
+  // display-only exchanges (sports/books/exchanges.py): their own price is listed, never counted in a market chance
+  var DISPLAY_ONLY = {novig: 1, gemini: 1};
+  function bookUsable(b, now) {           // per-book list entry: counted, a fresh one-sided price (shown as price), or a
+    if (!fresh(b.t, now)) return false;   // display-only exchange's fresh midpoint inside the frozen 5-cent spread
     if (b.in) return true;
+    if (DISPLAY_ONLY[b.p]) {
+      var o = b.over || [];
+      return b.kind === "mid" && o[0] !== null && o[0] !== undefined && o[1] !== null && o[1] !== undefined &&
+        o[1] - o[0] <= 0.05 + 1e-9;
+    }
     return b.kind === "one_sided" && b.why === "not a two-sided priced pair";
   }
   function usableBooks(mk, now) { return mk && mk.bk ? mk.bk.filter(function (b) { return bookUsable(b, now); }) : []; }
@@ -268,7 +275,8 @@
     return pct(b.c);
   }
   function bookStatus(b) {                // in the consensus, or the frozen filter's reason
-    return b.in ? "in the market chance" : "not counted: " + (b.why || "not eligible");
+    if (b.in) return "in the market chance";
+    return DISPLAY_ONLY[b.p] ? "not counted in the market chance" : "not counted: " + (b.why || "not eligible");
   }
 
   // QoL 1107: search ignores case, accents and extra spaces ("jokic" finds "Jokić", "  bos " finds BOS)

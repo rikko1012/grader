@@ -184,8 +184,10 @@ def fallback_at(books, line):
     oldest observation age. -> {po, pu, n, l, books, age, why} or None. It is a label for a stale cell - never a lean,
     edge, gap, confidence or sort input (board_view.market_at / table.js marketAt read `c` and `at` only)."""
     import math
+
+    from .books import display_only
     use = [b for b in books if b.get("kind") in ("devig", "mid") and b.get("c") is not None and b.get("l") == line
-           and 0.0 < float(b["c"]) < 1.0]
+           and 0.0 < float(b["c"]) < 1.0 and not display_only(b.get("p"))]   # Novig / Gemini: never a market chance
     if not use:
         return None
     logits = [math.log(float(b["c"]) / (1.0 - float(b["c"]))) for b in use]

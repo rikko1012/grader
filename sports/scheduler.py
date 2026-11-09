@@ -235,7 +235,7 @@ def default_jobs():
                           # 6+ min (and a running one blocks all starts for up to 15 min) - so the books job runs
                           # beside exclusive jobs; network-bound, 108 MB of the 1,200 MB budget on Standard.
                           # It also runs the display-only exchanges step (Novig, Gemini; books/exchanges.run_due, every
-                          # 10 min, hard 30 s budget) in this already-reserved light process, so it takes no budget room
+                          # 5 min, hard 30 s budget) in this already-reserved light process, so it takes no budget room
                           # from the heavy pair (a separate light job did - sched_sim: collectors waited ~3 min longer)
                           beside_exclusive=True)} if books_job else {}),
         "ingest-kalshi": dict(argv=_py("-m", "sports.worker", "ingest", *lg, "--bucket-min", "1", "--sources",
