@@ -1219,7 +1219,7 @@ def guard_row(league, row, forecasts, view_row, now):
             q["cal"] = ca
             po, pu = ca["po"], ca["pu"]
         x, code = board_view.quote_x(league, row["stat"], po, pu, mu, line, mkc, l10, iv, raw=raw, view=view_row,
-                                     now=now)
+                                     now=now, platform=q.get("platform"), own_po=board_view.own_chance(q))
         q["x"] = x
         if code:
             out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),

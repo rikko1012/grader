@@ -174,7 +174,8 @@ def sheet_markets(player_file, history_games, platform, events, now):
             # sg-2: raw chance for the degenerate check; the history rules only when the player's history was read
             cq["x"], _ = board_view.quote_x(lg, row["stat"], po, pu, src.get("projection_mean"), ln, mkc,
                                             list(l10[:4]) if l10 else None, (src.get("detail") or {}).get("interval"),
-                                            raw=raw, view=vr if history_games is not None else None, now=now)
+                                            raw=raw, view=vr if history_games is not None else None, now=now,
+                                            platform=cq.get("p"), own_po=board_view.own_chance(cq))
         markets_out.append({**({"nv": nv} if nv else {}), "k": row["key"], "e": row["event_id"], "pid": row["player_id"],
                             "n": row.get("player"),
                             "pos": row.get("position"), **({"ro": row["role"]} if row.get("role") else {}), "tm": row.get("team"), "tid": row.get("team_id"),

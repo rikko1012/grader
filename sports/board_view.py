@@ -413,6 +413,81 @@ def signal(po, pu, mu, line, mkc, l10=None, iv=None):
     return out
 
 
+# ---------------------------------------------------------------------------------- cap-3 near-even price rule
+# cap-3 (owner 2026-11-08, hub NBA board sorted by Scout chance full of "Under 98.4% A" rows on Polymarket ladder rungs:
+# "fix this these are only A's cause they're probbaly -1000 odd props"). On a line whose payout follows the price
+# (every sportsbook - FanDuel, BetRivers, DraftKings, oddsapi:<book> - and every exchange / prediction market -
+# Polymarket, Kalshi) a Scout side and letter are given only when the line is priced near even: the market's no-vig
+# chance of Scout's side must be <= MAX_SIDE_MARKET. A very likely side priced like -1000 is a high Scout chance by
+# construction, not an A. Fixed-payout pick'em apps (PICKEM_PLATFORMS) pay the same whatever the side's chance and are
+# never affected. Market chance, in order:
+#   1. the offer's own two prices: a book's two decimal prices de-vigged (1/o) / (1/o + 1/u); an exchange's YES
+#      midpoint (bid + ask) / 2 when both exist - the same per-book reading as sports/market_view.reading
+#   2. else the quote's market chance (market_at: mv-1 at this offer's line, the board's market_chance)
+#   3. neither: no price to judge -> held as well
+# A held line keeps its projection and P(Over) / P(Under); it has no side, no letter, no edge and no stake. The hold is
+# decided here, once, so snapshots, sheets, compare, the slip pool, the classic board and the hub all agree.
+CAP_VERSION = "cap-3"
+MAX_SIDE_MARKET = 0.65
+CAP_TEXT = "Scout grades lines priced near even."
+PICKEM_PLATFORMS = ("prizepicks", "underdog")
+
+
+def is_pickem(platform):
+    return str(platform or "").split(":", 1)[0] in PICKEM_PLATFORMS
+
+
+def _num(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def own_chance(q):
+    """P(Over) from the offer's OWN two prices, or None. q = a snapshot quote (its "sides" list) or a compact quote (sheet /
+    board: "d" = the book's decimal [over, under] when offered, "k" = the exchange's YES [bid, ask])."""
+    if not q:
+        return None
+    if q.get("sides") is not None:
+        sd = {s.get("side"): s for s in q.get("sides") or ()}
+        o, u = sd.get("over") or {}, sd.get("under") or {}
+        if o.get("price_format") == "exchange_yes_no":
+            bid, ask = o.get("bid"), o.get("ask")
+            return (bid + ask) / 2.0 if _num(bid) and _num(ask) and 0 < bid <= ask < 1 else None
+        dec = [s.get("price") if s.get("offered") and s.get("price_format") == "decimal" else None for s in (o, u)]
+    else:
+        k = q.get("k")
+        if k and len(k) == 2:
+            bid, ask = k
+            return (bid + ask) / 2.0 if _num(bid) and _num(ask) and 0 < bid <= ask < 1 else None
+        dec = list(q.get("d") or (None, None))
+        oo = q.get("o") or (1, 1)
+        dec = [dec[i] if i < len(dec) and (oo[i] if i < len(oo) else 1) else None for i in (0, 1)]
+    a, b = dec[0], dec[1]
+    if not (_num(a) and _num(b) and a > 1 and b > 1):
+        return None
+    io, iu = 1.0 / a, 1.0 / b
+    return io / (io + iu)
+
+
+def side_market_chance(lean, own_po=None, mkc=None):
+    """The market's chance of Scout's side: own prices first, else the quote's market chance, else None."""
+    if _num(own_po):
+        return own_po if lean == "over" else 1.0 - own_po
+    if mkc and _num(mkc.get("po")) and _num(mkc.get("pu")):
+        return mkc["po"] if lean == "over" else mkc["pu"]
+    return None
+
+
+def price_cap(platform, lean, own_po=None, mkc=None):
+    """cap-3 -> the hold {"b": "cap", "t": CAP_TEXT, "v": CAP_VERSION} or None. Only a quote with a side can be held;
+    a pick'em quote (or one with no platform named) never is."""
+    if not lean or not platform or is_pickem(platform):
+        return None
+    m = side_market_chance(lean, own_po, mkc)
+    if m is not None and m <= MAX_SIDE_MARKET + 1e-12:
+        return None
+    return {"b": "cap", "t": CAP_TEXT, "v": CAP_VERSION}
+
+
 # ------------------------------------------------------------------------------- cal-mi-1 (REGISTER A8) displayed chance
 CAL_MODELS = ("sm-1",)                                 # mi-1 already uses the market; market-only views never change
 
@@ -440,10 +515,13 @@ def calibrated(league, stat, po, pu, pp, model, mkc):
         return None
 
 
-def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None, raw=None, view=None, now=None):
-    """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-2 sanity), else the cf-2
-    signal. raw = the uncalibrated (po, pu) when cal-mi changed the shown chance; view = the bv-1 row summary (its
-    "to10" dates the newest game with the stat); now = snapshot time. -> (x, sanity code or None)."""
+def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None, raw=None, view=None, now=None, platform=None,
+            own_po=None):
+    """The q.x a snapshot / sheet quote carries: a hold {"b", "t", "v"} (vg-1 gate, then sg-2 sanity, then cap-3 near-even
+    price), else the cf-2 signal. raw = the uncalibrated (po, pu) when cal-mi changed the shown chance; view = the bv-1
+    row summary (its "to10" dates the newest game with the stat); now = snapshot time; platform = the quote's platform and
+    own_po = P(Over) from its own two prices (own_chance) for cap-3. -> (x, sanity code or None; cap-3 is not a sanity
+    code)."""
     held = contain_reason(league, stat)                # A9a 4: the one containment source, both leagues
     if held:
         return {"b": "gate", "t": held, "v": GATE_VERSION}, None
@@ -455,6 +533,9 @@ def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None, raw=None, vi
                         last_at=(view or {}).get("to10"), now=now, played=(view or {}).get("played"))
     if code:
         return {"b": code, "t": SANITY_TEXT[code], "v": SANITY_VERSION}, code
+    cap = price_cap(platform, sig.get("ln"), own_po, mkc)
+    if cap:                                            # cap-3: a long-odds book / exchange line gets no side or letter
+        return cap, None
     if sig.get("ln"):                                  # rg-1: grade from the UNROUNDED lean-side chance
         sig["gr"] = research_grade(po if sig["ln"] == "over" else pu)
         sig["gp"] = GRADE_POLICY
