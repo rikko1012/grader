@@ -809,3 +809,41 @@ rows count.**
    without a new registered reason.
 7. **Two-way players** (defensive listing) are outside this question. They stay at sm-1's floor with the sg-2 hold;
    SCOUT_NFL_TWO_WAY stays off.
+
+## Amendment A12 - nrm-1 NFL role-trend mean shadow for rush_att / rec (registered 2026-11-09, BEFORE the nrm-1 artifact was frozen or any forward row recorded)
+
+Owner 2026-11-09: a projection change is accepted when it raises HIT RATE at the real offered lines (side = Scout's lean,
+every graded prop), judged on Over picks and Under picks separately, without shrinking the graded count and without a
+more lopsided Over/Under split; calibration and log loss are information only. "Start the hidden NFL minutes/role test
+(rm-1) for rush attempts and receptions as a forward SHADOW ... decide after >= 48 games."
+
+Why: sacc-1109 / hit-1109 (cs2_scout_ops/logs/sports_accuracy_2026-11-09.md). On the development book-line window
+(NFL weeks 8-9 + TNF, 28 games; the window had been inspected for the diagnosis, so this is NOT evidence) rm-1 rush_att
+raised hit rate on all props +1.9 pts [-0.6, +4.7] and graded +1.1 [-1.1, +3.0], both sides up, graded count 455 vs
+447, Over share 26% vs 25%. rec: all props +0.5 [-1.6, +2.8], graded +1.5 [-0.4, +3.5] but graded count 606 vs 650.
+**Only forward rows count.**
+
+1. **Candidate nrm-1 (rush_att, rec).** The printed sm-1 PMF's frozen base (base_of, before any tw-1 layer) moved by one
+   multiplier r = exp(clip(gamma . z, -2, 2)), x -> r x on the grid. z (sports/model/nrm1.py Z_NAMES): const,
+   log((last-game opp + 1)/(EW4 opp + 1)), log((EW2 opp + 1)/(EW4 opp + 1)), L3 - EW4 snap share, team spread / 7,
+   (implied team total - 22) / 5, back from a 10+ day absence, lagged QB change, team change; opp = carries (rush_att)
+   or targets (rec). gamma per market fitted ONCE by Poisson deviance (offset = out-of-sample sm-1 mean, ridge 1e-2) on
+   every sacc-1109 walk-forward window through 2026 week 9; box scores only, the book line is never an input. Artifact
+   `nrm1_nfl.json` (content sha + pairing with the live sm-1 NFL sha verified at load; any mismatch skips the shadow).
+   The production inputs equal the research inputs row for row (hit_1109/nrm1_fit.py parity: max |diff| 0 on 24,118
+   rows per market).
+2. **Recording.** Inside the existing forward job, after sm-1 writes the market, for every target offer that got an sm-1
+   forecast: `shadow.db` shadow_forecasts (model_version `nrm-1`) + `nrm1_inputs` (base sm-1 PMF / chances, the PRINTED
+   sm-1 chances, z, r). Never displayed, never graded, never changes a grade; the sm-1 frame is read, not written. Off
+   switch SPORTS_SHADOW_NRM1=0. Any error skips the shadow.
+3. **Held-out window.** NFL games starting after the first recorded nrm-1 row. No interim looks (status only counts).
+4. **Threshold.** Each market is scored once, through `python -m sports.model.nrm1 heldout <history.db>`, when >= 48
+   final games have a recorded row; written once to `<SPORTS_DATA_DIR>/model/heldout_nrm1.json`, never re-scored.
+5. **Score.** Last pre-start row per (game, player, stat, line) on PrizePicks / Underdog, pushes and no-box rows dropped.
+   Side = the lean (P(Over) >= P(Under)). nrm-1 vs the PRINTED sm-1 chance: hit rate on all props and on graded props
+   (chosen side >= 53.45%), Over picks and Under picks separately, game-clustered bootstrap 95% CIs (B = 2000) of the
+   differences, graded counts, graded Over share, side flips.
+6. **Decision (pre-stated).** Pass = hit rate up on all props AND graded props (point estimate > 0, CI upper bound > 0)
+   AND neither Over picks nor Under picks down (point estimate) AND graded count >= sm-1's AND graded Over share no
+   further from 50% than sm-1's. A pass makes nrm-1 eligible for an **owner decision** to switch that market (model
+   version bump + the usual release checks). A fail retires nrm-1 for that market. Nothing switches automatically.
