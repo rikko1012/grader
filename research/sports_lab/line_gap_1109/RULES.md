@@ -83,3 +83,20 @@ B = 1,000, seed 7, on the rule-minus-baseline difference.
 - **H3** graded count >= baseline graded count.
 - **H4** graded Over share no further from 50% than the baseline's.
 - PASS = H1 and H2 and H3 and H4. Calibration / stated-vs-hit gap is information only; chances are never shrunk.
+
+## Amendment 1 (2026-11-09, made while building the dataset, BEFORE any rule was scored)
+
+Found while checking the 1,431 keys present in both sources (games Nov 4-5): the export's `forecast_at` is the creation
+time of the last DISTINCT saved forecast (the store keeps one forecast while its numbers do not change), while the
+stream logs every re-evaluation. Same key: same side 99.93%, mean |dp| 0.0002, results agree 100%, stream time later
+by a median 8.5 h. So the two windows carry different time semantics, and the L_O rule above would look ahead in
+window E. Replaced (no outcome was looked at):
+
+- **L_O, window E:** O's row with the largest forecast_at <= t (the O line most recently created at or before t; a line
+  change creates a new forecast, so that line was live at t). **L_O, window S:** as above (smallest forecast_at >= t,
+  with an O row <= t); the stream shows every run, so that line was live at t.
+- **L_open, window S:** the line of B's FIRST stream forecast for that game, player, stat (any time before t). Window E:
+  unchanged (earliest-created row).
+- **bump time / d3:** window S only (first stream time the current line appeared on B, hours before start). Window E
+  has no reliable move time, so d3 leaves window-E rows at baseline.
+- c1 "same run" (equal forecast_at) is exact under both semantics and is unchanged.
