@@ -202,13 +202,40 @@ exited 1 four times. Causes and fixes (no grade, chance, stake, side, projection
 Check after deploy: ops `scheduler.jobs` settle / settle-post / sheets / results-public / model-forward `last_ok_at` set
 and `failures_in_a_row` 0; `results_stages.last_ok`; `settle_post_stages` - the ledger's production run time was never
 measured on its own (only "ledger + scorecards ~1,000 s" before the split), so read the first runs' `model_learning` /
-`results` stage seconds against the 2,400 s timeout and the 900 s cadence; settle-post `last_exit.peak_rss_mb` against
+`results` stage seconds against the 1,500 s timeout (2,400 s until the stall fix below) and the 900 s cadence; settle-post `last_exit.peak_rss_mb` against
 its 270 MB cap; mapping-audit / archive `last_start` recent (they were starved of a heavy slot).
+
+**Bounded waits (scheduler stall 2026-11-09, after c31637d).** At 72 min uptime model-forward (exclusive) had been
+queued 71 min with 0 starts, settle 0 starts, and picks-ingest / slips-ingest / picks-settle / pregame-news had not run
+for ~60 min (member picks not recorded or settled), while board builds, collectors, prebuilt and books kept running.
+Replay (`python scripts/sim_sports_scheduler.py --ref c31637d --ref ecfa81a`, production job table, live run times,
+`sports/tests/sched_sim.py`): on Standard the two heavy slots are oversubscribed by member-facing jobs that are always
+urgent (board builds every 60 s at 140-220 s, prebuilt every 45 s at ~60 s, collectors every 3-5 min at 290-360 s -
+~3 slots of demand). Urgent jobs passed a waiting exclusive job, so the system never drained; the waiting exclusive
+job held every later start, LIGHT jobs included; a non-urgent heavy job (settle) never got a slot. The rule predates
+c31637d (ecfa81a replays the same first hour); there model-forward exited 1 every run and sat in its 1-8 h failure
+backoff, so most of the time nothing waited. c31637d fixed that exit 1 - and the boot made it due at once.
+Rules now (scheduling only; no grade, chance, stake, projection or settlement change; `sports/tests/test_sports_stall_1108.py`):
+- LIGHT jobs run beside a waiting or running exclusive job whenever the reservation total still holds the exclusive job
+  (like books); the exclusive job never waits for them.
+- An exclusive job that has waited `SPORTS_JOB_EXCL_DRAIN_S` (600 s) stops every other non-light start, urgent ones
+  included; the running jobs finish and it starts (model-forward every ~42 min in the replay, longest wait ~15 min).
+- settle is urgent after 15 min overdue on Standard; any other non-exclusive job overdue past `SPORTS_JOB_STARVE_S`
+  (3,600 s) counts as urgent and ages from then on, so it takes a turn between the board builds.
+- settle-post never starts while settle is due (`yields_to`), and `--budget-s` (`SPORTS_SETTLE_POST_BUDGET_S`, 600 s)
+  stops its scorecards between events (per-event marks keep the progress; shadow's closing mark is not advanced), then
+  the ledger runs; timeout 1,500 s. Its first production run held model-daily - and so settle - for the whole 2,400 s
+  kill; that kill lost no scorecard work (marks commit per event) but the ledger never ran.
+Trade-off (replay, hours 2-8): model-forward runs every ~42 min instead of ~69, and each run pauses every heavy job
+(drain + ~5 min alone), so the NBA board build's mean interval goes 10.6 -> ~14 min (longest 17 -> ~27 min). Raise
+`SPORTS_JOB_EXCL_DRAIN_S` to favour the boards; 0 restores the old exclusive hold (lights stay unblocked).
+Check after deploy: ops `scheduler.jobs` picks-ingest `last_start` within 2 min; model-forward `starts` rising every
+30-45 min; settle `starts` every 15-40 min; no `job_starved` alert for a light job.
 
 **Standard cadences (code defaults when the plan is >= 1.5 GB, 2026-10-25; Starter in brackets):** collector per
 league 3 / 5 / 10 min near tip / game day / otherwise [5 / 10 / 15]; Kalshi 10 / 30 min [20 / 60]; board build per
 league every 60 s and right after each collector cycle [180 s]; slip pool 45 s [90 s]; settle, settle-post (results
-ledger + scorecards), picks-settle, slips-settle every 15 min [60 min]; results-public 30 min. Model-forward stays 30 min (exclusive: on 1 CPU a 15-min cycle
+ledger + scorecards, scorecards bounded by --budget-s 600 s), picks-settle, slips-settle every 15 min [60 min]; results-public 30 min. Model-forward stays 30 min (exclusive: on 1 CPU a 15-min cycle
 would pause every other job ~20% of the time). The board build runs beside the OTHER league's collector, so pages keep
 updating while lines are collected.
 
@@ -247,7 +274,7 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | ingest-nba / ingest-nfl | `sports.worker ingest <league> --bucket-min 1 --sources espn,pp,ud,injuries,oddsapi,polymarket,games` (one job per league; `books` only with SPORTS_BOOKS_JOB=0) | GAME-DAY cadence per league: 5 min from 2 h before its earliest upcoming tip, 10 min on a game day (tip within 18 h or a game under way), 15 min otherwise (SPORTS_INGEST_HOT_S / _GAMEDAY_S / _IDLE_S / _HOT_H / _GAMEDAY_H) | exclusive | 300 | prod 191-197 both leagues together | SPORTS_INGEST |
 | ingest-kalshi | `sports.worker ingest nba nfl --bucket-min 1 --sources kalshi` | 20 min in a league's 2 h pre-tip window, else 60 min (SPORTS_KALSHI_HOT_S / _IDLE_S) | heavy | 240 | prod 70-84 | SPORTS_INGEST |
 | settle | `sports.worker settle nba nfl --no-post` (+ catch-up of unsettled games since SPORTS_SETTLE_FLOOR, 40 per run); settling only since 2026-11-08 - starts `settle-post` when it exits 0 | 60 min | heavy | 120 | 58 | SPORTS_INGEST |
-| settle-post | `sports.worker settle-post nba nfl`: the model + shadow scorecards (learning.on_settled / shadow.settle), then results.json per league (streamed per event through a spill file, sports/spill.py). Reads the store only; an event whose settlement / forecast records are unchanged since its last full pass is skipped without decoding, and each event's mark commits with its rows (a killed run resumes). Locks model-daily (never beside settle or grades-daily) and season-results (never beside results-public). Stages: ops `settle_post_stages` | 60 min and right after each settle | heavy | 150 (x1.8 = 270 MB on Standard; was 340 = 612 MB, review 2026-11-08: no board build fit beside it and a light job) | synthetic season (180k forecasts, 116 games, 2026-11-08): scorecards 56 MB / 38 s first pass, 0.5 s once events are marked (old: 25 s every run); ledger before the spill 302 MB, after: process peak flat with the season (69 / 71 / 76 MB at 9 / 27 / 81 games, ecfa81a 71 / 118 / 270) | SPORTS_INGEST |
+| settle-post | `sports.worker settle-post nba nfl --budget-s 600`: the model + shadow scorecards (stopped between events after the budget, resumed next run; never started while settle is due - stall 2026-11-09) (learning.on_settled / shadow.settle), then results.json per league (streamed per event through a spill file, sports/spill.py). Reads the store only; an event whose settlement / forecast records are unchanged since its last full pass is skipped without decoding, and each event's mark commits with its rows (a killed run resumes). Locks model-daily (never beside settle or grades-daily) and season-results (never beside results-public). Stages: ops `settle_post_stages` | 60 min and right after each settle | heavy | 150 (x1.8 = 270 MB on Standard; was 340 = 612 MB, review 2026-11-08: no board build fit beside it and a light job) | synthetic season (180k forecasts, 116 games, 2026-11-08): scorecards 56 MB / 38 s first pass, 0.5 s once events are marked (old: 25 s every run); ledger before the spill 302 MB, after: process peak flat with the season (69 / 71 / 76 MB at 9 / 27 / 81 games, ecfa81a 71 / 118 / 270) | SPORTS_INGEST |
 | sheets | `sports.sheets build nba nfl --skip-results` (pick sheets + "without" files; ops `sheets_stages`) | 5 min | heavy | 200 | 52 (sheets steps, 2026-11-08 prod) | SPORTS_INGEST |
 | results-public | `sports.sheets build nba nfl --only results --force` (public Results page file `results_public.json`; own job since 2026-11-08, ops `results_stages`; lock season-results: never beside settle-post) | 30 min | heavy | 200 | process peak flat with the season since the spill (64 / 65 / 66 MB at 9 / 27 / 81 synthetic games; ecfa81a 65 / 91 / 182; prod old in-sheets path 361-365 MB, ~230 s). Spill file ~0.8 MB per game on disk while it runs | SPORTS_INGEST |
 | slips-settle | `sports.slips settle` | 60 min | light | 60 | 23 | SPORTS_INGEST |

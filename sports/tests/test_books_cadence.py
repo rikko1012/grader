@@ -340,7 +340,10 @@ def test_an_exclusive_job_does_not_wait_for_the_books_job_but_others_still_wait_
     sch.running = {"books": (None, 0)}
     assert sch._fits("excl")                                                 # never waits for the books job
     sch.running = {"excl": (None, 0)}
-    assert sch._fits("books") and not sch._fits("heavy") and not sch._fits("light")
+    # stall 2026-11-09: every light job runs beside an exclusive one when the budget holds both, like books
+    assert sch._fits("books") and not sch._fits("heavy") and sch._fits("light")
+    sch.running = {"light": (None, 0)}
+    assert sch._fits("excl")                                                 # ...and is never waited for
     sch.running = {"heavy": (None, 0)}
     assert not sch._fits("excl")                                             # everything else still runs alone
     small = scheduler.Scheduler(jobs=jobs, budget=350, max_heavy_n=1)       # Starter-sized budget: memory first

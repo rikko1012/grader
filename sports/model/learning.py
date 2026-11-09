@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
+import time
 from datetime import timedelta
 
 import numpy as np
@@ -68,14 +69,16 @@ def _pit(fc, value, pmf_row=None, lo=None):
     return float(p[ks < value].sum() + 0.5 * p[ks == value].sum())
 
 
-def on_settled(scon, log=None, now=None, days=30):
+def on_settled(scon, log=None, now=None, days=30, deadline=None):
     """Score every forecast whose event has a settlement learned within the last `days`.
     Idempotent: one row per forecast x current settlement; a corrected settlement supersedes the earlier row.
 
     Bounded (Starter, 2026-10-24): event by event - only events with a settlement known in the window are read, each
     event's settlements are read once (records_event index) and only that event's forecasts are decoded; a forecast
     already scored against its current settlement costs one indexed lookup. Never retrains (retrain_due only REPORTS
-    whether the registered trigger is met; fitting needs `train fit` under SPORTS_TRAIN)."""
+    whether the registered trigger is met; fitting needs `train fit` under SPORTS_TRAIN).
+    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09): stop between events once passed; every event
+    done so far is committed with its mark, the rest are read by the next run ("partial": True, "events_left")."""
     lcon = db()
     icon = forward.inputs_db()
     cutoff = (parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -83,7 +86,11 @@ def on_settled(scon, log=None, now=None, days=30):
                                       "AND event_id IS NOT NULL ORDER BY event_id", (cutoff,))]
     n_new = n_diag = n_skip = 0
     done = dict(lcon.execute("SELECT event_id, sig FROM learn_events"))
-    for ev in evs:
+    left = 0
+    for i, ev in enumerate(evs):
+        if deadline is not None and time.time() >= deadline:
+            left = len(evs) - i                         # resumed by the next run (marks committed per event)
+            break
         # Skip an event whose records are exactly those of its last full pass: every forecast it could score is
         # already in the scorecard against its current settlement, so the body below would add nothing. The mark is
         # committed with the event's rows, so a run killed mid-way keeps what it finished (settle 1,500 s timeouts,
@@ -127,11 +134,13 @@ def on_settled(scon, log=None, now=None, days=30):
     lcon.commit()
     out = {"scorecard_rows_added": n_new, "diagnostics_added": n_diag, "events_read": len(evs),
            "events_unchanged": n_skip, "retrain": {}}
+    if left:
+        out.update(partial=True, events_left=left)
     for sport in ("nba", "nfl"):
         out["retrain"][sport] = retrain_due(sport, lcon)
     try:                                                # sm-2 shadow scorecard (REGISTER A5); never blocks sm-1
         from . import shadow
-        out["shadow"] = shadow.settle(scon)
+        out["shadow"] = shadow.settle(scon, deadline=deadline)
     except Exception as e:                              # noqa: BLE001
         out["shadow"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
     lcon.close()

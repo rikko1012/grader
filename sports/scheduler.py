@@ -12,6 +12,11 @@ through a MEMORY-RESERVATION QUEUE:
   * priority with AGING (effective priority = prio - overdue / SPORTS_JOB_AGING_S, default 120 s per level), so a
     job that keeps losing the slot moves up; a job blocked only by the heavy slot / budget lets later jobs that fit
     start (backfill), but a waiting EXCLUSIVE job holds every later start back until it gets the whole budget;
+  * bounded waits (stall 2026-11-09): LIGHT jobs run beside a waiting or running exclusive job whenever the
+    reservation total still holds the exclusive job (an exclusive job never waits for them); an exclusive job that has
+    waited SPORTS_JOB_EXCL_DRAIN_S (600) stops every other non-light start, urgent ones included, so the system drains
+    and it starts; any other job overdue past SPORTS_JOB_STARVE_S (3600) counts as urgent, so a saturated pair of heavy
+    slots cannot starve settle / history / player-context; a job may yield to another (settle-post -> settle);
   * a watchdog samples each child's RSS every 0.25 s; above its cap the child is killed (SIGKILL), counted
     (`over_cap`) and retried later with backoff - the service process itself is never the one that runs out;
   * children run at low OS priority (nice 10 / BELOW_NORMAL) so member requests keep the CPU, and on Linux mark
@@ -237,6 +242,9 @@ def default_jobs():
         "settle": dict(argv=_py("-m", "sports.worker", "settle", *lg, "--no-post"), every_s=900 if std else 3600,
                        timeout_s=1500 if std else 900,      # 764 s beside a partner on 2026-11-01, still rising
                        then=("settle-post",),
+                       # stall 2026-11-09: 0 starts in 72 min - a non-urgent heavy job never got a slot from the
+                       # board builds / collectors (always urgent on Standard). Settlement feeds members' picks
+                       urgent_after_s=900 if std else None,
                        flag="SPORTS_INGEST", cap_mb=240 if std else 120, cls=HEAVY, prio=4,
                        locks=("canonical", "books", "games", "cache", "model-daily"),      # never beside a collector
                        # Settlement also imports the model scorecard's native libraries. The old collector VM
@@ -254,9 +262,16 @@ def default_jobs():
         # cap 150 (x1.8 = 270 MB on Standard, review 2026-11-08): measured peaks scorecards 56 MB, ledger 69-76 MB
         # (spill, flat with the season). The former 340 (612 MB) left no room for a board build (540) beside a light
         # job while settle-post ran - and it runs most of the time
-        "settle-post": dict(argv=_py("-m", "sports.worker", "settle-post", *lg), every_s=900 if std else 3600,
-                            timeout_s=2400 if std else 1800, flag="SPORTS_INGEST", cap_mb=150,
+        # stall 2026-11-09: its first production run held model-daily (and so settle) for the whole 2,400 s kill. Now
+        # the scorecards stop between events after --budget-s (their per-event marks keep the progress; the next run
+        # resumes), the ledger follows, and the job never starts while settle is due (yields_to) - settle waits at most
+        # one bounded settle-post run (~budget + ledger, kill at timeout_s)
+        "settle-post": dict(argv=_py("-m", "sports.worker", "settle-post", *lg, "--budget-s",
+                                     str(_env_num("SPORTS_SETTLE_POST_BUDGET_S", 600, int))),
+                            every_s=900 if std else 3600,
+                            timeout_s=1500 if std else 1800, flag="SPORTS_INGEST", cap_mb=150,
                             cls=HEAVY, prio=5, locks=("model-daily", "settle-post", "season-results"),
+                            yields_to=("settle",),
                             env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
                             if std else {}),
         # pre-game news archive (pgn-1, pregame_news/): injury report + depth charts through the shared caches and the
@@ -500,6 +515,9 @@ class Scheduler:
         self.now = now
         self.tick_s = tick_s
         self.aging_s = aging_s if aging_s is not None else _env_num("SPORTS_JOB_AGING_S", 120.0)
+        # stall 2026-11-09 (sports/RUNBOOK.md "Bounded waits"): 0 disables either rule
+        self.drain_s = _env_num("SPORTS_JOB_EXCL_DRAIN_S", 600.0)
+        self.starve_s = _env_num("SPORTS_JOB_STARVE_S", 3600.0)
         self.triggers = triggers or TRIGGERS
         self.running = {}                               # name -> (Popen, start_t)
         self.stop_ev = threading.Event()
@@ -529,12 +547,18 @@ class Scheduler:
             return False
         return not (a.get("league") and a.get("league") == b.get("league"))
 
+    @staticmethod
+    def _beside(spec):
+        """May run beside an exclusive job, which does not wait for it (the reservation total still holds both):
+        beside_exclusive (the books job, 2026-11-06) and every LIGHT job (stall 2026-11-09: picks-ingest sat 65 min
+        behind a waiting model-forward while member picks went unrecorded; lights are small, short and touch only
+        their own stores)."""
+        return bool(spec.get("beside_exclusive")) or spec["cls"] == LIGHT
+
     def _fits(self, name):
-        """beside_exclusive (the books job, 2026-11-06): a light, network-bound job that may run beside an exclusive
-        model job and that an exclusive job does not wait for - the reservation total still holds both."""
         spec = self.specs[name]
-        others = [n for n in self.running if not self.specs[n].get("beside_exclusive")]
-        if any(self.specs[n]["cls"] == EXCLUSIVE for n in self.running) and not spec.get("beside_exclusive"):
+        others = [n for n in self.running if not self._beside(self.specs[n])]
+        if any(self.specs[n]["cls"] == EXCLUSIVE for n in self.running) and not self._beside(spec):
             return False
         if spec["cls"] == EXCLUSIVE:
             return not others and (not self.running or self.reserved() + spec["cap_mb"] <= self.budget)
@@ -545,9 +569,34 @@ class Scheduler:
         return self.reserved() + spec["cap_mb"] <= self.budget
 
     def _urgent(self, name, t):
-        """A member-facing job overdue past its urgent_after_s: ahead of everything, however aged the others are."""
-        after, ns = self.specs[name].get("urgent_after_s"), JOBS[name]["next_start"]
-        return bool(after and ns is not None and t - ns >= after)
+        """A member-facing job overdue past its urgent_after_s: ahead of everything, however aged the others are.
+        Any other non-exclusive job counts as urgent once overdue past starve_s (stall 2026-11-09: on Standard the
+        board builds / collectors are always urgent, so settle, history, player-context ... never got a slot)."""
+        return self._urgency(name, t) is not None
+
+    def _urgency(self, name, t):
+        """'member' (overdue past urgent_after_s), 'starved' (overdue past starve_s, not an exclusive job) or None."""
+        spec, ns = self.specs[name], JOBS[name]["next_start"]
+        if ns is None:
+            return None
+        after = spec.get("urgent_after_s")
+        if after and t - ns >= after:
+            return "member"
+        if self.starve_s and spec["cls"] != EXCLUSIVE and t - ns >= self.starve_s:
+            return "starved"
+        return None
+
+    def _draining(self, due, t):
+        """The exclusive job that has waited drain_s or longer (the first in due order), else None. While one drains
+        no other job starts unless it may run beside it, so the running ones finish and it gets the budget: before
+        2026-11-09 urgent jobs passed a waiting exclusive job forever and model-forward waited 72+ min."""
+        if not self.drain_s:
+            return None
+        for n in due:
+            qs = JOBS[n]["queued_since"]
+            if self.specs[n]["cls"] == EXCLUSIVE and qs is not None and t - qs >= self.drain_s:
+                return n
+        return None
 
     def _may_pass(self, name, held):
         """May `name` start while the urgent job `held` waits? Only if it leaves that job its slot and memory."""
@@ -597,7 +646,13 @@ class Scheduler:
                 out.append(name)
         def eff(n):
             ns = JOBS[n]["next_start"] or t
-            return (not self._urgent(n, t), self.specs[n]["prio"] - max(0.0, t - ns) / self.aging_s, ns)
+            over = max(0.0, t - ns)
+            kind = self._urgency(n, t)
+            if kind == "starved":
+                # among urgent jobs a starved one ages from the moment it became urgent: it takes its turn between
+                # the member-facing jobs (each slot it waits for is held), it does not jump all of them at once
+                over -= self.starve_s
+            return (kind is None, self.specs[n]["prio"] - over / self.aging_s, ns)
         out.sort(key=eff)
         return out
 
@@ -686,17 +741,29 @@ class Scheduler:
         with _LOCK:
             STATS["peak_children_rss_mb"] = round(max(STATS["peak_children_rss_mb"], total), 1)
         held = None                                     # an urgent job waiting for a slot
-        excl = None                                     # an exclusive job waiting for everything else to finish
-        for name in self.due():
-            if excl is not None:
-                # behind a waiting exclusive job only a beside_exclusive job may start, and only if the exclusive job
-                # still fits beside every beside_exclusive job once the others (which it waits for anyway) are done -
-                # so neither ever starves the other
-                spec = self.specs[name]
-                beside = sum(self.specs[n]["cap_mb"] for n in self.running if self.specs[n].get("beside_exclusive"))
-                if spec.get("beside_exclusive") and self._fits(name) and \
+        due = self.due()
+        waiting = set(due)
+        # an exclusive job waiting for everything else to finish; one that has waited drain_s holds every start from
+        # the top of the queue (urgent ones too), not only the starts after it
+        excl = self._draining(due, t)
+        for name in due:
+            spec = self.specs[name]
+            if any(y in waiting for y in spec.get("yields_to") or ()):
+                # e.g. settle-post (shares model-daily with settle) never takes the lock while settle is due
+                if JOBS[name]["queued_since"] is None:
+                    JOBS[name]["queued_since"] = t
+                continue
+            if excl is not None and name != excl:
+                # behind a waiting exclusive job only a job that may run beside it (books, the light jobs) may start,
+                # and only if the exclusive job still fits beside every such job once the others (which it waits for
+                # anyway) are done - so neither ever starves the other
+                beside = sum(self.specs[n]["cap_mb"] for n in self.running if self._beside(self.specs[n]))
+                if self._beside(spec) and self._fits(name) and \
                         beside + spec["cap_mb"] + self.specs[excl]["cap_mb"] <= self.budget:
                     self.start(name)
+                    continue
+                if JOBS[name]["queued_since"] is None:
+                    JOBS[name]["queued_since"] = t
                 continue
             if (held is None or self._may_pass(name, held)) and self._fits(name):
                 self.start(name)
@@ -706,7 +773,8 @@ class Scheduler:
             with _LOCK:
                 STATS["deferred_ticks"] += 1
             if self.specs[name]["cls"] == EXCLUSIVE:
-                excl = name                             # hold everything behind a waiting exclusive job (no starvation)
+                if excl is None:
+                    excl = name                         # hold everything behind a waiting exclusive job (no starvation)
                 continue
             if held is None and self._urgent(name, t):
                 held = name                             # nothing may take the slot it is waiting for

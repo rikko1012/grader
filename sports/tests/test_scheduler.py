@@ -88,14 +88,18 @@ def test_memory_budget_limits_concurrent_light_jobs():
 
 
 def test_a_waiting_exclusive_job_holds_back_later_starts():
+    # stall 2026-11-09: a LIGHT job no longer waits for an exclusive one when the budget holds both (picks-ingest sat
+    # 65 min behind a waiting model-forward); a later HEAVY job still does
     jobs = {"heavy": J(sleeper(1.0), "heavy", prio=2, every=60),                 # runs first (exclusive not due yet)
             "excl": J(sleeper(0.3), "exclusive", cap=200, prio=1, every=60, first=0.2),
+            "heavy2": J(sleeper(0.1), "heavy", cap=10, prio=3, every=60, first=0.4),
             "light": J(sleeper(0.1), "light", cap=10, prio=3, every=60, first=0.4)}
     sch = scheduler.Scheduler(jobs=jobs, budget=300, tick_s=0.05)
     run_for(sch, 4)
     iv = {n: (s, e) for n, s, e in intervals(sch)}
     assert iv["heavy"][0] < iv["excl"][0]                                        # excl waited for the heavy job
-    assert iv["light"][0] >= iv["excl"][1] - 0.01                                # light (lower prio) waited for excl
+    assert iv["heavy2"][0] >= iv["excl"][1] - 0.01                               # heavy2 (lower prio) waited for excl
+    assert iv["light"][0] < iv["excl"][0]                                        # the light job did not
     assert scheduler.JOBS["excl"]["last_exit"]["code"] == 0
 
 

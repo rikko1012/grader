@@ -397,7 +397,10 @@ def test_settle_runs_without_post_and_starts_settle_post(monkeypatch):
     s, p = J["settle"], J["settle-post"]
     assert "--no-post" in s["argv"] and s["then"] == ("settle-post",)
     assert p["argv"][2:4] == ["sports.worker", "settle-post"] and p["cls"] == scheduler.HEAVY
-    assert "model-daily" in p["locks"] and p["timeout_s"] > s["timeout_s"]
+    # stall 2026-11-09: no longer a longer kill than settle's - the scorecards stop at --budget-s (resumed next run)
+    # and the ledger follows well inside timeout_s; settle-post never starts while settle is due
+    budget = float(p["argv"][p["argv"].index("--budget-s") + 1])
+    assert "model-daily" in p["locks"] and budget + 600 <= p["timeout_s"] and p["yields_to"] == ("settle",)
     assert not scheduler.Scheduler._pairable(s, p)                  # never beside the settle run it follows
     assert not scheduler.Scheduler._pairable(p, J["grades-daily"])  # nor the daily fit reading learning.db
     assert scheduler._child_env(p)["SPORTS_WORKER_MAX_VM_MB"] == scheduler._child_env(s)["SPORTS_WORKER_MAX_VM_MB"]

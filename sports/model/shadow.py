@@ -488,12 +488,15 @@ def l2_score(sport, hcon, freeze, art):
 CORRECTION_WINDOW_DAYS = 30            # first scan: settlements learned this far back (learning.on_settled's window)
 
 
-def settle(scon, path=None, now=None):
+def settle(scon, path=None, now=None, deadline=None):
     """Score shadow forecasts whose offer has a settlement (same rule as learning._score_one: the forecast's OWN line
     and chosen side), each under its OWN model_version (sm-2, sm-nfl-2). Idempotent.
     A corrected settlement (new settlement_id) SUPERSEDES the forecast's earlier row (superseded=1) instead of adding a
     second live row, and events are re-read when a settlement was learned since the last pass - also when every
-    forecast of the event is already scored (bug sweep 2026-11-06 #42)."""
+    forecast of the event is already scored (bug sweep 2026-11-06 #42).
+    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09): stop between events once passed; the events
+    done keep their marks and the closing 'settled_known_at' mark is NOT advanced, so the next run re-reads the rest."""
+    import time
     from datetime import timedelta
     from .. import settlement, store
     from ..contracts import now_utc, parse_utc
@@ -515,7 +518,12 @@ def settle(scon, path=None, now=None):
     n = 0
     from .learning import event_sig
     done = dict(con.execute("SELECT event_id, sig FROM shadow_events"))
-    for ev in sorted(evs):
+    left = 0
+    order = sorted(evs)
+    for i, ev in enumerate(order):
+        if deadline is not None and time.time() >= deadline:
+            left = len(order) - i
+            break
         # skip an event whose settlements and shadow forecasts are exactly those of its last full pass (a no-op: every
         # forecast it can score already has its row); the mark commits with the event's rows, so a killed run (settle
         # 1,500 s timeouts, 2026-11-08 - the closing 'settled_known_at' mark was never written) keeps its progress
@@ -556,10 +564,11 @@ def settle(scon, path=None, now=None):
                               cur.source_value, cur.settled_at)).rowcount
         con.execute("INSERT OR REPLACE INTO shadow_events (event_id, sig) VALUES (?, ?)", (ev, sig))
         con.commit()
-    con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('settled_known_at', ?)", (newest,))
+    if not left:
+        con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('settled_known_at', ?)", (newest,))
     con.commit()
     con.close()
-    return {"shadow_scored": n}
+    return {"shadow_scored": n, **({"partial": True, "events_left": left} if left else {})}
 
 
 def scorecard_rows(path=None):

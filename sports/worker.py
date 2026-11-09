@@ -712,15 +712,19 @@ def _write_stages(name, stage_s, finished=True):
         pass
 
 
-def _post_settle(leagues, con, stage_s, t0, stages_name):
+def _post_settle(leagues, con, stage_s, t0, stages_name, budget_s=None):
     """The bookkeeping after settling: the model + shadow scorecards, then the results ledger per league. Never breaks
     settlement. The stages file is written after each stage, so a killed run still says how far it got.
     Scorecards FIRST (2026-11-08 review): they resume per event (learning.on_settled / shadow.settle marks), while the
-    ledger is rebuilt in full each run - a ledger that is killed (cap / timeout) can no longer starve the scorecards."""
+    ledger is rebuilt in full each run - a ledger that is killed (cap / timeout) can no longer starve the scorecards.
+    budget_s (settle-post, stall 2026-11-09): the scorecards stop between events once it is spent - the events done so
+    far keep their marks, the next run resumes - and the ledger still runs, so one run never holds model-daily (and so
+    settle) for long. None = no limit (manual runs, settle without --no-post)."""
     out = {}
+    deadline = (t0 + budget_s) if budget_s else None
     try:                                                # model scorecard + diagnostic queue (sports/model/learning.py)
         from .model import learning                     # never breaks settlement
-        out["model_learning"] = learning.on_settled(con)
+        out["model_learning"] = learning.on_settled(con, deadline=deadline)
     except Exception as e:                              # noqa: BLE001
         out["model_learning"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     stage_s.append(["model_learning", round(time.time() - t0, 1)])
@@ -745,7 +749,8 @@ def cmd_settle_post(a, con):
     learning.db and shadow.db; never a settlement."""
     flags.require("SPORTS_INGEST")
     leagues = a.leagues or ["nba", "nfl"]
-    out = _post_settle(leagues, con, [], time.time(), "settle_post_stages.json")
+    out = _post_settle(leagues, con, [], time.time(), "settle_post_stages.json",
+                       budget_s=getattr(a, "budget_s", None))
     _print(out)
     return out
 
@@ -835,6 +840,9 @@ def main(argv=None):
                    help="settle only: the results ledger and scorecards run as `settle-post` (scheduler job)")
     s = sub.add_parser("settle-post")
     s.add_argument("leagues", nargs="*")
+    s.add_argument("--budget-s", type=float, default=None,
+                   help="stop the scorecards between events after this many seconds (resumed next run); the ledger "
+                        "still runs")
     s = sub.add_parser("forecast")
     s.add_argument("leagues", nargs="*")
     s = sub.add_parser("coverage")
