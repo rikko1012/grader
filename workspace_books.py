@@ -29,6 +29,16 @@ PICKEM = ("underdog", "prizepicks")
 PREF = ("underdog", "prizepicks")
 GAME_PERIODS = ("full_game", "game")
 ONE_SIDED_LABELS = ("Over only", "Under only")     # a pick'em line offering one side only (LoL os-1, sports cap-2)
+# cap-3 (owner 2026-11-08: "these are only A's cause they're probbaly -1000 odd props") on an extra book whose payout follows
+# the price (kind != "pickem": FanDuel / BetRivers / The Odds API books). The rule is sports/board_view.price_cap, mirrored here
+# because this module imports no sports package (tests/test_sports_cap3_hub.py keeps the constants and the answers equal): a
+# side and letter only when the line's no-vig chance of that side is <= CAP_MAX_SIDE_MARKET - its own two decimal prices
+# first, else the board's market chance at that same line, else held. Held = no side, no letter, no stake, no p_side (so the
+# hub's Scout-chance sort puts it last); chances and projection stay; the hub board's own held book row says the same.
+CAP_VERSION = "cap-3"
+CAP_MAX_SIDE_MARKET = 0.65
+CAP_TEXT = "Scout grades lines priced near even."
+CAP_HOLD_LABEL = "Research estimate"               # = workspace_sports.HOLD_LABEL: the hub board's label for a held book row
 _PARSED = {}
 
 
@@ -166,6 +176,42 @@ def _windows():
     return ("l5", "l10", "l20") + (("h2h", "season") if workspace_h2h.board_enabled() else ())
 
 
+def own_po(over, under):
+    """P(Over) from a book line's own two decimal prices, de-vigged (= sports/board_view.own_chance for a book), or None."""
+    a = (over or {}).get("price") if (over or {}).get("offered") else None
+    b = (under or {}).get("price") if (under or {}).get("offered") else None
+    if not (isinstance(a, (int, float)) and isinstance(b, (int, float)) and a > 1 and b > 1):
+        return None
+    io, iu = 1.0 / a, 1.0 / b
+    return io / (io + iu)
+
+
+def cap_held(kind, side, po=None, market=None):
+    """cap-3 (= sports/board_view.price_cap): True when this extra-book line's side is not priced near even. A pick'em book or
+    a line with no side is never held. market = {"p_over", "p_under"} at this same line, used only without own prices."""
+    if kind == "pickem" or not side:
+        return False
+    if po is not None:
+        m = po if side == "over" else 1.0 - po
+    elif market and isinstance(market.get("p_over"), (int, float)) and isinstance(market.get("p_under"), (int, float)):
+        m = market["p_over"] if side == "over" else market["p_under"]
+    else:
+        m = None
+    return m is None or m > CAP_MAX_SIDE_MARKET + 1e-12
+
+
+def _cap3(r, kind, over, under, market):
+    """Apply cap-3 to one derived record's Scout block in place (display only: the board's saved chances never change)."""
+    s = r["scout"]
+    if not cap_held(kind, s.get("side"), own_po(over, under), market):
+        return
+    s.pop("letter_held", None)
+    s.update(side=None, p_side=None, grade=None, units=None, stake_reason=None,
+             hold={"label": CAP_HOLD_LABEL, "reason": CAP_TEXT},
+             validation={"kind": "research", "label": CAP_HOLD_LABEL, "detail": CAP_TEXT},
+             read_rev="x-" + _sha(s.get("read_rev"), CAP_VERSION)[:16])
+
+
 def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed_at, offer_key, read=None):
     """One display record for an extra book's line, built from the board's own records of that player and market.
     read(base record, line) -> (chance at this line or None, history at this line or None): line_chance + the game log."""
@@ -217,6 +263,9 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
         import letter_containment as lc               # lc-1: a held letter is never shown on an extra book's line either
         if lc.contained(sport, m.get("stat")):
             r["scout"].update(grade=None, letter_held=True, units=None)
+    # cap-3: a sportsbook line priced far from even shows no side or letter (its own prices first; the board's market chance
+    # only at the same line it was read at)
+    _cap3(r, kind, over, under, base.get("market_chance") if same else None)
     r["state"] = {"kind": "ok", "reason": None}
     pc = bp.providers().get(pid) or {}
     r["extra"] = {"provider": pid, "kind": kind, "same_line_as": base["offer"]["platform_label"] if same else None,

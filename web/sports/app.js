@@ -617,9 +617,12 @@
     return '<details class="sw-tech"><summary>Details</summary><div class="sw-small sw-faint">' + ls.join("<br>") + "</div>" + (buttons ? '<div class="sw-tech-src">' + buttons + "</div>" : "") + "</details>";
   }
   // rg-1 research grade of a quote: the server's letter (sports/board_view.quote_x q.x.gr) - every surface renders it
+  // A held quote (q.x.b: cap-3 near-even price, sg-2 sanity, vg-1 gate) has no letter; it says why in the server's own text
+  // (q.x.t), as the board table and Compare do - a held book / Polymarket card never shows chances with no word at all
   function gradeLine(q) {
     var x = q && q.x;
-    if (!x || x.b || !x.ln || !x.gr) return "";
+    if (x && x.b) return x.t ? '<div class="sw-grade-line sw-grade-held" data-held="' + esc(x.b) + '">' + esc(x.t) + "</div>" : "";
+    if (!x || !x.ln || !x.gr) return "";
     // the board table says "not offered here" when the graded side is closed on this book; cards and the player page
     // say the same (the side buttons below can only pick an offered side)
     var open = q.o ? !!q.o[x.ln === "over" ? 0 : 1] : !(q.sides || []).some(function (s) { return s.side === x.ln && !s.offered; });

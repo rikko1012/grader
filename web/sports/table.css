@@ -87,6 +87,7 @@
 .sw .sw-grade-nv{color:var(--muted)}
 .sw .sw-grade-banner{margin:0 0 8px;font-size:12.5px;color:var(--muted)}
 .sw .sw-grade-line{margin:4px 0 0;font-size:12.5px}
+.sw .sw-grade-held{color:var(--muted)}
 /* QoL (audit 2026-10-26): wide screens - the table fits, so its header sticks under the site header while the page
    scrolls (inside an overflow box it could only stick to the box). QoL 1107: "fits" is now measured (.sw-fit, set by
    fitTables in app.js, rules in sports.css) and the offset is the header's real height - the fixed 68 px slid under

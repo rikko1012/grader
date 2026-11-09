@@ -422,7 +422,9 @@ def signal(po, pu, mu, line, mkc, l10=None, iv=None):
 # construction, not an A. Fixed-payout pick'em apps (PICKEM_PLATFORMS) pay the same whatever the side's chance and are
 # never affected. Market chance, in order:
 #   1. the offer's own two prices: a book's two decimal prices de-vigged (1/o) / (1/o + 1/u); an exchange's YES
-#      midpoint (bid + ask) / 2 when both exist - the same per-book reading as sports/market_view.reading
+#      midpoint (bid + ask) / 2 when both exist AND ask - bid <= EXCHANGE_MAX_SPREAD (0.05, the registered market rule
+#      sports/model/market.py MAX_SPREAD). An empty ladder rung (bid 0.01 / ask 0.97) reads ~49% from its midpoint but
+#      says nothing about the price, so a wider spread is not an own price: the rule falls through to 2.
 #   2. else the quote's market chance (market_at: mv-1 at this offer's line, the board's market_chance)
 #   3. neither: no price to judge -> held as well
 # A held line keeps its projection and P(Over) / P(Under); it has no side, no letter, no edge and no stake. The hold is
@@ -431,6 +433,7 @@ CAP_VERSION = "cap-3"
 MAX_SIDE_MARKET = 0.65
 CAP_TEXT = "Scout grades lines priced near even."
 PICKEM_PLATFORMS = ("prizepicks", "underdog")
+EXCHANGE_MAX_SPREAD = 0.05                             # = sports/model/market.py MAX_SPREAD (test_cap3_long_odds keeps them equal)
 
 
 def is_pickem(platform):
@@ -441,23 +444,29 @@ def _num(x):
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
+def _mid(bid, ask):
+    """An exchange's YES midpoint when both sides are quoted and the spread is at most EXCHANGE_MAX_SPREAD, else None."""
+    if not (_num(bid) and _num(ask) and 0 < bid <= ask < 1) or round(ask - bid, 4) > EXCHANGE_MAX_SPREAD + 1e-9:
+        return None
+    return (bid + ask) / 2.0
+
+
 def own_chance(q):
     """P(Over) from the offer's OWN two prices, or None. q = a snapshot quote (its "sides" list) or a compact quote (sheet /
-    board: "d" = the book's decimal [over, under] when offered, "k" = the exchange's YES [bid, ask])."""
+    board: "d" = the book's decimal [over, under] when offered, "k" = the exchange's YES [bid, ask]). An exchange quote
+    wider than EXCHANGE_MAX_SPREAD has no own price (None): the caller then judges by the market chance, or holds."""
     if not q:
         return None
     if q.get("sides") is not None:
         sd = {s.get("side"): s for s in q.get("sides") or ()}
         o, u = sd.get("over") or {}, sd.get("under") or {}
         if o.get("price_format") == "exchange_yes_no":
-            bid, ask = o.get("bid"), o.get("ask")
-            return (bid + ask) / 2.0 if _num(bid) and _num(ask) and 0 < bid <= ask < 1 else None
+            return _mid(o.get("bid"), o.get("ask"))
         dec = [s.get("price") if s.get("offered") and s.get("price_format") == "decimal" else None for s in (o, u)]
     else:
         k = q.get("k")
         if k and len(k) == 2:
-            bid, ask = k
-            return (bid + ask) / 2.0 if _num(bid) and _num(ask) and 0 < bid <= ask < 1 else None
+            return _mid(*k)
         dec = list(q.get("d") or (None, None))
         oo = q.get("o") or (1, 1)
         dec = [dec[i] if i < len(dec) and (oo[i] if i < len(oo) else 1) else None for i in (0, 1)]

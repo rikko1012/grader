@@ -125,6 +125,72 @@ def test_own_chance_reads_every_quote_form():
     assert board_view.own_chance(pp) is None
 
 
+def test_exchange_spread_limit_matches_the_market_rule():
+    from sports.model import market
+    assert board_view.EXCHANGE_MAX_SPREAD == market.MAX_SPREAD == 0.05
+
+
+def test_wide_exchange_rung_has_no_own_price():
+    """Review 2026-11-08: an empty Polymarket / Kalshi rung (bid 0.01 / ask 0.97, live Gamma read: Giannis Points O/U 14.5)
+    reads ~49% from its midpoint. A spread over 0.05 is not an own price (the registered market rule): no own chance."""
+    for bid, ask in ((0.01, 0.97), (0.001, 0.999), (0.01, 0.99), (0.40, 0.46)):
+        assert board_view.own_chance({"k": [bid, ask]}) is None, (bid, ask)
+        assert board_view.own_chance({"sides": _ex(bid, ask)}) is None, (bid, ask)
+    for bid, ask in ((0.40, 0.45), (0.18, 0.22), (0.47, 0.47)):          # spread <= 0.05 (inclusive): the midpoint
+        assert board_view.own_chance({"k": [bid, ask]}) == pytest.approx((bid + ask) / 2)
+        assert board_view.own_chance({"sides": _ex(bid, ask)}) == pytest.approx((bid + ask) / 2)
+
+
+@pytest.mark.parametrize("platform", ["polymarket", "kalshi"])
+def test_wide_exchange_rung_falls_back_to_the_market_chance(platform):
+    """The reviewed case: Scout Over .985 at 14.5, market chance Over .96, rung 0.01 / 0.97 -> held (was an A)."""
+    mkc = {"po": 0.96, "pu": 0.04, "n": 3}
+    own = board_view.own_chance({"k": [0.01, 0.97]})
+    x, code = qx(platform, 0.985, 0.015, 22.0, 14.5, mkc, own)
+    assert code is None and x == {"b": "cap", "t": TEXT, "v": "cap-3"}
+    # no market chance either: nothing to judge the price by -> held
+    x, _ = qx(platform, 0.985, 0.015, 22.0, 14.5, None, own)
+    assert x["b"] == "cap"
+    # a near-even market chance still grades the side
+    x, _ = qx(platform, 0.62, 0.38, 22.0, 20.5, {"po": 0.55, "pu": 0.45, "n": 3}, own)
+    assert "b" not in x and x["ln"] == "over" and x["gr"] == "A"
+
+
+def test_wide_rung_in_snapshot_and_compact_board_is_held():
+    """guard_row (snapshot sides) and the compact board quote (k) give the same answer for a wide rung."""
+    row, forecasts, view = _world()
+    forecasts["fw"] = _fc("fw", 14.5, 0.985, 0.015, mu=22.0)
+    row["quotes"].append(_q("pmw", "polymarket", 14.5, "fw", _ex(0.01, 0.97)))
+    row["market"]["at"]["pmw"] = {"po": 0.96, "pu": 0.04, "n": 3}
+    forecasts["fe"] = _fc("fe", 20.5, 0.62, 0.38, mu=22.0)            # wide rung, near-even market chance: graded
+    row["quotes"].append(_q("pme", "polymarket", 20.5, "fe", _ex(0.01, 0.97)))
+    row["market"]["at"]["pme"] = {"po": 0.55, "pu": 0.45, "n": 3}
+    view["lines"]["14.5"] = view["lines"]["20.5"] = L10 + L10
+    snapshots.guard_row("nba", row, forecasts, view, NOW)
+    q = next(q for q in row["quotes"] if q["record_id"] == "pmw")
+    assert q["x"] == {"b": "cap", "t": TEXT, "v": "cap-3"}
+    c = snapshots.compact_quote(q)
+    assert c["x"] == q["x"] and board_view.own_chance(c) is None
+    e = next(q for q in row["quotes"] if q["record_id"] == "pme")
+    assert "b" not in e["x"] and e["x"]["ln"] == "over" and e["x"]["gr"] == "A", e["x"]
+
+
+# Golden cases shared with the hub's extra-book mirror (workspace_books.cap_held; tests/test_sports_cap3_hub.py holds the
+# SAME table - this package never imports a hub module): (over price, under price, side, market (po, pu) or None, held)
+GOLDEN = [(1.10, 7.0, "over", None, True), (1.10, 7.0, "under", None, False), (7.0, 1.10, "under", None, True),
+          (1.87, 1.95, "over", None, False), (1.87, 1.95, "under", None, False), (1.50, 2.60, "over", None, False),
+          (1.45, 2.80, "over", None, True), (None, 1.10, "under", (0.2, 0.8), True), (None, 1.80, "under", (0.45, 0.55), False),
+          (None, 1.80, "under", (0.35, 0.65), False), (None, None, "over", None, True), (4.6, 1.18, "under", (0.45, 0.55), True),
+          (2.0, 1.83, "under", (0.2, 0.8), False)]
+
+
+def test_golden_cases_for_the_hub_extra_book_mirror():
+    for o, u, side, mc, held in GOLDEN:
+        own = board_view.own_chance({"d": [o, u], "o": [o is not None, u is not None]})
+        got = board_view.price_cap("fanduel", side, own, {"po": mc[0], "pu": mc[1]} if mc else None) is not None
+        assert got == held, (o, u, side, mc)
+
+
 # ------------------------------------------------------------------------------------ snapshot rows (guard_row)
 def _q(rid, platform, line, fid, sides):
     return {"record_id": rid, "platform": platform, "line": line, "variant": "ladder_rung" if platform == "polymarket" else
