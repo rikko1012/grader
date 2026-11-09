@@ -15,7 +15,7 @@ _GAPS = {"site.web.api.espn.com": 0.5, "site.api.espn.com": 0.5,      # ESPN: un
          "guest.api.arcadia.pinnacle.com": 1.0,                       # Pinnacle guest API: 1 / second
          "partner-api.prizepicks.com": 2.0, "api.underdogfantasy.com": 1.0,
          "api.the-odds-api.com": 1.0, "api.elections.kalshi.com": 2.0, "eu-offering-api.kambicdn.com": 1.0,
-         "gamma-api.polymarket.com": 1.0,
+         "gamma-api.polymarket.com": 1.0, "api.novig.com": 1.0, "api.gemini.com": 1.0,
          "api.oddspapi.io": 2.0}                                      # the CS2 module's own spacing; endpoint cooldowns <= 2 s
 _LAST = {}
 _LOCK = threading.Lock()

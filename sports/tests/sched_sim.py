@@ -117,6 +117,7 @@ def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hoo
             name = next(n for n, s in J.items() if s is spec)
             k = len(starts.get(name, ()))
             d = run_s.get(name, 30)
+            d = d(k) if callable(d) else d          # a run time may vary per run (k = 0, 1, ...)
             if name == "settle-post" and k == 0:
                 d = fsp
                 argv = list(spec["argv"])
@@ -130,7 +131,7 @@ def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hoo
         if warm:
             for n, st in mod.JOBS.items():
                 if "recent_ran_s" in st:                # older scheduler copies have no fill-in rule
-                    st["recent_ran_s"] = [float(run_s.get(n, 30))]
+                    st["recent_ran_s"] = [float(_first(run_s.get(n, 30)))]
         enabled = sorted(n for n in J if mod.JOBS[n]["enabled"])
         due_since = {}
         waits = {n: 0.0 for n in enabled}
@@ -174,6 +175,10 @@ def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hoo
                 "stats": dict(mod.STATS), "jobs": {k: dict(v) for k, v in mod.JOBS.items()}, "specs": J,
                 "reserved_ok": reserved_ok, "heavy_ok": heavy_ok, "history": list(sch.history),
                 "idle_board_s": idle_board if probe else None}
+
+
+def _first(d):
+    return d(0) if callable(d) else d
 
 
 def _board_slot_idle(mod, sch, t, run_s):

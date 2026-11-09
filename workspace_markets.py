@@ -36,7 +36,7 @@ import book_providers as bp
 import workspace_books as wb
 
 TTL = 30
-PREDICTION = ("kalshi", "polymarket")
+PREDICTION = ("kalshi", "polymarket", "novig", "gemini")
 BOARD_PICKEM = ("underdog", "prizepicks")
 
 

@@ -28,6 +28,8 @@ This is the ONE scheduled collector (the sports service's ingest-loop child). Ea
   espn / injuries / pp / ud / kalshi   ESPN events + rosters, the injury report, the pick'em boards, Kalshi props
   oddsapi      The Odds API through books/sources.oddsapi_ingest (credit ledger; events and players resolved)
   polymarket   books/sources.polymarket_ingest
+  (Novig / Gemini display-only exchanges are NOT a source here: a step of the light books job, books/exchanges.run_due -
+   inside ingest-<league> they doubled its cost on 2026-11-09)
   books        FanDuel / BetRivers own feeds (+ OddsPapi when its guard allows): books/worker.run_once, each game
                read stored as quote history AND as sc-1 offers (books/bridge.py) from the same fetch. Scheduled as
                its OWN light job (`books` command, scheduler "books", every minute on a game day; 2026-11-06) so the
@@ -524,10 +526,49 @@ def cmd_books(a, con):
             out[lg] = {"state": "failed", "error": str(e)}
         except Exception as e:                          # noqa: BLE001 - one league never stops the other
             out[lg] = {"state": "failed", "error": f"{type(e).__name__}: {str(e)[:200]}"}
+    out["exchanges"] = _exchanges_step(con, a.leagues)
     out["rss_mb"] = rss_mb()
     _print(out)
     if a.leagues and all("ingestion paused" in str((out.get(lg) or {}).get("error") or "") for lg in a.leagues):
         raise SystemExit(3)
+    return out
+
+
+EXCHANGES_HEADROOM_MB = 35          # measured 2026-11-09: one exchanges pass adds ~25 MB to the process (Novig NBA answer)
+
+
+def _exchanges_step(con, leagues):
+    """The display-only exchanges (Novig, Gemini; books/exchanges.run_due) inside the books job's process: every
+    SPORTS_EXCHANGES_EVERY_S (600), one hard SPORTS_EXCHANGES_BUDGET_S (30 s) budget, skipped when the process could
+    pass the books job's memory cap or ingestion is paused. Never raises: the books job's own result stands."""
+    from . import scheduler
+    from .books import exchanges
+    try:
+        cap = float(os.environ.get("SPORTS_JOB_BOOKS_CAP_MB") or scheduler.BOOKS_CAP_MB * scheduler.cap_scale())
+        if rss_mb() + EXCHANGES_HEADROOM_MB > cap:
+            return {"skipped": f"memory: {rss_mb():.0f} + {EXCHANGES_HEADROOM_MB} MB > books cap {cap:.0f} MB"}
+        _check_budget()
+        return exchanges.run_due(con, leagues)
+    except BudgetExceeded as e:
+        return {"skipped": str(e)[:200]}
+    except Exception as e:                              # noqa: BLE001 - never fails the books job
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+
+def cmd_exchanges(a, con):
+    """python -m sports.worker exchanges nba nfl: one display-only exchanges pass now (Novig, Gemini;
+    books/exchanges.run), one hard time budget (SPORTS_EXCHANGES_BUDGET_S, 30 s). Operator / manual: the scheduled pass
+    is the books job's exchanges step (_exchanges_step). Exit 3 when ingestion is paused (store cap / disk floor)."""
+    from .books import exchanges
+    flags.require("SPORTS_INGEST")
+    try:
+        _check_budget()
+    except BudgetExceeded as e:
+        _print({"state": "failed", "error": str(e)})
+        raise SystemExit(3)
+    out = exchanges.run(con, a.leagues)
+    out["rss_mb"] = rss_mb()
+    _print(out)
     return out
 
 
@@ -832,6 +873,8 @@ def main(argv=None):
             s.add_argument("--kalshi-every", type=int, default=30)
     s = sub.add_parser("books")
     s.add_argument("leagues", nargs="+")
+    s = sub.add_parser("exchanges")
+    s.add_argument("leagues", nargs="+")
     s = sub.add_parser("settle")
     s.add_argument("leagues", nargs="*")
     s.add_argument("--since", help="backfill: settle every stored game started since this date (YYYY-MM-DD)")
@@ -856,7 +899,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     if a.cmd == "train":
         flags.require("SPORTS_TRAIN")                   # a refused command sets no memory cap on its process
-    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "settle", "settle-post", "train") else None
+    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "exchanges", "settle", "settle-post", "train") else None
     if a.cmd == "train":
         from .model import jobs as model_jobs           # model agent's registered training jobs (sports/model/jobs.py)
         return model_jobs.main(a.rest)
@@ -866,7 +909,7 @@ def main(argv=None):
             return
         if cap:
             print(f"memory cap: {cap}", file=sys.stderr)
-        res = {"ingest": cmd_ingest, "loop": cmd_loop, "books": cmd_books, "settle": cmd_settle,
+        res = {"ingest": cmd_ingest, "loop": cmd_loop, "books": cmd_books, "exchanges": cmd_exchanges, "settle": cmd_settle,
                "settle-post": cmd_settle_post,
                "coverage": cmd_coverage, "verify": cmd_verify, "forecast": cmd_forecast, "jobs": lambda a, con: _print(Jobs(con).list())}[a.cmd](a, con)
         if a.cmd in ("ingest", "loop", "settle") and _still_running(res):
