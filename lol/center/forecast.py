@@ -413,7 +413,7 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         lo, hi = m.interval(pj["lambda"], pj["nb_size"], 0.8)
         med = _nb_median(m, pj["lambda"], pj["nb_size"])
         lam_shown = pj["lambda"]
-    # lpf-1 (flag LOL_LPF1, default off; lol/lpf1_live.py): the full-history distribution started from the live per-game
+    # lpf-1 (flag LOL_LPF1, default off; answers from a child process, lol/lpf1_client.py): the full-history distribution started from the live per-game
     # projection above replaces the chance, the projection, the median and the 80% range for the stats it covers. The
     # book line is never an input. No projector this cycle = no new forecast (the last saved one stands), never another
     # model's grade.
@@ -424,11 +424,14 @@ def forecast_one(con, h, offer, link, now=None, market=None):
             return {"skip": "lpf-1 projector unavailable this cycle (the last saved forecast stands)"}
         t = lp["proj"].target(link["sid"], pid, tid, opp, role, day, league, tour or s["tournament"],
                               bo or {"1": 1, "12": 3, "123": 5}[scope], s["tournament_page"])
-        r1 = lp["proj"].project(t, stat, scope, pj["lambda_game"], offer["line"])
+        try:
+            r1 = lp["proj"].project(t, stat, scope, pj["lambda_game"], offer["line"])
+        except Exception:      # noqa: BLE001 - pending / no answer this cycle: skip, the last saved forecast stands
+            return {"skip": "lpf-1 projector unavailable this cycle (the last saved forecast stands)"}
         po, pu, push = r1["p_over"], r1["p_under"], r1["p_push"]
-        lpf1_inputs = {"version": lp["version"], "artifact": lp["sha"], "cutoff": lp["cutoff"], "lambda_lol1f": round(lam_shown, 4),
+        lpf1_inputs = {"version": lp["version"], "artifact": lp["sha"], "cutoff": r1.get("cutoff", lp.get("cutoff")), "lambda_lol1f": round(lam_shown, 4),
                        "lambda_game_lol1f": round(pj["lambda_game"], 4), "p_win_series_model": round(r1["p_win"], 4),
-                       "p_decider": round(r1["p_decider"], 4), "patch_assumed": t["patch"]}
+                       "p_decider": round(r1["p_decider"], 4), "patch_assumed": r1.get("patch_assumed", t.get("patch"))}
         mix = None
         lam_shown, med, (lo, hi) = r1["mean"], r1["median"], r1["range80"]
         pj = dict(pj, version=lp["version"])
@@ -652,22 +655,45 @@ def _sha(rec):
     return store.sha({k: rec.get(k) for k in keys})
 
 
-def lpf1_state(con, h):
-    """None when LOL_LPF1 is off (the default: nothing about the forecast changes and lol/lpf1_live is never imported).
-    On: {"proj", "stats", "version", "sha", "cutoff"}; a failed build gives proj None + "error" (those stats are skipped for
-    the cycle so the last saved forecast stands - never a fallback grade)."""
+def lpf1_state(con, h, todo=(), now=None, market=None):
+    """None when LOL_LPF1 is off (the default: nothing about the forecast changes; the lpf-1 modules are never imported).
+    On: the lpf-1 answers for this cycle's lines, computed OUTSIDE this process (lol/lpf1_client.py: one short-lived child
+    that builds the projector from the history database, answers, writes a small JSON and exits - the worker's memory does
+    not grow). A pre-pass over the offers collects the lines lpf-1 must answer; answers are reused while the history version
+    and the artifact are unchanged, so a quiet cycle starts no child. No answer (child failed / timed out / artifact
+    missing) = those lines are skipped this cycle and the last saved forecast stands - never another model's grade."""
     if os.environ.get("LOL_LPF1", "0") != "1":
         return None
-    from .. import lpf1_live
-    st = {"proj": None, "stats": lpf1_live.live_stats(), "version": lpf1_live.VERSION, "sha": None, "cutoff": None}
-    try:
-        art = lpf1_live.load_artifact()
-        if art is None:
-            raise RuntimeError("artifact missing")
-        st["proj"] = lpf1_live.projector_for(h.db, con, (h.last_game, len(h.md)), art)
-        st["sha"], st["cutoff"] = art["_sha"], art.get("cutoff")
-    except Exception as e:      # noqa: BLE001
-        st["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+    from .. import lpf1_client as C
+    st = {"proj": None, "stats": C.live_stats(), "version": C.VERSION, "sha": C.artifact_sha(), "cutoff": None}
+    if st["sha"] is None:
+        st["error"] = "artifact missing"
+        return st
+    ver = (h.last_game, len(h.md), st["sha"])
+    proj = C.RequestProjector(dict(C.answers_for(ver)))
+    st["proj"] = proj
+    pre = {"proj": proj, "stats": st["stats"], "version": st["version"], "sha": st["sha"], "cutoff": None}
+    h.lpf1 = pre
+    for r in todo:
+        try:
+            offer = json.loads(r["data"])
+            if offer.get("stat") not in st["stats"]:
+                continue
+            ln = offer.get("line")
+            if not isinstance(ln, (int, float)) or isinstance(ln, bool) or not math.isfinite(ln):
+                continue
+            offer.update(platform=r["platform"], _event_id=r["event_id"], _observed_at=r["observed_at"])
+            forecast_one(con, h, offer, dict(r), now, market)
+        except Exception:      # noqa: BLE001 - a bad offer is counted by the main loop
+            pass
+    if proj.requests:
+        ans, info = C.run_child(proj.requests, C.history_path(h.db), store.db_path())
+        st["child"] = info
+        C.remember(ver, ans)
+        proj.answers.update(ans)                # this cycle: failures stay None (skip), never cached
+        if info.get("error"):
+            st["error"] = f"child: {info['error']}"[:300]
+        proj.requests = {}
     return st
 
 
@@ -684,9 +710,11 @@ def run(con, db=None, now=None, market=None):
     try:
         h.fit, h.sim_states = fit_json(), {}
         h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
-        h.lpf1 = lpf1_state(con, h) if todo else None
+        h.lpf1 = lpf1_state(con, h, todo, now, market) if todo else None
         if h.lpf1 and h.lpf1.get("error"):
             counts["lpf1_error"] = h.lpf1["error"]
+        if h.lpf1 and h.lpf1.get("child"):
+            counts["lpf1_child"] = h.lpf1["child"]
         for r in todo:
             # audit 12: one bad offer (a feed row without a usable line, an error in its inputs) is counted and skipped;
             # it never stops the other offers, the commit, settlement or the board

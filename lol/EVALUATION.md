@@ -959,6 +959,12 @@ started from; no projector in a cycle = those lines are skipped (the last saved 
 Parity on the local copy: live path vs research walk-forward (same cutoff 2026-11-01), 390 forward lines, |P(over) diff| median
 0.0002, max 0.0115, same side 389 / 390.
 
-**Before turning it on:** projector build on 130k player-games: 11 s, steady +86 MB, build peak ~300 MB (tracemalloc, local); the
-LoL worker's container is near its limit, so measure on Render (or move the build to a child process) first. Letters fall ~8%
-and the mean printed chance ~2.4 pts: a projection change, not a calibration layer, but members will see fewer letters.
+**Memory (2026-11-09, second commit):** the projector never runs in the web process or the LoL worker. The worker's forecast
+cycle collects the lines lpf-1 must answer and runs ONE short-lived child (`python -m lol.lpf1_live predict`, oom_score_adj
+1000, nice 10) that builds the projector from the history database, answers, writes a small JSON and exits; answers are
+reused while the history version and the artifact are unchanged (a quiet cycle starts no child); a failed / timed-out child
+(LOL_LPF1_CHILD_TIMEOUT_S, default 600) answers nothing, so those lines are skipped and the last saved forecast stands
+(failures are never cached). Measured locally on the full history (130,405 player-games, 29 board lines): child peak RSS
+366 MB for 2.5 s, calling process +0.5 MB; `lol/lpf1_client.py` is stdlib only (a test checks numpy / lpf never load).
+Letters fall ~8% and the mean printed chance ~2.4 pts: a projection change, not a calibration layer, but members will see
+fewer letters.

@@ -15,8 +15,11 @@ still graded, Over share 34.4% -> 37.0%. The book line is NEVER an input (only t
 Runtime: numpy only (no lightgbm / scipy / sklearn on the server). The trees are evaluated by Trees below (tested equal to
 lightgbm's own raw prediction). Inputs come from production's history tables (lol_player_games / lol_games through
 lol/history.DB) and the data center (c_series, Leaguepedia Tournaments) - games on days strictly before the match day.
-A failure to build the projector never falls back to another model's grade: forecast.py skips the line for that cycle so
-the last saved forecast stands (transient-failure rule).
+Where it runs (memory, 2026-11-09): ONLY in a short-lived child process (`python -m lol.lpf1_live predict`, started by
+lol/lpf1_client.run_child from the LoL worker's forecast cycle). Neither the web process nor the LoL worker imports this
+module. Measured on the full history (130,405 player-games): child peak RSS 366 MB for ~2.5 s, then it exits; the calling
+process +0.5 MB. A failure never falls back to another model's grade: the lines are skipped for that cycle so the last
+saved forecast stands (transient-failure rule).
 """
 import gzip
 import hashlib
@@ -30,20 +33,7 @@ from pathlib import Path
 import numpy as np
 
 from . import lpf
-
-VERSION = "lpf-1"
-ARTIFACT = Path(__file__).resolve().with_name("lpf1_model.json.gz")
-STATS = ("kills", "assists", "deaths")
-
-
-def enabled():
-    return os.environ.get("LOL_LPF1", "0") == "1"
-
-
-def live_stats():
-    """Stats the flag moves (LOL_LPF1_STATS, default kills + assists: the two markets accepted 2026-11-09)."""
-    raw = os.environ.get("LOL_LPF1_STATS", "kills,assists")
-    return tuple(s for s in (x.strip() for x in raw.split(",")) if s in STATS)
+from .lpf1_client import ARTIFACT, STATS, VERSION, enabled, live_stats  # noqa: F401  (one definition, stdlib module)
 
 
 # ============================================================================================ trees (numpy, no lightgbm)
@@ -363,3 +353,84 @@ def projector_for(hdb, con, version_key, art=None):
         _CACHE["proj"] = Projector(st, art)
         _CACHE["key"] = key
     return _CACHE["proj"]
+
+
+# ============================================================================================ the child process
+def peak_rss_mb():
+    """This process's peak resident memory (Linux VmHWM; psutil peak working set elsewhere when installed)."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmHWM:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except OSError:
+        pass
+    try:
+        import psutil
+        mi = psutil.Process().memory_info()
+        return round(getattr(mi, "peak_wset", mi.rss) / 2 ** 20, 1)
+    except Exception:       # noqa: BLE001
+        return None
+
+
+def predict_main(argv=None):
+    """python -m lol.lpf1_live predict --req <json> --out <json> --center <center db> [--history <sqlite>] [--artifact <gz>]
+    Builds the projector once, answers every request ({key: {t, stat, scope, lam_game, line}}), writes {"answers": {key:
+    result or None}, "peak_rss_mb", ...} and exits. Run by lol/lpf1_client.run_child from the LoL worker's forecast cycle."""
+    import argparse
+    import sqlite3
+    import time
+    ap = argparse.ArgumentParser()
+    ap.add_argument("cmd", choices=("predict",))
+    ap.add_argument("--req", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--center", required=True)
+    ap.add_argument("--history", default=None)
+    ap.add_argument("--artifact", default=None)
+    a = ap.parse_args(argv)
+    # a short-lived child: first in line for the kernel OOM killer and low CPU priority (Linux; no-ops elsewhere), so a
+    # memory squeeze ends this cycle's lpf-1 answers (lines skipped, last forecast stands), never the web process
+    try:
+        with open("/proc/self/oom_score_adj", "w") as fh:
+            fh.write("1000")
+    except OSError:
+        pass
+    try:
+        os.nice(10)
+    except (AttributeError, OSError):
+        pass
+    from . import history
+    t0 = time.time()
+    req = json.loads(Path(a.req).read_text(encoding="utf-8"))
+    art = load_artifact(a.artifact)
+    if art is None:
+        raise SystemExit("lpf-1 artifact missing")
+    hdb = history.DB(dsn="", path=Path(a.history)) if a.history else history.DB()
+    con = sqlite3.connect(f"file:{a.center}?mode=ro", uri=True, timeout=60)
+    con.row_factory = sqlite3.Row
+    try:
+        st = ProdStore(hdb, con, tournaments_from_center(con))
+        proj = Projector(st, art)
+    finally:
+        hdb.con.close()
+    build_s = round(time.time() - t0, 1)
+    answers = {}
+    for k, q in req.items():
+        t = q["t"]
+        try:
+            tt = proj.target(t["match"], t["pid"], t["team"], t["opp"], t["role"], int(t["day"]), t["league"], t["tournament"],
+                             t["best_of"], t.get("tournament_page"))
+            r = proj.project(tt, q["stat"], q["scope"], q["lam_game"], q["line"])
+            r["patch_assumed"], r["cutoff"] = tt["patch"], art.get("cutoff")
+            answers[k] = r
+        except Exception:      # noqa: BLE001 - one bad target never stops the others; it is skipped this cycle
+            answers[k] = None
+    out = {"answers": answers, "answered": sum(v is not None for v in answers.values()), "build_s": build_s,
+           "seconds": round(time.time() - t0, 1), "artifact_sha": art["_sha"], "peak_rss_mb": peak_rss_mb()}
+    tmp = Path(a.out).with_suffix(".tmp")
+    tmp.write_text(json.dumps(out), encoding="utf-8")
+    os.replace(tmp, a.out)
+
+
+if __name__ == "__main__":
+    predict_main()

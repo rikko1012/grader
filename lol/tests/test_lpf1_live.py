@@ -9,7 +9,7 @@ import sqlite3
 import numpy as np
 import pytest
 
-from lol import lpf, lpf1_live as L
+from lol import lpf, lpf1_client as C, lpf1_live as L
 from lol.center import forecast, store
 from lol.tests.test_consolidation import _future_world
 from lol.tests.test_lpf import _db
@@ -139,7 +139,7 @@ def test_flag_off_is_the_default_and_changes_nothing(con, tmp_path, monkeypatch)
 
 def test_flag_on_saves_the_lpf1_chance_and_projection(con, tmp_path, monkeypatch):
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
-    monkeypatch.setattr(forecast, "lpf1_state", lambda c, h: {"proj": _Stub(), "stats": ("kills",), "version": "lpf-1",
+    monkeypatch.setattr(forecast, "lpf1_state", lambda c, h, *a, **k: {"proj": _Stub(), "stats": ("kills",), "version": "lpf-1",
                                                                "sha": "abc", "cutoff": "2026-11-09"})
     assert forecast.run(con, db)["saved"] == 1
     f = dict(con.execute("SELECT * FROM lol_forecasts").fetchone())
@@ -150,7 +150,7 @@ def test_flag_on_saves_the_lpf1_chance_and_projection(con, tmp_path, monkeypatch
 
 def test_flag_on_without_a_projector_skips_never_falls_back(con, tmp_path, monkeypatch):
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
-    monkeypatch.setattr(forecast, "lpf1_state", lambda c, h: {"proj": None, "stats": ("kills",), "version": "lpf-1", "sha": None,
+    monkeypatch.setattr(forecast, "lpf1_state", lambda c, h, *a, **k: {"proj": None, "stats": ("kills",), "version": "lpf-1", "sha": None,
                                                                "cutoff": None, "error": "RuntimeError: x"})
     out = forecast.run(con, db)
     assert "saved" not in out and any(k.startswith("skip: lpf-1 projector unavailable") for k in out)
@@ -159,7 +159,8 @@ def test_flag_on_without_a_projector_skips_never_falls_back(con, tmp_path, monke
 
 def test_flag_on_with_a_broken_artifact_reports_and_skips(con, tmp_path, monkeypatch):
     monkeypatch.setenv("LOL_LPF1", "1")
-    monkeypatch.setattr(L, "ARTIFACT", tmp_path / "missing.json.gz")
+    from lol import lpf1_client as C
+    monkeypatch.setattr(C, "ARTIFACT", tmp_path / "missing.json.gz")
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
     out = forecast.run(con, db)
     assert "artifact missing" in out.get("lpf1_error", "") and "saved" not in out
@@ -172,3 +173,67 @@ def test_shipped_artifact_loads_and_has_the_accepted_configuration():
     assert art["booster_inputs"][-3:] == ["gn", "decider", "win"]
     T = L.Trees(art["boosters"]["kills"])
     assert T.names == art["booster_inputs"] and len(T.trees) == art["rounds"]
+
+
+# ------------------------------------------------------------------ the child process (memory: nothing lpf-1 in the worker)
+def test_client_is_stdlib_only():
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    out = subprocess.run([sys.executable, "-c", "import sys, lol.lpf1_client; print(sorted(m for m in ('numpy', 'lol.lpf', 'lol.lp1', "
+                          "'lol.lpf1_live') if m in sys.modules))"], cwd=str(root), capture_output=True, text=True)
+    assert out.returncode == 0 and out.stdout.strip() == "[]", out.stderr
+
+
+def test_request_projector_collects_then_answers():
+    rp = C.RequestProjector({})
+    t = rp.target("s1", "p1", "t1", "t2", "mid", 739000, "LCK", "LCK 2026", 3, "LCK/2026")
+    with pytest.raises(C.Pending):
+        rp.project(t, "kills", "12", 2.5, 7.5)
+    (k, q), = rp.requests.items()
+    assert q["stat"] == "kills" and q["line"] == 7.5
+    rp2 = C.RequestProjector({k: {"p_over": 0.6}})
+    assert rp2.project(t, "kills", "12", 2.5, 7.5)["p_over"] == 0.6
+    with pytest.raises(C.Unavailable):
+        C.RequestProjector({k: None}).project(t, "kills", "12", 2.5, 7.5)
+
+
+def test_failures_are_never_cached():
+    C.remember(("v", 1), {"a": None, "b": {"p_over": 0.5}})
+    assert C.answers_for(("v", 1)) == {"b": {"p_over": 0.5}}
+    assert C.answers_for(("v", 2)) == {}
+
+
+def test_flag_on_runs_the_real_child_once_and_reuses_its_answers(con, tmp_path, monkeypatch):
+    monkeypatch.setenv("LOL_LPF1", "1")
+    monkeypatch.setenv("LOL_LPF1_STATS", "kills")
+    monkeypatch.setattr(C, "_ANS", {"version": None, "map": {}})
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    out = forecast.run(con, db)
+    assert out.get("saved") == 1, out
+    assert out["lpf1_child"]["code"] == 0 and out["lpf1_child"]["answered"] == 1 and out["lpf1_child"]["peak_rss_mb"] is not None
+    f = dict(con.execute("SELECT * FROM lol_forecasts").fetchone())
+    inp = json.loads(f["inputs"])
+    assert f["model_version"] == "lpf-1" and inp["lpf1"]["cutoff"] == L.load_artifact()["cutoff"]
+    assert abs(f["p_over"] + f["p_under"] + f["p_push"] - 1) < 1e-3
+    out2 = forecast.run(con, db)                        # same history, same line: answered from memory, no child
+    assert "lpf1_child" not in out2 and out2.get("unchanged") == 1
+
+
+def test_a_failed_child_skips_the_line_and_is_retried_next_cycle(con, tmp_path, monkeypatch):
+    monkeypatch.setenv("LOL_LPF1", "1")
+    monkeypatch.setenv("LOL_LPF1_STATS", "kills")
+    monkeypatch.setattr(C, "_ANS", {"version": None, "map": {}})
+    calls = []
+
+    def dead(requests, *a, **k):
+        calls.append(len(requests))
+        return {q: None for q in requests}, {"requests": len(requests), "error": "timeout"}
+    monkeypatch.setattr(C, "run_child", dead)
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    out = forecast.run(con, db)
+    assert "saved" not in out and "timeout" in out["lpf1_error"]
+    assert con.execute("SELECT COUNT(*) FROM lol_forecasts").fetchone()[0] == 0
+    forecast.run(con, db)
+    assert calls == [1, 1]                              # the failure was not cached: asked again
