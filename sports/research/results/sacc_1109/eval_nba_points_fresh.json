@@ -1,0 +1,877 @@
+{
+ "rule": "(written before any candidate was scored at a line; the diagnosis of the same window had been looked at,\nso this window is DEVELOPMENT evidence, and a pass here only earns the fresh-window test):\n  L1  log loss at the line below live, game-clustered 95% CI of the difference entirely < 0;\n  L2  |stated - hit| on graded (C+, chosen side >= 53.45%) rows smaller than live's, AND on Over picks and on Under\n      picks separately smaller than live's;\n  L3  graded count >= 90% of live's;\n  L4  graded hit rate >= live's (point estimate) and the CI of the difference not entirely < 0;\n  L5  Over share among graded rows >= live's - 2 pts (no new Under lean).\n  (A1, from the walk-forward report: all-outcome dev log score gain CI entirely > 0.)",
+ "all": {
+  "n": 929,
+  "games": 23,
+  "arms": {
+   "po_live": {
+    "n": 929,
+    "logloss": 0.71941,
+    "stated_all": 0.5888,
+    "hit_all": 0.5038,
+    "graded_n": 714,
+    "graded_stated": 0.6103,
+    "graded_hit": 0.5098,
+    "graded_gap": 0.1005,
+    "graded_gap_ci": [
+     0.03654,
+     0.15684
+    ],
+    "over_share_graded": 0.2661,
+    "over_share_all": 0.3025,
+    "graded_over_n": 190,
+    "graded_over_gap": 0.1381,
+    "graded_over_gap_ci": [
+     0.04447,
+     0.21268
+    ],
+    "graded_under_n": 524,
+    "graded_under_gap": 0.0869,
+    "graded_under_gap_ci": [
+     -0.00764,
+     0.17435
+    ],
+    "AB_n": 584,
+    "AB_stated": 0.6248,
+    "AB_hit": 0.4897,
+    "bands": {
+     "0.5000-0.53": {
+      "n": 215,
+      "stated": 0.5175,
+      "hit": 0.4837
+     },
+     "0.5345-0.56": {
+      "n": 130,
+      "stated": 0.5451,
+      "hit": 0.6
+     },
+     "0.5559-0.60": {
+      "n": 229,
+      "stated": 0.5768,
+      "hit": 0.4498
+     },
+     "0.6000-0.65": {
+      "n": 179,
+      "stated": 0.6231,
+      "hit": 0.5084
+     },
+     "0.6500-0.70": {
+      "n": 130,
+      "stated": 0.6739,
+      "hit": 0.5308
+     },
+     "0.7000-1.01": {
+      "n": 46,
+      "stated": 0.7316,
+      "hit": 0.5
+     }
+    }
+   },
+   "po_base": {
+    "n": 929,
+    "logloss": 0.71594,
+    "stated_all": 0.584,
+    "hit_all": 0.4941,
+    "graded_n": 696,
+    "graded_stated": 0.606,
+    "graded_hit": 0.5014,
+    "graded_gap": 0.1045,
+    "graded_gap_ci": [
+     0.05504,
+     0.14963
+    ],
+    "over_share_graded": 0.3305,
+    "over_share_all": 0.3703,
+    "graded_over_n": 230,
+    "graded_over_gap": 0.1355,
+    "graded_over_gap_ci": [
+     0.04207,
+     0.21747
+    ],
+    "graded_under_n": 466,
+    "graded_under_gap": 0.0893,
+    "graded_under_gap_ci": [
+     0.00882,
+     0.16009
+    ],
+    "AB_n": 571,
+    "AB_stated": 0.6194,
+    "AB_hit": 0.4869,
+    "bands": {
+     "0.5000-0.53": {
+      "n": 233,
+      "stated": 0.5184,
+      "hit": 0.4721
+     },
+     "0.5345-0.56": {
+      "n": 125,
+      "stated": 0.5449,
+      "hit": 0.568
+     },
+     "0.5559-0.60": {
+      "n": 245,
+      "stated": 0.577,
+      "hit": 0.4286
+     },
+     "0.6000-0.65": {
+      "n": 181,
+      "stated": 0.623,
+      "hit": 0.5249
+     },
+     "0.6500-0.70": {
+      "n": 113,
+      "stated": 0.6748,
+      "hit": 0.5398
+     },
+     "0.7000-1.01": {
+      "n": 32,
+      "stated": 0.7273,
+      "hit": 0.5312
+     }
+    },
+    "vs_live": {
+     "d_logloss": -0.00346,
+     "d_logloss_ci": [
+      -0.0176,
+      0.0084
+     ],
+     "graded_hit_diff": -0.0084,
+     "graded_hit_diff_ci": [
+      -0.0326,
+      0.0192
+     ],
+     "graded_count_ratio": 0.975
+    }
+   },
+   "po_rs1": {
+    "n": 929,
+    "logloss": 0.71472,
+    "stated_all": 0.5843,
+    "hit_all": 0.4995,
+    "graded_n": 692,
+    "graded_stated": 0.6068,
+    "graded_hit": 0.4957,
+    "graded_gap": 0.1111,
+    "graded_gap_ci": [
+     0.05842,
+     0.15692
+    ],
+    "over_share_graded": 0.3049,
+    "over_share_all": 0.3563,
+    "graded_over_n": 211,
+    "graded_over_gap": 0.1278,
+    "graded_over_gap_ci": [
+     0.02653,
+     0.21465
+    ],
+    "graded_under_n": 481,
+    "graded_under_gap": 0.1038,
+    "graded_under_gap_ci": [
+     0.02293,
+     0.17356
+    ],
+    "AB_n": 568,
+    "AB_stated": 0.6202,
+    "AB_hit": 0.4982,
+    "bands": {
+     "0.5000-0.53": {
+      "n": 237,
+      "stated": 0.5185,
+      "hit": 0.5105
+     },
+     "0.5345-0.56": {
+      "n": 124,
+      "stated": 0.5452,
+      "hit": 0.4839
+     },
+     "0.5559-0.60": {
+      "n": 233,
+      "stated": 0.5765,
+      "hit": 0.4635
+     },
+     "0.6000-0.65": {
+      "n": 189,
+      "stated": 0.623,
+      "hit": 0.5344
+     },
+     "0.6500-0.70": {
+      "n": 112,
+      "stated": 0.6744,
+      "hit": 0.5179
+     },
+     "0.7000-1.01": {
+      "n": 34,
+      "stated": 0.7264,
+      "hit": 0.4706
+     }
+    },
+    "vs_live": {
+     "d_logloss": -0.00469,
+     "d_logloss_ci": [
+      -0.01689,
+      0.00532
+     ],
+     "graded_hit_diff": -0.0141,
+     "graded_hit_diff_ci": [
+      -0.0375,
+      0.0104
+     ],
+     "graded_count_ratio": 0.969
+    },
+    "vs_base": {
+     "d_logloss": -0.00122,
+     "d_logloss_ci": [
+      -0.00394,
+      0.00125
+     ],
+     "graded_hit_diff": -0.0058,
+     "graded_hit_diff_ci": [
+      -0.0157,
+      0.0051
+     ],
+     "graded_count_ratio": 0.994
+    },
+    "verdict": {
+     "L1_logloss": false,
+     "L2_calibration": false,
+     "L3_count": true,
+     "L4_hit": false,
+     "L5_balance": true,
+     "pass": false
+    }
+   },
+   "po_rm1": {
+    "n": 929,
+    "logloss": 0.7188,
+    "stated_all": 0.5897,
+    "hit_all": 0.4876,
+    "graded_n": 740,
+    "graded_stated": 0.6084,
+    "graded_hit": 0.4932,
+    "graded_gap": 0.1152,
+    "graded_gap_ci": [
+     0.06361,
+     0.16242
+    ],
+    "over_share_graded": 0.3189,
+    "over_share_all": 0.3488,
+    "graded_over_n": 236,
+    "graded_over_gap": 0.1265,
+    "graded_over_gap_ci": [
+     0.03085,
+     0.21507
+    ],
+    "graded_under_n": 504,
+    "graded_under_gap": 0.1099,
+    "graded_under_gap_ci": [
+     0.03026,
+     0.1822
+    ],
+    "AB_n": 597,
+    "AB_stated": 0.6236,
+    "AB_hit": 0.4925,
+    "bands": {
+     "0.5000-0.53": {
+      "n": 189,
+      "stated": 0.5164,
+      "hit": 0.4656
+     },
+     "0.5345-0.56": {
+      "n": 143,
+      "stated": 0.545,
+      "hit": 0.4965
+     },
+     "0.5559-0.60": {
+      "n": 253,
+      "stated": 0.5771,
+      "hit": 0.4704
+     },
+     "0.6000-0.65": {
+      "n": 176,
+      "stated": 0.6253,
+      "hit": 0.5057
+     },
+     "0.6500-0.70": {
+      "n": 111,
+      "stated": 0.6723,
+      "hit": 0.5225
+     },
+     "0.7000-1.01": {
+      "n": 57,
+      "stated": 0.7302,
+      "hit": 0.4912
+     }
+    },
+    "vs_live": {
+     "d_logloss": -0.00061,
+     "d_logloss_ci": [
+      -0.01855,
+      0.01585
+     ],
+     "graded_hit_diff": -0.0166,
+     "graded_hit_diff_ci": [
+      -0.0514,
+      0.019
+     ],
+     "graded_count_ratio": 1.036
+    },
+    "vs_base": {
+     "d_logloss": 0.00285,
+     "d_logloss_ci": [
+      -0.0047,
+      0.01095
+     ],
+     "graded_hit_diff": -0.0082,
+     "graded_hit_diff_ci": [
+      -0.0294,
+      0.0123
+     ],
+     "graded_count_ratio": 1.063
+    },
+    "verdict": {
+     "L1_logloss": false,
+     "L2_calibration": false,
+     "L3_count": true,
+     "L4_hit": false,
+     "L5_balance": true,
+     "pass": false
+    }
+   },
+   "po_rsm1": {
+    "n": 929,
+    "logloss": 0.71772,
+    "stated_all": 0.5902,
+    "hit_all": 0.4941,
+    "graded_n": 736,
+    "graded_stated": 0.6093,
+    "graded_hit": 0.4986,
+    "graded_gap": 0.1107,
+    "graded_gap_ci": [
+     0.059,
+     0.15811
+    ],
+    "over_share_graded": 0.284,
+    "over_share_all": 0.3251,
+    "graded_over_n": 209,
+    "graded_over_gap": 0.1408,
+    "graded_over_gap_ci": [
+     0.06188,
+     0.21402
+    ],
+    "graded_under_n": 527,
+    "graded_under_gap": 0.0987,
+    "graded_under_gap_ci": [
+     0.01837,
+     0.17085
+    ],
+    "AB_n": 598,
+    "AB_stated": 0.6243,
+    "AB_hit": 0.5033,
+    "bands": {
+     "0.5000-0.53": {
+      "n": 193,
+      "stated": 0.5174,
+      "hit": 0.4767
+     },
+     "0.5345-0.56": {
+      "n": 138,
+      "stated": 0.5445,
+      "hit": 0.4783
+     },
+     "0.5559-0.60": {
+      "n": 250,
+      "stated": 0.5775,
+      "hit": 0.504
+     },
+     "0.6000-0.65": {
+      "n": 173,
+      "stated": 0.625,
+      "hit": 0.5087
+     },
+     "0.6500-0.70": {
+      "n": 120,
+      "stated": 0.6718,
+      "hit": 0.4917
+     },
+     "0.7000-1.01": {
+      "n": 55,
+      "stated": 0.7309,
+      "hit": 0.5091
+     }
+    },
+    "vs_live": {
+     "d_logloss": -0.00169,
+     "d_logloss_ci": [
+      -0.01823,
+      0.01317
+     ],
+     "graded_hit_diff": -0.0112,
+     "graded_hit_diff_ci": [
+      -0.0426,
+      0.0167
+     ],
+     "graded_count_ratio": 1.031
+    },
+    "vs_base": {
+     "d_logloss": 0.00177,
+     "d_logloss_ci": [
+      -0.00536,
+      0.0092
+     ],
+     "graded_hit_diff": -0.0028,
+     "graded_hit_diff_ci": [
+      -0.0243,
+      0.019
+     ],
+     "graded_count_ratio": 1.057
+    },
+    "verdict": {
+     "L1_logloss": false,
+     "L2_calibration": false,
+     "L3_count": true,
+     "L4_hit": false,
+     "L5_balance": true,
+     "pass": false
+    }
+   }
+  }
+ },
+ "by_market": {
+  "points": {
+   "n": 929,
+   "games": 23,
+   "arms": {
+    "po_live": {
+     "n": 929,
+     "logloss": 0.71941,
+     "stated_all": 0.5888,
+     "hit_all": 0.5038,
+     "graded_n": 714,
+     "graded_stated": 0.6103,
+     "graded_hit": 0.5098,
+     "graded_gap": 0.1005,
+     "graded_gap_ci": [
+      0.03654,
+      0.15684
+     ],
+     "over_share_graded": 0.2661,
+     "over_share_all": 0.3025,
+     "graded_over_n": 190,
+     "graded_over_gap": 0.1381,
+     "graded_over_gap_ci": [
+      0.04447,
+      0.21268
+     ],
+     "graded_under_n": 524,
+     "graded_under_gap": 0.0869,
+     "graded_under_gap_ci": [
+      -0.00764,
+      0.17435
+     ],
+     "AB_n": 584,
+     "AB_stated": 0.6248,
+     "AB_hit": 0.4897,
+     "bands": {
+      "0.5000-0.53": {
+       "n": 215,
+       "stated": 0.5175,
+       "hit": 0.4837
+      },
+      "0.5345-0.56": {
+       "n": 130,
+       "stated": 0.5451,
+       "hit": 0.6
+      },
+      "0.5559-0.60": {
+       "n": 229,
+       "stated": 0.5768,
+       "hit": 0.4498
+      },
+      "0.6000-0.65": {
+       "n": 179,
+       "stated": 0.6231,
+       "hit": 0.5084
+      },
+      "0.6500-0.70": {
+       "n": 130,
+       "stated": 0.6739,
+       "hit": 0.5308
+      },
+      "0.7000-1.01": {
+       "n": 46,
+       "stated": 0.7316,
+       "hit": 0.5
+      }
+     }
+    },
+    "po_base": {
+     "n": 929,
+     "logloss": 0.71594,
+     "stated_all": 0.584,
+     "hit_all": 0.4941,
+     "graded_n": 696,
+     "graded_stated": 0.606,
+     "graded_hit": 0.5014,
+     "graded_gap": 0.1045,
+     "graded_gap_ci": [
+      0.05504,
+      0.14963
+     ],
+     "over_share_graded": 0.3305,
+     "over_share_all": 0.3703,
+     "graded_over_n": 230,
+     "graded_over_gap": 0.1355,
+     "graded_over_gap_ci": [
+      0.04207,
+      0.21747
+     ],
+     "graded_under_n": 466,
+     "graded_under_gap": 0.0893,
+     "graded_under_gap_ci": [
+      0.00882,
+      0.16009
+     ],
+     "AB_n": 571,
+     "AB_stated": 0.6194,
+     "AB_hit": 0.4869,
+     "bands": {
+      "0.5000-0.53": {
+       "n": 233,
+       "stated": 0.5184,
+       "hit": 0.4721
+      },
+      "0.5345-0.56": {
+       "n": 125,
+       "stated": 0.5449,
+       "hit": 0.568
+      },
+      "0.5559-0.60": {
+       "n": 245,
+       "stated": 0.577,
+       "hit": 0.4286
+      },
+      "0.6000-0.65": {
+       "n": 181,
+       "stated": 0.623,
+       "hit": 0.5249
+      },
+      "0.6500-0.70": {
+       "n": 113,
+       "stated": 0.6748,
+       "hit": 0.5398
+      },
+      "0.7000-1.01": {
+       "n": 32,
+       "stated": 0.7273,
+       "hit": 0.5312
+      }
+     },
+     "vs_live": {
+      "d_logloss": -0.00346,
+      "d_logloss_ci": [
+       -0.0176,
+       0.0084
+      ],
+      "graded_hit_diff": -0.0084,
+      "graded_hit_diff_ci": [
+       -0.0326,
+       0.0192
+      ],
+      "graded_count_ratio": 0.975
+     }
+    },
+    "po_rs1": {
+     "n": 929,
+     "logloss": 0.71472,
+     "stated_all": 0.5843,
+     "hit_all": 0.4995,
+     "graded_n": 692,
+     "graded_stated": 0.6068,
+     "graded_hit": 0.4957,
+     "graded_gap": 0.1111,
+     "graded_gap_ci": [
+      0.05842,
+      0.15692
+     ],
+     "over_share_graded": 0.3049,
+     "over_share_all": 0.3563,
+     "graded_over_n": 211,
+     "graded_over_gap": 0.1278,
+     "graded_over_gap_ci": [
+      0.02653,
+      0.21465
+     ],
+     "graded_under_n": 481,
+     "graded_under_gap": 0.1038,
+     "graded_under_gap_ci": [
+      0.02293,
+      0.17356
+     ],
+     "AB_n": 568,
+     "AB_stated": 0.6202,
+     "AB_hit": 0.4982,
+     "bands": {
+      "0.5000-0.53": {
+       "n": 237,
+       "stated": 0.5185,
+       "hit": 0.5105
+      },
+      "0.5345-0.56": {
+       "n": 124,
+       "stated": 0.5452,
+       "hit": 0.4839
+      },
+      "0.5559-0.60": {
+       "n": 233,
+       "stated": 0.5765,
+       "hit": 0.4635
+      },
+      "0.6000-0.65": {
+       "n": 189,
+       "stated": 0.623,
+       "hit": 0.5344
+      },
+      "0.6500-0.70": {
+       "n": 112,
+       "stated": 0.6744,
+       "hit": 0.5179
+      },
+      "0.7000-1.01": {
+       "n": 34,
+       "stated": 0.7264,
+       "hit": 0.4706
+      }
+     },
+     "vs_live": {
+      "d_logloss": -0.00469,
+      "d_logloss_ci": [
+       -0.01689,
+       0.00532
+      ],
+      "graded_hit_diff": -0.0141,
+      "graded_hit_diff_ci": [
+       -0.0375,
+       0.0104
+      ],
+      "graded_count_ratio": 0.969
+     },
+     "vs_base": {
+      "d_logloss": -0.00122,
+      "d_logloss_ci": [
+       -0.00394,
+       0.00125
+      ],
+      "graded_hit_diff": -0.0058,
+      "graded_hit_diff_ci": [
+       -0.0157,
+       0.0051
+      ],
+      "graded_count_ratio": 0.994
+     },
+     "verdict": {
+      "L1_logloss": false,
+      "L2_calibration": false,
+      "L3_count": true,
+      "L4_hit": false,
+      "L5_balance": true,
+      "pass": false
+     }
+    },
+    "po_rm1": {
+     "n": 929,
+     "logloss": 0.7188,
+     "stated_all": 0.5897,
+     "hit_all": 0.4876,
+     "graded_n": 740,
+     "graded_stated": 0.6084,
+     "graded_hit": 0.4932,
+     "graded_gap": 0.1152,
+     "graded_gap_ci": [
+      0.06361,
+      0.16242
+     ],
+     "over_share_graded": 0.3189,
+     "over_share_all": 0.3488,
+     "graded_over_n": 236,
+     "graded_over_gap": 0.1265,
+     "graded_over_gap_ci": [
+      0.03085,
+      0.21507
+     ],
+     "graded_under_n": 504,
+     "graded_under_gap": 0.1099,
+     "graded_under_gap_ci": [
+      0.03026,
+      0.1822
+     ],
+     "AB_n": 597,
+     "AB_stated": 0.6236,
+     "AB_hit": 0.4925,
+     "bands": {
+      "0.5000-0.53": {
+       "n": 189,
+       "stated": 0.5164,
+       "hit": 0.4656
+      },
+      "0.5345-0.56": {
+       "n": 143,
+       "stated": 0.545,
+       "hit": 0.4965
+      },
+      "0.5559-0.60": {
+       "n": 253,
+       "stated": 0.5771,
+       "hit": 0.4704
+      },
+      "0.6000-0.65": {
+       "n": 176,
+       "stated": 0.6253,
+       "hit": 0.5057
+      },
+      "0.6500-0.70": {
+       "n": 111,
+       "stated": 0.6723,
+       "hit": 0.5225
+      },
+      "0.7000-1.01": {
+       "n": 57,
+       "stated": 0.7302,
+       "hit": 0.4912
+      }
+     },
+     "vs_live": {
+      "d_logloss": -0.00061,
+      "d_logloss_ci": [
+       -0.01855,
+       0.01585
+      ],
+      "graded_hit_diff": -0.0166,
+      "graded_hit_diff_ci": [
+       -0.0514,
+       0.019
+      ],
+      "graded_count_ratio": 1.036
+     },
+     "vs_base": {
+      "d_logloss": 0.00285,
+      "d_logloss_ci": [
+       -0.0047,
+       0.01095
+      ],
+      "graded_hit_diff": -0.0082,
+      "graded_hit_diff_ci": [
+       -0.0294,
+       0.0123
+      ],
+      "graded_count_ratio": 1.063
+     },
+     "verdict": {
+      "L1_logloss": false,
+      "L2_calibration": false,
+      "L3_count": true,
+      "L4_hit": false,
+      "L5_balance": true,
+      "pass": false
+     }
+    },
+    "po_rsm1": {
+     "n": 929,
+     "logloss": 0.71772,
+     "stated_all": 0.5902,
+     "hit_all": 0.4941,
+     "graded_n": 736,
+     "graded_stated": 0.6093,
+     "graded_hit": 0.4986,
+     "graded_gap": 0.1107,
+     "graded_gap_ci": [
+      0.059,
+      0.15811
+     ],
+     "over_share_graded": 0.284,
+     "over_share_all": 0.3251,
+     "graded_over_n": 209,
+     "graded_over_gap": 0.1408,
+     "graded_over_gap_ci": [
+      0.06188,
+      0.21402
+     ],
+     "graded_under_n": 527,
+     "graded_under_gap": 0.0987,
+     "graded_under_gap_ci": [
+      0.01837,
+      0.17085
+     ],
+     "AB_n": 598,
+     "AB_stated": 0.6243,
+     "AB_hit": 0.5033,
+     "bands": {
+      "0.5000-0.53": {
+       "n": 193,
+       "stated": 0.5174,
+       "hit": 0.4767
+      },
+      "0.5345-0.56": {
+       "n": 138,
+       "stated": 0.5445,
+       "hit": 0.4783
+      },
+      "0.5559-0.60": {
+       "n": 250,
+       "stated": 0.5775,
+       "hit": 0.504
+      },
+      "0.6000-0.65": {
+       "n": 173,
+       "stated": 0.625,
+       "hit": 0.5087
+      },
+      "0.6500-0.70": {
+       "n": 120,
+       "stated": 0.6718,
+       "hit": 0.4917
+      },
+      "0.7000-1.01": {
+       "n": 55,
+       "stated": 0.7309,
+       "hit": 0.5091
+      }
+     },
+     "vs_live": {
+      "d_logloss": -0.00169,
+      "d_logloss_ci": [
+       -0.01823,
+       0.01317
+      ],
+      "graded_hit_diff": -0.0112,
+      "graded_hit_diff_ci": [
+       -0.0426,
+       0.0167
+      ],
+      "graded_count_ratio": 1.031
+     },
+     "vs_base": {
+      "d_logloss": 0.00177,
+      "d_logloss_ci": [
+       -0.00536,
+       0.0092
+      ],
+      "graded_hit_diff": -0.0028,
+      "graded_hit_diff_ci": [
+       -0.0243,
+       0.019
+      ],
+      "graded_count_ratio": 1.057
+     },
+     "verdict": {
+      "L1_logloss": false,
+      "L2_calibration": false,
+      "L3_count": true,
+      "L4_hit": false,
+      "L5_balance": true,
+      "pass": false
+     }
+    }
+   }
+  }
+ }
+}

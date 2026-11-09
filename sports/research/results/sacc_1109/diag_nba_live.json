@@ -1,0 +1,1213 @@
+{
+ "pcol": "po_live",
+ "all": {
+  "n": 10102,
+  "games": 90,
+  "stated": 0.599,
+  "hit": 0.5399,
+  "gap": 0.0591,
+  "gap_ci": [
+   0.0427,
+   0.0748
+  ],
+  "over_share": 0.342
+ },
+ "graded_C_plus": {
+  "n": 7755,
+  "games": 90,
+  "stated": 0.6237,
+  "hit": 0.5451,
+  "gap": 0.0787,
+  "gap_ci": [
+   0.0603,
+   0.0971
+  ],
+  "over_share": 0.3
+ },
+ "by_band": {
+  "0.500-0.53": {
+   "n": 2347,
+   "games": 90,
+   "stated": 0.5173,
+   "hit": 0.5228,
+   "gap": -0.0055,
+   "gap_ci": [
+    -0.0322,
+    0.0229
+   ],
+   "over_share": 0.48
+  },
+  "0.534-0.56": {
+   "n": 1492,
+   "games": 90,
+   "stated": 0.547,
+   "hit": 0.5295,
+   "gap": 0.0176,
+   "gap_ci": [
+    -0.0145,
+    0.0472
+   ],
+   "over_share": 0.397
+  },
+  "0.560-0.60": {
+   "n": 2081,
+   "games": 90,
+   "stated": 0.5784,
+   "hit": 0.4964,
+   "gap": 0.0821,
+   "gap_ci": [
+    0.0575,
+    0.1068
+   ],
+   "over_share": 0.351
+  },
+  "0.600-0.65": {
+   "n": 1930,
+   "games": 90,
+   "stated": 0.6241,
+   "hit": 0.5746,
+   "gap": 0.0495,
+   "gap_ci": [
+    0.0187,
+    0.0782
+   ],
+   "over_share": 0.285
+  },
+  "0.650-0.70": {
+   "n": 1198,
+   "games": 90,
+   "stated": 0.6721,
+   "hit": 0.5718,
+   "gap": 0.1003,
+   "gap_ci": [
+    0.064,
+    0.1375
+   ],
+   "over_share": 0.275
+  },
+  "0.700-0.80": {
+   "n": 813,
+   "games": 86,
+   "stated": 0.7364,
+   "hit": 0.567,
+   "gap": 0.1694,
+   "gap_ci": [
+    0.1122,
+    0.2253
+   ],
+   "over_share": 0.144
+  },
+  "0.800-1.01": {
+   "n": 241,
+   "games": 56,
+   "stated": 0.8665,
+   "hit": 0.6183,
+   "gap": 0.2482,
+   "gap_ci": [
+    0.1462,
+    0.3587
+   ],
+   "over_share": 0.025
+  }
+ },
+ "by_market": {
+  "assists": {
+   "n": 1754,
+   "games": 90,
+   "stated": 0.5956,
+   "hit": 0.541,
+   "gap": 0.0546,
+   "gap_ci": [
+    0.0233,
+    0.0868
+   ],
+   "over_share": 0.385
+  },
+  "points": {
+   "n": 3941,
+   "games": 90,
+   "stated": 0.6035,
+   "hit": 0.5245,
+   "gap": 0.079,
+   "gap_ci": [
+    0.0527,
+    0.1053
+   ],
+   "over_share": 0.335
+  },
+  "rebounds": {
+   "n": 2745,
+   "games": 90,
+   "stated": 0.5895,
+   "hit": 0.5556,
+   "gap": 0.034,
+   "gap_ci": [
+    0.0091,
+    0.0609
+   ],
+   "over_share": 0.336
+  },
+  "threes": {
+   "n": 1662,
+   "games": 90,
+   "stated": 0.6076,
+   "hit": 0.5493,
+   "gap": 0.0583,
+   "gap_ci": [
+    0.0292,
+    0.0855
+   ],
+   "over_share": 0.322
+  }
+ },
+ "by_side": {
+  "over": {
+   "n": 3452,
+   "games": 90,
+   "stated": 0.5745,
+   "hit": 0.531,
+   "gap": 0.0435,
+   "gap_ci": [
+    0.0174,
+    0.0701
+   ],
+   "over_share": 1.0
+  },
+  "under": {
+   "n": 6650,
+   "games": 90,
+   "stated": 0.6118,
+   "hit": 0.5445,
+   "gap": 0.0672,
+   "gap_ci": [
+    0.0411,
+    0.0916
+   ],
+   "over_share": 0.0
+  }
+ },
+ "by_book": {
+  "prizepicks": {
+   "n": 4606,
+   "games": 90,
+   "stated": 0.5948,
+   "hit": 0.5291,
+   "gap": 0.0657,
+   "gap_ci": [
+    0.0462,
+    0.0846
+   ],
+   "over_share": 0.341
+  },
+  "underdog": {
+   "n": 5496,
+   "games": 90,
+   "stated": 0.6025,
+   "hit": 0.5489,
+   "gap": 0.0536,
+   "gap_ci": [
+    0.0389,
+    0.0684
+   ],
+   "over_share": 0.342
+  }
+ },
+ "mean_vs_line": {
+  "assists": {
+   "n": 1754,
+   "slope": 0.349,
+   "slope_ci": [
+    0.049,
+    0.636
+   ],
+   "intercept": 0.156,
+   "mean_minus_line": -0.017,
+   "actual_minus_line": 0.15,
+   "actual_minus_line_ci": [
+    -0.0391,
+    0.342
+   ],
+   "bias_mean_minus_actual": -0.167,
+   "bias_ci": [
+    -0.3798,
+    0.0189
+   ],
+   "mae_model": 1.879,
+   "mae_line": 1.875,
+   "corr_x_y": 0.104
+  },
+  "points": {
+   "n": 3941,
+   "slope": 0.19,
+   "slope_ci": [
+    -0.003,
+    0.364
+   ],
+   "intercept": -0.123,
+   "mean_minus_line": 0.656,
+   "actual_minus_line": 0.001,
+   "actual_minus_line_ci": [
+    -0.354,
+    0.3837
+   ],
+   "bias_mean_minus_actual": 0.655,
+   "bias_ci": [
+    0.2242,
+    1.0934
+   ],
+   "mae_model": 5.439,
+   "mae_line": 5.243,
+   "corr_x_y": 0.067
+  },
+  "rebounds": {
+   "n": 2745,
+   "slope": 0.375,
+   "slope_ci": [
+    0.173,
+    0.595
+   ],
+   "intercept": 0.179,
+   "mean_minus_line": 0.042,
+   "actual_minus_line": 0.195,
+   "actual_minus_line_ci": [
+    0.0102,
+    0.358
+   ],
+   "bias_mean_minus_actual": -0.153,
+   "bias_ci": [
+    -0.3406,
+    0.058
+   ],
+   "mae_model": 2.185,
+   "mae_line": 2.198,
+   "corr_x_y": 0.107
+  },
+  "threes": {
+   "n": 1662,
+   "slope": 0.435,
+   "slope_ci": [
+    0.255,
+    0.623
+   ],
+   "intercept": 0.088,
+   "mean_minus_line": 0.091,
+   "actual_minus_line": 0.128,
+   "actual_minus_line_ci": [
+    0.0442,
+    0.2082
+   ],
+   "bias_mean_minus_actual": -0.036,
+   "bias_ci": [
+    -0.1206,
+    0.0572
+   ],
+   "mae_model": 1.17,
+   "mae_line": 1.181,
+   "corr_x_y": 0.12
+  }
+ },
+ "spread_var_z": {
+  "assists": {
+   "var_z": 1.061,
+   "var_z_ci": [
+    0.9179,
+    1.2584
+   ]
+  },
+  "points": {
+   "var_z": 1.042,
+   "var_z_ci": [
+    0.9585,
+    1.1592
+   ]
+  },
+  "rebounds": {
+   "var_z": 1.125,
+   "var_z_ci": [
+    0.9934,
+    1.275
+   ]
+  },
+  "threes": {
+   "var_z": 1.131,
+   "var_z_ci": [
+    0.9972,
+    1.2939
+   ]
+  }
+ },
+ "slices": {
+  "minutes_ew10": {
+   "(-1, 15]": {
+    "n": 262,
+    "games": 45,
+    "stated": 0.747,
+    "hit": 0.5115,
+    "gap": 0.2356,
+    "gap_ci": [
+     0.1339,
+     0.3405
+    ],
+    "over_share": 0.053,
+    "bias_mean_minus_actual": -1.631,
+    "var_z": 1.867,
+    "minutes_mean_minus_actual": -9.39
+   },
+   "(15, 22]": {
+    "n": 1261,
+    "games": 80,
+    "stated": 0.6173,
+    "hit": 0.5599,
+    "gap": 0.0574,
+    "gap_ci": [
+     0.0158,
+     0.1011
+    ],
+    "over_share": 0.283,
+    "bias_mean_minus_actual": 0.081,
+    "var_z": 1.062,
+    "minutes_mean_minus_actual": -2.95
+   },
+   "(22, 28]": {
+    "n": 2863,
+    "games": 90,
+    "stated": 0.5967,
+    "hit": 0.532,
+    "gap": 0.0648,
+    "gap_ci": [
+     0.038,
+     0.0903
+    ],
+    "over_share": 0.366,
+    "bias_mean_minus_actual": 0.428,
+    "var_z": 1.096,
+    "minutes_mean_minus_actual": 0.03
+   },
+   "(28, 33]": {
+    "n": 3604,
+    "games": 87,
+    "stated": 0.593,
+    "hit": 0.5397,
+    "gap": 0.0533,
+    "gap_ci": [
+     0.0273,
+     0.0803
+    ],
+    "over_share": 0.311,
+    "bias_mean_minus_actual": 0.074,
+    "var_z": 1.067,
+    "minutes_mean_minus_actual": -0.36
+   },
+   "(33, 60]": {
+    "n": 2112,
+    "games": 74,
+    "stated": 0.5831,
+    "hit": 0.5426,
+    "gap": 0.0405,
+    "gap_ci": [
+     0.0107,
+     0.0715
+    ],
+    "over_share": 0.432,
+    "bias_mean_minus_actual": 0.304,
+    "var_z": 0.978,
+    "minutes_mean_minus_actual": 1.5
+   }
+  },
+  "starter_prev": {
+   "bench": {
+    "n": 2561,
+    "games": 90,
+    "stated": 0.6118,
+    "hit": 0.5404,
+    "gap": 0.0714,
+    "gap_ci": [
+     0.0463,
+     0.097
+    ],
+    "over_share": 0.374,
+    "bias_mean_minus_actual": 0.208,
+    "var_z": 1.239,
+    "minutes_mean_minus_actual": 0.39
+   },
+   "starter": {
+    "n": 7541,
+    "games": 90,
+    "stated": 0.5947,
+    "hit": 0.5397,
+    "gap": 0.0549,
+    "gap_ci": [
+     0.0353,
+     0.0739
+    ],
+    "over_share": 0.331,
+    "bias_mean_minus_actual": 0.169,
+    "var_z": 1.038,
+    "minutes_mean_minus_actual": -0.7
+   }
+  },
+  "minutes_volatility_sd10": {
+   "(-1.0, 3.0]": {
+    "n": 655,
+    "games": 50,
+    "stated": 0.5868,
+    "hit": 0.4489,
+    "gap": 0.1379,
+    "gap_ci": [
+     0.0791,
+     0.1905
+    ],
+    "over_share": 0.456,
+    "bias_mean_minus_actual": 0.082,
+    "var_z": 1.15,
+    "minutes_mean_minus_actual": 0.58
+   },
+   "(3.0, 5.0]": {
+    "n": 3558,
+    "games": 90,
+    "stated": 0.5891,
+    "hit": 0.532,
+    "gap": 0.0571,
+    "gap_ci": [
+     0.0351,
+     0.0826
+    ],
+    "over_share": 0.34,
+    "bias_mean_minus_actual": 0.286,
+    "var_z": 1.052,
+    "minutes_mean_minus_actual": -0.33
+   },
+   "(5.0, 8.0]": {
+    "n": 4552,
+    "games": 90,
+    "stated": 0.6021,
+    "hit": 0.5527,
+    "gap": 0.0493,
+    "gap_ci": [
+     0.0235,
+     0.0749
+    ],
+    "over_share": 0.331,
+    "bias_mean_minus_actual": 0.104,
+    "var_z": 1.124,
+    "minutes_mean_minus_actual": -0.3
+   },
+   "(8.0, 60.0]": {
+    "n": 1238,
+    "games": 73,
+    "stated": 0.6232,
+    "hit": 0.5582,
+    "gap": 0.065,
+    "gap_ci": [
+     0.0255,
+     0.1044
+    ],
+    "over_share": 0.317,
+    "bias_mean_minus_actual": 0.193,
+    "var_z": 1.035,
+    "minutes_mean_minus_actual": -1.7
+   },
+   "nan": {
+    "n": 99,
+    "games": 11,
+    "stated": 0.5921,
+    "hit": 0.6061,
+    "gap": -0.0139,
+    "gap_ci": [
+     -0.1495,
+     0.161
+    ],
+    "over_share": 0.434,
+    "bias_mean_minus_actual": 0.27,
+    "var_z": 0.994,
+    "minutes_mean_minus_actual": -0.11
+   }
+  },
+  "season_games": {
+   "(0, 2]": {
+    "n": 1848,
+    "games": 35,
+    "stated": 0.6091,
+    "hit": 0.5373,
+    "gap": 0.0718,
+    "gap_ci": [
+     0.0344,
+     0.1131
+    ],
+    "over_share": 0.354,
+    "bias_mean_minus_actual": 0.432,
+    "var_z": 1.118,
+    "minutes_mean_minus_actual": -0.54
+   },
+   "(2, 5]": {
+    "n": 5204,
+    "games": 70,
+    "stated": 0.5983,
+    "hit": 0.5402,
+    "gap": 0.0582,
+    "gap_ci": [
+     0.038,
+     0.0774
+    ],
+    "over_share": 0.343,
+    "bias_mean_minus_actual": 0.152,
+    "var_z": 1.106,
+    "minutes_mean_minus_actual": -0.17
+   },
+   "(5, 10]": {
+    "n": 3015,
+    "games": 36,
+    "stated": 0.5941,
+    "hit": 0.5416,
+    "gap": 0.0525,
+    "gap_ci": [
+     0.0221,
+     0.0838
+    ],
+    "over_share": 0.328,
+    "bias_mean_minus_actual": 0.05,
+    "var_z": 1.034,
+    "minutes_mean_minus_actual": -0.89
+   }
+  },
+  "prior_games": {
+   "(-1, 5]": {
+    "n": 403,
+    "games": 40,
+    "stated": 0.6042,
+    "hit": 0.5385,
+    "gap": 0.0658,
+    "gap_ci": [
+     -0.0159,
+     0.1449
+    ],
+    "over_share": 0.474,
+    "bias_mean_minus_actual": -0.363,
+    "var_z": 1.398,
+    "minutes_mean_minus_actual": 0.57
+   },
+   "(30, 80]": {
+    "n": 474,
+    "games": 56,
+    "stated": 0.6355,
+    "hit": 0.4747,
+    "gap": 0.1608,
+    "gap_ci": [
+     0.0758,
+     0.2387
+    ],
+    "over_share": 0.234,
+    "bias_mean_minus_actual": -0.575,
+    "var_z": 1.112,
+    "minutes_mean_minus_actual": -4.54
+   },
+   "(5, 10]": {
+    "n": 151,
+    "games": 16,
+    "stated": 0.6012,
+    "hit": 0.5033,
+    "gap": 0.0979,
+    "gap_ci": [
+     -0.0554,
+     0.2307
+    ],
+    "over_share": 0.384,
+    "bias_mean_minus_actual": -0.17,
+    "var_z": 1.241,
+    "minutes_mean_minus_actual": -0.36
+   },
+   "(80, 2000]": {
+    "n": 9069,
+    "games": 90,
+    "stated": 0.5969,
+    "hit": 0.5441,
+    "gap": 0.0528,
+    "gap_ci": [
+     0.0359,
+     0.0698
+    ],
+    "over_share": 0.341,
+    "bias_mean_minus_actual": 0.248,
+    "var_z": 1.067,
+    "minutes_mean_minus_actual": -0.25
+   }
+  },
+  "team_changed": {
+   "0": {
+    "n": 10095,
+    "games": 90,
+    "stated": 0.599,
+    "hit": 0.5396,
+    "gap": 0.0594,
+    "gap_ci": [
+     0.0429,
+     0.0753
+    ],
+    "over_share": 0.341,
+    "bias_mean_minus_actual": 0.179,
+    "var_z": 1.089,
+    "minutes_mean_minus_actual": -0.42
+   }
+  },
+  "days_since_played": {
+   "(-1, 3]": {
+    "n": 8822,
+    "games": 89,
+    "stated": 0.599,
+    "hit": 0.5397,
+    "gap": 0.0593,
+    "gap_ci": [
+     0.0429,
+     0.0756
+    ],
+    "over_share": 0.341,
+    "bias_mean_minus_actual": 0.111,
+    "var_z": 1.095,
+    "minutes_mean_minus_actual": -0.58
+   },
+   "(3, 7]": {
+    "n": 1211,
+    "games": 34,
+    "stated": 0.5997,
+    "hit": 0.5434,
+    "gap": 0.0563,
+    "gap_ci": [
+     0.0074,
+     0.1072
+    ],
+    "over_share": 0.336,
+    "bias_mean_minus_actual": 0.58,
+    "var_z": 1.01,
+    "minutes_mean_minus_actual": 0.54
+   }
+  },
+  "abs_spread_blowout": {
+   "(-1, 3]": {
+    "n": 2363,
+    "games": 20,
+    "stated": 0.6033,
+    "hit": 0.5459,
+    "gap": 0.0574,
+    "gap_ci": [
+     0.0311,
+     0.0851
+    ],
+    "over_share": 0.332,
+    "bias_mean_minus_actual": 0.103,
+    "var_z": 1.123,
+    "minutes_mean_minus_actual": -1.01
+   },
+   "(11, 40]": {
+    "n": 1620,
+    "games": 16,
+    "stated": 0.5892,
+    "hit": 0.5506,
+    "gap": 0.0386,
+    "gap_ci": [
+     0.0013,
+     0.0733
+    ],
+    "over_share": 0.362,
+    "bias_mean_minus_actual": 0.267,
+    "var_z": 0.936,
+    "minutes_mean_minus_actual": 0.54
+   },
+   "(3, 7]": {
+    "n": 4210,
+    "games": 37,
+    "stated": 0.5995,
+    "hit": 0.5302,
+    "gap": 0.0693,
+    "gap_ci": [
+     0.0433,
+     0.0943
+    ],
+    "over_share": 0.336,
+    "bias_mean_minus_actual": 0.193,
+    "var_z": 1.098,
+    "minutes_mean_minus_actual": -0.76
+   },
+   "(7, 11]": {
+    "n": 1909,
+    "games": 17,
+    "stated": 0.601,
+    "hit": 0.5448,
+    "gap": 0.0562,
+    "gap_ci": [
+     0.0122,
+     0.1041
+    ],
+    "over_share": 0.349,
+    "bias_mean_minus_actual": 0.168,
+    "var_z": 1.154,
+    "minutes_mean_minus_actual": 0.23
+   }
+  },
+  "nfl_abs_spread": {
+   "(-1, 3]": {
+    "n": 2363,
+    "games": 20,
+    "stated": 0.6033,
+    "hit": 0.5459,
+    "gap": 0.0574,
+    "gap_ci": [
+     0.0311,
+     0.0851
+    ],
+    "over_share": 0.332,
+    "bias_mean_minus_actual": 0.103,
+    "var_z": 1.123,
+    "minutes_mean_minus_actual": -1.01
+   },
+   "(3, 7]": {
+    "n": 4210,
+    "games": 37,
+    "stated": 0.5995,
+    "hit": 0.5302,
+    "gap": 0.0693,
+    "gap_ci": [
+     0.0433,
+     0.0943
+    ],
+    "over_share": 0.336,
+    "bias_mean_minus_actual": 0.193,
+    "var_z": 1.098,
+    "minutes_mean_minus_actual": -0.76
+   },
+   "(7, 40]": {
+    "n": 3529,
+    "games": 33,
+    "stated": 0.5956,
+    "hit": 0.5475,
+    "gap": 0.0481,
+    "gap_ci": [
+     0.0196,
+     0.0786
+    ],
+    "over_share": 0.355,
+    "bias_mean_minus_actual": 0.213,
+    "var_z": 1.055,
+    "minutes_mean_minus_actual": 0.37
+   }
+  },
+  "teammates_out_usage": {
+   "(-1.0, 0.0001]": {
+    "n": 3729,
+    "games": 53,
+    "stated": 0.5898,
+    "hit": 0.561,
+    "gap": 0.0288,
+    "gap_ci": [
+     0.0096,
+     0.0481
+    ],
+    "over_share": 0.361,
+    "bias_mean_minus_actual": 0.227,
+    "var_z": 0.96,
+    "minutes_mean_minus_actual": 0.35
+   },
+   "(0.25, 5.0]": {
+    "n": 5992,
+    "games": 78,
+    "stated": 0.5986,
+    "hit": 0.5274,
+    "gap": 0.0712,
+    "gap_ci": [
+     0.0496,
+     0.0925
+    ],
+    "over_share": 0.345,
+    "bias_mean_minus_actual": 0.246,
+    "var_z": 1.112,
+    "minutes_mean_minus_actual": -0.39
+   },
+   "nan": {
+    "n": 346,
+    "games": 31,
+    "stated": 0.7059,
+    "hit": 0.5578,
+    "gap": 0.1481,
+    "gap_ci": [
+     0.0686,
+     0.2326
+    ],
+    "over_share": 0.084,
+    "bias_mean_minus_actual": -1.336,
+    "var_z": 1.745,
+    "minutes_mean_minus_actual": -8.99
+   }
+  },
+  "b2b": {
+   "0": {
+    "n": 8175,
+    "games": 82,
+    "stated": 0.5963,
+    "hit": 0.5372,
+    "gap": 0.0591,
+    "gap_ci": [
+     0.0404,
+     0.0767
+    ],
+    "over_share": 0.349,
+    "bias_mean_minus_actual": 0.231,
+    "var_z": 1.059,
+    "minutes_mean_minus_actual": -0.13
+   },
+   "1": {
+    "n": 1927,
+    "games": 30,
+    "stated": 0.6104,
+    "hit": 0.5511,
+    "gap": 0.0593,
+    "gap_ci": [
+     0.0242,
+     0.0972
+    ],
+    "over_share": 0.311,
+    "bias_mean_minus_actual": -0.04,
+    "var_z": 1.211,
+    "minutes_mean_minus_actual": -1.67
+   }
+  },
+  "total_line_pace": {
+   "(0, 220]": {
+    "n": 1126,
+    "games": 10,
+    "stated": 0.5997,
+    "hit": 0.5631,
+    "gap": 0.0366,
+    "gap_ci": [
+     -0.0029,
+     0.074
+    ],
+    "over_share": 0.321,
+    "bias_mean_minus_actual": 0.477,
+    "var_z": 0.957,
+    "minutes_mean_minus_actual": -0.56
+   },
+   "(220, 230]": {
+    "n": 4387,
+    "games": 39,
+    "stated": 0.6118,
+    "hit": 0.5243,
+    "gap": 0.0875,
+    "gap_ci": [
+     0.0661,
+     0.112
+    ],
+    "over_share": 0.289,
+    "bias_mean_minus_actual": -0.224,
+    "var_z": 1.174,
+    "minutes_mean_minus_actual": -1.2
+   },
+   "(230, 240]": {
+    "n": 3940,
+    "games": 35,
+    "stated": 0.5864,
+    "hit": 0.5495,
+    "gap": 0.0369,
+    "gap_ci": [
+     0.0125,
+     0.0626
+    ],
+    "over_share": 0.388,
+    "bias_mean_minus_actual": 0.46,
+    "var_z": 1.037,
+    "minutes_mean_minus_actual": 0.36
+   },
+   "(240, 300]": {
+    "n": 649,
+    "games": 6,
+    "stated": 0.588,
+    "hit": 0.547,
+    "gap": 0.041,
+    "gap_ci": [
+     -0.035,
+     0.0954
+    ],
+    "over_share": 0.455,
+    "bias_mean_minus_actual": 0.68,
+    "var_z": 0.941,
+    "minutes_mean_minus_actual": 0.32
+   }
+  },
+  "nfl_total_line": {
+   "nan": {
+    "n": 10102,
+    "games": 90,
+    "stated": 0.599,
+    "hit": 0.5399,
+    "gap": 0.0591,
+    "gap_ci": [
+     0.0427,
+     0.0748
+    ],
+    "over_share": 0.342,
+    "bias_mean_minus_actual": 0.179,
+    "var_z": 1.089,
+    "minutes_mean_minus_actual": -0.42
+   }
+  },
+  "line_vs_mean_z": {
+   "(-0.2, 0.2]": {
+    "n": 5129,
+    "games": 90,
+    "stated": 0.5621,
+    "hit": 0.5272,
+    "gap": 0.0349,
+    "gap_ci": [
+     0.012,
+     0.0565
+    ],
+    "over_share": 0.161,
+    "bias_mean_minus_actual": -0.036,
+    "var_z": 1.005,
+    "minutes_mean_minus_actual": -0.15
+   },
+   "(-0.5, -0.2]": {
+    "n": 2327,
+    "games": 89,
+    "stated": 0.5708,
+    "hit": 0.5144,
+    "gap": 0.0564,
+    "gap_ci": [
+     0.0309,
+     0.0821
+    ],
+    "over_share": 0.884,
+    "bias_mean_minus_actual": 1.22,
+    "var_z": 0.924,
+    "minutes_mean_minus_actual": 0.94
+   },
+   "(-1.0, -0.5]": {
+    "n": 589,
+    "games": 79,
+    "stated": 0.6481,
+    "hit": 0.5823,
+    "gap": 0.0658,
+    "gap_ci": [
+     0.0108,
+     0.1311
+    ],
+    "over_share": 0.935,
+    "bias_mean_minus_actual": 2.382,
+    "var_z": 0.801,
+    "minutes_mean_minus_actual": 1.4
+   },
+   "(0.2, 0.5]": {
+    "n": 1525,
+    "games": 90,
+    "stated": 0.6754,
+    "hit": 0.581,
+    "gap": 0.0945,
+    "gap_ci": [
+     0.0532,
+     0.1347
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -0.811,
+    "var_z": 1.181,
+    "minutes_mean_minus_actual": -2.08
+   },
+   "(0.5, 1.0]": {
+    "n": 402,
+    "games": 71,
+    "stated": 0.7787,
+    "hit": 0.5995,
+    "gap": 0.1792,
+    "gap_ci": [
+     0.105,
+     0.2592
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -2.236,
+    "var_z": 1.361,
+    "minutes_mean_minus_actual": -5.63
+   },
+   "(1.0, 9.0]": {
+    "n": 111,
+    "games": 38,
+    "stated": 0.9103,
+    "hit": 0.6577,
+    "gap": 0.2526,
+    "gap_ci": [
+     0.112,
+     0.4072
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -2.062,
+    "var_z": 2.594,
+    "minutes_mean_minus_actual": -9.47
+   }
+  },
+  "position": {
+   "C": {
+    "n": 1393,
+    "games": 87,
+    "stated": 0.6003,
+    "hit": 0.5621,
+    "gap": 0.0382,
+    "gap_ci": [
+     0.0031,
+     0.0729
+    ],
+    "over_share": 0.308,
+    "bias_mean_minus_actual": 0.282,
+    "var_z": 1.117,
+    "minutes_mean_minus_actual": -0.54
+   },
+   "F": {
+    "n": 3636,
+    "games": 90,
+    "stated": 0.5957,
+    "hit": 0.5341,
+    "gap": 0.0616,
+    "gap_ci": [
+     0.0345,
+     0.0888
+    ],
+    "over_share": 0.353,
+    "bias_mean_minus_actual": 0.254,
+    "var_z": 1.066,
+    "minutes_mean_minus_actual": -0.77
+   },
+   "G": {
+    "n": 5073,
+    "games": 90,
+    "stated": 0.6011,
+    "hit": 0.5379,
+    "gap": 0.0631,
+    "gap_ci": [
+     0.0423,
+     0.0844
+    ],
+    "over_share": 0.343,
+    "bias_mean_minus_actual": 0.097,
+    "var_z": 1.097,
+    "minutes_mean_minus_actual": -0.14
+   }
+  },
+  "market_x_side": {
+   "assists:over": {
+    "n": 676,
+    "games": 90,
+    "stated": 0.5776,
+    "hit": 0.5281,
+    "gap": 0.0495,
+    "gap_ci": [
+     0.0012,
+     0.0924
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 0.259,
+    "var_z": 0.935,
+    "minutes_mean_minus_actual": 0.74
+   },
+   "assists:under": {
+    "n": 1078,
+    "games": 90,
+    "stated": 0.6069,
+    "hit": 0.5492,
+    "gap": 0.0577,
+    "gap_ci": [
+     0.0105,
+     0.1035
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -0.434,
+    "var_z": 1.105,
+    "minutes_mean_minus_actual": -1.17
+   },
+   "points:over": {
+    "n": 1319,
+    "games": 87,
+    "stated": 0.5771,
+    "hit": 0.5034,
+    "gap": 0.0737,
+    "gap_ci": [
+     0.0331,
+     0.1177
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 2.316,
+    "var_z": 0.911,
+    "minutes_mean_minus_actual": 1.29
+   },
+   "points:under": {
+    "n": 2622,
+    "games": 90,
+    "stated": 0.6168,
+    "hit": 0.5351,
+    "gap": 0.0817,
+    "gap_ci": [
+     0.0482,
+     0.114
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -0.181,
+    "var_z": 1.058,
+    "minutes_mean_minus_actual": -1.26
+   },
+   "rebounds:over": {
+    "n": 922,
+    "games": 90,
+    "stated": 0.5634,
+    "hit": 0.5813,
+    "gap": -0.0179,
+    "gap_ci": [
+     -0.0633,
+     0.0311
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 0.252,
+    "var_z": 0.914,
+    "minutes_mean_minus_actual": 1.14
+   },
+   "rebounds:under": {
+    "n": 1823,
+    "games": 90,
+    "stated": 0.6028,
+    "hit": 0.5425,
+    "gap": 0.0602,
+    "gap_ci": [
+     0.0192,
+     0.1023
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -0.357,
+    "var_z": 1.212,
+    "minutes_mean_minus_actual": -1.33
+   },
+   "threes:over": {
+    "n": 535,
+    "games": 88,
+    "stated": 0.5831,
+    "hit": 0.5159,
+    "gap": 0.0672,
+    "gap_ci": [
+     0.0167,
+     0.1185
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 0.205,
+    "var_z": 0.898,
+    "minutes_mean_minus_actual": 1.02
+   },
+   "threes:under": {
+    "n": 1127,
+    "games": 90,
+    "stated": 0.6193,
+    "hit": 0.5652,
+    "gap": 0.0541,
+    "gap_ci": [
+     0.0124,
+     0.089
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -0.151,
+    "var_z": 1.22,
+    "minutes_mean_minus_actual": -0.93
+   }
+  }
+ }
+}

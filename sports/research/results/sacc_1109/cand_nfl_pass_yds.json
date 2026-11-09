@@ -1,0 +1,1178 @@
+{
+ "params": {
+  "dev_2024-09-01": {
+   "rs1_theta": {
+    "const": 1.0794,
+    "abs_log_lag1_vs_ew_opp": 0.3797,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.1107,
+    "log_ew_opp": -0.7963,
+    "inv_sqrt_prior_n": 0.321,
+    "early_season": 0.2255,
+    "back_from_absence": 0.0966,
+    "team_change": 0.4454,
+    "qb_change": 0.3041,
+    "abs_spread": -0.1123,
+    "RB": -0.0,
+    "TE": -0.0,
+    "QB": -0.0013
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.041,
+    "log_lag1_vs_ew_opp": 0.1926,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.7099,
+    "team_spread": 0.0361,
+    "implied_total": 0.0142,
+    "back_from_absence": -0.152,
+    "qb_change": 0.0912,
+    "team_change": -0.5245
+   },
+   "rsm1_theta": {
+    "const": 0.9278,
+    "abs_log_lag1_vs_ew_opp": 0.4689,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0774,
+    "log_ew_opp": -0.7746,
+    "inv_sqrt_prior_n": 0.167,
+    "early_season": 0.0689,
+    "back_from_absence": 0.2689,
+    "team_change": 0.4848,
+    "qb_change": 0.2901,
+    "abs_spread": -0.0257,
+    "RB": -0.0001,
+    "TE": -0.0001,
+    "QB": -0.0014
+   },
+   "n_train": 7008,
+   "n_test": 1500
+  },
+  "dev_2024-10-01": {
+   "rs1_theta": {
+    "const": 1.0591,
+    "abs_log_lag1_vs_ew_opp": 0.3834,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0916,
+    "log_ew_opp": -0.7915,
+    "inv_sqrt_prior_n": 0.3149,
+    "early_season": 0.0842,
+    "back_from_absence": 0.1263,
+    "team_change": 0.5506,
+    "qb_change": 0.2397,
+    "abs_spread": -0.1066,
+    "RB": -0.0,
+    "TE": -0.0,
+    "QB": -0.0011
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0312,
+    "log_lag1_vs_ew_opp": 0.2154,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4966,
+    "team_spread": 0.0266,
+    "implied_total": 0.0029,
+    "back_from_absence": -0.1087,
+    "qb_change": 0.0839,
+    "team_change": -0.5429
+   },
+   "rsm1_theta": {
+    "const": 0.8076,
+    "abs_log_lag1_vs_ew_opp": 0.4489,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0219,
+    "log_ew_opp": -0.7278,
+    "inv_sqrt_prior_n": 0.1854,
+    "early_season": 0.1677,
+    "back_from_absence": 0.2287,
+    "team_change": 0.5131,
+    "qb_change": 0.2264,
+    "abs_spread": -0.0927,
+    "RB": -0.0,
+    "TE": -0.0,
+    "QB": -0.0002
+   },
+   "n_train": 8508,
+   "n_test": 1476
+  },
+  "dev_2024-11-01": {
+   "rs1_theta": {
+    "const": 1.0157,
+    "abs_log_lag1_vs_ew_opp": 0.3561,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0729,
+    "log_ew_opp": -0.7579,
+    "inv_sqrt_prior_n": 0.323,
+    "early_season": 0.1698,
+    "back_from_absence": 0.1687,
+    "team_change": 0.5207,
+    "qb_change": 0.1365,
+    "abs_spread": -0.1654,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": 0.0001
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.028,
+    "log_lag1_vs_ew_opp": 0.196,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.5132,
+    "team_spread": 0.0244,
+    "implied_total": 0.0023,
+    "back_from_absence": -0.1292,
+    "qb_change": 0.1111,
+    "team_change": -0.601
+   },
+   "rsm1_theta": {
+    "const": 0.7471,
+    "abs_log_lag1_vs_ew_opp": 0.4456,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0248,
+    "log_ew_opp": -0.7113,
+    "inv_sqrt_prior_n": 0.1335,
+    "early_season": 0.2438,
+    "back_from_absence": 0.2626,
+    "team_change": 0.4594,
+    "qb_change": 0.1418,
+    "abs_spread": -0.0295,
+    "RB": -0.0,
+    "TE": -0.0,
+    "QB": 0.0007
+   },
+   "n_train": 9984,
+   "n_test": 1488
+  },
+  "dev_2024-12-01": {
+   "rs1_theta": {
+    "const": 1.0311,
+    "abs_log_lag1_vs_ew_opp": 0.3625,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0814,
+    "log_ew_opp": -0.7808,
+    "inv_sqrt_prior_n": 0.2743,
+    "early_season": 0.2294,
+    "back_from_absence": 0.2049,
+    "team_change": 0.5065,
+    "qb_change": 0.1222,
+    "abs_spread": -0.1256,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": 0.0
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0357,
+    "log_lag1_vs_ew_opp": 0.221,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.5297,
+    "team_spread": 0.022,
+    "implied_total": -0.0043,
+    "back_from_absence": -0.0925,
+    "qb_change": 0.1052,
+    "team_change": -0.6142
+   },
+   "rsm1_theta": {
+    "const": 0.7497,
+    "abs_log_lag1_vs_ew_opp": 0.4795,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0813,
+    "log_ew_opp": -0.7252,
+    "inv_sqrt_prior_n": 0.1349,
+    "early_season": 0.2335,
+    "back_from_absence": 0.2469,
+    "team_change": 0.397,
+    "qb_change": 0.1787,
+    "abs_spread": -0.0502,
+    "RB": -0.0001,
+    "TE": -0.0001,
+    "QB": -0.0001
+   },
+   "n_train": 11472,
+   "n_test": 1825
+  },
+  "dev_2025-01-01": {
+   "rs1_theta": {
+    "const": 0.939,
+    "abs_log_lag1_vs_ew_opp": 0.3826,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0814,
+    "log_ew_opp": -0.7551,
+    "inv_sqrt_prior_n": 0.2395,
+    "early_season": 0.2517,
+    "back_from_absence": 0.2143,
+    "team_change": 0.4774,
+    "qb_change": 0.1159,
+    "abs_spread": -0.1132,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": -0.0013
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0332,
+    "log_lag1_vs_ew_opp": 0.2486,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.5365,
+    "team_spread": 0.0243,
+    "implied_total": 0.0023,
+    "back_from_absence": -0.098,
+    "qb_change": 0.1087,
+    "team_change": -0.6027
+   },
+   "rsm1_theta": {
+    "const": 0.5556,
+    "abs_log_lag1_vs_ew_opp": 0.4894,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0665,
+    "log_ew_opp": -0.6721,
+    "inv_sqrt_prior_n": 0.1399,
+    "early_season": 0.2691,
+    "back_from_absence": 0.2712,
+    "team_change": 0.3945,
+    "qb_change": 0.1277,
+    "abs_spread": 0.0052,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0006
+   },
+   "n_train": 13297,
+   "n_test": 701
+  },
+  "dev_2025-02-01": {
+   "rs1_theta": {
+    "const": 1.0368,
+    "abs_log_lag1_vs_ew_opp": 0.359,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0691,
+    "log_ew_opp": -0.7835,
+    "inv_sqrt_prior_n": 0.2518,
+    "early_season": 0.2526,
+    "back_from_absence": 0.2193,
+    "team_change": 0.456,
+    "qb_change": 0.1036,
+    "abs_spread": -0.1261,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": -0.0002
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0332,
+    "log_lag1_vs_ew_opp": 0.209,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4943,
+    "team_spread": 0.0225,
+    "implied_total": -0.003,
+    "back_from_absence": -0.1161,
+    "qb_change": 0.1111,
+    "team_change": -0.5355
+   },
+   "rsm1_theta": {
+    "const": 0.6194,
+    "abs_log_lag1_vs_ew_opp": 0.4805,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0303,
+    "log_ew_opp": -0.6885,
+    "inv_sqrt_prior_n": 0.1491,
+    "early_season": 0.2783,
+    "back_from_absence": 0.2729,
+    "team_change": 0.4051,
+    "qb_change": 0.1337,
+    "abs_spread": -0.0705,
+    "RB": -0.0,
+    "TE": -0.0,
+    "QB": -0.0018
+   },
+   "n_train": 13998,
+   "n_test": 26
+  },
+  "dev_2025-09-01": {
+   "rs1_theta": {
+    "const": 1.0349,
+    "abs_log_lag1_vs_ew_opp": 0.3625,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0697,
+    "log_ew_opp": -0.7843,
+    "inv_sqrt_prior_n": 0.2532,
+    "early_season": 0.253,
+    "back_from_absence": 0.2123,
+    "team_change": 0.4561,
+    "qb_change": 0.1058,
+    "abs_spread": -0.1236,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0004
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0335,
+    "log_lag1_vs_ew_opp": 0.2119,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4918,
+    "team_spread": 0.0227,
+    "implied_total": -0.0027,
+    "back_from_absence": -0.1137,
+    "qb_change": 0.1107,
+    "team_change": -0.5347
+   },
+   "rsm1_theta": {
+    "const": 0.5867,
+    "abs_log_lag1_vs_ew_opp": 0.4724,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0542,
+    "log_ew_opp": -0.6893,
+    "inv_sqrt_prior_n": 0.1608,
+    "early_season": 0.2874,
+    "back_from_absence": 0.2907,
+    "team_change": 0.4065,
+    "qb_change": 0.1394,
+    "abs_spread": -0.0352,
+    "RB": -0.0,
+    "TE": -0.0,
+    "QB": -0.0006
+   },
+   "n_train": 14024,
+   "n_test": 1532
+  },
+  "dev_2025-10-01": {
+   "rs1_theta": {
+    "const": 0.8679,
+    "abs_log_lag1_vs_ew_opp": 0.3967,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0589,
+    "log_ew_opp": -0.7419,
+    "inv_sqrt_prior_n": 0.2314,
+    "early_season": 0.2639,
+    "back_from_absence": 0.1945,
+    "team_change": 0.5333,
+    "qb_change": 0.0803,
+    "abs_spread": -0.0819,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0003
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0261,
+    "log_lag1_vs_ew_opp": 0.2,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.3942,
+    "team_spread": 0.0134,
+    "implied_total": -0.0084,
+    "back_from_absence": -0.1091,
+    "qb_change": 0.1257,
+    "team_change": -0.4927
+   },
+   "rsm1_theta": {
+    "const": 0.6804,
+    "abs_log_lag1_vs_ew_opp": 0.4526,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0463,
+    "log_ew_opp": -0.683,
+    "inv_sqrt_prior_n": 0.2167,
+    "early_season": 0.2373,
+    "back_from_absence": 0.2307,
+    "team_change": 0.5156,
+    "qb_change": 0.1186,
+    "abs_spread": -0.0926,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0006
+   },
+   "n_train": 15556,
+   "n_test": 1465
+  },
+  "dev_2025-11-01": {
+   "rs1_theta": {
+    "const": 0.8413,
+    "abs_log_lag1_vs_ew_opp": 0.4398,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0645,
+    "log_ew_opp": -0.7436,
+    "inv_sqrt_prior_n": 0.2286,
+    "early_season": 0.296,
+    "back_from_absence": 0.1727,
+    "team_change": 0.5037,
+    "qb_change": 0.0989,
+    "abs_spread": -0.0878,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0005
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0293,
+    "log_lag1_vs_ew_opp": 0.2135,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4161,
+    "team_spread": 0.0198,
+    "implied_total": -0.0065,
+    "back_from_absence": -0.1063,
+    "qb_change": 0.136,
+    "team_change": -0.5011
+   },
+   "rsm1_theta": {
+    "const": 0.5519,
+    "abs_log_lag1_vs_ew_opp": 0.4812,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0579,
+    "log_ew_opp": -0.6858,
+    "inv_sqrt_prior_n": 0.2177,
+    "early_season": 0.3022,
+    "back_from_absence": 0.2065,
+    "team_change": 0.4757,
+    "qb_change": 0.1235,
+    "abs_spread": -0.0037,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0005
+   },
+   "n_train": 17021,
+   "n_test": 1752
+  },
+  "dev_2025-12-01": {
+   "rs1_theta": {
+    "const": 0.8195,
+    "abs_log_lag1_vs_ew_opp": 0.4648,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0681,
+    "log_ew_opp": -0.7396,
+    "inv_sqrt_prior_n": 0.2107,
+    "early_season": 0.3042,
+    "back_from_absence": 0.1632,
+    "team_change": 0.4711,
+    "qb_change": 0.1109,
+    "abs_spread": -0.0916,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": 0.0002
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0252,
+    "log_lag1_vs_ew_opp": 0.2154,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4611,
+    "team_spread": 0.03,
+    "implied_total": 0.0063,
+    "back_from_absence": -0.1056,
+    "qb_change": 0.1398,
+    "team_change": -0.4927
+   },
+   "rsm1_theta": {
+    "const": 0.5827,
+    "abs_log_lag1_vs_ew_opp": 0.52,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0489,
+    "log_ew_opp": -0.6927,
+    "inv_sqrt_prior_n": 0.1785,
+    "early_season": 0.2857,
+    "back_from_absence": 0.171,
+    "team_change": 0.4584,
+    "qb_change": 0.1249,
+    "abs_spread": -0.0209,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0011
+   },
+   "n_train": 18773,
+   "n_test": 1607
+  },
+  "dev_2026-01-01": {
+   "rs1_theta": {
+    "const": 0.8209,
+    "abs_log_lag1_vs_ew_opp": 0.4808,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0818,
+    "log_ew_opp": -0.7339,
+    "inv_sqrt_prior_n": 0.1891,
+    "early_season": 0.3239,
+    "back_from_absence": 0.2147,
+    "team_change": 0.4413,
+    "qb_change": 0.1156,
+    "abs_spread": -0.1263,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0016
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0257,
+    "log_lag1_vs_ew_opp": 0.2319,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4181,
+    "team_spread": 0.0316,
+    "implied_total": 0.0131,
+    "back_from_absence": -0.1139,
+    "qb_change": 0.1336,
+    "team_change": -0.4861
+   },
+   "rsm1_theta": {
+    "const": 0.5442,
+    "abs_log_lag1_vs_ew_opp": 0.5062,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0652,
+    "log_ew_opp": -0.6786,
+    "inv_sqrt_prior_n": 0.21,
+    "early_season": 0.3287,
+    "back_from_absence": 0.2406,
+    "team_change": 0.4461,
+    "qb_change": 0.1422,
+    "abs_spread": -0.0347,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": -0.0003
+   },
+   "n_train": 20380,
+   "n_test": 690
+  },
+  "dev_2026-02-01": {
+   "rs1_theta": {
+    "const": 0.7658,
+    "abs_log_lag1_vs_ew_opp": 0.4819,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0811,
+    "log_ew_opp": -0.7267,
+    "inv_sqrt_prior_n": 0.1541,
+    "early_season": 0.3131,
+    "back_from_absence": 0.1898,
+    "team_change": 0.4329,
+    "qb_change": 0.0902,
+    "abs_spread": -0.016,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": 0.0003
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0213,
+    "log_lag1_vs_ew_opp": 0.2118,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4333,
+    "team_spread": 0.0332,
+    "implied_total": 0.0125,
+    "back_from_absence": -0.1066,
+    "qb_change": 0.1446,
+    "team_change": -0.4812
+   },
+   "rsm1_theta": {
+    "const": 0.5182,
+    "abs_log_lag1_vs_ew_opp": 0.4827,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.058,
+    "log_ew_opp": -0.6572,
+    "inv_sqrt_prior_n": 0.1858,
+    "early_season": 0.3224,
+    "back_from_absence": 0.189,
+    "team_change": 0.421,
+    "qb_change": 0.0811,
+    "abs_spread": 0.0164,
+    "RB": -0.0,
+    "TE": -0.0,
+    "QB": -0.0002
+   },
+   "n_train": 21070,
+   "n_test": 24
+  },
+  "final_2026-09-08": {
+   "rs1_theta": {
+    "const": 0.7643,
+    "abs_log_lag1_vs_ew_opp": 0.4822,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0813,
+    "log_ew_opp": -0.7263,
+    "inv_sqrt_prior_n": 0.155,
+    "early_season": 0.3134,
+    "back_from_absence": 0.1869,
+    "team_change": 0.4323,
+    "qb_change": 0.0912,
+    "abs_spread": -0.0159,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": -0.0003
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0213,
+    "log_lag1_vs_ew_opp": 0.2117,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.4351,
+    "team_spread": 0.0335,
+    "implied_total": 0.0127,
+    "back_from_absence": -0.1048,
+    "qb_change": 0.1442,
+    "team_change": -0.4812
+   },
+   "rsm1_theta": {
+    "const": 0.497,
+    "abs_log_lag1_vs_ew_opp": 0.4902,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0643,
+    "log_ew_opp": -0.6509,
+    "inv_sqrt_prior_n": 0.1907,
+    "early_season": 0.3137,
+    "back_from_absence": 0.1948,
+    "team_change": 0.42,
+    "qb_change": 0.0774,
+    "abs_spread": 0.0168,
+    "RB": 0.0003,
+    "TE": 0.0003,
+    "QB": -0.0006
+   },
+   "n_train": 21094,
+   "n_test": 354
+  },
+  "final_2026-09-15": {
+   "rs1_theta": {
+    "const": 0.7775,
+    "abs_log_lag1_vs_ew_opp": 0.4799,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0829,
+    "log_ew_opp": -0.7307,
+    "inv_sqrt_prior_n": 0.1631,
+    "early_season": 0.2917,
+    "back_from_absence": 0.1915,
+    "team_change": 0.4314,
+    "qb_change": 0.0958,
+    "abs_spread": -0.0208,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": 0.0005
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0232,
+    "log_lag1_vs_ew_opp": 0.2137,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.3899,
+    "team_spread": 0.0351,
+    "implied_total": 0.0107,
+    "back_from_absence": -0.1046,
+    "qb_change": 0.1355,
+    "team_change": -0.4741
+   },
+   "rsm1_theta": {
+    "const": 0.5322,
+    "abs_log_lag1_vs_ew_opp": 0.5029,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0689,
+    "log_ew_opp": -0.67,
+    "inv_sqrt_prior_n": 0.1913,
+    "early_season": 0.2911,
+    "back_from_absence": 0.2272,
+    "team_change": 0.4026,
+    "qb_change": 0.0729,
+    "abs_spread": 0.0262,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0012
+   },
+   "n_train": 21448,
+   "n_test": 404
+  },
+  "final_2026-09-22": {
+   "rs1_theta": {
+    "const": 0.7752,
+    "abs_log_lag1_vs_ew_opp": 0.4877,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0863,
+    "log_ew_opp": -0.7293,
+    "inv_sqrt_prior_n": 0.1741,
+    "early_season": 0.2722,
+    "back_from_absence": 0.1885,
+    "team_change": 0.4361,
+    "qb_change": 0.0914,
+    "abs_spread": -0.0304,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": 0.0009
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0209,
+    "log_lag1_vs_ew_opp": 0.2177,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.3921,
+    "team_spread": 0.0315,
+    "implied_total": 0.01,
+    "back_from_absence": -0.0969,
+    "qb_change": 0.138,
+    "team_change": -0.4711
+   },
+   "rsm1_theta": {
+    "const": 0.5526,
+    "abs_log_lag1_vs_ew_opp": 0.4951,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0793,
+    "log_ew_opp": -0.6648,
+    "inv_sqrt_prior_n": 0.1997,
+    "early_season": 0.2585,
+    "back_from_absence": 0.2059,
+    "team_change": 0.4085,
+    "qb_change": 0.0717,
+    "abs_spread": -0.0079,
+    "RB": 0.0003,
+    "TE": 0.0003,
+    "QB": 0.0012
+   },
+   "n_train": 21852,
+   "n_test": 403
+  },
+  "final_2026-09-29": {
+   "rs1_theta": {
+    "const": 0.7996,
+    "abs_log_lag1_vs_ew_opp": 0.4841,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0869,
+    "log_ew_opp": -0.7362,
+    "inv_sqrt_prior_n": 0.1892,
+    "early_season": 0.2484,
+    "back_from_absence": 0.1896,
+    "team_change": 0.4646,
+    "qb_change": 0.1014,
+    "abs_spread": -0.0389,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0001
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.022,
+    "log_lag1_vs_ew_opp": 0.2104,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.39,
+    "team_spread": 0.0319,
+    "implied_total": 0.0088,
+    "back_from_absence": -0.0934,
+    "qb_change": 0.1345,
+    "team_change": -0.4746
+   },
+   "rsm1_theta": {
+    "const": 0.5845,
+    "abs_log_lag1_vs_ew_opp": 0.4876,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.057,
+    "log_ew_opp": -0.6871,
+    "inv_sqrt_prior_n": 0.2194,
+    "early_season": 0.2705,
+    "back_from_absence": 0.2239,
+    "team_change": 0.4414,
+    "qb_change": 0.0715,
+    "abs_spread": 0.0177,
+    "RB": 0.0002,
+    "TE": 0.0002,
+    "QB": 0.0011
+   },
+   "n_train": 22255,
+   "n_test": 398
+  },
+  "final_2026-10-06": {
+   "rs1_theta": {
+    "const": 0.8264,
+    "abs_log_lag1_vs_ew_opp": 0.4829,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0892,
+    "log_ew_opp": -0.7436,
+    "inv_sqrt_prior_n": 0.1902,
+    "early_season": 0.2504,
+    "back_from_absence": 0.1847,
+    "team_change": 0.4577,
+    "qb_change": 0.1051,
+    "abs_spread": -0.0437,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0019
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0228,
+    "log_lag1_vs_ew_opp": 0.2108,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.3629,
+    "team_spread": 0.0347,
+    "implied_total": 0.0129,
+    "back_from_absence": -0.0896,
+    "qb_change": 0.1302,
+    "team_change": -0.4739
+   },
+   "rsm1_theta": {
+    "const": 0.6533,
+    "abs_log_lag1_vs_ew_opp": 0.4779,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0601,
+    "log_ew_opp": -0.7021,
+    "inv_sqrt_prior_n": 0.2154,
+    "early_season": 0.261,
+    "back_from_absence": 0.2183,
+    "team_change": 0.4322,
+    "qb_change": 0.0955,
+    "abs_spread": 0.0021,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0006
+   },
+   "n_train": 22653,
+   "n_test": 381
+  },
+  "final_2026-10-13": {
+   "rs1_theta": {
+    "const": 0.8259,
+    "abs_log_lag1_vs_ew_opp": 0.4764,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.087,
+    "log_ew_opp": -0.7372,
+    "inv_sqrt_prior_n": 0.1868,
+    "early_season": 0.2437,
+    "back_from_absence": 0.181,
+    "team_change": 0.4783,
+    "qb_change": 0.093,
+    "abs_spread": -0.0519,
+    "RB": 0.0,
+    "TE": 0.0,
+    "QB": -0.0003
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0228,
+    "log_lag1_vs_ew_opp": 0.2088,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.3767,
+    "team_spread": 0.0355,
+    "implied_total": 0.0141,
+    "back_from_absence": -0.0908,
+    "qb_change": 0.1337,
+    "team_change": -0.505
+   },
+   "rsm1_theta": {
+    "const": 0.6447,
+    "abs_log_lag1_vs_ew_opp": 0.4783,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0644,
+    "log_ew_opp": -0.6972,
+    "inv_sqrt_prior_n": 0.2161,
+    "early_season": 0.2657,
+    "back_from_absence": 0.2157,
+    "team_change": 0.4797,
+    "qb_change": 0.0709,
+    "abs_spread": -0.0136,
+    "RB": 0.0,
+    "TE": 0.0001,
+    "QB": 0.0001
+   },
+   "n_train": 23034,
+   "n_test": 355
+  },
+  "final_2026-10-20": {
+   "rs1_theta": {
+    "const": 0.7971,
+    "abs_log_lag1_vs_ew_opp": 0.4834,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0888,
+    "log_ew_opp": -0.7327,
+    "inv_sqrt_prior_n": 0.1913,
+    "early_season": 0.2461,
+    "back_from_absence": 0.1717,
+    "team_change": 0.4762,
+    "qb_change": 0.0961,
+    "abs_spread": -0.0463,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0013
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0231,
+    "log_lag1_vs_ew_opp": 0.2074,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.3648,
+    "team_spread": 0.036,
+    "implied_total": 0.0145,
+    "back_from_absence": -0.0886,
+    "qb_change": 0.1341,
+    "team_change": -0.5055
+   },
+   "rsm1_theta": {
+    "const": 0.6459,
+    "abs_log_lag1_vs_ew_opp": 0.4787,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0549,
+    "log_ew_opp": -0.7016,
+    "inv_sqrt_prior_n": 0.2178,
+    "early_season": 0.2761,
+    "back_from_absence": 0.2126,
+    "team_change": 0.4779,
+    "qb_change": 0.0692,
+    "abs_spread": -0.0132,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0001
+   },
+   "n_train": 23389,
+   "n_test": 353
+  },
+  "final_2026-10-27": {
+   "rs1_theta": {
+    "const": 0.7687,
+    "abs_log_lag1_vs_ew_opp": 0.4855,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0924,
+    "log_ew_opp": -0.7272,
+    "inv_sqrt_prior_n": 0.1949,
+    "early_season": 0.246,
+    "back_from_absence": 0.1655,
+    "team_change": 0.4752,
+    "qb_change": 0.0967,
+    "abs_spread": -0.0378,
+    "RB": 0.0002,
+    "TE": 0.0002,
+    "QB": 0.0019
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0221,
+    "log_lag1_vs_ew_opp": 0.2101,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.355,
+    "team_spread": 0.036,
+    "implied_total": 0.015,
+    "back_from_absence": -0.0866,
+    "qb_change": 0.1354,
+    "team_change": -0.5045
+   },
+   "rsm1_theta": {
+    "const": 0.6112,
+    "abs_log_lag1_vs_ew_opp": 0.4759,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0706,
+    "log_ew_opp": -0.686,
+    "inv_sqrt_prior_n": 0.2409,
+    "early_season": 0.2554,
+    "back_from_absence": 0.2068,
+    "team_change": 0.4704,
+    "qb_change": 0.0548,
+    "abs_spread": -0.0107,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0004
+   },
+   "n_train": 23742,
+   "n_test": 356
+  },
+  "final_2026-11-03": {
+   "rs1_theta": {
+    "const": 0.7924,
+    "abs_log_lag1_vs_ew_opp": 0.4866,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0814,
+    "log_ew_opp": -0.7288,
+    "inv_sqrt_prior_n": 0.1852,
+    "early_season": 0.2359,
+    "back_from_absence": 0.1763,
+    "team_change": 0.4667,
+    "qb_change": 0.0999,
+    "abs_spread": -0.0487,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0002
+   },
+   "rs1_sigma_test_median": 2.7183,
+   "rm1_gamma": {
+    "const": 0.0218,
+    "log_lag1_vs_ew_opp": 0.2178,
+    "log_e2_vs_ew_opp": 0.0,
+    "snap_trend": 0.3329,
+    "team_spread": 0.033,
+    "implied_total": 0.0108,
+    "back_from_absence": -0.0867,
+    "qb_change": 0.1317,
+    "team_change": -0.4891
+   },
+   "rsm1_theta": {
+    "const": 0.6229,
+    "abs_log_lag1_vs_ew_opp": 0.4863,
+    "abs_log_e2_vs_e8_opp": 0.0,
+    "abs_snap_trend": 0.0784,
+    "log_ew_opp": -0.6889,
+    "inv_sqrt_prior_n": 0.2083,
+    "early_season": 0.2445,
+    "back_from_absence": 0.2139,
+    "team_change": 0.444,
+    "qb_change": 0.0714,
+    "abs_spread": 0.0069,
+    "RB": 0.0001,
+    "TE": 0.0001,
+    "QB": 0.0012
+   },
+   "n_train": 24098,
+   "n_test": 20
+  }
+ },
+ "dev_all": {
+  "n": 14086,
+  "games": 570,
+  "base": {
+   "logscore": -0.75863,
+   "mae": 6.8244,
+   "bias": -0.33,
+   "cov80": 0.9781
+  },
+  "rs1": {
+   "logscore": -0.5893,
+   "d_logscore": 0.16933,
+   "d_logscore_ci": [
+    0.15265,
+    0.18719
+   ],
+   "mae": 6.8188,
+   "d_mae_ci": [
+    -0.00865,
+    -0.00247
+   ],
+   "bias": -0.3487,
+   "cov80": 0.9844
+  },
+  "rm1": {
+   "logscore": -0.69444,
+   "d_logscore": 0.06419,
+   "d_logscore_ci": [
+    0.04523,
+    0.08316
+   ],
+   "mae": 6.5301,
+   "d_mae_ci": [
+    -0.43407,
+    -0.1604
+   ],
+   "bias": -0.3756,
+   "cov80": 0.9772
+  },
+  "rsm1": {
+   "logscore": -0.58956,
+   "d_logscore": 0.16907,
+   "d_logscore_ci": [
+    0.15216,
+    0.18683
+   ],
+   "mae": 6.5305,
+   "d_mae_ci": [
+    -0.43244,
+    -0.16105
+   ],
+   "bias": -0.3872,
+   "cov80": 0.9839
+  }
+ },
+ "dev_population": {
+  "n": 1224,
+  "games": 569,
+  "base": {
+   "logscore": -7.54395,
+   "mae": 69.4271,
+   "bias": -0.7637,
+   "cov80": 0.8072
+  },
+  "rs1": {
+   "logscore": -5.81774,
+   "d_logscore": 1.72621,
+   "d_logscore_ci": [
+    1.54827,
+    1.90901
+   ],
+   "mae": 69.3599,
+   "d_mae_ci": [
+    -0.1039,
+    -0.03357
+   ],
+   "bias": -0.9684,
+   "cov80": 0.8734
+  },
+  "rm1": {
+   "logscore": -6.83556,
+   "d_logscore": 0.70839,
+   "d_logscore_ci": [
+    0.5078,
+    0.93264
+   ],
+   "mae": 66.6945,
+   "d_mae_ci": [
+    -4.31537,
+    -1.15038
+   ],
+   "bias": -0.5835,
+   "cov80": 0.799
+  },
+  "rsm1": {
+   "logscore": -5.80396,
+   "d_logscore": 1.73999,
+   "d_logscore_ci": [
+    1.55607,
+    1.93285
+   ],
+   "mae": 66.6989,
+   "d_mae_ci": [
+    -4.29758,
+    -1.14471
+   ],
+   "bias": -0.7017,
+   "cov80": 0.8725
+  }
+ },
+ "final_all": {
+  "n": 3024,
+  "games": 122,
+  "base": {
+   "logscore": -0.72958,
+   "mae": 6.4104,
+   "bias": -0.7314,
+   "cov80": 0.9821
+  },
+  "rs1": {
+   "logscore": -0.55218,
+   "d_logscore": 0.17741,
+   "d_logscore_ci": [
+    0.14352,
+    0.21364
+   ],
+   "mae": 6.4035,
+   "d_mae_ci": [
+    -0.01266,
+    -0.00164
+   ],
+   "bias": -0.7516,
+   "cov80": 0.9868
+  },
+  "rm1": {
+   "logscore": -0.62731,
+   "d_logscore": 0.10227,
+   "d_logscore_ci": [
+    0.06557,
+    0.13947
+   ],
+   "mae": 6.2434,
+   "d_mae_ci": [
+    -0.40749,
+    0.10878
+   ],
+   "bias": -0.5102,
+   "cov80": 0.9812
+  },
+  "rsm1": {
+   "logscore": -0.55067,
+   "d_logscore": 0.17891,
+   "d_logscore_ci": [
+    0.14402,
+    0.2168
+   ],
+   "mae": 6.2438,
+   "d_mae_ci": [
+    -0.40571,
+    0.10668
+   ],
+   "bias": -0.5299,
+   "cov80": 0.9868
+  }
+ },
+ "book_rows_matched": 274
+}
