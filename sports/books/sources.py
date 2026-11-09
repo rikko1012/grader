@@ -24,7 +24,7 @@ import re
 
 from .. import adapters, config, identity, names, net, store
 from ..contracts import OfferSnapshot, SideQuote, now_utc, utc
-from . import SOURCES, ledger
+from . import ODDSAPI_EXTRA_BOOKS, ODDSAPI_PICKEM_KEYS, SOURCES, ledger
 
 GAMMA = "https://gamma-api.polymarket.com"
 PM_STAT = {"nba": {"points": "points", "rebounds": "rebounds", "assists": "assists", "threes": "threes",
@@ -238,6 +238,30 @@ def _oddsapi_order(evs, now_iso):
     return sorted(up, key=lambda e: (last.get(e["id"]) or 0, e.get("commence_time") or ""))
 
 
+def oddsapi_extra_regions():
+    """more-books-1109: the extra Odds API regions to read (SPORTS_ODDSAPI_EXTRA_REGIONS, default none = off).
+    -> (regions, ignored). Only books/__init__.ODDSAPI_EXTRA_BOOKS regions are taken (us2, us_ex); us_dfs (pick'em
+    apps) and any unknown name are ignored and reported, never requested."""
+    raw = [x.strip().lower() for x in (os.environ.get("SPORTS_ODDSAPI_EXTRA_REGIONS") or "").split(",") if x.strip()]
+    regs, ignored = [], []
+    for r in raw:
+        (regs if r in ODDSAPI_EXTRA_BOOKS and r not in regs else ignored).append(r)
+    return regs, ignored
+
+
+def _oddsapi_keep_extra(body, regions, dropped):
+    """The extra-region answer keeps only the listed books of the asked regions (never a pick'em app, never a book we
+    read elsewhere); every other bookmaker key is counted in `dropped` and left out."""
+    allowed = {b for r in regions for b in ODDSAPI_EXTRA_BOOKS[r]} - ODDSAPI_PICKEM_KEYS
+    keep = []
+    for bk in (body or {}).get("bookmakers") or []:
+        if bk.get("key") in allowed:
+            keep.append(bk)
+        else:
+            dropped[str(bk.get("key"))] = dropped.get(str(bk.get("key")), 0) + 1
+    return dict(body or {}, bookmakers=keep)
+
+
 def oddsapi_ingest(con, league, observed_at, resolver, teams_raw):
     if not config.odds_api_enabled():
         return {"ok": True, "skipped": "disabled: SPORTS_ODDSAPI is not 1; direct book feeds run via source books"}
@@ -251,15 +275,21 @@ def oddsapi_ingest(con, league, observed_at, resolver, teams_raw):
     except net.HttpError as e:
         return {"ok": False, "error": str(e).replace(k, "***")[:160]}
     full = {t["name"]: t["abbr"] for t in teams_raw}
+    extra, ignored = oddsapi_extra_regions()
+    if extra or ignored:
+        out.update(extra_regions=extra, extra_regions_ignored=ignored, extra_books_dropped={})
     b = adapters.Batch()
     for ev in _oddsapi_order(evs, observed_at)[:ODDS_MAX_EVENTS]:
         mk = ODDS_MARKETS[league]
-        ok, why = ledger.paced("oddsapi", len(mk))
+        # one game is read whole: the 'us' call and, when SPORTS_ODDSAPI_EXTRA_REGIONS is set, ONE more call for the
+        # extra regions (cost = markets x regions, the documented rule) - paced together, before either is sent
+        ok, why = ledger.paced("oddsapi", len(mk) * (1 + len(extra)))
         if not ok:                                           # even spread of the month's credits: wait for the next hour
             out["paced"] = why
             break
+        url = f"{ODDS_API}/sports/{lg['odds_api']}/events/{ev['id']}/odds"
         try:
-            body = _get("oddsapi", f"{ODDS_API}/sports/{lg['odds_api']}/events/{ev['id']}/odds",
+            body = _get("oddsapi", url,
                         params={"apiKey": k, "regions": "us", "oddsFormat": "decimal", "markets": ",".join(mk)},
                         cost=len(mk)).json()
         except net.HttpError as e:
@@ -267,25 +297,46 @@ def oddsapi_ingest(con, league, observed_at, resolver, teams_raw):
             break                                            # budget or provider refusal: stop this cycle
         out["credits"] += len(mk)
         out["events"] += 1
-        bb = adapters.oddsapi_offers(body, lg, observed_at)
-        start = adapters._ts(body.get("commence_time"))
-        day = identity.us_date(start)
-        away, home = full.get(body.get("away_team")), full.get(body.get("home_team"))
-        eid, why = resolver.event(day, away, home) if away and home else (None, "team full name not an ESPN name")
-        for o in bb.records:
-            pid, why_p = resolver.player(o.player_name, None, eid, day) if eid else (None, why)
-            extras = tuple(x for x in o.extras if x[0] != "unresolved_event")
-            if eid is None:
-                extras += (("unresolved_event", why),)
-            elif pid is None:
-                extras += (("unresolved_player", why_p),)
-            d = {k2: v for k2, v in o.to_dict().items() if k2 != "kind"}
-            d.update(event_id=eid, player_id=pid, extras=extras, sides=o.sides, liquidity=o.liquidity)
-            b.add(OfferSnapshot(**d))
+        bodies = [body]
+        if extra:
+            try:
+                xb = _get("oddsapi", url, params={"apiKey": k, "regions": ",".join(extra), "oddsFormat": "decimal",
+                                                  "markets": ",".join(mk)}, cost=len(mk) * len(extra)).json()
+                out["credits"] += len(mk) * len(extra)
+                bodies.append(_oddsapi_keep_extra(xb, extra, out["extra_books_dropped"]))
+            except net.HttpError as e:                       # the 'us' read stands; the extra books wait for next cycle
+                out.setdefault("errors", []).append(("extra: " + str(e).replace(k, "***"))[:120])
+                bodies.append(None)
+        for body in bodies:
+            if body is not None:
+                _oddsapi_store(b, body, lg, observed_at, resolver, full)
+        if extra and bodies[-1] is None:
+            break
     res = store.put_many(con, b.records)
     out["offers"] = res["inserted"] + res["revision"]
     out["ok"] = True
     return out
+
+
+def _oddsapi_store(b, body, lg, observed_at, resolver, full):
+    """One event-odds answer -> resolved OfferSnapshots added to batch b. A fixed-payout pick'em app is never stored as an
+    oddsapi:<book> priced line (cap-3 / consensus would read its indicative price as odds)."""
+    body = dict(body, bookmakers=[bk for bk in body.get("bookmakers") or [] if bk.get("key") not in ODDSAPI_PICKEM_KEYS])
+    bb = adapters.oddsapi_offers(body, lg, observed_at)
+    start = adapters._ts(body.get("commence_time"))
+    day = identity.us_date(start)
+    away, home = full.get(body.get("away_team")), full.get(body.get("home_team"))
+    eid, why = resolver.event(day, away, home) if away and home else (None, "team full name not an ESPN name")
+    for o in bb.records:
+        pid, why_p = resolver.player(o.player_name, None, eid, day) if eid else (None, why)
+        extras = tuple(x for x in o.extras if x[0] != "unresolved_event")
+        if eid is None:
+            extras += (("unresolved_event", why),)
+        elif pid is None:
+            extras += (("unresolved_player", why_p),)
+        d = {k2: v for k2, v in o.to_dict().items() if k2 != "kind"}
+        d.update(event_id=eid, player_id=pid, extras=extras, sides=o.sides, liquidity=o.liquidity)
+        b.add(OfferSnapshot(**d))
 
 
 # ------------------------------------------------------------------------------------- Thunderpick / OddsPapi capture

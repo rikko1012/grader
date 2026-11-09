@@ -51,9 +51,11 @@ def dnp_share(league):
 
 def source_status(platform):
     """-> (in_display_consensus, reason_if_not). Verified flags from sports/books SOURCES."""
-    from .books import SOURCES
+    from .books import SOURCES, oddsapi_display_only
     if platform in TARGET_BOARDS:
         return False, "pick'em board (graded against, never a market source)"
+    if oddsapi_display_only(platform):
+        return False, "display only: added book (more-books-1109), not a consensus source"
     base = platform.split(":", 1)[0]
     meta = SOURCES.get(base)
     if meta is None:

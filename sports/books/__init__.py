@@ -40,3 +40,28 @@ SOURCES = {
     "fanduel": {"key_env": None, "verified": True, "consensus": False},
     "betrivers": {"key_env": None, "verified": True, "consensus": False},
 }
+
+# more-books-1109 (owner 2026-11-09 "find more sportsbooks you can add"): extra The Odds API regions, OFF by default.
+# SPORTS_ODDSAPI_EXTRA_REGIONS=us2,us_ex (needs SPORTS_ODDSAPI=1 + ODDS_API_KEY, the same key and credit ledger) adds the
+# priced books below, read with ONE extra event-odds call per game (cost = markets x extra regions). Bookmaker keys and
+# regions as listed on https://the-odds-api.com/sports-odds-data/bookmaker-apis.html (read 2026-11-09); paid-only keys
+# (courtside, rebet) and books we already read directly (kalshi, polymarket, polymarket_us) or do not know (limitless)
+# are not taken. us_dfs is NEVER allowed here: its books (prizepicks, underdog, dabble_us_dfs, pick6) are fixed-payout
+# pick'em apps whose Odds API prices are "indicative only"; stored as oddsapi:<book> they would be judged as priced
+# lines by cap-3 and enter the market consensus. Dabble / PrizePicks / Underdog come from their own feeds.
+# These books are DISPLAY ONLY: each shows its own priced line (its own grade follows the existing priced-line rules,
+# cap-3 near-even included), but none is a source of the mc-1 / mi-1 consensus or the mv-1 "Market (N books)" chance,
+# so adding them moves no other line's chance or grade (registered source set, REGISTER.md section 10, unchanged).
+ODDSAPI_EXTRA_BOOKS = {
+    "us2": ("ballybet", "betanysports", "betparx", "espnbet", "fliff", "hardrockbet", "hardrockbet_az",
+            "hardrockbet_fl", "hardrockbet_oh"),
+    "us_ex": ("novig", "prophetx", "betopenly"),
+}
+ODDSAPI_DISPLAY_ONLY = frozenset(b for v in ODDSAPI_EXTRA_BOOKS.values() for b in v)
+ODDSAPI_PICKEM_KEYS = frozenset(("prizepicks", "underdog", "dabble_us_dfs", "pick6", "betr_us_dfs"))
+
+
+def oddsapi_display_only(platform):
+    """True for an oddsapi:<book> added by SPORTS_ODDSAPI_EXTRA_REGIONS (shown, never a consensus source)."""
+    p = str(platform or "")
+    return p.startswith("oddsapi:") and p.split(":", 1)[1] in ODDSAPI_DISPLAY_ONLY

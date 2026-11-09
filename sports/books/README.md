@@ -219,6 +219,7 @@ first and last price per offer) is a decision to make before it is needed.
 | `SPORTS_FANDUEL_STATE` | Same | `oh` |
 | `SPORTS_BETRIVERS_OPERATOR` | Same | `rsiusoh` |
 | `SPORTS_DB_DSN` | Worker **and** web service, only for the separate-service option | unset = SQLite |
+| `SPORTS_ODDSAPI_EXTRA_REGIONS` | Same (more-books-1109): `us2,us_ex` adds Hard Rock, ESPN BET / theScore Bet, Fliff, Bally Bet, betPARX, BetAnySports, Novig, ProphetX, BetOpenly via ONE extra call per game (credits = markets x extra regions). Display only, never a consensus source; `us_dfs` is refused (pick'em apps) | unset = off |
 | `SPORTS_ODDSPAPI` | The worker's service: `1` turns the OddsPapi provider on (after the owner's check) | unset = off |
 | `ODDSPAPI_API_KEY` (or `odds_papi_api`) | The CS2 key, already on the site; read, never copied | - |
 | `SPORTS_ODDSPAPI_MONTHLY_REQUESTS` | Sports' share of that account per month | 0 = nothing |

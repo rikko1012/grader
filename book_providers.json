@@ -154,7 +154,7 @@
       "source": "sports_service",
       "platform_prefix": "oddsapi:",
       "sports": ["nba", "nfl"],
-      "feed": {"stale_after_s": 1800, "note": "Documented feed polled once, by the sports service (SPORTS_ODDSAPI=1 and ODDS_API_KEY on scout-sports-api; credit ledger enforced there). This server makes no Odds API request."},
+      "feed": {"stale_after_s": 1800, "note": "Documented feed polled once, by the sports service (SPORTS_ODDSAPI=1 and ODDS_API_KEY on scout-sports-api; credit ledger enforced there). This server makes no Odds API request. more-books-1109: SPORTS_ODDSAPI_EXTRA_REGIONS=us2,us_ex (default unset = off) adds priced books on the same key (Hard Rock, ESPN BET / theScore Bet, Fliff, Bally Bet, betPARX, BetAnySports; exchanges Novig, ProphetX, BetOpenly) at one extra call per game (markets x extra regions credits). They are display-only: never a consensus source; us_dfs (pick'em apps) is never requested."},
       "rules": {
         "pick_price": "decimal price per book as returned by /v4/sports/{sport}/events/{id}/odds (oddsFormat=decimal)",
         "push": "not used: whole-number lines are priced only where a push chance is known",

@@ -28,7 +28,9 @@ LEAGUES = ("nba", "nfl")
 PICKEM = ("underdog", "prizepicks")
 LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
 BOOK_LABEL = {"fanduel": "FanDuel", "betrivers": "BetRivers", "kalshi": "Kalshi", "polymarket": "Polymarket", "pinnacle": "Pinnacle", "draftkings": "DraftKings",
-              "betmgm": "BetMGM", "caesars": "Caesars", "bovada": "Bovada", "fanatics": "Fanatics", "espnbet": "ESPN BET", "hardrockbet": "Hard Rock", "bet365": "bet365"}
+              "betmgm": "BetMGM", "caesars": "Caesars", "bovada": "Bovada", "fanatics": "Fanatics", "espnbet": "ESPN BET", "hardrockbet": "Hard Rock", "bet365": "bet365",
+              # more-books-1109: Odds API keys of the added regions (us2 / us_ex) and the us offshore books
+              "hardrockbet_az": "Hard Rock", "hardrockbet_fl": "Hard Rock", "hardrockbet_oh": "Hard Rock", "fliff": "Fliff", "novig": "Novig", "prophetx": "ProphetX", "betopenly": "BetOpenly", "ballybet": "Bally Bet", "betparx": "betPARX", "betanysports": "BetAnySports", "lowvig": "LowVig", "mybookieag": "MyBookie", "betus": "BetUS", "betonlineag": "BetOnline", "williamhill_us": "Caesars"}
 PERIOD = {"full_game": "Full game", "1h": "First half", "2h": "Second half", "1q": "First quarter",
           "first_half": "First half", "second_half": "Second half", "q1": "First quarter", "q2": "Second quarter",
           "q3": "Third quarter", "q4": "Fourth quarter"}        # sports scopes (contracts SCOPES) + the older short keys
@@ -260,7 +262,8 @@ def book_label(p):
 
 
 BOOK_SHORT = {"fanduel": "FD", "betrivers": "BR", "kalshi": "KA", "polymarket": "PM", "pinnacle": "PN", "draftkings": "DK", "betmgm": "MG", "caesars": "CZ", "bovada": "BV", "fanatics": "FN", "espnbet": "EB",
-              "hardrockbet": "HR", "bet365": "36"}
+              "hardrockbet": "HR", "bet365": "36",
+              "hardrockbet_az": "HR", "hardrockbet_fl": "HR", "hardrockbet_oh": "HR", "fliff": "FL", "novig": "NV", "prophetx": "PR", "betopenly": "BO", "ballybet": "BL", "betparx": "PA", "betanysports": "BA", "lowvig": "LV", "mybookieag": "MB", "betus": "BU", "betonlineag": "BOL", "williamhill_us": "CZ"}
 
 
 def book_short(p):

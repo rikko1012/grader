@@ -145,7 +145,8 @@
                oddsapi: "The Odds API"};
   var FEED_BOOKS = {draftkings: "DraftKings", fanduel: "FanDuel", betmgm: "BetMGM", williamhill_us: "Caesars",
                     caesars: "Caesars", betrivers: "BetRivers", espnbet: "ESPN BET", fanatics: "Fanatics",
-                    bovada: "Bovada", betonlineag: "BetOnline", pinnacle: "Pinnacle", ballybet: "Bally Bet"};
+                    bovada: "Bovada", betonlineag: "BetOnline", pinnacle: "Pinnacle", ballybet: "Bally Bet",
+                    hardrockbet: "Hard Rock", hardrockbet_az: "Hard Rock", hardrockbet_fl: "Hard Rock", hardrockbet_oh: "Hard Rock", fliff: "Fliff", novig: "Novig", prophetx: "ProphetX", betopenly: "BetOpenly", betparx: "betPARX", betanysports: "BetAnySports", lowvig: "LowVig", mybookieag: "MyBookie", betus: "BetUS"};
   function bookName(p) {                  // "oddsapi:draftkings" -> "DraftKings"
     if (!p) return "";
     if (BOOKS[p]) return BOOKS[p];

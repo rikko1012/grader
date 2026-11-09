@@ -31,6 +31,7 @@ import math
 import numpy as np
 
 from .. import capabilities, fair, markets, sharp2
+from ..books import oddsapi_display_only
 from ..contracts import parse_utc
 from . import dists
 
@@ -63,7 +64,8 @@ def source_of(platform):
 
 def in_consensus(source):
     """The sources mc-1 and mi-1 combine, exactly as registered (section 10): Kalshi, Polymarket, each Odds API book."""
-    return source in ("kalshi", "polymarket") or source.startswith("oddsapi:")
+    # more-books-1109: an Odds API book added by SPORTS_ODDSAPI_EXTRA_REGIONS is display only, never a source here
+    return source in ("kalshi", "polymarket") or (source.startswith("oddsapi:") and not oddsapi_display_only(source))
 
 
 def consensus_sources(per_source):
