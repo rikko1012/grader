@@ -15,7 +15,7 @@ fit carries to Nov 9, so Nov 6-8 is the untouched fresh window):
   pers  trained AND scored on "missed this game AND the previous one" (persisting absences) - what an Out-list-only
         definition looks like when the report is complete; served live it would need the report (research only)
 
-  python -m sports.research.hit_1109.nba_abs <history.db> <lines.pkl> <out.pkl>
+  python -m research.sports_lab.hit_1109.nba_abs <history.db> <lines.pkl> <out.pkl>
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ import pandas as pd
 os.environ.setdefault("PNF_FINAL_END", "2026-11-09T12:00:00Z")
 
 from sports.model import dists, featurize, study  # noqa: E402
-from sports.research.proj_nba_full import walkforward as W  # noqa: E402
+from research.sports_lab.proj_nba_full import walkforward as W  # noqa: E402
 
 MK = "points"
 REFITS = ["2026-10-24T00:00:00Z", "2026-11-01T00:00:00Z", os.environ["PNF_FINAL_END"]]

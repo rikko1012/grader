@@ -22,7 +22,7 @@ offline-scored comparison. --export restricts every source to the CURRENT live t
 artifact_version; comparison rows are sm-1 raw forecasts only (gradecore adapter rule) produced while that artifact
 was the live one.
 
-  python -m sports.research.proj_nba_full.bookline <pred_dir> <out.json> [nba_full.db]
+  python -m research.sports_lab.proj_nba_full.bookline <pred_dir> <out.json> [nba_full.db]
                                                    [--comparison <gradecore_comparison_nba.json>]
                                                    [--export <gradecore_export_nba.json>] [--live-tag sm-1:<sha>]
                                                    [--export-only 1]
@@ -37,9 +37,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from sports.model import proj_nba_full as pnf
-from sports.research.proj_nba_full import data as D
-from sports.research.proj_nba_full.walkforward import Boot, _load
+from research.sports_lab import proj_nba_full_model as pnf
+from research.sports_lab.proj_nba_full import data as D
+from research.sports_lab.proj_nba_full.walkforward import Boot, _load
 
 C_BAND = 0.5345
 

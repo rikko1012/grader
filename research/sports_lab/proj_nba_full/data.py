@@ -253,7 +253,7 @@ def add_pos(f):
     return f
 
 
-if __name__ == "__main__":       # python -m sports.research.proj_nba_full.data <nba_full.db> <frame.pkl>
+if __name__ == "__main__":       # python -m research.sports_lab.proj_nba_full.data <nba_full.db> <frame.pkl>
     import sys
     fr, _ = build(sys.argv[1])
     fr.to_pickle(sys.argv[2])

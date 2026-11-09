@@ -5,7 +5,7 @@ Read-only. Inputs (local copies, never production):
   frame   : pnf-1 feature frame (one row per played player-game, pre-game features)
   preds   : sm1frozen_<stat>__final_*.npz (the frozen live artifact sm1_nba.json applied offline)
 
-  python -m sports.research.sacc_1109.nba_lines <export.json> <frame.pkl> <pred_dir> <out.pkl>
+  python -m research.sports_lab.sacc_1109.nba_lines <export.json> <frame.pkl> <pred_dir> <out.pkl>
 """
 from __future__ import annotations
 

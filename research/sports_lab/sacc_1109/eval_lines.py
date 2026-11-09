@@ -1,4 +1,4 @@
-﻿"""sacc-1109 book-line evaluation of the candidate layers (rows = settled service props at their own offered line,
+"""sacc-1109 book-line evaluation of the candidate layers (rows = settled service props at their own offered line,
 pushes dropped; the baseline 'live' is the saved service chance, 'base' the frozen artifact re-run offline, which the
 candidates sit on - so cand - base is like-for-like and cand - live is what members would see change).
 
@@ -12,7 +12,7 @@ so this window is DEVELOPMENT evidence, and a pass here only earns the fresh-win
   L5  Over share among graded rows >= live's - 2 pts (no new Under lean).
   (A1, from the walk-forward report: all-outcome dev log score gain CI entirely > 0.)
 
-  python -m sports.research.sacc_1109.eval_lines <cand_dir> <out.json> <markets,comma> [period: dev_lines|fresh]
+  python -m research.sports_lab.sacc_1109.eval_lines <cand_dir> <out.json> <markets,comma> [period: dev_lines|fresh]
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from sports.research.sacc_1109.cand import Boot
+from research.sports_lab.sacc_1109.cand import Boot
 
 C_BAND, B_BAND, A_BAND = 0.5345, 0.5559, 0.60
 

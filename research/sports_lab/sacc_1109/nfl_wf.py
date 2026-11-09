@@ -3,7 +3,7 @@ then - the proj_nfl_full harness's fit_baseline) on every player-game with histo
 pre-game role inputs the candidate layers read. Final window (2026 season, weekly) also applies the frozen live
 artifact sm1_nfl.json.
 
-  python -m sports.research.sacc_1109.nfl_wf <history.db> <outdir>
+  python -m research.sports_lab.sacc_1109.nfl_wf <history.db> <outdir>
 """
 from __future__ import annotations
 

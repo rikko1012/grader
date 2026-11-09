@@ -1,7 +1,7 @@
 """sacc-1109: NFL book-line population joined to the frozen live sm-1 distribution (sm1_nfl.json applied offline) and
 pre-game features. Read-only; reuses the proj_nfl_full harness loader.
 
-  python -m sports.research.sacc_1109.nfl_lines <history.db> <export.json> <out.pkl>
+  python -m research.sports_lab.sacc_1109.nfl_lines <history.db> <export.json> <out.pkl>
 """
 from __future__ import annotations
 

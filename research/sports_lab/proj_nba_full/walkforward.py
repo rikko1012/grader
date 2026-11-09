@@ -1,5 +1,5 @@
 """Walk-forward of the NBA projection DISTRIBUTION on EVERY historical played player-game (no book lines needed):
-live-equivalent sm-1 vs pnf-1 (sports/model/proj_nba_full.py). Read-only on the data; writes prediction files + JSON.
+live-equivalent sm-1 vs pnf-1 (research/sports_lab/proj_nba_full_model.py). Read-only on the data; writes prediction files + JSON.
 
 Baseline ("sm1"): the frozen sm-1 configuration (model_config_nba.json: half-lives, feature set, family, cal-1 - the
 live code path sports.model.study) REFIT at every refit date on the rows known then, exactly as forward.fit does. Its
@@ -17,8 +17,8 @@ Protocol:
     models on exactly the same rows. Distributions are conditional on playing (props on DNPs are void).
   * clustered CIs: whole-game bootstrap (B draws) of per-game sums.
 
-  python -m sports.research.proj_nba_full.walkforward run   <hist.db> <frame.pkl> <outdir> [dev|final|all]
-  python -m sports.research.proj_nba_full.walkforward report <outdir> <out.json>
+  python -m research.sports_lab.proj_nba_full.walkforward run   <hist.db> <frame.pkl> <outdir> [dev|final|all]
+  python -m research.sports_lab.proj_nba_full.walkforward report <outdir> <out.json>
 """
 from __future__ import annotations
 
@@ -33,10 +33,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from sports.model import featurize, model as smodel, proj_nba_full as pnf, study
-from sports.research.proj_nba_full import data as D
+from sports.model import featurize, model as smodel, study
+from research.sports_lab import proj_nba_full_model as pnf
+from research.sports_lab.proj_nba_full import data as D
 
-ART = Path(__file__).resolve().parents[2] / "model" / "artifacts"
+ART = Path(__file__).resolve().parents[3] / "sports" / "model" / "artifacts"
 KNOWN_H = 4
 DEV_REFITS = [f"{y}-{m:02d}-01T00:00:00Z" for y, m in
               [(2024, 10), (2024, 11), (2024, 12), (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6),

@@ -7,7 +7,7 @@ Outcome: ESPN's public box score (cached under SPORTS_DATA_DIR - point it at a s
 re-run offline from the frozen artifact on an upcoming-row frame built from history known before the game (as the
 forward job does), and nrm-1 moves that PMF by its frozen multiplier.
 
-  python -m sports.research.hit_1109.fresh_nfl <cmp.json> <history.db> <out.pkl>
+  python -m research.sports_lab.hit_1109.fresh_nfl <cmp.json> <history.db> <out.pkl>
 """
 from __future__ import annotations
 

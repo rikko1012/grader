@@ -52,10 +52,10 @@ is +5.4 there.
 
 ```
 python <rerun>/scripts/build_nba_full.py            # fresh export -> <rerun>/nba_full.db
-python -m sports.research.proj_nba_full.data <rerun>/nba_full.db <frame.pkl>
-PNF_FINAL_END=2026-11-07T00:00:00Z python -m sports.research.proj_nba_full.walkforward run <rerun>/history/history_ext.db <frame.pkl> <preds> final
-PNF_FRAME=<frame.pkl> python -m sports.research.proj_nba_full.walkforward report <preds> <wf.json>
-python -m sports.research.proj_nba_full.bookline <preds> <out.json> <rerun>/nba_full.db   --export <exports_2026-11-06>/gradecore_export_nba.json --live-tag sm-1:5ec8adf73a6dad18 --export-only 1
+python -m research.sports_lab.proj_nba_full.data <rerun>/nba_full.db <frame.pkl>
+PNF_FINAL_END=2026-11-07T00:00:00Z python -m research.sports_lab.proj_nba_full.walkforward run <rerun>/history/history_ext.db <frame.pkl> <preds> final
+PNF_FRAME=<frame.pkl> python -m research.sports_lab.proj_nba_full.walkforward report <preds> <wf.json>
+python -m research.sports_lab.proj_nba_full.bookline <preds> <out.json> <rerun>/nba_full.db   --export <exports_2026-11-06>/gradecore_export_nba.json --live-tag sm-1:5ec8adf73a6dad18 --export-only 1
 ```
 
 Results: `sports/research/results/pnf1_nba_bookline_fresh_export_2026-11-06.json`,
@@ -110,10 +110,10 @@ The pass rule still fails on Over calibration (+6.6).
 ### Reproduce
 
 ```
-python -m sports.research.proj_nba_full.data <nba_full.db> <frame.pkl>
-python -m sports.research.proj_nba_full.walkforward run <history_ext.db> <frame.pkl> <preds> final
-PNF_FRAME=<frame.pkl> python -m sports.research.proj_nba_full.walkforward report <preds> <wf.json>
-python -m sports.research.proj_nba_full.bookline <preds> <out.json> \
+python -m research.sports_lab.proj_nba_full.data <nba_full.db> <frame.pkl>
+python -m research.sports_lab.proj_nba_full.walkforward run <history_ext.db> <frame.pkl> <preds> final
+PNF_FRAME=<frame.pkl> python -m research.sports_lab.proj_nba_full.walkforward report <preds> <wf.json>
+python -m research.sports_lab.proj_nba_full.bookline <preds> <out.json> \
   --comparison <dl>/gradecore_comparison_nba.json --export <dl>/gradecore_export_nba.json --live-tag sm-1:5ec8adf73a6dad18
 ```
 

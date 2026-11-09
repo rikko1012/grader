@@ -6,8 +6,8 @@ fit    gamma per market (rush_att, rec) by the sacc-1109 rm-1 recipe (Poisson de
 parity the production inputs (sports.model.nrm1.role_inputs on the LIVE sm-1 frame at the market's own half-life) vs
        the research inputs (nfl_cand.mean_Z on proj_nfl_full.augment of the h=4 frame), row for row.
 
-  python -m sports.research.hit_1109.nrm1_fit fit <nflwf_dir> <out_artifact.json>
-  python -m sports.research.hit_1109.nrm1_fit parity <history.db> <nflwf_dir>
+  python -m research.sports_lab.hit_1109.nrm1_fit fit <nflwf_dir> <out_artifact.json>
+  python -m research.sports_lab.hit_1109.nrm1_fit parity <history.db> <nflwf_dir>
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import sys
 import numpy as np
 
 from sports.model import featurize, nrm1, study
-from sports.research.sacc_1109 import cand as C, nfl_cand as N
+from research.sports_lab.sacc_1109 import cand as C, nfl_cand as N
 
 
 def fit(wf_dir, out_path):

@@ -1,10 +1,10 @@
-﻿"""sacc-1109 walk-forward runner: live-equivalent sm-1 (frozen config, refit at every refit date on games known then)
+"""sacc-1109 walk-forward runner: live-equivalent sm-1 (frozen config, refit at every refit date on games known then)
 predicting EVERY played player-game with history (prior_n >= 1, eligible flag saved), plus the per-row pre-game inputs the
 candidate layers read. In the final window the frozen live artifact sm1_nba.json is applied too.
 
 Read-only on the data. Reuses the pnf-1 harness (sports/research/proj_nba_full/walkforward.py: sm1_frames, sm1_fit).
 
-  python -m sports.research.sacc_1109.wf run <history_ext.db> <outdir> [dev|final|all]
+  python -m research.sports_lab.sacc_1109.wf run <history_ext.db> <outdir> [dev|final|all]
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import time
 import numpy as np
 
 from sports.model import dists, model as smodel, study
-from sports.research.proj_nba_full import walkforward as W
+from research.sports_lab.proj_nba_full import walkforward as W
 
 MARKETS = ("points", "rebounds", "assists", "threes")
 FEATS = ("ew_min", "l10_min", "l5_min", "w_min_n", "prior_n", "starter_lag", "starter_rate10", "absent_share",

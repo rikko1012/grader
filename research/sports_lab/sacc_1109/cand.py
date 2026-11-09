@@ -1,4 +1,4 @@
-﻿"""sacc-1109 candidate projection layers on top of the frozen sm-1 distribution, walk-forward.
+"""sacc-1109 candidate projection layers on top of the frozen sm-1 distribution, walk-forward.
 
 Candidates (each one is a change to the PROJECTION DISTRIBUTION, fitted on box-score outcomes only - never on book
 lines or on settled props):
@@ -16,7 +16,7 @@ out-of-sample sm-1 predictions of all EARLIER windows only (expanding). The fina
 book-line window) uses the frozen live artifact's predictions and a layer fitted on every dev window (nothing from
 the final window or from any book line).
 
-  python -m sports.research.sacc_1109.cand <wf_dir> <frame.pkl> <lines.pkl> <out_dir>
+  python -m research.sports_lab.sacc_1109.cand <wf_dir> <frame.pkl> <lines.pkl> <out_dir>
 """
 from __future__ import annotations
 

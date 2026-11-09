@@ -3,7 +3,7 @@ service's saved sm-1 raw forecasts (read-only gradecore-comparison pages), one p
 before tip, scored offline against the ESPN box score (a player who did not play = void, dropped). Same columns as
 nba_lines.build so cand / eval_lines run unchanged. Nothing here was looked at while the candidates were built.
 
-  python -m sports.research.sacc_1109.fresh_lines <cmp.json> <nba_full.db> <frame.pkl> <wf_dir> <out.pkl>
+  python -m research.sports_lab.sacc_1109.fresh_lines <cmp.json> <nba_full.db> <frame.pkl> <wf_dir> <out.pkl>
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from sports.research.sacc_1109.nba_lines import STATS, load_preds, p_line, sd_of
+from research.sports_lab.sacc_1109.nba_lines import STATS, load_preds, p_line, sd_of
 
 FRESH_FROM = "2026-11-06T03:00:00Z"
 

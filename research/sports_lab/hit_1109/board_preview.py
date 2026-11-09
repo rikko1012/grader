@@ -1,7 +1,7 @@
 """hit-1109 board preview: summarise a saved live board JSON (GET /api/sports/board?league=..., read-only).
 
 Graded quotes (x.gr present) per grade letter and platform, Over / Under lean split, and the top picks by printed chance.
-  python -m sports.research.hit_1109.board_preview <board.json> [top_n]
+  python -m research.sports_lab.hit_1109.board_preview <board.json> [top_n]
 """
 from __future__ import annotations
 

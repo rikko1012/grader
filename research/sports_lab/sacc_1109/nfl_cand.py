@@ -1,8 +1,8 @@
-﻿"""sacc-1109 NFL: the same candidate layers as cand.py (rs-1 role spread, rm-1 role mean, rsm-1 both) with NFL role
+"""sacc-1109 NFL: the same candidate layers as cand.py (rs-1 role spread, rm-1 role mean, rsm-1 both) with NFL role
 inputs. Windows from nfl_wf (dev = monthly in-season 2023-09 .. 2026-02, final = weekly 2026 season). The layer for a
 window is fitted on the out-of-sample predictions of all EARLIER windows (dev and final), never on book lines.
 
-  python -m sports.research.sacc_1109.nfl_cand <nflwf_dir> <nfl_lines.pkl> <out_dir>
+  python -m research.sports_lab.sacc_1109.nfl_cand <nflwf_dir> <nfl_lines.pkl> <out_dir>
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from sports.research.sacc_1109 import cand as C
+from research.sports_lab.sacc_1109 import cand as C
 
 MARKETS = ("rec", "rec_yds", "rush_att", "rush_yds", "pass_yds")
 EVAL_FROM = "2024-09-01"

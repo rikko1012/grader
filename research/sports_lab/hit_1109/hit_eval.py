@@ -16,7 +16,7 @@ A candidate column po_<arm> that was built on the offline re-run (po_base) is tr
   logit(po_<arm>_xl) = logit(po_live) + logit(po_<arm>) - logit(po_base)
 so it is "what members would see" (for rebounds / assists / threes / NFL po_base == po_live already).
 
-  python -m sports.research.hit_1109.hit_eval <out.json> <pkl>[,<pkl>...] [period] [arm,arm,...]
+  python -m research.sports_lab.hit_1109.hit_eval <out.json> <pkl>[,<pkl>...] [period] [arm,arm,...]
 """
 from __future__ import annotations
 

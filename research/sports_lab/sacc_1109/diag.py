@@ -1,6 +1,6 @@
-﻿"""sacc-1109 diagnosis at offered lines: where the stated chance runs above the hit rate.
+"""sacc-1109 diagnosis at offered lines: where the stated chance runs above the hit rate.
 
-  python -m sports.research.sacc_1109.diag <lines.pkl> <out.json> [pcol=po_live]
+  python -m research.sports_lab.sacc_1109.diag <lines.pkl> <out.json> [pcol=po_live]
 """
 from __future__ import annotations
 
