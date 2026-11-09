@@ -208,7 +208,8 @@ def default_jobs():
         # tip, SPORTS_INGEST_GAMEDAY_S (600) on a game day, SPORTS_INGEST_IDLE_S (900) otherwise; each successful
         # cycle starts the board build at once ("then"). --bucket-min 1: a 5-minute cycle is never skipped as 'done'.
         **{f"ingest-{x}": dict(argv=_py("-m", "sports.worker", "ingest", x, "--bucket-min", "1", "--sources",
-                                        "espn,pp,ud,injuries,oddsapi,polymarket," + ("" if books_job else "books,")
+                                        "espn,pp,ud,injuries,oddsapi,polymarket,novig,gemini,"
+                                        + ("" if books_job else "books,")
                                         + "games"),
                                every_s=600 if std else 900, cadence=("gameday", (x,)), then=(f"ui-snapshots-{x}",), collector=True,
                                # 2026-10-31: a board shows only collected lines; 15 min overdue goes first (replay: 5 min

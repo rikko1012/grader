@@ -1,0 +1,291 @@
+{
+ "_recorded": {
+  "at": "2026-11-09T18:30Z",
+  "requests": [
+   "GET https://api.novig.com/v3/public/catalog/events?league=NBA&status=OPEN_PREGAME&limit=5000",
+   "GET https://api.novig.com/v3/public/catalog/markets?league=NBA&eventStatus=OPEN_PREGAME&limit=5000"
+  ],
+  "note": "public catalog, no key; trimmed to a few markets of one game"
+ },
+ "events_answer": {
+  "items": [
+   {
+    "eventId": "01a1bb1d-5beb-7572-a0f4-4570ad474b2f",
+    "description": "Los Angeles Lakers @ Atlanta Hawks",
+    "sport": "BASKETBALL",
+    "league": "NBA",
+    "status": "OPEN_PREGAME",
+    "startsTs": 1794269100000
+   },
+   {
+    "eventId": "01a1c07a-8f9c-7163-bbe2-c34c9f1ee0d4",
+    "description": "Boston Celtics @ Philadelphia 76ers",
+    "sport": "BASKETBALL",
+    "league": "NBA",
+    "status": "OPEN_PREGAME",
+    "startsTs": 1794359100000
+   }
+  ]
+ },
+ "markets_answer": {
+  "items": [
+   {
+    "marketId": "01a1c180-43b1-7992-b220-ea111c2da1bc",
+    "description": "Matisse Thybulle 6.5 POINTS",
+    "eventId": "01a1bb1d-5beb-7572-a0f4-4570ad474b2f",
+    "marketType": "POINTS",
+    "strike": "6.5",
+    "status": "OPEN",
+    "voids": "FMV",
+    "startsTs": 1794269100000,
+    "fee": {
+     "coefficient": "0.06",
+     "makerCredit": "0.25",
+     "charged": "WHEN_LIVE"
+    },
+    "outcomes": [
+     {
+      "outcomeId": "01a1c180-43b1-7992-b220-ea2eeb66bc1f",
+      "name": "Over 6.5",
+      "status": "TBD",
+      "bid": {
+       "price": "0.46",
+       "qty": 24728
+      }
+     },
+     {
+      "outcomeId": "01a1c180-43b1-7992-b220-ea33329559b9",
+      "name": "Under 6.5",
+      "status": "TBD",
+      "bid": {
+       "price": "0.50",
+       "qty": 24750
+      }
+     }
+    ],
+    "volume": 0,
+    "openInterest": 0
+   },
+   {
+    "marketId": "01a1c17a-5114-78f2-8560-a37d3574f103",
+    "description": "Luka Doncic 35.5 POINTS",
+    "eventId": "01a1bb1d-5beb-7572-a0f4-4570ad474b2f",
+    "marketType": "POINTS",
+    "strike": "35.5",
+    "status": "OPEN",
+    "voids": "FMV",
+    "startsTs": 1794269100000,
+    "fee": {
+     "coefficient": "0.06",
+     "makerCredit": "0.25",
+     "charged": "WHEN_LIVE"
+    },
+    "outcomes": [
+     {
+      "outcomeId": "01a1c17a-5114-78f2-8560-a3854c986e68",
+      "name": "Over 35.5",
+      "status": "TBD",
+      "last": "0.50",
+      "bid": {
+       "price": "0.50",
+       "qty": 33996
+      }
+     },
+     {
+      "outcomeId": "01a1c17a-5114-78f2-8560-a392dffe24d8",
+      "name": "Under 35.5",
+      "status": "TBD",
+      "last": "0.50",
+      "bid": {
+       "price": "0.48",
+       "qty": 19932
+      }
+     }
+    ],
+    "volume": 25807,
+    "openInterest": 21000
+   },
+   {
+    "marketId": "01a1c11f-4a1f-7a22-80a5-d15867ef3274",
+    "description": "Ziaire Williams 8.5 POINTS",
+    "eventId": "01a1bb1d-5beb-7572-a0f4-4570ad474b2f",
+    "marketType": "POINTS",
+    "strike": "8.5",
+    "status": "OPEN",
+    "voids": "FMV",
+    "startsTs": 1794269100000,
+    "fee": {
+     "coefficient": "0.06",
+     "makerCredit": "0.25",
+     "charged": "WHEN_LIVE"
+    },
+    "outcomes": [
+     {
+      "outcomeId": "01a1c11f-4a1f-7a22-80a5-d162c8896a31",
+      "name": "Over 8.5",
+      "status": "TBD",
+      "last": "0.52",
+      "bid": {
+       "price": "0.505",
+       "qty": 11880
+      }
+     },
+     {
+      "outcomeId": "01a1c11f-4a1f-7a22-80a5-d178759bc51a",
+      "name": "Under 8.5",
+      "status": "TBD",
+      "last": "0.48",
+      "bid": {
+       "price": "0.47",
+       "qty": 7500
+      }
+     }
+    ],
+    "volume": 576,
+    "openInterest": 576
+   },
+   {
+    "marketId": "01a1c13a-c8db-7930-9564-434f94b6b630",
+    "description": "Onyeka Okongwu 6.5 REBOUNDS",
+    "eventId": "01a1bb1d-5beb-7572-a0f4-4570ad474b2f",
+    "marketType": "REBOUNDS",
+    "strike": "6.5",
+    "status": "OPEN",
+    "voids": "FMV",
+    "startsTs": 1794269100000,
+    "fee": {
+     "coefficient": "0.06",
+     "makerCredit": "0.25",
+     "charged": "WHEN_LIVE"
+    },
+    "outcomes": [
+     {
+      "outcomeId": "01a1c13a-c8db-7930-9564-435db4a1f305",
+      "name": "Over 6.5",
+      "status": "TBD",
+      "bid": {
+       "price": "0.50",
+       "qty": 9900
+      }
+     },
+     {
+      "outcomeId": "01a1c13a-c8db-7930-9564-436649ec3585",
+      "name": "Under 6.5",
+      "status": "TBD",
+      "bid": {
+       "price": "0.355",
+       "qty": 20740
+      }
+     }
+    ],
+    "volume": 0,
+    "openInterest": 0
+   },
+   {
+    "marketId": "01a1c043-0385-7460-b2db-0a7a9dc62abc",
+    "description": "Nickeil Alexander-Walker 7.5 ASSISTS",
+    "eventId": "01a1bb1d-5beb-7572-a0f4-4570ad474b2f",
+    "marketType": "ASSISTS",
+    "strike": "7.5",
+    "status": "OPEN",
+    "voids": "FMV",
+    "startsTs": 1794269100000,
+    "fee": {
+     "coefficient": "0.06",
+     "makerCredit": "0.25",
+     "charged": "WHEN_LIVE"
+    },
+    "outcomes": [
+     {
+      "outcomeId": "01a1c043-0385-7460-b2db-0a84ab1d4122",
+      "name": "Over 7.5",
+      "status": "TBD"
+     },
+     {
+      "outcomeId": "01a1c043-0385-7460-b2db-0a96bb1f8767",
+      "name": "Under 7.5",
+      "status": "TBD",
+      "bid": {
+       "price": "0.958",
+       "qty": 10000
+      }
+     }
+    ],
+    "volume": 0,
+    "openInterest": 0
+   },
+   {
+    "marketId": "01a1c171-b1d2-7081-b5a5-1b12cc39c10f",
+    "description": "Ryan Kalkbrenner 0.5 DOUBLE_DOUBLE",
+    "eventId": "01a1bb1d-5cb2-7763-bb59-c422c2e170b4",
+    "marketType": "DOUBLE_DOUBLE",
+    "strike": "0.5",
+    "status": "OPEN",
+    "voids": "FMV",
+    "startsTs": 1794269100000,
+    "fee": {
+     "coefficient": "0.06",
+     "makerCredit": "0.25",
+     "charged": "WHEN_LIVE"
+    },
+    "outcomes": [
+     {
+      "outcomeId": "01a1c171-b1d2-7081-b5a5-1b28db0237ff",
+      "name": "Over 0.5",
+      "status": "TBD"
+     },
+     {
+      "outcomeId": "01a1c171-b1d2-7081-b5a5-1b3621c0d836",
+      "name": "Under 0.5",
+      "status": "TBD",
+      "bid": {
+       "price": "0.86",
+       "qty": 7500
+      }
+     }
+    ],
+    "volume": 0,
+    "openInterest": 0
+   },
+   {
+    "marketId": "01a1bede-3e4f-7870-819f-7d7df2972099",
+    "description": "LAL @ ATL t214.5",
+    "eventId": "01a1bb1d-5beb-7572-a0f4-4570ad474b2f",
+    "marketType": "TOTAL",
+    "strike": "214.5",
+    "status": "OPEN",
+    "voids": "FMV",
+    "startsTs": 1794269100000,
+    "fee": {
+     "coefficient": "0.06",
+     "makerCredit": "0.25",
+     "charged": "WHEN_LIVE"
+    },
+    "outcomes": [
+     {
+      "outcomeId": "01a1bede-3e4f-7870-819f-7d8499f9ff75",
+      "name": "Over 214.5",
+      "status": "TBD",
+      "last": "0.895",
+      "bid": {
+       "price": "0.875",
+       "qty": 80000
+      }
+     },
+     {
+      "outcomeId": "01a1bede-3e4f-7870-819f-7d9abb20c0e5",
+      "name": "Under 214.5",
+      "status": "TBD",
+      "last": "0.105",
+      "bid": {
+       "price": "0.11",
+       "qty": 15000
+      }
+     }
+    ],
+    "volume": 14840,
+    "openInterest": 14285
+   }
+  ]
+ }
+}

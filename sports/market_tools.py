@@ -32,7 +32,7 @@ def build(items, now, validated=None, rules=None, limit=20000):
         rule=rules.get(o.platform+'|'+o.rule_version)
         if not rule or not jurisdiction:
             excluded['Settlement rules or jurisdiction not verified']+=1;continue
-        if o.platform in ('kalshi','polymarket'):
+        if o.platform in ('kalshi','polymarket','novig','gemini'):
             excluded['Executable liquidity and fees not verified']+=1;continue
         source=meta.get('last_source_updated_at') or o.source_updated_at
         if not source:

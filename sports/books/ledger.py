@@ -33,6 +33,10 @@ LIMITS = {
     "oddspapi": {"monthly": int(os.environ.get("SPORTS_ODDSPAPI_MONTHLY_REQUESTS", "0")), "reserve": 0,
                  "gap_s": 2.0, "per_min": 20},
     "polymarket": {"monthly": None, "reserve": 0, "gap_s": 1.0, "per_min": 50},
+    # display-only exchanges (books/exchanges.py): public reads, no published limit (Novig throttles per IP at its
+    # edge, Gemini ~120 / min); a few requests per ingest cycle, >= 1 s apart
+    "novig": {"monthly": None, "reserve": 0, "gap_s": 1.0, "per_min": 20},
+    "gemini": {"monthly": None, "reserve": 0, "gap_s": 1.0, "per_min": 20},
 }
 
 

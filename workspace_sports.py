@@ -27,7 +27,7 @@ from urllib.parse import urlencode, urlparse
 LEAGUES = ("nba", "nfl")
 PICKEM = ("underdog", "prizepicks")
 LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
-BOOK_LABEL = {"fanduel": "FanDuel", "betrivers": "BetRivers", "kalshi": "Kalshi", "polymarket": "Polymarket", "pinnacle": "Pinnacle", "draftkings": "DraftKings",
+BOOK_LABEL = {"fanduel": "FanDuel", "betrivers": "BetRivers", "kalshi": "Kalshi", "polymarket": "Polymarket", "novig": "Novig", "gemini": "Gemini", "pinnacle": "Pinnacle", "draftkings": "DraftKings",
               "betmgm": "BetMGM", "caesars": "Caesars", "bovada": "Bovada", "fanatics": "Fanatics", "espnbet": "ESPN BET", "hardrockbet": "Hard Rock", "bet365": "bet365"}
 PERIOD = {"full_game": "Full game", "1h": "First half", "2h": "Second half", "1q": "First quarter",
           "first_half": "First half", "second_half": "Second half", "q1": "First quarter", "q2": "Second quarter",
@@ -259,7 +259,7 @@ def book_label(p):
     return LABEL.get(p) or BOOK_LABEL.get(str(p).split(":")[-1]) or str(p).split(":")[-1].title()
 
 
-BOOK_SHORT = {"fanduel": "FD", "betrivers": "BR", "kalshi": "KA", "polymarket": "PM", "pinnacle": "PN", "draftkings": "DK", "betmgm": "MG", "caesars": "CZ", "bovada": "BV", "fanatics": "FN", "espnbet": "EB",
+BOOK_SHORT = {"fanduel": "FD", "betrivers": "BR", "kalshi": "KA", "polymarket": "PM", "novig": "NV", "gemini": "GM", "pinnacle": "PN", "draftkings": "DK", "betmgm": "MG", "caesars": "CZ", "bovada": "BV", "fanatics": "FN", "espnbet": "EB",
               "hardrockbet": "HR", "bet365": "36"}
 
 
