@@ -925,3 +925,40 @@ assists:underdog 273: live 62.9 / 50.2, lc-1 59.8 / 54.2, -0.0420 (-0.114, +0.02
 settle, once per UTC day from 06:00, child process, single BLAS thread, 900 s timeout); a dry run on the fresh pull wrote all three
 markets OFF (child peak working set 37.9 MB on Windows; 47.6 MB on a 4,800-row synthetic record in the test) and the second run
 logged "skip". Admin: `/admin/lol/learning.json` -> `lc1`; admin LoL page tab "Calibration (lc-1)". Switch `LOL_CAL_AUTOFIT=0`.
+
+## lpf-1 live path (2026-11-09) - accepted under the owner's hit-rate rule, wired behind LOL_LPF1 (default OFF)
+
+Owner 2026-11-09: a projection change is accepted when it raises the hit rate at the real offered lines (side = Scout's lean,
+every graded line) on a walk-forward test, keeps every line graded, does not make the Over / Under split more lopsided and does
+not make either side worse; stated-vs-hit, MAE, log loss and calibration are reported, never a veto; the book line is never an
+input. Full write-up: `cs2_scout_ops/logs/esports_hit_2026-11-09.md`.
+
+**Record:** 2,059 settled graded forward lines / 42 series (2026-10-17 .. 11-08; latest pre-match forecast per line, latest
+settlement), lpf-1 = variant W + live offset + decider, production history only (no Oracle's Elixir year: production has none),
+refits 2026-10-01 and 2026-11-01 on earlier days only. Series-grouped bootstrap 95% CIs.
+
+| | live (lol-1f) | lpf-1 kills + assists |
+|---|---|---|
+| hit, all lines | 56.0% [51.1, 60.6] | **59.5% [55.3, 63.7]**; paired +3.45 pts [-0.1, +7.1] |
+| Over picks | 708, 48.0% [40.3, 55.2] | 761, **52.8%** [45.4, 60.3] |
+| Under picks | 1,351, 60.3% [54.0, 66.2] | 1,298, **63.4%** [57.5, 69.1] |
+| Over share (over rate 42.6%) | 34.4% | 37.0% |
+| lines with a side / letters (>= 55%) | 2,059 / 1,544 | 2,059 / 1,424 (-7.8%) |
+| mean stated chance | 63.7% | 61.3% |
+| MAE (one unit per player-market) / bias | 3.189 / +0.22 | 3.015 / +0.43 |
+| kills MAE / bias | 2.271 / +0.13 | 2.231 / +0.37 [+0.1, +0.6] |
+| assists MAE / bias; assists Over picks | 4.133 / +0.32; 35.9% (n 142) | 3.819 / +0.50; 47.3% (n 131) |
+| series from Oct 26 (19) | 56.8% | 62.3%, paired +5.5 [+0.4, +10.6] |
+| Nov 6-8 (3 series, after the Nov 5 lpf-1 report) | 44.4% | 55.6% |
+
+**Code:** `lol/lpf1_live.py` (numpy tree evaluator equal to lightgbm's raw score, the production-history store, the W mixture,
+no scipy / sklearn / lightgbm on the server), `lol/lpf1_train.py` (offline artifact writer), `lol/lpf1_model.json.gz` (cutoff
+2026-11-09, 600 rounds, kills + assists). `lol/center/forecast.py`: with `LOL_LPF1=1` the stats in `LOL_LPF1_STATS` (default
+kills,assists) take lpf-1's chance, mean, median and 80% range; `inputs.lpf1` records the artifact and the lol-1f projection it
+started from; no projector in a cycle = those lines are skipped (the last saved forecast stands). Off = byte-identical records.
+Parity on the local copy: live path vs research walk-forward (same cutoff 2026-11-01), 390 forward lines, |P(over) diff| median
+0.0002, max 0.0115, same side 389 / 390.
+
+**Before turning it on:** projector build on 130k player-games: 11 s, steady +86 MB, build peak ~300 MB (tracemalloc, local); the
+LoL worker's container is near its limit, so measure on Render (or move the build to a child process) first. Letters fall ~8%
+and the mean printed chance ~2.4 pts: a projection change, not a calibration layer, but members will see fewer letters.
