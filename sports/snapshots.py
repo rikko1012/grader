@@ -1525,16 +1525,147 @@ def write_results(con, league, now=None, base=None):
                                            (league,))}
     st_events = sorted(fc_events & {r[0] for r in con.execute(
         "SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND event_id LIKE ?", (f"{league}:%",))})
-    rows = []
-    for i in range(0, len(st_events), RESULTS_EVENTS_PER_PASS):
-        part = st_events[i:i + RESULTS_EVENTS_PER_PASS]
-        rows += results_view(con, league, _event_settlements(con, part), now, meta, rows_only=True)
-    obj = results_from_rows(rows, meta)
+    obj = _ledger_streamed((row for i in range(0, len(st_events), RESULTS_EVENTS_PER_PASS)
+                            for row in results_view(con, league,
+                                                    _event_settlements(con, st_events[i:i + RESULTS_EVENTS_PER_PASS]),
+                                                    now, meta, rows_only=True)), meta)
     names = player_names(con, {r["player_id"] for r in obj["rows"] if r.get("player_id")}, now)
     for r in obj["rows"]:                              # N7: the player's record name, never the lowercase key
         r["player"] = names.get(r.get("player_id"))
     _write(root / "results.json", obj)
     return {"rows": obj["total_rows"], "settled_by_model": {k: v["settled"] for k, v in obj["summary"].items()}}
+
+
+# The ledger STREAMED (2026-11-08 review): results_from_rows needs every ledger row of the season (~2 MB per game held,
+# settle-post would be killed over its cap partway through a season). Rows go to a throwaway SQLite file as they come
+# (sports/spill.py) with the columns the summary reads; only the newest RESULTS_ROWS rows are kept whole (a heap).
+# The summary then reads the file in results_from_rows' order (settled_at, forecast id, newest first; arrival order on a
+# tie - the stable sort): per-game totals for the intervals in one pass, and each mean as sum() over the same values in
+# the same order. head_to_head gets its newest row per key and its grouping order from SQL. The file is identical to
+# results_from_rows' (sports/tests/test_sports_jobs_1108.py, against ecfa81a).
+RESULTS_ROWS = 2000
+_LEDGER_SCHEMA = (
+    # the numbers are stored as given (no column type: an int stays an int, a float stays the same float)
+    "CREATE TABLE L (seq INTEGER PRIMARY KEY, sa TEXT, fid TEXT, mv TEXT, ev TEXT, status TEXT, outcome TEXT, "
+    "err, brier, ll, bb, npay INTEGER, k TEXT, prefix TEXT, st TEXT, fa TEXT, po, pu)",
+)
+_LEDGER_ORDER = "sa DESC, fid DESC, seq"
+
+
+def _ledger_streamed(rows, base_meta):
+    """results_from_rows(list(rows), base_meta) without holding the rows."""
+    import heapq
+
+    from . import results_public as rp, spill
+    top, models, n = [], set(), 0
+    with spill.Spill("results-ledger") as sp:
+        for ddl in _LEDGER_SCHEMA:
+            sp.execute(ddl)
+        batch = []
+        for r in rows:
+            n += 1
+            models.add(r["model_version"])
+            sa = r["settled_at"] or ""
+            item = (sa, r["forecast_id"], -n, r)          # the newest RESULTS_ROWS by (settled_at, id), first on a tie
+            if len(top) < RESULTS_ROWS:
+                heapq.heappush(top, item)
+            elif item[:3] > top[0][:3]:
+                heapq.heapreplace(top, item)
+            model = r.get("model") or r.get("model_version")
+            hk = pre = None
+            if r.get("status") in ("settled", "void") and model:          # = results_public._hh_key
+                ln = round(float(r["line"]), 3)
+                hk, pre = repr((r["event_id"], r["player_id"], r["stat"], ln, model)), repr(
+                    (r["event_id"], r["player_id"], r["stat"], ln))
+            batch.append((n, sa, r["forecast_id"], r["model_version"], r["event_id"], r["status"], r["outcome"],
+                          r["error"], r["brier"], r["log_loss"], r.get("brier_binary"), len(r["payouts"]), hk, pre,
+                          r["stat"], r.get("forecast_at") or "", r["p_over"], r["p_under"]))
+            if len(batch) >= 2000:
+                sp.executemany(f"INSERT INTO L VALUES ({','.join('?' * 18)})", batch)
+                batch.clear()
+        if batch:
+            sp.executemany(f"INSERT INTO L VALUES ({','.join('?' * 18)})", batch)
+        del batch
+        sp.execute(f"CREATE INDEX L_mv ON L (mv, status, {_LEDGER_ORDER})")
+        summary = {mv: _ledger_model(sp, mv) for mv in sorted(models)}
+        hh = rp.HeadToHead()
+        _ledger_head_to_head(sp, hh)
+        hh_rows = hh.result()
+    top_rows = [it[3] for it in sorted(top, key=lambda it: it[:3], reverse=True)]
+    del top
+    return {**base_meta, "rows": top_rows, "total_rows": n, "summary": summary,
+            "head_to_head": {"version": rp.HH_VERSION, "method": rp.HH_METHOD, "rows": hh_rows},
+            "method": dict(RESULTS_METHOD)}
+
+
+def _ledger_model(sp, mv):
+    """results_from_rows' summary[mv] from the spill file (rows of that model in the ledger order)."""
+    where = "mv IS ?"
+    void = sp.execute(f"SELECT COUNT(*) FROM L WHERE {where} AND status = 'void'", (mv,)).fetchone()[0]
+    recorded = sp.execute(f"SELECT COALESCE(SUM(npay), 0) FROM L WHERE {where}", (mv,)).fetchone()[0]
+    # one pass: per game (first appearance order) the (total, count) _boot_mean_ci builds, field by field
+    groups = {}
+    settled = pushes = 0
+    fields = ("err", "err", "brier", "ll", "bb")              # error (absolute), error, brier, log loss, binary brier
+    for ev, outcome, *vals in sp.execute(f"SELECT ev, outcome, err, brier, ll, bb FROM L WHERE {where} AND "
+                                         f"status = 'settled' ORDER BY {_LEDGER_ORDER}", (mv,)):
+        settled += 1
+        pushes += outcome == "push"
+        g = groups.get(ev)
+        if g is None:
+            g = groups[ev] = [[0.0, 0] for _ in fields]
+        err, brier, ll, bb = vals
+        for i, value in enumerate((err, err, brier, ll, bb)):
+            if value is not None:
+                g[i][0] += abs(value) if i == 0 else value
+                g[i][1] += 1
+    tots = list(groups.values())
+
+    def mean(col, fn=None):
+        n = sp.execute(f"SELECT COUNT({col}) FROM L WHERE {where} AND status = 'settled'", (mv,)).fetchone()[0]
+        if not n:
+            return None, 0
+        vals = (v for (v,) in sp.execute(f"SELECT {col} FROM L WHERE {where} AND status = 'settled' AND {col} IS NOT "
+                                         f"NULL ORDER BY {_LEDGER_ORDER}", (mv,)))
+        return sum(map(fn, vals) if fn else vals) / n, n
+
+    def ci(i):
+        return _boot_mean_ci_totals([g[i] for g in tots])
+    mae, n_err = mean("err", abs)
+    bias, _ = mean("err")
+    brier, _ = mean("brier")
+    ll, _ = mean("ll")
+    bb, n_bb = mean("bb")
+    return {
+        "settled": settled, "games": len(tots), "void": void, "pushes": pushes,
+        "projection": {"n": n_err, "mae": _r(mae, 4), "mae_ci": ci(0), "bias": _r(bias, 4), "bias_ci": ci(1)},
+        "probability": {"n": settled, "brier": _r(brier, 5), "brier_ci": ci(2), "log_loss": _r(ll, 5),
+                        "log_loss_ci": ci(3), "brier_binary": _r(bb, 5), "brier_binary_ci": ci(4),
+                        "brier_binary_n": n_bb},
+        "returns": {"recorded": recorded}}
+
+
+def _ledger_head_to_head(sp, acc):
+    """head_to_head(all ledger rows in the ledger order): the newest row per (game, player, stat, line, model) of the
+    settled / void rows (the first in ledger order on a forecast_at tie), grouped per prop key in the order the keys
+    first appear."""
+    # keys only through the sorts (the chosen row ids go to H in order), then a rowid walk fetches the columns
+    sp.execute("CREATE TABLE H (pos INTEGER PRIMARY KEY, id INTEGER)")
+    sp.execute(f"INSERT INTO H (id) SELECT id FROM (SELECT id, MIN(pos) OVER (PARTITION BY k) AS kfirst, MIN(pos) OVER "
+               "(PARTITION BY prefix) AS pfirst, ROW_NUMBER() OVER (PARTITION BY k ORDER BY fa DESC, pos) AS rn FROM "
+               f"(SELECT seq AS id, k, prefix, fa, ROW_NUMBER() OVER (ORDER BY {_LEDGER_ORDER}) AS pos FROM L "
+               "WHERE k IS NOT NULL)) WHERE rn = 1 ORDER BY pfirst, kfirst")
+    q = ("SELECT t.prefix, t.ev, t.st, t.mv, t.fid, t.status, t.outcome, t.po, t.pu FROM H h CROSS JOIN L t "
+         "ON t.seq = h.id ORDER BY h.pos")
+    cur_key, ms, ev, st = None, {}, None, None
+    for prefix, e, s, mv, fid, status, outcome, po, pu in sp.execute(q):
+        if prefix != cur_key:
+            if ms:
+                acc.add(ev, st, ms)
+            cur_key, ms, ev, st = prefix, {}, e, s
+        ms[mv] = {"forecast_id": fid, "status": status, "outcome": outcome, "p_over": po, "p_under": pu}
+    if ms:
+        acc.add(ev, st, ms)
 
 
 def player_names(con, pids, as_of=None):
@@ -1583,11 +1714,18 @@ def _boot_mean_ci(groups, field, absolute=False, reps=400, seed=7):
                 total += abs(value) if absolute else value
                 count += 1
         totals.append((total, count))
+    return _boot_mean_ci_totals(totals, reps, seed)
+
+
+def _boot_mean_ci_totals(totals, reps=400, seed=7):
+    """_boot_mean_ci from its per-game (total, count) list (games in first-appearance order)."""
+    if len(totals) < 2:
+        return None
     rng = random.Random(seed)
     vals = []
     for _ in range(reps):
         total, count = 0.0, 0
-        for _ in groups:
+        for _ in totals:
             value, n = totals[rng.randrange(len(totals))]
             total += value
             count += n
@@ -1631,9 +1769,9 @@ def settled_forecast_links(con, setts):
                                  f"({','.join('?' * len(chunk))})", chunk):
                 ident[r["record_id"]] = (r["source"], r["source_key"])
         for orid in orids:
-            if orid not in ident:                       # archived offer revision (sports/archive.py)
-                m = store.row_meta(con, orid)
-                if m and m.get("kind") == "offer":
+            if orid not in ident:                       # archived offer revision (sports/archive.py): metadata only,
+                m = store._archive().identity_by_record_id(con, orid)     # no archive file decoded (2026-11-08)
+                if m and m["kind"] == "offer":
                     ident[orid] = (m["source"], m["source_key"])
         for fid, fc in dec:
             for orid in fc.offer_snapshot_ids or ():
@@ -1719,6 +1857,17 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
     return results_from_rows(rows, base_meta)
 
 
+RESULTS_METHOD = {"brier": "three-outcome Brier (over / under / push) on the forecast's unconditional chances: "
+                           "the sum over the three outcomes, range 0-2 - a 50/50 forecast with no push scores "
+                           "0.50 on it (= 2 x the binary Brier 0.25), so ~0.5 means coin-flip skill, not a bug",
+                  "brier_binary": "binary Brier on the chance of Over given no push vs the settled Over / Under "
+                                  "(pushes left out): range 0-1, 0.25 = always 50%",
+                  "log_loss": "-ln(chance the forecast gave the settled outcome)",
+                  "error": "settled value minus the forecast's projection mean",
+                  "ci": "95% bootstrap interval, whole games resampled (400 draws, seed 7)",
+                  "returns": "only stakes and payouts a settlement record states; none are assumed"}
+
+
 def results_from_rows(rows, base_meta):
     """The ledger file body (summary per model + newest 2,000 rows) from ledger rows."""
     rows.sort(key=lambda r: (r["settled_at"] or "", r["forecast_id"]), reverse=True)
@@ -1765,15 +1914,7 @@ def results_from_rows(rows, base_meta):
     hh = rp.head_to_head(rows)
     return {**base_meta, "rows": rows[:2000], "total_rows": len(rows), "summary": summary,
             "head_to_head": {"version": rp.HH_VERSION, "method": rp.HH_METHOD, "rows": hh},
-            "method": {"brier": "three-outcome Brier (over / under / push) on the forecast's unconditional chances: "
-                                "the sum over the three outcomes, range 0-2 - a 50/50 forecast with no push scores "
-                                "0.50 on it (= 2 x the binary Brier 0.25), so ~0.5 means coin-flip skill, not a bug",
-                       "brier_binary": "binary Brier on the chance of Over given no push vs the settled Over / Under "
-                                       "(pushes left out): range 0-1, 0.25 = always 50%",
-                       "log_loss": "-ln(chance the forecast gave the settled outcome)",
-                       "error": "settled value minus the forecast's projection mean",
-                       "ci": "95% bootstrap interval, whole games resampled (400 draws, seed 7)",
-                       "returns": "only stakes and payouts a settlement record states; none are assumed"}}
+            "method": dict(RESULTS_METHOD)}
 
 
 # ---------------------------------------------------------------------------------------------------------- CLI

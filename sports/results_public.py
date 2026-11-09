@@ -47,6 +47,7 @@ DEFINITIONS
 """
 from __future__ import annotations
 
+import itertools
 import json
 import random
 import time
@@ -77,23 +78,136 @@ def path(base=None) -> Path:
 
 
 def cluster_ci(items, stat, reps=1000, seed=7):
+    """95% percentile bootstrap over games (all items of a game drawn together), `reps` draws, seed 7.
+    A stat that declares how it reduces (ci_spec, below) is evaluated from per-game value lists / counts instead of a
+    fresh list of every drawn row per draw (sheets job 2026-11-08: 1.3-5.5 s per call at 14k-40k rows, called a few
+    hundred times per league). Same games in the same sorted order, the same rng draws, the same values in the same
+    order handed to sum() (itertools.chain over the drawn games' lists) and the same integer counts -> bit-identical
+    intervals (sports/tests/test_sports_jobs_1108.py compares it with the original on random inputs)."""
     groups = defaultdict(list)
     for it in items:
         groups[it["event_id"] or it["forecast_id"]].append(it)
     keys = sorted(groups)
     if len(keys) < 2:
         return None
+    spec = getattr(stat, "ci_spec", None)
+    if spec is not None and spec[0] == "mean":          # mean of value(x) over items whose value is not None
+        value = spec[1]
+        return ci_mean([[v for v in map(value, groups[k]) if v is not None] for k in keys], reps, seed)
+    if spec is not None and spec[0] == "ratio":         # sum(num(x)) / sum(den(x)), integer counts
+        num, den = spec[1], spec[2]
+        return ci_ratio([(sum(num(x) for x in groups[k]), sum(den(x) for x in groups[k])) for k in keys], reps, seed)
     rng = random.Random(seed)
+    n = len(keys)
     vals = []
     for _ in range(reps):
-        sample = [x for _k in range(len(keys)) for x in groups[keys[rng.randrange(len(keys))]]]
+        sample = [x for _k in range(n) for x in groups[keys[rng.randrange(n)]]]
         v = stat(sample)
         if v is not None:
             vals.append(v)
+    return _ci_end(vals, reps)
+
+
+def ci_mean(per, reps=1000, seed=7):
+    """cluster_ci of a mean from per-game value lists (games in sorted key order, None values already left out)."""
+    n = len(per)
+    if n < 2:
+        return None
+    rng = random.Random(seed)
+    vals = []
+    lens = [len(v) for v in per]
+    chain = itertools.chain.from_iterable
+    for _ in range(reps):
+        pick = [rng.randrange(n) for _k in range(n)]
+        cnt = sum(lens[i] for i in pick)
+        if cnt:
+            vals.append(sum(chain([per[i] for i in pick])) / cnt)
+    return _ci_end(vals, reps)
+
+
+def ci_ratio(per, reps=1000, seed=7):
+    """cluster_ci of sum(num) / sum(den) from per-game (num, den) integer totals (games in sorted key order)."""
+    n = len(per)
+    if n < 2:
+        return None
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(reps):
+        a = b = 0
+        for _k in range(n):
+            pa, pb = per[rng.randrange(n)]
+            a += pa
+            b += pb
+        if b:
+            vals.append(a / b)
+    return _ci_end(vals, reps)
+
+
+def _ci_end(vals, reps):
     if len(vals) < reps // 2:
         return None
     vals.sort()
     return [round(vals[int(0.025 * (len(vals) - 1))], 4), round(vals[int(0.975 * (len(vals) - 1))], 4)]
+
+
+class _MeanCI:
+    """One cluster_ci mean statistic built one item at a time (2026-11-08 review: the season's rows are never held):
+    per game (event_id, else forecast_id - every item registers its game, as cluster_ci groups every item) the
+    non-None values in arrival order, and every value in arrival order for the plain mean."""
+    __slots__ = ("groups", "vals")
+
+    def __init__(self):
+        self.groups, self.vals = {}, []
+
+    def add(self, gkey, v):
+        g = self.groups.get(gkey)
+        if g is None:
+            g = self.groups[gkey] = []
+        if v is not None:
+            g.append(v)
+            self.vals.append(v)
+
+    def mean(self, fn=None):
+        if not self.vals:
+            return None
+        return (sum(self.vals) if fn is None else sum(map(fn, self.vals))) / len(self.vals)
+
+    def ci(self, fn=None):
+        if len(self.groups) < 2:
+            return None
+        return ci_mean([self.groups[k] if fn is None else list(map(fn, self.groups[k])) for k in sorted(self.groups)])
+
+
+class _RatioCI:
+    """One cluster_ci ratio statistic built one item at a time: integer (num, den) per game."""
+    __slots__ = ("groups",)
+
+    def __init__(self):
+        self.groups = {}
+
+    def add(self, gkey, num, den):
+        g = self.groups.get(gkey)
+        if g is None:
+            g = self.groups[gkey] = [0, 0]
+        g[0] += num
+        g[1] += den
+
+    def ci(self):
+        if len(self.groups) < 2:
+            return None
+        return ci_ratio([(self.groups[k][0], self.groups[k][1]) for k in sorted(self.groups)])
+
+
+def _mean_spec(fn, value):
+    """Declare fn(xs) == mean of value(x) over xs, None values left out (None when none) - cluster_ci's fast path."""
+    fn.ci_spec = ("mean", value)
+    return fn
+
+
+def _ratio_spec(fn, num, den):
+    """Declare fn(xs) == sum(num(x)) / sum(den(x)) (None when the denominator is 0), integer num / den."""
+    fn.ci_spec = ("ratio", num, den)
+    return fn
 
 
 def lean_side(r):
@@ -125,6 +239,12 @@ def _mae(xs):
 def _bias(xs):
     e = [x["error"] for x in xs if x["error"] is not None]
     return sum(e) / len(e) if e else None
+
+
+_ratio_spec(_hit, lambda x: 1 if x["lean_result"] == "win" else 0,
+            lambda x: 1 if x["lean_result"] in ("win", "loss") else 0)
+_mean_spec(_mae, lambda x: abs(x["error"]) if x["error"] is not None else None)
+_mean_spec(_bias, lambda x: x["error"])
 
 
 def _r(x, n=4):
@@ -232,22 +352,55 @@ def representative(rows):
     """rp-2 steps 1-3: one forecast per (game, player, stat, model) - see the module doc."""
     newest = {}
     for r in rows:
-        k = (r["event_id"], r["player_id"], r["stat"], r.get("model"), round(float(r["line"]), 3))
-        if k not in newest or ((r.get("forecast_at") or ""), r["forecast_id"]) > \
-                ((newest[k].get("forecast_at") or ""), newest[k]["forecast_id"]):
-            newest[k] = r
-    # newest first, then a stable sort on (source rank, closeness): ties keep the newer forecast, then the forecast id
-    cands = sorted(newest.values(), key=lambda r: r["forecast_id"])
-    cands.sort(key=lambda r: r.get("forecast_at") or "", reverse=True)
-    cands.sort(key=lambda r: (_source_rank(r), _closeness(r)))
+        _rep_newest_add(newest, r)
+    return _rep_select(newest)
+
+
+def _rep_key(r):
+    return (r["event_id"], r["player_id"], r["stat"], r.get("model"), round(float(r["line"]), 3))
+
+
+def _rep_newest_add(newest, r):
+    """rp-2 step 1, one row at a time: the newest forecast per (game, player, stat, model, line)."""
+    k = _rep_key(r)
+    if k not in newest or ((r.get("forecast_at") or ""), r["forecast_id"]) > \
+            ((newest[k].get("forecast_at") or ""), newest[k]["forecast_id"]):
+        newest[k] = r
+
+
+def _rep_select(newest):
+    """rp-2 steps 2-3 over step 1's {key: row}."""
+    return _rep_order([(r["forecast_id"], r.get("forecast_at") or "", (_source_rank(r), _closeness(r)), k[:4], r)
+                       for k, r in newest.items()])
+
+
+def _rep_order(cands):
+    """cands: [(forecast_id, forecast_at or "", (source rank, closeness), (game, player, stat, model), row)] in step 1's
+    order -> the chosen rows. Newest first, then a stable sort on (source rank, closeness): ties keep the newer
+    forecast, then the forecast id."""
+    cands = sorted(cands, key=lambda c: c[0])
+    cands.sort(key=lambda c: c[1], reverse=True)
+    cands.sort(key=lambda c: c[2])
     best = {}
-    for r in cands:
-        best.setdefault((r["event_id"], r["player_id"], r["stat"], r.get("model")), r)
+    for c in cands:
+        best.setdefault(c[3], c[4])
     return list(best.values())
 
 
 def one_per_prop(rows, pref=None):
     """rp-2 step 4: one forecast per (game, player, stat) across models (input: representative() rows)."""
+    rank = _model_rank(pref)
+    best = {}
+    for r in rows:
+        k = (r["event_id"], r["player_id"], r["stat"])
+        if k not in best or rank(r) < rank(best[k]):
+            best[k] = r
+    return list(best.values())
+
+
+def _model_rank(pref=None):
+    """one_per_prop's order of models: a Scout model before a market one, then the snapshots.models_pref order, then
+    the model name."""
     from .forecast_detail import kind
     if pref is None:
         try:
@@ -259,12 +412,7 @@ def one_per_prop(rows, pref=None):
     def rank(r):
         m = r.get("model") or ""
         return (1 if kind(m) == "market" else 0, order.get(m, len(order)), m)
-    best = {}
-    for r in rows:
-        k = (r["event_id"], r["player_id"], r["stat"])
-        if k not in best or rank(r) < rank(best[k]):
-            best[k] = r
-    return list(best.values())
+    return rank
 
 
 def raw_counts(rows):
@@ -276,52 +424,135 @@ def raw_counts(rows):
 
 
 def summarize(rows):
-    rr = [r for r in rows if r["status"] == "settled"]
-    leans = [r for r in rr if r["lean"]]
-    return {"forecasts": len(rows), "settled": len(rr), "void": sum(1 for r in rows if r["status"] == "void"),
-            "unresolved": sum(1 for r in rows if r["status"] == "unresolved"),
-            "props": len({(r["event_id"], r["player_id"], r["stat"]) for r in rr}),
-            "games": len({r["event_id"] for r in rr}),
-            "projection": {"n": sum(1 for r in rr if r["error"] is not None), "mae": _r(_mae(rr)),
-                           "mae_ci95": cluster_ci(rr, _mae), "bias": _r(_bias(rr)), "bias_ci95": cluster_ci(rr, _bias)},
-            "leans": {"n": len(leans), "wins": sum(1 for r in leans if r["lean_result"] == "win"),
-                      "losses": sum(1 for r in leans if r["lean_result"] == "loss"),
-                      "pushes": sum(1 for r in leans if r["lean_result"] == "push"),
-                      "hit_rate": _r(_hit(leans)), "hit_rate_ci95": cluster_ci(leans, _hit)}}
+    acc = Summary()
+    for r in rows:
+        acc.add(r)
+    return acc.result()
+
+
+class Summary:
+    """summarize() fed one row at a time (2026-11-08 review): counts, the error values (per game and in arrival order)
+    and the lean win / loss counts per game - never the rows. unique_props=True where the caller's rows are already one
+    per (game, player, stat) - every streamed scope of build(): one_per_prop rows, one model's representative rows, one
+    stat's rows - so the props count is the settled count without a season-long set of keys."""
+
+    def __init__(self, unique_props=False):
+        self.unique = unique_props
+        self.n = self.void = self.unresolved = self.settled = 0
+        self.props, self.games = set(), set()
+        self.err = _MeanCI()
+        self.leans = self.wins = self.losses = self.pushes = 0
+        self.hit = _RatioCI()
+
+    def add(self, r):
+        self.n += 1
+        st = r["status"]
+        if st == "void":
+            self.void += 1
+        elif st == "unresolved":
+            self.unresolved += 1
+        if st != "settled":
+            return
+        self.settled += 1
+        if not self.unique:
+            self.props.add((r["event_id"], r["player_id"], r["stat"]))
+        self.games.add(r["event_id"])
+        gk = r["event_id"] or r["forecast_id"]
+        self.err.add(gk, r["error"])
+        if r["lean"]:
+            res = r["lean_result"]
+            self.leans += 1
+            self.wins += res == "win"
+            self.losses += res == "loss"
+            self.pushes += res == "push"
+            self.hit.add(gk, 1 if res == "win" else 0, 1 if res in ("win", "loss") else 0)
+
+    def result(self):
+        w, l_ = self.wins, self.losses
+        return {"forecasts": self.n, "settled": self.settled, "void": self.void, "unresolved": self.unresolved,
+                "props": self.settled if self.unique else len(self.props), "games": len(self.games),
+                "projection": {"n": len(self.err.vals), "mae": _r(self.err.mean(abs)), "mae_ci95": self.err.ci(abs),
+                               "bias": _r(self.err.mean()), "bias_ci95": self.err.ci()},
+                "leans": {"n": self.leans, "wins": w, "losses": l_, "pushes": self.pushes,
+                          "hit_rate": _r(w / (w + l_) if w + l_ else None), "hit_rate_ci95": self.hit.ci()}}
 
 
 def calibration(rows):
-    out = []
-    rr = [r for r in rows if r["status"] == "settled" and r["outcome"] in ("over", "under")
-          and r["p_over"] is not None and (r["p_over"] + r["p_under"]) > 0]
-    for i in range(10):
-        lo, hi = i / 10, (i + 1) / 10
-        xs = [r for r in rr if lo <= r["p_over"] / (r["p_over"] + r["p_under"]) < hi or (i == 9 and
-                                                                                       r["p_over"] / (r["p_over"] + r["p_under"]) == 1)]
-        if not xs:
-            continue
+    acc = Calibration()
+    for r in rows:
+        acc.add(r)
+    return acc.result()
 
-        def obs(x):
-            return sum(1 for r in x if r["outcome"] == "over") / len(x) if x else None
-        out.append({"band": f"{i * 10}-{(i + 1) * 10}%", "n": len(xs),
-                    "stated": _r(sum(r["p_over"] / (r["p_over"] + r["p_under"]) for r in xs) / len(xs)),
-                    "observed": _r(obs(xs)), "observed_ci95": cluster_ci(xs, obs)})
-    return out
+
+class Calibration:
+    """calibration() fed one row at a time: per 10-point band the stated chances in arrival order and the Over counts
+    per game."""
+
+    def __init__(self):
+        self.bands = {}
+
+    def add(self, r):
+        if not (r["status"] == "settled" and r["outcome"] in ("over", "under") and r["p_over"] is not None
+                and (r["p_over"] + r["p_under"]) > 0):
+            return
+        for i in range(10):
+            lo, hi = i / 10, (i + 1) / 10
+            if lo <= r["p_over"] / (r["p_over"] + r["p_under"]) < hi or (i == 9 and
+                                                                        r["p_over"] / (r["p_over"] + r["p_under"]) == 1):
+                b = self.bands.get(i)
+                if b is None:
+                    b = self.bands[i] = [[], 0, _RatioCI()]
+                over = 1 if r["outcome"] == "over" else 0
+                b[0].append(r["p_over"] / (r["p_over"] + r["p_under"]))
+                b[1] += over
+                b[2].add(r["event_id"] or r["forecast_id"], over, 1)
+
+    def result(self):
+        out = []
+        for i in range(10):
+            b = self.bands.get(i)
+            if b is None:
+                continue
+            qs, over, ci = b
+            out.append({"band": f"{i * 10}-{(i + 1) * 10}%", "n": len(qs), "stated": _r(sum(qs) / len(qs)),
+                        "observed": _r(over / len(qs)), "observed_ci95": ci.ci()})
+        return out
 
 
 def bands(rows):
-    out = []
-    leans = [r for r in rows if r["status"] == "settled" and r["lean"] and r.get("lean_p") is not None]
-    for lo, hi, label in BANDS:
-        xs = [r for r in leans if lo <= r["lean_p"] < hi]
-        wl = [r for r in xs if r["lean_result"] in ("win", "loss")]
-        out.append({"band": label, "label": "probability band", "n": len(xs),
-                    "wins": sum(1 for r in xs if r["lean_result"] == "win"),
-                    "losses": sum(1 for r in xs if r["lean_result"] == "loss"),
-                    "pushes": sum(1 for r in xs if r["lean_result"] == "push"),
-                    "stated": _r(sum(r["lean_p"] for r in wl) / len(wl)) if wl else None,
-                    "hit_rate": _r(_hit(xs)), "hit_rate_ci95": cluster_ci(xs, _hit)})
-    return out
+    acc = Bands()
+    for r in rows:
+        acc.add(r)
+    return acc.result()
+
+
+class Bands:
+    """bands() fed one row at a time."""
+
+    def __init__(self):
+        self.b = [[0, 0, 0, 0, [], _RatioCI()] for _ in BANDS]        # n, wins, losses, pushes, stated (W/L), hit
+
+    def add(self, r):
+        if not (r["status"] == "settled" and r["lean"] and r.get("lean_p") is not None):
+            return
+        res = r["lean_result"]
+        for (lo, hi, _label), b in zip(BANDS, self.b):
+            if lo <= r["lean_p"] < hi:
+                b[0] += 1
+                b[1] += res == "win"
+                b[2] += res == "loss"
+                b[3] += res == "push"
+                if res in ("win", "loss"):
+                    b[4].append(r["lean_p"])
+                b[5].add(r["event_id"] or r["forecast_id"], 1 if res == "win" else 0, 1 if res in ("win", "loss") else 0)
+
+    def result(self):
+        out = []
+        for (_lo, _hi, label), (n, w, l_, p, wl, hit) in zip(BANDS, self.b):
+            out.append({"band": label, "label": "probability band", "n": n, "wins": w, "losses": l_, "pushes": p,
+                        "stated": _r(sum(wl) / len(wl)) if wl else None,
+                        "hit_rate": _r(w / (w + l_) if w + l_ else None), "hit_rate_ci95": hit.ci()})
+        return out
 
 
 def _contained(league, stat):
@@ -336,20 +567,46 @@ def grades(rows, league=None):
     board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here.
     The chance is the one members saw: the shown (cal-mi-1) chance stored beside the forecast when its market was ON
     (sports/model/shown.py, A9a 6), else the record's raw sm-1 chance (= what the board showed while OFF)."""
-    from . import board_view
-    leans = [r for r in rows if r["status"] == "settled" and r["lean"] and not _contained(league, r.get("stat"))]
-    out = []
-    if league and _league_contained(league):
+    acc = Grades(league)
+    for r in rows:
+        acc.add(r)
+    return acc.result()
+
+
+class Grades:
+    """grades() fed one row at a time: W-L-P and per-game win / loss counts per research letter."""
+    LETTERS = ("A", "B", "C", "Lean")
+
+    def __init__(self, league=None):
+        self.league = league
+        self.g = {g: [0, 0, 0, 0, _RatioCI()] for g in self.LETTERS}           # n, wins, losses, pushes, hit
+
+    def add(self, r):
         from . import board_view
-        return {"label": "Research grade - not validated", "rule": "rg-1", "rows": [],
-                "withheld": board_view.NOT_VALIDATED_TEXT.format(LG=league.upper())}
-    for g in ("A", "B", "C", "Lean"):
-        xs = [r for r in leans if board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"]) == g]
-        out.append({"grade": g, "n": len(xs), "wins": sum(1 for r in xs if r["lean_result"] == "win"),
-                    "losses": sum(1 for r in xs if r["lean_result"] == "loss"),
-                    "pushes": sum(1 for r in xs if r["lean_result"] == "push"),
-                    "hit_rate": _r(_hit(xs)), "hit_rate_ci95": cluster_ci(xs, _hit)})
-    return {"label": "Research grade - not validated", "rule": "rg-1", "rows": out}
+        if not (r["status"] == "settled" and r["lean"] and not _contained(self.league, r.get("stat"))):
+            return
+        b = self.g.get(board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"]))
+        if b is None:
+            return
+        res = r["lean_result"]
+        b[0] += 1
+        b[1] += res == "win"
+        b[2] += res == "loss"
+        b[3] += res == "push"
+        b[4].add(r["event_id"] or r["forecast_id"], 1 if res == "win" else 0, 1 if res in ("win", "loss") else 0)
+
+    def result(self):
+        league = self.league
+        if league and _league_contained(league):
+            from . import board_view
+            return {"label": "Research grade - not validated", "rule": "rg-1", "rows": [],
+                    "withheld": board_view.NOT_VALIDATED_TEXT.format(LG=league.upper())}
+        out = []
+        for g in self.LETTERS:
+            n, w, l_, p, hit = self.g[g]
+            out.append({"grade": g, "n": n, "wins": w, "losses": l_, "pushes": p,
+                        "hit_rate": _r(w / (w + l_) if w + l_ else None), "hit_rate_ci95": hit.ci()})
+        return {"label": "Research grade - not validated", "rule": "rg-1", "rows": out}
 
 
 def tracked_picks():
@@ -423,37 +680,12 @@ def model_gate(league):
 
 
 def build(con, now=None, base=None):
-    from gradecore.calendar import daily_record
     t0 = time.time()
     now = now or now_utc()
     leagues = {}
-    for lg in snapshots.LEAGUES:
-        all_rows = rows_for(con, lg)
-        reps = representative(all_rows)                 # rp-2: one forecast per game x player x stat x model
-        rows = one_per_prop(reps)                       # ... and one per game x player x stat for the record
-        s = summarize(rows)
-        models = {}
-        for mv in sorted({r["model"] for r in reps}):
-            mr = [r for r in reps if r["model"] == mv]
-            models[mv] = dict(summarize(mr), research_only=all(r["research_only"] for r in mr))
-        stats = {st: summarize([r for r in rows if r["stat"] == st]) for st in sorted({r["stat"] for r in rows})}
-        hh_rows = head_to_head_rows(all_rows, reps)
-        rec = recent(rows, league=lg)
-        try:
-            names = snapshots.player_names(con, {r["player_id"] for r in rec if r.get("player_id")}, now)
-        except Exception:                               # noqa: BLE001 - names are a nicety; ids stay
-            names = {}
-        for r in rec:
-            r["player"] = names.get(r["player_id"])
-        leagues[lg] = {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": False,
-                                     "under_review": s["props"] >= GATE, "text": gate_text(s["props"]),
-                                     "rule": GATE_RULE},
-                       "models": models, "stats": stats, "calibration": calibration(rows), "bands": bands(rows), "grades": grades(rows, lg),
-                       "recent": rec, "model_gate": model_gate(lg),
-                       'calendar':daily_record(({'at':r.get('settled_at'),'status':r.get('lean_result')} for r in rows), now, 'Settlement date · US Central', 'America/Chicago'),
-                       "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": head_to_head(hh_rows)},
-                       "raw_counts": raw_counts(all_rows), "counting": COUNTING}
-    doc = {"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
+    for lg in snapshots.LEAGUES:                        # one league at a time: its rows are freed before the next
+        leagues[lg] = _league(con, lg, now)
+    doc ={"version": VERSION, "built_at": now_utc(), "as_of": now, "leagues": leagues, "picks": tracked_picks(),
            "grades": "research grades rg-1 (owner 2026-10-25): sports-gp-1 bands of the unrounded lean-side chance - "
                      "A >= 60%, B >= 55.59%, C >= 53.45%, else Lean; research, not validated; stakes 0",
            "returns": "none: this page measures accuracy only (no ROI, no profit, no stakes)",
@@ -470,6 +702,223 @@ def build(con, now=None, base=None):
     size = snapshots._write(path(base), doc)
     return {"ok": True, "bytes": size, "build_s": round(time.time() - t0, 2),
             **{lg: leagues[lg]["gate"]["text"] for lg in leagues}}
+
+
+def _league(con, lg, now):
+    """One league's results block (was the body of build's loop, which kept the previous league's rows alive)."""
+    return league_block(con, lg, now, (r for setts in settlement_chunks(con, lg) for r in _rows_from(con, lg, setts)))
+
+
+# Streamed build (2026-11-08 review: the in-memory reduction still kept one row per (game, player, stat, model, line) of
+# the season, ~0.6 MB per game -> killed over the cap partway through a season). Every row goes to a throwaway SQLite
+# file as it streams (sports/spill.py); the rp-2 choices, head_to_head's newest-per-key and every ordering run there
+# with the same rules and tie-breaks as the list code, and the summaries are fed one decoded row at a time (Summary,
+# Calibration, Bands, Grades, HeadToHead). Python keeps per-game numbers and the value lists of the means, never the
+# row dicts. The file is identical to the list build's (sports/tests/test_sports_jobs_1108.py, against ecfa81a).
+_SPILL_SCHEMA = (
+    # rp-2 step 1: newest forecast per (game, player, stat, model, line); k_seq = the key's first arrival (dict order)
+    "CREATE TABLE rep (k TEXT PRIMARY KEY, k_seq INTEGER, fa TEXT, fid TEXT, r0 INTEGER, r1 REAL, k4 TEXT, blob BLOB)",
+    # head_to_head's newest per (game, player, stat, line, model) of settled / void rows (first row kept on a tie)
+    "CREATE TABLE hh (k TEXT PRIMARY KEY, k_seq INTEGER, fa TEXT, prefix TEXT, k4m TEXT, ln REAL, mkt INTEGER, "
+    "blob BLOB)",
+    "CREATE TABLE opp (pos INTEGER PRIMARY KEY, k3 TEXT, a INTEGER, b INTEGER, m TEXT, blob BLOB)",   # step 4 input
+    "CREATE TABLE own (k4 TEXT PRIMARY KEY, line REAL)",          # head_to_head_rows: each Scout model's own line
+    "CREATE TABLE lines (k TEXT PRIMARY KEY)",                    # ... and the props x lines they make
+    "CREATE TABLE rec (pos INTEGER PRIMARY KEY, k TEXT, fa TEXT, sa TEXT, fid TEXT, blob BLOB)",     # recent() input
+    "CREATE TABLE cal (pos INTEGER PRIMARY KEY, at TEXT, status TEXT)",                              # calendar input
+    # an ordered pass = the row ids in order (INSERT ... SELECT ... ORDER BY numbers them in that order), then a rowid
+    # walk joined to the blobs: the sorts carry only the keys, never the row blobs
+    "CREATE TABLE ord (pos INTEGER PRIMARY KEY, id INTEGER)",
+)
+_REP_UPSERT = ("INSERT INTO rep VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(k) DO UPDATE SET fa=excluded.fa, fid=excluded.fid, "
+               "r0=excluded.r0, r1=excluded.r1, blob=excluded.blob "
+               "WHERE excluded.fa > rep.fa OR (excluded.fa = rep.fa AND excluded.fid > rep.fid)")   # = _rep_newest_add
+_HH_UPSERT = ("INSERT INTO hh VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(k) DO UPDATE SET fa=excluded.fa, blob=excluded.blob "
+              "WHERE excluded.fa > hh.fa")                                                          # = _hh_newest_add
+_SPILL_BATCH = 2000
+
+
+def league_block(con, lg, now, rows):
+    """The league block of results_public.json from a stream of _rows_from rows (in the order the list build read
+    them). Same output as the list build: representative / one_per_prop / summarize / calibration / bands / grades /
+    recent / head_to_head over the season's rows."""
+    from gradecore.calendar import daily_record
+
+    from . import spill
+    with spill.Spill("results-public") as sp:
+        for ddl in _SPILL_SCHEMA:
+            sp.execute(ddl)
+        raw = _spill_rows(sp, rows)
+        # rp-2 steps 2-3 (_rep_order): newest first, then a stable sort on (source rank, closeness), ties on the forecast
+        # id, then the key's arrival; the first row per (game, player, stat, model) is its representative
+        reps = _ordered(sp, "rep", "SELECT id FROM (SELECT rowid AS id, r0, r1, fa, fid, k_seq, ROW_NUMBER() OVER "
+                                   "(PARTITION BY k4 ORDER BY r0, r1, fa DESC, fid, k_seq) AS rn FROM rep) WHERE rn = 1 "
+                                   "ORDER BY r0, r1, fa DESC, fid, k_seq")
+        rank = _model_rank()
+        models, research = {}, {}
+        batch_opp, batch_own, batch_lines = [], [], []
+        for pos, (blob,) in enumerate(reps):
+            r = spill.unpack(blob)
+            mv = r["model"]
+            acc = models.get(mv)
+            if acc is None:
+                acc = models[mv] = Summary(unique_props=True)       # reps are one per (game, player, stat, model)
+            acc.add(r)
+            research[mv] = research.get(mv, True) and bool(r["research_only"])
+            a, b, m = rank(r)
+            batch_opp.append((pos, repr((r["event_id"], r["player_id"], r["stat"])), a, b, m, blob))
+            if r.get("model") in SCOUT:
+                ln = round(float(r["line"]), 3)
+                batch_own.append((repr((r["event_id"], r["player_id"], r["stat"], r.get("model"))), ln))
+                batch_lines.append((repr((r["event_id"], r["player_id"], r["stat"], ln)),))
+            if len(batch_opp) >= _SPILL_BATCH:
+                _flush_reps(sp, batch_opp, batch_own, batch_lines)
+        _flush_reps(sp, batch_opp, batch_own, batch_lines)
+        models = {mv: dict(models[mv].result(), research_only=research[mv]) for mv in sorted(models)}
+        # rp-2 step 4 (one_per_prop): the best-ranked model per (game, player, stat), the first on a tie, in the order
+        # the props first appear among the representatives
+        props = _ordered(sp, "opp", "SELECT id FROM (SELECT pos AS id, MIN(pos) OVER (PARTITION BY k3) AS first, "
+                                    "ROW_NUMBER() OVER (PARTITION BY k3 ORDER BY a, b, m, pos) AS rn FROM opp) WHERE rn = 1 "
+                                    "ORDER BY first")
+        total, stats = Summary(unique_props=True), {}
+        cal, bnd, grd = Calibration(), Bands(), Grades(lg)
+        batch_rec, batch_cal = [], []
+        for pos, (blob,) in enumerate(props):
+            r = spill.unpack(blob)
+            total.add(r)
+            acc = stats.get(r["stat"])
+            if acc is None:
+                acc = stats[r["stat"]] = Summary(unique_props=True)
+            acc.add(r)
+            cal.add(r)
+            bnd.add(r)
+            grd.add(r)
+            batch_cal.append((pos, r.get("settled_at"), r.get("lean_result")))
+            if r["status"] == "settled" and r["lean"]:
+                batch_rec.append((pos, repr((r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3))),
+                                  r.get("forecast_at") or "", r.get("settled_at") or "", r["forecast_id"], blob))
+            if len(batch_cal) >= _SPILL_BATCH:
+                _flush_rows(sp, batch_rec, batch_cal)
+        _flush_rows(sp, batch_rec, batch_cal)
+        s = total.result()
+        stats = {st: stats[st].result() for st in sorted(stats)}
+        # recent(): newest Scout forecast per (game, player, stat, line) among the settled leans (first on a tie), newest
+        # settled first; recent() on those RECENT_N rows gives the list it gives on every row
+        rec_rows = [spill.unpack(b) for (b,) in _ordered(
+            sp, "rec", "SELECT id FROM (SELECT pos AS id, sa, fid, ROW_NUMBER() OVER (PARTITION BY k ORDER BY fa DESC, pos) "
+                       f"AS rn FROM rec) WHERE rn = 1 ORDER BY sa DESC, fid DESC, id LIMIT {int(RECENT_N)}")]
+        rec = recent(rec_rows, league=lg)
+        del rec_rows
+        calendar = daily_record(({"at": at, "status": st} for at, st in sp.execute("SELECT at, status FROM cal "
+                                                                                   "ORDER BY pos")),
+                                now, "Settlement date · US Central", "America/Chicago")
+        hh = HeadToHead()
+        _feed_head_to_head(sp, hh)
+        hh_rows = hh.result()
+    try:
+        names = snapshots.player_names(con, {r["player_id"] for r in rec if r.get("player_id")}, now)
+    except Exception:                                   # noqa: BLE001 - names are a nicety; ids stay
+        names = {}
+    for r in rec:
+        r["player"] = names.get(r["player_id"])
+    return {**s, "gate": {"settled_props": s["props"], "required": GATE, "validated": False,
+                          "under_review": s["props"] >= GATE, "text": gate_text(s["props"]),
+                          "rule": GATE_RULE},
+            "models": models, "stats": stats, "calibration": cal.result(), "bands": bnd.result(),
+            "grades": grd.result(),
+            "recent": rec, "model_gate": model_gate(lg),
+            "calendar": calendar,
+            "head_to_head": {"version": HH_VERSION, "method": HH_METHOD, "rows": hh_rows},
+            "raw_counts": raw, "counting": COUNTING}
+
+
+def _spill_rows(sp, rows):
+    """Every streamed row into the rep / hh tables (newest per key, the list build's tie rules); -> raw_counts."""
+    from . import spill
+    n = settled = leans = 0
+    games = set()
+    rep_b, hh_b = [], []
+    for r in rows:
+        n += 1
+        if r["status"] == "settled":
+            settled += 1
+            leans += 1 if r["lean"] else 0
+            games.add(r["event_id"])
+        blob = spill.pack(r)
+        k = _rep_key(r)
+        rep_b.append((repr(k), n, r.get("forecast_at") or "", r["forecast_id"], _source_rank(r), _closeness(r),
+                      repr(k[:4]), blob))
+        hk = _hh_key(r)
+        if hk is not None:
+            ev, pid, st, ln, mv = hk
+            hh_b.append((repr(hk), n, r.get("forecast_at") or "", repr((ev, pid, st, ln)),
+                         repr((ev, pid, st, r.get("model") or r.get("model_version") or "")), ln,
+                         1 if _is_market(mv) else 0, blob))
+        if len(rep_b) >= _SPILL_BATCH:
+            _flush_spill(sp, rep_b, hh_b)
+    _flush_spill(sp, rep_b, hh_b)
+    return {"forecasts": n, "settled": settled, "leans": leans, "games": len(games),
+            "per_game": round(settled / max(1, len(games)), 1)}
+
+
+def _flush_spill(sp, rep_b, hh_b):
+    # executemany applies the rows in order, so a later row of a key meets the earlier one as the list build does
+    if rep_b:
+        sp.executemany(_REP_UPSERT, rep_b)
+        rep_b.clear()
+    if hh_b:
+        sp.executemany(_HH_UPSERT, hh_b)
+        hh_b.clear()
+
+
+def _flush_reps(sp, opp, own, lines):
+    if opp:
+        sp.executemany("INSERT INTO opp VALUES (?,?,?,?,?,?)", opp)
+    if own:
+        sp.executemany("INSERT OR REPLACE INTO own VALUES (?,?)", own)   # a dict: the last one per key stays
+    if lines:
+        sp.executemany("INSERT OR IGNORE INTO lines VALUES (?)", lines)
+    opp.clear()
+    own.clear()
+    lines.clear()
+
+
+def _flush_rows(sp, rec, cal):
+    if rec:
+        sp.executemany("INSERT INTO rec VALUES (?,?,?,?,?,?)", rec)
+    if cal:
+        sp.executemany("INSERT INTO cal VALUES (?,?,?)", cal)
+    rec.clear()
+    cal.clear()
+
+
+def _feed_head_to_head(sp, acc):
+    """head_to_head(head_to_head_rows(all rows, reps)) from the spill: the newest row per head_to_head key whose line is
+    a Scout model's own representative line (a market at that line, or that Scout model itself), grouped per prop key
+    in the order the keys first arrived - head_to_head's own grouping order."""
+    from . import spill
+    q = ("SELECT id FROM (SELECT h.rowid AS id, h.k_seq, MIN(h.k_seq) OVER (PARTITION BY h.prefix) AS first FROM hh h "
+         "WHERE h.prefix IN (SELECT k FROM lines) AND (h.mkt = 1 OR EXISTS (SELECT 1 FROM own o WHERE o.k4 = h.k4m "
+         "AND o.line = h.ln))) ORDER BY first, k_seq")
+    cur_key, ms, ev, st = None, {}, None, None
+    for prefix, blob in _ordered(sp, "hh", q, "t.prefix, t.blob"):
+        if prefix != cur_key:
+            if ms:
+                acc.add(ev, st, ms)
+            cur_key, ms = prefix, {}
+        r = spill.unpack(blob)
+        ev, st = r["event_id"], r["stat"]
+        ms[r.get("model") or r.get("model_version")] = r
+    if ms:
+        acc.add(ev, st, ms)
+
+
+def _ordered(sp, table, ids_sql, cols="t.blob"):
+    """Rows of `table` in the order of ids_sql (a SELECT of rowids): the ids go to the ord table in that order, then a
+    rowid walk of ord (CROSS JOIN: ord stays the outer loop, so no second sort) fetches each row."""
+    sp.execute("DELETE FROM ord")
+    sp.execute(f"INSERT INTO ord (id) {ids_sql}")
+    return sp.execute(f"SELECT {cols} FROM ord o CROSS JOIN {table} t ON t.rowid = o.id ORDER BY o.pos")
 
 
 COUNTING = ("one pick per game x player x stat (rp-2): a pick'em app line (any type) before a sportsbook line, then "
@@ -523,6 +972,25 @@ def _is_market(mv):
     return mv == "mc-1" or mv.startswith("sharp") or mv.startswith("mkt-")
 
 
+def _hh_key(r):
+    """head_to_head's key (game, player, stat, line, model) - None for a row it leaves out (not settled / void, or no
+    model)."""
+    model = r.get("model") or r.get("model_version")
+    if r.get("status") not in ("settled", "void") or not model:
+        return None
+    return (r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3), model)
+
+
+def _hh_newest_add(newest, r):
+    """head_to_head's newest forecast per (game, player, stat, line, model): settled / void rows of a model only; on a
+    forecast_at tie the first row stays."""
+    k = _hh_key(r)
+    if k is None:
+        return
+    if k not in newest or (r.get("forecast_at") or "") > (newest[k].get("forecast_at") or ""):
+        newest[k] = r
+
+
 def binary_scores(p_over, p_under, outcome):
     """-> (q, brier, log loss, favoured side or None) for a settled Over / Under outcome, or None."""
     if outcome not in ("over", "under") or p_over is None or p_under is None or p_over + p_under <= 0:
@@ -540,18 +1008,26 @@ def head_to_head(rows):
     -> [{"scout", "market", "stat", "pairs", "pushes", "games", "scout_brier", ..., "diff": {...}}] (stat "all" first)."""
     newest = {}
     for r in rows:
-        model = r.get("model") or r.get("model_version")
-        if r.get("status") not in ("settled", "void") or not model:
-            continue
-        k = (r["event_id"], r["player_id"], r["stat"], round(float(r["line"]), 3), model)
-        if k not in newest or (r.get("forecast_at") or "") > (newest[k].get("forecast_at") or ""):
-            newest[k] = r
+        _hh_newest_add(newest, r)
     by_key = defaultdict(dict)
     for (ev, pid, st, ln, mv), r in newest.items():
         by_key[(ev, pid, st, ln)][mv] = r
-    pairs = defaultdict(list)
-    pushes = defaultdict(int)
+    acc = HeadToHead()
     for (ev, pid, st, ln), ms in by_key.items():
+        acc.add(ev, st, ms)
+    return acc.result()
+
+
+class HeadToHead:
+    """head_to_head's pairs and scores fed one prop key at a time (2026-11-08 review: neither the rows nor the pair
+    dicts of the season are held). add(game, stat, {model: newest row}) in head_to_head's key order; per (Scout,
+    market, stat) the scores in pair order, the per-pair differences and their per-game lists for the interval."""
+
+    def __init__(self):
+        self.pairs = {}
+        self.pushes = defaultdict(int)
+
+    def add(self, ev, st, ms):
         for s in SCOUT:
             if s not in ms:
                 continue
@@ -563,41 +1039,44 @@ def head_to_head(rows):
                     continue
                 if a["outcome"] == "push":
                     for g in (st, "all"):
-                        pushes[(s, mk, g)] += 1
+                        self.pushes[(s, mk, g)] += 1
                     continue
                 sa = binary_scores(a["p_over"], a["p_under"], a["outcome"])
                 sb = binary_scores(b["p_over"], b["p_under"], b["outcome"])
                 if sa is None or sb is None:
                     continue
-                item = {"event_id": ev, "forecast_id": a.get("forecast_id"), "outcome": a["outcome"],
-                        "sb": sa[1], "mb": sb[1], "sl": sa[2], "ml": sb[2],
-                        "sh": None if sa[3] is None else (1.0 if sa[3] == a["outcome"] else 0.0),
-                        "mh": None if sb[3] is None else (1.0 if sb[3] == a["outcome"] else 0.0)}
+                sh = None if sa[3] is None else (1.0 if sa[3] == a["outcome"] else 0.0)
+                mh = None if sb[3] is None else (1.0 if sb[3] == a["outcome"] else 0.0)
+                vals = (sa[1], sb[1], sa[2], sb[2], sh, mh)
+                diffs = (sa[1] - sb[1], sa[2] - sb[2], None if sh is None or mh is None else sh - mh)
+                gk = ev or a.get("forecast_id")
                 for g in (st, "all"):
-                    pairs[(s, mk, g)].append(item)
+                    acc = self.pairs.get((s, mk, g))
+                    if acc is None:
+                        acc = self.pairs[(s, mk, g)] = [0, set(), [[] for _ in vals], [_MeanCI() for _ in diffs]]
+                    acc[0] += 1
+                    acc[1].add(ev)
+                    for lst, v in zip(acc[2], vals):
+                        if v is not None:
+                            lst.append(v)
+                    for m, d in zip(acc[3], diffs):
+                        m.add(gk, d)
 
-    def mean(key):
-        def f(xs):
-            v = [x[key] for x in xs if x[key] is not None]
+    def result(self):
+        def mean(v):
             return sum(v) / len(v) if v else None
-        return f
-
-    def diff(a, b):
-        def f(xs):
-            v = [x[a] - x[b] for x in xs if x[a] is not None and x[b] is not None]
-            return sum(v) / len(v) if v else None
-        return f
-    out = []
-    for (s, mk, g), xs in sorted(pairs.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2] != "all", kv[0][2])):
-        out.append({"scout": s, "market": mk, "stat": g, "pairs": len(xs), "pushes": pushes.get((s, mk, g), 0),
-                    "games": len({x["event_id"] for x in xs}),
-                    "scout_brier": _r(mean("sb")(xs)), "market_brier": _r(mean("mb")(xs)),
-                    "scout_log_loss": _r(mean("sl")(xs)), "market_log_loss": _r(mean("ml")(xs)),
-                    "scout_hit_rate": _r(mean("sh")(xs)), "market_hit_rate": _r(mean("mh")(xs)),
-                    "diff": {"brier": _r(diff("sb", "mb")(xs)), "brier_ci95": cluster_ci(xs, diff("sb", "mb")),
-                             "log_loss": _r(diff("sl", "ml")(xs)), "log_loss_ci95": cluster_ci(xs, diff("sl", "ml")),
-                             "hit_rate": _r(diff("sh", "mh")(xs)), "hit_rate_ci95": cluster_ci(xs, diff("sh", "mh"))}})
-    return out
+        out = []
+        for (s, mk, g), (n, games, (sb, mb, sl, ml, sh, mh), (db, dl, dh)) in sorted(
+                self.pairs.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2] != "all", kv[0][2])):
+            out.append({"scout": s, "market": mk, "stat": g, "pairs": n, "pushes": self.pushes.get((s, mk, g), 0),
+                        "games": len(games),
+                        "scout_brier": _r(mean(sb)), "market_brier": _r(mean(mb)),
+                        "scout_log_loss": _r(mean(sl)), "market_log_loss": _r(mean(ml)),
+                        "scout_hit_rate": _r(mean(sh)), "market_hit_rate": _r(mean(mh)),
+                        "diff": {"brier": _r(db.mean()), "brier_ci95": db.ci(),
+                                 "log_loss": _r(dl.mean()), "log_loss_ci95": dl.ci(),
+                                 "hit_rate": _r(dh.mean()), "hit_rate_ci95": dh.ci()}})
+        return out
 
 
 HH_METHOD = ("Scout (sm-1 / mi-1) and each market estimate on the SAME props: same game, player, stat and line, so the "

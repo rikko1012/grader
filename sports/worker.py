@@ -691,7 +691,41 @@ def cmd_settle(a, con):
             _print(out)
             return out
     stage_s.append(["settle", round(time.time() - t0, 1)])
-    from . import snapshots                             # Results ledger right after settling (never breaks settlement)
+    if getattr(a, "no_post", False):
+        # 2026-11-08: the results ledger + model scorecard (~1,000 s and growing) ran in this process after settling,
+        # so the job hit its 1,500 s kill every run (5 timeouts, 4 h backoff, settlement every ~4.5 h). They run as
+        # the scheduler's "settle-post" job now (started right after this one); settlement itself is unchanged.
+        _write_stages("settle_stages.json", stage_s)
+        _print(out)
+        return out
+    post = _post_settle(leagues, con, stage_s, t0, "settle_stages.json")
+    out.update(post)
+    _print(out)
+    return out
+
+
+def _write_stages(name, stage_s, finished=True):
+    """admin ops: seconds since start at the end of each stage (settle_stages.json / settle_post_stages.json)."""
+    try:
+        (config.DATA_DIR / name).write_text(json.dumps({"at": now_utc(), "stage_s": stage_s, "finished": finished}))
+    except OSError:
+        pass
+
+
+def _post_settle(leagues, con, stage_s, t0, stages_name):
+    """The bookkeeping after settling: the model + shadow scorecards, then the results ledger per league. Never breaks
+    settlement. The stages file is written after each stage, so a killed run still says how far it got.
+    Scorecards FIRST (2026-11-08 review): they resume per event (learning.on_settled / shadow.settle marks), while the
+    ledger is rebuilt in full each run - a ledger that is killed (cap / timeout) can no longer starve the scorecards."""
+    out = {}
+    try:                                                # model scorecard + diagnostic queue (sports/model/learning.py)
+        from .model import learning                     # never breaks settlement
+        out["model_learning"] = learning.on_settled(con)
+    except Exception as e:                              # noqa: BLE001
+        out["model_learning"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    stage_s.append(["model_learning", round(time.time() - t0, 1)])
+    _write_stages(stages_name, stage_s, finished=False)
+    from . import snapshots                             # Results ledger (never breaks settlement)
     out["results"] = {}
     for lg in leagues:
         if lg not in snapshots.LEAGUES:
@@ -701,16 +735,17 @@ def cmd_settle(a, con):
         except Exception as e:                          # noqa: BLE001
             out["results"][lg] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     stage_s.append(["results", round(time.time() - t0, 1)])
-    try:                                                # model scorecard + diagnostic queue (sports/model/learning.py)
-        from .model import learning                     # never breaks settlement
-        out["model_learning"] = learning.on_settled(con)
-    except Exception as e:                              # noqa: BLE001
-        out["model_learning"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
-    stage_s.append(["model_learning", round(time.time() - t0, 1)])
-    try:                                                # admin ops: seconds since start, as the board build's stages
-        (config.DATA_DIR / "settle_stages.json").write_text(json.dumps({"at": now_utc(), "stage_s": stage_s}))
-    except OSError:
-        pass
+    _write_stages(stages_name, stage_s)
+    return out
+
+
+def cmd_settle_post(a, con):
+    """python -m sports.worker settle-post nba nfl: the results ledger and the model / shadow scorecards from the
+    settlements already stored (the scheduler starts it after each settle run). Writes only results.json,
+    learning.db and shadow.db; never a settlement."""
+    flags.require("SPORTS_INGEST")
+    leagues = a.leagues or ["nba", "nfl"]
+    out = _post_settle(leagues, con, [], time.time(), "settle_post_stages.json")
     _print(out)
     return out
 
@@ -796,6 +831,10 @@ def main(argv=None):
     s.add_argument("leagues", nargs="*")
     s.add_argument("--since", help="backfill: settle every stored game started since this date (YYYY-MM-DD)")
     s.add_argument("--bucket-min", type=int, default=60, help="idempotency bucket of the scheduled run")
+    s.add_argument("--no-post", action="store_true",
+                   help="settle only: the results ledger and scorecards run as `settle-post` (scheduler job)")
+    s = sub.add_parser("settle-post")
+    s.add_argument("leagues", nargs="*")
     s = sub.add_parser("forecast")
     s.add_argument("leagues", nargs="*")
     s = sub.add_parser("coverage")
@@ -809,7 +848,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     if a.cmd == "train":
         flags.require("SPORTS_TRAIN")                   # a refused command sets no memory cap on its process
-    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "settle", "train") else None
+    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "settle", "settle-post", "train") else None
     if a.cmd == "train":
         from .model import jobs as model_jobs           # model agent's registered training jobs (sports/model/jobs.py)
         return model_jobs.main(a.rest)
@@ -820,6 +859,7 @@ def main(argv=None):
         if cap:
             print(f"memory cap: {cap}", file=sys.stderr)
         res = {"ingest": cmd_ingest, "loop": cmd_loop, "books": cmd_books, "settle": cmd_settle,
+               "settle-post": cmd_settle_post,
                "coverage": cmd_coverage, "verify": cmd_verify, "forecast": cmd_forecast, "jobs": lambda a, con: _print(Jobs(con).list())}[a.cmd](a, con)
         if a.cmd in ("ingest", "loop", "settle") and _still_running(res):
             # bug sweep #12 review: a timed-out job's thread is still writing on this connection. End the process now

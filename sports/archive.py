@@ -338,6 +338,23 @@ def _heads(head):
 
 def row_by_record_id(con, record_id):
     """The archived row (records_all columns) for one record id, through the identity index - never a scan."""
+    rid = _archived_rid(con, record_id)
+    if rid is None:
+        return None
+    return con.execute("SELECT * FROM records_all WHERE rid = ?", (rid,)).fetchone()
+
+
+def identity_by_record_id(con, record_id):
+    """(kind, source, source_key) of one ARCHIVED record id - the same index lookups as row_by_record_id, then the
+    metadata view (records_meta_all), so no archive file is read or decoded (results / ledger links of archived offer
+    revisions, 2026-11-08: one file decode per revision). None when the id is not archived."""
+    rid = _archived_rid(con, record_id)
+    if rid is None:
+        return None
+    return con.execute("SELECT kind, source, source_key FROM records_meta_all WHERE rid = ?", (rid,)).fetchone()
+
+
+def _archived_rid(con, record_id):
     if not record_id or not _has_tables(con):
         return None
     rid = None
@@ -372,9 +389,7 @@ def row_by_record_id(con, record_id):
     if rid is None and _has2(con):
         row = con.execute("SELECT rid FROM arch_text WHERE record_id = ?", (record_id,)).fetchone()
         rid = row[0] if row else None
-    if rid is None:
-        return None
-    return con.execute("SELECT * FROM records_all WHERE rid = ?", (rid,)).fetchone()
+    return rid
 
 
 def identity_tail(con, kind, source, source_key):

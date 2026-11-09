@@ -359,11 +359,12 @@ def board_builds():
     return out
 
 
-def settle_stages():
-    """The last finished settle run: seconds since its start at the end of each stage (admin ops only)."""
+def settle_stages(name="settle_stages.json"):
+    """The last finished settle run: seconds since its start at the end of each stage (admin ops only).
+    settle_post_stages.json: the settle-post job (results ledger + scorecards), written after each stage."""
     from . import config
     try:
-        return json.loads((config.DATA_DIR / "settle_stages.json").read_text(encoding="utf-8"))
+        return json.loads((config.DATA_DIR / name).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
@@ -388,7 +389,8 @@ def ops():
             "scheduler_alive": bool(_SCHED["thread"] and _SCHED["thread"].is_alive()) if _SCHED["thread"] else None,
             "prebuilt": prebuilt_state(),
             "board_builds": board_builds(),
-            "settle_stages": settle_stages(), "sheets_stages": sheets_stages(),
+            "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
+            "sheets_stages": sheets_stages(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 

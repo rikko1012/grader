@@ -347,7 +347,11 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                 pmf_i, _ = _tw1_layer(tw, mk, pmf_i, lo)
                 mu_i = float(dists.mean_of(pmf_i[None, :], ks)[0])
             pmf_of[gk_i] = (pmf_i, mu_i, bool(el[i]))
-        for rid, o in store.iter_offers(scon, league=league, stat=mk, limit=500000):
+        # list(): read the offers BEFORE writing (2026-11-08). The streaming cursor held one WAL read snapshot across
+        # the store.put calls below; once the books job (beside_exclusive since 2026-11-06) committed, that stale
+        # snapshot could not become a write transaction -> "database is locked" (SQLITE_BUSY_SNAPSHOT, no busy wait)
+        # and model-forward exited 1. Same query, same rows, same order: forecasts unchanged.
+        for rid, o in list(store.iter_offers(scon, league=league, stat=mk, limit=500000)):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
             ok, _ = capabilities.gate(o)

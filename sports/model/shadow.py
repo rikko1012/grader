@@ -176,6 +176,8 @@ def db(path=None):
     if "superseded" not in {r[1] for r in con.execute("PRAGMA table_info(shadow_scorecard)")}:
         con.execute("ALTER TABLE shadow_scorecard ADD COLUMN superseded INTEGER NOT NULL DEFAULT 0")
     con.execute("CREATE TABLE IF NOT EXISTS shadow_meta (key TEXT PRIMARY KEY, value TEXT)")
+    # per-event progress of settle() (2026-11-08): what the event's scoring read when it last ran in full
+    con.execute("CREATE TABLE IF NOT EXISTS shadow_events (event_id TEXT PRIMARY KEY, sig TEXT)")
     con.commit()
     return con
 
@@ -511,7 +513,17 @@ def settle(scon, path=None, now=None):
             evs.add(ev)
         newest = max(newest, kn or newest)
     n = 0
+    from .learning import event_sig
+    done = dict(con.execute("SELECT event_id, sig FROM shadow_events"))
     for ev in sorted(evs):
+        # skip an event whose settlements and shadow forecasts are exactly those of its last full pass (a no-op: every
+        # forecast it can score already has its row); the mark commits with the event's rows, so a killed run (settle
+        # 1,500 s timeouts, 2026-11-08 - the closing 'settled_known_at' mark was never written) keeps its progress
+        f_n, f_top, f_tot = con.execute("SELECT COUNT(*), MAX(rowid), SUM(rowid) FROM shadow_forecasts "
+                                        "WHERE event_id = ?", (ev,)).fetchone()
+        sig = f"{event_sig(scon, ev)}|{f_n}:{f_top}:{f_tot}"
+        if done.get(ev) == sig:
+            continue
         by_offer = {}
         for r in scon.execute("SELECT source, source_key, payload FROM records WHERE kind='settlement' AND event_id=? "
                               "ORDER BY source_key, revision", (ev,)):
@@ -542,6 +554,7 @@ def settle(scon, path=None, now=None):
                              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
                              (sid, cur.settlement_id, mv or VERSION, lg, st, ev, line, side, p_side, p_push, status,
                               cur.source_value, cur.settled_at)).rowcount
+        con.execute("INSERT OR REPLACE INTO shadow_events (event_id, sig) VALUES (?, ?)", (ev, sig))
         con.commit()
     con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('settled_known_at', ?)", (newest,))
     con.commit()
