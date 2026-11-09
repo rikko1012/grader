@@ -1,0 +1,69 @@
+{
+ "league": "nba",
+ "built_at": "2026-11-09T17:37:03Z",
+ "markets": 420,
+ "graded": 539,
+ "by_grade": {
+  "A": 167,
+  "B": 162,
+  "C": 34,
+  "Lean": 176
+ },
+ "by_platform": {
+  "underdog": 131,
+  "polymarket": 129,
+  "fanduel": 111,
+  "betrivers": 92,
+  "prizepicks": 76
+ },
+ "over": 159,
+ "under": 380,
+ "over_share": 0.295,
+ "top": [
+  {
+   "p": 0.84,
+   "player": "Khaman Maluach",
+   "stat": "threes",
+   "book": "underdog",
+   "line": 0.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.823,
+   "player": "Scottie Barnes",
+   "stat": "threes",
+   "book": "underdog",
+   "line": 1.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.785,
+   "player": "Amen Thompson",
+   "stat": "threes",
+   "book": "underdog",
+   "line": 0.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.777,
+   "player": "AJ Dybantsa",
+   "stat": "threes",
+   "book": "underdog",
+   "line": 1.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.771,
+   "player": "Coby White",
+   "stat": "threes",
+   "book": "underdog",
+   "line": 2.5,
+   "side": "under",
+   "grade": "A"
+  }
+ ]
+}
