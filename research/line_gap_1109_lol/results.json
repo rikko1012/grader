@@ -1,0 +1,1951 @@
+{
+ "stats": {
+  "a15_rows": 2107,
+  "a15_status": {
+   "graded": 2059,
+   "push": 31,
+   "dnp": 17
+  },
+  "dupes_removed": 0,
+  "quote_events": 8384,
+  "quote_events_mapped_by_name": 121,
+  "quote_events_unmapped": {
+   "no exact name match": 743,
+   "not modelled stat/scope": 1750
+  },
+  "rows": 2090
+ },
+ "R-a1": {
+  "kind": "side",
+  "walk_forward_test": {
+   "universe_rows": 404,
+   "series": 32,
+   "changed": 126,
+   "base": {
+    "n": 384,
+    "hit": 51.3,
+    "over_n": 153,
+    "over_hit": 50.3,
+    "under_n": 231,
+    "under_hit": 51.9,
+    "over_share": 39.8,
+    "W": 197,
+    "L": 187
+   },
+   "rule": {
+    "n": 384,
+    "hit": 53.6,
+    "over_n": 198,
+    "over_hit": 52.5,
+    "under_n": 186,
+    "under_hit": 54.8,
+    "over_share": 51.6,
+    "W": 206,
+    "L": 178
+   },
+   "diff_ci": [
+    -3.5,
+    8.1
+   ],
+   "rule_ci": [
+    49.2,
+    57.9
+   ],
+   "base_ci": [
+    43.5,
+    58.6
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "gate_log": [
+   [
+    "2026-10-24",
+    true,
+    "train hit 0.528 vs 0.481"
+   ],
+   [
+    "2026-10-25",
+    true,
+    "train hit 0.517 vs 0.511"
+   ],
+   [
+    "2026-10-26",
+    false,
+    "train hit 0.529 vs 0.529"
+   ],
+   [
+    "2026-10-28",
+    false,
+    "train hit 0.541 vs 0.556"
+   ],
+   [
+    "2026-10-29",
+    true,
+    "train hit 0.549 vs 0.543"
+   ],
+   [
+    "2026-10-30",
+    true,
+    "train hit 0.545 vs 0.533"
+   ],
+   [
+    "2026-10-31",
+    true,
+    "train hit 0.549 vs 0.524"
+   ],
+   [
+    "2026-11-03",
+    true,
+    "train hit 0.548 vs 0.527"
+   ],
+   [
+    "2026-11-04",
+    true,
+    "train hit 0.551 vs 0.537"
+   ],
+   [
+    "2026-11-05",
+    true,
+    "train hit 0.547 vs 0.528"
+   ],
+   [
+    "2026-11-06",
+    true,
+    "train hit 0.547 vs 0.524"
+   ],
+   [
+    "2026-11-07",
+    true,
+    "train hit 0.544 vs 0.515"
+   ],
+   [
+    "2026-11-08",
+    true,
+    "train hit 0.542 vs 0.511"
+   ]
+  ],
+  "fixed_test": {
+   "universe_rows": 404,
+   "series": 32,
+   "changed": 156,
+   "base": {
+    "n": 384,
+    "hit": 51.3,
+    "over_n": 153,
+    "over_hit": 50.3,
+    "under_n": 231,
+    "under_hit": 51.9,
+    "over_share": 39.8,
+    "W": 197,
+    "L": 187
+   },
+   "rule": {
+    "n": 384,
+    "hit": 54.2,
+    "over_n": 200,
+    "over_hit": 53.0,
+    "under_n": 184,
+    "under_hit": 55.4,
+    "over_share": 52.1,
+    "W": 208,
+    "L": 176
+   },
+   "diff_ci": [
+    -4.1,
+    10.0
+   ],
+   "rule_ci": [
+    50.9,
+    57.3
+   ],
+   "base_ci": [
+    44.0,
+    58.6
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "fixed_all_days": {
+   "universe_rows": 515,
+   "series": 42,
+   "changed": 197,
+   "base": {
+    "n": 490,
+    "hit": 50.6,
+    "over_n": 185,
+    "over_hit": 46.5,
+    "under_n": 305,
+    "under_hit": 53.1,
+    "over_share": 37.8,
+    "W": 248,
+    "L": 242
+   },
+   "rule": {
+    "n": 490,
+    "hit": 53.9,
+    "over_n": 255,
+    "over_hit": 50.6,
+    "under_n": 235,
+    "under_hit": 57.4,
+    "over_share": 52.0,
+    "W": 264,
+    "L": 226
+   },
+   "diff_ci": [
+    -3.5,
+    9.7
+   ],
+   "rule_ci": [
+    51.0,
+    56.5
+   ],
+   "base_ci": [
+    44.3,
+    57.1
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  }
+ },
+ "R-a2": {
+  "kind": "side",
+  "walk_forward_test": {
+   "universe_rows": 103,
+   "series": 30,
+   "changed": 5,
+   "base": {
+    "n": 103,
+    "hit": 49.5,
+    "over_n": 42,
+    "over_hit": 38.1,
+    "under_n": 61,
+    "under_hit": 57.4,
+    "over_share": 40.8,
+    "W": 51,
+    "L": 52
+   },
+   "rule": {
+    "n": 103,
+    "hit": 48.5,
+    "over_n": 45,
+    "over_hit": 37.8,
+    "under_n": 58,
+    "under_hit": 56.9,
+    "over_share": 43.7,
+    "W": 50,
+    "L": 53
+   },
+   "diff_ci": [
+    -3.1,
+    0.0
+   ],
+   "rule_ci": [
+    38.6,
+    59.2
+   ],
+   "base_ci": [
+    39.3,
+    60.0
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": false,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "gate_log": [
+   [
+    "2026-10-24",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-10-25",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-10-26",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-10-28",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-10-29",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-10-30",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-10-31",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-11-03",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-11-04",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-11-05",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-11-06",
+    true,
+    "train hit 0.595 vs 0.474"
+   ],
+   [
+    "2026-11-07",
+    true,
+    "train hit 0.574 vs 0.459"
+   ],
+   [
+    "2026-11-08",
+    true,
+    "train hit 0.570 vs 0.461"
+   ]
+  ],
+  "fixed_test": {
+   "universe_rows": 103,
+   "series": 30,
+   "changed": 27,
+   "base": {
+    "n": 103,
+    "hit": 49.5,
+    "over_n": 42,
+    "over_hit": 38.1,
+    "under_n": 61,
+    "under_hit": 57.4,
+    "over_share": 40.8,
+    "W": 51,
+    "L": 52
+   },
+   "rule": {
+    "n": 103,
+    "hit": 56.3,
+    "over_n": 51,
+    "over_hit": 47.1,
+    "under_n": 52,
+    "under_hit": 65.4,
+    "over_share": 49.5,
+    "W": 58,
+    "L": 45
+   },
+   "diff_ci": [
+    -2.4,
+    16.0
+   ],
+   "rule_ci": [
+    46.7,
+    65.9
+   ],
+   "base_ci": [
+    39.3,
+    59.5
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "fixed_all_days": {
+   "universe_rows": 133,
+   "series": 39,
+   "changed": 35,
+   "base": {
+    "n": 133,
+    "hit": 46.6,
+    "over_n": 54,
+    "over_hit": 35.2,
+    "under_n": 79,
+    "under_hit": 54.4,
+    "over_share": 40.6,
+    "W": 62,
+    "L": 71
+   },
+   "rule": {
+    "n": 133,
+    "hit": 56.4,
+    "over_n": 65,
+    "over_hit": 47.7,
+    "under_n": 68,
+    "under_hit": 64.7,
+    "over_share": 48.9,
+    "W": 75,
+    "L": 58
+   },
+   "diff_ci": [
+    2.1,
+    18.0
+   ],
+   "rule_ci": [
+    48.9,
+    64.5
+   ],
+   "base_ci": [
+    38.1,
+    55.0
+   ],
+   "checks": {
+    "ci_above_0": true,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": true
+  }
+ },
+ "R-a3": {
+  "kind": "side",
+  "walk_forward_test": {
+   "universe_rows": 155,
+   "series": 28,
+   "changed": 59,
+   "base": {
+    "n": 155,
+    "hit": 49.0,
+    "over_n": 49,
+    "over_hit": 46.9,
+    "under_n": 106,
+    "under_hit": 50.0,
+    "over_share": 31.6,
+    "W": 76,
+    "L": 79
+   },
+   "rule": {
+    "n": 155,
+    "hit": 54.8,
+    "over_n": 74,
+    "over_hit": 54.1,
+    "under_n": 81,
+    "under_hit": 55.6,
+    "over_share": 47.7,
+    "W": 85,
+    "L": 70
+   },
+   "diff_ci": [
+    -5.4,
+    17.1
+   ],
+   "rule_ci": [
+    45.4,
+    64.9
+   ],
+   "base_ci": [
+    36.8,
+    62.0
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "gate_log": [
+   [
+    "2026-10-24",
+    false,
+    "fewer than 30 changes in training"
+   ],
+   [
+    "2026-10-25",
+    true,
+    "train hit 0.616 vs 0.523"
+   ],
+   [
+    "2026-10-26",
+    true,
+    "train hit 0.602 vs 0.500"
+   ],
+   [
+    "2026-10-28",
+    true,
+    "train hit 0.617 vs 0.579"
+   ],
+   [
+    "2026-10-29",
+    true,
+    "train hit 0.620 vs 0.562"
+   ],
+   [
+    "2026-10-30",
+    true,
+    "train hit 0.613 vs 0.527"
+   ],
+   [
+    "2026-10-31",
+    true,
+    "train hit 0.623 vs 0.522"
+   ],
+   [
+    "2026-11-03",
+    true,
+    "train hit 0.623 vs 0.521"
+   ],
+   [
+    "2026-11-04",
+    true,
+    "train hit 0.623 vs 0.521"
+   ],
+   [
+    "2026-11-05",
+    true,
+    "train hit 0.624 vs 0.520"
+   ],
+   [
+    "2026-11-06",
+    true,
+    "train hit 0.606 vs 0.522"
+   ],
+   [
+    "2026-11-07",
+    true,
+    "train hit 0.602 vs 0.522"
+   ],
+   [
+    "2026-11-08",
+    true,
+    "train hit 0.601 vs 0.513"
+   ]
+  ],
+  "fixed_test": {
+   "universe_rows": 155,
+   "series": 28,
+   "changed": 73,
+   "base": {
+    "n": 155,
+    "hit": 49.0,
+    "over_n": 49,
+    "over_hit": 46.9,
+    "under_n": 106,
+    "under_hit": 50.0,
+    "over_share": 31.6,
+    "W": 76,
+    "L": 79
+   },
+   "rule": {
+    "n": 155,
+    "hit": 60.0,
+    "over_n": 78,
+    "over_hit": 59.0,
+    "under_n": 77,
+    "under_hit": 61.0,
+    "over_share": 50.3,
+    "W": 93,
+    "L": 62
+   },
+   "diff_ci": [
+    -1.2,
+    22.1
+   ],
+   "rule_ci": [
+    50.8,
+    69.2
+   ],
+   "base_ci": [
+    37.3,
+    61.6
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "fixed_all_days": {
+   "universe_rows": 197,
+   "series": 36,
+   "changed": 99,
+   "base": {
+    "n": 197,
+    "hit": 50.8,
+    "over_n": 70,
+    "over_hit": 45.7,
+    "under_n": 127,
+    "under_hit": 53.5,
+    "over_share": 35.5,
+    "W": 100,
+    "L": 97
+   },
+   "rule": {
+    "n": 197,
+    "hit": 59.4,
+    "over_n": 107,
+    "over_hit": 55.1,
+    "under_n": 90,
+    "under_hit": 64.4,
+    "over_share": 54.3,
+    "W": 117,
+    "L": 80
+   },
+   "diff_ci": [
+    -3.6,
+    20.6
+   ],
+   "rule_ci": [
+    51.1,
+    67.5
+   ],
+   "base_ci": [
+    40.0,
+    62.5
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  }
+ },
+ "R-b1": {
+  "kind": "letter",
+  "walk_forward_test": {
+   "universe_rows": 404,
+   "series": 32,
+   "changed": 0,
+   "base": {
+    "n": 247,
+    "hit": 53.4,
+    "over_n": 84,
+    "over_hit": 46.4,
+    "under_n": 163,
+    "under_hit": 57.1,
+    "over_share": 34.0,
+    "W": 132,
+    "L": 115
+   },
+   "rule": {
+    "n": 247,
+    "hit": 53.4,
+    "over_n": 84,
+    "over_hit": 46.4,
+    "under_n": 163,
+    "under_hit": 57.1,
+    "over_share": 34.0,
+    "W": 132,
+    "L": 115
+   },
+   "diff_ci": [
+    0.0,
+    0.0
+   ],
+   "rule_ci": [
+    43.2,
+    63.7
+   ],
+   "base_ci": [
+    43.2,
+    63.7
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "gate_log": [
+   [
+    "2026-10-24",
+    false,
+    "train hit 0.500 vs 0.521"
+   ],
+   [
+    "2026-10-25",
+    false,
+    "train hit 0.496 vs 0.513"
+   ],
+   [
+    "2026-10-26",
+    false,
+    "train hit 0.533 vs 0.552"
+   ],
+   [
+    "2026-10-28",
+    false,
+    "train hit 0.564 vs 0.578"
+   ],
+   [
+    "2026-10-29",
+    false,
+    "train hit 0.557 vs 0.569"
+   ],
+   [
+    "2026-10-30",
+    false,
+    "train hit 0.548 vs 0.565"
+   ],
+   [
+    "2026-10-31",
+    false,
+    "train hit 0.533 vs 0.544"
+   ],
+   [
+    "2026-11-03",
+    false,
+    "train hit 0.542 vs 0.562"
+   ],
+   [
+    "2026-11-04",
+    false,
+    "train hit 0.551 vs 0.568"
+   ],
+   [
+    "2026-11-05",
+    false,
+    "train hit 0.540 vs 0.553"
+   ],
+   [
+    "2026-11-06",
+    false,
+    "train hit 0.538 vs 0.551"
+   ],
+   [
+    "2026-11-07",
+    false,
+    "train hit 0.526 vs 0.536"
+   ],
+   [
+    "2026-11-08",
+    false,
+    "train hit 0.523 vs 0.532"
+   ]
+  ],
+  "fixed_test": {
+   "universe_rows": 404,
+   "series": 32,
+   "changed": 319,
+   "base": {
+    "n": 247,
+    "hit": 53.4,
+    "over_n": 84,
+    "over_hit": 46.4,
+    "under_n": 163,
+    "under_hit": 57.1,
+    "over_share": 34.0,
+    "W": 132,
+    "L": 115
+   },
+   "rule": {
+    "n": 297,
+    "hit": 52.5,
+    "over_n": 116,
+    "over_hit": 49.1,
+    "under_n": 181,
+    "under_hit": 54.7,
+    "over_share": 39.1,
+    "W": 156,
+    "L": 141
+   },
+   "diff_ci": [
+    -4.4,
+    2.3
+   ],
+   "rule_ci": [
+    44.3,
+    60.6
+   ],
+   "base_ci": [
+    43.6,
+    63.7
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": false,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "fixed_all_days": {
+   "universe_rows": 515,
+   "series": 42,
+   "changed": 413,
+   "base": {
+    "n": 318,
+    "hit": 53.1,
+    "over_n": 100,
+    "over_hit": 45.0,
+    "under_n": 218,
+    "under_hit": 56.9,
+    "over_share": 31.4,
+    "W": 169,
+    "L": 149
+   },
+   "rule": {
+    "n": 387,
+    "hit": 51.9,
+    "over_n": 142,
+    "over_hit": 45.8,
+    "under_n": 245,
+    "under_hit": 55.5,
+    "over_share": 36.7,
+    "W": 201,
+    "L": 186
+   },
+   "diff_ci": [
+    -4.5,
+    1.6
+   ],
+   "rule_ci": [
+    45.0,
+    59.5
+   ],
+   "base_ci": [
+    44.5,
+    62.5
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": false,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  }
+ },
+ "R-c1": {
+  "kind": "side",
+  "walk_forward_test": {
+   "universe_rows": 349,
+   "series": 27,
+   "changed": 204,
+   "base": {
+    "n": 337,
+    "hit": 51.6,
+    "over_n": 103,
+    "over_hit": 51.5,
+    "under_n": 234,
+    "under_hit": 51.7,
+    "over_share": 30.6,
+    "W": 174,
+    "L": 163
+   },
+   "rule": {
+    "n": 140,
+    "hit": 56.4,
+    "over_n": 44,
+    "over_hit": 59.1,
+    "under_n": 96,
+    "under_hit": 55.2,
+    "over_share": 31.4,
+    "W": 79,
+    "L": 61
+   },
+   "diff_ci": [
+    0.1,
+    9.9
+   ],
+   "rule_ci": [
+    45.3,
+    67.6
+   ],
+   "base_ci": [
+    41.2,
+    61.5
+   ],
+   "checks": {
+    "ci_above_0": true,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": false,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "gate_log": [
+   [
+    "2026-10-24",
+    true,
+    "train hit 0.462 vs 0.441"
+   ],
+   [
+    "2026-10-25",
+    true,
+    "train hit 0.470 vs 0.463"
+   ],
+   [
+    "2026-10-26",
+    true,
+    "train hit 0.528 vs 0.503"
+   ],
+   [
+    "2026-10-28",
+    true,
+    "train hit 0.598 vs 0.567"
+   ],
+   [
+    "2026-10-29",
+    true,
+    "train hit 0.588 vs 0.559"
+   ],
+   [
+    "2026-10-30",
+    true,
+    "train hit 0.579 vs 0.538"
+   ],
+   [
+    "2026-10-31",
+    true,
+    "train hit 0.574 vs 0.530"
+   ],
+   [
+    "2026-11-03",
+    true,
+    "train hit 0.580 vs 0.531"
+   ],
+   [
+    "2026-11-04",
+    true,
+    "train hit 0.588 vs 0.539"
+   ],
+   [
+    "2026-11-05",
+    true,
+    "train hit 0.584 vs 0.532"
+   ],
+   [
+    "2026-11-06",
+    true,
+    "train hit 0.581 vs 0.532"
+   ],
+   [
+    "2026-11-07",
+    true,
+    "train hit 0.562 vs 0.521"
+   ],
+   [
+    "2026-11-08",
+    true,
+    "train hit 0.552 vs 0.507"
+   ]
+  ],
+  "fixed_test": {
+   "universe_rows": 349,
+   "series": 27,
+   "changed": 204,
+   "base": {
+    "n": 337,
+    "hit": 51.6,
+    "over_n": 103,
+    "over_hit": 51.5,
+    "under_n": 234,
+    "under_hit": 51.7,
+    "over_share": 30.6,
+    "W": 174,
+    "L": 163
+   },
+   "rule": {
+    "n": 140,
+    "hit": 56.4,
+    "over_n": 44,
+    "over_hit": 59.1,
+    "under_n": 96,
+    "under_hit": 55.2,
+    "over_share": 31.4,
+    "W": 79,
+    "L": 61
+   },
+   "diff_ci": [
+    0.1,
+    9.9
+   ],
+   "rule_ci": [
+    45.5,
+    67.2
+   ],
+   "base_ci": [
+    41.3,
+    61.9
+   ],
+   "checks": {
+    "ci_above_0": true,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": false,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "fixed_all_days": {
+   "universe_rows": 445,
+   "series": 36,
+   "changed": 260,
+   "base": {
+    "n": 430,
+    "hit": 50.0,
+    "over_n": 122,
+    "over_hit": 46.7,
+    "under_n": 308,
+    "under_hit": 51.3,
+    "over_share": 28.4,
+    "W": 215,
+    "L": 215
+   },
+   "rule": {
+    "n": 179,
+    "hit": 54.2,
+    "over_n": 52,
+    "over_hit": 55.8,
+    "under_n": 127,
+    "under_hit": 53.5,
+    "over_share": 29.1,
+    "W": 97,
+    "L": 82
+   },
+   "diff_ci": [
+    -0.0,
+    8.7
+   ],
+   "rule_ci": [
+    44.1,
+    64.0
+   ],
+   "base_ci": [
+    41.0,
+    59.3
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": false,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  }
+ },
+ "R-d1": {
+  "kind": "side",
+  "walk_forward_test": {
+   "universe_rows": 295,
+   "series": 32,
+   "changed": 0,
+   "base": {
+    "n": 287,
+    "hit": 48.1,
+    "over_n": 86,
+    "over_hit": 46.5,
+    "under_n": 201,
+    "under_hit": 48.8,
+    "over_share": 30.0,
+    "W": 138,
+    "L": 149
+   },
+   "rule": {
+    "n": 287,
+    "hit": 48.1,
+    "over_n": 86,
+    "over_hit": 46.5,
+    "under_n": 201,
+    "under_hit": 48.8,
+    "over_share": 30.0,
+    "W": 138,
+    "L": 149
+   },
+   "diff_ci": [
+    0.0,
+    0.0
+   ],
+   "rule_ci": [
+    41.0,
+    56.6
+   ],
+   "base_ci": [
+    41.0,
+    56.6
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "gate_log": [
+   [
+    "2026-10-24",
+    false,
+    "train hit 0.373 vs 0.602"
+   ],
+   [
+    "2026-10-25",
+    false,
+    "train hit 0.415 vs 0.593"
+   ],
+   [
+    "2026-10-26",
+    false,
+    "train hit 0.403 vs 0.597"
+   ],
+   [
+    "2026-10-28",
+    false,
+    "train hit 0.442 vs 0.610"
+   ],
+   [
+    "2026-10-29",
+    false,
+    "train hit 0.443 vs 0.589"
+   ],
+   [
+    "2026-10-30",
+    false,
+    "train hit 0.442 vs 0.558"
+   ],
+   [
+    "2026-10-31",
+    false,
+    "train hit 0.450 vs 0.550"
+   ],
+   [
+    "2026-11-03",
+    false,
+    "train hit 0.455 vs 0.545"
+   ],
+   [
+    "2026-11-04",
+    false,
+    "train hit 0.476 vs 0.551"
+   ],
+   [
+    "2026-11-05",
+    false,
+    "train hit 0.463 vs 0.540"
+   ],
+   [
+    "2026-11-06",
+    false,
+    "train hit 0.476 vs 0.544"
+   ],
+   [
+    "2026-11-07",
+    false,
+    "train hit 0.477 vs 0.526"
+   ],
+   [
+    "2026-11-08",
+    false,
+    "train hit 0.490 vs 0.513"
+   ]
+  ],
+  "fixed_test": {
+   "universe_rows": 295,
+   "series": 32,
+   "changed": 164,
+   "base": {
+    "n": 287,
+    "hit": 48.1,
+    "over_n": 86,
+    "over_hit": 46.5,
+    "under_n": 201,
+    "under_hit": 48.8,
+    "over_share": 30.0,
+    "W": 138,
+    "L": 149
+   },
+   "rule": {
+    "n": 287,
+    "hit": 51.2,
+    "over_n": 171,
+    "over_hit": 50.9,
+    "under_n": 116,
+    "under_hit": 51.7,
+    "over_share": 59.6,
+    "W": 147,
+    "L": 140
+   },
+   "diff_ci": [
+    -7.3,
+    12.0
+   ],
+   "rule_ci": [
+    43.7,
+    58.9
+   ],
+   "base_ci": [
+    41.0,
+    56.8
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": true,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "fixed_all_days": {
+   "universe_rows": 381,
+   "series": 41,
+   "changed": 209,
+   "base": {
+    "n": 370,
+    "hit": 50.8,
+    "over_n": 112,
+    "over_hit": 46.4,
+    "under_n": 258,
+    "under_hit": 52.7,
+    "over_share": 30.3,
+    "W": 188,
+    "L": 182
+   },
+   "rule": {
+    "n": 370,
+    "hit": 48.1,
+    "over_n": 230,
+    "over_hit": 46.1,
+    "under_n": 140,
+    "under_hit": 51.4,
+    "over_share": 62.2,
+    "W": 178,
+    "L": 192
+   },
+   "diff_ci": [
+    -13.0,
+    6.6
+   ],
+   "rule_ci": [
+    41.8,
+    55.0
+   ],
+   "base_ci": [
+    43.6,
+    58.7
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": false,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  }
+ },
+ "R-d2": {
+  "kind": "letter",
+  "walk_forward_test": {
+   "universe_rows": 295,
+   "series": 32,
+   "changed": 250,
+   "base": {
+    "n": 207,
+    "hit": 49.8,
+    "over_n": 50,
+    "over_hit": 42.0,
+    "under_n": 157,
+    "under_hit": 52.2,
+    "over_share": 24.2,
+    "W": 103,
+    "L": 104
+   },
+   "rule": {
+    "n": 240,
+    "hit": 50.4,
+    "over_n": 71,
+    "over_hit": 47.9,
+    "under_n": 169,
+    "under_hit": 51.5,
+    "over_share": 29.6,
+    "W": 121,
+    "L": 119
+   },
+   "diff_ci": [
+    -4.1,
+    5.3
+   ],
+   "rule_ci": [
+    41.2,
+    61.8
+   ],
+   "base_ci": [
+    40.9,
+    60.5
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": false,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "gate_log": [
+   [
+    "2026-10-24",
+    true,
+    "train hit 0.632 vs 0.577"
+   ],
+   [
+    "2026-10-25",
+    true,
+    "train hit 0.618 vs 0.568"
+   ],
+   [
+    "2026-10-26",
+    true,
+    "train hit 0.634 vs 0.600"
+   ],
+   [
+    "2026-10-28",
+    true,
+    "train hit 0.662 vs 0.610"
+   ],
+   [
+    "2026-10-29",
+    true,
+    "train hit 0.631 vs 0.595"
+   ],
+   [
+    "2026-10-30",
+    true,
+    "train hit 0.593 vs 0.572"
+   ],
+   [
+    "2026-10-31",
+    true,
+    "train hit 0.579 vs 0.559"
+   ],
+   [
+    "2026-11-03",
+    true,
+    "train hit 0.581 vs 0.566"
+   ],
+   [
+    "2026-11-04",
+    true,
+    "train hit 0.590 vs 0.565"
+   ],
+   [
+    "2026-11-05",
+    true,
+    "train hit 0.574 vs 0.550"
+   ],
+   [
+    "2026-11-06",
+    true,
+    "train hit 0.580 vs 0.555"
+   ],
+   [
+    "2026-11-07",
+    true,
+    "train hit 0.556 vs 0.529"
+   ],
+   [
+    "2026-11-08",
+    true,
+    "train hit 0.543 vs 0.516"
+   ]
+  ],
+  "fixed_test": {
+   "universe_rows": 295,
+   "series": 32,
+   "changed": 250,
+   "base": {
+    "n": 207,
+    "hit": 49.8,
+    "over_n": 50,
+    "over_hit": 42.0,
+    "under_n": 157,
+    "under_hit": 52.2,
+    "over_share": 24.2,
+    "W": 103,
+    "L": 104
+   },
+   "rule": {
+    "n": 240,
+    "hit": 50.4,
+    "over_n": 71,
+    "over_hit": 47.9,
+    "under_n": 169,
+    "under_hit": 51.5,
+    "over_share": 29.6,
+    "W": 121,
+    "L": 119
+   },
+   "diff_ci": [
+    -4.1,
+    5.6
+   ],
+   "rule_ci": [
+    40.9,
+    62.1
+   ],
+   "base_ci": [
+    40.8,
+    61.1
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": false,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  },
+  "fixed_all_days": {
+   "universe_rows": 381,
+   "series": 41,
+   "changed": 317,
+   "base": {
+    "n": 259,
+    "hit": 51.4,
+    "over_n": 58,
+    "over_hit": 37.9,
+    "under_n": 201,
+    "under_hit": 55.2,
+    "over_share": 22.4,
+    "W": 133,
+    "L": 126
+   },
+   "rule": {
+    "n": 308,
+    "hit": 53.2,
+    "over_n": 92,
+    "over_hit": 48.9,
+    "under_n": 216,
+    "under_hit": 55.1,
+    "over_share": 29.9,
+    "W": 164,
+    "L": 144
+   },
+   "diff_ci": [
+    -2.6,
+    5.7
+   ],
+   "rule_ci": [
+    44.4,
+    63.5
+   ],
+   "base_ci": [
+    42.3,
+    62.1
+   ],
+   "checks": {
+    "ci_above_0": false,
+    "over_and_under_not_worse": false,
+    "count_not_reduced": true,
+    "split_not_more_lopsided": true
+   },
+   "passes": false
+  }
+ },
+ "descriptive": {
+  "all_days": {
+   "gap": {
+    "Scout agrees with soft side |gap|=0.5": {
+     "n": 202,
+     "series": 42,
+     "hit": 54.5,
+     "ci": [
+      47.6,
+      61.5
+     ],
+     "over_n": 83,
+     "over_hit": 54.2,
+     "under_n": 119,
+     "under_hit": 54.6
+    },
+    "Scout agrees with soft side |gap|>=1": {
+     "n": 98,
+     "series": 34,
+     "hit": 52.0,
+     "ci": [
+      42.7,
+      61.7
+     ],
+     "over_n": 42,
+     "over_hit": 40.5,
+     "under_n": 56,
+     "under_hit": 60.7
+    },
+    "Scout disagrees |gap|=0.5": {
+     "n": 155,
+     "series": 40,
+     "hit": 49.0,
+     "ci": [
+      40.5,
+      58.0
+     ],
+     "over_n": 48,
+     "over_hit": 45.8,
+     "under_n": 107,
+     "under_hit": 50.5
+    },
+    "Scout disagrees |gap|>=1": {
+     "n": 35,
+     "series": 27,
+     "hit": 31.4,
+     "ci": [
+      17.1,
+      47.1
+     ],
+     "over_n": 12,
+     "over_hit": 16.7,
+     "under_n": 23,
+     "under_hit": 39.1
+    },
+    "lines equal": {
+     "n": 316,
+     "series": 40,
+     "hit": 54.1,
+     "ci": [
+      43.7,
+      64.0
+     ],
+     "over_n": 101,
+     "over_hit": 42.6,
+     "under_n": 215,
+     "under_hit": 59.5
+    }
+   },
+   "bump": {
+    "market agrees (>=6 h)": {
+     "n": 148,
+     "series": 35,
+     "hit": 49.3,
+     "ci": [
+      37.2,
+      63.0
+     ],
+     "over_n": 60,
+     "over_hit": 46.7,
+     "under_n": 88,
+     "under_hit": 51.1
+    },
+    "market agrees (last move <6 h before start)": {
+     "n": 16,
+     "series": 9,
+     "hit": 43.8,
+     "ci": [
+      21.4,
+      62.5
+     ],
+     "over_n": 8,
+     "over_hit": 62.5,
+     "under_n": 8,
+     "under_hit": 25.0
+    },
+    "market disagrees (>=6 h)": {
+     "n": 144,
+     "series": 37,
+     "hit": 47.2,
+     "ci": [
+      39.7,
+      56.1
+     ],
+     "over_n": 35,
+     "over_hit": 40.0,
+     "under_n": 109,
+     "under_hit": 49.5
+    },
+    "market disagrees (last move <6 h before start)": {
+     "n": 62,
+     "series": 29,
+     "hit": 64.5,
+     "ci": [
+      51.1,
+      75.4
+     ],
+     "over_n": 9,
+     "over_hit": 55.6,
+     "under_n": 53,
+     "under_hit": 66.0
+    },
+    "no bump": {
+     "n": 1644,
+     "series": 41,
+     "hit": 57.7,
+     "ci": [
+      53.2,
+      62.2
+     ],
+     "over_n": 588,
+     "over_hit": 48.5,
+     "under_n": 1056,
+     "under_hit": 62.9
+    },
+    "open unknown": {
+     "n": 45,
+     "series": 1,
+     "hit": 37.8,
+     "ci": [
+      37.8,
+      37.8
+     ],
+     "over_n": 8,
+     "over_hit": 37.5,
+     "under_n": 37,
+     "under_hit": 37.8
+    }
+   },
+   "price": {
+    "Scout agrees with UD price side": {
+     "n": 98,
+     "series": 30,
+     "hit": 60.2,
+     "ci": [
+      45.5,
+      75.0
+     ],
+     "over_n": 39,
+     "over_hit": 48.7,
+     "under_n": 59,
+     "under_hit": 67.8
+    },
+    "Scout disagrees with UD price side": {
+     "n": 99,
+     "series": 31,
+     "hit": 41.4,
+     "ci": [
+      30.0,
+      53.7
+     ],
+     "over_n": 31,
+     "over_hit": 41.9,
+     "under_n": 68,
+     "under_hit": 41.2
+    },
+    "price gap <0.03": {
+     "n": 106,
+     "series": 32,
+     "hit": 60.4,
+     "ci": [
+      45.5,
+      73.6
+     ],
+     "over_n": 31,
+     "over_hit": 35.5,
+     "under_n": 75,
+     "under_hit": 70.7
+    }
+   },
+   "soft_side_platform": {
+    "('prizepicks', 'agrees')": {
+     "n": 146,
+     "series": 35,
+     "hit": 52.1,
+     "ci": [
+      42.4,
+      61.9
+     ],
+     "over_n": 49,
+     "over_hit": 51.0,
+     "under_n": 97,
+     "under_hit": 52.6
+    },
+    "('prizepicks', 'disagrees')": {
+     "n": 81,
+     "series": 32,
+     "hit": 45.7,
+     "ci": [
+      34.1,
+      56.5
+     ],
+     "over_n": 32,
+     "over_hit": 43.8,
+     "under_n": 49,
+     "under_hit": 46.9
+    },
+    "('underdog', 'agrees')": {
+     "n": 154,
+     "series": 42,
+     "hit": 55.2,
+     "ci": [
+      47.9,
+      62.8
+     ],
+     "over_n": 76,
+     "over_hit": 48.7,
+     "under_n": 78,
+     "under_hit": 61.5
+    },
+    "('underdog', 'disagrees')": {
+     "n": 109,
+     "series": 41,
+     "hit": 45.9,
+     "ci": [
+      35.7,
+      56.6
+     ],
+     "over_n": 28,
+     "over_hit": 35.7,
+     "under_n": 81,
+     "under_hit": 49.4
+    }
+   }
+  },
+  "test_days": {
+   "gap": {
+    "Scout agrees with soft side |gap|=0.5": {
+     "n": 159,
+     "series": 32,
+     "hit": 54.7,
+     "ci": [
+      47.0,
+      62.2
+     ],
+     "over_n": 69,
+     "over_hit": 58.0,
+     "under_n": 90,
+     "under_hit": 52.2
+    },
+    "Scout agrees with soft side |gap|>=1": {
+     "n": 76,
+     "series": 26,
+     "hit": 53.9,
+     "ci": [
+      42.0,
+      66.2
+     ],
+     "over_n": 33,
+     "over_hit": 42.4,
+     "under_n": 43,
+     "under_hit": 62.8
+    },
+    "Scout disagrees |gap|=0.5": {
+     "n": 122,
+     "series": 31,
+     "hit": 48.4,
+     "ci": [
+      39.0,
+      57.5
+     ],
+     "over_n": 42,
+     "over_hit": 50.0,
+     "under_n": 80,
+     "under_hit": 47.5
+    },
+    "Scout disagrees |gap|>=1": {
+     "n": 27,
+     "series": 21,
+     "hit": 37.0,
+     "ci": [
+      19.2,
+      56.0
+     ],
+     "over_n": 9,
+     "over_hit": 22.2,
+     "under_n": 18,
+     "under_hit": 44.4
+    },
+    "lines equal": {
+     "n": 231,
+     "series": 30,
+     "hit": 53.2,
+     "ci": [
+      42.9,
+      64.1
+     ],
+     "over_n": 68,
+     "over_hit": 47.1,
+     "under_n": 163,
+     "under_hit": 55.8
+    }
+   },
+   "bump": {
+    "market agrees (>=6 h)": {
+     "n": 115,
+     "series": 26,
+     "hit": 49.6,
+     "ci": [
+      35.4,
+      64.8
+     ],
+     "over_n": 44,
+     "over_hit": 45.5,
+     "under_n": 71,
+     "under_hit": 52.1
+    },
+    "market agrees (last move <6 h before start)": {
+     "n": 11,
+     "series": 7,
+     "hit": 45.5,
+     "ci": [
+      14.3,
+      70.0
+     ],
+     "over_n": 4,
+     "over_hit": 75.0,
+     "under_n": 7,
+     "under_hit": 28.6
+    },
+    "market disagrees (>=6 h)": {
+     "n": 117,
+     "series": 29,
+     "hit": 43.6,
+     "ci": [
+      36.2,
+      53.5
+     ],
+     "over_n": 30,
+     "over_hit": 40.0,
+     "under_n": 87,
+     "under_hit": 44.8
+    },
+    "market disagrees (last move <6 h before start)": {
+     "n": 44,
+     "series": 24,
+     "hit": 56.8,
+     "ci": [
+      43.5,
+      69.0
+     ],
+     "over_n": 8,
+     "over_hit": 62.5,
+     "under_n": 36,
+     "under_hit": 55.6
+    },
+    "no bump": {
+     "n": 1316,
+     "series": 32,
+     "hit": 57.5,
+     "ci": [
+      52.3,
+      62.5
+     ],
+     "over_n": 470,
+     "over_hit": 50.9,
+     "under_n": 846,
+     "under_hit": 61.2
+    }
+   },
+   "price": {
+    "Scout agrees with UD price side": {
+     "n": 82,
+     "series": 23,
+     "hit": 58.5,
+     "ci": [
+      41.5,
+      75.0
+     ],
+     "over_n": 27,
+     "over_hit": 44.4,
+     "under_n": 55,
+     "under_hit": 65.5
+    },
+    "Scout disagrees with UD price side": {
+     "n": 73,
+     "series": 25,
+     "hit": 38.4,
+     "ci": [
+      24.6,
+      51.5
+     ],
+     "over_n": 22,
+     "over_hit": 50.0,
+     "under_n": 51,
+     "under_hit": 33.3
+    },
+    "price gap <0.03": {
+     "n": 66,
+     "series": 22,
+     "hit": 65.2,
+     "ci": [
+      46.9,
+      79.7
+     ],
+     "over_n": 19,
+     "over_hit": 47.4,
+     "under_n": 47,
+     "under_hit": 72.3
+    }
+   },
+   "soft_side_platform": {
+    "('prizepicks', 'agrees')": {
+     "n": 114,
+     "series": 26,
+     "hit": 52.6,
+     "ci": [
+      41.1,
+      64.0
+     ],
+     "over_n": 44,
+     "over_hit": 52.3,
+     "under_n": 70,
+     "under_hit": 52.9
+    },
+    "('prizepicks', 'disagrees')": {
+     "n": 65,
+     "series": 23,
+     "hit": 46.2,
+     "ci": [
+      34.4,
+      58.3
+     ],
+     "over_n": 26,
+     "over_hit": 50.0,
+     "under_n": 39,
+     "under_hit": 43.6
+    },
+    "('underdog', 'agrees')": {
+     "n": 121,
+     "series": 32,
+     "hit": 56.2,
+     "ci": [
+      48.0,
+      64.4
+     ],
+     "over_n": 58,
+     "over_hit": 53.4,
+     "under_n": 63,
+     "under_hit": 58.7
+    },
+    "('underdog', 'disagrees')": {
+     "n": 84,
+     "series": 31,
+     "hit": 46.4,
+     "ci": [
+      35.5,
+      58.3
+     ],
+     "over_n": 25,
+     "over_hit": 40.0,
+     "under_n": 59,
+     "under_hit": 49.2
+    }
+   }
+  }
+ }
+}
