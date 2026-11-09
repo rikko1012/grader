@@ -1,0 +1,961 @@
+{
+ "pcol": "po_live",
+ "all": {
+  "n": 4035,
+  "games": 28,
+  "stated": 0.6248,
+  "hit": 0.544,
+  "gap": 0.0808,
+  "gap_ci": [
+   0.0384,
+   0.123
+  ],
+  "over_share": 0.316
+ },
+ "graded_C_plus": {
+  "n": 3323,
+  "games": 28,
+  "stated": 0.6477,
+  "hit": 0.548,
+  "gap": 0.0997,
+  "gap_ci": [
+   0.0541,
+   0.1455
+  ],
+  "over_share": 0.286
+ },
+ "by_band": {
+  "0.500-0.53": {
+   "n": 712,
+   "games": 28,
+   "stated": 0.5177,
+   "hit": 0.5253,
+   "gap": -0.0076,
+   "gap_ci": [
+    -0.0509,
+    0.0413
+   ],
+   "over_share": 0.459
+  },
+  "0.534-0.56": {
+   "n": 532,
+   "games": 28,
+   "stated": 0.5465,
+   "hit": 0.5526,
+   "gap": -0.0061,
+   "gap_ci": [
+    -0.0716,
+    0.0593
+   ],
+   "over_share": 0.365
+  },
+  "0.560-0.60": {
+   "n": 767,
+   "games": 28,
+   "stated": 0.5797,
+   "hit": 0.5085,
+   "gap": 0.0713,
+   "gap_ci": [
+    0.0214,
+    0.1227
+   ],
+   "over_share": 0.361
+  },
+  "0.600-0.65": {
+   "n": 703,
+   "games": 28,
+   "stated": 0.6232,
+   "hit": 0.5832,
+   "gap": 0.04,
+   "gap_ci": [
+    -0.013,
+    0.1008
+   ],
+   "over_share": 0.252
+  },
+  "0.650-0.70": {
+   "n": 510,
+   "games": 28,
+   "stated": 0.6736,
+   "hit": 0.5549,
+   "gap": 0.1187,
+   "gap_ci": [
+    0.0479,
+    0.1923
+   ],
+   "over_share": 0.231
+  },
+  "0.700-0.80": {
+   "n": 535,
+   "games": 28,
+   "stated": 0.7403,
+   "hit": 0.5271,
+   "gap": 0.2132,
+   "gap_ci": [
+    0.144,
+    0.2865
+   ],
+   "over_share": 0.264
+  },
+  "0.800-1.01": {
+   "n": 276,
+   "games": 25,
+   "stated": 0.8667,
+   "hit": 0.587,
+   "gap": 0.2797,
+   "gap_ci": [
+    0.1815,
+    0.3714
+   ],
+   "over_share": 0.156
+  }
+ },
+ "by_market": {
+  "pass_yds": {
+   "n": 274,
+   "games": 28,
+   "stated": 0.5993,
+   "hit": 0.5292,
+   "gap": 0.0701,
+   "gap_ci": [
+    -0.0731,
+    0.2287
+   ],
+   "over_share": 0.307
+  },
+  "rec": {
+   "n": 725,
+   "games": 28,
+   "stated": 0.641,
+   "hit": 0.5628,
+   "gap": 0.0783,
+   "gap_ci": [
+    0.0359,
+    0.1209
+   ],
+   "over_share": 0.277
+  },
+  "rec_yds": {
+   "n": 1727,
+   "games": 28,
+   "stated": 0.6107,
+   "hit": 0.5495,
+   "gap": 0.0612,
+   "gap_ci": [
+    0.0132,
+    0.1102
+   ],
+   "over_share": 0.337
+  },
+  "rush_att": {
+   "n": 523,
+   "games": 28,
+   "stated": 0.6687,
+   "hit": 0.5182,
+   "gap": 0.1505,
+   "gap_ci": [
+    0.0838,
+    0.2201
+   ],
+   "over_share": 0.258
+  },
+  "rush_yds": {
+   "n": 786,
+   "games": 28,
+   "stated": 0.6202,
+   "hit": 0.5369,
+   "gap": 0.0833,
+   "gap_ci": [
+    0.0117,
+    0.155
+   ],
+   "over_share": 0.35
+  }
+ },
+ "by_side": {
+  "over": {
+   "n": 1277,
+   "games": 28,
+   "stated": 0.6003,
+   "hit": 0.5074,
+   "gap": 0.0929,
+   "gap_ci": [
+    0.0285,
+    0.1528
+   ],
+   "over_share": 1.0
+  },
+  "under": {
+   "n": 2758,
+   "games": 28,
+   "stated": 0.6361,
+   "hit": 0.5609,
+   "gap": 0.0752,
+   "gap_ci": [
+    0.0097,
+    0.1377
+   ],
+   "over_share": 0.0
+  }
+ },
+ "by_book": {
+  "prizepicks": {
+   "n": 2377,
+   "games": 28,
+   "stated": 0.6186,
+   "hit": 0.5305,
+   "gap": 0.0881,
+   "gap_ci": [
+    0.0397,
+    0.1389
+   ],
+   "over_share": 0.313
+  },
+  "underdog": {
+   "n": 1658,
+   "games": 28,
+   "stated": 0.6336,
+   "hit": 0.5633,
+   "gap": 0.0702,
+   "gap_ci": [
+    0.0351,
+    0.1056
+   ],
+   "over_share": 0.322
+  }
+ },
+ "mean_vs_line": {
+  "pass_yds": {
+   "n": 274,
+   "slope": 0.248,
+   "slope_ci": [
+    -0.684,
+    1.409
+   ],
+   "intercept": -14.936,
+   "mean_minus_line": -14.185,
+   "actual_minus_line": -18.456,
+   "actual_minus_line_ci": [
+    -43.0103,
+    11.3659
+   ],
+   "bias_mean_minus_actual": 4.271,
+   "bias_ci": [
+    -25.1414,
+    29.1445
+   ],
+   "mae_model": 66.987,
+   "mae_line": 64.547,
+   "corr_x_y": 0.073
+  },
+  "rec": {
+   "n": 725,
+   "slope": 0.605,
+   "slope_ci": [
+    0.352,
+    0.874
+   ],
+   "intercept": 0.114,
+   "mean_minus_line": -0.117,
+   "actual_minus_line": 0.043,
+   "actual_minus_line_ci": [
+    -0.276,
+    0.3617
+   ],
+   "bias_mean_minus_actual": -0.16,
+   "bias_ci": [
+    -0.4751,
+    0.1505
+   ],
+   "mae_model": 1.45,
+   "mae_line": 1.485,
+   "corr_x_y": 0.202
+  },
+  "rec_yds": {
+   "n": 1727,
+   "slope": 0.312,
+   "slope_ci": [
+    -0.076,
+    0.7
+   ],
+   "intercept": 2.709,
+   "mean_minus_line": 1.749,
+   "actual_minus_line": 3.254,
+   "actual_minus_line_ci": [
+    -0.4446,
+    7.8313
+   ],
+   "bias_mean_minus_actual": -1.506,
+   "bias_ci": [
+    -5.8655,
+    2.5216
+   ],
+   "mae_model": 20.302,
+   "mae_line": 19.625,
+   "corr_x_y": 0.084
+  },
+  "rush_att": {
+   "n": 523,
+   "slope": 0.173,
+   "slope_ci": [
+    -0.281,
+    0.657
+   ],
+   "intercept": 0.679,
+   "mean_minus_line": -0.257,
+   "actual_minus_line": 0.635,
+   "actual_minus_line_ci": [
+    -0.1544,
+    1.5335
+   ],
+   "bias_mean_minus_actual": -0.892,
+   "bias_ci": [
+    -1.7774,
+    0.0082
+   ],
+   "mae_model": 4.028,
+   "mae_line": 3.581,
+   "corr_x_y": 0.08
+  },
+  "rush_yds": {
+   "n": 786,
+   "slope": 0.033,
+   "slope_ci": [
+    -0.599,
+    0.68
+   ],
+   "intercept": 5.104,
+   "mean_minus_line": 2.405,
+   "actual_minus_line": 5.183,
+   "actual_minus_line_ci": [
+    1.0351,
+    10.3194
+   ],
+   "bias_mean_minus_actual": -2.778,
+   "bias_ci": [
+    -8.2428,
+    1.5291
+   ],
+   "mae_model": 23.159,
+   "mae_line": 20.869,
+   "corr_x_y": 0.01
+  }
+ },
+ "spread_var_z": {
+  "pass_yds": {
+   "var_z": 1.034,
+   "var_z_ci": [
+    0.6315,
+    1.5637
+   ]
+  },
+  "rec": {
+   "var_z": 1.453,
+   "var_z_ci": [
+    1.1687,
+    1.7742
+   ]
+  },
+  "rec_yds": {
+   "var_z": 12.883,
+   "var_z_ci": [
+    1.427,
+    37.3521
+   ]
+  },
+  "rush_att": {
+   "var_z": 2.225,
+   "var_z_ci": [
+    1.7149,
+    3.0071
+   ]
+  },
+  "rush_yds": {
+   "var_z": 1.846,
+   "var_z_ci": [
+    1.245,
+    2.5518
+   ]
+  }
+ },
+ "slices": {
+  "prior_games": {
+   "(-1, 5]": {
+    "n": 200,
+    "games": 12,
+    "stated": 0.6379,
+    "hit": 0.525,
+    "gap": 0.1129,
+    "gap_ci": [
+     -0.1098,
+     0.3645
+    ],
+    "over_share": 0.365,
+    "bias_mean_minus_actual": 3.281,
+    "var_z": 95.828
+   },
+   "(10, 30]": {
+    "n": 756,
+    "games": 27,
+    "stated": 0.6549,
+    "hit": 0.5622,
+    "gap": 0.0927,
+    "gap_ci": [
+     0.0138,
+     0.1628
+    ],
+    "over_share": 0.258,
+    "bias_mean_minus_actual": -7.543,
+    "var_z": 1.934
+   },
+   "(30, 80]": {
+    "n": 2673,
+    "games": 28,
+    "stated": 0.616,
+    "hit": 0.5413,
+    "gap": 0.0747,
+    "gap_ci": [
+     0.0376,
+     0.1164
+    ],
+    "over_share": 0.318,
+    "bias_mean_minus_actual": 1.579,
+    "var_z": 1.428
+   },
+   "(5, 10]": {
+    "n": 334,
+    "games": 22,
+    "stated": 0.6296,
+    "hit": 0.5419,
+    "gap": 0.0877,
+    "gap_ci": [
+     -0.0238,
+     0.2138
+    ],
+    "over_share": 0.377,
+    "bias_mean_minus_actual": -6.428,
+    "var_z": 2.949
+   }
+  },
+  "nfl_abs_spread": {
+   "(-1, 3]": {
+    "n": 1580,
+    "games": 12,
+    "stated": 0.6151,
+    "hit": 0.569,
+    "gap": 0.0461,
+    "gap_ci": [
+     -0.015,
+     0.1066
+    ],
+    "over_share": 0.347,
+    "bias_mean_minus_actual": 0.805,
+    "var_z": 14.125
+   },
+   "(3, 7]": {
+    "n": 1715,
+    "games": 12,
+    "stated": 0.6373,
+    "hit": 0.5184,
+    "gap": 0.1189,
+    "gap_ci": [
+     0.0657,
+     0.1827
+    ],
+    "over_share": 0.261,
+    "bias_mean_minus_actual": -2.713,
+    "var_z": 1.446
+   },
+   "(7, 40]": {
+    "n": 740,
+    "games": 4,
+    "stated": 0.6164,
+    "hit": 0.55,
+    "gap": 0.0664,
+    "gap_ci": [
+     -0.0784,
+     0.1784
+    ],
+    "over_share": 0.378,
+    "bias_mean_minus_actual": -1.103,
+    "var_z": 1.949
+   }
+  },
+  "total_line_pace": {
+   "(0, 220]": {
+    "n": 4035,
+    "games": 28,
+    "stated": 0.6248,
+    "hit": 0.544,
+    "gap": 0.0808,
+    "gap_ci": [
+     0.0384,
+     0.123
+    ],
+    "over_share": 0.316,
+    "bias_mean_minus_actual": -1.04,
+    "var_z": 6.505
+   }
+  },
+  "nfl_total_line": {
+   "(0, 41]": {
+    "n": 754,
+    "games": 5,
+    "stated": 0.6273,
+    "hit": 0.565,
+    "gap": 0.0623,
+    "gap_ci": [
+     -0.0362,
+     0.2014
+    ],
+    "over_share": 0.308,
+    "bias_mean_minus_actual": -2.609,
+    "var_z": 2.032
+   },
+   "(41, 45]": {
+    "n": 1327,
+    "games": 10,
+    "stated": 0.6355,
+    "hit": 0.5471,
+    "gap": 0.0884,
+    "gap_ci": [
+     -0.0043,
+     0.1734
+    ],
+    "over_share": 0.327,
+    "bias_mean_minus_actual": 0.422,
+    "var_z": 16.286
+   },
+   "(45, 49]": {
+    "n": 1290,
+    "games": 8,
+    "stated": 0.6097,
+    "hit": 0.5039,
+    "gap": 0.1058,
+    "gap_ci": [
+     0.0464,
+     0.157
+    ],
+    "over_share": 0.346,
+    "bias_mean_minus_actual": -3.668,
+    "var_z": 1.25
+   },
+   "(49, 80]": {
+    "n": 664,
+    "games": 5,
+    "stated": 0.6297,
+    "hit": 0.5919,
+    "gap": 0.0378,
+    "gap_ci": [
+     -0.0186,
+     0.1341
+    ],
+    "over_share": 0.248,
+    "bias_mean_minus_actual": 2.926,
+    "var_z": 2.212
+   }
+  },
+  "nfl_ew_targets": {
+   "(-1.0, 2.0]": {
+    "n": 1550,
+    "games": 28,
+    "stated": 0.6401,
+    "hit": 0.5613,
+    "gap": 0.0788,
+    "gap_ci": [
+     -0.0062,
+     0.1586
+    ],
+    "over_share": 0.336,
+    "bias_mean_minus_actual": -0.817,
+    "var_z": 14.569
+   },
+   "(2.0, 4.0]": {
+    "n": 1254,
+    "games": 28,
+    "stated": 0.6237,
+    "hit": 0.5144,
+    "gap": 0.1093,
+    "gap_ci": [
+     0.0532,
+     0.1666
+    ],
+    "over_share": 0.404,
+    "bias_mean_minus_actual": -1.509,
+    "var_z": 1.829
+   },
+   "(4.0, 6.0]": {
+    "n": 658,
+    "games": 26,
+    "stated": 0.6035,
+    "hit": 0.538,
+    "gap": 0.0655,
+    "gap_ci": [
+     0.0025,
+     0.1389
+    ],
+    "over_share": 0.24,
+    "bias_mean_minus_actual": -2.353,
+    "var_z": 0.998
+   },
+   "(6.0, 30.0]": {
+    "n": 570,
+    "games": 27,
+    "stated": 0.6081,
+    "hit": 0.5667,
+    "gap": 0.0414,
+    "gap_ci": [
+     -0.0661,
+     0.1452
+    ],
+    "over_share": 0.161,
+    "bias_mean_minus_actual": 0.897,
+    "var_z": 1.075
+   }
+  },
+  "nfl_ew_carries": {
+   "(-1.0, 3.0]": {
+    "n": 2281,
+    "games": 28,
+    "stated": 0.6249,
+    "hit": 0.5493,
+    "gap": 0.0756,
+    "gap_ci": [
+     0.0337,
+     0.124
+    ],
+    "over_share": 0.306,
+    "bias_mean_minus_actual": -0.872,
+    "var_z": 10.124
+   },
+   "(14.0, 40.0]": {
+    "n": 501,
+    "games": 22,
+    "stated": 0.6078,
+    "hit": 0.5749,
+    "gap": 0.033,
+    "gap_ci": [
+     -0.0514,
+     0.1282
+    ],
+    "over_share": 0.269,
+    "bias_mean_minus_actual": 2.198,
+    "var_z": 1.159
+   },
+   "(3.0, 8.0]": {
+    "n": 757,
+    "games": 28,
+    "stated": 0.6214,
+    "hit": 0.5575,
+    "gap": 0.064,
+    "gap_ci": [
+     -0.0107,
+     0.1279
+    ],
+    "over_share": 0.395,
+    "bias_mean_minus_actual": -1.876,
+    "var_z": 2.175
+   },
+   "(8.0, 14.0]": {
+    "n": 493,
+    "games": 20,
+    "stated": 0.644,
+    "hit": 0.4645,
+    "gap": 0.1795,
+    "gap_ci": [
+     0.0713,
+     0.2921
+    ],
+    "over_share": 0.294,
+    "bias_mean_minus_actual": -3.831,
+    "var_z": 1.738
+   }
+  },
+  "line_vs_mean_z": {
+   "(-0.2, 0.2]": {
+    "n": 1709,
+    "games": 28,
+    "stated": 0.5772,
+    "hit": 0.5576,
+    "gap": 0.0196,
+    "gap_ci": [
+     -0.0444,
+     0.0924
+    ],
+    "over_share": 0.066,
+    "bias_mean_minus_actual": -1.819,
+    "var_z": 1.388
+   },
+   "(-0.5, -0.2]": {
+    "n": 906,
+    "games": 28,
+    "stated": 0.5513,
+    "hit": 0.5022,
+    "gap": 0.0491,
+    "gap_ci": [
+     -0.0031,
+     0.0977
+    ],
+    "over_share": 0.866,
+    "bias_mean_minus_actual": 1.862,
+    "var_z": 1.698
+   },
+   "(-1.0, -0.5]": {
+    "n": 364,
+    "games": 28,
+    "stated": 0.6978,
+    "hit": 0.5082,
+    "gap": 0.1895,
+    "gap_ci": [
+     0.0882,
+     0.287
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 5.929,
+    "var_z": 1.975
+   },
+   "(0.2, 0.5]": {
+    "n": 636,
+    "games": 28,
+    "stated": 0.6822,
+    "hit": 0.5645,
+    "gap": 0.1177,
+    "gap_ci": [
+     0.0342,
+     0.1981
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -2.958,
+    "var_z": 1.697
+   },
+   "(0.5, 1.0]": {
+    "n": 284,
+    "games": 28,
+    "stated": 0.7861,
+    "hit": 0.5704,
+    "gap": 0.2157,
+    "gap_ci": [
+     0.1099,
+     0.3069
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -7.827,
+    "var_z": 1.687
+   },
+   "(1.0, 9.0]": {
+    "n": 115,
+    "games": 19,
+    "stated": 0.9062,
+    "hit": 0.6087,
+    "gap": 0.2975,
+    "gap_ci": [
+     0.1712,
+     0.4543
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -7.472,
+    "var_z": 5.744
+   }
+  },
+  "nfl_position": {
+   "QB": {
+    "n": 563,
+    "games": 28,
+    "stated": 0.6059,
+    "hit": 0.6092,
+    "gap": -0.0033,
+    "gap_ci": [
+     -0.0939,
+     0.0919
+    ],
+    "over_share": 0.327,
+    "bias_mean_minus_actual": 4.287,
+    "var_z": 1.065
+   },
+   "RB": {
+    "n": 1639,
+    "games": 28,
+    "stated": 0.6355,
+    "hit": 0.5253,
+    "gap": 0.1102,
+    "gap_ci": [
+     0.0487,
+     0.1709
+    ],
+    "over_share": 0.318,
+    "bias_mean_minus_actual": -3.044,
+    "var_z": 2.319
+   },
+   "TE": {
+    "n": 588,
+    "games": 28,
+    "stated": 0.6065,
+    "hit": 0.5714,
+    "gap": 0.0351,
+    "gap_ci": [
+     -0.0344,
+     0.115
+    ],
+    "over_share": 0.299,
+    "bias_mean_minus_actual": -3.166,
+    "var_z": 1.393
+   },
+   "WR": {
+    "n": 1245,
+    "games": 28,
+    "stated": 0.6277,
+    "hit": 0.5261,
+    "gap": 0.1016,
+    "gap_ci": [
+     0.0416,
+     0.1697
+    ],
+    "over_share": 0.317,
+    "bias_mean_minus_actual": 0.194,
+    "var_z": 16.813
+   }
+  },
+  "market_x_side": {
+   "pass_yds:over": {
+    "n": 84,
+    "games": 15,
+    "stated": 0.5614,
+    "hit": 0.5,
+    "gap": 0.0614,
+    "gap_ci": [
+     -0.1629,
+     0.3524
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 21.17,
+    "var_z": 0.524
+   },
+   "pass_yds:under": {
+    "n": 190,
+    "games": 28,
+    "stated": 0.6161,
+    "hit": 0.5421,
+    "gap": 0.074,
+    "gap_ci": [
+     -0.0988,
+     0.2771
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -3.2,
+    "var_z": 1.238
+   },
+   "rec:over": {
+    "n": 201,
+    "games": 28,
+    "stated": 0.6154,
+    "hit": 0.5721,
+    "gap": 0.0433,
+    "gap_ci": [
+     -0.0344,
+     0.1239
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 0.147,
+    "var_z": 1.0
+   },
+   "rec:under": {
+    "n": 524,
+    "games": 28,
+    "stated": 0.6508,
+    "hit": 0.5592,
+    "gap": 0.0917,
+    "gap_ci": [
+     0.02,
+     0.1598
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -0.278,
+    "var_z": 1.595
+   },
+   "rec_yds:over": {
+    "n": 582,
+    "games": 28,
+    "stated": 0.5921,
+    "hit": 0.5052,
+    "gap": 0.0869,
+    "gap_ci": [
+     0.0132,
+     0.1609
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 2.614,
+    "var_z": 1.766
+   },
+   "rec_yds:under": {
+    "n": 1145,
+    "games": 28,
+    "stated": 0.6202,
+    "hit": 0.5721,
+    "gap": 0.0482,
+    "gap_ci": [
+     -0.0364,
+     0.1328
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -3.6,
+    "var_z": 18.459
+   },
+   "rush_att:over": {
+    "n": 135,
+    "games": 26,
+    "stated": 0.6415,
+    "hit": 0.4963,
+    "gap": 0.1452,
+    "gap_ci": [
+     -0.0047,
+     0.299
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 0.817,
+    "var_z": 2.51
+   },
+   "rush_att:under": {
+    "n": 388,
+    "games": 28,
+    "stated": 0.6782,
+    "hit": 0.5258,
+    "gap": 0.1524,
+    "gap_ci": [
+     0.0818,
+     0.2217
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -1.487,
+    "var_z": 2.054
+   },
+   "rush_yds:over": {
+    "n": 275,
+    "games": 28,
+    "stated": 0.5984,
+    "hit": 0.4727,
+    "gap": 0.1257,
+    "gap_ci": [
+     0.0098,
+     0.2378
+    ],
+    "over_share": 1.0,
+    "bias_mean_minus_actual": 2.013,
+    "var_z": 2.198
+   },
+   "rush_yds:under": {
+    "n": 511,
+    "games": 28,
+    "stated": 0.632,
+    "hit": 0.5714,
+    "gap": 0.0605,
+    "gap_ci": [
+     -0.0224,
+     0.1526
+    ],
+    "over_share": 0.0,
+    "bias_mean_minus_actual": -5.356,
+    "var_z": 1.624
+   }
+  }
+ }
+}

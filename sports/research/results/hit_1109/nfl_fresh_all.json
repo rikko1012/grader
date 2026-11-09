@@ -1,0 +1,420 @@
+{
+ "rule": "(owner 2026-11-09, plus the same-day update):\n  H1  hit rate on all props AND on graded props: point estimate up vs live, game-grouped 95% CI of the difference not\n      entirely < 0;\n  H2  Over picks and Under picks scored SEPARATELY: neither side's hit rate down (point estimate) vs live;\n  H3  graded count >= live's;\n  H4  Over share of graded picks no further from 50% than live's (no more lopsided).\n  Stated-vs-hit gap, log loss and calibration are reported for information only - never a veto. Chances are never\n  shrunk by any arm here.",
+ "period": "",
+ "all": {
+  "n": 1876,
+  "games": 13,
+  "arms": {
+   "po_live": {
+    "all": {
+     "n": 1876,
+     "hit": 0.5453,
+     "hit_ci": [
+      0.5049,
+      0.5921
+     ],
+     "over_share": 0.2953,
+     "stated": 0.6218,
+     "over_n": 554,
+     "over_hit": 0.5704,
+     "over_hit_ci": [
+      0.4794,
+      0.6454
+     ],
+     "under_n": 1322,
+     "under_hit": 0.5348,
+     "under_hit_ci": [
+      0.4636,
+      0.6003
+     ]
+    },
+    "graded": {
+     "n": 1549,
+     "hit": 0.5429,
+     "hit_ci": [
+      0.4893,
+      0.6038
+     ],
+     "over_share": 0.2537,
+     "stated": 0.6438,
+     "over_n": 393,
+     "over_hit": 0.5878,
+     "over_hit_ci": [
+      0.4787,
+      0.6835
+     ],
+     "under_n": 1156,
+     "under_hit": 0.5277,
+     "under_hit_ci": [
+      0.4594,
+      0.5963
+     ]
+    },
+    "proj": {
+     "mae": 17.467,
+     "bias": -4.983,
+     "line_mae": 16.787,
+     "over_picks": {
+      "n": 554,
+      "mae": 14.374,
+      "bias": -0.568,
+      "line_mae": 14.781
+     },
+     "under_picks": {
+      "n": 1322,
+      "mae": 18.763,
+      "bias": -6.833,
+      "line_mae": 17.628
+     }
+    }
+   }
+  }
+ },
+ "by_market": {
+  "pass_yds": {
+   "n": 135,
+   "games": 13,
+   "arms": {
+    "po_live": {
+     "all": {
+      "n": 135,
+      "hit": 0.5037,
+      "hit_ci": [
+       0.317,
+       0.6727
+      ],
+      "over_share": 0.237,
+      "stated": 0.6158,
+      "over_n": 32,
+      "over_hit": 0.4688,
+      "over_hit_ci": [
+       0.108,
+       0.9169
+      ],
+      "under_n": 103,
+      "under_hit": 0.5146,
+      "under_hit_ci": [
+       0.2446,
+       0.7568
+      ]
+     },
+     "graded": {
+      "n": 96,
+      "hit": 0.4896,
+      "hit_ci": [
+       0.2439,
+       0.7155
+      ],
+      "over_share": 0.1875,
+      "stated": 0.6562,
+      "over_n": 18,
+      "over_hit": 0.7222,
+      "over_hit_ci": [
+       0.0,
+       1.0
+      ],
+      "under_n": 78,
+      "under_hit": 0.4359,
+      "under_hit_ci": [
+       0.147,
+       0.7288
+      ]
+     },
+     "proj": {
+      "mae": 58.208,
+      "bias": -38.245,
+      "line_mae": 49.47,
+      "over_picks": {
+       "n": 32,
+       "mae": 33.444,
+       "bias": -5.671,
+       "line_mae": 35.156
+      },
+      "under_picks": {
+       "n": 103,
+       "mae": 65.902,
+       "bias": -48.365,
+       "line_mae": 53.917
+      }
+     }
+    }
+   }
+  },
+  "rec": {
+   "n": 307,
+   "games": 13,
+   "arms": {
+    "po_live": {
+     "all": {
+      "n": 307,
+      "hit": 0.5635,
+      "hit_ci": [
+       0.5166,
+       0.6089
+      ],
+      "over_share": 0.2638,
+      "stated": 0.6312,
+      "over_n": 81,
+      "over_hit": 0.5556,
+      "over_hit_ci": [
+       0.4578,
+       0.6506
+      ],
+      "under_n": 226,
+      "under_hit": 0.5664,
+      "under_hit_ci": [
+       0.5139,
+       0.6121
+      ]
+     },
+     "graded": {
+      "n": 277,
+      "hit": 0.5776,
+      "hit_ci": [
+       0.5315,
+       0.6312
+      ],
+      "over_share": 0.2527,
+      "stated": 0.6439,
+      "over_n": 70,
+      "over_hit": 0.5714,
+      "over_hit_ci": [
+       0.4489,
+       0.6739
+      ],
+      "under_n": 207,
+      "under_hit": 0.5797,
+      "under_hit_ci": [
+       0.5246,
+       0.6342
+      ]
+     },
+     "proj": {
+      "mae": 1.368,
+      "bias": -0.273,
+      "line_mae": 1.407,
+      "over_picks": {
+       "n": 81,
+       "mae": 1.298,
+       "bias": 0.19,
+       "line_mae": 1.315
+      },
+      "under_picks": {
+       "n": 226,
+       "mae": 1.393,
+       "bias": -0.439,
+       "line_mae": 1.44
+      }
+     }
+    }
+   }
+  },
+  "rec_yds": {
+   "n": 891,
+   "games": 13,
+   "arms": {
+    "po_live": {
+     "all": {
+      "n": 891,
+      "hit": 0.5679,
+      "hit_ci": [
+       0.5064,
+       0.6191
+      ],
+      "over_share": 0.3322,
+      "stated": 0.5974,
+      "over_n": 296,
+      "over_hit": 0.625,
+      "over_hit_ci": [
+       0.4883,
+       0.7073
+      ],
+      "under_n": 595,
+      "under_hit": 0.5395,
+      "under_hit_ci": [
+       0.4631,
+       0.6117
+      ]
+     },
+     "graded": {
+      "n": 693,
+      "hit": 0.57,
+      "hit_ci": [
+       0.4969,
+       0.6361
+      ],
+      "over_share": 0.2713,
+      "stated": 0.6201,
+      "over_n": 188,
+      "over_hit": 0.6649,
+      "over_hit_ci": [
+       0.5301,
+       0.7736
+      ],
+      "under_n": 505,
+      "under_hit": 0.5347,
+      "under_hit_ci": [
+       0.4536,
+       0.6108
+      ]
+     },
+     "proj": {
+      "mae": 19.409,
+      "bias": -4.264,
+      "line_mae": 19.843,
+      "over_picks": {
+       "n": 296,
+       "mae": 15.9,
+       "bias": -3.704,
+       "line_mae": 17.689
+      },
+      "under_picks": {
+       "n": 595,
+       "mae": 21.155,
+       "bias": -4.542,
+       "line_mae": 20.915
+      }
+     }
+    }
+   }
+  },
+  "rush_att": {
+   "n": 202,
+   "games": 13,
+   "arms": {
+    "po_live": {
+     "all": {
+      "n": 202,
+      "hit": 0.5297,
+      "hit_ci": [
+       0.4328,
+       0.6355
+      ],
+      "over_share": 0.2624,
+      "stated": 0.6845,
+      "over_n": 53,
+      "over_hit": 0.4528,
+      "over_hit_ci": [
+       0.3103,
+       0.6776
+      ],
+      "under_n": 149,
+      "under_hit": 0.557,
+      "under_hit_ci": [
+       0.4444,
+       0.6854
+      ]
+     },
+     "graded": {
+      "n": 180,
+      "hit": 0.5056,
+      "hit_ci": [
+       0.4031,
+       0.6251
+      ],
+      "over_share": 0.2389,
+      "stated": 0.7044,
+      "over_n": 43,
+      "over_hit": 0.3488,
+      "over_hit_ci": [
+       0.1951,
+       0.5789
+      ],
+      "under_n": 137,
+      "under_hit": 0.5547,
+      "under_hit_ci": [
+       0.4392,
+       0.687
+      ]
+     },
+     "proj": {
+      "mae": 3.565,
+      "bias": -0.425,
+      "line_mae": 2.99,
+      "over_picks": {
+       "n": 53,
+       "mae": 3.885,
+       "bias": 2.268,
+       "line_mae": 3.151
+      },
+      "under_picks": {
+       "n": 149,
+       "mae": 3.451,
+       "bias": -1.383,
+       "line_mae": 2.933
+      }
+     }
+    }
+   }
+  },
+  "rush_yds": {
+   "n": 341,
+   "games": 13,
+   "arms": {
+    "po_live": {
+     "all": {
+      "n": 341,
+      "hit": 0.4956,
+      "hit_ci": [
+       0.3482,
+       0.6464
+      ],
+      "over_share": 0.2698,
+      "stated": 0.6424,
+      "over_n": 92,
+      "over_hit": 0.5109,
+      "over_hit_ci": [
+       0.2659,
+       0.8
+      ],
+      "under_n": 249,
+      "under_hit": 0.49,
+      "under_hit_ci": [
+       0.32,
+       0.6412
+      ]
+     },
+     "graded": {
+      "n": 303,
+      "hit": 0.4884,
+      "hit_ci": [
+       0.3343,
+       0.6442
+      ],
+      "over_share": 0.2442,
+      "stated": 0.658,
+      "over_n": 74,
+      "over_hit": 0.5135,
+      "over_hit_ci": [
+       0.2815,
+       0.8098
+      ],
+      "under_n": 229,
+      "under_hit": 0.4803,
+      "under_hit_ci": [
+       0.312,
+       0.6367
+      ]
+     },
+     "proj": {
+      "mae": 18.993,
+      "bias": -0.632,
+      "line_mae": 17.881,
+      "over_picks": {
+       "n": 92,
+       "mae": 20.389,
+       "bias": 8.996,
+       "line_mae": 16.891
+      },
+      "under_picks": {
+       "n": 249,
+       "mae": 18.477,
+       "bias": -4.19,
+       "line_mae": 18.247
+      }
+     }
+    }
+   }
+  }
+ }
+}

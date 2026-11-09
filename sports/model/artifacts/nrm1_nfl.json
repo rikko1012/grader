@@ -1,0 +1,73 @@
+{
+ "fitted_on": "sacc-1109 walk-forward out-of-sample sm-1 predictions, every window through 2026-11-03 (NFL 2026 week 9); box scores only, no book line",
+ "markets": {
+  "rec": {
+   "fit_rows": 24118,
+   "gamma": [
+    0.045422,
+    0.153524,
+    0.203437,
+    0.404289,
+    0.023289,
+    0.03173,
+    -0.074636,
+    -0.015804,
+    -0.205946
+   ],
+   "gamma_named": {
+    "back_from_absence": -0.0746,
+    "const": 0.0454,
+    "implied_total": 0.0317,
+    "log_e2_vs_ew_opp": 0.2034,
+    "log_lag1_vs_ew_opp": 0.1535,
+    "qb_change": -0.0158,
+    "snap_trend": 0.4043,
+    "team_change": -0.2059,
+    "team_spread": 0.0233
+   },
+   "windows": "final_2026-11-03"
+  },
+  "rush_att": {
+   "fit_rows": 24118,
+   "gamma": [
+    0.023365,
+    0.038307,
+    -0.348567,
+    0.125427,
+    -0.049019,
+    -0.055835,
+    -0.01398,
+    0.021541,
+    -0.174683
+   ],
+   "gamma_named": {
+    "back_from_absence": -0.014,
+    "const": 0.0234,
+    "implied_total": -0.0558,
+    "log_e2_vs_ew_opp": -0.3486,
+    "log_lag1_vs_ew_opp": 0.0383,
+    "qb_change": 0.0215,
+    "snap_trend": 0.1254,
+    "team_change": -0.1747,
+    "team_spread": -0.049
+   },
+   "windows": "final_2026-11-03"
+  }
+ },
+ "model_version": "nrm-1",
+ "pairs_with_sm1": "cc56aeb8b88c31d8",
+ "role": "challenger (shadow) - REGISTER.md A12; not displayed, not graded",
+ "sha": "8c0ce91932b2dec1",
+ "sport": "nfl",
+ "z_names": [
+  "const",
+  "log_lag1_vs_ew_opp",
+  "log_e2_vs_ew_opp",
+  "snap_trend",
+  "team_spread",
+  "implied_total",
+  "back_from_absence",
+  "qb_change",
+  "team_change"
+ ]
+}

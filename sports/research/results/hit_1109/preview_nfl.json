@@ -1,0 +1,69 @@
+{
+ "league": "nfl",
+ "built_at": "2026-11-09T17:36:03Z",
+ "markets": 162,
+ "graded": 180,
+ "by_grade": {
+  "A": 120,
+  "B": 33,
+  "C": 10,
+  "Lean": 17
+ },
+ "by_platform": {
+  "underdog": 63,
+  "prizepicks": 38,
+  "betrivers": 28,
+  "polymarket": 27,
+  "fanduel": 24
+ },
+ "over": 63,
+ "under": 117,
+ "over_share": 0.35,
+ "top": [
+  {
+   "p": 0.844,
+   "player": "Justin Jefferson",
+   "stat": "rec_yds",
+   "book": "polymarket",
+   "line": 89.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.837,
+   "player": "Rachaad White",
+   "stat": "rush_att",
+   "book": "underdog",
+   "line": 11.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.837,
+   "player": "Rachaad White",
+   "stat": "rush_att",
+   "book": "prizepicks",
+   "line": 11.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.832,
+   "player": "Justin Jefferson",
+   "stat": "rec",
+   "book": "underdog",
+   "line": 6.5,
+   "side": "under",
+   "grade": "A"
+  },
+  {
+   "p": 0.832,
+   "player": "Justin Jefferson",
+   "stat": "rec",
+   "book": "prizepicks",
+   "line": 6.5,
+   "side": "under",
+   "grade": "A"
+  }
+ ]
+}
