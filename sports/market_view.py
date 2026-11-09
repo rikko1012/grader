@@ -38,6 +38,7 @@ from .contracts import parse_utc
 
 DISPLAY_VERSION = "mv-1"
 TARGET_BOARDS = ("prizepicks", "underdog")          # pick'em boards graded against; never market sources
+EXCHANGES = ("kalshi", "polymarket", "novig", "gemini")     # priced by a YES bid / ask (exchange_yes_no)
 DIRECT_BOOKS = ("fanduel", "betrivers")
 _ART = Path(__file__).resolve().parent / "model" / "artifacts" / "market_mc1.json"
 
@@ -60,6 +61,8 @@ def source_status(platform):
         return False, "unknown source"
     if not meta["verified"]:
         return False, "capture-only: prop format not verified"
+    if meta.get("display_only"):
+        return False, "display only: its price is shown, never counted in the market chance"
     return True, None
 
 
@@ -71,7 +74,7 @@ def reading(q):
     """A book's own chance at its own line. -> dict(kind, c, over, under) - c = P(Over | no push) or None."""
     o, u = q.side("over"), q.side("under")
     out = {"kind": "none", "c": None, "over": None, "under": None}
-    if q.platform in ("kalshi", "polymarket"):
+    if q.platform in EXCHANGES:
         if o is not None and o.bid is not None and o.ask is not None:
             out.update(kind="mid", c=(o.bid + o.ask) / 2, over=[o.bid, o.ask])
         elif o is not None and (o.bid is not None or o.ask is not None):

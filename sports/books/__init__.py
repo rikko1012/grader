@@ -19,6 +19,10 @@ PRIMARY market source for sports projections). Sports-namespaced: nothing here i
 |             |                                        | passing / rushing / receiving yards, receptions,        |           |
 |             |                                        | passing attempts / completions (many books empty: the   |           |
 |             |                                        | liquidity / spread filter applies)                      |           |
+| novig       | public catalog, no key (2026-11-09)    | yes: NBA points / reb / ast / threes / combos / stl /    | NO -      |
+|             | books/exchanges.py; NOVIG=0 = off      | blk; NFL pass / rush / rec yds, rec, att, cmp, TDs, INT  | display   |
+| gemini      | public prediction-markets API, no key  | NFL pass / rush / rec yds, pass TDs (no NBA props        | only      |
+|             | books/exchanges.py; GEMINI=0 = off     | listed 2026-11-09)                                      |           |
 | oddsapi     | ODDS_API_KEY (Render env only)         | not here: key not set locally. Parser = foundation       | yes, once |
 |             |                                        | adapters.oddsapi_offers (documented API shape)          | resolved  |
 | thunderpick | THUNDERPICK_API_KEY (Render env only)  | not here: key not set locally; sport paths for NBA / NFL | no - until|
@@ -39,4 +43,14 @@ SOURCES = {
     # set (REGISTER.md section 10) is unchanged (amendment A4)
     "fanduel": {"key_env": None, "verified": True, "consensus": False},
     "betrivers": {"key_env": None, "verified": True, "consensus": False},
+    # display-only exchanges (owner 2026-11-09, books/exchanges.py): shown as priced exchange lines on the board,
+    # Compare / best prices and the card's odds table; NEVER in mc-1 / mi-1, the mv-1 display consensus or the hub's
+    # fair price. Public market data, no key (kill switches NOVIG=0 / GEMINI=0)
+    "novig": {"key_env": None, "verified": True, "consensus": False, "display_only": True},
+    "gemini": {"key_env": None, "verified": True, "consensus": False, "display_only": True},
 }
+
+
+def display_only(platform):
+    """A source shown with its own price but never counted in any market chance (books/exchanges.py)."""
+    return bool((SOURCES.get(str(platform or "").split(":", 1)[0]) or {}).get("display_only"))

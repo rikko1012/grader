@@ -1,0 +1,528 @@
+{
+ "_recorded": {
+  "at": "2026-11-09T18:31Z",
+  "request": "GET https://api.gemini.com/v1/prediction-markets/events?status=active&category=Sports&sport=american_football&sports_market_type=prop&limit=100&offset=0",
+  "note": "anonymous; trimmed to 3 events"
+ },
+ "data": [
+  {
+   "id": "421897",
+   "title": "Detroit vs Miami: Player Rushing Yards",
+   "slug": "detroit-vs-miami-player-rushing-yards",
+   "type": "categorical",
+   "category": "Sports",
+   "ticker": "NFL-2611081800-DET-MIA-PPRYDS",
+   "status": "active",
+   "createdAt": "2026-11-04T05:07:43.554Z",
+   "contracts": [
+    {
+     "id": "421897-1006246",
+     "label": "Jaylen Wright 10+ Rushing Yards",
+     "description": "<trimmed rules text>",
+     "prices": {
+      "buy": {
+       "yes": "0.35",
+       "no": "0.65"
+      },
+      "sell": {
+       "yes": "0.35",
+       "no": "0.65"
+      },
+      "lastTradePrice": "0.35"
+     },
+     "status": "active",
+     "createdAt": "2026-11-04T05:07:43.554Z",
+     "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/TC_Pro_Football_Rushing_Yards_766d41e9-0f08-4e19-b385-2cb1f2197262.pdf",
+     "ticker": "JWRIGHT2O9",
+     "instrumentSymbol": "GEMI-NFL-2611081800-DET-MIA-PPRYDS-JWRIGHT2O9",
+     "marketState": "open",
+     "color": "#008E97",
+     "imageUrl": "https://assets.gemini.com/predictions/images/Miami_DolphinsDark_010094b1-e4ea-4b35-9638-6d065247b25b.avif",
+     "expiryDate": "2026-11-10T06:00:00.000Z",
+     "effectiveDate": "2026-11-02T00:00:06.000Z",
+     "sortOrder": 38,
+     "teamId": "4809ecb0-abd3-451d-9c4a-92a90b83ca06",
+     "strike": {
+      "type": "over",
+      "value": "9.5"
+     },
+     "isCombo": false,
+     "quantityIncrement": "0.01",
+     "quantityMinimum": "0.01",
+     "priceIncrement": "0.01",
+     "quoteAssetPrecision": 2,
+     "priceMinimum": "0.01"
+    },
+    {
+     "id": "421897-1004629",
+     "label": "Jahmyr Gibbs 60+ Rushing Yards",
+     "description": "<trimmed rules text>",
+     "prices": {
+      "buy": {},
+      "sell": {}
+     },
+     "status": "settled",
+     "createdAt": "2026-11-04T05:07:43.554Z",
+     "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/TC_Pro_Football_Rushing_Yards_766d41e9-0f08-4e19-b385-2cb1f2197262.pdf",
+     "ticker": "GIBBSO59",
+     "instrumentSymbol": "GEMI-NFL-2611081800-DET-MIA-PPRYDS-GIBBSO59",
+     "marketState": "closed",
+     "color": "#0076B6",
+     "imageUrl": "https://assets.gemini.com/predictions/images/Detroit_LionsDark_1e27ec0a-9614-4cb5-9088-c5531ce74ebc.avif",
+     "expiryDate": "2026-11-10T06:00:00.000Z",
+     "resolutionSide": "yes",
+     "resolvedAt": "2026-11-08T21:01:36.642Z",
+     "effectiveDate": "2026-11-02T00:00:06.000Z",
+     "sortOrder": 0,
+     "teamId": "c5a59daa-53a7-4de0-851f-fb12be893e9e",
+     "strike": {
+      "type": "over",
+      "value": "59.5"
+     },
+     "isCombo": false,
+     "quantityIncrement": "0.01",
+     "quantityMinimum": "0.01",
+     "priceIncrement": "0.01",
+     "quoteAssetPrecision": 2,
+     "priceMinimum": "0.01"
+    }
+   ],
+   "effectiveDate": "2026-11-04T05:07:43.554Z",
+   "isLive": true,
+   "participants": [
+    {
+     "id": "427",
+     "name": "Miami Dolphins",
+     "abbreviation": "MIA",
+     "side": "home"
+    },
+    {
+     "id": "447",
+     "name": "Detroit Lions",
+     "abbreviation": "DET",
+     "side": "away"
+    }
+   ],
+   "description": "How many rushing yards will each player record?",
+   "imageUrl": "https://assets.gemini.com/predictions/images/Football_fb67fb13-3768-40c7-a99d-cbe2644d299e.avif",
+   "volume": "15",
+   "volume24h": "202.52",
+   "tags": [
+    "Pro Football"
+   ],
+   "expiryDate": "2026-11-10T06:00:00.000Z",
+   "startTime": "2026-11-08T18:00:00.000Z",
+   "termsLink": "https://assets.gemini.com/predictions/terms_and_conditions/TC_Pro_Football_Rushing_Yards_766d41e9-0f08-4e19-b385-2cb1f2197262.pdf",
+   "subcategory": {
+    "id": 12,
+    "slug": "sports_pro-football",
+    "name": "Pro Football",
+    "path": [
+     "Sports",
+     "Pro Football"
+    ]
+   },
+   "socialImageUrl": "https://assets.gemini.com/predictions/images/Football_square_1_7660ad42-c561-4e8b-8bc7-175a1c63ae5c.png",
+   "template": "sports-player-props",
+   "gameId": "c183e3ee-ac35-4774-a2ab-f8f73bbbd2ac",
+   "sourceDetails": {
+    "agency": "sportradar-rest-api",
+    "index": "American Football Player Props"
+   },
+   "volumeDelta24hPct": "62.51",
+   "sportsMarket": {
+    "sport": "american_football",
+    "type": "prop",
+    "subject": "player",
+    "scope": {
+     "type": "full_contest"
+    },
+    "metric": "rushing_yards",
+    "team": {
+     "symbol": "MIA",
+     "name": "Miami Dolphins",
+     "externalIds": {
+      "sportradarId": "4809ecb0-abd3-451d-9c4a-92a90b83ca06"
+     }
+    },
+    "player": {
+     "symbol": "MWILLIS",
+     "name": "Malik Willis",
+     "externalIds": {
+      "sportradarId": "55aefcf9-4dfb-4994-883f-4d537a6f1ddb",
+      "officialLeagueId": "00-0038128",
+      "officialLeagueSource": "nfl_gsis"
+     },
+     "position": "QB",
+     "number": "2"
+    }
+   }
+  },
+  {
+   "id": "424531",
+   "title": "Buffalo vs Minnesota: Player Touchdowns",
+   "slug": "buffalo-vs-minnesota-player-touchdowns",
+   "type": "categorical",
+   "category": "Sports",
+   "ticker": "NFL-2611100115-BUF-MIN-PPTD",
+   "status": "active",
+   "createdAt": "2026-11-05T02:19:31.684Z",
+   "contracts": [
+    {
+     "id": "424531-1011790",
+     "label": "Jauan Jennings 1+ Touchdowns",
+     "description": "<trimmed rules text>",
+     "prices": {
+      "buy": {
+       "yes": "0.53",
+       "no": "0.93"
+      },
+      "sell": {
+       "yes": "0.07",
+       "no": "0.47"
+      },
+      "bestBid": "0.07",
+      "bestAsk": "0.53",
+      "lastTradePrice": "0.5"
+     },
+     "status": "active",
+     "createdAt": "2026-11-05T02:19:31.684Z",
+     "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/Terms_and_Conditions_NFL_Anytime_TD_Scorer_Class_c0c98e8d-a544-4786-8061-5943dd3096d8.pdf",
+     "ticker": "BJENNINGSO0",
+     "instrumentSymbol": "GEMI-NFL-2611100115-BUF-MIN-PPTD-BJENNINGSO0",
+     "marketState": "open",
+     "color": "#4F2683",
+     "imageUrl": "https://assets.gemini.com/predictions/images/Minnesota_Vikings_1_092c0864-e622-47bd-88c7-9c91461f4bbe.avif",
+     "expiryDate": "2026-11-11T13:15:00.000Z",
+     "effectiveDate": "2026-11-02T14:52:00.000Z",
+     "sortOrder": 10,
+     "teamId": "33405046-04ee-4058-a950-d606f8c30852",
+     "strike": {
+      "type": "over",
+      "value": "0.5"
+     },
+     "isCombo": false,
+     "quantityIncrement": "0.01",
+     "quantityMinimum": "0.01",
+     "priceIncrement": "0.01",
+     "quoteAssetPrecision": 2,
+     "priceMinimum": "0.01"
+    },
+    {
+     "id": "424531-1011811",
+     "label": "Josh Allen 1+ Touchdowns",
+     "description": "<trimmed rules text>",
+     "prices": {
+      "buy": {
+       "yes": "0.53",
+       "no": "0.48"
+      },
+      "sell": {
+       "yes": "0.52",
+       "no": "0.47"
+      },
+      "bestBid": "0.52",
+      "bestAsk": "0.53",
+      "lastTradePrice": "0.53"
+     },
+     "status": "active",
+     "createdAt": "2026-11-05T02:19:31.684Z",
+     "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/Terms_and_Conditions_NFL_Anytime_TD_Scorer_Class_c0c98e8d-a544-4786-8061-5943dd3096d8.pdf",
+     "ticker": "JALLENO0",
+     "instrumentSymbol": "GEMI-NFL-2611100115-BUF-MIN-PPTD-JALLENO0",
+     "marketState": "open",
+     "color": "#00338D",
+     "imageUrl": "https://assets.gemini.com/predictions/images/Buffalo_BillsDark_0e4eb9e5-f78f-49fb-9dc0-8071c01c2d0e.avif",
+     "expiryDate": "2026-11-11T13:15:00.000Z",
+     "effectiveDate": "2026-11-02T14:52:00.000Z",
+     "sortOrder": 16,
+     "teamId": "768c92aa-75ff-4a43-bcc0-f2798c2e1724",
+     "strike": {
+      "type": "over",
+      "value": "0.5"
+     },
+     "isCombo": false,
+     "quantityIncrement": "0.01",
+     "quantityMinimum": "0.01",
+     "priceIncrement": "0.01",
+     "quoteAssetPrecision": 2,
+     "priceMinimum": "0.01"
+    }
+   ],
+   "effectiveDate": "2026-11-05T02:19:31.684Z",
+   "isLive": true,
+   "participants": [
+    {
+     "id": "449",
+     "name": "Minnesota Vikings",
+     "abbreviation": "MIN",
+     "side": "home"
+    },
+    {
+     "id": "426",
+     "name": "Buffalo Bills",
+     "abbreviation": "BUF",
+     "side": "away"
+    }
+   ],
+   "description": "Will each player score a touchdown?",
+   "imageUrl": "https://assets.gemini.com/predictions/images/Football_fb67fb13-3768-40c7-a99d-cbe2644d299e.avif",
+   "volume": "3286.55",
+   "volume24h": "3286.55",
+   "tags": [
+    "Pro Football"
+   ],
+   "expiryDate": "2026-11-11T13:15:00.000Z",
+   "startTime": "2026-11-10T01:15:00.000Z",
+   "termsLink": "https://assets.gemini.com/predictions/terms_and_conditions/Terms_and_Conditions_NFL_Anytime_TD_Scorer_Class_c0c98e8d-a544-4786-8061-5943dd3096d8.pdf",
+   "subcategory": {
+    "id": 12,
+    "slug": "sports_pro-football",
+    "name": "Pro Football",
+    "path": [
+     "Sports",
+     "Pro Football"
+    ]
+   },
+   "socialImageUrl": "https://assets.gemini.com/predictions/images/Football_square_1_7660ad42-c561-4e8b-8bc7-175a1c63ae5c.png",
+   "template": "sports-player-props",
+   "gameId": "481bb9be-4ab1-4723-9946-a57a6094cafa",
+   "sourceDetails": {
+    "agency": "statscore-rest-api",
+    "index": "American Football Player Props"
+   },
+   "volumeDelta24hPct": "0",
+   "sportsMarket": {
+    "sport": "american_football",
+    "type": "prop",
+    "subject": "player",
+    "scope": {
+     "type": "full_contest"
+    },
+    "metric": "touchdowns",
+    "team": {
+     "symbol": "MIN",
+     "name": "Minnesota Vikings",
+     "externalIds": {
+      "sportradarId": "33405046-04ee-4058-a950-d606f8c30852"
+     }
+    },
+    "player": {
+     "symbol": "YUROSEK",
+     "name": "Ben Yurosek",
+     "externalIds": {
+      "sportradarId": "1f3d48b0-2629-11f0-9dca-47cf7c5385b0",
+      "officialLeagueId": "00-0040509",
+      "officialLeagueSource": "nfl_gsis"
+     },
+     "position": "TE",
+     "number": "85"
+    }
+   }
+  },
+  {
+   "id": "424559",
+   "title": "Buffalo vs Minnesota: Player Receiving Yards",
+   "slug": "buffalo-vs-minnesota-player-receiving-yards",
+   "type": "categorical",
+   "category": "Sports",
+   "ticker": "NFL-2611100115-BUF-MIN-PPRECY",
+   "status": "active",
+   "createdAt": "2026-11-05T02:24:17.926Z",
+   "contracts": [
+    {
+     "id": "424559-1012086",
+     "label": "Jordan Addison 15+ Receiving Yards",
+     "description": "<trimmed rules text>",
+     "prices": {
+      "buy": {
+       "yes": "0.82",
+       "no": "0.19"
+      },
+      "sell": {
+       "yes": "0.81",
+       "no": "0.18"
+      },
+      "bestBid": "0.81",
+      "bestAsk": "0.82"
+     },
+     "status": "active",
+     "createdAt": "2026-11-05T02:24:17.926Z",
+     "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/TC_Pro_Football_Receiving_Yards_fbe8c34e-0c64-4f42-baa9-403d4ced168c.pdf",
+     "ticker": "ADDISONO14",
+     "instrumentSymbol": "GEMI-NFL-2611100115-BUF-MIN-PPRECY-ADDISONO14",
+     "marketState": "open",
+     "color": "#4F2683",
+     "imageUrl": "https://assets.gemini.com/predictions/images/Minnesota_Vikings_1_092c0864-e622-47bd-88c7-9c91461f4bbe.avif",
+     "expiryDate": "2026-11-11T13:15:00.000Z",
+     "effectiveDate": "2026-11-02T14:52:00.000Z",
+     "sortOrder": 21,
+     "teamId": "33405046-04ee-4058-a950-d606f8c30852",
+     "strike": {
+      "type": "over",
+      "value": "14.5"
+     },
+     "isCombo": false,
+     "quantityIncrement": "0.01",
+     "quantityMinimum": "0.01",
+     "priceIncrement": "0.01",
+     "quoteAssetPrecision": 2,
+     "priceMinimum": "0.01"
+    },
+    {
+     "id": "424559-1012128",
+     "label": "Justin Jefferson 50+ Receiving Yards",
+     "description": "<trimmed rules text>",
+     "prices": {
+      "buy": {
+       "yes": "0.78",
+       "no": "0.24"
+      },
+      "sell": {
+       "yes": "0.76",
+       "no": "0.22"
+      },
+      "bestBid": "0.76",
+      "bestAsk": "0.78"
+     },
+     "status": "active",
+     "createdAt": "2026-11-05T02:24:17.926Z",
+     "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/TC_Pro_Football_Receiving_Yards_fbe8c34e-0c64-4f42-baa9-403d4ced168c.pdf",
+     "ticker": "JJEFFERSONO49",
+     "instrumentSymbol": "GEMI-NFL-2611100115-BUF-MIN-PPRECY-JJEFFERSONO49",
+     "marketState": "open",
+     "color": "#4F2683",
+     "imageUrl": "https://assets.gemini.com/predictions/images/Minnesota_Vikings_1_092c0864-e622-47bd-88c7-9c91461f4bbe.avif",
+     "expiryDate": "2026-11-11T13:15:00.000Z",
+     "effectiveDate": "2026-11-02T14:52:00.000Z",
+     "sortOrder": 34,
+     "teamId": "33405046-04ee-4058-a950-d606f8c30852",
+     "strike": {
+      "type": "over",
+      "value": "49.5"
+     },
+     "isCombo": false,
+     "quantityIncrement": "0.01",
+     "quantityMinimum": "0.01",
+     "priceIncrement": "0.01",
+     "quoteAssetPrecision": 2,
+     "priceMinimum": "0.01"
+    },
+    {
+     "id": "424559-1012123",
+     "label": "Justin Jefferson 30+ Receiving Yards",
+     "description": "<trimmed rules text>",
+     "prices": {
+      "buy": {
+       "yes": "0.96",
+       "no": "0.15"
+      },
+      "sell": {
+       "yes": "0.85",
+       "no": "0.04"
+      },
+      "bestBid": "0.85",
+      "bestAsk": "0.96"
+     },
+     "status": "active",
+     "createdAt": "2026-11-05T02:24:17.926Z",
+     "termsAndConditionsUrl": "https://assets.gemini.com/predictions/terms_and_conditions/TC_Pro_Football_Receiving_Yards_fbe8c34e-0c64-4f42-baa9-403d4ced168c.pdf",
+     "ticker": "JJEFFERSONO29",
+     "instrumentSymbol": "GEMI-NFL-2611100115-BUF-MIN-PPRECY-JJEFFERSONO29",
+     "marketState": "open",
+     "color": "#4F2683",
+     "imageUrl": "https://assets.gemini.com/predictions/images/Minnesota_Vikings_1_092c0864-e622-47bd-88c7-9c91461f4bbe.avif",
+     "expiryDate": "2026-11-11T13:15:00.000Z",
+     "effectiveDate": "2026-11-02T14:52:00.000Z",
+     "sortOrder": 32,
+     "teamId": "33405046-04ee-4058-a950-d606f8c30852",
+     "strike": {
+      "type": "over",
+      "value": "29.5"
+     },
+     "isCombo": false,
+     "quantityIncrement": "0.01",
+     "quantityMinimum": "0.01",
+     "priceIncrement": "0.01",
+     "quoteAssetPrecision": 2,
+     "priceMinimum": "0.01"
+    }
+   ],
+   "effectiveDate": "2026-11-05T02:24:17.926Z",
+   "isLive": true,
+   "participants": [
+    {
+     "id": "449",
+     "name": "Minnesota Vikings",
+     "abbreviation": "MIN",
+     "side": "home"
+    },
+    {
+     "id": "426",
+     "name": "Buffalo Bills",
+     "abbreviation": "BUF",
+     "side": "away"
+    }
+   ],
+   "description": "How many receiving yards will each player record?",
+   "imageUrl": "https://assets.gemini.com/predictions/images/Football_fb67fb13-3768-40c7-a99d-cbe2644d299e.avif",
+   "volume": "143.23",
+   "volume24h": "143.09",
+   "tags": [
+    "Pro Football"
+   ],
+   "expiryDate": "2026-11-11T13:15:00.000Z",
+   "startTime": "2026-11-10T01:15:00.000Z",
+   "termsLink": "https://assets.gemini.com/predictions/terms_and_conditions/TC_Pro_Football_Receiving_Yards_fbe8c34e-0c64-4f42-baa9-403d4ced168c.pdf",
+   "subcategory": {
+    "id": 12,
+    "slug": "sports_pro-football",
+    "name": "Pro Football",
+    "path": [
+     "Sports",
+     "Pro Football"
+    ]
+   },
+   "socialImageUrl": "https://assets.gemini.com/predictions/images/Football_square_1_7660ad42-c561-4e8b-8bc7-175a1c63ae5c.png",
+   "template": "sports-player-props",
+   "gameId": "481bb9be-4ab1-4723-9946-a57a6094cafa",
+   "sourceDetails": {
+    "agency": "sportradar-rest-api",
+    "index": "American Football Player Props"
+   },
+   "volumeDelta24hPct": "102107.14",
+   "sportsMarket": {
+    "sport": "american_football",
+    "type": "prop",
+    "subject": "player",
+    "scope": {
+     "type": "full_contest"
+    },
+    "metric": "receiving_yards",
+    "team": {
+     "symbol": "BUF",
+     "name": "Buffalo Bills",
+     "externalIds": {
+      "sportradarId": "768c92aa-75ff-4a43-bcc0-f2798c2e1724"
+     }
+    },
+    "player": {
+     "symbol": "DMOORE2",
+     "name": "DJ Moore",
+     "externalIds": {
+      "sportradarId": "d8202e6d-d03b-4cd1-a793-ff8fd39d9755",
+      "officialLeagueId": "00-0034827",
+      "officialLeagueSource": "nfl_gsis"
+     },
+     "position": "WR",
+     "number": "3"
+    }
+   }
+  }
+ ],
+ "pagination": {
+  "limit": 100,
+  "offset": 0,
+  "total": 3
+ }
+}
