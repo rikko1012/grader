@@ -13,7 +13,10 @@ Fix (scheduling only - no grade / chance / stake / projection / settlement chang
   * LIGHT jobs run beside a waiting or running exclusive job when the budget holds both (like books);
   * an exclusive job that waited SPORTS_JOB_EXCL_DRAIN_S (600 s) stops every other non-light start -> it starts;
   * settle is urgent after 900 s overdue; any other job overdue past SPORTS_JOB_STARVE_S (3600 s) counts as urgent;
-  * settle-post never starts while settle is due and stops its scorecards after --budget-s (resumed next run)."""
+  * settle-post never starts while settle is due and stops its scorecards after --budget-s (resumed next run).
+Review 2026-11-09: the drain stopped the board builds even with a heavy slot idle (one collector finishing) and the
+board gaps grew past c31637d - now a heavy job whose recent runs end before the running jobs fills the slot (it never
+delays the waiting job), also past an urgent job held on a store lock; recent run times persist across restarts."""
 import pytest
 
 from sports import config, scheduler, store
@@ -110,11 +113,46 @@ def test_nothing_starves_and_the_earlier_fixes_hold(six_hours):
         assert r["starts"].get(n), n                                        # every enabled job ran at least once
     for n in ("sheets", "results-public", "mapping-audit", "archive", "history", "player-context", "grades-daily"):
         assert r["waits"][n] <= 100 * 60, (n, r["waits"][n])               # bounded (live: 0 starts / 4 h)
-    for n in ("ui-snapshots-nba", "ui-snapshots-nfl"):
-        assert len(r["starts"][n]) >= 15 and r["max_gap"][n] <= 40 * 60, (n, r["max_gap"][n])
     assert len(r["starts"]["prebuilt"]) >= 25
     assert "--skip-results" in r["specs"]["sheets"]["argv"]
     assert r["specs"]["settle"]["then"] == ("settle-post",) and "--no-post" in r["specs"]["settle"]["argv"]
+
+
+# --------------------------------------------------------------- review 2026-11-09: what the drain costs the boards
+# c31637d on the same replay (seed 1108, 6 h): longest start-to-start gap in minutes. scripts/sim_sports_scheduler.py
+# --ref c31637d --seeds 8 prints the medians over 8 jitter seeds (RUNBOOK "Bounded waits").
+C31637D_GAP = {"ok": {"ui-snapshots-nba": 25.8, "ui-snapshots-nfl": 21.8, "prebuilt": 17.2},
+               "long": {"ui-snapshots-nba": 35.8, "ui-snapshots-nfl": 30.4, "prebuilt": 30.4}}
+# the collectors (canonical lock) pay for settle / history / archive now running and one model-forward drain per run:
+# bounded here at the measured value + ~2 min so a further slide fails (c31637d: 25.8 ok / 35.8 long)
+COLLECTOR_GAP = {"ok": 34.0, "long": 54.0}
+LONG_RUN_S = {"settle-post": 900, "grades-daily": 1200, "archive": 1500}
+
+
+@pytest.fixture(scope="module", params=["ok", "long"])
+def replay(request):
+    kw = {"run_s": LONG_RUN_S} if request.param == "long" else {}
+    return request.param, sim.simulate(scheduler, hours=6.0, probe=True, **kw)
+
+
+def test_the_drain_never_leaves_a_heavy_slot_idle_that_a_board_build_could_use(replay):
+    """By the MODELLED run times: no tick with a heavy slot empty while a due board build fitted and would have ended
+    before the running heavy jobs (eeb392a: ~28 min of such ticks in 6 h; c31637d ~23 min, its urgent-slot hold)."""
+    _sc, r = replay
+    assert r["idle_board_s"] == 0, r["idle_board_s"]
+
+
+def test_board_builds_and_prebuilt_keep_c31637d_gaps_and_collectors_are_bounded(replay):
+    sc, r = replay
+    for n, base in C31637D_GAP[sc].items():
+        assert r["max_gap"][n] <= (base + 1.0) * 60, (sc, n, r["max_gap"][n] / 60, base)
+    for n in ("ui-snapshots-nba", "ui-snapshots-nfl"):
+        assert len(r["starts"][n]) >= (25 if sc == "ok" else 20), (sc, n)
+    for n in ("ingest-nba", "ingest-nfl"):
+        assert r["max_gap"][n] <= COLLECTOR_GAP[sc] * 60, (sc, n, r["max_gap"][n] / 60)
+    assert len(r["starts"]["model-forward"]) >= 7                           # c31637d: 4 in 6 h
+    assert r["waits"]["model-forward"] <= (20 if sc == "ok" else 32) * 60, r["waits"]["model-forward"]
+    assert r["reserved_ok"] and r["heavy_ok"]
 
 
 # ---------------------------------------------------------------------------------------------- the rules, one by one
@@ -129,15 +167,17 @@ class _P:
         return self.rc
 
 
-def _sched(monkeypatch, jobs, budget=1200, **env):
+def _sched(monkeypatch, jobs, budget=1200, runs_path=None, **env):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     monkeypatch.setenv("SPORTS_API", "1")
     monkeypatch.setattr(scheduler, "JOBS", {})
+    monkeypatch.setattr(scheduler, "STATS", {k: 0 if isinstance(v, (int, float)) else v
+                                             for k, v in scheduler.STATS.items()})
     monkeypatch.setattr(scheduler, "rss_mb", lambda pid: 1.0)
     monkeypatch.setattr(scheduler, "spawn", lambda spec: _P())
     clock = [1_794_190_000.0]
-    sch = scheduler.Scheduler(jobs=jobs, budget=budget, now=lambda: clock[0], max_heavy_n=2)
+    sch = scheduler.Scheduler(jobs=jobs, budget=budget, now=lambda: clock[0], max_heavy_n=2, runs_path=runs_path)
     for n in jobs:
         scheduler.JOBS[n]["next_start"] = clock[0]
     return sch, clock
@@ -191,6 +231,149 @@ def test_a_draining_exclusive_job_stops_urgent_heavies_but_not_the_lights(monkey
     sch.tick()
     assert {"picks", "excl"} <= set(sch.running)                    # a light job beside the running exclusive job
     assert not ({"b1", "b2"} & set(sch.running))
+
+
+def _end(sch, name):
+    sch.running[name][0].rc = 0
+
+
+def _drain_setup(monkeypatch, board_runs=(150.0,), collector_runs=(360.0,), **env):
+    """A collector (360 s) runs, the exclusive job has waited past the drain, a board build is due."""
+    jobs = {"collector": _j("heavy", 540, 3, every=10_000, locks=("canonical",)),
+            "board": _j("heavy", 540, 2, every=1, urgent_after_s=1, locks=("snapshots",)),
+            "excl": _j("exclusive", 720, 5, every=10_000)}
+    sch, clock = _sched(monkeypatch, jobs, SPORTS_JOB_EXCL_DRAIN_S="600", **env)
+    scheduler.JOBS["board"]["next_start"] = clock[0] + 10_000                # not due yet
+    scheduler.JOBS["excl"]["next_start"] = clock[0] + 10_000
+    sch.tick()
+    assert set(sch.running) == {"collector"}
+    scheduler.JOBS["collector"]["recent_ran_s"] = list(collector_runs)
+    scheduler.JOBS["board"]["recent_ran_s"] = list(board_runs)
+    scheduler.JOBS["excl"]["next_start"] = clock[0]
+    scheduler.JOBS["excl"]["queued_since"] = clock[0] - 700                  # drained
+    scheduler.JOBS["board"]["next_start"] = clock[0]
+    return sch, clock
+
+
+def test_a_board_build_fills_the_idle_slot_while_draining_and_the_exclusive_job_starts_on_time(monkeypatch):
+    """review 2026-11-09: during the drain one heavy slot sat empty for ~5 min while a collector finished and every
+    board build was held. Now a build whose runs end before the collector takes it; the exclusive job still starts
+    the moment the collector ends."""
+    sch, clock = _drain_setup(monkeypatch)
+    t0 = clock[0]
+    sch.tick()
+    assert set(sch.running) == {"collector", "board"}                       # 150 s < 360 s left
+    clock[0] = t0 + 150
+    _end(sch, "board")
+    sch.tick()                                                              # reaped (its next run is due in ~1 s)
+    clock[0] += 2
+    sch.tick()                                                              # 150 s again < 208 s left: once more
+    assert set(sch.running) == {"collector", "board"}
+    clock[0] = t0 + 301
+    _end(sch, "board")
+    sch.tick()
+    clock[0] += 2
+    sch.tick()                                                              # 150 s > 57 s left: held for the drain
+    assert set(sch.running) == {"collector"} and scheduler.JOBS["board"]["next_start"] <= clock[0]
+    clock[0] = t0 + 360
+    _end(sch, "collector")
+    sch.tick()
+    assert set(sch.running) == {"excl"}                                     # not a second later than without builds
+
+
+def test_no_fill_in_when_the_build_would_outlast_the_running_job_or_has_no_recorded_run(monkeypatch):
+    sch, clock = _drain_setup(monkeypatch, board_runs=(150.0, 380.0))       # its LONGEST recent run counts
+    sch.tick()
+    assert set(sch.running) == {"collector"}
+    sch, clock = _drain_setup(monkeypatch, board_runs=())                   # never before its first run
+    sch.tick()
+    assert set(sch.running) == {"collector"}
+    sch, clock = _drain_setup(monkeypatch, collector_runs=(140.0, 360.0))   # the collector's SHORTEST run counts
+    sch.tick()
+    assert set(sch.running) == {"collector"}
+
+
+def test_a_running_job_with_no_recorded_run_counts_its_timeout(monkeypatch):
+    sch, clock = _drain_setup(monkeypatch, collector_runs=())               # timeout 10,000 s: a build fits
+    assert sch._left_s(["collector"]) == pytest.approx(10_000)
+    sch.tick()
+    assert set(sch.running) == {"collector", "board"}
+
+
+def test_a_short_job_passes_an_urgent_job_held_on_a_store_lock(monkeypatch):
+    """c31637d too: an urgent collector waiting on the archive's canonical lock held the free slot for the archive's
+    whole run, so no board build started (prod replay ~23 min of idle slot in 6 h). A build that ends before the
+    archive does not delay the collector."""
+    jobs = {"archive": _j("heavy", 360, 6, every=10_000, locks=("canonical", "archive")),
+            "collector": _j("heavy", 540, 3, every=1, urgent_after_s=1, locks=("canonical",)),
+            "board": _j("heavy", 540, 4, every=1, locks=("snapshots",))}
+    sch, clock = _sched(monkeypatch, jobs)
+    scheduler.JOBS["collector"]["next_start"] = clock[0] + 10_000
+    scheduler.JOBS["board"]["next_start"] = clock[0] + 10_000
+    sch.tick()
+    assert set(sch.running) == {"archive"}
+    scheduler.JOBS["archive"]["recent_ran_s"] = [600.0]
+    scheduler.JOBS["board"]["recent_ran_s"] = [150.0]
+    scheduler.JOBS["collector"]["next_start"] = clock[0] - 5                # urgent, blocked by canonical
+    scheduler.JOBS["board"]["next_start"] = clock[0]
+    sch.tick()
+    assert set(sch.running) == {"archive", "board"}
+    clock[0] += 500                                                          # 100 s left on the archive
+    _end(sch, "board")
+    scheduler.JOBS["board"]["next_start"] = clock[0]
+    sch.tick()
+    assert set(sch.running) == {"archive"}                                   # 150 s > 100 s: the slot stays held
+    clock[0] += 100
+    _end(sch, "archive")
+    sch.tick()
+    assert "collector" in sch.running
+
+
+def test_recent_run_times_persist_across_a_restart(monkeypatch, tmp_path):
+    import json
+    f = tmp_path / "scheduler_runs.json"
+    jobs = {"h": _j("heavy", 300, 1, locks=("h",)), "l": _j("light", 50, 2)}
+    sch, clock = _sched(monkeypatch, jobs, runs_path=f)
+    sch.tick()
+    assert set(sch.running) == {"h", "l"}
+    clock[0] += 42
+    _end(sch, "h")
+    _end(sch, "l")
+    sch.tick()
+    assert json.loads(f.read_text(encoding="utf-8")) == {"h": [42.0]}        # lights are not written
+    _sched(monkeypatch, jobs, runs_path=f)
+    assert scheduler.JOBS["h"]["recent_ran_s"] == [42.0] and scheduler.JOBS["l"]["recent_ran_s"] == []
+    f.write_text("{not json", encoding="utf-8")
+    _sched(monkeypatch, jobs, runs_path=f)
+    assert scheduler.JOBS["h"]["recent_ran_s"] == []                         # unreadable: learn again
+    f.write_text(json.dumps({"h": [1, "x", -3, True, 2, 3, 4], "gone": [5]}), encoding="utf-8")
+    _sched(monkeypatch, jobs, runs_path=f)
+    assert scheduler.JOBS["h"]["recent_ran_s"] == [2.0, 3.0, 4.0]            # numbers > 0 only, last 3
+    assert "gone" not in scheduler.JOBS
+    sch, clock = _sched(monkeypatch, jobs, runs_path=tmp_path / "missing" / "x.json")   # unwritable: no error
+    sch.tick()
+    clock[0] += 7
+    _end(sch, "h")
+    sch.tick()
+    assert scheduler.JOBS["h"]["recent_ran_s"] == [7.0] and not (tmp_path / "missing").exists()
+
+
+def test_the_service_persists_run_times_in_the_data_dir(monkeypatch, tmp_path):
+    from sports import service
+    seen = {}
+
+    class FakeScheduler:
+        def __init__(self, jobs=None, runs_path=None):
+            seen["runs_path"] = runs_path
+            self.stop_ev = None
+
+        def run(self):
+            pass
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(scheduler, "Scheduler", FakeScheduler)
+    monkeypatch.setattr(service, "_SCHED", dict(service._SCHED))
+    service.supervise()
+    assert seen["runs_path"] == tmp_path / "scheduler_runs.json"
 
 
 def test_a_light_job_never_takes_the_exclusive_jobs_memory(monkeypatch):

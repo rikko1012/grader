@@ -640,7 +640,9 @@ def schedule():
 def supervise(stop=None, jobs=None):
     """Start the ONE scheduler thread (memory-reservation queue over every job whose flag is on). -> Scheduler."""
     from . import scheduler
-    sch = scheduler.Scheduler(jobs=jobs)
+    from . import config
+    # recent run times persist across deploys (the drain fill-in rule needs them at once; review 2026-11-09)
+    sch = scheduler.Scheduler(jobs=jobs, runs_path=config.DATA_DIR / "scheduler_runs.json")
     if stop is not None:
         sch.stop_ev = stop
     t = threading.Thread(target=sch.run, daemon=True, name="sports-scheduler")

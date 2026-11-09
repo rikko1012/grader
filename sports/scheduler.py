@@ -15,8 +15,10 @@ through a MEMORY-RESERVATION QUEUE:
   * bounded waits (stall 2026-11-09): LIGHT jobs run beside a waiting or running exclusive job whenever the
     reservation total still holds the exclusive job (an exclusive job never waits for them); an exclusive job that has
     waited SPORTS_JOB_EXCL_DRAIN_S (600) stops every other non-light start, urgent ones included, so the system drains
-    and it starts; any other job overdue past SPORTS_JOB_STARVE_S (3600) counts as urgent, so a saturated pair of heavy
-    slots cannot starve settle / history / player-context; a job may yield to another (settle-post -> settle);
+    and it starts - except a heavy job whose recent runs all ended within the time the running ones still need (a
+    board build beside a collector), which finishes first and so never delays it; any other job overdue past
+    SPORTS_JOB_STARVE_S (3600) counts as urgent, so a saturated pair of heavy slots cannot starve settle / history /
+    player-context; a job may yield to another (settle-post -> settle);
   * a watchdog samples each child's RSS every 0.25 s; above its cap the child is killed (SIGKILL), counted
     (`over_cap`) and retried later with backoff - the service process itself is never the one that runs out;
   * children run at low OS priority (nice 10 / BELOW_NORMAL) so member requests keep the CPU, and on Linux mark
@@ -43,6 +45,7 @@ from . import flags
 
 LIGHT, HEAVY, EXCLUSIVE = "light", "heavy", "exclusive"
 TICK_S = 0.25
+RECENT_RUNS = 3                                     # run times kept per job for the drain fill-in (review 2026-11-09)
 _LOCK = threading.Lock()
 JOBS = {}                     # name -> state (ops / alerts / tests)
 STATS = {"started": 0, "over_cap_kills": 0, "timeouts": 0, "deferred_ticks": 0, "peak_reserved_mb": 0,
@@ -506,8 +509,11 @@ def cadence_every(cadence, now_ts, snap_root=None):
 # ---------------------------------------------------------------------------------------------------- scheduler
 class Scheduler:
     def __init__(self, jobs=None, budget=None, now=time.time, tick_s=TICK_S, triggers=None, aging_s=None,
-                 snap_root=None, max_heavy_n=None):
+                 snap_root=None, max_heavy_n=None, runs_path=None):
         self.specs = jobs if jobs is not None else default_jobs()
+        # recent run times survive a restart (the fill-in rule needs them right after a deploy): a small JSON file
+        # the service passes (DATA_DIR/scheduler_runs.json); None keeps them in memory only (tests, the replay)
+        self.runs_path = runs_path
         self.snap_root = snap_root
         self._cad = {}                                  # cadence -> (computed_at, every_s): re-read every 30 s
         self.budget = budget if budget is not None else budget_mb()
@@ -532,7 +538,40 @@ class Scheduler:
                           # first run soon after start, staggered by priority so jobs do not pile up at boot
                           "next_start": (t + spec.get("first_s", 5 + 3 * spec["prio"])) if spec["every_s"] is not None
                           else None,
-                          "queued_since": None}
+                          "queued_since": None,
+                          "recent_ran_s": []}           # last RECENT_RUNS run times (s), any exit: the fill-in rule
+        self._load_runs()
+
+    # -- recent run times (the fill-in rule, review 2026-11-09) ----------------------------------------------------
+    def _load_runs(self):
+        if not self.runs_path:
+            return
+        try:
+            import json
+            with open(self.runs_path, encoding="utf-8") as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            return                                      # no file yet / unreadable: learn from the next runs
+        if not isinstance(saved, dict):
+            return
+        for name, rec in saved.items():
+            if name in JOBS and name in self.specs and isinstance(rec, list):
+                ok = [float(x) for x in rec if isinstance(x, (int, float)) and not isinstance(x, bool) and x > 0]
+                JOBS[name]["recent_ran_s"] = ok[-RECENT_RUNS:]
+
+    def _save_runs(self):
+        if not self.runs_path:
+            return
+        try:
+            import json
+            data = {n: JOBS[n]["recent_ran_s"] for n in self.specs
+                    if n in JOBS and JOBS[n].get("recent_ran_s") and self.specs[n]["cls"] != LIGHT}
+            tmp = f"{self.runs_path}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp, self.runs_path)
+        except OSError:                                 # a full / read-only disk never stops the scheduler
+            pass
 
     # -- admission ----------------------------------------------------------------------------------------------
     def reserved(self):
@@ -598,15 +637,55 @@ class Scheduler:
                 return n
         return None
 
+    def _left_s(self, names):
+        """Seconds until the last of the running jobs `names` is expected to end: per job the SHORTEST of its recent
+        runs minus the time it has run so far, so the estimate errs early. A job with no recorded run (its first since
+        the run-times file began) counts its timeout - the scheduler kills it there - so a short job may still use the
+        idle slot; if the job ends sooner, the waiting job waits at most for that one short run."""
+        t, left = self.now(), 0.0
+        for n in names:
+            if n not in self.running:
+                continue
+            rec = JOBS[n].get("recent_ran_s")
+            est = min(rec) if rec else float(self.specs[n].get("timeout_s") or 0.0)
+            left = max(left, est - (t - self.running[n][1]))
+        return left
+
+    def _ends_first(self, name, names):
+        """Is the heavy job `name` expected to end before the running jobs `names` that another job waits for (review
+        2026-11-09)? The LONGEST of its recent runs, plus a tick, against _left_s: it finishes first, so the waiting job
+        starts no later - a board build (60-220 s) uses the idle heavy slot beside a collector (290-360 s) or the
+        archive instead of the slot sitting empty. Never before the job's first recorded run."""
+        rec = JOBS[name].get("recent_ran_s")
+        return (self.specs[name]["cls"] == HEAVY and bool(rec) and bool(names)
+                and max(rec) + self.tick_s < self._left_s(names))
+
+    def _blocking(self, name):
+        """The running jobs `name` cannot start beside (an exclusive job: every non-beside one; a heavy job: a shared
+        store lock, the same league's collector / board build, or a running exclusive job)."""
+        spec = self.specs[name]
+        out = []
+        for n in self.running:
+            other = self.specs[n]
+            if self._beside(other):
+                continue
+            if spec["cls"] == EXCLUSIVE or other["cls"] == EXCLUSIVE or not self._pairable(spec, other):
+                out.append(n)
+        return out
+
     def _may_pass(self, name, held):
-        """May `name` start while the urgent job `held` waits? Only if it leaves that job its slot and memory."""
+        """May `name` start while the urgent job `held` waits? Only if it leaves that job its slot and memory - or
+        (review 2026-11-09) `held` waits on a store lock / an exclusive job that runs longer than `name` will."""
         spec, want = self.specs[name], self.specs[held]
         if spec["cls"] == LIGHT:
             return True
-        if spec["cls"] == EXCLUSIVE or not self._pairable(spec, want):
+        if spec["cls"] == EXCLUSIVE:
             return False
-        heavy = sum(1 for n in self.running if self.specs[n]["cls"] == HEAVY)
-        return heavy + 1 < self.max_heavy and self.reserved() + spec["cap_mb"] + want["cap_mb"] <= self.budget
+        if self._pairable(spec, want):
+            heavy = sum(1 for n in self.running if self.specs[n]["cls"] == HEAVY)
+            if heavy + 1 < self.max_heavy and self.reserved() + spec["cap_mb"] + want["cap_mb"] <= self.budget:
+                return True
+        return self._ends_first(name, self._blocking(held))
 
     def every(self, name):
         """The job's current interval: its game-day cadence when it has one (cached 30 s), else every_s."""
@@ -682,6 +761,10 @@ class Scheduler:
         spec, st = self.specs[name], JOBS[name]
         st.update(pid=None, last_exit={"code": rc, "at": self.now(), "ran_s": round(ran, 1),
                                        "peak_rss_mb": st.get("last_peak_rss_mb")})
+        if ran > 0:                                     # a spawn failure (0 s) says nothing about the run time
+            st["recent_ran_s"] = (list(st.get("recent_ran_s") or []) + [round(ran, 1)])[-RECENT_RUNS:]
+            if spec["cls"] != LIGHT:                    # lights never block anyone: not worth a write
+                self._save_runs()
         st["failures_in_a_row"] = 0 if rc == 0 else st["failures_in_a_row"] + 1
         if rc == 0:
             st["last_ok_at"] = self.now()
@@ -760,6 +843,13 @@ class Scheduler:
                 beside = sum(self.specs[n]["cap_mb"] for n in self.running if self._beside(self.specs[n]))
                 if self._beside(spec) and self._fits(name) and \
                         beside + spec["cap_mb"] + self.specs[excl]["cap_mb"] <= self.budget:
+                    self.start(name)
+                    continue
+                # a heavy job that ends before the running ones may take the idle heavy slot: the exclusive job
+                # waits for those anyway (review 2026-11-09: the drain had stopped every board build for ~5 min with
+                # one heavy slot empty while a collector finished)
+                if (held is None or self._may_pass(name, held)) and self._fits(name) and \
+                        self._ends_first(name, self._blocking(excl)):
                     self.start(name)
                     continue
                 if JOBS[name]["queued_since"] is None:

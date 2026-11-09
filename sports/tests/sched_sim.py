@@ -59,8 +59,8 @@ def prod_env(extra=None):
 class _Patched:
     """Patch a scheduler module (the current one or an older copy) for one simulation and restore it afterwards."""
 
-    def __init__(self, mod, env):
-        self.mod, self.env = mod, env
+    def __init__(self, mod, env, seed=1108):
+        self.mod, self.env, self.seed = mod, env, seed
 
     def __enter__(self):
         self.saved_env = {k: os.environ.get(k) for k in self.env}
@@ -79,7 +79,7 @@ class _Patched:
         self.mod.cadence_every = lambda cad, t, root=None: FIXED_CADENCE[
             cad[0] if cad[0] != "gameday" else f"gameday:{cad[1][0]}"]
         self.rstate = random.getstate()
-        random.seed(1108)
+        random.seed(self.seed)
         return self
 
     def __exit__(self, *exc):
@@ -94,16 +94,21 @@ class _Patched:
         return False
 
 
-def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hook=None, first_settle_post_s=None):
-    """Run mod.Scheduler over `hours` of simulated time with the production table. Returns a dict:
+def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hook=None, first_settle_post_s=None,
+             warm=False, seed=1108, probe=False):
+    """Run mod.Scheduler over `hours` of simulated time with the production table. warm=True starts with each job's
+    recent run time known (the service persists them in DATA_DIR/scheduler_runs.json, so a deploy starts warm once the
+    file exists); the default (cold) is the first deploy with the file, the worst case. Returns a dict:
     starts {job: [t...]} (seconds since T0), ends {job: [(t, code)]}, waits {job: longest due-but-not-started span},
-    max_gap {job: longest start-to-start gap incl. the tail}, stats, jobs (final JOBS), reserved_ok, heavy_ok."""
+    max_gap {job: longest start-to-start gap incl. the tail}, stats, jobs (final JOBS), reserved_ok, heavy_ok;
+    probe=True adds idle_board_s: seconds a heavy slot sat empty (no exclusive job running) while a due board build
+    fitted and, by its MODELLED run time, would have ended before every running heavy job (review 2026-11-09)."""
     run_s = dict(RUN_S, **(run_s or {}))
     rc = rc or {}
     fsp = FIRST_SETTLE_POST_S if first_settle_post_s is None else first_settle_post_s
     clock = [T0]
     starts, ends = {}, {}
-    with _Patched(mod, prod_env(env)):
+    with _Patched(mod, prod_env(env), seed):
         J = mod.default_jobs()
         if jobs_hook:
             J = jobs_hook(J) or J
@@ -122,10 +127,15 @@ def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hoo
             return FakeChild(clock, d, code)
         mod.spawn = spawn
         sch = mod.Scheduler(jobs=J, now=lambda: clock[0], tick_s=tick_s)
+        if warm:
+            for n, st in mod.JOBS.items():
+                if "recent_ran_s" in st:                # older scheduler copies have no fill-in rule
+                    st["recent_ran_s"] = [float(run_s.get(n, 30))]
         enabled = sorted(n for n in J if mod.JOBS[n]["enabled"])
         due_since = {}
         waits = {n: 0.0 for n in enabled}
         reserved_ok = heavy_ok = True
+        idle_board = 0.0
         steps = int(hours * 3600 / tick_s)
         for _ in range(steps):
             before = set(sch.running)
@@ -147,6 +157,8 @@ def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hoo
                     waits[n] = max(waits[n], clock[0] - due_since[n])
                 else:
                     due_since.pop(n, None)
+            if probe:
+                idle_board += tick_s * _board_slot_idle(mod, sch, clock[0], run_s)
             if sch.reserved() > sch.budget:
                 reserved_ok = False
             if sum(1 for n in sch.running if J[n]["cls"] == mod.HEAVY) > sch.max_heavy:
@@ -160,7 +172,23 @@ def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hoo
             max_gap[n] = max(b - a for a, b in zip([0.0] + pts[:-1], pts)) if pts else end
         return {"starts": starts, "ends": ends, "waits": waits, "max_gap": max_gap, "end": end,
                 "stats": dict(mod.STATS), "jobs": {k: dict(v) for k, v in mod.JOBS.items()}, "specs": J,
-                "reserved_ok": reserved_ok, "heavy_ok": heavy_ok, "history": list(sch.history)}
+                "reserved_ok": reserved_ok, "heavy_ok": heavy_ok, "history": list(sch.history),
+                "idle_board_s": idle_board if probe else None}
+
+
+def _board_slot_idle(mod, sch, t, run_s):
+    """1 when a heavy slot is empty, no exclusive job runs, and a due board build fits now and would end (by its
+    modelled run time, two ticks of margin) before the running heavy jobs - a slot the drain wasted - else 0."""
+    if any(sch.specs[n]["cls"] == mod.EXCLUSIVE for n in sch.running):
+        return 0
+    heavy = [n for n in sch.running if sch.specs[n]["cls"] == mod.HEAVY]
+    if len(heavy) >= sch.max_heavy or not heavy:
+        return 0
+    left = max(run_s.get(n, 30) - (t - sch.running[n][1]) for n in heavy)
+    for n in sch.due():
+        if n.startswith("ui-snapshots-") and run_s.get(n, 30) + 2 < left and sch._fits(n):
+            return 1
+    return 0
 
 
 def summary(res, names=None):

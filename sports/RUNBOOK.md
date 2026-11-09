@@ -220,17 +220,45 @@ Rules now (scheduling only; no grade, chance, stake, projection or settlement ch
   (like books); the exclusive job never waits for them.
 - An exclusive job that has waited `SPORTS_JOB_EXCL_DRAIN_S` (600 s) stops every other non-light start, urgent ones
   included; the running jobs finish and it starts (model-forward every ~42 min in the replay, longest wait ~15 min).
+- Fill-in (review 2026-11-09): while an exclusive job waits - and past an urgent job held on a store lock - a heavy
+  job may still take an idle heavy slot when the LONGEST of its last 3 runs ends before the SHORTEST recent run of the
+  jobs that are waited for (minus their time so far; a job with no recorded run counts its timeout). It ends first,
+  so the waiting job starts no later; if an estimate is wrong the delay is at most that one short run. Never before
+  a job's first recorded run. Run times persist in `DATA_DIR/scheduler_runs.json` (heavy / exclusive jobs, written
+  at each exit; unreadable = learn again), so a deploy starts warm. Before this, the drain held every board build
+  for ~5 min per model-forward run with one heavy slot empty while a collector finished, and an urgent collector
+  waiting on the archive's canonical lock held the free slot for the archive's whole run (c31637d too).
 - settle is urgent after 15 min overdue on Standard; any other non-exclusive job overdue past `SPORTS_JOB_STARVE_S`
   (3,600 s) counts as urgent and ages from then on, so it takes a turn between the board builds.
 - settle-post never starts while settle is due (`yields_to`), and `--budget-s` (`SPORTS_SETTLE_POST_BUDGET_S`, 600 s)
   stops its scorecards between events (per-event marks keep the progress; shadow's closing mark is not advanced), then
   the ledger runs; timeout 1,500 s. Its first production run held model-daily - and so settle - for the whole 2,400 s
   kill; that kill lost no scorecard work (marks commit per event) but the ledger never ran.
-Trade-off (replay, hours 2-8): model-forward runs every ~42 min instead of ~69, and each run pauses every heavy job
-(drain + ~5 min alone), so the NBA board build's mean interval goes 10.6 -> ~14 min (longest 17 -> ~27 min). Raise
-`SPORTS_JOB_EXCL_DRAIN_S` to favour the boards; 0 restores the old exclusive hold (lights stay unblocked).
+Trade-off (replay over the FULL 6 h incl. the boot / after-deploy hour, median / worst of the longest start-to-start
+gap over 8 jitter seeds, `python scripts/sim_sports_scheduler.py --ref c31637d --seeds 8`; "long" = settle-post
+900 s, grades-daily 1,200 s, archive 1,500 s; cold = first deploy with no run-times file):
+
+| job | c31637d | this fix, cold | this fix, warm | c31637d long | this fix long (cold) |
+|---|---|---|---|---|---|
+| ui-snapshots-nba (board) | 19.4 / 25.8 | 21.7 / 28.0 | 20.2 / 22.2 | 35.8 / 38.3 | 27.4 / 29.8 |
+| ui-snapshots-nfl (board) | 19.2 / 21.8 | 20.9 / 24.3 | 23.3 / 26.5 | 30.4 / 37.4 | 27.2 / 28.7 |
+| prebuilt | 17.0 / 17.2 | 14.3 / 15.3 | 14.0 / 17.5 | 30.4 / 34.7 | 22.2 / 23.3 |
+| ingest-nba (line collector) | 26.8 / 27.1 | **36.7 / 39.2** | 35.9 / 40.3 | 36.8 / 38.3 | **56.7 / 58.6** |
+| ingest-nfl (line collector) | 26.8 / 27.1 | 26.9 / 29.5 | 30.2 / 32.8 | 36.8 / 38.3 | **51.5 / 54.1** |
+| model-forward longest wait | 75.2 (4.8 runs) | 15.2 (8.8 runs) | 15.6 | 92.7 (4 runs) | 29.0 (8 runs) |
+| idle heavy slot a due board build fitted (min / 6 h) | 22.1 | 0 | 0 | 27.6 | 0 |
+
+(eeb392a, the stall fix before the fill-in: boards 36.9 / 35.5, prebuilt 31.4, long boards 52.8 - the review's
+finding.) The boards and prebuilt are back at c31637d or better; the collectors are not: they share the canonical
+lock with settle, history, archive and archive-verify, which now actually run (c31637d: settle 0 starts in the first
+72 min, history / archive starved), and a collector (290-360 s) is too long to fill in, so each model-forward run
+costs it the drain tail + ~5 min. With `SPORTS_JOB_EXCL_DRAIN_S=0` the NBA collector is 30.1 (long 50.0) but
+model-forward waits up to ~116 min (long ~200). Raise `SPORTS_JOB_EXCL_DRAIN_S` to favour the collectors; 0
+restores the old exclusive hold (lights stay unblocked).
 Check after deploy: ops `scheduler.jobs` picks-ingest `last_start` within 2 min; model-forward `starts` rising every
-30-45 min; settle `starts` every 15-40 min; no `job_starved` alert for a light job.
+30-45 min; settle `starts` every 15-40 min; no `job_starved` alert for a light job; heavy jobs' `recent_ran_s`
+filling in (and `DATA_DIR/scheduler_runs.json` present after the first heavy exit); ingest-nba / ingest-nfl
+`last_start` gaps against the table above.
 
 **Standard cadences (code defaults when the plan is >= 1.5 GB, 2026-10-25; Starter in brackets):** collector per
 league 3 / 5 / 10 min near tip / game day / otherwise [5 / 10 / 15]; Kalshi 10 / 30 min [20 / 60]; board build per
