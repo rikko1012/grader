@@ -3671,6 +3671,11 @@ def board_forever():
                                       # display gd-1 (owner 2026-10-15): model grade / stake reason / availability, separate
                                       **grade_display.annotate(g, v)}
                     res["verdict"] = v
+                    try:                                  # the hub card's copy of the classic card's panels (display only,
+                        import cs2_card_ctx               # memory only; never a grade input - cs2_card_ctx.py)
+                        cs2_card_ctx.put(r["id"], cs2_card_ctx.build(res))
+                    except Exception:
+                        traceback.print_exc()
                     try:                                  # immutable comparison snapshot (changes only) + the row's evidence
                         ub = underdog.board()
                         pnl = comparison.panel(res, ub["rows"] + prizepicks.board()["rows"], board_at=ub.get("at"), id_map=ud_id_map(ub["rows"]))
@@ -4381,6 +4386,7 @@ WORKSPACE_API = "/preview/workspace/api/"
 # the page bytes are the file's (tests/test_upgrade_gate.py). The API is the workspace's, on its own prefix and its own gate.
 UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf-8"),
                   "/upgrade/hub.js": ("upgrade-hub.js", "text/javascript; charset=utf-8"),
+                  "/upgrade/cards.js": ("upgrade-cards.js", "text/javascript; charset=utf-8"),   # the hub card's restored panels + odds
                   "/upgrade/hub.css": ("upgrade-hub.css", "text/css; charset=utf-8"),
                   "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8")}
 UPGRADE_API = "/api/upgrade/"

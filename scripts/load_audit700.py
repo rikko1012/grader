@@ -254,6 +254,21 @@ def workspace_run():
         server.LOL_CENTER = lol_fx.dir
         server.lol_public = lambda: True
         other = {"sports": sports_stub, "lol": lol_fx}
+        try:                                                    # hub card panels (2026-11-09): every NBA player has a full player file
+            from tests.card_factors_fixture import rich_player, rich_history
+            base = next(iter(sports_stub.players.values()))
+            for m in sports_stub.boards["nba"][0]["markets"]:
+                sports_stub.players[m["pid"]] = rich_player(base, m["st"], [q.get("f") for q in m["q"] if q.get("f")], m["q"][0]["l"])
+                sports_stub.history[m["pid"]] = rich_history(m["st"])
+        except ImportError:
+            pass
+    try:                                                        # hub card panels (2026-11-09): every CS2 line has the classic card's copy
+        import cs2_card_ctx
+        from tests.card_factors_fixture import classic_res
+        for r in fx.rows:
+            cs2_card_ctx.put(r["id"], cs2_card_ctx.build(classic_res(r["nick"], r["team"], r["opponent"])))
+    except ImportError:
+        pass
     workspace_api.reset()
     seeded = seed_history(workspace_api, HISTORY) if HISTORY else 0
     GEN_BUILDS = [0]                                            # Slip Studio sq-1: one search per option set per GEN_TTL, shared
