@@ -880,7 +880,7 @@ def _player(srv, lg, pid, path):
             return 200, None, 1
         try:
             doc, _ = call(srv, path, {"league": lg, "id": pid})
-            return 200, trim(doc)
+            return 200, trim(doc, lg)
         except Down:
             return 200, None, 5
         finally:
@@ -888,21 +888,61 @@ def _player(srv, lg, pid, path):
     return srv.shared(("ws_sp_file", path, lg, pid), compute, ttl=PLAYER_TTL)[1]
 
 
-def trim(doc):
-    """Only what research reads, so a cached player costs little."""
+SPLIT_GAMES = 82        # the classic player page's splits read the last 82 games held (web/sports/app.js historyPanel)
+OPP_PARTS = ("min", "targets", "rush_att", "pass_att")
+
+
+def _q(q):
+    """One book quote of the player file, as the classic line strip reads it (sides with price / payout / bid-ask)."""
+    sides = {}
+    for x in q.get("sides") or []:
+        if x.get("side") in ("over", "under"):
+            sides[x["side"]] = {k: x.get(k) for k in ("offered", "price", "price_format", "multiplier", "bid", "ask") if x.get(k) is not None}
+    return {"platform": q.get("platform"), "line": q.get("line"), "variant": q.get("variant"), "seen_at": q.get("last_seen_at"), "over": sides.get("over") or {}, "under": sides.get("under") or {}}
+
+
+def _fc(f):
+    d = f.get("detail") or {}
+    return {"line": f.get("line"), "mean": f.get("projection_mean"), "at": f.get("forecast_at"), "model": f.get("model_version"), "reasons": list(f.get("reason_codes") or [])[:12],
+            "contributions": [{"label": c.get("label") or c.get("feature"), "value": c.get("value")} for c in f.get("contributions") or []][:20],
+            "interval": d.get("interval"), "median": d.get("median"),
+            "inputs": [{"label": x.get("label"), "value": x.get("value"), "definition": x.get("definition")} for x in d.get("factors") or []][:30]}
+
+
+def _det(d):
+    p = (d or {}).get("pmf") or {}
+    return {"bins": [b for b in p.get("bins") or [] if isinstance(b, list) and len(b) == 3][:80] if not d.get("ladder_withheld") else [],
+            "ladder": [{k: r.get(k) for k in ("line", "p_over", "p_under", "p_push", "stored")} for r in d.get("ladder") or []][:20]}
+
+
+def trim(doc, league=None):
+    """Only what research reads, so a cached player costs little. The classic player page's panels (owner 2026-11-09: the hub card
+    shows them too): home / away and season type for the splits, the opportunity parts for the trend, every book quote and Kalshi rung
+    of each market, and each of the player's forecasts with its distribution ladder - values as served, nothing recomputed."""
     if "games" in doc:
         lg = {"basketball": "nba", "football": "nfl"}.get(doc.get("family"))      # B8: one team code
         return {"games": [{"start_utc": g.get("start_utc"), "opponent": _team(g.get("opponent"), lg), "home": g.get("home"), "played": g.get("participation") == "played", "values": g.get("values") or {},
-                           "season": g.get("season")} for g in (doc.get("games") or [])[:RESEARCH_MAX_GAMES]]}
+                           "season": g.get("season"), "season_type": g.get("season_type"),
+                           "parts": {k: v for k, v in (g.get("parts") or {}).items() if k in OPP_PARTS and v is not None}} for g in (doc.get("games") or [])[:SPLIT_GAMES]]}
     f = doc.get("factors") or {}
+    fcs = doc.get("forecasts") or {}
+    dets = doc.get("forecast_detail") or {}
+    ne = doc.get("next_event") or {}
+    lg = league
     return {"position": doc.get("position"), "status": doc.get("status"), "injury": doc.get("injury"), "next_event": doc.get("next_event"), "context": f.get("context") or [], "stats": f.get("stats") or [],
-            "engine": f.get("engine")}
+            "engine": f.get("engine"), "next_opp": _team(ne.get("opponent"), lg) if ne.get("opponent") else None, "next_home": ne.get("home"),
+            "markets": [{"stat": m.get("stat"), "scope": m.get("scope") or "full_game", "quotes": [_q(q) for q in (m.get("quotes") or []) + (m.get("alternates") or [])][:40],
+                         "kalshi": [{"line": k.get("line"), "bid": ((k.get("sides") or [{}])[0]).get("bid"), "ask": ((k.get("sides") or [{}])[0]).get("ask"),
+                                     "volume": (k.get("liquidity") or {}).get("volume"), "oi": (k.get("liquidity") or {}).get("open_interest"), "seen_at": k.get("last_seen_at")}
+                                    for k in m.get("kalshi") or []][:30]} for m in doc.get("markets") or []],
+            "forecasts": {k: _fc(v) for k, v in fcs.items() if isinstance(v, dict)},
+            "details": {k: _det(v) for k, v in dets.items() if isinstance(v, dict)}}
 
 
 def series_of(hist, stat):
     """Played games with a value for this stat, newest first: the same games the board's hit rates count."""
     out = []
-    for g in (hist or {}).get("games") or []:
+    for g in ((hist or {}).get("games") or [])[:RESEARCH_MAX_GAMES]:      # the research window (the splits read further back)
         v = (g.get("values") or {}).get(stat)
         if g.get("played") and v is not None:
             out.append({"date": str(g.get("start_utc") or "")[:10], "opponent": g.get("opponent") or "", "value": v})
@@ -982,8 +1022,37 @@ def line_doc(srv, lg, book, rid):
             hist_out["full_game"] = fg[:10]
     return 200, {"record": rec, "forecast": forecast, "history": hist_out, "books": books, "market_books": {"same": same, "other": other},
                  "h2h": workspace_h2h.h2h(series, rec["player"]["opponent"], x["l"]) if series else None,
-                 "context": context_of(x, player, lg),
+                 "context": context_of(x, player, lg), "sports_card": sports_card(x, hist, player, lg),
                  "market": {"available": True, "p_over": mk["p_over"], "p_under": mk["p_under"], "source": f"{mk['sources']} market sources at this line"} if mk else {"available": False, "reason": "No market price at this exact line."}}
+
+
+def _part_of(lg, stat):
+    """The opportunity measure the classic page charts for this stat (web/sports/app.js contextPanel)."""
+    if lg == "nba":
+        return "min", "Minutes"
+    s = str(stat or "")
+    return ("targets", "Targets") if re.search(r"rec|targets", s) else ("rush_att", "Carries") if "rush" in s else ("pass_att", "Pass attempts")
+
+
+def sports_card(x, hist, player, lg):
+    """The classic player page's panels for this line (owner 2026-11-09), from the two cached player files the card already reads:
+    the games for the splits and the opportunity trend, this forecast's distribution ladder and inputs, the matchup engine's rows for
+    this stat, every book quote and Kalshi rung of this market. Values as served by Sports; display only, never a grade input."""
+    part, part_label = _part_of(lg, x["st"])
+    games = []
+    for g in (hist or {}).get("games") or []:
+        v = (g.get("values") or {}).get(x["st"])
+        games.append({"d": str(g.get("start_utc") or "")[:10], "o": g.get("opponent") or "", "h": g.get("home"), "s": g.get("season"), "t": g.get("season_type"),
+                      "pl": bool(g.get("played")), "v": v, "p": (g.get("parts") or {}).get(part)})
+    p = player or {}
+    mk = next((m for m in p.get("markets") or [] if m.get("stat") == x["st"] and (m.get("scope") or "full_game") == x["scope"]), None) or {}
+    eng = p.get("engine") or {}
+    fid = x.get("fid")
+    out = {"part": part, "part_label": part_label, "games": games, "next_opp": p.get("next_opp"), "next_home": p.get("next_home"),
+           "stats": p.get("stats") or [], "forecast": (p.get("forecasts") or {}).get(fid) if fid else None, "detail": (p.get("details") or {}).get(fid) if fid else None,
+           "quotes": [dict(q, label=book_label(q.get("platform"))) for q in mk.get("quotes") or []], "kalshi": [k for k in mk.get("kalshi") or [] if k.get("bid") is not None or k.get("ask") is not None],
+           "engine": {"label": eng.get("label"), "as_of": eng.get("as_of"), "rows": ((eng.get("by_stat") or {}).get(x["st"]) or [])[:60]} if eng.get("by_stat") else None}
+    return out if games or out["forecast"] or out["quotes"] or out["engine"] else None
 
 
 # ---------------------------------------------------------------------------------------------------------------- results

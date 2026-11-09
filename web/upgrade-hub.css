@@ -1432,3 +1432,69 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
 @media(max-width:1100px){
  #u-hub .h-game-head .h-countdown{display:inline-block;flex:none}
 }
+
+/* owner 2026-11-09: the classic cards' factor panels (Stats tab) and every book's odds (Lines tab) on the hub card - web/upgrade-cards.js */
+.h-fx-wrap{min-width:0;margin:0 0 16px}
+#u-hub .h-fx{min-width:0;border:1px solid #2a3544;border-radius:8px;background:#141a22;margin:0 0 8px}
+#u-hub .h-fx>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:40px;padding:6px 12px;cursor:pointer;list-style:none;font:600 12px 'DM Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:#9fb6d6}
+#u-hub .h-fx>summary::-webkit-details-marker{display:none}
+#u-hub .h-fx>summary::after{content:'+';font-size:16px;color:#7f8fa4;flex:none}
+#u-hub .h-fx[open]>summary::after{content:'−'}
+#u-hub .h-fx>summary small{margin-left:auto;font:400 10.5px 'DM Mono',monospace;text-transform:none;letter-spacing:0;color:#7f8fa4}
+#u-hub .h-fx-body{padding:0 12px 10px;min-width:0}
+#u-hub .h-fx-kv{margin:0}
+#u-hub .h-fx-kv>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;border-top:1px solid #222c39}
+#u-hub .h-fx-kv>div:first-child{border-top:0}
+#u-hub .h-fx-kv dt{font-size:12px;color:#a9b7c9;min-width:0;overflow-wrap:anywhere}
+#u-hub .h-fx-kv dd{margin:0;font-size:12.5px;color:#f1f5fa;text-align:right;max-width:62%;overflow-wrap:anywhere}
+#u-hub .h-fx-kv small,#u-hub .h-fx-table small,#u-hub .h-odds-table small{color:#7f8fa4;font-size:10.5px}
+#u-hub .h-fx-table,#u-hub .h-odds-table{width:100%;border-collapse:collapse;font-size:12px}
+#u-hub .h-fx-table th,#u-hub .h-fx-table td,#u-hub .h-odds-table th,#u-hub .h-odds-table td{padding:5px 6px;border-top:1px solid #222c39;text-align:left;vertical-align:top}
+#u-hub .h-fx-table thead th,#u-hub .h-odds-table thead th{font:600 10px 'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#8797ac;border-top:0}
+#u-hub .h-fx-table tr.h-fx-group th{color:#c9d4e2;font-size:11px;background:#18202b}
+#u-hub .h-fx-table tr.is-selected td{background:#1d2e45}
+#u-hub .h-fx-def{display:block}
+#u-hub .h-fx-used{color:#7fd6a5;font-weight:600}
+#u-hub .h-fx-w0{color:#8797ac}
+#u-hub .h-fx-up{color:#7fd6a5}
+#u-hub .h-fx-dn{color:#f08a8a}
+#u-hub .h-fx-lab{margin:10px 0 4px;font:600 10.5px 'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#9fb6d6}
+#u-hub .h-fx-ul,#u-hub .h-fx-ol{margin:0;padding-left:18px;font-size:12px;line-height:1.55;color:#c9d4e2}
+#u-hub .h-fx-chips{display:flex;flex-wrap:wrap;gap:6px}
+#u-hub .h-fx-chips span{padding:3px 8px;border:1px solid #2f3b4c;border-radius:999px;font-size:11.5px;color:#c9d4e2}
+#u-hub .h-fx-bars{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#u-hub .h-fx-bars li{display:grid;grid-template-columns:minmax(0,110px) 1fr 44px;align-items:center;gap:8px;font-size:12px;color:#c9d4e2}
+#u-hub .h-fx-bars li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#u-hub .h-fx-bars li i{display:block;height:8px;border-radius:4px;background:#222c39;overflow:hidden}
+#u-hub .h-fx-bars li i b{display:block;height:100%;background:#4f7fbf}
+#u-hub .h-fx-bars li.is-me{color:#fff;font-weight:600}
+#u-hub .h-fx-bars li.is-me i b{background:#77adff}
+#u-hub .h-fx-bars li em{font-style:normal;text-align:right;font-family:'DM Mono',monospace}
+#u-hub .h-fx-dist,#u-hub .h-fx-spark{display:flex;align-items:flex-end;gap:2px;height:84px;padding:4px 0;border-bottom:1px solid #2a3544}
+#u-hub .h-fx-dist i,#u-hub .h-fx-spark i{flex:1 1 0;min-width:2px;background:#4f7fbf;border-radius:2px 2px 0 0}
+#u-hub .h-fx-dist i.is-over{background:#3f9d72}
+#u-hub .h-fx-dist i.is-under{background:#b8615f}
+#u-hub .h-fx-dist i.is-push{background:#9c8f5a}
+#u-hub .h-fx-more{margin-top:8px}
+#u-hub .h-fx-more>summary{min-height:32px;cursor:pointer;font-size:12px;color:#9fb6d6}
+.h-odds{min-width:0;margin:0 0 16px}
+#u-hub .h-odds-table th[scope=row]{font-weight:600;color:#c9d9ed;white-space:nowrap}
+#u-hub .h-odds-table td{white-space:nowrap;font-family:'DM Mono',monospace}
+#u-hub .h-odds-table td.is-best{background:#16301f;box-shadow:inset 0 0 0 1px #2f6b47}
+#u-hub .h-odds-best{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;background:#2f6b47;color:#e6fff0;font:600 9.5px 'DM Mono',monospace;letter-spacing:.04em;text-transform:uppercase}
+#u-hub .h-odds-table tr.is-selected th,#u-hub .h-odds-table tr.is-selected td{background:#1d2e45}
+#u-hub .h-odds-table tr.is-selected td.is-best{background:#1b3a2a}
+@media(max-width:640px){
+  #u-hub .h-fx-kv dd{max-width:58%}
+  #u-hub .h-fx-bars li{grid-template-columns:minmax(0,90px) 1fr 40px}
+  #u-hub .h-odds-table th,#u-hub .h-odds-table td{padding:5px 4px;font-size:11.5px}
+}
+#u-hub .h-odds-table th[scope=row]{text-transform:none;letter-spacing:0;font:600 12px Inter,system-ui,sans-serif;white-space:normal;min-width:84px}
+#u-hub .h-odds-table th[scope=row] small{text-transform:none;font-weight:400}
+#u-hub .h-odds-seen-m{display:none}
+@media(max-width:640px){
+  #u-hub .h-odds-table .h-odds-seen{display:none}
+  #u-hub .h-odds-seen-m{display:block;margin-top:2px}
+  #u-hub .h-odds-table td small{display:block}
+  #u-hub .h-odds-best{display:block;width:max-content;margin:2px 0 0}
+}

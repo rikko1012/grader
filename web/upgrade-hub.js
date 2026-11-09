@@ -1,6 +1,7 @@
 /* One real research surface over the existing authenticated sport adapters.
  * No grades or prices are calculated here. The original pages and their tools stay intact.
  */
+import {panels as cardPanels} from '/upgrade/cards.js';
 export function mount(C) {
   if(!document.querySelector('link[href="/upgrade/hub.css"]')){const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);}
   const {api, R, T, SPORTS, esc, pct, when} = C;
@@ -227,6 +228,10 @@ export function mount(C) {
      seen time, projection, ONE Scout cell, ONE hit strip, compare, add. The matchup and the countdown sit on the game header row. ---- */
   const sideWord = sd => sd==='over'?'Over':'Under';
   const countOf = (t,sd) => sd==='over'?t.over:t.under;
+  /* owner 2026-11-09: the classic cards' factor panels and every book's odds, on the hub card (web/upgrade-cards.js, display only) */
+  let PXc=null;
+  const PX = () => PXc||(PXc=cardPanels({esc,pct,when,sideWord}));
+  const pxCtx = r => ({platforms:C.PLATFORMS,lineKind:C.lineKind,oddsPref:H.par.odds,age,bookLabel:p=>C.PLATFORMS[p]?.label||String(p||'').replace(/^./,c=>c.toUpperCase()),extra:MX?(bestOf(r)?.bk||[]):[]});
   const STRIP = [['l5','L5'],['l10','L10'],['l20','L20'],...(COLS?[['h2h','H2H'],['season','SZN']]:[])];
   const STRIP_TITLE = {l5:'Last 5 results at this line',l10:'Last 10 results at this line',l20:'Last 20 results at this line',h2h:"Past meetings with tonight's opponent, at this line",season:"This season's results, at this line"};
   const currentLines = () => H.records.filter(r=>!C.started(r)&&!unavailableReason(r));
@@ -872,9 +877,11 @@ export function mount(C) {
       <p class="h-history-note">Past meetings at today's line. Not a predicted chance.</p></section>`;
   }
   const factText = v => typeof v==='object'?JSON.stringify(v):String(v);
+  const HEDGE_RX = /\b(questionable|doubtful|probable|day[-_ ]to[-_ ]day|unconfirmed|uncertain)\b/i;
   /* every saved measure under its own heading (context rows carry a group); nothing is computed here except the map split of loaded games */
   function statsHtml(r,doc,all) {
-    const rows=(doc?.context?.rows||[]).filter(f=>f.label&&f.value!=null), groups=new Map();
+    /* hedge statuses (questionable, day-to-day...) never show on a member page: definite facts only */
+    const rows=(doc?.context?.rows||[]).filter(f=>f.label&&f.value!=null&&!(typeof f.value==='string'&&HEDGE_RX.test(f.value))), groups=new Map();
     for(const f of rows){const g=typeof f.group==='string'&&f.group?f.group:'More measures';if(!groups.has(g))groups.set(g,[]);groups.get(g).push(f);}
     const block=(title,body,cls='')=>`<section class="h-stat-group${cls}"><h5>${esc(title)}</h5>${body}</section>`;
     const blocks=[...groups].map(([g,list])=>block(g,`<dl>${list.map(f=>`<div><dt>${esc(f.label)}</dt><dd>${esc(factText(f.value))}</dd></div>`).join('')}</dl>`));
@@ -1079,6 +1086,7 @@ export function mount(C) {
         const html=`Likely maps: ${top.map(x=>`${esc(x.name)} <b>${esc(x.pct)}%</b>`).join(' · ')}${his.length?`. His ${stat.toLowerCase()} a map there: ${his.join(' · ')}`:''}`;
         if(used)out.scout.push(fact(html,true,0));else add(html,0);
       }
+      PX().cs2Facts(r,doc).forEach(x=>add(x.html,0));     /* vs similar-ranked opponents: context, weight 0 */
       const bo=r.event.best_of, days=ctxRows(doc).find(f=>f.key==='days_since_last_map')?.value;
       if(num(Number(bo))&&Number(bo)>0)add(`Best of <b>${esc(bo)}</b> · ${esc(r.market.period_label)} count for this line`,0);
       if(num(Number(days))&&Number(days)>=15)add(`Last official map <b>${esc(days)} days</b> ago`,-1);
@@ -1210,7 +1218,7 @@ export function mount(C) {
     const more=MX?(bestOf(r)?.bk||[]).filter(([,,bk])=>!have.has(base(bk))):[];
     const side=v=>v==null?'Not offered':v||'Listed';
     const moreRows=more.map(([label,line,,o,u])=>`<tr><td><span>${esc(label)}</span> <b>${esc(line)}</b></td><td>${esc(side(o))}</td><td>${esc(side(u))}</td><td>—</td><td>—</td></tr>`).join('');
-    return `${MX?bestLinesHtml(r):''}<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${C.oneSided(q)?esc(C.oneSided(q)):q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}${moreRows}</tbody></table></div>
+    return `${PX().odds(r,doc,pxCtx(r))}${MX?bestLinesHtml(r):''}<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${C.oneSided(q)?esc(C.oneSided(q)):q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}${moreRows}</tbody></table></div>
       <p class="h-history-note">Choose a line to recount its past results. Each line is its own pick with its own forecast; payouts and availability differ.</p>
       ${extra.length||other.length?`<div class="h-sec-head"><h4>Market books</h4></div><div class="h-scroll-x"><table><thead><tr><th>Book</th><th>Over</th><th>Under</th><th>Its chance</th></tr></thead><tbody>${extra.map(b=>mrow(b,false)).join('')}${other.map(b=>mrow(b,true)).join('')}</tbody></table></div>`:''}${market}</section>`;
   }
@@ -1233,7 +1241,7 @@ export function mount(C) {
     const doc=H.detailDoc, all=(doc?.history?.series||[]).filter(g=>num(g.value));
     const full=['nba','nfl'].includes(r.sport)&&r.player.id!=null?`<p class="h-full-research"><a href="${esc(`/sports?view=classic#/player/${encodeURIComponent(r.player.id)}?lg=${r.sport}&stat=${encodeURIComponent(r.market.stat)}`)}" target="_blank" rel="noopener">Full player research ↗</a></p>`:'';
     if(H.detailState==='loading')return full+'<p class="h-detail-loading">Loading this player’s saved stats…</p>';
-    const body=statsHtml(r,doc,all)+(r.sport==='cs2'?mapChancesHtml(doc?.map_chances):'');
+    const body=PX().factors(r,doc)+statsHtml(r,doc,all)+(r.sport==='cs2'?mapChancesHtml(doc?.map_chances):'');
     return full+(body||'<p class="h-detail-loading">No saved stats are on file for this player and market.</p>');
   }
   /* Ask: the Genie (SCOUT_GENIE) answers one question about this line from its own payload, every number checked by the server;

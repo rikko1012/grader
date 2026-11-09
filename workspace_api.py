@@ -1080,7 +1080,27 @@ def _line_body(srv, book, rid):
         _line_history(srv, x, prop_key, full, hist)
     return 200, {"record": rec, "forecast": forecast, "history": hist,
                  "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
-                 "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved)}
+                 "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved),
+                 "cs2_card": _cs2_card(x, saved), "veto": _veto(x)}
+
+
+def _cs2_card(x, saved):
+    """The classic card's panels for this line (cs2_card_ctx: copied when the board graded it), else the few its saved forecast holds.
+    Display only - never a grade input. None = no panels."""
+    try:
+        import cs2_card_ctx
+        return cs2_card_ctx.get(x.get("id")) or cs2_card_ctx.from_inputs((saved or {}).get("gi"))
+    except Exception:
+        return None
+
+
+def _veto(x):
+    """The classic card's map-veto panel (veto_serve: the background's stored answer for this match, a dict lookup). Display only."""
+    try:
+        import veto_serve
+        return veto_serve.for_match(x.get("match_id")) if x.get("match_id") else None
+    except Exception:
+        return None
 
 
 def _closing(srv, x, full):

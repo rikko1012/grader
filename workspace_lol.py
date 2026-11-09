@@ -29,7 +29,9 @@ HISTORY_DAYS = 400
 HISTORY_GAMES = 90                      # games read per player: enough for 20 series of up to five games
 SERIES_KEEP = 24
 DB_SLOTS = 3
-RESEARCH_KEYS = ("role", "opponent", "event", "best_of", "scope_games", "recent_games", "recent_per_game", "median", "team_win", "drivers")
+RESEARCH_KEYS = ("role", "opponent", "event", "best_of", "scope_games", "recent_games", "recent_per_game", "median", "team_win", "drivers",
+                 # the classic LoL card's panels (owner 2026-11-09: the hub card shows them too) - the member board row's own values
+                 "factors", "not_modelled", "line_type_note", "line_seen", "line_checked", "forecast_at", "range80")
 _DB = threading.BoundedSemaphore(DB_SLOTS)
 
 
@@ -568,7 +570,20 @@ def line_doc(srv, book, rid):
     forecast = {"id": x["fid"], "logged_at": x["at"], "model_version": x["model"], "p_saved": rec["scout"]["p_side"]} if x["fid"] else None
     return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": values[:20] or None}, "books": books, "market_books": None,
                  "h2h": workspace_h2h.h2h(values, rec["player"]["opponent"], x["line"]),
-                 "context": context_of(x["member"]), "market": {"available": False, "reason": "LoL lines carry no market price."}}
+                 "context": context_of(x["member"]), "market": {"available": False, "reason": "LoL lines carry no market price."},
+                 "lol_card": lol_card(x["member"])}
+
+
+def lol_card(m):
+    """The classic LoL card's panels (web/lol.html card + factorsHtml), read from the same member board row: team win chance two ways,
+    every factor with its effect (or weight 0), what the projection uses and leaves out, the line type and the times. Display only."""
+    tw = m.get("team_win") or {}
+    f = m.get("factors") if isinstance(m.get("factors"), dict) else None
+    out = {"team_win": tw or None, "factors": f, "drivers": list(m.get("drivers") or [])[:12], "not_modelled": list(m.get("not_modelled") or [])[:12],
+           "line_type_note": m.get("line_type_note"), "median": m.get("median"), "range80": m.get("range80"),
+           "recent_games": m.get("recent_games"), "recent_per_game": m.get("recent_per_game"), "scope_games": m.get("scope_games"),
+           "times": {"line_seen": m.get("line_seen"), "line_checked": m.get("line_checked"), "forecast_at": m.get("forecast_at")}}
+    return out if any(v for k, v in out.items() if k != "times") else None
 
 
 # ---------------------------------------------------------------------------------------------------------------- results
