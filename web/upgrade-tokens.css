@@ -67,6 +67,8 @@ html[data-ui-tokens] #u-hub #hub-table .h-prop-toggle:is(:hover,[aria-expanded=t
 html[data-ui-tokens] #u-hub #hub-table .h-add{min-width:40px;min-height:40px;border-color:#f5c84266;background:var(--u-panel2);color:var(--u-gold)}
 html[data-ui-tokens] #u-hub #hub-table .h-add:hover:not(:disabled),html[data-ui-tokens] #u-hub #hub-table .h-add.selected{background:var(--u-gold);border-color:var(--u-gold);color:var(--u-ink)}
 html[data-ui-tokens][data-upgrade] .h-entry{min-height:40px;display:inline-flex;align-items:center}
+/* UI 2026-11-09: the rule above out-ranked upgrade-hub.css's hub-open hide, so "All sports research" sat in the research hub's own top bar, linking to the page already open */
+html[data-ui-tokens][data-upgrade].hub-open .h-entry{display:none}
 /* the compact filter row (hub.css switches to it at 1100px) gets 40px+ columns; a flex row ignores this */
 html[data-ui-tokens] #u-hub .h-tools{grid-template-columns:minmax(0,1fr) 72px 44px}
 

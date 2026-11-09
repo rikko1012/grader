@@ -1808,11 +1808,23 @@ export function mount(C) {
   }
   /* N10 (site audit 2026-11-06): a pop-over anchored to a button that wrapped to the toolbar's left edge opened partly off screen
      ("ed views"). After opening, it is moved sideways just enough to sit 8px inside the window on both sides. */
+  /* UI 2026-11-09 (owner: "why is filters getting blocked by picks tab on pc"): on desktop the pop-over lives inside the scrolling
+     board column, so the part past that column's right edge was cut off under the Slip column (Side and Done unreachable at every
+     desktop width). The room is now the board column's visible box, less an open player card, inside the window; the pop-over
+     moves left (and narrows / scrolls only if the room is smaller than it) so every control stays on screen and clickable. */
   function fitPop(pop) {
-    pop.style.transform='';
-    const r=pop.getBoundingClientRect(),vw=document.documentElement.clientWidth,pad=8;
-    const dx=r.left<pad?pad-r.left:r.right>vw-pad?Math.max(pad-r.left,vw-pad-r.right):0;
+    pop.style.transform='';pop.style.maxWidth='';pop.style.maxHeight='';pop.style.overflowY='';
+    const pad=8,vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight,c=$('hub-center'),cr=c.getBoundingClientRect();
+    let lo=Math.max(0,cr.left+c.clientLeft)+pad,hi=Math.min(vw,cr.left+c.clientLeft+c.clientWidth)-pad;
+    const card=$('hub-card');
+    if(!card.hidden&&getComputedStyle(pop).position!=='fixed'){const k=card.getBoundingClientRect();if(k.width&&k.left>lo+200)hi=Math.min(hi,k.left-pad);}
+    if(hi-lo<120){lo=pad;hi=vw-pad;}
+    if(pop.offsetWidth>hi-lo)pop.style.maxWidth=Math.floor(hi-lo)+'px';
+    const r=pop.getBoundingClientRect();
+    const dx=r.left<lo?lo-r.left:r.right>hi?Math.max(lo-r.left,hi-r.right):0;
     if(dx)pop.style.transform=`translateX(${Math.round(dx)}px)`;
+    const room=Math.floor(vh-pad-r.top);
+    if(r.bottom>vh-pad&&room>=160){pop.style.maxHeight=room+'px';pop.style.overflowY='auto';}
   }
   const openPop = () => Object.entries(POPS).find(([,[,pop]])=>!$(pop).hidden)?.[0]||null;
   window.addEventListener('resize',()=>{const w=openPop();if(w)fitPop($(POPS[w][1]));});
@@ -1943,9 +1955,14 @@ export function mount(C) {
   }
   installCols();
   /* B7: the sticky toolbar's height, so the table header pins right under it (the toolbar wraps on narrow screens) */
-  {const bar=document.querySelector('#u-hub .h-toolbar'),setBar=()=>{if(bar.offsetHeight)$('u-hub').style.setProperty('--h-bar',bar.offsetHeight+'px');};
-    if(window.ResizeObserver)new ResizeObserver(setBar).observe(bar);setBar();}
-  if(EVB)$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">Best prices</button>');
+  /* UI 2026-11-09: the desktop toolbar is one row only while everything fits. With Best prices, the account bar's wider sidebar and
+     slip, Views and Refresh ran past the board column and sat cut off under the Slip column (Filters' pop-over with them). When the
+     row overflows, the sport tabs take a row of their own and the controls sit on the row under it (the narrow-desktop layout). */
+  const fitBar=()=>{const bar=document.querySelector('#u-hub .h-toolbar');if(!bar||!bar.offsetWidth)return;
+    bar.classList.remove('h-bar-wrap');if(DESKTOP.matches&&bar.scrollWidth>bar.clientWidth+1)bar.classList.add('h-bar-wrap');};
+  {const bar=document.querySelector('#u-hub .h-toolbar'),setBar=()=>{fitBar();if(bar.offsetHeight)$('u-hub').style.setProperty('--h-bar',bar.offsetHeight+'px');};
+    if(window.ResizeObserver)new ResizeObserver(setBar).observe(bar);setBar();document.fonts?.ready?.then(setBar);}
+  if(EVB){$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">Best prices</button>');fitBar();}
   if(TOKENS){
     // Skip link first in the hub (the classic page's own is inert under it) and one named account control in the top bar.
     $('u-hub').insertAdjacentHTML('afterbegin','<a class="h-skip" href="#hub-title" data-hub="skip" style="position:fixed;top:-80px;left:16px">Skip to content</a>');

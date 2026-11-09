@@ -817,6 +817,8 @@ html[data-upgrade] .h-entry{position:static;inset:auto;z-index:auto;display:inli
 #u-hub .h-sidebar nav{gap:2px}
 #u-hub .h-sidebar nav button{min-height:44px}
 #u-hub .h-sidebar-foot button{min-height:40px;font-size:12px}
+/* UI 2026-11-09: "Classic board ↗" wrapped its arrow onto a second line in the 136px sidebar (1101-1400px): one line, full width */
+#u-hub .h-sidebar-foot button{width:100%;white-space:nowrap;padding-inline:8px}
 /* the board's page heading stays for screen readers and the skip link; the toolbar is the first thing on screen */
 #u-hub.h-board-mode .h-top{position:absolute;width:1px;height:1px;min-height:0;margin:0;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal;margin:0 0 8px}
@@ -1415,6 +1417,8 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
 /* narrow desktops (one row would need ~1265px): the sport tabs take a row of their own and every control sits on the row under it,
    aligned, instead of whichever control no longer fit dropping alone to a second row */
 @media(min-width:1101px) and (max-width:1270px){#u-hub .h-toolbar{flex-wrap:wrap}#u-hub .h-toolbar .h-sports{flex:1 1 100%}}
+/* UI 2026-11-09: the same two-row layout at any desktop width where the one row would run under the Slip column (set by fitBar) */
+@media(min-width:1101px){#u-hub .h-toolbar.h-bar-wrap{flex-wrap:wrap}#u-hub .h-toolbar.h-bar-wrap .h-sports{flex:1 1 100%}}
 /* QOL 2026-11-07 (board): the refresh button turns while the boards are read; reduced motion gets a dimmed button instead */
 @keyframes h-spin{to{transform:rotate(360deg)}}
 #u-hub .h-refresh[aria-busy=true]{color:#8ab6ff;cursor:progress}

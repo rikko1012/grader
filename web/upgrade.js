@@ -657,7 +657,7 @@
     if (phase === "running") return "<b>Checking</b>";
     if (phase === "down") return T.checkErr === "limit" ? "<b>Too many checks this minute.</b> Scout will check again shortly." : "<b>The check did not answer.</b> Track and Copy stay off.";
     const vals = Object.values(T.check.entries), ready = vals.filter((e) => e.ok).length;
-    return `<b>${ready} of ${vals.length} ${vals.length === 1 ? "entry" : "entries"} ready.</b> Checked ${clock(T.check.checked_at)}.`;
+    return `<b>${ready} of ${vals.length} ${vals.length === 1 ? "entry" : "entries"} ready.</b> <span style="white-space:nowrap">Checked ${clock(T.check.checked_at)}.</span>`;   /* UI 2026-11-09: the time no longer splits "7:30 / AM." in the slip column */
   }
   /* SCOUT_SLIP_HEADER_V2 (server flag, default off): spec 4.3. The server sends every entry type of the platform at once, so the
      Power / Flex toggle repaints from the last answer for the same legs at once, before the recheck returns. */
