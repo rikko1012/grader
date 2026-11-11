@@ -855,3 +855,20 @@ forward.injury_absences judged an ESPN injury entry fresh by its FIRST sighting,
 and count only entries in the newest report read (sports/availability.py current()). Shadow forward rows recorded
 before the release under-count long-standing absences; label evidence windows as before / after the release when
 these shadows are reviewed. No shadow definition, artifact or decision rule changes.
+
+## Amendment A13 - gu-1111 grading-logic upgrade study (registered 2026-11-11, BEFORE any arm was fitted or scored)
+
+Owner 2026-11-11: test new factors and the grade layer "on previous projections versus how it ended". Research only;
+no live grade, chance, side or stake changes. Definitions, baselines and the acceptance rule (the A12 5-6 form: hit
+rate at the real offered lines, Overs and Unders separately, graded count kept, Over / Under split not more lopsided,
+game-grouped bootstrap CIs, de-duplicated rows, calibration information only, no shrink toward 50%) are frozen in
+`research/sports_lab/grade_up_1111/FROZEN_RULES.md`:
+
+1. Grade-layer arms G1-G5 (letters only, on the saved chances), descriptive G6 (cap-3 cutoff), re-tests G7 (lg-1 a1,
+   NFL d1) of the frozen Nov 9 rules.
+2. Projection arms: NBA P1-P11 (separate minutes model, opponent positional defence, pace x total, with / without
+   specific teammates, home, altitude / travel, rest x load, shot profile, role change, garbage time, all), NFL N1-N12
+   (snap / route trend, teammates out, QB change, opponent defence by position, game script, weather, surface - not
+   testable, red zone, pace, backup promoted, new team, all). One multiplier on the sm-1 mean, fitted by Poisson
+   deviance on box scores of earlier windows only (the rm-1 / nrm-1 form); the prop line is never an input.
+3. A pass makes an arm eligible for a registered shadow / default-off flag and an owner preview. Nothing switches.
