@@ -17,6 +17,7 @@ that names the one it supersedes (provider corrections), the earlier one is kept
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 
 from . import markets, store
 from .contracts import Settlement
@@ -35,7 +36,7 @@ def _sid(platform, offer_id, side, outcome, value, rule):
 
 def settle_offer(offer, obs_by_stat, event, settled_at, forecast_ids=()):
     """obs_by_stat: {part: StatObservation} for this player in this event (latest revisions)."""
-    if event is None or event.status != "final":
+    if event is None or event.status != "final" or event.event_id != offer.event_id or event.league != offer.league:
         return []
     fam = FAMILY.get(offer.league)
     rule = SETTLE_RULES.get(offer.platform.split(":")[0], "book house rules (unverified)")
@@ -47,6 +48,15 @@ def settle_offer(offer, obs_by_stat, event, settled_at, forecast_ids=()):
             reason = "market not settled here"
         elif not obs_by_stat:
             reason = "player not in the final box score"
+        elif any(o.event_id != offer.event_id or o.league != offer.league
+                 or o.participant_id != offer.player_id or o.participant_type != "player"
+                 or o.scope != offer.scope or o.stat != part or not o.final
+                 for part, o in obs_by_stat.items()):
+            reason = "result identity or period does not match the final player prop"
+        elif any(o.value is not None and (isinstance(o.value, bool)
+                 or not isinstance(o.value, (int, float)) or not math.isfinite(o.value))
+                 for o in obs_by_stat.values()):
+            reason = "invalid numeric result"
         else:
             parts = {}
             participation = {o.participation for o in obs_by_stat.values()}

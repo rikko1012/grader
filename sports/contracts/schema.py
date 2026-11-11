@@ -338,8 +338,9 @@ class StatObservation(_Record):
              + _ts_errors(self, ("observed_at", "known_at", "source_updated_at"), required=("observed_at", "known_at")))
         if self.participant_type not in ("player", "team"):
             e.append("participant_type must be player or team")
-        if self.value is not None and (not isinstance(self.value, (int, float)) or math.isnan(self.value)):
-            e.append("value must be a number or None")
+        if self.value is not None and (isinstance(self.value, bool) or not isinstance(self.value, (int, float))
+                                       or not math.isfinite(self.value)):
+            e.append("value must be a finite number or None")
         if self.participation == "did_not_play" and self.value not in (None, 0, 0.0):
             e.append("did_not_play with a non-zero value")
         return e
