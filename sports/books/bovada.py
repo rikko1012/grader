@@ -1,6 +1,7 @@
 """Bovada public pregame JSON. No credentials, browser, proxies or location overrides.
 
-Whole-league NBA response; NFL uses its listing plus every pregame event detail.
+Legacy coupons when available; otherwise finite public subscription snapshots.
+The subscription listing is followed by every pregame event's main/alt markets.
 Event responses are parsed and released one at a time. Quote-specific update times
 are absent: observation time belongs to the worker, never event.lastModified.
 """
@@ -10,6 +11,7 @@ from datetime import datetime, timezone
 
 from .. import net
 from .base import Provider, Event, FetchResult, make_offer
+from . import bovada_stream
 
 BASE = "https://www.bovada.lv/services/sports/event/coupon/events/A/description"
 PATHS = {"nba": "/basketball/nba", "nfl": "/football/nfl"}
@@ -88,10 +90,16 @@ class Bovada(Provider):
             res.requests += 1
             return net.get_json(BASE + path, params=params, tries=1, timeout=8)
         try:
-            if lg["key"] == "nba":
-                res.events, res.offers = parse(fetch(PATHS["nba"]), "nba", now)
+            league = lg["key"]
+            listing = fetch(PATHS[league], None if league == "nba" else
+                            {"marketFilterId": "def", "preMatchOnly": "true", "lang": "en"})
+            streaming = listing == {}
+            if streaming:
+                res.requests += 1
+                listing = bovada_stream.snapshot(league)
+            if league == "nba" and not streaming:
+                res.events, res.offers = parse(listing, league, now)
             else:
-                listing = fetch(PATHS["nfl"], {"marketFilterId": "def", "preMatchOnly": "true", "lang": "en"})
                 rows = [e for e in event_rows(listing) if not e.get("live") and e.get("status") == "U"
                         and float(e.get("startTime", 0)) / 1000 > now.timestamp()]
                 rows.sort(key=lambda e: (e["startTime"], str(e["id"])))
@@ -100,9 +108,13 @@ class Bovada(Provider):
                 for e in rows:
                     res = FetchResult()
                     path = e.get("link", "")
-                    if not path.startswith("/football/nfl/") or "?" in path or ".." in path:
-                        raise ValueError("unexpected NFL event path")
-                    detail = fetch(path)
+                    if not path.startswith(PATHS[league] + "/") or not re.fullmatch(r"/[a-zA-Z0-9/_-]+", path):
+                        raise ValueError("unexpected Bovada event path")
+                    if streaming:
+                        res.requests += 1
+                        detail = bovada_stream.snapshot(league, path)
+                    else:
+                        detail = fetch(path)
                     if detail == {} or detail == []:
                         # Listing can lead publication of details. Do not withdraw this game's saved quotes;
                         # they retain their real observation time and expire under the existing freshness rules.
@@ -110,9 +122,11 @@ class Bovada(Provider):
                         res.http_status = 200
                         yield res
                         continue
-                    events, offers = parse(detail, "nfl", now)
-                    if not any(x.provider_event_id == str(e["id"]) for x in events):
-                        raise ValueError("NFL event detail does not match its listing")
+                    events, offers = parse(detail, league, now)
+                    # The public stream sends main/alternate groups as separate fullEvent frames.
+                    events = list({x.provider_event_id: x for x in events}.values())
+                    if not events or any(x.provider_event_id != str(e["id"]) for x in events):
+                        raise ValueError("Bovada event detail does not match its listing")
                     res.events, res.offers, res.http_status = events, offers, 200
                     yield res
                 return
