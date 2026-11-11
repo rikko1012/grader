@@ -362,7 +362,7 @@ def _put(con, rec, known_at):
         ex = con.execute("SELECT forecast_id FROM forecast_keys WHERE input_key = ?", (fkey,)).fetchone()
         if ex:                                 # the same forecast, made again from unchanged inputs: nothing written
             return {"status": "unchanged", "record_id": ex[0], "revision": 1}
-        clash = con.execute("SELECT 1 FROM records WHERE kind='forecast' AND source_key=?",
+        clash = con.execute("SELECT 1 FROM records WHERE kind='forecast' AND source='forecast' AND source_key=?",
                             (rec.forecast_id,)).fetchone()
         if clash:
             raise ContractError(f"forecast {rec.forecast_id} already stored with other content (immutable)")

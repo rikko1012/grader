@@ -118,8 +118,8 @@ def forecast(offer, offer_rid, rungs, event, forecast_at):
         artifact_version=f"dispersion:{dispersion_hash()}", data_version="kalshi-midpoint", calibration_version=None,
         grade_policy_version=None, projection_mean=round(f["mean"], 4), projection_median=None,
         distribution=(("family", spec["shape"]), ("mean", round(f["mean"], 6)), ("var_a", a), ("var_b", b)),
-        p_over=po, p_under=pu, p_push=pp, p_over_given_no_push=po / dec if dec > 0 else None,
-        p_under_given_no_push=pu / dec if dec > 0 else None, sides_available=sides, chosen_side=chosen, grade=None,
+        p_over=po, p_under=pu, p_push=pp, p_over_given_no_push=min(1.0, po / dec) if dec > 0 else None,
+        p_under_given_no_push=min(1.0, pu / dec) if dec > 0 else None, sides_available=sides, chosen_side=chosen, grade=None,
         stake_units=None, stake_policy_version=None, reason_codes=tuple(codes), seed=None, research_only=True,
         observed_at=forecast_at, known_at=forecast_at)
     return fc, reasons

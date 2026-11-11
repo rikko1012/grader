@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from .. import capabilities, config, identity, store
-from ..contracts import Forecast, now_utc, parse_utc
+from ..contracts import ContractError, Forecast, now_utc, parse_utc
 from . import (GRADE_POLICY_VERSION, MARKET_INFORMED_VERSION, MODEL_VERSION, STAKE_POLICY_VERSION, datasets, dists,
                featurize, grade_policy, market, model, study)
 from .frame import Frame
@@ -293,8 +293,8 @@ def build_forecast(o, rid, forecast_at, model_version, artifact_version, pmf, lo
         projection_mean=round(float(mean), 6), projection_median=med,
         distribution=(("family", "pmf"), ("pmf_lo", int(lo)), ("pmf_sha", _sha([round(float(x), 15) for x in pmf])[:16]))
         + tuple(extra_dist),
-        p_over=po, p_under=pu, p_push=pp, p_over_given_no_push=po / dec if dec > 0 else None,
-        p_under_given_no_push=pu / dec if dec > 0 else None, sides_available=sides,
+        p_over=po, p_under=pu, p_push=pp, p_over_given_no_push=min(1.0, po / dec) if dec > 0 else None,
+        p_under_given_no_push=min(1.0, pu / dec) if dec > 0 else None, sides_available=sides,
         chosen_side=pol["chosen_side"], grade=pol["grade"], stake_units=pol["stake_units"],
         stake_policy_version=STAKE_POLICY_VERSION, reason_codes=tuple(codes) + (f"gp:{pol['validation_state']}",
                                                                               f"gp_band:{pol['band']}"),
@@ -439,7 +439,13 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                     out["no_forecast"].get("market: " + (reasons[0].split(": ", 1)[-1] if reasons else "no quote"), 0) + 1
             for name, fcx, polx, pmfx, inp in written:
                 store.assert_known_before(scon, fcx.input_snapshot_ids, forecast_at)
-                res = store.put(scon, fcx)
+                try:
+                    res = store.put(scon, fcx)
+                except ContractError as e:          # one invalid record never stops the whole run: skip, count, log
+                    k = f"{name}|{mk}"
+                    out.setdefault("contract_errors", {})[k] = out.get("contract_errors", {}).get(k, 0) + 1
+                    log({"league": league, "market": mk, "model": name, "offer": rid, "contract_error": str(e)[:300]})
+                    continue
                 if name == 'sm-1' and os.getenv('SCOUT_GRADECORE_SHADOW', '0') == '1':
                     from gradecore.capture import capture
                     # the mc-1 consensus written in this same run is the saved market quote of the shadow (flag on only)
@@ -566,8 +572,8 @@ def _market_forecast(o, rid, forecast_at, name, po, pu, pp, input_ids, used, mcf
         model_version=name, artifact_version=f"mc-1:{mcfg.get('sha')}", data_version="quotes",
         calibration_version=None, grade_policy_version=GRADE_POLICY_VERSION, projection_mean=None,
         projection_median=None, distribution=(("family", "dispersion.json shape"), ("sources", "+".join(used))),
-        p_over=po, p_under=pu, p_push=pp, p_over_given_no_push=po / dec if dec > 0 else None,
-        p_under_given_no_push=pu / dec if dec > 0 else None, sides_available=sides, chosen_side=chosen, grade=None,
+        p_over=po, p_under=pu, p_push=pp, p_over_given_no_push=min(1.0, po / dec) if dec > 0 else None,
+        p_under_given_no_push=min(1.0, pu / dec) if dec > 0 else None, sides_available=sides, chosen_side=chosen, grade=None,
         stake_units=0.0, stake_policy_version=STAKE_POLICY_VERSION,
         reason_codes=("market_only", "consensus" if len(used) > 1 else "single_source", "gp:unvalidated"),
         seed=0, research_only=True, observed_at=forecast_at, known_at=forecast_at)
