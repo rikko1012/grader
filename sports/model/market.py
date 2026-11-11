@@ -70,7 +70,7 @@ def consensus_sources(per_source):
     return {s: v for s, v in per_source.items() if in_consensus(s)}
 
 
-def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0, last_source=None):
+def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0, last_source=None, *, display_books=()):
     """-> (p_over_given_no_push at q.line, reason) or (None, why) for one source quote. last_seen / last_source = the
     revision's newest sighting and newest SOURCE time (store columns): an unchanged quote re-confirmed by the source
     is as fresh as its latest source time, not its first one (LINE_CORRECTNESS.md R2)."""
@@ -108,7 +108,7 @@ def quote_prob(q, event, forecast_at, last_seen=None, dnp_share=0.0, last_source
             return None, "no liquidity"
         mid = (s.bid + s.ask) / 2
         return min(0.99, mid / (1 - dnp_share)), None
-    if q.platform.startswith("oddsapi:") or q.platform in DIRECT_BOOKS:
+    if q.platform.startswith("oddsapi:") or q.platform in DIRECT_BOOKS or q.platform in display_books:
         o, u = q.side("over"), q.side("under")
         if not (o and u and o.offered and u.offered and o.price and u.price and o.price > 1 and u.price > 1):
             return None, "not a two-sided priced pair"

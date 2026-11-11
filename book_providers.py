@@ -58,7 +58,7 @@ def providers():
 
 def enabled(pid):
     p = providers().get(pid)
-    return bool(p) and os.environ.get(p["flag"]) == "1"
+    return bool(p) and os.environ.get(p["flag"], os.environ.get(p.get("default_flag", ""), "0")) == "1"
 
 
 def enabled_ids():

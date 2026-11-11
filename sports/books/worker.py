@@ -93,6 +93,17 @@ def _seen_at(now, fixed):
     return now if fixed else _now()
 
 
+def _league_batches(prov, db, lg, now):
+    """Stream event batches when supported; exceptions still become ordinary provider backoff."""
+    if not hasattr(prov, "read_batches"):
+        yield _guarded(prov.read, db, lg, now)
+        return
+    try:
+        yield from prov.read_batches(db, lg, now)
+    except Exception as e:
+        yield FetchResult(error=f"{type(e).__name__}: {str(e)[:200]}")
+
+
 def _league_reads(db, name, prov, leagues, now, info, sink=None, fixed=True):
     """Providers that read a whole league per request (OddsPapi): due per league, every read through the provider's
     own quota guard; a budget refusal is not a failure (no backoff), it just waits for the next due time."""
@@ -103,42 +114,44 @@ def _league_reads(db, name, prov, leagues, now, info, sink=None, fixed=True):
         nd = store.due(db, name, key, "league")
         if nd and dt(nd) > now:
             continue
-        fid = store.start_fetch(db, name, key, "league", now=now)
-        res = _guarded(prov.read, db, lg, now)
-        if res.budget_denied:
-            store.finish_fetch(db, fid, res, now=now)
-            info.setdefault("budget", {})[key] = res.budget_denied
-            store.set_due(db, name, key, "league", now + _td(minutes=60))
-            continue
-        if res.error is not None:
-            store.finish_fetch(db, fid, res, now=now)
-            fails = store.provider_state(db, name)["failures"]
-            until = _cooldown(fails, res.blocked, now, res.not_before)
-            store.note_result(db, name, res, now=now, cooldown_until=iso(until))
-            info["error"], info["cooling_down_until"] = res.error, iso(until)
-            return
-        seen = _seen_at(now, fixed)
-        keys = canon.keys_for(lg, name, res.events, now=now) if res.events else {}
-        store.record_events(db, name, key, res.events, keys, now=seen)
-        by_ev = {}
-        for o in res.offers:
-            by_ev.setdefault(o["provider_event_id"], []).append(o)
-        new = removed = 0
-        for ev in res.events:
-            n, r = store.save_offers(db, fid, name, key, ev.provider_event_id, keys.get(ev.provider_event_id),
-                                     by_ev.get(ev.provider_event_id, []), True, now=seen)
-            new, removed = new + n, removed + r
-            if sink is not None:
-                sink(name, lg, keys.get(ev.provider_event_id), by_ev.get(ev.provider_event_id, []), True, iso(seen))
-        store.finish_fetch(db, fid, res, len(res.offers), new, removed, now=now)
-        store.note_result(db, name, res, now=now)
-        store.set_due(db, name, key, "league", now + _td(minutes=prov.interval_min(db, len(with_games), now)))
-        info["fetched"] += 1
-        info["offers"] += len(res.offers)
-        info["new_quotes"] += new
-        info["removed"] += removed
-        if res.unmapped:
-            info.setdefault("unmapped_markets", {})[key] = res.unmapped[:20]
+        for res in _league_batches(prov, db, lg, now):
+            fid = store.start_fetch(db, name, key, "league", now=now)
+            if res.budget_denied:
+                store.finish_fetch(db, fid, res, now=now)
+                info.setdefault("budget", {})[key] = res.budget_denied
+                store.set_due(db, name, key, "league", now + _td(minutes=60))
+                break
+            if res.error is not None:
+                store.finish_fetch(db, fid, res, now=now)
+                fails = store.provider_state(db, name)["failures"]
+                until = _cooldown(fails, res.blocked, now, res.not_before)
+                store.note_result(db, name, res, now=now, cooldown_until=iso(until))
+                info["error"], info["cooling_down_until"] = res.error, iso(until)
+                return
+            seen = _seen_at(now, fixed)
+            keys = canon.keys_for(lg, name, res.events, now=now) if res.events else {}
+            store.record_events(db, name, key, res.events, keys, now=seen)
+            by_ev = {}
+            for o in res.offers:
+                by_ev.setdefault(o["provider_event_id"], []).append(o)
+            new = removed = 0
+            for ev in res.events:
+                n, r = store.save_offers(db, fid, name, key, ev.provider_event_id, keys.get(ev.provider_event_id),
+                                         by_ev.get(ev.provider_event_id, []), True, now=seen)
+                new, removed = new + n, removed + r
+                if sink is not None:
+                    sink(name, lg, keys.get(ev.provider_event_id), by_ev.get(ev.provider_event_id, []), True, iso(seen))
+            store.finish_fetch(db, fid, res, len(res.offers), new, removed, now=now)
+            store.note_result(db, name, res, now=now)
+            info["fetched"] += 1
+            info["offers"] += len(res.offers)
+            info["new_quotes"] += new
+            info["removed"] += removed
+            if res.unmapped:
+                warnings = info.setdefault("unmapped_markets", {}).setdefault(key, [])
+                warnings.extend(res.unmapped[:max(0, 20 - len(warnings))])
+        else:
+            store.set_due(db, name, key, "league", now + _td(minutes=prov.interval_min(db, len(with_games), now)))
 
 
 def _games(db, prov, lg, now):
