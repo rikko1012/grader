@@ -34,9 +34,12 @@ def candidates(con, platform, mode="mixed", exclude_roles=(), preview=False, now
     """Legs that may enter a slip, best first, each with the reasons a leg was left out."""
     now = now or datetime.now(timezone.utc)
     legs, out = [], {}
-    holds = forecast.avail_holds(con)
-    links = {r["market_key"]: dict(r) for r in con.execute(
-        "SELECT market_key, status AS link_status, reason AS link_reason, sid, pid FROM market_links WHERE platform = ?", (platform,))}
+    try:                                    # lav-1 / lnk-1 inputs (LoL slips are 0U previews; unreadable = no hold info)
+        holds = forecast.avail_holds(con)
+        links = {r["market_key"]: dict(r) for r in con.execute(
+            "SELECT market_key, status AS link_status, reason AS link_reason, sid, pid FROM market_links WHERE platform = ?", (platform,))}
+    except Exception:                       # noqa: BLE001
+        holds, links = {}, {}
     for f in _latest(con, platform):
         why = []
         hold = forecast.display_hold(con, dict(links.get(f["market_key"]) or {}, platform=platform, market_key=f["market_key"]),

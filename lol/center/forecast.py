@@ -930,8 +930,12 @@ def settle_all(con):
     # the full pass runs once per such change; in between only units without a recorded settlement are tried
     key = store.sha([store.get_meta(con, "built_at"), rules.RULES, _settle_code()])
     full = store.get_meta(con, "settle_pass") != key
-    prior = {u for (u,) in con.execute("SELECT DISTINCT unit_key FROM lol_settlements")}
-    done = set() if full else prior
+    # latest status per settled unit; the team check (link_mismatch) applies to new units and to units already
+    # link_mismatch (so the owner-approved clean-up of the old DNPs is never undone by a later full pass)
+    latest = {u: st for u, st in con.execute("SELECT x.unit_key, x.status FROM lol_settlements x JOIN (SELECT unit_key, "
+                                              "MAX(version) AS v FROM lol_settlements GROUP BY unit_key) z ON z.unit_key = x.unit_key "
+                                              "AND z.v = x.version")}
+    done = set() if full else set(latest)
     rows = con.execute("SELECT f.* FROM lol_forecasts f JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM lol_forecasts "
                        "WHERE forecast_at < series_start GROUP BY platform, market_key, line) z ON z.id = f.id "
                        "JOIN c_series s ON s.sid = f.sid WHERE s.status = 'complete'").fetchall()
@@ -940,10 +944,10 @@ def settle_all(con):
         if unit in done:
             out["unchanged"] = out.get("unchanged", 0) + 1
             continue
-        # the team check (link_mismatch, 2026-11-09) applies to units settled from now on; a unit that already has a
-        # settlement keeps its rule (the 17 old DNP rows change only through the owner-approved clean-up, fix_dnp_links)
+        # the team check (link_mismatch, 2026-11-09): units settled from now on; a unit that already has another status
+        # keeps its rule (the 17 old DNP rows change only through the owner-approved clean-up, fix_dnp_links)
         res = settle.record(con, unit, f["platform"], f["stat"], "maps_" + "_".join(f["scope"]), store.canonical_id(con, f["pid"]),
-                            f["sid"], f["line"], tid=None if unit in prior else f["tid"])
+                            f["sid"], f["line"], tid=f["tid"] if latest.get(unit, "link_mismatch") == "link_mismatch" else None)
         out[res["status"]] = out.get(res["status"], 0) + 1
     if full:
         store.set_meta(con, "settle_pass", key)

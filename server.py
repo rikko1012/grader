@@ -1455,7 +1455,7 @@ def benched_hold(pb):
     if not role_benched(pb) or pb.get("is_standin") or pb.get("standin_for"):
         return False
     pf, prof = pb.get("playing_for"), pb.get("profile_team")
-    return pf is None or comparison._team_same(pf, prof) is True
+    return pf is None or str(pf).strip().lower() == str(prof or "").strip().lower() or comparison._team_same(pf, prof) is True
 
 
 def avail_hold_row(r, pb, now=None):
@@ -4034,7 +4034,8 @@ _FLAG_RULES = (   # (starts with, member-friendly text or None = not shown)
 HLTV_NOT_CONNECTED = "Grading resumes in a few minutes - the Prop Board keeps each line's latest grade meanwhile"
 HLTV_NOT_CONFIGURED = "Projection from the older model - the HLTV database is not configured on this server"
 _REASONS = (("Gate A", "AWPer on a headshot prop"), ("Gate D", "No recent official maps to grade"),
-            ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"))
+            ("Gate C", "Not on this team's roster"), ("Missing", "Not enough data to grade"),
+            ("Not in the team's current lineup", "Not in the team's current lineup"))     # av-cs2-1 hold
 
 
 # ---------------------------------------------------------------- the odds a card's grade used (2026-10-13)
