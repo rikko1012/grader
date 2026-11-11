@@ -111,13 +111,14 @@ MIGRATIONS = [
         # cycle): one venue + league's identities, their current revision and their newest sighting. The per-market
         # offer list (store.iter_offers(league, stat) - model-forward, once per market): the stat was not in any index.
         "CREATE INDEX IF NOT EXISTS records_offer_seen ON records "
-        "(kind, source, league, source_key, late, revision, COALESCE(last_seen_at, observed_at, known_at)) "
+        "(kind, source, league, source_key, late, revision, last_seen_at, observed_at, known_at) "
         "WHERE kind = 'offer'",
         "CREATE INDEX IF NOT EXISTS records_current_stat ON records "
         "(kind, league, stat, source, source_key, revision, platform) WHERE late = 0",
     ]),
 ]
-# the newest sighting of a stored row - records_offer_seen indexes exactly this expression (worker._board_offers)
+# the newest sighting of a stored row - records_offer_seen holds its three plain columns, so the expression is read
+# from the index on every SQLite version (an expression index is only covering on newer SQLite; CI's was not)
 SEEN_SQL = "COALESCE(last_seen_at, observed_at, known_at)"
 FEED_SIGHTINGS_SQL = ("SELECT platform, max(coalesce(last_seen_at, observed_at)) FROM records "
                      "WHERE kind = 'offer' GROUP BY platform")
