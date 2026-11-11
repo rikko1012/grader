@@ -1,0 +1,26 @@
+Bovada feed repair - 2026-11-11
+
+The legacy NBA/NFL coupon listing routes returned HTTP 200 with {} while
+Bovada's public pages still listed games. The current public client subscribes
+to services.bovada.lv/services/sports/subscription/<random UUID>, language=en,
+lnGrp=2. NBA competition 2958468, NFL 241. Event details use eventByLink.
+These routes were observed in the public client's network traffic; the worker
+reads them directly, never through a browser. No cookies, credentials, proxy,
+location override, CAPTCHA solver, or disabled TLS verification are used.
+
+Legacy valid coupons remain supported. Only an empty object listing selects
+the current subscription transport; HTTP authentication/access failures do not.
+Listing and each event require start/end catch-up delimiters. Main and alternate
+frames are both parsed using the existing exact stat/period/price rules.
+Each event is committed separately, only after a complete snapshot. A partial
+or unavailable event does not withdraw its existing quotes or refresh their age.
+Challenges, timeouts, schema/identity mismatches fail closed. Provider cooldowns
+and Retry-After remain effective. Connections close after the finite snapshot.
+Limits: 20 seconds / 200 messages / 8 MiB per snapshot, 8-second socket timeout;
+only one event is retained at a time. The scheduler's existing job cap remains.
+
+Read-only live validation: NBA 10 events / 5184 offers / 22.24 seconds;
+NFL 14 events / 694 offers / 24.11 seconds; no duplicate selections/errors.
+Counts vary with the slate and are not an assertion about future availability.
+No grade formula, forecast source registration, paid service, or member access
+setting is changed. websocket-client is installed in Sports/test images only.
