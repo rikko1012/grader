@@ -1563,3 +1563,11 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
  #u-hub .h-center{scroll-padding-bottom:100px}
  #u-hub .h-generator-controls select,#u-hub #hub-generate{scroll-margin-block:70px 110px}
 }
+
+/* Additional generation filters stay tucked away until needed. */
+#u-hub .h-generation-more{grid-column:1/-1;border:1px solid #303a49;border-radius:10px;background:#111720}
+#u-hub .h-generation-more>summary{padding:13px 14px;cursor:pointer;font-weight:600;min-height:44px;box-sizing:border-box}
+#u-hub .h-generation-more>summary span{float:right;color:#8fb8ff;font-size:12px}
+#u-hub .h-generation-more>div{padding:0 14px 14px}
+#u-hub .h-generation-more label{display:grid;gap:8px}
+#u-hub .h-generation-more small{color:#a8b4c5;line-height:1.5}

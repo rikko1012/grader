@@ -46,6 +46,11 @@ def test_studio_summary_layout_and_settings(browser, env, width, tmp_path):
         p.get_by_role('tab', name='Auto-build', exact=True).click()
         assert p.locator('#hub-generation-repeats').input_value() == 'none'
         assert p.locator('#hub-generation-count').input_value() == '6'
+        assert not p.locator('#hub-generation-side').is_visible()
+        p.locator('.h-generation-more summary').click()
+        p.locator('#hub-generation-side').select_option('under')
+        assert 'Unders only' in p.locator('#hub-generation-summary').inner_text()
+        assert p.locator('#hub-generation-filter-count').inner_text() == '1 active'
         controls = p.locator('.h-generator-controls select').evaluate_all('(es)=>es.map(e=>({w:e.clientWidth,scroll:e.scrollWidth,h:e.getBoundingClientRect().height}))')
         assert all(x['h'] >= 44 and x['w'] > 90 for x in controls)
         for control in p.locator('.h-generator-controls select, #hub-generate').all():

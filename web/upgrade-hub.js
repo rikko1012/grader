@@ -1394,7 +1394,7 @@ export function mount(C) {
       const pool=H.records.filter(r=>sports.includes(r.sport)&&!unavailableReason(r)&&!C.started(r));
       const options={platform:$('hub-generation-book').value,count:Number($('hub-generation-slips').value),size:Number($('hub-generation-count').value),entryType:$('hub-generation-type').value,
         mix:$('hub-generation-mix').value,games:$('hub-generation-games').value,noRepeatProps:$('hub-generation-repeats').value==='none',lines:$('hub-generation-lines').value,
-        research:$('hub-generation-research')?.value==='include',sports};
+        research:$('hub-generation-research')?.value==='include',side:$('hub-generation-side').value,sports};
       const batch=await C.generateBatch(pool,options,text=>{status.textContent=text;});
       if(!batch.slips.length)throw new Error(batch.note||'No combinations passed recheck. Widen your settings.');
       H.batch=batch;H.batchSaved=false;paintBatch();
@@ -1446,6 +1446,7 @@ export function mount(C) {
       <label>Game selection<select id="hub-generation-games"><option value="spread">One per match</option><option value="stacks">Same match (Underdog)</option></select></label>
       <label>Prop reuse<select id="hub-generation-repeats"><option value="allow">Allow across slips</option><option value="none">No repeat props</option></select></label>
       ${research?'<label>Research estimates<select id="hub-generation-research"><option value="leave">Leave out</option><option value="include">Include, marked</option></select></label>':''}
+      <details class="h-generation-more"><summary>More filters <span id="hub-generation-filter-count"></span></summary><div><label>Pick side<select id="hub-generation-side"><option value="any">Either side</option><option value="over">Overs only</option><option value="under">Unders only</option></select><small>Uses Scout’s recommended side. Picks are never flipped to fill a slip.</small></label></div></details>
       <div class="h-generation-submit"><p id="hub-generation-summary" role="status" aria-live="polite"></p><button id="hub-generate" data-hub="generate">Generate slips</button><small>Current lines are rechecked before results appear.</small></div></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
   }
   /* 30 days of the record; a run of days with no decided pick folds into one quiet tile instead of a wall of dashes */
@@ -2009,7 +2010,9 @@ export function mount(C) {
     const n=$('hub-generation-slips').value,size=$('hub-generation-count').value;
     const sports=[...$('hub-generation-sports').querySelectorAll('input:checked')].map(x=>SPORTS[x.value]);
     const book=$('hub-generation-book').selectedOptions[0].textContent;
-    $('hub-generation-summary').textContent=sports.length?`${n} slips × ${size} picks · ${book} · ${sports.join(' + ')}`:'Select at least one sport to build your batch.';
+    const side=$('hub-generation-side').value,sideText=side==='any'?'':side==='over'?'Overs only':'Unders only';
+    $('hub-generation-filter-count').textContent=sideText?'1 active':'';
+    $('hub-generation-summary').textContent=sports.length?`${n} slips × ${size} picks · ${book} · ${sports.join(' + ')}${sideText?' · '+sideText:''}`:'Select at least one sport to build your batch.';
   }
   $('hub-studio-section').addEventListener('change',generationSummary);
   generationSummary();

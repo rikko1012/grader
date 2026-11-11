@@ -902,7 +902,7 @@ def test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed(ctx, env, browse
     assert sel.input_value() == 'no_goblins'
     assert sel.locator('option').all_text_contents() == ['No goblins', 'At most 1 goblin per slip', 'No goblins or demons', 'Any lines']
     assert p.locator('#hub-generation-lines-help').inner_text() == 'Goblins are easier lines that pay less. Scout leaves them out unless you allow them.'
-    assert 'Goblins (PrizePicks lines set below the standard line' in p.locator('.h-generator details').text_content()
+    assert 'Goblins (PrizePicks lines set below the standard line' in p.locator('.h-generator > details').text_content()
     if SHOTS_DIR:
         SHOTS_DIR.mkdir(parents=True, exist_ok=True)
         p.locator('.h-generator').screenshot(path=str(SHOTS_DIR / f"studio_goblin_rule_{size['width']}.png"))
