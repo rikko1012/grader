@@ -278,6 +278,20 @@ def pending(db, leagues=LEAGUES, now=None, provs=None, probe=True):
     return False
 
 
+def _collection_order(db, provs):
+    """Oldest attempted source first; interrupted large batches cannot always lead.
+
+    Fetch starts are committed before network/save work. Unlike last_ok_at this
+    also rotates a source whose first batch was interrupted before completion.
+    Existing due times, cooldowns and credit guards still decide whether to read.
+    """
+    def attempted(item):
+        row = db.one("SELECT started_at FROM sports_book_fetches WHERE provider = ? ORDER BY id DESC LIMIT 1",
+                     (item[0],))
+        return row["started_at"] if row else ""
+    return sorted(provs.items(), key=attempted)
+
+
 def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
     """One pass. -> summary dict. Returns {"busy": holder} when another worker holds the lease. sink(provider, lg,
     event_key, offers, complete, observed_at) receives every successful game read - the canonical ingest
@@ -289,7 +303,7 @@ def run_once(db, leagues=LEAGUES, now=None, provs=None, probe=True, sink=None):
     summary = {"at": iso(now), "providers": {}}
     try:
         load_holds(db, now)                             # inside the try: the lease is released whatever happens
-        for name, prov in (providers.PROVIDERS if provs is None else provs).items():
+        for name, prov in _collection_order(db, providers.PROVIDERS if provs is None else provs):
             info = summary["providers"].setdefault(name, {"fetched": 0, "offers": 0, "new_quotes": 0, "removed": 0})
             ok, why = prov.configured()
             if not ok:
