@@ -53,6 +53,7 @@ def test_interrupted_fit_is_not_silently_repeated(world):
     paths['state'].write_text(json.dumps({'attempt_day':'2026-11-11', 'cal_attempt':{'status':'running'}}))
     result = daily.run(now=NOW)
     assert 'interrupted' in result['error']['cal'] and not calls
+    assert result['gradecheck']['skipped'].startswith('calibration attempt incomplete')
 
 
 def test_failed_fit_stays_visible_without_counting_another_daily_failure(world, monkeypatch):
@@ -103,3 +104,14 @@ def test_stale_jobs_alert_even_before_three_failures(name,monkeypatch):
     data['scheduler']['uptime_s']=10000
     job['enabled']=False
     assert not stale()
+
+
+def test_long_job_timeout_is_included_in_alert_grace(monkeypatch):
+    from sports import service
+    from sports.tests.test_service import _ops
+    monkeypatch.setattr(service.time, 'time', lambda: 100000.)
+    job = {'enabled':True, 'every_s':300, 'timeout_s':3600, 'last_ok_at':None}
+    data = _ops(scheduler={'uptime_s':3000,'jobs':{'settle':job}})
+    assert not any(a['code']=='grading_job_stale' for a in service.alerts(data))
+    data['scheduler']['uptime_s']=4000
+    assert any(a['code']=='grading_job_stale' for a in service.alerts(data))

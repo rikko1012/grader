@@ -532,7 +532,8 @@ class Scheduler:
         for name, spec in self.specs.items():
             enabled = _job_on(spec["flag"])
             JOBS[name] = {"enabled": enabled, "flag": spec["flag"], "cls": spec["cls"], "cap_mb": spec["cap_mb"],
-                          "every_s": spec["every_s"], "prio": spec["prio"], "pid": None, "starts": 0,
+                          "every_s": spec["every_s"], "timeout_s": spec.get("timeout_s"),
+                          "prio": spec["prio"], "pid": None, "starts": 0,
                           "last_start": None, "last_exit": None, "failures_in_a_row": 0, "over_cap": 0,
                           "rss_mb": None, "peak_rss_mb": 0.0, "last_peak_rss_mb": None, "last_ok_at": None,
                           # first run soon after start, staggered by priority so jobs do not pile up at boot
