@@ -81,3 +81,46 @@ def test_one_invalid_forecast_never_stops_the_league(tmp_path, monkeypatch):
         monkeypatch.setattr(store, "put", real_put)       # the next run writes it normally
         res2 = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
         assert res2["written"].get("sm-1") == 1 and "contract_errors" not in res2
+
+
+def _offer_world(con):
+    """Three platforms, two events, several revisions per identity (line moves back and forth)."""
+    for i in range(30):
+        for plat in ("prizepicks", "underdog", "kalshi"):
+            ev = "nba:espn:1" if i % 2 else "nba:espn:2"
+            for j, line in enumerate((10.5 + i, 11.5 + i, 10.5 + i)[: 1 + i % 3]):
+                store.put(con, h.offer(platform=plat, oid=f"{plat[:2]}:{i}", line=line, event_id=ev,
+                                       stat="points" if i % 3 else "rebounds",
+                                       observed_at=f"2026-01-31T{10 + j:02d}:{i:02d}:00Z"))
+
+
+def test_platform_filter_keeps_the_same_rows_in_the_same_order():
+    con = store.connect()
+    _offer_world(con)
+    allr = list(store.iter_offers(con, league="nba", limit=500000))
+    assert len(allr) == 90
+    tg = list(store.iter_offers(con, league="nba", limit=500000, platforms=forward.TARGETS))
+    mk = list(store.iter_offers(con, league="nba", limit=500000, exclude_platforms=forward.TARGETS))
+    assert [r for r, _ in tg] == [r for r, o in allr if o.platform in forward.TARGETS]
+    assert [r for r, _ in mk] == [r for r, o in allr if o.platform not in forward.TARGETS]
+    assert [o.to_dict() for _, o in tg] == [o.to_dict() for _, o in allr if o.platform in forward.TARGETS]
+    assert list(store.iter_offers(con, league="nba", platforms=())) == []
+
+
+def test_current_offer_ids_same_as_the_old_query():
+    from sports.model import pipeline
+    con = store.connect()
+    _offer_world(con)
+    ev = ["nba:espn:1", "nba:espn:2"]
+    old = (f"SELECT r.record_id FROM records r JOIN (SELECT source, source_key, MAX(revision) rv FROM records WHERE "
+           f"kind = 'offer' AND {store.CURRENT_SQL} AND league = ? AND event_id IN (?,?) "
+           f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND "
+           f"r.revision = z.rv WHERE r.kind = 'offer'")
+    want = {x[0] for x in con.execute(old, ["nba"] + ev)}
+    assert len(want) == 90 and pipeline.current_offer_ids(con, "nba", ev) == want
+    assert pipeline.current_offer_ids(con, "nba", ev[:1]) == {x[0] for x in con.execute(
+        old.replace("IN (?,?)", "IN (?)"), ["nba"] + ev[:1])}
+    plan = " ".join(str(tuple(r)) for r in con.execute(
+        "EXPLAIN QUERY PLAN SELECT source, source_key, MAX(revision) FROM records INDEXED BY records_event WHERE "
+        "kind = 'offer' AND late = 0 AND league = ? AND event_id IN (?) GROUP BY source, source_key", ["nba", "x"]))
+    assert "records_event" in plan
