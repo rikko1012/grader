@@ -640,9 +640,14 @@ def offers(con, league=None, event_id=None, player_id=None, stat=None, platform=
     return list(iter_offers(con, league, event_id, player_id, stat, platform, as_of, limit))
 
 
-def iter_offers(con, league=None, event_id=None, player_id=None, stat=None, platform=None, as_of=None, limit=5000):
+def iter_offers(con, league=None, event_id=None, player_id=None, stat=None, platform=None, as_of=None, limit=5000,
+                platforms=None, exclude_platforms=None):
     """CURRENT revision of each offer (per platform + provider offer id) known at as_of -> [(record_id, OfferSnapshot)].
-    The board, the player card, the slip pool / validation and new forecasts all read offers through this one rule."""
+    The board, the player card, the slip pool / validation and new forecasts all read offers through this one rule.
+    platforms / exclude_platforms keep (drop) whole identities by platform - an offer's identity source IS its platform
+    (OfferSnapshot.identity), so each kept identity has the same current revision and the same relative order as in
+    the unfiltered listing, and only the kept identities' rows are read (model-forward 2026-11-11: the target list and
+    the market-quote list each read every current offer row of the league)."""
     w, a = [], []
     for col, v in (("league", league), ("event_id", event_id), ("player_id", player_id), ("stat", stat),
                    ("platform", platform)):
@@ -654,6 +659,11 @@ def iter_offers(con, league=None, event_id=None, player_id=None, stat=None, plat
             # index keys; the rows returned are the same.
             w.append(f"+{col} = ?" if event_id is not None and col in ("league", "platform", "stat") else f"{col} = ?")
             a.append(v)
+    for op, ps in (("IN", platforms), ("NOT IN", exclude_platforms)):
+        if ps is not None:
+            ps = sorted(set(ps))
+            w.append(f"source {op} ({','.join('?' * len(ps))})" if ps else ("0" if op == "IN" else "1"))
+            a.extend(ps)
     rows = _latest_rows(con, "offer", " AND ".join(w), a, as_of, limit,
                         scoped=event_id is not None or player_id is not None, stream=True)
     for r in rows:

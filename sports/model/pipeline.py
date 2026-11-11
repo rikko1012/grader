@@ -173,10 +173,13 @@ def current_offer_ids(scon, league, event_ids):
     store.offers gives the board, the player card, the slip pool and new forecasts. Ids only (no payloads)."""
     out = set()
     for part in _chunks(event_ids, 400):
-        q = (f"SELECT r.record_id FROM records r JOIN (SELECT source, source_key, MAX(revision) rv FROM records WHERE "
-             f"kind = 'offer' AND {store.CURRENT_SQL} AND league = ? AND event_id IN ({','.join('?' * len(part))}) "
-             f"GROUP BY source, source_key) z ON r.source = z.source AND r.source_key = z.source_key AND "
-             f"r.revision = z.rv WHERE r.kind = 'offer'")
+        # model-forward 2026-11-11: the planner walked every league offer row for z and then scanned every offer for
+        # r (records_feed_seen + an automatic index on z) - ~8 GB of reads per snapshot on a 3 GB store. Same rows:
+        # z from the event index, then each identity's revision row by records_ident (CROSS JOIN keeps z outer).
+        q = (f"SELECT r.record_id FROM (SELECT source, source_key, MAX(revision) rv FROM records INDEXED BY records_event "
+             f"WHERE kind = 'offer' AND {store.CURRENT_SQL} AND league = ? AND event_id IN ({','.join('?' * len(part))}) "
+             f"GROUP BY source, source_key) z CROSS JOIN records r WHERE r.kind = 'offer' AND r.source = z.source AND "
+             f"r.source_key = z.source_key AND r.revision = z.rv")
         out.update(x[0] for x in scon.execute(q, [league] + list(part)))
     return out
 
