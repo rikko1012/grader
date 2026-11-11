@@ -847,3 +847,11 @@ raised hit rate on all props +1.9 pts [-0.6, +4.7] and graded +1.1 [-1.1, +3.0],
    AND neither Over picks nor Under picks down (point estimate) AND graded count >= sm-1's AND graded Over share no
    further from 50% than sm-1's. A pass makes nrm-1 eligible for an **owner decision** to switch that market (model
    version bump + the usual release checks). A fail retires nrm-1 for that market. Nothing switches automatically.
+
+## Data note 2026-11-09 (av-1) - injury freshness in the shadow inputs (A5 / A6 / A12 evidence windows)
+Before this fix, shadow._report (sm-2 statuses and teammates-out, sm-nfl-2 absences) and the live NBA input
+forward.injury_absences judged an ESPN injury entry fresh by its FIRST sighting, so an entry unchanged for more than
+24 h read as "not on the report". From the av-1 release on, both judge it by the newest sighting (store last_seen_at)
+and count only entries in the newest report read (sports/availability.py current()). Shadow forward rows recorded
+before the release under-count long-standing absences; label evidence windows as before / after the release when
+these shadows are reviewed. No shadow definition, artifact or decision rule changes.

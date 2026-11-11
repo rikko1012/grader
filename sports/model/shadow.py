@@ -287,15 +287,12 @@ def _tail(x):
 def _report(scon, hcon, league, forecast_at, up):
     """-> ({store player id: own injury status}, NFL {(game_id, team): [gsis ids Out]} | None per team when no fresh
     report). Same freshness rule as forward.injury_absences (a report observed within 24 h before the forecast)."""
-    from .. import store
-    from ..contracts import parse_utc
-    try:
-        recs = [store._rec(r) for r in store._latest_rows(scon, "context", "league = ?", [league], forecast_at, 20000)]
+    try:                                    # newest sighting (last_seen_at), not the first-observed time (2026-11-09)
+        from .forward import listed_injuries
+        fresh = [c for c in listed_injuries(scon, league, forecast_at).values()
+                 if c is not None and getattr(c, "present", None) == "yes"]
     except Exception:                                                # noqa: BLE001
         return {}, {}
-    t = parse_utc(forecast_at)
-    fresh = [c for c in recs if c is not None and (t - parse_utc(c.observed_at)).total_seconds()
-             <= REPORT_MAX_AGE_H * 3600 and getattr(c, "present", None) == "yes"]
     statuses = {c.subject_id: c.status for c in fresh if c.subject_id}
     if league != "nfl":
         return statuses, {}

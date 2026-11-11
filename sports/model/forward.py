@@ -207,14 +207,30 @@ def upcoming_rows(scon, hcon, league, now):
 REPORT_MAX_AGE_H = 24
 
 
+def listed_injuries(scon, league, at):
+    """{player id: injury record} of the ESPN report entries in the NEWEST report read known at `at` (sports/availability
+    current(): judged by each record's newest sighting last_seen_at, never the first-observed time in its payload - an
+    unchanged Out entry stays listed for as long as ESPN lists it; one ESPN dropped leaves at the next read). {} when
+    the newest read is older than REPORT_MAX_AGE_H."""
+    from .. import availability
+    recs = []
+    for r in store._latest_rows(scon, "context", "league = ?", [league], at, 20000):
+        if (r["source_key"] or "").split("|", 1)[0] != "injury":
+            continue
+        try:
+            ls = r["last_seen_at"]
+        except (KeyError, IndexError):
+            ls = None
+        recs.append((store._rec(r), ls))
+    return availability.current(recs, at)[1]
+
+
 def injury_absences(scon, league, rows, forecast_at):
-    """{(game_id, team): [ds-1 player ids listed Out]} from the ESPN injury report in the store, known at forecast_at
-    and read within REPORT_MAX_AGE_H; a team without a fresh report -> None (unknown)."""
+    """{(game_id, team): [ds-1 player ids listed Out]} from the ESPN injury report in the store: the entries in the
+    newest report read (listed_injuries), read within REPORT_MAX_AGE_H; a team without a fresh report -> None (unknown)."""
     if league != "nba":
         return {}
-    recs = [store._rec(r) for r in store._latest_rows(scon, "context", "league = ?", [league], forecast_at, 20000)]
-    fresh = [c for c in recs if (parse_utc(forecast_at) - parse_utc(c.observed_at)).total_seconds()
-             <= REPORT_MAX_AGE_H * 3600]
+    fresh = list(listed_injuries(scon, league, forecast_at).values())
     team_of = _current_team(scon, league)
     abbr = _teams(scon, league)
     seen_report = bool(fresh)                     # ESPN publishes one league-wide report: a fresh read covers every team

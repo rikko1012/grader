@@ -170,11 +170,15 @@ def held_quote(league, rid, fid):
                     keys = d.get("keys") if isinstance(d.get("keys"), list) else \
                         [[e.get("record_id"), e.get("forecast_id"), e.get("reason")] for e in d.get("entries") or ()]
                     idx = {(k[0], k[1]): k[2] for k in keys if isinstance(k, list) and len(k) == 3}
+                    from . import availability
+                    for (r_, _f), c_ in list(idx.items()):  # av-1 holds the LINE, whichever forecast a pick uses
+                        if c_ in availability.CODES:
+                            idx[(r_, None)] = c_
                 except (OSError, ValueError, AttributeError):
                     idx = {}
             _HELD[league] = (now, mt, idx)
         c = _HELD[league]
-    return c[2].get((rid, fid))
+    return c[2].get((rid, fid)) or c[2].get((rid, None))      # (rid, None) = an av-1 hold of the whole line
 
 
 _CAL = {}

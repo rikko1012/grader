@@ -1,7 +1,9 @@
 """Sports pre-game news archive job (pgn-1, see pregame_news/__init__.py): ESPN injury report, depth charts and - for games
 starting within SPORTS_NEWS_GAME_H hours - the game summary's injury list and starter / active flags, saved change-only
-to <SPORTS_DATA_DIR>/pregame_news.db with the time each was observed. Research input only: no board, card, grade,
-forecast or member page reads it.
+to <SPORTS_DATA_DIR>/pregame_news.db with the time each was observed. Research input, with ONE exception: the av-1
+availability hold (sports/availability.py, 2026-11-09) reads ESPN's designation of each listed injury entry
+(fantasyStatus / returnDate) and the NFL game-day lineup flags, read-only, to hold the lines of players ruled out.
+No grade, chance, forecast or projection reads it.
 
 Sources are the reads the service already makes, through the same caches:
   injury report  worker._espn_injuries_raw (30-min cache shared with ingest / games)   -> kind injury  (scope league)

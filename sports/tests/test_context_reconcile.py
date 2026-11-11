@@ -48,6 +48,11 @@ def world(con):
     store.put(con, inj(KAT, "out", "2026-10-23T20:30:00Z", as_of="2026-10-23T20:25:00Z"))
     store.put(con, inj(OPP, "out", "2026-10-23T20:45:00Z"))                       # ESPN gave no entry date
     store.put(con, inj(MATE2, "active", "2026-10-23T20:50:00Z", present="no", as_of="2026-10-23T20:48:00Z"))
+    # the 20:50 read still lists the others unchanged: duplicates move only last_seen_at (a real read re-sees every
+    # listed entry; av-1 shows only entries in the newest read)
+    store.put(con, inj(KAT, "out", "2026-10-23T20:50:00Z", as_of="2026-10-23T20:25:00Z"))
+    store.put(con, inj(MATE, "questionable", "2026-10-23T20:50:00Z", as_of="2026-10-22T18:00:00Z"))
+    store.put(con, inj(OPP, "out", "2026-10-23T20:50:00Z"))
     pp = store.put(con, h.offer())["record_id"]                                      # PrizePicks 20.5 for KAT
     fc = _fc_consistent(pp)
     store.put(con, fc)
