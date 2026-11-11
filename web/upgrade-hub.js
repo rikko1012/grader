@@ -1159,15 +1159,27 @@ export function mount(C) {
     }
     return {lean,side,graded,...out};
   }
+  function keyStatsHtml(r) {
+    const line=Number(r.offer.line), games=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,20);
+    if(!Number.isFinite(line)||!games.length)return '<p class="h-history-note h-insight-empty">'+(H.detailState==='loading'?'Loading current-line insights…':'No comparable game log for this exact stat and period. Check the Stats tab for available context.')+'</p>';
+    const ten=games.slice(0,10), values=ten.map(g=>g.value), over=values.filter(x=>x>line).length, under=values.filter(x=>x<line).length, pushes=values.length-over-under;
+    const avg=values.reduce((a,b)=>a+b,0)/values.length, sorted=[...values].sort((a,b)=>a-b), middle=Math.floor(values.length/2), median=values.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
+    const last5=values.slice(0,5), previous5=values.slice(5,10), mean=xs=>xs.reduce((a,b)=>a+b,0)/xs.length;
+    const tile=(label,value,sub)=>`<div><span>${label}</span><b>${value}</b><small>${sub}</small></div>`;
+    const streakSide=values[0]>line?'Over':values[0]<line?'Under':'Push';let streak=0;
+    for(const value of values){if((value>line?'Over':value<line?'Under':'Push')!==streakSide)break;streak++;}
+    const trend=previous5.length===5?`Last 5 average <b>${f1(mean(last5))}</b> vs <b>${f1(mean(previous5))}</b> in the previous 5.`:'';
+    return `<div class="h-insight-stats" aria-label="Key stats at the current line">${tile('Over '+esc(line),over+'/'+values.length,'Last '+values.length+' results')}${tile('Under '+esc(line),under+'/'+values.length,pushes+' '+(pushes===1?'push':'pushes')+' kept separate')}${tile('Average / median',f1(avg)+' / '+f1(median),esc(r.market.period_label))}${tile('Recent range',f1(sorted[0])+'–'+f1(sorted[sorted.length-1]),'Observed results, not a forecast')}</div><details class="h-insight-more"><summary>More supporting stats</summary><p>${trend}</p><p>Average result was <b>${f1(Math.abs(avg-line))}</b> ${avg>=line?'above':'below'} today’s line. Latest sequence: <b>${streak} ${streakSide}${streak>1?' results':' result'}</b> at this line.</p><small>Uses the same stat and period as this prop. Historical counts are not a predicted chance; a streak does not make the next result due.</small></details>`;
+  }
   function whyHtml(r) {
     const f=whyFacts(r), {lean,side,graded}=f, Side=sideWord(side);
-    if(!f.scout.length&&!f.for.length&&!f.risk.length&&!f.also.length)return '';
+    if(!f.scout.length&&!f.for.length&&!f.risk.length&&!f.also.length)return `<section class="h-why"><span class="h-eyebrow">Key insights</span>${keyStatsHtml(r)}</section>`;
     const dot=x=>!graded?'':x.used?'<i class="h-why-dot is-used" title="Used in the grade"></i><span class="u-sr">Used in the grade: </span>':'<i class="h-why-dot" title="Not used in the grade"></i><span class="u-sr">Not used in the grade: </span>';
     const li=x=>`<li class="${x.dir>0?'is-for':x.dir<0?'is-against':''}${graded?'':' no-dot'}">${dot(x)}<span>${x.html}</span></li>`;
     const list=(cls,xs)=>`<ul class="h-why-list ${cls}">${xs.map(li).join('')}</ul>`;
     const title=lean?`Why Scout leans ${sideWord(lean)} ${esc(r.offer.line)}`:`The numbers for ${Side} ${esc(r.offer.line)}`;
-    return `<section class="h-why" aria-labelledby="hub-why-title"><div class="h-sec-head"><h4 id="hub-why-title">${title}</h4></div>
-      ${f.scout.length?list('h-why-scout',f.scout.slice(0,4)):''}
+    return `<section class="h-why" aria-labelledby="hub-why-title"><span class="h-eyebrow">Key insights</span><div class="h-sec-head"><h4 id="hub-why-title">${title}</h4></div>
+      ${f.scout.length?list('h-why-scout',f.scout.slice(0,4)):''}${keyStatsHtml(r)}
       ${f.for.length?`<h5 class="h-why-sub h-why-for-head">${f.scout.length?'Other numbers that point':'What points'} to ${Side}</h5>${list('h-why-for',f.for.slice(0,5))}`:''}
       ${f.risk.length?`<h5 class="h-why-risk-head">What could go wrong</h5>${list('h-why-risk',f.risk.slice(0,4))}`:''}
       ${f.also.length?`<h5 class="h-why-sub">Also good to know</h5>${list('h-why-also',f.also.slice(0,4))}`:''}
