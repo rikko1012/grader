@@ -310,6 +310,19 @@ def alerts(o):
     for name, j in jobs.items():
         if not j.get("enabled"):
             continue
+        # These stages used to stay quiet during the long retry backoff: unlike
+        # collectors they had no success-age check. A healthy HTTP server alone
+        # does not mean new forecasts or settlements are being produced.
+        if name in {"model-forward", "books", "settle", "settle-post", "picks-settle", "slips-settle", "grades-daily"}:
+            every = j.get("every_s")
+            if every:
+                limit = max(3 * every, every + (j.get("timeout_s") or 0), 1800)
+                last_ok = j.get("last_ok_at")
+                age = time.time() - last_ok if last_ok is not None else (sched.get("uptime_s") or 0)
+                if age > limit:
+                    out.append({"level": "page", "code": "grading_job_stale", "detail": {
+                        "job": name, "success_age_s": round(age), "limit_s": limit,
+                        "last_exit": j.get("last_exit"), "next_start": j.get("next_start")}})
         if j.get("failures_in_a_row", 0) >= 3:
             out.append({"level": "warn", "code": "job_failing", "detail": {"job": name, "last_exit": j.get("last_exit")}})
         code = str((j.get("last_exit") or {}).get("code"))

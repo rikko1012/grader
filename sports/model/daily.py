@@ -268,7 +268,8 @@ def admin_view():
             "generated_at": st.get("gradecheck_at"), "game_day": st.get("last_day"),
             "containment": containment.snapshot(), "containment_log": ((obj or {}).get("log") or [])[-20:],
             "cal_mi_log": tail, "daily": {k: st.get(k) for k in ("last_day", "last_run_at", "data_as_of", "last_skip",
-                                                                 "cal", "cal_fails", "containment", "gradecheck_file")},
+                                                                 "cal", "cal_fails", "containment", "gradecheck_file",
+                                                                 "attempt_day", "cal_attempt", "last_error")},
             "switches": {"SPORTS_CAL_AUTOFIT": autofit_on(), "SPORTS_GRADECHECK_DAILY": gradecheck_on(),
                          "SPORTS_DAILY_AFTER_UTC_H": after_hour()}}
 
@@ -282,11 +283,24 @@ def run(now=None, force=False, log=print):
     day = game_day(now)
     if not ok:
         state["last_skip"] = {"at": _iso(now), "why": why}
+        if state.get("publish_pending"):
+            err = publish(admin_view())
+            state["publish_pending"] = bool(err)
+            _atomic(p["state"], json.dumps(state, indent=1))
+            return dict(ran=False, why=why, **({"publish_error": err} if err else {}))
         _atomic(p["state"], json.dumps(state, indent=1))
         return {"ran": False, "why": why}
     out = {"ran": True, "game_day": day, "data_as_of": latest}
     t0 = time.time()
-    if autofit_on():
+    # Resume a failed read/report stage without counting another calibration decision
+    # on the same day. Persist BEFORE entering the weight writer: a killed/partially
+    # completed fit is ambiguous and must never silently advance hysteresis twice.
+    attempt = state.get("cal_attempt") if state.get("attempt_day") == day else None
+    if attempt is not None and not force:
+        out["cal"] = attempt.get("result") or {"error": "previous calibration attempt interrupted; retained for review"}
+    elif autofit_on():
+        state.update(attempt_day=day, cal_attempt={"at": _iso(now), "status": "running"})
+        _atomic(p["state"], json.dumps(state, indent=1, default=float))
         try:
             out["cal"] = autofit(p, day, state, log)
             state["cal_fails"] = (out["cal"] or {}).get("fails") or {}
@@ -294,10 +308,18 @@ def run(now=None, force=False, log=print):
             out["cal"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     else:
         out["cal"] = {"skipped": "SPORTS_CAL_AUTOFIT=0"}
-    if gradecheck_on():
+    state.update(attempt_day=day, cal_attempt={"at": _iso(now), "status": "error" if out["cal"].get("error") else "done",
+                                             "result": out["cal"]})
+    _atomic(p["state"], json.dumps(state, indent=1, default=float))
+    if out["cal"].get("error"):
+        out["gradecheck"] = {"skipped": "calibration attempt incomplete; no new verdict applied"}
+    elif gradecheck_on():
         from . import gradecheck
         from .. import containment
-        res = gradecheck.run(p["learning"], p["inputs"], p["store"], p["history"], p["games"])
+        try:
+            res = gradecheck.run(p["learning"], p["inputs"], p["store"], p["history"], p["games"])
+        except Exception as e:  # report reads retry through scheduler backoff; no second calibration decision
+            res = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
         if res.get("error"):
             out["gradecheck"] = {"error": res["error"]}
         else:
@@ -311,11 +333,22 @@ def run(now=None, force=False, log=print):
     else:
         out["gradecheck"] = {"skipped": "SPORTS_GRADECHECK_DAILY=0"}
     out["run_s"] = round(time.time() - t0, 1)
-    state.update(last_day=day, last_run_at=_iso(now), data_as_of=latest, cal=out.get("cal"), last_skip=None)
+    errors = {name: value["error"] for name in ("cal", "gradecheck")
+              if isinstance((value := out.get(name)), dict) and value.get("error")}
+    state.update(last_run_at=_iso(now), cal=out.get("cal"), last_skip=None,
+                 last_error={"at": _iso(now), "stages": errors} if errors else None)
+    if errors:
+        out["error"] = errors
+    else:
+        state.update(last_day=day, data_as_of=latest)
+    state["publish_pending"] = True
     _atomic(p["state"], json.dumps(state, indent=1, default=float))
     err = publish(admin_view())
     if err:
         out["publish_error"] = err
+    else:
+        state["publish_pending"] = False
+        _atomic(p["state"], json.dumps(state, indent=1, default=float))
     return out
 
 
@@ -331,7 +364,7 @@ def main(argv=None):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     res = run(force=a.force)
     print(json.dumps(res, indent=1, default=float), flush=True)
-    return 0
+    return 1 if res.get("error") or res.get("publish_error") else 0
 
 
 if __name__ == "__main__":

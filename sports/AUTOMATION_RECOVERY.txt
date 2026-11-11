@@ -1,0 +1,41 @@
+Grader operation and recovery (2026-11-11)
+
+Use the existing service scheduler and LoL worker, not another cron or parallel
+writer. Routine collection, forecasts, settlement, results snapshots, archives
+and registered daily grading checks already run there. Inspect their actual
+last successful work, not only the HTTP health endpoint.
+
+Sports daily checks now checkpoint the calibration attempt before entering its
+writer. A completed calibration decision is reused when a later read/report
+step fails. That step retries on the existing scheduler's bounded backoff.
+It must not count a second consecutive DAILY failure on the same day, retrain
+twice, or force a new verdict because a report was unavailable.
+
+A failed or interrupted calibration attempt remains an explicit error for the
+day; it is not silently rerun after an ambiguous partial weight-file write.
+No new containment verdict is applied in that state. The next daily attempt
+uses the normal registered rules. Inspect the attempt before considering a
+manual --force; that override is not a recovery default.
+
+Successful daily work is marked complete only after enabled stages succeed.
+Failed report publication is retried independently without repeating the fit
+or gradecheck. The CLI returns nonzero on stage/publication failure, allowing
+the existing supervisor to back off and report the failure honestly.
+
+The admin ops alerts include grading_job_stale for enabled forecasts, books,
+settlement and daily-check jobs. The threshold includes startup grace, cadence
+and timeout. An alert clears on success or deliberate disabling of that job.
+This indicates job completion freshness, not proof every source returned data.
+Existing feed-age and snapshot-age alerts remain necessary.
+
+LoL's normal settlement already validates the team/series link for new units
+and preserves link_mismatch corrections on subsequent passes. The approved
+17-record cleanup on November 11 appended version 2 to each record; it did
+not edit original DNP records, forecasts, or win/loss totals. Do not schedule
+the one-off cleanup as an unrestricted historical rewrite.
+
+Operations that stay outside automatic recovery: spending, bypassing source
+access controls, replacing a model without registered chronological tests,
+inventing missing outcomes, or deleting/rewriting historical results. Unknown
+provider schema changes and ambiguous partial writes require investigation,
+not repeated restarts or bigger memory/disk limits.
