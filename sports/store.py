@@ -647,7 +647,12 @@ def iter_offers(con, league=None, event_id=None, player_id=None, stat=None, plat
     for col, v in (("league", league), ("event_id", event_id), ("player_id", player_id), ("stat", stat),
                    ("platform", platform)):
         if v is not None:
-            w.append(f"{col} = ?")
+            # books-slow 2026-11-11: an event-scoped read must be served by the event index (records_event /
+            # archive_rows_event / arch_segs_event). With "platform = ?" SQLite (no ANALYZE stats) chose
+            # records_feed_seen (kind, platform) and read the table row of EVERY stored revision of that platform, all
+            # leagues, once per game per platform in the books sink. Unary + only stops the other columns being used as
+            # index keys; the rows returned are the same.
+            w.append(f"+{col} = ?" if event_id is not None and col in ("league", "platform", "stat") else f"{col} = ?")
             a.append(v)
     rows = _latest_rows(con, "offer", " AND ".join(w), a, as_of, limit,
                         scoped=event_id is not None or player_id is not None, stream=True)
