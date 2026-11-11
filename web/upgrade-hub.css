@@ -1498,3 +1498,68 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
   #u-hub .h-odds-table td small{display:block}
   #u-hub .h-odds-best{display:block;width:max-content;margin:2px 0 0}
 }
+/* Member usability: readable markets, removable filters and optional research space. */
+#u-hub #hub-table .h-mcell{align-items:flex-start;flex-wrap:wrap;gap:5px}
+#u-hub #hub-table .h-mcell>div{flex:1 1 72px}
+#u-hub #hub-table .h-mcell b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:break-word;line-height:1.35}
+#u-hub #hub-table .h-mcell small{white-space:normal;overflow:visible}
+#u-hub #hub-chips{flex-basis:100%;order:5}
+#u-hub #hub-chips .h-chip{border-radius:6px;min-height:36px;background:#18212d;padding:4px 10px}
+#u-hub .h-focus-toggle{min-height:40px;padding:6px 10px;border:1px solid #3c4859;border-radius:6px;background:#171e28;color:#bcd0ea;white-space:nowrap}
+@media(min-width:1101px){
+ #u-hub.h-focus-board{--slip-w:0px}
+ #u-hub.h-focus-board.scout-hub{grid-template-columns:var(--side-w) minmax(0,1fr)}
+ #u-hub.scout-hub.h-focus-board:not(.h-studio-mode)>.h-slip{display:none}
+ #u-hub.h-focus-board .h-card-panel{right:0}
+ #u-hub #hub-table .h-c-market{width:130px}
+}
+@media(max-width:1100px){#u-hub .h-focus-toggle{display:none}}
+/* Slip Studio keeps familiar tabs; setup and results get distinct, legible spaces. */
+#u-hub #hub-studio-section .h-generator{background:#141a22;border:1px solid #303b4a;border-radius:12px;padding:24px;min-width:0}
+#u-hub .h-generator>h2{font-size:25px;letter-spacing:-.03em;margin:8px 0}
+#u-hub .h-generator>p{color:#b1bfce;max-width:64ch;line-height:1.6}
+#u-hub .h-generator-controls{max-width:none;gap:16px;align-items:start}
+#u-hub .h-generator-controls>label{min-width:0;color:#c6d1df;font-size:12px;display:flex;flex-direction:column;gap:7px}
+#u-hub .h-generator-controls select{width:100%;min-width:0;min-height:44px;border-radius:7px;background:#0e141c;border:1px solid #3c4a5c;padding:8px 10px;color:#f0f4fa;font-size:14px}
+#u-hub .h-generator-controls label>small{font-size:11px;line-height:1.5;color:#98a9bd}
+#u-hub .h-generator-step{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding-top:16px;border-top:1px solid #2c3745}
+#u-hub .h-generator-step>span{font:11px 'DM Mono',monospace;color:#86b6ff}
+#u-hub .h-generator-step h3{margin:0;color:#edf3fc;font-size:14px;font-weight:600}
+#u-hub .h-generation-submit{grid-column:1/-1;display:grid;gap:10px;border-top:1px solid #344358;padding-top:18px;margin-top:4px}
+#u-hub #hub-generation-summary{margin:0;line-height:1.6;color:#d4e2f5;font-size:13px;overflow-wrap:anywhere}
+#u-hub .h-generation-submit #hub-generate{width:100%;min-height:48px;background:#3476df;color:white;border:1px solid #6096ed;border-radius:8px;font-size:15px;font-weight:600}
+#u-hub .h-generation-submit small{color:#93a6be;font-size:11px}
+#u-hub .h-generator>details{margin-top:18px;color:#adbed3;font-size:12px}
+#u-hub .h-generator>details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer}
+#u-hub .h-studio-tabs{gap:4px;border-bottom:1px solid #334052;margin-bottom:24px}
+#u-hub .h-studio-tabs button{min-height:46px;padding:10px 18px}
+#u-hub .h-studio-tabs [aria-selected=true]{background:#1b2c44;color:#c9e0ff;border-radius:7px 7px 0 0;box-shadow:inset 0 -2px #73a8fa}
+#u-hub .h-batch-card{min-width:0}
+@media(min-width:1101px){
+ #u-hub #hub-studio-section [data-studio-panel=build]{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:28px;align-items:start}
+ #u-hub #hub-studio-section [data-studio-panel=build][hidden]{display:none}
+ #u-hub #hub-generated{min-width:0}
+}
+@media(max-width:640px){
+ #u-hub #hub-studio-section .h-generator{padding:16px;border-radius:9px}
+ #u-hub .h-generator-controls{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 10px}
+ #u-hub .h-generator-controls .h-goblin-rule{grid-column:1/-1}
+ #u-hub .h-studio-tabs button{padding:10px 12px}
+}
+
+#u-hub #hub-studio-section .h-working-draft .u-entry{background:#141b24;border:1px solid #344255;border-radius:12px;padding:20px;margin-bottom:18px}
+#u-hub #hub-studio-section .h-working-draft .u-leg{padding-block:14px;border-bottom:1px solid #2d3745}
+#u-hub #hub-studio-section .h-studio-explain{max-width:70ch;color:#a5b7ce;line-height:1.6}
+#u-hub #hub-generation-sports{gap:8px;margin:16px 0}
+#u-hub #hub-generation-sports label{min-height:40px;padding:8px 10px}
+#u-hub .h-generation-submit{background:#141a22}
+#u-hub #hub-generated .h-batch-grid{grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:16px}
+#u-hub #hub-generated .h-generated-card{border-radius:10px;border:1px solid #354356;overflow:hidden;background:#151c25}
+#u-hub #hub-generated .h-generated-card>header{background:#1a2534;border-bottom:1px solid #344358}
+#u-hub #hub-generated .h-generated-card>footer{display:flex;flex-wrap:wrap;gap:8px}
+#u-hub #hub-generated .h-generated-card>footer>button{flex:1 1 160px;min-height:44px}
+@media(max-width:640px){#u-hub #hub-studio-section .h-working-draft .u-entry{padding:14px}}
+@media(max-width:1100px){
+ #u-hub .h-center{scroll-padding-bottom:100px}
+ #u-hub .h-generator-controls select,#u-hub #hub-generate{scroll-margin-block:70px 110px}
+}
