@@ -1,5 +1,4 @@
 """Member-facing controls against the real Handler, using isolated fixture data."""
-from pathlib import Path
 
 import pytest
 from tests.test_upgrade_browser import browser, env, context, open_page, no_h_scroll  # noqa: F401
@@ -34,7 +33,7 @@ def test_individual_filters_and_readable_markets(browser, env, width):
 
 
 @pytest.mark.parametrize('width', [390, 1280, 1920])
-def test_studio_summary_layout_and_settings(browser, env, width):
+def test_studio_summary_layout_and_settings(browser, env, width, tmp_path):
     c = context(browser, env, {'width': width, 'height': 900})
     try:
         p = open_page(c, env, '/#slips', {'width': width, 'height': 900})
@@ -53,7 +52,7 @@ def test_studio_summary_layout_and_settings(browser, env, width):
             control.scroll_into_view_if_needed()
             assert control.evaluate('(e)=>{const r=e.getBoundingClientRect();const at=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return at===e||e.contains(at)}')
         no_h_scroll(p)
-        out = Path('../outputs/ui-usability-1111');out.mkdir(exist_ok=True)
+        out = tmp_path / 'screenshots';out.mkdir(parents=True, exist_ok=True)
         p.locator('#hub-generate').scroll_into_view_if_needed()
         p.screenshot(path=str(out / f'studio-{width}.png'))
         assert not p.errors
