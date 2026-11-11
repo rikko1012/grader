@@ -503,6 +503,14 @@ Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin
    file): build the exports (`python -m sports.model.gradecore_export --data-dir /sports-data --league nba|nfl`),
    then `python -m sports.model.chance_cal fit --nba <export> --nfl <export> --test-from <first held-out game-day>
    --report <path>`. Off: `SPORTS_CHANCE_CAL=0` (the board shows cal-mi-1 / raw as before).
+9. Store read cost (store-slow 2026-11-09). Store migration 8 adds two covering indexes on canonical.db:
+   `records_offer_seen` (the board withdrawal read of `_store_offers`, by venue + league) and `records_current_stat`
+   (`store.iter_offers(league, stat)`, model-forward's per-market offer list). Before it both reads fetched the table row
+   of every stored offer revision, so ingest-<league> and model-forward slowed as the hot table grew (old vs new:
+   `python scripts/bench_store_offer_reads.py`). The first writable connection after the deploy builds the indexes once
+   (45 s on a 5.46 GB synthetic store on the workstation SSD, +460 MB; longer on the Render disk - the collector that takes it may miss one cycle). The Novig / Gemini
+   rows the reverted exchanges release left: `python scripts/sports_exchange_rows.py` (read-only count). They age out
+   through the archive pass (72 h unseen); `purge --apply` deletes them and is an owner-approved manual step only.
 
 ## 11. Load results (2026-10-23, Windows workstation, 700 simultaneous members)
 

@@ -55,9 +55,18 @@ LONG_RUN_S = {"settle-post": 900, "grades-daily": 1200, "archive": 1500}
 MEMBER = ("ui-snapshots-nba", "ui-snapshots-nfl", "ingest-nba", "ingest-nfl", "prebuilt", "model-forward")
 
 
+# store-slow 2026-11-09 (ops at uptime 51 min after the Novig/Gemini revert e5e2ce0): the run times live ops showed,
+# model-forward killed at its 900 s timeout every run. "store-fix" = the same table with the jobs the migration-8 reads
+# speed up back at their pre-2026-11-09 times (RUN_S; model-forward 300 s - it ran 190 s on 2026-11-05).
+LIVE_1109_S = {"ingest-nba": 424, "ingest-nfl": 585, "model-forward": 900, "settle": 199, "ui-snapshots-nba": 292,
+               "ui-snapshots-nfl": 143, "settle-post": 418, "results-public": 119, "sheets": 76, "books": 25}
+STORE_FIX_S = dict(LIVE_1109_S, **{k: sim.RUN_S[k] for k in ("ingest-nba", "ingest-nfl", "model-forward")})
+
+
 def scenarios():
     return {"ok": dict(), "failing": dict(rc={"model-forward": 1}), "no-fwd": dict(env={"SPORTS_FORECAST": ""}),
-            "first": dict(hours=1.2), "long": dict(run_s=LONG_RUN_S), "warm": dict(warm=True)}
+            "first": dict(hours=1.2), "long": dict(run_s=LONG_RUN_S), "warm": dict(warm=True),
+            "live-1109": dict(run_s=LIVE_1109_S, warm=True), "store-fix": dict(run_s=STORE_FIX_S, warm=True)}
 
 
 def seeds_table(mod, kw, hours, n):
@@ -83,6 +92,7 @@ def main(argv=None):
     ap.add_argument("--ref", action="append", default=[], help="git ref of an older sports/scheduler.py")
     ap.add_argument("--hours", type=float, default=6.0)
     ap.add_argument("--seeds", type=int, default=0, help="repeat each scenario over N jitter seeds (median / worst)")
+    ap.add_argument("--only", action="append", default=[], help="run only these scenarios")
     a = ap.parse_args(argv)
     mods = [("this checkout", current)]
     with tempfile.TemporaryDirectory() as tmp:
@@ -90,6 +100,8 @@ def main(argv=None):
             mods.append((r, load_ref(r, tmp)))
         for label, mod in mods:
             for sc, kw in scenarios().items():
+                if a.only and sc not in a.only:
+                    continue
                 kw = dict(kw)
                 hours = kw.pop("hours", a.hours)
                 if kw.get("warm") and not hasattr(mod, "RECENT_RUNS"):

@@ -388,12 +388,19 @@ def _board_offers(con, league, platform_prefix, observed_at):
     league-wide scan decoded every offer of the league on every board read and drove the ingest child from ~120 to
     ~250 MB)."""
     since = (parse_utc(observed_at) - timedelta(hours=REMOVAL_WINDOW_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    n = len(platform_prefix)
-    rows = store._latest_rows(
-        con, "offer", "league = ? AND substr(platform, 1, ?) = ? AND (source, source_key) IN (SELECT source, source_key "
-        "FROM records WHERE kind = 'offer' AND league = ? AND substr(platform, 1, ?) = ? GROUP BY source, source_key "
-        "HAVING MAX(COALESCE(last_seen_at, observed_at, known_at)) >= ?)",
-        [league, n, platform_prefix, league, n, platform_prefix, since], None, 10_000_000)
+    # store-slow 2026-11-09: the former query filtered substr(platform, 1, n) = prefix, which no index can serve, so
+    # SQLite walked every offer revision of EVERY league and platform and read its table row (payload pages) twice per
+    # ingest cycle - a cost that grew with the hot table, not with the venue. An offer's identity source IS its
+    # platform (OfferSnapshot.identity) and every caller passes a whole platform name (prizepicks / underdog / kalshi;
+    # no other platform starts with one of them), so source = ? selects exactly the same rows, through the covering
+    # index records_offer_seen (store migration 8): index entries of this venue + league only, then the current rows.
+    # Same rows, same order, same withdrawal semantics (test_store_slow_1109 compares both queries row for row).
+    rows = con.execute(
+        "SELECT r.* FROM (SELECT rid, MAX(revision) AS rv FROM records WHERE kind = 'offer' AND source = ? AND "
+        f"league = ? AND {store.CURRENT_SQL} AND source_key IN (SELECT source_key FROM records WHERE kind = 'offer' AND "
+        f"source = ? AND league = ? GROUP BY source_key HAVING MAX({store.SEEN_SQL}) >= ?) GROUP BY source_key) z "
+        "CROSS JOIN records r WHERE r.rid = z.rid ORDER BY r.known_at DESC, r.source, r.source_key",
+        (platform_prefix, league, platform_prefix, league, since)).fetchall()
     return [(r["record_id"], store._rec(r)) for r in rows]
 
 
