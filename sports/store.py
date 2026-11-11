@@ -105,7 +105,20 @@ MIGRATIONS = [
         "CREATE INDEX IF NOT EXISTS records_current_league ON records "
         "(kind, league, source, source_key, revision, platform) WHERE late = 0",
     ]),
+    (8, [
+        # store-slow 2026-11-09: two reads that fetched EVERY stored offer revision's table row (payload pages included)
+        # now read index entries only. The board withdrawal check (worker._board_offers, twice per ingest-<league>
+        # cycle): one venue + league's identities, their current revision and their newest sighting. The per-market
+        # offer list (store.iter_offers(league, stat) - model-forward, once per market): the stat was not in any index.
+        "CREATE INDEX IF NOT EXISTS records_offer_seen ON records "
+        "(kind, source, league, source_key, late, revision, COALESCE(last_seen_at, observed_at, known_at)) "
+        "WHERE kind = 'offer'",
+        "CREATE INDEX IF NOT EXISTS records_current_stat ON records "
+        "(kind, league, stat, source, source_key, revision, platform) WHERE late = 0",
+    ]),
 ]
+# the newest sighting of a stored row - records_offer_seen indexes exactly this expression (worker._board_offers)
+SEEN_SQL = "COALESCE(last_seen_at, observed_at, known_at)"
 FEED_SIGHTINGS_SQL = ("SELECT platform, max(coalesce(last_seen_at, observed_at)) FROM records "
                      "WHERE kind = 'offer' GROUP BY platform")
 CURRENT_SQL = "late = 0"                           # the predicate every 'current' reader adds (see module docstring)
