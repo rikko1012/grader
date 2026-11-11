@@ -2,3 +2,4 @@
 # requirements.txt alone and never gets these.
 -r requirements.txt
 anthropic>=2.0,<3   # sports/assistant runner (lazy import, runner process only)
+websocket-client>=1.8,<2  # Bovada public, finite subscription snapshots
