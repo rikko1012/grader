@@ -664,6 +664,27 @@ def same_match(r, slug, st, mid=None):
     return bool(st and rs and abs((rs - st).total_seconds()) <= comparison.JOIN_START_MIN * 60)
 
 
+TEAM_FRESH_H = 0.5        # a team page that shows a bench (status 2) or < 5 active players is re-read at most every 30 min
+
+
+def team_page_suspect(td):
+    """A cached BO3.gg team page that lists a benched (status 2) player or fewer than 5 active players: the lineup may
+    have changed since the page's 12-h cache copy."""
+    ps = [x for x in (td or {}).get("players") or [] if not x.get("is_coach")]
+    return any(x.get("status") == 2 for x in ps) or sum(1 for x in ps if x.get("status") != 2) < 5
+
+
+def team_fresh(b, slug, td):
+    """The team page re-read with a 30-min freshness limit (bo3.py is not edited: its per-read TTL override). The fresh
+    page replaces the cached copy, so the next board regrade's roster check reads it too. A failed read keeps the page
+    already read and is never cached (transient rule)."""
+    try:
+        got = b._run(b.cs2.get_team_data(slug), ttl=TEAM_FRESH_H)
+        return got if isinstance(got, dict) and got.get("players") is not None else td
+    except Exception:
+        return td
+
+
 def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="underdog", match_slug=None):
     """Match player projection comparison (2026-10-09): every player of both teams in this match - OUR projection for
     kills and headshots, the graded Underdog line for the same match and maps when one exists (side, chance, grade,
@@ -688,6 +709,8 @@ def match_compare(team_slug, opp_slug, team, opponent, start, scope="12", book="
         for slug, name in ((team_slug, team), (opp_slug, opponent)):
             try:
                 td = b.team(slug) if slug else {}
+                if slug and team_page_suspect(td):
+                    td = team_fresh(b, slug, td)        # bench / lineup change: one short-TTL re-read (kept on failure)
                 # active players only: BO3.gg status 2 = benched (not in the lineup)
                 rosters[name] = [x.get("nickname") for x in (td.get("players") or [])
                                  if not x.get("is_coach") and x.get("nickname") and x.get("status") != 2]
@@ -1415,6 +1438,54 @@ def role_benched(pb):
     """The player is on his team's BO3.gg page as benched (status 2; player_block["benched"]): no role tag (display only)."""
     nick = str((pb.get("player") or {}).get("nick") or "").lower()
     return bool(nick) and nick in {str(b or "").lower() for b in pb.get("benched") or ()}
+
+
+# av-cs2-1 availability hold (owner 2026-11-09: "every projection accounts for ... whether a player is playing or not"):
+# a player his own team's BO3.gg page lists as benched (status 2) - not a stand-in, graded for that same team - is not in
+# the lineup: the line shows no side, letter or stake (board row hidden, card "No grade" with this fact), nothing is
+# logged. Not a projection factor; players who play are untouched. A failed team-page read leaves the benched list empty,
+# so a BO3.gg blip never holds anyone (missing data never hides a healthy player).
+AVAIL_HOLD_REASON = "Not in the team's current lineup"
+AVAIL_HOLD_VERSION = "av-cs2-1"
+
+
+def benched_hold(pb):
+    """True when the graded player is benched (BO3.gg status 2) on the team he is graded for."""
+    pb = pb or {}
+    if not role_benched(pb) or pb.get("is_standin") or pb.get("standin_for"):
+        return False
+    pf, prof = pb.get("playing_for"), pb.get("profile_team")
+    return pf is None or comparison._team_same(pf, prof) is True
+
+
+def avail_hold_row(r, pb, now=None):
+    """The board's stored row for a held line: no side (every member surface keys on it), the line's identity kept so
+    a moved line or a new pass regrades it; the hold lifts on the next regrade once BO3.gg lists him active."""
+    return {"at": now or time.time(), "graded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "state": "HELD",
+            "held": AVAIL_HOLD_VERSION, "reason": AVAIL_HOLD_REASON, "graded_line": r.get("line"),
+            "graded_model": picklog.MODEL_VERSION, "book": r.get("book") or "underdog",
+            "nick": (pb.get("player") or {}).get("nick"), "player_id": (pb.get("player") or {}).get("id"),
+            "team_name": pb.get("playing_for") or pb.get("current_team"),
+            "graded_sides": {"under": r.get("under_available"), "over": r.get("over_available")}}
+
+
+def withhold_availability(res):
+    """A member card for a held player (av-cs2-1): no projection, chance, letter, side or stake; the plain fact shows as the
+    card's reason (the card's "No grade" headline). Returns res."""
+    g = res.get("grade") or {}
+    res["grade"] = dict({k: g[k] for k in _OUTAGE_GRADE_KEYS if k in g}, status="NO GRADE", held=AVAIL_HOLD_VERSION,
+                        reason=AVAIL_HOLD_REASON)
+    res["verdict"] = {"side": None, "p": None, "grade": None, "units": 0.0, "state": "HELD", "held": AVAIL_HOLD_VERSION,
+                      "kept_from_board": False, "stale": False, "temporary": False, "reason": AVAIL_HOLD_REASON}
+    res["ladder"] = []
+    res["simulation"] = None
+    res["dist_view"] = None
+    res["comparison"] = {"error": "no line comparison: this player is not in the team's current lineup"}
+    res.pop("hltv_outage", None)
+    fg = res.get("form_gap")
+    if isinstance(fg, dict):
+        res["form_gap"] = {k: v for k, v in fg.items() if k not in ("projection", "gap")}
+    return res
 
 
 def card_role_label(res):
@@ -3608,6 +3679,9 @@ def board_forever():
                             BOARD[r["id"]] = dict(old, at=time.time() - BOARD_EVERY + HLTV_RETRY, nf_retries=(old.get("nf_retries") or 0) + 1)
                             return                                                 # context build (BO3.gg blip): tried again soon
                         BOARD[r["id"]] = {"at": time.time(), "state": "NOT FOUND", "reason": res["error"]}
+                        return
+                    if benched_hold(res.get("player_block")):    # av-cs2-1: benched on his own team - held, not logged
+                        BOARD[r["id"]] = avail_hold_row(r, res.get("player_block") or {})
                         return
                     v = verdict(res.get("grade"))
                     g = res.get("grade") or {}
@@ -5947,6 +6021,7 @@ class Handler(BaseHTTPRequestHandler):
             res["verdict"] = verdict(res.get("grade"))
             res["caps"] = stake_caps()
             outage = grade_transient(res.get("grade") or {})        # HLTV or Thunderpick blip (owner 2026-10-13)
+            held = benched_hold(pb_)                                # av-cs2-1: benched on his own team (never logged)
             try:
                 res["underdog"] = underdog.line_for((pb_.get("player") or {}).get("nick") or name, prop)
                 if PP_OPEN_LINK and res["underdog"] and ud_row_link(res["underdog"].get("id")):   # a copy: never the board's row
@@ -5962,7 +6037,7 @@ class Handler(BaseHTTPRequestHandler):
                 res["comparison"] = {"error": "comparison unavailable"}
             tm["underdog"] = round(time.time() - t0, 2)
             t0 = time.time()
-            if not outage:                               # an outage grade is never logged as a live forecast (2026-10-13 audit:
+            if not outage and not held:                  # an outage grade is never logged as a live forecast (2026-10-13 audit:
                 try:                                     # the board path skipped it, member card lookups did not)
                     picklog.log_async(res, res["verdict"], test=load_test)   # written in the background
                 except Exception:
@@ -6024,6 +6099,12 @@ class Handler(BaseHTTPRequestHandler):
                                       "reason": "Live data unavailable - no grade for this line until it is back"}
                     res["hltv_outage"] = {"rows": [], "causes": cs_, "odds_note": None, "unavailable": True}
                 withhold_temporary(res)
+            if held:                                     # after every other verdict step: no side, letter or stake
+                withhold_availability(res)
+                try:
+                    res["verdict"] = card_identity(res, res["verdict"], prop, scope, line, book)
+                except Exception:
+                    traceback.print_exc()
             res["veto"] = card_veto(res)                 # map veto panel: the background's stored answer (display only)
             res["role_label"] = card_role_label(res)     # role tag (display only, after the pick log; role_display.py)
             res["map_chances"] = card_map_chances(res)   # HLTV map chances (display only, weight 0; after the pick log)

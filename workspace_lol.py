@@ -422,7 +422,7 @@ def result_of(row, side):
     st = row["status"]
     if st == "push":
         return "push", row["actual"]
-    if st in ("void", "dnp"):
+    if st in ("void", "dnp", "link_mismatch"):       # link_mismatch (2026-11-09): what an outdated series link settled as dnp
         return "void", None
     if st == "graded" and row["over_hit"] in (0, 1):
         over = row["over_hit"] == 1

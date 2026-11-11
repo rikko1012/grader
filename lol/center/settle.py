@@ -36,8 +36,14 @@ def _value(stat, rows):
     return sum(r[stat] for r in rows)
 
 
-def settle(con, platform, stat, scope, pid, sid, line):
-    """-> {status: pending | graded | push | void | dnp | rule_unverified | unsupported, actual, over_hit, games, reasons}"""
+LINK_MISMATCH = "forecast team not in the linked series (superseded or wrong series link)"
+
+
+def settle(con, platform, stat, scope, pid, sid, line, tid=None):
+    """-> {status: pending | graded | push | void | dnp | link_mismatch | rule_unverified | unsupported, actual, over_hit,
+    games, reasons}. tid (the forecast's team, canonical): a series his team is not in is a wrong / superseded link
+    (link_mismatch), never a DNP - 2026-11-09 audit: all 17 recorded DNPs were lines settled on an outdated series link.
+    link_mismatch, like dnp and void, is never a hit or a miss."""
     want = scope_games(scope)
     if want is None or stat not in ("kills", "assists", "deaths", "fantasy_points"):
         return {"status": "unsupported", "reasons": [f"scope {scope} / stat {stat} not mapped"]}
@@ -46,6 +52,8 @@ def settle(con, platform, stat, scope, pid, sid, line):
         return {"status": "pending", "reasons": ["series not in the data center"]}
     if s["status"] != "complete":
         return {"status": "pending", "reasons": ["series not complete"]}
+    if tid and not _team_in(con, tid, s):
+        return {"status": "link_mismatch", "reasons": [LINK_MISMATCH], "games": []}
     games = [dict(g) for g in con.execute("SELECT * FROM c_games WHERE sid = ? ORDER BY game_n", (sid,))]
     played = {g["game_n"]: g for g in games if not g["remake"] and g["game_n"] in want}
     reasons, unverified = [], []
@@ -98,9 +106,14 @@ def settle(con, platform, stat, scope, pid, sid, line):
     return dict(res, status="push" if actual == line else "graded", reasons=reasons)
 
 
-def record(con, unit_key, platform, stat, scope, pid, sid, line, at=None):
+def _team_in(con, tid, s):
+    canon = lambda x: store.canonical_id(con, x) if x else x
+    return canon(tid) in {canon(s["team1"]), canon(s["team2"])}
+
+
+def record(con, unit_key, platform, stat, scope, pid, sid, line, at=None, tid=None):
     """Store the settlement; a different result than the latest version becomes a new version (never an edit)."""
-    res = settle(con, platform, stat, scope, pid, sid, line)
+    res = settle(con, platform, stat, scope, pid, sid, line, tid=tid)
     if res["status"] == "pending":
         return res
     fp = store.sha({k: res.get(k) for k in ("status", "actual", "over_hit", "push", "games", "alternatives")})

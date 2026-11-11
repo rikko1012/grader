@@ -337,9 +337,78 @@ def _ec1_status():
         return {"error": f"{type(e).__name__}"}
 
 
+# lav-1 availability hold (owner 2026-11-09: "every projection accounts for ... whether a player is playing or not"). Not a
+# projection factor: it decides whether a line is shown with a side / letter at all; the projection of a player who plays
+# is unchanged. Held = his team fielded a full lineup after his last game for that team, without him (games before the
+# match day only, A7.1 last_lineup). Missing data never holds (no stored game of his for the team, an incomplete lineup,
+# his last game for the team older than LINEUP_RECENT_DAYS = an identity / coverage gap). A read failure keeps the line's
+# previous hold (transient rule) and never creates a new one.
+LINEUP_HOLD = "Not in the team's current lineup"
+LINEUP_HOLD_VERSION = "lav-1"
+LINEUP_RECENT_DAYS = 120
+AVAIL_META = "avail_holds"
+# lnk-1: a saved forecast is shown only while its line is still linked to that player and series. A definite roster /
+# schedule answer from the linker hides it; a link that failed for missing data keeps it (transient rule).
+LINK_LOST = {"player_not_on_team", "player_ambiguous", "series_ambiguous", "no_scheduled_series"}
+LINK_LOST_TEXT = "Line no longer linked to this player's series"
+LINK_CHANGED_TEXT = "Line now linked to another player or series"
+
+
+def lineup_state(h, pid, tid, day):
+    """-> ("held", info) | ("ok", None) | ("unknown", None). unknown = the lineup data could not be read this cycle."""
+    if not pid or not tid:
+        return "ok", None
+    try:
+        idx = factor_index(h)
+        team = [x for x in idx.tm.get(tid, ()) if x[0] < day]
+        lu = idx.last_lineup(tid, day)
+        mine = [r["_day"] for r in (getattr(h, "by_player", None) or {}).get(pid, ())
+                if r.get("team_id") == tid and r.get("_day") is not None and r["_day"] < day]
+    except Exception:          # noqa: BLE001 - a read failure: unknown (the previous hold, if any, stands)
+        return "unknown", None
+    if not team or len(lu) < 5 or pid in lu.values() or not mine:
+        return "ok", None
+    his, team_last = max(mine), team[-1][0]
+    if his >= team_last or day - his > LINEUP_RECENT_DAYS:
+        return "ok", None
+    from datetime import date as _d
+    return "held", {"his_last_game": _d.fromordinal(his).isoformat(), "team_last_game": _d.fromordinal(team_last).isoformat(),
+                    "team_games_since": sum(1 for x in team if x[0] > his)}
+
+
+def avail_holds(con):
+    """{"platform|market_key": hold} from the last completed forecast cycle (lav-1)."""
+    try:
+        return (store.get_meta(con, AVAIL_META) or {}).get("rows") or {}
+    except Exception:          # noqa: BLE001
+        return {}
+
+
+def display_hold(con, r, f, holds):
+    """Why a saved forecast must not be shown for this open line (None = show it). r: board row with link_status,
+    link_reason, sid, pid; f: the latest saved forecast (dict) or None. Display only - no record is changed."""
+    h = holds.get(f"{r.get('platform')}|{r.get('market_key')}")
+    if h:
+        return {"reason": LINEUP_HOLD, "v": LINEUP_HOLD_VERSION, "his_last_game": h.get("his_last_game"),
+                "team_last_game": h.get("team_last_game")}
+    if not f:
+        return None
+    st, why = r.get("link_status"), r.get("link_reason")
+    if st and st != "matched":
+        return {"reason": LINK_LOST_TEXT, "v": "lnk-1", "link_reason": why} if why in LINK_LOST else None
+    if st == "matched":
+        canon = lambda x: store.canonical_id(con, x) if x else x
+        if (r.get("sid") and f.get("sid") and r["sid"] != f["sid"]) or (
+                r.get("pid") and f.get("pid") and canon(r["pid"]) != canon(f["pid"])):
+            return {"reason": LINK_CHANGED_TEXT, "v": "lnk-1"}
+    return None
+
+
 def forecast_one(con, h, offer, link, now=None, market=None):
     """-> forecast record dict (not saved) or {"skip": reason}. market(team, opponent, start) -> the match-winner price at
-    this moment (lol/odds.match_odds) or None: saved with the record for forward evaluation only (A7), never an input."""
+    this moment (lol/odds.match_odds) or None: saved with the record for forward evaluation only (A7), never an input.
+    A player his team no longer fields (lav-1) -> {"skip": ..., "hold": {...}}: nothing new is saved and the board hides
+    the line's saved forecast (before the lpf-1 block, so a held line never keeps an old lpf-1 grade on the board)."""
     m = _model()
     now = now or datetime.now(timezone.utc)
     stat, scope = offer.get("stat"), SCOPE.get(offer.get("scope") or "")
@@ -357,6 +426,13 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         return {"skip": "no fitted model (lol/model_fit.json missing)"}
     day = start.date().toordinal()
     pid, tid, opp = store.canonical_id(con, link["pid"]), store.canonical_id(con, link["tid"]), store.canonical_id(con, link["opp_tid"])
+    st_, info_ = lineup_state(h, pid, tid, day)
+    prev_ = (getattr(h, "avail_prev", None) or {}).get(f"{offer.get('platform')}|{offer.get('market_key')}")
+    if st_ == "unknown" and prev_:
+        st_, info_ = "held", dict(prev_, kept=True)          # a read failure never lifts a hold
+    if st_ == "held":
+        return {"skip": "held: not in the team's current lineup",
+                "hold": dict(info_ or {}, reason=LINEUP_HOLD, v=LINEUP_HOLD_VERSION, pid=pid, tid=tid, sid=link["sid"])}
     pin, tin, oin = h.inputs(pid, tid, opp, day)
     role = ROLE_IN.get(link.get("role")) or h.role(pid, day)
     if not role:
@@ -734,6 +810,8 @@ def run(con, db=None, now=None, market=None):
     try:
         h.fit, h.sim_states = fit_json(), {}
         h.factor_pids, h.factor_teams = ids("pid"), ids("tid") | ids("opp_tid")
+        h.avail_prev = avail_holds(con)          # lav-1: the last cycle's holds (a read failure keeps a line's hold)
+        holds = {}
         try:
             h.lpf1 = lpf1_state(con, h, todo, now, market) if todo else None
         except Exception as e:      # noqa: BLE001 - never stops the cycle: no lpf-1 answers this cycle (fallback rule in forecast_one)
@@ -757,11 +835,16 @@ def run(con, db=None, now=None, market=None):
                 rec = forecast_one(con, h, offer, dict(r), now, market)
                 if "skip" in rec:
                     counts["skip: " + rec["skip"]] = counts.get("skip: " + rec["skip"], 0) + 1
+                    if rec.get("hold"):
+                        holds[f"{r['platform']}|{r['market_key']}"] = rec["hold"]
                     continue
                 sha = _sha(rec)
-                last = con.execute("SELECT state_sha FROM lol_forecasts WHERE platform = ? AND market_key = ? ORDER BY id DESC LIMIT 1",
+                last = con.execute("SELECT state_sha, sid, pid FROM lol_forecasts WHERE platform = ? AND market_key = ? ORDER BY id DESC LIMIT 1",
                                    (rec["platform"], rec["market_key"])).fetchone()
-                if last and last[0] == sha:
+                # lnk-1: the same numbers under a new series / player link are saved again (append-only), so the saved
+                # forecast always carries the line's current link (board display check, settlement)
+                if last and last[0] == sha and last[1] == rec["sid"] and (
+                        store.canonical_id(con, last[2]) if last[2] else last[2]) == rec["pid"]:
                     counts["unchanged"] = counts.get("unchanged", 0) + 1
                     continue
                 cols = ("sport", "platform", "market_key", "line_id", "quote_event_id", "quote_observed_at", "stat", "scope", "market_type",
@@ -779,11 +862,17 @@ def run(con, db=None, now=None, market=None):
                 counts["saved"] = counts.get("saved", 0) + 1
                 news.append((saved_at, rec))
             except Exception as e:      # noqa: BLE001
+                kk = f"{r['platform']}|{r['market_key']}"
+                if kk in h.avail_prev:              # a failed offer keeps its hold (transient rule)
+                    holds[kk] = h.avail_prev[kk]
                 k = f"error: {type(e).__name__}"
                 counts[k] = counts.get(k, 0) + 1
                 errs = counts.setdefault("_errors", [])
                 if len(errs) < 5:
                     errs.append({"market": f"{r['platform']}|{r['market_key']}", "error": f"{type(e).__name__}: {str(e)[:200]}"})
+        store.set_meta(con, AVAIL_META, {"at": store.now_iso(), "v": LINEUP_HOLD_VERSION, "rows": holds})
+        if holds:
+            counts["held"] = len(holds)
         con.commit()
         counts.update(archive_news(news))
     finally:
@@ -841,7 +930,8 @@ def settle_all(con):
     # the full pass runs once per such change; in between only units without a recorded settlement are tried
     key = store.sha([store.get_meta(con, "built_at"), rules.RULES, _settle_code()])
     full = store.get_meta(con, "settle_pass") != key
-    done = set() if full else {u for (u,) in con.execute("SELECT DISTINCT unit_key FROM lol_settlements")}
+    prior = {u for (u,) in con.execute("SELECT DISTINCT unit_key FROM lol_settlements")}
+    done = set() if full else prior
     rows = con.execute("SELECT f.* FROM lol_forecasts f JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM lol_forecasts "
                        "WHERE forecast_at < series_start GROUP BY platform, market_key, line) z ON z.id = f.id "
                        "JOIN c_series s ON s.sid = f.sid WHERE s.status = 'complete'").fetchall()
@@ -850,8 +940,10 @@ def settle_all(con):
         if unit in done:
             out["unchanged"] = out.get("unchanged", 0) + 1
             continue
+        # the team check (link_mismatch, 2026-11-09) applies to units settled from now on; a unit that already has a
+        # settlement keeps its rule (the 17 old DNP rows change only through the owner-approved clean-up, fix_dnp_links)
         res = settle.record(con, unit, f["platform"], f["stat"], "maps_" + "_".join(f["scope"]), store.canonical_id(con, f["pid"]),
-                            f["sid"], f["line"])
+                            f["sid"], f["line"], tid=None if unit in prior else f["tid"])
         out[res["status"]] = out.get(res["status"], 0) + 1
     if full:
         store.set_meta(con, "settle_pass", key)
@@ -890,6 +982,7 @@ def board(con, now=None):
     label = {r[0]: r[1] for r in con.execute("SELECT eid, label FROM entities")}
     lab = lambda e: label.get(store.canonical_id(con, e)) if e else None
     series = {r["sid"]: dict(r) for r in con.execute("SELECT * FROM c_series")}
+    holds = avail_holds(con)
     rows = []
     q = ("SELECT s.platform, s.market_key, s.last_seen AS checked_at, e.id AS event_id, e.observed_at, e.player, e.team, e.opponent, e.start_time, e.stat, e.scope, "
          "e.stat_label, e.market_type, e.odds_type, e.line, e.line_id, e.match_source_id, json_extract(e.data, '$.extra.match_type') AS ud_match_type, "
@@ -901,6 +994,9 @@ def board(con, now=None):
         f = con.execute("SELECT * FROM lol_forecasts WHERE platform = ? AND market_key = ? ORDER BY id DESC LIMIT 1",
                         (r["platform"], r["market_key"])).fetchone()
         f = dict(f) if f else None
+        hold = display_hold(con, r, f, holds)      # lav-1 / lnk-1: the line is shown with no forecast (no side or letter)
+        if hold:
+            f = None
         sh = shown(f) if f else {}
         s = series.get(r.get("sid")) or {}
         rows.append({
@@ -926,7 +1022,7 @@ def board(con, now=None):
                 "grade": sh["grade_label"], "units": f["units"], "units_policy": sh["units_policy"],
                 "stake_restriction": LOL_STAKE_RESTRICTION if sh["units_policy"] > 0 else None,
                 "calibration": sh["cal"], "raw": sh["raw"], "one_sided": sh["one_sided"]},
-            "grade": sh.get("grade_label"), "stake": (f or {}).get("units")})
+            "grade": sh.get("grade_label"), "stake": (f or {}).get("units"), "hold": hold})
     tables = {}
     for x in rows:
         if x["link"]["sid"]:
@@ -955,4 +1051,5 @@ def board(con, now=None):
             "grades": "model grades from the published bands; stakes held at 0U until validated at real lines",
             "rows": rows, "match_tables": list(tables.values()), "settled_recent": settled,
             "counts": {"offers": len(rows), "with_forecast": sum(1 for x in rows if x["forecast"]),
+                       "held": sum(1 for x in rows if x["hold"]),
                        "linked": sum(1 for x in rows if x["link"]["status"] == "matched")}}
