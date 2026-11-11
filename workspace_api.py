@@ -2037,6 +2037,9 @@ def _gen_opts(q, allowed):
     if not sports:
         return None, "Choose at least one sport."
     mix, games, repeats = q.get("mix") or "any", q.get("games") or "spread", q.get("repeats") or "allow"
+    side = q.get("side") or "any"
+    if side not in ("any", "over", "under"):
+        return None, "Choose Either side, Overs only or Unders only."
     lines = q.get("lines") or sq.LINE_RULE_DEFAULT        # owner 2026-11-05: goblins stay out unless the member allows them
     if mix not in ("any", "mixed", "single") or games not in ("spread", "stacks") or repeats not in ("allow", "none") or lines not in sq.LINE_RULES:
         return None, "Choose supported generator settings."
@@ -2051,7 +2054,7 @@ def _gen_opts(q, allowed):
         return None, "Too many lines to leave out. Generate again."
     research = q.get("research") == "1" and any(s in sq.RESEARCH_SPORTS for s in sports)
     return {"platform": platform, "entry_type": et, "count": count, "size": size, "sports": sports, "mix": mix, "same_match": games == "stacks",
-            "no_repeat": repeats == "none", "lines": lines, "research": research, "exclude": exclude}, None
+            "no_repeat": repeats == "none", "lines": lines, "research": research, "exclude": exclude, "side": side}, None
 
 
 def _ev_leg(l):
@@ -2099,6 +2102,8 @@ def _generate(srv, o):
                 why["started"] = why.get("started", 0) + 1
             elif l["research"] and not o["research"]:
                 why["research"] = why.get("research", 0) + 1
+            elif o.get("side", "any") != "any" and l["side"] != o["side"]:
+                why["side"] = why.get("side", 0) + 1
             elif l["key"] in o["exclude"]:
                 why["excluded"] = why.get("excluded", 0) + 1
             else:
@@ -2122,7 +2127,7 @@ def get_generate(h, srv, q, member, scratch, name):
     if _limited(h, srv, "generate", member, GEN_PER_MIN):
         return None
     key = ("ws_gen", o["platform"], o["entry_type"], o["count"], o["size"], o["sports"], o["mix"], o["same_match"], o["no_repeat"], o["lines"],
-           o["research"], hashlib.sha256("\n".join(o["exclude"]).encode()).hexdigest()[:16] if o["exclude"] else "")
+           o["research"], o["side"], hashlib.sha256("\n".join(o["exclude"]).encode()).hexdigest()[:16] if o["exclude"] else "")
     try:
         st_, body = srv.shared(key, lambda: _generate(srv, o), ttl=GEN_TTL)
     except Exception:

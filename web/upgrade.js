@@ -384,7 +384,7 @@
     let checks = 0, last = null, picked = [], note = "";
     for (let round = 0; round < GEN_ROUNDS; round++) {
       const q = new URLSearchParams({ platform, type: entryType, slips: String(count), picks: String(size), sports: opts.sports.join(","), mix, games,
-        repeats: opts.noRepeatProps ? "none" : "allow", lines: opts.lines || "no_goblins", research: opts.research ? "1" : "0" });
+        repeats: opts.noRepeatProps ? "none" : "allow", lines: opts.lines || "no_goblins", research: opts.research ? "1" : "0", side: opts.side || "any" });
       if (exclude.size) q.set("exclude", [...exclude].slice(0, 60).join(","));
       let doc;
       try { doc = await api("generate?" + q.toString()); }
