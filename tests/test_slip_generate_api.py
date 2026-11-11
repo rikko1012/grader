@@ -235,3 +235,26 @@ def test_advice_one_goblin_counts_a_goblin_outside_the_pool(env):
     legs[0]["line_type"] = "standard"                                          # a client cannot talk the board's type away
     st, doc = post(env, "slip-advice", {"legs": legs, "lines": "one_goblin"})
     assert st == 200 and (doc["legs"][1].get("replacement") or {}).get("player") != "gobby"
+
+
+def test_side_filter_and_cache_separation(env):
+    # Supply two eligible Unders on different matches, alongside existing Overs.
+    env.rows.append(row('pp:7999', 'prizepicks', 'underplayer', 'Other', 'Opponent', 20.5,
+                        'Less', 0.60, 999, env.rows[0]['start']))
+    fresh()
+    board = keys_on_board(env)
+    for side in ('over', 'under', 'any', 'over'):
+        st, doc = gen(env, slips=1, side=side)
+        assert st == 200 and doc['slips'], doc
+        assert doc['options']['side'] == side
+        legs = [l for s in doc['slips'] for l in s['legs']]
+        assert all(side == 'any' or l['side'] == side for l in legs)
+        assert all(l['side'] == board[(l['book'], l['row_id'])]['scout']['side'] for l in legs)
+
+
+def test_side_filter_never_backfills_opposite_side(env):
+    st, doc = gen(env, side='under', slips=8)
+    assert st == 200 and not doc['slips']  # Only one eligible Under: don't flip an Over.
+    assert doc['pool']['excluded']['side'] > 0
+    st, doc = gen(env, side='invalid')
+    assert st == 400 and 'side' in doc['error']

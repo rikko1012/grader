@@ -104,3 +104,29 @@ def test_hit_rates_in_why_match_the_tiles(ctx, env):
     went = [x['text'] for x in w['why'] + w['risk'] + w['also'] if x['text'].startswith('Went ')]
     assert went and f'{k} of the last {n}' in went[0], (tile, went)
     assert not p.errors
+
+@pytest.mark.parametrize('sp', ['cs2', 'lol', 'nba', 'nfl'])
+@pytest.mark.parametrize('size', [DESK, PHONE], ids=['1440', '390'])
+def test_key_insights_current_line_counts(ctx, env, sp, size):
+    p = board(ctx, env, size)
+    sport(p, sp)
+    open_first_card(p)
+    assert p.locator('.h-why .h-eyebrow').inner_text() == 'KEY INSIGHTS' or p.locator('.h-why .h-eyebrow').inner_text() == 'Key insights'
+    stats = p.locator('.h-insight-stats')
+    if stats.count():
+        cards = stats.locator(':scope > div')
+        assert cards.count() == 4
+        o, n = map(int, cards.nth(0).locator('b').inner_text().split('/'))
+        u, un = map(int, cards.nth(1).locator('b').inner_text().split('/'))
+        pushes = int(cards.nth(1).locator('small').inner_text().split()[0])
+        assert n == un and o + u + pushes == n and n <= 10
+        p.locator('.h-insight-more summary').click()
+        assert 'not a predicted chance' in p.locator('.h-insight-more').inner_text()
+        # Changing the reviewed side must not change objective history counts.
+        before = stats.inner_text()
+        p.locator('[data-hub=history-side][data-id=under]').click()
+        assert p.locator('.h-insight-stats').inner_text() == before
+    else:
+        assert p.locator('.h-insight-empty').is_visible()
+    no_h_scroll(p)
+    assert not p.errors

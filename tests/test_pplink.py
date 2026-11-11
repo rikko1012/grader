@@ -253,7 +253,13 @@ def _base_page(tmp_path, name):
 
 
 def run_file(tmp_path, path, body, data=None):
-    (tmp_path / "h2.js").write_text(H2, encoding="utf-8")
+    # Fixtures below are built at collection. A long full-suite run must not age their
+    # quotes past the real 15-minute protection before these tests even start.
+    clock = int(REAL.timestamp() * 1000)
+    harness = (f"class FixtureDate extends Date {{ constructor(...a) {{ super(...(a.length ? a : [{clock}])); }} "
+               f"static now() {{ return {clock}; }} }}\n" +
+               H2.replace("URL, URLSearchParams, Date,", "URL, URLSearchParams, Date: FixtureDate,"))
+    (tmp_path / "h2.js").write_text(harness, encoding="utf-8")
     (tmp_path / "in.json").write_text(json.dumps(data or {}), encoding="utf-8")
     (tmp_path / "body.js").write_text(body, encoding="utf-8")
     r = subprocess.run([NODE, str(tmp_path / "h2.js"), str(path), str(tmp_path / "in.json"), str(tmp_path / "body.js")],
@@ -426,7 +432,8 @@ def test_studio_open_after_verify_ok_only(tmp_path):
 def _lrow(key, player, team, pid, platform="prizepicks", line=4.5, lt="Standard", sides=(True, True)):
     r = _lol_row(key, player, "2099-01-01T18:00:00Z")
     r.update(platform=platform, platform_label="PrizePicks" if platform == "prizepicks" else "Underdog", team=team, match=f"{team} vs Z",
-             line=line, line_type=lt, sides=[{"side": "Over", "offered": sides[0]}, {"side": "Under", "offered": sides[1]}])
+             line=line, line_type=lt, line_checked=iso(REAL),
+             sides=[{"side": "Over", "offered": sides[0]}, {"side": "Under", "offered": sides[1]}])
     if pid is not None:
         r["pp_projection_id"] = pid
     return r
@@ -439,6 +446,16 @@ LDRAW = """(() => { D = INPUT.d; F.view = "slip"; const o = {};
   for (const [k, keys] of Object.entries(INPUT.slips)) { SLIP.legs = keys.map(x => legOf(D.rows.find(r => r.key === x))); render(); o[k] = $("#app").innerHTML; }
   return o; })()"""
 LSLIPS = {"pp": ["k1", "k2"], "noid": ["k1", "k3"], "one": ["k1"], "ud": ["u1", "u2"]}
+
+
+@needs_node
+def test_link_fixture_clock_preserves_real_stale_quote_protection(tmp_path):
+    data = {"fresh": LROWS[0], "stale": dict(LROWS[0], line_checked=iso(REAL - timedelta(minutes=16)))}
+    out = run_file(tmp_path, CUR("lol.html"),
+                   "({now: Date.now(), fresh: quoteIssue(INPUT.fresh), stale: quoteIssue(INPUT.stale)})", data)
+    assert out["now"] == int(REAL.timestamp() * 1000)
+    assert out["fresh"] is None
+    assert "15 minutes" in out["stale"]
 
 
 @needs_node

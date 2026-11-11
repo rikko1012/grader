@@ -146,6 +146,20 @@
         "sources": [{"url": "sports/books/README.md#sources", "read_at": "2026-10-23"}]
       }
     },
+    "bovada": {
+      "label": "Bovada", "short": "BV", "kind": "sportsbook",
+      "flag": "SCOUT_BOOK_BOVADA", "default_flag": "SCOUT_BOOK_FANDUEL",
+      "source": "sports_service", "platforms": ["bovada"], "sports": ["nba", "nfl"],
+      "feed": {"stale_after_s": 900, "note": "Public pregame quotes collected by the sports service every five minutes. Actual observation time governs freshness; member requests never fetch the book."},
+      "rules": {
+        "pick_price": "decimal price per offered side and exact line; no invented opposite side",
+        "push": "whole-number lines require a known push chance for EV",
+        "sources": [
+          {"url": "https://www.bovada.lv/help/sports-faq/prop-builder-faq", "read_at": "2026-11-10"},
+          {"url": "https://www.bovada.lv/help/common-faq/football-betting-rules", "read_at": "2026-11-10"}
+        ]
+      }
+    },
     "oddsapi": {
       "label": "The Odds API books",
       "short": "OA",
