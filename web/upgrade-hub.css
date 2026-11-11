@@ -1511,7 +1511,7 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
  #u-hub.h-focus-board.scout-hub{grid-template-columns:var(--side-w) minmax(0,1fr)}
  #u-hub.scout-hub.h-focus-board:not(.h-studio-mode)>.h-slip{display:none}
  #u-hub.h-focus-board .h-card-panel{right:0}
- #u-hub #hub-table .h-c-market{width:130px}
+ #u-hub.h-focus-board #hub-table .h-c-market{width:130px}
 }
 @media(max-width:1100px){#u-hub .h-focus-toggle{display:none}}
 /* Slip Studio keeps familiar tabs; setup and results get distinct, legible spaces. */
