@@ -255,6 +255,13 @@ def alerts(o):
     ingest_on = o["flags"].get("SPORTS_INGEST")
     sched = o.get("scheduler") or {}
     jobs = sched.get("jobs") or {}
+    daily_state = o.get("grades_daily") or {}
+    if (jobs.get("grades-daily") or {}).get("enabled"):
+        if daily_state.get("last_error"):
+            out.append({"level": "page", "code": "daily_grading_incomplete", "detail": daily_state["last_error"]})
+        if daily_state.get("publish_pending"):
+            out.append({"level": "warn", "code": "daily_report_unpublished", "detail": {
+                "attempt_day": daily_state.get("attempt_day")}})
     if o.get("scheduler_alive") is False:
         out.append({"level": "page", "code": "scheduler_down", "detail": "the job scheduler thread is not running"})
     # the collector: "ingest" (one job) or one "ingest-<league>" job per league (game-day cadence, scheduler.py)
@@ -404,6 +411,7 @@ def ops():
             "board_builds": board_builds(),
             "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
             "sheets_stages": sheets_stages(),
+            "grades_daily": settle_stages("model/daily_state.json"),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 

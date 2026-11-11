@@ -115,3 +115,14 @@ def test_long_job_timeout_is_included_in_alert_grace(monkeypatch):
     assert not any(a['code']=='grading_job_stale' for a in service.alerts(data))
     data['scheduler']['uptime_s']=4000
     assert any(a['code']=='grading_job_stale' for a in service.alerts(data))
+
+
+def test_daily_failure_remains_visible_after_a_not_due_success():
+    from sports import service
+    from sports.tests.test_service import _ops
+    data = _ops(scheduler={'jobs':{'grades-daily':{'enabled':True,'last_exit':{'code':0}}}},
+                grades_daily={'last_error':{'stages':{'gradecheck':'failed'}},'publish_pending':True})
+    codes = lambda: {a['code'] for a in service.alerts(data)}
+    assert {'daily_grading_incomplete','daily_report_unpublished'} <= codes()
+    data['grades_daily']={'last_error':None,'publish_pending':False}
+    assert not codes()
