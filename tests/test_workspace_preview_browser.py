@@ -892,6 +892,7 @@ def test_chips_and_columns_do_not_collide(ctx, env, width):
 
 def test_phone_targets_are_44(ctx, env):
     p = open_page(ctx, env, size=PHONE)
+    all_days(p)
     panel(p, "vargo")
     small = p.evaluate("""() => [...document.querySelectorAll('#panel button')].filter(b => b.offsetParent && b.getBoundingClientRect().height < 44).map(b => b.className)""")
     assert small == []
