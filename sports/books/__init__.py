@@ -39,4 +39,5 @@ SOURCES = {
     # set (REGISTER.md section 10) is unchanged (amendment A4)
     "fanduel": {"key_env": None, "verified": True, "consensus": False},
     "betrivers": {"key_env": None, "verified": True, "consensus": False},
+    "bovada": {"key_env": None, "verified": True, "consensus": False},
 }

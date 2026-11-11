@@ -290,3 +290,27 @@ python -m sports.books.cli inventory-show thunderpick nba # re-print the stored 
 The format is proven only when, for one known game, the stored answer shows a player-stat market whose selections
 carry the player's name, Over and Under as separate selections, one shared numeric line, a price per selection and the
 event's teams / start. Only then is a parser written against the stored raw answer and VERIFIED flipped.
+
+## Bovada public feed (2026-11-10)
+
+`bovada.py` reads the public coupon JSON with the normal honest HTTP client. NBA
+uses one league response. NFL reads its pregame listing and every listed event's
+detail, sequentially; no two-game coverage cap. The five-minute books schedule,
+timeouts, provider backoff and Retry-After rules remain in effect. Empty NFL detail
+responses are recorded as unavailable and do not withdraw that game's saved quotes.
+
+Full-game player Over/Under markets retain their exact lines and decimal prices.
+Multiple lines are separate ladder rungs, not an invented main line. Event and
+player resolution uses the existing canonical resolver. The provider publishes no
+quote-specific timestamp here, so freshness uses actual observation time. Quotes
+retain `bovada.lv` provenance; they are not represented as Ohio prices.
+
+Collection follows `SPORTS_INGEST=1`; `SPORTS_BOVADA=0` disables this provider.
+The extra-book catalogue follows the existing `SCOUT_BOOK_FANDUEL` access flag;
+`SCOUT_BOOK_BOVADA=1/0` overrides that for Bovada only. No new credential or paid
+subscription is required. The board can compare prices and display their two-sided
+no-vig chance. Registered model forecasts do not gain a new source from this change.
+
+Rules reviewed: https://www.bovada.lv/help/sports-faq/prop-builder-faq and
+https://www.bovada.lv/help/common-faq/football-betting-rules (full game includes
+overtime). This integration does not invent bet-placement links or same-game payouts.

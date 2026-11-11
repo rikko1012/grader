@@ -25,11 +25,13 @@ from ..contracts import OfferSnapshot, SideQuote
 RULE = "book house rules (not read)"
 PERIOD_SCOPE = {"game": "full_game", "regulation": "regulation"}
 FEED = {"fanduel": "fanduel sbapi (own public feed, Ohio)", "betrivers": "Kambi offering API (own public feed, Ohio)",
+        "bovada": "Bovada public coupon feed (bovada.lv)",
         "oddspapi": "OddsPapi v4 (documented feed)"}
+DIRECT = ("fanduel", "betrivers", "bovada")
 
 
 def platform_of(offer):
-    return offer["book"] if offer["provider"] in ("fanduel", "betrivers") else f"{offer['provider']}:{offer['book']}"
+    return offer["book"] if offer["provider"] in DIRECT else f"{offer['provider']}:{offer['book']}"
 
 
 def _pair_key(o):
@@ -69,7 +71,8 @@ def to_offers(offers, lg, event_key, observed_at, resolver=None):
             event_id=event_id, event_ref=o.get("event_name"), player_id=pid, player_name=o["player"],
             player_key=names.key(o["player"]), team=None, stat=o["market"], source_stat=o.get("stat_label") or "",
             scope=PERIOD_SCOPE[o["period"]], line=float(o["line"]), sides=quotes,
-            variant="main" if o.get("market_type") == "standard" else "alternate",
+            variant=("ladder_rung" if o["provider"] == "bovada" and o.get("market_type") == "alternate"
+                     else "main" if o.get("market_type") == "standard" else "alternate"),
             promotional=o.get("market_type") == "promo", availability=status, rule_version=RULE,
             listed_start_utc=o.get("start"), listed_time_kind="start", source_updated_at=upd,
             observed_at=observed_at, source_time_unknown=upd is None, extras=extras, known_at=observed_at))
@@ -110,12 +113,12 @@ def sink(con, resolver_for):
 
     def put(provider, lg, event_key, offers, complete, observed_at):
         batch = to_offers(offers, lg, event_key, observed_at, resolver_for(lg["key"]))
-        plats = sorted({platform_of(o) for o in offers}) or ([provider] if provider in ("fanduel", "betrivers")
+        plats = sorted({platform_of(o) for o in offers}) or ([provider] if provider in DIRECT
                                                               else [])
         eid = batch.records[0].event_id if batch.records else (
             f"{lg['key']}:espn:{event_key.split(':', 1)[1]}" if event_key and event_key.startswith("espn:") else None)
         r = store_game(con, lg["key"], plats, eid, batch, observed_at, complete,
-                       prefix=None if provider in ("fanduel", "betrivers") else f"{provider}:")
+                       prefix=None if provider in DIRECT else f"{provider}:")
         t = totals.setdefault(provider, {"offers": 0, "inserted": 0, "revision": 0, "duplicate": 0, "removed": 0,
                                          "unresolved_player": 0})
         t["offers"] += len(batch.records)
