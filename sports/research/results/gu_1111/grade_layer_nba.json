@@ -1,0 +1,1608 @@
+{
+ "league": "nba",
+ "rows": 13695,
+ "games": 128,
+ "days": [
+  "2026-10-24",
+  "2026-10-25",
+  "2026-10-26",
+  "2026-10-28",
+  "2026-10-29",
+  "2026-10-30",
+  "2026-10-31",
+  "2026-11-01",
+  "2026-11-02",
+  "2026-11-04",
+  "2026-11-05",
+  "2026-11-06",
+  "2026-11-07",
+  "2026-11-08",
+  "2026-11-09",
+  "2026-11-10"
+ ],
+ "duplicates": 0,
+ "pc1_b": 0.280821,
+ "descriptive": {
+  "all": {
+   "n": 13695,
+   "hit": 53.4,
+   "over_n": 4668,
+   "under_n": 9027,
+   "over_hit": 51.74,
+   "under_hit": 54.26,
+   "over_share": 34.09
+  },
+  "by_letter": {
+   "A": {
+    "n": 235,
+    "hit": 59.57,
+    "over_n": 4,
+    "under_n": 231,
+    "over_hit": 0.0,
+    "under_hit": 60.61,
+    "over_share": 1.7
+   },
+   "B": {
+    "n": 1245,
+    "hit": 57.51,
+    "over_n": 201,
+    "under_n": 1044,
+    "over_hit": 62.69,
+    "under_hit": 56.51,
+    "over_share": 16.14
+   },
+   "C": {
+    "n": 2787,
+    "hit": 56.23,
+    "over_n": 741,
+    "under_n": 2046,
+    "over_hit": 54.25,
+    "under_hit": 56.94,
+    "over_share": 26.59
+   },
+   "Lean": {
+    "n": 9428,
+    "hit": 51.87,
+    "over_n": 3722,
+    "under_n": 5706,
+    "over_hit": 50.7,
+    "under_hit": 52.63,
+    "over_share": 39.48
+   }
+  },
+  "by_stat": {
+   "assists": {
+    "all": {
+     "n": 2390,
+     "hit": 53.93,
+     "over_n": 953,
+     "under_n": 1437,
+     "over_hit": 51.0,
+     "under_hit": 55.88,
+     "over_share": 39.87
+    },
+    "graded": {
+     "n": 707,
+     "hit": 59.55,
+     "over_n": 204,
+     "under_n": 503,
+     "over_hit": 56.37,
+     "under_hit": 60.83,
+     "over_share": 28.85
+    }
+   },
+   "points": {
+    "all": {
+     "n": 5525,
+     "hit": 51.66,
+     "over_n": 1824,
+     "under_n": 3701,
+     "over_hit": 48.79,
+     "under_hit": 53.07,
+     "over_share": 33.01
+    },
+    "graded": {
+     "n": 1823,
+     "hit": 54.91,
+     "over_n": 389,
+     "under_n": 1434,
+     "over_hit": 53.73,
+     "under_hit": 55.23,
+     "over_share": 21.34
+    }
+   },
+   "rebounds": {
+    "all": {
+     "n": 3601,
+     "hit": 54.76,
+     "over_n": 1165,
+     "under_n": 2436,
+     "over_hit": 56.48,
+     "under_hit": 53.94,
+     "over_share": 32.35
+    },
+    "graded": {
+     "n": 936,
+     "hit": 56.09,
+     "over_n": 161,
+     "under_n": 775,
+     "over_hit": 67.08,
+     "under_hit": 53.81,
+     "over_share": 17.2
+    }
+   },
+   "threes": {
+    "all": {
+     "n": 2179,
+     "hit": 54.98,
+     "over_n": 726,
+     "under_n": 1453,
+     "over_hit": 52.48,
+     "under_hit": 56.23,
+     "over_share": 33.32
+    },
+    "graded": {
+     "n": 801,
+     "hit": 59.43,
+     "over_n": 192,
+     "under_n": 609,
+     "over_hit": 50.0,
+     "under_hit": 62.4,
+     "over_share": 23.97
+    }
+   }
+  },
+  "by_raw_bucket": {
+   "0.50-0.55": {
+    "n": 4575,
+    "hit": 50.95,
+    "over_n": 2095,
+    "under_n": 2480,
+    "over_hit": 50.55,
+    "under_hit": 51.29,
+    "over_share": 45.79,
+    "stated_raw": 52.5,
+    "printed": 50.7
+   },
+   "0.55-0.60": {
+    "n": 3710,
+    "hit": 51.54,
+    "over_n": 1318,
+    "under_n": 2392,
+    "over_hit": 49.77,
+    "under_hit": 52.51,
+    "over_share": 35.53,
+    "stated_raw": 57.3,
+    "printed": 52.1
+   },
+   "0.60-0.65": {
+    "n": 2582,
+    "hit": 56.24,
+    "over_n": 717,
+    "under_n": 1865,
+    "over_hit": 55.37,
+    "under_hit": 56.57,
+    "over_share": 27.77,
+    "stated_raw": 62.4,
+    "printed": 53.6
+   },
+   "0.65-0.70": {
+    "n": 1582,
+    "hit": 56.19,
+    "over_n": 398,
+    "under_n": 1184,
+    "over_hit": 54.52,
+    "under_hit": 56.76,
+    "over_share": 25.16,
+    "stated_raw": 67.2,
+    "printed": 55.0
+   },
+   "0.70-0.80": {
+    "n": 983,
+    "hit": 57.48,
+    "over_n": 134,
+    "under_n": 849,
+    "over_hit": 62.69,
+    "under_hit": 56.65,
+    "over_share": 13.63,
+    "stated_raw": 73.6,
+    "printed": 57.2
+   },
+   "0.80-1.00": {
+    "n": 263,
+    "hit": 62.36,
+    "over_n": 6,
+    "under_n": 257,
+    "over_hit": 33.33,
+    "under_hit": 63.04,
+    "over_share": 2.28,
+    "stated_raw": 86.8,
+    "printed": 64.3
+   }
+  },
+  "by_book": {
+   "prizepicks": {
+    "n": 6246,
+    "hit": 52.15,
+    "over_n": 2117,
+    "under_n": 4129,
+    "over_hit": 50.12,
+    "under_hit": 53.18,
+    "over_share": 33.89
+   },
+   "underdog": {
+    "n": 7449,
+    "hit": 54.45,
+    "over_n": 2551,
+    "under_n": 4898,
+    "over_hit": 53.08,
+    "under_hit": 55.17,
+    "over_share": 34.25
+   }
+  },
+  "raw_band_graded": {
+   "n": 10435,
+   "hit": 54.11,
+   "over_n": 3109,
+   "under_n": 7326,
+   "over_hit": 52.36,
+   "under_hit": 54.85,
+   "over_share": 29.79
+  },
+  "standard": {
+   "standard": {
+    "n": 2478,
+    "hit": 54.36,
+    "over_n": 827,
+    "under_n": 1651,
+    "over_hit": 51.63,
+    "under_hit": 55.72,
+    "over_share": 33.37
+   },
+   "non_standard": {
+    "n": 1,
+    "hit": 100.0,
+    "over_n": 1,
+    "under_n": 0,
+    "over_hit": 100.0,
+    "under_hit": null,
+    "over_share": 100.0
+   }
+  },
+  "G6_cap3_market_price_of_scout_side": {
+   "<0.45": {
+    "n": 110,
+    "hit": 42.73,
+    "over_n": 3,
+    "under_n": 107,
+    "over_hit": 66.67,
+    "under_hit": 42.06,
+    "over_share": 2.73
+   },
+   "0.45-0.55": {
+    "n": 441,
+    "hit": 46.94,
+    "over_n": 125,
+    "under_n": 316,
+    "over_hit": 41.6,
+    "under_hit": 49.05,
+    "over_share": 28.34
+   },
+   "0.55-0.65": {
+    "n": 160,
+    "hit": 57.5,
+    "over_n": 101,
+    "under_n": 59,
+    "over_hit": 50.5,
+    "under_hit": 69.49,
+    "over_share": 63.12
+   },
+   ">=0.65": {
+    "n": 9,
+    "hit": 55.56,
+    "over_n": 6,
+    "under_n": 3,
+    "over_hit": 50.0,
+    "under_hit": 66.67,
+    "over_share": 66.67
+   }
+  },
+  "G6_priced_rows": 720,
+  "under_minus_over_hit_ci": [
+   -1.52,
+   6.2
+  ],
+  "under_minus_over_graded_ci": [
+   -4.4,
+   6.6
+  ]
+ },
+ "arms": {
+  "G1 over-bar": {
+   "all_rows": {
+    "changed": 946,
+    "up": 0,
+    "down": 946,
+    "graded": {
+     "base": {
+      "n": 4267,
+      "hit": 56.78,
+      "over_n": 946,
+      "under_n": 3321,
+      "over_hit": 55.81,
+      "under_hit": 57.06,
+      "over_share": 22.17
+     },
+     "arm": {
+      "n": 3526,
+      "hit": 57.32,
+      "over_n": 205,
+      "under_n": 3321,
+      "over_hit": 61.46,
+      "under_hit": 57.06,
+      "over_share": 5.81
+     },
+     "diff": 0.54,
+     "ci": [
+      -0.48,
+      1.55
+     ],
+     "games_needed": 453
+    },
+    "top": {
+     "base": {
+      "n": 1480,
+      "hit": 57.84,
+      "over_n": 205,
+      "under_n": 1275,
+      "over_hit": 61.46,
+      "under_hit": 57.25,
+      "over_share": 13.85
+     },
+     "arm": {
+      "n": 1279,
+      "hit": 57.08,
+      "over_n": 4,
+      "under_n": 1275,
+      "over_hit": 0.0,
+      "under_hit": 57.25,
+      "over_share": 0.31
+     },
+     "diff": -0.76,
+     "ci": [
+      -2.05,
+      0.54
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": false
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3",
+     "H4"
+    ]
+   },
+   "test_days": {
+    "changed": 536,
+    "up": 0,
+    "down": 536,
+    "graded": {
+     "base": {
+      "n": 2727,
+      "hit": 56.36,
+      "over_n": 536,
+      "under_n": 2191,
+      "over_hit": 53.36,
+      "under_hit": 57.1,
+      "over_share": 19.66
+     },
+     "arm": {
+      "n": 2286,
+      "hit": 57.13,
+      "over_n": 95,
+      "under_n": 2191,
+      "over_hit": 57.89,
+      "under_hit": 57.1,
+      "over_share": 4.16
+     },
+     "diff": 0.77,
+     "ci": [
+      -0.34,
+      1.99
+     ],
+     "games_needed": 204
+    },
+    "top": {
+     "base": {
+      "n": 842,
+      "hit": 57.48,
+      "over_n": 95,
+      "under_n": 747,
+      "over_hit": 57.89,
+      "under_hit": 57.43,
+      "over_share": 11.28
+     },
+     "arm": {
+      "n": 747,
+      "hit": 57.43,
+      "over_n": 0,
+      "under_n": 747,
+      "over_hit": null,
+      "under_hit": 57.43,
+      "over_share": 0.0
+     },
+     "diff": -0.05,
+     "ci": [
+      -1.76,
+      1.93
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": false
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3",
+     "H4"
+    ]
+   }
+  },
+  "G1b over-floor": {
+   "all_rows": {
+    "changed": 741,
+    "up": 0,
+    "down": 741,
+    "graded": {
+     "base": {
+      "n": 4267,
+      "hit": 56.78,
+      "over_n": 946,
+      "under_n": 3321,
+      "over_hit": 55.81,
+      "under_hit": 57.06,
+      "over_share": 22.17
+     },
+     "arm": {
+      "n": 3526,
+      "hit": 57.32,
+      "over_n": 205,
+      "under_n": 3321,
+      "over_hit": 61.46,
+      "under_hit": 57.06,
+      "over_share": 5.81
+     },
+     "diff": 0.54,
+     "ci": [
+      -0.48,
+      1.55
+     ],
+     "games_needed": 453
+    },
+    "top": {
+     "base": {
+      "n": 1480,
+      "hit": 57.84,
+      "over_n": 205,
+      "under_n": 1275,
+      "over_hit": 61.46,
+      "under_hit": 57.25,
+      "over_share": 13.85
+     },
+     "arm": {
+      "n": 1480,
+      "hit": 57.84,
+      "over_n": 205,
+      "under_n": 1275,
+      "over_hit": 61.46,
+      "under_hit": 57.25,
+      "over_share": 13.85
+     },
+     "diff": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": true,
+     "H3": false,
+     "H4": false
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H3",
+     "H4"
+    ]
+   },
+   "test_days": {
+    "changed": 441,
+    "up": 0,
+    "down": 441,
+    "graded": {
+     "base": {
+      "n": 2727,
+      "hit": 56.36,
+      "over_n": 536,
+      "under_n": 2191,
+      "over_hit": 53.36,
+      "under_hit": 57.1,
+      "over_share": 19.66
+     },
+     "arm": {
+      "n": 2286,
+      "hit": 57.13,
+      "over_n": 95,
+      "under_n": 2191,
+      "over_hit": 57.89,
+      "under_hit": 57.1,
+      "over_share": 4.16
+     },
+     "diff": 0.77,
+     "ci": [
+      -0.34,
+      1.99
+     ],
+     "games_needed": 204
+    },
+    "top": {
+     "base": {
+      "n": 842,
+      "hit": 57.48,
+      "over_n": 95,
+      "under_n": 747,
+      "over_hit": 57.89,
+      "under_hit": 57.43,
+      "over_share": 11.28
+     },
+     "arm": {
+      "n": 842,
+      "hit": 57.48,
+      "over_n": 95,
+      "under_n": 747,
+      "over_hit": 57.89,
+      "under_hit": 57.43,
+      "over_share": 11.28
+     },
+     "diff": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": true,
+     "H3": false,
+     "H4": false
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H3",
+     "H4"
+    ]
+   }
+  },
+  "G2 over-bar + under-step": {
+   "all_rows": {
+    "changed": 6155,
+    "up": 5209,
+    "down": 946,
+    "graded": {
+     "base": {
+      "n": 4267,
+      "hit": 56.78,
+      "over_n": 946,
+      "under_n": 3321,
+      "over_hit": 55.81,
+      "under_hit": 57.06,
+      "over_share": 22.17
+     },
+     "arm": {
+      "n": 5645,
+      "hit": 56.17,
+      "over_n": 205,
+      "under_n": 5440,
+      "over_hit": 61.46,
+      "under_hit": 55.97,
+      "over_share": 3.63
+     },
+     "diff": -0.61,
+     "ci": [
+      -2.12,
+      0.86
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 1480,
+      "hit": 57.84,
+      "over_n": 205,
+      "under_n": 1275,
+      "over_hit": 61.46,
+      "under_hit": 57.25,
+      "over_share": 13.85
+     },
+     "arm": {
+      "n": 3325,
+      "hit": 56.99,
+      "over_n": 4,
+      "under_n": 3321,
+      "over_hit": 0.0,
+      "under_hit": 57.06,
+      "over_share": 0.12
+     },
+     "diff": -0.85,
+     "ci": [
+      -3.57,
+      2.04
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": true,
+     "H4": false
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H4"
+    ]
+   },
+   "test_days": {
+    "changed": 4148,
+    "up": 3612,
+    "down": 536,
+    "graded": {
+     "base": {
+      "n": 2727,
+      "hit": 56.36,
+      "over_n": 536,
+      "under_n": 2191,
+      "over_hit": 53.36,
+      "under_hit": 57.1,
+      "over_share": 19.66
+     },
+     "arm": {
+      "n": 3799,
+      "hit": 56.36,
+      "over_n": 95,
+      "under_n": 3704,
+      "over_hit": 57.89,
+      "under_hit": 56.32,
+      "over_share": 2.5
+     },
+     "diff": 0.0,
+     "ci": [
+      -1.74,
+      1.84
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 842,
+      "hit": 57.48,
+      "over_n": 95,
+      "under_n": 747,
+      "over_hit": 57.89,
+      "under_hit": 57.43,
+      "over_share": 11.28
+     },
+     "arm": {
+      "n": 2191,
+      "hit": 57.1,
+      "over_n": 0,
+      "under_n": 2191,
+      "over_hit": null,
+      "under_hit": 57.1,
+      "over_share": 0.0
+     },
+     "diff": -0.38,
+     "ci": [
+      -4.69,
+      3.83
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": true,
+     "H4": false
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H4"
+    ]
+   }
+  },
+  "G3 cell-step": {
+   "test_days": {
+    "changed": 635,
+    "up": 359,
+    "down": 276,
+    "graded": {
+     "base": {
+      "n": 2727,
+      "hit": 56.36,
+      "over_n": 536,
+      "under_n": 2191,
+      "over_hit": 53.36,
+      "under_hit": 57.1,
+      "over_share": 19.66
+     },
+     "arm": {
+      "n": 2716,
+      "hit": 56.15,
+      "over_n": 561,
+      "under_n": 2155,
+      "over_hit": 52.94,
+      "under_hit": 56.98,
+      "over_share": 20.66
+     },
+     "diff": -0.21,
+     "ci": [
+      -1.06,
+      0.68
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 842,
+      "hit": 57.48,
+      "over_n": 95,
+      "under_n": 747,
+      "over_hit": 57.89,
+      "under_hit": 57.43,
+      "over_share": 11.28
+     },
+     "arm": {
+      "n": 900,
+      "hit": 57.56,
+      "over_n": 144,
+      "under_n": 756,
+      "over_hit": 61.11,
+      "under_hit": 56.88,
+      "over_share": 16.0
+     },
+     "diff": 0.08,
+     "ci": [
+      -2.31,
+      2.43
+     ],
+     "games_needed": 78111
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   }
+  },
+  "G4 evidence letters": {
+   "test_days": {
+    "changed": 3044,
+    "up": 2846,
+    "down": 198,
+    "graded": {
+     "base": {
+      "n": 2727,
+      "hit": 56.36,
+      "over_n": 536,
+      "under_n": 2191,
+      "over_hit": 53.36,
+      "under_hit": 57.1,
+      "over_share": 19.66
+     },
+     "arm": {
+      "n": 3828,
+      "hit": 55.41,
+      "over_n": 1060,
+      "under_n": 2768,
+      "over_hit": 50.28,
+      "under_hit": 57.37,
+      "over_share": 27.69
+     },
+     "diff": -0.95,
+     "ci": [
+      -2.38,
+      0.48
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 842,
+      "hit": 57.48,
+      "over_n": 95,
+      "under_n": 747,
+      "over_hit": 57.89,
+      "under_hit": 57.43,
+      "over_share": 11.28
+     },
+     "arm": {
+      "n": 3238,
+      "hit": 56.15,
+      "over_n": 718,
+      "under_n": 2520,
+      "over_hit": 52.09,
+      "under_hit": 57.3,
+      "over_share": 22.17
+     },
+     "diff": -1.33,
+     "ci": [
+      -6.18,
+      3.25
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": true,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2"
+    ]
+   }
+  },
+  "G5 standard-only": {
+   "flag_rows": {
+    "changed": 0,
+    "up": 0,
+    "down": 0,
+    "graded": {
+     "base": {
+      "n": 630,
+      "hit": 57.3,
+      "over_n": 107,
+      "under_n": 523,
+      "over_hit": 57.94,
+      "under_hit": 57.17,
+      "over_share": 16.98
+     },
+     "arm": {
+      "n": 630,
+      "hit": 57.3,
+      "over_n": 107,
+      "under_n": 523,
+      "over_hit": 57.94,
+      "under_hit": 57.17,
+      "over_share": 16.98
+     },
+     "diff": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 145,
+      "hit": 66.21,
+      "over_n": 17,
+      "under_n": 128,
+      "over_hit": 76.47,
+      "under_hit": 64.84,
+      "over_share": 11.72
+     },
+     "arm": {
+      "n": 145,
+      "hit": 66.21,
+      "over_n": 17,
+      "under_n": 128,
+      "over_hit": 76.47,
+      "under_hit": 64.84,
+      "over_share": 11.72
+     },
+     "diff": 0.0,
+     "ci": [
+      0.0,
+      0.0
+     ],
+     "games_needed": null
+    },
+    "checks": {
+     "H1": false,
+     "H2": true,
+     "H3": true,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1"
+    ],
+    "rows": 2479
+   }
+  }
+ },
+ "test_days": [
+  "2026-10-30",
+  "2026-10-31",
+  "2026-11-01",
+  "2026-11-02",
+  "2026-11-04",
+  "2026-11-05",
+  "2026-11-06",
+  "2026-11-07",
+  "2026-11-08",
+  "2026-11-09",
+  "2026-11-10"
+ ],
+ "wf_log": {
+  "G3": {
+   "2026-10-30": {
+    "points/under": "down (-3.0, n 1035)",
+    "rebounds/over": "up (+7.1, n 430)"
+   },
+   "2026-10-31": {
+    "rebounds/over": "up (+6.3, n 542)"
+   },
+   "2026-11-01": {
+    "assists/over": "down (-3.7, n 424)",
+    "rebounds/over": "up (+5.3, n 611)",
+    "threes/over": "down (-3.7, n 329)"
+   },
+   "2026-11-02": {
+    "assists/over": "down (-3.9, n 444)",
+    "rebounds/over": "up (+5.0, n 639)",
+    "threes/over": "down (-3.5, n 356)"
+   },
+   "2026-11-04": {
+    "rebounds/over": "up (+5.0, n 777)"
+   },
+   "2026-11-05": {
+    "points/over": "down (-3.6, n 1300)",
+    "rebounds/over": "up (+3.7, n 898)",
+    "threes/over": "down (-3.0, n 522)"
+   },
+   "2026-11-06": {
+    "points/over": "down (-4.0, n 1336)",
+    "rebounds/over": "up (+4.0, n 911)"
+   },
+   "2026-11-07": {
+    "points/over": "down (-4.2, n 1475)",
+    "threes/under": "up (+3.6, n 1236)"
+   },
+   "2026-11-08": {
+    "points/over": "down (-4.3, n 1566)",
+    "rebounds/over": "up (+3.3, n 1040)",
+    "threes/under": "up (+3.8, n 1314)"
+   },
+   "2026-11-09": {
+    "points/over": "down (-4.3, n 1629)",
+    "rebounds/over": "up (+3.2, n 1040)",
+    "threes/under": "up (+3.8, n 1314)"
+   },
+   "2026-11-10": {
+    "points/over": "down (-4.2, n 1745)",
+    "rebounds/over": "up (+3.4, n 1122)",
+    "threes/under": "up (+3.3, n 1381)"
+   }
+  },
+  "G4": {
+   "2026-10-30": {
+    "0.50/over": "B (55.9, n 599)",
+    "0.50/under": "Lean (50.6, n 692)",
+    "0.55/over": "C (53.7, n 443)",
+    "0.55/under": "Lean (49.0, n 671)",
+    "0.60/over": "B (59.9, n 267)",
+    "0.60/under": "C (55.5, n 537)",
+    "0.65/over": "C (55.4, n 184)",
+    "0.65/under": "B (57.8, n 379)",
+    "0.70/under": "B (55.6, n 322)"
+   },
+   "2026-10-31": {
+    "0.50/over": "C (54.3, n 803)",
+    "0.50/under": "Lean (50.3, n 939)",
+    "0.55/over": "Lean (52.7, n 545)",
+    "0.55/under": "Lean (50.2, n 934)",
+    "0.60/over": "B (58.1, n 346)",
+    "0.60/under": "B (55.8, n 728)",
+    "0.65/over": "Lean (52.0, n 221)",
+    "0.65/under": "B (57.5, n 501)",
+    "0.70/under": "B (57.8, n 400)",
+    "0.80/under": "B (57.5, n 167)"
+   },
+   "2026-11-01": {
+    "0.50/over": "Lean (53.4, n 930)",
+    "0.50/under": "Lean (51.0, n 1085)",
+    "0.55/over": "Lean (51.6, n 605)",
+    "0.55/under": "Lean (51.6, n 1075)",
+    "0.60/over": "B (57.3, n 375)",
+    "0.60/under": "B (56.7, n 846)",
+    "0.65/over": "Lean (52.9, n 240)",
+    "0.65/under": "B (59.3, n 560)",
+    "0.70/under": "A (60.3, n 446)",
+    "0.80/under": "B (58.7, n 184)"
+   },
+   "2026-11-02": {
+    "0.50/over": "Lean (53.3, n 987)",
+    "0.50/under": "Lean (50.8, n 1165)",
+    "0.55/over": "Lean (51.5, n 621)",
+    "0.55/under": "Lean (52.1, n 1168)",
+    "0.60/over": "B (57.1, n 392)",
+    "0.60/under": "B (56.2, n 938)",
+    "0.65/over": "Lean (53.3, n 244)",
+    "0.65/under": "B (58.7, n 620)",
+    "0.70/under": "B (58.7, n 491)",
+    "0.80/under": "A (60.7, n 196)"
+   },
+   "2026-11-04": {
+    "0.50/over": "Lean (53.2, n 1243)",
+    "0.50/under": "Lean (51.2, n 1461)",
+    "0.55/over": "Lean (52.0, n 784)",
+    "0.55/under": "Lean (51.2, n 1444)",
+    "0.60/over": "B (57.0, n 465)",
+    "0.60/under": "B (58.4, n 1165)",
+    "0.65/over": "C (54.3, n 291)",
+    "0.65/under": "B (58.4, n 740)",
+    "0.70/under": "B (57.3, n 628)",
+    "0.80/under": "A (61.3, n 230)"
+   },
+   "2026-11-05": {
+    "0.50/over": "Lean (51.9, n 1483)",
+    "0.50/under": "Lean (51.8, n 1723)",
+    "0.55/over": "Lean (50.9, n 913)",
+    "0.55/under": "Lean (51.2, n 1676)",
+    "0.60/over": "B (56.8, n 533)",
+    "0.60/under": "B (57.9, n 1340)",
+    "0.65/over": "C (53.5, n 325)",
+    "0.65/under": "B (58.6, n 840)",
+    "0.70/under": "B (56.3, n 682)",
+    "0.80/under": "A (61.9, n 239)"
+   },
+   "2026-11-06": {
+    "0.50/over": "Lean (52.2, n 1524)",
+    "0.50/under": "Lean (51.8, n 1771)",
+    "0.55/over": "Lean (50.9, n 938)",
+    "0.55/under": "Lean (51.1, n 1710)",
+    "0.60/over": "B (56.6, n 549)",
+    "0.60/under": "B (57.9, n 1374)",
+    "0.65/over": "Lean (52.9, n 331)",
+    "0.65/under": "B (58.4, n 868)",
+    "0.70/under": "B (56.0, n 689)",
+    "0.80/under": "A (62.1, n 240)"
+   },
+   "2026-11-07": {
+    "0.50/over": "Lean (50.5, n 1678)",
+    "0.50/under": "Lean (51.0, n 1991)",
+    "0.55/over": "Lean (49.4, n 1068)",
+    "0.55/under": "Lean (51.8, n 1897)",
+    "0.60/over": "B (55.7, n 603)",
+    "0.60/under": "B (56.6, n 1519)",
+    "0.65/over": "C (54.7, n 362)",
+    "0.65/under": "B (56.6, n 966)",
+    "0.70/under": "C (55.2, n 752)",
+    "0.80/under": "A (62.5, n 251)"
+   },
+   "2026-11-08": {
+    "0.50/over": "Lean (50.8, n 1790)",
+    "0.50/under": "Lean (50.9, n 2140)",
+    "0.55/over": "Lean (49.2, n 1123)",
+    "0.55/under": "Lean (52.0, n 2036)",
+    "0.60/over": "B (56.6, n 641)",
+    "0.60/under": "B (56.4, n 1624)",
+    "0.65/over": "C (54.4, n 375)",
+    "0.65/under": "B (56.7, n 1031)",
+    "0.70/under": "C (55.5, n 779)",
+    "0.80/under": "A (62.7, n 252)"
+   },
+   "2026-11-09": {
+    "0.50/over": "Lean (50.9, n 1836)",
+    "0.50/under": "Lean (50.9, n 2216)",
+    "0.55/over": "Lean (49.2, n 1156)",
+    "0.55/under": "Lean (52.2, n 2090)",
+    "0.60/over": "B (56.5, n 651)",
+    "0.60/under": "B (56.5, n 1671)",
+    "0.65/over": "C (54.7, n 380)",
+    "0.65/under": "B (57.0, n 1055)",
+    "0.70/under": "C (55.5, n 779)",
+    "0.80/under": "A (62.7, n 252)"
+   },
+   "2026-11-10": {
+    "0.50/over": "Lean (51.1, n 1996)",
+    "0.50/under": "Lean (51.0, n 2359)",
+    "0.55/over": "Lean (49.3, n 1246)",
+    "0.55/under": "Lean (52.3, n 2239)",
+    "0.60/over": "B (55.7, n 689)",
+    "0.60/under": "B (56.6, n 1777)",
+    "0.65/over": "C (54.5, n 396)",
+    "0.65/under": "B (56.8, n 1112)",
+    "0.70/under": "B (55.7, n 809)",
+    "0.80/under": "A (62.6, n 254)"
+   }
+  }
+ },
+ "G7a_a1_retest": {
+  "new_slates": {
+   "flips": 5,
+   "letters_changed": 0,
+   "all": {
+    "base": {
+     "n": 1478,
+     "hit": 54.06,
+     "over_n": 514,
+     "under_n": 964,
+     "over_hit": 49.81,
+     "under_hit": 56.33,
+     "over_share": 34.78
+    },
+    "arm": {
+     "n": 1478,
+     "hit": 53.72,
+     "over_n": 517,
+     "under_n": 961,
+     "over_hit": 49.32,
+     "under_hit": 56.09,
+     "over_share": 34.98
+    },
+    "diff": -0.34,
+    "ci": [
+     -0.78,
+     0.0
+    ],
+    "games_needed": null
+   },
+   "graded": {
+    "base": {
+     "n": 383,
+     "hit": 55.87,
+     "over_n": 62,
+     "under_n": 321,
+     "over_hit": 53.23,
+     "under_hit": 56.39,
+     "over_share": 16.19
+    },
+    "arm": {
+     "n": 383,
+     "hit": 55.35,
+     "over_n": 64,
+     "under_n": 319,
+     "over_hit": 51.56,
+     "under_hit": 56.11,
+     "over_share": 16.71
+    },
+    "diff": -0.52,
+    "ci": [
+     -1.17,
+     0.0
+    ],
+    "games_needed": null
+   },
+   "top": {
+    "base": {
+     "n": 110,
+     "hit": 68.18,
+     "over_n": 14,
+     "under_n": 96,
+     "over_hit": 71.43,
+     "under_hit": 67.71,
+     "over_share": 12.73
+    },
+    "arm": {
+     "n": 110,
+     "hit": 68.18,
+     "over_n": 14,
+     "under_n": 96,
+     "over_hit": 71.43,
+     "under_hit": 67.71,
+     "over_share": 12.73
+    },
+    "diff": 0.0,
+    "ci": [
+     0.0,
+     0.0
+    ],
+    "games_needed": null
+   },
+   "raw_graded": {
+    "base_n": 1106,
+    "arm_n": 1106,
+    "base_hit": 55.42,
+    "arm_hit": 54.97,
+    "ci": [
+     -1.03,
+     0.0
+    ]
+   },
+   "logloss": {
+    "base": 0.69262,
+    "arm": 0.69392
+   },
+   "checks": {
+    "H1": false,
+    "H2": false,
+    "H3": true,
+    "H4": true
+   },
+   "pass": false,
+   "failed": [
+    "H1",
+    "H2"
+   ],
+   "rows": 1478,
+   "games": 14,
+   "flipped_rows": 5,
+   "flipped_hit_before_after": [
+    100.0,
+    0.0
+   ]
+  },
+  "nov9_test_days": {
+   "flips": 61,
+   "letters_changed": 0,
+   "all": {
+    "base": {
+     "n": 7898,
+     "hit": 52.77,
+     "over_n": 2585,
+     "under_n": 5313,
+     "over_hit": 49.28,
+     "under_hit": 54.47,
+     "over_share": 32.73
+    },
+    "arm": {
+     "n": 7898,
+     "hit": 52.94,
+     "over_n": 2604,
+     "under_n": 5294,
+     "over_hit": 49.54,
+     "under_hit": 54.61,
+     "over_share": 32.97
+    },
+    "diff": 0.17,
+    "ci": [
+     -0.04,
+     0.36
+    ],
+    "games_needed": 104
+   },
+   "graded": {
+    "base": {
+     "n": 2344,
+     "hit": 56.44,
+     "over_n": 474,
+     "under_n": 1870,
+     "over_hit": 53.38,
+     "under_hit": 57.22,
+     "over_share": 20.22
+    },
+    "arm": {
+     "n": 2344,
+     "hit": 56.61,
+     "over_n": 486,
+     "under_n": 1858,
+     "over_hit": 53.7,
+     "under_hit": 57.37,
+     "over_share": 20.73
+    },
+    "diff": 0.17,
+    "ci": [
+     -0.14,
+     0.48
+    ],
+    "games_needed": 250
+   },
+   "top": {
+    "base": {
+     "n": 732,
+     "hit": 55.87,
+     "over_n": 81,
+     "under_n": 651,
+     "over_hit": 55.56,
+     "under_hit": 55.91,
+     "over_share": 11.07
+    },
+    "arm": {
+     "n": 732,
+     "hit": 56.28,
+     "over_n": 86,
+     "under_n": 646,
+     "over_hit": 56.98,
+     "under_hit": 56.19,
+     "over_share": 11.75
+    },
+    "diff": 0.41,
+    "ci": [
+     0.0,
+     0.84
+    ],
+    "games_needed": 79
+   },
+   "raw_graded": {
+    "base_n": 5940,
+    "arm_n": 5940,
+    "base_hit": 53.37,
+    "arm_hit": 53.57,
+    "ci": [
+     -0.03,
+     0.42
+    ]
+   },
+   "logloss": {
+    "base": 0.70323,
+    "arm": 0.70254
+   },
+   "checks": {
+    "H1": false,
+    "H2": true,
+    "H3": true,
+    "H4": true
+   },
+   "pass": false,
+   "failed": [
+    "H1"
+   ],
+   "rows": 7898,
+   "games": 75,
+   "flipped_rows": 61,
+   "flipped_hit_before_after": [
+    39.34,
+    60.66
+   ]
+  },
+  "pooled_test": {
+   "flips": 66,
+   "letters_changed": 0,
+   "all": {
+    "base": {
+     "n": 9376,
+     "hit": 52.98,
+     "over_n": 3099,
+     "under_n": 6277,
+     "over_hit": 49.37,
+     "under_hit": 54.76,
+     "over_share": 33.05
+    },
+    "arm": {
+     "n": 9376,
+     "hit": 53.06,
+     "over_n": 3121,
+     "under_n": 6255,
+     "over_hit": 49.5,
+     "under_hit": 54.84,
+     "over_share": 33.29
+    },
+    "diff": 0.08,
+    "ci": [
+     -0.1,
+     0.26
+    ],
+    "games_needed": 451
+   },
+   "graded": {
+    "base": {
+     "n": 2727,
+     "hit": 56.36,
+     "over_n": 536,
+     "under_n": 2191,
+     "over_hit": 53.36,
+     "under_hit": 57.1,
+     "over_share": 19.66
+    },
+    "arm": {
+     "n": 2727,
+     "hit": 56.44,
+     "over_n": 550,
+     "under_n": 2177,
+     "over_hit": 53.45,
+     "under_hit": 57.19,
+     "over_share": 20.17
+    },
+    "diff": 0.08,
+    "ci": [
+     -0.22,
+     0.38
+    ],
+    "games_needed": 1252
+   },
+   "top": {
+    "base": {
+     "n": 842,
+     "hit": 57.48,
+     "over_n": 95,
+     "under_n": 747,
+     "over_hit": 57.89,
+     "under_hit": 57.43,
+     "over_share": 11.28
+    },
+    "arm": {
+     "n": 842,
+     "hit": 57.84,
+     "over_n": 100,
+     "under_n": 742,
+     "over_hit": 59.0,
+     "under_hit": 57.68,
+     "over_share": 11.88
+    },
+    "diff": 0.36,
+    "ci": [
+     0.0,
+     0.76
+    ],
+    "games_needed": 100
+   },
+   "raw_graded": {
+    "base_n": 7046,
+    "arm_n": 7046,
+    "base_hit": 53.69,
+    "arm_hit": 53.79,
+    "ci": [
+     -0.13,
+     0.32
+    ]
+   },
+   "logloss": {
+    "base": 0.70155,
+    "arm": 0.70118
+   },
+   "checks": {
+    "H1": false,
+    "H2": true,
+    "H3": true,
+    "H4": true
+   },
+   "pass": false,
+   "failed": [
+    "H1"
+   ],
+   "rows": 9376,
+   "games": 89,
+   "flipped_rows": 66,
+   "flipped_hit_before_after": [
+    43.94,
+    56.06
+   ]
+  },
+  "all_days_incl_burn_in": {
+   "flips": 112,
+   "letters_changed": 0,
+   "all": {
+    "base": {
+     "n": 13695,
+     "hit": 53.4,
+     "over_n": 4668,
+     "under_n": 9027,
+     "over_hit": 51.74,
+     "under_hit": 54.26,
+     "over_share": 34.09
+    },
+    "arm": {
+     "n": 13695,
+     "hit": 53.5,
+     "over_n": 4690,
+     "under_n": 9005,
+     "over_hit": 51.88,
+     "under_hit": 54.35,
+     "over_share": 34.25
+    },
+    "diff": 0.1,
+    "ci": [
+     -0.05,
+     0.27
+    ],
+    "games_needed": 328
+   },
+   "graded": {
+    "base": {
+     "n": 4267,
+     "hit": 56.78,
+     "over_n": 946,
+     "under_n": 3321,
+     "over_hit": 55.81,
+     "under_hit": 57.06,
+     "over_share": 22.17
+    },
+    "arm": {
+     "n": 4267,
+     "hit": 56.88,
+     "over_n": 968,
+     "under_n": 3299,
+     "over_hit": 55.89,
+     "under_hit": 57.17,
+     "over_share": 22.69
+    },
+    "diff": 0.1,
+    "ci": [
+     -0.15,
+     0.36
+    ],
+    "games_needed": 833
+   },
+   "top": {
+    "base": {
+     "n": 1480,
+     "hit": 57.84,
+     "over_n": 205,
+     "under_n": 1275,
+     "over_hit": 61.46,
+     "under_hit": 57.25,
+     "over_share": 13.85
+    },
+    "arm": {
+     "n": 1480,
+     "hit": 58.18,
+     "over_n": 214,
+     "under_n": 1266,
+     "over_hit": 62.15,
+     "under_hit": 57.5,
+     "over_share": 14.46
+    },
+    "diff": 0.34,
+    "ci": [
+     -0.07,
+     0.81
+    ],
+    "games_needed": 215
+   },
+   "raw_graded": {
+    "base_n": 10435,
+    "arm_n": 10435,
+    "base_hit": 54.11,
+    "arm_hit": 54.23,
+    "ci": [
+     -0.05,
+     0.31
+    ]
+   },
+   "logloss": {
+    "base": 0.70694,
+    "arm": 0.70592
+   },
+   "checks": {
+    "H1": false,
+    "H2": true,
+    "H3": true,
+    "H4": true
+   },
+   "pass": false,
+   "failed": [
+    "H1"
+   ],
+   "rows": 13695,
+   "games": 128,
+   "flipped_rows": 112,
+   "flipped_hit_before_after": [
+    43.75,
+    56.25
+   ]
+  }
+ }
+}

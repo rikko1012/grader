@@ -1,0 +1,280 @@
+{
+ "arm": "po_P7",
+ "from": "2026-11-09T12:00:00Z",
+ "rows": 1478,
+ "games": 14,
+ "sides_flipped": 49,
+ "to_over": 24,
+ "to_under": 25,
+ "flipped_hit_before_after": [
+  46.9,
+  53.1
+ ],
+ "letters_up_same_side": 48,
+ "letters_down_same_side": 28,
+ "unchanged": 1353,
+ "before": {
+  "letters": {
+   "A": {
+    "over": 0,
+    "under": 4
+   },
+   "B": {
+    "over": 14,
+    "under": 92
+   },
+   "C": {
+    "over": 48,
+    "under": 225
+   },
+   "Lean": {
+    "over": 452,
+    "under": 643
+   }
+  },
+  "over_share_all": 34.8,
+  "graded": 383,
+  "graded_over_share": 16.2,
+  "hit_all": 54.1,
+  "hit_graded": 55.9,
+  "hit_over": 49.8,
+  "hit_under": 56.3
+ },
+ "after": {
+  "letters": {
+   "A": {
+    "over": 0,
+    "under": 4
+   },
+   "B": {
+    "over": 14,
+    "under": 100
+   },
+   "C": {
+    "over": 50,
+    "under": 226
+   },
+   "Lean": {
+    "over": 449,
+    "under": 635
+   }
+  },
+  "over_share_all": 34.7,
+  "graded": 394,
+  "graded_over_share": 16.2,
+  "hit_all": 54.3,
+  "hit_graded": 58.9,
+  "hit_over": 50.1,
+  "hit_under": 56.5
+ },
+ "newly_graded_hit": 66.7,
+ "newly_graded_n": 36,
+ "lost_grade_hit_before": 24.0,
+ "lost_grade_n": 25,
+ "examples_largest_changes": [
+  {
+   "player": "Khaman Maluach",
+   "team": "PHX",
+   "opp": "LAC",
+   "date": "2026-11-11",
+   "stat": "rebounds",
+   "book": "prizepicks",
+   "line": 6.0,
+   "before": "C Under 53.5%",
+   "after": "Lean Over 50.6%",
+   "b2b": 1,
+   "games_last_7d": 4,
+   "ew_min": 15.3,
+   "result": "Over",
+   "before_hit": false,
+   "after_hit": true
+  },
+  {
+   "player": "Paul Reed",
+   "team": "DET",
+   "opp": "WSH",
+   "date": "2026-11-10",
+   "stat": "rebounds",
+   "book": "prizepicks",
+   "line": 8.0,
+   "before": "C Under 53.9%",
+   "after": "Lean Under 51.3%",
+   "b2b": 1,
+   "games_last_7d": 3,
+   "ew_min": 19.3,
+   "result": "Over",
+   "before_hit": false,
+   "after_hit": false
+  },
+  {
+   "player": "Luka Doncic",
+   "team": "LAL",
+   "opp": "ATL",
+   "date": "2026-11-10",
+   "stat": "rebounds",
+   "book": "prizepicks",
+   "line": 7.0,
+   "before": "Lean Over 50.8%",
+   "after": "Lean Under 51.5%",
+   "b2b": 1,
+   "games_last_7d": 4,
+   "ew_min": 35.9,
+   "result": "Over",
+   "before_hit": true,
+   "after_hit": false
+  },
+  {
+   "player": "Karlo Matkovic",
+   "team": "NO",
+   "opp": "GS",
+   "date": "2026-11-10",
+   "stat": "rebounds",
+   "book": "underdog",
+   "line": 4.5,
+   "before": "Lean Under 50.3%",
+   "after": "Lean Over 51.7%",
+   "b2b": 1,
+   "games_last_7d": 3,
+   "ew_min": 18.1,
+   "result": "Over",
+   "before_hit": false,
+   "after_hit": true
+  },
+  {
+   "player": "Sandro Mamukelashvili",
+   "team": "LAL",
+   "opp": "ATL",
+   "date": "2026-11-10",
+   "stat": "rebounds",
+   "book": "underdog",
+   "line": 4.5,
+   "before": "Lean Under 50.0%",
+   "after": "Lean Over 51.7%",
+   "b2b": 1,
+   "games_last_7d": 4,
+   "ew_min": 20.8,
+   "result": "Over",
+   "before_hit": false,
+   "after_hit": true
+  },
+  {
+   "player": "Luka Doncic",
+   "team": "LAL",
+   "opp": "ATL",
+   "date": "2026-11-10",
+   "stat": "points",
+   "book": "underdog",
+   "line": 36.5,
+   "before": "Lean Over 51.5%",
+   "after": "Lean Under 50.1%",
+   "b2b": 1,
+   "games_last_7d": 4,
+   "ew_min": 35.9,
+   "result": "Under",
+   "before_hit": false,
+   "after_hit": true
+  },
+  {
+   "player": "Kyrie Irving",
+   "team": "DAL",
+   "opp": "IND",
+   "date": "2026-11-10",
+   "stat": "points",
+   "book": "underdog",
+   "line": 21.5,
+   "before": "Lean Under 52.5%",
+   "after": "C Under 53.9%",
+   "b2b": 1,
+   "games_last_7d": 3,
+   "ew_min": 33.3,
+   "result": "Over",
+   "before_hit": false,
+   "after_hit": false
+  },
+  {
+   "player": "Paul Reed",
+   "team": "DET",
+   "opp": "WSH",
+   "date": "2026-11-10",
+   "stat": "assists",
+   "book": "underdog",
+   "line": 2.5,
+   "before": "C Under 54.3%",
+   "after": "Lean Under 52.9%",
+   "b2b": 1,
+   "games_last_7d": 3,
+   "ew_min": 19.3,
+   "result": "Under",
+   "before_hit": true,
+   "after_hit": true
+  },
+  {
+   "player": "Sandro Mamukelashvili",
+   "team": "LAL",
+   "opp": "ATL",
+   "date": "2026-11-10",
+   "stat": "points",
+   "book": "prizepicks",
+   "line": 8.0,
+   "before": "Lean Under 50.2%",
+   "after": "Lean Over 51.0%",
+   "b2b": 1,
+   "games_last_7d": 4,
+   "ew_min": 20.8,
+   "result": "Over",
+   "before_hit": false,
+   "after_hit": true
+  },
+  {
+   "player": "Paul Reed",
+   "team": "DET",
+   "opp": "WSH",
+   "date": "2026-11-10",
+   "stat": "points",
+   "book": "underdog",
+   "line": 12.5,
+   "before": "Lean Under 50.7%",
+   "after": "Lean Over 50.5%",
+   "b2b": 1,
+   "games_last_7d": 3,
+   "ew_min": 19.3,
+   "result": "Under",
+   "before_hit": true,
+   "after_hit": false
+  },
+  {
+   "player": "Cooper Flagg",
+   "team": "DAL",
+   "opp": "IND",
+   "date": "2026-11-10",
+   "stat": "points",
+   "book": "prizepicks",
+   "line": 25.5,
+   "before": "C Under 55.1%",
+   "after": "B Under 56.4%",
+   "b2b": 1,
+   "games_last_7d": 3,
+   "ew_min": 33.0,
+   "result": "Over",
+   "before_hit": false,
+   "after_hit": false
+  },
+  {
+   "player": "Matisse Thybulle",
+   "team": "LAL",
+   "opp": "ATL",
+   "date": "2026-11-10",
+   "stat": "points",
+   "book": "prizepicks",
+   "line": 6.5,
+   "before": "Lean Under 50.8%",
+   "after": "Lean Over 50.3%",
+   "b2b": 1,
+   "games_last_7d": 4,
+   "ew_min": 21.0,
+   "result": "Under",
+   "before_hit": true,
+   "after_hit": false
+  }
+ ]
+}

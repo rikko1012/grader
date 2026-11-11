@@ -1,0 +1,8050 @@
+{
+ "dropped_columns": [
+  "mates_out_tshare (KeyError: 'mates_out_tshare')",
+  "mates_out_carries (KeyError: 'mates_out_carries')"
+ ],
+ "markets": {
+  "rec": {
+   "all_outcome_2026_weeks": {
+    "n": 1813,
+    "N1 snap_route": {
+     "d_logscore": 0.04244,
+     "ci": [
+      0.00969,
+      0.07462
+     ]
+    },
+    "N3 qb_change": {
+     "d_logscore": 0.03787,
+     "ci": [
+      0.01733,
+      0.0631
+     ]
+    },
+    "N4 opp_def": {
+     "d_logscore": 0.02829,
+     "ci": [
+      0.0113,
+      0.04751
+     ]
+    },
+    "N5 script": {
+     "d_logscore": 0.03392,
+     "ci": [
+      0.01285,
+      0.05922
+     ]
+    },
+    "N6 weather": {
+     "d_logscore": 0.03217,
+     "ci": [
+      0.01361,
+      0.05493
+     ]
+    },
+    "N8 redzone": {
+     "d_logscore": 0.0359,
+     "ci": [
+      0.01349,
+      0.06342
+     ]
+    },
+    "N9 pace": {
+     "d_logscore": 0.02551,
+     "ci": [
+      0.00688,
+      0.05055
+     ]
+    },
+    "N10 promoted": {
+     "d_logscore": 0.03485,
+     "ci": [
+      0.01431,
+      0.05927
+     ]
+    },
+    "N11 new_team": {
+     "d_logscore": 0.0181,
+     "ci": [
+      -0.00292,
+      0.04095
+     ]
+    },
+    "N12 all": {
+     "d_logscore": 0.03159,
+     "ci": [
+      -0.00654,
+      0.06797
+     ]
+    },
+    "N0 const-only (post-hoc reference)": {
+     "d_logscore": 0.03562,
+     "ci": [
+      0.01601,
+      0.06003
+     ]
+    }
+   },
+   "gamma_last_window": {
+    "N1 snap_route": {
+     "const": 0.0008,
+     "l3_snap_trend": 0.0425,
+     "lag1_snap_trend": 0.0955,
+     "log_e2_vs_e8_opp": 0.0593,
+     "log_lag1_vs_ew_opp": 0.0104
+    },
+    "N3 qb_change": {
+     "const": 0.0154,
+     "qb_change_lag": -0.0104
+    },
+    "N4 opp_def": {
+     "const": 0.0144,
+     "allow_targets": -0.0167,
+     "allow_rec": 0.0458,
+     "oa_targets": -0.0167,
+     "oa_catch": 0.0241
+    },
+    "N5 script": {
+     "const": 0.0148,
+     "team_spread": 0.0226,
+     "implied_total": 0.0259,
+     "abs_spread": 0.0042,
+     "team_spread_x_RB": 0.0022,
+     "team_spread_x_QB": 0.0145
+    },
+    "N6 weather": {
+     "const": 0.015,
+     "wind_x": -0.0067,
+     "temp_x": 0.0041,
+     "dome": 0.0104,
+     "wind15_outdoor": -0.0079
+    },
+    "N8 redzone": {
+     "const": 0.0364,
+     "ew_rz_targets": -0.0304,
+     "ew_rz_carries": -0.0031,
+     "rz_targets_trend": 0.0415,
+     "rz_carries_trend": 0.0205
+    },
+    "N9 pace": {
+     "const": 0.0156,
+     "plays_l6": -0.0219,
+     "opp_plays_l6": 0.0051,
+     "npass_l6": 0.012
+    },
+    "N10 promoted": {
+     "const": 0.0168,
+     "snap_jump_25": 0.0819,
+     "back_from_absence": -0.0346
+    },
+    "N11 new_team": {
+     "const": 0.0102,
+     "team_change": -0.1061,
+     "early_season": -0.0203,
+     "team_change_x_early": 0.053
+    },
+    "N12 all": {
+     "const": 0.0106,
+     "N1:l3_snap_trend": 0.0381,
+     "N1:lag1_snap_trend": 0.0854,
+     "N1:log_e2_vs_e8_opp": 0.0665,
+     "N1:log_lag1_vs_ew_opp": 0.0089,
+     "N3:qb_change_lag": -0.0058,
+     "N4:allow_targets": -0.0164,
+     "N4:allow_rec": 0.0527,
+     "N4:oa_targets": -0.0164,
+     "N4:oa_catch": 0.0182,
+     "N5:team_spread": 0.0137,
+     "N5:implied_total": 0.0275,
+     "N5:abs_spread": 0.0005,
+     "N5:team_spread_x_RB": 0.0052,
+     "N5:team_spread_x_QB": 0.013,
+     "N6:wind_x": -0.0049,
+     "N6:temp_x": 0.0099,
+     "N6:dome": 0.0071,
+     "N6:wind15_outdoor": -0.0103,
+     "N8:ew_rz_targets": -0.0267,
+     "N8:ew_rz_carries": -0.0039,
+     "N8:rz_targets_trend": 0.0033,
+     "N8:rz_carries_trend": 0.0055,
+     "N9:plays_l6": -0.0312,
+     "N9:opp_plays_l6": 0.0051,
+     "N9:npass_l6": -0.0004,
+     "N10:snap_jump_25": 0.0126,
+     "N10:back_from_absence": -0.0247,
+     "N11:team_change": -0.0853,
+     "N11:early_season": -0.0159,
+     "N11:team_change_x_early": 0.0316
+    },
+    "N0 const-only (post-hoc reference)": {
+     "const": 0.0155
+    }
+   },
+   "line_rows": 725,
+   "line_rows_with_pmf": 724
+  },
+  "rec_yds": {
+   "all_outcome_2026_weeks": {
+    "n": 1813,
+    "N1 snap_route": {
+     "d_logscore": 0.1217,
+     "ci": [
+      0.06363,
+      0.18135
+     ]
+    },
+    "N3 qb_change": {
+     "d_logscore": 0.12387,
+     "ci": [
+      0.07116,
+      0.18249
+     ]
+    },
+    "N4 opp_def": {
+     "d_logscore": 0.12537,
+     "ci": [
+      0.07711,
+      0.18298
+     ]
+    },
+    "N5 script": {
+     "d_logscore": 0.13284,
+     "ci": [
+      0.08297,
+      0.18791
+     ]
+    },
+    "N6 weather": {
+     "d_logscore": 0.13353,
+     "ci": [
+      0.08046,
+      0.1908
+     ]
+    },
+    "N8 redzone": {
+     "d_logscore": 0.12856,
+     "ci": [
+      0.07343,
+      0.18829
+     ]
+    },
+    "N9 pace": {
+     "d_logscore": 0.11183,
+     "ci": [
+      0.06214,
+      0.16857
+     ]
+    },
+    "N10 promoted": {
+     "d_logscore": 0.13799,
+     "ci": [
+      0.08503,
+      0.19928
+     ]
+    },
+    "N11 new_team": {
+     "d_logscore": 0.09228,
+     "ci": [
+      0.03313,
+      0.16047
+     ]
+    },
+    "N12 all": {
+     "d_logscore": 0.11778,
+     "ci": [
+      0.04459,
+      0.19407
+     ]
+    },
+    "N0 const-only (post-hoc reference)": {
+     "d_logscore": 0.13169,
+     "ci": [
+      0.08267,
+      0.19288
+     ]
+    }
+   },
+   "gamma_last_window": {
+    "N1 snap_route": {
+     "const": 0.0119,
+     "l3_snap_trend": 0.0449,
+     "lag1_snap_trend": 0.0918,
+     "log_e2_vs_e8_opp": 0.0575,
+     "log_lag1_vs_ew_opp": 0.0169
+    },
+    "N3 qb_change": {
+     "const": 0.0264,
+     "qb_change_lag": -0.0123
+    },
+    "N4 opp_def": {
+     "const": 0.1193,
+     "allow_rec_yds": 0.09,
+     "allow_targets": -0.0447,
+     "oa_targets": -0.0447,
+     "oa_ypr": -0.0081
+    },
+    "N5 script": {
+     "const": 0.0233,
+     "team_spread": 0.0239,
+     "implied_total": 0.0579,
+     "abs_spread": -0.0027,
+     "team_spread_x_RB": 0.0014,
+     "team_spread_x_QB": 0.0616
+    },
+    "N6 weather": {
+     "const": 0.0255,
+     "wind_x": -0.0219,
+     "temp_x": 0.0028,
+     "dome": 0.009,
+     "wind15_outdoor": -0.0104
+    },
+    "N8 redzone": {
+     "const": 0.0572,
+     "ew_rz_targets": -0.0377,
+     "ew_rz_carries": 0.0061,
+     "rz_targets_trend": 0.0449,
+     "rz_carries_trend": 0.0182
+    },
+    "N9 pace": {
+     "const": 0.027,
+     "plays_l6": -0.0202,
+     "opp_plays_l6": 0.0142,
+     "npass_l6": 0.003
+    },
+    "N10 promoted": {
+     "const": 0.0287,
+     "snap_jump_25": 0.0863,
+     "back_from_absence": -0.0312
+    },
+    "N11 new_team": {
+     "const": 0.0185,
+     "team_change": -0.1814,
+     "early_season": -0.0322,
+     "team_change_x_early": 0.1164
+    },
+    "N12 all": {
+     "const": 0.0834,
+     "N1:l3_snap_trend": 0.0399,
+     "N1:lag1_snap_trend": 0.0795,
+     "N1:log_e2_vs_e8_opp": 0.0665,
+     "N1:log_lag1_vs_ew_opp": 0.0147,
+     "N3:qb_change_lag": -0.0009,
+     "N4:allow_rec_yds": 0.0492,
+     "N4:allow_targets": -0.0194,
+     "N4:oa_targets": -0.0194,
+     "N4:oa_ypr": -0.005,
+     "N5:team_spread": 0.0111,
+     "N5:implied_total": 0.0594,
+     "N5:abs_spread": -0.007,
+     "N5:team_spread_x_RB": 0.0063,
+     "N5:team_spread_x_QB": 0.0426,
+     "N6:wind_x": -0.0161,
+     "N6:temp_x": 0.0154,
+     "N6:dome": 0.0012,
+     "N6:wind15_outdoor": -0.0132,
+     "N8:ew_rz_targets": -0.0359,
+     "N8:ew_rz_carries": 0.0031,
+     "N8:rz_targets_trend": 0.0056,
+     "N8:rz_carries_trend": 0.0022,
+     "N9:plays_l6": -0.034,
+     "N9:opp_plays_l6": 0.013,
+     "N9:npass_l6": -0.0112,
+     "N10:snap_jump_25": 0.0173,
+     "N10:back_from_absence": -0.0235,
+     "N11:team_change": -0.1514,
+     "N11:early_season": -0.0319,
+     "N11:team_change_x_early": 0.086
+    },
+    "N0 const-only (post-hoc reference)": {
+     "const": 0.0265
+    }
+   },
+   "line_rows": 1727,
+   "line_rows_with_pmf": 1725
+  },
+  "rush_att": {
+   "all_outcome_2026_weeks": {
+    "n": 744,
+    "N1 snap_route": {
+     "d_logscore": 0.04588,
+     "ci": [
+      0.00036,
+      0.09591
+     ]
+    },
+    "N3 qb_change": {
+     "d_logscore": 0.02965,
+     "ci": [
+      0.00838,
+      0.05918
+     ]
+    },
+    "N4 opp_def": {
+     "d_logscore": 0.04629,
+     "ci": [
+      0.01808,
+      0.08427
+     ]
+    },
+    "N5 script": {
+     "d_logscore": 0.034,
+     "ci": [
+      0.00142,
+      0.06787
+     ]
+    },
+    "N6 weather": {
+     "d_logscore": 0.02509,
+     "ci": [
+      0.00554,
+      0.05197
+     ]
+    },
+    "N8 redzone": {
+     "d_logscore": 0.0168,
+     "ci": [
+      -0.01988,
+      0.05849
+     ]
+    },
+    "N9 pace": {
+     "d_logscore": 0.04211,
+     "ci": [
+      0.01166,
+      0.08087
+     ]
+    },
+    "N10 promoted": {
+     "d_logscore": 0.02552,
+     "ci": [
+      0.00317,
+      0.05566
+     ]
+    },
+    "N11 new_team": {
+     "d_logscore": 0.0146,
+     "ci": [
+      0.00154,
+      0.02702
+     ]
+    },
+    "N12 all": {
+     "d_logscore": 0.06634,
+     "ci": [
+      0.01614,
+      0.11657
+     ]
+    },
+    "N0 const-only (post-hoc reference)": {
+     "d_logscore": 0.03009,
+     "ci": [
+      0.00869,
+      0.0586
+     ]
+    }
+   },
+   "gamma_last_window": {
+    "N1 snap_route": {
+     "const": 0.0267,
+     "l3_snap_trend": 0.0333,
+     "lag1_snap_trend": 0.0856,
+     "log_e2_vs_e8_opp": -0.0976,
+     "log_lag1_vs_ew_opp": 0.0127
+    },
+    "N3 qb_change": {
+     "const": 0.017,
+     "qb_change_lag": 0.0083
+    },
+    "N4 opp_def": {
+     "const": -0.063,
+     "allow_carries": 0.0309,
+     "oa_carries": 0.0309
+    },
+    "N5 script": {
+     "const": 0.017,
+     "team_spread": -0.0229,
+     "implied_total": -0.0451,
+     "abs_spread": 0.0108,
+     "team_spread_x_RB": -0.0157,
+     "team_spread_x_QB": 0.0092
+    },
+    "N6 weather": {
+     "const": 0.017,
+     "wind_x": 0.0101,
+     "temp_x": -0.0112,
+     "dome": 0.0047,
+     "wind15_outdoor": -0.0042
+    },
+    "N8 redzone": {
+     "const": 0.0526,
+     "ew_rz_targets": -0.0031,
+     "ew_rz_carries": -0.0183,
+     "rz_targets_trend": 0.0116,
+     "rz_carries_trend": -0.0087
+    },
+    "N9 pace": {
+     "const": 0.0205,
+     "plays_l6": -0.0401,
+     "opp_plays_l6": -0.0128,
+     "npass_l6": 0.037
+    },
+    "N10 promoted": {
+     "const": 0.0163,
+     "snap_jump_25": 0.0339,
+     "back_from_absence": -0.0059
+    },
+    "N11 new_team": {
+     "const": 0.0148,
+     "team_change": -0.012,
+     "early_season": -0.0183,
+     "team_change_x_early": -0.0249
+    },
+    "N12 all": {
+     "const": -0.0221,
+     "N1:l3_snap_trend": 0.0263,
+     "N1:lag1_snap_trend": 0.0746,
+     "N1:log_e2_vs_e8_opp": -0.0998,
+     "N1:log_lag1_vs_ew_opp": 0.0147,
+     "N3:qb_change_lag": 0.0118,
+     "N4:allow_carries": 0.0435,
+     "N4:oa_carries": 0.0435,
+     "N5:team_spread": -0.012,
+     "N5:implied_total": -0.0176,
+     "N5:abs_spread": 0.0069,
+     "N5:team_spread_x_RB": -0.011,
+     "N5:team_spread_x_QB": 0.0069,
+     "N6:wind_x": 0.0052,
+     "N6:temp_x": -0.0089,
+     "N6:dome": 0.0038,
+     "N6:wind15_outdoor": -0.0061,
+     "N8:ew_rz_targets": -0.0144,
+     "N8:ew_rz_carries": -0.0383,
+     "N8:rz_targets_trend": 0.0105,
+     "N8:rz_carries_trend": 0.0145,
+     "N9:plays_l6": -0.0286,
+     "N9:opp_plays_l6": -0.0029,
+     "N9:npass_l6": 0.0281,
+     "N10:snap_jump_25": 0.008,
+     "N10:back_from_absence": -0.0036,
+     "N11:team_change": -0.0236,
+     "N11:early_season": -0.0141,
+     "N11:team_change_x_early": -0.0201
+    },
+    "N0 const-only (post-hoc reference)": {
+     "const": 0.0171
+    }
+   },
+   "line_rows": 523,
+   "line_rows_with_pmf": 523
+  },
+  "rush_yds": {
+   "all_outcome_2026_weeks": {
+    "n": 744,
+    "N1 snap_route": {
+     "d_logscore": 0.01295,
+     "ci": [
+      -0.00326,
+      0.02949
+     ]
+    },
+    "N3 qb_change": {
+     "d_logscore": 0.00276,
+     "ci": [
+      -0.0013,
+      0.00741
+     ]
+    },
+    "N4 opp_def": {
+     "d_logscore": 0.00478,
+     "ci": [
+      -0.00379,
+      0.01352
+     ]
+    },
+    "N5 script": {
+     "d_logscore": 0.00385,
+     "ci": [
+      -0.0031,
+      0.01014
+     ]
+    },
+    "N6 weather": {
+     "d_logscore": 0.00265,
+     "ci": [
+      -0.00104,
+      0.00671
+     ]
+    },
+    "N8 redzone": {
+     "d_logscore": -0.00119,
+     "ci": [
+      -0.01376,
+      0.01124
+     ]
+    },
+    "N9 pace": {
+     "d_logscore": 0.00187,
+     "ci": [
+      -0.00529,
+      0.00865
+     ]
+    },
+    "N10 promoted": {
+     "d_logscore": 0.00565,
+     "ci": [
+      -0.00017,
+      0.01213
+     ]
+    },
+    "N11 new_team": {
+     "d_logscore": 0.01079,
+     "ci": [
+      0.00217,
+      0.01966
+     ]
+    },
+    "N12 all": {
+     "d_logscore": -0.00311,
+     "ci": [
+      -0.02894,
+      0.0195
+     ]
+    },
+    "N0 const-only (post-hoc reference)": {
+     "d_logscore": 0.00252,
+     "ci": [
+      -0.00163,
+      0.00706
+     ]
+    }
+   },
+   "gamma_last_window": {
+    "N1 snap_route": {
+     "const": 0.0275,
+     "l3_snap_trend": 0.0418,
+     "lag1_snap_trend": 0.093,
+     "log_e2_vs_e8_opp": -0.101,
+     "log_lag1_vs_ew_opp": 0.0098
+    },
+    "N3 qb_change": {
+     "const": 0.0197,
+     "qb_change_lag": 0.0069
+    },
+    "N4 opp_def": {
+     "const": 0.0256,
+     "allow_rush_yds": -0.1614,
+     "allow_carries": 0.1815,
+     "oa_ypc": 0.4497
+    },
+    "N5 script": {
+     "const": 0.0176,
+     "team_spread": -0.141,
+     "implied_total": 0.0029,
+     "abs_spread": 0.016,
+     "team_spread_x_RB": 0.0452,
+     "team_spread_x_QB": 0.0672
+    },
+    "N6 weather": {
+     "const": 0.0195,
+     "wind_x": 0.0015,
+     "temp_x": -0.0179,
+     "dome": 0.0061,
+     "wind15_outdoor": -0.0059
+    },
+    "N8 redzone": {
+     "const": 0.188,
+     "ew_rz_targets": 0.166,
+     "ew_rz_carries": -0.0818,
+     "rz_targets_trend": -0.0428,
+     "rz_carries_trend": 0.0046
+    },
+    "N9 pace": {
+     "const": 0.0238,
+     "plays_l6": -0.0497,
+     "opp_plays_l6": -0.0114,
+     "npass_l6": 0.0385
+    },
+    "N10 promoted": {
+     "const": 0.0188,
+     "snap_jump_25": 0.032,
+     "back_from_absence": -0.0067
+    },
+    "N11 new_team": {
+     "const": 0.0153,
+     "team_change": 0.0118,
+     "early_season": -0.0415,
+     "team_change_x_early": -0.0607
+    },
+    "N12 all": {
+     "const": 0.2197,
+     "N1:l3_snap_trend": 0.0323,
+     "N1:lag1_snap_trend": 0.085,
+     "N1:log_e2_vs_e8_opp": -0.1075,
+     "N1:log_lag1_vs_ew_opp": 0.0092,
+     "N3:qb_change_lag": 0.0186,
+     "N4:allow_rush_yds": -0.1794,
+     "N4:allow_carries": 0.1837,
+     "N4:oa_ypc": 0.4162,
+     "N5:team_spread": -0.0476,
+     "N5:implied_total": 0.02,
+     "N5:abs_spread": 0.0089,
+     "N5:team_spread_x_RB": -0.0011,
+     "N5:team_spread_x_QB": 0.0299,
+     "N6:wind_x": -0.0059,
+     "N6:temp_x": -0.0152,
+     "N6:dome": -0.003,
+     "N6:wind15_outdoor": -0.0052,
+     "N8:ew_rz_targets": 0.168,
+     "N8:ew_rz_carries": -0.088,
+     "N8:rz_targets_trend": -0.0455,
+     "N8:rz_carries_trend": 0.0252,
+     "N9:plays_l6": -0.035,
+     "N9:opp_plays_l6": -0.0102,
+     "N9:npass_l6": 0.0072,
+     "N10:snap_jump_25": 0.0027,
+     "N10:back_from_absence": -0.0099,
+     "N11:team_change": 0.001,
+     "N11:early_season": -0.0382,
+     "N11:team_change_x_early": -0.0563
+    },
+    "N0 const-only (post-hoc reference)": {
+     "const": 0.0197
+    }
+   },
+   "line_rows": 786,
+   "line_rows_with_pmf": 786
+  },
+  "pass_yds": {
+   "all_outcome_2026_weeks": {
+    "n": 262,
+    "N1 snap_route": {
+     "d_logscore": 0.93542,
+     "ci": [
+      0.55648,
+      1.33314
+     ]
+    },
+    "N3 qb_change": {
+     "d_logscore": 0.86858,
+     "ci": [
+      0.57779,
+      1.17097
+     ]
+    },
+    "N4 opp_def": {
+     "d_logscore": 0.83751,
+     "ci": [
+      0.47595,
+      1.21866
+     ]
+    },
+    "N5 script": {
+     "d_logscore": 0.74906,
+     "ci": [
+      0.38439,
+      1.11666
+     ]
+    },
+    "N6 weather": {
+     "d_logscore": 0.69984,
+     "ci": [
+      0.36617,
+      1.0842
+     ]
+    },
+    "N8 redzone": {
+     "d_logscore": 0.80831,
+     "ci": [
+      0.44145,
+      1.20772
+     ]
+    },
+    "N9 pace": {
+     "d_logscore": 0.96305,
+     "ci": [
+      0.61557,
+      1.29397
+     ]
+    },
+    "N10 promoted": {
+     "d_logscore": 0.60661,
+     "ci": [
+      0.22993,
+      0.9891
+     ]
+    },
+    "N11 new_team": {
+     "d_logscore": 0.86436,
+     "ci": [
+      0.48025,
+      1.26681
+     ]
+    },
+    "N12 all": {
+     "d_logscore": 0.85286,
+     "ci": [
+      0.40519,
+      1.30073
+     ]
+    },
+    "N0 const-only (post-hoc reference)": {
+     "d_logscore": 0.83564,
+     "ci": [
+      0.47796,
+      1.21836
+     ]
+    }
+   },
+   "gamma_last_window": {
+    "N1 snap_route": {
+     "const": 0.0244,
+     "l3_snap_trend": 0.0486,
+     "lag1_snap_trend": 0.0302,
+     "log_e2_vs_e8_opp": -0.0268,
+     "log_lag1_vs_ew_opp": 0.0531
+    },
+    "N3 qb_change": {
+     "const": 0.0207,
+     "qb_change_lag": 0.0433
+    },
+    "N4 opp_def": {
+     "const": -0.2809,
+     "allow_pass_yds": 0.0888,
+     "allow_pass_att": 0.0067,
+     "oa_pass_att": 0.0067,
+     "oa_ypcmp": 0.0391
+    },
+    "N5 script": {
+     "const": 0.0226,
+     "team_spread": -0.0204,
+     "implied_total": 0.004,
+     "abs_spread": -0.0023,
+     "team_spread_x_RB": -0.0731,
+     "team_spread_x_QB": 0.0178
+    },
+    "N6 weather": {
+     "const": 0.0179,
+     "wind_x": -0.0217,
+     "temp_x": 0.0118,
+     "dome": 0.0015,
+     "wind15_outdoor": -0.0166
+    },
+    "N8 redzone": {
+     "const": -0.0669,
+     "ew_rz_targets": -0.1078,
+     "ew_rz_carries": -0.0109,
+     "rz_targets_trend": 0.0457,
+     "rz_carries_trend": 0.0077
+    },
+    "N9 pace": {
+     "const": 0.0216,
+     "plays_l6": -0.0261,
+     "opp_plays_l6": -0.0003,
+     "npass_l6": -0.0273
+    },
+    "N10 promoted": {
+     "const": 0.0166,
+     "snap_jump_25": 0.0554,
+     "back_from_absence": -0.0554
+    },
+    "N11 new_team": {
+     "const": 0.0184,
+     "team_change": -0.0288,
+     "early_season": -0.017,
+     "team_change_x_early": -0.0524
+    },
+    "N12 all": {
+     "const": -0.2423,
+     "N1:l3_snap_trend": 0.0492,
+     "N1:lag1_snap_trend": 0.0082,
+     "N1:log_e2_vs_e8_opp": -0.0251,
+     "N1:log_lag1_vs_ew_opp": 0.0516,
+     "N3:qb_change_lag": 0.0392,
+     "N4:allow_pass_yds": 0.0949,
+     "N4:allow_pass_att": 0.0012,
+     "N4:oa_pass_att": 0.0012,
+     "N4:oa_ypcmp": -0.0104,
+     "N5:team_spread": -0.0283,
+     "N5:implied_total": -0.0094,
+     "N5:abs_spread": 0.0023,
+     "N5:team_spread_x_RB": -0.1045,
+     "N5:team_spread_x_QB": 0.0127,
+     "N6:wind_x": -0.0213,
+     "N6:temp_x": 0.0137,
+     "N6:dome": 0.0006,
+     "N6:wind15_outdoor": -0.0155,
+     "N8:ew_rz_targets": 0.0211,
+     "N8:ew_rz_carries": -0.0126,
+     "N8:rz_targets_trend": 0.0234,
+     "N8:rz_carries_trend": -0.007,
+     "N9:plays_l6": -0.0196,
+     "N9:opp_plays_l6": 0.0023,
+     "N9:npass_l6": -0.0258,
+     "N10:snap_jump_25": 0.0173,
+     "N10:back_from_absence": -0.0363,
+     "N11:team_change": -0.0161,
+     "N11:early_season": -0.017,
+     "N11:team_change_x_early": -0.0706
+    },
+    "N0 const-only (post-hoc reference)": {
+     "const": 0.0191
+    }
+   },
+   "line_rows": 274,
+   "line_rows_with_pmf": 274
+  }
+ },
+ "arms": {
+  "N1 snap_route": {
+   "pooled": {
+    "flips": 529,
+    "letters_changed": 594,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 52.74,
+      "over_n": 1536,
+      "under_n": 2499,
+      "over_hit": 48.44,
+      "under_hit": 55.38,
+      "over_share": 38.07
+     },
+     "diff": -1.66,
+     "ci": [
+      -3.58,
+      0.18
+     ],
+     "games_needed": null
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 605,
+      "hit": 54.88,
+      "over_n": 157,
+      "under_n": 448,
+      "over_hit": 53.5,
+      "under_hit": 55.36,
+      "over_share": 25.95
+     },
+     "diff": 0.15,
+     "ci": [
+      -5.88,
+      5.47
+     ],
+     "games_needed": 40079
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 182,
+      "hit": 63.74,
+      "over_n": 21,
+      "under_n": 161,
+      "over_hit": 66.67,
+      "under_hit": 63.35,
+      "over_share": 11.54
+     },
+     "diff": 3.74,
+     "ci": [
+      -9.05,
+      13.68
+     ],
+     "games_needed": 259
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3143,
+     "base_hit": 54.8,
+     "arm_hit": 53.29,
+     "ci": [
+      -3.55,
+      0.54
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.72648
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 92,
+     "letters_changed": 141,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 57.38,
+       "over_n": 251,
+       "under_n": 474,
+       "over_hit": 57.37,
+       "under_hit": 57.38,
+       "over_share": 34.62
+      },
+      "diff": 1.1,
+      "ci": [
+       -1.58,
+       3.86
+      ],
+      "games_needed": 172
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 117,
+       "hit": 62.39,
+       "over_n": 27,
+       "under_n": 90,
+       "over_hit": 70.37,
+       "under_hit": 60.0,
+       "over_share": 23.08
+      },
+      "diff": -2.07,
+      "ci": [
+       -12.95,
+       7.76
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 34,
+       "hit": 73.53,
+       "over_n": 8,
+       "under_n": 26,
+       "over_hit": 87.5,
+       "under_hit": 69.23,
+       "over_share": 23.53
+      },
+      "diff": -0.61,
+      "ci": [
+       -20.44,
+       16.46
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 591,
+      "base_hit": 57.76,
+      "arm_hit": 57.87,
+      "ci": [
+       -2.73,
+       2.86
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.69563
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 234,
+     "letters_changed": 189,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 51.71,
+       "over_n": 700,
+       "under_n": 1027,
+       "over_hit": 46.43,
+       "under_hit": 55.31,
+       "over_share": 40.53
+      },
+      "diff": -3.24,
+      "ci": [
+       -5.73,
+       -0.81
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 177,
+       "hit": 49.15,
+       "over_n": 58,
+       "under_n": 119,
+       "over_hit": 46.55,
+       "under_hit": 50.42,
+       "over_share": 32.77
+      },
+      "diff": -7.49,
+      "ci": [
+       -17.97,
+       1.05
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 46,
+       "hit": 36.96,
+       "over_n": 3,
+       "under_n": 43,
+       "over_hit": 100.0,
+       "under_hit": 32.56,
+       "over_share": 6.52
+      },
+      "diff": -21.1,
+      "ci": [
+       -43.42,
+       6.65
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1285,
+      "base_hit": 55.28,
+      "arm_hit": 52.61,
+      "ci": [
+       -6.05,
+       0.48
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.73356
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 60,
+     "letters_changed": 133,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 50.67,
+       "over_n": 155,
+       "under_n": 368,
+       "over_hit": 47.74,
+       "under_hit": 51.9,
+       "over_share": 29.64
+      },
+      "diff": -1.15,
+      "ci": [
+       -4.96,
+       2.32
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 159,
+       "hit": 53.46,
+       "over_n": 38,
+       "under_n": 121,
+       "over_hit": 44.74,
+       "under_hit": 56.2,
+       "over_share": 23.9
+      },
+      "diff": 2.05,
+      "ci": [
+       -6.59,
+       10.28
+      ],
+      "games_needed": 475
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 67,
+       "hit": 67.16,
+       "over_n": 9,
+       "under_n": 58,
+       "over_hit": 44.44,
+       "under_hit": 70.69,
+       "over_share": 13.43
+      },
+      "diff": 8.27,
+      "ci": [
+       -1.38,
+       19.94
+      ],
+      "games_needed": 47
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 446,
+      "base_hit": 51.9,
+      "arm_hit": 50.45,
+      "ci": [
+       -6.42,
+       2.94
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.77247
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 84,
+     "letters_changed": 91,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 51.65,
+       "over_n": 313,
+       "under_n": 473,
+       "over_hit": 45.05,
+       "under_hit": 56.03,
+       "over_share": 39.82
+      },
+      "diff": -2.04,
+      "ci": [
+       -5.79,
+       1.49
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 129,
+       "hit": 53.49,
+       "over_n": 33,
+       "under_n": 96,
+       "over_hit": 60.61,
+       "under_hit": 51.04,
+       "over_share": 25.58
+      },
+      "diff": 9.12,
+      "ci": [
+       -2.79,
+       17.83
+      ],
+      "games_needed": 36
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 33,
+       "hit": 81.82,
+       "over_n": 1,
+       "under_n": 32,
+       "over_hit": 0.0,
+       "under_hit": 84.38,
+       "over_share": 3.03
+      },
+      "diff": 30.6,
+      "ci": [
+       -7.18,
+       48.18
+      ],
+      "games_needed": 23
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 621,
+      "base_hit": 53.77,
+      "arm_hit": 50.72,
+      "ci": [
+       -7.22,
+       0.61
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.72622
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 59,
+     "letters_changed": 40,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 54.01,
+       "over_n": 117,
+       "under_n": 157,
+       "over_hit": 51.28,
+       "under_hit": 56.05,
+       "over_share": 42.7
+      },
+      "diff": 1.09,
+      "ci": [
+       -9.9,
+       13.45
+      ],
+      "games_needed": 3213
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 23,
+       "hit": 78.26,
+       "over_n": 1,
+       "under_n": 22,
+       "over_hit": 100.0,
+       "under_hit": 77.27,
+       "over_share": 4.35
+      },
+      "diff": 23.09,
+      "ci": [
+       -12.12,
+       59.74
+      ],
+      "games_needed": 68
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 2,
+       "hit": 100.0,
+       "over_n": 0,
+       "under_n": 2,
+       "over_hit": null,
+       "under_hit": 100.0,
+       "over_share": 0.0
+      },
+      "diff": 100.0,
+      "ci": [
+       0.0,
+       100.0
+      ],
+      "games_needed": 7
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 200,
+      "base_hit": 51.85,
+      "arm_hit": 58.5,
+      "ci": [
+       -5.12,
+       20.88
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.67641
+     },
+     "checks": {
+      "H1": false,
+      "H2": true,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N3 qb_change": {
+   "pooled": {
+    "flips": 101,
+    "letters_changed": 115,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 54.42,
+      "over_n": 1378,
+      "under_n": 2657,
+      "over_hit": 50.73,
+      "under_hit": 56.34,
+      "over_share": 34.15
+     },
+     "diff": 0.02,
+     "ci": [
+      -0.46,
+      0.51
+     ],
+     "games_needed": 16466
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 677,
+      "hit": 54.36,
+      "over_n": 167,
+      "under_n": 510,
+      "over_hit": 51.5,
+      "under_hit": 55.29,
+      "over_share": 24.67
+     },
+     "diff": -0.37,
+     "ci": [
+      -2.58,
+      1.41
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 232,
+      "hit": 59.05,
+      "over_n": 38,
+      "under_n": 194,
+      "over_hit": 52.63,
+      "under_hit": 60.31,
+      "over_share": 16.38
+     },
+     "diff": -0.95,
+     "ci": [
+      -3.05,
+      1.82
+     ],
+     "games_needed": null
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3250,
+     "base_hit": 54.8,
+     "arm_hit": 54.52,
+     "ci": [
+      -1.0,
+      0.44
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.73208
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 13,
+     "letters_changed": 28,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.69,
+       "over_n": 214,
+       "under_n": 511,
+       "over_hit": 57.48,
+       "under_hit": 56.36,
+       "over_share": 29.52
+      },
+      "diff": 0.41,
+      "ci": [
+       -0.55,
+       1.38
+      ],
+      "games_needed": 156
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 155,
+       "hit": 65.81,
+       "over_n": 32,
+       "under_n": 123,
+       "over_hit": 75.0,
+       "under_hit": 63.41,
+       "over_share": 20.65
+      },
+      "diff": 1.35,
+      "ci": [
+       -1.98,
+       5.33
+      ],
+      "games_needed": 206
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 54,
+       "hit": 72.22,
+       "over_n": 12,
+       "under_n": 42,
+       "over_hit": 91.67,
+       "under_hit": 66.67,
+       "over_share": 22.22
+      },
+      "diff": -1.92,
+      "ci": [
+       -4.2,
+       0.0
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 609,
+      "base_hit": 57.76,
+      "arm_hit": 57.96,
+      "ci": [
+       -1.4,
+       1.73
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.6952
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 53,
+     "letters_changed": 28,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 54.89,
+       "over_n": 635,
+       "under_n": 1092,
+       "over_hit": 50.39,
+       "under_hit": 57.51,
+       "over_share": 36.77
+      },
+      "diff": -0.06,
+      "ci": [
+       -0.77,
+       0.66
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 209,
+       "hit": 55.02,
+       "over_n": 66,
+       "under_n": 143,
+       "over_hit": 51.52,
+       "under_hit": 56.64,
+       "over_share": 31.58
+      },
+      "diff": -1.62,
+      "ci": [
+       -4.11,
+       0.68
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 57,
+       "hit": 59.65,
+       "over_n": 5,
+       "under_n": 52,
+       "over_hit": 100.0,
+       "under_hit": 55.77,
+       "over_share": 8.77
+      },
+      "diff": 1.59,
+      "ci": [
+       -2.45,
+       5.35
+      ],
+      "games_needed": 169
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1352,
+      "base_hit": 55.28,
+      "arm_hit": 54.88,
+      "ci": [
+       -1.51,
+       0.79
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72511
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 12,
+     "letters_changed": 25,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 52.96,
+       "over_n": 147,
+       "under_n": 376,
+       "over_hit": 51.7,
+       "under_hit": 53.46,
+       "over_share": 28.11
+      },
+      "diff": 1.14,
+      "ci": [
+       -0.2,
+       2.9
+      ],
+      "games_needed": 52
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 168,
+       "hit": 51.19,
+       "over_n": 35,
+       "under_n": 133,
+       "over_hit": 34.29,
+       "under_hit": 55.64,
+       "over_share": 20.83
+      },
+      "diff": -0.22,
+      "ci": [
+       -4.09,
+       2.81
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 80,
+       "hit": 57.5,
+       "over_n": 16,
+       "under_n": 64,
+       "over_hit": 25.0,
+       "under_hit": 65.62,
+       "over_share": 20.0
+      },
+      "diff": -1.39,
+      "ci": [
+       -5.07,
+       5.51
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 437,
+      "base_hit": 51.9,
+      "arm_hit": 51.72,
+      "ci": [
+       -1.75,
+       1.19
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.79324
+     },
+     "checks": {
+      "H1": false,
+      "H2": true,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 18,
+     "letters_changed": 18,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 53.44,
+       "over_n": 293,
+       "under_n": 493,
+       "over_hit": 47.1,
+       "under_hit": 57.2,
+       "over_share": 37.28
+      },
+      "diff": -0.25,
+      "ci": [
+       -1.51,
+       1.01
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 131,
+       "hit": 45.8,
+       "over_n": 34,
+       "under_n": 97,
+       "over_hit": 47.06,
+       "under_hit": 45.36,
+       "over_share": 25.95
+      },
+      "diff": 1.43,
+      "ci": [
+       -1.15,
+       5.82
+      ],
+      "games_needed": 167
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 38,
+       "hit": 47.37,
+       "over_n": 5,
+       "under_n": 33,
+       "over_hit": 0.0,
+       "under_hit": 54.55,
+       "over_share": 13.16
+      },
+      "diff": -3.85,
+      "ci": [
+       -13.24,
+       3.54
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 640,
+      "base_hit": 53.77,
+      "arm_hit": 53.59,
+      "ci": [
+       -1.27,
+       1.05
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.74229
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 5,
+     "letters_changed": 16,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 51.09,
+       "over_n": 89,
+       "under_n": 185,
+       "over_hit": 47.19,
+       "under_hit": 52.97,
+       "over_share": 32.48
+      },
+      "diff": -1.83,
+      "ci": [
+       -5.08,
+       0.0
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 14,
+       "hit": 35.71,
+       "over_n": 0,
+       "under_n": 14,
+       "over_hit": null,
+       "under_hit": 35.71,
+       "over_share": 0.0
+      },
+      "diff": -19.46,
+      "ci": [
+       -49.23,
+       22.22
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 3,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 3,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "diff": 0.0,
+      "ci": [
+       0.0,
+       0.0
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 212,
+      "base_hit": 51.85,
+      "arm_hit": 50.94,
+      "ci": [
+       -4.23,
+       1.34
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.72754
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N4 opp_def": {
+   "pooled": {
+    "flips": 204,
+    "letters_changed": 197,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 55.04,
+      "over_n": 1395,
+      "under_n": 2640,
+      "over_hit": 51.61,
+      "under_hit": 56.86,
+      "over_share": 34.57
+     },
+     "diff": 0.64,
+     "ci": [
+      -0.56,
+      1.87
+     ],
+     "games_needed": 101
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 675,
+      "hit": 54.07,
+      "over_n": 170,
+      "under_n": 505,
+      "over_hit": 48.82,
+      "under_hit": 55.84,
+      "over_share": 25.19
+     },
+     "diff": -0.66,
+     "ci": [
+      -2.92,
+      1.41
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 227,
+      "hit": 61.67,
+      "over_n": 36,
+      "under_n": 191,
+      "over_hit": 50.0,
+      "under_hit": 63.87,
+      "over_share": 15.86
+     },
+     "diff": 1.67,
+     "ci": [
+      -1.88,
+      5.88
+     ],
+     "games_needed": 152
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3258,
+     "base_hit": 54.8,
+     "arm_hit": 54.73,
+     "ci": [
+      -0.92,
+      0.88
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.72923
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 9,
+     "letters_changed": 48,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.69,
+       "over_n": 210,
+       "under_n": 515,
+       "over_hit": 57.62,
+       "under_hit": 56.31,
+       "over_share": 28.97
+      },
+      "diff": 0.41,
+      "ci": [
+       -0.54,
+       1.34
+      ],
+      "games_needed": 148
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 151,
+       "hit": 64.9,
+       "over_n": 32,
+       "under_n": 119,
+       "over_hit": 75.0,
+       "under_hit": 62.18,
+       "over_share": 21.19
+      },
+      "diff": 0.44,
+      "ci": [
+       -3.36,
+       4.76
+      ],
+      "games_needed": 2384
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 49,
+       "hit": 73.47,
+       "over_n": 10,
+       "under_n": 39,
+       "over_hit": 90.0,
+       "under_hit": 69.23,
+       "over_share": 20.41
+      },
+      "diff": -0.67,
+      "ci": [
+       -6.08,
+       4.62
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 631,
+      "base_hit": 57.76,
+      "arm_hit": 57.53,
+      "ci": [
+       -1.56,
+       1.01
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.69571
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 56,
+     "letters_changed": 33,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 626,
+       "under_n": 1101,
+       "over_hit": 50.48,
+       "under_hit": 57.49,
+       "over_share": 36.25
+      },
+      "diff": 0.0,
+      "ci": [
+       -0.86,
+       0.85
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 216,
+       "hit": 54.63,
+       "over_n": 71,
+       "under_n": 145,
+       "over_hit": 49.3,
+       "under_hit": 57.24,
+       "over_share": 32.87
+      },
+      "diff": -2.01,
+      "ci": [
+       -5.17,
+       0.67
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 56,
+       "hit": 58.93,
+       "over_n": 5,
+       "under_n": 51,
+       "over_hit": 100.0,
+       "under_hit": 54.9,
+       "over_share": 8.93
+      },
+      "diff": 0.87,
+      "ci": [
+       -3.95,
+       4.95
+      ],
+      "games_needed": 733
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1332,
+      "base_hit": 55.28,
+      "arm_hit": 54.5,
+      "ci": [
+       -1.86,
+       0.41
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72642
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 39,
+     "letters_changed": 64,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 54.68,
+       "over_n": 166,
+       "under_n": 357,
+       "over_hit": 54.22,
+       "under_hit": 54.9,
+       "over_share": 31.74
+      },
+      "diff": 2.86,
+      "ci": [
+       -0.19,
+       6.49
+      ],
+      "games_needed": 39
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 165,
+       "hit": 53.33,
+       "over_n": 37,
+       "under_n": 128,
+       "over_hit": 29.73,
+       "under_hit": 60.16,
+       "over_share": 22.42
+      },
+      "diff": 1.92,
+      "ci": [
+       -3.59,
+       6.17
+      ],
+      "games_needed": 181
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 79,
+       "hit": 65.82,
+       "over_n": 16,
+       "under_n": 63,
+       "over_hit": 25.0,
+       "under_hit": 76.19,
+       "over_share": 20.25
+      },
+      "diff": 6.93,
+      "ci": [
+       0.07,
+       18.18
+      ],
+      "games_needed": 48
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 447,
+      "base_hit": 51.9,
+      "arm_hit": 53.47,
+      "ci": [
+       -1.55,
+       4.86
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.77905
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 59,
+     "letters_changed": 33,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 54.83,
+       "over_n": 296,
+       "under_n": 490,
+       "over_hit": 48.99,
+       "under_hit": 58.37,
+       "over_share": 37.66
+      },
+      "diff": 1.14,
+      "ci": [
+       -1.33,
+       3.66
+      ],
+      "games_needed": 135
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 131,
+       "hit": 45.8,
+       "over_n": 30,
+       "under_n": 101,
+       "over_hit": 43.33,
+       "under_hit": 46.53,
+       "over_share": 22.9
+      },
+      "diff": 1.43,
+      "ci": [
+       -2.54,
+       7.17
+      ],
+      "games_needed": 323
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 41,
+       "hit": 46.34,
+       "over_n": 5,
+       "under_n": 36,
+       "over_hit": 0.0,
+       "under_hit": 52.78,
+       "over_share": 12.2
+      },
+      "diff": -4.88,
+      "ci": [
+       -31.35,
+       8.81
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 650,
+      "base_hit": 53.77,
+      "arm_hit": 54.46,
+      "ci": [
+       -1.54,
+       2.79
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.73438
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": false
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3",
+      "H4"
+     ]
+    },
+    "pass_yds": {
+     "flips": 41,
+     "letters_changed": 19,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 52.55,
+       "over_n": 97,
+       "under_n": 177,
+       "over_hit": 49.48,
+       "under_hit": 54.24,
+       "over_share": 35.4
+      },
+      "diff": -0.37,
+      "ci": [
+       -9.21,
+       8.25
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 12,
+       "hit": 8.33,
+       "over_n": 0,
+       "under_n": 12,
+       "over_hit": null,
+       "under_hit": 8.33,
+       "over_share": 0.0
+      },
+      "diff": -46.84,
+      "ci": [
+       -76.93,
+       -3.33
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 2,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 2,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "diff": 0.0,
+      "ci": [
+       0.0,
+       0.0
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 198,
+      "base_hit": 51.85,
+      "arm_hit": 51.01,
+      "ci": [
+       -12.7,
+       8.82
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.72571
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N5 script": {
+   "pooled": {
+    "flips": 231,
+    "letters_changed": 196,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 53.73,
+      "over_n": 1416,
+      "under_n": 2619,
+      "over_hit": 49.72,
+      "under_hit": 55.9,
+      "over_share": 35.09
+     },
+     "diff": -0.67,
+     "ci": [
+      -1.68,
+      0.4
+     ],
+     "games_needed": null
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 676,
+      "hit": 54.59,
+      "over_n": 166,
+      "under_n": 510,
+      "over_hit": 51.81,
+      "under_hit": 55.49,
+      "over_share": 24.56
+     },
+     "diff": -0.14,
+     "ci": [
+      -2.74,
+      1.9
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 227,
+      "hit": 61.67,
+      "over_n": 38,
+      "under_n": 189,
+      "over_hit": 52.63,
+      "under_hit": 63.49,
+      "over_share": 16.74
+     },
+     "diff": 1.67,
+     "ci": [
+      -1.8,
+      5.26
+     ],
+     "games_needed": 126
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3235,
+     "base_hit": 54.8,
+     "arm_hit": 54.71,
+     "ci": [
+      -0.93,
+      0.86
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.73002
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 19,
+     "letters_changed": 30,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.69,
+       "over_n": 220,
+       "under_n": 505,
+       "over_hit": 57.27,
+       "under_hit": 56.44,
+       "over_share": 30.34
+      },
+      "diff": 0.41,
+      "ci": [
+       -0.8,
+       1.51
+      ],
+      "games_needed": 223
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 159,
+       "hit": 65.41,
+       "over_n": 32,
+       "under_n": 127,
+       "over_hit": 75.0,
+       "under_hit": 62.99,
+       "over_share": 20.13
+      },
+      "diff": 0.95,
+      "ci": [
+       -1.91,
+       4.24
+      ],
+      "games_needed": 294
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 53,
+       "hit": 75.47,
+       "over_n": 12,
+       "under_n": 41,
+       "over_hit": 91.67,
+       "under_hit": 70.73,
+       "over_share": 22.64
+      },
+      "diff": 1.33,
+      "ci": [
+       -2.58,
+       5.93
+      ],
+      "games_needed": 287
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 633,
+      "base_hit": 57.76,
+      "arm_hit": 57.82,
+      "ci": [
+       -1.2,
+       1.31
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.69446
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 102,
+     "letters_changed": 55,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 53.56,
+       "over_n": 654,
+       "under_n": 1073,
+       "over_hit": 48.62,
+       "under_hit": 56.57,
+       "over_share": 37.87
+      },
+      "diff": -1.39,
+      "ci": [
+       -2.77,
+       -0.18
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 207,
+       "hit": 56.52,
+       "over_n": 67,
+       "under_n": 140,
+       "over_hit": 52.24,
+       "under_hit": 58.57,
+       "over_share": 32.37
+      },
+      "diff": -0.12,
+      "ci": [
+       -3.36,
+       3.3
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 58,
+       "hit": 60.34,
+       "over_n": 6,
+       "under_n": 52,
+       "over_hit": 100.0,
+       "under_hit": 55.77,
+       "over_share": 10.34
+      },
+      "diff": 2.28,
+      "ci": [
+       -0.9,
+       6.14
+      ],
+      "games_needed": 67
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1326,
+      "base_hit": 55.28,
+      "arm_hit": 54.52,
+      "ci": [
+       -1.97,
+       0.58
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72514
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 24,
+     "letters_changed": 45,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 52.96,
+       "over_n": 151,
+       "under_n": 372,
+       "over_hit": 51.66,
+       "under_hit": 53.49,
+       "over_share": 28.87
+      },
+      "diff": 1.14,
+      "ci": [
+       -0.92,
+       3.58
+      ],
+      "games_needed": 110
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 162,
+       "hit": 50.62,
+       "over_n": 34,
+       "under_n": 128,
+       "over_hit": 35.29,
+       "under_hit": 54.69,
+       "over_share": 20.99
+      },
+      "diff": -0.79,
+      "ci": [
+       -5.66,
+       2.94
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 78,
+       "hit": 60.26,
+       "over_n": 15,
+       "under_n": 63,
+       "over_hit": 20.0,
+       "under_hit": 69.84,
+       "over_share": 19.23
+      },
+      "diff": 1.37,
+      "ci": [
+       -3.43,
+       7.86
+      ],
+      "games_needed": 476
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 452,
+      "base_hit": 51.9,
+      "arm_hit": 53.32,
+      "ci": [
+       -0.52,
+       3.57
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.78789
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 55,
+     "letters_changed": 43,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 53.05,
+       "over_n": 302,
+       "under_n": 484,
+       "over_hit": 46.69,
+       "under_hit": 57.02,
+       "over_share": 38.42
+      },
+      "diff": -0.64,
+      "ci": [
+       -2.79,
+       1.62
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 130,
+       "hit": 45.38,
+       "over_n": 32,
+       "under_n": 98,
+       "over_hit": 43.75,
+       "under_hit": 45.92,
+       "over_share": 24.62
+      },
+      "diff": 1.01,
+      "ci": [
+       -4.12,
+       5.42
+      ],
+      "games_needed": 625
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 38,
+       "hit": 47.37,
+       "over_n": 5,
+       "under_n": 33,
+       "over_hit": 0.0,
+       "under_hit": 54.55,
+       "over_share": 13.16
+      },
+      "diff": -3.85,
+      "ci": [
+       -40.92,
+       7.65
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 615,
+      "base_hit": 53.77,
+      "arm_hit": 53.17,
+      "ci": [
+       -2.65,
+       1.75
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.73931
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 31,
+     "letters_changed": 23,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 50.36,
+       "over_n": 89,
+       "under_n": 185,
+       "over_hit": 46.07,
+       "under_hit": 52.43,
+       "over_share": 32.48
+      },
+      "diff": -2.56,
+      "ci": [
+       -10.77,
+       5.95
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 18,
+       "hit": 38.89,
+       "over_n": 1,
+       "under_n": 17,
+       "over_hit": 100.0,
+       "under_hit": 35.29,
+       "over_share": 5.56
+      },
+      "diff": -16.28,
+      "ci": [
+       -55.18,
+       26.32
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 0,
+       "hit": null,
+       "over_n": 0,
+       "under_n": 0,
+       "over_hit": null,
+       "under_hit": null,
+       "over_share": null
+      },
+      "diff": null,
+      "ci": null,
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 209,
+      "base_hit": 51.85,
+      "arm_hit": 54.07,
+      "ci": [
+       -3.14,
+       8.58
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.71784
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N6 weather": {
+   "pooled": {
+    "flips": 140,
+    "letters_changed": 129,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 54.35,
+      "over_n": 1417,
+      "under_n": 2618,
+      "over_hit": 50.6,
+      "under_hit": 56.38,
+      "over_share": 35.12
+     },
+     "diff": -0.05,
+     "ci": [
+      -0.66,
+      0.54
+     ],
+     "games_needed": null
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 679,
+      "hit": 53.76,
+      "over_n": 173,
+      "under_n": 506,
+      "over_hit": 52.6,
+      "under_hit": 54.15,
+      "over_share": 25.48
+     },
+     "diff": -0.97,
+     "ci": [
+      -3.36,
+      0.97
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 229,
+      "hit": 60.7,
+      "over_n": 38,
+      "under_n": 191,
+      "over_hit": 52.63,
+      "under_hit": 62.3,
+      "over_share": 16.59
+     },
+     "diff": 0.7,
+     "ci": [
+      -2.41,
+      5.0
+     ],
+     "games_needed": 785
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3261,
+     "base_hit": 54.8,
+     "arm_hit": 54.43,
+     "ci": [
+      -1.1,
+      0.43
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.73353
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 15,
+     "letters_changed": 35,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.69,
+       "over_n": 216,
+       "under_n": 509,
+       "over_hit": 57.41,
+       "under_hit": 56.39,
+       "over_share": 29.79
+      },
+      "diff": 0.41,
+      "ci": [
+       -1.0,
+       1.73
+      ],
+      "games_needed": 311
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 161,
+       "hit": 65.84,
+       "over_n": 36,
+       "under_n": 125,
+       "over_hit": 80.56,
+       "under_hit": 61.6,
+       "over_share": 22.36
+      },
+      "diff": 1.38,
+      "ci": [
+       -1.97,
+       4.99
+      ],
+      "games_needed": 179
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 50,
+       "hit": 74.0,
+       "over_n": 12,
+       "under_n": 38,
+       "over_hit": 91.67,
+       "under_hit": 68.42,
+       "over_share": 24.0
+      },
+      "diff": -0.14,
+      "ci": [
+       -5.09,
+       4.85
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 622,
+      "base_hit": 57.76,
+      "arm_hit": 58.2,
+      "ci": [
+       -0.71,
+       1.59
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.69716
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 65,
+     "letters_changed": 36,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 54.55,
+       "over_n": 647,
+       "under_n": 1080,
+       "over_hit": 49.92,
+       "under_hit": 57.31,
+       "over_share": 37.46
+      },
+      "diff": -0.4,
+      "ci": [
+       -1.46,
+       0.56
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 205,
+       "hit": 53.17,
+       "over_n": 68,
+       "under_n": 137,
+       "over_hit": 50.0,
+       "under_hit": 54.74,
+       "over_share": 33.17
+      },
+      "diff": -3.47,
+      "ci": [
+       -6.3,
+       -1.08
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 57,
+       "hit": 59.65,
+       "over_n": 5,
+       "under_n": 52,
+       "over_hit": 100.0,
+       "under_hit": 55.77,
+       "over_share": 8.77
+      },
+      "diff": 1.59,
+      "ci": [
+       -1.79,
+       5.1
+      ],
+      "games_needed": 132
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1348,
+      "base_hit": 55.28,
+      "arm_hit": 54.15,
+      "ci": [
+       -2.23,
+       0.13
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72785
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 11,
+     "letters_changed": 22,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 52.77,
+       "over_n": 146,
+       "under_n": 377,
+       "over_hit": 51.37,
+       "under_hit": 53.32,
+       "over_share": 27.92
+      },
+      "diff": 0.95,
+      "ci": [
+       -0.2,
+       2.44
+      ],
+      "games_needed": 55
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 168,
+       "hit": 51.19,
+       "over_n": 35,
+       "under_n": 133,
+       "over_hit": 34.29,
+       "under_hit": 55.64,
+       "over_share": 20.83
+      },
+      "diff": -0.22,
+      "ci": [
+       -4.09,
+       2.81
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 83,
+       "hit": 59.04,
+       "over_n": 16,
+       "under_n": 67,
+       "over_hit": 25.0,
+       "under_hit": 67.16,
+       "over_share": 19.28
+      },
+      "diff": 0.15,
+      "ci": [
+       -3.79,
+       6.99
+      ],
+      "games_needed": 36154
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 436,
+      "base_hit": 51.9,
+      "arm_hit": 51.38,
+      "ci": [
+       -1.99,
+       0.65
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.79469
+     },
+     "checks": {
+      "H1": false,
+      "H2": true,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 19,
+     "letters_changed": 17,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 53.31,
+       "over_n": 294,
+       "under_n": 492,
+       "over_hit": 46.94,
+       "under_hit": 57.11,
+       "over_share": 37.4
+      },
+      "diff": -0.38,
+      "ci": [
+       -1.59,
+       0.83
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 131,
+       "hit": 45.8,
+       "over_n": 34,
+       "under_n": 97,
+       "over_hit": 47.06,
+       "under_hit": 45.36,
+       "over_share": 25.95
+      },
+      "diff": 1.43,
+      "ci": [
+       -1.15,
+       5.82
+      ],
+      "games_needed": 167
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 39,
+       "hit": 48.72,
+       "over_n": 5,
+       "under_n": 34,
+       "over_hit": 0.0,
+       "under_hit": 55.88,
+       "over_share": 12.82
+      },
+      "diff": -2.5,
+      "ci": [
+       -10.71,
+       4.41
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 640,
+      "base_hit": 53.77,
+      "arm_hit": 53.59,
+      "ci": [
+       -1.27,
+       1.05
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.74238
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 30,
+     "letters_changed": 19,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 114,
+       "under_n": 160,
+       "over_hit": 50.0,
+       "under_hit": 55.0,
+       "over_share": 41.61
+      },
+      "diff": 0.0,
+      "ci": [
+       -5.23,
+       5.1
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 14,
+       "hit": 28.57,
+       "over_n": 0,
+       "under_n": 14,
+       "over_hit": null,
+       "under_hit": 28.57,
+       "over_share": 0.0
+      },
+      "diff": -26.6,
+      "ci": [
+       -38.64,
+       16.13
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 0,
+       "hit": null,
+       "over_n": 0,
+       "under_n": 0,
+       "over_hit": null,
+       "under_hit": null,
+       "over_share": null
+      },
+      "diff": null,
+      "ci": null,
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 215,
+      "base_hit": 51.85,
+      "arm_hit": 53.95,
+      "ci": [
+       -2.6,
+       6.75
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.72342
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N8 redzone": {
+   "pooled": {
+    "flips": 259,
+    "letters_changed": 335,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 54.18,
+      "over_n": 1418,
+      "under_n": 2617,
+      "over_hit": 50.35,
+      "under_hit": 56.25,
+      "over_share": 35.14
+     },
+     "diff": -0.22,
+     "ci": [
+      -1.47,
+      1.0
+     ],
+     "games_needed": null
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 724,
+      "hit": 54.83,
+      "over_n": 175,
+      "under_n": 549,
+      "over_hit": 54.29,
+      "under_hit": 55.01,
+      "over_share": 24.17
+     },
+     "diff": 0.1,
+     "ci": [
+      -3.79,
+      3.37
+     ],
+     "games_needed": 35886
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 233,
+      "hit": 61.8,
+      "over_n": 40,
+      "under_n": 193,
+      "over_hit": 50.0,
+      "under_hit": 64.25,
+      "over_share": 17.17
+     },
+     "diff": 1.8,
+     "ci": [
+      -3.27,
+      7.47
+     ],
+     "games_needed": 250
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3291,
+     "base_hit": 54.8,
+     "arm_hit": 54.6,
+     "ci": [
+      -1.16,
+      0.86
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.72908
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 18,
+     "letters_changed": 87,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.55,
+       "over_n": 217,
+       "under_n": 508,
+       "over_hit": 57.14,
+       "under_hit": 56.3,
+       "over_share": 29.93
+      },
+      "diff": 0.27,
+      "ci": [
+       -1.35,
+       1.9
+      ],
+      "games_needed": 1015
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 163,
+       "hit": 60.74,
+       "over_n": 33,
+       "under_n": 130,
+       "over_hit": 75.76,
+       "under_hit": 56.92,
+       "over_share": 20.25
+      },
+      "diff": -3.72,
+      "ci": [
+       -11.42,
+       3.0
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 47,
+       "hit": 74.47,
+       "over_n": 11,
+       "under_n": 36,
+       "over_hit": 90.91,
+       "under_hit": 69.44,
+       "over_share": 23.4
+      },
+      "diff": 0.33,
+      "ci": [
+       -7.51,
+       7.52
+      ],
+      "games_needed": 14521
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 634,
+      "base_hit": 57.76,
+      "arm_hit": 58.52,
+      "ci": [
+       -0.89,
+       2.45
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.6933
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 119,
+     "letters_changed": 79,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 54.08,
+       "over_n": 665,
+       "under_n": 1062,
+       "over_hit": 49.32,
+       "under_hit": 57.06,
+       "over_share": 38.51
+      },
+      "diff": -0.87,
+      "ci": [
+       -2.67,
+       0.81
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 205,
+       "hit": 57.56,
+       "over_n": 68,
+       "under_n": 137,
+       "over_hit": 54.41,
+       "under_hit": 59.12,
+       "over_share": 33.17
+      },
+      "diff": 0.92,
+      "ci": [
+       -3.93,
+       4.82
+      ],
+      "games_needed": 634
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 50,
+       "hit": 58.0,
+       "over_n": 6,
+       "under_n": 44,
+       "over_hit": 100.0,
+       "under_hit": 52.27,
+       "over_share": 12.0
+      },
+      "diff": -0.06,
+      "ci": [
+       -6.58,
+       6.13
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1357,
+      "base_hit": 55.28,
+      "arm_hit": 54.38,
+      "ci": [
+       -2.44,
+       0.75
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72408
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 36,
+     "letters_changed": 56,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 50.67,
+       "over_n": 149,
+       "under_n": 374,
+       "over_hit": 47.65,
+       "under_hit": 51.87,
+       "over_share": 28.49
+      },
+      "diff": -1.15,
+      "ci": [
+       -4.06,
+       1.87
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 181,
+       "hit": 49.17,
+       "over_n": 36,
+       "under_n": 145,
+       "over_hit": 36.11,
+       "under_hit": 52.41,
+       "over_share": 19.89
+      },
+      "diff": -2.24,
+      "ci": [
+       -6.0,
+       1.32
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 87,
+       "hit": 57.47,
+       "over_n": 16,
+       "under_n": 71,
+       "over_hit": 25.0,
+       "under_hit": 64.79,
+       "over_share": 18.39
+      },
+      "diff": -1.42,
+      "ci": [
+       -8.02,
+       8.14
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 447,
+      "base_hit": 51.9,
+      "arm_hit": 50.56,
+      "ci": [
+       -3.71,
+       0.87
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.80782
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": true,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2"
+     ]
+    },
+    "rush_yds": {
+     "flips": 72,
+     "letters_changed": 95,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 54.96,
+       "over_n": 289,
+       "under_n": 497,
+       "over_hit": 49.13,
+       "under_hit": 58.35,
+       "over_share": 36.77
+      },
+      "diff": 1.27,
+      "ci": [
+       -2.05,
+       4.52
+      ],
+      "games_needed": 188
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 162,
+       "hit": 54.32,
+       "over_n": 38,
+       "under_n": 124,
+       "over_hit": 52.63,
+       "under_hit": 54.84,
+       "over_share": 23.46
+      },
+      "diff": 9.95,
+      "ci": [
+       -0.94,
+       19.92
+      ],
+      "games_needed": 31
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 47,
+       "hit": 63.83,
+       "over_n": 7,
+       "under_n": 40,
+       "over_hit": 0.0,
+       "under_hit": 75.0,
+       "over_share": 14.89
+      },
+      "diff": 12.61,
+      "ci": [
+       -13.2,
+       28.6
+      ],
+      "games_needed": 77
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 658,
+      "base_hit": 53.77,
+      "arm_hit": 54.71,
+      "ci": [
+       -2.63,
+       4.4
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.72435
+     },
+     "checks": {
+      "H1": false,
+      "H2": true,
+      "H3": true,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1"
+     ]
+    },
+    "pass_yds": {
+     "flips": 14,
+     "letters_changed": 18,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 98,
+       "under_n": 176,
+       "over_hit": 50.0,
+       "under_hit": 54.55,
+       "over_share": 35.77
+      },
+      "diff": 0.0,
+      "ci": [
+       -3.08,
+       2.95
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 13,
+       "hit": 23.08,
+       "over_n": 0,
+       "under_n": 13,
+       "over_hit": null,
+       "under_hit": 23.08,
+       "over_share": 0.0
+      },
+      "diff": -32.09,
+      "ci": [
+       -54.22,
+       16.67
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 2,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 2,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "diff": 0.0,
+      "ci": [
+       0.0,
+       0.0
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 195,
+      "base_hit": 51.85,
+      "arm_hit": 52.31,
+      "ci": [
+       -3.64,
+       4.51
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.7186
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N9 pace": {
+   "pooled": {
+    "flips": 208,
+    "letters_changed": 203,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 54.85,
+      "over_n": 1393,
+      "under_n": 2642,
+      "over_hit": 51.33,
+      "under_hit": 56.7,
+      "over_share": 34.52
+     },
+     "diff": 0.45,
+     "ci": [
+      -0.83,
+      1.71
+     ],
+     "games_needed": 224
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 671,
+      "hit": 54.69,
+      "over_n": 174,
+      "under_n": 497,
+      "over_hit": 51.72,
+      "under_hit": 55.73,
+      "over_share": 25.93
+     },
+     "diff": -0.04,
+     "ci": [
+      -3.15,
+      2.05
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 232,
+      "hit": 59.91,
+      "over_n": 39,
+      "under_n": 193,
+      "over_hit": 51.28,
+      "under_hit": 61.66,
+      "over_share": 16.81
+     },
+     "diff": -0.09,
+     "ci": [
+      -4.05,
+      4.47
+     ],
+     "games_needed": null
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3233,
+     "base_hit": 54.8,
+     "arm_hit": 54.96,
+     "ci": [
+      -0.9,
+      1.34
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.72827
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 13,
+     "letters_changed": 41,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.41,
+       "over_n": 214,
+       "under_n": 511,
+       "over_hit": 57.01,
+       "under_hit": 56.16,
+       "over_share": 29.52
+      },
+      "diff": 0.13,
+      "ci": [
+       -0.94,
+       1.14
+      ],
+      "games_needed": 1792
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 163,
+       "hit": 65.03,
+       "over_n": 39,
+       "under_n": 124,
+       "over_hit": 71.79,
+       "under_hit": 62.9,
+       "over_share": 23.93
+      },
+      "diff": 0.57,
+      "ci": [
+       -3.72,
+       5.18
+      ],
+      "games_needed": 1707
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 55,
+       "hit": 76.36,
+       "over_n": 12,
+       "under_n": 43,
+       "over_hit": 91.67,
+       "under_hit": 72.09,
+       "over_share": 21.82
+      },
+      "diff": 2.22,
+      "ci": [
+       -0.85,
+       6.15
+      ],
+      "games_needed": 70
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 630,
+      "base_hit": 57.76,
+      "arm_hit": 56.98,
+      "ci": [
+       -2.15,
+       0.55
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.6944
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 51,
+     "letters_changed": 30,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 55.36,
+       "over_n": 627,
+       "under_n": 1100,
+       "over_hit": 51.04,
+       "under_hit": 57.82,
+       "over_share": 36.31
+      },
+      "diff": 0.41,
+      "ci": [
+       -0.46,
+       1.26
+      ],
+      "games_needed": 124
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 209,
+       "hit": 54.55,
+       "over_n": 68,
+       "under_n": 141,
+       "over_hit": 50.0,
+       "under_hit": 56.74,
+       "over_share": 32.54
+      },
+      "diff": -2.09,
+      "ci": [
+       -5.25,
+       0.53
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 6,
+       "under_n": 56,
+       "over_hit": 100.0,
+       "under_hit": 53.57,
+       "over_share": 9.68
+      },
+      "diff": 0.0,
+      "ci": [
+       -1.75,
+       2.24
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1353,
+      "base_hit": 55.28,
+      "arm_hit": 55.06,
+      "ci": [
+       -1.19,
+       0.82
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72397
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 40,
+     "letters_changed": 67,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 51.43,
+       "over_n": 155,
+       "under_n": 368,
+       "over_hit": 49.03,
+       "under_hit": 52.45,
+       "over_share": 29.64
+      },
+      "diff": -0.39,
+      "ci": [
+       -3.86,
+       3.21
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 155,
+       "hit": 50.32,
+       "over_n": 32,
+       "under_n": 123,
+       "over_hit": 37.5,
+       "under_hit": 53.66,
+       "over_share": 20.65
+      },
+      "diff": -1.09,
+      "ci": [
+       -5.56,
+       2.55
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 80,
+       "hit": 57.5,
+       "over_n": 15,
+       "under_n": 65,
+       "over_hit": 20.0,
+       "under_hit": 66.15,
+       "over_share": 18.75
+      },
+      "diff": -1.39,
+      "ci": [
+       -9.11,
+       8.13
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 426,
+      "base_hit": 51.9,
+      "arm_hit": 51.88,
+      "ci": [
+       -2.6,
+       2.47
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.79157
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 56,
+     "letters_changed": 40,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 54.2,
+       "over_n": 291,
+       "under_n": 495,
+       "over_hit": 48.11,
+       "under_hit": 57.78,
+       "over_share": 37.02
+      },
+      "diff": 0.51,
+      "ci": [
+       -1.68,
+       2.65
+      ],
+      "games_needed": 505
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 121,
+       "hit": 46.28,
+       "over_n": 34,
+       "under_n": 87,
+       "over_hit": 44.12,
+       "under_hit": 47.13,
+       "over_share": 28.1
+      },
+      "diff": 1.91,
+      "ci": [
+       -3.04,
+       8.35
+      ],
+      "games_needed": 249
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 34,
+       "hit": 41.18,
+       "over_n": 6,
+       "under_n": 28,
+       "over_hit": 0.0,
+       "under_hit": 50.0,
+       "over_share": 17.65
+      },
+      "diff": -10.04,
+      "ci": [
+       -45.59,
+       1.81
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 629,
+      "base_hit": 53.77,
+      "arm_hit": 53.42,
+      "ci": [
+       -2.65,
+       2.41
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.7389
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 48,
+     "letters_changed": 25,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 55.84,
+       "over_n": 106,
+       "under_n": 168,
+       "over_hit": 53.77,
+       "under_hit": 57.14,
+       "over_share": 38.69
+      },
+      "diff": 2.92,
+      "ci": [
+       -6.1,
+       11.97
+      ],
+      "games_needed": 269
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 23,
+       "hit": 56.52,
+       "over_n": 1,
+       "under_n": 22,
+       "over_hit": 100.0,
+       "under_hit": 54.55,
+       "over_share": 4.35
+      },
+      "diff": 1.35,
+      "ci": [
+       -41.67,
+       33.98
+      ],
+      "games_needed": 21982
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 1,
+       "hit": 100.0,
+       "over_n": 0,
+       "under_n": 1,
+       "over_hit": null,
+       "under_hit": 100.0,
+       "over_share": 0.0
+      },
+      "diff": 100.0,
+      "ci": [
+       0.0,
+       100.0
+      ],
+      "games_needed": 7
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 195,
+      "base_hit": 51.85,
+      "arm_hit": 59.49,
+      "ci": [
+       -0.74,
+       15.46
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.69373
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N10 promoted": {
+   "pooled": {
+    "flips": 167,
+    "letters_changed": 233,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 54.13,
+      "over_n": 1340,
+      "under_n": 2695,
+      "over_hit": 50.3,
+      "under_hit": 56.03,
+      "over_share": 33.21
+     },
+     "diff": -0.27,
+     "ci": [
+      -1.6,
+      0.97
+     ],
+     "games_needed": null
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 723,
+      "hit": 54.08,
+      "over_n": 169,
+      "under_n": 554,
+      "over_hit": 52.07,
+      "under_hit": 54.69,
+      "over_share": 23.37
+     },
+     "diff": -0.65,
+     "ci": [
+      -3.51,
+      2.02
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 205,
+      "hit": 60.0,
+      "over_n": 34,
+      "under_n": 171,
+      "over_hit": 55.88,
+      "under_hit": 60.82,
+      "over_share": 16.59
+     },
+     "diff": 0.0,
+     "ci": [
+      -4.88,
+      6.79
+     ],
+     "games_needed": null
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3285,
+     "base_hit": 54.8,
+     "arm_hit": 54.03,
+     "ci": [
+      -2.08,
+      0.5
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.7324
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 25,
+     "letters_changed": 60,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.97,
+       "over_n": 208,
+       "under_n": 517,
+       "over_hit": 58.17,
+       "under_hit": 56.48,
+       "over_share": 28.69
+      },
+      "diff": 0.69,
+      "ci": [
+       -0.94,
+       2.45
+      ],
+      "games_needed": 169
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 159,
+       "hit": 67.92,
+       "over_n": 27,
+       "under_n": 132,
+       "over_hit": 81.48,
+       "under_hit": 65.15,
+       "over_share": 16.98
+      },
+      "diff": 3.46,
+      "ci": [
+       -0.43,
+       7.61
+      ],
+      "games_needed": 38
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 42,
+       "hit": 80.95,
+       "over_n": 10,
+       "under_n": 32,
+       "over_hit": 100.0,
+       "under_hit": 75.0,
+       "over_share": 23.81
+      },
+      "diff": 6.81,
+      "ci": [
+       -3.37,
+       17.74
+      ],
+      "games_needed": 68
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 627,
+      "base_hit": 57.76,
+      "arm_hit": 57.74,
+      "ci": [
+       -2.28,
+       2.02
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.69098
+     },
+     "checks": {
+      "H1": false,
+      "H2": true,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 73,
+     "letters_changed": 81,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 53.97,
+       "over_n": 597,
+       "under_n": 1130,
+       "over_hit": 49.08,
+       "under_hit": 56.55,
+       "over_share": 34.57
+      },
+      "diff": -0.98,
+      "ci": [
+       -2.66,
+       0.7
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 222,
+       "hit": 54.95,
+       "over_n": 67,
+       "under_n": 155,
+       "over_hit": 52.24,
+       "under_hit": 56.13,
+       "over_share": 30.18
+      },
+      "diff": -1.69,
+      "ci": [
+       -6.6,
+       2.37
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 45,
+       "hit": 48.89,
+       "over_n": 5,
+       "under_n": 40,
+       "over_hit": 100.0,
+       "under_hit": 42.5,
+       "over_share": 11.11
+      },
+      "diff": -9.17,
+      "ci": [
+       -21.7,
+       5.46
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1363,
+      "base_hit": 55.28,
+      "arm_hit": 53.85,
+      "ci": [
+       -2.94,
+       0.12
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72631
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 14,
+     "letters_changed": 31,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 52.2,
+       "over_n": 147,
+       "under_n": 376,
+       "over_hit": 50.34,
+       "under_hit": 52.93,
+       "over_share": 28.11
+      },
+      "diff": 0.38,
+      "ci": [
+       -1.24,
+       1.95
+      ],
+      "games_needed": 494
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 172,
+       "hit": 50.0,
+       "over_n": 39,
+       "under_n": 133,
+       "over_hit": 35.9,
+       "under_hit": 54.14,
+       "over_share": 22.67
+      },
+      "diff": -1.41,
+      "ci": [
+       -5.11,
+       1.65
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 77,
+       "hit": 58.44,
+       "over_n": 15,
+       "under_n": 62,
+       "over_hit": 26.67,
+       "under_hit": 66.13,
+       "over_share": 19.48
+      },
+      "diff": -0.45,
+      "ci": [
+       -5.0,
+       6.05
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 441,
+      "base_hit": 51.9,
+      "arm_hit": 50.79,
+      "ci": [
+       -3.21,
+       0.99
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.79625
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 19,
+     "letters_changed": 17,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 53.31,
+       "over_n": 292,
+       "under_n": 494,
+       "over_hit": 46.92,
+       "under_hit": 57.09,
+       "over_share": 37.15
+      },
+      "diff": -0.38,
+      "ci": [
+       -1.99,
+       1.15
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 133,
+       "hit": 45.11,
+       "over_n": 35,
+       "under_n": 98,
+       "over_hit": 45.71,
+       "under_hit": 44.9,
+       "over_share": 26.32
+      },
+      "diff": 0.74,
+      "ci": [
+       -2.23,
+       5.0
+      ],
+      "games_needed": 669
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 39,
+       "hit": 53.85,
+       "over_n": 4,
+       "under_n": 35,
+       "over_hit": 0.0,
+       "under_hit": 60.0,
+       "over_share": 10.26
+      },
+      "diff": 2.63,
+      "ci": [
+       0.0,
+       19.25
+      ],
+      "games_needed": 376
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 636,
+      "base_hit": 53.77,
+      "arm_hit": 53.77,
+      "ci": [
+       -1.27,
+       1.32
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.74076
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 36,
+     "letters_changed": 44,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 53.65,
+       "over_n": 96,
+       "under_n": 178,
+       "over_hit": 51.04,
+       "under_hit": 55.06,
+       "over_share": 35.04
+      },
+      "diff": 0.73,
+      "ci": [
+       -8.83,
+       10.0
+      ],
+      "games_needed": 4658
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 37,
+       "hit": 40.54,
+       "over_n": 1,
+       "under_n": 36,
+       "over_hit": 100.0,
+       "under_hit": 38.89,
+       "over_share": 2.7
+      },
+      "diff": -14.63,
+      "ci": [
+       -36.81,
+       26.68
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 2,
+       "hit": 50.0,
+       "over_n": 0,
+       "under_n": 2,
+       "over_hit": null,
+       "under_hit": 50.0,
+       "over_share": 0.0
+      },
+      "diff": 50.0,
+      "ci": [
+       0.0,
+       100.0
+      ],
+      "games_needed": 28
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 218,
+      "base_hit": 51.85,
+      "arm_hit": 51.83,
+      "ci": [
+       -9.97,
+       8.46
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.73451
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": true,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2"
+     ]
+    }
+   }
+  },
+  "N11 new_team": {
+   "pooled": {
+    "flips": 262,
+    "letters_changed": 195,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 54.45,
+      "over_n": 1511,
+      "under_n": 2524,
+      "over_hit": 50.69,
+      "under_hit": 56.7,
+      "over_share": 37.45
+     },
+     "diff": 0.05,
+     "ci": [
+      -1.19,
+      1.29
+     ],
+     "games_needed": 17222
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 654,
+      "hit": 54.28,
+      "over_n": 180,
+      "under_n": 474,
+      "over_hit": 50.56,
+      "under_hit": 55.7,
+      "over_share": 27.52
+     },
+     "diff": -0.45,
+     "ci": [
+      -2.88,
+      1.59
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 222,
+      "hit": 62.61,
+      "over_n": 41,
+      "under_n": 181,
+      "over_hit": 51.22,
+      "under_hit": 65.19,
+      "over_share": 18.47
+     },
+     "diff": 2.61,
+     "ci": [
+      -0.86,
+      7.02
+     ],
+     "games_needed": 64
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3196,
+     "base_hit": 54.8,
+     "arm_hit": 54.85,
+     "ci": [
+      -1.09,
+      1.25
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.73064
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 24,
+     "letters_changed": 44,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 225,
+       "under_n": 500,
+       "over_hit": 56.44,
+       "under_hit": 56.2,
+       "over_share": 31.03
+      },
+      "diff": 0.0,
+      "ci": [
+       -1.63,
+       1.57
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 150,
+       "hit": 66.0,
+       "over_n": 37,
+       "under_n": 113,
+       "over_hit": 75.68,
+       "under_hit": 62.83,
+       "over_share": 24.67
+      },
+      "diff": 1.54,
+      "ci": [
+       -2.96,
+       6.2
+      ],
+      "games_needed": 248
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 51,
+       "hit": 74.51,
+       "over_n": 12,
+       "under_n": 39,
+       "over_hit": 91.67,
+       "under_hit": 69.23,
+       "over_share": 23.53
+      },
+      "diff": 0.37,
+      "ci": [
+       -3.79,
+       4.94
+      ],
+      "games_needed": 3897
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 613,
+      "base_hit": 57.76,
+      "arm_hit": 58.08,
+      "ci": [
+       -1.45,
+       2.01
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.69426
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 108,
+     "letters_changed": 50,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 54.72,
+       "over_n": 682,
+       "under_n": 1045,
+       "over_hit": 50.15,
+       "under_hit": 57.7,
+       "over_share": 39.49
+      },
+      "diff": -0.23,
+      "ci": [
+       -1.74,
+       1.21
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 207,
+       "hit": 51.69,
+       "over_n": 74,
+       "under_n": 133,
+       "over_hit": 47.3,
+       "under_hit": 54.14,
+       "over_share": 35.75
+      },
+      "diff": -4.95,
+      "ci": [
+       -8.72,
+       -1.99
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 58,
+       "hit": 62.07,
+       "over_n": 6,
+       "under_n": 52,
+       "over_hit": 100.0,
+       "under_hit": 57.69,
+       "over_share": 10.34
+      },
+      "diff": 4.01,
+      "ci": [
+       -0.63,
+       8.36
+      ],
+      "games_needed": 36
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1322,
+      "base_hit": 55.28,
+      "arm_hit": 54.99,
+      "ci": [
+       -1.75,
+       1.35
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.7261
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 36,
+     "letters_changed": 44,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 52.96,
+       "over_n": 163,
+       "under_n": 360,
+       "over_hit": 51.53,
+       "under_hit": 53.61,
+       "over_share": 31.17
+      },
+      "diff": 1.14,
+      "ci": [
+       -1.6,
+       3.99
+      ],
+      "games_needed": 169
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 158,
+       "hit": 51.9,
+       "over_n": 36,
+       "under_n": 122,
+       "over_hit": 33.33,
+       "under_hit": 57.38,
+       "over_share": 22.78
+      },
+      "diff": 0.49,
+      "ci": [
+       -3.86,
+       4.1
+      ],
+      "games_needed": 1848
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 75,
+       "hit": 64.0,
+       "over_n": 16,
+       "under_n": 59,
+       "over_hit": 25.0,
+       "under_hit": 74.58,
+       "over_share": 21.33
+      },
+      "diff": 5.11,
+      "ci": [
+       -0.16,
+       13.35
+      ],
+      "games_needed": 49
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 434,
+      "base_hit": 51.9,
+      "arm_hit": 53.0,
+      "ci": [
+       -1.04,
+       3.18
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.78505
+     },
+     "checks": {
+      "H1": false,
+      "H2": true,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 49,
+     "letters_changed": 43,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 53.31,
+       "over_n": 312,
+       "under_n": 474,
+       "over_hit": 47.12,
+       "under_hit": 57.38,
+       "over_share": 39.69
+      },
+      "diff": -0.38,
+      "ci": [
+       -2.25,
+       1.62
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 118,
+       "hit": 47.46,
+       "over_n": 32,
+       "under_n": 86,
+       "over_hit": 46.88,
+       "under_hit": 47.67,
+       "over_share": 27.12
+      },
+      "diff": 3.09,
+      "ci": [
+       -2.5,
+       10.81
+      ],
+      "games_needed": 130
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 38,
+       "hit": 44.74,
+       "over_n": 7,
+       "under_n": 31,
+       "over_hit": 0.0,
+       "under_hit": 54.84,
+       "over_share": 18.42
+      },
+      "diff": -6.48,
+      "ci": [
+       -30.36,
+       1.82
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 625,
+      "base_hit": 53.77,
+      "arm_hit": 53.12,
+      "ci": [
+       -2.91,
+       1.92
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.74228
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 45,
+     "letters_changed": 14,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 54.01,
+       "over_n": 129,
+       "under_n": 145,
+       "over_hit": 51.16,
+       "under_hit": 56.55,
+       "over_share": 47.08
+      },
+      "diff": 1.09,
+      "ci": [
+       -5.73,
+       8.13
+      ],
+      "games_needed": 1132
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 21,
+       "hit": 52.38,
+       "over_n": 1,
+       "under_n": 20,
+       "over_hit": 100.0,
+       "under_hit": 50.0,
+       "over_share": 4.76
+      },
+      "diff": -2.79,
+      "ci": [
+       -31.03,
+       23.75
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 0,
+       "hit": null,
+       "over_n": 0,
+       "under_n": 0,
+       "over_hit": null,
+       "under_hit": null,
+       "over_share": null
+      },
+      "diff": null,
+      "ci": null,
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 202,
+      "base_hit": 51.85,
+      "arm_hit": 53.47,
+      "ci": [
+       -6.82,
+       8.48
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.71819
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N12 all": {
+   "pooled": {
+    "flips": 698,
+    "letters_changed": 696,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 53.95,
+      "over_n": 1599,
+      "under_n": 2436,
+      "over_hit": 50.03,
+      "under_hit": 56.53,
+      "over_share": 39.63
+     },
+     "diff": -0.45,
+     "ci": [
+      -2.53,
+      1.51
+     ],
+     "games_needed": null
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 637,
+      "hit": 57.77,
+      "over_n": 162,
+      "under_n": 475,
+      "over_hit": 58.64,
+      "under_hit": 57.47,
+      "over_share": 25.43
+     },
+     "diff": 3.04,
+     "ci": [
+      -3.18,
+      8.37
+     ],
+     "games_needed": 102
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 194,
+      "hit": 66.49,
+      "over_n": 29,
+      "under_n": 165,
+      "over_hit": 51.72,
+      "under_hit": 69.09,
+      "over_share": 14.95
+     },
+     "diff": 6.49,
+     "ci": [
+      -5.38,
+      17.36
+     ],
+     "games_needed": 86
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3220,
+     "base_hit": 54.8,
+     "arm_hit": 54.35,
+     "ci": [
+      -2.78,
+      1.91
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.71895
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 92,
+     "letters_changed": 147,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 57.66,
+       "over_n": 253,
+       "under_n": 472,
+       "over_hit": 57.71,
+       "under_hit": 57.63,
+       "over_share": 34.9
+      },
+      "diff": 1.38,
+      "ci": [
+       -1.41,
+       3.95
+      ],
+      "games_needed": 106
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 110,
+       "hit": 61.82,
+       "over_n": 31,
+       "under_n": 79,
+       "over_hit": 77.42,
+       "under_hit": 55.7,
+       "over_share": 28.18
+      },
+      "diff": -2.64,
+      "ci": [
+       -13.28,
+       7.28
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 30,
+       "hit": 73.33,
+       "over_n": 7,
+       "under_n": 23,
+       "over_hit": 85.71,
+       "under_hit": 69.57,
+       "over_share": 23.33
+      },
+      "diff": -0.81,
+      "ci": [
+       -23.59,
+       18.74
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 597,
+      "base_hit": 57.76,
+      "arm_hit": 57.96,
+      "ci": [
+       -2.75,
+       2.98
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.69158
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 303,
+     "letters_changed": 196,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 51.65,
+       "over_n": 777,
+       "under_n": 950,
+       "over_hit": 46.72,
+       "under_hit": 55.68,
+       "over_share": 44.99
+      },
+      "diff": -3.3,
+      "ci": [
+       -6.13,
+       -0.6
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 155,
+       "hit": 52.26,
+       "over_n": 62,
+       "under_n": 93,
+       "over_hit": 54.84,
+       "under_hit": 50.54,
+       "over_share": 40.0
+      },
+      "diff": -4.38,
+      "ci": [
+       -14.08,
+       5.06
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 32,
+       "hit": 34.38,
+       "over_n": 3,
+       "under_n": 29,
+       "over_hit": 100.0,
+       "under_hit": 27.59,
+       "over_share": 9.38
+      },
+      "diff": -23.68,
+      "ci": [
+       -43.84,
+       3.18
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1263,
+      "base_hit": 55.28,
+      "arm_hit": 51.78,
+      "ci": [
+       -7.51,
+       0.35
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72768
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 89,
+     "letters_changed": 153,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 53.92,
+       "over_n": 168,
+       "under_n": 355,
+       "over_hit": 52.98,
+       "under_hit": 54.37,
+       "over_share": 32.12
+      },
+      "diff": 2.1,
+      "ci": [
+       -2.24,
+       6.53
+      ],
+      "games_needed": 123
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 178,
+       "hit": 59.55,
+       "over_n": 36,
+       "under_n": 142,
+       "over_hit": 52.78,
+       "under_hit": 61.27,
+       "over_share": 20.22
+      },
+      "diff": 8.14,
+      "ci": [
+       -0.19,
+       17.23
+      ],
+      "games_needed": 33
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 71,
+       "hit": 61.97,
+       "over_n": 16,
+       "under_n": 55,
+       "over_hit": 37.5,
+       "under_hit": 69.09,
+       "over_share": 22.54
+      },
+      "diff": 3.08,
+      "ci": [
+       -9.09,
+       18.22
+      ],
+      "games_needed": 551
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 472,
+      "base_hit": 51.9,
+      "arm_hit": 53.81,
+      "ci": [
+       -3.42,
+       7.0
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.75095
+     },
+     "checks": {
+      "H1": false,
+      "H2": true,
+      "H3": true,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1"
+     ]
+    },
+    "rush_yds": {
+     "flips": 124,
+     "letters_changed": 157,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 54.96,
+       "over_n": 289,
+       "under_n": 497,
+       "over_hit": 49.13,
+       "under_hit": 58.35,
+       "over_share": 36.77
+      },
+      "diff": 1.27,
+      "ci": [
+       -2.78,
+       4.81
+      ],
+      "games_needed": 251
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 171,
+       "hit": 59.65,
+       "over_n": 31,
+       "under_n": 140,
+       "over_hit": 54.84,
+       "under_hit": 60.71,
+       "over_share": 18.13
+      },
+      "diff": 15.28,
+      "ci": [
+       0.34,
+       26.59
+      ],
+      "games_needed": 21
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 59,
+       "hit": 84.75,
+       "over_n": 3,
+       "under_n": 56,
+       "over_hit": 0.0,
+       "under_hit": 89.29,
+       "over_share": 5.08
+      },
+      "diff": 33.53,
+      "ci": [
+       -4.17,
+       52.52
+      ],
+      "games_needed": 21
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 670,
+      "base_hit": 53.77,
+      "arm_hit": 55.52,
+      "ci": [
+       -2.82,
+       6.25
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.70433
+     },
+     "checks": {
+      "H1": true,
+      "H2": true,
+      "H3": true,
+      "H4": false
+     },
+     "pass": false,
+     "failed": [
+      "H4"
+     ]
+    },
+    "pass_yds": {
+     "flips": 90,
+     "letters_changed": 43,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 55.84,
+       "over_n": 112,
+       "under_n": 162,
+       "over_hit": 53.57,
+       "under_hit": 57.41,
+       "over_share": 40.88
+      },
+      "diff": 2.92,
+      "ci": [
+       -12.15,
+       20.42
+      ],
+      "games_needed": 871
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 23,
+       "hit": 47.83,
+       "over_n": 2,
+       "under_n": 21,
+       "over_hit": 50.0,
+       "under_hit": 47.62,
+       "over_share": 8.7
+      },
+      "diff": -7.34,
+      "ci": [
+       -55.82,
+       34.88
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 2,
+       "hit": 100.0,
+       "over_n": 0,
+       "under_n": 2,
+       "over_hit": null,
+       "under_hit": 100.0,
+       "over_share": 0.0
+      },
+      "diff": 100.0,
+      "ci": [
+       0.0,
+       100.0
+      ],
+      "games_needed": 7
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 218,
+      "base_hit": 51.85,
+      "arm_hit": 56.88,
+      "ci": [
+       -12.57,
+       25.39
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.7172
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  },
+  "N0 const-only (post-hoc reference)": {
+   "pooled": {
+    "flips": 113,
+    "letters_changed": 113,
+    "all": {
+     "base": {
+      "n": 4035,
+      "hit": 54.4,
+      "over_n": 1277,
+      "under_n": 2758,
+      "over_hit": 50.74,
+      "under_hit": 56.09,
+      "over_share": 31.65
+     },
+     "arm": {
+      "n": 4035,
+      "hit": 54.42,
+      "over_n": 1390,
+      "under_n": 2645,
+      "over_hit": 50.72,
+      "under_hit": 56.37,
+      "over_share": 34.45
+     },
+     "diff": 0.02,
+     "ci": [
+      -0.55,
+      0.6
+     ],
+     "games_needed": 23144
+    },
+    "graded": {
+     "base": {
+      "n": 740,
+      "hit": 54.73,
+      "over_n": 156,
+      "under_n": 584,
+      "over_hit": 52.56,
+      "under_hit": 55.31,
+      "over_share": 21.08
+     },
+     "arm": {
+      "n": 681,
+      "hit": 53.89,
+      "over_n": 168,
+      "under_n": 513,
+      "over_hit": 50.0,
+      "under_hit": 55.17,
+      "over_share": 24.67
+     },
+     "diff": -0.84,
+     "ci": [
+      -3.24,
+      0.98
+     ],
+     "games_needed": null
+    },
+    "top": {
+     "base": {
+      "n": 255,
+      "hit": 60.0,
+      "over_n": 36,
+      "under_n": 219,
+      "over_hit": 55.56,
+      "under_hit": 60.73,
+      "over_share": 14.12
+     },
+     "arm": {
+      "n": 230,
+      "hit": 60.87,
+      "over_n": 38,
+      "under_n": 192,
+      "over_hit": 52.63,
+      "under_hit": 62.5,
+      "over_share": 16.52
+     },
+     "diff": 0.87,
+     "ci": [
+      -2.04,
+      4.95
+     ],
+     "games_needed": 452
+    },
+    "raw_graded": {
+     "base_n": 3323,
+     "arm_n": 3245,
+     "base_hit": 54.8,
+     "arm_hit": 54.45,
+     "ci": [
+      -1.16,
+      0.45
+     ]
+    },
+    "logloss": {
+     "base": 0.73401,
+     "arm": 0.73205
+    },
+    "checks": {
+     "H1": false,
+     "H2": false,
+     "H3": false,
+     "H4": true
+    },
+    "pass": false,
+    "failed": [
+     "H1",
+     "H2",
+     "H3"
+    ]
+   },
+   "by_market": {
+    "rec": {
+     "flips": 11,
+     "letters_changed": 23,
+     "all": {
+      "base": {
+       "n": 725,
+       "hit": 56.28,
+       "over_n": 201,
+       "under_n": 524,
+       "over_hit": 57.21,
+       "under_hit": 55.92,
+       "over_share": 27.72
+      },
+      "arm": {
+       "n": 725,
+       "hit": 56.69,
+       "over_n": 212,
+       "under_n": 513,
+       "over_hit": 57.55,
+       "under_hit": 56.34,
+       "over_share": 29.24
+      },
+      "diff": 0.41,
+      "ci": [
+       -0.7,
+       1.53
+      ],
+      "games_needed": 208
+     },
+     "graded": {
+      "base": {
+       "n": 166,
+       "hit": 64.46,
+       "over_n": 27,
+       "under_n": 139,
+       "over_hit": 81.48,
+       "under_hit": 61.15,
+       "over_share": 16.27
+      },
+      "arm": {
+       "n": 153,
+       "hit": 66.01,
+       "over_n": 29,
+       "under_n": 124,
+       "over_hit": 75.86,
+       "under_hit": 63.71,
+       "over_share": 18.95
+      },
+      "diff": 1.55,
+      "ci": [
+       -1.61,
+       5.41
+      ],
+      "games_needed": 144
+     },
+     "top": {
+      "base": {
+       "n": 58,
+       "hit": 74.14,
+       "over_n": 12,
+       "under_n": 46,
+       "over_hit": 91.67,
+       "under_hit": 69.57,
+       "over_share": 20.69
+      },
+      "arm": {
+       "n": 53,
+       "hit": 73.58,
+       "over_n": 12,
+       "under_n": 41,
+       "over_hit": 91.67,
+       "under_hit": 68.29,
+       "over_share": 22.64
+      },
+      "diff": -0.56,
+      "ci": [
+       -3.57,
+       3.72
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 651,
+      "arm_n": 613,
+      "base_hit": 57.76,
+      "arm_hit": 58.08,
+      "ci": [
+       -1.23,
+       1.78
+      ]
+     },
+     "logloss": {
+      "base": 0.69924,
+      "arm": 0.6963
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rec_yds": {
+     "flips": 46,
+     "letters_changed": 30,
+     "all": {
+      "base": {
+       "n": 1727,
+       "hit": 54.95,
+       "over_n": 582,
+       "under_n": 1145,
+       "over_hit": 50.52,
+       "under_hit": 57.21,
+       "over_share": 33.7
+      },
+      "arm": {
+       "n": 1727,
+       "hit": 54.72,
+       "over_n": 628,
+       "under_n": 1099,
+       "over_hit": 50.16,
+       "under_hit": 57.32,
+       "over_share": 36.36
+      },
+      "diff": -0.23,
+      "ci": [
+       -0.89,
+       0.46
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 226,
+       "hit": 56.64,
+       "over_n": 63,
+       "under_n": 163,
+       "over_hit": 52.38,
+       "under_hit": 58.28,
+       "over_share": 27.88
+      },
+      "arm": {
+       "n": 215,
+       "hit": 53.95,
+       "over_n": 70,
+       "under_n": 145,
+       "over_hit": 48.57,
+       "under_hit": 56.55,
+       "over_share": 32.56
+      },
+      "diff": -2.69,
+      "ci": [
+       -5.65,
+       -0.44
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 62,
+       "hit": 58.06,
+       "over_n": 5,
+       "under_n": 57,
+       "over_hit": 100.0,
+       "under_hit": 54.39,
+       "over_share": 8.06
+      },
+      "arm": {
+       "n": 57,
+       "hit": 59.65,
+       "over_n": 5,
+       "under_n": 52,
+       "over_hit": 100.0,
+       "under_hit": 55.77,
+       "over_share": 8.77
+      },
+      "diff": 1.59,
+      "ci": [
+       -2.45,
+       5.35
+      ],
+      "games_needed": 169
+     },
+     "raw_graded": {
+      "base_n": 1373,
+      "arm_n": 1351,
+      "base_hit": 55.28,
+      "arm_hit": 54.48,
+      "ci": [
+       -1.86,
+       0.29
+      ]
+     },
+     "logloss": {
+      "base": 0.72729,
+      "arm": 0.72646
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_att": {
+     "flips": 16,
+     "letters_changed": 26,
+     "all": {
+      "base": {
+       "n": 523,
+       "hit": 51.82,
+       "over_n": 135,
+       "under_n": 388,
+       "over_hit": 49.63,
+       "under_hit": 52.58,
+       "over_share": 25.81
+      },
+      "arm": {
+       "n": 523,
+       "hit": 52.58,
+       "over_n": 151,
+       "under_n": 372,
+       "over_hit": 50.99,
+       "under_hit": 53.23,
+       "over_share": 28.87
+      },
+      "diff": 0.76,
+      "ci": [
+       -0.97,
+       2.68
+      ],
+      "games_needed": 162
+     },
+     "graded": {
+      "base": {
+       "n": 177,
+       "hit": 51.41,
+       "over_n": 33,
+       "under_n": 144,
+       "over_hit": 33.33,
+       "under_hit": 55.56,
+       "over_share": 18.64
+      },
+      "arm": {
+       "n": 166,
+       "hit": 50.6,
+       "over_n": 35,
+       "under_n": 131,
+       "over_hit": 34.29,
+       "under_hit": 54.96,
+       "over_share": 21.08
+      },
+      "diff": -0.81,
+      "ci": [
+       -5.05,
+       2.42
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 90,
+       "hit": 58.89,
+       "over_n": 15,
+       "under_n": 75,
+       "over_hit": 26.67,
+       "under_hit": 65.33,
+       "over_share": 16.67
+      },
+      "arm": {
+       "n": 81,
+       "hit": 59.26,
+       "over_n": 16,
+       "under_n": 65,
+       "over_hit": 25.0,
+       "under_hit": 67.69,
+       "over_share": 19.75
+      },
+      "diff": 0.37,
+      "ci": [
+       -3.89,
+       7.6
+      ],
+      "games_needed": 6751
+     },
+     "raw_graded": {
+      "base_n": 447,
+      "arm_n": 436,
+      "base_hit": 51.9,
+      "arm_hit": 51.38,
+      "ci": [
+       -2.49,
+       1.16
+      ]
+     },
+     "logloss": {
+      "base": 0.80059,
+      "arm": 0.79294
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "rush_yds": {
+     "flips": 20,
+     "letters_changed": 17,
+     "all": {
+      "base": {
+       "n": 786,
+       "hit": 53.69,
+       "over_n": 275,
+       "under_n": 511,
+       "over_hit": 47.27,
+       "under_hit": 57.14,
+       "over_share": 34.99
+      },
+      "arm": {
+       "n": 786,
+       "hit": 53.18,
+       "over_n": 295,
+       "under_n": 491,
+       "over_hit": 46.78,
+       "under_hit": 57.03,
+       "over_share": 37.53
+      },
+      "diff": -0.51,
+      "ci": [
+       -1.85,
+       0.8
+      ],
+      "games_needed": null
+     },
+     "graded": {
+      "base": {
+       "n": 142,
+       "hit": 44.37,
+       "over_n": 33,
+       "under_n": 109,
+       "over_hit": 48.48,
+       "under_hit": 43.12,
+       "over_share": 23.24
+      },
+      "arm": {
+       "n": 131,
+       "hit": 45.8,
+       "over_n": 34,
+       "under_n": 97,
+       "over_hit": 47.06,
+       "under_hit": 45.36,
+       "over_share": 25.95
+      },
+      "diff": 1.43,
+      "ci": [
+       -1.15,
+       5.82
+      ],
+      "games_needed": 167
+     },
+     "top": {
+      "base": {
+       "n": 41,
+       "hit": 51.22,
+       "over_n": 4,
+       "under_n": 37,
+       "over_hit": 0.0,
+       "under_hit": 56.76,
+       "over_share": 9.76
+      },
+      "arm": {
+       "n": 39,
+       "hit": 48.72,
+       "over_n": 5,
+       "under_n": 34,
+       "over_hit": 0.0,
+       "under_hit": 55.88,
+       "over_share": 12.82
+      },
+      "diff": -2.5,
+      "ci": [
+       -10.71,
+       4.41
+      ],
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 636,
+      "arm_n": 641,
+      "base_hit": 53.77,
+      "arm_hit": 53.51,
+      "ci": [
+       -1.39,
+       1.0
+      ]
+     },
+     "logloss": {
+      "base": 0.74232,
+      "arm": 0.74237
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    },
+    "pass_yds": {
+     "flips": 20,
+     "letters_changed": 17,
+     "all": {
+      "base": {
+       "n": 274,
+       "hit": 52.92,
+       "over_n": 84,
+       "under_n": 190,
+       "over_hit": 50.0,
+       "under_hit": 54.21,
+       "over_share": 30.66
+      },
+      "arm": {
+       "n": 274,
+       "hit": 53.65,
+       "over_n": 104,
+       "under_n": 170,
+       "over_hit": 50.96,
+       "under_hit": 55.29,
+       "over_share": 37.96
+      },
+      "diff": 0.73,
+      "ci": [
+       -3.05,
+       4.76
+      ],
+      "games_needed": 802
+     },
+     "graded": {
+      "base": {
+       "n": 29,
+       "hit": 55.17,
+       "over_n": 0,
+       "under_n": 29,
+       "over_hit": null,
+       "under_hit": 55.17,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 16,
+       "hit": 37.5,
+       "over_n": 0,
+       "under_n": 16,
+       "over_hit": null,
+       "under_hit": 37.5,
+       "over_share": 0.0
+      },
+      "diff": -17.67,
+      "ci": [
+       -27.43,
+       17.86
+      ],
+      "games_needed": null
+     },
+     "top": {
+      "base": {
+       "n": 4,
+       "hit": 0.0,
+       "over_n": 0,
+       "under_n": 4,
+       "over_hit": null,
+       "under_hit": 0.0,
+       "over_share": 0.0
+      },
+      "arm": {
+       "n": 0,
+       "hit": null,
+       "over_n": 0,
+       "under_n": 0,
+       "over_hit": null,
+       "under_hit": null,
+       "over_share": null
+      },
+      "diff": null,
+      "ci": null,
+      "games_needed": null
+     },
+     "raw_graded": {
+      "base_n": 216,
+      "arm_n": 204,
+      "base_hit": 51.85,
+      "arm_hit": 52.94,
+      "ci": [
+       -3.46,
+       4.9
+      ]
+     },
+     "logloss": {
+      "base": 0.71742,
+      "arm": 0.71602
+     },
+     "checks": {
+      "H1": false,
+      "H2": false,
+      "H3": false,
+      "H4": true
+     },
+     "pass": false,
+     "failed": [
+      "H1",
+      "H2",
+      "H3"
+     ]
+    }
+   }
+  }
+ },
+ "rows": 4035,
+ "games": 28,
+ "rows_with_offline_pmf": 4032
+}
