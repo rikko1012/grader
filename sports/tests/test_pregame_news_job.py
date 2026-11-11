@@ -96,3 +96,8 @@ def test_no_member_surface_imports_the_archive():
     root = Path(__file__).resolve().parents[1]
     for f in list(root.glob("api_*.py")) + [root / "web.py", root / "board_view.py", root / "snapshots.py"]:
         assert "pregame_news" not in f.read_text(encoding="utf-8"), f.name
+    # the one reader outside the job: the av-1 availability hold (read-only; no model module reads it)
+    readers = sorted(f.name for f in root.glob("*.py") if f.name not in ("pregame_news.py", "scheduler.py")
+                     and "pregame_news" in f.read_text(encoding="utf-8"))
+    assert readers == ["availability.py"], readers
+    assert not [f.name for f in (root / "model").glob("*.py") if "pregame_news" in f.read_text(encoding="utf-8")]

@@ -45,7 +45,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import (board_view, cache, capabilities, config, context_reconcile, fair, flags, forecast_detail, game_lines,
+from . import (availability, board_view, cache, capabilities, config, context_reconcile, fair, flags, forecast_detail, game_lines,
                identity, market_view, markets, role_display, scout_chance, store)
 from .names import team_abbr
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
@@ -762,13 +762,21 @@ def build(con, league, now=None, base=None, history=True, results=True):
             cur_team[m.player_id] = m.team_id
             team_players[m.team_id].add(m.player_id)
     injuries = {}
+    inj_recs, inj_rid = [], {}
     for rid, c, cm in _latest(con, "context", "league = ?", [league], now):
         # ContextSnapshot.to_dict() overwrites the record's own `kind` field with "context" (contracts sc-1), so the
         # context kind is read from the stored identity (source_key = "<kind>|<subject>|<event>") instead
         ckind = (cm.get("source_key") or "").split("|", 1)[0]
-        if ckind == "injury" and c.present == "yes":
-            injuries[c.subject_id] = {"record_id": rid, "status": c.status, "detail": c.detail, "as_of": c.as_of,
-                                      "observed_at": c.observed_at, "source": c.source}
+        if ckind == "injury":
+            inj_recs.append((c, cm.get("last_seen_at")))
+            inj_rid[c.subject_id] = rid
+    # av-1: only records in the newest report read are current (ESPN sends no removal entry; an outage keeps the last state)
+    inj_read_at, inj_cur = availability.current(inj_recs, now)
+    del inj_recs
+    for sid, c in inj_cur.items():
+        if c.present == "yes":
+            injuries[sid] = {"record_id": inj_rid.get(sid), "status": c.status, "detail": c.detail, "as_of": c.as_of,
+                             "observed_at": c.observed_at, "source": c.source}
     all_inj_players = {}
     for pid in injuries:
         rs = _latest(con, "player", "player_id = ?", [pid], now)
@@ -1030,6 +1038,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
     ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root)
     manifest["player_context"] = ctx_summary
     sanity_log = []
+    # av-1: ESPN's own designation of each listed entry + the NFL game-day inactive list (read-only, once; availability.py)
+    av_desig, av_lineup = availability.designations(league, [eid for eid, (_, e, _) in events.items()
+                                                             if e.start_utc > now]) if inj_cur else ({}, {})
+    av_held = {}
     view_out = board_view.StreamWriter(root / "board_view.json",       # bv-1 hit rates, streamed per player
                                        {**base_meta, "part": "view", "rule": board_view.VERSION})
     for pid in pids:
@@ -1054,7 +1066,12 @@ def build(con, league, now=None, base=None, history=True, results=True):
         view_out.add(vrows)
         for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
             # sg-2 history rules (thin / stale) read the bv-1 row only when the history was actually read
-            log = guard_row(league, r, forecasts, vrows.get(r["key"]) if history else None, now)
+            e_r = events[r["event_id"]][1]
+            av = availability.hold(inj_cur.get(pid), av_desig.get(pid), e_r.start_utc,
+                                   av_lineup.get((pid, str(r["event_id"]).rsplit(":", 1)[-1])))
+            if av:
+                av_held[av] = av_held.get(av, 0) + 1
+            log = guard_row(league, r, forecasts, vrows.get(r["key"]) if history else None, now, avail=av)
             if events[r["event_id"]][1].start_utc > now:      # the admin log lists games still on the board
                 sanity_log.extend(log)
         tid = cur_team.get(pid)
@@ -1106,6 +1123,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
     sizes["board_more"] = _write(root / "board_more.json", {**board_meta, "part": "secondary",
                                                               "markets": [compact_row(r, league) for r in sec],
                                                               "fc": compact_forecasts(forecasts, sec)})
+    manifest["availability"] = {"rule": availability.VERSION, "on": availability.on(), "report_read_at": inj_read_at,
+                                "listed": len(injuries), "designations": len(av_desig), "lineup_flags": len(av_lineup),
+                                "held_rows": av_held}
     manifest["sanity"] = write_sanity(root, sanity_log, base_meta, board_rows)
     manifest["cal_mi"] = write_cal_index(root, base_meta, board_rows)
     if results:
@@ -1195,16 +1215,25 @@ def _view_push(q, forecasts, fid):
     return (q.get("line_read") or {}).get("pp") or 0.0
 
 
-def guard_row(league, row, forecasts, view_row, now):
+def guard_row(league, row, forecasts, view_row, now, avail=None):
     """Row signal for every quote of one market row with a Scout view (sports/board_view.quote_x): q["x"] = a hold
     {"b", "t", "v"} (vg-1 gate / sg-1 sanity: no lean, edge, confidence or edge rank anywhere - board, sheets, slip
     pool) or the cf-2 signal {"ln", "pl", "e", "g", "c", "cw", "s", "n", "v"}. -> sanity log entries (sg-1 holds with
-    their inputs; vg-1 holds are only counted)."""
+    their inputs; vg-1 holds are only counted). avail = the av-1 hold code (sports/availability.py) of this player for
+    this game: EVERY quote of the row is held (chances and the forecast stay as they are) and logged, so slips and
+    tracked picks leave it out."""
     out = []
     for q in (row.get("quotes") or []) + (row.get("kalshi") or []) + (row.get("alternates") or []):
         q.pop("x", None)
         sv = scout_view(q, forecasts)
         if sv is None:
+            if avail:
+                q["x"] = availability.x_of(avail)
+                if q.get("record_id"):
+                    out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),
+                                "player_id": row["player_id"], "stat": row["stat"], "platform": q.get("platform"),
+                                "record_id": q.get("record_id"), "line": q.get("line"), "forecast_id": None,
+                                "reason": avail, "rule": availability.VERSION})
             continue
         po, pu, mu, model, fid, iv = sv
         raw = (po, pu)
@@ -1220,6 +1249,8 @@ def guard_row(league, row, forecasts, view_row, now):
             po, pu = ca["po"], ca["pu"]
         x, code = board_view.quote_x(league, row["stat"], po, pu, mu, line, mkc, l10, iv, raw=raw, view=view_row,
                                      now=now, platform=q.get("platform"), own_po=board_view.own_chance(q))
+        if avail:                                        # av-1: ruled out / inactive - no side, letter, stake or leg
+            x, code = availability.x_of(avail), avail
         q["x"] = x
         if code:
             out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),
@@ -1227,7 +1258,7 @@ def guard_row(league, row, forecasts, view_row, now):
                         "record_id": q.get("record_id"), "line": line, "projection": mu, "p_over": po,
                         "p_under": pu, "lean": board_view.lean_of(po, pu, mu, line), "l10": l10, "model": model,
                         "forecast_id": fid, "via": "forecast" if q.get("forecast_id") == fid else "line_read",
-                        "reason": code, "rule": board_view.SANITY_VERSION})
+                        "reason": code, "rule": availability.VERSION if avail else board_view.SANITY_VERSION})
     return out
 
 

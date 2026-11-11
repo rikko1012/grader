@@ -47,7 +47,7 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from .. import board_view, capabilities, containment, markets, store
+from .. import availability, board_view, capabilities, containment, markets, store
 from ..contracts import SPORT_OF, parse_utc
 from . import POLICY_VERSION, rules
 
@@ -256,8 +256,13 @@ def _sanity_held(league):
         from ..snapshots import snap_root
         d = json.loads((snap_root() / league / "sanity.json").read_text(encoding="utf-8"))
         if isinstance(d.get("keys"), list):
-            return {(k[0], k[1]): k[2] for k in d["keys"] if isinstance(k, list) and len(k) == 3}
-        return {(e.get("record_id"), e.get("forecast_id")): e.get("reason") for e in d.get("entries") or ()}
+            out = {(k[0], k[1]): k[2] for k in d["keys"] if isinstance(k, list) and len(k) == 3}
+        else:
+            out = {(e.get("record_id"), e.get("forecast_id")): e.get("reason") for e in d.get("entries") or ()}
+        for (r, _f), c in list(out.items()):            # av-1 holds the LINE, whichever forecast a leg would use
+            if c in availability.CODES:
+                out[(r, None)] = c
+        return out
     except Exception:                                   # noqa: BLE001 - no snapshot yet: the ratio rules still apply
         return {}
 
@@ -279,6 +284,10 @@ def lean_mismatch(po, pu, mean, line, side):
 def guard_reason(f, league, rid=None, held=(), chances=()):
     """vg-1 / sg-2 for one forecast as a slip leg -> exclusion text or None (member policy). held = the board's
     {(record_id, forecast_id): reason} (or a set of pairs); chances = the leg's shown chances (cal-mi) beside the raw."""
+    if isinstance(held, dict):                          # av-1: the board held the player's line (ruled out / inactive)
+        av = held.get((rid, f.forecast_id)) or held.get((rid, None))
+        if av in availability.CODES:
+            return f"not playing: {availability.text(av)}"
     if f.model_version not in board_view.SCOUT_MODELS:
         return None
     if board_view.contain_reason(league, f.stat) or (board_view.gate_reason(league, f.stat)
