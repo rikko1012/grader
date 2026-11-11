@@ -80,12 +80,22 @@ def cs2_at(x, line):
         line, base = float(line), float(x.get("graded_line") if x.get("graded_line") is not None else x["line"])
     except (KeyError, TypeError, ValueError):
         return None
+    if not all(math.isfinite(v) for v in (line, base)):
+        return None
     if x.get("cal_v") or x.get("p_raw") is not None:
         return None                            # the printed chance is a display layer's: never mixed with a raw read
     if x.get("perf_on") is not True or any("only half counts" in str(f) for f in (x.get("flags") or ())):
         return None                            # old pipeline: its gap-trust shift and margins depend on the line, so the saved
                                                # distribution read at another line is not what the grader would print there
     dist, raw, p = x.get("dist"), x.get("model_outcomes") or {}, x.get("p")
+    try:
+        raw = {"over": float(raw.get("over")), "under": float(raw.get("under")),
+               "push": float(raw.get("push", 0.0))}
+        p = float(p)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if not all(math.isfinite(v) and 0 <= v <= 1 for v in (*raw.values(), p)):
+        return None
     try:
         pmf = dist_view.pmf(dist) if dist else None
     except Exception:                          # noqa: BLE001
@@ -145,7 +155,9 @@ def lol_at(lam, size, base_line, p_over, p_under, line):
         lam, size, base_line, line, p_over, p_under = (float(v) for v in (lam, size, base_line, line, p_over, p_under))
     except (TypeError, ValueError):
         return None
-    if lam <= 0 or size <= 0 or not all(math.isfinite(v) for v in (lam, size, base_line, line)):
+    if lam <= 0 or size <= 0 or not all(math.isfinite(v) for v in (lam, size, base_line, line, p_over, p_under)):
+        return None
+    if not (0 <= p_over <= 1 and 0 <= p_under <= 1):
         return None
     o, u, _ = nb_probs(lam, size, base_line)
     if max(abs(o - p_over), abs(u - p_under)) > CHECK_TOL:
