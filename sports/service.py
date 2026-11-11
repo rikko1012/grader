@@ -255,6 +255,13 @@ def alerts(o):
     ingest_on = o["flags"].get("SPORTS_INGEST")
     sched = o.get("scheduler") or {}
     jobs = sched.get("jobs") or {}
+    daily_state = o.get("grades_daily") or {}
+    if (jobs.get("grades-daily") or {}).get("enabled"):
+        if daily_state.get("last_error"):
+            out.append({"level": "page", "code": "daily_grading_incomplete", "detail": daily_state["last_error"]})
+        if daily_state.get("publish_pending"):
+            out.append({"level": "warn", "code": "daily_report_unpublished", "detail": {
+                "attempt_day": daily_state.get("attempt_day")}})
     if o.get("scheduler_alive") is False:
         out.append({"level": "page", "code": "scheduler_down", "detail": "the job scheduler thread is not running"})
     # the collector: "ingest" (one job) or one "ingest-<league>" job per league (game-day cadence, scheduler.py)
@@ -310,6 +317,19 @@ def alerts(o):
     for name, j in jobs.items():
         if not j.get("enabled"):
             continue
+        # These stages used to stay quiet during the long retry backoff: unlike
+        # collectors they had no success-age check. A healthy HTTP server alone
+        # does not mean new forecasts or settlements are being produced.
+        if name in {"model-forward", "books", "settle", "settle-post", "picks-settle", "slips-settle", "grades-daily"}:
+            every = j.get("every_s")
+            if every:
+                limit = max(3 * every, every + (j.get("timeout_s") or 0), 1800)
+                last_ok = j.get("last_ok_at")
+                age = time.time() - last_ok if last_ok is not None else (sched.get("uptime_s") or 0)
+                if age > limit:
+                    out.append({"level": "page", "code": "grading_job_stale", "detail": {
+                        "job": name, "success_age_s": round(age), "limit_s": limit,
+                        "last_exit": j.get("last_exit"), "next_start": j.get("next_start")}})
         if j.get("failures_in_a_row", 0) >= 3:
             out.append({"level": "warn", "code": "job_failing", "detail": {"job": name, "last_exit": j.get("last_exit")}})
         code = str((j.get("last_exit") or {}).get("code"))
@@ -391,6 +411,7 @@ def ops():
             "board_builds": board_builds(),
             "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
             "sheets_stages": sheets_stages(),
+            "grades_daily": settle_stages("model/daily_state.json"),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 
