@@ -1499,8 +1499,8 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
   #u-hub .h-odds-best{display:block;width:max-content;margin:2px 0 0}
 }
 /* Member usability: readable markets, removable filters and optional research space. */
-#u-hub #hub-table .h-mcell{align-items:flex-start;flex-wrap:wrap;gap:5px}
-#u-hub #hub-table .h-mcell>div{flex:1 1 72px}
+#u-hub #hub-table .h-mcell{align-items:center;flex-wrap:nowrap;gap:5px}
+#u-hub #hub-table .h-mcell>div{flex:1 1 0;min-width:0}
 #u-hub #hub-table .h-mcell b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:break-word;line-height:1.35}
 #u-hub #hub-table .h-mcell small{white-space:normal;overflow:visible}
 #u-hub #hub-chips{flex-basis:100%;order:5}
