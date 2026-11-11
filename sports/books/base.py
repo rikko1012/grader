@@ -19,6 +19,7 @@ Offer (one priced side of one market at one line - never a two-sided pair):
 A one-sided offer (an "X+" ladder rung, an Over-only line) is stored as exactly that: no opposite side is invented.
 """
 import hashlib
+import math
 from dataclasses import dataclass, field
 
 from .. import names
@@ -75,14 +76,14 @@ class Provider:
 
 def american_to_decimal(a):
     a = float(a)
-    if a == 0:
+    if not math.isfinite(a) or a == 0:
         raise ValueError("american odds 0")
     return round(1 + (a / 100.0 if a > 0 else 100.0 / -a), 6)
 
 
 def decimal_to_american(d):
     d = float(d)
-    if d <= 1:
+    if not math.isfinite(d) or d <= 1:
         raise ValueError("decimal odds <= 1")
     return int(round((d - 1) * 100)) if d >= 2 else int(round(-100 / (d - 1)))
 
@@ -115,5 +116,7 @@ def make_offer(**kw):
     if o["side"] not in ("over", "under") or o["market_type"] not in (STANDARD, ALTERNATE, PROMO):
         raise ValueError(f"bad side / market type: {o['side']} / {o['market_type']}")
     o["line"] = float(o["line"])
+    if not math.isfinite(o["line"]) or not math.isfinite(o["price_decimal"]) or o["price_decimal"] <= 1:
+        raise ValueError("offer requires a finite line and decimal odds greater than 1")
     o["offer_key"] = offer_key(o)
     return o

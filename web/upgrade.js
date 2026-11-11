@@ -1169,7 +1169,8 @@
   function hitCell(n, t, side) {
     if (!t) return `<span class="u-hc none"><i>L${n}</i><b>--</b></span>`;
     const hits = side === "under" ? t.under : t.over, decided = t.n - t.push, rate = decided ? hits / decided : 0;
-    return `<span class="u-hc${rate >= 0.6 ? " up" : ""}" title="${esc(`Last ${t.n} at this line: ${hits} for ${cap(side)}, ${t.push} push`)}"><i>L${n}</i><b>${hits}/${t.n}</b></span>`;
+    const detail = `Last ${t.n} games at this line: ${hits} ${cap(side)} hits in ${decided} decided, ${t.push} pushes`;
+    return `<span class="u-hc${rate >= 0.6 ? " up" : ""}" title="${esc(detail)}" aria-label="${esc(`L${n}: ${detail}`)}"><i>L${n}</i><b>${decided ? `${hits}/${decided}` : "—"}</b>${t.push ? `<small>${t.push} push${t.push === 1 ? "" : "es"}</small>` : ""}</span>`;
   }
   function hitsHtml(rec, side) {
     const t = rec ? tallies(rec) : {}, sd = side || (rec && rec.scout.side) || "over", windows = [5, 10, 20];
