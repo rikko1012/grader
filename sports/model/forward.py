@@ -166,7 +166,8 @@ def upcoming_rows(scon, hcon, league, now):
     for r in hcon.execute(sql):
         pos[r["player_id"]] = r["position"]
     rows, idmap, skipped = {}, {}, {}
-    for rid, o in store.iter_offers(scon, league=league, limit=500000):
+    # only target-platform offers are used below: read just those (same rows, same order - store.iter_offers)
+    for rid, o in store.iter_offers(scon, league=league, limit=500000, platforms=TARGETS):
         if o.platform not in TARGETS:
             continue
         ok, why = capabilities.gate(o)
@@ -319,7 +320,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         return out
     events = {e.event_id: e for _, e in store.events(scon, league)}
     quotes = {}
-    for rid, q in store.iter_offers(scon, league=league, limit=500000):
+    # market quotes are the non-target offers: read just those (same rows, same order - store.iter_offers)
+    for rid, q in store.iter_offers(scon, league=league, limit=500000, exclude_platforms=TARGETS):
         if q.platform in TARGETS or q.event_id is None or q.player_id is None:
             continue
         meta = store.row_meta(scon, rid)
