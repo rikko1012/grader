@@ -749,12 +749,16 @@ def test_saved_markup_stays_text(ctx, env):
 def test_bad_saved_state_still_boots(ctx, env, bad):
     workspace_api.store().put_state(workspace_api.member_key("whop:u1"), 0, bad)
     p = open_page(ctx, env)
+    # Fixture games span now+3h and now+5h; "today" can contain only two
+    # players near local midnight. This checks recovery, not the day filter.
+    all_days(p)
     assert p.locator(".row").count() > 3 and p.errors == []
 
 
 @pytest.mark.parametrize("bad", ["#/research/p/%E0%A4%A", "#/research/p/%"])
 def test_bad_link_still_boots(ctx, env, bad):
     p = open_page(ctx, env, path=bad)
+    all_days(p)
     assert p.locator(".row").count() > 3 and p.errors == []
 
 
@@ -888,6 +892,7 @@ def test_chips_and_columns_do_not_collide(ctx, env, width):
 
 def test_phone_targets_are_44(ctx, env):
     p = open_page(ctx, env, size=PHONE)
+    all_days(p)
     panel(p, "vargo")
     small = p.evaluate("""() => [...document.querySelectorAll('#panel button')].filter(b => b.offsetParent && b.getBoundingClientRect().height < 44).map(b => b.className)""")
     assert small == []
