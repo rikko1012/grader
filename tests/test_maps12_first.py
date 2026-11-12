@@ -175,3 +175,4 @@ def test_rows_by_player_list_maps12_before_map1(tmp_path):
     out = subprocess.run([shutil.which("node"), str(js), str(data)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert out.returncode == 0, out.stderr
     assert json.loads(out.stdout) == [["kills/maps12", "kills/map1", "hs/maps12", "hs/map1"], ["kills/maps13", "kills/maps12", "kills/map1"]]
+

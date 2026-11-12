@@ -147,7 +147,7 @@ export function mount(C) {
     const byStart=(a,b)=>Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc)||gameKey(a).localeCompare(gameKey(b))||a.player.name.localeCompare(b.player.name);
     /* an empty cell (no side, no games at this line, no edge) sorts after every filled one, in either direction */
     const byValue=(x,y)=>x==null&&y==null?0:x==null?1:y==null?-1:(asc?x-y:y-x);
-    return list.sort((a,b)=> {
+    return mapsFirst(list.sort((a,b)=> {
       if(H.sortBy==='start') return asc?byStart(a,b):byStart(b,a);
       if(H.sortBy==='player') return (asc?1:-1)*a.player.name.localeCompare(b.player.name)||byStart(a,b);
       if(H.sortBy==='line'||H.sortBy==='chance'||WINDOWS.has(H.sortBy)) return byValue(sortValue(a,H.sortBy),sortValue(b,H.sortBy))||byStart(a,b);
@@ -158,7 +158,18 @@ export function mount(C) {
          every line above it, and a line with no key after both, so 100% hit rates at a price that cannot pay never flood the top */
       if(H.sortBy==='hit'){const x=parOf(a)?.hit,y=parOf(b)?.hit,rk=h=>!h?2:h.below?1:0;return rk(x)-rk(y)||(x&&y?y.key-x.key:0)||byStart(a,b);}
       return byStart(a,b);
-    });
+    }));
+  }
+  /* owner 2026-11-12 ("make sure map 1-2 lines show before map 1 lines"): in the default view (no sort chosen by the member), one
+     player's stat on several maps scopes stays together where its first row landed, Maps 1-3, then Maps 1-2, then Map 1. A sort the
+     member chose is left exactly as sorted; rows with no maps scope (NBA / NFL periods) never move. */
+  function mapsFirst(list) {
+    if(H.sortChosen)return list;
+    const MAPS_RANK={maps13:0,maps12:1,map1:2};
+    const rk=r=>Object.prototype.hasOwnProperty.call(MAPS_RANK,r.market.period)?MAPS_RANK[r.market.period]:null;
+    const gk=(r,i)=>rk(r)==null?'#'+i:[r.sport,r.event.id,r.player.key,r.market.stat].join('|'), first=new Map();
+    list.forEach((r,i)=>{const k=gk(r,i);if(!first.has(k))first.set(k,i);});
+    return list.map((r,i)=>({r,i,g:first.get(gk(r,i)),s:rk(r)??3})).sort((a,b)=>a.g-b.g||a.s-b.s||a.i-b.i).map(x=>x.r);
   }
   /* the value a row sorts on: Scout's chance on its side; a window's hit rate for Scout's side (no side: empty, sorted last); the line */
   const WINDOWS=new Set(['l5','l10','l20','h2h','season']);
