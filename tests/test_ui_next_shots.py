@@ -13,7 +13,7 @@ ONLY = [x for x in os.environ.get("UI_NEXT_SHOTS_ONLY", "").split(",") if x]
 pytestmark = pytest.mark.skipif(not OUT, reason="UI_NEXT_SHOTS not set")
 SIZES = {"desktop": {"width": 1440, "height": 900}, "phone": {"width": 390, "height": 844}}
 SCREENS = [("board-all", "/#all-sports"), ("board-cs2", "/"), ("board-lol", "/lol"), ("board-nba", "/sports"), ("board-nfl", "/sports#/board?lg=nfl"),
-           ("slips", "/#/slips"), ("games", "/#scout/games"), ("tools", "/#scout/tools"), ("picks", "/#scout/picks"), ("record", "/#scout/record")]
+           ("slips", "/#slips"), ("games", "/#/games"), ("tools", "/#/tools"), ("picks", "/#/picks"), ("record", "/#/record"), ("ev", "/sports#/ev"), ("arb", "/sports#/arb")]
 
 
 def variants():
@@ -24,7 +24,9 @@ def variants():
 
 
 @pytest.mark.parametrize("size", list(SIZES))
-def test_shots(browser, env, size):
+def test_shots(browser, env, size, monkeypatch):
+    for k in ("SCOUT_MARKET_TOOLS", "SCOUT_PICKEM_EV", "SCOUT_PARITY_EDGE", "SCOUT_MARKET_EDGE", "SCOUT_BOARD_H2H", "SCOUT_WORKSPACE_V2"):
+        monkeypatch.setenv(k, "1")                      # the flags the live site runs with
     out = Path(OUT)
     out.mkdir(parents=True, exist_ok=True)
     env.sports.boards["nba"] = ladder_board()           # a prop the way the books list it: 15 lines over 6 apps
@@ -101,3 +103,21 @@ def test_landing_shots(browser, env, size):
         p.screenshot(path=str(out / f"landing-{size}-new-dark.png"))
     finally:
         c.close()
+
+
+@pytest.mark.parametrize("size", list(SIZES))
+def test_public_page_shots(browser, env, size, monkeypatch):
+    out = Path(OUT)
+    monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
+    for tag, flag in (("old", "0"), ("new-dark", None)):
+        monkeypatch.setenv("UI_NEXT", flag) if flag else monkeypatch.delenv("UI_NEXT", raising=False)
+        anon = browser.new_context(viewport=SIZES[size], color_scheme="dark")
+        try:
+            for name, path in (("record", "/record"), ("unsubscribe", "/alerts/unsubscribe?m=a&t=b")):
+                p = anon.new_page()
+                p.goto(env.url + path)
+                p.wait_for_timeout(1500)
+                p.screenshot(path=str(out / f"{name}-{size}-{tag}.png"))
+                p.close()
+        finally:
+            anon.close()

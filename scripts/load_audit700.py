@@ -350,7 +350,9 @@ def workspace_run():
                       ("POST", "track", {"idem": f"trkl-{i:06d}", "entry_key": "underdog", "entry_type": "standard", "legs": ll}),
                       ("GET", "results?sport=lol", None), ("GET", "results?sport=nba", None), ("GET", "results?sport=nfl", None), ("GET", "mine", None)]
         if UPGRADE:
-            steps = [("GET", "/", None), ("GET", "/upgrade/upgrade.js", None), ("GET", "/upgrade/upgrade.css", None)] + steps + [("GET", "hits", None), ("GET", "stated", None)]
+            steps = [("GET", "/", None), ("GET", "/upgrade/upgrade.js", None), ("GET", "/upgrade/upgrade.css", None),
+                     # the default design's own files (2026-11-11 redesign): its two sheets, the hub script and the row-grouping module
+                     ("GET", "/upgrade/next-base.css", None), ("GET", "/upgrade/next.css", None), ("GET", "/upgrade/hub.js", None), ("GET", "/upgrade/lines.js", None)] + steps + [("GET", "hits", None), ("GET", "stated", None)]
         for method, name, body in steps:
             st, dt, n, enc, _ = req(method, name, who, body)
             out.append((method + " " + name.split("&")[0] if "sport=" in name else method + " " + name.split("?")[0], st, dt, n, enc))

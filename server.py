@@ -4440,6 +4440,23 @@ LANDING_NEXT_FONTS = (b'<link rel="stylesheet" href="https://fonts.googleapis.co
                       b'&family=IBM+Plex+Sans:wght@400;500;600&display=swap">')
 
 
+_PUBLIC_NEXT = {}                                       # id(page bytes) -> (page bytes, restyled copy)
+
+
+def public_next(body):
+    """UI_NEXT: a small signed-out page (the public record) with web/public-next.css added after its own styles. Styling only:
+    the same markup, script and data. One bytes object per page version (send_shared keys its ETag + gzip on body identity)."""
+    hit = _PUBLIC_NEXT.get(id(body))
+    if hit is not None and hit[0] is body:
+        return hit[1]
+    i = body.rfind(b"</head>")
+    out = body if i < 0 else body[:i] + LANDING_NEXT_FONTS + b"<style>" + web_file("public-next.css") + b"</style>" + body[i:]
+    if len(_PUBLIC_NEXT) > 8:
+        _PUBLIC_NEXT.clear()
+    _PUBLIC_NEXT[id(body)] = (body, out)
+    return out
+
+
 def landing_next():
     """UI_NEXT: the signed-out page in the redesign's identity. The same landing.html with web/landing-next.css added after its own
     styles; one bytes object per landing version (send_shared keys its ETag + gzip on body identity)."""
@@ -4486,13 +4503,15 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
                   "/upgrade/next.css": ("upgrade-next.css", "text/css; charset=utf-8")}
 UPGRADE_API = "/api/upgrade/"
 UI_NEXT_PREVIEW = "/preview/next"                       # member-gated like the board: turns the redesign on for this browser only
+UI_PREV_PATH = "/preview/current"                       # member-gated: this browser goes back to the design before the redesign
 UI_NEXT_COOKIE = "scout_ui"                             # next = the redesign, current = the design before it; read by the page's head script
 
 
 def ui_next_default():
-    """UI_NEXT=1: the redesigned hub is what every member gets (a member's own /preview/next?off=1 choice still wins). Unset = the
-    current design is the default and the redesign is reached only through /preview/next. One step to go live, one to roll back."""
-    return os.environ.get("UI_NEXT", "").strip() == "1"
+    """The redesigned hub is the default (owner 2026-11-11: "i like that ui"). UI_NEXT=0 puts every member back on the design before it,
+    in one step: the flag is read on each request, so a Render env change applies without a deploy. A member's own choice
+    (/preview/current, /preview/next) still wins over the default either way."""
+    return os.environ.get("UI_NEXT", "").strip().lower() not in ("0", "false", "off", "no")
 _UPGRADE_MEMO = {}                                      # (id(page bytes), name, tokens) -> (page bytes, upgraded page)
 _UPGRADE_LOCK = threading.Lock()
 UI_TOKENS_ROUTE = "/upgrade/tokens.css"                 # SCOUT_UI_TOKENS=1 only; off = the unknown-route answer
@@ -4821,7 +4840,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_shared(('public_record_slips',sport),status,body,keep=300)
                 if u.path != '/api/record':
                     name,ctype=('record.html','text/html; charset=utf-8') if u.path=='/record' else ('record.js','text/javascript; charset=utf-8')
-                    return self.send_shared(('public_record_asset',name),200,web_file(name),ctype,keep=600)
+                    asset=web_file(name)
+                    if name=='record.html' and ui_next_default():asset=public_next(asset)      # styling only
+                    return self.send_shared(('public_record_asset',name,name=='record.html' and ui_next_default()),200,asset,ctype,keep=600)
                 sport=q.get('sport','cs2')
                 if sport not in ('cs2','lol','nba','nfl'):
                     return self.send(400,{'error':'unsupported sport'})
@@ -4852,6 +4873,9 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == UI_NEXT_PREVIEW + "/landing" and self._upgrade_on(q):      # the redesigned signed-out page, for a member to look at
                 landing_page()
                 return self.send_shared(("page", "landing", "next"), 200, landing_next(), "text/html; charset=utf-8", keep=600)
+            if u.path == UI_PREV_PATH and self._upgrade_on(q):          # the design before the redesign, for this browser (rollback comparison)
+                secure = "; Secure" if self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
+                return self.redirect("/#all-sports", cookies=(f"{UI_NEXT_COOKIE}=current; Max-Age=7776000; Path=/; SameSite=Lax{secure}",))
             if u.path == UI_NEXT_PREVIEW and self._upgrade_on(q):       # not allowed = the unknown-route answer below
                 # the redesign preview: a cookie for this browser, then the board. ?off=1 goes back to the current design.
                 want = "current" if q.get("off") in ("1", "true") else "next"
@@ -6430,7 +6454,8 @@ def unsubscribe_page(member, token, confirm=False):
     shell = ("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
              "<title>Scout alerts</title><style>body{background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:520px}"
              "button{min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #f5c842;background:#f5c842;color:#000;font-weight:600}"
-             "p{color:#bbb}</style></head><body><h1>Scout alerts</h1>{}</body></html>")
+             "p{color:#bbb}</style>__NEXT__</head><body><h1>Scout alerts</h1>{}</body></html>")
+    shell = shell.replace("__NEXT__", "<style>" + web_file("public-next.css").decode("utf-8") + "body{padding:24px;max-width:520px}</style>" if ui_next_default() else "")
     if not workspace_alerts.unsub_ok(member, token):
         return 400, shell.replace("{}", "<p>This link is not valid. Turn alerts off in Scout under Alerts.</p>").encode(), "text/html; charset=utf-8"
     if not confirm:

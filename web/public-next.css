@@ -1,0 +1,30 @@
+/* UI_NEXT: the small signed-out pages (the public record, the alert unsubscribe page) in the redesign's identity. Added after each
+   page's own styles only while the redesign is the default; the pages' markup, scripts and data are untouched. Dark by default,
+   light when the visitor's system asks for it (these pages have no theme switch). */
+:root{--n-bg:#0b0c0e;--n-s1:#111316;--n-s2:#171a1d;--n-line:#22262b;--n-line2:#353b42;--n-t1:#ecebe6;--n-t2:#b6babf;--n-t3:#8b9199;--n-acc:#5b97ff;--n-acc-t:#93b9ff;--n-acc-on:#06101f;
+ --n-font:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;--n-mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;--n-display:'Barlow Condensed','IBM Plex Sans',system-ui,sans-serif;
+ color-scheme:dark;font-family:var(--n-font);background:var(--n-bg);color:var(--n-t1)}
+@media(prefers-color-scheme:light){:root{--n-bg:#f1f0ec;--n-s1:#f8f7f4;--n-s2:#ffffff;--n-line:#dedcd4;--n-line2:#c6c4bb;--n-t1:#15171a;--n-t2:#3f4349;--n-t3:#5f646b;--n-acc:#1d5bd0;--n-acc-t:#184cae;--n-acc-on:#ffffff;color-scheme:light}}
+*,*::before,*::after{border-radius:2px !important;box-shadow:none !important}
+body{background:var(--n-bg);color:var(--n-t1);font:400 14px/1.5 var(--n-font);font-feature-settings:"tnum" 1}
+main{padding:24px 16px}
+a{color:var(--n-acc-t)}
+p{color:var(--n-t2)}
+h1{font:700 clamp(32px,5vw,52px)/1 var(--n-display);letter-spacing:.01em;text-transform:uppercase;margin:32px 0 12px;color:var(--n-t1)}
+h2,h3{font:600 20px/1.1 var(--n-display);letter-spacing:.03em;text-transform:uppercase;color:var(--n-t1)}
+header b{font:700 19px/1 var(--n-display);letter-spacing:.04em}
+button{min-height:44px;padding:8px 14px;border:1px solid var(--n-line2);background:var(--n-s2);color:var(--n-t1);font:500 13px/1 var(--n-font)}
+button[aria-pressed=true],button[type=submit]{background:var(--n-acc);border-color:var(--n-acc);color:var(--n-acc-on);font-weight:600}
+button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--n-acc);outline-offset:2px}
+.scores{gap:0;padding:0;margin:16px 0;border:1px solid var(--n-line2);background:var(--n-s1)}
+.scores>*{padding:12px 14px;border-right:1px solid var(--n-line)}
+.scores b{font:600 clamp(22px,3.4vw,32px)/1.1 var(--n-mono);color:var(--n-t1)}
+.scores span{font:500 10px/1.4 var(--n-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--n-t3)}
+table{font-size:13px}
+td,th{padding:8px;border-bottom:1px solid var(--n-line)}
+th{font:500 10px/1.2 var(--n-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--n-t3);border-bottom-color:var(--n-line2)}
+td{font-variant-numeric:tabular-nums;color:var(--n-t1)}
+.calendar{gap:4px}
+.calendar details{background:var(--n-s1);border:1px solid var(--n-line2)}
+.calendar small{color:var(--n-t3);font-family:var(--n-mono)}
+details,section,article{border-color:var(--n-line2)}

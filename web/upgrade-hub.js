@@ -1710,7 +1710,7 @@ export function mount(C) {
     const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small></div>`;
     const back=(100+Number(x.return_per_100))*H.mt.stake/100;
     return `<li class="h-pc-row h-pc-arb"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick({...x,side:null})}</div>${(x.legs||[]).map(leg).join('')}`
-      +`<div class="h-pc-cell h-pc-value" data-label="Either way you get"><span class="h-pc-chip"><b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney(back)}</b> back <i data-gain-per100="${Number(x.return_per_100)}">(+${mtMoney(back-H.mt.stake)})</i></span></div>`
+      +`<div class="h-pc-cell h-pc-value" data-label="Either way you get"><span class="h-pc-chip"><b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney(back)}</b> back <i data-gain-per100="${Number(x.return_per_100)}">(+${mtMoney(back-H.mt.stake)})</i></span>${NEXT?`<small class="h-pc-margin">Margin ${Number(x.return_per_100).toFixed(2)}%</small>`:''}</div>`
       +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtLegsAge(x)))}</div></li>`;
   }
   const mtHead=cols=>`<li class="h-pc-row h-pc-head" aria-hidden="true">${cols.map(c=>`<div class="h-pc-cell">${c}</div>`).join('')}</li>`;
@@ -1718,7 +1718,7 @@ export function mount(C) {
     if(H.marketLoading&&!H.marketDoc)return '<p class="h-mt-state" role="status">Checking current prices…</p>';
     if(H.marketError&&!H.marketDoc)return `<p class="h-mt-state h-warning" role="status">${esc(H.marketError)} Use Refresh prices to try again.</p>`;
     if(!H.marketDoc)return '<p class="h-mt-state">Choose Refresh prices to read the latest prices.</p>';
-    const d=H.marketDoc,f=H.mt,sports=mtSports(d),owner=!!d.owner;
+    const d=H.marketDoc,f=H.mt,sports=mtSports(d),owner=!!d.owner,mode=mtMode();
     const ageText=t=>t==null||!Number.isFinite(t)?'—':t<60?Math.round(t)+'s':t<5400?Math.floor(t/60)+'m':(t/3600).toFixed(1)+'h';
     const builtAge=(Date.now()-Date.parse(d.as_of))/1000;
     /* QOL 2026-11-07: a refresh that fails keeps the last good sheet on screen under a warning (it used to blank the whole section);
@@ -1734,10 +1734,10 @@ export function mount(C) {
     const live=r=>(mtAge(r)??Infinity)<=evMax,liveArb=r=>mtLegsAge(r)<=arbMax;
     for(const s of ready){const x=d.sports[s]||{};
       quotes+=x.quotes_checked||0;lines+=x.markets_checked||0;
-      const e=(x.ev||[]).filter(r=>mtBook(r)&&live(r)),a=(x.arbitrage||[]).filter(liveArb);all+=e.length+a.length;
+      const e=mode==='arb'?[]:(x.ev||[]).filter(r=>mtBook(r)&&live(r)),a=mode==='ev'?[]:(x.arbitrage||[]).filter(liveArb);all+=e.length+a.length;
       ev.push(...e.filter(r=>mtKeep(s,r,false)&&num(r.ev)&&r.ev>=Number(f.minEv)));
       arb.push(...a.filter(r=>mtKeep(s,r,true)));
-      near.push(...(x.closest||[]).filter(r=>mtBook(r)&&live(r)&&mtKeep(s,r,false)&&num(r.per_100)));}
+      if(mode!=='arb')near.push(...(x.closest||[]).filter(r=>mtBook(r)&&live(r)&&mtKeep(s,r,false)&&num(r.per_100)));}
     ev.sort((a,b)=>f.sort==='fresh'?(mtAge(a)??1e12)-(mtAge(b)??1e12):f.sort==='chance'?b.p_cal-a.p_cal:b.per_100-a.per_100);
     arb.sort((a,b)=>f.sort==='fresh'?mtLegsAge(a)-mtLegsAge(b):b.return_per_100-a.return_per_100||mtLegsAge(a)-mtLegsAge(b));
     const at=new Date(d.as_of),clock=Number.isFinite(at.getTime())?at.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'';
@@ -1752,6 +1752,7 @@ export function mount(C) {
         +`<ol class="h-pc-list h-pc-ev${f.dense?' is-compact':''}">${mtHead(['Pick','Book &amp; price','Fair chance vs needed','Per $100 against fair','Checked'])}${near.map(x=>mtEvRow(x,true)).join('')}</ol></section>`;}
     else if(!ev.length&&!arb.length)
       body=all?`<p class="h-mt-state h-pc-none">No prices match these filters. Clear a filter to see all ${all} rows. <button type="button" data-hub="mt-clear">Clear filters</button></p>`
+        :mode==='arb'?`<p class="h-mt-state h-pc-none"><b class="h-empty-title">No arbitrage right now</b>${clock?`Last checked ${esc(clock)}.`:''}</p>`
         :`<p class="h-mt-state h-pc-none">Nothing worth acting on right now. Checked ${quotes.toLocaleString()} prices on ${lines.toLocaleString()} lines${clock?' at '+esc(clock):''}.</p>`;
     if(ev.length){const x=ev[0];
       body+=`<section class="h-pc-section" aria-label="Prices better than the fair chance"><h3>Prices better than the fair chance</h3><p class="h-pc-ask">Which single bets pay more than their real chance is worth?</p>`
@@ -1833,11 +1834,15 @@ export function mount(C) {
   const stopJump=()=>{H.alertsJump=0;};
   for(const t of ['wheel','touchmove','keydown','pointerdown'])document.addEventListener(t,stopJump,{passive:true,capture:true});
   function paintMarkets(){
-    if(!R.me.features?.market_tools||H.section!=='tools')return;
+    if(!R.me.features?.market_tools||!mtSection())return;
+    const mode=mtMode(),host=mode==='arb'?$('hub-arb-body'):mode==='ev'?$('hub-ev-priced'):null;
+    /* one Price check component: it lives in the section on screen (Tools, EV or Arbitrage) and is rebuilt when that changes */
+    if($('hub-market-tools')&&$('hub-market-tools').dataset.mode!==mode)$('hub-market-tools').remove();
     if(!$('hub-market-results')){
       // flag-on styles travel with the flag-on markup, so hub.css keeps its bytes
       if(!$('hub-mt-style'))document.head.insertAdjacentHTML('beforeend',`<style id="hub-mt-style">${MT_CSS}</style>`);
-      ($('hub-tools-alerts')||$('hub-tools-body')).insertAdjacentHTML($('hub-tools-alerts')?'beforebegin':'beforeend',`<section class="h-market-tools" id="hub-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2 tabindex="-1">Price check</h2><p>Prices that pay more than they should, and lines where two books let you bet both sides and win either way.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><p class="h-pc-lede">Each row is a single bet at one book. Green is what the price pays over its fair chance, per $100.</p><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
+      if(host)host.innerHTML=`<section class="h-market-tools h-mt-own" id="hub-market-tools" data-mode="${mode}"><div class="h-section-head"><div><h2 tabindex="-1">${mode==='arb'?'Both sides at two books':'Sportsbook prices above their fair chance'}</h2><p>${mode==='arb'?'Lines where two books let you bet Over and Under and get more back than you staked either way.':'Single bets whose price pays more than the fair chance is worth, best first.'}</p></div><button data-hub="refresh-markets">Refresh prices</button></div><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`;
+      else ($('hub-tools-alerts')||$('hub-tools-body')).insertAdjacentHTML($('hub-tools-alerts')?'beforebegin':'beforeend',`<section class="h-market-tools" id="hub-market-tools" data-mode="all"><div class="h-section-head"><div><span class="h-eyebrow">PRICE RESEARCH</span><h2 tabindex="-1">Price check</h2><p>Prices that pay more than they should, and lines where two books let you bet both sides and win either way.</p></div><button data-hub="refresh-markets">Refresh prices</button></div><p class="h-pc-lede">Each row is a single bet at one book. Green is what the price pays over its fair chance, per $100.</p><div id="hub-market-filters"></div><div id="hub-market-results" aria-live="polite"></div></section>`);
       const box=$('hub-market-filters');
       const read=e=>{const id=(e.target.id||'').replace('hub-mt-','');if(!(id in H.mt)||id==='dense')return;H.mt[id]=e.target.value;if(id in MT_KEEP)mtRemember();paintMarketResults();};
       box.addEventListener('input',e=>{if(e.target.id==='hub-mt-q')read(e);});
@@ -1863,10 +1868,16 @@ export function mount(C) {
     document.querySelector('#hub-studio-section .h-studio-intro').insertAdjacentHTML('beforeend','<button data-hub="share-card">Download lineup image</button>');
   }
 
-  const SECTIONS=['board','studio','record','alerts','picks','tools',...(EVB?['ev']:[])];
-  const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:'Best prices'};
+  /* UI_NEXT (owner 2026-11-11: "where is EV and Arbitrage section"): both get their own screen and nav item. EV = the pick'em +EV
+     board plus Price check's priced-book rows; Arbitrage = Price check's both-sides pairs. The same server rows, limits and maths:
+     only where they are shown changes. A member without the feature gets no nav item (never a locked one). */
+  const MT_ON=R.me.features?.market_tools===true, EV_ON=EVB||(NEXT&&MT_ON), ARB_ON=NEXT&&MT_ON;
+  const mtMode=()=>NEXT&&H.section==='arb'?'arb':NEXT&&H.section==='ev'?'ev':'all';
+  const mtSection=()=>H.section==='tools'||(NEXT&&MT_ON&&(H.section==='ev'||H.section==='arb'));
+  const SECTIONS=['board','studio','record','alerts','picks','tools',...(EV_ON?['ev']:[]),...(ARB_ON?['arb']:[])];
+  const TITLES={tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:NEXT?'EV':'Best prices',arb:'Arbitrage'};
   async function paintEv(){
-    const box=$('hub-ev-body');if(!box||H.section!=='ev')return;
+    const box=$('hub-ev-body');if(!box||H.section!=='ev'||!EVB)return;
     try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
     catch(e){box.innerHTML='<p class="h-mt-state">Best prices could not be loaded. Use Refresh to try again.</p>';}
   }
@@ -1883,12 +1894,12 @@ export function mount(C) {
     const games=name==='board'&&H.view==='games';
     if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
     for(const n of SECTIONS)$('hub-'+n+'-section').hidden=n!==name;
-    const here=name==='alerts'||name==='ev'?'tools':name;
+    const here=name==='alerts'||(name==='ev'&&!NEXT)?'tools':name;
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('u-hub').classList.toggle('h-board-mode',name==='board');
     $('hub-title').textContent=TITLES[name]||'Player props';
-    if(name==='board'){paintBoard();if(from!=='board'&&H.boardScroll!=null&&center){center.scrollTop=H.boardScroll;H.boardScroll=null;}}else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev')paintEv();else paintAlerts();
+    if(name==='board'){paintBoard();if(from!=='board'&&H.boardScroll!=null&&center){center.scrollTop=H.boardScroll;H.boardScroll=null;}}else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev'){paintEv();paintMarkets();}else if(name==='arb')paintMarkets();else paintAlerts();
   }
   /* old Sports links (site audit 2026-11-06): /sports#/board?lg=nba opened the board on All. A route's sport= wins, then the old
      lg= (nba / nfl), then, for a bare board link on /sports, NBA as the classic sports page opened; else the tab kept */
@@ -1899,8 +1910,8 @@ export function mount(C) {
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
     const csBoard=/^#board(?:\/(?:all|prizepicks|underdog))?$/.test(location.hash);
-    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|record|tools|picks|alerts|ev)(?:\?(.*))?$/);
-    const scout=location.hash.match(/^#scout\/(board|games|studio|picks|record|alerts|tools|ev)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
+    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|record|tools|picks|alerts|ev|arb)(?:\?(.*))?$/);
+    const scout=location.hash.match(/^#scout\/(board|games|studio|picks|record|alerts|tools|ev|arb)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
     const mainBoard=location.pathname==='/lol'&&!location.hash || location.pathname==='/sports'&&(!location.hash||location.hash.startsWith('#/board')) || location.pathname==='/'&&(!location.hash||csBoard);
     const open=!classic&&(location.hash==='#all-sports'||!!scout||!!modern||mainBoard||slips);
     if(open&&H.routeHash!==location.pathname+location.hash){
@@ -2042,7 +2053,7 @@ export function mount(C) {
   const sectionFocus=(action,id)=>document.querySelector(`#u-hub [data-hub="${action}"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
   const PAGE_BACK=location.pathname==='/sports'?'#/board':location.pathname==='/lol'?'':'#board';
   function openSave(kind) {H.saveKind=kind;$('hub-save-title').textContent=kind==='alert'?(BG?'Alert on these filters':'Live highlight these filters'):'Save this research view';$('hub-save-note').textContent=kind!=='alert'?'Saved to your account.':BG?'Saved to your account. Whop delivers matches when Scout is closed once delivery is on under Alerts; this screen highlights them live.':'Saved to your account. New matches are highlighted while this research screen is open. Nothing is sent when it is closed.';$('hub-save-name').value='';$('hub-save-dialog').showModal();$('hub-save-name').focus();}
-  const NAV=[['board','Board'],['studio','Slips'],['picks','My picks'],['record','Record'],['tools','Tools']];
+  const NAV=[['board','Board'],['studio','Slips'],...(NEXT&&EV_ON?[['ev','EV']]:[]),...(ARB_ON?[['arb','Arbitrage']]:[]),['picks','My picks'],['record','Record'],['tools','Tools']];
   const pickStatus=[['all','All outcomes'],['pending','Pending'],['hit','Won'],['miss','Lost'],['push','Pushed'],['void','Void']];
   document.body.insertAdjacentHTML('beforeend',`<section id="u-hub" class="scout-hub" aria-label="All sports research" hidden>
     <aside class="h-sidebar"><a class="h-brand" href="/"><span>1T</span><b>1TIME <em>SCOUT</em></b></a><nav aria-label="Research hub">${NAV.map(([id,label])=>`<button data-hub="section" data-id="${id}">${label}${id==='tools'?' <span id="hub-alert-count" aria-label="New filter matches"></span>':''}</button>`).join('')}</nav><div class="h-sidebar-foot"><button data-hub="close">Classic board ↗</button></div></aside>
@@ -2075,7 +2086,7 @@ export function mount(C) {
       <section id="hub-picks-section" hidden><div class="h-section-head"><div><p>Your tracked picks, with the line and chance saved when you tracked. Each settles at that line; pushes are counted apart.</p></div><div class="h-pick-filters" hidden><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status">${pickStatus.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label></div></div><div id="hub-picks-body"></div></section>
       <section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section>
       <section id="hub-tools-section" hidden><div class="h-section-head"><div><p>Every research tool outside the board, in one place.</p></div></div><div id="hub-tools-body"></div></section>
-      <section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>${EVB?'<section id="hub-ev-section" hidden><div id="hub-ev-body"></div></section>':''}
+      <section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>${EV_ON?'<section id="hub-ev-section" hidden><div id="hub-ev-body"></div><div id="hub-ev-priced"></div></section>':''}${ARB_ON?'<section id="hub-arb-section" hidden><div id="hub-arb-body"></div></section>':''}
     </div><aside class="h-slip" aria-label="Slip"><header><h2>Slip <span id="hub-slip-count">0</span></h2><button data-hub="receipts">My picks →</button></header><p id="hub-save-status" class="h-sync" aria-live="polite"></p><div id="hub-slip-content" tabindex="-1"></div><footer>One entry per platform. Rechecked against current offers before tracking.</footer></aside>
     <nav class="h-tabbar" aria-label="Sections"><button data-hub="section" data-id="board">Board</button><button id="hub-tab-slip" data-hub="section" data-id="studio">Slip <span id="hub-tab-slip-n" class="h-count-badge">0</span></button><button data-hub="section" data-id="picks">My picks</button><button data-hub="section" data-id="record">Record</button><button id="hub-more-toggle" data-hub="more" aria-expanded="false" aria-controls="hub-more">More <span id="hub-alert-count-m" class="h-count-badge" aria-label="New filter matches"></span></button></nav>
     <div id="hub-more" class="h-more-sheet" role="group" aria-label="More" hidden><button data-hub="view" data-id="games">By game</button><button data-hub="section" data-id="tools">Tools</button><button data-hub="section" data-id="alerts">${ALERT_WORD}</button><button data-hub="studio-open" data-id="build">Auto-build slips</button><button data-hub="studio-open" data-id="tracked">Tracked slips</button><a href="/?view=classic#moneylines">Moneylines ↗</a><a href="/?view=classic#one">Single prop grader ↗</a><a href="/?view=classic#matches">Match research ↗</a><button data-hub="close">Classic board ↗</button></div>
@@ -2121,12 +2132,15 @@ export function mount(C) {
   if(document.body.classList.contains('ot-lol')){let q=0;new MutationObserver(()=>{if(q)return;q=requestAnimationFrame(()=>{q=0;const bar=document.querySelector('.ot-lol .bar');if(bar&&entry.parentNode!==bar)bar.appendChild(entry);});}).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});}
   /* QOL 2026-11-07: Enter in the name box saves (the form's first button is Cancel, so Enter cancelled and nothing was saved) */
   $('hub-board-section').querySelector('.h-viewmode').insertAdjacentHTML('afterend','<button id="hub-focus" class="h-focus-toggle" data-hub="focus-board" aria-pressed="false" aria-controls="hub-slip-content">Hide slip</button>');
+  /* the design before the redesign, kept for comparison (/preview/current): its sidebar has the way back to the new one */
+  if(!NEXT&&/(?:^|;\s*)scout_ui=current(?:;|$)/.test(document.cookie))document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin','<a class="h-preview-on" href="/preview/next" style="display:block;margin:0 0 8px;font-size:11px">New design</a>');
   if(NEXT){
     /* UI_NEXT shell: By prop / By player, the theme switch, and (preview cookie only) the way back to the current design */
     $('hub-board-section').querySelector('.h-viewmode').insertAdjacentHTML('beforebegin','<div class="h-segment h-groupmode" role="group" aria-label="Group rows"><button data-hub="group-by" data-id="prop" aria-pressed="true">By prop</button><button data-hub="group-by" data-id="player" aria-pressed="false">By player</button></div>');
     const light=document.documentElement.dataset.theme==='light',preview=/(?:^|;\s*)scout_ui=next(?:;|$)/.test(document.cookie);
-    const extra=`<button data-hub="theme" aria-pressed="${light}">${light?'Dark theme':'Light theme'}</button>${preview?'<a class="h-preview-off" href="/preview/next?off=1">Current design</a>':''}`;
+    const extra=`<button data-hub="theme" aria-pressed="${light}">${light?'Dark theme':'Light theme'}</button><a class="h-preview-off" href="/preview/current">Previous design</a>`;
     document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin',extra);
+    $('hub-more').insertAdjacentHTML('afterbegin',(EV_ON?'<button data-hub="section" data-id="ev">EV</button>':'')+(ARB_ON?'<button data-hub="section" data-id="arb">Arbitrage</button>':''));
     $('hub-more').insertAdjacentHTML('beforeend',extra);
     /* rows by keyboard: Up / Down move between rows, Right opens a row's ladder, Left closes it (Enter opens the card as before) */
     $('hub-rows').addEventListener('keydown',e=>{
@@ -2258,8 +2272,8 @@ export function mount(C) {
   /* Price check left open: coming back to the tab reloads a sheet older than 2 min, and once a minute the rows are redrawn (no
      request) so a price or both-sides pair past the server's age limit drops off even if nobody touches the page */
   const mtOld=()=>{const t=Date.parse(H.marketDoc?.as_of);return !Number.isFinite(t)||Date.now()-t>120000;};
-  document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='tools'&&H.marketDoc&&!H.marketLoading&&mtOld())actions['refresh-markets']();});
-  setInterval(()=>{const box=$('hub-market-results');if(!document.hidden&&H.section==='tools'&&H.marketDoc&&box&&!box.contains(document.activeElement))paintMarketResults();},60000);
+  document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&mtSection()&&H.marketDoc&&!H.marketLoading&&mtOld())actions['refresh-markets']();});
+  setInterval(()=>{const box=$('hub-market-results');if(!document.hidden&&mtSection()&&H.marketDoc&&box&&!box.contains(document.activeElement))paintMarketResults();},60000);
   restoreBoard();
   route();
   loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts'||H.section==='tools')paintAlerts();});

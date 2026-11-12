@@ -421,3 +421,55 @@ html[data-ui=next] #u-hub .h-insight-stats b{font:600 18px/1.2 var(--n-mono);col
 html[data-ui=next] #u-hub .h-insight-stats span{font:500 10px/1.3 var(--n-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--n-t3)}
 html[data-ui=next] #u-hub .h-insight-stats small{font-size:11px;color:var(--n-t3)}
 html[data-ui=next] #u-hub .h-why-list b{font-family:inherit;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* ---------- desktop column plan (the Edge, Market edge, H2H and Season columns are live flags): the player column never collapses ---------- */
+@media(min-width:1101px){
+ html[data-ui=next] #u-hub #hub-table{table-layout:fixed;width:100%}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-player{width:auto;min-width:0}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-market{width:112px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-line{width:80px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-proj{width:48px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-scout{width:138px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-hits{width:136px}
+ html[data-ui=next] #u-hub.h-cols #hub-table :is(th,td).h-c-hits{width:224px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-edge{width:84px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-medge{width:104px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-compare{width:136px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-add{width:72px}
+ html[data-ui=next] #u-hub #hub-table .h-strip{display:flex;gap:4px;justify-content:flex-start}
+ html[data-ui=next] #u-hub #hub-table .h-strip>*{flex:0 0 40px;min-width:0;width:40px}
+ html[data-ui=next] #u-hub #hub-table .h-strip .h-hit{min-width:0;width:40px}
+ html[data-ui=next] #u-hub #hub-table .h-player{width:100%;min-width:0}
+ html[data-ui=next] #u-hub #hub-table .h-player :is(b,small){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;max-width:100%}
+ html[data-ui=next] #u-hub #hub-table .h-c-player{display:table-cell}
+}
+@media(min-width:1101px) and (max-width:1699px){
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-medge{display:none}
+ html[data-ui=next] #u-hub.h-cols #hub-table :is(th,td).h-c-hits{width:136px}
+ html[data-ui=next] #u-hub #hub-table .h-strip>:nth-child(n+4){display:none}
+}
+@media(min-width:1101px) and (max-width:1499px){
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-proj{display:none}
+ html[data-ui=next] #u-hub #hub-table .h-c-player :is(.h-face,.u-face){display:none}
+}
+@media(min-width:1101px) and (max-width:1279px){
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-edge{display:none}
+ html[data-ui=next] .scout-hub{--slip-w:288px}
+}
+
+/* ---------- EV and Arbitrage: Price check's rows as board-style tables ---------- */
+html[data-ui=next] #u-hub .h-mt-own{border:0;background:transparent;padding:0}
+html[data-ui=next] #u-hub .h-pc-list{margin:8px 0 16px;padding:0;border:1px solid var(--n-line2);border-radius:var(--n-r);background:var(--n-s1);overflow:hidden}
+html[data-ui=next] #u-hub .h-pc-row{border-top:1px solid var(--n-line);border-radius:0;background:var(--n-s1);padding:6px 8px}
+html[data-ui=next] #u-hub .h-pc-row.h-pc-head{background:var(--n-s2);border-top:0;border-bottom:1px solid var(--n-line2);color:var(--n-t3);font:500 10px/1.2 var(--n-mono);letter-spacing:.08em;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-pc-cell b{color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-pc-cell small{color:var(--n-t3);font-size:11px}
+html[data-ui=next] #u-hub :is(.h-pc-nb,.h-pc-fair,.h-pc-age,.h-pc-leg span){font-family:var(--n-mono);font-size:12px}
+html[data-ui=next] #u-hub .h-pc-chip{padding:1px 6px;border:1px solid var(--n-over-line);border-radius:var(--n-r);background:transparent;color:var(--n-over-t);font:600 12px/1.5 var(--n-mono)}
+html[data-ui=next] #u-hub .h-pc-chip.h-pc-short{border-color:var(--n-line2);color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-pc-margin{display:block;margin-top:2px;font:500 11px/1.2 var(--n-mono);color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-mt-state{padding:16px 0;border:0;background:transparent;color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-pc-none .h-empty-title{margin-bottom:4px}
+html[data-ui=next] #u-hub .h-pc-stake input{width:120px;font-family:var(--n-mono)}
+html[data-ui=next] #u-hub .h-market-filters{gap:8px;padding:8px 0;border:0;background:transparent}
+html[data-ui=next] #u-hub #hub-ev-priced{margin-top:16px;border-top:1px solid var(--n-line2);padding-top:8px}
