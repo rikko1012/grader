@@ -47,11 +47,3 @@ def test_current_revision_persistence_and_seen_time(tmp_path):
         assert datetime.fromisoformat(event['seen_at'].replace('Z','+00:00'))==NOW+timedelta(minutes=5)
         assert gb.refresh(db,'nfl',NOW+timedelta(days=5))=={'events':0}
     finally:db.close()
-
-def test_bridge_wrong_league(monkeypatch):
-    import workspace_game_books as bridge
-    import workspace_sports
-    class Server:
-        def shared(self,key,compute,ttl):return compute()
-    monkeypatch.setattr(workspace_sports,'call',lambda *a: ({'league':'nba','events':[]},None))
-    assert bridge.shared(Server(),'nfl')[0]==503

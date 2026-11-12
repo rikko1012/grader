@@ -24,3 +24,11 @@ def test_game_prices_pass_only_valid_league_to_shared_cache(monkeypatch):
     h = SimpleNamespace(send=lambda status, body: (status, body))
     assert workspace_api.get_game_books(h, None, {"league": "nfl"}, None, None, None)[0] == 200
     assert calls == ["nfl"]
+
+def test_bridge_wrong_league(monkeypatch):
+    import workspace_game_books as bridge
+    import workspace_sports
+    class Server:
+        def shared(self,key,compute,ttl):return compute()
+    monkeypatch.setattr(workspace_sports,'call',lambda *a: ({'league':'nba','events':[]},None))
+    assert bridge.shared(Server(),'nfl')[0]==503
