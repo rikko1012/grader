@@ -240,3 +240,19 @@ def test_member_books_are_cut_to_the_members_sports(fake, monkeypatch):
     body = _member_body(fake, monkeypatch)
     m = wm.for_member(body, {"cs2": True, "lol": True})
     assert set(m["sports"]) == {"cs2", "lol"} and m["books"] == []                     # no NBA/NFL book on a CS2/LoL-only account
+
+
+def test_duplicate_quote_uses_latest_whole_revision_not_first_attachment(monkeypatch):
+    now = time.time()
+    snapshot = snap([("p1", 20.5, [("fanduel", 2.3, 1.7, 900), ("betrivers", 1.7, 2.3, 20)])], now)
+    import copy
+    second = copy.deepcopy(snapshot["index"][("underdog", "o-p1")])
+    second["books"][0][0].update(over=1.7, under=2.3, seen_at=iso(now - 10))
+    snapshot["index"][("prizepicks", "other-offer")] = second
+    quotes, _ = wb.book_quotes(snapshot)
+    fd = [b for k, b, x in quotes if k[0] == "fanduel"]
+    assert len(fd) == 1 and (fd[0]["over"], fd[0]["under"]) == (1.7, 2.3)
+    # Same answer when attachment order changes; stale profitable-looking Over
+    # must not be resurrected or combined with the current Under.
+    snapshot["index"] = dict(reversed(list(snapshot["index"].items())))
+    assert [(k, b) for k, b, x in wb.book_quotes(snapshot)[0]] == [(k, b) for k, b, x in quotes]

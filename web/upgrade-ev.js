@@ -10,6 +10,12 @@ const DEF_F = () => ({q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: tr
 const S = {doc: null, loading: false, error: null, seq: 0, open: new Set(), showModel: false, restored: false, notice: '',
   p: Object.assign({app: 'prizepicks', entry: '', n: 0}, DEF_P()), f: DEF_F()};
 let C = null, box = null;
+const PAGE_SIZE = 50;
+let pageKey = '', marketPage = 0, modelPage = 0;
+function pager(kind, page, count) {
+  if (count <= PAGE_SIZE) return '';
+  return `<nav class="ev-pages" aria-label="${kind === 'market' ? 'Market priced' : 'No book price'} pages"><button data-ev="page" data-kind="${kind}" data-step="-1"${page === 0 ? ' disabled' : ''}>Previous</button><span role="status">${page * PAGE_SIZE + 1} &ndash; ${Math.min((page + 1) * PAGE_SIZE, count)} of ${count}</span><button data-ev="page" data-kind="${kind}" data-step="1"${(page + 1) * PAGE_SIZE >= count ? ' disabled' : ''}>Next</button></nav>`;
+}
 
 function load() {
   try {
@@ -161,7 +167,7 @@ function filtersHtml(d) {
   const w = p.preset === 'custom' ? `<fieldset class="ev-weights"><legend>How much each book counts</legend>${books.map(b => sel('w-' + b.id, b.label, o.weight_choices.map(x => [x, x === 0 ? 'Off' : x + 'x']), p.w[b.id] ?? 1)).join('')}</fieldset>` : '';
   return `<details class="ev-drawer"${S.drawer ? ' open' : ''}><summary>Filters</summary><div class="ev-drawer-body">`
     + `<div class="ev-quick" role="group" aria-label="Quick filters">${[['sharp', 'Top books only'], ['favorites', 'Favorites'], ['longshots', 'Longshots']].map(([k, t]) => { const on = k === 'sharp' ? p.preset === 'sharp' : f.quick === k; return `<button data-ev="quick" data-id="${k}" aria-pressed="${on}">${on ? '<span aria-hidden="true">✓ </span>' : ''}${t}</button>`; }).join('')}`
-    + `<button data-ev="evonly" aria-pressed="${f.evOnly}">Only picks that beat the entry</button></div>`
+    + `</div>`
     + `<div class="ev-grid">${sel('preset', 'How books count', o.presets.map(x => [x, x === 'equal' ? 'All the same' : x === 'sharp' ? 'Top books count more' : 'Choose for each book']), p.preset)}`
     + sel('min_books', 'Fewest independent books', Array.from({length: o.min_books_max}, (_, i) => [i + 1, String(i + 1)]), p.min_books)
     + sel('min_liq', 'Least money on an exchange price', o.min_liq_choices.map(x => [x, x ? '$' + x.toLocaleString() : 'Any']), p.min_liq)
@@ -192,6 +198,10 @@ function paintBox() {
   if (!d) { box.innerHTML = head() + `<p class="ev-state" role="status">${S.error ? esc(S.error) + ' Use Refresh to try again.' : 'Checking current prices…'}</p>`; return; }
   const sports = (d.sports || []).length, rows = d.rows.filter(r => keep(r) && (!S.f.evOnly || (typeof r.ev === 'number' && r.ev > 0)));
   const model = d.model_only.filter(keep), entries = d.options.entries.filter(e => e.app === d.app);
+  const nextKey = JSON.stringify([S.f, d.as_of, d.app, d.entry, d.n]);
+  if (nextKey !== pageKey) { pageKey = nextKey; marketPage = modelPage = 0; }
+  marketPage = Math.min(marketPage, Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1));
+  modelPage = Math.min(modelPage, Math.max(0, Math.ceil(model.length / PAGE_SIZE) - 1));
   const sportOpts = [['all', 'All sports'], ...d.sports.map(s => [s, C.SPORTS[s] || s])];
   const banner = d.hidden && d.hidden.text ? `<p class="ev-banner" role="status">${esc(d.hidden.text)} Old, one-sided or wide prices never set a chance.</p>` : '';
   box.innerHTML = head()
@@ -202,11 +212,11 @@ function paintBox() {
     + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
     + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
     + (d.payout && d.payout.text ? `<p class="ev-banner">${esc(d.payout.text)}</p>` : '') + filtersHtml(d) + chipsHtml(d) + banner
-    + `<section aria-label="Market priced legs"><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
-    + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.map(r => rowHtml(r, sports)).join('')}</ol>`
-      : `<p class="ev-state">${d.rows_total ? 'No leg beats the entry right now with these filters.' : d.params.min_books > 1 ? `No pick'em leg has ${d.params.min_books} independent books on its exact line right now.` : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
+    + `<section aria-label="Market priced legs"><div class="ev-quick"><button data-ev="evonly" aria-pressed="${S.f.evOnly}">Only picks that beat the entry</button>${S.f.evOnly ? '<span>Turn off to explore every priced line.</span>' : '<span>All priced lines, including those below break-even.</span>'}</div><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
+    + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.slice(marketPage * PAGE_SIZE, (marketPage + 1) * PAGE_SIZE).map(r => rowHtml(r, sports)).join('')}</ol>${pager('market', marketPage, rows.length)}`
+      : `<p class="ev-state">${d.rows_total ? (S.f.evOnly ? 'No leg beats the entry right now with these filters.' : 'No priced leg matches these filters.') : d.params.min_books > 1 ? `No pick'em leg has ${d.params.min_books} independent books on its exact line right now.` : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
     + `</section><section aria-label="Model only legs" class="ev-model"><h3>No book price <small>${model.length} legs · no book price to use on this exact line, ranked by Scout's chance</small></h3>`
-    + (model.length ? `<button class="ev-link" data-ev="model" aria-expanded="${S.showModel}">${S.showModel ? 'Hide' : 'Show'} legs with no book price</button>${S.showModel ? `<ol class="ev-list ev-list-model"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>Scout</span><span>Average return on Scout's chance</span><span></span></li>${model.slice(0, 100).map(r => modelRowHtml(r, sports)).join('')}</ol>` : ''}` : '<p class="ev-state">None right now.</p>')
+    + (model.length ? `<button class="ev-link" data-ev="model" aria-expanded="${S.showModel}">${S.showModel ? 'Hide' : 'Show'} legs with no book price</button>${S.showModel ? `<ol class="ev-list ev-list-model"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>Scout</span><span>Average return on Scout's chance</span><span></span></li>${model.slice(modelPage * PAGE_SIZE, (modelPage + 1) * PAGE_SIZE).map(r => modelRowHtml(r, sports)).join('')}</ol>${pager('model', modelPage, model.length)}` : ''}` : '<p class="ev-state">None right now.</p>')
     + `</section><details class="ev-how"><summary>How this works</summary><p>To hit is the books' chance for this side at the app's exact line, with each book's cut taken out (the least favourable of three ways, so the chance is never flattered). A book counts only when it prices this exact line and settles a player who sits out the way the app does; nothing is moved over from another line. Exchange prices count only when buy and sell are within ${Math.round(d.options.max_spread * 100)}¢. Prices older than ${Math.round(d.options.freshness_s.sportsbook / 60)} minutes (exchanges ${Math.round(d.options.freshness_s.exchange / 60)}) are left out. Books that share one price feed count once, and by default a leg needs two independent books. Lower Fewest independent books to 1 to see legs that rest on a single book; they are marked 1 book.</p>`
     + `<p>Average return is per pick on this entry: chance to hit ÷ chance needed − 1. Scout is Scout's own chance as the board shows it, beside the books' chance and never mixed into it.</p>`
     + `<p>Payouts: ${esc(d.app_label)} table from ${d.payout_source.source ? `<a href="${esc(d.payout_source.source)}" target="_blank" rel="noopener">its help center</a>` : 'its help center'}, read ${esc(d.payout_source.read_at || '')}. The app's own entry screen is final. Scout links to the app and never places an entry.</p></details>`;
@@ -217,7 +227,8 @@ function head() {
     + `<div class="ev-refresh"><button data-ev="refresh"${S.loading ? ' disabled' : ''}>${S.loading ? 'Checking…' : 'Refresh'}</button>${d ? `<small>Checked ${esc(C.when(d.as_of))}</small>` : ''}</div></div>`;
 }
 
-const CSS = '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}'
+const CSS = '#u-hub .ev-pages{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px 0}#u-hub .ev-pages button{min-height:40px;padding:8px 16px}#u-hub .ev-pages button:disabled{opacity:.45}'
+  + '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}'
   + '#u-hub .ev-refresh{display:flex;flex-direction:column;align-items:flex-end;gap:4px}#u-hub .ev-refresh small{color:var(--u-muted)}'
   + '#u-hub .ev-apps{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px}#u-hub .ev-apps button{min-height:40px;display:inline-flex;align-items:center;gap:8px}'
   + '#u-hub .ev-apps button[aria-pressed="true"]{border-color:var(--u-accent,#3b82f6);box-shadow:inset 0 0 0 1px var(--u-accent,#3b82f6)}'
@@ -251,6 +262,7 @@ const CSS = '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;j
 function onClick(e) {
   const b = e.target.closest('[data-ev]'); if (!b || !box.contains(b) || b.disabled) return;
   const id = b.dataset.id, a = b.dataset.ev;
+  if (a === 'page') { const step = Number(b.dataset.step); if (b.dataset.kind === 'market') marketPage = Math.max(0, marketPage + step); else modelPage = Math.max(0, modelPage + step); return render(); }
   if (a === 'refresh') return fetchDoc();
   if (a === 'app' && id !== S.p.app) { S.p.app = id; S.p.entry = ''; S.p.n = 0; return fetchDoc();   /* the server opens each app on the entry that needs the lowest chance */ }
   if (a === 'books') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); return render(); }

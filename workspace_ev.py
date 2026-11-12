@@ -38,8 +38,6 @@ MARKET_SPORTS = ("nba", "nfl")
 MODEL_EV_HIDDEN = ("nba", "nfl")                # no return figure on a leg with no book price (owner audit 2026-11-06, T5)
 MODEL_SPORTS = ("cs2", "lol")
 PREDICTION = ("kalshi", "polymarket")
-MAX_ROWS = 400
-MAX_MODEL_ROWS = 200
 MAX_REQUIRED = 2
 _LOCK = threading.Lock()
 _FAIR = {}                          # (board token, fair params) -> {(sport, app, offer id, side): leg}
@@ -363,7 +361,7 @@ def build(srv, p, allowed, now=None):
                         "max_width_choices": list(ev_board.MAX_WIDTH_CHOICES), "min_books_max": ev_board.MIN_BOOKS_MAX,
                         "min_books_default": ev_board.MIN_BOOKS_DEFAULT,
                         "freshness_s": price_limits(), "max_spread": fair.MAX_SPREAD},
-            "plays": plays, "rows": rows[:MAX_ROWS], "rows_total": len(rows), "model_only": model_rows[:MAX_MODEL_ROWS],
+            "plays": plays, "rows": rows, "rows_total": len(rows), "model_only": model_rows,
             "model_only_total": len(model_rows), "hidden": {"count": sum(hidden.values()), "by": hidden,
                                                              "text": ev_board.hidden_banner(hidden)},
             "sports": sorted(s for s, v in allowed.items() if v)}
