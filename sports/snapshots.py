@@ -135,7 +135,11 @@ def _iter_latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7, index=
         cur = best.get(k)
         if cur is None or row["revision"] > cur["revision"]:
             best[k] = row
-    rows = list(best.values())[:int(limit)]
+    yield from _decode_current_rows(con, list(best.values())[:int(limit)])
+
+
+def _decode_current_rows(con, rows):
+    """Fetch payloads only for the selected current revisions, in bounded batches."""
     for i in range(0, len(rows), 500):
         chunk = rows[i:i + 500]
         pay = {r["record_id"]: r["payload"] for r in con.execute(
@@ -145,6 +149,39 @@ def _iter_latest(con, kind, where="", args=(), as_of=None, limit=10 ** 7, index=
             yield (row["record_id"], from_dict(store._unpack(pay[row["record_id"]])),
                         {"known_at": row["known_at"], "revision": row["revision"], "last_seen_at": row["last_seen_at"],
                          "last_source_updated_at": row["last_source_updated_at"], "source_key": row["source_key"]})
+
+
+
+def _slate_offers(con, league, event_ids, as_of):
+    """Current offer revisions for identities ever mapped to this slate.
+
+    Read candidate identities through records_event, then seek each identity's
+    latest non-late revision through records_current. The former league scan
+    spent 307 seconds before publishing NBA prices on 2026-11-12. An identity
+    whose newest revision moved to another event or withdrew must still resolve
+    to that newest revision; filtering event_id before selecting it resurrects
+    the old offer. The caller applies event/availability filters afterward.
+    """
+    if not event_ids:
+        return []
+    pairs = set()
+    ids = sorted(set(event_ids))
+    for i in range(0, len(ids), 400):
+        part = ids[i:i + 400]
+        pairs.update((r[0], r[1]) for r in con.execute(
+            "SELECT DISTINCT source, source_key FROM records INDEXED BY records_event "
+            "WHERE kind = 'offer' AND league = ? AND event_id IN (" + ",".join("?" * len(part)) + ")",
+            [league, *part]))
+    rows = []
+    for source, key in sorted(pairs):
+        row = con.execute(
+            "SELECT record_id, source, source_key, revision, known_at, last_seen_at, last_source_updated_at "
+            "FROM records INDEXED BY records_current WHERE kind = 'offer' AND source = ? AND source_key = ? "
+            f"AND {store.CURRENT_SQL} AND league = ? AND known_at <= ? ORDER BY revision DESC LIMIT 1",
+            (source, key, league, as_of)).fetchone()
+        if row is not None:
+            rows.append(row)
+    return list(_decode_current_rows(con, rows))
 
 
 def _all_forecasts(con, league, as_of, event_ids=None):
@@ -706,12 +743,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
     # current offer + every forecast + every offer revision grew with the store and pushed this job over its cap
     # (production 2026-10-25 01:00Z: killed_over_cap 254 > 250 MB six times in a row -> the board stopped refreshing).
     ev_ids = sorted(events)
-    ev_in = ",".join("?" * len(ev_ids)) or "NULL"
     last_read = _last_read(con, league, now)                # platform -> newest re-confirmation of any of its offers
-    offers = [(rid, o, m) for rid, o, m in _latest(
-        con, "offer", f"league = ? AND (source, source_key) IN (SELECT source, source_key FROM records WHERE "
-                      f"kind = 'offer' AND league = ? AND event_id IN ({ev_in}))", [league, league, *ev_ids], now)
-        if o.event_id in events and o.availability == "open"]
+    offers = [(rid, o, m) for rid, o, m in _slate_offers(con, league, ev_ids, now)
+              if o.event_id in events and o.availability == "open"]
     unmatched = _unmatched_offers(con, league, now)
     stage("offers read")
     revs = _offer_revisions(con, league, now, ev_ids)
