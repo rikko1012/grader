@@ -414,6 +414,9 @@ def _log_rows(doc):
     return rows, summary
 
 
+_KNOWN = {}
+
+
 def rules_table():
     """The book family map and the settlement table, as rows (the admin record view)."""
     from gradecore import book_rules
@@ -424,8 +427,13 @@ def known_books(srv):
     """Books the NBA / NFL snapshots hold right now (for the required-books and per-book-weight parameters)."""
     from gradecore import book_rules
     _token, legs = _legs(srv)
-    return sorted({base_book(b.get("platform")) for leg in legs for b in leg["book_rows"] or ()
-                   if book_rules.for_pickem(b.get("platform"), leg["sport"])[0]})
+    hit = _KNOWN.get("v")
+    if hit is not None and hit[0] is legs:             # every member request asks: answered once per leg list, not per request
+        return hit[1]
+    pairs = {(base_book(b.get("platform")), leg["sport"]) for leg in legs for b in leg["book_rows"] or ()}
+    out = sorted({b for b, sport in pairs if book_rules.for_pickem(b, sport)[0]})
+    _KNOWN["v"] = (legs, out)
+    return out
 
 
 def shared(srv, q, allowed):
