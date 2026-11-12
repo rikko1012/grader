@@ -16,8 +16,9 @@ Unders 54.3%, Over share 43.7%. Staked 2,679 at 53.1%.
   staked Over share 51.6 -> 50.8. The added picks: 121 rows / 95 units / 79 matches, 65.3% [55.9, 74.8] vs 58.7%
   printed. Whole record Oct 11 - Nov 8: 381 rows / 239 matches, 62.5% [56.8, 68.2] vs 59.2% printed. Fresh holdout
   Nov 9-11 (after scoring): 35 picks / 18 matches, 60.0%.
-- **Candidate:** `awp_hs_lift.py` (awp-hs-1), `CS2_AWP_HS_LIFT`, default off, NOT wired into the live path (no
-  model-tag file edited); `tests/test_awp_hs_lift.py`.
+- **Shipped 2026-11-12 02:48 UTC as awp-hs-1** (owner "yes"; main 1900a1e, model tag `042a5339de`, rollback
+  `CS2_AWP_HS_LIFT=0`): the rule is in `grader.grade_leg` (Gate A); `awp_hs_lift.py` holds the stake-rebuild helper;
+  tests `tests/test_awp_hs_lift.py`. See MODEL_VERSIONS.md and FACTOR_AUDIT.md round 8.
 - **Board preview (2026-11-11 23:17 UTC, 376 lines / 14 matches):** 0 sides, 0 letters, 0 chances change; 14 picks
   0U -> staked (4 Over, 10 Under); staked 152 -> 166; staked Over share 59.2% -> 56.6%.
 
