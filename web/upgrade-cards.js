@@ -356,7 +356,8 @@ export function panels(X) {
    * doc.grade_inputs is built on the server (card_grade_inputs.py) from the board record and the saved forecast: one shape for every
    * sport. This panel only prints it. The headline numbers are the board record's own (r.scout / r.offer); when the doc was read for
    * an earlier grade of this line (the doc is shared for a few seconds) only the record's numbers are printed, never a stale input. */
-  const giP = v => (v * 100).toFixed(Math.abs(v * 1000 - Math.round(v * 1000)) > 1e-6 ? 2 : 1) + '%';
+  const giP = v => (v * 100).toFixed(1) + '%';   /* chances to 0.1%, as on the board row and the card's headline */
+  const gi1 = v => (+v).toFixed(1);                /* the projection as the board prints it */
   const giN = v => String(+(+v).toFixed(2));
   const giRow = (k, v) => v ? `<tr><th scope="row">${k}</th><td>${v}</td></tr>` : '';
   const giTable = (cls, caption, head, rows) => rows.length ? `<table class="h-gi-table ${cls}"><caption>${esc(caption)}</caption>${head ? `<thead><tr>${head.map((h, i) => `<th scope="col"${i ? ' class="h-gi-num"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>` : ''}<tbody>${rows.join('')}</tbody></table>` : '';
@@ -377,7 +378,7 @@ export function panels(X) {
     const letter = same ? (g.letter || g.lean || '') : '';
     const band = rule ? (rule.lower != null && rule.upper != null ? `${giP(rule.lower)} to below ${giP(rule.upper)}` : rule.lower != null ? `at least ${giP(rule.lower)}` : rule.upper != null ? `below ${giP(rule.upper)}` : '') : '';
     const def = [
-      giRow('Projection vs line', num(proj) && num(line) ? `<span class="h-gi-num">${giN(proj)} vs ${esc(line)}</span>${gap ? ` <small class="${gap > 0 ? 'h-gi-up' : 'h-gi-dn'}"><span aria-hidden="true">${gap > 0 ? '▲' : '▼'}</span> ${giN(Math.abs(gap))} ${gap > 0 ? 'above' : 'below'} the line</small>` : ''}` : num(proj) ? `<span class="h-gi-num">${giN(proj)}</span>` : ''),
+      giRow('Projection vs line', num(proj) && num(line) ? `<span class="h-gi-num">${gi1(proj)} vs ${esc(line)}</span>${gap ? ` <small class="${gap > 0 ? 'h-gi-up' : 'h-gi-dn'}"><span aria-hidden="true">${gap > 0 ? '▲' : '▼'}</span> ${gi1(Math.abs(gap))} ${gap > 0 ? 'above' : 'below'} the line</small>` : ''}` : num(proj) ? `<span class="h-gi-num">${gi1(proj)}</span>` : ''),
       giRow('Chance', side && num(sc.p_side) ? `<span class="h-gi-num">${giP(sc.p_side)}</span>${same && g.chance_rule ? ` <small>${esc(g.chance_rule)}</small>` : ''}` : ''),
       giRow('Side', side ? `<b class="h-gi-side-${side}">${esc(sideWord(side))}</b>` : ''),
       giRow('Letter', letter ? `<b>${esc(letter)}</b>${band ? ` <small>Why this letter: chance ${band}</small>` : ''}` : ''),

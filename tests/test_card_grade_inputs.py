@@ -365,7 +365,7 @@ def test_panel_prints_the_block_with_the_record_numbers(env, tmp_path):
     order = [html.index(t) for t in ("Behind the grade", "Projection vs line", ">Chance<", ">Side<", ">Letter<", ">Stake<", ">Model<", ">Sample<",
                                      "What moved the projection", "Shown for context", "<caption>Matchup</caption>")]
     assert order == sorted(order)
-    assert f"{rec['scout']['projection']:g} vs {rec['offer']['line']}" in html and f"{rec['scout']['p_side'] * 100:.1f}%" in html      # 0.1%
+    assert f"{rec['scout']['projection']:.1f} vs {rec['offer']['line']}" in html and f"{rec['scout']['p_side'] * 100:.1f}%" in html      # 0.1%
     assert ">Over</b>" in html and "<b>B</b>" in html and "Why this letter: chance 57.0% to below 63.0%" in html and "0.5U" in html and "perf-cm2" in html
     live, ctx = html.split("Shown for context")[0], html.split("Shown for context")[1]
     assert live.count('<th scope="row">') == 7 + len(cm2.ARTIFACT["feature_names"]) and "▲" in live and "▼" in live and ">up</span>" in live and ">down</span>" in live

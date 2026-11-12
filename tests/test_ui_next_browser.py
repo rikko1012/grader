@@ -307,7 +307,7 @@ def test_the_card_sits_beside_the_board_and_shows_what_is_behind_the_grade(brows
         rec = next(r for r in records(p) if r["player"]["name"] == "Reed Lean" and r["offer"]["platform"] == row.get_attribute("data-record").split("|")[1])
         gi = p.locator("#hub-card .h-gi").inner_text()
         assert "Behind the grade" in gi or "BEHIND THE GRADE" in gi.upper()
-        assert f"{rec['scout']['projection']:g}" in gi and f"{rec['scout']['p_side'] * 100:.1f}%" in gi and "sm-1" in gi and rec["scout"]["grade"] in gi
+        assert f"{rec['scout']['projection']:.1f}" in gi and f"{rec['scout']['p_side'] * 100:.1f}%" in gi and "sm-1" in gi and rec["scout"]["grade"] in gi
         assert f"{rec['scout']['p_side'] * 100:.1f}%" in p.locator("#hub-decision").inner_text()       # the card's headline agrees with the board
         assert f"{rec['scout']['p_side'] * 100:.1f}%" in row.locator(".h-c-scout").inner_text()
         # the board stays in reach: the next player is one click
