@@ -16,7 +16,7 @@ import workspace_books as wb
 from tests.test_audit_board_browser import sport
 from tests.test_phase4_browser import offer, lines_read, page, SHOWN_BOOKS
 from tests.test_pickem_readers import event_of
-from tests.test_upgrade_browser import browser, env, context, DESK, no_h_scroll  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, DESK, no_h_scroll  # noqa: F401
 
 SHOTS = Path(os.environ['PHONE_SHOTS']) if os.environ.get('PHONE_SHOTS') else None
 PHONES = [{"width": w, "height": 844} for w in (360, 390, 414)]
@@ -90,7 +90,7 @@ def open_board(browser, env, size):
 
 def pick_book(p, b):
     p.wait_for_function(f"{SHOWN_BOOKS}.includes('{b}')", timeout=20000)
-    p.locator(f'#hub-platform [data-hub="book"][data-id="{b}"]').click()
+    in_sheet(p, f'#hub-platform [data-hub="book"][data-id="{b}"]').click(); close_sheet(p)
     p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length>0", timeout=20000)
     p.wait_for_function("!document.querySelector('#hub-rows .h-hit-wait')", timeout=20000)
 

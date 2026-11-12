@@ -11,7 +11,7 @@ import book_providers as bp
 import workspace_alerts
 import workspace_books as wb
 from tests.test_pickem_readers import event_of  # noqa: E402
-from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 
 SHOTS_DIR = Path(os.environ['PHASE4_SHOTS']) if os.environ.get('PHASE4_SHOTS') else None
 
@@ -60,7 +60,7 @@ def test_book_toggle_flag_on_shows_view_only_sleeper_lines(browser, env, sleeper
     try:
         p = hub(c, env, size)
         assert 'sleeper' in p.locator('#hub-platform [data-hub="book"]').evaluate_all('bs=>bs.map(b=>b.dataset.id)')
-        p.locator('#hub-platform [data-hub="book"][data-id="sleeper"]').click()
+        in_sheet(p, '#hub-platform [data-hub="book"][data-id="sleeper"]').click(); close_sheet(p)
         assert p.locator('#hub-platform [data-id="sleeper"]').get_attribute('aria-pressed') == 'true'
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
         text = p.locator('#hub-rows').inner_text()
@@ -138,7 +138,7 @@ def test_book_toggle_follows_the_sport_tab(browser, env, sleeper, monkeypatch, s
         lines_read(p, '/')
         assert p.evaluate(SHOWN_BOOKS) == ['all', 'prizepicks', 'underdog', 'sleeper']
         shot(p, 'toggle_cs2', size, '#u-hub .h-toolbar')
-        p.locator('#hub-platform [data-id="sleeper"]').click()
+        in_sheet(p, '#hub-platform [data-id="sleeper"]').click(); close_sheet(p)
         assert p.locator('#hub-platform [data-id="sleeper"]').get_attribute('aria-pressed') == 'true'
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
         p.locator('#hub-sports [data-id="lol"]').click()
@@ -218,7 +218,7 @@ def test_book_toggle_shows_dabble_beside_sleeper_with_its_price(ctx, env, sleepe
     lines_read(p, '/')
     p.wait_for_function(f"{SHOWN_BOOKS}.includes('dabble')", timeout=20000)
     assert p.evaluate(SHOWN_BOOKS) == ['all', 'prizepicks', 'underdog', 'sleeper', 'dabble']
-    p.locator('#hub-platform [data-hub="book"][data-id="dabble"]').click()
+    in_sheet(p, '#hub-platform [data-hub="book"][data-id="dabble"]').click(); close_sheet(p)
     assert p.locator('#hub-platform [data-id="dabble"]').get_attribute('aria-pressed') == 'true'
     p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
     text = p.locator('#hub-rows').inner_text()

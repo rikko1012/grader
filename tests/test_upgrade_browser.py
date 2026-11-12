@@ -574,3 +574,20 @@ def test_genie_flag_on_answers_with_checked_numbers_and_a_daily_count(browser, e
         assert not p.errors
     finally:
         c.close()
+
+
+def in_sheet(p, sel):
+    """Phones under 600px (owner 2026-11-12, the phone simplification) keep the app pills, EV, Views and sort inside the Filters sheet:
+    open it when the control is there and not on screen. Wider screens: the control as it is."""
+    loc = p.locator(sel).first
+    if not loc.is_visible() and p.locator("#hub-filter-pop").locator(sel).count():
+        p.locator("#hub-filters-toggle").click()
+        p.wait_for_selector("#hub-filter-pop:not([hidden])")
+        loc.scroll_into_view_if_needed()
+    return loc
+
+
+def close_sheet(p):
+    if p.locator("#hub-filter-pop").is_visible():
+        p.locator("#hub-filter-pop .h-pop-foot [data-hub=filters]").click()
+        p.wait_for_selector("#hub-filter-pop", state="hidden")

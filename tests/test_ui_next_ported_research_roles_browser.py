@@ -186,11 +186,11 @@ def test_board_rows_show_real_counts_placeholders_the_letter_and_the_lines_cell(
     # ONE hit strip: the rate on the cell, the exact counts in its tooltip
     l10 = row.locator('.h-s-l10 .h-hit')
     assert l10.text_content() == '60%' and l10.get_attribute('title').startswith('6 Over of the last 10 at this line')
-    assert l10.is_visible()
+    assert l10.is_visible() or p.viewport_size['width'] < 600         # phones (2026-11-12): the windows are on the card, not the row
     p.wait_for_function("!document.querySelector('#hub-rows .h-hit-wait')", timeout=20000)
     l20 = row.locator('.h-s-l20 .h-hit')
     assert l20.text_content() == '78%' and '7 Over of the last 9' in l20.get_attribute('title') and '(9 games on file)' in l20.get_attribute('title')
-    assert 'h-few' in l20.get_attribute('class') and l20.is_visible()
+    assert 'h-few' in l20.get_attribute('class') and (l20.is_visible() or p.viewport_size['width'] < 600)
     assert '—' not in row.locator('.h-s-l5').text_content()
     assert row.locator('.h-c-scout .h-grade.h-grade-b').inner_text() == 'B'                 # side, chance and letter in one Scout cell
     scout = row.locator('.h-c-scout').text_content()
@@ -321,7 +321,7 @@ def check_rows_next(p, size, where):
             assert not r["cut"], (where, r)
         else:
             assert r["nw"] >= 56, (where, r)
-        assert r["tagIn"] and r["bare"]["nameIn"], (where, r)
+        assert (r["tagIn"] or w < 600) and r["bare"]["nameIn"], (where, r)          # phones (2026-11-12): no role tag on the row
         assert r["line2"] <= 18, (where, r)                                                             # the second line stays one line
         if r["tag"] is not None:
             assert r["tag"] == r["tag"].strip() and r["tag"], (where, r)
@@ -359,6 +359,7 @@ def test_every_sports_rows_carry_the_cards_role_and_keep_name_and_lines(browser,
             every = check_rows_next(p, size, sp)
             assert any(r["tag"] for r in every) or sp != "cs2", (sp, every)
             cells = lines_cells(p)
+            cells = [c for c in cells if not (size["width"] < 600 and c["kind"] == "h-lines-one")]   # phones (2026-11-12): a one-line row names no app
             assert cells and all(c["kind"] and c["inside"] and c["w"] > 20 and c["h"] >= 12 for c in cells), (sp, cells)   # the Lines cell is on screen
             assert all(c["h"] >= (44 if size["width"] <= 1100 else 28) for c in cells if c["kind"] == "h-lines-btn"), (sp, cells)
             row = hub_row(p, name)
@@ -404,6 +405,8 @@ def test_the_ladder_opens_from_the_board_on_the_narrowest_desktop(browser, roles
 def test_a_players_header_ladder_and_by_game_carry_the_tag(browser, roles_env, next_board, size):
     """legacy: test_more_props_sub_rows_and_by_game_carry_the_tag. The "+N props" sub-rows are gone: a search that lands on one player
     lists the props under the player's header, which carries the role tag once; the lines are the ladder. By game is unchanged."""
+    if size["width"] < 600:
+        pytest.skip("phone simplification (owner 2026-11-12): the phone row no longer carries role tags; the card has it")
     p = next_board(browser, roles_env, size)
     try:
         is_next(p)

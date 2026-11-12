@@ -16,7 +16,7 @@ from tests.test_hub_shell_browser import market_doc, mt_page
 from tests.test_lol_one_sided_browser import one, hub_lol, harky  # noqa: F401
 from tests.test_phase4_browser import lines_read, page, SHOWN_BOOKS
 from tests.test_research_hub_browser import book
-from tests.test_upgrade_browser import browser, env, context, open_page, no_h_scroll, DESK, PHONE, OWNER  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, open_page, no_h_scroll, DESK, PHONE, OWNER  # noqa: F401
 
 SIZES = [DESK, PHONE]
 
@@ -56,6 +56,8 @@ def open_ladders(p):
 def test_sport_tag_stays_whole_under_the_edge_sort(ctx, env, size):
     """legacy: test_audit_board_browser.py::test_sport_tag_stays_whole_under_the_edge_sort. With 'Team vs Opp' under the name only the
     matchup text is cut; the sport tag keeps its full text inside its cell."""
+    if size["width"] < 600:
+        pytest.skip("phone simplification (owner 2026-11-12): the phone row no longer carries the sport tag; the card has it")
     p = board(ctx, env, size)
     is_next(p)
     assert p.locator('#hub-sort').input_value() == 'edge'
@@ -79,7 +81,8 @@ def test_sports_rows_name_the_game_once_and_never_cut_the_letter(ctx, env, size)
     p = board(ctx, env, size)
     is_next(p)
     sport(p, 'nba')
-    p.locator('#hub-sort').select_option('start')
+    in_sheet(p, '#hub-sort').select_option('start')
+    close_sheet(p)
     heads = p.locator('#hub-rows .h-game-head > span:not(.h-countdown)').all_text_contents() if size == DESK else []
     assert all(not t.startswith('NBA · NBA') for t in heads) and (size != DESK or (heads and all(t.startswith('NBA · ') for t in heads))), heads
     letters = p.locator('#hub-rows tr.h-row .h-grade')
@@ -124,6 +127,11 @@ def test_sport_tabs_keep_their_width_toolbar_sticks_and_a_sport_change_scrolls_u
     scroller = "(document.querySelector('#hub-center').scrollHeight > document.querySelector('#hub-center').clientHeight ? document.querySelector('#hub-center') : document.scrollingElement)"
     p.evaluate(f"{scroller}.scrollTop = 600")
     p.wait_for_timeout(200)
+    if size['width'] < 600:                 # phones (2026-11-12): the header slides away on the way down and is back on the way up
+        assert p.locator('#u-hub .h-toolbar.h-bar-away').count() == 1
+        p.evaluate(f"{scroller}.scrollTop = 500")
+        p.wait_for_timeout(300)
+        assert p.locator('#u-hub .h-toolbar.h-bar-away').count() == 0
     bar = p.locator('#u-hub .h-toolbar').bounding_box()
     assert p.evaluate(f"{scroller}.scrollTop") > 100
     # the toolbar stays on screen with its search and filters reachable
@@ -244,6 +252,8 @@ def test_a_side_below_break_even_keeps_its_wording_and_says_so(ctx, env, monkeyp
 def test_phone_hit_chips_are_readable(ctx, env):
     """legacy: ...::test_phone_hit_chips_are_larger (its 44px label + value box is the previous layout's; the windows must still be
     readable on the phone: each rate at least 12px type in a chip at least 32px wide that is not clipped)."""
+    if True:
+        pytest.skip("phone simplification (owner 2026-11-12): the phone row no longer carries the L5-SZN windows; the card has it")
     p = board(ctx, env, PHONE)
     is_next(p)
     sizes = p.evaluate("""[...document.querySelectorAll('#hub-rows tr.h-row[data-record]:not(.h-nohits) .h-strip .h-hit')].slice(0, 20).map(e => {
@@ -279,7 +289,7 @@ def test_nba_nfl_faces_on_rows_card_slip_and_picks_esports_unchanged(ctx, env, s
     logo = face.locator('img.u-face-logo')
     assert re.match(LOGO, logo.get_attribute('src')) and re.fullmatch(r'[A-Z]{2,4} logo', logo.get_attribute('alt'))
     if size == DESK:
-        assert not face.is_visible() and rows.first.locator('.h-player b').first.evaluate('e => e.scrollWidth <= e.clientWidth + 1')   # the name is whole
+        assert face.is_visible() and rows.first.locator('.h-player b').first.evaluate('e => e.scrollWidth <= e.clientWidth + 1')   # owner 2026-11-12: photos on the rows at every width; the name is whole
     else:
         p.wait_for_function("document.querySelector('#hub-rows tr.h-row .u-face').classList.contains('u-face-fb')")   # blocked image -> initials
         assert face.locator('i').text_content() == ''.join(w[0] for w in name.split()[:2]).upper()
@@ -389,7 +399,8 @@ def test_sleeper_line_has_chance_hits_and_the_full_card(browser, setup, size):
         lines_read(p, '/')
         is_next(p)
         p.wait_for_function(f"{SHOWN_BOOKS}.includes('sleeper')", timeout=20000)
-        p.locator('#hub-platform [data-hub="book"][data-id="sleeper"]').click()
+        in_sheet(p, '#hub-platform [data-hub="book"][data-id="sleeper"]').click()
+        close_sheet(p)
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr.h-row[data-record]')].length===2", timeout=20000)
         v = p.locator('#hub-rows tr.h-row[data-record]', has_text='vargo').first
         b = p.locator('#hub-rows tr.h-row[data-record]', has_text='brandr').first
@@ -468,13 +479,13 @@ def test_phone_row_keeps_its_own_grid_with_the_edge_and_h2h_columns_on(ctx, env,
       const btn = tr.querySelector('.h-lines-btn, .h-lines-one'), add = tr.querySelector('.h-c-add button');
       for (const e of [btn, add]) if (e && e.getBoundingClientRect().right > innerWidth + 0.5) out.push('off screen ' + e.className);
       const pl = tr.querySelector('.h-c-player');
-      if (pl.getBoundingClientRect().width < t.width * 0.5) out.push('player cell ' + Math.round(pl.getBoundingClientRect().width) + 'px');
+      if (pl.getBoundingClientRect().width < t.width * (innerWidth < 600 ? 0.3 : 0.5)) out.push('player cell ' + Math.round(pl.getBoundingClientRect().width) + 'px');
       return out.length ? [tr.dataset.record, out] : null; }).filter(Boolean)"""
     assert p.locator('#hub-rows tr.h-row[data-record]').count() >= 10
     assert p.evaluate(check) == []
     p.locator('#hub-board-section [data-hub=group-by][data-id=player]').click()
     p.wait_for_selector('#hub-table.h-by-player tr.h-player-row')
-    assert p.evaluate(check.replace("if (pl.getBoundingClientRect().width < t.width * 0.5) out.push('player cell ' + Math.round(pl.getBoundingClientRect().width) + 'px');", '')) == []
+    assert p.evaluate(check.replace("if (pl.getBoundingClientRect().width < t.width * (innerWidth < 600 ? 0.3 : 0.5)) out.push('player cell ' + Math.round(pl.getBoundingClientRect().width) + 'px');", '')) == []
     no_h_scroll(p)
     assert not p.errors
 

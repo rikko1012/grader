@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_upgrade_browser import browser, env, ctx, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, ctx, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 
 NOTE = "Over only: Scout grades lines that offer both sides."
 GOBLIN = {"basis": "adjusted-odds line, no allowed sides sent", "higher": {"offered": True}, "lower": {"offered": None}}
@@ -39,7 +39,7 @@ def hub_lol(ctx, env, size, book):
     p.locator("#hub-sports [data-id=lol]").click()
     p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length && [...document.querySelectorAll('#hub-rows tr[data-record]')]"
                         ".every(r => r.dataset.record.startsWith('lol|'))", timeout=20000)
-    p.locator(f'#hub-platform [data-hub="book"][data-id="{book}"]').click()
+    in_sheet(p, f'#hub-platform [data-hub="book"][data-id="{book}"]').click(); close_sheet(p)
     p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].some(r => r.innerText.includes('Harky'))", timeout=20000)
     return p
 

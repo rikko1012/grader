@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from tests.test_upgrade_browser import browser, env, context, open_page, no_h_scroll
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, open_page, no_h_scroll
 
 
 @pytest.mark.parametrize('width',[390,1440])
@@ -155,12 +155,12 @@ def test_draftkings_in_main_board_selector(browser, env, monkeypatch, width):
     p.on('pageerror',lambda e:errors.append(str(e)))
     try:
         p.goto(env.url+'/#/board')
-        dk=p.locator('#hub-platform [data-hub="book"][data-id="draftkings"]')
-        dk.wait_for(state='visible',timeout=20000);dk.click()
+        p.wait_for_selector('#hub-platform [data-hub="book"][data-id="draftkings"]:not([hidden])',state='attached',timeout=20000)
+        dk=in_sheet(p,'#hub-platform [data-hub="book"][data-id="draftkings"]');dk.wait_for(state='visible',timeout=20000);dk.click();close_sheet(p)
         p.locator('tr[data-record]').first.wait_for()
         assert 'Karl Anders' in p.locator('tr[data-record]').first.inner_text()
         assert '-117 / +105' in p.locator('tr[data-record]').first.inner_text()
-        assert 'side not supplied' in p.locator('tr[data-record]').first.inner_text().lower()   # shown in the row's small caps (DK restyle 2026-11-12)
+        assert 'side not supplied' in p.locator('tr[data-record]').first.text_content().lower()   # shown in the row's small caps (DK restyle 2026-11-12)
         assert not p.locator('tr[data-record] button:has-text("+ Add")').count()
         assert 'reported odds' in p.locator('th.h-c-scout').inner_text().lower()
         p.locator('tr[data-record] .h-player').first.click()

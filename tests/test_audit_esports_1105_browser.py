@@ -15,7 +15,7 @@ import underdog
 import workspace_books as wb
 from tests.test_audit_esports_1105 import _cs2_row
 from tests.test_phase4_browser import offer, lines_read, page, SHOWN_BOOKS
-from tests.test_upgrade_browser import browser, env, context, no_h_scroll, DESK, PHONE  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, no_h_scroll, DESK, PHONE  # noqa: F401
 
 SHOTS = Path(os.environ['AUDIT_SHOTS']) if os.environ.get('AUDIT_SHOTS') else None
 
@@ -53,7 +53,7 @@ def test_underdog_row_age_is_since_scouts_read(browser, setup, size):
     try:
         p = page(c, setup)
         lines_read(p, '/')
-        p.locator('#hub-platform [data-hub="book"][data-id="underdog"]').click()
+        in_sheet(p, '#hub-platform [data-hub="book"][data-id="underdog"]').click(); close_sheet(p)
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length>0", timeout=20000)
         chips = p.locator('#hub-rows .h-c-line small').all_inner_texts()
         assert chips and all(t.startswith('UD') for t in chips)
@@ -72,7 +72,7 @@ def test_sleeper_line_has_chance_hits_and_the_full_card(browser, setup, size):
         p = page(c, setup)
         lines_read(p, '/')
         p.wait_for_function(f"{SHOWN_BOOKS}.includes('sleeper')", timeout=20000)
-        p.locator('#hub-platform [data-hub="book"][data-id="sleeper"]').click()
+        in_sheet(p, '#hub-platform [data-hub="book"][data-id="sleeper"]').click(); close_sheet(p)
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
         v = p.locator('#hub-rows tr[data-record]', has_text='vargo').first
         b = p.locator('#hub-rows tr[data-record]', has_text='brandr').first

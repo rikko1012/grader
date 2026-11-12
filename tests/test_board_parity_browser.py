@@ -12,7 +12,7 @@ import pytest
 
 import board_parity as bpar
 import workspace_api
-from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 
 BASE = ("SCOUT_WORKSPACE_V2", "SCOUT_BOARD_H2H", "SCOUT_GENIE", "SCOUT_SLIP_HEADER", "SCOUT_CLOSING_LINES", "SCOUT_PUBLIC_RECORD")
 SHOTS_DIR = Path(os.environ['PARITY_SHOTS']) if os.environ.get('PARITY_SHOTS') else None
@@ -181,7 +181,7 @@ def test_unrated_prizepicks_rows_show_the_points_gap_not_no_payout(ctx, env, mon
     parity_on(monkeypatch, passing=False)
     workspace_api.reset()
     p = board(ctx, env, DESK, sport=sport)
-    p.locator('#hub-platform [data-id=prizepicks]').click()
+    in_sheet(p, '#hub-platform [data-id=prizepicks]').click(); close_sheet(p)
     rows = p.locator('#hub-rows tr[data-record*="|prizepicks|"]')
     assert rows.count() > 0
     titles = rows.locator('td.h-c-edge .h-edge').evaluate_all("es => es.map(e => e.title)")

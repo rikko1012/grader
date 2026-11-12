@@ -13,7 +13,7 @@ import workspace_lol
 import workspace_sports
 from gradecore import payouts
 from tests.test_upgrade_gate import get, series
-from tests.test_upgrade_browser import browser, env, ctx, open_page, no_h_scroll, DESK, PHONE  # noqa: F401 - the real Handler, four sports
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, ctx, open_page, no_h_scroll, DESK, PHONE  # noqa: F401 - the real Handler, four sports
 
 SER = [{"date": "2026-10-28", "opponent": "Norrland", "value": 40}, {"date": "2026-10-20", "opponent": "Norrland Academy", "value": 50},
        {"date": "2026-09-01", "opponent": "norrland", "value": 30}, {"date": "2025-12-30", "opponent": "Norrland", "value": 38.5},
@@ -185,7 +185,7 @@ def test_board_flag_on_columns_countdown_edge_and_tones(ctx, env, monkeypatch, s
         book.click()                                                            # no line on screen has an edge: start-time order, said so
         assert 'sorted by start time' in p.locator('#hub-sort-note').text_content()
         assert p.locator('#hub-rows tr.h-game-row').count() >= 1
-        p.locator('#hub-platform [data-id=all]').click(); p.locator('#hub-q').fill('')
+        in_sheet(p, '#hub-platform [data-id=all]').click(); close_sheet(p); p.locator('#hub-q').fill('')
         p.locator('#hub-filters-toggle').click(); p.locator('#hub-sort').select_option('start'); p.keyboard.press('Escape')
     assert p.locator('#hub-rows .h-hit:not(.empty):not(.h-hit-wait):not(.h-hit-both)').count() == \
         p.locator('#hub-rows .h-hit[class*="h-tone-"]').count()                              # every sided cell takes one of the 7 tones

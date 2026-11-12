@@ -18,7 +18,7 @@ from tests.test_pickem_ev_browser import JARGON as EV_JARGON, ev_on, ev_page  # 
 from tests.test_research_hub_browser import hub as research_hub
 from tests.test_slip_header_v2_browser import JARGON as SLIP_JARGON, build_pair
 from tests.test_ui_next_browser import nxt
-from tests.test_upgrade_browser import DESK, PHONE, browser, env, no_h_scroll, open_page  # noqa: F401  (fixtures)
+from tests.test_upgrade_browser import in_sheet, close_sheet, DESK, PHONE, browser, env, no_h_scroll, open_page  # noqa: F401  (fixtures)
 
 
 @pytest.fixture
@@ -344,7 +344,8 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width_on_the_new_design(
         assert pp.locator('.h-ld-p').inner_text() == '53.0%' and pp.locator('.h-ld-side').text_content().endswith('Under')
         btn.click()
         # the Underdog line as the row (Platform filter): no Scout side, and still a market edge on the side the books favour
-        p.locator('#hub-platform [data-id=underdog]').click()
+        in_sheet(p, '#hub-platform [data-id=underdog]').click()
+        close_sheet(p)
         p.wait_for_selector('#hub-rows tr.h-row[data-record^="nba|underdog|"]')
         row = p.locator('#hub-rows tr.h-row[data-record^="nba|underdog|"]').first
         cell = row.locator('td.h-c-medge')
@@ -367,7 +368,8 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width_on_the_new_design(
         nrow = p.locator('#hub-rows tr.h-row[data-record^="nfl|underdog|"]', has_text='Sam Field').first
         assert nrow.locator('.h-gap').inner_text() == '≠ DraftKings 266.5'
         assert nrow.locator('td.h-c-medge .h-medge b').count() == 1
-        p.locator('#hub-platform [data-id=all]').click()
+        in_sheet(p, '#hub-platform [data-id=all]').click()
+        close_sheet(p)
         # CS2 / LoL: no sportsbook prices player props, so "—" with the plain reason
         for s in ('cs2', 'lol'):
             pick(p, s)

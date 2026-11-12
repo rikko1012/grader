@@ -25,7 +25,7 @@ import workspace_books as wb
 from tests.test_card_why_books_browser import offer
 from tests.test_phase4_browser import lines_read, page, SHOWN_BOOKS
 from tests.test_pickem_readers import event_of
-from tests.test_upgrade_browser import browser, env, context, no_h_scroll, DESK  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, no_h_scroll, DESK  # noqa: F401
 from tests.workspace_other_fixture import iso
 
 SHOTS = Path(os.environ['CARD_SHOTS']) if os.environ.get('CARD_SHOTS') else None
@@ -277,7 +277,7 @@ def test_phone_extra_book_rows_on_nba_and_nfl_show_counted_windows(browser, rich
             sport(p, sp)
             for b in ('sleeper', 'dabble'):
                 p.wait_for_function(f"{SHOWN_BOOKS}.includes('{b}')", timeout=20000)
-                p.locator(f'#hub-platform [data-hub="book"][data-id="{b}"]').click()
+                in_sheet(p, f'#hub-platform [data-hub="book"][data-id="{b}"]').click(); close_sheet(p)
                 p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length>0 && !document.querySelector('#hub-rows .h-hit-wait')", timeout=20000)
                 p.wait_for_function(f"[...document.querySelectorAll('#hub-rows tr[data-record]')].every(r => r.dataset.record.startsWith('{sp}|'))", timeout=20000)
                 rows = phone_rows(p)
@@ -293,7 +293,7 @@ def test_phone_extra_book_rows_on_nba_and_nfl_show_counted_windows(browser, rich
                     assert 'saved chance' not in r['scout'].lower(), r
                 no_h_scroll(p)
                 shot(p, f'board-{sp}-{b}')
-            p.locator('#hub-platform [data-hub="book"][data-id="all"]').click()
+            in_sheet(p, '#hub-platform [data-hub="book"][data-id="all"]').click(); close_sheet(p)
         assert not p.errors, p.errors
     finally:
         p.ctx.close()
@@ -334,7 +334,7 @@ def test_board_and_card_fit_every_width(browser, rich, size):
             sport(p, sp)
             b = book or 'all'
             p.wait_for_function(f"{SHOWN_BOOKS}.includes('{b}')", timeout=20000)
-            p.locator(f'#hub-platform [data-hub="book"][data-id="{b}"]').click()
+            in_sheet(p, f'#hub-platform [data-hub="book"][data-id="{b}"]').click(); close_sheet(p)
             p.wait_for_function(f"[...document.querySelectorAll('#hub-rows tr[data-record]')].length>0 && [...document.querySelectorAll('#hub-rows tr[data-record]')].every(r => r.dataset.record.startsWith('{sp}|'))", timeout=20000)
             p.wait_for_function("!document.querySelector('#hub-rows .h-hit-wait')", timeout=20000)
             no_h_scroll(p)

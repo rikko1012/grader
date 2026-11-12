@@ -9,7 +9,7 @@ import pytest
 
 import server
 import workspace_api
-from tests.test_upgrade_browser import browser, env, context, open_page, no_h_scroll  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, open_page, no_h_scroll  # noqa: F401
 from tests.workspace_other_fixture import event, forecast, iso, market, nba_board, quote, soon
 
 DESK, PHONE = {"width": 1440, "height": 900}, {"width": 390, "height": 844}
@@ -204,19 +204,21 @@ def test_filters_sorting_views_and_the_slip_studio_work_on_the_default_design(br
         assert scouts and all("OVER" in t.upper() for t in scouts)
         assert all(re.search(r"\b(A\+|A-|A|B\+|B)\b", t) for t in scouts)
         # save the view, clear, choose it again
-        p.locator("#hub-views-toggle").click()
+        (in_sheet(p, "[data-hub=save-view]") if p.viewport_size["width"] < 600 else p.locator("#hub-views-toggle").click())
         p.locator("[data-hub=save-view]").click()
         p.locator("#hub-save-name").fill("Overs B up")
         p.locator("#hub-save-confirm").click()
         p.locator("#hub-clear").click()
         assert p.locator("#hub-rows tr.h-row").count() == total
-        p.locator("#hub-views-toggle").click()
+        (in_sheet(p, "#hub-views") if p.viewport_size["width"] < 600 else p.locator("#hub-views-toggle").click())
         p.locator("#hub-views").select_option(label="Overs B up")
         p.keyboard.press("Escape")
+        close_sheet(p)
         assert p.locator("#hub-side").input_value() == "over" and p.locator("#hub-minGrade").input_value() == "B"
         p.locator("#hub-clear").click()
         # sorting from the menu and (desktop) from a column header
-        p.locator("#hub-sort").select_option("player")
+        in_sheet(p, "#hub-sort").select_option("player")
+        close_sheet(p)
         names = p.locator("#hub-rows tr.h-row .h-player b").all_inner_texts()
         assert names == sorted(names, key=str.lower) or names == sorted(names)
         if size is DESK:
@@ -366,7 +368,7 @@ def test_one_row_per_prop_and_a_ladder_of_every_line(browser, env, size, tmp_pat
         assert row.count() == 1                                                    # 15 lines, one row
         assert "15 lines" in p.locator("#hub-count").inner_text().lower() or "lines" in p.locator("#hub-count").inner_text().lower()
         btn = row.locator("[data-hub=ladder]")
-        assert btn.inner_text().split("\n")[0].strip() == "+14 lines" and "6 apps" in btn.inner_text() and "24.5–39.5" in btn.inner_text()
+        assert btn.locator("b").text_content().strip() == "+14 lines" and "6 apps" in btn.text_content() and "24.5–39.5" in btn.text_content()
         assert btn.get_attribute("aria-expanded") == "false" and p.locator(".h-ladder").count() == 0     # the ladder is not built until asked for
         btn.click()
         lad = p.locator("tr.h-ladder-row .h-ladder-table tbody tr")
@@ -415,7 +417,8 @@ def test_filters_and_search_never_hide_a_matched_line_in_a_grouped_row(browser, 
     c = nxt(browser, env, DESK, board=ladder_board())
     try:
         p = nba(c, env, DESK)
-        p.locator("#hub-platform [data-id=prizepicks]").click()
+        in_sheet(p, "#hub-platform [data-id=prizepicks]").click()
+        close_sheet(p)
         row = row_of(p, "Shai Ladder", "Points")
         assert row.count() == 1 and "PP" in row.locator(".h-c-line").inner_text()                     # the row leads with the matched line
         btn = row.locator("[data-hub=ladder]")
@@ -424,7 +427,8 @@ def test_filters_and_search_never_hide_a_matched_line_in_a_grouped_row(browser, 
         lad = p.locator("tr.h-ladder-row .h-ladder-table tbody tr")
         assert lad.count() == 15 and p.locator("tr.h-ladder-row tr.is-match").count() == 1 and p.locator("tr.h-ladder-row tr.is-dim").count() == 14
         assert "1 of 15 lines match" in p.locator(".h-ladder-note").inner_text()
-        p.locator("#hub-platform [data-id=all]").click()
+        in_sheet(p, "#hub-platform [data-id=all]").click()
+        close_sheet(p)
         assert p.locator("tr.h-ladder-row tr.is-dim").count() == 0 and "match" not in row_of(p, "Shai Ladder", "Points").locator("[data-hub=ladder]").inner_text()
         # Side = Under keeps only the lines Scout leans Under on; the count says how many
         p.locator("#hub-filters-toggle").click()
@@ -436,7 +440,8 @@ def test_filters_and_search_never_hide_a_matched_line_in_a_grouped_row(browser, 
         assert p.locator("tr.h-ladder-row tr.is-match").count() == unders
         p.locator("#hub-chips [data-id=side]").click()
         # sorting by chance: the row leads with its highest-chance line
-        p.locator("#hub-sort").select_option("chance")
+        in_sheet(p, "#hub-sort").select_option("chance")
+        close_sheet(p)
         top = row_of(p, "Shai Ladder", "Points")
         best = max((r for r in records(p) if r["player"]["name"] == "Shai Ladder" and r["market"]["stat"] == "points" and r["scout"]["side"]), key=lambda r: r["scout"]["p_side"])
         assert f"{best['scout']['p_side'] * 100:.1f}%" in top.locator(".h-c-scout").inner_text()
