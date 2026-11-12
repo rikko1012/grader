@@ -40,4 +40,6 @@ SOURCES = {
     "fanduel": {"key_env": None, "verified": True, "consensus": False},
     "betrivers": {"key_env": None, "verified": True, "consensus": False},
     "bovada": {"key_env": None, "verified": True, "consensus": False},
+    "unibet_au": {"key_env": None, "verified": True, "consensus": False, "display_only": True},
+    "pointsbet_au": {"key_env": None, "verified": True, "consensus": False, "display_only": True},
 }

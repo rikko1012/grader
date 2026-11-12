@@ -299,8 +299,19 @@ def test_forward_forecast_replays_identically(tmp_path, monkeypatch):
         assert "gp:unvalidated" in fc.reason_codes
         orig, again = forward.replay(fc.forecast_id, scon)
         assert again == orig                                 # identical id, probabilities, versions
+        # New display-only books cannot enter forecast inputs or its in-memory
+        # quote pool, even when they match the target exactly.
+        import dataclasses
+        ref_ids = {store.put(scon, dataclasses.replace(store.get(scon, rid), platform=plat,
+                   offer_id="reference:"+plat))["record_id"] for plat in ("unibet_au", "pointsbet_au")}
+        original_meta = store.row_meta
+        def guarded_meta(con, record_id):
+            assert record_id not in ref_ids, "reference quote loaded into model worker"
+            return original_meta(con, record_id)
         # the same offer forecast twice -> the same immutable record (duplicate, not a second id)
-        res2 = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
+        with monkeypatch.context() as m:
+            m.setattr(store, "row_meta", guarded_meta)
+            res2 = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
         assert res2["written"].get("sm-1") == 0
         snap = pipeline.write_snapshot(now="2026-01-31T21:30:00Z")
         assert snap["leagues"]["nba"]["forecasts"] >= 1

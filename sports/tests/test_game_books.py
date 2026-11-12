@@ -53,3 +53,23 @@ def test_current_revision_persistence_and_seen_time(tmp_path):
         assert datetime.fromisoformat(event['seen_at'].replace('Z','+00:00'))==NOW+timedelta(minutes=5)
         assert gb.refresh(db,'nfl',NOW+timedelta(days=5))=={'events':0}
     finally:db.close()
+
+
+def test_reference_lines_latest_revision_exact_event_and_freshness(tmp_path):
+    db=store.connect(tmp_path/'refs.db',dsn='')
+    try:
+        row={'source':'espn','book':'draftkings','provenance':'ESPN-supplied DraftKings','league':'nba',
+             'event_id':'123','prop_key':'nba:123:100:7:1','athlete_id':'7','player':'Example Player',
+             'player_key':'exampleplayer','team_id':'9','market':'points','period':'1q','kind':'milestone',
+             'raw_type_id':'1','raw_type':'Points Milestones - 1st Quarter','line':4.5,'line_open':4.5,
+             'price_over':None,'price_under':None,'provider_updated_at':None,'status':'open'}
+        store.save_prop_lines(db,[row],NOW)
+        store.save_prop_lines(db,[dict(row,line=5.5)],NOW+timedelta(minutes=5))
+        store.save_prop_lines(db,[dict(row,line=99.5)],NOW+timedelta(minutes=1))
+        rows=gb.reference_props(db,'nba','123',NOW+timedelta(minutes=10))
+        assert len(rows)==1 and rows[0]['line']==5.5 and rows[0]['period']=='1q'
+        assert rows[0]['price_over'] is None and rows[0]['price_under'] is None
+        assert gb.reference_props(db,'nfl','123',NOW+timedelta(minutes=10))==[]
+        assert gb.reference_props(db,'nba','999',NOW+timedelta(minutes=10))==[]
+        assert gb.reference_props(db,'nba','123',NOW+timedelta(hours=2))==[]
+    finally:db.close()

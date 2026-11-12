@@ -623,7 +623,7 @@ def settle_league(con, league, ctx=None, now=None, since=None, max_catchup=None)
             sts = []
             for _, o in store.offers(con, event_id=e.event_id, limit=100000):
                 if o.player_id is None or o.platform.startswith(("oddsapi", "oddspapi")) or \
-                        o.platform in ("fanduel", "betrivers"):
+                        o.platform in ("fanduel", "betrivers", "unibet_au", "pointsbet_au"):
                     continue                            # book prices are market references, never settled offers
                 sts += settlement.settle_offer(o, obs.get(o.player_id, {}), e, observed_at)
             c = settlement.record(con, sts)
