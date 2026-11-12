@@ -135,3 +135,34 @@ def test_grouped_prop_keeps_keyboard_focus_when_offer_id_changes(browser, env):
 
 
 
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_draftkings_in_main_board_selector(browser, env, monkeypatch, width):
+    import json
+    import workspace_game_books
+    import book_providers
+    monkeypatch.setenv('UI_NEXT', '1')
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setenv('SCOUT_BOOK_LINES', '1')
+    monkeypatch.setenv('SCOUT_BOOK_DRAFTKINGS', '1')
+    book_providers.reset()
+    now = datetime.now(timezone.utc)
+    doc = {'league': 'nba', 'events': [{'id': 'espn:1', 'start_utc': (now+timedelta(hours=3)).isoformat(),
+           'reference_props': [{'player_id': '301', 'player': 'Karl Anders', 'market': 'points', 'period': 'game',
+             'line': 22.5, 'kind': 'line', 'revision_id': 99, 'seen_at': now.isoformat(), 'reported_prices': [-117, 105]}]}]}
+    monkeypatch.setattr(workspace_game_books, 'shared', lambda srv, lg: (200, json.dumps(doc if lg=='nba' else {'league':lg,'events':[]}).encode()))
+    c=context(browser,env,{'width':width,'height':900});p=c.new_page();errors=[]
+    p.on('pageerror',lambda e:errors.append(str(e)))
+    try:
+        p.goto(env.url+'/#/board')
+        dk=p.locator('#hub-platform [data-hub="book"][data-id="draftkings"]')
+        dk.wait_for(state='visible',timeout=20000);dk.click()
+        p.locator('tr[data-record]').first.wait_for()
+        assert 'Karl Anders' in p.locator('tr[data-record]').first.inner_text()
+        assert '-117 / +105' in p.locator('tr[data-record]').first.inner_text()
+        assert 'side not supplied' in p.locator('tr[data-record]').first.inner_text()
+        assert not p.locator('tr[data-record] button:has-text("+ Add")').count()
+        no_h_scroll(p)
+        assert not errors
+    finally:
+        c.close();book_providers.reset()

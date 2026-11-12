@@ -348,6 +348,9 @@ def _recs_of(s, props, x):
 
 def build(srv, sport, pid, now=None):
     """-> (status, doc). The display records of one extra book on one sport, with coverage and feed freshness."""
+    if pid == "draftkings":
+        import workspace_draftkings
+        return workspace_draftkings.build(srv, sport, now)
     now = time.time() if now is None else now
     p = bp.providers()[pid]
     label, kind = p["label"], p["kind"]
