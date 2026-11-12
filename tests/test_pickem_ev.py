@@ -225,3 +225,19 @@ def test_page_script_is_served_only_with_the_flag(env, monkeypatch):
     monkeypatch.setenv("SCOUT_PICKEM_EV", "1")
     st, body = fetch()
     assert st == 200 and b"export function paint" in body
+
+
+def test_every_priced_and_model_leg_survives_before_client_filters(monkeypatch, reference_tables):
+    # A late-sorting player used to disappear behind the global 400/200 caps,
+    # even when searching for that player's exact name or selecting their sport.
+    we._FAIR.clear(); we._LEGS.clear()
+    items = [(rec(f"priced-{i:03}", 20.5), [book("fanduel", 20.5, 1.8, 2.0, 10),
+              book("betrivers", 20.5, 1.8, 2.0, 10)]) for i in range(225)]
+    items += [(rec(f"model-{i:03}", 20.5), []) for i in range(120)]
+    snapshot = snap(items)
+    monkeypatch.setattr(wb, "records", lambda srv, sport: ([r for r, _ in items], snapshot) if sport == "nba" else (None, None))
+    d = we.build(None, we.params({}, []), ALL)
+    assert len(d["rows"]) == d["rows_total"] == 450
+    assert len(d["model_only"]) == d["model_only_total"] == 240
+    assert {r["side"] for r in d["rows"] if r["player"] == "Player priced-224"} == {"over", "under"}
+    assert {r["side"] for r in d["model_only"] if r["player"] == "Player model-119"} == {"over", "under"}
