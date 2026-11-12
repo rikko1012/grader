@@ -1,0 +1,1658 @@
+{
+ "rows": 2090,
+ "graded": 2059,
+ "push": 31,
+ "series": 42,
+ "test_rows": 1603,
+ "test_series": 32,
+ "G1_G2_descriptive": {
+  "whole lines: Under side, projection above the line": {
+   "rows": 64,
+   "W": 32,
+   "L": 23,
+   "push": 9,
+   "hit": 58.2,
+   "ci": [
+    45.2,
+    70.6
+   ]
+  },
+  "whole lines: Over side, projection below the line": {
+   "rows": 0,
+   "W": 0,
+   "L": 0,
+   "push": 0,
+   "hit": null,
+   "ci": null
+  },
+  "whole lines: chance side = projection side": {
+   "rows": 150,
+   "hit": 59.3,
+   "ci": [
+    52.2,
+    66.1
+   ]
+  },
+  "half lines: Under side, projection above the line": {
+   "rows": 398,
+   "W": 244,
+   "L": 154,
+   "push": 0,
+   "hit": 61.3,
+   "ci": [
+    53.6,
+    68.8
+   ]
+  },
+  "half lines: Over side, projection below the line": {
+   "rows": 0,
+   "W": 0,
+   "L": 0,
+   "push": 0,
+   "hit": null,
+   "ci": null
+  },
+  "half lines: chance side = projection side": {
+   "rows": 1456,
+   "hit": 59.1,
+   "ci": [
+    54.1,
+    63.8
+   ]
+  }
+ },
+ "G1 WL-1": {
+  "all days": {
+   "lines": 2059,
+   "changed": 55,
+   "base_hit": 59.5,
+   "hit": 59.1,
+   "d_hit": -0.4,
+   "d_ci": [
+    -1.1,
+    0.2
+   ],
+   "changed_rows_hit": [
+    58.2,
+    41.8
+   ],
+   "changed_ci": [
+    29.4,
+    54.8
+   ],
+   "over_hit": [
+    52.8,
+    52.1
+   ],
+   "under_hit": [
+    63.4,
+    63.6
+   ],
+   "over_share": [
+    37.0,
+    39.6
+   ],
+   "data_over_rate": 42.6,
+   "letters": [
+    1424,
+    1424
+   ],
+   "clauses": {
+    "1 hit up": false,
+    "2 Over and Under not lower": false,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL"
+  },
+  "test days": {
+   "lines": 1603,
+   "changed": 47,
+   "base_hit": 59.9,
+   "hit": 59.6,
+   "d_hit": -0.3,
+   "d_ci": [
+    -1.1,
+    0.5
+   ],
+   "changed_rows_hit": [
+    55.3,
+    44.7
+   ],
+   "changed_ci": [
+    32.1,
+    58.1
+   ],
+   "over_hit": [
+    55.7,
+    54.9
+   ],
+   "under_hit": [
+    62.4,
+    62.7
+   ],
+   "over_share": [
+    36.9,
+    39.8
+   ],
+   "data_over_rate": 44.3,
+   "letters": [
+    1116,
+    1116
+   ],
+   "clauses": {
+    "1 hit up": false,
+    "2 Over and Under not lower": false,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL"
+  },
+  "whole lines only": {
+   "lines": 205,
+   "changed": 55,
+   "base_hit": 59.0,
+   "hit": 54.6,
+   "d_hit": -4.4,
+   "d_ci": [
+    -11.8,
+    2.4
+   ],
+   "changed_rows_hit": [
+    58.2,
+    41.8
+   ],
+   "changed_ci": [
+    29.4,
+    54.8
+   ],
+   "over_hit": [
+    60.6,
+    52.1
+   ],
+   "under_hit": [
+    58.3,
+    58.3
+   ],
+   "over_share": [
+    32.2,
+    59.0
+   ],
+   "data_over_rate": 47.8,
+   "letters": [
+    59,
+    59
+   ],
+   "clauses": {
+    "1 hit up": false,
+    "2 Over and Under not lower": false,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL"
+  }
+ },
+ "G2 WL-2": {
+  "all days": {
+   "lines": 2059,
+   "changed": 453,
+   "base_hit": 59.5,
+   "hit": 54.7,
+   "d_hit": -4.8,
+   "d_ci": [
+    -8.4,
+    -1.4
+   ],
+   "changed_rows_hit": [
+    60.9,
+    39.1
+   ],
+   "changed_ci": [
+    31.9,
+    46.7
+   ],
+   "over_hit": [
+    52.8,
+    47.7
+   ],
+   "under_hit": [
+    63.4,
+    64.7
+   ],
+   "over_share": [
+    37.0,
+    59.0
+   ],
+   "data_over_rate": 42.6,
+   "letters": [
+    1424,
+    1298
+   ],
+   "clauses": {
+    "1 hit up": false,
+    "2 Over and Under not lower": false,
+    "3 count": false,
+    "4 split": false
+   },
+   "verdict": "FAIL"
+  },
+  "test days": {
+   "lines": 1603,
+   "changed": 346,
+   "base_hit": 59.9,
+   "hit": 56.6,
+   "d_hit": -3.3,
+   "d_ci": [
+    -6.7,
+    0.2
+   ],
+   "changed_rows_hit": [
+    57.5,
+    42.5
+   ],
+   "changed_ci": [
+    35.1,
+    50.5
+   ],
+   "over_hit": [
+    55.7,
+    50.8
+   ],
+   "under_hit": [
+    62.4,
+    64.9
+   ],
+   "over_share": [
+    36.9,
+    58.5
+   ],
+   "data_over_rate": 44.3,
+   "letters": [
+    1116,
+    1022
+   ],
+   "clauses": {
+    "1 hit up": false,
+    "2 Over and Under not lower": false,
+    "3 count": false,
+    "4 split": false
+   },
+   "verdict": "FAIL"
+  }
+ },
+ "push_lines": {
+  "whole-line rows": 236,
+  "pushes": 31,
+  "mean model push chance": 0.118,
+  "push rate": 0.131
+ },
+ "G3 AS-1": {
+  "letters": [
+   1116,
+   1115
+  ],
+  "letter_hit": [
+   63.2,
+   62.5
+  ],
+  "d_hit": -0.7,
+  "d_ci": [
+   -3.6,
+   2.0
+  ],
+  "over_letter_hit": [
+   58.0,
+   62.1
+  ],
+  "under_letter_hit": [
+   65.9,
+   62.6
+  ],
+  "over_letters": [
+   386,
+   177
+  ],
+  "over_share_of_letters": [
+   34.6,
+   15.9
+  ],
+  "data_over_rate": 44.3,
+  "gained": {
+   "n": 208,
+   "hit": 51.0
+  },
+  "lost": {
+   "n": 209,
+   "hit": 54.5
+  },
+  "clauses": {
+   "1 lettered hit up": false,
+   "2 Over and Under not lower": false,
+   "3 letter count": false,
+   "4 split": false
+  },
+  "verdict": "FAIL",
+  "offsets_by_day": {
+   "2026-10-24": {
+    "kills over": 0.1453,
+    "kills under": -0.1,
+    "assists over": 0.0,
+    "assists under": 0.0
+   },
+   "2026-10-25": {
+    "kills over": 0.0989,
+    "kills under": -0.0782,
+    "assists over": 0.0,
+    "assists under": -0.0056
+   },
+   "2026-10-26": {
+    "kills over": 0.1138,
+    "kills under": -0.0935,
+    "assists over": 0.0,
+    "assists under": -0.0189
+   },
+   "2026-10-28": {
+    "kills over": 0.094,
+    "kills under": -0.0773,
+    "assists over": 0.0,
+    "assists under": -0.0085
+   },
+   "2026-10-29": {
+    "kills over": 0.0954,
+    "kills under": -0.0775,
+    "assists over": 0.0992,
+    "assists under": -0.0211
+   },
+   "2026-10-30": {
+    "kills over": 0.0839,
+    "kills under": -0.0702,
+    "assists over": 0.1011,
+    "assists under": -0.0191
+   },
+   "2026-10-31": {
+    "kills over": 0.0776,
+    "kills under": -0.0644,
+    "assists over": 0.1026,
+    "assists under": -0.0191
+   },
+   "2026-11-03": {
+    "kills over": 0.0881,
+    "kills under": -0.0689,
+    "assists over": 0.0823,
+    "assists under": -0.0236
+   },
+   "2026-11-04": {
+    "kills over": 0.0751,
+    "kills under": -0.0617,
+    "assists over": 0.0819,
+    "assists under": -0.0187
+   },
+   "2026-11-05": {
+    "kills over": 0.067,
+    "kills under": -0.0493,
+    "assists over": 0.0761,
+    "assists under": -0.0257
+   },
+   "2026-11-06": {
+    "kills over": 0.065,
+    "kills under": -0.0455,
+    "assists over": 0.0738,
+    "assists under": -0.0261
+   },
+   "2026-11-07": {
+    "kills over": 0.068,
+    "kills under": -0.045,
+    "assists over": 0.0744,
+    "assists under": -0.0284
+   },
+   "2026-11-08": {
+    "kills over": 0.0504,
+    "kills under": -0.0357,
+    "assists over": 0.0715,
+    "assists under": -0.0222
+   }
+  }
+ },
+ "G4 TH-1": {
+  "letters": [
+   1116,
+   983
+  ],
+  "letter_hit": [
+   63.2,
+   63.1
+  ],
+  "d_hit": -0.1,
+  "d_ci": [
+   -1.5,
+   1.6
+  ],
+  "over_letter_hit": [
+   58.0,
+   54.9
+  ],
+  "under_letter_hit": [
+   65.9,
+   65.9
+  ],
+  "over_letters": [
+   386,
+   253
+  ],
+  "over_share_of_letters": [
+   34.6,
+   25.7
+  ],
+  "data_over_rate": 44.3,
+  "gained": {
+   "n": 0,
+   "hit": null
+  },
+  "lost": {
+   "n": 133,
+   "hit": 63.9
+  },
+  "clauses": {
+   "1 lettered hit up": false,
+   "2 Over and Under not lower": false,
+   "3 letter count": false,
+   "4 split": false
+  },
+  "verdict": "FAIL",
+  "cells_by_day": {
+   "2026-10-24": {
+    "kills over": [
+     94,
+     45.7,
+     true
+    ],
+    "kills under": [
+     139,
+     67.6,
+     false
+    ],
+    "assists over": [
+     16,
+     37.5,
+     false
+    ],
+    "assists under": [
+     59,
+     61.0,
+     false
+    ]
+   },
+   "2026-10-25": {
+    "kills over": [
+     167,
+     50.3,
+     false
+    ],
+    "kills under": [
+     248,
+     68.1,
+     false
+    ],
+    "assists over": [
+     34,
+     44.1,
+     false
+    ],
+    "assists under": [
+     97,
+     55.7,
+     false
+    ]
+   },
+   "2026-10-26": {
+    "kills over": [
+     209,
+     46.4,
+     true
+    ],
+    "kills under": [
+     307,
+     68.7,
+     false
+    ],
+    "assists over": [
+     46,
+     34.8,
+     false
+    ],
+    "assists under": [
+     122,
+     56.6,
+     false
+    ]
+   },
+   "2026-10-28": {
+    "kills over": [
+     256,
+     51.2,
+     false
+    ],
+    "kills under": [
+     373,
+     70.0,
+     false
+    ],
+    "assists over": [
+     56,
+     42.9,
+     false
+    ],
+    "assists under": [
+     139,
+     59.0,
+     false
+    ]
+   },
+   "2026-10-29": {
+    "kills over": [
+     277,
+     50.9,
+     false
+    ],
+    "kills under": [
+     393,
+     70.0,
+     false
+    ],
+    "assists over": [
+     63,
+     38.1,
+     true
+    ],
+    "assists under": [
+     150,
+     60.0,
+     false
+    ]
+   },
+   "2026-10-30": {
+    "kills over": [
+     303,
+     52.5,
+     false
+    ],
+    "kills under": [
+     425,
+     69.9,
+     false
+    ],
+    "assists over": [
+     63,
+     38.1,
+     true
+    ],
+    "assists under": [
+     171,
+     62.0,
+     false
+    ]
+   },
+   "2026-10-31": {
+    "kills over": [
+     331,
+     53.5,
+     false
+    ],
+    "kills under": [
+     468,
+     69.4,
+     false
+    ],
+    "assists over": [
+     67,
+     38.8,
+     true
+    ],
+    "assists under": [
+     191,
+     61.8,
+     false
+    ]
+   },
+   "2026-11-03": {
+    "kills over": [
+     361,
+     54.0,
+     false
+    ],
+    "kills under": [
+     501,
+     71.3,
+     false
+    ],
+    "assists over": [
+     75,
+     44.0,
+     true
+    ],
+    "assists under": [
+     204,
+     63.7,
+     false
+    ]
+   },
+   "2026-11-04": {
+    "kills over": [
+     374,
+     54.5,
+     false
+    ],
+    "kills under": [
+     514,
+     70.6,
+     false
+    ],
+    "assists over": [
+     75,
+     44.0,
+     true
+    ],
+    "assists under": [
+     214,
+     63.1,
+     false
+    ]
+   },
+   "2026-11-05": {
+    "kills over": [
+     378,
+     54.8,
+     false
+    ],
+    "kills under": [
+     553,
+     68.7,
+     false
+    ],
+    "assists over": [
+     76,
+     44.7,
+     true
+    ],
+    "assists under": [
+     226,
+     64.2,
+     false
+    ]
+   },
+   "2026-11-06": {
+    "kills over": [
+     385,
+     54.8,
+     false
+    ],
+    "kills under": [
+     586,
+     67.7,
+     false
+    ],
+    "assists over": [
+     76,
+     44.7,
+     true
+    ],
+    "assists under": [
+     238,
+     64.3,
+     false
+    ]
+   },
+   "2026-11-07": {
+    "kills over": [
+     394,
+     54.8,
+     false
+    ],
+    "kills under": [
+     620,
+     67.7,
+     false
+    ],
+    "assists over": [
+     76,
+     44.7,
+     true
+    ],
+    "assists under": [
+     255,
+     65.1,
+     false
+    ]
+   },
+   "2026-11-08": {
+    "kills over": [
+     412,
+     56.6,
+     false
+    ],
+    "kills under": [
+     636,
+     66.7,
+     false
+    ],
+    "assists over": [
+     76,
+     44.7,
+     true
+    ],
+    "assists under": [
+     266,
+     63.9,
+     false
+    ]
+   }
+  }
+ },
+ "G5 OS-1": {
+  "baseline shown letters (not Underdog one-sided)": {
+   "n": 1031,
+   "hit": 62.5,
+   "ci": [
+    57.6,
+    67.4
+   ]
+  },
+  "Underdog Over-only": {
+   "lines": {
+    "n": 532,
+    "series": 42,
+    "hit": 59.8,
+    "ci": [
+     51.9,
+     67.0
+    ],
+    "stated": 61.1
+   },
+   "data over rate": 38.7,
+   "by stat": {
+    "kills": 49,
+    "assists": 483
+   },
+   "model side Over (= offered)": {
+    "n": 134,
+    "series": 35,
+    "hit": 47.0,
+    "ci": [
+     31.5,
+     61.6
+    ],
+    "stated": 56.2
+   },
+   "model side Under (not offered)": {
+    "n": 398,
+    "series": 42,
+    "hit": 64.1,
+    "ci": [
+     55.6,
+     71.4
+    ],
+    "stated": 62.7
+   },
+   "OS-1 added letters: model Over, chance >= 55%": {
+    "n": 77,
+    "series": 24,
+    "hit": 45.5,
+    "ci": [
+     26.8,
+     63.4
+    ],
+    "stated": 59.2
+   },
+   "model Over, Lean": {
+    "n": 57,
+    "series": 31,
+    "hit": 49.1,
+    "ci": [
+     30.8,
+     65.0
+    ],
+    "stated": 52.1
+   },
+   "mean Over payout multiplier": 1.001,
+   "by stat, model Over": {
+    "kills": {
+     "n": 4,
+     "series": 4,
+     "hit": 50.0,
+     "ci": [
+      0.0,
+      100.0
+     ],
+     "stated": 56.6
+    },
+    "assists": {
+     "n": 130,
+     "series": 32,
+     "hit": 46.9,
+     "ci": [
+      30.6,
+      62.2
+     ],
+     "stated": 56.2
+    }
+   }
+  },
+  "Underdog Under-only rows": 0,
+  "OS-1 verdict": "FAIL",
+  "PrizePicks standard": {
+   "lines": {
+    "n": 466,
+    "series": 37,
+    "hit": 56.0,
+    "ci": [
+     49.9,
+     62.0
+    ],
+    "stated": 58.8
+   },
+   "data over rate": 44.8,
+   "model side offered": {
+    "n": 337,
+    "series": 37,
+    "hit": 58.2,
+    "ci": [
+     51.5,
+     64.5
+    ],
+    "stated": 58.5
+   },
+   "model side not offered": {
+    "n": 129,
+    "series": 33,
+    "hit": 50.4,
+    "ci": [
+     40.0,
+     61.2
+    ],
+    "stated": 59.6
+   },
+   "lettered and offered": {
+    "n": 163,
+    "series": 36,
+    "hit": 59.5,
+    "ci": [
+     50.6,
+     68.0
+    ],
+    "stated": 62.8
+   },
+   "model Over": {
+    "n": 156,
+    "series": 36,
+    "hit": 51.3,
+    "ci": [
+     38.2,
+     62.7
+    ],
+    "stated": 57.0
+   },
+   "model Under": {
+    "n": 310,
+    "series": 37,
+    "hit": 58.4,
+    "ci": [
+     50.8,
+     66.2
+    ],
+    "stated": 59.7
+   }
+  },
+  "PrizePicks goblin": {
+   "lines": {
+    "n": 274,
+    "series": 36,
+    "hit": 60.2,
+    "ci": [
+     54.5,
+     66.0
+    ],
+    "stated": 64.9
+   },
+   "data over rate": 61.7,
+   "model side offered": {
+    "n": 238,
+    "series": 36,
+    "hit": 62.6,
+    "ci": [
+     55.9,
+     69.1
+    ],
+    "stated": 66.4
+   },
+   "model side not offered": {
+    "n": 36,
+    "series": 16,
+    "hit": 44.4,
+    "ci": [
+     29.0,
+     59.4
+    ],
+    "stated": 54.3
+   },
+   "lettered and offered": {
+    "n": 219,
+    "series": 36,
+    "hit": 62.1,
+    "ci": [
+     55.2,
+     68.9
+    ],
+    "stated": 67.7
+   },
+   "model Over": {
+    "n": 238,
+    "series": 36,
+    "hit": 62.6,
+    "ci": [
+     55.9,
+     69.1
+    ],
+    "stated": 66.4
+   },
+   "model Under": {
+    "n": 36,
+    "series": 16,
+    "hit": 44.4,
+    "ci": [
+     29.0,
+     59.4
+    ],
+    "stated": 54.3
+   }
+  },
+  "PrizePicks demon": {
+   "lines": {
+    "n": 317,
+    "series": 36,
+    "hit": 71.0,
+    "ci": [
+     65.0,
+     76.4
+    ],
+    "stated": 67.7
+   },
+   "data over rate": 26.5,
+   "model side offered": {
+    "n": 14,
+    "series": 10,
+    "hit": 21.4,
+    "ci": [
+     0.0,
+     44.4
+    ],
+    "stated": 53.7
+   },
+   "model side not offered": {
+    "n": 303,
+    "series": 36,
+    "hit": 73.3,
+    "ci": [
+     67.9,
+     78.5
+    ],
+    "stated": 68.4
+   },
+   "lettered and offered": {
+    "n": 3,
+    "series": 3,
+    "hit": 66.7,
+    "ci": [
+     0.0,
+     100.0
+    ],
+    "stated": 56.1
+   },
+   "model Over": {
+    "n": 14,
+    "series": 10,
+    "hit": 21.4,
+    "ci": [
+     0.0,
+     44.4
+    ],
+    "stated": 53.7
+   },
+   "model Under": {
+    "n": 303,
+    "series": 36,
+    "hit": 73.3,
+    "ci": [
+     67.9,
+     78.5
+    ],
+    "stated": 68.4
+   }
+  },
+  "Underdog two-sided": {
+   "lines": {
+    "n": 470,
+    "series": 42,
+    "hit": 54.5,
+    "ci": [
+     48.5,
+     60.2
+    ],
+    "stated": 57.7
+   },
+   "model Over": {
+    "n": 219,
+    "series": 41,
+    "hit": 48.9,
+    "ci": [
+     40.0,
+     57.6
+    ],
+    "stated": 57.5
+   },
+   "model Under": {
+    "n": 251,
+    "series": 42,
+    "hit": 59.4,
+    "ci": [
+     51.3,
+     67.2
+    ],
+    "stated": 57.9
+   },
+   "lettered": {
+    "n": 285,
+    "series": 42,
+    "hit": 58.2,
+    "ci": [
+     51.3,
+     65.2
+    ],
+    "stated": 61.1
+   }
+  }
+ },
+ "G6 SC-1": {
+  "all": {
+   "n": 2059,
+   "series": 42,
+   "hit": 59.5,
+   "ci": [
+    55.1,
+    63.5
+   ],
+   "stated": 61.3
+  },
+  "Over picks": {
+   "n": 761,
+   "series": 42,
+   "hit": 52.8,
+   "ci": [
+    45.4,
+    60.1
+   ],
+   "stated": 59.9
+  },
+  "Under picks": {
+   "n": 1298,
+   "series": 42,
+   "hit": 63.4,
+   "ci": [
+    57.5,
+    69.0
+   ],
+   "stated": 62.2
+  },
+  "kills Over": {
+   "n": 630,
+   "series": 42,
+   "hit": 54.0,
+   "ci": [
+    47.1,
+    60.6
+   ],
+   "stated": 60.6
+  },
+  "kills Under": {
+   "n": 945,
+   "series": 42,
+   "hit": 63.5,
+   "ci": [
+    57.6,
+    69.5
+   ],
+   "stated": 61.9
+  },
+  "kills scope 1 best-of-1": {
+   "n": 688,
+   "series": 20,
+   "hit": 59.0,
+   "ci": [
+    52.1,
+    65.4
+   ],
+   "stated": 60.8,
+   "over": {
+    "n": 280,
+    "series": 20,
+    "hit": 45.4,
+    "ci": [
+     35.0,
+     55.4
+    ],
+    "stated": 59.8
+   },
+   "under": {
+    "n": 408,
+    "series": 20,
+    "hit": 68.4,
+    "ci": [
+     59.2,
+     77.1
+    ],
+    "stated": 61.5
+   }
+  },
+  "kills scope 12 best-of-3": {
+   "n": 466,
+   "series": 13,
+   "hit": 65.2,
+   "ci": [
+    59.4,
+    71.1
+   ],
+   "stated": 61.9,
+   "over": {
+    "n": 199,
+    "series": 13,
+    "hit": 58.8,
+    "ci": [
+     49.0,
+     68.8
+    ],
+    "stated": 62.0
+   },
+   "under": {
+    "n": 267,
+    "series": 13,
+    "hit": 70.0,
+    "ci": [
+     62.1,
+     78.0
+    ],
+    "stated": 61.9
+   }
+  },
+  "kills scope 123 best-of-5": {
+   "n": 421,
+   "series": 9,
+   "hit": 54.6,
+   "ci": [
+    48.9,
+    59.9
+   ],
+   "stated": 61.8,
+   "over": {
+    "n": 151,
+    "series": 9,
+    "hit": 63.6,
+    "ci": [
+     49.5,
+     73.9
+    ],
+    "stated": 60.4
+   },
+   "under": {
+    "n": 270,
+    "series": 9,
+    "hit": 49.6,
+    "ci": [
+     38.3,
+     60.1
+    ],
+    "stated": 62.7
+   }
+  },
+  "assists Over": {
+   "n": 131,
+   "series": 33,
+   "hit": 47.3,
+   "ci": [
+    31.0,
+    62.6
+   ],
+   "stated": 56.5
+  },
+  "assists Under": {
+   "n": 353,
+   "series": 41,
+   "hit": 63.2,
+   "ci": [
+    54.4,
+    71.2
+   ],
+   "stated": 62.7
+  },
+  "assists scope 1 best-of-1": {
+   "n": 232,
+   "series": 20,
+   "hit": 49.1,
+   "ci": [
+    35.8,
+    61.9
+   ],
+   "stated": 58.4,
+   "over": {
+    "n": 84,
+    "series": 20,
+    "hit": 41.7,
+    "ci": [
+     22.8,
+     60.5
+    ],
+    "stated": 56.5
+   },
+   "under": {
+    "n": 148,
+    "series": 20,
+    "hit": 53.4,
+    "ci": [
+     37.9,
+     68.0
+    ],
+    "stated": 59.5
+   }
+  },
+  "assists scope 12 best-of-3": {
+   "n": 154,
+   "series": 13,
+   "hit": 68.8,
+   "ci": [
+    59.1,
+    79.7
+   ],
+   "stated": 60.9,
+   "over": {
+    "n": 44,
+    "series": 10,
+    "hit": 59.1,
+    "ci": [
+     28.6,
+     81.3
+    ],
+    "stated": 55.8
+   },
+   "under": {
+    "n": 110,
+    "series": 13,
+    "hit": 72.7,
+    "ci": [
+     62.1,
+     84.7
+    ],
+    "stated": 62.9
+   }
+  },
+  "assists scope 123 best-of-5": {
+   "n": 98,
+   "series": 8,
+   "hit": 66.3,
+   "ci": [
+    50.6,
+    80.0
+   ],
+   "stated": 67.5,
+   "over": {
+    "n": 3,
+    "series": 3,
+    "hit": 33.3,
+    "ci": [
+     0.0,
+     100.0
+    ],
+    "stated": 64.4
+   },
+   "under": {
+    "n": 95,
+    "series": 8,
+    "hit": 67.4,
+    "ci": [
+     52.5,
+     80.3
+    ],
+    "stated": 67.6
+   }
+  },
+  "letter bands": {
+   "all": {
+    "A+": {
+     "n": 50,
+     "series": 20,
+     "hit": 72.0,
+     "ci": [
+      56.8,
+      89.3
+     ],
+     "stated": 83.5
+    },
+    "A": {
+     "n": 132,
+     "series": 34,
+     "hit": 73.5,
+     "ci": [
+      64.5,
+      80.8
+     ],
+     "stated": 76.6
+    },
+    "A-": {
+     "n": 234,
+     "series": 41,
+     "hit": 65.8,
+     "ci": [
+      58.7,
+      72.6
+     ],
+     "stated": 70.7
+    },
+    "B+": {
+     "n": 312,
+     "series": 41,
+     "hit": 60.6,
+     "ci": [
+      51.3,
+      69.4
+     ],
+     "stated": 65.6
+    },
+    "B": {
+     "n": 484,
+     "series": 42,
+     "hit": 59.3,
+     "ci": [
+      53.2,
+      65.4
+     ],
+     "stated": 60.2
+    },
+    "B-": {
+     "n": 212,
+     "series": 40,
+     "hit": 57.1,
+     "ci": [
+      48.6,
+      65.0
+     ],
+     "stated": 56.4
+    },
+    "Lean": {
+     "n": 635,
+     "series": 42,
+     "hit": 53.7,
+     "ci": [
+      47.8,
+      59.5
+     ],
+     "stated": 53.3
+    }
+   },
+   "Over": {
+    "A+": {
+     "n": 11,
+     "series": 10,
+     "hit": 81.8,
+     "ci": [
+      55.6,
+      100.0
+     ],
+     "stated": 83.8
+    },
+    "A": {
+     "n": 40,
+     "series": 25,
+     "hit": 72.5,
+     "ci": [
+      60.5,
+      83.8
+     ],
+     "stated": 76.4
+    },
+    "A-": {
+     "n": 76,
+     "series": 34,
+     "hit": 57.9,
+     "ci": [
+      47.0,
+      68.1
+     ],
+     "stated": 70.4
+    },
+    "B+": {
+     "n": 93,
+     "series": 35,
+     "hit": 59.1,
+     "ci": [
+      44.4,
+      72.0
+     ],
+     "stated": 65.4
+    },
+    "B": {
+     "n": 172,
+     "series": 39,
+     "hit": 50.6,
+     "ci": [
+      39.5,
+      62.2
+     ],
+     "stated": 59.9
+    },
+    "B-": {
+     "n": 104,
+     "series": 36,
+     "hit": 47.1,
+     "ci": [
+      35.8,
+      57.8
+     ],
+     "stated": 56.2
+    },
+    "Lean": {
+     "n": 265,
+     "series": 42,
+     "hit": 48.7,
+     "ci": [
+      38.1,
+      59.1
+     ],
+     "stated": 53.0
+    }
+   },
+   "Under": {
+    "A+": {
+     "n": 39,
+     "series": 14,
+     "hit": 69.2,
+     "ci": [
+      52.1,
+      89.7
+     ],
+     "stated": 83.5
+    },
+    "A": {
+     "n": 92,
+     "series": 30,
+     "hit": 73.9,
+     "ci": [
+      62.0,
+      85.0
+     ],
+     "stated": 76.7
+    },
+    "A-": {
+     "n": 158,
+     "series": 37,
+     "hit": 69.6,
+     "ci": [
+      61.2,
+      77.4
+     ],
+     "stated": 70.9
+    },
+    "B+": {
+     "n": 219,
+     "series": 39,
+     "hit": 61.2,
+     "ci": [
+      50.2,
+      72.1
+     ],
+     "stated": 65.7
+    },
+    "B": {
+     "n": 312,
+     "series": 42,
+     "hit": 64.1,
+     "ci": [
+      56.0,
+      72.4
+     ],
+     "stated": 60.4
+    },
+    "B-": {
+     "n": 108,
+     "series": 37,
+     "hit": 66.7,
+     "ci": [
+      52.5,
+      78.8
+     ],
+     "stated": 56.5
+    },
+    "Lean": {
+     "n": 370,
+     "series": 41,
+     "hit": 57.3,
+     "ci": [
+      49.4,
+      65.3
+     ],
+     "stated": 53.6
+    }
+   },
+   "shown (not Underdog one-sided)": {
+    "A+": {
+     "n": 40,
+     "series": 18,
+     "hit": 77.5,
+     "ci": [
+      64.9,
+      88.9
+     ],
+     "stated": 83.7
+    },
+    "A": {
+     "n": 97,
+     "series": 34,
+     "hit": 72.2,
+     "ci": [
+      62.8,
+      81.2
+     ],
+     "stated": 76.5
+    },
+    "A-": {
+     "n": 176,
+     "series": 39,
+     "hit": 65.9,
+     "ci": [
+      58.6,
+      72.9
+     ],
+     "stated": 70.7
+    },
+    "B+": {
+     "n": 230,
+     "series": 40,
+     "hit": 61.3,
+     "ci": [
+      51.1,
+      71.6
+     ],
+     "stated": 65.7
+    },
+    "B": {
+     "n": 333,
+     "series": 42,
+     "hit": 60.4,
+     "ci": [
+      53.9,
+      66.8
+     ],
+     "stated": 60.4
+    },
+    "B-": {
+     "n": 155,
+     "series": 39,
+     "hit": 54.8,
+     "ci": [
+      45.0,
+      63.7
+     ],
+     "stated": 56.5
+    },
+    "Lean": {
+     "n": 496,
+     "series": 42,
+     "hit": 53.0,
+     "ci": [
+      46.9,
+      59.0
+     ],
+     "stated": 53.6
+    }
+   }
+  },
+  "lettered": {
+   "all": {
+    "n": 1424,
+    "series": 42,
+    "hit": 62.1,
+    "ci": [
+     57.1,
+     67.0
+    ],
+    "stated": 64.9
+   },
+   "Over": {
+    "n": 496,
+    "series": 42,
+    "hit": 55.0,
+    "ci": [
+     47.1,
+     63.1
+    ],
+    "stated": 63.6
+   },
+   "Under": {
+    "n": 928,
+    "series": 42,
+    "hit": 65.8,
+    "ci": [
+     59.6,
+     71.8
+    ],
+    "stated": 65.6
+   },
+   "Lean": {
+    "n": 635,
+    "series": 42,
+    "hit": 53.7,
+    "ci": [
+     47.8,
+     59.5
+    ],
+    "stated": 53.3
+   }
+  }
+ }
+}

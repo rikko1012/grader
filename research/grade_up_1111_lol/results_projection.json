@@ -1,0 +1,8288 @@
+{
+ "rows": 2090,
+ "graded": 2059,
+ "push": 31,
+ "series": 42,
+ "forward": {
+  "base": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1424,
+   "hit": 59.5,
+   "hit_ci": [
+    55.1,
+    63.5
+   ],
+   "over_n": 761,
+   "over_hit": 52.8,
+   "over_ci": [
+    45.4,
+    60.1
+   ],
+   "under_n": 1298,
+   "under_hit": 63.4,
+   "under_ci": [
+    57.5,
+    69.0
+   ],
+   "over_share": 37.0,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.1,
+   "offered": {
+    "side offered": {
+     "n": 1193,
+     "hit": 55.9,
+     "ci": [
+      50.7,
+      60.8
+     ],
+     "over_n": 761,
+     "over_hit": 52.8,
+     "under_hit": 61.3
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1059,
+     "hit": 57.0,
+     "ci": [
+      52.6,
+      61.3
+     ],
+     "over_n": 627,
+     "over_hit": 54.1,
+     "under_hit": 61.3
+    }
+   },
+   "mae": 3.015,
+   "bias": 0.434
+  },
+  "P1": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1416,
+   "hit": 60.0,
+   "hit_ci": [
+    55.6,
+    64.0
+   ],
+   "over_n": 746,
+   "over_hit": 53.6,
+   "over_ci": [
+    45.9,
+    61.6
+   ],
+   "under_n": 1313,
+   "under_hit": 63.7,
+   "under_ci": [
+    57.9,
+    69.0
+   ],
+   "over_share": 36.2,
+   "data_over_rate": 42.6,
+   "stated": 61.4,
+   "letter_hit": 61.9,
+   "offered": {
+    "side offered": {
+     "n": 1180,
+     "hit": 56.7,
+     "ci": [
+      51.6,
+      61.8
+     ],
+     "over_n": 746,
+     "over_hit": 53.6,
+     "under_hit": 62.0
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1063,
+     "hit": 57.9,
+     "ci": [
+      53.3,
+      62.4
+     ],
+     "over_n": 629,
+     "over_hit": 55.0,
+     "under_hit": 62.0
+    }
+   },
+   "mae": 3.004,
+   "bias": 0.352,
+   "d_hit": 0.53,
+   "d_hit_ci": [
+    -0.3,
+    1.5
+   ],
+   "d_sd": 0.46,
+   "flips": 61,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    41.0,
+    59.0
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 122
+  },
+  "P2": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1438,
+   "hit": 61.1,
+   "hit_ci": [
+    57.0,
+    65.2
+   ],
+   "over_n": 721,
+   "over_hit": 55.3,
+   "over_ci": [
+    47.9,
+    62.8
+   ],
+   "under_n": 1338,
+   "under_hit": 64.3,
+   "under_ci": [
+    58.5,
+    69.6
+   ],
+   "over_share": 35.0,
+   "data_over_rate": 42.6,
+   "stated": 61.5,
+   "letter_hit": 62.7,
+   "offered": {
+    "side offered": {
+     "n": 1178,
+     "hit": 58.1,
+     "ci": [
+      53.3,
+      62.8
+     ],
+     "over_n": 721,
+     "over_hit": 55.3,
+     "under_hit": 62.4
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1052,
+     "hit": 59.0,
+     "ci": [
+      54.6,
+      63.2
+     ],
+     "over_n": 595,
+     "over_hit": 56.5,
+     "under_hit": 62.4
+    }
+   },
+   "mae": 2.989,
+   "bias": 0.372,
+   "d_hit": 1.65,
+   "d_hit_ci": [
+    0.4,
+    2.9
+   ],
+   "d_sd": 0.65,
+   "flips": 88,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    30.7,
+    69.3
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 26
+  },
+  "P3": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1422,
+   "hit": 60.3,
+   "hit_ci": [
+    55.9,
+    64.4
+   ],
+   "over_n": 743,
+   "over_hit": 54.0,
+   "over_ci": [
+    46.6,
+    61.6
+   ],
+   "under_n": 1316,
+   "under_hit": 63.8,
+   "under_ci": [
+    58.0,
+    69.4
+   ],
+   "over_share": 36.1,
+   "data_over_rate": 42.6,
+   "stated": 61.4,
+   "letter_hit": 62.3,
+   "offered": {
+    "side offered": {
+     "n": 1182,
+     "hit": 56.8,
+     "ci": [
+      51.9,
+      61.5
+     ],
+     "over_n": 743,
+     "over_hit": 54.0,
+     "under_hit": 61.5
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1057,
+     "hit": 57.6,
+     "ci": [
+      53.2,
+      61.7
+     ],
+     "over_n": 618,
+     "over_hit": 54.9,
+     "under_hit": 61.5
+    }
+   },
+   "mae": 3.002,
+   "bias": 0.402,
+   "d_hit": 0.78,
+   "d_hit_ci": [
+    -0.4,
+    2.0
+   ],
+   "d_sd": 0.6,
+   "flips": 74,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    39.2,
+    60.8
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 96
+  },
+  "P4": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1416,
+   "hit": 60.5,
+   "hit_ci": [
+    56.3,
+    64.3
+   ],
+   "over_n": 787,
+   "over_hit": 54.0,
+   "over_ci": [
+    46.6,
+    61.4
+   ],
+   "under_n": 1272,
+   "under_hit": 64.5,
+   "under_ci": [
+    58.8,
+    69.9
+   ],
+   "over_share": 38.2,
+   "data_over_rate": 42.6,
+   "stated": 61.2,
+   "letter_hit": 61.5,
+   "offered": {
+    "side offered": {
+     "n": 1205,
+     "hit": 56.8,
+     "ci": [
+      52.0,
+      61.6
+     ],
+     "over_n": 787,
+     "over_hit": 54.0,
+     "under_hit": 62.2
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1065,
+     "hit": 57.7,
+     "ci": [
+      53.3,
+      61.9
+     ],
+     "over_n": 647,
+     "over_hit": 54.9,
+     "under_hit": 62.2
+    }
+   },
+   "mae": 3.027,
+   "bias": 0.52,
+   "d_hit": 0.97,
+   "d_hit_ci": [
+    0.0,
+    2.0
+   ],
+   "d_sd": 0.51,
+   "flips": 72,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    36.1,
+    63.9
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL",
+   "series_needed": 45
+  },
+  "P5": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1439,
+   "hit": 60.4,
+   "hit_ci": [
+    56.2,
+    64.4
+   ],
+   "over_n": 754,
+   "over_hit": 54.1,
+   "over_ci": [
+    46.6,
+    61.7
+   ],
+   "under_n": 1305,
+   "under_hit": 64.1,
+   "under_ci": [
+    58.4,
+    69.4
+   ],
+   "over_share": 36.6,
+   "data_over_rate": 42.6,
+   "stated": 61.4,
+   "letter_hit": 62.8,
+   "offered": {
+    "side offered": {
+     "n": 1189,
+     "hit": 56.9,
+     "ci": [
+      52.0,
+      61.8
+     ],
+     "over_n": 754,
+     "over_hit": 54.1,
+     "under_hit": 61.8
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1062,
+     "hit": 57.9,
+     "ci": [
+      53.5,
+      62.1
+     ],
+     "over_n": 627,
+     "over_hit": 55.2,
+     "under_hit": 61.8
+    }
+   },
+   "mae": 3.007,
+   "bias": 0.409,
+   "d_hit": 0.92,
+   "d_hit_ci": [
+    -0.3,
+    2.1
+   ],
+   "d_sd": 0.63,
+   "flips": 69,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    36.2,
+    63.8
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 76
+  },
+  "P6": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1408,
+   "hit": 60.1,
+   "hit_ci": [
+    55.8,
+    64.0
+   ],
+   "over_n": 752,
+   "over_hit": 53.7,
+   "over_ci": [
+    46.2,
+    61.2
+   ],
+   "under_n": 1307,
+   "under_hit": 63.8,
+   "under_ci": [
+    58.1,
+    69.2
+   ],
+   "over_share": 36.5,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 61.6,
+   "offered": {
+    "side offered": {
+     "n": 1186,
+     "hit": 56.5,
+     "ci": [
+      51.5,
+      61.3
+     ],
+     "over_n": 752,
+     "over_hit": 53.7,
+     "under_hit": 61.3
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1064,
+     "hit": 57.3,
+     "ci": [
+      53.0,
+      61.4
+     ],
+     "over_n": 630,
+     "over_hit": 54.6,
+     "under_hit": 61.3
+    }
+   },
+   "mae": 3.009,
+   "bias": 0.42,
+   "d_hit": 0.63,
+   "d_hit_ci": [
+    -0.2,
+    1.4
+   ],
+   "d_sd": 0.38,
+   "flips": 53,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    37.7,
+    62.3
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 59
+  },
+  "P7": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1421,
+   "hit": 60.2,
+   "hit_ci": [
+    56.0,
+    64.1
+   ],
+   "over_n": 764,
+   "over_hit": 53.8,
+   "over_ci": [
+    46.2,
+    61.4
+   ],
+   "under_n": 1295,
+   "under_hit": 64.0,
+   "under_ci": [
+    58.3,
+    69.4
+   ],
+   "over_share": 37.1,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.5,
+   "offered": {
+    "side offered": {
+     "n": 1189,
+     "hit": 56.6,
+     "ci": [
+      51.6,
+      61.4
+     ],
+     "over_n": 764,
+     "over_hit": 53.8,
+     "under_hit": 61.6
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1066,
+     "hit": 57.5,
+     "ci": [
+      53.3,
+      61.7
+     ],
+     "over_n": 641,
+     "over_hit": 54.8,
+     "under_hit": 61.6
+    }
+   },
+   "mae": 3.01,
+   "bias": 0.422,
+   "d_hit": 0.73,
+   "d_hit_ci": [
+    -0.2,
+    1.8
+   ],
+   "d_sd": 0.5,
+   "flips": 77,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    40.3,
+    59.7
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL",
+   "series_needed": 76
+  },
+  "P8": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1427,
+   "hit": 60.4,
+   "hit_ci": [
+    56.0,
+    64.4
+   ],
+   "over_n": 732,
+   "over_hit": 54.2,
+   "over_ci": [
+    46.3,
+    62.0
+   ],
+   "under_n": 1327,
+   "under_hit": 63.8,
+   "under_ci": [
+    58.2,
+    69.2
+   ],
+   "over_share": 35.6,
+   "data_over_rate": 42.6,
+   "stated": 61.4,
+   "letter_hit": 62.5,
+   "offered": {
+    "side offered": {
+     "n": 1172,
+     "hit": 57.1,
+     "ci": [
+      52.0,
+      62.1
+     ],
+     "over_n": 732,
+     "over_hit": 54.2,
+     "under_hit": 61.8
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1059,
+     "hit": 58.1,
+     "ci": [
+      53.4,
+      62.6
+     ],
+     "over_n": 619,
+     "over_hit": 55.4,
+     "under_hit": 61.8
+    }
+   },
+   "mae": 2.988,
+   "bias": 0.37,
+   "d_hit": 0.92,
+   "d_hit_ci": [
+    -0.0,
+    2.0
+   ],
+   "d_sd": 0.52,
+   "flips": 63,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    34.9,
+    65.1
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 52
+  },
+  "ALL": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1424,
+   "hit": 60.0,
+   "hit_ci": [
+    55.9,
+    63.8
+   ],
+   "over_n": 767,
+   "over_hit": 53.5,
+   "over_ci": [
+    45.8,
+    61.4
+   ],
+   "under_n": 1292,
+   "under_hit": 63.9,
+   "under_ci": [
+    58.3,
+    69.1
+   ],
+   "over_share": 37.3,
+   "data_over_rate": 42.6,
+   "stated": 61.4,
+   "letter_hit": 61.7,
+   "offered": {
+    "side offered": {
+     "n": 1189,
+     "hit": 56.6,
+     "ci": [
+      51.7,
+      61.6
+     ],
+     "over_n": 767,
+     "over_hit": 53.5,
+     "under_hit": 62.3
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1076,
+     "hit": 57.5,
+     "ci": [
+      53.2,
+      61.9
+     ],
+     "over_n": 654,
+     "over_hit": 54.4,
+     "under_hit": 62.3
+    }
+   },
+   "mae": 3.013,
+   "bias": 0.387,
+   "d_hit": 0.49,
+   "d_hit_ci": [
+    -1.0,
+    2.0
+   ],
+   "d_sd": 0.77,
+   "flips": 114,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    45.6,
+    54.4
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL",
+   "series_needed": 399
+  },
+  "P10": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1409,
+   "hit": 59.9,
+   "hit_ci": [
+    55.9,
+    63.6
+   ],
+   "over_n": 767,
+   "over_hit": 53.3,
+   "over_ci": [
+    46.4,
+    60.2
+   ],
+   "under_n": 1292,
+   "under_hit": 63.8,
+   "under_ci": [
+    57.9,
+    69.4
+   ],
+   "over_share": 37.3,
+   "data_over_rate": 42.6,
+   "stated": 61.0,
+   "letter_hit": 62.1,
+   "offered": {
+    "side offered": {
+     "n": 1202,
+     "hit": 56.4,
+     "ci": [
+      51.8,
+      60.8
+     ],
+     "over_n": 767,
+     "over_hit": 53.3,
+     "under_hit": 61.8
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1068,
+     "hit": 57.6,
+     "ci": [
+      53.5,
+      61.3
+     ],
+     "over_n": 633,
+     "over_hit": 54.7,
+     "under_hit": 61.8
+    }
+   },
+   "mae": 3.021,
+   "bias": 0.437,
+   "d_hit": 0.39,
+   "d_hit_ci": [
+    -0.4,
+    1.2
+   ],
+   "d_sd": 0.41,
+   "flips": 78,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    44.9,
+    55.1
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL",
+   "series_needed": 179
+  },
+  "P11": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1433,
+   "hit": 60.0,
+   "hit_ci": [
+    55.5,
+    64.1
+   ],
+   "over_n": 737,
+   "over_hit": 53.6,
+   "over_ci": [
+    46.0,
+    61.2
+   ],
+   "under_n": 1322,
+   "under_hit": 63.5,
+   "under_ci": [
+    57.7,
+    69.1
+   ],
+   "over_share": 35.8,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.8,
+   "offered": {
+    "side offered": {
+     "n": 1181,
+     "hit": 56.3,
+     "ci": [
+      51.2,
+      61.2
+     ],
+     "over_n": 737,
+     "over_hit": 53.6,
+     "under_hit": 60.8
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1054,
+     "hit": 57.0,
+     "ci": [
+      52.4,
+      61.4
+     ],
+     "over_n": 610,
+     "over_hit": 54.3,
+     "under_hit": 60.8
+    }
+   },
+   "mae": 3.006,
+   "bias": 0.426,
+   "d_hit": 0.49,
+   "d_hit_ci": [
+    -0.7,
+    1.7
+   ],
+   "d_sd": 0.62,
+   "flips": 68,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    42.6,
+    57.4
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 259
+  },
+  "NOISE1": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1418,
+   "hit": 60.6,
+   "hit_ci": [
+    56.4,
+    64.4
+   ],
+   "over_n": 767,
+   "over_hit": 54.2,
+   "over_ci": [
+    46.8,
+    61.8
+   ],
+   "under_n": 1292,
+   "under_hit": 64.3,
+   "under_ci": [
+    58.6,
+    69.7
+   ],
+   "over_share": 37.3,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.3,
+   "offered": {
+    "side offered": {
+     "n": 1197,
+     "hit": 56.9,
+     "ci": [
+      52.1,
+      61.7
+     ],
+     "over_n": 767,
+     "over_hit": 54.2,
+     "under_hit": 61.6
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1062,
+     "hit": 57.7,
+     "ci": [
+      53.3,
+      61.9
+     ],
+     "over_n": 632,
+     "over_hit": 55.1,
+     "under_hit": 61.6
+    }
+   },
+   "mae": 3.016,
+   "bias": 0.458,
+   "d_hit": 1.07,
+   "d_hit_ci": [
+    -0.0,
+    2.3
+   ],
+   "d_sd": 0.59,
+   "flips": 68,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    33.8,
+    66.2
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "NEAR-MISS",
+   "series_needed": 50
+  },
+  "NOISE2": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1415,
+   "hit": 59.8,
+   "hit_ci": [
+    55.6,
+    63.6
+   ],
+   "over_n": 772,
+   "over_hit": 53.2,
+   "over_ci": [
+    45.8,
+    60.8
+   ],
+   "under_n": 1287,
+   "under_hit": 63.8,
+   "under_ci": [
+    58.2,
+    69.0
+   ],
+   "over_share": 37.5,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.3,
+   "offered": {
+    "side offered": {
+     "n": 1198,
+     "hit": 55.9,
+     "ci": [
+      51.1,
+      60.8
+     ],
+     "over_n": 772,
+     "over_hit": 53.2,
+     "under_hit": 60.8
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1069,
+     "hit": 56.7,
+     "ci": [
+      52.3,
+      61.0
+     ],
+     "over_n": 643,
+     "over_hit": 54.0,
+     "under_hit": 60.8
+    }
+   },
+   "mae": 3.016,
+   "bias": 0.444,
+   "d_hit": 0.34,
+   "d_hit_ci": [
+    -0.7,
+    1.5
+   ],
+   "d_sd": 0.54,
+   "flips": 73,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    45.2,
+    54.8
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "FAIL",
+   "series_needed": 407
+  },
+  "NOISE3": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1417,
+   "hit": 60.6,
+   "hit_ci": [
+    56.5,
+    64.4
+   ],
+   "over_n": 766,
+   "over_hit": 54.3,
+   "over_ci": [
+    46.9,
+    61.8
+   ],
+   "under_n": 1293,
+   "under_hit": 64.3,
+   "under_ci": [
+    58.7,
+    69.7
+   ],
+   "over_share": 37.2,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.3,
+   "offered": {
+    "side offered": {
+     "n": 1200,
+     "hit": 57.1,
+     "ci": [
+      52.2,
+      61.8
+     ],
+     "over_n": 766,
+     "over_hit": 54.3,
+     "under_hit": 62.0
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1063,
+     "hit": 58.0,
+     "ci": [
+      53.6,
+      62.1
+     ],
+     "over_n": 629,
+     "over_hit": 55.3,
+     "under_hit": 62.0
+    }
+   },
+   "mae": 3.015,
+   "bias": 0.432,
+   "d_hit": 1.12,
+   "d_hit_ci": [
+    0.1,
+    2.3
+   ],
+   "d_sd": 0.57,
+   "flips": 59,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    30.5,
+    69.5
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": true
+   },
+   "verdict": "PASS",
+   "series_needed": 42
+  },
+  "NOISE4": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1412,
+   "hit": 60.0,
+   "hit_ci": [
+    56.0,
+    63.8
+   ],
+   "over_n": 750,
+   "over_hit": 53.6,
+   "over_ci": [
+    46.4,
+    60.8
+   ],
+   "under_n": 1309,
+   "under_hit": 63.7,
+   "under_ci": [
+    58.1,
+    69.1
+   ],
+   "over_share": 36.4,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.5,
+   "offered": {
+    "side offered": {
+     "n": 1189,
+     "hit": 56.3,
+     "ci": [
+      51.6,
+      60.9
+     ],
+     "over_n": 750,
+     "over_hit": 53.6,
+     "under_hit": 60.8
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1062,
+     "hit": 57.1,
+     "ci": [
+      52.8,
+      61.1
+     ],
+     "over_n": 623,
+     "over_hit": 54.4,
+     "under_hit": 60.8
+    }
+   },
+   "mae": 3.009,
+   "bias": 0.429,
+   "d_hit": 0.53,
+   "d_hit_ci": [
+    -0.7,
+    1.8
+   ],
+   "d_sd": 0.62,
+   "flips": 67,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    41.8,
+    58.2
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 221
+  },
+  "NOISE5": {
+   "lines": 2059,
+   "series": 42,
+   "graded": 2059,
+   "letters": 1415,
+   "hit": 59.9,
+   "hit_ci": [
+    55.9,
+    63.8
+   ],
+   "over_n": 752,
+   "over_hit": 53.5,
+   "over_ci": [
+    46.0,
+    61.0
+   ],
+   "under_n": 1307,
+   "under_hit": 63.7,
+   "under_ci": [
+    58.1,
+    68.9
+   ],
+   "over_share": 36.5,
+   "data_over_rate": 42.6,
+   "stated": 61.3,
+   "letter_hit": 62.3,
+   "offered": {
+    "side offered": {
+     "n": 1190,
+     "hit": 56.1,
+     "ci": [
+      51.4,
+      60.9
+     ],
+     "over_n": 752,
+     "over_hit": 53.5,
+     "under_hit": 60.7
+    },
+    "side offered, two-sided line (what members see graded)": {
+     "n": 1061,
+     "hit": 57.1,
+     "ci": [
+      52.7,
+      61.2
+     ],
+     "over_n": 623,
+     "over_hit": 54.6,
+     "under_hit": 60.7
+    }
+   },
+   "mae": 3.012,
+   "bias": 0.429,
+   "d_hit": 0.44,
+   "d_hit_ci": [
+    -0.7,
+    1.6
+   ],
+   "d_sd": 0.57,
+   "flips": 61,
+   "base_hit": 59.5,
+   "base_over_hit": 52.8,
+   "base_under_hit": 63.4,
+   "base_over_share": 37.0,
+   "base_graded": 2059,
+   "base_letters": 1424,
+   "changed_rows_hit": [
+    42.6,
+    57.4
+   ],
+   "clauses": {
+    "1 hit up": true,
+    "2 Over and Under not lower": true,
+    "3 count": true,
+    "4 split": false
+   },
+   "verdict": "FAIL",
+   "series_needed": 271
+  }
+ },
+ "history": {
+  "P1": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.93,
+   "d_hit": -0.01,
+   "d_ci": [
+    -0.13,
+    0.11
+   ],
+   "over_hit": [
+    67.03,
+    67.27
+   ],
+   "under_hit": [
+    66.89,
+    66.75
+   ],
+   "over_share": [
+    34.3,
+    33.8
+   ]
+  },
+  "P2": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.94,
+   "d_hit": 0.0,
+   "d_ci": [
+    -0.11,
+    0.1
+   ],
+   "over_hit": [
+    67.03,
+    67.07
+   ],
+   "under_hit": [
+    66.89,
+    66.87
+   ],
+   "over_share": [
+    34.3,
+    34.2
+   ]
+  },
+  "P3": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.93,
+   "d_hit": -0.01,
+   "d_ci": [
+    -0.11,
+    0.1
+   ],
+   "over_hit": [
+    67.03,
+    67.07
+   ],
+   "under_hit": [
+    66.89,
+    66.86
+   ],
+   "over_share": [
+    34.3,
+    34.2
+   ]
+  },
+  "P4": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 67.02,
+   "d_hit": 0.08,
+   "d_ci": [
+    -0.03,
+    0.2
+   ],
+   "over_hit": [
+    67.03,
+    67.05
+   ],
+   "under_hit": [
+    66.89,
+    67.0
+   ],
+   "over_share": [
+    34.3,
+    34.5
+   ]
+  },
+  "P5": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.9,
+   "d_hit": -0.03,
+   "d_ci": [
+    -0.14,
+    0.07
+   ],
+   "over_hit": [
+    67.03,
+    67.12
+   ],
+   "under_hit": [
+    66.89,
+    66.79
+   ],
+   "over_share": [
+    34.3,
+    34.0
+   ]
+  },
+  "P6": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.95,
+   "d_hit": 0.01,
+   "d_ci": [
+    -0.1,
+    0.12
+   ],
+   "over_hit": [
+    67.03,
+    67.12
+   ],
+   "under_hit": [
+    66.89,
+    66.86
+   ],
+   "over_share": [
+    34.3,
+    34.1
+   ]
+  },
+  "P7": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.93,
+   "d_hit": -0.01,
+   "d_ci": [
+    -0.11,
+    0.1
+   ],
+   "over_hit": [
+    67.03,
+    67.11
+   ],
+   "under_hit": [
+    66.89,
+    66.84
+   ],
+   "over_share": [
+    34.3,
+    34.1
+   ]
+  },
+  "P8": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.89,
+   "d_hit": -0.05,
+   "d_ci": [
+    -0.15,
+    0.06
+   ],
+   "over_hit": [
+    67.03,
+    67.07
+   ],
+   "under_hit": [
+    66.89,
+    66.79
+   ],
+   "over_share": [
+    34.3,
+    34.0
+   ]
+  },
+  "ALL": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 67.04,
+   "d_hit": 0.1,
+   "d_ci": [
+    -0.03,
+    0.24
+   ],
+   "over_hit": [
+    67.03,
+    67.16
+   ],
+   "under_hit": [
+    66.89,
+    66.98
+   ],
+   "over_share": [
+    34.3,
+    34.3
+   ]
+  },
+  "P11": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.9,
+   "d_hit": -0.04,
+   "d_ci": [
+    -0.15,
+    0.07
+   ],
+   "over_hit": [
+    67.03,
+    67.07
+   ],
+   "under_hit": [
+    66.89,
+    66.81
+   ],
+   "over_share": [
+    34.3,
+    34.1
+   ]
+  },
+  "NOISE1": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.98,
+   "d_hit": 0.04,
+   "d_ci": [
+    -0.06,
+    0.14
+   ],
+   "over_hit": [
+    67.03,
+    67.15
+   ],
+   "under_hit": [
+    66.89,
+    66.89
+   ],
+   "over_share": [
+    34.3,
+    34.1
+   ]
+  },
+  "NOISE2": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.96,
+   "d_hit": 0.02,
+   "d_ci": [
+    -0.09,
+    0.13
+   ],
+   "over_hit": [
+    67.03,
+    67.18
+   ],
+   "under_hit": [
+    66.89,
+    66.85
+   ],
+   "over_share": [
+    34.3,
+    34.0
+   ]
+  },
+  "NOISE3": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.96,
+   "d_hit": 0.03,
+   "d_ci": [
+    -0.08,
+    0.13
+   ],
+   "over_hit": [
+    67.03,
+    67.17
+   ],
+   "under_hit": [
+    66.89,
+    66.86
+   ],
+   "over_share": [
+    34.3,
+    34.0
+   ]
+  },
+  "NOISE4": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.97,
+   "d_hit": 0.03,
+   "d_ci": [
+    -0.08,
+    0.14
+   ],
+   "over_hit": [
+    67.03,
+    67.17
+   ],
+   "under_hit": [
+    66.89,
+    66.86
+   ],
+   "over_share": [
+    34.3,
+    34.1
+   ]
+  },
+  "NOISE5": {
+   "n": 63522,
+   "series": 1771,
+   "base_hit": 66.94,
+   "hit": 66.98,
+   "d_hit": 0.04,
+   "d_ci": [
+    -0.06,
+    0.15
+   ],
+   "over_hit": [
+    67.03,
+    67.17
+   ],
+   "under_hit": [
+    66.89,
+    66.89
+   ],
+   "over_share": [
+    34.3,
+    34.1
+   ]
+  }
+ },
+ "by": {
+  "kills": {
+   "base": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1072,
+    "hit": 59.7,
+    "hit_ci": [
+     55.8,
+     63.5
+    ],
+    "over_n": 630,
+    "over_hit": 54.0,
+    "over_ci": [
+     47.1,
+     60.6
+    ],
+    "under_n": 945,
+    "under_hit": 63.5,
+    "under_ci": [
+     57.6,
+     69.5
+    ],
+    "over_share": 40.0,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 62.9,
+    "offered": {
+     "side offered": {
+      "n": 1062,
+      "hit": 57.0,
+      "ci": [
+       52.6,
+       61.2
+      ],
+      "over_n": 630,
+      "over_hit": 54.0,
+      "under_hit": 61.3
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1058,
+      "hit": 57.0,
+      "ci": [
+       52.5,
+       61.2
+      ],
+      "over_n": 626,
+      "over_hit": 54.0,
+      "under_hit": 61.3
+     }
+    },
+    "mae": 2.231,
+    "bias": 0.373
+   },
+   "P1": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1065,
+    "hit": 60.5,
+    "hit_ci": [
+     56.6,
+     64.3
+    ],
+    "over_n": 631,
+    "over_hit": 55.0,
+    "over_ci": [
+     47.8,
+     62.3
+    ],
+    "under_n": 944,
+    "under_hit": 64.2,
+    "under_ci": [
+     58.5,
+     69.7
+    ],
+    "over_share": 40.1,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 62.8,
+    "offered": {
+     "side offered": {
+      "n": 1065,
+      "hit": 57.8,
+      "ci": [
+       53.3,
+       62.3
+      ],
+      "over_n": 631,
+      "over_hit": 55.0,
+      "under_hit": 62.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1062,
+      "hit": 57.8,
+      "ci": [
+       53.3,
+       62.4
+      ],
+      "over_n": 628,
+      "over_hit": 54.9,
+      "under_hit": 62.0
+     }
+    },
+    "mae": 2.23,
+    "bias": 0.367,
+    "d_hit": 0.83,
+    "d_hit_ci": [
+     -0.2,
+     2.0
+    ],
+    "d_sd": 0.59,
+    "flips": 43,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     34.9,
+     65.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 82
+   },
+   "P2": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1096,
+    "hit": 61.5,
+    "hit_ci": [
+     57.5,
+     65.2
+    ],
+    "over_n": 596,
+    "over_hit": 56.5,
+    "over_ci": [
+     49.4,
+     63.8
+    ],
+    "under_n": 979,
+    "under_hit": 64.5,
+    "under_ci": [
+     58.8,
+     70.3
+    ],
+    "over_share": 37.8,
+    "data_over_rate": 43.5,
+    "stated": 61.7,
+    "letter_hit": 63.4,
+    "offered": {
+     "side offered": {
+      "n": 1053,
+      "hit": 59.1,
+      "ci": [
+       54.7,
+       63.2
+      ],
+      "over_n": 596,
+      "over_hit": 56.5,
+      "under_hit": 62.4
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1051,
+      "hit": 59.0,
+      "ci": [
+       54.6,
+       63.2
+      ],
+      "over_n": 594,
+      "over_hit": 56.4,
+      "under_hit": 62.4
+     }
+    },
+    "mae": 2.209,
+    "bias": 0.319,
+    "d_hit": 1.78,
+    "d_hit_ci": [
+     0.3,
+     3.3
+    ],
+    "d_sd": 0.76,
+    "flips": 74,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     31.1,
+     68.9
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 30
+   },
+   "P3": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1082,
+    "hit": 60.4,
+    "hit_ci": [
+     56.4,
+     64.1
+    ],
+    "over_n": 619,
+    "over_hit": 54.9,
+    "over_ci": [
+     47.9,
+     62.0
+    ],
+    "under_n": 956,
+    "under_hit": 63.9,
+    "under_ci": [
+     58.0,
+     69.8
+    ],
+    "over_share": 39.3,
+    "data_over_rate": 43.5,
+    "stated": 61.5,
+    "letter_hit": 62.7,
+    "offered": {
+     "side offered": {
+      "n": 1058,
+      "hit": 57.7,
+      "ci": [
+       53.2,
+       61.8
+      ],
+      "over_n": 619,
+      "over_hit": 54.9,
+      "under_hit": 61.5
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1056,
+      "hit": 57.6,
+      "ci": [
+       53.2,
+       61.7
+      ],
+      "over_n": 617,
+      "over_hit": 54.8,
+      "under_hit": 61.5
+     }
+    },
+    "mae": 2.228,
+    "bias": 0.357,
+    "d_hit": 0.7,
+    "d_hit_ci": [
+     -0.5,
+     1.9
+    ],
+    "d_sd": 0.61,
+    "flips": 53,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     39.6,
+     60.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 123
+   },
+   "P4": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1072,
+    "hit": 60.6,
+    "hit_ci": [
+     56.8,
+     64.2
+    ],
+    "over_n": 648,
+    "over_hit": 54.9,
+    "over_ci": [
+     48.0,
+     62.0
+    ],
+    "under_n": 927,
+    "under_hit": 64.5,
+    "under_ci": [
+     58.7,
+     70.3
+    ],
+    "over_share": 41.1,
+    "data_over_rate": 43.5,
+    "stated": 61.3,
+    "letter_hit": 62.2,
+    "offered": {
+     "side offered": {
+      "n": 1066,
+      "hit": 57.8,
+      "ci": [
+       53.3,
+       62.0
+      ],
+      "over_n": 648,
+      "over_hit": 54.9,
+      "under_hit": 62.2
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1064,
+      "hit": 57.7,
+      "ci": [
+       53.3,
+       61.9
+      ],
+      "over_n": 646,
+      "over_hit": 54.8,
+      "under_hit": 62.2
+     }
+    },
+    "mae": 2.244,
+    "bias": 0.412,
+    "d_hit": 0.89,
+    "d_hit_ci": [
+     -0.3,
+     2.2
+    ],
+    "d_sd": 0.63,
+    "flips": 58,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     37.9,
+     62.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 81
+   },
+   "P5": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1091,
+    "hit": 60.7,
+    "hit_ci": [
+     56.8,
+     64.3
+    ],
+    "over_n": 628,
+    "over_hit": 55.3,
+    "over_ci": [
+     48.2,
+     62.3
+    ],
+    "under_n": 947,
+    "under_hit": 64.3,
+    "under_ci": [
+     58.6,
+     70.1
+    ],
+    "over_share": 39.9,
+    "data_over_rate": 43.5,
+    "stated": 61.5,
+    "letter_hit": 63.4,
+    "offered": {
+     "side offered": {
+      "n": 1063,
+      "hit": 57.9,
+      "ci": [
+       53.5,
+       62.2
+      ],
+      "over_n": 628,
+      "over_hit": 55.3,
+      "under_hit": 61.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1061,
+      "hit": 57.9,
+      "ci": [
+       53.4,
+       62.1
+      ],
+      "over_n": 626,
+      "over_hit": 55.1,
+      "under_hit": 61.8
+     }
+    },
+    "mae": 2.231,
+    "bias": 0.348,
+    "d_hit": 1.02,
+    "d_hit_ci": [
+     -0.3,
+     2.4
+    ],
+    "d_sd": 0.67,
+    "flips": 48,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     33.3,
+     66.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 70
+   },
+   "P6": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1060,
+    "hit": 60.2,
+    "hit_ci": [
+     56.3,
+     63.8
+    ],
+    "over_n": 632,
+    "over_hit": 54.6,
+    "over_ci": [
+     47.3,
+     61.5
+    ],
+    "under_n": 943,
+    "under_hit": 63.9,
+    "under_ci": [
+     58.2,
+     69.6
+    ],
+    "over_share": 40.1,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 62.4,
+    "offered": {
+     "side offered": {
+      "n": 1066,
+      "hit": 57.3,
+      "ci": [
+       53.1,
+       61.4
+      ],
+      "over_n": 632,
+      "over_hit": 54.6,
+      "under_hit": 61.3
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1063,
+      "hit": 57.3,
+      "ci": [
+       53.0,
+       61.4
+      ],
+      "over_n": 629,
+      "over_hit": 54.5,
+      "under_hit": 61.3
+     }
+    },
+    "mae": 2.24,
+    "bias": 0.392,
+    "d_hit": 0.51,
+    "d_hit_ci": [
+     -0.3,
+     1.2
+    ],
+    "d_sd": 0.38,
+    "flips": 36,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     38.9,
+     61.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 90
+   },
+   "P7": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1078,
+    "hit": 60.4,
+    "hit_ci": [
+     56.6,
+     63.9
+    ],
+    "over_n": 642,
+    "over_hit": 54.8,
+    "over_ci": [
+     47.8,
+     61.9
+    ],
+    "under_n": 933,
+    "under_hit": 64.3,
+    "under_ci": [
+     58.5,
+     70.1
+    ],
+    "over_share": 40.8,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 63.4,
+    "offered": {
+     "side offered": {
+      "n": 1067,
+      "hit": 57.5,
+      "ci": [
+       53.3,
+       61.7
+      ],
+      "over_n": 642,
+      "over_hit": 54.8,
+      "under_hit": 61.6
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1065,
+      "hit": 57.5,
+      "ci": [
+       53.2,
+       61.6
+      ],
+      "over_n": 640,
+      "over_hit": 54.7,
+      "under_hit": 61.6
+     }
+    },
+    "mae": 2.228,
+    "bias": 0.379,
+    "d_hit": 0.76,
+    "d_hit_ci": [
+     -0.3,
+     2.0
+    ],
+    "d_sd": 0.58,
+    "flips": 56,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     39.3,
+     60.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 94
+   },
+   "P8": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1079,
+    "hit": 60.8,
+    "hit_ci": [
+     56.7,
+     64.6
+    ],
+    "over_n": 620,
+    "over_hit": 55.5,
+    "over_ci": [
+     47.9,
+     62.9
+    ],
+    "under_n": 955,
+    "under_hit": 64.3,
+    "under_ci": [
+     58.6,
+     70.0
+    ],
+    "over_share": 39.4,
+    "data_over_rate": 43.5,
+    "stated": 61.5,
+    "letter_hit": 63.2,
+    "offered": {
+     "side offered": {
+      "n": 1060,
+      "hit": 58.1,
+      "ci": [
+       53.4,
+       62.6
+      ],
+      "over_n": 620,
+      "over_hit": 55.5,
+      "under_hit": 61.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1058,
+      "hit": 58.0,
+      "ci": [
+       53.3,
+       62.5
+      ],
+      "over_n": 618,
+      "over_hit": 55.3,
+      "under_hit": 61.8
+     }
+    },
+    "mae": 2.22,
+    "bias": 0.352,
+    "d_hit": 1.14,
+    "d_hit_ci": [
+     0.1,
+     2.3
+    ],
+    "d_sd": 0.59,
+    "flips": 40,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     27.5,
+     72.5
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 44
+   },
+   "ALL": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1074,
+    "hit": 60.3,
+    "hit_ci": [
+     56.6,
+     63.7
+    ],
+    "over_n": 655,
+    "over_hit": 54.5,
+    "over_ci": [
+     47.5,
+     61.9
+    ],
+    "under_n": 920,
+    "under_hit": 64.3,
+    "under_ci": [
+     58.9,
+     69.8
+    ],
+    "over_share": 41.6,
+    "data_over_rate": 43.5,
+    "stated": 61.3,
+    "letter_hit": 62.2,
+    "offered": {
+     "side offered": {
+      "n": 1077,
+      "hit": 57.6,
+      "ci": [
+       53.3,
+       62.0
+      ],
+      "over_n": 655,
+      "over_hit": 54.5,
+      "under_hit": 62.3
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1075,
+      "hit": 57.5,
+      "ci": [
+       53.2,
+       61.9
+      ],
+      "over_n": 653,
+      "over_hit": 54.4,
+      "under_hit": 62.3
+     }
+    },
+    "mae": 2.245,
+    "bias": 0.428,
+    "d_hit": 0.57,
+    "d_hit_ci": [
+     -1.2,
+     2.4
+    ],
+    "d_sd": 0.91,
+    "flips": 87,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     44.8,
+     55.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 412
+   },
+   "P10": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1057,
+    "hit": 60.2,
+    "hit_ci": [
+     56.7,
+     63.5
+    ],
+    "over_n": 636,
+    "over_hit": 54.6,
+    "over_ci": [
+     48.2,
+     60.8
+    ],
+    "under_n": 939,
+    "under_hit": 64.0,
+    "under_ci": [
+     58.1,
+     69.8
+    ],
+    "over_share": 40.4,
+    "data_over_rate": 43.5,
+    "stated": 61.0,
+    "letter_hit": 62.9,
+    "offered": {
+     "side offered": {
+      "n": 1071,
+      "hit": 57.5,
+      "ci": [
+       53.5,
+       61.1
+      ],
+      "over_n": 636,
+      "over_hit": 54.6,
+      "under_hit": 61.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1067,
+      "hit": 57.5,
+      "ci": [
+       53.5,
+       61.3
+      ],
+      "over_n": 632,
+      "over_hit": 54.6,
+      "under_hit": 61.8
+     }
+    },
+    "mae": 2.245,
+    "bias": 0.378,
+    "d_hit": 0.51,
+    "d_hit_ci": [
+     -0.5,
+     1.6
+    ],
+    "d_sd": 0.54,
+    "flips": 78,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     44.9,
+     55.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 181
+   },
+   "P11": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1088,
+    "hit": 59.9,
+    "hit_ci": [
+     55.8,
+     63.6
+    ],
+    "over_n": 611,
+    "over_hit": 54.3,
+    "over_ci": [
+     47.0,
+     61.7
+    ],
+    "under_n": 964,
+    "under_hit": 63.4,
+    "under_ci": [
+     57.6,
+     69.4
+    ],
+    "over_share": 38.8,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 63.3,
+    "offered": {
+     "side offered": {
+      "n": 1055,
+      "hit": 57.1,
+      "ci": [
+       52.5,
+       61.4
+      ],
+      "over_n": 611,
+      "over_hit": 54.3,
+      "under_hit": 60.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1053,
+      "hit": 57.0,
+      "ci": [
+       52.4,
+       61.4
+      ],
+      "over_n": 609,
+      "over_hit": 54.2,
+      "under_hit": 60.8
+     }
+    },
+    "mae": 2.221,
+    "bias": 0.348,
+    "d_hit": 0.19,
+    "d_hit_ci": [
+     -1.3,
+     1.7
+    ],
+    "d_sd": 0.76,
+    "flips": 55,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     47.3,
+     52.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 2582
+   },
+   "NOISE1": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1072,
+    "hit": 60.6,
+    "hit_ci": [
+     56.9,
+     64.1
+    ],
+    "over_n": 633,
+    "over_hit": 55.1,
+    "over_ci": [
+     47.9,
+     62.3
+    ],
+    "under_n": 942,
+    "under_hit": 64.3,
+    "under_ci": [
+     58.7,
+     70.0
+    ],
+    "over_share": 40.2,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 63.1,
+    "offered": {
+     "side offered": {
+      "n": 1063,
+      "hit": 57.8,
+      "ci": [
+       53.4,
+       62.0
+      ],
+      "over_n": 633,
+      "over_hit": 55.1,
+      "under_hit": 61.6
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1061,
+      "hit": 57.7,
+      "ci": [
+       53.3,
+       61.9
+      ],
+      "over_n": 631,
+      "over_hit": 55.0,
+      "under_hit": 61.6
+     }
+    },
+    "mae": 2.232,
+    "bias": 0.372,
+    "d_hit": 0.95,
+    "d_hit_ci": [
+     -0.3,
+     2.4
+    ],
+    "d_sd": 0.7,
+    "flips": 53,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     35.8,
+     64.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 88
+   },
+   "NOISE2": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1073,
+    "hit": 59.8,
+    "hit_ci": [
+     56.1,
+     63.3
+    ],
+    "over_n": 644,
+    "over_hit": 54.0,
+    "over_ci": [
+     46.8,
+     61.3
+    ],
+    "under_n": 931,
+    "under_hit": 63.8,
+    "under_ci": [
+     58.2,
+     69.4
+    ],
+    "over_share": 40.9,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 62.8,
+    "offered": {
+     "side offered": {
+      "n": 1070,
+      "hit": 56.7,
+      "ci": [
+       52.4,
+       61.0
+      ],
+      "over_n": 644,
+      "over_hit": 54.0,
+      "under_hit": 60.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1068,
+      "hit": 56.6,
+      "ci": [
+       52.3,
+       60.9
+      ],
+      "over_n": 642,
+      "over_hit": 53.9,
+      "under_hit": 60.8
+     }
+    },
+    "mae": 2.248,
+    "bias": 0.397,
+    "d_hit": 0.13,
+    "d_hit_ci": [
+     -0.9,
+     1.4
+    ],
+    "d_sd": 0.61,
+    "flips": 54,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     48.1,
+     51.9
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 3553
+   },
+   "NOISE3": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1066,
+    "hit": 60.8,
+    "hit_ci": [
+     57.1,
+     64.2
+    ],
+    "over_n": 631,
+    "over_hit": 55.3,
+    "over_ci": [
+     48.1,
+     62.3
+    ],
+    "under_n": 944,
+    "under_hit": 64.4,
+    "under_ci": [
+     58.8,
+     70.1
+    ],
+    "over_share": 40.1,
+    "data_over_rate": 43.5,
+    "stated": 61.5,
+    "letter_hit": 63.1,
+    "offered": {
+     "side offered": {
+      "n": 1065,
+      "hit": 58.0,
+      "ci": [
+       53.6,
+       62.1
+      ],
+      "over_n": 631,
+      "over_hit": 55.3,
+      "under_hit": 62.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1062,
+      "hit": 58.0,
+      "ci": [
+       53.6,
+       62.1
+      ],
+      "over_n": 628,
+      "over_hit": 55.3,
+      "under_hit": 62.0
+     }
+    },
+    "mae": 2.235,
+    "bias": 0.365,
+    "d_hit": 1.08,
+    "d_hit_ci": [
+     -0.1,
+     2.5
+    ],
+    "d_sd": 0.67,
+    "flips": 43,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     30.2,
+     69.8
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 63
+   },
+   "NOISE4": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1063,
+    "hit": 60.0,
+    "hit_ci": [
+     56.3,
+     63.6
+    ],
+    "over_n": 625,
+    "over_hit": 54.4,
+    "over_ci": [
+     47.3,
+     61.4
+    ],
+    "under_n": 950,
+    "under_hit": 63.7,
+    "under_ci": [
+     58.1,
+     69.5
+    ],
+    "over_share": 39.7,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 63.3,
+    "offered": {
+     "side offered": {
+      "n": 1064,
+      "hit": 57.0,
+      "ci": [
+       52.7,
+       61.2
+      ],
+      "over_n": 625,
+      "over_hit": 54.4,
+      "under_hit": 60.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1061,
+      "hit": 57.0,
+      "ci": [
+       52.7,
+       61.1
+      ],
+      "over_n": 622,
+      "over_hit": 54.3,
+      "under_hit": 60.8
+     }
+    },
+    "mae": 2.229,
+    "bias": 0.36,
+    "d_hit": 0.32,
+    "d_hit_ci": [
+     -1.1,
+     1.8
+    ],
+    "d_sd": 0.72,
+    "flips": 49,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     44.9,
+     55.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 817
+   },
+   "NOISE5": {
+    "lines": 1575,
+    "series": 42,
+    "graded": 1575,
+    "letters": 1070,
+    "hit": 60.1,
+    "hit_ci": [
+     56.4,
+     63.7
+    ],
+    "over_n": 625,
+    "over_hit": 54.6,
+    "over_ci": [
+     47.2,
+     61.8
+    ],
+    "under_n": 950,
+    "under_hit": 63.8,
+    "under_ci": [
+     58.3,
+     69.4
+    ],
+    "over_share": 39.7,
+    "data_over_rate": 43.5,
+    "stated": 61.4,
+    "letter_hit": 63.2,
+    "offered": {
+     "side offered": {
+      "n": 1063,
+      "hit": 57.1,
+      "ci": [
+       52.7,
+       61.2
+      ],
+      "over_n": 625,
+      "over_hit": 54.6,
+      "under_hit": 60.7
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1060,
+      "hit": 57.1,
+      "ci": [
+       52.7,
+       61.2
+      ],
+      "over_n": 622,
+      "over_hit": 54.5,
+      "under_hit": 60.7
+     }
+    },
+    "mae": 2.228,
+    "bias": 0.363,
+    "d_hit": 0.44,
+    "d_hit_ci": [
+     -0.8,
+     1.8
+    ],
+    "d_sd": 0.66,
+    "flips": 45,
+    "base_hit": 59.7,
+    "base_over_hit": 54.0,
+    "base_under_hit": 63.5,
+    "base_over_share": 40.0,
+    "base_graded": 1575,
+    "base_letters": 1072,
+    "changed_rows_hit": [
+     42.2,
+     57.8
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 364
+   }
+  },
+  "assists": {
+   "base": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 352,
+    "hit": 58.9,
+    "hit_ci": [
+     51.0,
+     66.9
+    ],
+    "over_n": 131,
+    "over_hit": 47.3,
+    "over_ci": [
+     31.8,
+     62.0
+    ],
+    "under_n": 353,
+    "under_hit": 63.2,
+    "under_ci": [
+     54.7,
+     71.5
+    ],
+    "over_share": 27.1,
+    "data_over_rate": 39.7,
+    "stated": 61.0,
+    "letter_hit": 59.7,
+    "offered": {
+     "side offered": {
+      "n": 131,
+      "hit": 47.3,
+      "ci": [
+       31.8,
+       62.0
+      ],
+      "over_n": 131,
+      "over_hit": 47.3,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.819,
+    "bias": 0.497
+   },
+   "P1": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 351,
+    "hit": 58.5,
+    "hit_ci": [
+     50.6,
+     66.2
+    ],
+    "over_n": 115,
+    "over_hit": 46.1,
+    "over_ci": [
+     29.8,
+     61.5
+    ],
+    "under_n": 369,
+    "under_hit": 62.3,
+    "under_ci": [
+     54.4,
+     70.3
+    ],
+    "over_share": 23.8,
+    "data_over_rate": 39.7,
+    "stated": 61.5,
+    "letter_hit": 59.3,
+    "offered": {
+     "side offered": {
+      "n": 115,
+      "hit": 46.1,
+      "ci": [
+       29.8,
+       61.5
+      ],
+      "over_n": 115,
+      "over_hit": 46.1,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.798,
+    "bias": 0.336,
+    "d_hit": -0.41,
+    "d_hit_ci": [
+     -2.4,
+     1.3
+    ],
+    "d_sd": 0.94,
+    "flips": 18,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     55.6,
+     44.4
+    ],
+    "clauses": {
+     "1 hit up": false,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL"
+   },
+   "P2": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 342,
+    "hit": 60.1,
+    "hit_ci": [
+     52.3,
+     67.7
+    ],
+    "over_n": 125,
+    "over_hit": 49.6,
+    "over_ci": [
+     34.3,
+     63.7
+    ],
+    "under_n": 359,
+    "under_hit": 63.8,
+    "under_ci": [
+     55.6,
+     71.7
+    ],
+    "over_share": 25.8,
+    "data_over_rate": 39.7,
+    "stated": 61.0,
+    "letter_hit": 60.5,
+    "offered": {
+     "side offered": {
+      "n": 125,
+      "hit": 49.6,
+      "ci": [
+       34.3,
+       63.7
+      ],
+      "over_n": 125,
+      "over_hit": 49.6,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.79,
+    "bias": 0.427,
+    "d_hit": 1.24,
+    "d_hit_ci": [
+     -0.2,
+     2.8
+    ],
+    "d_sd": 0.79,
+    "flips": 14,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     28.6,
+     71.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 64
+   },
+   "P3": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 340,
+    "hit": 59.9,
+    "hit_ci": [
+     52.2,
+     67.5
+    ],
+    "over_n": 124,
+    "over_hit": 49.2,
+    "over_ci": [
+     33.3,
+     64.1
+    ],
+    "under_n": 360,
+    "under_hit": 63.6,
+    "under_ci": [
+     55.4,
+     71.5
+    ],
+    "over_share": 25.6,
+    "data_over_rate": 39.7,
+    "stated": 61.1,
+    "letter_hit": 61.2,
+    "offered": {
+     "side offered": {
+      "n": 124,
+      "hit": 49.2,
+      "ci": [
+       33.3,
+       64.1
+      ],
+      "over_n": 124,
+      "over_hit": 49.2,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.798,
+    "bias": 0.447,
+    "d_hit": 1.03,
+    "d_hit_ci": [
+     -0.9,
+     3.3
+    ],
+    "d_sd": 1.07,
+    "flips": 21,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     38.1,
+     61.9
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 170
+   },
+   "P4": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 344,
+    "hit": 60.1,
+    "hit_ci": [
+     52.4,
+     67.7
+    ],
+    "over_n": 139,
+    "over_hit": 49.6,
+    "over_ci": [
+     34.8,
+     62.8
+    ],
+    "under_n": 345,
+    "under_hit": 64.3,
+    "under_ci": [
+     55.9,
+     72.3
+    ],
+    "over_share": 28.7,
+    "data_over_rate": 39.7,
+    "stated": 60.6,
+    "letter_hit": 59.3,
+    "offered": {
+     "side offered": {
+      "n": 139,
+      "hit": 49.6,
+      "ci": [
+       34.8,
+       62.8
+      ],
+      "over_n": 139,
+      "over_hit": 49.6,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.832,
+    "bias": 0.631,
+    "d_hit": 1.24,
+    "d_hit_ci": [
+     -0.2,
+     3.1
+    ],
+    "d_sd": 0.87,
+    "flips": 14,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     28.6,
+     71.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 78
+   },
+   "P5": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 348,
+    "hit": 59.5,
+    "hit_ci": [
+     51.7,
+     67.4
+    ],
+    "over_n": 126,
+    "over_hit": 48.4,
+    "over_ci": [
+     33.0,
+     63.3
+    ],
+    "under_n": 358,
+    "under_hit": 63.4,
+    "under_ci": [
+     55.2,
+     71.3
+    ],
+    "over_share": 26.0,
+    "data_over_rate": 39.7,
+    "stated": 61.0,
+    "letter_hit": 60.6,
+    "offered": {
+     "side offered": {
+      "n": 126,
+      "hit": 48.4,
+      "ci": [
+       33.0,
+       63.3
+      ],
+      "over_n": 126,
+      "over_hit": 48.4,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.803,
+    "bias": 0.472,
+    "d_hit": 0.62,
+    "d_hit_ci": [
+     -1.4,
+     2.9
+    ],
+    "d_sd": 1.11,
+    "flips": 21,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     42.9,
+     57.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 505
+   },
+   "P6": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 348,
+    "hit": 59.9,
+    "hit_ci": [
+     52.1,
+     67.9
+    ],
+    "over_n": 120,
+    "over_hit": 49.2,
+    "over_ci": [
+     33.0,
+     64.5
+    ],
+    "under_n": 364,
+    "under_hit": 63.5,
+    "under_ci": [
+     55.2,
+     71.6
+    ],
+    "over_share": 24.8,
+    "data_over_rate": 39.7,
+    "stated": 60.9,
+    "letter_hit": 59.2,
+    "offered": {
+     "side offered": {
+      "n": 120,
+      "hit": 49.2,
+      "ci": [
+       33.0,
+       64.5
+      ],
+      "over_n": 120,
+      "over_hit": 49.2,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.799,
+    "bias": 0.449,
+    "d_hit": 1.03,
+    "d_hit_ci": [
+     -0.6,
+     3.0
+    ],
+    "d_sd": 0.93,
+    "flips": 17,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     35.3,
+     64.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 129
+   },
+   "P7": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 343,
+    "hit": 59.5,
+    "hit_ci": [
+     51.6,
+     67.4
+    ],
+    "over_n": 122,
+    "over_hit": 48.4,
+    "over_ci": [
+     32.1,
+     63.8
+    ],
+    "under_n": 362,
+    "under_hit": 63.3,
+    "under_ci": [
+     55.0,
+     71.4
+    ],
+    "over_share": 25.2,
+    "data_over_rate": 39.7,
+    "stated": 61.0,
+    "letter_hit": 59.8,
+    "offered": {
+     "side offered": {
+      "n": 122,
+      "hit": 48.4,
+      "ci": [
+       32.1,
+       63.8
+      ],
+      "over_n": 122,
+      "over_hit": 48.4,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.813,
+    "bias": 0.467,
+    "d_hit": 0.62,
+    "d_hit_ci": [
+     -1.0,
+     2.6
+    ],
+    "d_sd": 0.94,
+    "flips": 21,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     42.9,
+     57.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 363
+   },
+   "P8": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 348,
+    "hit": 59.1,
+    "hit_ci": [
+     51.7,
+     66.6
+    ],
+    "over_n": 112,
+    "over_hit": 47.3,
+    "over_ci": [
+     30.7,
+     62.8
+    ],
+    "under_n": 372,
+    "under_hit": 62.6,
+    "under_ci": [
+     54.8,
+     70.3
+    ],
+    "over_share": 23.1,
+    "data_over_rate": 39.7,
+    "stated": 61.2,
+    "letter_hit": 60.3,
+    "offered": {
+     "side offered": {
+      "n": 112,
+      "hit": 47.3,
+      "ci": [
+       30.7,
+       62.8
+      ],
+      "over_n": 112,
+      "over_hit": 47.3,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.777,
+    "bias": 0.389,
+    "d_hit": 0.21,
+    "d_hit_ci": [
+     -2.1,
+     2.3
+    ],
+    "d_sd": 1.14,
+    "flips": 23,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     47.8,
+     52.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 4642
+   },
+   "ALL": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 350,
+    "hit": 59.1,
+    "hit_ci": [
+     51.2,
+     66.9
+    ],
+    "over_n": 112,
+    "over_hit": 47.3,
+    "over_ci": [
+     30.5,
+     63.4
+    ],
+    "under_n": 372,
+    "under_hit": 62.6,
+    "under_ci": [
+     54.6,
+     70.3
+    ],
+    "over_share": 23.1,
+    "data_over_rate": 39.7,
+    "stated": 61.4,
+    "letter_hit": 60.3,
+    "offered": {
+     "side offered": {
+      "n": 112,
+      "hit": 47.3,
+      "ci": [
+       30.5,
+       63.4
+      ],
+      "over_n": 112,
+      "over_hit": 47.3,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.802,
+    "bias": 0.345,
+    "d_hit": 0.21,
+    "d_hit_ci": [
+     -2.4,
+     2.8
+    ],
+    "d_sd": 1.31,
+    "flips": 27,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     48.1,
+     51.9
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 6130
+   },
+   "P10": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 352,
+    "hit": 58.9,
+    "hit_ci": [
+     51.0,
+     66.9
+    ],
+    "over_n": 131,
+    "over_hit": 47.3,
+    "over_ci": [
+     31.8,
+     62.0
+    ],
+    "under_n": 353,
+    "under_hit": 63.2,
+    "under_ci": [
+     54.7,
+     71.5
+    ],
+    "over_share": 27.1,
+    "data_over_rate": 39.7,
+    "stated": 61.0,
+    "letter_hit": 59.7,
+    "offered": {
+     "side offered": {
+      "n": 131,
+      "hit": 47.3,
+      "ci": [
+       31.8,
+       62.0
+      ],
+      "over_n": 131,
+      "over_hit": 47.3,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.819,
+    "bias": 0.497,
+    "d_hit": 0.0,
+    "d_hit_ci": [
+     0.0,
+     0.0
+    ],
+    "d_sd": 0.0,
+    "flips": 0,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": null,
+    "clauses": {
+     "1 hit up": false,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL"
+   },
+   "P11": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 345,
+    "hit": 60.3,
+    "hit_ci": [
+     52.7,
+     67.9
+    ],
+    "over_n": 126,
+    "over_hit": 50.0,
+    "over_ci": [
+     34.0,
+     64.9
+    ],
+    "under_n": 358,
+    "under_hit": 64.0,
+    "under_ci": [
+     55.7,
+     71.9
+    ],
+    "over_share": 26.0,
+    "data_over_rate": 39.7,
+    "stated": 60.9,
+    "letter_hit": 61.2,
+    "offered": {
+     "side offered": {
+      "n": 126,
+      "hit": 50.0,
+      "ci": [
+       34.0,
+       64.9
+      ],
+      "over_n": 126,
+      "over_hit": 50.0,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.812,
+    "bias": 0.506,
+    "d_hit": 1.45,
+    "d_hit_ci": [
+     -0.2,
+     3.4
+    ],
+    "d_sd": 0.88,
+    "flips": 13,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     23.1,
+     76.9
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 59
+   },
+   "NOISE1": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 346,
+    "hit": 60.3,
+    "hit_ci": [
+     52.5,
+     68.1
+    ],
+    "over_n": 134,
+    "over_hit": 50.0,
+    "over_ci": [
+     34.9,
+     64.2
+    ],
+    "under_n": 350,
+    "under_hit": 64.3,
+    "under_ci": [
+     55.9,
+     72.2
+    ],
+    "over_share": 27.7,
+    "data_over_rate": 39.7,
+    "stated": 60.8,
+    "letter_hit": 60.1,
+    "offered": {
+     "side offered": {
+      "n": 134,
+      "hit": 50.0,
+      "ci": [
+       34.9,
+       64.2
+      ],
+      "over_n": 134,
+      "over_hit": 50.0,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.821,
+    "bias": 0.546,
+    "d_hit": 1.45,
+    "d_hit_ci": [
+     -0.2,
+     3.3
+    ],
+    "d_sd": 0.89,
+    "flips": 15,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     26.7,
+     73.3
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 60
+   },
+   "NOISE2": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 342,
+    "hit": 59.9,
+    "hit_ci": [
+     52.4,
+     67.5
+    ],
+    "over_n": 128,
+    "over_hit": 49.2,
+    "over_ci": [
+     34.0,
+     63.5
+    ],
+    "under_n": 356,
+    "under_hit": 63.8,
+    "under_ci": [
+     55.6,
+     71.5
+    ],
+    "over_share": 26.4,
+    "data_over_rate": 39.7,
+    "stated": 60.9,
+    "letter_hit": 60.8,
+    "offered": {
+     "side offered": {
+      "n": 128,
+      "hit": 49.2,
+      "ci": [
+       34.0,
+       63.5
+      ],
+      "over_n": 128,
+      "over_hit": 49.2,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.804,
+    "bias": 0.494,
+    "d_hit": 1.03,
+    "d_hit_ci": [
+     -0.8,
+     3.0
+    ],
+    "d_sd": 0.98,
+    "flips": 19,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     36.8,
+     63.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 143
+   },
+   "NOISE3": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 351,
+    "hit": 60.1,
+    "hit_ci": [
+     52.3,
+     67.9
+    ],
+    "over_n": 135,
+    "over_hit": 49.6,
+    "over_ci": [
+     34.7,
+     63.4
+    ],
+    "under_n": 349,
+    "under_hit": 64.2,
+    "under_ci": [
+     55.7,
+     72.2
+    ],
+    "over_share": 27.9,
+    "data_over_rate": 39.7,
+    "stated": 61.0,
+    "letter_hit": 59.8,
+    "offered": {
+     "side offered": {
+      "n": 135,
+      "hit": 49.6,
+      "ci": [
+       34.7,
+       63.4
+      ],
+      "over_n": 135,
+      "over_hit": 49.6,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.816,
+    "bias": 0.501,
+    "d_hit": 1.24,
+    "d_hit_ci": [
+     -0.4,
+     3.1
+    ],
+    "d_sd": 0.91,
+    "flips": 16,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     31.2,
+     68.8
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 85
+   },
+   "NOISE4": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 349,
+    "hit": 60.1,
+    "hit_ci": [
+     52.7,
+     67.5
+    ],
+    "over_n": 125,
+    "over_hit": 49.6,
+    "over_ci": [
+     34.6,
+     63.8
+    ],
+    "under_n": 359,
+    "under_hit": 63.8,
+    "under_ci": [
+     55.6,
+     71.7
+    ],
+    "over_share": 25.8,
+    "data_over_rate": 39.7,
+    "stated": 60.9,
+    "letter_hit": 59.9,
+    "offered": {
+     "side offered": {
+      "n": 125,
+      "hit": 49.6,
+      "ci": [
+       34.6,
+       63.8
+      ],
+      "over_n": 125,
+      "over_hit": 49.6,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.81,
+    "bias": 0.499,
+    "d_hit": 1.24,
+    "d_hit_ci": [
+     -0.4,
+     3.0
+    ],
+    "d_sd": 0.91,
+    "flips": 18,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     33.3,
+     66.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 85
+   },
+   "NOISE5": {
+    "lines": 484,
+    "series": 41,
+    "graded": 484,
+    "letters": 345,
+    "hit": 59.3,
+    "hit_ci": [
+     51.9,
+     66.7
+    ],
+    "over_n": 127,
+    "over_hit": 48.0,
+    "over_ci": [
+     33.0,
+     61.6
+    ],
+    "under_n": 357,
+    "under_hit": 63.3,
+    "under_ci": [
+     54.9,
+     71.2
+    ],
+    "over_share": 26.2,
+    "data_over_rate": 39.7,
+    "stated": 60.9,
+    "letter_hit": 59.4,
+    "offered": {
+     "side offered": {
+      "n": 127,
+      "hit": 48.0,
+      "ci": [
+       33.0,
+       61.6
+      ],
+      "over_n": 127,
+      "over_hit": 48.0,
+      "under_hit": null
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1,
+      "hit": 100.0,
+      "ci": [
+       100.0,
+       100.0
+      ],
+      "over_n": 1,
+      "over_hit": 100.0,
+      "under_hit": null
+     }
+    },
+    "mae": 3.817,
+    "bias": 0.497,
+    "d_hit": 0.41,
+    "d_hit_ci": [
+     -1.2,
+     2.0
+    ],
+    "d_sd": 0.82,
+    "flips": 16,
+    "base_hit": 58.9,
+    "base_over_hit": 47.3,
+    "base_under_hit": 63.2,
+    "base_over_share": 27.1,
+    "base_graded": 484,
+    "base_letters": 352,
+    "changed_rows_hit": [
+     43.8,
+     56.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 631
+   }
+  },
+  "from 2026-10-26": {
+   "base": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 740,
+    "hit": 62.3,
+    "hit_ci": [
+     58.5,
+     66.7
+    ],
+    "over_n": 371,
+    "over_hit": 62.5,
+    "over_ci": [
+     53.0,
+     70.9
+    ],
+    "under_n": 668,
+    "under_hit": 62.1,
+    "under_ci": [
+     55.5,
+     69.0
+    ],
+    "over_share": 35.7,
+    "data_over_rate": 46.7,
+    "stated": 62.1,
+    "letter_hit": 66.4,
+    "offered": {
+     "side offered": {
+      "n": 574,
+      "hit": 60.6,
+      "ci": [
+       54.8,
+       66.5
+      ],
+      "over_n": 371,
+      "over_hit": 62.5,
+      "under_hit": 57.1
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 520,
+      "hit": 61.0,
+      "ci": [
+       56.0,
+       65.9
+      ],
+      "over_n": 317,
+      "over_hit": 63.4,
+      "under_hit": 57.1
+     }
+    },
+    "mae": 3.047,
+    "bias": 0.046
+   },
+   "P1": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 737,
+    "hit": 63.3,
+    "hit_ci": [
+     59.9,
+     67.3
+    ],
+    "over_n": 368,
+    "over_hit": 64.1,
+    "over_ci": [
+     54.3,
+     73.1
+    ],
+    "under_n": 671,
+    "under_hit": 62.9,
+    "under_ci": [
+     57.0,
+     69.0
+    ],
+    "over_share": 35.4,
+    "data_over_rate": 46.7,
+    "stated": 62.2,
+    "letter_hit": 66.6,
+    "offered": {
+     "side offered": {
+      "n": 571,
+      "hit": 62.3,
+      "ci": [
+       56.3,
+       68.4
+      ],
+      "over_n": 368,
+      "over_hit": 64.1,
+      "under_hit": 59.1
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 524,
+      "hit": 63.0,
+      "ci": [
+       58.0,
+       68.0
+      ],
+      "over_n": 321,
+      "over_hit": 65.4,
+      "under_hit": 59.1
+     }
+    },
+    "mae": 3.051,
+    "bias": -0.017,
+    "d_hit": 1.06,
+    "d_hit_ci": [
+     -0.3,
+     2.5
+    ],
+    "d_sd": 0.7,
+    "flips": 35,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     34.3,
+     65.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 32
+   },
+   "P2": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 741,
+    "hit": 63.9,
+    "hit_ci": [
+     60.2,
+     68.1
+    ],
+    "over_n": 366,
+    "over_hit": 65.0,
+    "over_ci": [
+     55.3,
+     74.0
+    ],
+    "under_n": 673,
+    "under_hit": 63.3,
+    "under_ci": [
+     57.3,
+     69.7
+    ],
+    "over_share": 35.2,
+    "data_over_rate": 46.7,
+    "stated": 62.3,
+    "letter_hit": 67.3,
+    "offered": {
+     "side offered": {
+      "n": 571,
+      "hit": 62.7,
+      "ci": [
+       56.6,
+       69.2
+      ],
+      "over_n": 366,
+      "over_hit": 65.0,
+      "under_hit": 58.5
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 521,
+      "hit": 62.8,
+      "ci": [
+       57.4,
+       68.4
+      ],
+      "over_n": 316,
+      "over_hit": 65.5,
+      "under_hit": 58.5
+     }
+    },
+    "mae": 3.026,
+    "bias": 0.003,
+    "d_hit": 1.64,
+    "d_hit_ci": [
+     0.2,
+     3.4
+    ],
+    "d_sd": 0.81,
+    "flips": 45,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     31.1,
+     68.9
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 18
+   },
+   "P3": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 746,
+    "hit": 64.1,
+    "hit_ci": [
+     60.3,
+     68.4
+    ],
+    "over_n": 370,
+    "over_hit": 65.1,
+    "over_ci": [
+     55.4,
+     74.0
+    ],
+    "under_n": 669,
+    "under_hit": 63.5,
+    "under_ci": [
+     57.3,
+     70.0
+    ],
+    "over_share": 35.6,
+    "data_over_rate": 46.7,
+    "stated": 62.1,
+    "letter_hit": 66.5,
+    "offered": {
+     "side offered": {
+      "n": 574,
+      "hit": 62.9,
+      "ci": [
+       56.8,
+       68.8
+      ],
+      "over_n": 370,
+      "over_hit": 65.1,
+      "under_hit": 58.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 522,
+      "hit": 62.8,
+      "ci": [
+       57.6,
+       67.9
+      ],
+      "over_n": 318,
+      "over_hit": 65.4,
+      "under_hit": 58.8
+     }
+    },
+    "mae": 3.033,
+    "bias": 0.023,
+    "d_hit": 1.83,
+    "d_hit_ci": [
+     0.4,
+     3.4
+    ],
+    "d_sd": 0.79,
+    "flips": 45,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     28.9,
+     71.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 14
+   },
+   "P4": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 742,
+    "hit": 64.1,
+    "hit_ci": [
+     60.6,
+     68.1
+    ],
+    "over_n": 384,
+    "over_hit": 64.6,
+    "over_ci": [
+     55.1,
+     73.2
+    ],
+    "under_n": 655,
+    "under_hit": 63.8,
+    "under_ci": [
+     57.8,
+     70.3
+    ],
+    "over_share": 37.0,
+    "data_over_rate": 46.7,
+    "stated": 61.9,
+    "letter_hit": 66.7,
+    "offered": {
+     "side offered": {
+      "n": 581,
+      "hit": 63.0,
+      "ci": [
+       57.0,
+       69.2
+      ],
+      "over_n": 384,
+      "over_hit": 64.6,
+      "under_hit": 59.9
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 525,
+      "hit": 63.2,
+      "ci": [
+       57.9,
+       68.5
+      ],
+      "over_n": 328,
+      "over_hit": 65.2,
+      "under_hit": 59.9
+     }
+    },
+    "mae": 3.048,
+    "bias": 0.167,
+    "d_hit": 1.83,
+    "d_hit_ci": [
+     0.4,
+     3.7
+    ],
+    "d_sd": 0.82,
+    "flips": 39,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     25.6,
+     74.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "PASS",
+    "series_needed": 15
+   },
+   "P5": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 752,
+    "hit": 64.6,
+    "hit_ci": [
+     60.8,
+     69.0
+    ],
+    "over_n": 369,
+    "over_hit": 65.9,
+    "over_ci": [
+     56.7,
+     74.7
+    ],
+    "under_n": 670,
+    "under_hit": 63.9,
+    "under_ci": [
+     57.9,
+     70.4
+    ],
+    "over_share": 35.5,
+    "data_over_rate": 46.7,
+    "stated": 62.1,
+    "letter_hit": 67.8,
+    "offered": {
+     "side offered": {
+      "n": 573,
+      "hit": 63.7,
+      "ci": [
+       57.5,
+       70.1
+      ],
+      "over_n": 369,
+      "over_hit": 65.9,
+      "under_hit": 59.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 524,
+      "hit": 63.5,
+      "ci": [
+       57.9,
+       69.0
+      ],
+      "over_n": 320,
+      "over_hit": 65.9,
+      "under_hit": 59.8
+     }
+    },
+    "mae": 3.031,
+    "bias": 0.024,
+    "d_hit": 2.31,
+    "d_hit_ci": [
+     0.6,
+     4.3
+    ],
+    "d_sd": 0.95,
+    "flips": 44,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     22.7,
+     77.3
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 13
+   },
+   "P6": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 726,
+    "hit": 63.7,
+    "hit_ci": [
+     60.2,
+     68.0
+    ],
+    "over_n": 370,
+    "over_hit": 64.6,
+    "over_ci": [
+     55.4,
+     73.1
+    ],
+    "under_n": 669,
+    "under_hit": 63.2,
+    "under_ci": [
+     56.9,
+     69.9
+    ],
+    "over_share": 35.6,
+    "data_over_rate": 46.7,
+    "stated": 61.9,
+    "letter_hit": 66.5,
+    "offered": {
+     "side offered": {
+      "n": 573,
+      "hit": 62.5,
+      "ci": [
+       56.7,
+       68.4
+      ],
+      "over_n": 370,
+      "over_hit": 64.6,
+      "under_hit": 58.6
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 526,
+      "hit": 62.5,
+      "ci": [
+       57.5,
+       67.4
+      ],
+      "over_n": 323,
+      "over_hit": 65.0,
+      "under_hit": 58.6
+     }
+    },
+    "mae": 3.041,
+    "bias": 0.059,
+    "d_hit": 1.44,
+    "d_hit_ci": [
+     0.6,
+     2.4
+    ],
+    "d_sd": 0.48,
+    "flips": 35,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     28.6,
+     71.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 9
+   },
+   "P7": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 741,
+    "hit": 63.9,
+    "hit_ci": [
+     60.4,
+     68.2
+    ],
+    "over_n": 372,
+    "over_hit": 64.8,
+    "over_ci": [
+     55.2,
+     73.9
+    ],
+    "under_n": 667,
+    "under_hit": 63.4,
+    "under_ci": [
+     57.3,
+     69.7
+    ],
+    "over_share": 35.8,
+    "data_over_rate": 46.7,
+    "stated": 62.0,
+    "letter_hit": 67.2,
+    "offered": {
+     "side offered": {
+      "n": 573,
+      "hit": 62.7,
+      "ci": [
+       56.6,
+       68.8
+      ],
+      "over_n": 372,
+      "over_hit": 64.8,
+      "under_hit": 58.7
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 527,
+      "hit": 62.6,
+      "ci": [
+       57.3,
+       67.9
+      ],
+      "over_n": 326,
+      "over_hit": 65.0,
+      "under_hit": 58.7
+     }
+    },
+    "mae": 3.041,
+    "bias": 0.047,
+    "d_hit": 1.64,
+    "d_hit_ci": [
+     0.4,
+     3.2
+    ],
+    "d_sd": 0.74,
+    "flips": 41,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     29.3,
+     70.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "PASS",
+    "series_needed": 15
+   },
+   "P8": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 753,
+    "hit": 64.1,
+    "hit_ci": [
+     60.5,
+     68.3
+    ],
+    "over_n": 364,
+    "over_hit": 65.4,
+    "over_ci": [
+     55.4,
+     74.4
+    ],
+    "under_n": 675,
+    "under_hit": 63.4,
+    "under_ci": [
+     57.6,
+     69.6
+    ],
+    "over_share": 35.0,
+    "data_over_rate": 46.7,
+    "stated": 62.0,
+    "letter_hit": 66.7,
+    "offered": {
+     "side offered": {
+      "n": 568,
+      "hit": 63.4,
+      "ci": [
+       57.2,
+       69.6
+      ],
+      "over_n": 364,
+      "over_hit": 65.4,
+      "under_hit": 59.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 522,
+      "hit": 63.8,
+      "ci": [
+       58.5,
+       69.1
+      ],
+      "over_n": 318,
+      "over_hit": 66.4,
+      "under_hit": 59.8
+     }
+    },
+    "mae": 3.016,
+    "bias": 0.016,
+    "d_hit": 1.83,
+    "d_hit_ci": [
+     0.3,
+     3.5
+    ],
+    "d_sd": 0.82,
+    "flips": 41,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     26.8,
+     73.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 15
+   },
+   "ALL": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 742,
+    "hit": 64.1,
+    "hit_ci": [
+     60.4,
+     68.2
+    ],
+    "over_n": 384,
+    "over_hit": 64.6,
+    "over_ci": [
+     54.5,
+     74.0
+    ],
+    "under_n": 655,
+    "under_hit": 63.8,
+    "under_ci": [
+     58.1,
+     70.0
+    ],
+    "over_share": 37.0,
+    "data_over_rate": 46.7,
+    "stated": 62.1,
+    "letter_hit": 66.6,
+    "offered": {
+     "side offered": {
+      "n": 577,
+      "hit": 63.1,
+      "ci": [
+       56.6,
+       69.5
+      ],
+      "over_n": 384,
+      "over_hit": 64.6,
+      "under_hit": 60.1
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 534,
+      "hit": 62.9,
+      "ci": [
+       57.0,
+       68.6
+      ],
+      "over_n": 341,
+      "over_hit": 64.5,
+      "under_hit": 60.1
+     }
+    },
+    "mae": 3.051,
+    "bias": 0.032,
+    "d_hit": 1.83,
+    "d_hit_ci": [
+     -0.1,
+     3.8
+    ],
+    "d_sd": 0.99,
+    "flips": 57,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     33.3,
+     66.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 22
+   },
+   "P10": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 736,
+    "hit": 62.3,
+    "hit_ci": [
+     59.0,
+     66.0
+    ],
+    "over_n": 375,
+    "over_hit": 62.4,
+    "over_ci": [
+     53.7,
+     70.1
+    ],
+    "under_n": 664,
+    "under_hit": 62.2,
+    "under_ci": [
+     55.5,
+     69.1
+    ],
+    "over_share": 36.1,
+    "data_over_rate": 46.7,
+    "stated": 61.8,
+    "letter_hit": 66.3,
+    "offered": {
+     "side offered": {
+      "n": 578,
+      "hit": 60.6,
+      "ci": [
+       55.7,
+       65.8
+      ],
+      "over_n": 375,
+      "over_hit": 62.4,
+      "under_hit": 57.1
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 524,
+      "hit": 60.9,
+      "ci": [
+       56.8,
+       65.0
+      ],
+      "over_n": 321,
+      "over_hit": 63.2,
+      "under_hit": 57.1
+     }
+    },
+    "mae": 3.066,
+    "bias": 0.048,
+    "d_hit": 0.0,
+    "d_hit_ci": [
+     -1.3,
+     1.2
+    ],
+    "d_sd": 0.64,
+    "flips": 46,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     50.0,
+     50.0
+    ],
+    "clauses": {
+     "1 hit up": false,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL"
+   },
+   "P11": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 749,
+    "hit": 64.2,
+    "hit_ci": [
+     60.5,
+     68.4
+    ],
+    "over_n": 369,
+    "over_hit": 65.3,
+    "over_ci": [
+     55.6,
+     74.5
+    ],
+    "under_n": 670,
+    "under_hit": 63.6,
+    "under_ci": [
+     57.8,
+     70.0
+    ],
+    "over_share": 35.5,
+    "data_over_rate": 46.7,
+    "stated": 62.0,
+    "letter_hit": 67.0,
+    "offered": {
+     "side offered": {
+      "n": 574,
+      "hit": 63.1,
+      "ci": [
+       56.9,
+       69.3
+      ],
+      "over_n": 369,
+      "over_hit": 65.3,
+      "under_hit": 59.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 522,
+      "hit": 63.0,
+      "ci": [
+       57.5,
+       68.4
+      ],
+      "over_n": 317,
+      "over_hit": 65.6,
+      "under_hit": 59.0
+     }
+    },
+    "mae": 3.039,
+    "bias": 0.063,
+    "d_hit": 1.92,
+    "d_hit_ci": [
+     0.5,
+     3.7
+    ],
+    "d_sd": 0.81,
+    "flips": 38,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     23.7,
+     76.3
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 13
+   },
+   "NOISE1": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 739,
+    "hit": 64.9,
+    "hit_ci": [
+     61.3,
+     69.2
+    ],
+    "over_n": 372,
+    "over_hit": 66.1,
+    "over_ci": [
+     56.9,
+     74.8
+    ],
+    "under_n": 667,
+    "under_hit": 64.2,
+    "under_ci": [
+     58.1,
+     70.7
+    ],
+    "over_share": 35.8,
+    "data_over_rate": 46.7,
+    "stated": 61.9,
+    "letter_hit": 67.8,
+    "offered": {
+     "side offered": {
+      "n": 574,
+      "hit": 63.9,
+      "ci": [
+       57.9,
+       70.1
+      ],
+      "over_n": 372,
+      "over_hit": 66.1,
+      "under_hit": 59.9
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 523,
+      "hit": 63.9,
+      "ci": [
+       58.6,
+       69.0
+      ],
+      "over_n": 321,
+      "over_hit": 66.4,
+      "under_hit": 59.9
+     }
+    },
+    "mae": 3.048,
+    "bias": 0.085,
+    "d_hit": 2.6,
+    "d_hit_ci": [
+     1.2,
+     4.4
+    ],
+    "d_sd": 0.81,
+    "flips": 37,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     13.5,
+     86.5
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "PASS",
+    "series_needed": 8
+   },
+   "NOISE2": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 741,
+    "hit": 63.8,
+    "hit_ci": [
+     60.4,
+     67.7
+    ],
+    "over_n": 375,
+    "over_hit": 64.5,
+    "over_ci": [
+     55.1,
+     73.6
+    ],
+    "under_n": 664,
+    "under_hit": 63.4,
+    "under_ci": [
+     57.6,
+     69.6
+    ],
+    "over_share": 36.1,
+    "data_over_rate": 46.7,
+    "stated": 62.1,
+    "letter_hit": 67.2,
+    "offered": {
+     "side offered": {
+      "n": 577,
+      "hit": 62.4,
+      "ci": [
+       56.4,
+       68.7
+      ],
+      "over_n": 375,
+      "over_hit": 64.5,
+      "under_hit": 58.4
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 528,
+      "hit": 62.3,
+      "ci": [
+       57.1,
+       67.6
+      ],
+      "over_n": 326,
+      "over_hit": 64.7,
+      "under_hit": 58.4
+     }
+    },
+    "mae": 3.049,
+    "bias": 0.055,
+    "d_hit": 1.54,
+    "d_hit_ci": [
+     0.1,
+     3.2
+    ],
+    "d_sd": 0.81,
+    "flips": 40,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     30.0,
+     70.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "PASS",
+    "series_needed": 21
+   },
+   "NOISE3": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 745,
+    "hit": 64.9,
+    "hit_ci": [
+     61.4,
+     69.0
+    ],
+    "over_n": 374,
+    "over_hit": 66.0,
+    "over_ci": [
+     56.9,
+     74.5
+    ],
+    "under_n": 665,
+    "under_hit": 64.2,
+    "under_ci": [
+     58.3,
+     70.7
+    ],
+    "over_share": 36.0,
+    "data_over_rate": 46.7,
+    "stated": 62.1,
+    "letter_hit": 66.8,
+    "offered": {
+     "side offered": {
+      "n": 576,
+      "hit": 64.1,
+      "ci": [
+       58.2,
+       70.1
+      ],
+      "over_n": 374,
+      "over_hit": 66.0,
+      "under_hit": 60.4
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 523,
+      "hit": 64.2,
+      "ci": [
+       59.1,
+       69.3
+      ],
+      "over_n": 321,
+      "over_hit": 66.7,
+      "under_hit": 60.4
+     }
+    },
+    "mae": 3.054,
+    "bias": 0.048,
+    "d_hit": 2.6,
+    "d_hit_ci": [
+     1.2,
+     4.3
+    ],
+    "d_sd": 0.81,
+    "flips": 35,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     11.4,
+     88.6
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "PASS",
+    "series_needed": 8
+   },
+   "NOISE4": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 733,
+    "hit": 63.9,
+    "hit_ci": [
+     60.5,
+     68.1
+    ],
+    "over_n": 370,
+    "over_hit": 64.9,
+    "over_ci": [
+     55.7,
+     73.6
+    ],
+    "under_n": 669,
+    "under_hit": 63.4,
+    "under_ci": [
+     57.5,
+     69.8
+    ],
+    "over_share": 35.6,
+    "data_over_rate": 46.7,
+    "stated": 62.0,
+    "letter_hit": 67.5,
+    "offered": {
+     "side offered": {
+      "n": 573,
+      "hit": 62.7,
+      "ci": [
+       56.7,
+       69.0
+      ],
+      "over_n": 370,
+      "over_hit": 64.9,
+      "under_hit": 58.6
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 523,
+      "hit": 62.7,
+      "ci": [
+       57.4,
+       68.1
+      ],
+      "over_n": 320,
+      "over_hit": 65.3,
+      "under_hit": 58.6
+     }
+    },
+    "mae": 3.046,
+    "bias": 0.057,
+    "d_hit": 1.64,
+    "d_hit_ci": [
+     0.1,
+     3.4
+    ],
+    "d_sd": 0.85,
+    "flips": 37,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     27.0,
+     73.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 20
+   },
+   "NOISE5": {
+    "lines": 1039,
+    "series": 19,
+    "graded": 1039,
+    "letters": 734,
+    "hit": 63.9,
+    "hit_ci": [
+     60.6,
+     67.9
+    ],
+    "over_n": 372,
+    "over_hit": 64.8,
+    "over_ci": [
+     55.6,
+     73.6
+    ],
+    "under_n": 667,
+    "under_hit": 63.4,
+    "under_ci": [
+     57.6,
+     69.8
+    ],
+    "over_share": 35.8,
+    "data_over_rate": 46.7,
+    "stated": 62.1,
+    "letter_hit": 67.4,
+    "offered": {
+     "side offered": {
+      "n": 574,
+      "hit": 62.7,
+      "ci": [
+       56.8,
+       68.9
+      ],
+      "over_n": 372,
+      "over_hit": 64.8,
+      "under_hit": 58.9
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 523,
+      "hit": 63.1,
+      "ci": [
+       57.8,
+       68.2
+      ],
+      "over_n": 321,
+      "over_hit": 65.7,
+      "under_hit": 58.9
+     }
+    },
+    "mae": 3.043,
+    "bias": 0.044,
+    "d_hit": 1.64,
+    "d_hit_ci": [
+     0.2,
+     3.3
+    ],
+    "d_sd": 0.79,
+    "flips": 35,
+    "base_hit": 62.3,
+    "base_over_hit": 62.5,
+    "base_under_hit": 62.1,
+    "base_over_share": 35.7,
+    "base_graded": 1039,
+    "base_letters": 740,
+    "changed_rows_hit": [
+     25.7,
+     74.3
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "PASS",
+    "series_needed": 17
+   }
+  },
+  "shown (not Underdog one-sided)": {
+   "base": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1031,
+    "hit": 59.4,
+    "hit_ci": [
+     55.4,
+     63.3
+    ],
+    "over_n": 627,
+    "over_hit": 54.1,
+    "over_ci": [
+     47.1,
+     60.9
+    ],
+    "under_n": 900,
+    "under_hit": 63.1,
+    "under_ci": [
+     57.0,
+     69.3
+    ],
+    "over_share": 41.1,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 62.5,
+    "offered": {
+     "side offered": {
+      "n": 1059,
+      "hit": 57.0,
+      "ci": [
+       52.6,
+       61.3
+      ],
+      "over_n": 627,
+      "over_hit": 54.1,
+      "under_hit": 61.3
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1059,
+      "hit": 57.0,
+      "ci": [
+       52.6,
+       61.3
+      ],
+      "over_n": 627,
+      "over_hit": 54.1,
+      "under_hit": 61.3
+     }
+    },
+    "mae": 2.267,
+    "bias": 0.359
+   },
+   "P1": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1023,
+    "hit": 60.2,
+    "hit_ci": [
+     56.2,
+     64.0
+    ],
+    "over_n": 629,
+    "over_hit": 55.0,
+    "over_ci": [
+     47.8,
+     62.3
+    ],
+    "under_n": 898,
+    "under_hit": 63.8,
+    "under_ci": [
+     57.9,
+     69.6
+    ],
+    "over_share": 41.2,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 62.5,
+    "offered": {
+     "side offered": {
+      "n": 1063,
+      "hit": 57.9,
+      "ci": [
+       53.3,
+       62.4
+      ],
+      "over_n": 629,
+      "over_hit": 55.0,
+      "under_hit": 62.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1063,
+      "hit": 57.9,
+      "ci": [
+       53.3,
+       62.4
+      ],
+      "over_n": 629,
+      "over_hit": 55.0,
+      "under_hit": 62.0
+     }
+    },
+    "mae": 2.266,
+    "bias": 0.353,
+    "d_hit": 0.79,
+    "d_hit_ci": [
+     -0.3,
+     2.0
+    ],
+    "d_sd": 0.58,
+    "flips": 42,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     35.7,
+     64.3
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 87
+   },
+   "P2": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1052,
+    "hit": 61.1,
+    "hit_ci": [
+     57.2,
+     64.9
+    ],
+    "over_n": 595,
+    "over_hit": 56.5,
+    "over_ci": [
+     49.3,
+     63.7
+    ],
+    "under_n": 932,
+    "under_hit": 64.1,
+    "under_ci": [
+     58.3,
+     70.0
+    ],
+    "over_share": 39.0,
+    "data_over_rate": 43.9,
+    "stated": 61.6,
+    "letter_hit": 63.0,
+    "offered": {
+     "side offered": {
+      "n": 1052,
+      "hit": 59.0,
+      "ci": [
+       54.6,
+       63.2
+      ],
+      "over_n": 595,
+      "over_hit": 56.5,
+      "under_hit": 62.4
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1052,
+      "hit": 59.0,
+      "ci": [
+       54.6,
+       63.2
+      ],
+      "over_n": 595,
+      "over_hit": 56.5,
+      "under_hit": 62.4
+     }
+    },
+    "mae": 2.245,
+    "bias": 0.307,
+    "d_hit": 1.7,
+    "d_hit_ci": [
+     0.3,
+     3.2
+    ],
+    "d_sd": 0.77,
+    "flips": 72,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     31.9,
+     68.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 34
+   },
+   "P3": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1042,
+    "hit": 60.0,
+    "hit_ci": [
+     56.1,
+     63.7
+    ],
+    "over_n": 618,
+    "over_hit": 54.9,
+    "over_ci": [
+     47.8,
+     61.9
+    ],
+    "under_n": 909,
+    "under_hit": 63.5,
+    "under_ci": [
+     57.5,
+     69.6
+    ],
+    "over_share": 40.5,
+    "data_over_rate": 43.9,
+    "stated": 61.5,
+    "letter_hit": 62.4,
+    "offered": {
+     "side offered": {
+      "n": 1057,
+      "hit": 57.6,
+      "ci": [
+       53.2,
+       61.7
+      ],
+      "over_n": 618,
+      "over_hit": 54.9,
+      "under_hit": 61.5
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1057,
+      "hit": 57.6,
+      "ci": [
+       53.2,
+       61.7
+      ],
+      "over_n": 618,
+      "over_hit": 54.9,
+      "under_hit": 61.5
+     }
+    },
+    "mae": 2.263,
+    "bias": 0.343,
+    "d_hit": 0.59,
+    "d_hit_ci": [
+     -0.6,
+     1.8
+    ],
+    "d_sd": 0.6,
+    "flips": 51,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     41.2,
+     58.8
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 167
+   },
+   "P4": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1032,
+    "hit": 60.2,
+    "hit_ci": [
+     56.4,
+     63.8
+    ],
+    "over_n": 647,
+    "over_hit": 54.9,
+    "over_ci": [
+     48.0,
+     61.9
+    ],
+    "under_n": 880,
+    "under_hit": 64.1,
+    "under_ci": [
+     58.1,
+     70.0
+    ],
+    "over_share": 42.4,
+    "data_over_rate": 43.9,
+    "stated": 61.3,
+    "letter_hit": 61.8,
+    "offered": {
+     "side offered": {
+      "n": 1065,
+      "hit": 57.7,
+      "ci": [
+       53.3,
+       61.9
+      ],
+      "over_n": 647,
+      "over_hit": 54.9,
+      "under_hit": 62.2
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1065,
+      "hit": 57.7,
+      "ci": [
+       53.3,
+       61.9
+      ],
+      "over_n": 647,
+      "over_hit": 54.9,
+      "under_hit": 62.2
+     }
+    },
+    "mae": 2.278,
+    "bias": 0.4,
+    "d_hit": 0.79,
+    "d_hit_ci": [
+     -0.4,
+     2.0
+    ],
+    "d_sd": 0.61,
+    "flips": 56,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     39.3,
+     60.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 97
+   },
+   "P5": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1049,
+    "hit": 60.3,
+    "hit_ci": [
+     56.4,
+     64.1
+    ],
+    "over_n": 627,
+    "over_hit": 55.2,
+    "over_ci": [
+     48.1,
+     62.2
+    ],
+    "under_n": 900,
+    "under_hit": 63.9,
+    "under_ci": [
+     58.0,
+     69.9
+    ],
+    "over_share": 41.1,
+    "data_over_rate": 43.9,
+    "stated": 61.5,
+    "letter_hit": 63.1,
+    "offered": {
+     "side offered": {
+      "n": 1062,
+      "hit": 57.9,
+      "ci": [
+       53.5,
+       62.1
+      ],
+      "over_n": 627,
+      "over_hit": 55.2,
+      "under_hit": 61.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1062,
+      "hit": 57.9,
+      "ci": [
+       53.5,
+       62.1
+      ],
+      "over_n": 627,
+      "over_hit": 55.2,
+      "under_hit": 61.8
+     }
+    },
+    "mae": 2.266,
+    "bias": 0.335,
+    "d_hit": 0.92,
+    "d_hit_ci": [
+     -0.3,
+     2.2
+    ],
+    "d_sd": 0.65,
+    "flips": 46,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     34.8,
+     65.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 81
+   },
+   "P6": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1019,
+    "hit": 59.9,
+    "hit_ci": [
+     56.0,
+     63.5
+    ],
+    "over_n": 630,
+    "over_hit": 54.6,
+    "over_ci": [
+     47.3,
+     61.6
+    ],
+    "under_n": 897,
+    "under_hit": 63.5,
+    "under_ci": [
+     57.7,
+     69.5
+    ],
+    "over_share": 41.3,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 61.9,
+    "offered": {
+     "side offered": {
+      "n": 1064,
+      "hit": 57.3,
+      "ci": [
+       53.0,
+       61.4
+      ],
+      "over_n": 630,
+      "over_hit": 54.6,
+      "under_hit": 61.3
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1064,
+      "hit": 57.3,
+      "ci": [
+       53.0,
+       61.4
+      ],
+      "over_n": 630,
+      "over_hit": 54.6,
+      "under_hit": 61.3
+     }
+    },
+    "mae": 2.275,
+    "bias": 0.379,
+    "d_hit": 0.46,
+    "d_hit_ci": [
+     -0.3,
+     1.2
+    ],
+    "d_sd": 0.38,
+    "flips": 35,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     40.0,
+     60.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 111
+   },
+   "P7": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1038,
+    "hit": 60.1,
+    "hit_ci": [
+     56.3,
+     63.6
+    ],
+    "over_n": 641,
+    "over_hit": 54.8,
+    "over_ci": [
+     47.7,
+     61.8
+    ],
+    "under_n": 886,
+    "under_hit": 63.9,
+    "under_ci": [
+     58.0,
+     69.8
+    ],
+    "over_share": 42.0,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 62.9,
+    "offered": {
+     "side offered": {
+      "n": 1066,
+      "hit": 57.5,
+      "ci": [
+       53.3,
+       61.7
+      ],
+      "over_n": 641,
+      "over_hit": 54.8,
+      "under_hit": 61.6
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1066,
+      "hit": 57.5,
+      "ci": [
+       53.3,
+       61.7
+      ],
+      "over_n": 641,
+      "over_hit": 54.8,
+      "under_hit": 61.6
+     }
+    },
+    "mae": 2.264,
+    "bias": 0.365,
+    "d_hit": 0.65,
+    "d_hit_ci": [
+     -0.4,
+     1.8
+    ],
+    "d_sd": 0.56,
+    "flips": 54,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     40.7,
+     59.3
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 120
+   },
+   "P8": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1038,
+    "hit": 60.4,
+    "hit_ci": [
+     56.2,
+     64.3
+    ],
+    "over_n": 619,
+    "over_hit": 55.4,
+    "over_ci": [
+     47.9,
+     62.9
+    ],
+    "under_n": 908,
+    "under_hit": 63.9,
+    "under_ci": [
+     58.0,
+     69.8
+    ],
+    "over_share": 40.5,
+    "data_over_rate": 43.9,
+    "stated": 61.5,
+    "letter_hit": 62.9,
+    "offered": {
+     "side offered": {
+      "n": 1059,
+      "hit": 58.1,
+      "ci": [
+       53.4,
+       62.6
+      ],
+      "over_n": 619,
+      "over_hit": 55.4,
+      "under_hit": 61.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1059,
+      "hit": 58.1,
+      "ci": [
+       53.4,
+       62.6
+      ],
+      "over_n": 619,
+      "over_hit": 55.4,
+      "under_hit": 61.8
+     }
+    },
+    "mae": 2.255,
+    "bias": 0.338,
+    "d_hit": 1.05,
+    "d_hit_ci": [
+     0.0,
+     2.2
+    ],
+    "d_sd": 0.57,
+    "flips": 38,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     28.9,
+     71.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 48
+   },
+   "ALL": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1031,
+    "hit": 59.9,
+    "hit_ci": [
+     56.3,
+     63.3
+    ],
+    "over_n": 654,
+    "over_hit": 54.4,
+    "over_ci": [
+     47.5,
+     61.8
+    ],
+    "under_n": 873,
+    "under_hit": 63.9,
+    "under_ci": [
+     58.3,
+     69.4
+    ],
+    "over_share": 42.8,
+    "data_over_rate": 43.9,
+    "stated": 61.3,
+    "letter_hit": 61.8,
+    "offered": {
+     "side offered": {
+      "n": 1076,
+      "hit": 57.5,
+      "ci": [
+       53.2,
+       61.9
+      ],
+      "over_n": 654,
+      "over_hit": 54.4,
+      "under_hit": 62.3
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1076,
+      "hit": 57.5,
+      "ci": [
+       53.2,
+       61.9
+      ],
+      "over_n": 654,
+      "over_hit": 54.4,
+      "under_hit": 62.3
+     }
+    },
+    "mae": 2.281,
+    "bias": 0.419,
+    "d_hit": 0.46,
+    "d_hit_ci": [
+     -1.3,
+     2.3
+    ],
+    "d_sd": 0.91,
+    "flips": 85,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     45.9,
+     54.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 632
+   },
+   "P10": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1016,
+    "hit": 59.9,
+    "hit_ci": [
+     56.5,
+     63.3
+    ],
+    "over_n": 633,
+    "over_hit": 54.7,
+    "over_ci": [
+     48.3,
+     61.1
+    ],
+    "under_n": 894,
+    "under_hit": 63.6,
+    "under_ci": [
+     57.7,
+     69.7
+    ],
+    "over_share": 41.5,
+    "data_over_rate": 43.9,
+    "stated": 61.0,
+    "letter_hit": 62.5,
+    "offered": {
+     "side offered": {
+      "n": 1068,
+      "hit": 57.6,
+      "ci": [
+       53.5,
+       61.3
+      ],
+      "over_n": 633,
+      "over_hit": 54.7,
+      "under_hit": 61.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1068,
+      "hit": 57.6,
+      "ci": [
+       53.5,
+       61.3
+      ],
+      "over_n": 633,
+      "over_hit": 54.7,
+      "under_hit": 61.8
+     }
+    },
+    "mae": 2.281,
+    "bias": 0.364,
+    "d_hit": 0.52,
+    "d_hit_ci": [
+     -0.5,
+     1.6
+    ],
+    "d_sd": 0.55,
+    "flips": 78,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     44.9,
+     55.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 181
+   },
+   "P11": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1047,
+    "hit": 59.5,
+    "hit_ci": [
+     55.4,
+     63.2
+    ],
+    "over_n": 610,
+    "over_hit": 54.3,
+    "over_ci": [
+     46.9,
+     61.7
+    ],
+    "under_n": 917,
+    "under_hit": 62.9,
+    "under_ci": [
+     57.0,
+     69.2
+    ],
+    "over_share": 39.9,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 63.0,
+    "offered": {
+     "side offered": {
+      "n": 1054,
+      "hit": 57.0,
+      "ci": [
+       52.4,
+       61.4
+      ],
+      "over_n": 610,
+      "over_hit": 54.3,
+      "under_hit": 60.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1054,
+      "hit": 57.0,
+      "ci": [
+       52.4,
+       61.4
+      ],
+      "over_n": 610,
+      "over_hit": 54.3,
+      "under_hit": 60.8
+     }
+    },
+    "mae": 2.256,
+    "bias": 0.334,
+    "d_hit": 0.07,
+    "d_hit_ci": [
+     -1.5,
+     1.5
+    ],
+    "d_sd": 0.75,
+    "flips": 53,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     49.1,
+     50.9
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 18522
+   },
+   "NOISE1": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1031,
+    "hit": 60.2,
+    "hit_ci": [
+     56.5,
+     63.8
+    ],
+    "over_n": 632,
+    "over_hit": 55.1,
+    "over_ci": [
+     47.8,
+     62.2
+    ],
+    "under_n": 895,
+    "under_hit": 63.9,
+    "under_ci": [
+     58.1,
+     69.8
+    ],
+    "over_share": 41.4,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 62.8,
+    "offered": {
+     "side offered": {
+      "n": 1062,
+      "hit": 57.7,
+      "ci": [
+       53.3,
+       61.9
+      ],
+      "over_n": 632,
+      "over_hit": 55.1,
+      "under_hit": 61.6
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1062,
+      "hit": 57.7,
+      "ci": [
+       53.3,
+       61.9
+      ],
+      "over_n": 632,
+      "over_hit": 55.1,
+      "under_hit": 61.6
+     }
+    },
+    "mae": 2.267,
+    "bias": 0.359,
+    "d_hit": 0.85,
+    "d_hit_ci": [
+     -0.4,
+     2.3
+    ],
+    "d_sd": 0.69,
+    "flips": 51,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     37.3,
+     62.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 107
+   },
+   "NOISE2": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1034,
+    "hit": 59.4,
+    "hit_ci": [
+     55.7,
+     62.9
+    ],
+    "over_n": 643,
+    "over_hit": 54.0,
+    "over_ci": [
+     46.7,
+     61.3
+    ],
+    "under_n": 884,
+    "under_hit": 63.3,
+    "under_ci": [
+     57.6,
+     69.1
+    ],
+    "over_share": 42.1,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 62.4,
+    "offered": {
+     "side offered": {
+      "n": 1069,
+      "hit": 56.7,
+      "ci": [
+       52.3,
+       61.0
+      ],
+      "over_n": 643,
+      "over_hit": 54.0,
+      "under_hit": 60.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1069,
+      "hit": 56.7,
+      "ci": [
+       52.3,
+       61.0
+      ],
+      "over_n": 643,
+      "over_hit": 54.0,
+      "under_hit": 60.8
+     }
+    },
+    "mae": 2.284,
+    "bias": 0.383,
+    "d_hit": 0.0,
+    "d_hit_ci": [
+     -1.1,
+     1.2
+    ],
+    "d_sd": 0.58,
+    "flips": 52,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     50.0,
+     50.0
+    ],
+    "clauses": {
+     "1 hit up": false,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL"
+   },
+   "NOISE3": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1025,
+    "hit": 60.4,
+    "hit_ci": [
+     56.7,
+     64.0
+    ],
+    "over_n": 629,
+    "over_hit": 55.3,
+    "over_ci": [
+     48.1,
+     62.4
+    ],
+    "under_n": 898,
+    "under_hit": 64.0,
+    "under_ci": [
+     58.4,
+     69.9
+    ],
+    "over_share": 41.2,
+    "data_over_rate": 43.9,
+    "stated": 61.5,
+    "letter_hit": 62.8,
+    "offered": {
+     "side offered": {
+      "n": 1063,
+      "hit": 58.0,
+      "ci": [
+       53.6,
+       62.1
+      ],
+      "over_n": 629,
+      "over_hit": 55.3,
+      "under_hit": 62.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1063,
+      "hit": 58.0,
+      "ci": [
+       53.6,
+       62.1
+      ],
+      "over_n": 629,
+      "over_hit": 55.3,
+      "under_hit": 62.0
+     }
+    },
+    "mae": 2.27,
+    "bias": 0.351,
+    "d_hit": 1.05,
+    "d_hit_ci": [
+     -0.2,
+     2.4
+    ],
+    "d_sd": 0.66,
+    "flips": 42,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     31.0,
+     69.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 64
+   },
+   "NOISE4": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1023,
+    "hit": 59.7,
+    "hit_ci": [
+     55.9,
+     63.2
+    ],
+    "over_n": 623,
+    "over_hit": 54.4,
+    "over_ci": [
+     47.3,
+     61.6
+    ],
+    "under_n": 904,
+    "under_hit": 63.3,
+    "under_ci": [
+     57.5,
+     69.2
+    ],
+    "over_share": 40.8,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 63.0,
+    "offered": {
+     "side offered": {
+      "n": 1062,
+      "hit": 57.1,
+      "ci": [
+       52.8,
+       61.1
+      ],
+      "over_n": 623,
+      "over_hit": 54.4,
+      "under_hit": 60.8
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1062,
+      "hit": 57.1,
+      "ci": [
+       52.8,
+       61.1
+      ],
+      "over_n": 623,
+      "over_hit": 54.4,
+      "under_hit": 60.8
+     }
+    },
+    "mae": 2.264,
+    "bias": 0.346,
+    "d_hit": 0.26,
+    "d_hit_ci": [
+     -1.1,
+     1.7
+    ],
+    "d_sd": 0.71,
+    "flips": 48,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     45.8,
+     54.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 1204
+   },
+   "NOISE5": {
+    "lines": 1527,
+    "series": 42,
+    "graded": 1527,
+    "letters": 1030,
+    "hit": 59.8,
+    "hit_ci": [
+     56.0,
+     63.4
+    ],
+    "over_n": 623,
+    "over_hit": 54.6,
+    "over_ci": [
+     47.2,
+     61.8
+    ],
+    "under_n": 904,
+    "under_hit": 63.4,
+    "under_ci": [
+     57.8,
+     69.0
+    ],
+    "over_share": 40.8,
+    "data_over_rate": 43.9,
+    "stated": 61.4,
+    "letter_hit": 62.8,
+    "offered": {
+     "side offered": {
+      "n": 1061,
+      "hit": 57.1,
+      "ci": [
+       52.7,
+       61.2
+      ],
+      "over_n": 623,
+      "over_hit": 54.6,
+      "under_hit": 60.7
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 1061,
+      "hit": 57.1,
+      "ci": [
+       52.7,
+       61.2
+      ],
+      "over_n": 623,
+      "over_hit": 54.6,
+      "under_hit": 60.7
+     }
+    },
+    "mae": 2.264,
+    "bias": 0.349,
+    "d_hit": 0.39,
+    "d_hit_ci": [
+     -0.8,
+     1.7
+    ],
+    "d_sd": 0.64,
+    "flips": 44,
+    "base_hit": 59.4,
+    "base_over_hit": 54.1,
+    "base_under_hit": 63.1,
+    "base_over_share": 41.1,
+    "base_graded": 1527,
+    "base_letters": 1031,
+    "changed_rows_hit": [
+     43.2,
+     56.8
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 435
+   }
+  },
+  "market odds saved": {
+   "base": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 623,
+    "hit": 61.5,
+    "hit_ci": [
+     57.6,
+     65.2
+    ],
+    "over_n": 337,
+    "over_hit": 56.7,
+    "over_ci": [
+     49.2,
+     63.8
+    ],
+    "under_n": 541,
+    "under_hit": 64.5,
+    "under_ci": [
+     58.3,
+     70.8
+    ],
+    "over_share": 38.4,
+    "data_over_rate": 43.6,
+    "stated": 63.1,
+    "letter_hit": 65.2,
+    "offered": {
+     "side offered": {
+      "n": 474,
+      "hit": 59.3,
+      "ci": [
+       54.2,
+       64.0
+      ],
+      "over_n": 337,
+      "over_hit": 56.7,
+      "under_hit": 65.7
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 474,
+      "hit": 59.3,
+      "ci": [
+       54.2,
+       64.0
+      ],
+      "over_n": 337,
+      "over_hit": 56.7,
+      "under_hit": 65.7
+     }
+    },
+    "mae": 2.218,
+    "bias": 0.376
+   },
+   "P1": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 625,
+    "hit": 62.5,
+    "hit_ci": [
+     58.6,
+     66.2
+    ],
+    "over_n": 340,
+    "over_hit": 57.9,
+    "over_ci": [
+     50.0,
+     65.7
+    ],
+    "under_n": 538,
+    "under_hit": 65.4,
+    "under_ci": [
+     59.5,
+     71.4
+    ],
+    "over_share": 38.7,
+    "data_over_rate": 43.6,
+    "stated": 63.1,
+    "letter_hit": 65.9,
+    "offered": {
+     "side offered": {
+      "n": 479,
+      "hit": 60.3,
+      "ci": [
+       55.1,
+       65.8
+      ],
+      "over_n": 340,
+      "over_hit": 57.9,
+      "under_hit": 66.2
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 479,
+      "hit": 60.3,
+      "ci": [
+       55.1,
+       65.8
+      ],
+      "over_n": 340,
+      "over_hit": 57.9,
+      "under_hit": 66.2
+     }
+    },
+    "mae": 2.214,
+    "bias": 0.393,
+    "d_hit": 1.03,
+    "d_hit_ci": [
+     0.0,
+     2.2
+    ],
+    "d_sd": 0.59,
+    "flips": 21,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     28.6,
+     71.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 40
+   },
+   "P2": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 637,
+    "hit": 63.2,
+    "hit_ci": [
+     59.0,
+     67.0
+    ],
+    "over_n": 322,
+    "over_hit": 59.3,
+    "over_ci": [
+     51.2,
+     67.2
+    ],
+    "under_n": 556,
+    "under_hit": 65.5,
+    "under_ci": [
+     59.3,
+     71.7
+    ],
+    "over_share": 36.7,
+    "data_over_rate": 43.6,
+    "stated": 63.4,
+    "letter_hit": 66.4,
+    "offered": {
+     "side offered": {
+      "n": 468,
+      "hit": 61.5,
+      "ci": [
+       56.3,
+       66.6
+      ],
+      "over_n": 322,
+      "over_hit": 59.3,
+      "under_hit": 66.4
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 468,
+      "hit": 61.5,
+      "ci": [
+       56.3,
+       66.6
+      ],
+      "over_n": 322,
+      "over_hit": 59.3,
+      "under_hit": 66.4
+     }
+    },
+    "mae": 2.189,
+    "bias": 0.335,
+    "d_hit": 1.71,
+    "d_hit_ci": [
+     0.1,
+     3.2
+    ],
+    "d_sd": 0.8,
+    "flips": 39,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     30.8,
+     69.2
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 27
+   },
+   "P3": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 627,
+    "hit": 62.2,
+    "hit_ci": [
+     58.2,
+     66.0
+    ],
+    "over_n": 331,
+    "over_hit": 57.7,
+    "over_ci": [
+     49.7,
+     65.3
+    ],
+    "under_n": 547,
+    "under_hit": 64.9,
+    "under_ci": [
+     58.9,
+     71.1
+    ],
+    "over_share": 37.7,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 65.7,
+    "offered": {
+     "side offered": {
+      "n": 472,
+      "hit": 60.0,
+      "ci": [
+       54.5,
+       65.2
+      ],
+      "over_n": 331,
+      "over_hit": 57.7,
+      "under_hit": 65.2
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 472,
+      "hit": 60.0,
+      "ci": [
+       54.5,
+       65.2
+      ],
+      "over_n": 331,
+      "over_hit": 57.7,
+      "under_hit": 65.2
+     }
+    },
+    "mae": 2.21,
+    "bias": 0.363,
+    "d_hit": 0.68,
+    "d_hit_ci": [
+     -0.7,
+     2.0
+    ],
+    "d_sd": 0.66,
+    "flips": 28,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     39.3,
+     60.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 113
+   },
+   "P4": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 625,
+    "hit": 62.2,
+    "hit_ci": [
+     58.3,
+     65.7
+    ],
+    "over_n": 345,
+    "over_hit": 57.4,
+    "over_ci": [
+     49.7,
+     65.1
+    ],
+    "under_n": 533,
+    "under_hit": 65.3,
+    "under_ci": [
+     59.1,
+     71.6
+    ],
+    "over_share": 39.3,
+    "data_over_rate": 43.6,
+    "stated": 63.1,
+    "letter_hit": 65.1,
+    "offered": {
+     "side offered": {
+      "n": 480,
+      "hit": 59.6,
+      "ci": [
+       54.2,
+       65.1
+      ],
+      "over_n": 345,
+      "over_hit": 57.4,
+      "under_hit": 65.2
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 480,
+      "hit": 59.6,
+      "ci": [
+       54.2,
+       65.1
+      ],
+      "over_n": 345,
+      "over_hit": 57.4,
+      "under_hit": 65.2
+     }
+    },
+    "mae": 2.231,
+    "bias": 0.432,
+    "d_hit": 0.68,
+    "d_hit_ci": [
+     -0.6,
+     2.0
+    ],
+    "d_sd": 0.68,
+    "flips": 30,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     40.0,
+     60.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 120
+   },
+   "P5": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 640,
+    "hit": 62.8,
+    "hit_ci": [
+     58.8,
+     66.4
+    ],
+    "over_n": 338,
+    "over_hit": 58.3,
+    "over_ci": [
+     50.5,
+     65.9
+    ],
+    "under_n": 540,
+    "under_hit": 65.6,
+    "under_ci": [
+     59.5,
+     71.6
+    ],
+    "over_share": 38.5,
+    "data_over_rate": 43.6,
+    "stated": 63.3,
+    "letter_hit": 66.1,
+    "offered": {
+     "side offered": {
+      "n": 477,
+      "hit": 60.6,
+      "ci": [
+       55.3,
+       65.8
+      ],
+      "over_n": 338,
+      "over_hit": 58.3,
+      "under_hit": 66.2
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 477,
+      "hit": 60.6,
+      "ci": [
+       55.3,
+       65.8
+      ],
+      "over_n": 338,
+      "over_hit": 58.3,
+      "under_hit": 66.2
+     }
+    },
+    "mae": 2.21,
+    "bias": 0.362,
+    "d_hit": 1.25,
+    "d_hit_ci": [
+     0.0,
+     2.7
+    ],
+    "d_sd": 0.7,
+    "flips": 27,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     29.6,
+     70.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 38
+   },
+   "P6": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 622,
+    "hit": 62.3,
+    "hit_ci": [
+     58.5,
+     65.9
+    ],
+    "over_n": 340,
+    "over_hit": 57.6,
+    "over_ci": [
+     49.7,
+     65.2
+    ],
+    "under_n": 538,
+    "under_hit": 65.2,
+    "under_ci": [
+     59.3,
+     71.3
+    ],
+    "over_share": 38.7,
+    "data_over_rate": 43.6,
+    "stated": 63.1,
+    "letter_hit": 65.1,
+    "offered": {
+     "side offered": {
+      "n": 479,
+      "hit": 59.9,
+      "ci": [
+       54.6,
+       65.0
+      ],
+      "over_n": 340,
+      "over_hit": 57.6,
+      "under_hit": 65.5
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 479,
+      "hit": 59.9,
+      "ci": [
+       54.6,
+       65.0
+      ],
+      "over_n": 340,
+      "over_hit": 57.6,
+      "under_hit": 65.5
+     }
+    },
+    "mae": 2.227,
+    "bias": 0.403,
+    "d_hit": 0.8,
+    "d_hit_ci": [
+     -0.1,
+     1.8
+    ],
+    "d_sd": 0.49,
+    "flips": 21,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     33.3,
+     66.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 45
+   },
+   "P7": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 627,
+    "hit": 62.9,
+    "hit_ci": [
+     59.1,
+     66.3
+    ],
+    "over_n": 345,
+    "over_hit": 58.3,
+    "over_ci": [
+     50.4,
+     65.9
+    ],
+    "under_n": 533,
+    "under_hit": 65.9,
+    "under_ci": [
+     59.9,
+     71.9
+    ],
+    "over_share": 39.3,
+    "data_over_rate": 43.6,
+    "stated": 63.1,
+    "letter_hit": 66.0,
+    "offered": {
+     "side offered": {
+      "n": 481,
+      "hit": 60.7,
+      "ci": [
+       55.6,
+       66.0
+      ],
+      "over_n": 345,
+      "over_hit": 58.3,
+      "under_hit": 66.9
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 481,
+      "hit": 60.7,
+      "ci": [
+       55.6,
+       66.0
+      ],
+      "over_n": 345,
+      "over_hit": 58.3,
+      "under_hit": 66.9
+     }
+    },
+    "mae": 2.212,
+    "bias": 0.397,
+    "d_hit": 1.37,
+    "d_hit_ci": [
+     0.2,
+     2.6
+    ],
+    "d_sd": 0.6,
+    "flips": 28,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     28.6,
+     71.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "PASS",
+    "series_needed": 23
+   },
+   "P8": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 631,
+    "hit": 63.0,
+    "hit_ci": [
+     58.7,
+     66.9
+    ],
+    "over_n": 334,
+    "over_hit": 58.7,
+    "over_ci": [
+     50.5,
+     66.5
+    ],
+    "under_n": 544,
+    "under_hit": 65.6,
+    "under_ci": [
+     59.5,
+     71.7
+    ],
+    "over_share": 38.0,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 65.8,
+    "offered": {
+     "side offered": {
+      "n": 474,
+      "hit": 61.0,
+      "ci": [
+       55.3,
+       66.5
+      ],
+      "over_n": 334,
+      "over_hit": 58.7,
+      "under_hit": 66.4
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 474,
+      "hit": 61.0,
+      "ci": [
+       55.3,
+       66.5
+      ],
+      "over_n": 334,
+      "over_hit": 58.7,
+      "under_hit": 66.4
+     }
+    },
+    "mae": 2.204,
+    "bias": 0.364,
+    "d_hit": 1.48,
+    "d_hit_ci": [
+     0.5,
+     2.7
+    ],
+    "d_sd": 0.58,
+    "flips": 21,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     19.0,
+     81.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 19
+   },
+   "ALL": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 623,
+    "hit": 61.5,
+    "hit_ci": [
+     57.9,
+     64.8
+    ],
+    "over_n": 357,
+    "over_hit": 56.3,
+    "over_ci": [
+     48.4,
+     64.2
+    ],
+    "under_n": 521,
+    "under_hit": 65.1,
+    "under_ci": [
+     59.3,
+     70.9
+    ],
+    "over_share": 40.7,
+    "data_over_rate": 43.6,
+    "stated": 62.9,
+    "letter_hit": 65.0,
+    "offered": {
+     "side offered": {
+      "n": 493,
+      "hit": 58.8,
+      "ci": [
+       53.5,
+       64.2
+      ],
+      "over_n": 357,
+      "over_hit": 56.3,
+      "under_hit": 65.4
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 493,
+      "hit": 58.8,
+      "ci": [
+       53.5,
+       64.2
+      ],
+      "over_n": 357,
+      "over_hit": 56.3,
+      "under_hit": 65.4
+     }
+    },
+    "mae": 2.237,
+    "bias": 0.459,
+    "d_hit": 0.0,
+    "d_hit_ci": [
+     -1.8,
+     1.8
+    ],
+    "d_sd": 0.91,
+    "flips": 42,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     50.0,
+     50.0
+    ],
+    "clauses": {
+     "1 hit up": false,
+     "2 Over and Under not lower": false,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL"
+   },
+   "P10": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 608,
+    "hit": 62.4,
+    "hit_ci": [
+     59.3,
+     65.3
+    ],
+    "over_n": 343,
+    "over_hit": 57.7,
+    "over_ci": [
+     51.1,
+     64.3
+    ],
+    "under_n": 535,
+    "under_hit": 65.4,
+    "under_ci": [
+     59.4,
+     71.6
+    ],
+    "over_share": 39.1,
+    "data_over_rate": 43.6,
+    "stated": 62.5,
+    "letter_hit": 65.3,
+    "offered": {
+     "side offered": {
+      "n": 483,
+      "hit": 60.5,
+      "ci": [
+       56.5,
+       64.3
+      ],
+      "over_n": 343,
+      "over_hit": 57.7,
+      "under_hit": 67.1
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 483,
+      "hit": 60.5,
+      "ci": [
+       56.5,
+       64.3
+      ],
+      "over_n": 343,
+      "over_hit": 57.7,
+      "under_hit": 67.1
+     }
+    },
+    "mae": 2.214,
+    "bias": 0.38,
+    "d_hit": 0.91,
+    "d_hit_ci": [
+     -1.0,
+     2.8
+    ],
+    "d_sd": 0.99,
+    "flips": 78,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     44.9,
+     55.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 141
+   },
+   "P11": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 633,
+    "hit": 62.1,
+    "hit_ci": [
+     57.8,
+     66.0
+    ],
+    "over_n": 328,
+    "over_hit": 57.6,
+    "over_ci": [
+     49.4,
+     65.6
+    ],
+    "under_n": 550,
+    "under_hit": 64.7,
+    "under_ci": [
+     58.5,
+     71.0
+    ],
+    "over_share": 37.4,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 66.4,
+    "offered": {
+     "side offered": {
+      "n": 471,
+      "hit": 59.9,
+      "ci": [
+       54.4,
+       65.3
+      ],
+      "over_n": 328,
+      "over_hit": 57.6,
+      "under_hit": 65.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 471,
+      "hit": 59.9,
+      "ci": [
+       54.4,
+       65.3
+      ],
+      "over_n": 328,
+      "over_hit": 57.6,
+      "under_hit": 65.0
+     }
+    },
+    "mae": 2.203,
+    "bias": 0.366,
+    "d_hit": 0.57,
+    "d_hit_ci": [
+     -1.0,
+     2.2
+    ],
+    "d_sd": 0.82,
+    "flips": 31,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     41.9,
+     58.1
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 247
+   },
+   "NOISE1": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 630,
+    "hit": 62.8,
+    "hit_ci": [
+     58.9,
+     66.3
+    ],
+    "over_n": 338,
+    "over_hit": 58.3,
+    "over_ci": [
+     50.4,
+     66.0
+    ],
+    "under_n": 540,
+    "under_hit": 65.6,
+    "under_ci": [
+     59.5,
+     71.7
+    ],
+    "over_share": 38.5,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 66.0,
+    "offered": {
+     "side offered": {
+      "n": 477,
+      "hit": 60.4,
+      "ci": [
+       55.1,
+       65.7
+      ],
+      "over_n": 338,
+      "over_hit": 58.3,
+      "under_hit": 65.5
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 477,
+      "hit": 60.4,
+      "ci": [
+       55.1,
+       65.7
+      ],
+      "over_n": 338,
+      "over_hit": 58.3,
+      "under_hit": 65.5
+     }
+    },
+    "mae": 2.212,
+    "bias": 0.382,
+    "d_hit": 1.25,
+    "d_hit_ci": [
+     0.0,
+     2.6
+    ],
+    "d_sd": 0.68,
+    "flips": 27,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     29.6,
+     70.4
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 36
+   },
+   "NOISE2": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 631,
+    "hit": 62.1,
+    "hit_ci": [
+     58.3,
+     65.6
+    ],
+    "over_n": 344,
+    "over_hit": 57.3,
+    "over_ci": [
+     49.4,
+     64.9
+    ],
+    "under_n": 534,
+    "under_hit": 65.2,
+    "under_ci": [
+     59.3,
+     70.9
+    ],
+    "over_share": 39.2,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 65.6,
+    "offered": {
+     "side offered": {
+      "n": 484,
+      "hit": 59.5,
+      "ci": [
+       54.3,
+       64.9
+      ],
+      "over_n": 344,
+      "over_hit": 57.3,
+      "under_hit": 65.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 484,
+      "hit": 59.5,
+      "ci": [
+       54.3,
+       64.9
+      ],
+      "over_n": 344,
+      "over_hit": 57.3,
+      "under_hit": 65.0
+     }
+    },
+    "mae": 2.232,
+    "bias": 0.399,
+    "d_hit": 0.57,
+    "d_hit_ci": [
+     -0.6,
+     1.8
+    ],
+    "d_sd": 0.64,
+    "flips": 25,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     40.0,
+     60.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 151
+   },
+   "NOISE3": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 626,
+    "hit": 62.6,
+    "hit_ci": [
+     58.9,
+     66.1
+    ],
+    "over_n": 339,
+    "over_hit": 58.1,
+    "over_ci": [
+     50.3,
+     65.8
+    ],
+    "under_n": 539,
+    "under_hit": 65.5,
+    "under_ci": [
+     59.5,
+     71.5
+    ],
+    "over_share": 38.6,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 65.7,
+    "offered": {
+     "side offered": {
+      "n": 478,
+      "hit": 60.3,
+      "ci": [
+       55.1,
+       65.4
+      ],
+      "over_n": 339,
+      "over_hit": 58.1,
+      "under_hit": 65.5
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 478,
+      "hit": 60.3,
+      "ci": [
+       55.1,
+       65.4
+      ],
+      "over_n": 339,
+      "over_hit": 58.1,
+      "under_hit": 65.5
+     }
+    },
+    "mae": 2.218,
+    "bias": 0.373,
+    "d_hit": 1.14,
+    "d_hit_ci": [
+     0.0,
+     2.4
+    ],
+    "d_sd": 0.65,
+    "flips": 24,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     29.2,
+     70.8
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "NEAR-MISS",
+    "series_needed": 39
+   },
+   "NOISE4": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 623,
+    "hit": 62.2,
+    "hit_ci": [
+     58.5,
+     65.7
+    ],
+    "over_n": 337,
+    "over_hit": 57.6,
+    "over_ci": [
+     49.8,
+     65.2
+    ],
+    "under_n": 541,
+    "under_hit": 65.1,
+    "under_ci": [
+     59.1,
+     71.3
+    ],
+    "over_share": 38.4,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 66.1,
+    "offered": {
+     "side offered": {
+      "n": 477,
+      "hit": 59.7,
+      "ci": [
+       54.6,
+       64.9
+      ],
+      "over_n": 337,
+      "over_hit": 57.6,
+      "under_hit": 65.0
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 477,
+      "hit": 59.7,
+      "ci": [
+       54.6,
+       64.9
+      ],
+      "over_n": 337,
+      "over_hit": 57.6,
+      "under_hit": 65.0
+     }
+    },
+    "mae": 2.213,
+    "bias": 0.371,
+    "d_hit": 0.68,
+    "d_hit_ci": [
+     -0.7,
+     2.1
+    ],
+    "d_sd": 0.71,
+    "flips": 28,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     39.3,
+     60.7
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": true
+    },
+    "verdict": "FAIL",
+    "series_needed": 130
+   },
+   "NOISE5": {
+    "lines": 878,
+    "series": 31,
+    "graded": 878,
+    "letters": 629,
+    "hit": 62.3,
+    "hit_ci": [
+     58.4,
+     65.8
+    ],
+    "over_n": 336,
+    "over_hit": 57.7,
+    "over_ci": [
+     49.7,
+     65.6
+    ],
+    "under_n": 542,
+    "under_hit": 65.1,
+    "under_ci": [
+     59.2,
+     71.1
+    ],
+    "over_share": 38.3,
+    "data_over_rate": 43.6,
+    "stated": 63.2,
+    "letter_hit": 66.0,
+    "offered": {
+     "side offered": {
+      "n": 476,
+      "hit": 59.7,
+      "ci": [
+       54.5,
+       64.9
+      ],
+      "over_n": 336,
+      "over_hit": 57.7,
+      "under_hit": 64.3
+     },
+     "side offered, two-sided line (what members see graded)": {
+      "n": 476,
+      "hit": 59.7,
+      "ci": [
+       54.5,
+       64.9
+      ],
+      "over_n": 336,
+      "over_hit": 57.7,
+      "under_hit": 64.3
+     }
+    },
+    "mae": 2.212,
+    "bias": 0.372,
+    "d_hit": 0.8,
+    "d_hit_ci": [
+     -0.4,
+     2.1
+    ],
+    "d_sd": 0.64,
+    "flips": 25,
+    "base_hit": 61.5,
+    "base_over_hit": 56.7,
+    "base_under_hit": 64.5,
+    "base_over_share": 38.4,
+    "base_graded": 878,
+    "base_letters": 623,
+    "changed_rows_hit": [
+     36.0,
+     64.0
+    ],
+    "clauses": {
+     "1 hit up": true,
+     "2 Over and Under not lower": true,
+     "3 count": true,
+     "4 split": false
+    },
+    "verdict": "FAIL",
+    "series_needed": 77
+   }
+  }
+ },
+ "baseline_vs_nov9_lpf_rows": {
+  "n": 2059,
+  "max_abs_dP": 0.0,
+  "median": 0.0
+ },
+ "deaths": {
+  "2026-07-01..2026-11-09": {
+   "n": 38912,
+   "series": 2142,
+   "lol-1": {
+    "logscore": -2.3418,
+    "mae": 2.154,
+    "hit": 65.75,
+    "over_hit": 66.02,
+    "under_hit": 65.57,
+    "over_share": 40.8
+   },
+   "lpf-1": {
+    "logscore": -2.3312,
+    "mae": 2.135,
+    "hit": 66.26,
+    "over_hit": 66.09,
+    "under_hit": 66.39,
+    "over_share": 42.2,
+    "d_hit_vs_lol1": [
+     0.51,
+     0.21,
+     0.84
+    ],
+    "d_logscore_vs_lol1": [
+     0.01058,
+     0.00656,
+     0.01478
+    ],
+    "d_mae_vs_lol1": [
+     -0.01903,
+     -0.02806,
+     -0.00998
+    ]
+   },
+   "lpf-1 + ALL": {
+    "logscore": -2.3306,
+    "mae": 2.132,
+    "hit": 66.38,
+    "over_hit": 66.25,
+    "under_hit": 66.47,
+    "over_share": 42.1,
+    "d_hit_vs_lol1": [
+     0.62,
+     0.29,
+     0.95
+    ],
+    "d_logscore_vs_lol1": [
+     0.01114,
+     0.00711,
+     0.0153
+    ],
+    "d_mae_vs_lol1": [
+     -0.0214,
+     -0.03042,
+     -0.01237
+    ]
+   }
+  },
+  "holdout 2026-10-01..2026-11-09": {
+   "n": 7151,
+   "series": 371,
+   "lol-1": {
+    "logscore": -2.383,
+    "mae": 2.257,
+    "hit": 65.78,
+    "over_hit": 64.85,
+    "under_hit": 66.51,
+    "over_share": 43.9
+   },
+   "lpf-1": {
+    "logscore": -2.3697,
+    "mae": 2.228,
+    "hit": 66.44,
+    "over_hit": 64.5,
+    "under_hit": 68.18,
+    "over_share": 47.2,
+    "d_hit_vs_lol1": [
+     0.66,
+     -0.28,
+     1.52
+    ],
+    "d_logscore_vs_lol1": [
+     0.01332,
+     0.00026,
+     0.0262
+    ],
+    "d_mae_vs_lol1": [
+     -0.02906,
+     -0.05797,
+     0.0008
+    ]
+   },
+   "lpf-1 + ALL": {
+    "logscore": -2.3657,
+    "mae": 2.216,
+    "hit": 66.76,
+    "over_hit": 64.95,
+    "under_hit": 68.36,
+    "over_share": 46.9,
+    "d_hit_vs_lol1": [
+     0.98,
+     -0.03,
+     1.92
+    ],
+    "d_logscore_vs_lol1": [
+     0.01727,
+     0.00414,
+     0.02998
+    ],
+    "d_mae_vs_lol1": [
+     -0.04083,
+     -0.06959,
+     -0.01083
+    ]
+   }
+  }
+ }
+}
