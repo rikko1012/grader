@@ -162,7 +162,12 @@ def test_draftkings_in_main_board_selector(browser, env, monkeypatch, width):
         assert '-117 / +105' in p.locator('tr[data-record]').first.inner_text()
         assert 'side not supplied' in p.locator('tr[data-record]').first.inner_text()
         assert not p.locator('tr[data-record] button:has-text("+ Add")').count()
+        assert 'reported odds' in p.locator('th.h-c-scout').inner_text().lower()
+        p.locator('tr[data-record] .h-player').first.click()
+        p.locator('.h-extra-detail').wait_for()
+        assert '-117 / +105' in p.locator('.h-extra-detail').inner_text()
         no_h_scroll(p)
         assert not errors
     finally:
         c.close();book_providers.reset()
+
