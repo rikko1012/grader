@@ -59,7 +59,7 @@ def test_desktop_first_row_high_on_the_screen_with_ten_rows_and_one_toolbar(ctx,
     assert p.locator('#hub-games, .h-games, .h-tools-menu, .h-classic, .h-nav-mobile, .h-mobile-slip').count() == 0
     assert p.locator('#u-hub [data-hub=close]').locator('visible=true').count() == 1
     nav = [t.strip() for t in p.locator('.h-sidebar nav [data-hub=section]').all_text_contents()]
-    assert [n for n in nav if n not in ('EV', 'Arbitrage')] == ['Board', 'Slips', 'My picks', 'Record', 'Tools'], nav
+    assert [n for n in nav if n not in ('EV', 'Arbitrage', 'Sportsbooks')] == ['Board', 'Slips', 'My picks', 'Record', 'Tools'], nav     # Sportsbooks: main 3ef2fad
     p.locator('#hub-sort').select_option('start')
     head = p.locator('#hub-rows tr.h-game-row [data-hub=game]').first
     event = head.locator('.h-match').text_content()

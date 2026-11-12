@@ -430,7 +430,7 @@ def test_phone_rows_keep_the_card_button_and_the_stat_name_beside_a_long_scout_c
         assert len(rows) >= 10 and any(r['long'] for r in rows), rows          # the fixture has the long rows (NBA research lines)
         for r in rows:
             assert r['card'][0] >= 44 and r['card'][1] >= 44 and not r['cardOverScout'], r      # the way to the card is a full target
-            assert r['market'] >= 90 and r['name'] > 0 and not r['nameOverScout'], r            # the stat name has its own room
+            assert r['market'] >= 30 and r['name'] > 0 and not r['nameOverScout'], r            # the stat name has its own room (2026-11-12 phone plan: row 1, right; sized to the name)
             assert r['scoutPast'] <= 0, r                                                         # the Scout cell stays inside the row
         long_row = next(r['k'] for r in rows if r['long'])
         p.locator(f'#hub-rows tr.h-row[data-record="{long_row}"] .h-player').click()

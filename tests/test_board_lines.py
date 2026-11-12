@@ -134,3 +134,20 @@ def test_the_built_stylesheet_is_current():
     import re
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b(?![^{}]*\{)", re.sub(r"--u-[\w-]+:[^;}]+", "", css)), "a literal colour is left in the built sheet"
     assert "blur(" not in css and "gradient(" not in css.replace("var(--hit", "")
+
+
+def test_the_hand_written_sheets_parse():
+    """Every block in the redesign's sheets closes where it opens (2026-11-12: a merge left one rule unclosed and the browser dropped
+    every rule after it, including the phone layout)."""
+    import re
+    for name in ("upgrade-next.css", "public-next.css", "upgrade-next-base.css"):
+        css = re.sub(r"/\*.*?\*/", "", (ROOT / "web" / name).read_text(encoding="utf-8"), flags=re.S)
+        depth = 0
+        for i, ch in enumerate(css):
+            depth += ch == "{"
+            depth -= ch == "}"
+            assert depth >= 0, (name, i)
+            if css.startswith("@media", i):
+                assert depth == 0, (name, "an @media rule opens inside another block", css[max(0, i - 120):i])
+        assert depth == 0, name
+        assert not re.search(r"^(<<<<<<<|=======|>>>>>>>)", css, re.M), name

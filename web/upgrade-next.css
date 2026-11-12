@@ -557,6 +557,7 @@ html[data-ui=next] #u-hub.h-card-open #hub-table .h-below-alt{display:inline-blo
 @media(max-width:1100px){
  html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record],html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record].h-nohits{grid-template-columns:minmax(96px,1fr) auto auto}
  html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record] .h-scout{justify-content:flex-end}
+}
 
 /* ---------- 2026-11-12 function check (veto, matchroom, bumps, discrepancies, app links) on the redesign ---------- */
 /* a bumped line: "was X" sits on its own line under the app and age (the one-line note was cut off in the 80px Line column) */
@@ -582,3 +583,62 @@ html[data-ui=next] #u-hub .h-card-body .h-fx>summary{padding:6px 12px}
  /* the app's line type (Goblin / Standard / Demon) wraps under the app's name instead of being cut off at the column's edge */
  html[data-ui=next] #u-hub #hub-table .h-ld-book{flex-wrap:wrap;align-content:center;gap:2px 4px}
 }
+
+/* ---------- phone / tablet rows, final plan (owner iPhone report 2026-11-12: text drawn over text, controls out of their row) ----------
+   One full-width row per prop, every piece in its own grid cell, nothing positioned over text; rows grow with their content.
+   Row 1: player (name, then team / matchup) | stat + scope (right; chips wrap under it)
+   Row 2: line value (line type on its own small line, then app + age) | Scout side, chance, letter | + Add
+   Row 3: L5 / L10 / L20 / H2H / SZN
+   Row 4: app name or the "+N lines" control, full width */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record],
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record].h-nohits,
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]{
+  display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) auto;
+  grid-template-areas:"player player market" "line scout add" "hits hits hits" "lines lines lines";gap:6px 10px;align-items:start;width:100%;box-sizing:border-box}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>td{min-width:0;max-width:100%;overflow:visible;position:static}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player{grid-area:player;display:flex;align-items:flex-start;gap:8px;min-width:0}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player{min-width:0;flex:1 1 auto;display:block;text-align:left}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player small{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;min-width:0;white-space:nowrap;overflow:hidden}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player small>*{flex:0 0 auto}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player small>.h-vs{flex:0 1 auto}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player small .h-vs{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market{grid-area:market;justify-self:end;text-align:right;min-width:0;max-width:42vw}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market .h-mcell,
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market .h-mcell>div{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market b{white-space:normal;overflow-wrap:anywhere}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market .h-gap{position:static;max-width:100%;white-space:normal;margin:2px 0 0}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line{grid-area:line;text-align:left;justify-self:stretch;min-width:0}
+ /* By player the name, role and matchup are on the player's header row; the row keeps only its way to the card */
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-player :is(.h-face,.u-face,.h-player b,.h-player small){display:none}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line b{display:block;font-size:20px;line-height:1.1;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line b .u-lt{display:table;position:static;margin:4px 0 0;vertical-align:baseline;font-size:9px}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line small{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line .h-was{display:block;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout{grid-area:scout;justify-self:start;align-self:start;min-width:0;padding-top:2px}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-scout{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-direction{display:flex;flex-wrap:wrap;gap:2px 6px;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout :is(.h-grade-text,.h-below,.h-band){white-space:normal;position:static}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-add{grid-area:add;justify-self:end;align-self:start}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-hits{grid-area:hits;min-width:0;padding:0}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare{grid-area:lines;justify-self:stretch;min-width:0;padding:0}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare .h-lines-btn{width:100%;max-width:100%;min-width:0;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;min-height:44px}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare .h-lines-btn small{white-space:normal}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table>tbody>tr[data-record]>:is(.h-c-watch,.h-c-proj,.h-c-edge,.h-c-medge){display:none}
+}
+/* tablet and phone: one column of full-width rows. The base sheet's 700-1100px two-tile grid made each row about 190px wide on an
+   iPhone showing the desktop-width page (owner screenshot 2026-11-12); the redesign's rows are built for the full width. */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table>tbody{display:block;grid-template-columns:none}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table>tbody>tr{width:100%}
+}
+/* by player: the player's header keeps the name on one line (it broke letter by letter at 375px, "mrou / z"), the matchup gives way first */
+html[data-ui=next] #u-hub .h-player-head{flex-wrap:nowrap;min-width:0}
+html[data-ui=next] #u-hub .h-player-head b{flex:0 1 auto;min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui=next] #u-hub .h-player-head span{flex:1 1 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui=next] #u-hub .h-player-head .h-role{flex:0 0 auto}
+html[data-ui=next] #u-hub .h-player-head small{white-space:nowrap}
+html[data-ui=next] #u-hub .h-player-head .h-star{flex:0 0 auto}
+/* the bump note keeps its own line in the Line column at every width (a later span rule made it inline: "UD · 20mwas 37.5") */
+html[data-ui=next] #u-hub#u-hub #hub-table#hub-table .h-c-line small .h-was{display:block;white-space:nowrap}
