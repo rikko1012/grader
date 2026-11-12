@@ -10,7 +10,9 @@ sq-1, in plain words:
   1. Pool. Only PrizePicks / Underdog lines that are open now: the platform feed reads ok, the start is at least LEAD_S away, the
      row is not held, Scout's side is offered, the chance is a number. CS2 needs a live letter (A+ to B) with a stake, or a 0U
      stake that only the same-match exposure cap took away. LoL needs the model's letter (A+ to B; LoL letters carry 0 units).
-     NBA / NFL letters are research estimates: left out unless the member asks for them, and then marked. A held or contained
+     NBA / NFL letters (A to C, released by the owner 2026-11-08, ct-1b) have no settled band yet: research_ok=True lets them in
+     (the hub always passes it since 2026-11-12) and they rank at RESEARCH_WEIGHT; research_ok=False keeps the frozen research
+     scripts reproducible. A held or contained
      prop is never a leg (a letter held by letter_containment lc-1: "contained", no rating). A degenerate chance
      (DEGENERATE_P or more, or a projection near zero against the line) is never a leg.
   2. Rank. Each leg's chance to hit is what its band has won on settled results: the band is sport x stat x side x chance band
@@ -446,7 +448,7 @@ def why_line(legs, pool_size, first, reused):
     head = "Best all-hit chance on the board" if first else "Best all-hit chance left" + ("" if reused else " with unused props")
     one = "one leg each" if matches == len(legs) else "same-match legs"
     research = sum(1 for l in legs if l["research"])
-    tail = f"; {research} research estimate{'s' if research != 1 else ''}" if research else ""
+    tail = f"; {research} NBA/NFL {'leg' if research == 1 else 'legs'} ranked by Scout chance (no settled record yet)" if research else ""
     return f"{head}: {matches} matches, {one}; legs rank {ranks} of {pool_size} by settled hit rate{tail}."
 
 
@@ -508,7 +510,7 @@ def build(legs, opts):
 def _brief(l):
     return {"key": l["key"], "sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "player": l["player"],
             "line": l["line"], "stat_label": l["stat_label"], "period_label": l["period_label"], "p": l["p"], "rank": l["rank"],
-            "band": band_text(l["band"], l["sport"], l["line_type"]) if not l["research"] else "Research estimate"}
+            "band": band_text(None if l["research"] else l["band"], l["sport"], l["line_type"])}
 
 
 def advise(slip, legs_by_key, ranked, entry_type=None, lines="all"):

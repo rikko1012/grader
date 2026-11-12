@@ -377,11 +377,16 @@ export function mount(C) {
   const faceOf = (r,size) => C.faceHtml?C.faceHtml(r.sport,{id:r.player.id,key:r.player.key,name:r.player.name,team:r.player.team_abbr||r.player.team,size,cls:'h-face'}):'';
   const kindOf = r => C.lineKind?C.lineKind(r.offer.platform,r.market.line_type):'';
   const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
+  /* owner 2026-11-12 ("make sure they all have grades"): a row with no letter says why in a few plain words (the server's hold.short,
+     its full sentence in the tooltip); a page or row without the short text keeps the older label */
+  const HOLD_SHORT_OF={'Scout grades lines priced near even.':'Priced far from even'};   /* an extra book's cap-3 row carries the sentence only */
+  const holdText = s => s.hold?.short || HOLD_SHORT_OF[s.hold?.reason] || 'Research estimate';
+  const holdChip = s => `<span class="h-grade-text h-hold-why" title="${esc(s.hold?.reason||'')}">${esc(holdText(s))}</span>`;
   /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters carry no tag (ct-1b, owner 2026-11-08: released) */
   function gradeChip(r) {
     const s=r.scout;
     if(C.oneSided(r)) return `<span class="h-grade-text h-one-sided">${esc(C.oneSided(r))}</span>`;
-    if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
+    if(s.hold) return holdChip(s);
     if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
     if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance" title="Scout\u2019s chance at this line">Chance at this line</span>';   /* short on the row (follow-up 2026-11-06: was cut off); the card keeps the full sentence */   /* audit 2026-11-05: another book's line, same saved distribution */
     if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>`;
@@ -486,7 +491,7 @@ export function mount(C) {
     if(C.oneSided(r)) return `<div class="h-scout"><div class="h-direction-options" title="${esc(C.oneSidedNote(r))}"><span class="h-one-sided">${esc(C.oneSided(r))}</span></div></div>`;
     if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>${H.showEdge?(NEXT?belowChip(r).replace('class="h-below"','class="h-below h-below-alt"'):''):belowChip(r)}</div>`;   /* UI_NEXT: where the redesign hides the Edge column (phone, card open, narrow desktop) the Scout cell carries the same chip; CSS shows one of the two */
     const both=num(s.p_over)&&num(s.p_under);
-    return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
+    return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:s.hold?.short?'':'<span>Forecast pending</span>'}</div>${s.hold?`<div class="h-scout-grade">${holdChip(s)}</div>`:''}</div>`;
   }
   const reportedOdds = r => (r.offer.reported_prices||[]).map(n=>n>0?'+'+n:String(n)).join(' / ');
   function priceSummary(q) {
@@ -494,6 +499,48 @@ export function mount(C) {
     const o=C.priceText(q,'over'), u=C.priceText(q,'under');
     if(o||u) return [o&&'O '+o,u&&'U '+u].filter(Boolean).join(' · ');
     return C.lineLabel(q)+' line';
+  }
+  /* owner 2026-11-12 ("make sure they all have grades and odds"): every NBA / NFL row's odds, from the board's own numbers only.
+     A pick'em line (PrizePicks / Underdog): what the app pays - an Underdog multiplier as the app states it, else the entry's per-pick
+     break-even (the server's parity figure: PrizePicks Power 2-pick, Underdog standard 2-pick) - and the price a sportsbook gives for
+     this exact player, stat, period and line (Scout's side, else both sides); no such book = "No book odds at this line". A sportsbook
+     or exchange row: its own price per side (an exchange in cents). Never another line's price. Format: the member's Odds format. */
+  const ODDS_SPORTS=['nba','nfl'], PICKEM=['prizepicks','underdog'];
+  const fmtDec = d => {if(!num(d)||d<=1)return null;if(H.par.odds==='decimal')return d.toFixed(2);const a=d>=2?Math.round((d-1)*100):-Math.round(100/(d-1));return (a>0?'+':'−')+Math.abs(a);};
+  const ownOdds = (q,sd) => {const v=q.offer[sd];if(!v?.offered)return null;if(num(v.price))return fmtDec(v.price);if(num(v.ask)&&v.ask>0&&v.ask<1)return Math.round(v.ask*100)+'¢';return null;};
+  function bookOddsAt(r) {
+    const sides=r.scout.side?[r.scout.side]:['over','under'], out=[];
+    for(const q of C.siblings(r)){
+      if(q===r||q.extra||PICKEM.includes(q.offer.platform)||Number(q.offer.line)!==Number(r.offer.line))continue;
+      const parts=sides.map(sd=>{const v=q.offer[sd];return v?.offered&&num(v.price)&&v.price>1?[sd,v.price]:null;});
+      if(parts.some(Boolean))out.push({q,parts});
+    }
+    return out.sort((a,b)=>(b.parts[0]?.[1]||0)-(a.parts[0]?.[1]||0));   /* the best price for the side first */
+  }
+  function appOdds(r) {
+    const s=r.scout, sd=s.side, kind=r.market.line_type;
+    if(r.offer.platform==='underdog'){
+      const m=sd?[[sd,r.offer[sd]?.payout]]:['over','under'].filter(x=>r.offer[x]?.offered).map(x=>[x,r.offer[x]?.payout]);
+      if(m.some(([,v])=>num(v)&&Math.abs(v-1)>1e-9))return {text:m.filter(([,v])=>num(v)).map(([x,v])=>(sd?'':(x==='over'?'O ':'U '))+'Pays '+v.toFixed(2)+'x').join(' · '),title:`Underdog pays ${m.filter(([,v])=>num(v)).map(([x,v])=>`${v.toFixed(2)}x on the ${sideWord(x)}`).join(' and ')}, as the app lists it`};
+    }
+    if(kind!=='standard')return {text:`${C.lineLabel(r)}: no set payout`,title:`${r.offer.platform_label} publishes no fixed per-pick payout for ${C.lineLabel(r).toLowerCase()} lines`};
+    const p=parOf(r)||(PAR?.break_even?.[r.offer.platform]?{...PAR.break_even[r.offer.platform],be_american:PAR.break_even[r.offer.platform].american,be_decimal:PAR.break_even[r.offer.platform].decimal}:null);
+    if(!p||!num(p.be))return null;
+    const o=H.par.odds==='decimal'&&num(p.be_decimal)?p.be_decimal.toFixed(2):num(p.be_american)?(p.be_american>0?'+':'−')+Math.abs(Math.round(p.be_american)):pct(p.be);
+    return {text:`Needs ${o}`,title:`${p.entry||r.offer.platform_label}: each pick needs ${pct(p.be)} (${o}) to break even, from ${r.offer.platform_label}'s published payouts`};
+  }
+  function oddsLine(r) {
+    if(!ODDS_SPORTS.includes(r.sport)||r.extra)return '';
+    const st='display:block;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25;margin-top:2px';
+    const cell=(text,title)=>`<small class="h-odds" style="${st}" title="${esc(title)}">${esc(text)}</small>`;
+    if(!PICKEM.includes(r.offer.platform)){
+      const sides=r.scout.side?[r.scout.side]:['over','under'], v=sides.map(sd=>[sd,ownOdds(r,sd)]).filter(([,x])=>x);
+      return v.length?cell(v.map(([sd,x])=>(r.scout.side?sideWord(sd):(sd==='over'?'O':'U'))+' '+x).join(' · '),`${r.offer.platform_label}'s own price at ${r.offer.line}`):cell('No price listed',`${r.offer.platform_label} lists no price for this line right now`);
+    }
+    const app=appOdds(r), books=bookOddsAt(r);
+    const bt=books.length?books.slice(0,2).map(({q,parts})=>`${BOOK_SHORT[q.offer.platform]||q.offer.platform_label} ${parts.filter(Boolean).map(([sd,d])=>(r.scout.side?'':(sd==='over'?'O ':'U '))+fmtDec(d)).join(' / ')}`).join(' · ')+(books.length>2?` +${books.length-2}`:''):'No book odds at this line';
+    const btitle=books.length?`Sportsbook prices at exactly ${r.offer.line}${r.scout.side?` for the ${sideWord(r.scout.side)}`:''}: `+books.map(({q,parts})=>`${q.offer.platform_label} ${parts.filter(Boolean).map(([sd,d])=>sideWord(sd)+' '+fmtDec(d)).join(', ')}`).join('; '):`No sportsbook prices ${r.player.name} ${r.market.stat_label} at exactly ${r.offer.line} right now`;
+    return (app?cell(app.text,app.title):'')+cell(bt,btitle);
   }
   /* the real alternatives for this prop (other books, other lines) as one small button; the detail is in its tooltip and the card's Lines tab */
   function compareCell(r) {
@@ -533,7 +580,7 @@ export function mount(C) {
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${rowRole(r)}<span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
       <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
-      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small></td>
+      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small>${oddsLine(r)}</td>
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}${MX?booksLine(r):''}</td>`:''}${MX?`<td class="h-c-medge h-number${mxValue(r)==null?' is-empty':''}">${mxCell(r)}</td>`:''}
@@ -570,9 +617,9 @@ export function mount(C) {
     const body=g.lines.map(q=>{const k=key(q),kind=kindOf(q)||(q.market.line_type!=='standard'?C.lineLabel(q):''),hit=g.match.has(lineId(q));
       return `<tr class="${[k===key(g.main)?'is-main':'',dim&&!hit?'is-dim':'',dim&&hit?'is-match':'',H.detail===k?'is-open':''].filter(Boolean).join(' ')}" data-line="${esc(k)}">
         <th scope="row"><button class="h-ld-book" data-hub="expand" data-id="${esc(k)}" aria-label="Open the card for ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">${esc(q.offer.platform_label)}${kind?` <em class="u-lt u-lt-${esc(String(kind).toLowerCase())}">${esc(kind)}</em>`:''}</button></th>
-        <td class="h-ld-line"><b>${esc(q.offer.line)}</b>${g.best&&key(g.best)===k?`<em class="h-ld-best">Best ${sideWord(side)}</em>`:''}${q.offer.moved_from!=null?`<small>was ${esc(q.offer.moved_from)}</small>`:''}</td>
+        <td class="h-ld-line"><b>${esc(q.offer.line)}</b>${g.best&&key(g.best)===k?`<em class="h-ld-best">Best ${sideWord(side)}</em>`:''}${q.offer.moved_from!=null?`<small>was ${esc(q.offer.moved_from)}</small>`:''}${oddsLine(q)}</td>
         <td class="h-ld-px">${price(q,'over')}</td><td class="h-ld-px">${price(q,'under')}</td>
-        <td class="h-ld-scout">${ladderScout(q)}<span class="h-ld-grade">${q.scout.side&&!q.scout.hold&&!q.scout.line_chance&&!C.oneSided(q)?gradeChip(q):''}</span></td>
+        <td class="h-ld-scout">${ladderScout(q)}<span class="h-ld-grade">${q.scout.side&&!q.scout.hold&&!q.scout.line_chance&&!C.oneSided(q)?gradeChip(q):q.scout.hold?.short&&!C.oneSided(q)?holdChip(q.scout):''}</span></td>
         <td class="h-ld-do">${act(q)}</td></tr>`;}).join('');
     return `<tr class="h-ladder-row h-span-row" data-ladder="${esc(g.key)}"><td colspan="${cols}"><div class="h-ladder"><table class="h-ladder-table" aria-label="${esc(`All ${g.total} lines for ${g.main.player.name} ${g.main.market.stat_label}`)}"><thead><tr><th scope="col">App</th><th scope="col">Line</th><th scope="col">Over</th><th scope="col">Under</th><th scope="col">Scout</th><th scope="col"><span class="u-sr">Slip</span></th></tr></thead><tbody>${body}</tbody></table>${dim?`<p class="h-ladder-note">${g.matched.length} of ${g.total} lines match the filters; the rest are listed dimmed.</p>`:''}</div></td></tr>`;
   }
@@ -1087,7 +1134,7 @@ export function mount(C) {
     const side=H.histSide, line=r.offer.line, s=r.scout, quotes=C.siblings(r), on=C.onSlip(r);
     const eligible=!r.extra&&H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
     const chance=C.chanceOf(r,side);
-    const pick=C.oneSided(r)?gradeChip(r):s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:s.hold?'<span class="h-grade-text">Research estimate</span>':'';
+    const pick=C.oneSided(r)?gradeChip(r):s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:s.hold?holdChip(s):'';
     /* #24: Scout's side is not offered on this app (Over-only demon, PrizePicks one-way lines): no main Add button. The board row
        says "Side" there; the card says plainly which side the app offers, and adding that side is a secondary, labelled action. */
     const other=s.side==='over'?'under':'over', against=!!s.side&&!C.oneSided(r)&&!r.extra&&!r.offer[s.side]?.offered&&!!r.offer[other]?.offered;
@@ -1352,7 +1399,7 @@ export function mount(C) {
     const more=MX?(bestOf(r)?.bk||[]).filter(([,,bk])=>!have.has(base(bk))):[];
     const side=v=>v==null?'Not offered':v||'Listed';
     const moreRows=more.map(([label,line,,o,u])=>`<tr><td><span>${esc(label)}</span> <b>${esc(line)}</b></td><td>${esc(side(o))}</td><td>${esc(side(u))}</td><td>—</td><td>—</td></tr>`).join('');
-    return `${PX().odds(r,doc,pxCtx(r))}${MX?bestLinesHtml(r):''}<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${C.oneSided(q)?esc(C.oneSided(q)):q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}${moreRows}</tbody></table></div>
+    return `${PX().odds(r,doc,pxCtx(r))}${MX?bestLinesHtml(r):''}<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${C.oneSided(q)?esc(C.oneSided(q)):q.scout.hold?esc(holdText(q.scout)):esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}${moreRows}</tbody></table></div>
       <p class="h-history-note">Choose a line to recount its past results. Each line is its own pick with its own forecast; payouts and availability differ.</p>
       ${extra.length||other.length?`<div class="h-sec-head"><h4>Market books</h4></div><div class="h-scroll-x"><table><thead><tr><th>Book</th><th>Over</th><th>Under</th><th>Its chance</th></tr></thead><tbody>${extra.map(b=>mrow(b,false)).join('')}${other.map(b=>mrow(b,true)).join('')}</tbody></table></div>`:''}${market}</section>`;
   }
@@ -1534,7 +1581,7 @@ export function mount(C) {
       const pool=H.records.filter(r=>sports.includes(r.sport)&&!unavailableReason(r)&&!C.started(r));
       const options={platform:$('hub-generation-book').value,count:Number($('hub-generation-slips').value),size:Number($('hub-generation-count').value),entryType:$('hub-generation-type').value,
         mix:$('hub-generation-mix').value,games:$('hub-generation-games').value,noRepeatProps:$('hub-generation-repeats').value==='none',lines:$('hub-generation-lines').value,
-        research:$('hub-generation-research')?.value==='include',side:$('hub-generation-side').value,sports};
+        research:sports.some(s=>s==='nba'||s==='nfl'),side:$('hub-generation-side').value,sports};
       const batch=await C.generateBatch(pool,options,text=>{status.textContent=text;});
       if(!batch.slips.length)throw new Error(batch.note||'No combinations passed recheck. Widen your settings.');
       H.batch=batch;H.batchSaved=false;paintBatch();
@@ -1564,7 +1611,7 @@ export function mount(C) {
       const metrics=[num(s.all_hit)?`<span>All-hit chance <b>${pct(s.all_hit)}</b></span>`:(s.same_match?'<span>Legs share a match <b>No all-hit chance</b></span>':''),
         s.payout&&num(s.payout.multiple)?`<span>All-hit payout <b>${esc(s.payout.multiple)}×</b></span>`:'',
         s.ev&&num(s.ev.ev)?`<span>Expected return <b>${pct(s.ev.ev)}</b></span>`:''].filter(Boolean).join('');
-      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header>${s.why?`<p class="h-batch-why">${esc(s.why)}</p>`:''}${metrics?`<div class="h-batch-range">${metrics}</div>`:''}<ol>${s.legs.map(l=>`<li${['nba','nfl'].includes(l.sport)?' class="h-leg-face"':''}>${legFace(l)}<div><strong>${esc(l.player)}</strong>${l.gen?.research?' <em class="h-line-tag">Research estimate</em>':''}<small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineTag(l)}</span>${l.gen?.record?`<small class="h-batch-record">${esc(l.gen.record)}</small>`:''}<small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace the '+esc(C.PLATFORMS[s.platform].label)+' entry in My slip':'Open in My slip'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
+      return `<article class="h-generated-card"><header><span>SLIP ${String(i+1).padStart(2,'0')}</span><strong>${esc(C.PLATFORMS[s.platform].label)} · ${esc(s.entry_type)}</strong><small>${s.legs.length} picks · ${esc([...new Set(s.legs.map(l=>SPORTS[l.sport]))].join(' + '))}</small></header>${s.why?`<p class="h-batch-why">${esc(s.why)}</p>`:''}${metrics?`<div class="h-batch-range">${metrics}</div>`:''}<ol>${s.legs.map(l=>`<li${['nba','nfl'].includes(l.sport)?' class="h-leg-face"':''}>${legFace(l)}<div><strong>${esc(l.player)}</strong><small>${esc(SPORTS[l.sport])} · ${esc(l.event_label)}</small><span>${esc(l.side)} <b>${esc(l.line)}</b> ${esc(l.stat_label)} · ${esc(l.period_label)}${lineTag(l)}</span>${l.gen?.record?`<small class="h-batch-record">${esc(l.gen.record)}</small>`:''}<small>${use.get(l.sport+'|'+l.player_key)} of ${slips.length} slips use this player</small></div><b>${pct(l.shown_p)}</b></li>`).join('')}</ol><footer><button data-hub="use-generated" data-id="${i}">${T.legs.some(l=>l.book===s.platform)?'Replace the '+esc(C.PLATFORMS[s.platform].label)+' entry in My slip':'Open in My slip'}</button>${R.me.features?.book_links?`<button data-hub="open-generated" data-id="${i}">Open in ${esc(C.PLATFORMS[s.platform].label)}</button>`:""}<small id="hub-batch-message-${i}" role="status"></small></footer></article>`;
     }).join('')}</div>`;
   }
   async function useGenerated(id) {
@@ -1575,7 +1622,6 @@ export function mount(C) {
     finally{H.usingBatch=false;}
   }
   function generatorHtml() {
-    const research=allowed().some(s=>s==='nba'||s==='nfl');
     return `<section class="h-generator" aria-label="Generate slips"><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your batch</h2><p>Choose your sports and entry size. Review each generated slip before adding it to your picks.</p><fieldset id="hub-generation-sports"><legend>Eligible sports</legend>${allowed().map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls">
       <div class="h-generator-step"><span>01</span><h3>Entry setup</h3></div><label>Platform<select id="hub-generation-book"><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label>
       <label>Entry type<select id="hub-generation-type"><option value="power">Power</option><option value="flex">Flex</option></select></label>
@@ -1585,9 +1631,8 @@ export function mount(C) {
       <label class="h-goblin-rule">Goblins<select id="hub-generation-lines" aria-describedby="hub-generation-lines-help">${LINE_RULES.map(([v,t])=>`<option value="${v}"${v===H.slipLines?' selected':''}>${t}</option>`).join('')}</select><small id="hub-generation-lines-help">Goblins are easier lines that pay less. Scout leaves them out unless you allow them.</small></label>
       <label>Game selection<select id="hub-generation-games"><option value="spread">One per match</option><option value="stacks">Same match (Underdog)</option></select></label>
       <label>Prop reuse<select id="hub-generation-repeats"><option value="allow">Allow across slips</option><option value="none">No repeat props</option></select></label>
-      ${research?'<label>Research estimates<select id="hub-generation-research"><option value="leave">Leave out</option><option value="include">Include, marked</option></select></label>':''}
       <details class="h-generation-more"><summary>More filters <span id="hub-generation-filter-count"></span></summary><div><label>Pick side<select id="hub-generation-side"><option value="any">Either side</option><option value="over">Overs only</option><option value="under">Unders only</option></select><small>Uses Scout’s recommended side. Picks are never flipped to fill a slip.</small></label></div></details>
-      <div class="h-generation-submit"><p id="hub-generation-summary" role="status" aria-live="polite"></p><button id="hub-generate" data-hub="generate">Generate slips</button><small>Current lines are rechecked before results appear.</small></div></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL research estimates stay out unless you include them, and are then marked. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
+      <div class="h-generation-submit"><p id="hub-generation-summary" role="status" aria-live="polite"></p><button id="hub-generate" data-hub="generate">Generate slips</button><small>Current lines are rechecked before results appear.</small></div></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL legs carry Scout’s letter (A to C) and rank by Scout’s chance until their bands have settled results. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
   }
   /* 30 days of the record; a run of days with no decided pick folds into one quiet tile instead of a wall of dashes */
   function calendarHTML(doc){

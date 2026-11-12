@@ -40,7 +40,8 @@ EV_MIN_CHANCE = 0.57                    # Results cover 57% and up (results_view
 EV_MIN_MATCHES = 300
 EV_MAX_GAP = 0.03
 EV_MAX_AGE_H = 24
-EV_NOT_VALIDATED = {"lol": "LoL chances have no settled record at real lines yet.", "nba": "NBA chances are research estimates.", "nfl": "NFL chances are research estimates."}
+EV_NOT_VALIDATED = {"lol": "LoL chances have no settled record at real lines yet.", "nba": "Scout rates EV only on chances that passed its settled-results check; NBA chances have not.",
+                    "nfl": "Scout rates EV only on chances that passed its settled-results check; NFL chances have not."}
 
 SPORT = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL"}
 LABEL = {"prizepicks": "PrizePicks", "underdog": "Underdog"}

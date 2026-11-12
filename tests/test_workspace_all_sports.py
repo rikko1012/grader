@@ -459,7 +459,7 @@ def test_ev_needs_a_validated_chance(env):
     r = recs(env, "nba")
     legs = [leg(r[("Karl Anders", "underdog")], "under"), leg(r[("Reed Lean", "underdog")], "over")]
     ev = check(env, legs)[1]["entries"]["underdog"]["ev"]
-    assert ev == {"available": False, "reason": "NBA chances are research estimates.", "payout": ev["payout"]} and ev["payout"]["multiple"] == 3.5
+    assert ev == {"available": False, "reason": "Scout rates EV only on chances that passed its settled-results check; NBA chances have not.", "payout": ev["payout"]} and ev["payout"]["multiple"] == 3.5
 
 
 # ---- entries across sports

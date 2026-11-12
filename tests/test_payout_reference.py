@@ -14,6 +14,6 @@ def test_verified_table_is_shown_but_research_chances_get_no_ev():
     legs=[{'sport':'nba','line_type':'standard','match':f'm{i}','line':20.5,'on_side':True,'p':0.6} for i in range(6)]
     result=rules.ev_status('prizepicks','power',legs,None,0)
     assert not result['available'] and 'ev' not in result
-    assert result['payout']['multiple'] == 37.5 and 'research estimates' in result['reason']
+    assert result['payout']['multiple'] == 37.5 and 'settled-results check' in result['reason']
     legs[0]['line_type']='goblin'
     assert 'payout' not in rules.ev_status('prizepicks','power',legs,None,0)       # goblin / demon: unpublished payout

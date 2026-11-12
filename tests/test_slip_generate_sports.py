@@ -1,5 +1,5 @@
-"""Slip Studio sq-1 across CS2, LoL, NBA and NFL over real HTTP (tests/workspace_other_fixture.py): research estimates stay out
-unless asked and are then marked, held lines never enter, Underdog keeps one sport, and the LoL settled record is read from the
+"""Slip Studio sq-1 across CS2, LoL, NBA and NFL over real HTTP (tests/workspace_other_fixture.py): NBA / NFL letters enter by
+default (ct-1b released), held lines never enter, Underdog keeps one sport, and the LoL settled record is read from the
 worker's real schema. No network and no production data."""
 import pytest
 
@@ -19,17 +19,18 @@ def legs(doc):
     return [l for s in doc["slips"] for l in s["legs"]]
 
 
-def test_research_estimates_stay_out_unless_asked_then_marked(env, monkeypatch):
+def test_nba_nfl_letters_enter_by_default_without_research_label(env, monkeypatch):
+    """owner 2026-11-12 ("sports should be able to go in slips now"): NBA / NFL letters are released (ct-1b), so ticking NBA or NFL
+    puts their A-C legs in Auto-build with no opt-in; research=0 from an old page changes nothing; no "research estimate" text."""
     monkeypatch.setattr(server.Handler, "_sports_owner", lambda self: True)
-    st, doc = gen(env)
-    assert st == 200, doc
-    assert not [l for l in legs(doc) if l["sport"] in ("nba", "nfl")]
-    assert doc["pool"]["excluded"].get("research", 0) >= 1
-    st, doc = gen(env, research=1, sports="cs2,nba", slips=8)      # the fixture has one research letter per platform: it pairs with CS2
-    assert st == 200
-    research = [l for l in legs(doc) if l["research"]]
-    assert research and all(l["record"] == "Research estimate" for l in research)
-    assert all("research estimate" in s["why"] for s in doc["slips"] if any(l["research"] for l in s["legs"]))
+    for extra in ({}, {"research": 0}):
+        st, doc = gen(env, sports="cs2,nba", slips=8, **extra)
+        assert st == 200, doc
+        assert doc["pool"]["excluded"].get("research", 0) == 0
+        sports = [l for l in legs(doc) if l["sport"] in ("nba", "nfl")]
+        assert sports and all(l["record"] == "No settled record for this band yet" for l in sports), legs(doc)
+        assert all("research estimate" not in s["why"].lower() for s in doc["slips"])
+        assert all("ranked by Scout chance" in s["why"] for s in doc["slips"] if any(l["sport"] == "nba" for l in s["legs"]))
 
 
 def test_held_lines_never_enter_even_with_research(env, monkeypatch):

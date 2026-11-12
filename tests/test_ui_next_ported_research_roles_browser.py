@@ -210,7 +210,7 @@ def test_board_rows_show_real_counts_placeholders_the_letter_and_the_lines_cell(
     p.locator('#hub-sports [data-id=nba]').click()
     p.locator('#hub-q').fill('Karl Anders')
     nba = rows(p).first
-    assert nba.locator('.h-grade').count() == 0 and 'Research estimate' in nba.locator('.h-c-scout').text_content()
+    assert nba.locator('.h-grade').count() == 0 and nba.locator('.h-c-scout .h-hold-why').count() == 1     # the plain reason (2026-11-12)
     nba.locator('.h-player').click()
     p.locator('#hub-detail [role=tab][data-id=stats]').click()
     p.wait_for_selector('#hub-detail .h-stat-group h5', timeout=15000)

@@ -2078,7 +2078,9 @@ def _gen_opts(q, allowed):
     exclude = tuple(sorted({x for x in (q.get("exclude") or "").split(",") if x}))
     if len(exclude) > EXCLUDE_MAX or any(len(x) > 200 or not _LEG_ID_RE.match(x) for x in exclude):
         return None, "Too many lines to leave out. Generate again."
-    research = q.get("research") == "1" and any(s in sq.RESEARCH_SPORTS for s in sports)
+    # owner 2026-11-12 ("sports should be able to go in slips now"): NBA / NFL letters are released (ct-1b, 2026-11-08), so a ticked
+    # NBA or NFL box puts its A-C legs in the pool by default - no separate opt-in. The research param is still read for old pages.
+    research = any(s in sq.RESEARCH_SPORTS for s in sports)
     return {"platform": platform, "entry_type": et, "count": count, "size": size, "sports": sports, "mix": mix, "same_match": games == "stacks",
             "no_repeat": repeats == "none", "lines": lines, "research": research, "exclude": exclude, "side": side}, None
 
@@ -2092,7 +2094,7 @@ def _wire_slip(s, srv, now):
     out = {"platform": s["platform"], "entry_type": s["entry_type"], "why": s["why"], "same_match": s["same_match"],
            "legs": [{"sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "line_type": l["line_type"],
                      "player": l["player"], "p": l["p"], "rank": l["rank"], "rank_p": round(l["rank_p"], 4), "research": l["research"],
-                     "record": "Research estimate" if l["research"] else sq.band_text(l["band"], l["sport"], l["line_type"])} for l in s["legs"]]}
+                     "record": sq.band_text(None if l["research"] else l["band"], l["sport"], l["line_type"])} for l in s["legs"]]}
     if s["all_hit"] is not None:
         out["all_hit"] = round(s["all_hit"], 4)
     if s["payout"]:

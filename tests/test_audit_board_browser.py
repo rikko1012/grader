@@ -454,7 +454,6 @@ def test_auto_build_legs_and_the_lineup_image_carry_faces(ctx, env):
     p.locator('#hub-generation-type').select_option('power')
     p.locator('#hub-generation-count').select_option('3')
     p.locator('#hub-generation-slips').select_option('1')
-    p.locator('#hub-generation-research').select_option('include')
     p.locator('#hub-generate').click()
     p.wait_for_function(r"document.querySelector('#hub-generated .h-generated-card li') || /\w/.test(document.querySelector('#hub-generation-status').textContent) && !document.querySelector('#hub-generate').disabled", timeout=30000)
     assert p.locator('#hub-generated .h-generated-card li').count(), p.locator('#hub-generation-status').inner_text()
@@ -463,7 +462,7 @@ def test_auto_build_legs_and_the_lineup_image_carry_faces(ctx, env):
     faces = [legs.nth(i).locator('.u-face').count() for i in range(legs.count())]
     assert faces == [1 if x in ('NBA', 'NFL') else 0 for x in sports] and sum(faces) >= 1, (sports, faces)   # esports legs unchanged
     tags = [t.strip() for t in legs.locator('.h-line-tag').all_text_contents()]
-    assert all(t in ('Standard', 'Goblin', 'Demon', 'Research estimate') for t in tags) and sum(t != 'Research estimate' for t in tags) == legs.count(), tags
+    assert all(t in ('Standard', 'Goblin', 'Demon') for t in tags) and len(tags) == legs.count(), tags     # no research tag (2026-11-12)
     p.locator('#hub-generated .h-generated-card').first.scroll_into_view_if_needed()
     shot(p, 'faces-auto-build')
     p.locator('#hub-generated [data-hub=use-generated]').first.click()
@@ -513,7 +512,6 @@ def test_phone_sort_menu_chart_and_auto_build(ctx, env):
     p.locator('#hub-generation-sports input[value=lol]').uncheck()
     p.locator('#hub-generation-count').select_option('3')
     p.locator('#hub-generation-slips').select_option('1')
-    p.locator('#hub-generation-research').select_option('include')
     p.locator('#hub-generate').click()
     p.wait_for_selector('#hub-generated .h-generated-card li .u-face', timeout=30000)
     p.locator('#hub-generated').scroll_into_view_if_needed()

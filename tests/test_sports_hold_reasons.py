@@ -26,7 +26,7 @@ def test_market_rejection_explains_price_instead_of_league_gate():
 
 
 def test_missing_forecast_is_not_a_containment_claim():
-    assert 'matching forecast' in record(forecast=False)['hold']['reason']
+    assert record(forecast=False)['hold']['reason'] == 'Scout has no forecast for this line.'
 
 
 def test_sg2_degenerate_projection_is_a_research_estimate_with_its_reason():
@@ -41,7 +41,7 @@ def test_sg2_degenerate_projection_is_a_research_estimate_with_its_reason():
         rec,x=ws.record_of('nfl',doc,m,q,{})
         s=rec['scout']
         assert s['grade'] is None and s['units'] is None and s['side'] is None and x['lean'] is None
-        assert s['hold']=={'label':'Research estimate','reason':text} and s['validation']['label']=='Research estimate'
+        assert s['hold']=={'label':'Research estimate','reason':text,'short':ws.HOLD_SHORT[code]} and s['validation']['label']=='Research estimate'
 
 
 def test_explicit_containment_and_sanity_reasons_are_preserved():
@@ -68,3 +68,41 @@ def test_ct1b_kill_switch_gate_reads_switched_off():
     s=record({'b':'gate','t':'NBA model not validated - projection only','v':'vg-1'})
     assert s['side'] is None and s['grade'] is None and s['hold']['reason']=='NBA grades are switched off.'
     assert 'clear review' not in ws.HOLD_DETAIL
+
+
+# ---- owner 2026-11-12: every NBA / NFL row says why it has no letter (hold.short), and exchanges carry their own price ----
+
+def test_no_forecast_reason_comes_from_the_pipeline_not_a_guess():
+    def why(nf, st='pra'):
+        q={'p':'prizepicks','r':'offer:prizepicks:2','l':30.5,'o':[1,1],'f':None,'nf':nf}
+        m={'k':'event|player|pra|full_game','e':'event','pid':'player','n':'Player','st':st,'mk':None}
+        return ws.record_of('nba',{'fc':{},'stats':{'pra':'Pts+Rebs+Asts'}},m,q,{})[0]['scout']['hold']
+    h=why('Market not supported by the Scout model: combo')
+    assert h['short']=='Stat not graded' and h['reason']=="Scout's model does not cover Pts+Rebs+Asts."
+    assert why('Line appeared after the last forecast run')['short']=='New line'
+    assert why('No Scout forecast: no games in the data')['reason'].endswith('no games in the data')
+    assert why('Line not modelled: promotional')['short']=='Line not graded'
+    assert why(None)['short']=='No forecast'
+
+
+def test_every_hold_has_a_short_plain_reason():
+    assert record()['hold']['short']=='No clear side'
+    assert record(market={'l':10.5,'c':{'n':2,'po':.65,'pu':.35}})['hold']['short']=='No edge over books'
+    assert record({'b':'av_out','t':'Ruled out (ESPN injury report)','v':'av-1'})['hold']['short']=='Ruled out'
+    assert record({'b':'cap','t':'Scout grades lines priced near even.','v':'cap-3'})['hold']['short']=='Priced far from even'
+    assert record({'b':'gate'})['hold']['short']=='Letters switched off'
+    for code in ('l10_contra','ratio_low','thin','av_inactive'):
+        assert record({'b':code,'t':'x'})['hold']['short']==ws.HOLD_SHORT[code]
+
+
+def test_exchange_rows_carry_their_own_price_per_side():
+    q={'p':'polymarket','r':'offer:polymarket:1','l':10.5,'o':[1,1],'f':'f1','k':[0.52,0.55],'x':{'v':'cf-2','ln':None}}
+    m={'k':'event|player|points|full_game','e':'event','pid':'player','n':'Player','st':'points','mk':None}
+    o=ws.record_of('nba',{'fc':{'f1':{'m':'sm-1','po':.6,'pu':.4,'pp':0,'mu':12}}},m,q,{})[0]['offer']
+    assert o['over']['ask']==0.55 and o['under']['ask']==0.48 and o['over']['price'] is None
+    q['k']=[None,0.55]
+    o=ws.record_of('nba',{'fc':{}},m,q,{})[0]['offer']
+    assert o['over']['ask']==0.55 and 'ask' not in o['under']
+    q.pop('k')
+    o=ws.record_of('nba',{'fc':{}},m,q,{})[0]['offer']
+    assert 'ask' not in o['over'] and 'ask' not in o['under']

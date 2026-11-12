@@ -557,7 +557,7 @@ def test_generator_saves_eight_distinct_ranked_slips_without_replacing_draft(ctx
     assert all(len(s['legs']) == 2 for s in slips)
     assert state['studio']['generator'] == 'sq-1'
     assert all(s['why'] and all(l['gen']['record'] for l in s['legs']) for s in slips)          # one line per slip, a record per leg
-    assert not [l for s in slips for l in s['legs'] if l['sport'] in ('nba', 'nfl')]           # research estimates stay out unless asked
+    assert not [l for s in slips for l in s['legs'] if 'esearch' in l['gen']['record']]       # NBA / NFL legs carry no research label (2026-11-12)
     assert all(len({l['player_key'] for l in s['legs']}) == 2 for s in slips)
     assert p.locator('.h-generated-card .h-batch-why').count() == 8
     assert all(len({(l['sport'], l['event_id']) for l in s['legs']}) == 2 for s in slips)
@@ -672,7 +672,7 @@ def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, si
     p.locator('#hub-sports [data-id=nba]').click()
     p.locator('#hub-q').fill('Karl Anders')
     nba = p.locator('#hub-rows tr[data-record]').first
-    assert nba.locator('.h-grade').count() == 0 and 'Research estimate' in nba.locator('.h-c-scout').inner_text()
+    assert nba.locator('.h-grade').count() == 0 and nba.locator('.h-c-scout .h-hold-why').count() == 1     # the plain reason (2026-11-12)
     nba.locator('.h-player').click()
     p.locator('#hub-detail [role=tab][data-id=stats]').click()
     p.wait_for_selector('#hub-detail .h-stat-group h5', timeout=15000)

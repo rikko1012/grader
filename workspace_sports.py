@@ -398,7 +398,46 @@ def _side_prices(q, i):
     offered = bool((q.get("o") or [0, 0])[i])
     mult = (q.get("m") or [None, None])[i]
     dec = (q.get("d") or [None, None])[i]
-    return {"offered": offered, "payout": dec if dec is not None else mult, "price": dec}
+    out = {"offered": offered, "payout": dec if dec is not None else mult, "price": dec}
+    ask = _exchange_ask(q.get("k"), i)
+    if offered and ask is not None:
+        out["ask"] = ask                    # an exchange's own price to buy this side, 0-1 (owner 2026-11-12: every row shows its odds)
+    return out
+
+
+def _exchange_ask(k, i):
+    """An exchange's own price to buy one side, from its YES quote [bid, ask]: Over = the YES ask, Under = 1 - the YES bid (the
+    NO ask). None when that number is missing or outside 0-1. Read from the quote as it is, never from another line."""
+    if not isinstance(k, (list, tuple)) or len(k) != 2:
+        return None
+    v = k[1] if i == 0 else (None if k[0] is None else 1 - k[0])
+    if not isinstance(v, (int, float)) or isinstance(v, bool) or not 0 < v < 1:
+        return None
+    return round(v, 4)
+
+
+# owner 2026-11-12 ("make sure they all have grades"): a sports row without a letter names why in a few plain words on the row
+# (hold.short); the full sentence stays in hold.reason. The rules themselves are unchanged (sports/board_view, availability).
+HOLD_SHORT = {"cap": "Priced far from even", "gate": "Letters switched off", "ratio_low": "Projection far below line",
+              "ratio_high": "Projection far above line", "l10_contra": "Last 10 games disagree", "floor": "Not enough player data",
+              "certain": "Forecast out of range", "thin": "Fewer than 3 games", "stale": "No game in the last year",
+              "small_low": "Projection far below line", "av_out": "Ruled out", "av_injured_reserve": "Injured reserve",
+              "av_suspended": "Suspended", "av_inactive": "Inactive"}
+
+
+def no_forecast(nf, stat_label):
+    """(reason, short) for a line with no Scout forecast, from the sports pipeline's own reason (quote nf, snapshots
+    no_forecast_reason). Model coverage and a line newer than the last forecast run are told apart; nothing is guessed."""
+    nf = str(nf or "")
+    if nf.startswith("Market not supported"):
+        return f"Scout's model does not cover {stat_label}.", "Stat not graded"
+    if nf.startswith("Line not modelled"):
+        return "Scout does not grade this kind of line.", "Line not graded"
+    if nf.startswith("No Scout forecast:"):
+        return "Scout has no forecast for this player and stat: " + nf.split(":", 1)[1].strip(), "No forecast"
+    if "after the last forecast run" in nf:
+        return "This line appeared after Scout's last forecast run (forecasts run every 30 minutes).", "New line"
+    return "Scout has no forecast for this line.", "No forecast"
 
 
 def record_of(lg, doc, m, q, view):
@@ -426,19 +465,21 @@ def record_of(lg, doc, m, q, view):
     grade = signal.get("gr") if held is None and lean and signal.get("v") == "cf-2" else None
     if grade not in ("A", "B", "C", "Lean"):
         grade = None
+    short = None
     if one:
         reason = f"{one}: Scout grades lines that offer both sides."
     elif held is not None:
         reason = held
+        short = "Letters switched off" if not signal.get("b") or m.get("nv") else HOLD_SHORT.get(signal.get("b"), "No grade")
     elif not sc:
-        reason = "A matching forecast is not available for this line yet."
+        reason, short = no_forecast(q.get("nf"), (doc.get("stats") or {}).get(m.get("st"), m.get("st")))
     elif not lean and mkc and lean_of(sc, q.get("l")):
-        reason = "The market already prices the model's preferred side at least as highly."
+        reason, short = "The market already prices the model's preferred side at least as highly.", "No edge over books"
     elif not lean:
-        reason = "The forecast does not give a clear direction at this line."
+        reason, short = "The forecast does not give a clear direction at this line.", "No clear side"
     else:
-        reason = "A published grade is not available for this forecast yet."
-    hold = None if grade else {"label": one or HOLD_LABEL, "reason": reason}
+        reason, short = "A published grade is not available for this forecast yet.", "No grade yet"
+    hold = None if grade else {"label": one or HOLD_LABEL, "reason": reason, "short": one or short or "No grade"}
     line = q.get("l")
     v = view.get(m.get("k")) or {}
     a = (v.get("lines") or {}).get(line_key(line)) if line is not None else None

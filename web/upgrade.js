@@ -187,9 +187,9 @@
     if (oneSided(rec)) return oneSided(rec);
     if (!sd) return "No lean";
     if (s.side && sd !== s.side) return `Scout side is ${cap(s.side)}`;
-    if (s.hold) return `Research estimate ${cap(sd)}`;
+    if (s.hold) return s.hold.short ? `No grade: ${s.hold.short}` : `Research estimate ${cap(sd)}`;     /* sports rows name why (owner 2026-11-12) */
     if (s.line_chance) return `Scout's chance at this line: ${cap(sd)}`;      /* another book's line, read from the saved distribution: no letter */
-    if (s.grade) return `${s.grade} ${cap(sd)}${rec.sport === "nba" || rec.sport === "nfl" ? " · Research grade" : ""}`;      /* as classic sports */
+    if (s.grade) return `${s.grade} ${cap(sd)}`;      /* NBA / NFL letters are released (ct-1b, owner 2026-11-08): no research tag */
     return `Lean ${cap(sd)}`;
   }
   const decimalOf = (o, side) => { const v = o.offer[side], P = PLATFORMS[o.offer.platform] || {}; if (P.price_comparable === false) return null; /* Dabble: own unit, never odds */ return P.kind === "decimal" ? v.payout : v.price; };

@@ -23,7 +23,7 @@ def test_cap3_hold_reaches_the_hub_as_the_fact():
     rec, x = _rec("polymarket", {"b": "cap", "t": TEXT, "v": "cap-3"}, mk)
     s = rec["scout"]
     assert s["side"] is None and s["grade"] is None and s["p_side"] is None and s["units"] is None and x["lean"] is None
-    assert s["hold"] == {"label": ws.HOLD_LABEL, "reason": TEXT} and s["validation"]["detail"] == TEXT
+    assert s["hold"] == {"label": ws.HOLD_LABEL, "reason": TEXT, "short": "Priced far from even"} and s["validation"]["detail"] == TEXT
     assert s["p_over"] == 0.19 and s["p_under"] == 0.81 and s["projection"] == 19.2
     assert rec["market_chance"] == {"p_over": 0.202, "p_under": 0.798, "sources": 3}
     for bad in ("may ", "might", "unsure", "not validated", "switched off", "held"):
@@ -203,7 +203,10 @@ def test_extra_book_build_end_to_end_matches_the_hub_board(monkeypatch):
     # the hub board's own FanDuel 24.5 record (server hold) says the same
     board, _ = ws.record_of("nba", doc, m, {"p": "fanduel", "r": "fd245", "l": 24.5, "o": [1, 1], "d": [7.0, 1.10], "f": "f245",
                                             "x": {"b": "cap", "t": TEXT, "v": "cap-3"}}, {})
-    for k in ("side", "grade", "p_side", "hold"):
+    for k in ("side", "grade", "p_side"):
         assert rows[24.5]["scout"][k] == board["scout"][k], k
+    # same label and sentence; the board row also carries the short plain reason (owner 2026-11-12), which the page derives from
+    # this sentence for an extra-book row
+    assert {k: v for k, v in board["scout"]["hold"].items() if k != "short"} == rows[24.5]["scout"]["hold"]
     order = sorted(out["records"], key=lambda r: (r["scout"]["p_side"] is None, -(r["scout"]["p_side"] or 0)))
     assert [r["offer"]["line"] for r in order] == [19.5, 24.5]
