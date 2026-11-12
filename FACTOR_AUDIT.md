@@ -406,3 +406,22 @@ Fold weights: kills 0 / 0 / 0, HS 1.2 / 0 / 0. Frozen: kills 0.0, HS 0.25. Forwa
   - Kills 0.25+ sd from the line: 65.7% vs 43.6%.
   - The 80% intervals hold 77-85% in every cohort.
   - These are leads for prospective hypotheses, never fitted on these matches.
+
+## Round 8 - grade-upgrade study (frozen 2026-11-11 in research/grade_upgrade_2026_11_11/FROZEN_DEFINITIONS.md, d8aa3e3, before scoring)
+
+Walk-forward at the REAL offered lines (owner rule 2026-11-09: hit rate by side, graded count, split), Oct 19 - Nov 8:
+8,032 graded app rows / 296 matches; live 53.5% [51.6, 55.4], Overs 52.5%, Unders 54.3%. Full table:
+cs2_scout_ops/logs/grade_upgrade_cs2_2026-11-11.md; summary research/grade_upgrade_2026_11_11/RESULTS.md.
+
+| Group | Tested on | Result |
+|---|---|---|
+| H01-H23: opponent strength, similar-ranked opponent, match tier, event class, LAN, form (20 maps / 90 d), time on team, own / opponent roster change, days since last match, long break, team rest, opponent kills allowed, closeness, overtime propensity, kill share, entry, AWPer, IGL, history size, head-to-head, all together (ridge) - as a multiplier on the live projection, fitted on 101,380 HLTV history rows | live reconstruction (cm-2 / perf-2 N0), real lines | **All rejected**: -0.83 to +0.01 points, none with the interval above 0; 6 significantly worse. Supersedes the round 1-3 results that were MAE-only on perf-1 / perf-2 G8.3 |
+| B01-B12: market closeness and favourite / underdog (saved win odds), market quality, scope, app, sample size, rust, last-10 tape, role-unconfirmed, data-state flags - board-fitted cohort multipliers | live, real lines | **All rejected**: -0.95 to -0.26 points; 5 significantly worse (B09 hot-form: not a real test, flag on week 0 only) |
+| G1-G5, G7, G8: letter thresholds per stat x side, Over/Under asymmetry, chance band, distance-from-line, sample-size stake rule, per-scope threshold, learned selection (staked picks, sides unchanged) | live, real lines | **Rejected** (interval across 0, or one staked side lower) |
+| **G6: lift the AWPer-on-HS 0U gate** (sr-gates-1's forward re-test, no parameter) | starts after 2026-10-28 13:40 UTC | **PASSED -> LIVE as awp-hs-1 (owner "yes" 2026-11-11, tag `042a5339de`)**: staked 1,193 -> 1,314, hit 53.0 -> 54.1, +1.13 [+0.20, +2.04]; staked Overs 51.2 -> 51.6, Unders 54.8 -> 56.7; added picks 65.3% [55.9, 74.8] on 121 rows / 79 matches. Rollback `CS2_AWP_HS_LIFT=0` |
+
+Caveats recorded with the promotion: about 43 tests, one pass (roughly the chance rate); the added picks lean Under
+(237 Under / 144 Over over Oct 11 - Nov 8); four weeks of one model family; the holdout (Nov 9-11, 35 picks, 60.0%) is
+too small to confirm. Table row "Roster continuity / stand-ins ... GATES ONLY" above is unchanged; the "AWP share (G1)"
+row is unchanged (the AWP rule still marks the player; it no longer zeroes the HS stake). Untested lead for a later
+frozen round: a stake rule on the favourite / underdog split (favourites 56.9% [54.5, 59.2] vs underdogs 51.7%).

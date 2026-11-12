@@ -19,7 +19,7 @@ import workspace_api
 ROOT = Path(__file__).resolve().parents[1]
 HASHED = ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py", "market_odds.py",
           "thunderpick.py", "pick_verdict.py", "bo3.py", "roles.py", "polymarket.py", "oddspapi.py", "cm1.py", "cm2.py", "cm2_model.json")
-FROZEN_TAG_LF = "3007c59b74"          # the model tag of origin/main eddaa57 over LF text (dbca2af0fe in a CRLF checkout)
+FROZEN_TAG_LF = "042a5339de"          # the model tag over LF text since awp-hs-1 (2026-11-12; 3007c59b74 before it)
 
 
 def hrow(team, roles_, igl=False, team_match=True, wiki=None):

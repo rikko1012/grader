@@ -1676,11 +1676,22 @@ def test_owner_wording_rules_cover_server_text(bad):
 
 def test_model_hash_files_are_untouched():
     import subprocess
-    files = ["grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py", "market_odds.py", "thunderpick.py", "pick_verdict.py",
+    files = ["sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py", "market_odds.py", "thunderpick.py", "pick_verdict.py",
              "bo3.py", "roles.py", "polymarket.py", "oddspapi.py", "cm1.py", "cm2.py", "cm2_model.json", "platform_rules.py", "learning.py"]
     if subprocess.run(["git", "cat-file", "-e", "4877218"], cwd=ROOT, capture_output=True).returncode != 0:
         pytest.skip("base commit not in this clone (shallow checkout)")
     assert subprocess.run(["git", "diff", "--exit-code", "--quiet", "4877218", "--", *files], cwd=ROOT).returncode == 0
+    # grader.py: frozen too, except the owner-approved awp-hs-1 stake rule (2026-11-12, MODEL_VERSIONS.md) - every changed
+    # line of the diff against the baseline belongs to that block (the switch + Gate A's branch)
+    import difflib
+    old = subprocess.run(["git", "show", "4877218:grader.py"], cwd=ROOT, capture_output=True).stdout.decode("utf-8").splitlines()
+    new = (ROOT / "grader.py").read_text(encoding="utf-8").splitlines()
+    changed = [l[1:] for l in difflib.unified_diff(old, new, lineterm="", n=0) if l[:1] in "+-" and l[:3] not in ("+++", "---")]
+    removed = [l for l in difflib.unified_diff(old, new, lineterm="", n=0) if l.startswith("-") and not l.startswith("---")]
+    assert removed == ['-            zero_units.append("AWPer on a headshot prop")']
+    assert len(changed) <= 24 and all(
+        not l.strip() or l.strip().startswith("#") or "awp_hs" in l.lower() or "AWP_HS" in l or l.strip() in ("import os", "else:")
+        or 'cfg["awp_hs_lift"]' in l or "CS2_AWP_HS_LIFT" in l for l in changed), changed
     # Only the disabled-by-default shadow observer is added to the immutable
     # forecast writer. Everything else must still equal the frozen baseline.
     # 2026-11-04: plus the vm-2 shadow (research/map_chances/REGISTER.md) - exactly the blocks below, compared node for

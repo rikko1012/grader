@@ -47,7 +47,7 @@ Results print to the screen and save to `output/<player>_<command>_<date>.json`.
   his headshots per kill. Players HLTV doesn't have use the same model on their BO3.gg maps (provisional).
 - **Maps 1-3** = maps 1, 2 and 3 in full, never maps 4-5 (BO5: always played; BO3 2-0: Underdog voids). The older pipeline described below is the fallback only (rates, form, H2H, Round Swing, win chance,
   Over margin).
-- Gates and caps (stand-in, transfer, sample, rust, AWPer on HS, FORM / TAPE FIGHT, thin market, same-match cap) set
+- Gates and caps (stand-in, transfer, sample, rust, FORM / TAPE FIGHT, thin market, same-match cap) set
   the stake on every line. On the performance model they set the stake only and never change the chance. On the older
   pipeline (fallback grades only) some of them also change the chance: each of these widens the spread x1.10 (together
   at most x1.25) - roster not confirmed, sample under 5 Maps 1-2, under 10, thin data (under 20), stand-in, rust (15+

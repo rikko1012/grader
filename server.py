@@ -1635,9 +1635,10 @@ def _legacy_cap_words(reason):
 def stake_caps():
     """The stake limits the card's pills quote, read from the grader itself (2026-10-10 audit: the card said max 0.5U
     for a stand-in and max 1U for a thin market while the grader allowed 1U and 1.5U)."""
-    from grader import CONFIG
+    from grader import CONFIG, awp_hs_1_enabled
+    # awp_hs_gate: True only while CS2_AWP_HS_LIFT=0 keeps the old "AWPer on a headshot line: 0 units" rule (awp-hs-1)
     return {"standin": 1.0, "market": CONFIG["soft_market_cap"], "tape": CONFIG["tape_fight_cap"], "thin": 1.5,
-            "same_result": SAME_RESULT_CAP, "kills_chance": CONFIG["p_cap_kills"]}
+            "same_result": SAME_RESULT_CAP, "kills_chance": CONFIG["p_cap_kills"], "awp_hs_gate": not awp_hs_1_enabled()}
 
 
 _BS_CACHE = [0.0, []]

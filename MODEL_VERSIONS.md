@@ -1,5 +1,38 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## `042a5339de` — awp-hs-1: stakes on AWPer headshot props (owner "yes", 2026-11-11; branch claude/grade-up-1111-cs2; stake rule only, no chance / letter / side / projection change)
+
+- **Change:** Gate A ("AWPer on a headshot prop" -> 0 units) is lifted in `grader.grade_leg`. An AWPer's headshot prop
+  now carries the stake its chance earns, like any other pick. Every other 0-unit rule (stand-in, not on the listed
+  team, under 5 maps, FORM FIGHT, the BO3.gg-route gate) and every cap (SOFT / NO MARKET 1.5U, thin data 1.5U, rust 1U,
+  stand-in 1U, TAPE FIGHT 0.5U, same-match 3U) still applies. Side, chance, letter and projection are byte-identical
+  with the switch on or off (tests/test_awp_hs_lift.py).
+- **Tag:** `3007c59b74` -> `042a5339de` (grader.py is in the model hash; cs2_scout.py, roles.py, bo3.py, hltv.py are
+  untouched). Forward records are separable by this tag; each lifted row also carries the flag
+  "Gate A: AWPer on a headshot prop - staked on its chance (awp-hs-1)" (not shown to members), each gated row the old
+  "0 units: AWPer on a headshot prop".
+- **Rollback:** `CS2_AWP_HS_LIFT=0` on Render (read at grade time, no deploy): the exact old gate, reason text and
+  stakes. The env switch does not change the tag - rolled-back rows are told apart by the "0 units: AWPer ..." flag.
+- **Evidence (FACTOR_AUDIT.md round 8, G6; cs2_scout_ops/logs/grade_upgrade_cs2_2026-11-11.md):** frozen before
+  scoring (d8aa3e3) as sr-gates-1's named forward re-test, no fitted parameter. Gated picks at 55%+ after 2026-10-28
+  13:40 UTC: 121 rows / 95 units / 79 matches, 65.3% [55.9, 74.8] vs 58.7% printed; staked picks 1,193 -> 1,314, hit
+  53.0 -> 54.1, +1.13 [+0.20, +2.04], staked Overs 51.2 -> 51.6, Unders 54.8 -> 56.7. Whole record Oct 11 - Nov 8: 381
+  rows / 239 matches, 62.5% [56.8, 68.2] vs 59.2% printed. Fresh holdout Nov 9-11: 35 picks / 18 matches, 60.0%.
+- **Read the forward results with these in mind:**
+  - **Multiple comparisons.** About 43 rules were tested in that study and this is the only pass; one pass at the 2.5%
+    level is roughly what chance alone produces. It was pre-named and its cohort beat 55% in all five earlier periods,
+    but it is one cohort.
+  - **Under-heavy mix.** The lift adds more Unders than Overs (237 vs 144 over the record; forward Overs 55.8% on 52,
+    Unders 72.5% on 69). On an Under-heavy day it adds to the Under lean (owner's correlated-Under risk).
+  - **The all-lines hit rate does not move** (no side changes). The gain is on staked picks only.
+  - **Forward review:** compare AWPer-HS staked picks under tag `042a5339de` (or any later tag carrying the flag) with
+    the other staked HS picks of the same tag, match-grouped, Overs and Unders apart; first look at 300 forward matches.
+- **Record:** nothing added. The public record already counts every P1 unit whose favoured-side chance is 57%+ whatever
+  its stake, so these picks were and stay inside the existing totals (checked on the stored export, see the ops log).
+- **Display:** the card's "What this grade uses" stake list and the help text no longer say an AWPer on a headshot line
+  gets 0 units (the line returns only while `CS2_AWP_HS_LIFT=0`, from `caps.awp_hs_gate`); "AWP use" loses its
+  "(HS stake)" suffix.
+
 ## LoL lpf-1 LIVE for kills + assists (owner "yes turn lpf on", 2026-11-09; branch claude/lpf1-on-1109; CS2 model tag unchanged; deaths stay lol-1)
 
 - **What:** LoL kills and assists forecasts take lpf-1's chance, projection, median and 80% range (full-history booster started

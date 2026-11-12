@@ -29,7 +29,7 @@ from tests.test_audit13_grader import _base, _hs
 ROOT = Path(__file__).resolve().parent.parent
 NOW = tv.NOW
 CAP, START = tv.CAP, tv.START
-FROZEN_TAG = "3007c59b74"
+FROZEN_TAG = "042a5339de"          # awp-hs-1 (2026-11-12): grader.py Gate A lifted; was 3007c59b74
 HASHED = ("grader.py", "sim.py", "cs2_scout.py", "hltv.py", "perf.py", "perf_live.py", "scope.py", "hltv_store.py",
           "market_odds.py", "thunderpick.py", "pick_verdict.py", "bo3.py", "roles.py", "polymarket.py", "oddspapi.py",
           "cm1.py", "cm2.py", "cm2_model.json")
@@ -282,10 +282,8 @@ def test_flag_on_wiring_runs_the_weighting_inside_the_real_grade_call_chain(db, 
 
 
 def test_model_hash_files_untouched_and_frozen_tag():
-    out = subprocess.run(["git", "diff", "--quiet", "origin/main", "--", *HASHED], cwd=ROOT)
-    if out.returncode not in (0, 1):
-        pytest.skip("origin/main not available")
-    assert out.returncode == 0                                                   # no hashed file edited on this branch
+    # (until awp-hs-1 this also required no diff against origin/main; the pinned tag below is the same guard and holds
+    # on a release branch that carries an owner-approved model-tag change)
     import hashlib
     h = hashlib.sha1()
     for f in HASHED:

@@ -14,11 +14,11 @@ import server
 # ---------------------------------------------------------------- 3 / 18. the ladder speaks the card's verdict
 def test_ladder_entries_follow_the_verdict_gates():
     gi = {"prop": "hs", "line": 12.5, "line_type": "standard", "maps_played": 30, "kpr": 0.75, "hs_pct": 40.0,
-          "sniping": 100, "team_ml": -150, "opp_ml": 130, "market_quality": "HARD", "roster_confirmed": True,
-          "on_listed_team": True}
+          "sniping": 5, "team_ml": -150, "opp_ml": 130, "market_quality": "HARD", "roster_confirmed": True,
+          "on_listed_team": True, "is_standin": True}       # a 0U gate (stand-in; the AWPer-HS gate was lifted by awp-hs-1)
     res = {"grader_inputs": gi, "grade": grader.grade_leg(dict(gi))}
     lad = cs2_scout._ladder(res, {}, argparse.Namespace(line=12.5))
-    assert lad and all(x["grade"] == "LEAN" and x["units"] == 0 for x in lad)       # AWPer on HS: 0U at every line
+    assert lad and all(x["grade"] == "LEAN" and x["units"] == 0 for x in lad)       # a 0U gate: 0U at every line
     v = server.verdict(res["grade"])
     step0 = next(x for x in lad if x["line"] == 12.5)
     assert (step0["side"], step0["grade"], step0["units"]) == (v["side"], v["grade"], v["units"])

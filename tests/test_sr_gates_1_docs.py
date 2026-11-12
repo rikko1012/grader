@@ -23,7 +23,8 @@ def test_gates_and_caps_unchanged():
            "kpr": 0.70, "hs_pct": 48.0, "rating": 1.05, "teammate_ratings": [1.0, 0.98, 1.02, 0.95], "sniping": 45,
            "roster_confirmed": True, "p_team_market": 0.55, "market_quality": "HARD", "bo": 3,
            "recent_avg": 14.0, "recent_median": 14.0, "recent": {"n": 10, "overs": 5}}
-    g = grader.grade_leg(leg)
+    # the AWPer-HS gate stayed until awp-hs-1 (2026-11-12, its forward re-test passed); CS2_AWP_HS_LIFT=0 keeps it
+    g = grader.grade_leg(leg, dict(grader.CONFIG, awp_hs_lift=False))
     assert g["units"] == 0.0 and g["units_less"] == 0.0 and "AWPer on a headshot prop" in (g["zero_reason"] or "")
 
 

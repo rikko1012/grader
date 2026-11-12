@@ -234,7 +234,7 @@ def test_card_checks_show_the_awp_reading_never_a_role_word(tmp_path):
     data = {k: dict(base, player_block=dict(base["player_block"], awp_note=v)) for k, v in AWP_NOTES.items()}
     out = run_page(tmp_path, r"""(() => { const r = {};
       for (const k of Object.keys(INPUT)) { try { render(INPUT[k]); } catch (e) { if (!/nextSibling/.test(e.message)) throw e; }
-        const h = $("#out").innerHTML, m = /<span>AWP use \(HS stake\)<\/span><span>([^<]*)<\/span>/.exec(h);
+        const h = $("#out").innerHTML, m = /<span>AWP use<\/span><span>([^<]*)<\/span>/.exec(h);
         r[k] = {row: m ? m[1] : null, tags: (h.match(/class="rtag"/g) || []).length, words: (h.replace(/<[^>]+>/g, " ").match(/\b(AWPer|Rifler)\b/g) || [])}; }
       return r; })()""", data)
     assert out["hltv"]["row"] == "HLTV weapon stats: 27% of 1204 kills with the AWP (90 days to 2026-11-06)"

@@ -173,6 +173,23 @@ def sr_bo3_1_enabled(cfg=None):
     return os.environ.get("SR_BO3_1", "1").strip() != "0"
 
 
+# awp-hs-1 (owner-approved 2026-11-11, live 2026-11-12): the "AWPer on a headshot prop" 0-unit gate (Gate A) is lifted - the
+# pick is staked on its chance like any other (every other 0U rule and cap still applies). A stake rule only: side,
+# chance, letter and projection are untouched. Evidence + caveats: FACTOR_AUDIT.md round 8 (G6), MODEL_VERSIONS.md.
+# On unless the environment says CS2_AWP_HS_LIFT=0 (read at grade time: a Render env change restores the old 0U gate
+# without a deploy); a cfg key "awp_hs_lift" overrides for tests / previews.
+AWP_HS_1_VERSION = "awp-hs-1"
+AWP_HS_GATE_REASON = "AWPer on a headshot prop"
+AWP_HS_1_NOTE = "Gate A: AWPer on a headshot prop - staked on its chance (awp-hs-1)"   # 'Gate A' flags are not shown to members
+
+
+def awp_hs_1_enabled(cfg=None):
+    import os
+    if cfg is not None and cfg.get("awp_hs_lift") is not None:
+        return bool(cfg["awp_hs_lift"])
+    return os.environ.get("CS2_AWP_HS_LIFT", "1").strip() != "0"
+
+
 # ---------------------------------------------------------------- math
 def phi(z):
     return 0.5 * (1 + math.erf(z / math.sqrt(2)))
@@ -368,7 +385,10 @@ def grade_leg(d, cfg=CONFIG):
         if snip is None:
             flags.append("Gate A: Sniping unknown - fetch before playing an HS prop")
         elif snip > 40:
-            zero_units.append("AWPer on a headshot prop")
+            if awp_hs_1_enabled(cfg):
+                flags.append(AWP_HS_1_NOTE)
+            else:
+                zero_units.append(AWP_HS_GATE_REASON)
 
     # Win probability + stomp (either side at -400 or heavier = P(win) >= 0.80 or <= 0.20)
     if d.get("p_team_market") is not None:
