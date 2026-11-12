@@ -1,0 +1,926 @@
+{
+  "event": {
+    "provider_event_id": "1028823932",
+    "league": "nfl",
+    "name": "New York Giants - Washington Commanders",
+    "home": "New York Giants",
+    "away": "Washington Commanders",
+    "start": "2026-11-13T01:15:00Z"
+  },
+  "betOffers": [
+    {
+      "id": 2715076671,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929095,
+        "label": "Total Pass Attempts by the Player - Including Overtime",
+        "englishLabel": "Total Pass Attempts by the Player - Including Overtime",
+        "shortLabel": "Pass Attempts by Player + OT",
+        "shortEnglishLabel": "Pass Attempts by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410251276,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 2000,
+          "line": 30500,
+          "participant": "J.J. McCarthy",
+          "type": "OT_OVER",
+          "betOfferId": 2715076671,
+          "changedDate": "2026-11-12T15:04:21Z",
+          "participantId": 1007779020,
+          "oddsFractional": "Evens",
+          "oddsAmerican": "100",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410251277,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1780,
+          "line": 30500,
+          "participant": "J.J. McCarthy",
+          "type": "OT_UNDER",
+          "betOfferId": 2715076671,
+          "changedDate": "2026-11-12T15:04:21Z",
+          "participantId": 1007779020,
+          "oddsFractional": "10/13",
+          "oddsAmerican": "-129",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715087681,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929141,
+        "label": "Total Pass Completions by the Player - Including Overtime",
+        "englishLabel": "Total Pass Completions by the Player - Including Overtime",
+        "shortLabel": "Pass Completions by Player + OT",
+        "shortEnglishLabel": "Pass Completions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410259901,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1910,
+          "line": 18500,
+          "participant": "J.J. McCarthy",
+          "type": "OT_OVER",
+          "betOfferId": 2715087681,
+          "changedDate": "2026-11-12T15:04:21Z",
+          "participantId": 1007779020,
+          "oddsFractional": "10/11",
+          "oddsAmerican": "-110",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410259902,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1850,
+          "line": 18500,
+          "participant": "J.J. McCarthy",
+          "type": "OT_UNDER",
+          "betOfferId": 2715087681,
+          "changedDate": "2026-11-12T15:04:21Z",
+          "participantId": 1007779020,
+          "oddsFractional": "17/20",
+          "oddsAmerican": "-118",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715088741,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929138,
+        "label": "Total Receptions by the Player - Including Overtime",
+        "englishLabel": "Total Receptions by the Player - Including Overtime",
+        "shortLabel": "Receptions by Player + OT",
+        "shortEnglishLabel": "Receptions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410296595,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1850,
+          "line": 4500,
+          "participant": "Isaiah Likely",
+          "type": "OT_OVER",
+          "betOfferId": 2715088741,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028245174,
+          "oddsFractional": "17/20",
+          "oddsAmerican": "-118",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410296596,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1910,
+          "line": 4500,
+          "participant": "Isaiah Likely",
+          "type": "OT_UNDER",
+          "betOfferId": 2715088741,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028245174,
+          "oddsFractional": "10/11",
+          "oddsAmerican": "-110",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715088867,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1004952425,
+        "label": "Total Receiving Yards by the Player - Including Overtime",
+        "englishLabel": "Total Receiving Yards by the Player - Including Overtime",
+        "shortLabel": "Receiving Yards by Player + OT",
+        "shortEnglishLabel": "Receiving Yards by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410296959,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1860,
+          "line": 23500,
+          "participant": "Malachi Fields",
+          "type": "OT_OVER",
+          "betOfferId": 2715088867,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028276421,
+          "oddsFractional": "17/20",
+          "oddsAmerican": "-117",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410296960,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1900,
+          "line": 23500,
+          "participant": "Malachi Fields",
+          "type": "OT_UNDER",
+          "betOfferId": 2715088867,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028276421,
+          "oddsFractional": "9/10",
+          "oddsAmerican": "-112",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715088980,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929138,
+        "label": "Total Receptions by the Player - Including Overtime",
+        "englishLabel": "Total Receptions by the Player - Including Overtime",
+        "shortLabel": "Receptions by Player + OT",
+        "shortEnglishLabel": "Receptions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410297289,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 2200,
+          "line": 2500,
+          "participant": "Rachaad White",
+          "type": "OT_OVER",
+          "betOfferId": 2715088980,
+          "changedDate": "2026-11-12T17:22:04Z",
+          "participantId": 1007147590,
+          "oddsFractional": "6/5",
+          "oddsAmerican": "120",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410297290,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1640,
+          "line": 2500,
+          "participant": "Rachaad White",
+          "type": "OT_UNDER",
+          "betOfferId": 2715088980,
+          "changedDate": "2026-11-12T17:22:04Z",
+          "participantId": 1007147590,
+          "oddsFractional": "16/25",
+          "oddsAmerican": "-157",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715088981,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929138,
+        "label": "Total Receptions by the Player - Including Overtime",
+        "englishLabel": "Total Receptions by the Player - Including Overtime",
+        "shortLabel": "Receptions by Player + OT",
+        "shortEnglishLabel": "Receptions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410297291,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1820,
+          "line": 1500,
+          "participant": "Austin Ekeler",
+          "type": "OT_OVER",
+          "betOfferId": 2715088981,
+          "changedDate": "2026-11-12T17:22:04Z",
+          "participantId": 1004231996,
+          "oddsFractional": "4/5",
+          "oddsAmerican": "-122",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410297292,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1940,
+          "line": 1500,
+          "participant": "Austin Ekeler",
+          "type": "OT_UNDER",
+          "betOfferId": 2715088981,
+          "changedDate": "2026-11-12T17:22:04Z",
+          "participantId": 1004231996,
+          "oddsFractional": "23/25",
+          "oddsAmerican": "-107",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715105104,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929141,
+        "label": "Total Pass Completions by the Player - Including Overtime",
+        "englishLabel": "Total Pass Completions by the Player - Including Overtime",
+        "shortLabel": "Pass Completions by Player + OT",
+        "shortEnglishLabel": "Pass Completions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410253651,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1840,
+          "line": 19500,
+          "participant": "Jayden Daniels",
+          "type": "OT_OVER",
+          "betOfferId": 2715105104,
+          "changedDate": "2026-11-12T15:04:12Z",
+          "participantId": 1006074662,
+          "oddsFractional": "5/6",
+          "oddsAmerican": "-120",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410253652,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1920,
+          "line": 19500,
+          "participant": "Jayden Daniels",
+          "type": "OT_UNDER",
+          "betOfferId": 2715105104,
+          "changedDate": "2026-11-12T15:04:12Z",
+          "participantId": 1006074662,
+          "oddsFractional": "10/11",
+          "oddsAmerican": "-109",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715105306,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929095,
+        "label": "Total Pass Attempts by the Player - Including Overtime",
+        "englishLabel": "Total Pass Attempts by the Player - Including Overtime",
+        "shortLabel": "Pass Attempts by Player + OT",
+        "shortEnglishLabel": "Pass Attempts by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410254345,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1780,
+          "line": 30500,
+          "participant": "Jayden Daniels",
+          "type": "OT_OVER",
+          "betOfferId": 2715105306,
+          "changedDate": "2026-11-12T15:04:12Z",
+          "participantId": 1006074662,
+          "oddsFractional": "10/13",
+          "oddsAmerican": "-129",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410254346,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 2000,
+          "line": 30500,
+          "participant": "Jayden Daniels",
+          "type": "OT_UNDER",
+          "betOfferId": 2715105306,
+          "changedDate": "2026-11-12T15:04:12Z",
+          "participantId": 1006074662,
+          "oddsFractional": "Evens",
+          "oddsAmerican": "100",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715106158,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929138,
+        "label": "Total Receptions by the Player - Including Overtime",
+        "englishLabel": "Total Receptions by the Player - Including Overtime",
+        "shortLabel": "Receptions by Player + OT",
+        "shortEnglishLabel": "Receptions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410311047,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1730,
+          "line": 5500,
+          "participant": "Malik Nabers",
+          "type": "OT_OVER",
+          "betOfferId": 2715106158,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028282816,
+          "oddsFractional": "8/11",
+          "oddsAmerican": "-137",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410311049,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 2050,
+          "line": 5500,
+          "participant": "Malik Nabers",
+          "type": "OT_UNDER",
+          "betOfferId": 2715106158,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028282816,
+          "oddsFractional": "21/20",
+          "oddsAmerican": "105",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715106159,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1004952425,
+        "label": "Total Receiving Yards by the Player - Including Overtime",
+        "englishLabel": "Total Receiving Yards by the Player - Including Overtime",
+        "shortLabel": "Receiving Yards by Player + OT",
+        "shortEnglishLabel": "Receiving Yards by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410311046,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1860,
+          "line": 68500,
+          "participant": "Malik Nabers",
+          "type": "OT_OVER",
+          "betOfferId": 2715106159,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028282816,
+          "oddsFractional": "17/20",
+          "oddsAmerican": "-117",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410311051,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1900,
+          "line": 68500,
+          "participant": "Malik Nabers",
+          "type": "OT_UNDER",
+          "betOfferId": 2715106159,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028282816,
+          "oddsFractional": "9/10",
+          "oddsAmerican": "-112",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715106160,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929138,
+        "label": "Total Receptions by the Player - Including Overtime",
+        "englishLabel": "Total Receptions by the Player - Including Overtime",
+        "shortLabel": "Receptions by Player + OT",
+        "shortEnglishLabel": "Receptions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410311048,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 2450,
+          "line": 2500,
+          "participant": "Malachi Fields",
+          "type": "OT_OVER",
+          "betOfferId": 2715106160,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028276421,
+          "oddsFractional": "29/20",
+          "oddsAmerican": "145",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410311050,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1520,
+          "line": 2500,
+          "participant": "Malachi Fields",
+          "type": "OT_UNDER",
+          "betOfferId": 2715106160,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028276421,
+          "oddsFractional": "13/25",
+          "oddsAmerican": "-195",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715106397,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929138,
+        "label": "Total Receptions by the Player - Including Overtime",
+        "englishLabel": "Total Receptions by the Player - Including Overtime",
+        "shortLabel": "Receptions by Player + OT",
+        "shortEnglishLabel": "Receptions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410311815,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1680,
+          "line": 3500,
+          "participant": "Chigoziem Okonkwo",
+          "type": "OT_OVER",
+          "betOfferId": 2715106397,
+          "changedDate": "2026-11-12T17:22:04Z",
+          "participantId": 1007773278,
+          "oddsFractional": "4/6",
+          "oddsAmerican": "-148",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410311816,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 2140,
+          "line": 3500,
+          "participant": "Chigoziem Okonkwo",
+          "type": "OT_UNDER",
+          "betOfferId": 2715106397,
+          "changedDate": "2026-11-12T17:22:04Z",
+          "participantId": 1007773278,
+          "oddsFractional": "57/50",
+          "oddsAmerican": "114",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715128707,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1001929138,
+        "label": "Total Receptions by the Player - Including Overtime",
+        "englishLabel": "Total Receptions by the Player - Including Overtime",
+        "shortLabel": "Receptions by Player + OT",
+        "shortEnglishLabel": "Receptions by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410321165,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 2000,
+          "line": 1500,
+          "participant": "Darnell Mooney",
+          "type": "OT_OVER",
+          "betOfferId": 2715128707,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1006797242,
+          "oddsFractional": "Evens",
+          "oddsAmerican": "100",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410321166,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1770,
+          "line": 1500,
+          "participant": "Darnell Mooney",
+          "type": "OT_UNDER",
+          "betOfferId": 2715128707,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1006797242,
+          "oddsFractional": "3/4",
+          "oddsAmerican": "-130",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715128708,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 1004952425,
+        "label": "Total Receiving Yards by the Player - Including Overtime",
+        "englishLabel": "Total Receiving Yards by the Player - Including Overtime",
+        "shortLabel": "Receiving Yards by Player + OT",
+        "shortEnglishLabel": "Receiving Yards by Player + OT",
+        "order": [],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410321167,
+          "label": "Over",
+          "englishLabel": "Over",
+          "odds": 1870,
+          "line": 46500,
+          "participant": "Isaiah Likely",
+          "type": "OT_OVER",
+          "betOfferId": 2715128708,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028245174,
+          "oddsFractional": "17/20",
+          "oddsAmerican": "-115",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 0
+        },
+        {
+          "id": 4410321168,
+          "label": "Under",
+          "englishLabel": "Under",
+          "odds": 1890,
+          "line": 46500,
+          "participant": "Isaiah Likely",
+          "type": "OT_UNDER",
+          "betOfferId": 2715128708,
+          "changedDate": "2026-11-12T17:05:53Z",
+          "participantId": 1028245174,
+          "oddsFractional": "22/25",
+          "oddsAmerican": "-113",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000070038,
+          "displayOrder": 1
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    },
+    {
+      "id": 2715129797,
+      "closed": "2026-11-13T01:15:00Z",
+      "criterion": {
+        "id": 2100057918,
+        "label": "40+ Rushing Yards By The Player - Including Overtime",
+        "englishLabel": "40+ Rushing Yards By The Player - Including Overtime",
+        "shortLabel": "Player 40+ Rushing Yards + OT",
+        "shortEnglishLabel": "Player 40+ Rushing Yards + OT",
+        "order": [
+          40
+        ],
+        "lifetime": "FULL_TIME_OVERTIME"
+      },
+      "betOfferType": {
+        "id": 127,
+        "name": "Player Occurrence Line",
+        "englishName": "Player Occurrence Line"
+      },
+      "eventId": 1028823932,
+      "outcomes": [
+        {
+          "id": 4410393189,
+          "label": "Yes",
+          "englishLabel": "Yes",
+          "odds": 3200,
+          "line": 40000,
+          "participant": "Austin Ekeler",
+          "type": "OT_YES",
+          "betOfferId": 2715129797,
+          "changedDate": "2026-11-12T15:45:06Z",
+          "participantId": 1004231996,
+          "oddsFractional": "11/5",
+          "oddsAmerican": "220",
+          "status": "OPEN",
+          "cashOutStatus": "ENABLED",
+          "eventParticipantId": 1000000334,
+          "displayOrder": 0
+        }
+      ],
+      "tags": [
+        "OFFERED_PREMATCH",
+        "BET_BUILDER"
+      ],
+      "cashOutStatus": "ENABLED"
+    }
+  ]
+}

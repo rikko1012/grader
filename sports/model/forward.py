@@ -321,7 +321,10 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     events = {e.event_id: e for _, e in store.events(scon, league)}
     quotes = {}
     # market quotes are the non-target offers: read just those (same rows, same order - store.iter_offers)
-    for rid, q in store.iter_offers(scon, league=league, limit=500000, exclude_platforms=TARGETS):
+    # AU reference feeds are deliberately not model inputs. Exclude them in SQL
+    # so adding display coverage cannot accumulate unused quotes in this worker.
+    for rid, q in store.iter_offers(scon, league=league, limit=500000,
+                                   exclude_platforms=TARGETS + ("unibet_au", "pointsbet_au")):
         if q.platform in TARGETS or q.event_id is None or q.player_id is None:
             continue
         meta = store.row_meta(scon, rid)

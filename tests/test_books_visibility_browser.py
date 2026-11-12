@@ -5,6 +5,35 @@ import pytest
 from tests.test_upgrade_browser import browser, env, context, open_page, no_h_scroll
 
 
+@pytest.mark.parametrize('width',[390,1440])
+def test_draftkings_reference_props_search_and_no_fake_prices(browser,env,monkeypatch,tmp_path,width):
+    monkeypatch.setenv('UI_NEXT','1');monkeypatch.setenv('SCOUT_WORKSPACE_V2','1')
+    c=context(browser,env,{'width':width,'height':900});p=c.new_page()
+    now=datetime.now(timezone.utc);errors=[];p.on('pageerror',lambda e:errors.append(str(e)))
+    props=[{'player':'Example Guard','market':'points','label':'Points Milestones - 1st Quarter','period':'1q',
+            'kind':'milestone','line':4.5,'seen_at':now.isoformat()},
+           {'player':'Example Center','market':'rebounds','label':'Total Rebounds','period':'game',
+            'kind':'line','line':9.5,'seen_at':now.isoformat()}]
+    p.route('**/api/upgrade/game-books?*',lambda r:r.fulfill(json={'league':'nba','source':'ESPN','observed_at':now.isoformat(),
+      'events':[{'id':'espn:1','away':'Toronto Raptors','home':'Philadelphia 76ers',
+      'start_utc':(now+timedelta(days=1)).isoformat(),'books':{},'reference_props':props}]}))
+    try:
+        p.goto(env.url+'/#/books');section=p.locator('.h-reference-props');section.wait_for()
+        assert 'does not supply odds' in section.inner_text()
+        section.locator('summary').click()
+        assert '5+' in section.inner_text() and 'First quarter' in section.inner_text()
+        section.locator('input').fill('rebounds')
+        assert section.locator('[data-gb-reference]:visible').count()==1
+        assert 'Example Center' in section.locator('[data-gb-reference]:visible').inner_text()
+        section.locator('input').fill('no match')
+        assert '0 matching' in section.inner_text()
+        section.locator('input').fill('')
+        assert section.locator('[data-gb-reference]:visible').count()==2
+        no_h_scroll(p);assert not errors
+        p.screenshot(path=str(tmp_path/f'reference-props-{width}.png'))
+    finally:c.close()
+
+
 @pytest.mark.parametrize('width', [390, 768, 1440])
 @pytest.mark.parametrize('theme', ['dark', 'light'])
 def test_sportsbooks_route_filters_refresh_and_layout(browser, env, monkeypatch, tmp_path, width, theme):
