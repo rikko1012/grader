@@ -38,7 +38,7 @@ def nba(pkey, name, stat, label, line, app, p_over, books, mult=None):
                    "line": line, "over": {"offered": True, "payout": mult, "price": None}, "under": {"offered": True, "payout": mult, "price": None}},
          "scout": {"side": None, "p_side": None, "p_over": p_over, "p_under": None if p_over is None else round(1 - p_over, 4), "p_push": 0.0},
          "state": {"kind": "ok"}}
-    rows = [{"platform": b, "platform_label": b, "line": ln, "kind": k, "over": o, "under": u, "seen_at": iso(time.time() - age)} for b, ln, k, o, u, age in books]
+    rows = [{"platform": b, "platform_label": b, "line": ln, "kind": k, "over": o, "under": u, "seen_at": iso(time.time() - age), "_age": age} for b, ln, k, o, u, age in books]
     return r, rows
 
 
@@ -66,6 +66,9 @@ JARGON = ('+ev', 'kelly', 'shin', 'multiplicative', 'devig', 'vig', 'liquidity',
 def ev_on(monkeypatch):
     monkeypatch.setenv('SCOUT_PICKEM_EV', '1')
     we._FAIR.clear(); we._LEGS.clear()
+    for _r, rows in ITEMS:                             # ages count from now, not from when the module was imported: late in a long
+        for b in rows:                                 # run the 30 s Kalshi price was past its 4-minute limit (two books needed)
+            b["seen_at"] = iso(time.time() - b["_age"])
     body = json.dumps({"records": [r for r, _ in ITEMS]}).encode()
     s = {"body": body, "index": {(r["offer"]["platform"], r["offer"]["offer_id"]): {"books": (rows, []), "st": r["market"]["stat"]} for r, rows in ITEMS}}
     real = wb.records
