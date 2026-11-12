@@ -219,7 +219,9 @@ export function mount(C) {
     $('hub-diff').setAttribute('aria-pressed',String(H.onlyDiff));
     $('hub-watch').setAttribute('aria-pressed',String(H.watched));
     if(V2)for(const f of ['freshOnly','soonOnly','movedOnly'])$('hub-'+f).setAttribute('aria-pressed',String(H[f]));
-    const read=s=>s==='all'?allowed().every(x=>R.boards[x]?.at):!!R.boards[s]?.at;
+    /* #29: counts for every tab or for none. A tab showed its count only once its sport had been opened ("NFL 4957", LoL and NBA blank),
+       which read as "no lines there". Every sport's board is read on the All tab; until each one is, no tab shows a count. */
+    const everyRead=allowed().every(x=>R.boards[x]?.at),read=()=>everyRead;
     /* N13 (site audit 2026-11-06): a tab's count is the lines that tab lists, by the board's own rule (current lines only, the
        toolbar's search, platform and filters), so the open tab always equals the count over the list */
     const tabCount=s=>{const f=boardFilter(s);return boardSource().filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r,f)).length;};
@@ -1268,6 +1270,8 @@ export function mount(C) {
   }
   function keyStatsHtml(r) {
     const line=Number(r.offer.line), games=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,20);
+    /* #31: the empty message only when there really is no log; the board's saved counts ("Went Under in 3 of the last 10") are one */
+    if(Number.isFinite(line)&&!games.length&&H.detailState!=='loading'&&Object.values(C.tallies(r)||{}).some(t=>t&&t.n>0))return '';
     if(!Number.isFinite(line)||!games.length)return '<p class="h-history-note h-insight-empty">'+(H.detailState==='loading'?'Loading current-line insights…':'No comparable game log for this exact stat and period. Check the Stats tab for available context.')+'</p>';
     const ten=games.slice(0,10), values=ten.map(g=>g.value), over=values.filter(x=>x>line).length, under=values.filter(x=>x<line).length, pushes=values.length-over-under;
     const avg=values.reduce((a,b)=>a+b,0)/values.length, sorted=[...values].sort((a,b)=>a-b), middle=Math.floor(values.length/2), median=values.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;

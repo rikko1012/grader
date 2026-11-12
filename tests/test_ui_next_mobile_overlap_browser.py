@@ -260,3 +260,139 @@ def test_short_phone_card_gives_its_content_most_of_the_sheet(browser, live, vp)
         finally:
             c.close()
 
+
+
+# ---- UI sweep 2026-11-12 batch B: light-theme contrast (#25 Ask tab, #28 bump chips) -------------------------------------------
+# WCAG contrast of an element's text against the first non-transparent background behind it
+CONTRAST = """(el)=>{const rgb=s=>{const m=s.match(/rgba?\(([^)]+)\)/);if(!m)return null;const v=m[1].split(/[ ,\/]+/).filter(Boolean).map(Number);return {r:v[0],g:v[1],b:v[2],a:v.length>3?v[3]:1};};
+ const lum=c=>{const f=x=>{x/=255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);};return 0.2126*f(c.r)+0.7152*f(c.g)+0.0722*f(c.b);};
+ const mix=(top,bot)=>({r:top.r*top.a+bot.r*(1-top.a),g:top.g*top.a+bot.g*(1-top.a),b:top.b*top.a+bot.b*(1-top.a),a:1});
+ let layers=[];for(let n=el;n;n=n.parentElement){const c=rgb(getComputedStyle(n).backgroundColor);if(c&&c.a>0){layers.push(c);if(c.a>=1)break;}}
+ let bg={r:255,g:255,b:255,a:1};for(const c of layers.reverse())bg=mix(c,bg);
+ const fg=mix(rgb(getComputedStyle(el).color),bg),a=lum(fg),b=lum(bg);return {ratio:Math.round(100*(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05))/100,bg:[Math.round(bg.r),Math.round(bg.g),Math.round(bg.b)]};}"""
+
+
+def contrast(loc):
+    return loc.evaluate(CONTRAST)
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_card_ask_tab_is_readable_in_both_themes(browser, live, theme):
+    c, p = page(browser, live, 390, theme, "/")
+    try:
+        p.locator("#hub-rows tr.h-row .h-player").first.click()
+        p.wait_for_selector("#hub-card .h-why", timeout=20000)
+        p.locator("#hub-tab-ask").click()
+        p.wait_for_selector("#hub-card form.h-ask", timeout=10000)
+        p.wait_for_timeout(300)
+        fix_shot(p, f"card-ask-{theme}-390")
+        form = p.locator("#hub-card form.h-ask")
+        bg = contrast(form)["bg"]
+        if theme == "light":
+            assert sum(bg) > 600, bg                                                       # a light surface, not the dark panel
+        for sel in ("label", "input", ".h-ask-sugg button"):
+            for i in range(min(3, form.locator(sel).count())):
+                r = contrast(form.locator(sel).nth(i))
+                assert r["ratio"] >= 4.5, (theme, sel, i, r)
+        assert not p.errors
+    finally:
+        c.close()
+
+
+# ---- #26: Views opens like Filters: a full-width sheet with a backdrop on phones, a popover under its button on desktop
+POPBOX = """(id)=>{const p=document.getElementById(id),b=p.getBoundingClientRect(),cs=getComputedStyle(p),hub=getComputedStyle(document.getElementById('u-hub'),'::after');
+ return {l:b.left,r:b.right,t:b.top,bt:b.bottom,w:b.width,pos:cs.position,vw:document.documentElement.clientWidth,vh:innerHeight,scrim:hub.content!=='none'&&hub.content!=='normal'&&hub.position==='fixed'}}"""
+
+
+@pytest.mark.parametrize("width", (320, 390, 768, 1440))
+def test_views_opens_like_filters(browser, live, width):
+    c, p = page(browser, live, width, "dark", "/")
+    try:
+        out = {}
+        for tog, pop in (("hub-filters-toggle", "hub-filter-pop"), ("hub-views-toggle", "hub-views-pop")):
+            p.locator("#" + tog).click()
+            p.wait_for_selector(f"#{pop}:not([hidden])")
+            p.wait_for_timeout(200)
+            out[pop] = p.evaluate(POPBOX, pop)
+            out[pop]["btn"] = p.locator("#" + tog).bounding_box()
+            if pop == "hub-views-pop":
+                fix_shot(p, f"views-{width}")
+            p.locator("#" + tog).click() if width >= 1101 else p.keyboard.press("Escape")
+            p.wait_for_timeout(150)
+        f, v = out["hub-filter-pop"], out["hub-views-pop"]
+        if width < 1101:
+            assert abs(v["l"] - f["l"]) <= 1 and abs(v["r"] - f["r"]) <= 1 and v["w"] >= v["vw"] - 20, out      # the same full-width sheet
+            assert abs(v["bt"] - f["bt"]) <= 1 and v["scrim"] and f["scrim"], out                                 # with a backdrop
+        else:
+            b = v["btn"]
+            assert 0 <= v["t"] - (b["y"] + b["height"]) <= 12 and v["l"] < b["x"] + b["width"] and v["r"] > b["x"], out   # under its button
+        assert not p.errors
+    finally:
+        c.close()
+
+
+# ---- #27: no chart label runs past the chart (the first angled date label, "ATL · Oct 23", was cut at the left)
+@pytest.mark.parametrize("width", (390, 430, 1280, 1440))
+def test_card_chart_labels_stay_inside_the_chart(browser, live, width):
+    for path in ("/sports", "/"):
+        c, p = page(browser, live, width, "dark", path)
+        try:
+            p.locator("#hub-rows tr.h-row .h-player").first.click()
+            p.wait_for_selector("#hub-card svg text.opp", timeout=20000)
+            p.wait_for_timeout(300)
+            p.locator("#hub-card svg text.opp").first.scroll_into_view_if_needed()
+            fix_shot(p, f"chart-{path.strip('/') or 'cs2'}-{width}")
+            bad = p.evaluate("""()=>[...document.querySelectorAll('#hub-card svg')].flatMap(s=>{const b=s.getBoundingClientRect();
+                return [...s.querySelectorAll('text')].map(t=>[t.textContent,t.getBoundingClientRect()]).filter(([_,r])=>r.width&&(r.left<b.left-1||r.right>b.right+1||r.bottom>b.bottom+1)).map(([x,r])=>[x,Math.round(r.left-b.left),Math.round(b.right-r.right)])})""")
+            assert bad == [], (path, width, bad)
+            assert not p.errors
+        finally:
+            c.close()
+
+
+# ---- #28 and "every chip in light theme": every visible text on the board, the card's tabs and My picks has AA contrast in both themes
+SCAN = """(sel)=>{const f=(""" + CONTRAST + """);const root=document.querySelector(sel);if(!root)return [];const out=[],seen=new Set();
+ const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;
+ while((n=w.nextNode())){const e=n.parentElement,t=n.textContent.trim();if(!t||!e||seen.has(e)||!e.offsetParent&&getComputedStyle(e).position!=='fixed')continue;seen.add(e);
+  const cs=getComputedStyle(e);if(cs.visibility==='hidden'||+cs.opacity<0.99||e.closest('[disabled],[aria-disabled=true],.is-dim,.u-sr,svg'))continue;
+  let hidden=false;for(let x=e;x&&x!==document.body;x=x.parentElement){if(+getComputedStyle(x).opacity<0.99){hidden=true;break}}if(hidden)continue;
+  const r=f(e),big=parseFloat(cs.fontSize)>=18.66||parseFloat(cs.fontSize)>=14&&+cs.fontWeight>=700;if(r.ratio<(big?3:4.5))out.push([t.slice(0,30),e.className&&String(e.className).slice(0,30),r.ratio]);}
+ return out.slice(0,12);}"""
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("width", (390, 1440))
+def test_text_contrast_on_board_card_and_my_picks(browser, live, theme, width):
+    live.by("vargo", "underdog")["open_line"] = 37.5
+    c, p = page(browser, live, width, theme, "/")
+    try:
+        assert p.evaluate(SCAN, "#hub-board-section") == [], "board"
+        p.locator("#hub-rows tr.h-row .h-player").first.click()
+        p.wait_for_selector("#hub-card .h-why", timeout=20000)
+        for tab in ("overview", "lines", "stats", "ask"):
+            p.locator(f"#hub-tab-{tab}").click()
+            p.wait_for_timeout(300)
+            assert p.evaluate(SCAN, "#hub-card") == [], tab
+        assert not p.errors
+    finally:
+        c.close()
+
+
+# ---- #29: sport tab counts on every tab or on none (they showed only for sports opened this session)
+def test_sport_tab_counts_on_every_tab_or_none(browser, live):
+    c, p = page(browser, live, 1440, "dark", "/sports")
+    try:
+        shown = lambda: p.locator("#hub-sports button").evaluate_all("bs=>bs.map(b=>{const s=b.querySelector('span');return !!s&&!s.classList.contains('h-n-wait')&&s.textContent.trim()!==''})")
+        s = shown()
+        assert all(s) or not any(s), s
+        p.locator("#hub-sports [data-id=cs2]").click()
+        p.wait_for_selector("#hub-rows tr[data-record]")
+        p.wait_for_timeout(300)
+        s = shown()
+        assert all(s) or not any(s), s
+        p.locator("#hub-sports [data-id=all]").click()
+        p.wait_for_function("[...document.querySelectorAll('#hub-sports button span')].every(s=>!s.classList.contains('h-n-wait'))", timeout=20000)
+        assert all(shown())
+        assert not p.errors
+    finally:
+        c.close()

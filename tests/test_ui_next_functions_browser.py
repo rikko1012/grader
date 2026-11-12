@@ -604,3 +604,26 @@ def test_open_card_reloads_in_place_when_its_line_moves(browser, live, size):
         assert "offer changed" not in p.locator("#hub-detail").inner_text()
         assert abs(p.locator("#hub-card-body").evaluate("b=>b.scrollTop") - top) <= 2
         assert not p.errors
+
+
+# ------------------------------- UI sweep 2026-11-12 #31: "No comparable game log" never sits above "Went Over in 6 of the last 10"
+
+@SIZES
+def test_no_empty_game_log_message_when_the_card_has_counts(browser, live, size):
+    with Hub(browser, live, "next", size) as h:
+        p = h.p
+
+        def no_series(route):                                # the live NBA / NFL case: no game log for this stat, the board's saved counts only
+            resp = route.fetch()
+            d = resp.json()
+            if isinstance(d.get("history"), dict):
+                d["history"]["series"] = []
+            route.fulfill(response=resp, json=d, headers={k: v for k, v in resp.headers.items() if k.lower() not in ("content-length", "content-encoding")})
+        p.route("**/api/upgrade/line?*", no_series)
+        h.row("vargo").locator(".h-player").click()
+        p.wait_for_selector("#hub-detail .h-why", timeout=20000)
+        p.wait_for_timeout(1500)
+        txt = flat(p.locator("#hub-card-body").inner_text())
+        assert "went over in 6 of the last 10" in txt, txt[:300]
+        assert "no comparable game log" not in txt, txt[:600]
+        assert not p.errors
