@@ -281,6 +281,10 @@ def sheet(srv, sport, now):
             age = None if q["seen"] is None else now - q["seen"]
             if age is None or age > mt.EV_STALE_S:
                 ex("Quote older than 30 minutes"); continue
+            if q["kind"] == "sportsbook" and not book_rules.confirmed(q["book"], sport):
+                # a book whose own settlement was not read (Unibet / PointsBet AU, BetRivers, Bovada NBA, DraftKings): never a
+                # bet listed here, whichever chance would price it (owner 2026-11-12: unknown settlement = excluded)
+                ex(NOT_CONFIRMED); continue
             own = mt.market_width(q["over"], q["under"]) if q["over"] and q["under"] and not q["multiplier"] else None
             for side in ("over", "under"):
                 price = q[side]
@@ -316,7 +320,8 @@ def sheet(srv, sport, now):
                                width=own, consensus_width=round(cwidth, 4) if cwidth is not None else None,
                                age_s=round(age, 1), seen_at=wb._iso(q["seen"]), source=q["source"], flags=flags,
                                needs=round(mt.implied(price) * (1 - pp), 4), american=american(price), per_100=round(value * 100, 2),
-                               chance_from=chance_from, families=None if rel else cfams))
+                               chance_from=chance_from, families=None if rel else cfams,
+                               independent_books=None if rel else len(cfams), one_book=False))
         if len(ev) == n_ev and here:                        # one reason per line, so the line counts add up to markets_checked
             why = max(here.items(), key=lambda kv: kv[1])[0]
             excluded_lines[why] = excluded_lines.get(why, 0) + 1
@@ -361,7 +366,7 @@ def sheet(srv, sport, now):
             fl = leg_flags(x, "over") + leg_flags(y, "under")
             ages = [None if z["seen"] is None else round(now - z["seen"], 1) for z in (x, y)]
             row = dict(_row_base(g, sport), margin_pct=round(r["margin_pct"], 3), total_implied=round(r["total_implied"], 5),
-                       families=[book_rules.family_of(x["book"]), book_rules.family_of(y["book"])],
+                       families=[book_rules.family_of(x["book"]), book_rules.family_of(y["book"])], independent_books=2, one_book=False,
                        return_per_100=round(r["margin_pct"], 2), oldest_leg_s=None if None in ages else max(ages),
                        legs=[{"side": "over", "book": x["book"], "book_label": x["book_label"], "kind": x["kind"], "odds": round(x["over"], 3),
                               "implied": round(r["implied"][0], 5), "stake_share": round(r["stake_share"][0], 5),
@@ -391,6 +396,7 @@ def sheet(srv, sport, now):
             "lag": lag}
 
 
+NOT_CONFIRMED = "Book's settlement rules not confirmed: not priced"
 NO_CONSENSUS = "No calibrated chance and fewer than two other independent books with the same rules at this line"
 PAIR_RULES = "Both sides under 100% but the two books settle a sit-out differently, or a rule is not confirmed: not a pair"
 PAIR_ONE_FEED = "Both sides under 100% but both prices come from one feed: not a pair"

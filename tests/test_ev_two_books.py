@@ -254,6 +254,90 @@ def test_snapshot_lag_is_counted(monkeypatch):
     assert "lag" not in m["sports"]["nba"]
 
 
+# ------------------------------------------------------------------------------------------------- books added by PRs #62-#64
+
+def test_new_books_family_and_settlement_rows():
+    """Unibet AU is read from Kambi's offering API with BetRivers' parser: one family with BetRivers. PointsBet AU and
+    DraftKings have no established independence. None of the three has a read settlement rule: never a price here."""
+    from sports.books import unibet_au
+    assert "kambicdn.com" in unibet_au.BASE
+    assert book_rules.family_of("unibet_au") == book_rules.family_of("betrivers") == "kambi"
+    assert book_rules.families(["betrivers", "unibet_au", "oddsapi:betrivers"]) == {"kambi"}
+    for b in ("pointsbet_au", "draftkings", "oddsapi:draftkings", "espn:draftkings"):
+        assert book_rules.family_of(b) == book_rules.UNLISTED, b
+    for b in ("unibet_au", "pointsbet_au", "draftkings", "espn:draftkings"):
+        for sport in ("nba", "nfl"):
+            assert book_rules.for_pickem(b, sport) == (False, 0.0, book_rules.REASON_UNKNOWN), (b, sport)
+            assert not book_rules.confirmed(b, sport)
+            assert not book_rules.same_bet(b, "fanduel", sport) and not book_rules.same_bet(b, b, sport)
+    t = book_rules.table()
+    assert t["families"]["unibet_au"] == "kambi"
+    assert {(r["book"], r["sport"]) for r in t["settlement"] if not r["pickem_ok"]} >= {("unibet_au", "nba"), ("unibet_au", "nfl"),
+                                                                                           ("pointsbet_au", "nba"), ("draftkings", "nfl")}
+    # the provider file says the same thing: AU prices are not comparable
+    import book_providers as bp
+    assert all(bp.providers()[b].get("price_comparable") is False for b in ("unibet_au", "pointsbet_au"))
+
+
+def test_unibet_au_never_prices_a_pickem_leg_or_adds_a_book(board, monkeypatch):
+    """Live 2026-11-12 (before this release): Unibet (AU) priced PrizePicks / Underdog legs alone ("Tyler Higbee Receptions 3.5,
+    1 book: unibet_au") and stood beside BetRivers. Now it is not a price and not a filter."""
+    rows = [book("unibet_au", 20.5, 1.50, 2.80, 60)]
+    assert we.quotes_of(rows, "nba") == [] and we.quotes_of(rows, "nfl") == []
+    both = [book("fanduel", 20.5, 1.50, 2.80, 60), book("unibet_au", 20.5, 1.52, 2.70, 60), book("betrivers", 20.5, 1.52, 2.70, 60)]
+    assert [q.book for q in we.quotes_of(both, "nba")] == ["fanduel"]                      # still one independent book
+    wb.reset(); we._FAIR.clear(); we._LEGS.clear()
+    items = [(rec("u1", 3.5, app="underdog", mult=1.0), [book("unibet_au", 3.5, 1.50, 2.80, 60)])]
+    s = snap(items)
+    monkeypatch.setattr(wb, "records", lambda srv, sport: ([r for r, _ in items], s) if sport == "nba" else (None, None))
+    d = we.build(None, we.params({"app": "underdog", "min_books": "1"}, []), ALL)
+    assert d["rows"] == [] and d["model_only_total"] == 2 and "unibet_au" not in {b["id"] for b in d["options"]["books"]}
+    assert "unibet_au" not in we.known_books(None)
+
+
+def test_price_check_never_lists_an_unconfirmed_book_even_with_a_released_chance(monkeypatch):
+    like_the_app(monkeypatch, ("fanduel", "draftkings"))
+    monkeypatch.setattr(book_rules, "SETTLEMENT", {k: v for k, v in book_rules.SETTLEMENT.items() if k[0] != "draftkings"}
+                        | {("fanduel", "nba"): book_rules.SETTLEMENT[("fanduel", "nba")]})
+    monkeypatch.setattr(wm, "_released_p", lambda g, sport, side: (0.70, 0.0, "cal-x"))   # a released Scout chance prices every book
+    s = _sheet(monkeypatch, [("p1", 20.5, [("unibet_au", 2.40, 1.60, 20), ("fanduel", 1.70, 2.10, 20)]),
+                             ("p2", 21.5, [("unibet_au", 2.40, 1.70, 20), ("pointsbet_au", 1.70, 2.40, 20)])])
+    assert s["ev"] and {r["book"] for r in s["ev"]} == {"fanduel"}
+    assert not any(x["book"] in ("unibet_au", "pointsbet_au") for x in s["closest"])
+    assert s["excluded"][wm.NOT_CONFIRMED] == 3
+    assert s["arbitrage"] == [] and s["flagged"] == []                                       # an AU leg never makes a pair
+
+
+def test_price_check_rows_carry_the_independent_book_count(monkeypatch):
+    like_the_app(monkeypatch, ("fanduel", "betrivers", "draftkings"))
+    s = _sheet(monkeypatch, [("p1", 20.5, [("fanduel", 2.40, 1.60, 20), ("betrivers", 1.90, 1.90, 30), ("draftkings", 1.90, 1.90, 30)]),
+                             ("p2", 22.5, [("fanduel", 2.25, 1.70, 20), ("draftkings", 1.70, 1.90, 30)])])
+    r = next(r for r in s["ev"] if r["book"] == "fanduel")
+    assert r["independent_books"] == len(r["families"]) == 2 and r["one_book"] is False
+    assert s["arbitrage"] and all(a["independent_books"] == 2 and a["one_book"] is False for a in s["arbitrage"])
+
+
+def test_draftkings_reference_lines_are_line_only_and_never_reach_the_price_tools():
+    """PR #64: ESPN-supplied DraftKings player thresholds are written into the game-books document with no price; PR #62's
+    DraftKings game quotes are game lines there too. Neither tool reads that document."""
+    src = (Path(book_rules.__file__).parent.parent / "sports" / "game_books.py").read_text(encoding="utf-8")
+    assert "'price_over':None, 'price_under':None" in src
+    for mod in ("workspace_ev.py", "workspace_markets.py", "workspace_market_edge.py", "workspace_books.py"):
+        assert "game_books" not in (Path(book_rules.__file__).parent.parent / mod).read_text(encoding="utf-8"), mod
+
+
+def test_ev_rows_carry_the_independent_book_count(board):
+    d = we.build(None, we.params({"app": "underdog", "min_books": "1"}, []), ALL)
+    assert d["rows"] and all(r["independent_books"] == r["books"] == len(r["families"]) and r["one_book"] == (r["books"] == 1)
+                             for r in d["rows"])
+
+
+def test_saved_views_from_before_the_two_book_default_give_way():
+    js = (Path(book_rules.__file__).parent.parent / "web" / "upgrade-ev.js").read_text(encoding="utf-8")
+    assert "if (v.v !== VIEW_V) { delete v.p.min_books; delete v.p.entry; delete v.p.n; }" in js
+    assert "JSON.stringify({v: VIEW_V, p: S.p, f: S.f})" in js and "min_books: 2" in js
+
+
 # ------------------------------------------------------------------------------------------------- the record
 
 @pytest.fixture

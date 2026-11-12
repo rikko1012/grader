@@ -24,7 +24,7 @@ import json
 from pathlib import Path
 
 UNLISTED = "unlisted"
-RELAYS = ("oddsapi", "oddspapi")
+RELAYS = ("oddsapi", "oddspapi", "espn")
 
 # book -> family. Evidence is what this repo's own readers show, or the source named; nothing is assumed.
 FAMILY = {
@@ -44,6 +44,19 @@ FAMILY = {
     # is its own family, and neither is a sportsbook's feed.
     "kalshi": "kalshi",
     "polymarket": "polymarket",
+    # Unibet (AU), PR #64: read from KAMBI's offering API (ap.offering-api.kambicdn.com/offering/v2018/ubau,
+    # sports/books/unibet_au.py) and parsed by BetRivers' own Kambi parser (betrivers.parse_props). Same supplier as
+    # BetRivers, so the same family: the two never count as two books.
+    "unibet_au": "kambi",
+    # PointsBet (AU), PR #64: its own API (api.au.pointsbet.com, sports/books/pointsbet_au.py; collector off since it was
+    # refused on 2026-11-12). Who prices it is not established here, so it stays in the shared unlisted family.
+    "pointsbet_au": UNLISTED,
+    # DraftKings: no feed of DraftKings' own is read (its site refuses this server, sports/books/providers.py BLOCKED).
+    # PR #62 game quotes and PR #64 "searchable reference lines" are ESPN-supplied (sports/game_books.py, source 'espn',
+    # book 'draftkings'): game lines and LINE-ONLY player thresholds (price_over / price_under None) in their own
+    # game-books document, never in a board snapshot's book rows - nothing there has a price to read. Its pricing
+    # independence is not established here, so it stays in the shared unlisted family; ESPN is a relay of it.
+    "draftkings": UNLISTED,
 }
 
 # Never a price source for these tools, whatever a feed carries.
@@ -92,6 +105,15 @@ SETTLEMENT = {
     ("kalshi", "nfl"): {"dnp": "fair_price", "overtime": "included", "push": "none", "read_at": "2026-11-12", "source": _KALSHI},
     ("polymarket", "nba"): {"dnp": "loses_over", "overtime": "included", "push": "none", "read_at": "2026-10-23", "source": _POLY},
     ("polymarket", "nfl"): {"dnp": "loses_over", "overtime": "included", "push": "none", "read_at": "2026-10-23", "source": _POLY},
+    # Australian books (PR #64): book_providers.json marks both price_comparable false ("Not included in EV or arbitrage
+    # until settlement-rule compatibility is verified"). Australian house rules for a player who does not play, and
+    # whether overtime counts, were not read for this release. Unknown = not used, and not listed on member pages.
+    **{(b, s): {"dnp": None, "overtime": None, "push": None, "read_at": "2026-11-12",
+                "source": "Australian house rules not read (book_providers.json price_comparable false)"}
+       for b in ("unibet_au", "pointsbet_au") for s in ("nba", "nfl")},
+    # DraftKings: only ESPN-supplied lines without prices (see FAMILY); house rules not read. Unknown = not used.
+    **{("draftkings", s): {"dnp": None, "overtime": None, "push": None, "read_at": "2026-11-12",
+                           "source": "house rules not read; ESPN-supplied reference lines carry no price"} for s in ("nba", "nfl")},
 }
 
 # The one documented adjustment for a "loses_over" price: the registered market rule mc-1 (sports/model/market.py,
@@ -137,6 +159,15 @@ def sit_out_share(sport):
 
 def rule(platform, sport):
     return SETTLEMENT.get((base_book(platform), sport))
+
+
+def confirmed(platform, sport):
+    """Is this book's own bet on this sport's player prop settled by a rule that was read (sit-out and overtime both
+    known)? A book that is priced on its own (Price check's single bets) needs this, whatever the chance is measured by."""
+    if base_book(platform) in NEVER_A_SOURCE:
+        return False
+    r = rule(platform, sport)
+    return bool(r) and r.get("dnp") is not None and r.get("overtime") is not None
 
 
 def for_pickem(platform, sport):

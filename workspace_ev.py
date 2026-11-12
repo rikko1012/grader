@@ -336,7 +336,7 @@ def build(srv, p, allowed, now=None):
         if ev is not None and ev > 0:
             plays[app] += 1
         rows.append(dict(base, basis="market", p_market=round(f["p"], 4), ev=None if ev is None else round(ev, 4),
-                         books=len(f["books"]), families=list(f["books"]), one_book=len(f["books"]) == 1,
+                         books=len(f["books"]), independent_books=len(f["books"]), families=list(f["books"]), one_book=len(f["books"]) == 1,
                          books_label=ev_board.ONE_BOOK_LABEL if len(f["books"]) == 1 else f"{len(f['books'])} books", sources=[_source(s, labels) for s in f["sources"]],
                          left_out=[{"label": labels.get(d["book"], d["book"].title()), "line": d["line"], "reason": d["reason"],
                                     "age_s": None if d.get("age_s") is None or d["age_s"] != d["age_s"] else round(d["age_s"])}

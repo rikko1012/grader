@@ -3,6 +3,7 @@
  * line_shift.py). The page only filters and sorts what it is given; filters that change the fair chance are sent back as
  * parameters. Saved views live in this browser only (a per-viewer convenience). */
 const KEY = 'scout-ev-view';
+const VIEW_V = 2;   /* saved-view format: 2 = saved under the 2-independent-books default */
 /* the default filters (Reset, Clear all, and the fall-back when a saved view would hide every leg) */
 const DEF_P = () => ({preset: 'equal', method: 'worst', min_books: 2, req: [], w: {}, min_liq: 0, max_width: 0.1});
 const DEF_F = () => ({q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: true});
@@ -11,7 +12,15 @@ const S = {doc: null, loading: false, error: null, seq: 0, open: new Set(), show
 let C = null, box = null;
 
 function load() {
-  try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); if (v && v.p && v.f) { Object.assign(S.p, v.p); Object.assign(S.f, v.f); S.restored = true; return true; } } catch (e) { /* storage blocked */ }
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (v && v.p && v.f) {
+      /* owner 2026-11-12: a view saved before 2 independent books became the default carries the old default (1 book) and the
+         old opening entry; those were never the member's choice, so they give way to today's defaults */
+      if (v.v !== VIEW_V) { delete v.p.min_books; delete v.p.entry; delete v.p.n; }
+      Object.assign(S.p, v.p); Object.assign(S.f, v.f); S.restored = true; return true;
+    }
+  } catch (e) { /* storage blocked */ }
   return false;
 }
 /* owner audit 2026-11-06 (T3): a saved view of Required books FanDuel + Polymarket and Sport NBA opened on "0 of 0 legs". A view
@@ -268,7 +277,7 @@ function onClick(e) {
     const m = box.querySelector('#ev-saved');
     if (S.loading || JSON.stringify(S.p) !== JSON.stringify(S.docP)) { if (m) m.textContent = 'Wait for the prices to load, then save.'; return; }
     if (filtersHideAll(S.doc)) { if (m) m.textContent = 'This view shows no legs right now, so it was not saved.'; return; }
-    let ok = true; try { localStorage.setItem(KEY, JSON.stringify({p: S.p, f: S.f})); } catch (err) { ok = false; }
+    let ok = true; try { localStorage.setItem(KEY, JSON.stringify({v: VIEW_V, p: S.p, f: S.f})); } catch (err) { ok = false; }
     if (m) m.textContent = ok ? 'Saved in this browser.' : 'This browser does not allow saving.'; return;
   }
   if (a === 'reset') {
