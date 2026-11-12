@@ -136,6 +136,7 @@ def gradient(value):
 def fonts(value):
     value = re.sub(r"'Outfit'\s*,\s*system-ui(?:\s*,\s*sans-serif)?", "var(--n-font)", value)
     value = re.sub(r"'DM Mono'\s*,\s*(?:ui-monospace\s*,\s*)?monospace", "var(--n-mono)", value)
+    value = re.sub(r"Inter\s*,[^;}!]*?sans-serif", "var(--n-font)", value)        # hub.css names Inter, which no page loads
     return value.replace("'Bebas Neue'", "var(--n-display)")
 
 
