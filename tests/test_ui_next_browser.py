@@ -70,6 +70,7 @@ def big_ladder_board(players=150, stats=("points", "rebounds", "assists", "three
 
 
 def nxt(browser, env, size=DESK, theme=None, board=None):
+    """A member on the redesign (their own cookie, which wins over the fixture's UI_NEXT=0)."""
     if board:
         env.sports.boards["nba"] = board
         workspace_api.reset()
@@ -96,43 +97,258 @@ def records(p):
 
 # ---------------------------------------------------------------------------------------------------------------- the switch
 
-def test_preview_route_turns_the_redesign_on_for_one_browser_and_one_flag_makes_it_the_default(browser, env, monkeypatch):
+def sheets(p):
+    return p.evaluate("[...document.querySelectorAll('link[rel=stylesheet]')].map(l=>new URL(l.href).pathname)")
+
+
+def test_the_redesign_is_the_default_and_one_flag_or_one_path_goes_back(browser, env, monkeypatch):
+    monkeypatch.delenv("UI_NEXT", raising=False)                          # unset = the redesign for every member
     c = context(browser, env, DESK)
     try:
         p = open_page(c, env, "/#all-sports", DESK)
         p.wait_for_selector("#hub-rows tr[data-record]")
-        sheets = lambda: p.evaluate("[...document.querySelectorAll('link[rel=stylesheet]')].map(l=>new URL(l.href).pathname)")   # noqa: E731
-        assert p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub.css" in sheets() and "/upgrade/next.css" not in sheets()
-        assert p.locator("[data-hub=ladder],[data-hub=theme],[data-hub=group-by]").count() == 0          # the current design is untouched
-        p.goto(env.url + "/preview/next")                                                               # member-gated, sets the cookie, lands on the board
+        assert p.locator("html").get_attribute("data-ui") == "next"
+        assert "/upgrade/next.css" in sheets(p) and "/upgrade/next-base.css" in sheets(p) and "/upgrade/hub.css" not in sheets(p)
+        assert p.locator(".h-sidebar-foot .h-preview-off").get_attribute("href") == "/preview/current"
+        p.goto(env.url + "/preview/current")                              # the design before it, for this browser (member-gated)
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.url.endswith("/#all-sports") and p.locator("html").get_attribute("data-ui") == "next"
-        assert "/upgrade/next.css" in sheets() and "/upgrade/next-base.css" in sheets() and "/upgrade/hub.css" not in sheets()
-        assert p.locator(".h-preview-off").first.get_attribute("href") == "/preview/next?off=1"
-        p.goto(env.url + "/preview/next?off=1")
+        assert p.url.endswith("/#all-sports") and p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub.css" in sheets(p)
+        assert p.locator("[data-hub=ladder],[data-hub=theme],[data-hub=group-by]").count() == 0
+        assert p.locator(".h-preview-on").get_attribute("href") == "/preview/next"
+        p.goto(env.url + "/preview/next")
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub.css" in sheets()
+        assert p.locator("html").get_attribute("data-ui") == "next"
         assert not p.errors
     finally:
         c.close()
-    # signed out: the preview path is the unknown-route answer, like the board's own files
-    anon = browser.new_context()
+    anon = browser.new_context()                                          # signed out: both paths are the unknown-route answer
     try:
-        r = anon.request.get(env.url + "/preview/next", max_redirects=0)
-        assert r.status == 404
+        assert anon.request.get(env.url + "/preview/next", max_redirects=0).status == 404
+        assert anon.request.get(env.url + "/preview/current", max_redirects=0).status == 404
     finally:
         anon.close()
-    # UI_NEXT=1: the redesign is the default for everyone; a member's "current" cookie still opts out
-    monkeypatch.setenv("UI_NEXT", "1")
+    monkeypatch.setenv("UI_NEXT", "0")                                    # the rollback switch, read on each request: no restart
     c = context(browser, env, DESK)
     try:
         p = open_page(c, env, "/#all-sports", DESK)
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.locator("html").get_attribute("data-ui") == "next" and p.locator(".h-preview-off").count() == 0
-        c.add_cookies([{"name": server.UI_NEXT_COOKIE, "value": "current", "url": env.url}])
+        assert p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub.css" in sheets(p) and "/upgrade/next.css" not in sheets(p)
+        monkeypatch.delenv("UI_NEXT")
         p.reload()
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.locator("html").get_attribute("data-ui") is None
+        assert p.locator("html").get_attribute("data-ui") == "next"
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("path,sport,section", [
+    ("/", "cs2", "board"), ("/#board", "cs2", "board"), ("/#board/prizepicks", "cs2", "board"), ("/#all-sports", "all", "board"), ("/lol", "lol", "board"),
+    ("/sports", "nba", "board"), ("/sports#/board?lg=nfl", "nfl", "board"), ("/sports#/board?lg=nba", "nba", "board"), ("/#scout/board?sport=lol", "lol", "board"),
+    ("/#/slips", None, "studio"), ("/#slips", None, "studio"), ("/#scout/studio", None, "studio"), ("/#scout/picks", None, "picks"), ("/#scout/record", None, "record"),
+    ("/#scout/tools", None, "tools"), ("/#scout/games", None, "board")])
+def test_old_links_and_hash_routes_open_the_same_place_on_the_default_design(browser, env, monkeypatch, path, sport, section):
+    monkeypatch.delenv("UI_NEXT", raising=False)
+    c = context(browser, env, DESK)
+    try:
+        p = open_page(c, env, path, DESK)
+        p.wait_for_selector("#u-hub:not([hidden])", timeout=20000)
+        assert p.locator("html").get_attribute("data-ui") == "next"
+        assert p.locator(f"#hub-{section}-section").is_visible()
+        if sport:
+            p.wait_for_selector("#hub-rows tr[data-record]", timeout=20000)
+            assert p.locator(f"#hub-sports [data-id={sport}]").get_attribute("aria-pressed") == "true"
+            if sport != "all":
+                assert all(x.startswith(sport + "|") for x in p.locator("#hub-rows tr[data-record]").evaluate_all("rs=>rs.map(r=>r.dataset.record)"))
+        if path == "/#board/prizepicks":
+            assert p.locator("#hub-platform [data-id=prizepicks]").get_attribute("aria-pressed") == "true"
+        if path == "/#scout/games":
+            assert p.locator("#hub-games-body").is_visible()
+        assert not p.errors
+    finally:
+        c.close()
+    # the classic pages stay where they were
+    c = context(browser, env, DESK)
+    try:
+        p = open_page(c, env, "/?view=classic#board", DESK)
+        p.wait_for_selector("#boardout", timeout=20000)
+        assert p.locator("#u-hub").is_hidden()
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [DESK, PHONE], ids=["desktop", "phone"])
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_filters_sorting_views_and_the_slip_studio_work_on_the_default_design(browser, env, monkeypatch, size, theme):
+    monkeypatch.delenv("UI_NEXT", raising=False)
+    env.sports.boards["nba"] = ladder_board()
+    workspace_api.reset()
+    c = context(browser, env, size)
+    c.add_init_script("try{localStorage.setItem('scout-theme','%s')}catch(e){}" % theme)
+    try:
+        p = open_page(c, env, "/#all-sports", size)
+        p.wait_for_selector("#hub-rows tr[data-record]")
+        assert p.locator("html").get_attribute("data-theme") == theme
+        total = p.locator("#hub-rows tr.h-row").count()
+        # search, then the chip removes it
+        p.locator("#hub-q").fill("vargo")
+        p.wait_for_function("document.querySelectorAll('#hub-rows tr.h-row').length===1")
+        p.locator("#hub-chips [data-id=q]").click()
+        assert p.locator("#hub-rows tr.h-row").count() == total
+        # market + side + minimum grade from the Filters pop-over; the badge counts them; Clear filters resets
+        p.locator("#hub-filters-toggle").click()
+        p.locator("#hub-side").select_option("over")
+        p.locator("#hub-minGrade").select_option("B")
+        p.keyboard.press("Escape")
+        assert p.locator("#hub-filter-n").inner_text() == "2"
+        scouts = p.locator("#hub-rows tr.h-row .h-c-scout").all_inner_texts()
+        assert scouts and all("OVER" in t.upper() for t in scouts)
+        assert all(re.search(r"\b(A\+|A-|A|B\+|B)\b", t) for t in scouts)
+        # save the view, clear, choose it again
+        p.locator("#hub-views-toggle").click()
+        p.locator("[data-hub=save-view]").click()
+        p.locator("#hub-save-name").fill("Overs B up")
+        p.locator("#hub-save-confirm").click()
+        p.locator("#hub-clear").click()
+        assert p.locator("#hub-rows tr.h-row").count() == total
+        p.locator("#hub-views-toggle").click()
+        p.locator("#hub-views").select_option(label="Overs B up")
+        p.keyboard.press("Escape")
+        assert p.locator("#hub-side").input_value() == "over" and p.locator("#hub-minGrade").input_value() == "B"
+        p.locator("#hub-clear").click()
+        # sorting from the menu and (desktop) from a column header
+        p.locator("#hub-sort").select_option("player")
+        names = p.locator("#hub-rows tr.h-row .h-player b").all_inner_texts()
+        assert names == sorted(names, key=str.lower) or names == sorted(names)
+        if size is DESK:
+            p.locator("#hub-table thead [data-id=line]").click()
+            lines = [float(x) for x in p.locator("#hub-rows tr.h-row .h-c-line b").evaluate_all("bs=>bs.map(b=>b.firstChild.textContent)")]
+            assert lines == sorted(lines)
+            p.locator("#hub-table thead [data-id=line]").click()
+            lines = [float(x) for x in p.locator("#hub-rows tr.h-row .h-c-line b").evaluate_all("bs=>bs.map(b=>b.firstChild.textContent)")]
+            assert lines == sorted(lines, reverse=True)
+        # by game, then back to the list
+        if size is DESK:
+            p.locator(".h-viewmode [data-id=games]").click()
+            assert p.locator("#hub-games-body").is_visible()
+            p.locator(".h-viewmode [data-id=list]").click()
+        # a pick from the board lands on the slip; the card adds the other way and offers the app link
+        add = p.locator("#hub-rows tr.h-row", has_text="vargo").locator(".h-add")
+        add.click()
+        p.wait_for_function("document.getElementById('hub-tab-slip-n').textContent==='1'")
+        # Slip Studio: Auto-build with Unders only (PR #57) builds slips of Under legs
+        p.goto(env.url + "/#/slips")
+        p.get_by_role("tab", name="Auto-build", exact=True).click()
+        p.locator(".h-generation-more summary").click()
+        p.locator("#hub-generation-side").select_option("under")
+        assert "Unders only" in p.locator("#hub-generation-summary").inner_text()
+        p.locator("#hub-generate").scroll_into_view_if_needed()
+        box = p.locator("#hub-generate").bounding_box()
+        assert box["height"] >= (43.5 if size is PHONE else 30)
+        p.locator("#hub-generate").click()
+        p.wait_for_function("document.getElementById('hub-generated').textContent.trim().length>0", timeout=20000)
+        made = p.locator("#hub-generated").inner_text()
+        assert "Over " not in made.replace("Overs", "") or "Under" in made
+        no_h_scroll(p)
+        assert not p.errors
+    finally:
+        c.close()
+
+
+def test_card_keeps_the_app_link_line_notes_and_chips_on_the_default_design(browser, env, monkeypatch):
+    monkeypatch.delenv("UI_NEXT", raising=False)
+    for k in ("SCOUT_BOOK_LINKS", "SCOUT_MARKET_EDGE", "SCOUT_PARITY_EDGE"):
+        monkeypatch.setenv(k, "1")
+    c = context(browser, env, DESK)
+    try:
+        p = open_page(c, env, "/", DESK)
+        p.wait_for_selector("#hub-rows tr[data-record]")
+        row = p.locator("#hub-rows tr.h-row", has_text="orlo")                      # Underdog 33.5 vs PrizePicks 34.5: the books differ
+        # the name column holds with the Edge columns on (asked of the page: the board repaints as its price reads land)
+        p.wait_for_function("(()=>{const r=[...document.querySelectorAll('#hub-rows tr.h-row')].find(x=>x.textContent.includes('orlo'));return r&&r.querySelector('.h-player').getBoundingClientRect().width>80})()")
+        row.locator(".h-player").click()
+        p.wait_for_selector("#hub-card .h-why")
+        dec = p.locator("#hub-decision")
+        if "underdog" in row.get_attribute("data-record"):
+            links = p.evaluate("fetch('/api/upgrade/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>!!d.features.book_links)")
+            assert dec.locator("[data-hub=open-line]").count() == (1 if links else 0)   # Open in Underdog, where the feature is on
+        p.locator("#hub-tab-lines").click()
+        shop = p.locator("#hub-card .h-line-shop").inner_text()
+        assert "Underdog" in shop and "PrizePicks" in shop and "33.5" in shop and "34.5" in shop
+        p.locator("#hub-tab-stats").click()
+        p.locator("#hub-tab-ask").click()
+        assert p.locator("#hub-card .h-guide").count() == 1
+        assert not p.errors
+    finally:
+        c.close()
+
+
+def test_ev_and_arbitrage_have_their_own_screens_with_the_api_rows(browser, env, monkeypatch):
+    monkeypatch.delenv("UI_NEXT", raising=False)
+    import workspace_markets
+    doc = {"as_of": iso(soon(0)), "owner": False, "method": {"ev_stale_s": 1800, "arb_max_age_s": 300},
+           "sports": {"nba": {"state": "ok", "quotes_checked": 40, "markets_checked": 12, "sections_possible": {"ev": True, "arb": True},
+                              "ev": [{"sport": "nba", "player": "Karl Anders", "side": "under", "line": 20.5, "stat_label": "Points", "event": "NYK at BOS", "book": "fanduel", "book_label": "FanDuel",
+                                      "american": "+105", "p_cal": 0.53, "needs": 0.4878, "ev": 0.0865, "per_100": 8.65, "chance_from": "Scout", "seen_at": iso(soon(0)), "kind": "book"},
+                                     {"sport": "nba", "player": "Jay Brown", "side": "over", "line": 24.5, "stat_label": "Points", "event": "NYK at BOS", "book": "betrivers", "book_label": "BetRivers",
+                                      "american": "+110", "p_cal": 0.5, "needs": 0.4762, "ev": 0.05, "per_100": 5.0, "chance_from": "Scout", "seen_at": iso(soon(0)), "kind": "book"}],
+                              "arbitrage": [{"sport": "nba", "player": "Reed Lean", "line": 6.5, "stat_label": "Assists", "event": "CHI at MIA", "return_per_100": 2.41,
+                                             "legs": [{"book": "fanduel", "book_label": "FanDuel", "side": "over", "american": "+115", "stake_per_100": 47.63, "seen_at": iso(soon(0))},
+                                                      {"book": "betrivers", "book_label": "BetRivers", "side": "under", "american": "+105", "stake_per_100": 52.37, "seen_at": iso(soon(0))}]}],
+                              "closest": []}}}
+    monkeypatch.setenv("SCOUT_MARKET_TOOLS", "1")
+    monkeypatch.setattr(workspace_markets, "payload", lambda *a, **k: doc, raising=False)
+    workspace_api.reset()
+    c = context(browser, env, DESK)
+    c.route("**/api/upgrade/market-tools", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(doc)))
+    try:
+        p = open_page(c, env, "/sports", DESK)
+        p.wait_for_selector("#hub-rows tr[data-record]")
+        feats = p.evaluate("fetch('/api/upgrade/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>d.features)")
+        nav = p.locator("#u-hub .h-sidebar nav button").all_inner_texts()
+        if not feats.get("market_tools"):
+            assert "Arbitrage" not in nav and "EV" not in nav                       # no feature: no nav item (never a locked one)
+            return
+        assert "EV" in nav and "Arbitrage" in nav
+        p.locator("#u-hub .h-sidebar nav [data-id=arb]").click()
+        assert p.url.endswith("#scout/arb") or p.url.endswith("#/arb")
+        p.wait_for_selector("#hub-arb-section .h-pc-arb")
+        assert p.locator("#hub-title").inner_text().lower() == "arbitrage"
+        rows = p.locator("#hub-arb-section .h-pc-arb")
+        assert rows.count() == len(doc["sports"]["nba"]["arbitrage"]) and p.locator("#hub-arb-section .h-pc-ev").count() == 0
+        t = rows.first.inner_text()
+        assert "Reed Lean" in t and "FanDuel Over 6.5 +115" in t and "BetRivers Under 6.5 +105" in t and "$47.63" in t and "$52.37" in t and "Margin 2.41%" in t and "$102.41" in t
+        p.locator("#hub-mt-stake").fill("200")                                      # the stake split follows the chosen total
+        p.wait_for_function("document.querySelector('#hub-arb-section .h-pc-arb').innerText.includes('$95.26')")
+        p.locator("#u-hub .h-sidebar nav [data-id=ev]").click()
+        p.wait_for_selector("#hub-ev-section .h-pc-ev .h-pc-row:not(.h-pc-head)")
+        ev = p.locator("#hub-ev-section .h-pc-ev .h-pc-row:not(.h-pc-head)")
+        assert ev.count() == 2 and p.locator("#hub-ev-section .h-pc-arb").count() == 0
+        texts = ev.all_inner_texts()
+        assert "Karl Anders" in texts[0] and "+$8.65" in texts[0] and "Jay Brown" in texts[1] and "+$5.00" in texts[1]      # best value first, the API's own figures
+        # the old places still work: Tools keeps Price check with both lists
+        p.goto(env.url + "/sports#scout/tools")
+        p.wait_for_selector("#hub-tools-section .h-pc-arb")
+        assert p.locator("#hub-tools-section .h-pc-ev .h-pc-row:not(.h-pc-head)").count() == 2
+        # none right now: a plain empty state with the last check time
+        doc["sports"]["nba"]["arbitrage"] = []
+        p.locator("#u-hub .h-sidebar nav [data-id=arb]").click()
+        p.locator("#hub-arb-section [data-hub=refresh-markets]").click()
+        p.wait_for_selector("#hub-arb-section .h-pc-none")
+        none = p.locator("#hub-arb-section .h-pc-none").inner_text()
+        assert "no arbitrage right now" in none.lower() and "last checked" in none.lower()
+        assert not p.errors
+    finally:
+        c.close()
+    c = context(browser, env, PHONE)
+    c.route("**/api/upgrade/market-tools", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(doc)))
+    try:
+        p = open_page(c, env, "/sports", PHONE)
+        p.wait_for_selector("#hub-rows tr[data-record]")
+        p.locator("#hub-more-toggle").click()
+        p.locator("#hub-more [data-id=arb]").click()
+        p.wait_for_selector("#hub-arb-section .h-pc-none")
+        no_h_scroll(p)
+        assert not p.errors
     finally:
         c.close()
 

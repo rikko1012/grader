@@ -43,6 +43,9 @@ def env(monkeypatch, tmp_path):
     for k in ("REQUIRE_WHOP", "RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME", "SCOUT_WORKSPACE_PREVIEW", "SCOUT_SLIP_HEADER"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("SCOUT_UPGRADE", "1")
+    # The suites built on this fixture were written for the design before the 2026-11-11 redesign. They run on the rollback switch
+    # (UI_NEXT=0), which keeps that design and its behaviour under test; tests/test_ui_next_*.py cover the redesign, the default.
+    monkeypatch.setenv("UI_NEXT", "0")
     monkeypatch.setenv("SPORTS_UI", "1")
     monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(whop_auth, "enabled", lambda: True)
