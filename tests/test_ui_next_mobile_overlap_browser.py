@@ -210,3 +210,53 @@ def test_every_app_pill_is_reachable_at_every_width(browser, many_apps, width):
         assert not p.errors
     finally:
         c.close()
+
+
+# ---- UI sweep 2026-11-12 H5: every ladder fits a 300-360px screen (300 = a 390px iPhone at Safari 130%): Add never cut, no text under it
+@pytest.mark.parametrize("width", (300, 320, 360))
+def test_every_ladder_fits_a_narrow_phone(browser, live, width):
+    for path in ("/", "/sports", "/lol"):
+        c, p = page(browser, live, width, "dark", path)
+        try:
+            n = p.locator("#hub-rows [data-hub=ladder]").count()
+            for i in range(n):
+                p.locator("#hub-rows [data-hub=ladder]").nth(i).click()
+                p.wait_for_selector("tr.h-ladder-row .h-ladder-table tbody tr")
+                p.wait_for_timeout(150)
+                fix_shot(p, f"ladder-{path.strip('/') or 'cs2'}-{width}-{i}") if i == 0 else None
+                wide = p.evaluate("""()=>[...document.querySelectorAll('tr.h-ladder-row .h-ladder')].map(l=>{const b=l.getBoundingClientRect();
+                    return {sw:l.scrollWidth,cw:l.clientWidth,acts:[...l.querySelectorAll('.h-ld-act')].map(a=>a.getBoundingClientRect()).filter(a=>a.width&&(a.right>b.right+1||a.left<b.left-1)).length}})""")
+                assert all(x["sw"] <= x["cw"] + 1 and x["acts"] == 0 for x in wide), (path, width, i, wide)
+                clean(p, "tr.h-ladder-row", (path, width, i, "ladder"))
+                p.locator("#hub-rows [data-hub=ladder][aria-expanded=true]").first.click()
+                p.wait_for_timeout(100)
+            assert not p.errors
+        finally:
+            c.close()
+
+
+# ---- UI sweep 2026-11-12 H3: on a short phone screen the card's content gets the sheet (it had 45-150px under the pinned header)
+@pytest.mark.parametrize("vp", [(375, 553), (844, 390), (667, 375), (320, 568), (390, 664)], ids=lambda v: f"{v[0]}x{v[1]}")
+def test_short_phone_card_gives_its_content_most_of_the_sheet(browser, live, vp):
+    w, h = vp
+    for path in ("/", "/sports"):
+        c = context(browser, live, {"width": w, "height": h})
+        p = open_page(c, live, path, {"width": w, "height": h})
+        try:
+            p.wait_for_selector("#hub-rows tr[data-record]", timeout=20000)
+            p.locator("#hub-rows tr.h-row .h-player").first.click()
+            p.wait_for_selector("#hub-card .h-why, #hub-card .h-history-summary", timeout=20000)
+            p.wait_for_timeout(400)
+            fix_shot(p, f"card-short-{path.strip('/') or 'cs2'}-{w}x{h}")
+            for tab in ("overview", "stats"):
+                p.locator(f"#hub-tab-{tab}").click()
+                p.wait_for_timeout(250)
+                p.locator("#hub-card-body").evaluate("b=>{b.scrollTop=400;const d=document.getElementById('hub-detail');d.scrollTop=d.scrollHeight;}")
+                p.wait_for_timeout(150)
+                r = p.evaluate("""()=>{const s=document.getElementById('hub-card').getBoundingClientRect(),t=document.getElementById('hub-tab-overview').closest('.h-card-tabs').getBoundingClientRect(),
+                   b=document.getElementById('hub-card-body').getBoundingClientRect();return {sheet:s.height,room:Math.min(s.bottom,b.bottom)-Math.max(t.bottom,b.top),tabs:t.top-s.top}}""")
+                assert r["room"] >= 0.6 * r["sheet"], (path, vp, tab, r)
+            assert not p.errors
+        finally:
+            c.close()
+

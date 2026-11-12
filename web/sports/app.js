@@ -149,7 +149,12 @@
     return {view: parts[0] || "slate", arg: parts[1] || null, params: params};
   }
   function go(hash) { if (location.hash !== hash) location.hash = hash; else render(); }
+  /* UI sweep 2026-11-12 (H1/H13): with the member hub open (html.hub-open) the hub owns the address and the tab title. This page stays
+     mounted under it but must not rewrite #/board?sport=nfl to #/board?lg=nba (NFL was lost on reload / Back / deep links) nor
+     retitle the tab. A hub link (sport=) is never rewritten, even before the hub has opened. ?view=classic = this page owns both. */
+  function hubOwns() { return document.documentElement.classList.contains("hub-open"); }
   function setHashParams(params) {
+    if (hubOwns() || route().params.has("sport")) return;
     var r = route(), base = "#/" + r.view + (r.arg ? "/" + encodeURIComponent(r.arg) : "");
     var qs = new URLSearchParams(params).toString();
     history.replaceState(null, "", base + (qs ? "?" + qs : ""));
@@ -1446,6 +1451,7 @@
 
   // ------------------------------------------------------------------------------------------------------ render
   function render() {
+    if (hubOwns()) return;
     GEN++;
     var r = route();
     if (r.params.get("lg") === "nba" || r.params.get("lg") === "nfl") state.lg = r.params.get("lg");
@@ -1494,6 +1500,7 @@
   var VIEW_TITLE = {slate: "Slate", board: "Prop board", sheets: "Sheets", compare: "Compare", results: "Results", picks: "My picks",
                     slips: "Slip Studio", player: "Player", game: "Match context"};
   function setTitle(view, name) {
+    if (hubOwns()) return;
     document.title = (name ? name + " · " : VIEW_TITLE[view] ? VIEW_TITLE[view] + " · " : "") + state.lg.toUpperCase() + " · 1time Scout Sports";
   }
   // QoL 1107: back on a slate / board tab left open 10+ minutes -> reload it quietly, keeping the board's scroll and row
