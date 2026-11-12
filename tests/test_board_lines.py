@@ -110,11 +110,13 @@ def test_a_filtered_row_keeps_its_whole_ladder_and_counts_the_matches(tmp_path):
 
 def test_best_line_for_a_side(tmp_path):
     out = run(tmp_path, EVERY)
-    # Over: the lowest line whose app offers the Over; Under: the highest line whose app offers the Under (Polymarket 39.5 lists no Under)
-    assert out["bestOver"] == "bv-27" and out["bestUnder"] == "bv-34"
+    # H6 (UI sweep 2026-11-12): only even-payout pick'em lines compare by line value (PrizePicks / Underdog standard). A sportsbook's
+    # or prediction market's alt line (Bovada 27.5, Polymarket 39.5) and a goblin are never "best". Over: the lowest such line
+    # offering the Over (Underdog 32.5); Under: the highest offering the Under (PrizePicks 33.0)
+    assert out["bestOver"] == "ud-32" and out["bestUnder"] == "pp-33"
     assert out["one"] is None and out["none"] is None
     # the row's mark follows the row line's Scout side (pp-29g leans Over)
-    assert out["groups"][0]["best"] == "bv-27"
+    assert out["groups"][0]["best"] == "ud-32"
     # same line on two apps: nothing is priced on either, the first stays (no invented tie-break)
     assert out["groups"][3]["best"] in ("ud-j", "pp-j")
 
