@@ -145,7 +145,7 @@
                oddsapi: "The Odds API"};
   var FEED_BOOKS = {draftkings: "DraftKings", fanduel: "FanDuel", betmgm: "BetMGM", williamhill_us: "Caesars",
                     caesars: "Caesars", betrivers: "BetRivers", espnbet: "ESPN BET", fanatics: "Fanatics",
-                    bovada: "Bovada", betonlineag: "BetOnline", pinnacle: "Pinnacle", ballybet: "Bally Bet"};
+                    bovada: "Bovada", unibet_au: "Unibet (AU)", pointsbet_au: "PointsBet (AU)", betonlineag: "BetOnline", pinnacle: "Pinnacle", ballybet: "Bally Bet"};
   function bookName(p) {                  // "oddsapi:draftkings" -> "DraftKings"
     if (!p) return "";
     if (BOOKS[p]) return BOOKS[p];

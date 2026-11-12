@@ -60,6 +60,8 @@ def source_status(platform):
         return False, "unknown source"
     if not meta["verified"]:
         return False, "capture-only: prop format not verified"
+    if meta.get("display_only"):
+        return False, "AU reference prices; excluded from Scout's consensus"
     return True, None
 
 

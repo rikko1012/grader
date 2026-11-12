@@ -70,10 +70,10 @@ def _f(x, div=1.0):
         return None
 
 
-def parse_props(body, lg, event):
+def parse_props(body, lg, event, *, provider="betrivers", book="betrivers", region=None):
     stats = STAT[lg["family"]]
     out = []
-    common = {"provider": "betrivers", "book": "betrivers", "jurisdiction": jurisdiction(), "league": lg["key"],
+    common = {"provider": provider, "book": book, "jurisdiction": jurisdiction() if region is None else region, "league": lg["key"],
               "provider_event_id": event.provider_event_id, "event_name": event.name, "home": event.home,
               "away": event.away, "start": event.start}
     for b in (body or {}).get("betOffers") or []:
