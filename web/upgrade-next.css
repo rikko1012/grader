@@ -706,3 +706,88 @@ html[data-ui=next] #u-hub #hub-table>thead th small{color:var(--n-t3)}
 html[data-ui=next] #u-hub .h-not-offered{display:inline-block;padding:1px 6px;border:1px dashed var(--n-line3);border-radius:var(--n-r);font:600 10.5px/1.4 var(--n-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--n-t2);white-space:nowrap}
 html[data-ui=next] #u-hub .h-alt-note{display:block;margin-top:3px;font:500 11px/1.3 var(--n-font);color:var(--n-acc-t);white-space:normal}
 html[data-ui=next] #u-hub .h-card .h-dec-alt-add{white-space:normal}
+/* T1 / T5: dialogs outside #u-hub (Save view, Live highlight, Report, the book-link dialogs) follow the theme: the classic sheet forced
+   every input dark (upgrade.css: background #171b20 !important), the base sheet pinned --u-* to the dark values for .u-dialog, and the
+   book-link dialog is not a .u-dialog at all (pale #b3becb text and the old Outfit type on white). New design type and tokens here. */
+html[data-ui=next] :is(.u-dialog,.u-book-dialog,.h-save){
+ --u-gold:var(--n-acc);--u-bg:var(--n-bg);--u-panel:var(--n-s2);--u-panel2:var(--n-s3);--u-line:var(--n-line);--u-line2:var(--n-line2);
+ --u-text:var(--n-t1);--u-muted:var(--n-t2);--u-faint:var(--n-t3);font-family:var(--n-font)!important;color:var(--n-t1)}
+html[data-ui=next] :is(.u-dialog,.u-book-dialog,.h-save) :is(h1,h2,h3){font-family:var(--n-display)!important;color:var(--n-t1)}
+html[data-ui=next] :is(.u-dialog,.u-book-dialog,.h-save) :is(p,label,small){color:var(--n-t2)}
+html[data-ui=next] :is(.u-dialog,.u-book-dialog,.h-save) :is(input,select,textarea){background:var(--n-bg)!important;border:1px solid var(--n-line3)!important;color:var(--n-t1)!important;font-family:var(--n-font)!important}
+html[data-ui=next] :is(.u-dialog,.u-book-dialog,.h-save) :is(input,select,textarea)::placeholder{color:var(--n-t3)}
+html[data-ui=next] .u-book-dialog .u-x{background:transparent;border:1px solid var(--n-line2);color:var(--n-t1)}
+html[data-ui=next] .u-book-dialog a{color:var(--n-acc-t)}
+html[data-ui=next] .u-book-dialog::backdrop{background:var(--n-scrim)}
+/* T11 / T16: on phones every text box is 16px (iPhone Safari zooms into smaller ones on focus and leaves the page offset) and dialog
+   buttons and boxes are thumb size */
+@media(max-width:1100px){
+ html[data-ui=next] :is(#u-hub,.u-dialog,.u-book-dialog,.h-save) :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px!important}
+ html[data-ui=next] :is(.u-dialog,.u-book-dialog,.h-save) :is(button,input:not([type=checkbox]):not([type=radio]),select,a){min-height:44px}
+}
+html[data-ui=next] .u-book-dialog a:is(.u-btn,.u-gold){background:var(--n-acc)!important;border-color:var(--n-acc)!important;color:var(--n-acc-on)!important}
+/* ---------- UI sweep 2026-11-12 batch D (board / card / tools hunts) ---------- */
+/* H7: the Lines button's meta ("2 apps · 34.5–42.5") ran past its border at 1280 (card open) and 1440: it wraps inside the button */
+html[data-ui=next] #u-hub .h-lines-btn{min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden}
+html[data-ui=next] #u-hub .h-lines-btn small{white-space:normal;overflow-wrap:anywhere;max-width:100%}
+/* H10: the opened Lines button's meta (2.7:1): the button's own ink, at full strength */
+html[data-ui=next] #u-hub#u-hub #hub-table .h-lines-btn[aria-expanded=true] :is(b,small,em){color:var(--n-bg);opacity:1}
+/* H8: the by-player header's face is a fixed box; only the matchup text gives way ("CHI vs …" with room to spare) */
+html[data-ui=next] #u-hub .h-player-head span.u-face,html[data-ui=next] #u-hub .h-player-head .h-face{flex:none}
+/* H9: "Card ›" clears the row's left bar in By player */
+html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-player .h-player::before{padding-left:12px}
+@media(max-width:1100px){html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-player .h-player{padding-left:8px}}
+/* H18: the projection and its "PROJ." label never touch (line-height 1 let them overlap by 4px, more at 115% text) */
+html[data-ui=next] #u-hub .h-dec-proj{display:inline-flex;flex-direction:column;gap:3px;line-height:1.15}
+html[data-ui=next] #u-hub .h-dec-proj b{line-height:1.15}
+html[data-ui=next] #u-hub .h-dec-proj span{line-height:1.2}
+/* H12: desktop 1101-1280 with the card open: the matchup wraps instead of "Halcyo…", the search keeps its full placeholder */
+@media(min-width:1101px) and (max-width:1280px){
+ html[data-ui=next] #u-hub.h-card-open #hub-table .h-c-player small{white-space:normal;overflow:visible;text-overflow:clip}
+ html[data-ui=next] #u-hub.h-card-open .h-toolbar .h-search{min-width:210px}
+}
+/* T3 / T4: EV app chips and the pressed "Only picks that beat the entry": the pressed rule's ink on the pressed rule's fill */
+html[data-ui=next] #u-hub :is(.ev-apps,.ev-quick) button[aria-pressed=true]{background:var(--n-acc-bg)!important;border-color:var(--n-acc-line)!important;color:var(--n-acc-t)!important;box-shadow:inset 0 0 0 1px var(--n-acc-line)}
+html[data-ui=next] #u-hub .ev-chip{background:var(--n-s3);color:var(--n-t1)}
+html[data-ui=next] #u-hub .ev-apps button[aria-pressed=true] .ev-chip{background:var(--n-s2);color:var(--n-t1)}
+/* T6: the Sportsbooks game table stays inside its card at <=1100px (the board's -8px bleed and visible overflow beat its own rule) */
+html[data-ui=next] #u-hub#u-hub .h-book-game .h-table-wrap{margin:0;overflow-x:auto;max-width:100%}
+/* T7: long stat names in the Sportsbooks reference props wrap in their own column */
+html[data-ui=next] #u-hub .h-book-game table{table-layout:auto}
+html[data-ui=next] #u-hub .h-book-game :is(td,th){white-space:normal;overflow-wrap:anywhere}
+/* T15: the slip's status row: Check again / Clear are plain buttons on one line */
+html[data-ui=next] #u-hub :is(.h-slip,#hub-studio-body) :is(.u-sync-row,.u-slip-status) :is(button,a){text-decoration:none;display:inline-flex;align-items:center}
+/* T17: the phone tab bar's labels keep a gap at 320px */
+@media(max-width:360px){html[data-ui=next] #u-hub .h-tabbar button{letter-spacing:.02em;font-size:11px;padding:0 2px}}
+/* T19: the Game lines error block keeps its spacing above the next card */
+html[data-ui=next] #u-hub #hub-tools-body .h-error,html[data-ui=next] #u-hub #hub-tools-body [role=alert]{margin-bottom:16px}
+/* T20: the light Sportsbooks reference table's Player column on the same tint as the rest, in the body type */
+html[data-ui=next] #u-hub .h-book-game :is(th,td){background:transparent;font-family:var(--n-font)}
+/* T9: sign out */
+html[data-ui=next] #u-hub .h-signout{display:flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;color:var(--n-t2);text-decoration:none}
+html[data-ui=next] #u-hub .h-signout small{color:var(--n-t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* T10: the Undo on "Slip cleared" */
+html[data-ui=next] .u-toast.on{pointer-events:auto}
+html[data-ui=next] .u-toast .u-toast-undo{margin-left:10px;min-height:36px;padding:0 12px;border:1px solid currentColor;border-radius:var(--n-r);background:transparent;color:inherit;font:600 13px/1 var(--n-font);cursor:pointer}
+@media(max-width:1100px){html[data-ui=next] .u-toast .u-toast-undo{min-height:44px}}
+/* H11: the phone toolbar took 165-215px (four rows; CS2 with Sleeper pushed Views onto a row of its own). Three rows now: the sport
+   tabs; search + Filters + refresh; the app strip + EV + Views. Every control keeps a 44px target. */
+@media(max-width:719px){
+ html[data-ui=next] #u-hub .h-toolbar{flex-wrap:wrap;gap:6px;padding:6px 0}
+ html[data-ui=next] #u-hub .h-toolbar .h-sports{order:0;flex:1 1 100%}
+ html[data-ui=next] #u-hub .h-toolbar .h-search{order:1;flex:1 1 50%;min-width:0}
+ html[data-ui=next] #u-hub .h-toolbar .h-pop-wrap:has(#hub-filters-toggle){order:2;flex:none}
+ html[data-ui=next] #u-hub .h-toolbar .h-refresh{order:3;flex:none;min-width:44px}
+ html[data-ui=next] #u-hub .h-toolbar .h-platform{order:4;flex:1 1 50%;min-width:0}
+ html[data-ui=next] #u-hub .h-toolbar .h-ev-link{order:5;flex:none;min-height:44px;padding:0 10px}
+ html[data-ui=next] #u-hub .h-toolbar .h-pop-wrap:has(#hub-views-toggle){order:6;flex:none}
+ html[data-ui=next] #u-hub .h-toolbar .h-filter-toggle,html[data-ui=next] #u-hub #hub-views-toggle{padding:0 10px}
+}
+/* H17: the board's Previous / Next are thumb targets on the phone */
+@media(max-width:1100px){html[data-ui=next] #u-hub .h-pagination button{min-height:44px;min-width:88px}}
+/* T16: every control a thumb touches outside the board is 44px on phones and tablets (slip entry types and Check again, EV refresh /
+   apps / filters, Price check selects, My picks filters, Alerts Remove, the record link, Tools links) */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub :is(#hub-studio-section,#hub-picks-section,#hub-record-section,#hub-tools-section,#hub-alerts-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(button,select,input:not([type=checkbox]):not([type=radio]),a.u-btn,a.h-link,.h-link,summary,.h-tool-grid a){min-height:44px;box-sizing:border-box}
+ html[data-ui=next] #u-hub :is(#hub-studio-section,#hub-picks-section,#hub-record-section,#hub-tools-section,#hub-alerts-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(a.u-btn,a.h-link,.h-link,.h-tool-grid a){display:inline-flex;align-items:center}
+}

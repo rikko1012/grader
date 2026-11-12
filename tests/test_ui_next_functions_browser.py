@@ -728,3 +728,27 @@ def test_auto_build_never_takes_a_side_the_app_does_not_offer():
     kw = {k: v for k, v in (("rec", rec), ("side", "under"), ("now", datetime.now(timezone.utc)), ("feeds", None)) if k in args}
     assert fn(**kw) == "side"
 
+
+
+# ------------------------------------- T5: the book-link dialog (Open in Underdog) is readable in the light theme, in the new design's type
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_book_link_dialog_is_readable_in_both_themes(browser, live, theme):
+    from tests.test_ui_next_mobile_overlap_browser import SCAN, fix_shot as shot
+    live.mp.delenv("UI_NEXT", raising=False)
+    with Hub(browser, live, "next", PHONE) as h:
+        p = h.p
+        p.evaluate(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
+        p.reload()
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=30000)
+        h.card(VARGO_UD)
+        btn = p.locator("#hub-decision [data-hub=open-line]")
+        h.tall(btn).click()
+        box = p.locator("#u-book-line")
+        box.wait_for(state="visible")
+        p.wait_for_timeout(200)
+        shot(p, f"dialog-book-link-{theme}")
+        assert p.evaluate(SCAN, "#u-book-line") == [], theme
+        font = box.evaluate("b=>getComputedStyle(b).fontFamily")
+        assert "Plex" in font or "system-ui" in font, font                        # the new design's type, not the old Outfit
+        assert not p.errors

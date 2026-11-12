@@ -213,7 +213,7 @@ function paintBox() {
 }
 function head() {
   const d = S.doc;
-  return `<div class="h-section-head ev-headline"><div><span class="h-eyebrow">PICK'EM PRICES</span><h2 tabindex="-1">Best prices</h2><p>Pick'em legs whose chance from the books beats what the entry needs.</p></div>`
+  return `<div class="h-section-head ev-headline"><div><span class="h-eyebrow">PICK'EM PRICES</span><h2 tabindex="-1">${document.documentElement.dataset.ui === 'next' ? 'EV' : 'Best prices'}</h2><p>Pick'em legs whose chance from the books beats what the entry needs.</p></div>`
     + `<div class="ev-refresh"><button data-ev="refresh"${S.loading ? ' disabled' : ''}>${S.loading ? 'Checking…' : 'Refresh'}</button>${d ? `<small>Checked ${esc(C.when(d.as_of))}</small>` : ''}</div></div>`;
 }
 

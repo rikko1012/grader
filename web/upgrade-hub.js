@@ -508,7 +508,9 @@ export function mount(C) {
     if(s.side&&notOffered(r)){const a=offeredAlt(r);return `<div class="h-scout h-scout-nf"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}</div>${a?`<small class="h-alt-note">${esc(altText({side:s.side,r:a}))}</small>`:''}</div>`;}
     if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>${H.showEdge?(NEXT?belowChip(r).replace('class="h-below"','class="h-below h-below-alt"'):''):belowChip(r)}</div>`;   /* UI_NEXT: where the redesign hides the Edge column (phone, card open, narrow desktop) the Scout cell carries the same chip; CSS shows one of the two */
     const both=num(s.p_over)&&num(s.p_under);
-    return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
+    /* H16: a line its app offers on one side only shows that side's chance, as the card does ("Over only") */
+    const oo=r.offer.over?.offered!==false,uo=r.offer.under?.offered!==false,one=oo!==uo;
+    return `<div class="h-scout"><div class="h-direction-options" aria-label="${one?'Model probability for the offered side':'Model probabilities for both sides'}">${both?(one?`<span>${oo?'Over':'Under'} <b>${pct(oo?s.p_over:s.p_under)}</b></span><span class="h-one-side">${oo?'Over':'Under'} only</span>`:`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`):'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
   }
   function priceSummary(q) {
     const o=C.priceText(q,'over'), u=C.priceText(q,'under');
@@ -577,7 +579,8 @@ export function mount(C) {
     const s=q.scout;
     if(C.oneSided(q))return `<span class="h-ld-none">${esc(C.oneSided(q))}</span>`;
     if(s.side)return `<span class="h-ld-side ${s.side}">${s.side==='over'?'▲':'▼'} ${sideWord(s.side)}</span><b class="h-ld-p">${pct(s.p_side)}</b>`;
-    if(num(s.p_over)&&num(s.p_under))return `<span class="h-ld-both">O ${pct(s.p_over)} · U ${pct(s.p_under)}</span>`;
+    if(num(s.p_over)&&num(s.p_under)){const oo=q.offer.over?.offered!==false,uo=q.offer.under?.offered!==false;   /* H16: one offered side, one chance */
+      return oo!==uo?`<span class="h-ld-both">${oo?'O':'U'} ${pct(oo?s.p_over:s.p_under)} · ${oo?'Over':'Under'} only</span>`:`<span class="h-ld-both">O ${pct(s.p_over)} · U ${pct(s.p_under)}</span>`;}
     return '';
   }
   function ladderHtml(g,cols) {
@@ -653,7 +656,9 @@ export function mount(C) {
      current line exists (with Refresh). Owner rule: a failed, stale or held line is left off, never labelled. */
   function emptyReasons() {
     const f=boardFilter(), hidden=currentLines().filter(r=>(H.sport==='all'||r.sport===H.sport)&&!matches(r,f)).length;
-    if(hidden)return `<b class="h-empty-title">${hidden.toLocaleString()} ${hidden===1?'line':'lines'} hidden by filters</b><button data-hub="clear-filters">Clear filters</button>`;
+    /* H17: an empty search says it is the search ("15 lines hidden by filters" with only a search typed) */
+    const q=NEXT?String(H.q||'').trim():'',only=q&&!activeFilters()&&H.book==='all';
+    if(hidden)return `<b class="h-empty-title">${hidden.toLocaleString()} ${hidden===1?'line':'lines'} hidden by ${only?`your search “${esc(q)}”`:q?'your search and filters':'filters'}</b><button data-hub="clear-filters">${only?'Clear search':'Clear filters'}</button>`;
     return '<b class="h-empty-title">No current lines</b><button data-hub="refresh">Refresh</button>';
   }
   function installCols() {
@@ -928,7 +933,7 @@ export function mount(C) {
       ${full?(R.me.features?.background_alerts?`<div class="h-alert"><div><b>Whop notifications</b><p>${H.delivery?.enabled?`Enabled for this account, including when Scout is closed. At most ${H.delivery.daily_cap??12} a day, one every ${Math.round((H.delivery.cooldown_s??900)/60)} minutes; each opens the prop. Every message has a one-tap stop link.`:'Opt in to personal Whop notifications while Scout is closed. Uses your Whop account for delivery; consent expires after 30 days.'}</p>${H.delivery?.status?.startsWith('delivery_')?'<p class="h-warning">The last delivery could not be confirmed. Live highlight still works on this screen.</p>':''}</div><button data-hub="toggle-delivery" ${H.deliveryBusy?'disabled':''}>${H.delivery?.enabled?'Turn off':'Enable Whop alerts'}</button></div>`:''):''}
       ${full&&H.deliveryError?`<p class="h-warning" role="status">${esc(H.deliveryError)}</p>`:''}
       ${H.saveError?'<p class="h-warning">Preferences have not synced. <button data-hub="save-retry">Retry save</button></p>':''}
-      <h3>${BG?'Your alerts':'Your saved filters'}</h3>${H.alerts.length?H.alerts.map((a,i)=>`<div class="h-alert"><b>${esc(a.name)}</b><span>${esc(a.filters.sport==='all'?'All sports':SPORTS[a.filters.sport]||a.filters.sport)} · ${esc(a.filters.book)}</span><button data-hub="delete-alert" data-id="${i}" aria-label="Remove ${esc(a.name)}">Remove</button></div>`).join(''):`<p>Nothing saved yet. Set your board filters, then choose Views › ${BG?'Alert me on these filters':'Live highlight these filters'}.</p><button class="h-alert-new" data-hub="alerts-new">Set filters on the board</button>`}
+      <h3>${BG?'Your alerts':'Your saved filters'}</h3>${H.alerts.length?H.alerts.map((a,i)=>`<div class="h-alert"><b>${esc(a.name)}</b><span>${esc(a.filters.sport==='all'?'All sports':SPORTS[a.filters.sport]||a.filters.sport)} · ${esc(!a.filters.book||a.filters.book==='all'?'All apps':C.PLATFORMS[a.filters.book]?.label||EXTRA?.find(x=>x.id===a.filters.book)?.label||a.filters.book)}</span><button data-hub="delete-alert" data-id="${i}" aria-label="Remove ${esc(a.name)}">Remove</button></div>`).join(''):`<p>Nothing saved yet. Set your board filters, then choose Views › ${BG?'Alert me on these filters':'Live highlight these filters'}.</p><button class="h-alert-new" data-hub="alerts-new">Set filters on the board</button>`}
       <h3>Live highlight · this visit</h3>${H.notices.length?H.notices.map(n=>`<button class="h-notice" data-hub="research" data-id="${esc(n.id)}"><b>${esc(n.name)}</b><span>${esc(n.text)}</span><small>${esc(n.view)} · ${new Date(n.at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</small></button>`).join(''):'<p>New matches will appear here after the next refresh. The first load establishes your baseline.</p>'}`;
   }
   function paintAlerts() {
@@ -952,9 +957,10 @@ export function mount(C) {
          before). One history entry at the same address; closing the card any other way takes that entry back off. */
       /* a marker left on this entry with no card open (a reload with the card up) is cleared first, so the new card still gets
          its own entry and Back still closes it */
-      if(!DESKTOP.matches&&history.state?.hubCard&&!H.popSkip){try{history.replaceState(null,'',location.href);}catch(e){}}
+      if(!DESKTOP.matches&&history.state?.hubCard&&!H.popSkip&&!H.reopen){try{history.replaceState(null,'',location.href);}catch(e){}}
       if(!DESKTOP.matches&&!history.state?.hubCard){try{history.pushState({hubCard:1},'',location.href);H.cardPushed=true;}catch(e){}}
     }
+    H.lastCard=id;
     const sd=r.scout.side;
     /* #24: the card opens on Scout's side even when the app offers only the other one (it opened on the offered side: "Add Over 2.5"
        under a 28.7% chance while the board said Lean Under); decisionHtml then says that side is not offered here */
@@ -1080,7 +1086,7 @@ export function mount(C) {
     const rows=apps.flatMap(a=>a.points.map(p=>({a,p}))).sort((x,y)=>Date.parse(y.p.at)-Date.parse(x.p.at));
     const chart=apps.length?`<div class="h-lh-chart" data-hub-lh role="img" aria-label="Line history for ${apps.length} ${apps.length===1?'app':'apps'}, ${moves} ${moves===1?'move':'moves'}"></div>
       <div class="h-legend h-lh-legend">${apps.map((a,i)=>`<span><i class="lh-c${i%4}"></i>${esc(a.label)} ${esc(a.current)}</span>`).join('')}${(lh.closing_marks||[]).length?'<span><i class="lh-close"></i>Closing line (bars above)</span>':''}</div>`:'';
-    const table=rows.length?`<details class="h-history-table h-lh-table"><summary>Every move (${rows.length})</summary><div class="h-scroll-x"><table><thead><tr><th>Time</th><th>App</th><th>Line</th><th>Change</th></tr></thead><tbody>${rows.map(({a,p})=>`<tr><td><time datetime="${esc(p.at)}">${esc(lhTime(p.at))}</time></td><td>${esc(a.label)}</td><td>${num(p.line)?esc(p.line):'—'}</td><td>${esc(lhWord(p))}</td></tr>`).join('')}</tbody></table></div></details>`:'';
+    const table=rows.length?`<details class="h-history-table h-lh-table"><summary>Every reading (${rows.length})</summary><div class="h-scroll-x"><table><thead><tr><th>Time</th><th>App</th><th>Line</th><th>Change</th></tr></thead><tbody>${rows.map(({a,p})=>`<tr><td><time datetime="${esc(p.at)}">${esc(lhTime(p.at))}</time></td><td>${esc(a.label)}</td><td>${num(p.line)?esc(p.line):'—'}</td><td>${esc(lhWord(p))}</td></tr>`).join('')}</tbody></table></div></details>`:'';
     const closes=(lh.closing_marks||[]).length?`<p class="h-history-note">Closing lines on ${esc(lh.closing_platform)}: the white tick on each bar is the line that game closed at.${num(lh.avg_closing_l10)?` Average closing line, last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'}: <b>${esc(lh.avg_closing_l10)}</b>.`:''}</p>`:'';
     return `<section class="h-lh"><div class="h-sec-head"><h4>Line history</h4><small>${apps.length} ${apps.length===1?'app':'apps'} · ${moves} ${moves===1?'move':'moves'}${LH_ZONE?` · times in ${esc(LH_ZONE)}`:''}</small></div>${chart}${closes}${table}</section>`;
   }
@@ -1466,7 +1472,7 @@ export function mount(C) {
     const playerMarkets=marketStrip(r);
     const watched=H.watch.includes(playerKey(r));
     box.innerHTML=`<header class="h-card-head"><button class="h-back" data-hub="card-close" aria-label="Back to the board"><span aria-hidden="true">←</span> Back</button>
-        ${faceOf(r,48)}<div class="h-card-id"><h3 id="hub-card-title" tabindex="-1">${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${r.player.role?`<i class="h-role">${esc(r.player.role)}</i>`:''}${esc(r.player.team)} · ${esc(r.event.label)}${compOf(r)?` · ${esc(compOf(r))}`:''} · ${esc(when(r.event.start_utc))} ${countdownHtml(r)}${r.offer.moved_from!=null?` · moved from ${esc(r.offer.moved_from)}`:''}</p></div>
+        ${faceOf(r,48)}<div class="h-card-id"><h3 id="hub-card-title" tabindex="-1">${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${r.player.role?`<i class="h-role">${esc(r.player.role)}</i>`:''}${r.player.opponent&&r.player.team?`${esc(r.player.team)} vs ${esc(r.player.opponent)}`:`${esc(r.player.team)} · ${esc(r.event.label)}`}${compOf(r)?` · ${esc(compOf(r))}`:''} · ${esc(when(r.event.start_utc))} ${countdownHtml(r)}${r.offer.moved_from!=null?` · moved from ${esc(r.offer.moved_from)}`:''}</p></div>
         <button class="h-star" data-hub="watch" data-id="${esc(key(r))}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></header>
       ${playerMarkets.length>1?`<nav class="h-player-markets" aria-label="Player markets">${playerMarkets.map(x=>`<button data-hub="player-market" data-id="${esc(key(x))}" aria-pressed="${x.market.stat===r.market.stat&&x.market.period===r.market.period&&Number(x.offer.line)===Number(r.offer.line)}">${esc(x.market.stat_label)} <b>${esc(x.offer.line)}</b><small>${esc(x.market.period_label)}</small></button>`).join('')}</nav>`:''}
       <div class="h-decision" id="hub-decision" role="group" aria-label="Your pick">${decisionHtml(r)}</div>
@@ -1560,7 +1566,9 @@ export function mount(C) {
       H.batch=batch;H.batchSaved=false;paintBatch();
       await saveBatch();
       status.textContent=`${batch.slips.length} of ${options.count} slips generated and rechecked. ${batch.note||'Review them below; your slip is unchanged.'}`;
-    } catch(e){status.textContent=e.status?'Could not verify current offers. Your draft was kept. Try again.':e.message;}
+    } catch(e){status.textContent=e.status?'Could not verify current offers. Your draft was kept. Try again.':e.message;
+      /* T2: the earlier run's slips stayed on screen under the new settings' summary after a failed run; they are cleared */
+      H.batch=null;H.batchSaved=false;paintBatch();}
     finally{H.generating=false;button.disabled=false;button.textContent='Generate slips';}
   }
   async function saveBatch() {
@@ -1726,7 +1734,11 @@ export function mount(C) {
       box.onchange=e=>{if(e.target.dataset.gb)gameBooks(box,box.querySelector('[data-gb="league"]').value,box.querySelector('[data-gb="book"]').value);};
       box.onclick=e=>{if(e.target.closest('[data-gb="refresh"]'))gameBooks(box,league,book);};
       if(focus)box.querySelector('[data-gb="'+focus+'"]')?.focus({preventScroll:true});
-    }catch(e){if(box.isConnected&&request===box._request){box.innerHTML='<h2>Game lines</h2><p role="status">Sportsbook prices are temporarily unavailable.</p><button data-gb="retry">Retry</button>';box.onclick=e=>{if(e.target.closest('[data-gb="retry"]'))gameBooks(box,league,book);};if(focus)box.querySelector('button').focus({preventScroll:true});}}
+    }catch(e){if(box.isConnected&&request===box._request){/* T8: a failed league keeps the League switch, so the other league can still be picked */
+        const lgs=allowed().filter(s=>['nba','nfl'].includes(s));
+        box.innerHTML=`<h2>Game lines</h2>${lgs.length>1?`<div class="h-book-controls"><label>League <select data-gb="league">${lgs.map(s=>`<option value="${s}"${s===league?' selected':''}>${SPORTS[s]}</option>`).join('')}</select></label></div>`:''}<p role="status">${esc(SPORTS[league]||'')} sportsbook prices are temporarily unavailable.</p><button data-gb="retry">Retry</button>`;
+        box.onchange=e=>{if(e.target.dataset.gb==='league')gameBooks(box,e.target.value,book);};
+        box.onclick=e=>{if(e.target.closest('[data-gb="retry"]'))gameBooks(box,league,book);};if(focus)box.querySelector('button').focus({preventScroll:true});}}
     finally{if(request===box._request)box.setAttribute('aria-busy','false');}
   }
   function gradeSteps(side){
@@ -1808,11 +1820,11 @@ export function mount(C) {
       +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}</div></li>`;
   }
   function mtArbRow(x){
-    const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small></div>`;
+    const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small><small class="h-pc-leg-age">checked ${esc(mtAgo(mtAge(l)).replace('Time unavailable','—').toLowerCase())}</small></div>`;   /* T21: each leg's own age */
     const back=(100+Number(x.return_per_100))*H.mt.stake/100;
     return `<li class="h-pc-row h-pc-arb"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick({...x,side:null})}</div>${(x.legs||[]).map(leg).join('')}`
       +`<div class="h-pc-cell h-pc-value" data-label="Either way you get"><span class="h-pc-chip"><b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney(back)}</b> back <i data-gain-per100="${Number(x.return_per_100)}">(+${mtMoney(back-H.mt.stake)})</i></span>${NEXT?`<small class="h-pc-margin">Margin ${Number(x.return_per_100).toFixed(2)}%</small>`:''}</div>`
-      +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtLegsAge(x)))}</div></li>`;
+      +`<div class="h-pc-cell h-pc-age" data-label="Oldest leg checked">${esc(mtAgo(mtLegsAge(x)))}</div></li>`;
   }
   const mtHead=cols=>`<li class="h-pc-row h-pc-head" aria-hidden="true">${cols.map(c=>`<div class="h-pc-cell">${c}</div>`).join('')}</li>`;
   function marketHTML(){
@@ -1981,7 +1993,7 @@ export function mount(C) {
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev'||!EVB)return;
     try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
-    catch(e){box.innerHTML='<p class="h-mt-state">Best prices could not be loaded. Use Refresh to try again.</p>';}
+    catch(e){box.innerHTML=`<p class="h-mt-state">${NEXT?'EV':'Best prices'} could not be loaded. Use Refresh to try again.</p>`;}
   }
   function section(name,navigate=true) {
     if(name==='games'){H.view='games';name='board';}
@@ -1998,6 +2010,8 @@ export function mount(C) {
     for(const n of SECTIONS)$('hub-'+n+'-section').hidden=n!==name;
     const here=name==='alerts'||(name==='ev'&&!NEXT)?'tools':name;
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
+    /* T13: a section reached from the More sheet (EV, Arbitrage, Sportsbooks, Tools, Alerts) lights up More on the phone's tab bar */
+    {const inBar=[...document.querySelectorAll('#u-hub .h-tabbar [data-hub="section"]')].some(b=>b.dataset.id===here);$('hub-more-toggle')?.setAttribute('aria-current',inBar?'false':'page');}
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('u-hub').classList.toggle('h-board-mode',name==='board');
     $('hub-title').textContent=TITLES[name]||'Player props';hubTitle();
@@ -2012,9 +2026,12 @@ export function mount(C) {
   function route() {
     const query=new URLSearchParams(location.search),classic=query.get('view')==='classic'||query.has('slip')||query.has('p')||query.get('bv')==='1';
     const csBoard=/^#board(?:\/(?:all|prizepicks|underdog))?$/.test(location.hash);
-    const modern=V2&&location.hash.match(/^#\/(board|games|slips|results|record|tools|picks|alerts|books|ev|arb)(?:\?(.*))?$/);
+    /* T22: V2-style links (/#/ev, /#/picks) open the hub whether or not V2 is on, and on "/" a hash the classic CS2 page does not
+       route (its ROUTES: board, matches, moneylines, slips, results, one, slate) opens the hub board, not the classic page */
+    const modern=location.hash.match(/^#\/(board|games|slips|results|record|tools|picks|alerts|books|ev|arb)(?:\?(.*))?$/);
+    const strayHash=location.pathname==='/'&&!!location.hash&&!/^#(?:(?:board|matches|moneylines|slips|results|one|slate|all-sports)(?:[\/?]|$)|scout\/|\/|hub-|u-)/.test(location.hash)&&!document.getElementById(location.hash.slice(1));
     const scout=location.hash.match(/^#scout\/(board|games|studio|picks|record|alerts|tools|books|ev|arb)(?:\?(.*))?$/),slips=/^#\/?slips(?:\?|$)/.test(location.hash);
-    const mainBoard=location.pathname==='/lol'&&!location.hash || location.pathname==='/sports'&&(!location.hash||location.hash.startsWith('#/board')) || location.pathname==='/'&&(!location.hash||csBoard);
+    const mainBoard=location.pathname==='/lol'&&!location.hash || location.pathname==='/sports'&&(!location.hash||location.hash.startsWith('#/board')) || location.pathname==='/'&&(!location.hash||csBoard||strayHash);
     const open=!classic&&(location.hash==='#all-sports'||!!scout||!!modern||mainBoard||slips);
     if(open&&H.routeHash!==location.pathname+location.hash){
       H.routeHash=location.pathname+location.hash;
@@ -2116,7 +2133,7 @@ export function mount(C) {
     // alert notices open the same card as the board
     research(id){const r=rec(id);if(!r)return C.say('This offer is no longer on the board. Refresh to see current lines.');if(H.section!=='board')section('board');openCard(id);},
     books(id){if(rec(id))openCard(id,'lines');},
-    add(id){const r=rec(id);if(!r)return;if(r.extra||notOffered(r))return openCard(id,'overview');if(C.oneSided(r))return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
+    add(id){const r=rec(id);if(!r)return;if(r.extra)return openCard(id,'overview');if(notOffered(r))return openCard(id,'overview');if(C.oneSided(r))return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
     refresh(){H.bookLinesAt=0;load(true);},   /* H4: refreshing keeps the open card (it closed it); load() reloads its research if its line moved */ tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
@@ -2215,7 +2232,7 @@ export function mount(C) {
     bar.classList.remove('h-bar-wrap');if(DESKTOP.matches&&bar.scrollWidth>bar.clientWidth+1)bar.classList.add('h-bar-wrap');};
   {const bar=document.querySelector('#u-hub .h-toolbar'),setBar=()=>{fitBar();if(bar.offsetHeight)$('u-hub').style.setProperty('--h-bar',bar.offsetHeight+'px');};
     if(window.ResizeObserver){const ro=new ResizeObserver(setBar);ro.observe(bar);ro.observe($('hub-platform'));}setBar();   /* #23: the pill row grows as app counts arrive, the bar's own box does not */document.fonts?.ready?.then(setBar);}
-  if(EVB){$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">Best prices</button>');fitBar();}
+  if(EVB){$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">'+(NEXT?'EV':'Best prices')+'</button>');fitBar();}
   if(TOKENS){
     // Skip link first in the hub (the classic page's own is inert under it) and one named account control in the top bar.
     $('u-hub').insertAdjacentHTML('afterbegin','<a class="h-skip" href="#hub-title" data-hub="skip" style="position:fixed;top:-80px;left:16px">Skip to content</a>');
@@ -2247,6 +2264,9 @@ export function mount(C) {
     document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin',extra);
     $('hub-more').insertAdjacentHTML('afterbegin',(EV_ON?'<button data-hub="section" data-id="ev">EV</button>':'')+(ARB_ON?'<button data-hub="section" data-id="arb">Arbitrage</button>':''));
     $('hub-more').insertAdjacentHTML('beforeend',extra);
+    /* T9: the redesign had no sign-out anywhere unless ui_tokens was on (the account menu); the sidebar and the More sheet carry it */
+    if(!TOKENS){const who=String(R.me.name||'').trim(),out=`<a class="h-signout" href="/auth/logout"${who?` title="${esc('Signed in as '+who)}"`:''}>Sign out</a>`;
+      document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('beforeend',out);$('hub-more').insertAdjacentHTML('beforeend',out);}
     /* rows by keyboard: Up / Down move between rows, Right opens a row's ladder, Left closes it (Enter opens the card as before) */
     $('hub-rows').addEventListener('keydown',e=>{
       if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft'].includes(e.key)||e.altKey||e.ctrlKey||e.metaKey)return;
@@ -2263,7 +2283,7 @@ export function mount(C) {
     const book=$('hub-generation-book').selectedOptions[0].textContent;
     const side=$('hub-generation-side').value,sideText=side==='any'?'':side==='over'?'Overs only':'Unders only';
     $('hub-generation-filter-count').textContent=sideText?'1 active':'';
-    $('hub-generation-summary').textContent=sports.length?`${n} slips × ${size} picks · ${book} · ${sports.join(' + ')}${sideText?' · '+sideText:''}`:'Select at least one sport to build your batch.';
+    $('hub-generation-summary').textContent=sports.length?`${n} ${n==1?'slip':'slips'} × ${size} ${size==1?'pick':'picks'} · ${book} · ${sports.join(' + ')}${sideText?' · '+sideText:''}`:'Select at least one sport to build your batch.';
   }
   $('hub-studio-section').addEventListener('change',generationSummary);
   generationSummary();
@@ -2348,10 +2368,17 @@ export function mount(C) {
   generationControls();
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});
+  /* H14: on the phone sheet a tap on the dimmed board behind the card closes it, and so does a downward swipe on its header */
+  $('u-hub').addEventListener('click',e=>{if(e.target===$('u-hub')&&cardOpen()&&!DESKTOP.matches)closeCard();});
+  {let y0=null;const card=$('hub-card');
+    card.addEventListener('touchstart',e=>{y0=!DESKTOP.matches&&e.touches.length===1&&e.target.closest('.h-card-head')&&!e.target.closest('button,a,select')?e.touches[0].clientY:null;},{passive:true});
+    card.addEventListener('touchend',e=>{if(y0!=null&&e.changedTouches[0]&&e.changedTouches[0].clientY-y0>70&&cardOpen())closeCard();y0=null;},{passive:true});}
   window.addEventListener('hashchange',route);
   window.addEventListener('popstate',e=>{
     if(H.popSkip){H.popSkip=false;return;}                                         /* the card's own entry, taken off by closeCard */
     if(H.cardPushed&&cardOpen()&&!e.state?.hubCard){H.cardPushed=false;closeCard();return;}   /* phone Back closes the card */
+    /* H15: Forward onto the card's own entry (after Back closed it) opens that card again; it was a dead step that showed the board */
+    if(e.state?.hubCard&&!cardOpen()&&!DESKTOP.matches&&H.lastCard&&rec(H.lastCard)){H.reopen=true;try{openCard(H.lastCard,H.cardTab);}finally{H.reopen=false;}H.cardPushed=true;return;}
     route();
   });
   window.addEventListener('keydown',e=>{

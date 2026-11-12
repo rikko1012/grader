@@ -494,8 +494,9 @@ def build(legs, opts):
             shortage = f"Only {len(cands)} eligible legs on {label}{rule} right now."
         elif matches < size and not same_match:
             where = f"one sport on {label}" if one_sport else label
-            shortage = (f"The eligible legs for {where} come from {matches} matches at most; a {size}-pick slip needs {size} different matches."
-                        if one_sport else f"The eligible legs on {label} come from {matches} matches; a {size}-pick slip needs {size} different matches.")
+            mw = "match" if matches == 1 else "matches"           # T18 (UI sweep 2026-11-12): "1 matches"
+            shortage = (f"The eligible legs for {where} come from {matches} {mw} at most; a {size}-pick slip needs {size} different matches."
+                        if one_sport else f"The eligible legs on {label} come from {matches} {mw}; a {size}-pick slip needs {size} different matches.")
         elif no_repeat:
             shortage = "No props were repeated: the unused eligible legs could not form more valid slips."
         else:

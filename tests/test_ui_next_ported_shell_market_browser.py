@@ -226,7 +226,7 @@ def test_slip_check_time_and_sidebar_foot_buttons_stay_on_one_line(browser, env,
         assert p.evaluate(ONE_LINE) == 1
         # the foot now holds the theme button, the way back to the previous design and Classic board: each on one line, on screen
         foot = p.evaluate(FOOT)
-        assert [f["text"] for f in foot] == ["Light theme", "Previous design", "Classic board ↗"], foot
+        assert [f["text"] for f in foot] == ["Light theme", "Previous design", "Classic board ↗", "Sign out"], foot     # T9 (2026-11-12): sign out
         assert all(24 <= f["h"] <= 44 and f["lines"] == 1 and f["inside"] for f in foot), foot
         assert not p.errors
     finally:
@@ -460,7 +460,7 @@ def test_best_prices_link_is_styled_sized_fits_and_opens_ev(browser, env, ev_on,
         need = 44 if size['width'] <= 1100 else 30
         assert box['h'] >= need - 0.5 and box['w'] >= 40 and box['left'] >= 0 and box['right'] <= box['vw'], box
         assert box['others'] and all(abs(h - box['h']) <= 0.5 for h in box['others']), box       # the same height as Filters / Refresh
-        assert box['text'] == 'Best prices' and box['border'] == 'solid', box
+        assert box['text'] == 'EV' and box['border'] == 'solid', box          # T14 (2026-11-12): one name, EV, on the redesign
         no_h_scroll(p)
         p.locator('.h-ev-link').click()
         p.wait_for_selector('#hub-ev-body .ev-row', timeout=30000)
