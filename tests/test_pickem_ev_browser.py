@@ -122,7 +122,10 @@ def test_ev_board(browser, env, ev_on, size):
         rows.first.locator('[data-ev="books"]').click()
         p.wait_for_selector('#hub-ev-body .ev-src table')
         src = p.locator('#hub-ev-body .ev-src').first.inner_text()
-        assert 'FanDuel' in src and 'Kalshi' in src and 'read at' not in src and 'BetRivers' not in src     # exact line, two books
+        priced, _, left = src.partition('Left out')
+        assert 'FanDuel' in priced and 'Kalshi' in priced and 'read at' not in src and 'BetRivers' not in priced   # exact line, two books
+        # BetRivers' rules were read on 2026-11-12, so its quote on another line is listed as left out (never priced)
+        assert 'BetRivers 19.5: on another line' in left
         assert '2 books' in rows.first.inner_text()
         shot(p, 'ev_board_books', size)
         p.locator('#hub-ev-body .ev-drawer summary').click()

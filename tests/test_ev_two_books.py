@@ -75,9 +75,14 @@ def test_real_table_on_real_saved_quotes_uses_only_books_that_settle_like_the_ap
         for d in r["dropped"]:
             left.setdefault((d["book"], it["sport"]), set()).add(d["reason"])
         assert all(s["line"] == it["line"] and not s["shifted"] for s in r["sources"])
-    assert used <= {("fanduel", "nba"), ("fanduel", "nfl"), ("kalshi", "nba"), ("kalshi", "nfl"), ("polymarket", "nba")}
+    assert used <= {("fanduel", "nba"), ("fanduel", "nfl"), ("kalshi", "nba"), ("kalshi", "nfl"), ("polymarket", "nba"),
+                    ("betrivers", "nba"), ("betrivers", "nfl"), ("unibet_au", "nba"), ("unibet_au", "nfl")}
+    assert {("betrivers", "nba"), ("betrivers", "nfl")} <= used                # rules read 2026-11-12: a price now
     assert book_rules.REASON_DIFFERENT in left[("bovada", "nfl")] and book_rules.REASON_DIFFERENT in left[("polymarket", "nfl")]
-    assert not any(b == "betrivers" for b, _ in left)          # a rule that is not confirmed: not a price here, and not listed
+    assert not any(book_rules.REASON_UNKNOWN in why or book_rules.REASON_DIFFERENT in why          # Kambi: same rule as the app
+                   for (bk, _), why in left.items() if bk == "betrivers")
+    assert not any(bk == "pointsbet_au" for bk, _ in left)                     # unknown: not a price and not listed
+    assert not any(b == "bovada" for b, sp in used)                            # Bovada: NBA unknown, NFL active-roster = action
 
 
 # ------------------------------------------------------------------------------------------------- settlement
@@ -85,8 +90,8 @@ def test_real_table_on_real_saved_quotes_uses_only_books_that_settle_like_the_ap
 def test_settlement_table_decides_and_unknown_is_excluded():
     assert book_rules.for_pickem("fanduel", "nfl") == (True, 0.0, None)
     assert book_rules.for_pickem("kalshi", "nba") == (True, 0.0, None)                 # resolves at the last fair price
-    assert book_rules.for_pickem("betrivers", "nba") == (False, 0.0, book_rules.REASON_UNKNOWN)
-    assert book_rules.for_pickem("bovada", "nba") == (False, 0.0, book_rules.REASON_UNKNOWN)
+    assert book_rules.for_pickem("bovada", "nba") == (False, 0.0, book_rules.REASON_UNKNOWN)       # sit-out rule not published
+    assert book_rules.for_pickem("pointsbet_au", "nba") == (False, 0.0, book_rules.REASON_UNKNOWN)  # rules page refused
     assert book_rules.for_pickem("bovada", "nfl") == (False, 0.0, book_rules.REASON_DIFFERENT)      # active roster = action
     assert book_rules.for_pickem("somebook", "nba") == (False, 0.0, book_rules.REASON_UNKNOWN)
     assert book_rules.for_pickem("fanduel", "cs2")[0] is False                           # no rule read for that sport
@@ -95,7 +100,54 @@ def test_settlement_table_decides_and_unknown_is_excluded():
     assert ok and share == frozen["dnp_share"]["nba"] == pytest.approx(0.074857)
     assert book_rules.for_pickem("polymarket", "nfl") == (False, 0.0, book_rules.REASON_DIFFERENT)   # NFL share never measured
     assert book_rules.same_bet("fanduel", "oddsapi:fanduel", "nba") and not book_rules.same_bet("fanduel", "kalshi", "nba")
-    assert not book_rules.same_bet("polymarket", "kalshi", "nba") and not book_rules.same_bet("fanduel", "betrivers", "nba")
+    assert not book_rules.same_bet("polymarket", "kalshi", "nba") and not book_rules.same_bet("fanduel", "bovada", "nba")
+
+
+# Rules read first-hand on 2026-11-12 (operator's own published house rules; gradecore/book_rules.py has the clauses).
+READ_1112 = {
+    ("fanduel", "nba"): "fanduel.com/fanduel-sportsbook-house-rules-oh",
+    ("fanduel", "nfl"): "fanduel.com/fanduel-sportsbook-house-rules-oh",
+    ("betrivers", "nba"): "kambi.com/terms-and-conditions/com/rsi/",
+    ("betrivers", "nfl"): "kambi.com/terms-and-conditions/com/rsi/",
+    ("unibet_au", "nba"): "Kambi%20T&C%20v2.1a%20-%20AU.pdf",
+    ("unibet_au", "nfl"): "Kambi%20T&C%20v2.1a%20-%20AU.pdf",
+}
+
+
+@pytest.mark.parametrize("bk,sport", sorted(READ_1112))
+def test_each_rule_read_first_hand_settles_like_the_app(bk, sport):
+    book = bk
+    r = book_rules.rule(book, sport)
+    assert READ_1112[(book, sport)] in r["source"] and r["read_at"] == "2026-11-12"
+    assert "actionnetwork" not in r["source"].lower() and "gambling911" not in r["source"].lower()   # no second-hand source left
+    assert (r["dnp"], r["overtime"]) == ("void", "included")                     # takes no part = void; overtime counts
+    assert book_rules.confirmed(book, sport) and book_rules.for_pickem(book, sport) == (True, 0.0, None)
+    assert book_rules.for_pickem("oddsapi:" + book, sport) == (True, 0.0, None)  # a relay is the book it relays
+    others = [b for b, s in READ_1112 if s == sport and book_rules.family_of(b) != book_rules.family_of(book)]
+    assert others and all(book_rules.same_bet(book, o, sport) for o in others)   # a both-sides pair across families
+    assert not book_rules.same_bet(book, "kalshi", sport)                        # a fair-price exchange is another rule
+
+
+@pytest.mark.parametrize("bk,sport,why", [
+    ("bovada", "nba", book_rules.REASON_UNKNOWN),            # Bovada's basketball / general rules state no sit-out rule
+    ("bovada", "nfl", book_rules.REASON_DIFFERENT),          # active roster = action, even with no snap
+    ("pointsbet_au", "nba", book_rules.REASON_UNKNOWN),      # rules article refused (HTTP 403), no other official copy
+    ("pointsbet_au", "nfl", book_rules.REASON_UNKNOWN),
+    ("draftkings", "nba", book_rules.REASON_UNKNOWN),
+    ("draftkings", "nfl", book_rules.REASON_UNKNOWN),
+    ("somebook", "nba", book_rules.REASON_UNKNOWN),
+])
+def test_rules_not_read_still_exclude(bk, sport, why):
+    assert book_rules.for_pickem(bk, sport) == (False, 0.0, why)
+    assert not book_rules.same_bet(bk, "fanduel", sport)
+    assert book_rules.same_bet(bk, bk, sport) == (why == book_rules.REASON_DIFFERENT)   # a known (other) rule matches only itself
+    q = we.quotes_of([book(bk, 9.5, 1.90, 1.90, 60)], sport)
+    assert q == [] or all(x.excluded for x in q)                                 # never a price
+
+
+def test_kambi_sites_count_once_after_the_rules_were_read():
+    assert book_rules.families(["betrivers", "unibet_au", "oddsapi:betrivers"]) == {"kambi"}
+    assert book_rules.families(["fanduel", "betrivers", "unibet_au"]) == {"fanduel", "kambi"}
 
 
 def test_polymarket_sit_out_reads_the_same_in_fair_and_in_the_registered_market_rule():
@@ -124,13 +176,13 @@ def board(monkeypatch):
     items = [
         # two independent books on the exact line
         (rec("a1", 20.5, app="underdog", mult=1.0), [book("fanduel", 20.5, 1.50, 2.80, 60), book("kalshi", 20.5, "0.63 / 0.65", None, 60, kind="mid")]),
-        # one book on the exact line; BetRivers (rule not confirmed) and a FanDuel relay add nothing
+        # one book on the exact line; PointsBet AU (rule not confirmed) and a FanDuel relay add nothing
         (rec("a2", 9.5, app="underdog", mult=1.0), [book("fanduel", 9.5, 1.50, 2.80, 60), book("oddsapi:fanduel", 9.5, 1.51, 2.75, 60),
-                                                    book("betrivers", 9.5, 1.50, 2.80, 60)]),
+                                                    book("pointsbet_au", 9.5, 1.50, 2.80, 60)]),
         # books only on another line: nothing is shifted
         (rec("a3", 5.5, app="underdog", mult=1.0), [book("fanduel", 6.5, 2.30, 1.60, 60), book("kalshi", 4.5, "0.70 / 0.72", None, 60, kind="mid")]),
         # only books whose rule is not confirmed / that are never a source: no book price at all
-        (rec("a4", 7.5, app="underdog", mult=1.0), [book("betrivers", 7.5, 1.50, 2.80, 60), book("novig", 7.5, 1.50, 2.80, 60)]),
+        (rec("a4", 7.5, app="underdog", mult=1.0), [book("pointsbet_au", 7.5, 1.50, 2.80, 60), book("novig", 7.5, 1.50, 2.80, 60)]),
         # only a book that settles a sit-out differently (NFL-style rule on an NBA fixture row is set in the test)
         (rec("a5", 8.5, app="underdog", mult=1.0), [book("bovada", 8.5, 1.50, 2.80, 60)]),
     ]
@@ -163,7 +215,7 @@ def test_one_book_rows_only_when_the_member_lowers_the_filter_and_they_say_one_b
     one = by["un-a2"]
     assert one["books"] == 1 and one["one_book"] is True and one["books_label"] == ev_board.ONE_BOOK_LABEL == "1 book"
     assert {s["label"] for s in one["sources"]} == {"FanDuel"} and one["families"] == ["fanduel"]         # the relay is FanDuel
-    assert one["left_out"] == []                                             # BetRivers' rule is not confirmed: not listed at all
+    assert one["left_out"] == []                                          # PointsBet AU's rule is not confirmed: not listed at all
     assert "confirmed" not in json.dumps(d).lower()                         # nothing unsure on a member page
     assert by["un-a1"]["one_book"] is False
     # never a shifted line or a book with other rules, whatever the filter
@@ -227,9 +279,10 @@ def test_pairs_need_two_families_that_settle_alike(monkeypatch):
 
 
 def test_price_check_consensus_counts_families_and_real_rules(monkeypatch):
-    # real table: FanDuel priced by BetRivers + Bovada has no two books with confirmed, equal rules
+    # real table: FanDuel priced by BetRivers + Bovada has only one other family with a read rule (Bovada NBA: not stated);
+    # FanDuel and BetRivers (Kambi) both void a sit-out and count overtime, so they may make a both-sides pair
     s = _sheet(monkeypatch, [("p1", 20.5, [("fanduel", 2.40, 1.60, 20), ("betrivers", 1.90, 1.90, 30), ("bovada", 1.90, 1.90, 30)])])
-    assert s["ev"] == [] and s["excluded"][wm.NO_CONSENSUS] >= 1 and s["sections_possible"] == {"ev": False, "arb": False}
+    assert s["ev"] == [] and s["excluded"][wm.NO_CONSENSUS] >= 1 and s["sections_possible"] == {"ev": False, "arb": True}
     # fixture rules: two sites on Kambi are one book, so FanDuel still has only one other family
     like_the_app(monkeypatch, ("fanduel", "betrivers", "unibet", "draftkings"))
     monkeypatch.setattr(book_rules, "FAMILY", {**book_rules.FAMILY, "unibet": "kambi"})
@@ -258,41 +311,44 @@ def test_snapshot_lag_is_counted(monkeypatch):
 
 def test_new_books_family_and_settlement_rows():
     """Unibet AU is read from Kambi's offering API with BetRivers' parser: one family with BetRivers. PointsBet AU and
-    DraftKings have no established independence. None of the three has a read settlement rule: never a price here."""
+    DraftKings have no established independence and no read settlement rule: never a price here. Unibet AU's own rules
+    were read on 2026-11-12 (void on no part, overtime counts): a price, but never a second book beside BetRivers."""
     src = (Path(book_rules.__file__).parent.parent / "sports" / "books" / "unibet_au.py").read_text(encoding="utf-8")
     assert "kambicdn.com/offering" in src and "from .betrivers import parse_events, parse_props" in src   # read as text: no sports import here
     assert book_rules.family_of("unibet_au") == book_rules.family_of("betrivers") == "kambi"
     assert book_rules.families(["betrivers", "unibet_au", "oddsapi:betrivers"]) == {"kambi"}
     for b in ("pointsbet_au", "draftkings", "oddsapi:draftkings", "espn:draftkings"):
         assert book_rules.family_of(b) == book_rules.UNLISTED, b
-    for b in ("unibet_au", "pointsbet_au", "draftkings", "espn:draftkings"):
+    for b in ("pointsbet_au", "draftkings", "espn:draftkings"):
         for sport in ("nba", "nfl"):
             assert book_rules.for_pickem(b, sport) == (False, 0.0, book_rules.REASON_UNKNOWN), (b, sport)
             assert not book_rules.confirmed(b, sport)
             assert not book_rules.same_bet(b, "fanduel", sport) and not book_rules.same_bet(b, b, sport)
     t = book_rules.table()
     assert t["families"]["unibet_au"] == "kambi"
-    assert {(r["book"], r["sport"]) for r in t["settlement"] if not r["pickem_ok"]} >= {("unibet_au", "nba"), ("unibet_au", "nfl"),
-                                                                                           ("pointsbet_au", "nba"), ("draftkings", "nfl")}
-    # the provider file says the same thing: AU prices are not comparable
+    assert {(r["book"], r["sport"]) for r in t["settlement"] if not r["pickem_ok"]} >= {("pointsbet_au", "nba"), ("pointsbet_au", "nfl"),
+                                                                                           ("draftkings", "nba"), ("draftkings", "nfl")}
+    assert {(r["book"], r["sport"]) for r in t["settlement"] if r["pickem_ok"]} >= {("unibet_au", "nba"), ("unibet_au", "nfl")}
+    # the provider file says the same thing: PointsBet AU's price is not comparable, Unibet AU's is (its rules were read)
     import book_providers as bp
-    assert all(bp.providers()[b].get("price_comparable") is False for b in ("unibet_au", "pointsbet_au"))
+    assert bp.providers()["pointsbet_au"].get("price_comparable") is False and bp.providers()["unibet_au"].get("price_comparable") is True
 
 
-def test_unibet_au_never_prices_a_pickem_leg_or_adds_a_book(board, monkeypatch):
-    """Live 2026-11-12 (before this release): Unibet (AU) priced PrizePicks / Underdog legs alone ("Tyler Higbee Receptions 3.5,
-    1 book: unibet_au") and stood beside BetRivers. Now it is not a price and not a filter."""
+def test_unibet_au_is_kambi_and_never_a_second_book_beside_betrivers(board, monkeypatch):
+    """Live 2026-11-12 (5b8138f): Unibet (AU) was excluded (rules not read). Its own rules (v2.1a, June 2026) were read on
+    2026-11-12: a price now, in BetRivers' Kambi family - so Unibet AU + BetRivers is one book, never two."""
     rows = [book("unibet_au", 20.5, 1.50, 2.80, 60)]
-    assert we.quotes_of(rows, "nba") == [] and we.quotes_of(rows, "nfl") == []
-    both = [book("fanduel", 20.5, 1.50, 2.80, 60), book("unibet_au", 20.5, 1.52, 2.70, 60), book("betrivers", 20.5, 1.52, 2.70, 60)]
-    assert [q.book for q in we.quotes_of(both, "nba")] == ["fanduel"]                      # still one independent book
+    assert [q.book for q in we.quotes_of(rows, "nba")] == ["unibet_au"] and [q.book for q in we.quotes_of(rows, "nfl")] == ["unibet_au"]
     wb.reset(); we._FAIR.clear(); we._LEGS.clear()
-    items = [(rec("u1", 3.5, app="underdog", mult=1.0), [book("unibet_au", 3.5, 1.50, 2.80, 60)])]
+    items = [(rec("u1", 3.5, app="underdog", mult=1.0), [book("unibet_au", 3.5, 1.50, 2.80, 60), book("betrivers", 3.5, 1.52, 2.70, 60)]),
+             (rec("u2", 4.5, app="underdog", mult=1.0), [book("unibet_au", 4.5, 1.50, 2.80, 60), book("fanduel", 4.5, 1.52, 2.70, 60)])]
     s = snap(items)
     monkeypatch.setattr(wb, "records", lambda srv, sport: ([r for r, _ in items], s) if sport == "nba" else (None, None))
-    d = we.build(None, we.params({"app": "underdog", "min_books": "1"}, []), ALL)
-    assert d["rows"] == [] and d["model_only_total"] == 2 and "unibet_au" not in {b["id"] for b in d["options"]["books"]}
-    assert "unibet_au" not in we.known_books(None)
+    d = we.build(None, we.params({"app": "underdog"}, []), ALL)
+    assert {x["key"].split("|")[2] for x in d["rows"]} == {"un-u2"}                         # Kambi + Kambi = 1 book; Kambi + FanDuel = 2
+    assert all(sorted(x["families"]) == ["fanduel", "kambi"] for x in d["rows"])
+    assert d["hidden"]["by"].get("books") == 2                                             # u1, both sides: one feed, one book
+    assert {"unibet_au", "betrivers"} <= {b["id"] for b in d["options"]["books"]}
 
 
 def test_price_check_never_lists_an_unconfirmed_book_even_with_a_released_chance(monkeypatch):
@@ -302,10 +358,10 @@ def test_price_check_never_lists_an_unconfirmed_book_even_with_a_released_chance
     monkeypatch.setattr(wm, "_released_p", lambda g, sport, side: (0.70, 0.0, "cal-x"))   # a released Scout chance prices every book
     s = _sheet(monkeypatch, [("p1", 20.5, [("unibet_au", 2.40, 1.60, 20), ("fanduel", 1.70, 2.10, 20)]),
                              ("p2", 21.5, [("unibet_au", 2.40, 1.70, 20), ("pointsbet_au", 1.70, 2.40, 20)])])
-    assert s["ev"] and {r["book"] for r in s["ev"]} == {"fanduel"}
-    assert not any(x["book"] in ("unibet_au", "pointsbet_au") for x in s["closest"])
-    assert s["excluded"][wm.NOT_CONFIRMED] == 3
-    assert s["arbitrage"] == [] and s["flagged"] == []                                       # an AU leg never makes a pair
+    assert s["ev"] and "fanduel" in {r["book"] for r in s["ev"]} and {r["book"] for r in s["ev"]} <= {"fanduel", "unibet_au"}
+    assert not any(x["book"] == "pointsbet_au" for x in s["closest"] + s["ev"])
+    assert s["excluded"][wm.NOT_CONFIRMED] == 1                                              # PointsBet AU's own row
+    assert "pointsbet_au" not in json.dumps(s["arbitrage"] + s["flagged"])                   # never in a pair
 
 
 def test_price_check_rows_carry_the_independent_book_count(monkeypatch):

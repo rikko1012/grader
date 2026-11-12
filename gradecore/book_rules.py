@@ -76,41 +76,64 @@ _KALSHI = "Kalshi contract terms (kalshi-public-docs.s3.amazonaws.com/contract_t
           "the game resolves at the last fair price; regulation and overtime both count"
 _POLY = "Polymarket market description (sports/books/sources.py RULE_PM, read 2026-10-23): full game including overtime; " \
         "a player who is inactive or does not play resolves No / Under"
+_FD = "https://www.fanduel.com/fanduel-sportsbook-house-rules-oh"
+_RSI = "https://c3-static.kambi.com/terms-and-conditions/com/rsi/retail/il/en_US.html"
+_UB = "https://a2s.unicdn.net/polopoly_fs/1.2775969.1780319189!/menu/standard/file/Kambi%20T&C%20v2.1a%20-%20AU.pdf"
 SETTLEMENT = {
-    # FanDuel NFL: voided only when the player does not play a snap (Action Network's table of FanDuel's house rule,
-    # updated 2026-05-05). FanDuel NBA: stands once the player takes the court, void if he does not take part, totals
-    # include overtime (FanDuel's policy text as reproduced by Action Network / Gambling911). FanDuel's own rules page
-    # refused this reader (HTTP 403, 2026-11-12) and was not worked around, so both are second-hand.
-    ("fanduel", "nba"): {"dnp": "void", "overtime": "included", "push": "refund", "read_at": "2026-11-12",
-                         "source": "FanDuel house rule as reproduced by Action Network / Gambling911 (FanDuel's page: HTTP 403)"},
-    ("fanduel", "nfl"): {"dnp": "void", "overtime": "included", "push": "refund", "read_at": "2026-11-12",
-                         "source": "actionnetwork.com/education/prop-betting-rules-what-happens-if-player-doesnt-play (updated 2026-05-05)"},
-    # BetRivers: the reader keeps only Kambi's "Including Overtime" criteria (sports/books/betrivers.py PERIOD), so overtime
-    # is known. Its sit-out rule could not be read: the rules page is drawn in the browser and no copy was found
-    # (2026-11-12). Unknown = not used.
-    ("betrivers", "nba"): {"dnp": None, "overtime": "included", "push": "refund", "read_at": "2026-11-12",
-                           "source": "sit-out rule not read (rules page not readable without a browser)"},
-    ("betrivers", "nfl"): {"dnp": None, "overtime": "included", "push": "refund", "read_at": "2026-11-12",
-                           "source": "sit-out rule not read (rules page not readable without a browser)"},
+    # FanDuel - its own "FanDuel Sportsbook House Rules - Ohio" (Effective Date October 29, 2026; Ohio = the state the reader
+    # quotes, sports/books/fanduel.py SPORTS_FANDUEL_STATE), a public page that answered a plain read on 2026-11-12 (the
+    # rules page tried for 5b8138f had refused, HTTP 403); this replaces the Action Network / Gambling911 second-hand entries.
+    # NBA "Player Performance Markets": "All bets stand once a player takes the court, irrespective of game time played";
+    # "All totals are inclusive of overtime"; "Should a player not take any part, all bets will be void". The NBA section
+    # states no whole-number rule for player props (push: not read; the EV maths does not use it).
+    ("fanduel", "nba"): {"dnp": "void", "overtime": "included", "push": None, "read_at": "2026-11-12", "source": _FD + " (Basketball: Player Props)"},
+    # NFL "Proposition bets": "only when a player does not play a snap in that game are the selections voided"; "Overtime
+    # counts for all markets unless stated otherwise"; total points "exactly the nominated line, all stakes are refunded".
+    # Exceptions on that page cover markets the reader does not import (Kicking Points: active + no snap stands; Longest
+    # Completion/Rush/Reception: none recorded = Under) - sports/books/fanduel.py STAT has neither.
+    ("fanduel", "nfl"): {"dnp": "void", "overtime": "included", "push": "refund", "read_at": "2026-11-12", "source": _FD + " (American Football)"},
+    # BetRivers - Rush Street Interactive's own "Complete Betting Rules" for "betrivers.com Illinois Sportsbook", published on
+    # its platform supplier Kambi's static host (undated; read 2026-11-12). The reader quotes Kambi operator "rsiusoh" (Ohio),
+    # whose copy refused this reader (HTTP 403, not worked around); the same clauses read identically in RSI's Indiana (PDF,
+    # 2022-03-11) and Connecticut (2021-10-08) rulebooks on that host, so the Illinois text is taken as the house rule.
+    # Basketball 5 / Football 3: player Over/Under bets stand "given that all listed players take part in the game ... at some
+    # stage" (did not take part = void); Basketball 1 / Football 1: "including overtime (if necessary)", and the reader keeps
+    # only Kambi's "- Including Overtime" criteria (sports/books/betrivers.py); B.2 Over/Under: a total "exactly equal to the
+    # betting line" is declared cancelled (stake refunded).
+    ("betrivers", "nba"): {"dnp": "void", "overtime": "included", "push": "refund", "read_at": "2026-11-12", "source": _RSI + " (C.3 Basketball 1, 5, 9)"},
+    ("betrivers", "nfl"): {"dnp": "void", "overtime": "included", "push": "refund", "read_at": "2026-11-12", "source": _RSI + " (C.1 Football 1, 3, 8)"},
     # Bovada NFL (bovada.lv/help/common-faq/football-betting-rules, read 2026-11-12): the player "must be on the game day
     # active roster for bets to have action"; "Players that are active and end up not playing still have action". That is
     # not the apps' rule (no snap = removed), and no measured adjustment exists, so it is not used.
     ("bovada", "nfl"): {"dnp": "active_roster", "overtime": "included", "push": "refund", "read_at": "2026-11-12",
                         "source": "https://www.bovada.lv/help/common-faq/football-betting-rules"},
-    # Bovada NBA (bovada.lv/help/common-faq/basketball-betting-rules, read 2026-11-12): overtime counts; the page does not
-    # say what happens when the player does not play. Unknown = not used.
+    # Bovada NBA (bovada.lv/help/common-faq/basketball-betting-rules, re-read 2026-11-12): overtime counts ("Overtime counts
+    # for all markets except ..."), player totals "Push rules apply"; neither that page nor its General Betting Rules
+    # (bovada.lv/help/sports-faq/general-betting-rules, re-read 2026-11-12) says what happens when the player does not play,
+    # and no other Bovada copy was found. Unknown = not used.
     ("bovada", "nba"): {"dnp": None, "overtime": "included", "push": "refund", "read_at": "2026-11-12",
                         "source": "https://www.bovada.lv/help/common-faq/basketball-betting-rules (sit-out rule not stated)"},
     ("kalshi", "nba"): {"dnp": "fair_price", "overtime": "included", "push": "none", "read_at": "2026-11-12", "source": _KALSHI},
     ("kalshi", "nfl"): {"dnp": "fair_price", "overtime": "included", "push": "none", "read_at": "2026-11-12", "source": _KALSHI},
     ("polymarket", "nba"): {"dnp": "loses_over", "overtime": "included", "push": "none", "read_at": "2026-10-23", "source": _POLY},
     ("polymarket", "nfl"): {"dnp": "loses_over", "overtime": "included", "push": "none", "read_at": "2026-10-23", "source": _POLY},
-    # Australian books (PR #64): book_providers.json marks both price_comparable false ("Not included in EV or arbitrage
-    # until settlement-rule compatibility is verified"). Australian house rules for a player who does not play, and
-    # whether overtime counts, were not read for this release. Unknown = not used, and not listed on member pages.
-    **{(b, s): {"dnp": None, "overtime": None, "push": None, "read_at": "2026-11-12",
-                "source": "Australian house rules not read (book_providers.json price_comparable false)"}
-       for b in ("unibet_au", "pointsbet_au") for s in ("nba", "nfl")},
+    # Unibet (AU) - its own "Sportsbook Terms and Conditions" Version 2.1a, "Last updated: June 2026" (the Kambi rules PDF
+    # linked from unibet.com.au/general-info/terms, Terms v3.9 1.3 "Unibet Rules of Racing and Sport"), read 2026-11-12.
+    # C.7 Basketball 4: player performance offers "require all listed individuals to participate in at least one more second
+    # in the game, after bet acceptance"; C.2 American Football 4: "... at least one more play in the match, after bet
+    # acceptance" (no part = void; a pre-game quote is the app's no-second / no-snap rule). Overtime: C.7.1 / C.2.1 count it
+    # for match bets, B.1.1 makes a bet regular time "unless listed ... in conjunction with the bet offer", and the reader
+    # keeps only Kambi's "- Including Overtime" criteria (unibet_au.py uses betrivers.parse_props). B.2.3: a total "exactly
+    # equal to the betting line" is void. Same Kambi family as BetRivers, so it never adds a second book to BetRivers.
+    **{("unibet_au", s): {"dnp": "void", "overtime": "included", "push": "refund", "read_at": "2026-11-12",
+                          "source": _UB + (" (C.7 Basketball 1, 4)" if s == "nba" else " (C.2 American Football 1, 4)")}
+       for s in ("nba", "nfl")},
+    # PointsBet (AU): its rules article (support.pointsbet.com.au/hc/en-au/articles/15152059329551) refused this reader (HTTP
+    # 403, 2026-11-12, not worked around) and pointsbet.com.au draws its pages in the browser; no other official copy was
+    # found. Unknown = not used, and not listed on member pages (its collector is also off since 2026-11-12).
+    **{("pointsbet_au", s): {"dnp": None, "overtime": None, "push": None, "read_at": "2026-11-12",
+                             "source": "house rules not readable (support article HTTP 403; no other official copy)"}
+       for s in ("nba", "nfl")},
     # DraftKings: only ESPN-supplied lines without prices (see FAMILY); house rules not read. Unknown = not used.
     **{("draftkings", s): {"dnp": None, "overtime": None, "push": None, "read_at": "2026-11-12",
                            "source": "house rules not read; ESPN-supplied reference lines carry no price"} for s in ("nba", "nfl")},
