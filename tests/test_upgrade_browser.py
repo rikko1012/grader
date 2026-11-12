@@ -45,7 +45,7 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setenv("SCOUT_UPGRADE", "1")
     # The suites built on this fixture were written for the design before the 2026-11-11 redesign. They run on the rollback switch
     # (UI_NEXT=0), which keeps that design and its behaviour under test; tests/test_ui_next_*.py cover the redesign, the default.
-    monkeypatch.setenv("UI_NEXT", "0")
+    monkeypatch.setenv("UI_NEXT", os.environ.get("LEGACY_UI_NEXT", "0"))   # LEGACY_UI_NEXT=1: triage run of these suites on the redesign (tests/UI_NEXT_TRIAGE.md)
     monkeypatch.setenv("SPORTS_UI", "1")
     monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(whop_auth, "enabled", lambda: True)

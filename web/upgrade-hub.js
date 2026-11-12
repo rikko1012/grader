@@ -481,7 +481,7 @@ export function mount(C) {
        it reads like any other row without a side */
     if(r.extra&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return '';
     if(C.oneSided(r)) return `<div class="h-scout"><div class="h-direction-options" title="${esc(C.oneSidedNote(r))}"><span class="h-one-sided">${esc(C.oneSided(r))}</span></div></div>`;
-    if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>${H.showEdge?'':belowChip(r)}</div>`;
+    if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>${H.showEdge?(NEXT?belowChip(r).replace('class="h-below"','class="h-below h-below-alt"'):''):belowChip(r)}</div>`;   /* UI_NEXT: where the redesign hides the Edge column (phone, card open, narrow desktop) the Scout cell carries the same chip; CSS shows one of the two */
     const both=num(s.p_over)&&num(s.p_under);
     return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
   }
