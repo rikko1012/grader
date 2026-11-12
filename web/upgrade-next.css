@@ -473,3 +473,88 @@ html[data-ui=next] #u-hub .h-pc-none .h-empty-title{margin-bottom:4px}
 html[data-ui=next] #u-hub .h-pc-stake input{width:120px;font-family:var(--n-mono)}
 html[data-ui=next] #u-hub .h-market-filters{gap:8px;padding:8px 0;border:0;background:transparent}
 html[data-ui=next] #u-hub #hub-ev-priced{margin-top:16px;border-top:1px solid var(--n-line2);padding-top:8px}
+/* Bug (triage 2026-11-12, F1): with the Edge / H2H columns on (SCOUT_BOARD_H2H, on in production: #u-hub.h-cols, #hub-table.h-has-edge)
+   the base sheet's phone grids (five columns, areas "watch / edge / proj / compare") outranked the redesign's phone row grid, so on a
+   phone the line sat on top of Scout's side, names were cut to two letters and the Lines button ran off the row. The redesign's own
+   grid now wins whatever columns the board carries. Layout only. */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record],html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record].h-nohits{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"player player line" "market scout scout" "hits hits hits" "lines lines add"}
+ html[data-ui=next] #u-hub #hub-table#hub-table.h-by-player>tbody>tr[data-record],html[data-ui=next] #u-hub #hub-table#hub-table.h-by-player>tbody>tr[data-record].h-nohits{grid-template-areas:"market market line" "player scout scout" "hits hits hits" "lines lines add"}
+}
+
+/* 2026-11-12 triage (legacy suites on the redesign): the slip's leg below its break-even lost its red line. The slip rule above sets
+   box-shadow:none on every leg, which also removed upgrade.css's inset line on .u-leg-below (the words under the leg stayed).
+   Display only. */
+html[data-ui=next] #u-hub :is(.h-slip,#hub-studio-body) .u-leg.u-leg-below{box-shadow:inset 3px 0 0 var(--u-bad)}
+/* 2026-11-12 triage: on a phone / tablet the toolbar's Best prices link stayed 32px high beside 44px Filters / Views / Refresh. */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub#u-hub .h-toolbar .h-ev-link{min-height:44px}
+}
+
+/* triage 2026-11-12 (structure): phone tap targets that stayed at the desktop's 32px. The card's "More ..." disclosure rows lost the
+   phone's 44px to the more specific desktop rule above, and the Filters / Saved views pop-over buttons (Clear filters, Done) never had it. */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub .h-card .h-card-body details>summary{min-height:44px;padding-block:14px}
+ html[data-ui=next] #u-hub .h-pop button{min-height:44px}
+}
+
+/* triage 2026-11-12 (roles / research, F5), desktop 1101-1499px. Layout only.
+   (1) The base sheet keeps 42px beside the name for the face (td.h-c-player .u-face+.h-player); the redesign hides the face under
+       1500px, so the name lost those 42px for nothing and was cut ("Karl And…", three letters at 1200px). The name takes the cell.
+   (2) 1101-1180px: the base sheet hides the Compare column there. On the redesign that column is the Lines cell, the only way to
+       open a prop's ladder (there is no "+N props" toggle), so the other lines could not be reached from the board. It is shown,
+       compact (the count; apps and range stay in its label), and the hit strip gives it the room by showing L5 and L10 up to 1279px
+       (L20 stays in the Sort menu and on the card), which also keeps the player column readable at 1181-1279px. */
+@media(min-width:1101px) and (max-width:1499px){
+ html[data-ui=next] #u-hub #hub-table td.h-c-player .u-face+.h-player{width:100%}
+}
+@media(min-width:1101px) and (max-width:1279px){
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-hits,html[data-ui=next] #u-hub.h-cols #hub-table :is(th,td).h-c-hits{width:92px}
+ html[data-ui=next] #u-hub #hub-table .h-strip>:nth-child(n+3){display:none}
+}
+@media(min-width:1101px) and (max-width:1180px){
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-compare{display:table-cell;width:88px}
+ html[data-ui=next] #u-hub #hub-table .h-lines-btn{padding:3px 6px;min-height:30px;align-content:center}
+ html[data-ui=next] #u-hub #hub-table .h-lines-btn small{display:none}
+ html[data-ui=next] #u-hub #hub-table .h-lines-one{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+
+/* Bug (triage 2026-11-12, phone hit windows): with the H2H and Season windows on (live flags, #u-hub.h-cols) the row's five windows
+   sat on one fixed-gap flex line that ran past the card: at 360px the Season value was cut at the screen edge, and a row with no
+   Scout side (labels "L5 O-U" ... "SZN O-U", Sleeper / Dabble lines) ran to 458px on every phone, so H2H and Season were off screen.
+   The five windows now share the card's width in equal columns, label above value. Layout only. */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub.h-cols #hub-table .h-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;width:100%}
+ html[data-ui=next] #u-hub.h-cols #hub-table .h-strip .h-strip-cell{flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+ html[data-ui=next] #u-hub.h-cols #hub-table .h-strip .h-strip-cell::before{white-space:nowrap}
+}
+/* (F5, same fix) 1101-1180px: the Watch star column makes room for the player's name next to the Lines column, as on the phone
+   (the star stays on the card and on the By player header). */
+@media(min-width:1101px) and (max-width:1180px){
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-watch{display:none}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-player{padding-left:10px}
+}
+/* triage 2026-11-12 (structure), same bug on the other phone pages: the Slips tabs (36px), "My picks" on Tracked slips, the Record
+   sport menu and the Retry buttons (32px) kept their desktop height. */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub .h-studio-tabs button{min-height:44px}
+ html[data-ui=next] #u-hub :is([data-hub=receipts],[data-hub=record-retry],[data-gb=retry],#hub-record-sport){min-height:44px}
+}
+/* Bug (triage 2026-11-12, F1): "Below break-even" sits in the Edge cell, and the redesign hides the Edge column on the phone, while a
+   card is open and at 1101-1279px, so a side under its break-even read like any other pick there. The Scout cell carries the same
+   chip (.h-below-alt, upgrade-hub.js scoutCell); it shows exactly where the Edge cell is hidden. Display only. */
+html[data-ui=next] #u-hub #hub-table .h-below-alt{display:none}
+html[data-ui=next] #u-hub.h-card-open #hub-table .h-below-alt{display:inline-block}
+@media(max-width:1279px){
+ html[data-ui=next] #u-hub #hub-table .h-below-alt{display:inline-block}
+}
+
+/* Bug (triage 2026-11-12, F4: market edge port), phone / tablet rows whose Scout cell is long (side + chance + "Research estimate" +
+   "Below break-even", NBA / NFL lines). The Scout cell took its full one-line width and the first column got what was left: By
+   player, the row's "Card" button (the way to that prop's card) was 0-20px wide at 320-390px and at 768px; By prop, the stat name
+   had no column at 320-360px and was printed over the Scout side. The first column keeps 96px and the Scout cell wraps to the
+   right. Layout only. */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record],html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record].h-nohits{grid-template-columns:minmax(96px,1fr) auto auto}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record] .h-scout{justify-content:flex-end}
+}
