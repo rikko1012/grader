@@ -147,7 +147,7 @@ def test_mobile_shots(browser, live, width):
 
 # ---- UI sweep 2026-11-12 batch 2 (#23): every app pill reachable at every width with all 8 apps on NBA / NFL ----
 ALL_BOOKS = ("SCOUT_BOOK_UNIBET_AU", "SCOUT_BOOK_POINTSBET_AU", "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_DABBLE", "SCOUT_BOOK_FANDUEL",
-             "SCOUT_BOOK_BETRIVERS", "SCOUT_BOOK_BOVADA")
+             "SCOUT_BOOK_BETRIVERS", "SCOUT_BOOK_BOVADA", "SCOUT_BOOK_DRAFTKINGS")
 
 
 def fix_shot(p, name, full=False):
@@ -191,7 +191,7 @@ PILLS = """()=>{const plat=document.getElementById('hub-platform'),pb=plat.getBo
 def test_every_app_pill_is_reachable_at_every_width(browser, many_apps, width):
     c, p = page(browser, many_apps, width, "dark", "/sports")
     try:
-        p.wait_for_function("document.querySelectorAll('#hub-platform [data-hub=book]:not([hidden])').length>=9", timeout=20000)
+        p.wait_for_function("document.querySelectorAll('#hub-platform [data-hub=book]:not([hidden])').length>=10", timeout=20000)
         p.wait_for_timeout(300)
         for card in (False, True):
             if card:

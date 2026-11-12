@@ -503,7 +503,9 @@ export function mount(C) {
     const s=r.scout;
     /* an extra book's line with no saved chance: the cell stays empty (no status sentence, owner rule 2026-10-16); with both chances
        it reads like any other row without a side */
-    if(r.extra?.reference_only)return `<div class="h-scout"><b>${esc(reportedOdds(r)||'Odds not supplied')}</b><small>Reported odds / side not supplied</small></div>`;
+    /* DraftKings (PR #66, reported odds without a side): the Scout cell's own parts - the prices where a chance sits, and the small-caps
+       note where "Research estimate" sits on any other view-only row (owner 2026-11-12: "looks like the other ones") */
+    if(r.extra?.reference_only)return `<div class="h-scout"><div class="h-direction-options" aria-label="Reported odds"><span>Odds <b>${esc(reportedOdds(r)||'not supplied')}</b></span></div><div class="h-scout-grade"><span class="h-grade-text h-reported">Reported odds · side not supplied</span></div></div>`;
     if(r.extra&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return '';
     if(C.oneSided(r)) return `<div class="h-scout"><div class="h-direction-options" title="${esc(C.oneSidedNote(r))}"><span class="h-one-sided">${esc(C.oneSided(r))}</span></div></div>`;
     if(s.side&&notOffered(r)){const a=offeredAlt(r);return `<div class="h-scout h-scout-nf"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}</div>${a?`<small class="h-alt-note">${esc(altText({side:s.side,r:a}))}</small>`:''}</div>`;}
@@ -772,7 +774,7 @@ export function mount(C) {
       backoff:`${label} asked Scout to slow down. Lines return after its retry time.`,empty:`${label} lists no lines for these sports right now.`,
       not_offered:`${label} lists no lines for this sport.`}[x.state];
     if(msg)return `<p class="h-extra-state h-warning" role="status">${msg}</p>`;
-    if(H.book==='draftkings')return `<p class="h-extra-state">DraftKings player lines via ESPN / reported American odds. The feed does not identify the price's side; research only.</p>`;
+    if(H.book==='draftkings')return `<details class="h-extra-state"><summary>${label} lines${x?.at?` · read ${esc(age(x.at))}`:''} · view only</summary><p>DraftKings player lines via ESPN, with the American odds ESPN reports. The feed does not say which side each price belongs to, so no price is assigned to Over or Under. Research only: slips stay PrizePicks or Underdog entries.</p></details>`;
     const r=p?.rules||{},src=(r.sources||[]).map(s=>/^https:\/\//.test(s.url)?`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url.replace(/^https:\/\//,''))}</a>`:esc(s.url)).join(' · ');
     return `<details class="h-extra-state"><summary>${label} lines · read ${esc(x.at?age(x.at):'time unavailable')} · view only</summary><p>Where ${label} offers the same line as PrizePicks or Underdog, the row shows Scout's saved side, chance and letter for that line, unchanged. Other lines show the line and price only. Slips stay PrizePicks or Underdog entries.</p>${r.pick_price?`<p>Price: ${esc(r.pick_price)}.</p>`:''}${r.entry_payout?`<p>Entry payout: ${esc(r.entry_payout)}.</p>`:''}${r.flex?`<p>Flex: ${esc(r.flex)}.</p>`:''}${src?`<p>Rules source: ${src}</p>`:''}</details>`;
   }
@@ -791,7 +793,8 @@ export function mount(C) {
   }
   /* an extra book's line in the full card (audit 2026-11-05 A2/B4): its own prices and Scout's read at this line, above the research */
   function extraOffer(r) {
-    if(r.extra?.reference_only)return `<section class="h-extra-detail"><h4>DraftKings / ${esc(r.offer.reference_kind==='milestone'?(r.offer.line+0.5)+'+':r.offer.line)}</h4><p><b>${esc(reportedOdds(r)||'Odds not supplied')}</b> / Reported American odds</p><p>Via ESPN / ${esc(age(r.offer.seen_at))}. Selection sides are not supplied. These prices are not assigned to Over or Under and cannot be added to a slip.</p></section>`;
+    /* DraftKings: the same block as every other book's line (heading "App · line", read age, key-value list), PR #66's facts unchanged */
+    if(r.extra?.reference_only)return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(r.offer.platform_label||'DraftKings')} · ${esc(r.offer.reference_kind==='milestone'?(r.offer.line+0.5)+'+':r.offer.line)}</h4><small>Read ${esc(r.offer.seen_at?age(r.offer.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Reported odds</dt><dd>${esc(reportedOdds(r)||'Odds not supplied')} <small>American, via ESPN</small></dd></div><div><dt>Side</dt><dd>Not supplied by the feed</dd></div></dl><p class="h-history-note">Selection sides are not supplied. These prices are not assigned to Over or Under and cannot be added to a slip.</p></section>`;
     const o=r.offer,x=r.extra||{},price=sd=>!o[sd]?.offered?'Not offered':x.price_comparable===false?(num(o[sd].price)?esc(x.price_label||'App price')+' '+o[sd].price.toFixed(2)+' <small>(not what an entry pays)</small>':'Listed'):num(o[sd].price)?o[sd].price.toFixed(2)+' decimal':num(o[sd].payout)?o[sd].payout.toFixed(2)+'x pick multiplier':'Price unavailable';
     /* Scout's read: the side and its chance, or both chances; nothing saved at this line = no row (no status sentence) */
     const s=r.scout,both=num(s.p_over)&&num(s.p_under)?`Over ${pct(s.p_over)} · Under ${pct(s.p_under)}`:null;
@@ -1130,7 +1133,7 @@ export function mount(C) {
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}${s.side===side?belowChip(r):''}</div>
       <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)&&!notOffered(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
       ${against?againstHtml():C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
-      ${!r.offer[side].offered&&!against?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
+      ${!r.offer[side].offered&&!against&&!r.extra?.reference_only?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
   /* ---- "Why Scout leans Over / Under" (owner 2026-11-06: "people have no idea why they should take the props"). Plain facts at the
      top of the card, each with its number and its sample, sorted honestly:
