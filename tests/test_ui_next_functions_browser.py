@@ -481,3 +481,126 @@ def fix_shot(p, name, before=False):
         out = Path(os.environ["FIX_SHOTS"])
         out.mkdir(parents=True, exist_ok=True)
         p.screenshot(path=str(out / f"{name}-{tag}.png"))
+
+
+# ---------------------------- UI sweep 2026-11-12 H1 / H13 / #30: the hub owns the /sports address and the tab title
+
+@SIZES
+@pytest.mark.parametrize("v2", ["1", "0"], ids=["v2", "no-v2"])
+def test_nfl_tab_survives_reload_back_forward_and_deep_links_with_matching_title(browser, live, size, v2):
+    live.mp.delenv("UI_NEXT", raising=False)
+    live.mp.setenv("SCOUT_WORKSPACE_V2", v2)              # the live site runs with V2 on (#/board?sport=); off: #scout/board?sport=
+    c = context(browser, live, size)
+    try:
+        p = open_page(c, live, "/sports#/board?sport=nfl", size)
+
+        def on(sport):
+            p.wait_for_selector("#hub-rows tr[data-record]", timeout=20000)
+            p.wait_for_timeout(600)                       # the classic sports page under the hub has had its turn
+            assert p.locator(f"#hub-sports [data-id={sport}]").get_attribute("aria-pressed") == "true", (sport, p.url, p.title())
+            assert f"sport={sport}" in p.url and "lg=" not in p.url, p.url
+            assert p.title() == "1time Scout · " + sport.upper(), p.title()
+            assert all(x.startswith(sport + "|") for x in p.locator("#hub-rows tr[data-record]").evaluate_all("rs=>rs.map(r=>r.dataset.record)"))
+
+        on("nfl")
+        p.reload()
+        on("nfl")
+        p.locator("#hub-sports [data-id=nba]").click()
+        on("nba")
+        p.go_back()
+        on("nfl")
+        p.go_forward()
+        on("nba")
+        p.goto(live.url + "/sports#/board?lg=nfl")       # an old sports link still lands on NFL
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=20000)
+        p.wait_for_timeout(600)
+        assert p.locator("#hub-sports [data-id=nfl]").get_attribute("aria-pressed") == "true"
+        assert p.title() == "1time Scout · NFL"
+        p.locator("#hub-sports [data-id=cs2]").click()
+        p.wait_for_timeout(400)
+        assert p.title() == "1time Scout · CS2"
+        assert not p.errors
+    finally:
+        c.close()
+
+
+# ------------------------- UI sweep 2026-11-12 H2: the card's player-markets strip shows each stat's main line, not an alt rung
+
+@SIZES
+def test_player_markets_strip_shows_the_main_line_per_stat(browser, live, size):
+    from tests.test_ui_next_browser import ladder_board
+    live.mp.delenv("UI_NEXT", raising=False)
+    live.sports.boards["nba"] = ladder_board()
+    workspace_api.reset()
+    c = context(browser, live, size)
+    try:
+        p = open_page(c, live, "/sports#/board?sport=nba", size)
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=20000)
+        p.locator("#hub-q").fill("Shai Ladder")
+        p.wait_for_timeout(300)
+        row = p.locator("#hub-rows tr.h-row", has=p.locator("[data-hub=ladder]")).filter(has_text="Points").first
+        row.locator("[data-hub=ladder]").click()
+        p.wait_for_selector("tr.h-ladder-row .h-ladder-table tbody tr")
+        bov = p.locator("tr.h-ladder-row tr[data-line]", has_text="27.5").first
+        bov.locator(".h-ld-book").click()
+        p.wait_for_selector("#hub-detail .h-player-markets", timeout=20000)
+
+        def strip():
+            p.wait_for_timeout(300)
+            return [(" ".join(b.inner_text().split()), b.get_attribute("aria-pressed")) for b in p.locator("#hub-detail .h-player-markets button").all()]
+
+        s = strip()
+        assert ("Points 27.5 Full game", "true") in s and ("Rebounds 5.5 Full game", "false") in s, s      # the card's own line, pressed
+        p.locator("#hub-detail .h-player-markets button", has_text="Rebounds").click()
+        p.wait_for_function("document.querySelector('#hub-card-title')?.textContent.includes('Rebounds')", timeout=20000)
+        s = strip()
+        assert ("Points 31.5 Full game", "false") in s and ("Rebounds 5.5 Full game", "true") in s, s      # main line: most apps, PP / UD
+        p.locator("#hub-detail .h-player-markets button", has_text="Points").click()
+        p.wait_for_function("document.querySelector('#hub-card-title')?.textContent.includes('Points')", timeout=20000)
+        assert ("Points 31.5 Full game", "true") in strip()
+        assert "31.5" in p.locator("#hub-card-line option:checked").inner_text()
+        assert not p.errors
+    finally:
+        c.close()
+
+
+# ------------------------------- UI sweep 2026-11-12 H4: the open card survives a refresh that moves its line
+
+@SIZES
+def test_open_card_reloads_in_place_when_its_line_moves(browser, live, size):
+    with Hub(browser, live, "next", size) as h:
+        p = h.p
+        h.card(VARGO_UD)
+        h.tab("stats")
+        p.locator("#hub-card-body").evaluate("b=>b.scrollTop=120")
+        top = p.locator("#hub-card-body").evaluate("b=>b.scrollTop")
+        uid = VARGO_UD.split("|")[-1]
+
+        def moved(rec):
+            if rec.get("offer", {}).get("offer_id") == uid and rec.get("offer", {}).get("platform") == "underdog":
+                rec["offer"].update(line=39.5, revision="rev-moved")
+
+        def board(route):                                    # the next board read: Underdog moved vargo's line 38.5 -> 39.5
+            h = {k: v for k, v in route.request.headers.items() if k.lower() != "if-none-match"}
+            resp = route.fetch(headers=h)
+            d = resp.json()
+            for rec in d.get("records") or []:
+                moved(rec)
+            route.fulfill(response=resp, json=d, headers={k: v for k, v in resp.headers.items() if k.lower() not in ("etag", "content-length", "content-encoding")})
+
+        def line(route):
+            resp = route.fetch()
+            d = resp.json()
+            moved(d.get("record") or {})
+            route.fulfill(response=resp, json=d, headers={k: v for k, v in resp.headers.items() if k.lower() not in ("content-length", "content-encoding")})
+        p.route("**/api/upgrade/board*", board)
+        p.route(f"**/api/upgrade/line?*id={uid}*", line)
+        p.evaluate("document.querySelector('#u-hub [data-hub=refresh]').click()")      # the board's refresh (the 60 s poll does the same)
+        p.wait_for_function("[...document.querySelectorAll('#hub-card-line option')].some(o=>o.selected&&o.textContent.includes('39.5'))", timeout=20000)
+        p.wait_for_function("!document.querySelector('#hub-detail .h-detail-loading')", timeout=20000)
+        p.wait_for_timeout(500)
+        assert not p.locator("#hub-card").is_hidden()
+        assert p.locator("#hub-detail").get_attribute("data-tab") == "stats"
+        assert "offer changed" not in p.locator("#hub-detail").inner_text()
+        assert abs(p.locator("#hub-card-body").evaluate("b=>b.scrollTop") - top) <= 2
+        assert not p.errors

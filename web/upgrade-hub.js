@@ -635,8 +635,14 @@ export function mount(C) {
     if(COLS)$('u-hub').classList.add('h-cols');
     setInterval(()=>{if(!isOpen()||document.hidden)return;document.querySelectorAll('#u-hub .h-countdown[data-start]').forEach(el=>{const t=countdown(el.dataset.start);if(el.textContent!==t)el.textContent=t;el.classList.toggle('soon',Date.parse(el.dataset.start)-Date.now()<=3600000);});},30000);
   }
+  /* #30 / H13: the tab title names the sport on the board (it stayed "1time Scout · CS2" on every sport; /sports said "Slate · NBA") */
+  function hubTitle() {
+    const t=H.section==='board'?`1time Scout · ${H.sport==='all'?'All sports':SPORTS[H.sport]||H.sport}`:`${TITLES[H.section]||'Player props'} · 1time Scout`;
+    if(document.title!==t)document.title=t;
+  }
   function paintBoard() {
     if(!isOpen()||H.section!=='board') return;
+    hubTitle();
     const restoreFocus=focusAfter($('hub-board-section'));
     syncFields();
     const list=rows(), grouped=new Map();
@@ -790,7 +796,15 @@ export function mount(C) {
     H.lastLoad=Date.now();
     H.records=allowed().flatMap(s=>[...R.boards[s].recs.values()]);
     const current=rec(H.detail),shown=H.detailDoc?.record;
-    if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){H.detailDoc=null;H.detailState='error';H.detailSeq++;paintDetail();}
+    /* H4: the open card's line moved (or its research was re-read) during a refresh: research for the new revision loads in place,
+       the old one stays on screen until it lands (same tab and scroll). Only a line that left the board says it changed. */
+    if(shown&&(!current||current.offer.revision!==shown.offer.revision||current.scout.read_rev!==shown.scout.read_rev)){
+      const want=current?current.offer.revision+'|'+current.scout.read_rev:null;
+      if(!current){H.detailDoc=null;H.detailState='error';H.detailSeq++;paintDetail();}
+      else if(H.detailReload!==want){H.detailReload=want;const seq=++H.detailSeq,id=H.detail;paintDetail();
+        C.researchDoc(current).then(doc=>{if(seq!==H.detailSeq||H.detail!==id)return;H.detailDoc=doc;H.detailState='ready';H.detailReload=null;paintDetail();},
+          ()=>{if(seq!==H.detailSeq||H.detail!==id)return;H.detailDoc=null;H.detailState='error';H.detailReload=null;paintDetail();});}
+    }
     H.loading=false; busyRefresh(false); paintBoard(); checkAlerts();
     if(isExtra(H.book))loadExtra();
     loadBookLines();
@@ -941,7 +955,7 @@ export function mount(C) {
   async function selectDetail(id) {
     const r=rec(id), parent=rec(H.expanded);
     if(!r||!parent||!C.siblings(parent).some(x=>key(x)===id))return;
-    H.detail=id;H.detailDoc=null;H.detailState='loading';
+    H.detail=id;H.detailDoc=null;H.detailState='loading';H.detailReload=null;
     const seq=++H.detailSeq;paintBoard();paintDetail();
     try {
       const doc=await C.researchDoc(r);
@@ -1400,20 +1414,37 @@ export function mount(C) {
     const warn=H.detailState==='error'?`<p class="h-warning">This offer changed or research is unavailable. <button data-hub="detail-retry">Retry research</button> <button data-hub="refresh">Refresh board</button></p>`:'';
     return warn+(H.cardTab==='lines'?linesHtml(r):H.cardTab==='stats'?statsTabHtml(r):H.cardTab==='ask'?askHtml(r):overviewHtml(r));
   }
+  /* H2: the card's player-markets strip, one button per stat + period. It kept the LAST record of the card's own app per stat (Bovada's
+     top alt rung, "Points 30.5" pressed on a Bovada 26.5 card). Now: the card's own line for its stat; for every other stat the main
+     line = the line most apps list (ties: a PrizePicks / Underdog standard line, then the middle line), opened on the card's app when
+     it lists that line. Pressed = same stat, period and line. */
+  function marketStrip(r) {
+    const pk=x=>['prizepicks','underdog'].includes(x.offer.platform)&&x.market.line_type==='standard', groups=new Map();
+    H.records.forEach(x=>{if(x.sport!==r.sport||x.player.key!==r.player.key||x.event.id!==r.event.id||C.started(x))return;
+      const g=x.market.stat+'|'+x.market.period;if(!groups.has(g))groups.set(g,[]);groups.get(g).push(x);});
+    return [...groups.entries()].map(([g,list])=>{
+      if(g===r.market.stat+'|'+r.market.period)return r;
+      const lines=[...new Set(list.map(x=>Number(x.offer.line)))].sort((a,b)=>a-b),mid=lines[Math.floor((lines.length-1)/2)];
+      const score=l=>{const at=list.filter(x=>Number(x.offer.line)===l);return [new Set(at.map(x=>x.offer.platform)).size,at.some(pk)?1:0,-Math.abs(l-mid)];};
+      const best=lines.reduce((a,l)=>{const sa=score(a),sl=score(l);for(let i=0;i<3;i++){if(sl[i]!==sa[i])return sl[i]>sa[i]?l:a;}return a;},lines[0]);
+      const at=list.filter(x=>Number(x.offer.line)===best);
+      return at.find(x=>x.offer.platform===r.offer.platform)||at.find(pk)||at[0];
+    });
+  }
   function paintDetail() {
     const box=$('hub-detail'),r=rec(H.detail);if(!box||!r||!cardOpen())return;
-    const restoreFocus=focusAfter(box), body=$('hub-card-body'), top=body?body.scrollTop:0, wasTab=box.dataset.tab, wasId=box.dataset.id;
-    const playerMarkets=[...new Map(H.records.filter(x=>x.sport===r.sport&&x.player.key===r.player.key&&x.event.id===r.event.id&&x.offer.platform===r.offer.platform&&!C.started(x)).map(x=>[x.market.stat+'|'+x.market.period,x])).values()];
+    const restoreFocus=focusAfter(box), body=$('hub-card-body'), top=body?body.scrollTop:0, outer=box.scrollTop, wasTab=box.dataset.tab, wasId=box.dataset.id;
+    const playerMarkets=marketStrip(r);
     const watched=H.watch.includes(playerKey(r));
     box.innerHTML=`<header class="h-card-head"><button class="h-back" data-hub="card-close" aria-label="Back to the board"><span aria-hidden="true">←</span> Back</button>
         ${faceOf(r,48)}<div class="h-card-id"><h3 id="hub-card-title" tabindex="-1">${esc(r.player.name)} <span>${esc(r.market.stat_label)} · ${esc(r.market.period_label)}</span></h3><p>${r.player.role?`<i class="h-role">${esc(r.player.role)}</i>`:''}${esc(r.player.team)} · ${esc(r.event.label)}${compOf(r)?` · ${esc(compOf(r))}`:''} · ${esc(when(r.event.start_utc))} ${countdownHtml(r)}${r.offer.moved_from!=null?` · moved from ${esc(r.offer.moved_from)}`:''}</p></div>
         <button class="h-star" data-hub="watch" data-id="${esc(key(r))}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></header>
-      ${playerMarkets.length>1?`<nav class="h-player-markets" aria-label="Player markets">${playerMarkets.map(x=>`<button data-hub="player-market" data-id="${esc(key(x))}" aria-pressed="${x.market.stat===r.market.stat&&x.market.period===r.market.period}">${esc(x.market.stat_label)} <b>${esc(x.offer.line)}</b><small>${esc(x.market.period_label)}</small></button>`).join('')}</nav>`:''}
+      ${playerMarkets.length>1?`<nav class="h-player-markets" aria-label="Player markets">${playerMarkets.map(x=>`<button data-hub="player-market" data-id="${esc(key(x))}" aria-pressed="${x.market.stat===r.market.stat&&x.market.period===r.market.period&&Number(x.offer.line)===Number(r.offer.line)}">${esc(x.market.stat_label)} <b>${esc(x.offer.line)}</b><small>${esc(x.market.period_label)}</small></button>`).join('')}</nav>`:''}
       <div class="h-decision" id="hub-decision" role="group" aria-label="Your pick">${decisionHtml(r)}</div>
       <div class="h-card-tabs" role="tablist" aria-label="Player research">${CARD_TABS.map(([t,l])=>`<button role="tab" id="hub-tab-${t}" data-hub="card-tab" data-id="${t}" aria-selected="${H.cardTab===t}" aria-controls="hub-card-body" tabindex="${H.cardTab===t?0:-1}">${l}</button>`).join('')}</div>
       <div class="h-card-body" id="hub-card-body" role="tabpanel" aria-labelledby="hub-tab-${H.cardTab}" tabindex="0">${tabHtml(r)}</div>`;
     box.dataset.tab=H.cardTab;box.dataset.id=H.detail;
-    if(wasTab===H.cardTab&&wasId===H.detail)$('hub-card-body').scrollTop=top;
+    if(wasTab===H.cardTab&&wasId===H.detail){$('hub-card-body').scrollTop=top;box.scrollTop=outer;}   /* H3: a short phone scrolls the whole card */
     if(H.cardTab==='overview')drawChart();
     restoreFocus();
   }
@@ -1940,7 +1971,7 @@ export function mount(C) {
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('u-hub').classList.toggle('h-board-mode',name==='board');
-    $('hub-title').textContent=TITLES[name]||'Player props';
+    $('hub-title').textContent=TITLES[name]||'Player props';hubTitle();
     if(name==='board'){paintBoard();if(from!=='board'&&H.boardScroll!=null&&center){center.scrollTop=H.boardScroll;H.boardScroll=null;}}else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev'){paintEv();paintMarkets();}else if(name==='arb')paintMarkets();else if(name==='books')gameBooks($('hub-book-board'),H.gameBookLeague||allowed().find(s=>['nba','nfl'].includes(s)),H.gameBook||'draftkings');else paintAlerts();
   }
   /* old Sports links (site audit 2026-11-06): /sports#/board?lg=nba opened the board on All. A route's sport= wins, then the old
@@ -1959,7 +1990,7 @@ export function mount(C) {
     if(open&&H.routeHash!==location.pathname+location.hash){
       H.routeHash=location.pathname+location.hash;
       const wasSport=H.sport;
-      H.sport=modern?routeSport(modern):scout?routeSport(scout):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(location.hash.includes('lg=nfl')?'nfl':'nba'):'cs2';
+      H.sport=modern?routeSport(modern):scout?routeSport(scout):location.hash==='#all-sports'?'all':location.pathname==='/lol'?'lol':location.pathname==='/sports'?(/[?&](?:lg|sport)=nfl(?:&|$)/.test(location.hash)?'nfl':'nba'):'cs2';
       if(!allowed().includes(H.sport))H.sport='all';
       const deep=R.me.features?.background_alerts?new URLSearchParams((modern?modern[2]:scout?scout[2]:'')||'').get('open'):null;
       if(deep&&deep.length<=300)H.pendingOpen=deep;
@@ -2058,7 +2089,7 @@ export function mount(C) {
     add(id){const r=rec(id);if(!r)return;if(r.extra)return openCard(id,'overview');if(C.oneSided(r))return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
-    refresh(){H.detailSeq++;if(cardOpen())closeCard(false);H.bookLinesAt=0;load(true);}, tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
+    refresh(){H.bookLinesAt=0;load(true);},   /* H4: refreshing keeps the open card (it closed it); load() reloads its research if its line moved */ tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},
     'save-view'(){togglePop(null);openSave('view');}, 'save-alert'(){togglePop(null);openSave('alert');}, 'save-retry':savePreferences,
     'pick-clear'(){H.pickSport='all';H.pickStatus='all';$('hub-pick-sport').value='all';$('hub-pick-status').value='all';paintPicks();},
     'grade-review'(id,el){showGradeReview(id,el?.dataset.before);},
