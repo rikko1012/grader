@@ -79,13 +79,22 @@ def _save_config_snapshot():
         pass
 
 
+def _schema_key(path):
+    try:
+        return (str(path.absolute()), path.stat().st_ino)
+    except FileNotFoundError:
+        return None
+
+
 def _db():
-    con = sqlite3.connect(DB, timeout=30)
+    db_path = DB
+    key = _schema_key(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(db_path, timeout=30)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA synchronous=NORMAL")   # with WAL: safe, and writes don't wait on a full disk sync
-    if _SCHEMA_OK[0]:
+    if key is not None and _SCHEMA_OK[0] == key:
         return con
-    DB.parent.mkdir(parents=True, exist_ok=True)
     con.execute("PRAGMA journal_mode=WAL")     # readers and the writer no longer block each other
     con.execute(f"CREATE TABLE IF NOT EXISTS picks ({COLUMNS})")
     try:                                   # added 2026-09-29: owner's load tests are not real picks
@@ -186,7 +195,8 @@ def _db():
         con.commit()
     except Exception:
         pass
-    _SCHEMA_OK[0] = True
+    # A concurrent initializer for an old path must never mark a different DB ready.
+    _SCHEMA_OK[0] = _schema_key(db_path)
     return con
 
 
@@ -194,7 +204,8 @@ def _read_db():
     """A read-only connection that does NOT take _LOCK (2026-10-21 audit 11/41): under WAL a reader sees the last
     committed state and never blocks the writer, so member reads no longer queue behind each other, the pick-log writer
     or settlement. The schema / migrations still run once under _LOCK, before the first lock-free read."""
-    if not _SCHEMA_OK[0]:
+    key = _schema_key(DB)
+    if key is None or _SCHEMA_OK[0] != key:
         with _LOCK:
             _db().close()
     con = _db()
