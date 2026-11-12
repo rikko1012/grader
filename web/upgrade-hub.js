@@ -1602,8 +1602,31 @@ export function mount(C) {
       <div class="h-prefs-grid"><label>Odds format<select id="hub-pref-odds"><option value="american">American (−137)</option><option value="decimal">Decimal (1.73)</option></select></label>
       <label>Bet sizing<select id="hub-pref-sizing">${SIZING.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
       <label>Bankroll in $ (optional)<input id="hub-pref-bankroll" type="number" min="1" max="10000000" step="1" inputmode="decimal" placeholder="Sizes show as % of bankroll"></label></div></section>`);
+    if(leagues.length){const box=document.createElement('section');box.className='h-market-tools';box.id='hub-game-prices';$('hub-tools-body').prepend(box);gameBooks(box,leagues[0]);}
     if(P('prefs')){$('hub-pref-odds').value=H.par.odds;$('hub-pref-sizing').value=H.par.sizing;$('hub-pref-bankroll').value=H.par.bankroll??'';}
     if(R.me.owner)$('hub-tools-body').insertAdjacentHTML('beforeend',`<section class="h-market-tools"><div class="h-section-head"><div><span class="h-eyebrow">OWNER REVIEW</span><h2>Grading comparison</h2><p>Published chances beside the candidate grader, from saved forecast revisions.</p></div></div><div class="h-game-books">${['cs2','lol','nba','nfl'].map(s=>`<button data-hub="grade-review" data-id="${s}">${SPORTS[s]}</button>`).join('')}</div><div id="hub-grade-review" aria-live="polite"><p>Select a sport to inspect its comparison log.</p></div></section>`);
+  }
+  async function gameBooks(box,league,book='draftkings'){
+    const request=box._request=(box._request||0)+1;
+    box.innerHTML='<p role="status">Loading sportsbook prices…</p>';
+    try{
+      const d=await api('game-books?league='+encodeURIComponent(league));
+      if(!box.isConnected||request!==box._request)return;
+      const age=(Date.now()-Date.parse(d.observed_at))/1000,stale=d.stale||!Number.isFinite(age)||age>1800||age< -60;
+      const events=(d.events||[]).filter(e=>Date.parse(e.start_utc)>Date.now());
+      const books=new Map();events.forEach(e=>Object.values(e.books).forEach(b=>books.set(b.id,b.label)));
+      const price=n=>Number.isFinite(n)?esc(n>0?'+'+n:n):'—';
+      const spread=(m,s)=>Number.isFinite(m?.[s+'Spread'])&&Number.isFinite(m?.[s+'Odds'])?`${price(m[s+'Spread'])} (${price(m[s+'Odds'])})`:'—';
+      const total=(m,s)=>Number.isFinite(m?.total)&&Number.isFinite(m?.[s+'Odds'])?`${s==='over'?'O':'U'} ${esc(m.total)} (${price(m[s+'Odds'])})`:'—';
+      box.innerHTML=`<div class="h-section-head"><div><span class="h-eyebrow">SPORTSBOOK COMPARISON</span><h2>Game lines</h2><p>Full-game moneylines, spreads and totals · via ${esc(d.source)}</p></div></div>
+      <div class="h-game-books"><label>League <select data-gb="league">${allowed().filter(s=>['nba','nfl'].includes(s)).map(s=>`<option value="${s}"${s===league?' selected':''}>${SPORTS[s]}</option>`).join('')}</select></label>
+      <label>Book <select data-gb="book"><option value="all"${book==='all'?' selected':''}>All books</option>${[...books].map(([id,label])=>`<option value="${esc(id)}"${id===book?' selected':''}>${esc(label)}</option>`).join('')}</select></label><button data-gb="refresh">Refresh</button></div>
+      <p role="status">${stale?'Older snapshot — recheck prices at your book.':'Snapshot built '+esc(when(d.observed_at))+'.'} Books’ own update times are not supplied. Availability varies by location.</p>
+      ${events.filter(e=>book==='all'||e.books[book]).map(e=>`<details class="h-market-tools"><summary><strong>${esc(e.away)} at ${esc(e.home)}</strong> · ${esc(when(e.start_utc))} · Quotes seen ${esc(when(e.seen_at))}${Date.now()-Date.parse(e.seen_at)>1800000?' · Older prices':''}</summary><div class="h-table-wrap"><table class="h-table"><caption>American odds · full game${stale?' · older snapshot':''}</caption><thead><tr><th>Book / team</th><th>Moneyline</th><th>Spread</th><th>Total</th></tr></thead><tbody>${Object.values(e.books).filter(b=>book==='all'||b.id===book).map(b=>['away','home'].map((s,i)=>`<tr><th scope="row">${esc(b.label)}<small>${esc(e[s])}</small></th><td>${price(b.markets['money-line']?.[s+'Odds'])}</td><td>${spread(b.markets.spread,s)}</td><td>${total(b.markets.totals,i?'under':'over')}</td></tr>`).join('')).join('')}</tbody></table></div></details>`).join('')||'<p>No upcoming game prices from this book in this snapshot. Try All books or another league.</p>'}`;
+      // One handler on this panel; a new response replaces it rather than stacking listeners.
+      box.onchange=e=>{if(e.target.dataset.gb)gameBooks(box,box.querySelector('[data-gb="league"]').value,box.querySelector('[data-gb="book"]').value);};
+      box.onclick=e=>{if(e.target.dataset.gb==='refresh')gameBooks(box,league,book);};
+    }catch(e){if(box.isConnected&&request===box._request){box.innerHTML='<h2>Game lines</h2><p>Sportsbook prices are temporarily unavailable.</p><button data-gb="retry">Retry</button>';box.onclick=e=>{if(e.target.dataset.gb==='retry')gameBooks(box,league,book);};}}
   }
   function gradeSteps(side){
     if(!side)return '<p>No saved comparison for this side.</p>';

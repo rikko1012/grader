@@ -543,7 +543,11 @@ def _ingest_games(lg):
     with _COLLECT_LOCK:
         gdb = game_store.connect()
         try:
-            return collect.tick(gdb, (lg["key"],))
+            result = collect.tick(gdb, (lg["key"],))
+            if not result.get("busy"):
+                from . import game_books
+                result["game_books"] = game_books.refresh(gdb, lg["key"])
+            return result
         except Exception as e:                          # noqa: BLE001
             return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
         finally:

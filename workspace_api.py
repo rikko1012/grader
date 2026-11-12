@@ -1366,6 +1366,17 @@ def get_book_lines(h, srv, q, member, scratch, name):
     return h.send(200, {"as_of": doc.get("as_of"), "books": {pid: v for pid, v in books.items() if v}})
 
 
+def get_game_books(h, srv, q, member, scratch, name):
+    league = q.get("league", "nba")
+    if league not in ("nba", "nfl"):
+        return h.send(400, {"error": "Choose NBA or NFL"})
+    if not access(h, srv, q).get(league):
+        return h.send(404, {"error": "not found"})
+    import workspace_game_books
+    status, body = workspace_game_books.shared(srv, league)
+    return h.send(status, body)
+
+
 def get_market_tools(h, srv, q, member, scratch, name):
     """SCOUT_MARKET_TOOLS: the Tools route's +EV feed and arbitrage sheet (workspace_markets), one shared build for everyone."""
     if os.getenv('SCOUT_MARKET_TOOLS')!='1':return h.send(404,{'error':'not found'})
@@ -2450,7 +2461,7 @@ def post_report_problem(h, srv, q, member, scratch, name, n):
     return h.send(200, {"ok": True, "duplicate": out["duplicate"]})
 
 
-GET = {"me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
+GET = {"game-books": get_game_books, "me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
        "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
        "book-lines": get_book_lines, "pickem-ev": get_pickem_ev, "market-edge": get_market_edge}

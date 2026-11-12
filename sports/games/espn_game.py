@@ -233,6 +233,10 @@ def _plays_football(body, league, event_id, wp, core_plays):
 def context(body):
     """Pre-game context a summary carries, as snapshot payloads: {kind: data}."""
     out = {}
+    from ..game_books import parse_summary
+    prices = parse_summary(body)
+    if prices:
+        out["book_game_prices"] = prices
     pcs = []
     for pc in body.get("pickcenter") or []:
         h, a = pc.get("homeTeamOdds") or {}, pc.get("awayTeamOdds") or {}

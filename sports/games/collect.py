@@ -241,6 +241,8 @@ def _context(db, lg, games, now, clock):
             ctx = espn_game.context(body)
             t = clock()
             for kind, data in ctx.items():
+                if kind == "book_game_prices" and (data.get("id") != "espn:" + str(e["id"]) or data.get("league") != lg["key"]):
+                    continue
                 out["snapshots"] += store.save_snapshot(db, lg["key"], e["id"], kind, "espn", data, now=t)
             rows, info = espn_props.fetch(lg, e["id"], ath)
             out["prop_rows"] += store.save_prop_lines(db, rows, now=clock())

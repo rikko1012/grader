@@ -963,3 +963,38 @@ def test_adder_asks_with_the_goblin_rule(ctx, env):
         add_first(p)
     assert req.value.post_data_json['lines'] == 'no_goblins'
     assert not p.errors
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_game_books_filters_prices_retry_and_mobile(ctx,env,size,monkeypatch):
+    monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
+    from datetime import datetime,timezone,timedelta
+    p=ctx.new_page();p.set_viewport_size(size)
+    now=datetime.now(timezone.utc)
+    seen=[]
+    def response(route):
+        from urllib.parse import urlsplit,parse_qs
+        lg=parse_qs(urlsplit(route.request.url).query)['league'][0];seen.append(lg)
+        if len(seen)==1:return route.fulfill(status=503,json={'error':'unavailable'})
+        route.fulfill(json={'league':lg,'source':'ESPN','observed_at':now.isoformat(),'events':[{
+          'id':'espn:1','home':'Home <unsafe>','away':'Away','start_utc':(now+timedelta(days=1)).isoformat(),
+          'seen_at':(now-timedelta(hours=1)).isoformat(),'books':{'draftkings':{'id':'draftkings','label':'DraftKings','markets':{
+          'money-line':{'homeOdds':-142,'awayOdds':120},'spread':{'homeSpread':-2.5,'homeOdds':-105,'awaySpread':2.5,'awayOdds':-115},
+          'totals':{'total':40.5,'overOdds':-118,'underOdds':-102}}}}}]})
+    p.route('**/api/upgrade/game-books?*',response)
+    p.goto(env.url+'/#/tools')
+    p.locator('#hub-game-prices [data-gb=retry]').click()
+    p.locator('#hub-game-prices summary').click()
+    assert 'DraftKings' in p.locator('#hub-game-prices').inner_text()
+    assert '+120' in p.locator('#hub-game-prices').inner_text()
+    assert 'Older prices' in p.locator('#hub-game-prices').inner_text()
+    assert p.locator('#hub-game-prices unsafe').count()==0
+    p.locator('#hub-game-prices [data-gb=league]').select_option('nfl')
+    p.wait_for_function("document.querySelector('#hub-game-prices [data-gb=league]')?.value==='nfl'")
+    p.locator('#hub-game-prices [data-gb=book]').select_option('all')
+    p.wait_for_selector('#hub-game-prices summary')
+    p.locator('#hub-game-prices summary').click()
+    no_h_scroll(p)
+    shots=Path('../outputs/books-ui');shots.mkdir(exist_ok=True)
+    p.screenshot(path=str(shots / ('game-books-'+str(size['width'])+'.png')))
+    assert 'nfl' in seen
