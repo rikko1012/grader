@@ -265,7 +265,8 @@ CM2_SHOW = {
     "log_opponent_adjusted_player_rate": ("Kills per round, adjusted for the opponents he faced", lambda x, s: f"{_exp(x):.3f}"),
     "log_current_opponent_factor": ("Tonight's opponent, kills given up in the opponent adjustment", lambda x, s: f"{(_exp(x) - 1) * 100:+.1f}%"),
 }
-CM2_NOTE = ("Effect = that term's own share of the projection in the fitted model, against the model's average input. "
+CM2_NOTE = ("Each effect is from the model's coefficients: the term's coefficient x (his input - the model's average input) / "
+            "the input's spread, shown as that term's share of the projection. "
             "The terms are fitted together, so one term's sign is read with the others.")
 # perf-2 (perf.project): rate x opponent factor x rounds per map x maps (x headshots per kill)
 PERF2_TERMS = (("rate", "Kills per round, tonight's setting", lambda v: f"{v:.3f}", None),

@@ -557,4 +557,28 @@ html[data-ui=next] #u-hub.h-card-open #hub-table .h-below-alt{display:inline-blo
 @media(max-width:1100px){
  html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record],html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record].h-nohits{grid-template-columns:minmax(96px,1fr) auto auto}
  html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record] .h-scout{justify-content:flex-end}
+
+/* ---------- 2026-11-12 function check (veto, matchroom, bumps, discrepancies, app links) on the redesign ---------- */
+/* a bumped line: "was X" sits on its own line under the app and age (the one-line note was cut off in the 80px Line column) */
+html[data-ui=next] #u-hub #hub-table .h-c-line small .h-was{display:block;color:var(--n-t2)}
+/* the card's factor panels are bordered boxes: their headings keep the box's side padding */
+html[data-ui=next] #u-hub .h-card-body .h-fx>summary{padding:6px 12px}
+@media(max-width:1100px){
+ /* phone rows with the Edge, Market edge, H2H or Season columns on (the live flags): the older design's row grids for those tables
+    outranked the redesign's, so the line, its app and its "was X" note had no width and the Lines button fell out of the row */
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table>tbody>tr[data-record]{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"player player line" "market scout scout" "hits hits hits" "lines lines add"}
+ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table.h-by-player>tbody>tr[data-record]{grid-template-areas:"market market line" "player scout scout" "hits hits hits" "lines lines add"}
+ /* thumb targets: card panel headings, the Tools links, the slip's actions, the quick filters (Lines differ, Watchlist), the app-link dialog's close */
+ html[data-ui=next] #u-hub .h-card-body .h-fx>summary{min-height:44px}
+ html[data-ui=next] #u-hub .h-tool-grid a{min-height:44px}
+ html[data-ui=next] #u-hub #hub-studio-body .u-btn{min-height:44px}
+ html[data-ui=next] #u-hub .h-quick button{min-height:44px}
+ html[data-ui=next] .u-book-dialog .u-x{width:44px;height:44px}
+}
+@media(max-width:1100px){
+ /* the phone ladder fits the screen: the "Best Over / Under" mark sits under its line (beside it the row ran 26px past a 390px
+    screen and the Add button was cut off) */
+ html[data-ui=next] #u-hub .h-ladder-table .h-ld-line :is(.h-ld-best,small){display:block;width:max-content;margin:2px 0 0 auto}
+ /* the app's line type (Goblin / Standard / Demon) wraps under the app's name instead of being cut off at the column's edge */
+ html[data-ui=next] #u-hub #hub-table .h-ld-book{flex-wrap:wrap;align-content:center;gap:2px 4px}
 }
