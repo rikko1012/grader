@@ -352,6 +352,8 @@ export function panels(X) {
       ${ka.length ? `<details class="h-fx-more"><summary>Kalshi ladder · ${ka.length} ${ka.length === 1 ? 'rung' : 'rungs'}</summary>${table(['Rung (Over)', 'YES bid', 'YES ask', 'Volume', 'Open interest', 'Seen'], ka.map(k => `<tr><td>${esc(k.line)}</td><td>${k.bid != null ? Math.round(k.bid * 100) + '¢' : '–'}</td><td>${k.ask != null ? Math.round(k.ask * 100) + '¢' : '–'}</td><td>${k.volume != null ? esc(Math.round(k.volume)) : '–'}</td><td>${k.oi != null ? esc(Math.round(k.oi)) : '–'}</td><td>${k.seen_at ? esc(ctx.age ? ctx.age(k.seen_at) : when(k.seen_at)) : ''}</td></tr>`))}</details>` : ''}</section>`;
   }
 
+  /* the sample's unit agrees with its count: 1 game, 1 map */
+  const giUnit = s => Number(s.n) === 1 ? ({games: 'game', maps: 'map'}[s.unit] || s.unit || '') : (s.unit || '');
   /* ---------------------------------------------------------------- "Behind the grade" (owner 2026-11-11: every input and rule behind a grade)
    * doc.grade_inputs is built on the server (card_grade_inputs.py) from the board record and the saved forecast: one shape for every
    * sport. This panel only prints it. The headline numbers are the board record's own (r.scout / r.offer); when the doc was read for
@@ -384,7 +386,7 @@ export function panels(X) {
       giRow('Letter', letter ? `<b>${esc(letter)}</b>${band ? ` <small>Why this letter: chance ${band}</small>` : ''}` : ''),
       giRow('Stake', side && num(sc.units) ? `<span class="h-gi-num">${giN(sc.units)}U</span>${sc.stake_reason && stake?.rule ? ` <small>${esc(stake.rule)}</small>` : ''}${stake && num(stake.band_units) && stake.band_units !== sc.units ? ` <small>This chance band stakes ${giN(stake.band_units)}U before stake rules</small>` : ''}` : ''),
       giRow('Model', model?.name ? `<b>${esc(model.name)}</b>${model.version ? ` <small>version ${esc(model.version)}</small>` : ''}${model.calibration ? ` <small>chance calibration ${esc(model.calibration)}</small>` : ''}${model.grade_policy ? ` <small>letter scale ${esc(model.grade_policy)}</small>` : ''}` : ''),
-      giRow('Sample', sample && num(sample.n) ? `<span class="h-gi-num">${esc(sample.n)}</span> ${esc(sample.unit || '')}${sample.first && sample.last ? ` <small>${esc(sample.first)} to ${esc(sample.last)}</small>` : sample.last ? ` <small>newest ${esc(sample.last)}</small>` : ''}${num(sample.window_days) ? ` <small>${esc(sample.window_days)}-day window</small>` : ''}` : ''),
+      giRow('Sample', sample && num(sample.n) ? `<span class="h-gi-num">${esc(sample.n)}</span> ${esc(giUnit(sample))}${sample.first && sample.last ? ` <small>${esc(sample.first)} to ${esc(sample.last)}</small>` : sample.last ? ` <small>newest ${esc(sample.last)}</small>` : ''}${num(sample.window_days) ? ` <small>${esc(sample.window_days)}-day window</small>` : ''}` : ''),
     ].filter(Boolean);
     const fs = same && Array.isArray(g.factors) ? g.factors.filter(f => f && f.label && f.value != null) : [];
     const live = fs.filter(f => f.live === true), ctx = fs.filter(f => f.live !== true);

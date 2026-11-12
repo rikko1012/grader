@@ -130,6 +130,9 @@ def test_cs2_kills_every_perf_cm2_term_is_on_the_card(env):
     assert grader.grade_from_p(b["lower"]) == "B" and grader.grade_from_p(b["lower"] - 1e-6) != "B" and grader.grade_from_p(b["upper"]) != "B"
     assert g["stake"]["band_units"] == grader.units_for_p(b["lower"])
     assert g["sample"] == {"n": 71, "unit": "maps", "last": date.fromordinal(740000).isoformat(), "window_days": cm2.ARTIFACT["feature_constants"]["window_days"]}
+    # the note says where each effect comes from, as a plain fact (coef x (input - mean) / spread, the model's own numbers)
+    assert g["effect_note"].startswith("Each effect is from the model's coefficients:") and not FORBIDDEN.search(g["effect_note"])
+    assert not re.search(r"(may|might|likely|approximately|approx|estimated|roughly|about)", g["effect_note"], re.I)
     m = {x["id"]: x["value"] for x in g["matchup"]}
     assert m["opponent"] == "Norrland (VRS #21)" and m["setting"].startswith("LAN") and m["format"] == "Best of 3" and "rank_band" in m
 
@@ -375,6 +378,15 @@ def test_panel_prints_the_block_with_the_record_numbers(env, tmp_path):
     # a doc read for an earlier grade prints the record's own numbers and none of the older grade's inputs
     assert "70.0%" in stale and "1.5U" in stale and "61.2%" not in stale and "What moved the projection" not in stale and "Why this letter" not in stale
     assert "<img" not in xss and "&lt;img src=x" in xss
+    # the sample's unit agrees with its count: "1 map" / "1 game", never "1 maps" / "1 games"
+    assert f'{doc["grade_inputs"]["sample"]["n"]}</span> maps' in html and doc["grade_inputs"]["effect_note"] in html.replace("&#39;", "'")
+    units = []
+    for n, unit in ((1, "maps"), (1, "games"), (2, "games"), (0, "maps")):
+        d = json.loads(json.dumps(doc))
+        d["grade_inputs"]["sample"].update(n=n, unit=unit)
+        units.append([rec, d])
+    one_map, one_game, two_games, no_maps = render(tmp_path, units)
+    assert "1</span> map <" in one_map and "1</span> game <" in one_game and "2</span> games <" in two_games and "0</span> maps <" in no_maps
     css = (ROOT / "web" / "upgrade-next-grade.css").read_text(encoding="utf-8")
     used = set(re.findall(r"var\((--[a-z0-9-]+)\)", css))
     assert used <= {"--n-bg", "--n-s1", "--n-s2", "--n-line", "--n-line2", "--n-t1", "--n-t2", "--n-t3", "--n-acc", "--n-over", "--n-under", "--n-warn", "--n-font", "--n-mono"}
