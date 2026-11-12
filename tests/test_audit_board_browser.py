@@ -306,7 +306,7 @@ def test_a_side_below_break_even_keeps_its_wording_and_says_so(ctx, env, monkeyp
             below += 1
             assert chip == 1 and r.locator('.h-below').text_content().replace('‑', '-') == 'Below break-even', (edge, scout)
             assert re.search(r'(Over|Under)\s+\d+\.\d%', scout)                 # the side and its chance stay on the row
-            assert re.search(r'(?m)^[ABC][+-]?$|Lean (Over|Under)|Research', scout)       # and its letter or Lean wording
+            assert re.search(r'(?m)^[ABC][+-]?$|Lean (Over|Under)|Research|No grade', scout)       # and its letter or Lean wording
             assert 'No bet' not in scout
             assert 'break-even' in r.locator('.h-below').get_attribute('title')
         elif edge.startswith('+'):

@@ -57,7 +57,7 @@ def check_rows(p, size, where):
         else:
             assert not PLACEHOLDER.search(r["text"]), (where, r)
         if size["width"] > 1100:
-            assert r["h"] <= 72, (where, r)                                                             # the compact desktop row
+            assert r["h"] <= (92 if where in ("nba", "nfl") else 72), (where, r)    # compact; NBA / NFL add their odds line (2026-11-12)
         if size["width"] >= 1280:
             assert r["tagFull"], (where, r)                                                             # the whole role is read
     if size["width"] <= 1100:
@@ -85,7 +85,7 @@ def test_every_sports_rows_carry_the_cards_role(browser, roles_env, size):
             row = hub_row(p, name)
             assert row["tag"] == want, (sp, row)
             if size["width"] > 1100:
-                assert row["h"] <= 72, (sp, row)
+                assert row["h"] <= (92 if sp in ("nba", "nfl") else 72), (sp, row)
             card = hub_card(p, name)
             assert card["tag"] == row["tag"] == record_role(p, sp, name), (sp, card, row)     # board row = card = record, one text
             close_card(p)

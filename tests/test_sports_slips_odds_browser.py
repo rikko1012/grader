@@ -9,9 +9,18 @@ import pytest
 
 from tests.test_audit_board_browser import FLAGS, board, sport
 from tests.test_research_hub_browser import saved_state
-from tests.test_upgrade_browser import browser, env, ctx, context, open_page, DESK  # noqa: F401
+from tests.test_ui_next_browser import nxt
+from tests.test_upgrade_browser import browser, env, open_page, DESK  # noqa: F401
 
 GRADE = re.compile(r"^(A\+|A-|A|B\+|B-|B|C|Lean|Lean (Over|Under)|Over only|Under only)$")
+
+
+@pytest.fixture
+def ctx(browser, env):
+    """a member on the redesign (UI_NEXT, the live design since 2026-11-11): the odds line is drawn there"""
+    c = nxt(browser, env)
+    yield c
+    c.close()
 
 
 @pytest.fixture(autouse=True)
@@ -44,8 +53,8 @@ def test_every_sports_row_shows_a_grade_or_its_reason_and_odds(ctx, env):
             assert all(t and t != "Research estimate" and title for t, title in r["why"]), r
             assert r["odds"] and all(t for t, _ in r["odds"]), r
             if book in ("prizepicks", "underdog"):
-                books = r["odds"][-1][0]
-                assert books == "No book odds at this line" or re.search(r"[+−]\d{3}|\d\.\d\d", books), r
+                text, title = r["odds"][-1]
+                assert len(r["odds"]) == 1 and ("No book odds at this line" in text or "Sportsbook prices at exactly" in title), r
             assert "Research grade" not in " ".join(r["grade"])
     assert seen
 

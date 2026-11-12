@@ -338,7 +338,7 @@ def test_the_slip_tray_follows_the_account_across_the_three_pages(ctx, env):
     s.locator("#u-tray-btn").click()
     s.wait_for_selector("#u-tray .u-entry")
     text = s.locator("#u-tray").inner_text()
-    assert "CS2" in text and "LoL" in text and "NBA" in text and "Research estimate" in text
+    assert "CS2" in text and "LoL" in text and "NBA" in text and "Research grade" not in text      # no research tag (2026-11-12)
     shot(s, "sports-tray")
     assert not p.errors + q.errors + s.errors
 
@@ -419,7 +419,7 @@ def test_sports_board_keeps_its_table_and_adds_books_and_research(ctx, env):
     p.wait_for_selector("#u-drawer[open] .u-tiles")
     p.wait_for_function("!document.querySelector('#u-drawer .u-skel')", timeout=15000)
     text = p.locator("#u-drawer").inner_text()
-    assert "Research estimate" in text and "Forecast chance" in text
+    assert "No grade" in text and "Forecast chance" in text                 # the plain reason, not a status label (2026-11-12)
     assert "Grade" not in p.locator("#u-drawer .u-forecast").inner_text()
     shot(p, "sports-drawer")
     assert not p.errors

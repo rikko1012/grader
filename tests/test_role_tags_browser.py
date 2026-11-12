@@ -103,7 +103,7 @@ def test_hub_card_carries_the_records_role_and_rows_stay_compact(browser, roles_
             row = hub_row(p, name)
             assert row["tag"] == want, (sp, name, row)                                # owner 2026-11-08: the row carries it too
             if size["width"] > 1100:
-                assert row["h"] <= 72, (sp, row)                                      # the compact desktop row
+                assert row["h"] <= (92 if sp in ("nba", "nfl") else 72), (sp, row)  # compact; NBA / NFL add their odds line (2026-11-12)
             shot(p, f"row-{sp}")
             card = hub_card(p, name)
             assert card["tag"] == want == record_role(p, sp, name), (sp, card)     # the card = the board's record, one text

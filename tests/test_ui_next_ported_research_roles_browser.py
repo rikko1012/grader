@@ -328,7 +328,8 @@ def check_rows_next(p, size, where):
         else:
             assert not PLACEHOLDER.search(r["text"]), (where, r)
         if w > 1100:
-            assert r["h"] <= 72, (where, r)                                                             # the compact desktop row
+            # the compact desktop row; NBA / NFL rows carry one more 10px line, their odds (owner 2026-11-12), plus a wrapped app tag
+            assert r["h"] <= (92 if where in ("nba", "nfl") else 72), (where, r)
         if w >= 1280:
             assert r["tagFull"], (where, r)                                                             # the whole role is read
     if w <= 1100:

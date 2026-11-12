@@ -381,7 +381,7 @@ export function mount(C) {
      its full sentence in the tooltip); a page or row without the short text keeps the older label */
   const HOLD_SHORT_OF={'Scout grades lines priced near even.':'Priced far from even'};   /* an extra book's cap-3 row carries the sentence only */
   const holdText = s => s.hold?.short || HOLD_SHORT_OF[s.hold?.reason] || 'Research estimate';
-  const holdChip = s => `<span class="h-grade-text h-hold-why" title="${esc(s.hold?.reason||'')}">${esc(holdText(s))}</span>`;
+  const holdChip = s => `<span class="h-grade-text h-hold-why" style="display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom" title="${esc(s.hold?.reason||'')}">${esc(holdText(s))}</span>`;   /* one line: the row keeps its height */
   /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters carry no tag (ct-1b, owner 2026-11-08: released) */
   function gradeChip(r) {
     const s=r.scout;
@@ -530,9 +530,10 @@ export function mount(C) {
     return {text:`Needs ${o}`,title:`${p.entry||r.offer.platform_label}: each pick needs ${pct(p.be)} (${o}) to break even, from ${r.offer.platform_label}'s published payouts`};
   }
   function oddsLine(r) {
-    if(!ODDS_SPORTS.includes(r.sport)||r.extra)return '';
-    const st='display:block;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25;margin-top:2px';
-    const cell=(text,title)=>`<small class="h-odds" style="${st}" title="${esc(title)}">${esc(text)}</small>`;
+    if(!NEXT||!ODDS_SPORTS.includes(r.sport)||r.extra)return '';     /* the live design (UI_NEXT); classic rows keep their layout */
+    /* one line that never wraps (the row keeps its height); the whole sentence is the tooltip and the screen-reader label */
+    const st='display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1;margin-top:0;font-size:10px';
+    const cell=(text,title)=>`<small class="h-odds" style="${st}" title="${esc(title)}" aria-label="${esc('Odds: '+text+'. '+title)}">${esc(text)}</small>`;
     if(!PICKEM.includes(r.offer.platform)){
       const sides=r.scout.side?[r.scout.side]:['over','under'], v=sides.map(sd=>[sd,ownOdds(r,sd)]).filter(([,x])=>x);
       return v.length?cell(v.map(([sd,x])=>(r.scout.side?sideWord(sd):(sd==='over'?'O':'U'))+' '+x).join(' · '),`${r.offer.platform_label}'s own price at ${r.offer.line}`):cell('No price listed',`${r.offer.platform_label} lists no price for this line right now`);
@@ -540,7 +541,7 @@ export function mount(C) {
     const app=appOdds(r), books=bookOddsAt(r);
     const bt=books.length?books.slice(0,2).map(({q,parts})=>`${BOOK_SHORT[q.offer.platform]||q.offer.platform_label} ${parts.filter(Boolean).map(([sd,d])=>(r.scout.side?'':(sd==='over'?'O ':'U '))+fmtDec(d)).join(' / ')}`).join(' · ')+(books.length>2?` +${books.length-2}`:''):'No book odds at this line';
     const btitle=books.length?`Sportsbook prices at exactly ${r.offer.line}${r.scout.side?` for the ${sideWord(r.scout.side)}`:''}: `+books.map(({q,parts})=>`${q.offer.platform_label} ${parts.filter(Boolean).map(([sd,d])=>sideWord(sd)+' '+fmtDec(d)).join(', ')}`).join('; '):`No sportsbook prices ${r.player.name} ${r.market.stat_label} at exactly ${r.offer.line} right now`;
-    return (app?cell(app.text,app.title):'')+cell(bt,btitle);
+    return cell((app?app.text+' · ':'')+bt,(app?app.title+'. ':'')+btitle);
   }
   /* the real alternatives for this prop (other books, other lines) as one small button; the detail is in its tooltip and the card's Lines tab */
   function compareCell(r) {
