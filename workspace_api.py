@@ -1078,10 +1078,25 @@ def _line_body(srv, book, rid):
         hist["closing"] = closing                      # SCOUT_CLOSING_LINES: only when a past game has a saved closing line
     if os.environ.get("SCOUT_LINE_HISTORY") == "1":     # lh-1 (workspace_linehist.py): every app's moves + closing markers, display only
         _line_history(srv, x, prop_key, full, hist)
-    return 200, {"record": rec, "forecast": forecast, "history": hist,
-                 "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
-                 "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved),
-                 "cs2_card": _cs2_card(x, saved), "veto": _veto(x)}
+    card = _cs2_card(x, saved)
+    doc = {"record": rec, "forecast": forecast, "history": hist,
+           "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
+           "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved),
+           "cs2_card": card, "veto": _veto(x)}
+    gin = _grade_inputs(x, rec, saved, card)
+    if gin:
+        doc["grade_inputs"] = gin               # "Behind the grade" (card_grade_inputs.py): the record's numbers + the saved forecast's inputs
+    return 200, doc
+
+
+def _grade_inputs(x, rec, saved, card):
+    """The card's "Behind the grade" block (card_grade_inputs.cs2) from what this doc already read: no read of its own. Display
+    only; None = no block (and never a failed /line)."""
+    try:
+        import card_grade_inputs
+        return card_grade_inputs.cs2(x, rec, saved, card)
+    except Exception:
+        return None
 
 
 def _cs2_card(x, saved):

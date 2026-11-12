@@ -352,7 +352,56 @@ export function panels(X) {
       ${ka.length ? `<details class="h-fx-more"><summary>Kalshi ladder · ${ka.length} ${ka.length === 1 ? 'rung' : 'rungs'}</summary>${table(['Rung (Over)', 'YES bid', 'YES ask', 'Volume', 'Open interest', 'Seen'], ka.map(k => `<tr><td>${esc(k.line)}</td><td>${k.bid != null ? Math.round(k.bid * 100) + '¢' : '–'}</td><td>${k.ask != null ? Math.round(k.ask * 100) + '¢' : '–'}</td><td>${k.volume != null ? esc(Math.round(k.volume)) : '–'}</td><td>${k.oi != null ? esc(Math.round(k.oi)) : '–'}</td><td>${k.seen_at ? esc(ctx.age ? ctx.age(k.seen_at) : when(k.seen_at)) : ''}</td></tr>`))}</details>` : ''}</section>`;
   }
 
+  /* ---------------------------------------------------------------- "Behind the grade" (owner 2026-11-11: every input and rule behind a grade)
+   * doc.grade_inputs is built on the server (card_grade_inputs.py) from the board record and the saved forecast: one shape for every
+   * sport. This panel only prints it. The headline numbers are the board record's own (r.scout / r.offer); when the doc was read for
+   * an earlier grade of this line (the doc is shared for a few seconds) only the record's numbers are printed, never a stale input. */
+  const giP = v => (v * 100).toFixed(Math.abs(v * 1000 - Math.round(v * 1000)) > 1e-6 ? 2 : 1) + '%';
+  const giN = v => String(+(+v).toFixed(2));
+  const giRow = (k, v) => v ? `<tr><th scope="row">${k}</th><td>${v}</td></tr>` : '';
+  const giTable = (cls, caption, head, rows) => rows.length ? `<table class="h-gi-table ${cls}"><caption>${esc(caption)}</caption>${head ? `<thead><tr>${head.map((h, i) => `<th scope="col"${i ? ' class="h-gi-num"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>` : ''}<tbody>${rows.join('')}</tbody></table>` : '';
+  function giEffect(f) {
+    if (!num(f.effect) || f.direction === 'none' || !f.direction) return '<span class="h-gi-used">Used</span>';
+    const up = f.direction === 'up', a = Math.abs(f.effect);
+    return `<span class="${up ? 'h-gi-up' : 'h-gi-dn'}"><span aria-hidden="true">${up ? '▲' : '▼'}</span> ${up ? '+' : '−'}${f.effect_unit === 'stat' ? a.toFixed(2) : a.toFixed(1) + '%'} <span class="h-gi-word">${up ? 'up' : 'down'}</span></span>`;
+  }
+  function gradeHtml(r, doc) {
+    const g = doc?.grade_inputs, sc = r?.scout || {};
+    if (!g || r.extra) return '';
+    const near = (a, b) => (a == null && b == null) || (num(a) && num(b) && Math.abs(a - b) < 1e-9);
+    const side = sc.side === 'over' || sc.side === 'under' ? sc.side : null;
+    /* the doc belongs to this grade only when its numbers are the record's */
+    const same = (g.side || null) === side && near(g.chance, side ? sc.p_side : null) && near(g.projection, sc.projection) && near(g.line, r.offer?.line);
+    const proj = sc.projection, line = r.offer?.line, gap = num(proj) && num(line) ? proj - line : null;
+    const rule = same ? g.letter_rule : null, stake = same ? g.stake : null, model = same ? g.model : null, sample = same ? g.sample : null;
+    const letter = same ? (g.letter || g.lean || '') : '';
+    const band = rule ? (rule.lower != null && rule.upper != null ? `${giP(rule.lower)} to below ${giP(rule.upper)}` : rule.lower != null ? `at least ${giP(rule.lower)}` : rule.upper != null ? `below ${giP(rule.upper)}` : '') : '';
+    const def = [
+      giRow('Projection vs line', num(proj) && num(line) ? `<span class="h-gi-num">${giN(proj)} vs ${esc(line)}</span>${gap ? ` <small class="${gap > 0 ? 'h-gi-up' : 'h-gi-dn'}"><span aria-hidden="true">${gap > 0 ? '▲' : '▼'}</span> ${giN(Math.abs(gap))} ${gap > 0 ? 'above' : 'below'} the line</small>` : ''}` : num(proj) ? `<span class="h-gi-num">${giN(proj)}</span>` : ''),
+      giRow('Chance', side && num(sc.p_side) ? `<span class="h-gi-num">${giP(sc.p_side)}</span>${same && g.chance_rule ? ` <small>${esc(g.chance_rule)}</small>` : ''}` : ''),
+      giRow('Side', side ? `<b class="h-gi-side-${side}">${esc(sideWord(side))}</b>` : ''),
+      giRow('Letter', letter ? `<b>${esc(letter)}</b>${band ? ` <small>Why this letter: chance ${band}</small>` : ''}` : ''),
+      giRow('Stake', side && num(sc.units) ? `<span class="h-gi-num">${giN(sc.units)}U</span>${sc.stake_reason && stake?.rule ? ` <small>${esc(stake.rule)}</small>` : ''}${stake && num(stake.band_units) && stake.band_units !== sc.units ? ` <small>This chance band stakes ${giN(stake.band_units)}U before stake rules</small>` : ''}` : ''),
+      giRow('Model', model?.name ? `<b>${esc(model.name)}</b>${model.version ? ` <small>version ${esc(model.version)}</small>` : ''}${model.calibration ? ` <small>chance calibration ${esc(model.calibration)}</small>` : ''}${model.grade_policy ? ` <small>letter scale ${esc(model.grade_policy)}</small>` : ''}` : ''),
+      giRow('Sample', sample && num(sample.n) ? `<span class="h-gi-num">${esc(sample.n)}</span> ${esc(sample.unit || '')}${sample.first && sample.last ? ` <small>${esc(sample.first)} to ${esc(sample.last)}</small>` : sample.last ? ` <small>newest ${esc(sample.last)}</small>` : ''}${num(sample.window_days) ? ` <small>${esc(sample.window_days)}-day window</small>` : ''}` : ''),
+    ].filter(Boolean);
+    const fs = same && Array.isArray(g.factors) ? g.factors.filter(f => f && f.label && f.value != null) : [];
+    const live = fs.filter(f => f.live === true), ctx = fs.filter(f => f.live !== true);
+    const liveT = giTable('h-gi-live', 'What moved the projection', ['Factor', 'Value', 'Effect'],
+      live.map(f => `<tr><th scope="row">${esc(f.label)}</th><td class="h-gi-num">${esc(f.value)}</td><td class="h-gi-num">${giEffect(f)}</td></tr>`));
+    const ctxT = giTable('h-gi-ctx', 'Shown for context', ['Factor', 'Value'],
+      ctx.map(f => `<tr><th scope="row">${esc(f.label)}</th><td class="h-gi-num">${esc(f.value)}</td></tr>`));
+    const mt = giTable('h-gi-matchup', 'Matchup', null, (Array.isArray(g.matchup) ? g.matchup : []).filter(m => m && m.label && m.value != null).map(m => `<tr><th scope="row">${esc(m.label)}</th><td>${esc(m.value)}</td></tr>`));
+    const hold = same && g.hold && Array.isArray(g.hold.reasons) ? giTable('h-gi-hold', 'Hold reasons', null,
+      [...g.hold.reasons.map(t => `<tr><th scope="row">Held</th><td>${esc(t)}</td></tr>`), ...(g.hold.rule ? [`<tr><th scope="row">Rule</th><td>${esc(g.hold.rule)}</td></tr>`] : [])]) : '';
+    const body = (def.length ? `<table class="h-gi-table h-gi-def"><caption class="h-gi-sr">The numbers behind this grade</caption><tbody>${def.join('')}</tbody></table>` : '')
+      + liveT + (liveT && g.effect_note ? `<p class="h-gi-note">${esc(g.effect_note)}</p>` : '')
+      + (ctxT ? ctxT + '<p class="h-gi-note">Weight 0: these do not move this projection. A factor moves grades only after a chronological test.</p>' : '') + mt + hold;
+    return body ? `<section class="h-gi" aria-labelledby="h-gi-h"><div class="h-gi-head"><h4 id="h-gi-h">Behind the grade</h4></div>${body}</section>` : '';
+  }
+
   return {
+    grade: gradeHtml,
     factors(r, doc) {
       const list = r.sport === 'cs2' ? cs2(r, doc) : r.sport === 'lol' ? lol(r, doc) : sports(r, doc);
       const body = list.filter(Boolean).join('');

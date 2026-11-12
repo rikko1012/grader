@@ -2,8 +2,12 @@
  * No grades or prices are calculated here. The original pages and their tools stay intact.
  */
 import {panels as cardPanels} from '/upgrade/cards.js';
+import {groupProps,groupPlayers,lineId,propKey as linePropKey} from '/upgrade/lines.js';
 export function mount(C) {
-  if(!document.querySelector('link[href="/upgrade/hub.css"]')){const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);}
+  /* UI_NEXT (redesign 2026-11-11): the page's head script chose the design (UI_NEXT=1 or the member's /preview/next cookie) and
+     loaded its sheets; hub.css is not loaded with it. Display only: no number on the board or a card differs between the designs. */
+  const NEXT=document.documentElement.dataset.ui==='next';
+  if(!NEXT&&!document.querySelector('link[href="/upgrade/hub.css"]')){const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);}
   const {api, R, T, SPORTS, esc, pct, when} = C;
   const V2 = R.me.features?.workspace_v2 === true;
   // SCOUT_BOARD_H2H (default off): H2H + Season columns, 7-tone cells, start countdown, Edge vs the Underdog standard break-even
@@ -349,6 +353,19 @@ export function mount(C) {
   }
   const countdownHtml = r => `<span class="h-countdown${Date.parse(r.event.start_utc)-Date.now()<=3600000?' soon':''}" data-start="${esc(r.event.start_utc)}">${esc(countdown(r.event.start_utc))}</span>`;
   const openPlayers = new Set();
+  /* UI_NEXT: one board row per player + stat; its ladder (every line of that prop, by app) opens in place. Open ladders and the
+     By prop / By player choice survive repaints and refreshes (display state only). */
+  const openLadders = new Set();
+  H.groupBy='prop';
+  try{if(localStorage.getItem('scout-board-group')==='player')H.groupBy='player';}catch(e){/* storage blocked */}
+  const RANKED=new Set(['chance','line','edge','medge','l5','l10','l20','h2h','season','hit']);
+  const PAGE_PROPS=50,PAGE_PLAYERS=25;
+  /* by player: the member's choice, or a search that lands on a few players (their props together, grouped by stat) */
+  const byPlayer=groups=>H.groupBy==='player'||(!!fold(H.q)&&new Set(groups.map(g=>g.player)).size<=3);
+  function boardGroups(list){
+    const src=boardSource().filter(r=>!C.started(r)&&!unavailableReason(r)&&(H.sport==='all'||r.sport===H.sport));
+    return groupProps(list,src,RANKED.has(H.sortBy));
+  }
   /* NBA / NFL faces (audit 2026-11-05): ESPN headshot in a circle with the team logo; esports rows get none */
   const faceOf = (r,size) => C.faceHtml?C.faceHtml(r.sport,{id:r.player.id,key:r.player.key,name:r.player.name,team:r.player.team_abbr||r.player.team,size,cls:'h-face'}):'';
   const kindOf = r => C.lineKind?C.lineKind(r.offer.platform,r.market.line_type):'';
@@ -493,16 +510,16 @@ export function mount(C) {
   /* owner 2026-11-08 ("i dont see players roles"): the row's second line opens with the player's role, the same text as the card's
      tag (r.player.role, every sport); no role, no tag. It sits before the matchup, which is cut first, so the name keeps its width. */
   const rowRole = r => r.player.role?`<em class="h-role h-row-role">${esc(r.player.role)}</em>`:'';
-  function row(r, group=null) {
-    const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r)||H.detail===key(r);
+  function row(r, group=null, g=null) {
+    const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r)||H.detail===key(r)||(!!g&&g.lines.some(x=>key(x)===H.detail));
     const choose=!side||!r.offer[side]?.offered;
     const unavailable=!!unavailableReason(r);
     const bk=boardPlayerKey(r), propsOpen=openPlayers.has(bk), more=group?.length>1?group.length-1:0;
-    const toggle=more?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(bk)}" aria-expanded="${propsOpen}" aria-label="${propsOpen?'Hide':'Show'} ${more} more ${more===1?'prop':'props'} for ${esc(r.player.name)}" title="${esc(group.slice(1).map(x=>x.market.stat_label+' '+x.offer.line+' · '+x.market.period_label).join('\n'))}">${propsOpen?'−':'+'}${more}</button>`:'';
+    const toggle=g?'':more?`<button class="h-prop-toggle" data-hub="player-props" data-id="${esc(bk)}" aria-expanded="${propsOpen}" aria-label="${propsOpen?'Hide':'Show'} ${more} more ${more===1?'prop':'props'} for ${esc(r.player.name)}" title="${esc(group.slice(1).map(x=>x.market.stat_label+' '+x.offer.line+' · '+x.market.period_label).join('\n'))}">${propsOpen?'−':'+'}${more}</button>`:'';
     // the matchup sits on the game header row; without headers (another sort) the row names the opponent itself
     const vs=H.sortBy!=='start'&&r.player.opponent?` vs ${r.player.opponent}`:'', name=esc(r.player.name);
     const add=on?['On slip ✓',`On slip: show ${name} in the slip`]:choose?['Side',`Choose a side for ${name}`]:['+ Add',`Add ${name} ${sideWord(side)} ${esc(r.offer.line)} to slip`];
-    return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group?'':' is-sub'}${noHits(r)?' h-nohits':''}">
+    return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group||(g&&!g.inPlayer)?'':' is-sub'}${noHits(r)?' h-nohits':''}${g&&openLadders.has(g.key)?' has-ladder':''}"${g?` data-prop="${esc(g.key)}"`:''}>
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${rowRole(r)}<span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
       <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
@@ -510,8 +527,63 @@ export function mount(C) {
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}${MX?booksLine(r):''}</td>`:''}${MX?`<td class="h-c-medge h-number${mxValue(r)==null?' is-empty':''}">${mxCell(r)}</td>`:''}
-      <td class="h-c-compare">${compareCell(r)}</td>
+      <td class="h-c-compare">${g?linesCell(g):compareCell(r)}</td>
       <td class="h-c-add">${C.oneSided(r)&&!r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research. ${esc(C.oneSidedNote(r))}" title="${esc(C.oneSidedNote(r))}">Info</button>`:r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research for the ${esc(r.offer.platform_label)} line" title="Research for this line. View only: slips are PrizePicks or Underdog entries">Info</button>`:`<button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button>`}</td></tr>`;
+  }
+  /* UI_NEXT: the row's Lines cell. One line = the app's name; more = a button that opens the ladder under the row, with the number
+     of lines and apps and, when a filter or search is on, how many of them it matched (a grouped row never hides a matched line). */
+  const filtering=()=>activeFilters()>0||H.book!=='all'||!!fold(H.q);
+  function linesCell(g) {
+    const r=g.main,open=openLadders.has(g.key),n=g.total;
+    if(n<2)return `<span class="h-lines-one">${esc(r.offer.platform_label)}</span>`;
+    const part=filtering()&&g.matched.length<n?`${g.matched.length} of ${n} match`:'';
+    const range=g.values>1?`${g.lines[0].offer.line}–${g.lines[n-1].offer.line}`:`at ${r.offer.line}`;
+    const say=`${open?'Hide':'Show'} all ${n} lines for ${r.player.name} ${r.market.stat_label}, ${g.books} ${g.books===1?'app':'apps'}, ${range}${part?', '+part:''}`;
+    return `<button class="h-lines-btn" data-hub="ladder" data-id="${esc(g.key)}" aria-expanded="${open}" aria-label="${esc(say)}"><b>${open?'−':'+'}${n-1} ${n-1===1?'line':'lines'}</b><small>${g.books} ${g.books===1?'app':'apps'} · ${esc(range)}</small>${part?`<em>${esc(part)}</em>`:''}</button>`;
+  }
+  /* the ladder: every line of the prop by line then app, each with its prices and Scout's side, chance and letter for that line (the
+     server's own numbers for that record); the best line for the row's Scout side is marked; a line adds to the slip from here */
+  function ladderScout(q) {
+    const s=q.scout;
+    if(C.oneSided(q))return `<span class="h-ld-none">${esc(C.oneSided(q))}</span>`;
+    if(s.side)return `<span class="h-ld-side ${s.side}">${s.side==='over'?'▲':'▼'} ${sideWord(s.side)}</span><b class="h-ld-p">${pct(s.p_side)}</b>`;
+    if(num(s.p_over)&&num(s.p_under))return `<span class="h-ld-both">O ${pct(s.p_over)} · U ${pct(s.p_under)}</span>`;
+    return '';
+  }
+  function ladderHtml(g,cols) {
+    const side=g.main.scout.side,dim=filtering()&&g.matched.length<g.total;
+    const price=(q,sd)=>!q.offer[sd]?.offered?'<span class="h-ld-off">—</span>':esc(C.priceText(q,sd)||(q.market.line_type==='standard'?'Std':C.lineLabel(q)));
+    const act=q=>{const k=esc(key(q)),on=C.onSlip(q),nm=esc(q.player.name);
+      if(q.extra||C.oneSided(q)||!['prizepicks','underdog'].includes(q.offer.platform))return `<button class="h-ld-act" data-hub="expand" data-id="${k}" aria-label="Open ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">Card</button>`;
+      const choose=!q.scout.side||!q.offer[q.scout.side]?.offered;
+      return `<button class="h-ld-act${on?' is-on':''}" data-hub="add" data-id="${k}" aria-label="${on?`On slip: ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:choose?`Choose a side for ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:`Add ${nm} ${sideWord(q.scout.side)} ${esc(q.offer.line)} on ${esc(q.offer.platform_label)} to slip`}">${on?'On slip':choose?'Side':'+ Add'}</button>`;};
+    const body=g.lines.map(q=>{const k=key(q),kind=kindOf(q)||(q.market.line_type!=='standard'?C.lineLabel(q):''),hit=g.match.has(lineId(q));
+      return `<tr class="${[k===key(g.main)?'is-main':'',dim&&!hit?'is-dim':'',dim&&hit?'is-match':'',H.detail===k?'is-open':''].filter(Boolean).join(' ')}" data-line="${esc(k)}">
+        <th scope="row"><button class="h-ld-book" data-hub="expand" data-id="${esc(k)}" aria-label="Open the card for ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">${esc(q.offer.platform_label)}${kind?` <em class="u-lt u-lt-${esc(String(kind).toLowerCase())}">${esc(kind)}</em>`:''}</button></th>
+        <td class="h-ld-line"><b>${esc(q.offer.line)}</b>${g.best&&key(g.best)===k?`<em class="h-ld-best">Best ${sideWord(side)}</em>`:''}${q.offer.moved_from!=null?`<small>was ${esc(q.offer.moved_from)}</small>`:''}</td>
+        <td class="h-ld-px">${price(q,'over')}</td><td class="h-ld-px">${price(q,'under')}</td>
+        <td class="h-ld-scout">${ladderScout(q)}<span class="h-ld-grade">${q.scout.side&&!q.scout.hold&&!q.scout.line_chance&&!C.oneSided(q)?gradeChip(q):''}</span></td>
+        <td class="h-ld-do">${act(q)}</td></tr>`;}).join('');
+    return `<tr class="h-ladder-row h-span-row" data-ladder="${esc(g.key)}"><td colspan="${cols}"><div class="h-ladder"><table class="h-ladder-table" aria-label="${esc(`All ${g.total} lines for ${g.main.player.name} ${g.main.market.stat_label}`)}"><thead><tr><th scope="col">App</th><th scope="col">Line</th><th scope="col">Over</th><th scope="col">Under</th><th scope="col">Scout</th><th scope="col"><span class="u-sr">Slip</span></th></tr></thead><tbody>${body}</tbody></table>${dim?`<p class="h-ladder-note">${g.matched.length} of ${g.total} lines match the filters; the rest are listed dimmed.</p>`:''}</div></td></tr>`;
+  }
+  /* by player: one header per player (sticky while their props scroll), then their props by stat */
+  function playerRow(p,cols) {
+    const r=p.first,watched=H.watch.includes(playerKey(r));
+    return `<tr class="h-player-row h-span-row" data-player="${esc(p.key)}"><td colspan="${cols}"><div class="h-player-head">${faceOf(r,24)}<b>${esc(r.player.name)}</b>${rowRole(r)}<span>${esc(r.player.team)}${r.player.opponent?` vs ${esc(r.player.opponent)}`:''} · ${SPORTS[r.sport]}</span><small>${plural(p.props.length,'prop')} · ${plural(p.lines,'line')}</small><button class="h-star" data-hub="watch" data-id="${esc(key(r))}" aria-label="Watch ${esc(r.player.name)}" aria-pressed="${watched}">${watched?'★':'☆'}</button></div></td></tr>`;
+  }
+  function paintRowsNext(list,cols,headers) {
+    const groups=boardGroups(list),players=byPlayer(groups),units=players?groupPlayers(groups):groups,size=players?PAGE_PLAYERS:PAGE_PROPS,pages=Math.max(1,Math.ceil(units.length/size));
+    H.page=Math.min(H.page,pages-1);
+    const page=units.slice(H.page*size,(H.page+1)*size);
+    let last=null;
+    const prop=(g,inPlayer)=>{g.inPlayer=inPlayer;return row(g.main,null,g)+(openLadders.has(g.key)&&g.total>1?ladderHtml(g,cols):'');};
+    $('hub-rows').innerHTML=page.map(u=>{const r=players?u.first:u.main,gk=gameKey(r),head=headers&&gk!==last?gameRow(r,list,cols):'';last=gk;
+      return head+(players?playerRow(u,cols)+u.props.map(g=>prop(g,true)).join(''):prop(u,false));}).join('');
+    $('hub-table').classList.toggle('h-by-player',players);
+    const nPlayers=new Set(groups.map(g=>g.player)).size;
+    $('hub-count').textContent=`${plural(nPlayers,'player')} · ${plural(groups.length,'prop')} · ${plural(list.length,'line')}`;
+    $('hub-board-section').querySelectorAll('[data-hub="group-by"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===(players?'player':'prop'))));
+    return {n:units.length,size,pages,word:players?'players':'props'};
   }
   /* the game header row: matchup, sport, start and countdown once per game; a click shows only that game (and back) */
   function gameRow(r,list,cols) {
@@ -527,7 +599,7 @@ export function mount(C) {
       +`<th class="h-c-hits"><span class="h-strip h-strip-head">${STRIP.map(([w,l])=>`<i class="h-strip-th" title="${esc(STRIP_TITLE[w])}">${sortBtn(w,l)}</i>`).join('')}</span></th>`
       +(showEdge?`<th class="h-c-edge" title="${esc(EDGE_WHY())}" aria-sort="${sortState('edge')}">${sortBtn('edge','Edge',' <small>vs break-even</small>')}</th>`:'')
       +(MX?`<th class="h-c-medge" title="${esc(MX_WHY())}" aria-sort="${sortState('medge')}">${sortBtn('medge','Market edge',' <small>books vs break-even</small>')}</th>`:'')
-      +'<th class="h-c-compare">Compare</th><th class="h-c-add"><span class="u-sr">Add to slip</span></th></tr>';
+      +`<th class="h-c-compare">${NEXT?'Lines':'Compare'}</th>`+'<th class="h-c-add"><span class="u-sr">Add to slip</span></th></tr>';
   }
   /* audit 2026-11-04: one plain banner when a source feeding the visible sport(s) is behind: its feed is not current, or its newest
      offer was seen more than 2 hours ago. It names the source and how long since it updated; its lines stay off the board. */
@@ -575,10 +647,11 @@ export function mount(C) {
     /* the default Edge sort falls back to start time quietly; a sort the member chose says why it fell back */
     $('hub-sort-note').textContent=H.sortFallback&&H.sortChosen?(H.sort==='hit'?'No line on screen has a hit rate and a published payout, so the board is sorted by start time.':H.sort==='edge'?'No line on screen has an edge, so the board is sorted by start time.':H.sort==='medge'?'No line on screen has a market edge, so the board is sorted by start time.':`No line on screen has ${sortName(H.sort).replace(' hit rate','')} results, so the board is sorted by start time.`)
       :H.sortBy==='hit'?'Lines whose hit rate is below their break-even are listed last.':'';
-    let last=null;
-    $('hub-rows').innerHTML=page.map(group=>{const r=group[0],g=gameKey(r),head=headers&&g!==last?gameRow(r,list,cols):'';last=g;
+    let last=null,nx=null;
+    if(NEXT)nx=paintRowsNext(list,cols,headers);
+    else{$('hub-rows').innerHTML=page.map(group=>{const r=group[0],g=gameKey(r),head=headers&&g!==last?gameRow(r,list,cols):'';last=g;
       return head+row(r,group)+(openPlayers.has(boardPlayerKey(r))?group.slice(1).map(x=>row(x)).join(''):'');}).join('');
-    $('hub-count').textContent=`${players.length.toLocaleString()} ${players.length===1?'player':'players'} · ${list.length.toLocaleString()} ${list.length===1?'line':'lines'}`;
+    $('hub-count').textContent=`${players.length.toLocaleString()} ${players.length===1?'player':'players'} · ${list.length.toLocaleString()} ${list.length===1?'line':'lines'}`;}
     $('hub-clear').hidden=!activeFilters()&&H.book==='all'&&!H.q;
     $('hub-chips').innerHTML=filterChips();
     $('hub-sources').innerHTML=H.loading?$('hub-sources').innerHTML:sourcesHtml();
@@ -595,7 +668,8 @@ export function mount(C) {
     $('hub-empty').hidden=games||list.length>0;
     if(H.loading)$('hub-empty').textContent='Loading the available boards…';
     else if(!list.length)$('hub-empty').innerHTML=emptyReasons();
-    $('hub-pagination').innerHTML=games||!players.length?'':`<span>${H.page*size+1}–${Math.min((H.page+1)*size,players.length)} of ${players.length} players</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
+    if(nx)$('hub-pagination').innerHTML=games||!nx.n?'':`<span>${H.page*nx.size+1}–${Math.min((H.page+1)*nx.size,nx.n)} of ${nx.n.toLocaleString()} ${nx.word}</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===nx.pages-1?'disabled':''}>Next</button>`;
+    else $('hub-pagination').innerHTML=games||!players.length?'':`<span>${H.page*size+1}–${Math.min((H.page+1)*size,players.length)} of ${players.length} players</span><button data-hub="page" data-id="-1" ${H.page===0?'disabled':''}>Previous</button><button data-hub="page" data-id="1" ${H.page===pages-1?'disabled':''}>Next</button>`;
     /* QOL 2026-11-07: with nothing saved the menu says so and looks disabled (it offered "Choose a saved view" with nothing to choose) */
     $('hub-views').innerHTML=`<option value="">${H.views.length?'Choose a saved view':'No saved views yet'}</option>`+H.views.map((v,i)=>`<option value="${i}">${esc(v.name)}</option>`).join('');
     $('hub-views').disabled=!H.views.length;
@@ -608,7 +682,7 @@ export function mount(C) {
      Market edge (1281px+ with Edge); counted in the header row's colspan, a hidden column became an empty extra column that took the
      player column's width (on a start-time board names and role tags were cut, at 1101-1280px hidden). Display only; refit on resize. */
   function fitGameRows() {
-    const head=$('hub-table')?.tHead?.rows[0], rows=document.querySelectorAll('#hub-rows tr.h-game-row>td');if(!head||!rows.length)return;
+    const head=$('hub-table')?.tHead?.rows[0], rows=document.querySelectorAll('#hub-rows tr.h-game-row>td,#hub-rows tr.h-span-row>td');if(!head||!rows.length)return;
     const n=[...head.cells].filter(c=>getComputedStyle(c).display!=='none').length||1;
     rows.forEach(td=>{if(td.colSpan!==n)td.colSpan=n;});
   }
@@ -734,6 +808,8 @@ export function mount(C) {
     syncFields();
     const players=[...new Set(rows().map(boardPlayerKey))];
     H.page=Math.max(0,Math.floor(players.indexOf(boardPlayerKey(r))/40));
+    if(NEXT){const gs=boardGroups(rows()),pl=byPlayer(gs),us=pl?groupPlayers(gs):gs,k=pl?boardPlayerKey(r):linePropKey(r);
+      H.page=Math.max(0,Math.floor(us.findIndex(u=>u.key===k)/(pl?PAGE_PLAYERS:PAGE_PROPS)));openLadders.add(linePropKey(r));}
     openPlayers.add(boardPlayerKey(r));
     openCard(id).then(()=>{document.querySelector(`#hub-rows tr[data-record="${CSS.escape(id)}"]`)?.scrollIntoView({block:'center'});});
   }
@@ -1210,7 +1286,7 @@ export function mount(C) {
       :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span>${median!=null?`<span><i class="median"></i>Median ${esc(Math.round(median*10)/10)}</span>`:''}</div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>${movedRow(moves.get(g.date+'|'+g.opponent),4)}`).join('')}</tbody></table></div></details>`
       :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
     const lh=doc?.history?.line_history, avgClose=num(lh?.avg_closing_l10)?tile(esc(lh.avg_closing_l10),'Avg closing line',`<small>last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'} · ${esc(lh.closing_platform)}</small>`,' is-closing'):'';
-    return `${whyHtml(r)}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
+    return `${whyHtml(r)}${NEXT&&PX().grade?PX().grade(r,doc,pxCtx(r)):''}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
       <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
@@ -1889,6 +1965,10 @@ export function mount(C) {
     page(id){H.page+=Number(id);paintBoard();$('hub-table').scrollIntoView({block:'start'});},
     'player-props'(id){const open=rec(H.expanded);if(openPlayers.has(id)){openPlayers.delete(id);if(cardOpen()&&open&&boardPlayerKey(open)===id)closeCard(false);}else openPlayers.add(id);paintBoard();},
     expand(id){if(cardOpen()&&H.expanded===id)closeCard();else openCard(id,'overview');},
+    ladder(id){if(openLadders.has(id))openLadders.delete(id);else openLadders.add(id);paintBoard();},
+    'group-by'(id){H.groupBy=id==='player'?'player':'prop';H.page=0;try{localStorage.setItem('scout-board-group',H.groupBy);}catch(e){/* storage blocked */}paintBoard();},
+    theme(){const root=document.documentElement,t=root.dataset.theme==='light'?'dark':'light';root.dataset.theme=t;try{localStorage.setItem('scout-theme',t);}catch(e){/* storage blocked */}
+      document.querySelectorAll('#u-hub [data-hub="theme"]').forEach(b=>{b.textContent=t==='light'?'Dark theme':'Light theme';b.setAttribute('aria-pressed',String(t==='light'));});if(cardOpen()&&H.cardTab==='overview')drawChart();},
     'card-close'(){closeCard();},
     'card-tab'(id){if(!CARD_TABS.some(t=>t[0]===id))return;H.cardTab=id;paintDetail();$('hub-card-body').scrollTop=0;$('hub-tab-'+id)?.focus({preventScroll:true});},
     'genie-ask'(q){genieAsk(q);},
@@ -2018,6 +2098,23 @@ export function mount(C) {
   if(document.body.classList.contains('ot-lol')){let q=0;new MutationObserver(()=>{if(q)return;q=requestAnimationFrame(()=>{q=0;const bar=document.querySelector('.ot-lol .bar');if(bar&&entry.parentNode!==bar)bar.appendChild(entry);});}).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});}
   /* QOL 2026-11-07: Enter in the name box saves (the form's first button is Cancel, so Enter cancelled and nothing was saved) */
   $('hub-board-section').querySelector('.h-viewmode').insertAdjacentHTML('afterend','<button id="hub-focus" class="h-focus-toggle" data-hub="focus-board" aria-pressed="false" aria-controls="hub-slip-content">Hide slip</button>');
+  if(NEXT){
+    /* UI_NEXT shell: By prop / By player, the theme switch, and (preview cookie only) the way back to the current design */
+    $('hub-board-section').querySelector('.h-viewmode').insertAdjacentHTML('beforebegin','<div class="h-segment h-groupmode" role="group" aria-label="Group rows"><button data-hub="group-by" data-id="prop" aria-pressed="true">By prop</button><button data-hub="group-by" data-id="player" aria-pressed="false">By player</button></div>');
+    const light=document.documentElement.dataset.theme==='light',preview=/(?:^|;\s*)scout_ui=next(?:;|$)/.test(document.cookie);
+    const extra=`<button data-hub="theme" aria-pressed="${light}">${light?'Dark theme':'Light theme'}</button>${preview?'<a class="h-preview-off" href="/preview/next?off=1">Current design</a>':''}`;
+    document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin',extra);
+    $('hub-more').insertAdjacentHTML('beforeend',extra);
+    /* rows by keyboard: Up / Down move between rows, Right opens a row's ladder, Left closes it (Enter opens the card as before) */
+    $('hub-rows').addEventListener('keydown',e=>{
+      if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft'].includes(e.key)||e.altKey||e.ctrlKey||e.metaKey)return;
+      const tr=e.target.closest('tr.h-row');if(!tr||e.target.closest('.h-ladder'))return;
+      if(e.key==='ArrowRight'||e.key==='ArrowLeft'){const k=tr.dataset.prop,b=tr.querySelector('[data-hub="ladder"]');if(!k||!b)return;
+        if((e.key==='ArrowRight')!==openLadders.has(k)){e.preventDefault();openLadders[e.key==='ArrowRight'?'add':'delete'](k);paintBoard();document.querySelector(`#hub-rows tr[data-prop="${CSS.escape(k)}"] .h-player`)?.focus({preventScroll:true});}return;}
+      const list=[...document.querySelectorAll('#hub-rows tr.h-row')],to=list[list.indexOf(tr)+(e.key==='ArrowDown'?1:-1)];
+      if(to){e.preventDefault();to.querySelector('.h-player')?.focus();to.scrollIntoView({block:'nearest'});}
+    });
+  }
   function generationSummary(){
     const n=$('hub-generation-slips').value,size=$('hub-generation-count').value;
     const sports=[...$('hub-generation-sports').querySelectorAll('input:checked')].map(x=>SPORTS[x.value]);

@@ -4432,8 +4432,22 @@ def landing_page():
     version, join url): send_shared caches the ETag + gzip by body identity (see sports_nav)."""
     raw, url = web_file("landing.html"), whop_auth.upgrade_url()
     if _LANDING["raw"] is not raw or _LANDING["url"] != url:
-        _LANDING.update(raw=raw, url=url, data=raw.replace(b"{{JOIN_URL}}", htmllib.escape(url, quote=True).encode("utf-8")))
-    return _LANDING["data"]
+        _LANDING.update(raw=raw, url=url, data=raw.replace(b"{{JOIN_URL}}", htmllib.escape(url, quote=True).encode("utf-8")), next=None)
+    return landing_next() if ui_next_default() else _LANDING["data"]
+
+
+LANDING_NEXT_FONTS = (b'<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500'
+                      b'&family=IBM+Plex+Sans:wght@400;500;600&display=swap">')
+
+
+def landing_next():
+    """UI_NEXT: the signed-out page in the redesign's identity. The same landing.html with web/landing-next.css added after its own
+    styles; one bytes object per landing version (send_shared keys its ETag + gzip on body identity)."""
+    if _LANDING.get("next") is None:
+        base = _LANDING["data"]
+        i = base.rfind(b"</head>")
+        _LANDING["next"] = base if i < 0 else base[:i] + LANDING_NEXT_FONTS + b"<style>" + web_file("landing-next.css") + b"</style>" + base[i:]
+    return _LANDING["next"]
 
 
 def landing_route(path):
@@ -4464,8 +4478,21 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
                   "/upgrade/hub.js": ("upgrade-hub.js", "text/javascript; charset=utf-8"),
                   "/upgrade/cards.js": ("upgrade-cards.js", "text/javascript; charset=utf-8"),   # the hub card's restored panels + odds
                   "/upgrade/hub.css": ("upgrade-hub.css", "text/css; charset=utf-8"),
-                  "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8")}
+                  "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8"),
+                  # UI_NEXT (the redesign, 2026-11-11): its own two sheets. hub.css is not loaded with it, and nothing asks for
+                  # these unless the page's head script chose the new design (UI_NEXT=1, or the member's /preview/next cookie)
+                  "/upgrade/lines.js": ("upgrade-lines.js", "text/javascript; charset=utf-8"),   # board rows by prop (pure grouping)
+                  "/upgrade/next-base.css": ("upgrade-next-base.css", "text/css; charset=utf-8"),
+                  "/upgrade/next.css": ("upgrade-next.css", "text/css; charset=utf-8")}
 UPGRADE_API = "/api/upgrade/"
+UI_NEXT_PREVIEW = "/preview/next"                       # member-gated like the board: turns the redesign on for this browser only
+UI_NEXT_COOKIE = "scout_ui"                             # next = the redesign, current = the design before it; read by the page's head script
+
+
+def ui_next_default():
+    """UI_NEXT=1: the redesigned hub is what every member gets (a member's own /preview/next?off=1 choice still wins). Unset = the
+    current design is the default and the redesign is reached only through /preview/next. One step to go live, one to roll back."""
+    return os.environ.get("UI_NEXT", "").strip() == "1"
 _UPGRADE_MEMO = {}                                      # (id(page bytes), name, tokens) -> (page bytes, upgraded page)
 _UPGRADE_LOCK = threading.Lock()
 UI_TOKENS_ROUTE = "/upgrade/tokens.css"                 # SCOUT_UI_TOKENS=1 only; off = the unknown-route answer
@@ -4508,6 +4535,7 @@ def upgrade_page(body, name):
     """The upgraded copy of a member page. Memoised per page OBJECT, as sports_nav is: send_shared caches the ETag + gzip by body
     identity, so a fresh copy per request would recompress the page every time."""
     tokens, lazy = ui_tokens_on(), name == "cs2" and classic_lazy_on()
+    tokens = (tokens, ui_next_default())                # the memo key carries both design switches
     hit = _UPGRADE_MEMO.get((id(body), name, tokens, lazy))
     if hit is not None and hit[0] is body:
         return hit[1]
@@ -4525,22 +4553,31 @@ def _upgrade_build(body, name, tokens, lazy):
 html.scout-boot body{visibility:hidden!important}
 html.scout-boot{background:#101215}
 html.scout-boot::after{content:"Loading your workspace...";position:fixed;inset:0;display:grid;place-items:center;color:#b3becb;font:500 16px system-ui}
+html.scout-boot[data-ui=next]{background:#0b0d10}html.scout-boot[data-ui=next][data-theme=light]{background:#f4f3ef}
+html.scout-boot[data-ui=next]::after{content:"Loading";font:500 13px ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase;color:#8a9099}
 </style><script>
 (function(){
 const root=document.documentElement,q=new URLSearchParams(location.search);
 window.scoutClassic=q.get('view')==='classic'||q.has('slip')||q.has('p')||q.get('bv')==='1';
 window.scoutBootDone=function(){root.classList.remove('scout-boot');clearTimeout(window.scoutBootTimer);};
+const ck=document.cookie,NEXT=/(?:^|;\s*)scout_ui=next(?:;|$)/.test(ck)||(false/*UI_NEXT*/&&!/(?:^|;\s*)scout_ui=current(?:;|$)/.test(ck));
+if(NEXT){root.dataset.ui='next';let t=null;try{t=localStorage.getItem('scout-theme');}catch(e){}root.dataset.theme=t==='light'?'light':'dark';
+const f=document.createElement('link');f.rel='stylesheet';f.href='https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap';document.head.appendChild(f);}
 const h=location.hash;
 if(!window.scoutClassic&&root.dataset.upgrade!=='sports-results'&&(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|tools|picks|alerts))/.test(h))){
 root.classList.add('scout-boot');window.scoutBootTimer=setTimeout(window.scoutBootDone,8000);
 }
-window.scoutStylesReady=Promise.all(['/upgrade/upgrade.css','/upgrade/hub.css'].map(href=>new Promise(resolve=>{
+window.scoutStylesReady=Promise.all(['/upgrade/upgrade.css','/upgrade/hub.css'].flatMap(h=>NEXT&&h.slice(-8)==='/hub.css'?['/upgrade/next-base.css','/upgrade/next.css']:[h]).map(href=>new Promise(resolve=>{
 const link=document.createElement('link');link.rel='stylesheet';link.href=href;link.onload=link.onerror=resolve;document.head.appendChild(link);
 })));
 })();
 </script>'''
     tail = f'<script src="/upgrade/upgrade.js" data-page="{name}"></script>'.encode()
     mark = f'<html data-upgrade="{name}" '
+    tokens, nxt = tokens if isinstance(tokens, tuple) else (tokens, False)
+    key = (id(body), name, (tokens, nxt), lazy)
+    if nxt:                                             # UI_NEXT=1 only: the redesign is the default; one literal flips
+        head = head.replace(b"(false/*UI_NEXT*/&&", b"(true/*UI_NEXT*/&&", 1)
     if tokens:                                          # flag on only: the token sheet joins the two hub sheets, nothing else moves
         head = head.replace(b"html.scout-boot{background:#101215}", b"html.scout-boot{background:#080808}", 1)
         head = head.replace(b"['/upgrade/upgrade.css','/upgrade/hub.css']", b"['/upgrade/upgrade.css','/upgrade/hub.css','" + UI_TOKENS_ROUTE.encode() + b"']", 1)
@@ -4557,7 +4594,7 @@ const link=document.createElement('link');link.rel='stylesheet';link.href=href;l
         out = out.replace(b"<html ", mark.encode(), 1)
     if len(_UPGRADE_MEMO) > 16:                         # a handful of pages; old versions drop when a file changes
         _UPGRADE_MEMO.clear()
-    _UPGRADE_MEMO[(id(body), name, tokens, lazy)] = (body, out)
+    _UPGRADE_MEMO[key] = (body, out)
     return out
 
 
@@ -4804,7 +4841,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, {**_HEALTH_SNAPSHOT.read(_health_diagnostics), "ok": True,
                                        "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40]})
             if u.path in LANDING_PATHS and landing_route(u.path) and self.signed_out():     # signed-out visitors only
-                return self.send_shared(("page", "landing"), 200, landing_page(), "text/html; charset=utf-8", keep=600)
+                return self.send_shared(("page", "landing", ui_next_default()), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
                 return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
             if u.path in WORKSPACE_ROUTES and self._workspace_on(q):    # not allowed = the unknown-route answer below
@@ -4812,6 +4849,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(("workspace", name), 200, web_file(name), ctype, keep=600)
             if u.path.startswith(WORKSPACE_API) and self._workspace_on(q):
                 return self._workspace_api("GET", u.path, q)
+            if u.path == UI_NEXT_PREVIEW + "/landing" and self._upgrade_on(q):      # the redesigned signed-out page, for a member to look at
+                landing_page()
+                return self.send_shared(("page", "landing", "next"), 200, landing_next(), "text/html; charset=utf-8", keep=600)
+            if u.path == UI_NEXT_PREVIEW and self._upgrade_on(q):       # not allowed = the unknown-route answer below
+                # the redesign preview: a cookie for this browser, then the board. ?off=1 goes back to the current design.
+                want = "current" if q.get("off") in ("1", "true") else "next"
+                secure = "; Secure" if self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
+                return self.redirect("/#all-sports", cookies=(f"{UI_NEXT_COOKIE}={want}; Max-Age=7776000; Path=/; SameSite=Lax{secure}",))
             if u.path in UPGRADE_ROUTES and self._upgrade_on(q):        # not allowed = the unknown-route answer below
                 name, ctype = UPGRADE_ROUTES[u.path]
                 return self.send_shared(("upgrade", name), 200, web_file(name), ctype, keep=600)

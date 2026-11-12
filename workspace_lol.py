@@ -8,6 +8,7 @@ One snapshot per board.json write, single flight. Past games are read once per s
 behind one connection. Settlement is the LoL worker's own lol_settlements row for the receipt's platform, market and line: this
 module only says which side of it the member took. LoL letters carry 0 units, and a stake is never shown as anything else."""
 import board_parity
+import card_grade_inputs
 import hashlib
 import letter_containment
 import workspace_h2h
@@ -251,7 +252,8 @@ def _build(srv):
         if r.get("market_key"):
             raw[srv._lol_key(r.get("platform"), r["market_key"])] = {"market_key": r["market_key"], "link": r.get("link") or {}, "fid": (r.get("forecast") or {}).get("id"), "line_id": r.get("line_id"),
                                                                      "fc_line": (r.get("forecast") or {}).get("line"), "market_type": r.get("market_type"), "stat": r.get("stat"), "ud_link": None,
-                                                                     "nb": (r.get("forecast") or {}).get("nb_size")}
+                                                                     "nb": (r.get("forecast") or {}).get("nb_size"),
+                                                                     "gi": card_grade_inputs.lol_inputs(r.get("forecast"))}
     pids, series, canon = sorted({r["link"]["pid"] for r in raw.values() if r["link"].get("pid")}), {}, {}
     try:
         con = _open(srv)
@@ -276,7 +278,9 @@ def _build(srv):
               "over": rec["offer"]["over"]["offered"], "under": rec["offer"]["under"]["offered"], "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "po": x.get("p_over"), "pu": x.get("p_under"), "side": rec["scout"]["side"],
               "model": x.get("model_version"), "at": x.get("forecast_at"), "name": x.get("player") or "", "team": x.get("team") or "", "pkey": rec["player"]["key"], "lt": rec["market"]["line_type"], "ud": x.get("ud_app_link"),
               "eid": rec["event"]["id"], "projection_id": r.get("line_id"), "member": {k: x.get(k) for k in RESEARCH_KEYS},
-              "nb": r.get("nb"), "lam": x.get("projection")}     # the saved NB (server side only): another book's line is read from it
+              "nb": r.get("nb"), "lam": x.get("projection"),     # the saved NB (server side only): another book's line is read from it
+              # "Behind the grade" (card_grade_inputs.py, server side only - never in the board body): the saved forecast's own inputs
+              "gi": r.get("gi") or {}, "lean": str(x.get("grade") or "").startswith("Lean")}
         if rec["scout"].get("hold"):
             ix.update(fid=None, po=None, pu=None, one_sided=rec["scout"]["hold"]["label"])
         index[(x.get("platform"), x.get("key"))] = ix
@@ -568,10 +572,17 @@ def line_doc(srv, book, rid):
             books.append({"platform": bk, "platform_label": r["offer"]["platform_label"], "row_id": i, "key": r["key"], "line": o["line"], "line_type": o["lt"], "over": r["offer"]["over"], "under": r["offer"]["under"],
                           "seen_at": r["offer"]["seen_at"], "scout_side": o["side"], "p_side": r["scout"]["p_side"], "grade": r["scout"]["grade"]})
     forecast = {"id": x["fid"], "logged_at": x["at"], "model_version": x["model"], "p_saved": rec["scout"]["p_side"]} if x["fid"] else None
-    return 200, {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": values[:20] or None}, "books": books, "market_books": None,
-                 "h2h": workspace_h2h.h2h(values, rec["player"]["opponent"], x["line"]),
-                 "context": context_of(x["member"]), "market": {"available": False, "reason": "LoL lines carry no market price."},
-                 "lol_card": lol_card(x["member"])}
+    doc = {"record": rec, "forecast": forecast, "history": {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": values[:20] or None}, "books": books, "market_books": None,
+           "h2h": workspace_h2h.h2h(values, rec["player"]["opponent"], x["line"]),
+           "context": context_of(x["member"]), "market": {"available": False, "reason": "LoL lines carry no market price."},
+           "lol_card": lol_card(x["member"])}
+    try:                                            # "Behind the grade": the record's numbers + the saved forecast's inputs (display only)
+        gin = card_grade_inputs.lol(x, rec)
+        if gin:
+            doc["grade_inputs"] = gin
+    except Exception:
+        pass
+    return 200, doc
 
 
 def lol_card(m):

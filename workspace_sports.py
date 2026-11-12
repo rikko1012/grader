@@ -12,6 +12,7 @@ For 700 members: one snapshot per league every BOARD_TTL s, single flight, reval
 small request per part and no parse. A live pick check is shared per exact leg for CHECK_TTL s behind CHECK_SLOTS. The index keeps
 each record as bytes: at most MAX_RECORDS records per league are held."""
 import board_parity
+import card_grade_inputs
 import gzip
 import hashlib
 import workspace_h2h
@@ -466,6 +467,12 @@ def record_of(lg, doc, m, q, view):
          "lean": lean, "start": ev.get("start_utc"), "started": bool(ev.get("started") or ev.get("locked")), "e": m.get("e"), "pid": m.get("pid"), "name": m.get("n") or "", "team": team, "st": m.get("st"),
          "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey, "variant":q.get('v'),
          "line_type": rec["market"]["line_type"]}
+    # "Behind the grade" (card_grade_inputs.py; server side only, never in the board body): the forecast a line read came from, the
+    # hold's own version tag (av-1 / cap-3 ...), the calibration and grade policy the quote names
+    for k, v in (("lf", (q.get("lr") or {}).get("f") if sc and not sc.get("fid") else None), ("hv", signal.get("v") if signal.get("b") else None),
+                 ("cal", (q.get("ca") or {}).get("v") if sc else None), ("gp", signal.get("gp"))):
+        if v:
+            x[k] = v
     return rec, x
 
 
@@ -904,9 +911,10 @@ def _q(q):
 def _fc(f):
     d = f.get("detail") or {}
     return {"line": f.get("line"), "mean": f.get("projection_mean"), "at": f.get("forecast_at"), "model": f.get("model_version"), "reasons": list(f.get("reason_codes") or [])[:12],
+            **{k: f[s] for k, s in (("artifact", "artifact_version"), ("calibration", "calibration_version"), ("grade_policy", "grade_policy_version")) if f.get(s)},
             "contributions": [{"label": c.get("label") or c.get("feature"), "value": c.get("value")} for c in f.get("contributions") or []][:20],
             "interval": d.get("interval"), "median": d.get("median"),
-            "inputs": [{"label": x.get("label"), "value": x.get("value"), "definition": x.get("definition")} for x in d.get("factors") or []][:30]}
+            "inputs": [{**({"id": x["id"]} if x.get("id") else {}), "label": x.get("label"), "value": x.get("value"), "definition": x.get("definition")} for x in d.get("factors") or []][:30]}
 
 
 def _det(d):
@@ -1020,10 +1028,17 @@ def line_doc(srv, lg, book, rid):
         fg = series_of(hist, x["st"])
         if fg:
             hist_out["full_game"] = fg[:10]
-    return 200, {"record": rec, "forecast": forecast, "history": hist_out, "books": books, "market_books": {"same": same, "other": other},
+    doc = {"record": rec, "forecast": forecast, "history": hist_out, "books": books, "market_books": {"same": same, "other": other},
                  "h2h": workspace_h2h.h2h(series, rec["player"]["opponent"], x["l"]) if series else None,
                  "context": context_of(x, player, lg), "sports_card": sports_card(x, hist, player, lg),
                  "market": {"available": True, "p_over": mk["p_over"], "p_under": mk["p_under"], "source": f"{mk['sources']} market sources at this line"} if mk else {"available": False, "reason": "No market price at this exact line."}}
+    try:                                            # "Behind the grade": the record's numbers + this forecast's saved inputs (display only)
+        gin = card_grade_inputs.sports(x, rec, player, lg)
+        if gin:
+            doc["grade_inputs"] = gin
+    except Exception:
+        pass
+    return 200, doc
 
 
 def _part_of(lg, stat):

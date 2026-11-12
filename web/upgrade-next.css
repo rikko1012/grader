@@ -1,0 +1,423 @@
+/* UI_NEXT (owner 2026-11-11: "a full ui upgrade"). The redesigned hub: an odds screen, not a dashboard.
+   Loaded only when the page's head script chose the new design (UI_NEXT=1, or the member's /preview/next cookie), after
+   upgrade-next-base.css (hub.css with every colour on a token) and instead of hub.css. Everything is scoped to html[data-ui=next].
+
+   Identity
+   - Surfaces: graphite (dark) and paper (light). Two designed token sets; no rule below names a colour outside them.
+   - One brand accent (the 1Time blue) for actions and selection only. Over = green with an up mark, Under = vermilion with a down
+     mark (a pair that stays apart for red-green colour blindness, and never colour alone: the word and the mark are always there).
+   - Type: Barlow Condensed for the wordmark and headings, IBM Plex Sans for the interface, IBM Plex Mono for every number.
+   - 2px corners, 1px rules, no shadows, no gradients, no blur. A 4 / 8 spacing grid. Hierarchy by size and weight.
+   - Letters: one block for every grade. A = solid, B = outlined, C = hairline, Lean = small caps text. */
+
+/* ---------- tokens ---------- */
+html[data-ui=next]{
+ --n-font:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;--n-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Consolas,monospace;
+ --n-display:'Barlow Condensed','IBM Plex Sans',system-ui,sans-serif;--n-r:2px;
+ --n-bg:#0b0c0e;--n-s1:#111316;--n-s2:#171a1d;--n-s3:#1e2226;--n-s4:#2a2f34;--n-s5:#59616a;--n-inv:#ecebe6;
+ --n-line:#22262b;--n-line2:#353b42;--n-line3:#5b636c;
+ --n-t1:#ecebe6;--n-t2:#b6babf;--n-t3:#8b9199;--n-t4:#7a8089;--n-on:#0b0c0e;
+ --n-acc:#5b97ff;--n-acc-t:#93b9ff;--n-acc-line:#5b97ff;--n-acc-line2:#2b4878;--n-acc-bg:#13223a;--n-acc-fill:#2a63cf;--n-acc-hi:#5b97ff;--n-acc-on:#06101f;
+ --n-over:#36c796;--n-over-t:#5cdcae;--n-over-line:#22a57a;--n-over-line2:#1c4a3b;--n-over-bg:#0f2a21;--n-over-fill:#137f5b;--n-over-hi:#36c796;--n-over-on:#04140e;
+ --n-under:#f07a45;--n-under-t:#ff9d70;--n-under-line:#cc5d2c;--n-under-line2:#5c2b17;--n-under-bg:#33190e;--n-under-fill:#b34a1d;--n-under-hi:#f07a45;--n-under-on:#1a0a04;
+ --n-warn:#e0b23c;--n-warn-t:#ecc766;--n-warn-line:#b8902a;--n-warn-line2:#5a4716;--n-warn-bg:#2a2210;--n-warn-fill:#8f6c12;--n-warn-hi:#e0b23c;--n-warn-on:#1a1404;
+ --n-alt:#b98bd6;--n-alt-t:#cfa8e6;--n-alt-line:#8a62a8;--n-alt-line2:#4a3360;--n-alt-bg:#241a2e;--n-alt-fill:#6d4a8a;--n-alt-hi:#b98bd6;--n-alt-on:#140a1c;
+ --n-scrim:rgba(0,0,0,.62);color-scheme:dark}
+html[data-ui=next][data-theme=light]{
+ --n-bg:#f1f0ec;--n-s1:#f8f7f4;--n-s2:#ffffff;--n-s3:#eae9e3;--n-s4:#dcdad2;--n-s5:#a19f97;--n-inv:#1a1c1f;
+ --n-line:#dedcd4;--n-line2:#c6c4bb;--n-line3:#8d8b84;
+ --n-t1:#15171a;--n-t2:#3f4349;--n-t3:#5f646b;--n-t4:#6b7077;--n-on:#ffffff;
+ --n-acc:#1d5bd0;--n-acc-t:#184cae;--n-acc-line:#1d5bd0;--n-acc-line2:#a8bfec;--n-acc-bg:#e1eafa;--n-acc-fill:#cddcf8;--n-acc-hi:#1d5bd0;--n-acc-on:#ffffff;
+ --n-over:#0a7a57;--n-over-t:#086a4b;--n-over-line:#0a7a57;--n-over-line2:#9dd2be;--n-over-bg:#dbf0e7;--n-over-fill:#bee5d5;--n-over-hi:#0a7a57;--n-over-on:#ffffff;
+ --n-under:#bf400c;--n-under-t:#a6360a;--n-under-line:#bf400c;--n-under-line2:#e8b79e;--n-under-bg:#fae5d9;--n-under-fill:#f4ccb7;--n-under-hi:#bf400c;--n-under-on:#ffffff;
+ --n-warn:#8a6100;--n-warn-t:#765300;--n-warn-line:#a87a00;--n-warn-line2:#e0cd8b;--n-warn-bg:#f7ecc8;--n-warn-fill:#eedb98;--n-warn-hi:#c99600;--n-warn-on:#1a1404;
+ --n-alt:#7a3fa0;--n-alt-t:#6b3490;--n-alt-line:#a47ac1;--n-alt-line2:#d9c3e8;--n-alt-bg:#efe3f6;--n-alt-fill:#e2cff0;--n-alt-hi:#7a3fa0;--n-alt-on:#ffffff;
+ --n-scrim:rgba(24,24,20,.46);color-scheme:light}
+/* the slip tray, dialogs and toasts share these names (upgrade.css) */
+html[data-ui=next] .scout-hub,html[data-ui=next].hub-open .u-dialog,html[data-ui=next].hub-open .u-toast,html[data-ui=next] .h-save{
+ --u-gold:var(--n-acc);--u-bg:var(--n-bg);--u-panel:var(--n-s1);--u-panel2:var(--n-s2);--u-line:var(--n-line);--u-line2:var(--n-line2);
+ --u-text:var(--n-t1);--u-muted:var(--n-t2);--u-faint:var(--n-t3);--u-good:var(--n-over-t);--u-bad:var(--n-under-t);--u-mono:var(--n-mono);
+ --u-accent:var(--n-acc);--u-warn:var(--n-warn);--u-panel-2:var(--n-s2)}
+html[data-ui=next].hub-open,html[data-ui=next].hub-open body{background:var(--n-bg)!important}
+
+/* ---------- base ---------- */
+html[data-ui=next] .scout-hub{--side-w:176px;--slip-w:320px;grid-template-columns:var(--side-w) minmax(0,1fr) var(--slip-w);background:var(--n-bg);color:var(--n-t1);font:400 13px/1.45 var(--n-font);font-feature-settings:"tnum" 1,"cv05" 1;-webkit-font-smoothing:antialiased}
+html[data-ui=next] .scout-hub :is(button,select,input,textarea),html[data-ui=next] .h-save :is(button,input,select,textarea){font:inherit;border-radius:var(--n-r);border:1px solid var(--n-line2);background:var(--n-s2);color:var(--n-t1);min-height:32px;padding:4px 10px;transition:none}
+html[data-ui=next] #u-hub :is(input,select){background:var(--n-s2)!important;border-color:var(--n-line2)!important;color:var(--n-t1)}
+html[data-ui=next] #u-hub :is(input,select):focus{border-color:var(--n-acc)!important;box-shadow:none;outline:2px solid var(--n-acc);outline-offset:1px}
+html[data-ui=next] .scout-hub :is(button,a):hover{background:var(--n-s3);color:var(--n-t1)}
+html[data-ui=next] .scout-hub :is(button,a,input,select,summary,[tabindex]):focus-visible{outline:2px solid var(--n-acc)!important;outline-offset:1px}
+html[data-ui=next] .scout-hub button[aria-pressed=true]{background:var(--n-t1);border-color:var(--n-t1);color:var(--n-bg)}
+html[data-ui=next] .scout-hub :is(h1,h2,h3){font-family:var(--n-display);font-weight:600;letter-spacing:.01em;text-transform:uppercase;color:var(--n-t1)}
+html[data-ui=next] #u-hub h1{font:600 22px/1.1 var(--n-display)!important;letter-spacing:.02em;text-transform:uppercase}
+html[data-ui=next] .scout-hub h2{font-size:17px}
+html[data-ui=next] .scout-hub :is(h4,h5){font:600 12px/1.3 var(--n-font);letter-spacing:.04em;text-transform:uppercase;color:var(--n-t2)}
+html[data-ui=next] .scout-hub p{color:var(--n-t2)}
+html[data-ui=next] .scout-hub a{color:var(--n-acc-t)}
+html[data-ui=next] .scout-hub :is(td,th,.h-number,.h-tile>b,#hub-count,small b){font-variant-numeric:tabular-nums}
+html[data-ui=next] .scout-hub *{scrollbar-color:var(--n-line2) transparent;scrollbar-width:thin}
+
+/* ---------- nav ---------- */
+html[data-ui=next] #u-hub .h-sidebar{padding:12px 0 12px;background:var(--n-s1);border-right:1px solid var(--n-line)}
+html[data-ui=next] #u-hub .h-brand{padding:4px 16px 16px;gap:8px;border-bottom:1px solid var(--n-line);margin-bottom:8px}
+html[data-ui=next] #u-hub .h-brand>span{width:28px;height:28px;border-radius:var(--n-r);background:var(--n-acc);color:var(--n-acc-on);font:700 15px/1 var(--n-display);letter-spacing:0}
+html[data-ui=next] #u-hub .h-brand>b{font:700 19px/1 var(--n-display);letter-spacing:.04em;color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-brand em{font:500 9px/1.4 var(--n-mono);letter-spacing:.2em;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-sidebar nav{gap:0}
+html[data-ui=next] #u-hub .h-sidebar nav :is(button,a){min-height:36px;padding:8px 16px;border:0;border-left:3px solid transparent;border-radius:0;background:transparent;color:var(--n-t2);font:500 13px/1.2 var(--n-font)}
+html[data-ui=next] #u-hub .h-sidebar nav :is(button,a):hover{background:var(--n-s2);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-sidebar nav button[aria-current=page]{background:var(--n-s2);border-left-color:var(--n-acc);color:var(--n-t1);font-weight:600;box-shadow:none}
+html[data-ui=next] #u-hub .h-nav-label{font:500 10px/1 var(--n-mono);letter-spacing:.12em;color:var(--n-t3);margin:16px 16px 6px;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-nav-icon{display:none}
+html[data-ui=next] #u-hub .h-sidebar-foot{padding:12px 12px 0;display:grid;gap:6px;border-top:1px solid var(--n-line)}
+html[data-ui=next] #u-hub .h-sidebar-foot :is(button,a){display:flex;align-items:center;justify-content:center;min-height:30px;padding:4px 8px;font:500 11px/1 var(--n-font);color:var(--n-t2);background:transparent;border:1px solid var(--n-line2);border-radius:var(--n-r);text-decoration:none}
+html[data-ui=next] #u-hub .h-sidebar-foot button[aria-pressed=true]{background:transparent;color:var(--n-t2);border-color:var(--n-line2)}
+
+/* ---------- page head + toolbar ---------- */
+html[data-ui=next] #u-hub .h-center{padding:0 16px 48px;background:var(--n-bg)}
+html[data-ui=next] #u-hub .h-top{margin:0;padding:12px 0 8px;align-items:center}
+html[data-ui=next] #u-hub .h-eyebrow{display:none}
+html[data-ui=next] #u-hub .h-toolbar{gap:8px;padding:8px 0;margin:0;background:var(--n-bg);border:0;border-bottom:1px solid var(--n-line2);border-radius:0;align-items:center}
+html[data-ui=next] #u-hub .h-sports{gap:0;border:1px solid var(--n-line2);border-radius:var(--n-r);background:var(--n-s1);overflow:hidden}
+html[data-ui=next] #u-hub .h-toolbar .h-sports button{flex-direction:row;gap:4px;min-height:32px;padding:4px 12px;border:0;border-right:1px solid var(--n-line2);border-radius:0;background:transparent;color:var(--n-t2);font:600 13px/1 var(--n-display);letter-spacing:.06em;text-transform:uppercase;box-shadow:none}
+html[data-ui=next] #u-hub .h-toolbar .h-sports button:last-child{border-right:0}
+html[data-ui=next] #u-hub .h-toolbar .h-sports button[aria-pressed=true]{background:var(--n-acc)!important;color:var(--n-acc-on);box-shadow:none;border-bottom:0}
+html[data-ui=next] #u-hub .h-sports button :is(span,small,b,i){font:500 10px/1 var(--n-mono);letter-spacing:0;background:transparent;border:0;color:inherit;opacity:.75;padding:0 0 0 4px;min-width:0}
+html[data-ui=next] #u-hub .h-search input{min-height:32px;padding:4px 10px;font-size:13px}
+html[data-ui=next] #u-hub .h-search input::placeholder{color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-segment{gap:0;padding:0;border:1px solid var(--n-line2);border-radius:var(--n-r);background:var(--n-s1);overflow:hidden}
+html[data-ui=next] #u-hub .h-segment button{min-height:30px;padding:4px 10px;border:0;border-right:1px solid var(--n-line2);border-radius:0;background:transparent;color:var(--n-t2);font:500 12px/1 var(--n-font)}
+html[data-ui=next] #u-hub .h-segment button:last-child{border-right:0}
+html[data-ui=next] #u-hub .h-segment button[aria-pressed=true]{background:var(--n-t1);color:var(--n-bg);font-weight:600}
+html[data-ui=next] #u-hub .h-segment button[hidden]{display:none}
+html[data-ui=next] #u-hub :is(.h-filter-toggle,#hub-views-toggle,.h-refresh,.h-ev-link,.h-focus-toggle,.h-sort-dir){min-height:32px;padding:4px 10px;background:var(--n-s1);border:1px solid var(--n-line2);color:var(--n-t1);font:500 12px/1 var(--n-font);border-radius:var(--n-r)}
+html[data-ui=next] #u-hub .h-count-badge{min-width:16px;height:16px;padding:0 4px;border-radius:var(--n-r);background:var(--n-acc);color:var(--n-acc-on);font:600 10px/16px var(--n-mono);border:0}
+html[data-ui=next] #u-hub .h-count-badge:empty{display:none}
+html[data-ui=next] #u-hub .h-pop{background:var(--n-s2);border:1px solid var(--n-line3);border-radius:var(--n-r);box-shadow:0 0 0 1px var(--n-bg);padding:12px}
+html[data-ui=next] #u-hub .h-pop label{font:500 11px/1.4 var(--n-font);color:var(--n-t3);letter-spacing:.04em;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-quick button{border-radius:var(--n-r);min-height:32px}
+html[data-ui=next] #u-hub .h-table-title{gap:8px;padding:8px 0;margin:0;align-items:center}
+html[data-ui=next] #u-hub #hub-count{font:500 11px/1 var(--n-mono);color:var(--n-t3);letter-spacing:.02em;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-sortbar label{font:500 11px/1 var(--n-font);color:var(--n-t3);text-transform:uppercase;letter-spacing:.04em}
+html[data-ui=next] #u-hub .h-sortbar select{min-height:30px;padding:2px 8px;font-size:12px}
+html[data-ui=next] #u-hub .h-chip{min-height:24px;padding:2px 8px;border-radius:var(--n-r);border:1px solid var(--n-line2);background:var(--n-s2);color:var(--n-t1);font:500 11px/1 var(--n-font)}
+html[data-ui=next] #u-hub .h-link{background:transparent;border:0;color:var(--n-acc-t);text-decoration:underline;padding:0 4px;min-height:24px}
+html[data-ui=next] #u-hub :is(.h-sources,.h-health) p,html[data-ui=next] #u-hub .h-health details{margin:8px 0 0;padding:6px 10px;background:var(--n-s1);border:1px solid var(--n-line);border-left:3px solid var(--n-warn);border-radius:0;color:var(--n-t2);font-size:12px}
+
+/* ---------- board table ---------- */
+html[data-ui=next] #u-hub .h-table-wrap{border:1px solid var(--n-line2);border-radius:var(--n-r);background:var(--n-s1);overflow:visible}
+html[data-ui=next] #u-hub #hub-table{font-size:13px;border-collapse:separate;border-spacing:0}
+html[data-ui=next] #u-hub #hub-table>thead th{padding:0 8px;height:30px;background:var(--n-s2);border-bottom:1px solid var(--n-line2);color:var(--n-t3);font:500 10px/1 var(--n-mono);letter-spacing:.08em;text-transform:uppercase;vertical-align:middle;white-space:nowrap}
+html[data-ui=next] #u-hub #hub-table>thead th small{font:inherit;color:var(--n-t4);text-transform:none;letter-spacing:0}
+html[data-ui=next] #u-hub .h-th-sort{min-height:30px;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit;flex-direction:row;gap:4px;align-items:center}
+html[data-ui=next] #u-hub .h-th-sort[data-sort=ascending],html[data-ui=next] #u-hub .h-th-sort[data-sort=descending]{color:var(--n-t1)}
+html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>td{padding:5px 8px;height:44px;border-top:1px solid var(--n-line);background:var(--n-s1);vertical-align:middle}
+html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]:hover>td{background:var(--n-s2)}
+html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record].is-expanded>td{background:var(--n-acc-bg);box-shadow:none}
+html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record].is-expanded>td:first-child{box-shadow:inset 3px 0 var(--n-acc)}
+html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-line,html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-proj,html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-edge,html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-medge{text-align:right}
+html[data-ui=next] #u-hub #hub-table .h-number{font-family:var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub #hub-table .h-c-line b{font:600 15px/1.1 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub #hub-table .h-c-line small{display:block;font:400 10px/1.3 var(--n-mono);color:var(--n-t3);white-space:nowrap}
+html[data-ui=next] #u-hub #hub-table td.h-c-proj{font:500 13px/1 var(--n-mono);color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-face,html[data-ui=next] #u-hub .u-face{border-radius:var(--n-r)!important;background:var(--n-s3);border:1px solid var(--n-line2);color:var(--n-t2);font:600 10px/1 var(--n-mono)}
+html[data-ui=next] #u-hub .h-face img,html[data-ui=next] #u-hub .u-face img{border-radius:0}
+html[data-ui=next] #u-hub #hub-table .h-player{min-height:32px;padding:0;border:0;background:transparent;text-align:left}
+html[data-ui=next] #u-hub #hub-table .h-player b{font:600 13px/1.25 var(--n-font);color:var(--n-t1);letter-spacing:0}
+html[data-ui=next] #u-hub #hub-table .h-player small{font:400 11px/1.3 var(--n-font);color:var(--n-t3)}
+html[data-ui=next] #u-hub #hub-table .h-player small i{font:500 9px/1 var(--n-mono);font-style:normal;letter-spacing:.06em;border:0;background:transparent;color:var(--n-t4);padding:0}
+html[data-ui=next] #u-hub .h-role{font:600 9px/14px var(--n-mono);letter-spacing:.04em;text-transform:uppercase;padding:0 4px;border:1px solid var(--n-line2);border-radius:var(--n-r);background:transparent;color:var(--n-t2);font-style:normal}
+html[data-ui=next] #u-hub #hub-table .h-star{min-height:28px;min-width:24px;padding:0;border:0;background:transparent;color:var(--n-t4);font-size:14px}
+html[data-ui=next] #u-hub #hub-table .h-star[aria-pressed=true]{color:var(--n-warn);background:transparent}
+html[data-ui=next] #u-hub #hub-table .h-mcell b{font:600 12px/1.25 var(--n-font);color:var(--n-t1)}
+html[data-ui=next] #u-hub #hub-table .h-mcell small{font:400 11px/1.3 var(--n-font);color:var(--n-t3)}
+html[data-ui=next] #u-hub .u-lt{font:600 9px/14px var(--n-mono);letter-spacing:.04em;text-transform:uppercase;padding:0 4px;border-radius:var(--n-r);border:1px solid var(--n-line2);background:transparent;color:var(--n-t2);font-style:normal;margin-left:4px;vertical-align:1px}
+html[data-ui=next] #u-hub .u-lt-goblin{border-color:var(--n-over-line);color:var(--n-over-t)}
+html[data-ui=next] #u-hub .u-lt-demon{border-color:var(--n-alt-line);color:var(--n-alt-t)}
+
+/* Scout: side + chance + letter, one line */
+html[data-ui=next] #u-hub .h-scout{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:2px}
+html[data-ui=next] #u-hub .h-direction{display:flex;align-items:baseline;gap:6px;padding:0;border:0;background:transparent}
+html[data-ui=next] #u-hub .h-direction b{font:600 12px/1 var(--n-font);letter-spacing:.02em;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-direction.over b{color:var(--n-over-t)}
+html[data-ui=next] #u-hub .h-direction.under b{color:var(--n-under-t)}
+html[data-ui=next] #u-hub .h-direction span{font:500 13px/1 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-direction-options{display:grid;gap:1px;font:400 11px/1.3 var(--n-font);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-direction-options span{display:flex;justify-content:space-between;gap:8px}
+html[data-ui=next] #u-hub .h-direction-options b{font:500 12px/1.3 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-scout-grade{display:flex;align-items:center;gap:4px;min-width:0}
+html[data-ui=next] #u-hub .h-grade{display:inline-grid;place-items:center;min-width:26px;height:20px;padding:0 4px;border-radius:var(--n-r);font:600 12px/1 var(--n-mono);letter-spacing:0}
+html[data-ui=next] #u-hub .h-grade-a{background:var(--n-t1);border:1px solid var(--n-t1);color:var(--n-bg)}
+html[data-ui=next] #u-hub .h-grade-b{background:transparent;border:1px solid var(--n-t1);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-grade-c{background:transparent;border:1px solid var(--n-line3);color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-grade-text{font:500 10px/1.2 var(--n-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-grade-tag{font:500 10px/1 var(--n-mono);color:var(--n-t3)}
+html[data-ui=next] #u-hub :is(.h-below,.h-band,.h-gap-chip,.h-countdown){border-radius:var(--n-r)}
+html[data-ui=next] #u-hub .h-countdown{padding:1px 6px;border:1px solid var(--n-line2);background:transparent;color:var(--n-t2);font:500 10px/14px var(--n-mono)}
+html[data-ui=next] #u-hub .h-countdown.soon{border-color:var(--n-warn-line);color:var(--n-warn-t)}
+
+/* hit rates: a number over a meter, no tiles */
+html[data-ui=next] #u-hub #hub-table .h-strip{gap:4px}
+html[data-ui=next] #u-hub #hub-table .h-strip .h-hit{min-width:40px;height:24px;padding:0 4px;display:inline-grid;place-items:center;border-radius:0;border:0;border-bottom:2px solid var(--n-line2);background:transparent;color:var(--n-t2);font:500 12px/1 var(--n-mono);letter-spacing:0}
+html[data-ui=next] #u-hub #hub-table .h-strip .h-hit::after,html[data-ui=next] #u-hub #hub-table .h-strip .h-hit::before{display:none}
+html[data-ui=next] #u-hub #hub-table .h-strip .h-hit:is(.h-tone-5,.h-tone-6){color:var(--n-over-t);border-bottom-color:var(--n-over)}
+html[data-ui=next] #u-hub #hub-table .h-strip .h-hit.h-tone-4{color:var(--n-t1);border-bottom-color:var(--n-over-line2)}
+html[data-ui=next] #u-hub #hub-table .h-strip .h-hit:is(.h-tone-0,.h-tone-1){color:var(--n-under-t);border-bottom-color:var(--n-under)}
+html[data-ui=next] #u-hub #hub-table .h-strip .h-hit.h-tone-2{color:var(--n-t1);border-bottom-color:var(--n-under-line2)}
+html[data-ui=next] #u-hub #hub-table .h-strip .h-hit.empty{color:var(--n-t4);border-bottom-color:transparent}
+html[data-ui=next] #u-hub .h-strip-head .h-strip-th{min-width:40px}
+
+/* add + lines */
+html[data-ui=next] #u-hub #hub-table .h-add{min-height:28px;min-width:60px;padding:2px 8px;border-radius:var(--n-r);border:1px solid var(--n-acc-line);background:transparent;color:var(--n-acc-t);font:600 12px/1 var(--n-font);box-shadow:none}
+html[data-ui=next] #u-hub #hub-table .h-add:hover{background:var(--n-acc);color:var(--n-acc-on)}
+html[data-ui=next] #u-hub #hub-table .h-add.is-on{background:var(--n-acc);border-color:var(--n-acc);color:var(--n-acc-on)}
+html[data-ui=next] #u-hub #hub-table .h-add:is(.selected,.h-add-info){border-color:var(--n-line2);color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-lines-one{font:400 11px/1.3 var(--n-font);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-lines-btn{display:grid;gap:1px;justify-items:start;width:100%;min-height:32px;padding:3px 8px;border:1px solid var(--n-line2);border-radius:var(--n-r);background:var(--n-s2);text-align:left}
+html[data-ui=next] #u-hub .h-lines-btn b{font:600 12px/1.2 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-lines-btn small{font:400 10px/1.2 var(--n-mono);color:var(--n-t3);white-space:nowrap}
+html[data-ui=next] #u-hub .h-lines-btn em{font:500 10px/1.2 var(--n-mono);font-style:normal;color:var(--n-warn-t)}
+html[data-ui=next] #u-hub .h-lines-btn[aria-expanded=true]{background:var(--n-t1);border-color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-lines-btn[aria-expanded=true] :is(b,small,em){color:var(--n-bg)}
+html[data-ui=next] #u-hub #hub-table tr.has-ladder>td{border-bottom:0}
+html[data-ui=next] #u-hub #hub-table tr.h-ladder-row>td{padding:0 0 8px 40px;background:var(--n-s1);border-top:0}
+html[data-ui=next] #u-hub .h-ladder{border:1px solid var(--n-line2);border-left:3px solid var(--n-t1);background:var(--n-bg);max-height:420px;overflow:auto}
+html[data-ui=next] #u-hub .h-ladder-table{width:100%;border-collapse:collapse;table-layout:auto;font-size:12px}
+html[data-ui=next] #u-hub #hub-table .h-ladder-table thead th{position:sticky;top:0;z-index:1;height:24px;padding:0 8px;background:var(--n-s2);border-bottom:1px solid var(--n-line2);color:var(--n-t3);font:500 10px/1 var(--n-mono);letter-spacing:.08em;text-transform:uppercase;text-align:left}
+html[data-ui=next] #u-hub .h-ladder-table :is(th,td){padding:0 8px;height:30px;border-top:1px solid var(--n-line);vertical-align:middle;white-space:nowrap}
+html[data-ui=next] #u-hub .h-ladder-table thead th:is(:nth-child(2),:nth-child(3),:nth-child(4)),html[data-ui=next] #u-hub .h-ladder-table td:is(.h-ld-line,.h-ld-px){text-align:right;font-family:var(--n-mono)}
+html[data-ui=next] #u-hub #hub-table .h-ladder-table tbody th{text-align:left;font-weight:400;background:transparent;letter-spacing:0;text-transform:none}
+html[data-ui=next] #u-hub .h-ld-book{min-height:28px;padding:0;border:0;background:transparent;color:var(--n-t1);font:500 12px/1 var(--n-font);text-align:left}
+html[data-ui=next] #u-hub .h-ld-book:hover{background:transparent;text-decoration:underline}
+html[data-ui=next] #u-hub .h-ld-line b{font:600 13px/1 var(--n-mono)}
+html[data-ui=next] #u-hub .h-ld-line small{margin-left:6px;font:400 10px/1 var(--n-mono);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-ld-best{margin-left:6px;padding:0 4px;border:1px solid var(--n-acc-line);border-radius:var(--n-r);font:600 9px/14px var(--n-mono);font-style:normal;letter-spacing:.04em;text-transform:uppercase;color:var(--n-acc-t)}
+html[data-ui=next] #u-hub .h-ld-px{color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-ld-off{color:var(--n-t4)}
+html[data-ui=next] #u-hub .h-ld-side{font:600 11px/1 var(--n-font);letter-spacing:.02em;text-transform:uppercase;margin-right:6px}
+html[data-ui=next] #u-hub .h-ld-side.over{color:var(--n-over-t)}
+html[data-ui=next] #u-hub .h-ld-side.under{color:var(--n-under-t)}
+html[data-ui=next] #u-hub .h-ld-p{font:500 12px/1 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub :is(.h-ld-both,.h-ld-none){font:400 11px/1 var(--n-mono);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-ld-do{text-align:right;width:1%}
+html[data-ui=next] #u-hub .h-ld-act{min-height:24px;min-width:52px;padding:0 8px;border:1px solid var(--n-line2);border-radius:var(--n-r);background:transparent;color:var(--n-t2);font:600 11px/1 var(--n-font)}
+html[data-ui=next] #u-hub .h-ld-act[data-hub=add]{border-color:var(--n-acc-line);color:var(--n-acc-t)}
+html[data-ui=next] #u-hub .h-ld-act.is-on{background:var(--n-acc);border-color:var(--n-acc);color:var(--n-acc-on)}
+html[data-ui=next] #u-hub #hub-table .h-ladder-table tr.is-main>*{background:var(--n-s2)}
+html[data-ui=next] #u-hub .h-ladder-table tr.is-main>th{box-shadow:inset 2px 0 var(--n-t1)}
+html[data-ui=next] #u-hub #hub-table .h-ladder-table tr.is-open>*{background:var(--n-acc-bg)}
+html[data-ui=next] #u-hub .h-ladder-table tr.is-dim>:not(.h-ld-do){opacity:.5}
+html[data-ui=next] #u-hub .h-ladder-note{margin:0;padding:6px 8px;border-top:1px solid var(--n-line);font:400 11px/1.3 var(--n-font);color:var(--n-t3)}
+
+/* game + player header rows */
+html[data-ui=next] #u-hub #hub-table tr.h-game-row>td{padding:0;background:var(--n-bg);border-top:1px solid var(--n-line2);border-bottom:0}
+html[data-ui=next] #u-hub .h-game-head{width:100%;min-height:30px;padding:4px 8px;gap:10px;border:0;border-radius:0;background:var(--n-s3);color:var(--n-t2);font:400 11px/1 var(--n-font);box-shadow:none}
+html[data-ui=next] #u-hub .h-game-head .h-match{font:600 14px/1 var(--n-display);letter-spacing:.05em;text-transform:uppercase;color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-game-head small{font:400 10px/1 var(--n-mono);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-game-head em{font:500 11px/1 var(--n-font);font-style:normal;color:var(--n-acc-t)}
+html[data-ui=next] #u-hub #hub-table tr.h-player-row>td{position:sticky;top:calc(var(--h-bar,0px) + 30px);z-index:2;padding:0;background:var(--n-s2);border-top:1px solid var(--n-line2)}
+html[data-ui=next] #u-hub .h-player-head{display:flex;align-items:center;gap:8px;min-height:32px;padding:2px 8px;border-left:3px solid var(--n-t1)}
+html[data-ui=next] #u-hub .h-player-head b{font:600 14px/1 var(--n-font);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-player-head span{font:400 11px/1 var(--n-font);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-player-head small{margin-left:auto;font:500 10px/1 var(--n-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--n-t3)}
+html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-player :is(.h-face,.u-face,.h-player b,.h-row-role){display:none}
+html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-player .h-player small .h-vs{display:none}
+html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-watch .h-star{visibility:hidden}
+
+html[data-ui=next] #u-hub .h-empty{padding:40px 16px;border:0;border-radius:0;background:transparent;color:var(--n-t3);font:400 13px/1.5 var(--n-font);text-align:center}
+html[data-ui=next] #u-hub .h-empty-title{display:block;font:600 16px/1.2 var(--n-display);letter-spacing:.04em;text-transform:uppercase;color:var(--n-t1);margin-bottom:8px}
+html[data-ui=next] #u-hub .h-pagination{gap:8px;padding:8px 0;font:500 11px/1 var(--n-mono);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-pagination button{min-height:30px;font:500 12px/1 var(--n-font)}
+
+/* ---------- slip column ---------- */
+html[data-ui=next] #u-hub .h-slip{background:var(--n-s1);border-left:1px solid var(--n-line2);box-shadow:none}
+html[data-ui=next] #u-hub .h-slip>header{padding:12px 12px 8px;border-bottom:1px solid var(--n-line)}
+html[data-ui=next] #u-hub .h-slip h2{font:600 17px/1 var(--n-display);letter-spacing:.05em}
+html[data-ui=next] #u-hub .h-slip h2 span{border-radius:var(--n-r);background:var(--n-acc);color:var(--n-acc-on);font:600 11px/18px var(--n-mono);padding:0 5px;border:0}
+html[data-ui=next] #u-hub .h-slip>header button{border:0;background:transparent;color:var(--n-acc-t);font-size:12px;padding:0}
+html[data-ui=next] #u-hub .h-slip>footer{border-top:1px solid var(--n-line);color:var(--n-t3);font-size:11px}
+html[data-ui=next] #u-hub .h-empty-slip{padding:16px 12px;border:1px dashed var(--n-line2);border-radius:var(--n-r);background:transparent;margin:12px}
+html[data-ui=next] #u-hub :is(.h-slip,#hub-studio-body) :is(.u-leg,.u-entry,.u-card){border-radius:var(--n-r);box-shadow:none}
+html[data-ui=next] #u-hub :is(.h-slip,#hub-studio-body) .u-btn{border-radius:var(--n-r);font-weight:600}
+html[data-ui=next] #u-hub :is(.h-slip,#hub-studio-body) .u-btn.u-gold,html[data-ui=next] #u-hub :is(#hub-generate,.h-dec-add,.h-game-card>button),html[data-ui=next] .h-save button[value=save],html[data-ui=next] .h-save button[value=send]{background:var(--n-acc)!important;border-color:var(--n-acc)!important;color:var(--n-acc-on)!important;font-weight:600}
+html[data-ui=next] #u-hub .h-dec-add:disabled{background:var(--n-s3)!important;border-color:var(--n-line2)!important;color:var(--n-t3)!important;opacity:1}
+
+/* ---------- card: a panel beside the board ---------- */
+html[data-ui=next] #u-hub .h-card-panel{background:var(--n-s1);border-left:1px solid var(--n-line3);box-shadow:none}
+html[data-ui=next] #u-hub .h-card-head{padding:10px 12px;gap:10px;border-bottom:1px solid var(--n-line);background:var(--n-s1);align-items:center}
+html[data-ui=next] #u-hub .h-back{min-height:30px;padding:2px 8px;font:500 12px/1 var(--n-font);background:transparent}
+html[data-ui=next] #u-hub .h-card-id h3{font:600 20px/1.1 var(--n-display);letter-spacing:.03em;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-card-id h3 span{font:500 12px/1.2 var(--n-font);letter-spacing:0;text-transform:none;color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-card-id p{font:400 11px/1.4 var(--n-font);color:var(--n-t3);margin:2px 0 0}
+html[data-ui=next] #u-hub .h-player-markets{gap:0;padding:0;border-bottom:1px solid var(--n-line);overflow-x:auto}
+html[data-ui=next] #u-hub .h-player-markets button{flex:0 0 auto;min-height:36px;padding:4px 12px;border:0;border-right:1px solid var(--n-line);border-radius:0;background:transparent;color:var(--n-t2);font:500 12px/1.2 var(--n-font)}
+html[data-ui=next] #u-hub .h-player-markets button b{font-family:var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-player-markets button[aria-pressed=true]{background:var(--n-s3);color:var(--n-t1);box-shadow:inset 0 -2px var(--n-acc)}
+html[data-ui=next] #u-hub .h-decision{margin:0;padding:10px 12px;gap:8px 12px;border:0;border-bottom:1px solid var(--n-line2);border-radius:0;background:var(--n-s2)}
+html[data-ui=next] #u-hub .h-dec-line span{font:500 10px/1 var(--n-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-dec-chance b{font:600 24px/1 var(--n-mono);letter-spacing:-.01em;color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-dec-proj b{font:500 16px/1 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-dec-proj span{font:500 10px/1 var(--n-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-side-toggle button[aria-pressed=true][data-id=over]{background:var(--n-over);color:var(--n-over-on)}
+html[data-ui=next] #u-hub .h-side-toggle button[aria-pressed=true][data-id=under]{background:var(--n-under);color:var(--n-under-on)}
+html[data-ui=next] #u-hub .h-card-tabs{gap:0;padding:0 12px;border-bottom:1px solid var(--n-line2);background:var(--n-s1)}
+html[data-ui=next] #u-hub .h-card-tabs button{min-height:36px;padding:4px 12px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--n-t3);font:600 13px/1 var(--n-display);letter-spacing:.08em;text-transform:uppercase;box-shadow:none}
+html[data-ui=next] #u-hub .h-card-tabs button[aria-selected=true]{border-bottom-color:var(--n-acc);color:var(--n-t1);background:transparent}
+html[data-ui=next] #u-hub .h-card-body{padding:12px;background:var(--n-s1)}
+html[data-ui=next] #u-hub .h-card-body>section,html[data-ui=next] #u-hub .h-card-body :is(.h-why,.h-history-panel,.h-line-shop,.h-best-lines,.h-extra-detail,.h-px-odds,.h-h2h){margin:0 0 12px;padding:0;border:0;border-top:1px solid var(--n-line2);border-radius:0;background:transparent;box-shadow:none}
+html[data-ui=next] #u-hub .h-card-body .h-sec-head{padding:8px 0 6px;margin:0;align-items:baseline}
+html[data-ui=next] #u-hub .h-card-body .h-sec-head small{font:400 10px/1 var(--n-mono);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-history-summary{gap:0;margin:0 0 12px;border:1px solid var(--n-line2);border-radius:var(--n-r);overflow:hidden;background:var(--n-s2)}
+html[data-ui=next] #u-hub .h-tile{padding:8px 10px;border:0;border-right:1px solid var(--n-line);border-radius:0;background:transparent;box-shadow:none}
+html[data-ui=next] #u-hub .h-tile:last-child{border-right:0}
+html[data-ui=next] #u-hub .h-tile.is-window{background:var(--n-s3);box-shadow:inset 0 -2px var(--n-acc)}
+html[data-ui=next] #u-hub .h-tile>b{font:600 18px/1.1 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-tile>b em{font:400 12px/1 var(--n-mono);font-style:normal;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-tile>span{font:500 10px/1.3 var(--n-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-tile small{font:400 10px/1.3 var(--n-font);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-card-body table{width:100%;border-collapse:collapse;font-size:12px}
+html[data-ui=next] #u-hub .h-card-body table th{padding:4px 8px;border-bottom:1px solid var(--n-line2);background:transparent;color:var(--n-t3);font:500 10px/1.2 var(--n-mono);letter-spacing:.06em;text-transform:uppercase;text-align:left}
+html[data-ui=next] #u-hub .h-card-body table td{padding:5px 8px;border-top:1px solid var(--n-line);color:var(--n-t1);font-variant-numeric:tabular-nums}
+html[data-ui=next] #u-hub .h-card-body details>summary{min-height:32px;padding:6px 0;color:var(--n-t2);font:600 12px/1.2 var(--n-font);letter-spacing:.04em;text-transform:uppercase;border-radius:0;background:transparent}
+html[data-ui=next] #u-hub .h-card-body details{border-radius:0;background:transparent;border-color:var(--n-line)}
+html[data-ui=next] #u-hub :is(.h-history-note,.h-detail-loading){font:400 11px/1.45 var(--n-font);color:var(--n-t3);border-radius:0;background:transparent}
+html[data-ui=next] #u-hub .h-detail-loading{padding:16px 0;border:0;text-align:left}
+html[data-ui=next] #u-hub .h-why{padding:0 0 4px}
+html[data-ui=next] #u-hub .h-why :is(li,.h-why-row,.h-why-fact){border-radius:0;background:transparent}
+html[data-ui=next] #u-hub .h-at-over{color:var(--n-over-t)}
+html[data-ui=next] #u-hub .h-at-under{color:var(--n-under-t)}
+html[data-ui=next] #u-hub .h-at-push{color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-line-shop td button{min-height:28px;padding:0;border:0;background:transparent;text-align:left;color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-line-shop td button b{font-family:var(--n-mono);margin-left:6px}
+html[data-ui=next] #u-hub .h-line-shop tr.is-selected td{background:var(--n-acc-bg)}
+html[data-ui=next] #u-hub .h-ask input{min-height:36px}
+
+/* ---------- other sections ---------- */
+html[data-ui=next] #u-hub :is(.h-record-card,.h-game-card,.h-market-tools,.h-alert,.h-prefs,.h-tools-card,.h-working-draft,.h-studio-explain,.h-tracked-slips,.h-generator,.h-pick,.h-batch,.h-generated-slip,.ev-drawer,.ev-banner,.ev-list){border-radius:var(--n-r)!important;box-shadow:none;border-color:var(--n-line2);background:var(--n-s1)}
+html[data-ui=next] #u-hub .h-section-head{padding:12px 0 8px;margin:0;border-bottom:1px solid var(--n-line2)}
+html[data-ui=next] #u-hub .h-studio-tabs{gap:0;border-bottom:1px solid var(--n-line2);margin:0 0 12px;padding:0}
+html[data-ui=next] #u-hub .h-studio-tabs button{min-height:36px;padding:4px 14px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--n-t3);font:600 14px/1 var(--n-display);letter-spacing:.08em;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-studio-tabs button[aria-selected=true]{border-bottom-color:var(--n-acc);color:var(--n-t1);background:transparent}
+html[data-ui=next] #u-hub .h-generator-controls :is(select,input){min-height:44px}
+html[data-ui=next] #u-hub .h-band{font:600 10px/16px var(--n-mono);padding:0 5px;border:1px solid var(--n-line2);background:transparent;color:var(--n-t2)}
+html[data-ui=next] #u-hub .h-band-strong{border-color:var(--n-over-line);color:var(--n-over-t);background:transparent}
+html[data-ui=next] #u-hub .h-band-premium{border-color:var(--n-over);background:var(--n-over);color:var(--n-over-on)}
+html[data-ui=next] #u-hub .h-band-skip{color:var(--n-t3);border-color:var(--n-line2)}
+html[data-ui=next] #u-hub .h-band-marginal{color:var(--n-t2);background:transparent}
+html[data-ui=next] #u-hub .h-prefs{border:1px solid var(--n-line2)}
+html[data-ui=next] #u-hub .ev-chip,html[data-ui=next] #u-hub .ev-chip-on,html[data-ui=next] #u-hub .ev-badge{border-radius:var(--n-r)}
+html[data-ui=next] .h-save,html[data-ui=next] .u-dialog,html[data-ui=next] .u-book-dialog{border-radius:var(--n-r)!important;background:var(--n-s2);border:1px solid var(--n-line3);color:var(--n-t1);box-shadow:none}
+html[data-ui=next] .h-save::backdrop,html[data-ui=next] .u-dialog::backdrop{background:var(--n-scrim);backdrop-filter:none}
+html[data-ui=next] .u-toast{border-radius:var(--n-r)!important;background:var(--n-inv)!important;color:var(--n-on)!important;border:0!important;box-shadow:none!important;font:500 13px/1.4 var(--n-font)}
+html[data-ui=next] #u-hub .h-preview-off{color:var(--n-t2)}
+
+/* ---------- desktop: nav | board | slip or card ---------- */
+@media(min-width:1101px){
+ html[data-ui=next] #u-hub #hub-table>thead th{position:sticky;top:var(--h-bar,0px);z-index:3}
+ html[data-ui=next] #u-hub .h-toolbar{position:sticky;top:0;z-index:5}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-watch{width:30px;padding-right:0}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-add{width:76px;text-align:right}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-compare{width:150px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-scout{width:176px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-line{width:84px}
+ html[data-ui=next] #u-hub #hub-table :is(th,td).h-c-proj{width:60px}
+ /* the card sits beside the board, in the slip's column: the board stays in reach, the next player is one click away */
+ html[data-ui=next] #u-hub.h-card-open{grid-template-columns:var(--side-w) minmax(0,1fr) min(480px,38vw)}
+ html[data-ui=next] #u-hub.h-card-open>.h-slip{display:none}
+ html[data-ui=next] #u-hub.h-card-open .h-card-panel{position:relative;inset:auto;right:auto;top:auto;width:auto;z-index:1;min-width:0;height:100vh;height:100dvh}
+ html[data-ui=next] #u-hub.h-card-open #hub-table :is(th,td):is(.h-c-hits,.h-c-edge,.h-c-medge,.h-c-proj){display:none}
+ html[data-ui=next] #u-hub.h-focus-board:not(.h-card-open){grid-template-columns:var(--side-w) minmax(0,1fr)}
+}
+
+/* ---------- phone and tablet: rows built for a thumb ---------- */
+@media(max-width:1100px){
+ html[data-ui=next] .scout-hub{font-size:14px}
+ html[data-ui=next] #u-hub .h-center{padding:0 8px 76px}
+ html[data-ui=next] #u-hub .h-top{display:none}
+ html[data-ui=next] #u-hub .h-toolbar{padding:8px 0;gap:6px}
+ html[data-ui=next] #u-hub .h-sports{width:100%}
+ html[data-ui=next] #u-hub .h-toolbar .h-sports button{flex:1 1 0;min-height:44px;padding:4px 2px}
+ html[data-ui=next] #u-hub .h-search input,html[data-ui=next] #u-hub :is(.h-filter-toggle,#hub-views-toggle,.h-refresh,.h-sort-dir){min-height:44px}
+ html[data-ui=next] #u-hub .h-segment button{min-height:44px;padding:4px 12px}
+ html[data-ui=next] #u-hub .h-sortbar select{min-height:44px}
+ html[data-ui=next] #u-hub .h-table-wrap{border-left:0;border-right:0;border-radius:0;margin:0 -8px}
+ html[data-ui=next] #u-hub #hub-table thead{display:none}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"player player line" "market scout scout" "hits hits hits" "lines lines add";gap:2px 10px;align-items:center;margin:0;padding:8px 10px;border:0;border-top:1px solid var(--n-line);border-radius:0;background:var(--n-s1);box-shadow:none}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record].is-expanded{background:var(--n-acc-bg);box-shadow:inset 3px 0 var(--n-acc)}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>td{display:block;height:auto;padding:0;border:0;background:transparent!important;min-width:0;width:auto}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>td::before{display:none}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-watch{display:none}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-player{grid-area:player;display:flex;align-items:center;gap:8px}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-market{grid-area:market}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-market .h-mcell>div{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-line{grid-area:line;text-align:right}
+ html[data-ui=next] #u-hub #hub-table .h-c-line b{font-size:18px}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-proj{display:none}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-scout{grid-area:scout;justify-self:end}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-hits{grid-area:hits;padding-top:4px}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>:is(.h-c-edge,.h-c-medge){display:none}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-compare{grid-area:lines;justify-self:stretch;align-self:center;padding-top:4px}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record]>.h-c-add{grid-area:add;padding-top:4px}
+ html[data-ui=next] #u-hub #hub-table .h-add{min-height:44px;min-width:72px}
+ html[data-ui=next] #u-hub #hub-table .h-lines-btn{min-height:44px!important;height:auto;width:auto;min-width:104px;box-sizing:border-box}
+ html[data-ui=next] #u-hub #hub-table .h-player{min-height:44px}
+ html[data-ui=next] #u-hub #hub-table .h-player b{font-size:15px}
+ html[data-ui=next] #u-hub #hub-table .h-strip{display:flex;gap:14px;justify-content:flex-start;width:auto}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr[data-record].h-nohits>.h-c-hits{display:none}
+ html[data-ui=next] #u-hub #hub-table .h-strip .h-strip-cell{display:flex;flex-direction:row;align-items:center;gap:6px;padding:0;border:0;background:transparent;width:auto;min-width:0;flex:0 0 auto}
+ html[data-ui=next] #u-hub #hub-table .h-strip .h-strip-cell::before{content:attr(data-label);font:500 9px/1 var(--n-mono);letter-spacing:.06em;color:var(--n-t4);position:static;display:inline}
+ html[data-ui=next] #u-hub #hub-table .h-strip .h-hit{min-width:34px;height:22px}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr:is(.h-game-row,.h-span-row){display:block}
+ html[data-ui=next] #u-hub #hub-table>tbody>tr:is(.h-game-row,.h-span-row)>td{display:block;width:auto}
+ html[data-ui=next] #u-hub #hub-table tr.h-ladder-row>td{padding:0 0 8px 0}
+ html[data-ui=next] #u-hub .h-ladder{border-left-width:3px;border-right:0;max-height:60vh}
+ html[data-ui=next] #u-hub .h-ladder-table :is(th,td){height:44px;padding:0 6px}
+ html[data-ui=next] #u-hub .h-ladder-table :is(th,td):is(:nth-child(3),:nth-child(4)){display:none}
+ html[data-ui=next] #u-hub #hub-table .h-ld-book,html[data-ui=next] #u-hub #hub-table .h-ld-act{min-height:44px!important;display:inline-flex;align-items:center;gap:4px}
+ html[data-ui=next] #u-hub .h-ladder-table :is(th,td):first-child{max-width:112px;overflow:hidden;text-overflow:ellipsis}
+ html[data-ui=next] #u-hub #hub-table tr.h-player-row>td{top:0}
+ html[data-ui=next] #u-hub .h-player-head{min-height:40px}
+ html[data-ui=next] #u-hub .h-game-head{min-height:44px;flex-wrap:wrap}
+ /* tab bar */
+ html[data-ui=next] #u-hub .h-tabbar{background:var(--n-s1);border-top:1px solid var(--n-line2);box-shadow:none;padding:0;gap:0}
+ html[data-ui=next] #u-hub .h-tabbar button{min-height:52px;border:0;border-top:2px solid transparent;border-radius:0;background:transparent;color:var(--n-t3);font:600 12px/1 var(--n-display);letter-spacing:.08em;text-transform:uppercase}
+ html[data-ui=next] #u-hub .h-tabbar button[aria-current=page]{border-top-color:var(--n-acc);color:var(--n-t1);background:transparent;box-shadow:none}
+ html[data-ui=next] #u-hub .h-more-sheet{background:var(--n-s2);border:0;border-top:1px solid var(--n-line3);border-radius:0;box-shadow:none}
+ html[data-ui=next] #u-hub .h-more-sheet :is(button,a){min-height:48px;border:0;border-bottom:1px solid var(--n-line);border-radius:0;background:transparent;color:var(--n-t1);text-align:left;justify-content:flex-start;text-decoration:none}
+ /* the card is a bottom sheet over the board */
+ html[data-ui=next] #u-hub .h-card-panel{inset:auto 0 0 0;top:auto;height:94vh;height:94dvh;border:0;border-top:1px solid var(--n-line3);z-index:40}
+ html[data-ui=next] #u-hub.h-card-open::before{content:"";position:fixed;inset:0;z-index:39;background:var(--n-scrim)}
+ html[data-ui=next] #u-hub .h-card-head::before{content:"";position:absolute;left:50%;top:4px;width:36px;height:3px;margin-left:-18px;background:var(--n-line3)}
+ html[data-ui=next] #u-hub .h-card-head{position:relative;padding-top:14px}
+ html[data-ui=next] #u-hub .h-card :is(button,select,summary){min-height:44px}
+ html[data-ui=next] #u-hub .h-card-tabs button{flex:1 1 0;min-height:44px}
+}
+
+/* ---------- card text: headings carry no colour, the bar beside a fact does ---------- */
+html[data-ui=next] #u-hub .h-card-body :is(h4,h5),html[data-ui=next] #u-hub .h-why :is(h4,h5,.h-why-sub,.h-why-risk-head){color:var(--n-t1);font:600 12px/1.3 var(--n-font);letter-spacing:.05em;text-transform:uppercase}
+html[data-ui=next] #u-hub .h-why .h-why-risk-head{color:var(--n-under-t)}
+html[data-ui=next] #u-hub .h-why-key{gap:0;border:1px solid var(--n-line2);border-radius:var(--n-r);background:var(--n-s2);overflow:hidden}
+html[data-ui=next] #u-hub .h-why-key>*{padding:8px 10px;border:0;border-right:1px solid var(--n-line);border-bottom:1px solid var(--n-line);border-radius:0;background:transparent}
+html[data-ui=next] #u-hub .h-why-key b{font:600 18px/1.2 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-why-key :is(span,small,dt){font:400 11px/1.3 var(--n-font);color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-why-list b{font-family:var(--n-mono);font-weight:600;color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-grade-text{white-space:normal;overflow:visible}
+html[data-ui=next] #u-hub .h-fx-body b,html[data-ui=next] #u-hub .h-card-body td b{font-family:var(--n-mono);font-weight:600}
+
+html[data-ui=next] #u-hub .h-ld-grade{display:inline-flex;align-items:center;gap:4px;margin-left:8px;vertical-align:middle}
+html[data-ui=next] #u-hub .h-ld-grade:empty{display:none}
+html[data-ui=next] #u-hub .h-ld-scout{white-space:nowrap}
+/* by player: the name is on the player's header; the row's button opens that prop's card */
+html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-player .h-player small{display:none}
+html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-player .h-player::before{content:"Card \203A";font:500 11px/1 var(--n-font);color:var(--n-t3);padding-left:28px}
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub #hub-table.h-by-player>tbody>tr[data-record]{grid-template-areas:"market market line" "player scout scout" "hits hits hits" "lines lines add"}
+ html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-player .h-player::before{padding-left:0}
+ html[data-ui=next] #u-hub #hub-table.h-by-player tr.h-row .h-c-market b{font-size:15px}
+}
+html[data-ui=next] #u-hub .h-insight-stats{gap:1px;margin:8px 0 12px;background:var(--n-line);border-color:var(--n-line2)}
+html[data-ui=next] #u-hub .h-insight-stats>div{gap:2px;padding:8px 10px;background:var(--n-s2)}
+html[data-ui=next] #u-hub .h-insight-stats b{font:600 18px/1.2 var(--n-mono);color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-insight-stats span{font:500 10px/1.3 var(--n-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-insight-stats small{font-size:11px;color:var(--n-t3)}
+html[data-ui=next] #u-hub .h-why-list b{font-family:inherit;font-weight:600;font-variant-numeric:tabular-nums}

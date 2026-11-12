@@ -1,0 +1,167 @@
+/* "Behind the grade" (web/upgrade-cards.js panels().grade; data: card_grade_inputs.py -> /line doc grade_inputs).
+ * New-design hub only. Tokens used: --n-bg --n-s1 --n-s2 --n-line --n-line2 --n-t1 --n-t2 --n-t3 --n-acc --n-over --n-under
+ * --n-warn --n-font --n-mono. 2px radius, 1px borders, no shadows, no gradients. Numbers: right-aligned, mono, tabular. */
+html[data-ui=next] #u-hub .h-gi {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--n-line);
+  border-radius: 2px;
+  background: var(--n-s1);
+  color: var(--n-t1);
+  font-family: var(--n-font);
+}
+html[data-ui=next] #u-hub .h-gi-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--n-line);
+  background: var(--n-s2);
+}
+html[data-ui=next] #u-hub .h-gi-head h4 {
+  margin: 0;
+  font: 600 12px/1.3 var(--n-font);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--n-t1);
+}
+html[data-ui=next] #u-hub .h-gi-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  margin: 0;
+  font: 400 12px/1.35 var(--n-font);
+  color: var(--n-t1);
+}
+html[data-ui=next] #u-hub .h-gi-table + .h-gi-table,
+html[data-ui=next] #u-hub .h-gi-note + .h-gi-table {
+  border-top: 1px solid var(--n-line2);
+}
+html[data-ui=next] #u-hub .h-gi-table caption {
+  caption-side: top;
+  text-align: left;
+  padding: 8px 10px 4px;
+  font: 600 11px/1.3 var(--n-font);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--n-t2);
+}
+html[data-ui=next] #u-hub .h-gi-table caption.h-gi-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+html[data-ui=next] #u-hub .h-gi-table th,
+html[data-ui=next] #u-hub .h-gi-table td {
+  padding: 4px 10px;
+  border-top: 1px solid var(--n-line);
+  vertical-align: baseline;
+  text-align: left;
+  font-weight: 400;
+}
+html[data-ui=next] #u-hub .h-gi-table thead th {
+  border-top: 0;
+  padding-top: 2px;
+  font: 500 10px/1.3 var(--n-font);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--n-t3);
+}
+html[data-ui=next] #u-hub .h-gi-table tbody th {
+  color: var(--n-t2);
+  width: 46%;
+  overflow-wrap: anywhere;
+}
+html[data-ui=next] #u-hub .h-gi-def tbody tr:first-child th,
+html[data-ui=next] #u-hub .h-gi-def tbody tr:first-child td {
+  border-top: 0;
+}
+html[data-ui=next] #u-hub .h-gi-def tbody th {
+  width: 34%;
+}
+html[data-ui=next] #u-hub .h-gi-def td b {
+  font-weight: 600;
+  color: var(--n-t1);
+}
+html[data-ui=next] #u-hub .h-gi-table small {
+  display: block;
+  margin-top: 1px;
+  font: 400 11px/1.35 var(--n-font);
+  color: var(--n-t3);
+}
+html[data-ui=next] #u-hub .h-gi-num,
+html[data-ui=next] #u-hub .h-gi-table td.h-gi-num,
+html[data-ui=next] #u-hub .h-gi-table th.h-gi-num {
+  text-align: right;
+  font-family: var(--n-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+html[data-ui=next] #u-hub .h-gi-def td {
+  text-align: right;
+}
+html[data-ui=next] #u-hub .h-gi-def td small {
+  white-space: normal;
+}
+html[data-ui=next] #u-hub .h-gi-matchup td,
+html[data-ui=next] #u-hub .h-gi-hold td {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+html[data-ui=next] #u-hub .h-gi-up,
+html[data-ui=next] #u-hub .h-gi-side-over {
+  color: var(--n-over);
+}
+html[data-ui=next] #u-hub .h-gi-dn,
+html[data-ui=next] #u-hub .h-gi-side-under {
+  color: var(--n-under);
+}
+html[data-ui=next] #u-hub .h-gi-word {
+  font-family: var(--n-font);
+  font-size: 11px;
+}
+html[data-ui=next] #u-hub .h-gi-used {
+  font: 400 11px/1.3 var(--n-font);
+  color: var(--n-t3);
+}
+html[data-ui=next] #u-hub .h-gi-live caption {
+  color: var(--n-acc);
+}
+html[data-ui=next] #u-hub .h-gi-ctx {
+  background: var(--n-bg);
+}
+html[data-ui=next] #u-hub .h-gi-ctx caption,
+html[data-ui=next] #u-hub .h-gi-ctx tbody th,
+html[data-ui=next] #u-hub .h-gi-ctx td {
+  color: var(--n-t3);
+}
+html[data-ui=next] #u-hub .h-gi-ctx {
+  border-top: 1px solid var(--n-line2);
+}
+html[data-ui=next] #u-hub .h-gi-hold caption,
+html[data-ui=next] #u-hub .h-gi-hold td {
+  color: var(--n-warn);
+}
+html[data-ui=next] #u-hub .h-gi-note {
+  margin: 0;
+  padding: 4px 10px 8px;
+  font: 400 11px/1.4 var(--n-font);
+  color: var(--n-t3);
+}
+html[data-ui=next] #u-hub .h-gi-ctx + .h-gi-note {
+  background: var(--n-bg);
+}
+@media (max-width: 520px) {
+  html[data-ui=next] #u-hub .h-gi-table th,
+  html[data-ui=next] #u-hub .h-gi-table td {
+    padding: 4px 8px;
+  }
+  html[data-ui=next] #u-hub .h-gi-table tbody th {
+    width: 50%;
+  }
+}

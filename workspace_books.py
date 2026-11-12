@@ -660,6 +660,7 @@ def line_doc(srv, sport, pid, oid):
                                                     "scout_side": rec["scout"].get("side"), "p_side": rec["scout"].get("p_side"), "grade": None}]
     doc["market"] = {"available": False, "reason": f"{o['platform_label']} prices are not used for a market chance."}
     doc["record"] = rec
+    doc.pop("grade_inputs", None)                  # "Behind the grade" is the board line's own block: this line has no letter or stake
     return 200, doc
 
 
