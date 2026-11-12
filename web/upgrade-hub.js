@@ -242,7 +242,7 @@ export function mount(C) {
   /* owner 2026-11-09: the classic cards' factor panels and every book's odds, on the hub card (web/upgrade-cards.js, display only) */
   let PXc=null;
   const PX = () => PXc||(PXc=cardPanels({esc,pct,when,sideWord}));
-  const pxCtx = r => ({platforms:C.PLATFORMS,lineKind:C.lineKind,oddsPref:H.par.odds,age,bookLabel:p=>C.PLATFORMS[p]?.label||String(p||'').replace(/^./,c=>c.toUpperCase()),extra:MX?(bestOf(r)?.bk||[]):[]});
+  const pxCtx = r => ({notOffered:notOffered(r),notOfferedWhy:notOffered(r)?notOfferedWhy(r):'',platforms:C.PLATFORMS,lineKind:C.lineKind,oddsPref:H.par.odds,age,bookLabel:p=>C.PLATFORMS[p]?.label||String(p||'').replace(/^./,c=>c.toUpperCase()),extra:MX?(bestOf(r)?.bk||[]):[]});
   const STRIP = [['l5','L5'],['l10','L10'],['l20','L20'],...(COLS?[['h2h','H2H'],['season','SZN']]:[])];
   const STRIP_TITLE = {l5:'Last 5 results at this line',l10:'Last 10 results at this line',l20:'Last 20 results at this line',h2h:"Past meetings with tonight's opponent, at this line",season:"This season's results, at this line"};
   const currentLines = () => H.records.filter(r=>!C.started(r)&&!unavailableReason(r));
@@ -279,6 +279,7 @@ export function mount(C) {
      points gap too. Goblin / demon / promo lines pay an unpublished multiplier: their cell stays empty.
      A fact about the chance against the payout, not a grade: a held or contained letter does not change it. */
   function edgeValue(r) {
+    if(notOffered(r))return null;                     /* bug 3: no edge on a side this app does not offer */
     if(P('edge')&&evOf(r))return evOf(r).ev*100;     /* SCOUT_PARITY_EDGE: EV in % only where the slip check rates the line */
     const par=edgeBe(r);
     if(par)return (r.scout.p_side-par.be)*100;      /* not rated: the points gap against this row's own book break-even */
@@ -291,7 +292,7 @@ export function mount(C) {
   function edgeCell(r) {
     if(P('edge')&&evOf(r))return parEdgeCell(r);     /* otherwise the points gap below, as before */
     const d=edgeValue(r);
-    if(d==null)return `<span class="h-edge empty" title="${esc(r.market.line_type!=='standard'?'No fixed per-pick payout is published for this line type':!r.scout.side?'No Scout side on this line':'No published per-pick break-even for this line')}">—</span>`;
+    if(d==null)return `<span class="h-edge empty" title="${esc(notOffered(r)?notOfferedWhy(r):r.market.line_type!=='standard'?'No fixed per-pick payout is published for this line type':!r.scout.side?'No Scout side on this line':'No published per-pick break-even for this line')}">—</span>`;
     const par=edgeBe(r), be=par?par.be:COLS.ud_standard_break_even, entry=par?par.entry:(COLS.entry||'Underdog standard')+' entry';
     const why=par&&P('edge')?' · not rated: Scout’s settled results don’t back this chance yet, so no EV is shown':'';
     return `<span class="h-edge${d>0?' positive':''}" title="${esc(`Scout chance ${pct(r.scout.p_side)} against the ${(be*100).toFixed(1)}% break-even of a ${entry}${why}`)}"><b>${d>0?'+':d<0?'−':'±'}${Math.abs(d).toFixed(1)}</b><small>pts</small></span>`;
@@ -300,7 +301,7 @@ export function mount(C) {
   const parOf = r => r.parity && typeof r.parity === 'object' && num(r.parity.be) ? r.parity : null;
   /* the server sends ev / band / sizes only for a line the live slip check would rate (CS2, letter not held, half-point line,
      a chance band that passed the settled-results check); every other row keeps the points gap and gets no band */
-  const evOf = r => {const p=parOf(r);return p&&num(p.ev)?p:null;};
+  const evOf = r => {if(notOffered(r))return null;const p=parOf(r);return p&&num(p.ev)?p:null;};
   /* the row's own book break-even for the points gap: standard line, Scout side, a chance; never a goblin / demon / promo line */
   const edgeBe = r => {const p=parOf(r), s=r.scout||{};
     if(!p||r.market?.line_type!=='standard'||!s.side||!num(s.p_side))return null;
@@ -378,9 +379,30 @@ export function mount(C) {
   const kindOf = r => C.lineKind?C.lineKind(r.offer.platform,r.market.line_type):'';
   const boardPlayerKey = r => [r.sport,r.event.id,r.player.key].join('|');
   /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters carry no tag (ct-1b, owner 2026-11-08: released) */
+  /* Bug 3 (owner 2026-11-12, "Not offered"): on NBA / NFL, when the app does not offer Scout's side on this line, the row keeps Scout's
+     projection, side and chance and shows "Not offered" in place of the letter; no edge, no stake, no add for that side, and the card
+     never promotes the other side. When another app lists the EXACT same player, event, stat, period and line with Scout's side
+     offered, the row, ladder and card point to it ("Under 8.5 on Underdog") and add it from there; that line keeps its own grade.
+     Display and slip eligibility only: the logged grade and the projection are unchanged (the server's slip pool and Auto-build already
+     take offered sides only, slip_quality.py). */
+  const NOT_OFFERED_SPORTS=['nba','nfl'];
+  const notOffered=r=>!!r&&NOT_OFFERED_SPORTS.includes(r.sport)&&!r.extra&&!C.oneSided(r)&&(r.scout.side==='over'||r.scout.side==='under')&&!r.offer[r.scout.side]?.offered;
+  const PICKEM=['prizepicks','underdog'];
+  function offeredAlt(r) {
+    if(!notOffered(r))return null;
+    const sd=r.scout.side;
+    return H.records.find(x=>x!==r&&!x.extra&&PICKEM.includes(x.offer.platform)&&x.offer.platform!==r.offer.platform&&x.sport===r.sport&&x.player.key===r.player.key
+      &&x.event.id===r.event.id&&x.market.stat===r.market.stat&&x.market.period===r.market.period&&Number(x.offer.line)===Number(r.offer.line)
+      &&x.offer[sd]?.offered&&!C.started(x)&&!unavailableReason(x)&&!C.oneSided(x))||null;
+  }
+  const notOfferedWhy=r=>`${sideWord(r.scout.side)} not offered on ${r.offer.platform_label}`;
+  const altText=a=>`${sideWord(a.side)} ${a.r.offer.line} on ${a.r.offer.platform_label}`;
+  const altBtn=(r,cls='h-alt-add',short=false)=>{const a=offeredAlt(r);if(!a)return '';const t=altText({side:r.scout.side,r:a}),on=C.onSlip(a);
+    return `<button class="${cls}${on?' is-on':''}" data-hub="add-alt" data-id="${esc(key(r))}" aria-label="${esc((on?'On slip: ':'Add ')+t)}" title="${esc(`Same player, stat, period and line on ${a.offer.platform_label}, where ${sideWord(r.scout.side)} is offered`)}">${on?(short?'On slip':'On slip ✓'):'+ '+esc(short?(BOOK_SHORT[a.offer.platform]||a.offer.platform_label):'Add '+t)}</button>`;};
   function gradeChip(r) {
     const s=r.scout;
     if(C.oneSided(r)) return `<span class="h-grade-text h-one-sided">${esc(C.oneSided(r))}</span>`;
+    if(notOffered(r)) return `<span class="h-grade-text h-not-offered" title="${esc(notOfferedWhy(r))}">Not offered</span>`;
     if(s.hold) return '<span class="h-grade-text">Research estimate</span>';
     if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
     if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance" title="Scout\u2019s chance at this line">Chance at this line</span>';   /* short on the row (follow-up 2026-11-06: was cut off); the card keeps the full sentence */   /* audit 2026-11-05: another book's line, same saved distribution */
@@ -393,7 +415,7 @@ export function mount(C) {
      (Underdog standard per-pick, or the parity break-even of the line); no break-even = no chip. It sits under the Edge figure (in
      the Scout cell when the board has no Edge column), so the row keeps its height. */
   function belowBreakEven(r) {
-    const s=r.scout;if(!s.side||!num(s.p_side))return null;
+    const s=r.scout;if(!s.side||!num(s.p_side)||notOffered(r))return null;
     const d=edgeValue(r);
     /* bug #55: the same break-even edgeValue measured against (rated EV, else the row's own book), as edgeCell names it */
     const par=evOf(r)||edgeBe(r);
@@ -483,6 +505,7 @@ export function mount(C) {
        it reads like any other row without a side */
     if(r.extra&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return '';
     if(C.oneSided(r)) return `<div class="h-scout"><div class="h-direction-options" title="${esc(C.oneSidedNote(r))}"><span class="h-one-sided">${esc(C.oneSided(r))}</span></div></div>`;
+    if(s.side&&notOffered(r)){const a=offeredAlt(r);return `<div class="h-scout h-scout-nf"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}</div>${a?`<small class="h-alt-note">${esc(altText({side:s.side,r:a}))}</small>`:''}</div>`;}
     if(s.side) return `<div class="h-scout"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}${P('ev_band')&&!(P('edge')&&H.showEdge)?bandChip(r):''}</div>${H.showEdge?(NEXT?belowChip(r).replace('class="h-below"','class="h-below h-below-alt"'):''):belowChip(r)}</div>`;   /* UI_NEXT: where the redesign hides the Edge column (phone, card open, narrow desktop) the Scout cell carries the same chip; CSS shows one of the two */
     const both=num(s.p_over)&&num(s.p_under);
     return `<div class="h-scout"><div class="h-direction-options" aria-label="Model probabilities for both sides">${both?`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`:'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
@@ -535,7 +558,7 @@ export function mount(C) {
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}${MX?booksLine(r):''}</td>`:''}${MX?`<td class="h-c-medge h-number${mxValue(r)==null?' is-empty':''}">${mxCell(r)}</td>`:''}
       <td class="h-c-compare">${g?linesCell(g):compareCell(r)}</td>
-      <td class="h-c-add">${C.oneSided(r)&&!r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research. ${esc(C.oneSidedNote(r))}" title="${esc(C.oneSidedNote(r))}">Info</button>`:r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research for the ${esc(r.offer.platform_label)} line" title="Research for this line. View only: slips are PrizePicks or Underdog entries">Info</button>`:`<button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button>`}</td></tr>`;
+      <td class="h-c-add">${notOffered(r)?(offeredAlt(r)?altBtn(r,'h-add h-add-alt',true):`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research. ${esc(notOfferedWhy(r))}" title="${esc(notOfferedWhy(r))}">Info</button>`):C.oneSided(r)&&!r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research. ${esc(C.oneSidedNote(r))}" title="${esc(C.oneSidedNote(r))}">Info</button>`:r.extra?`<button class="h-add h-add-info" data-hub="add" data-id="${k}" aria-label="Open ${name}'s research for the ${esc(r.offer.platform_label)} line" title="Research for this line. View only: slips are PrizePicks or Underdog entries">Info</button>`:`<button class="h-add${on?' is-on':choose?' selected':''}" data-hub="add" data-id="${k}" aria-label="${add[1]}" ${unavailable?'disabled':''}>${add[0]}</button>`}</td></tr>`;
   }
   /* UI_NEXT: the row's Lines cell. One line = the app's name; more = a button that opens the ladder under the row, with the number
      of lines and apps and, when a filter or search is on, how many of them it matched (a grouped row never hides a matched line). */
@@ -561,7 +584,7 @@ export function mount(C) {
     const side=g.main.scout.side,dim=filtering()&&g.matched.length<g.total;
     const price=(q,sd)=>!q.offer[sd]?.offered?'<span class="h-ld-off">—</span>':esc(C.priceText(q,sd)||(q.market.line_type==='standard'?'Std':C.lineLabel(q)));
     const act=q=>{const k=esc(key(q)),on=C.onSlip(q),nm=esc(q.player.name);
-      if(q.extra||C.oneSided(q)||!['prizepicks','underdog'].includes(q.offer.platform))return `<button class="h-ld-act" data-hub="expand" data-id="${k}" aria-label="Open ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">Card</button>`;
+      if(q.extra||C.oneSided(q)||notOffered(q)||!['prizepicks','underdog'].includes(q.offer.platform))return `<button class="h-ld-act" data-hub="expand" data-id="${k}" aria-label="Open ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">Card</button>`;
       const choose=!q.scout.side||!q.offer[q.scout.side]?.offered;
       return `<button class="h-ld-act${on?' is-on':''}" data-hub="add" data-id="${k}" aria-label="${on?`On slip: ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:choose?`Choose a side for ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:`Add ${nm} ${sideWord(q.scout.side)} ${esc(q.offer.line)} on ${esc(q.offer.platform_label)} to slip`}">${on?'On slip':choose?'Side':'+ Add'}</button>`;};
     const body=g.lines.map(q=>{const k=key(q),kind=kindOf(q)||(q.market.line_type!=='standard'?C.lineLabel(q):''),hit=g.match.has(lineId(q));
@@ -569,7 +592,7 @@ export function mount(C) {
         <th scope="row"><button class="h-ld-book" data-hub="expand" data-id="${esc(k)}" aria-label="Open the card for ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">${esc(q.offer.platform_label)}${kind?` <em class="u-lt u-lt-${esc(String(kind).toLowerCase())}">${esc(kind)}</em>`:''}</button></th>
         <td class="h-ld-line"><b>${esc(q.offer.line)}</b>${g.best&&key(g.best)===k?`<em class="h-ld-best">Best ${sideWord(side)}</em>`:''}${q.offer.moved_from!=null?`<small>was ${esc(q.offer.moved_from)}</small>`:''}</td>
         <td class="h-ld-px">${price(q,'over')}</td><td class="h-ld-px">${price(q,'under')}</td>
-        <td class="h-ld-scout">${ladderScout(q)}<span class="h-ld-grade">${q.scout.side&&!q.scout.hold&&!q.scout.line_chance&&!C.oneSided(q)?gradeChip(q):''}</span></td>
+        <td class="h-ld-scout">${ladderScout(q)}<span class="h-ld-grade">${notOffered(q)||q.scout.side&&!q.scout.hold&&!q.scout.line_chance&&!C.oneSided(q)?gradeChip(q):''}</span></td>
         <td class="h-ld-do">${act(q)}</td></tr>`;}).join('');
     return `<tr class="h-ladder-row h-span-row" data-ladder="${esc(g.key)}"><td colspan="${cols}"><div class="h-ladder"><table class="h-ladder-table" aria-label="${esc(`All ${g.total} lines for ${g.main.player.name} ${g.main.market.stat_label}`)}"><thead><tr><th scope="col">App</th><th scope="col">Line</th><th scope="col">Over</th><th scope="col">Under</th><th scope="col">Scout</th><th scope="col"><span class="u-sr">Slip</span></th></tr></thead><tbody>${body}</tbody></table>${dim?`<p class="h-ladder-note">${g.matched.length} of ${g.total} lines match the filters; the rest are listed dimmed.</p>`:''}</div></td></tr>`;
   }
@@ -1087,12 +1110,14 @@ export function mount(C) {
        says "Side" there; the card says plainly which side the app offers, and adding that side is a secondary, labelled action. */
     const other=s.side==='over'?'under':'over', against=!!s.side&&!C.oneSided(r)&&!r.extra&&!r.offer[s.side]?.offered&&!!r.offer[other]?.offered;
     const otherOk=against&&!on&&H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r);
-    const againstHtml=()=>`<div class="h-dec-act h-dec-unoffered"><small class="h-dec-note">${esc(r.offer.platform_label)} offers only ${sideWord(other)} ${esc(line)} on this line. Scout's side, ${sideWord(s.side)}, is not offered here.</small>${on?`<button class="h-dec-add is-on" data-hub="detail-add">On slip ✓</button>`:`<button class="h-dec-alt" data-hub="detail-add-other" ${otherOk?'':'disabled'}>Add ${sideWord(other)} ${esc(line)} (against Scout's side)</button>`}</div>`;
+    const againstHtml=()=>notOffered(r)
+      ?`<div class="h-dec-act h-dec-unoffered"><small class="h-dec-note">Not offered: ${esc(r.offer.platform_label)} does not offer ${sideWord(s.side)} ${esc(line)}, Scout's side.${offeredAlt(r)?` ${esc(altText({side:s.side,r:offeredAlt(r)}))} is the same line with ${sideWord(s.side)} offered.`:''}</small>${altBtn(r,'h-dec-add h-dec-alt-add')}</div>`
+      :`<div class="h-dec-act h-dec-unoffered"><small class="h-dec-note">${esc(r.offer.platform_label)} offers only ${sideWord(other)} ${esc(line)} on this line. Scout's side, ${sideWord(s.side)}, is not offered here.</small>${on?`<button class="h-dec-add is-on" data-hub="detail-add">On slip ✓</button>`:`<button class="h-dec-alt" data-hub="detail-add-other" ${otherOk?'':'disabled'}>Add ${sideWord(other)} ${esc(line)} (against Scout's side)</button>`}</div>`;
     const opt=q=>`<option value="${esc(key(q))}"${key(q)===key(r)?' selected':''}>${esc(q.offer.platform_label)} ${esc(q.offer.line)}${kindOf(q)?' · '+esc(kindOf(q)):q.market.line_type!=='standard'?' · '+esc(C.lineLabel(q)):''}</option>`;
     return `<label class="h-dec-line"><span>Line</span><select id="hub-card-line" aria-label="Line and book">${quotes.map(opt).join('')}</select></label>
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}${s.side===side?belowChip(r):''}</div>
-      <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
+      <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)&&!notOffered(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
       ${against?againstHtml():C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
       ${!r.offer[side].offered&&!against?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
@@ -1347,7 +1372,7 @@ export function mount(C) {
     const more=MX?(bestOf(r)?.bk||[]).filter(([,,bk])=>!have.has(base(bk))):[];
     const side=v=>v==null?'Not offered':v||'Listed';
     const moreRows=more.map(([label,line,,o,u])=>`<tr><td><span>${esc(label)}</span> <b>${esc(line)}</b></td><td>${esc(side(o))}</td><td>${esc(side(u))}</td><td>—</td><td>—</td></tr>`).join('');
-    return `${PX().odds(r,doc,pxCtx(r))}${MX?bestLinesHtml(r):''}<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${C.oneSided(q)?esc(C.oneSided(q)):q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}${moreRows}</tbody></table></div>
+    return `${PX().odds(r,doc,pxCtx(r))}${MX?bestLinesHtml(r):''}<section class="h-line-shop"><div class="h-sec-head"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="h-scroll-x"><table><thead><tr><th>Book / line</th><th>Over</th><th>Under</th><th>Scout</th><th>Seen</th></tr></thead><tbody>${quotes.map(q=>`<tr class="${key(q)===H.detail?'is-selected':''}"><td><button data-hub="detail-line" data-id="${esc(key(q))}" aria-pressed="${key(q)===H.detail}"><span>${esc(q.offer.platform_label)}${kindOf(q)?` <small>${esc(kindOf(q))}</small>`:q.market.line_type!=='standard'?` <small>${esc(C.lineLabel(q))}</small>`:''}</span><b>${esc(q.offer.line)}</b></button></td><td>${esc(quoteText(q,'over'))}</td><td>${esc(quoteText(q,'under'))}</td><td>${C.oneSided(q)?esc(C.oneSided(q)):notOffered(q)?`${sideWord(q.scout.side)} · Not offered`:q.scout.hold?'Research estimate':esc(C.verdictText(q))}${num(q.scout.p_side)?` <b>${pct(q.scout.p_side)}</b>`:''}</td><td title="${esc(q.offer.seen_at||'')}">${q.offer.seen_at?esc(age(q.offer.seen_at)):'—'}</td></tr>`).join('')}${moreRows}</tbody></table></div>
       <p class="h-history-note">Choose a line to recount its past results. Each line is its own pick with its own forecast; payouts and availability differ.</p>
       ${extra.length||other.length?`<div class="h-sec-head"><h4>Market books</h4></div><div class="h-scroll-x"><table><thead><tr><th>Book</th><th>Over</th><th>Under</th><th>Its chance</th></tr></thead><tbody>${extra.map(b=>mrow(b,false)).join('')}${other.map(b=>mrow(b,true)).join('')}</tbody></table></div>`:''}${market}</section>`;
   }
@@ -2084,13 +2109,14 @@ export function mount(C) {
     'card-tab'(id){if(!CARD_TABS.some(t=>t[0]===id))return;H.cardTab=id;paintDetail();$('hub-card-body').scrollTop=0;$('hub-tab-'+id)?.focus({preventScroll:true});},
     'genie-ask'(q){genieAsk(q);},
     'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id==='under'?'under':'over';paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
-    'detail-add-other'(){const r=rec(H.detail);if(!r||r.extra||C.oneSided(r)||!r.scout.side)return;const o=r.scout.side==='over'?'under':'over';
+    'detail-add-other'(){const r=rec(H.detail);if(!r||r.extra||C.oneSided(r)||!r.scout.side||notOffered(r))return;const o=r.scout.side==='over'?'under':'over';
       if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[o]?.offered||r.offer[r.scout.side]?.offered)return;C.addLeg(r,o);refreshSlip();},
+    'add-alt'(id){const r=rec(id),a=offeredAlt(r);if(!a)return;if(C.onSlip(a))return revealSlip(a);C.addLeg(a,r.scout.side);refreshSlip();paintBoard();if(cardOpen())paintDetail();},
     'detail-add'(){const r=rec(H.detail);if(!r||r.extra)return;if(C.oneSided(r))return;if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;C.addLeg(r,H.histSide);refreshSlip();},
     // alert notices open the same card as the board
     research(id){const r=rec(id);if(!r)return C.say('This offer is no longer on the board. Refresh to see current lines.');if(H.section!=='board')section('board');openCard(id);},
     books(id){if(rec(id))openCard(id,'lines');},
-    add(id){const r=rec(id);if(!r)return;if(r.extra)return openCard(id,'overview');if(C.oneSided(r))return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
+    add(id){const r=rec(id);if(!r)return;if(r.extra||notOffered(r))return openCard(id,'overview');if(C.oneSided(r))return openCard(id,'overview');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.scout.side||!r.offer[r.scout.side]?.offered)return openCard(id,'overview');C.addLeg(r,r.scout.side);refreshSlip();},
     watch(id){const r=rec(id);if(!r)return;const k=playerKey(r);H.watch=H.watch.includes(k)?H.watch.filter(x=>x!==k):[...H.watch,k].slice(-100);savePreferences();paintBoard();if(cardOpen())paintDetail();},
     diff(){H.onlyDiff=!H.onlyDiff;H.page=0;paintBoard();}, watched(){H.watched=!H.watched;H.page=0;paintBoard();},
     refresh(){H.bookLinesAt=0;load(true);},   /* H4: refreshing keeps the open card (it closed it); load() reloads its research if its line moved */ tray(){H.studioTab='slip';section('studio');},receipts(){section('picks');},close(){const u=new URL(location.href);u.searchParams.set('view','classic');u.hash=PAGE_BACK;location.assign(u.href);},

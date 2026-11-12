@@ -396,3 +396,4 @@ def test_sport_tab_counts_on_every_tab_or_none(browser, live):
         assert not p.errors
     finally:
         c.close()
+

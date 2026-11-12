@@ -246,7 +246,7 @@
         var mult = r.mult ? " " + [r.mult[0] ? "O " + (Math.round(r.mult[0] * 100) / 100) + "x" : "", r.mult[1] ? "U " + (Math.round(r.mult[1] * 100) / 100) + "x" : ""].filter(Boolean).join(" ") : "";
         var conf = r.conf ? '<span class="shx-conf" title="' + esc("cf-1 research confidence: " + r.conf.why.join("; ")) + '">' + r.conf.score + "/5</span>" : '<span class="sw-faint">—</span>';
         var Lg = root.SportsLabels;
-        var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + (r.grade && Lg ? Lg.gradeHtml(r.grade, r.lean, r.notValidated) : esc(leanText(r))) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">not offered here</div>' : "")
+        var lean = r.lean ? '<span class="shx-lean shx-' + r.lean + '">' + (r.grade && Lg && r.leanOffered !== false ? Lg.gradeHtml(r.grade, r.lean, r.notValidated) : esc(leanText(r))) + "</span>" + (r.leanOffered === false ? '<div class="sw-faint sw-small">Not offered here</div>' : "")
           : '<span class="sw-faint">' + esc(noChanceText(r)) + "</span>";
         return "<tr>" +
           '<th scope="row"><a href="' + playerHref(lg, {pid: r.pid, st: r.stat}) + '">' + esc(r.player) + '</a><div class="sw-faint sw-small">' + esc([tag(r.team, lg), r.ro || r.pos].filter(Boolean).join(" · ")) + "</div>" + (root.SportsCompare ? root.SportsCompare.rowButton(r) : "") + "</th>" +   // HOOK (compare)
