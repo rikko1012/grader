@@ -348,7 +348,7 @@ def test_why_line_names_matches_and_ranks():
 def test_shortage_says_which_rule_binds():
     assert build([rec("a", "e1", .6)])["shortage"] == "Only 1 eligible legs on PrizePicks right now."
     two = [rec("a", "e1", .6), rec("b", "e1", .59), rec("c", "e1", .58)]
-    assert "1 matches" in build(two)["shortage"]
+    assert "1 match;" in build(two)["shortage"]          # T18 (2026-11-12): singular
     ud = [rec("a", "e1", .6, book="underdog"), rec("b", "l1", .6, book="underdog", sport="lol")]
     assert "one sport on Underdog" in build(ud, platform="underdog", entry_type="standard")["shortage"]
 

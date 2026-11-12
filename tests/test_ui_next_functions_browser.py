@@ -627,3 +627,128 @@ def test_no_empty_game_log_message_when_the_card_has_counts(browser, live, size)
         assert "went over in 6 of the last 10" in txt, txt[:300]
         assert "no comparable game log" not in txt, txt[:600]
         assert not p.errors
+
+
+# --------------------------- bug 3 (owner 2026-11-12, "Not offered"): NBA / NFL lines where the app does not offer Scout's side
+
+def not_offered_board():
+    """the fixture NBA board plus: Nora Offset rebounds, PrizePicks 8.5 Over only and Underdog 8.5 both sides (an exact-match line),
+    Scout Under 69.2% A on both; Nate Near assists, PrizePicks 4.5 Over only and Underdog 5.5 (a near line, never the alternate)."""
+    from tests.workspace_other_fixture import market as mk, nba_board, quote as qt, forecast as fc
+    doc, view = nba_board()
+    x = {"v": "cf-2", "ln": "under", "pl": 0.692, "gr": "A", "e": 9.1, "g": 9.1, "c": 3, "cw": [], "s": 3.0}
+    nora = mk("nba", "nba:espn:1", "nba:player:espn:351", "Nora Offset", "F", "BOS", "nba:team:espn:BOS", "rebounds", [
+        qt("prizepicks", "pp:351", 8.5, "fc-bbbbbbbb00000001", over=1, under=0, x=x),
+        qt("underdog", "ud:351", 8.5, "fc-bbbbbbbb00000002", mult=[1.0, 1.0], x=x)])
+    nate = mk("nba", "nba:espn:2", "nba:player:espn:352", "Nate Near", "G", "MIA", "nba:team:espn:MIA", "assists", [
+        qt("prizepicks", "pp:352", 4.5, "fc-bbbbbbbb00000003", over=1, under=0, x=x),
+        qt("underdog", "ud:352", 5.5, "fc-bbbbbbbb00000004", mult=[1.0, 1.0], x=dict(x, pl=0.66))])
+    doc["markets"] += [nora, nate]
+    doc["fc"].update({"fc-bbbbbbbb00000001": fc(0.308, 0.692, 6.9, line=8.5), "fc-bbbbbbbb00000002": fc(0.308, 0.692, 6.9, line=8.5),
+                      "fc-bbbbbbbb00000003": fc(0.308, 0.692, 3.4, line=4.5), "fc-bbbbbbbb00000004": fc(0.34, 0.66, 3.4, line=5.5)})
+    return doc, view
+
+
+@SIZES
+def test_not_offered_side_shows_no_letter_edge_or_add_and_points_to_the_exact_match(browser, live, size):
+    live.mp.delenv("UI_NEXT", raising=False)
+    live.sports.boards["nba"] = not_offered_board()
+    workspace_api.reset()
+    c = context(browser, live, size)
+    try:
+        p = open_page(c, live, "/sports#/board?sport=nba", size)
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=20000)
+
+        def line_row(name, platform):
+            p.locator("#hub-q").fill(name)
+            p.wait_for_timeout(400)
+            row = p.locator("#hub-rows tr.h-row", has_text=name).first
+            if platform not in (row.get_attribute("data-record") or ""):
+                row.locator("[data-hub=ladder]").click()
+                p.wait_for_selector("tr.h-ladder-row tr[data-line]")
+                return None, p.locator(f'tr.h-ladder-row tr[data-line*="{platform}"]').first
+            return row, None
+
+        # Nora: the PrizePicks line (Over only) - Scout's side, chance and projection stay; no letter, no edge, no add for Under
+        row, lad = line_row("Nora Offset", "prizepicks")
+        p.locator("[data-hub=group-by][data-id=prop]").count()
+        both = [x for x in (row, lad) if x is not None][0]
+        txt = flat(both.inner_text())
+        assert "under" in txt and "69.2%" in txt and "not offered" in txt, txt
+        assert both.locator(".h-grade").count() == 0, txt                              # no letter
+        if row is not None:
+            assert flat(row.locator(".h-c-edge").inner_text() if row.locator(".h-c-edge").count() else "—") in ("—", "")
+            assert "under 8.5 on underdog" in txt
+            btn = row.locator("[data-hub=add-alt]")
+            assert btn.count() == 1 and "underdog" in (btn.get_attribute("aria-label") or "").lower()
+        fix_shot(p, f"not-offered-row-{size['width']}")
+        # the card opens on Scout's side, says Not offered, and adds the exact-match Underdog line, not the Over
+        (row.locator(".h-player") if row is not None else lad.locator(".h-ld-book")).click()
+        p.wait_for_selector("#hub-detail .h-why", timeout=20000)
+        p.wait_for_timeout(400)
+        dec = p.locator("#hub-decision")
+        if "prizepicks" not in p.locator("#hub-card-line").input_value():
+            p.locator("#hub-card-line").select_option(value=[o for o in p.locator("#hub-card-line option").evaluate_all("os=>os.map(o=>o.value)") if "prizepicks" in o][0])
+            p.wait_for_timeout(600)
+        assert dec.locator("[data-hub=history-side][data-id=under]").get_attribute("aria-pressed") == "true"
+        dtxt = flat(dec.inner_text())
+        assert "not offered" in dtxt and "add over" not in dtxt and "69.2%" in dtxt, dtxt
+        assert dec.locator(".h-grade").count() == 0
+        gi = flat(p.locator("#hub-card-body .h-gi").inner_text()) if p.locator("#hub-card-body .h-gi").count() else ""
+        assert "stake" not in gi and ("not offered" in gi or not gi), gi
+        fix_shot(p, f"not-offered-card-{size['width']}")
+        alt = dec.locator("[data-hub=add-alt]")
+        assert "add under 8.5 on underdog" in flat(alt.inner_text())
+        alt.click()
+        p.wait_for_function("document.getElementById('hub-slip-count').textContent.trim()==='1'", timeout=5000)
+        slip = flat(p.locator("#hub-slip-content").inner_text()) if size is DESK else ""
+        assert not slip or ("nora offset" in slip and "under" in slip and "8.5" in slip), slip
+        p.locator("#hub-detail [data-hub=card-close]").click()
+        # Nate: a near line on another app (Underdog 5.5) is never offered as the alternate
+        row, lad = line_row("Nate Near", "prizepicks")
+        both = [x for x in (row, lad) if x is not None][0]
+        txt = flat(both.inner_text())
+        assert "not offered" in txt and "underdog" not in txt.replace("underdog 5.5", ""), txt
+        assert both.locator("[data-hub=add-alt]").count() == 0
+        assert not p.errors
+    finally:
+        c.close()
+
+
+def test_auto_build_never_takes_a_side_the_app_does_not_offer():
+    import slip_quality
+    from datetime import datetime, timedelta, timezone
+    start = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rec = {"sport": "nba", "state": {"kind": "ok"}, "event": {"start_utc": start, "status": "scheduled"},
+           "offer": {"platform": "prizepicks", "line": 8.5, "over": {"offered": True}, "under": {"offered": False}},
+           "scout": {"side": "under", "p_over": 0.308, "p_under": 0.692, "projection": 6.9, "grade": "A"}}
+    import inspect
+    fn = next(f for n, f in inspect.getmembers(slip_quality, inspect.isfunction) if "return \"side\"" in inspect.getsource(f))
+    args = inspect.signature(fn).parameters
+    kw = {k: v for k, v in (("rec", rec), ("side", "under"), ("now", datetime.now(timezone.utc)), ("feeds", None)) if k in args}
+    assert fn(**kw) == "side"
+
+
+
+# ------------------------------------- T5: the book-link dialog (Open in Underdog) is readable in the light theme, in the new design's type
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_book_link_dialog_is_readable_in_both_themes(browser, live, theme):
+    from tests.test_ui_next_mobile_overlap_browser import SCAN, fix_shot as shot
+    live.mp.delenv("UI_NEXT", raising=False)
+    with Hub(browser, live, "next", PHONE) as h:
+        p = h.p
+        p.evaluate(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
+        p.reload()
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=30000)
+        h.card(VARGO_UD)
+        btn = p.locator("#hub-decision [data-hub=open-line]")
+        h.tall(btn).click()
+        box = p.locator("#u-book-line")
+        box.wait_for(state="visible")
+        p.wait_for_timeout(200)
+        shot(p, f"dialog-book-link-{theme}")
+        assert p.evaluate(SCAN, "#u-book-line") == [], theme
+        font = box.evaluate("b=>getComputedStyle(b).fontFamily")
+        assert "Plex" in font or "system-ui" in font, font                        # the new design's type, not the old Outfit
+        assert not p.errors

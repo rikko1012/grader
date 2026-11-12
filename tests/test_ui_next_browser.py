@@ -389,7 +389,8 @@ def test_one_row_per_prop_and_a_ladder_of_every_line(browser, env, size, tmp_pat
         side = by_id[row.get_attribute("data-record")]["scout"]["side"]
         best = p.locator("tr.h-ladder-row .h-ld-best")
         assert best.count() == 1 and best.inner_text().lower() == f"best {side}"
-        offered = [r for r in recs if r["offer"][side]["offered"]]
+        # H6 (2026-11-12): only even-payout pick'em lines (PrizePicks / Underdog standard) compare by line value
+        offered = [r for r in recs if r["offer"][side]["offered"] and r["offer"]["platform"] in ("prizepicks", "underdog") and r["market"]["line_type"] == "standard"]
         want = min(offered, key=lambda r: r["offer"]["line"]) if side == "over" else max(offered, key=lambda r: r["offer"]["line"])
         assert float(best.locator("xpath=..").locator("b").inner_text()) == want["offer"]["line"]
         # a slip line adds from the ladder; a sportsbook line opens its card instead

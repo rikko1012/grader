@@ -368,8 +368,8 @@ export function panels(X) {
     const up = f.direction === 'up', a = Math.abs(f.effect);
     return `<span class="${up ? 'h-gi-up' : 'h-gi-dn'}"><span aria-hidden="true">${up ? '▲' : '▼'}</span> ${up ? '+' : '−'}${f.effect_unit === 'stat' ? a.toFixed(2) : a.toFixed(1) + '%'} <span class="h-gi-word">${up ? 'up' : 'down'}</span></span>`;
   }
-  function gradeHtml(r, doc) {
-    const g = doc?.grade_inputs, sc = r?.scout || {};
+  function gradeHtml(r, doc, cx) {
+    const g = doc?.grade_inputs, sc = r?.scout || {}, nf = !!cx?.notOffered;     /* bug 3: Scout's side not offered on this app */
     if (!g || r.extra) return '';
     const near = (a, b) => (a == null && b == null) || (num(a) && num(b) && Math.abs(a - b) < 1e-9);
     const side = sc.side === 'over' || sc.side === 'under' ? sc.side : null;
@@ -383,8 +383,8 @@ export function panels(X) {
       giRow('Projection vs line', num(proj) && num(line) ? `<span class="h-gi-num">${gi1(proj)} vs ${esc(line)}</span>${gap ? ` <small class="${gap > 0 ? 'h-gi-up' : 'h-gi-dn'}"><span aria-hidden="true">${gap > 0 ? '▲' : '▼'}</span> ${gi1(Math.abs(gap))} ${gap > 0 ? 'above' : 'below'} the line</small>` : ''}` : num(proj) ? `<span class="h-gi-num">${gi1(proj)}</span>` : ''),
       giRow('Chance', side && num(sc.p_side) ? `<span class="h-gi-num">${giP(sc.p_side)}</span>${same && g.chance_rule ? ` <small>${esc(g.chance_rule)}</small>` : ''}` : ''),
       giRow('Side', side ? `<b class="h-gi-side-${side}">${esc(sideWord(side))}</b>` : ''),
-      giRow('Letter', letter ? `<b>${esc(letter)}</b>${band ? ` <small>Why this letter: chance ${band}</small>` : ''}` : ''),
-      giRow('Stake', side && num(sc.units) ? `<span class="h-gi-num">${giN(sc.units)}U</span>${sc.stake_reason && stake?.rule ? ` <small>${esc(stake.rule)}</small>` : ''}${stake && num(stake.band_units) && stake.band_units !== sc.units ? ` <small>This chance band stakes ${giN(stake.band_units)}U before stake rules</small>` : ''}` : ''),
+      giRow('Letter', nf ? `<b>Not offered</b> <small>${esc(cx.notOfferedWhy || '')}</small>` : letter ? `<b>${esc(letter)}</b>${band ? ` <small>Why this letter: chance ${band}</small>` : ''}` : ''),
+      giRow('Stake', !nf && side && num(sc.units) ? `<span class="h-gi-num">${giN(sc.units)}U</span>${sc.stake_reason && stake?.rule ? ` <small>${esc(stake.rule)}</small>` : ''}${stake && num(stake.band_units) && stake.band_units !== sc.units ? ` <small>This chance band stakes ${giN(stake.band_units)}U before stake rules</small>` : ''}` : ''),
       giRow('Model', model?.name ? `<b>${esc(model.name)}</b>${model.version ? ` <small>version ${esc(model.version)}</small>` : ''}${model.calibration ? ` <small>chance calibration ${esc(model.calibration)}</small>` : ''}${model.grade_policy ? ` <small>letter scale ${esc(model.grade_policy)}</small>` : ''}` : ''),
       giRow('Sample', sample && num(sample.n) ? `<span class="h-gi-num">${esc(sample.n)}</span> ${esc(giUnit(sample))}${sample.first && sample.last ? ` <small>${esc(sample.first)} to ${esc(sample.last)}</small>` : sample.last ? ` <small>newest ${esc(sample.last)}</small>` : ''}${num(sample.window_days) ? ` <small>${esc(sample.window_days)}-day window</small>` : ''}` : ''),
     ].filter(Boolean);
