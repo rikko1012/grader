@@ -798,7 +798,7 @@ def test_no_repeat_props_across_generated_batch(ctx,env,size,available):
     assert not p.errors
 
 
-@pytest.mark.parametrize('path', ['/', '/lol', '/sports#/board'])
+@pytest.mark.parametrize('path', ['/', '/lol', '/sports#/board', '/#/books', '/#/ev', '/#/arb', '/#/record'])
 def test_workspace_boot_hides_classic_while_account_loads(ctx, env, monkeypatch, path):
     monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
     p = ctx.new_page()

@@ -4545,7 +4545,7 @@ var p=t.parentNode;p.insertBefore(f,t);p.removeChild(t);t=null;
 document.dispatchEvent(new Event('scout-classic-mount'));
 return true;};
 var h=location.hash;
-if(window.scoutClassic||!(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|record|tools|picks|alerts|ev)(?:[?\/]|$))/.test(h)))window.scoutClassicMount();
+if(window.scoutClassic||!(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|record|tools|picks|alerts|books|ev|arb)(?:[?\/]|$))/.test(h)))window.scoutClassicMount();
 else if(document.body.classList.contains('locked')){document.body.classList.remove('locked');document.body.dataset.classicLocked='1';}
 })();</script>"""
 
@@ -4583,7 +4583,7 @@ const ck=document.cookie,NEXT=/(?:^|;\s*)scout_ui=next(?:;|$)/.test(ck)||(false/
 if(NEXT){root.dataset.ui='next';let t=null;try{t=localStorage.getItem('scout-theme');}catch(e){}root.dataset.theme=t==='light'?'light':'dark';
 const f=document.createElement('link');f.rel='stylesheet';f.href='https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap';document.head.appendChild(f);}
 const h=location.hash;
-if(!window.scoutClassic&&root.dataset.upgrade!=='sports-results'&&(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|tools|picks|alerts))/.test(h))){
+if(!window.scoutClassic&&root.dataset.upgrade!=='sports-results'&&(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|record|tools|picks|alerts|books|ev|arb))/.test(h))){
 root.classList.add('scout-boot');window.scoutBootTimer=setTimeout(window.scoutBootDone,8000);
 }
 window.scoutStylesReady=Promise.all(['/upgrade/upgrade.css','/upgrade/hub.css'].flatMap(h=>NEXT&&h.slice(-8)==='/hub.css'?['/upgrade/next-base.css','/upgrade/next.css']:[h]).map(href=>new Promise(resolve=>{
