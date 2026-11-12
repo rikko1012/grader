@@ -3,15 +3,24 @@
  * line_shift.py). The page only filters and sorts what it is given; filters that change the fair chance are sent back as
  * parameters. Saved views live in this browser only (a per-viewer convenience). */
 const KEY = 'scout-ev-view';
+const VIEW_V = 2;   /* saved-view format: 2 = saved under the 2-independent-books default */
 /* the default filters (Reset, Clear all, and the fall-back when a saved view would hide every leg) */
-const DEF_P = () => ({preset: 'equal', method: 'worst', min_books: 1, req: [], w: {}, min_liq: 0, max_width: 0.1});
+const DEF_P = () => ({preset: 'equal', method: 'worst', min_books: 2, req: [], w: {}, min_liq: 0, max_width: 0.1});
 const DEF_F = () => ({q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: true});
 const S = {doc: null, loading: false, error: null, seq: 0, open: new Set(), showModel: false, restored: false, notice: '',
-  p: Object.assign({app: 'prizepicks', entry: 'power', n: 2}, DEF_P()), f: DEF_F()};
+  p: Object.assign({app: 'prizepicks', entry: '', n: 0}, DEF_P()), f: DEF_F()};
 let C = null, box = null;
 
 function load() {
-  try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); if (v && v.p && v.f) { Object.assign(S.p, v.p); Object.assign(S.f, v.f); S.restored = true; return true; } } catch (e) { /* storage blocked */ }
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (v && v.p && v.f) {
+      /* owner 2026-11-12: a view saved before 2 independent books became the default carries the old default (1 book) and the
+         old opening entry; those were never the member's choice, so they give way to today's defaults */
+      if (v.v !== VIEW_V) { delete v.p.min_books; delete v.p.entry; delete v.p.n; }
+      Object.assign(S.p, v.p); Object.assign(S.f, v.f); S.restored = true; return true;
+    }
+  } catch (e) { /* storage blocked */ }
   return false;
 }
 /* owner audit 2026-11-06 (T3): a saved view of Required books FanDuel + Polymarket and Sport NBA opened on "0 of 0 legs". A view
@@ -61,7 +70,7 @@ const age = s => typeof s !== 'number' ? '—' : s < 90 ? Math.round(s) + 's' : 
 const side = s => s === 'over' ? 'Over' : 'Under';
 const ENTRY = {power: 'Power', flex: 'Flex', standard: 'Standard'};
 const MODEL_EV_HIDDEN = ['nba', 'nfl'];
-const REASON = {stale: 'older than its limit', 'one-sided': 'one side priced only', wide: 'book cut too large', 'different line too far': 'line too far from the app\'s line',
+const REASON = {'different line': 'on another line', 'settlement rules differ': 'settles a sit-out differently from the app', stale: 'older than its limit', 'one-sided': 'one side priced only', wide: 'book cut too large', 'different line too far': 'line too far from the app\'s line',
   'different line and no line-shift shape': 'different line, no shape for this stat', 'no valid quote time': 'no time on the price'};
 const reason = r => REASON[r] || (r.startsWith('exchange spread') ? 'buy-sell gap too wide' : r.includes('liquidity') ? 'less money on it than your minimum' : r);
 
@@ -109,7 +118,7 @@ function rowHtml(r, sports) {
     + `<div class="ev-cell ev-hit" data-label="To hit"><b>${pct(r.p_market)}</b></div>`
     + `<div class="ev-cell ev-ev${evClass(r.ev)}" data-label="Average return"><b>${evText(r.ev)}</b></div>`
     + `<div class="ev-cell" data-label="Scout"><span>${pct(r.p_model)}</span></div>`
-    + `<div class="ev-cell" data-label="Market"><button class="ev-books" data-ev="books" data-id="${esc(id)}" aria-expanded="${open}">${r.books} ${r.books === 1 ? 'book' : 'books'} ${open ? '▴' : '▾'}</button></div>`
+    + `<div class="ev-cell" data-label="Market"><button class="ev-books" data-ev="books" data-id="${esc(id)}" aria-expanded="${open}">${esc(r.books_label || (r.books + (r.books === 1 ? ' book' : ' books')))} ${open ? '▴' : '▾'}</button></div>`
     + `<div class="ev-cell ev-act">${addBtn(r)}</div>${open ? sourcesHtml(r) : ''}</li>`;
 }
 function modelRowHtml(r, sports) {
@@ -129,7 +138,7 @@ function chips(d) {
   p.req.forEach(b => out.push(['req:' + b, label(b) + ' required']));
   if (p.preset === 'sharp') out.push(['quick:sharp', 'Top books only']);
   if (p.preset === 'custom') out.push(['preset', 'Each book counted your way']);
-  if (p.min_books !== D.min_books) out.push(['min_books', 'At least ' + p.min_books + ' books']);
+  if (p.min_books !== D.min_books) out.push(['min_books', p.min_books === 1 ? '1 book is enough' : 'At least ' + p.min_books + ' independent books']);
   if (p.min_liq !== D.min_liq) out.push(['min_liq', 'At least $' + Number(p.min_liq).toLocaleString() + ' on an exchange price']);
   if (p.max_width !== D.max_width) out.push(['max_width', 'Book cut up to ' + (p.max_width * 100).toFixed(0) + '%']);
   if (f.sport !== 'all') out.push(['sport', C.SPORTS[f.sport] || f.sport]);
@@ -154,7 +163,7 @@ function filtersHtml(d) {
     + `<div class="ev-quick" role="group" aria-label="Quick filters">${[['sharp', 'Top books only'], ['favorites', 'Favorites'], ['longshots', 'Longshots']].map(([k, t]) => { const on = k === 'sharp' ? p.preset === 'sharp' : f.quick === k; return `<button data-ev="quick" data-id="${k}" aria-pressed="${on}">${on ? '<span aria-hidden="true">✓ </span>' : ''}${t}</button>`; }).join('')}`
     + `<button data-ev="evonly" aria-pressed="${f.evOnly}">Only picks that beat the entry</button></div>`
     + `<div class="ev-grid">${sel('preset', 'How books count', o.presets.map(x => [x, x === 'equal' ? 'All the same' : x === 'sharp' ? 'Top books count more' : 'Choose for each book']), p.preset)}`
-    + sel('min_books', 'Fewest books', Array.from({length: o.min_books_max}, (_, i) => [i + 1, String(i + 1)]), p.min_books)
+    + sel('min_books', 'Fewest independent books', Array.from({length: o.min_books_max}, (_, i) => [i + 1, String(i + 1)]), p.min_books)
     + sel('min_liq', 'Least money on an exchange price', o.min_liq_choices.map(x => [x, x ? '$' + x.toLocaleString() : 'Any']), p.min_liq)
     + sel('max_width', 'Largest book cut', o.max_width_choices.map(x => [x, (x * 100).toFixed(0) + '%']), p.max_width)
     + `<label>To hit from<input id="ev-lo" type="number" min="0" max="100" step="1" inputmode="numeric" value="${esc(f.lo)}" placeholder="0"></label>`
@@ -192,13 +201,13 @@ function paintBox() {
     + (sports > 1 ? `<label>Sport<select id="ev-sport">${sportOpts.map(([k, t]) => `<option value="${k}"${S.f.sport === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>` : '') + `</div>`
     + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
     + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
-    + filtersHtml(d) + chipsHtml(d) + banner
+    + (d.payout && d.payout.text ? `<p class="ev-banner">${esc(d.payout.text)}</p>` : '') + filtersHtml(d) + chipsHtml(d) + banner
     + `<section aria-label="Market priced legs"><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
     + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.map(r => rowHtml(r, sports)).join('')}</ol>`
-      : `<p class="ev-state">${d.rows_total ? 'No leg beats the entry right now with these filters.' : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
-    + `</section><section aria-label="Model only legs" class="ev-model"><h3>No book price <small>${model.length} legs · no book prices this line, ranked by Scout's chance</small></h3>`
+      : `<p class="ev-state">${d.rows_total ? 'No leg beats the entry right now with these filters.' : d.params.min_books > 1 ? `No pick'em leg has ${d.params.min_books} independent books on its exact line right now.` : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
+    + `</section><section aria-label="Model only legs" class="ev-model"><h3>No book price <small>${model.length} legs · no book price to use on this exact line, ranked by Scout's chance</small></h3>`
     + (model.length ? `<button class="ev-link" data-ev="model" aria-expanded="${S.showModel}">${S.showModel ? 'Hide' : 'Show'} legs with no book price</button>${S.showModel ? `<ol class="ev-list ev-list-model"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>Scout</span><span>Average return on Scout's chance</span><span></span></li>${model.slice(0, 100).map(r => modelRowHtml(r, sports)).join('')}</ol>` : ''}` : '<p class="ev-state">None right now.</p>')
-    + `</section><details class="ev-how"><summary>How this works</summary><p>To hit is the books' chance for this side at the app's exact line, with each book's cut taken out (the least favourable of three ways, so the chance is never flattered). A book on a nearby line is read at the app's line from how the stat usually spreads; a book line too far away is left out. Exchange prices count only when buy and sell are within ${Math.round(d.options.max_spread * 100)}¢. Prices older than ${Math.round(d.options.freshness_s.sportsbook / 60)} minutes (exchanges ${Math.round(d.options.freshness_s.exchange / 60)}) are left out. A book copied by two feeds counts once.</p>`
+    + `</section><details class="ev-how"><summary>How this works</summary><p>To hit is the books' chance for this side at the app's exact line, with each book's cut taken out (the least favourable of three ways, so the chance is never flattered). A book counts only when it prices this exact line and settles a player who sits out the way the app does; nothing is moved over from another line. Exchange prices count only when buy and sell are within ${Math.round(d.options.max_spread * 100)}¢. Prices older than ${Math.round(d.options.freshness_s.sportsbook / 60)} minutes (exchanges ${Math.round(d.options.freshness_s.exchange / 60)}) are left out. Books that share one price feed count once, and by default a leg needs two independent books. Lower Fewest independent books to 1 to see legs that rest on a single book; they are marked 1 book.</p>`
     + `<p>Average return is per pick on this entry: chance to hit ÷ chance needed − 1. Scout is Scout's own chance as the board shows it, beside the books' chance and never mixed into it.</p>`
     + `<p>Payouts: ${esc(d.app_label)} table from ${d.payout_source.source ? `<a href="${esc(d.payout_source.source)}" target="_blank" rel="noopener">its help center</a>` : 'its help center'}, read ${esc(d.payout_source.read_at || '')}. The app's own entry screen is final. Scout links to the app and never places an entry.</p></details>`;
 }
@@ -243,12 +252,12 @@ function onClick(e) {
   const b = e.target.closest('[data-ev]'); if (!b || !box.contains(b) || b.disabled) return;
   const id = b.dataset.id, a = b.dataset.ev;
   if (a === 'refresh') return fetchDoc();
-  if (a === 'app' && id !== S.p.app) { S.p.app = id; S.p.entry = id === 'prizepicks' ? 'power' : 'standard'; S.p.n = 2; return fetchDoc(); }
+  if (a === 'app' && id !== S.p.app) { S.p.app = id; S.p.entry = ''; S.p.n = 0; return fetchDoc();   /* the server opens each app on the entry that needs the lowest chance */ }
   if (a === 'books') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); return render(); }
   if (a === 'model') { S.showModel = !S.showModel; return render(); }
   if (a === 'evonly') { S.f.evOnly = !S.f.evOnly; return render(); }
   if (a === 'quick') {                     /* T4: each is a toggle - a second press turns it off, and the button shows it is on */
-    if (id === 'sharp') { const on = S.p.preset !== 'sharp'; S.p.preset = on ? 'sharp' : 'equal'; S.p.min_books = on ? Math.max(2, S.p.min_books) : 1; S.drawer = true; return fetchDoc(); }
+    if (id === 'sharp') { const on = S.p.preset !== 'sharp'; S.p.preset = on ? 'sharp' : 'equal'; S.p.min_books = on ? Math.max(2, S.p.min_books) : 2; S.drawer = true; return fetchDoc(); }
     if (id !== 'favorites' && id !== 'longshots') return;
     S.f.quick = S.f.quick === id ? '' : id; S.drawer = true; return render();
   }
@@ -256,7 +265,7 @@ function onClick(e) {
     const [k, v] = String(id).split(/:(.*)/), D = DEF_P(), F = DEF_F();
     S.notice = '';
     if (k === 'req') { S.p.req = S.p.req.filter(x => x !== v); return fetchDoc(); }
-    if (k === 'quick' && v === 'sharp') { S.p.preset = 'equal'; S.p.min_books = 1; return fetchDoc(); }
+    if (k === 'quick' && v === 'sharp') { S.p.preset = 'equal'; S.p.min_books = 2; return fetchDoc(); }
     if (k === 'preset') { S.p.preset = D.preset; S.p.w = {}; return fetchDoc(); }
     if (['min_books', 'min_liq', 'max_width'].includes(k)) { S.p[k] = D[k]; return fetchDoc(); }
     if (k === 'quick') { S.f.quick = ''; return render(); }
@@ -268,7 +277,7 @@ function onClick(e) {
     const m = box.querySelector('#ev-saved');
     if (S.loading || JSON.stringify(S.p) !== JSON.stringify(S.docP)) { if (m) m.textContent = 'Wait for the prices to load, then save.'; return; }
     if (filtersHideAll(S.doc)) { if (m) m.textContent = 'This view shows no legs right now, so it was not saved.'; return; }
-    let ok = true; try { localStorage.setItem(KEY, JSON.stringify({p: S.p, f: S.f})); } catch (err) { ok = false; }
+    let ok = true; try { localStorage.setItem(KEY, JSON.stringify({v: VIEW_V, p: S.p, f: S.f})); } catch (err) { ok = false; }
     if (m) m.textContent = ok ? 'Saved in this browser.' : 'This browser does not allow saving.'; return;
   }
   if (a === 'reset') {

@@ -40,6 +40,12 @@ def snap(groups, now):
     return {"body": json.dumps({"records": recs}).encode(), "index": index, "props": props}
 
 
+@pytest.fixture(autouse=True)
+def fixture_books_settle_like_the_app(monkeypatch):
+    from tests.book_rules_fixture import like_the_app
+    like_the_app(monkeypatch)
+
+
 @pytest.fixture
 def fake(monkeypatch):
     bp.reset()
@@ -91,8 +97,9 @@ def test_arbitrage_formula_and_flags(fake):
     assert not any(x["line"] == 9.5 for x in s["arbitrage"])               # the stale leg's pair is left out ...
     st = next(x for x in s["flagged"] if x["line"] == 9.5)
     assert "Stale leg" in st["flags"]                                      # ... and listed with the reason
-    k = next(x for x in s["flagged"] if x["line"] == 5.5)
-    assert any("Prediction market" in f for f in k["flags"]) and not any(x["line"] == 5.5 for x in s["arbitrage"])
+    # owner 2026-11-12: Kalshi settles a sit-out at its last fair price, a sportsbook hands the stake back - not the same bet,
+    # so the pair is not an arbitrage and is listed nowhere (only counted)
+    assert not any(x["line"] == 5.5 for x in s["flagged"] + s["arbitrage"]) and s["excluded"].get(wm.PAIR_RULES) == 1
     assert "guarantee" not in json.dumps(s).lower()
 
 
@@ -213,7 +220,7 @@ def test_member_view_has_sportsbook_rows_only_and_the_owner_keeps_everything(fak
     o = wm.for_member(body, every, owner=True)
     assert o["owner"] is True and o["sports"]["nba"]["flagged"] and o["sports"]["nba"]["excluded"]
     assert any(r["book"] == "sleeper" for r in o["sports"]["nba"]["ev"]) and "p_cal" in o["method"] and "margin" in o["method"]["arbitrage"]
-    assert "kalshi" in {b["id"] for b in o["books"]}
+    assert "kalshi" not in {b["id"] for b in o["books"]}                             # its pair is not listed (rules differ), so no row
 
 
 def test_member_keeps_prediction_market_price_rows_and_drops_only_pickem():

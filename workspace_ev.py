@@ -1,10 +1,18 @@
 """SCOUT_PICKEM_EV (default off): the pick'em +EV board (competitor spec 4.1), route #/ev under Tools.
 
 For every open PrizePicks / Underdog standard line on the NBA / NFL boards: the books the sports service already holds for
-that market (FanDuel, BetRivers, The Odds API books, Kalshi, Polymarket - the snapshot's own book rows, no provider request
-is made here) -> the market's fair chance AT THE APP'S LINE (gradecore.fair; another line is read through the measured
-shape, gradecore.line_shift) -> the selected entry's per-leg break-even from the verified payout tables -> EV = p / be - 1
-(gradecore.ev_board). The chance the board prints (Scout's model) is shown beside the market fair, never blended: no blend
+that market (FanDuel, BetRivers, Bovada, Kalshi, Polymarket - the snapshot's own book rows, no provider request is made
+here) -> the market's fair chance AT THE APP'S EXACT LINE (gradecore.fair with exact=True) -> the selected entry's per-leg
+break-even from the verified payout tables -> EV = p / be - 1 (gradecore.ev_board).
+
+Owner 2026-11-12 ("use 2 independent books by default, matching the exact line, period and settlement rules. Two sites
+using the same underlying feed shouldn't count twice"):
+  - a book counts only on the app's exact line (nothing is shifted from another line), on the same stat and period (the
+    snapshot attaches book rows per event / player / stat / scope; a row of another scope is not attached), and only when
+    it settles the prop like the app does - gradecore.book_rules.for_pickem; a rule that is not confirmed = not used;
+  - "books" counts pricing FAMILIES (gradecore.book_rules.FAMILY), so two sites on one feed are one; the default minimum is
+    ev_board.MIN_BOOKS_DEFAULT (2). A member may lower it to 1; such rows carry one_book / the "1 book" label;
+  - every shared build's legs that beat the entry are queued for the record (workspace_ev_log), off the request path. The chance the board prints (Scout's model) is shown beside the market fair, never blended: no blend
 weight is fitted and the calibration layers are off. CS2 / LoL lines (and NBA / NFL lines no book prices) are "model only"
 and ranked in their own list. A leg whose quotes are all stale / one-sided / wide gets no EV: it is hidden and counted.
 
@@ -51,6 +59,17 @@ def base_book(p):
     return str(p or "").split(":")[-1].lower()
 
 
+def default_entry(app):
+    """The entry the board opens on: the in-app entry that needs the LOWEST chance per leg (PrizePicks: 6-pick Flex, 54.2%;
+    Underdog: Standard 2-pick, 53.5%). The 2026-11-12 check found PrizePicks opened on its hardest entry (Power 2-pick, 57.7%)
+    and so read "0 plays"; the needed chance is on every entry in the picker and in the list heading."""
+    es = [e for e in entries() if e["app"] == app]
+    if not es:
+        return ("power" if app == "prizepicks" else "standard"), 2
+    e = min(es, key=lambda e: (round(e["break_even"], 6), e["n"]))
+    return e["entry"], e["n"]
+
+
 # ------------------------------------------------------------------------------------------------------------- params
 
 def entries():
@@ -75,19 +94,19 @@ def params(q, books=()):
     g = lambda k, d=None: (q.get(k) or d)
     ok = {(e["app"], e["entry"], e["n"]) for e in entries()}
     app = g("app") if g("app") in {a for a, _, _ in ok} else default_app()
-    entry = g("entry", "power" if app == "prizepicks" else "standard")
+    entry = g("entry", "")
     try:
-        n = int(g("n", 2))
+        n = int(g("n", 0))
     except (TypeError, ValueError):
-        n = 2
+        n = 0
     if (app, entry, n) not in ok:
-        entry, n = ("power" if app == "prizepicks" else "standard"), 2
+        entry, n = default_entry(app)
     preset = g("preset", "equal") if g("preset", "equal") in (*fair.PRESETS, "custom") else "equal"
     method = g("method", "worst") if g("method", "worst") in fair.METHODS else "worst"
     try:
-        min_books = max(1, min(ev_board.MIN_BOOKS_MAX, int(g("min_books", 1))))
+        min_books = max(1, min(ev_board.MIN_BOOKS_MAX, int(g("min_books", ev_board.MIN_BOOKS_DEFAULT))))
     except (TypeError, ValueError):
-        min_books = 1
+        min_books = ev_board.MIN_BOOKS_DEFAULT
     known = set(books)
     req = tuple(sorted({b for b in str(g("req", "")).lower().split(",") if b in known}))[:MAX_REQUIRED]
     weights = ()
@@ -140,8 +159,13 @@ def _num(v):
     return x if x > 1 else None
 
 
-def quotes_of(rows):
-    """The snapshot's book rows of one market -> gradecore.fair.Quote list (no price is changed here)."""
+def quotes_of(rows, sport=None):
+    """The snapshot's book rows of one market -> gradecore.fair.Quote list (no price is changed here). Each quote's cluster is
+    its pricing family. A book whose settlement is known to differ from the app's is marked excluded (listed as left out with
+    that fact, never priced). A book whose rule is not confirmed, or that is never a price source, is not a price for this
+    board at all and is not listed (owner 2026-10-16: nothing unconfirmed on a member page) - the admin table
+    (/admin/ev_log.json) shows which books those are. Polymarket carries the measured sit-out share (book_rules.for_pickem)."""
+    from gradecore import book_rules
     from gradecore.fair import Quote
     out = []
     for b in rows or ():
@@ -151,11 +175,17 @@ def quotes_of(rows):
         seen = wb._ts(b.get("seen_at"))
         seen = float("nan") if seen is None else seen
         book = base_book(plat)
+        ok, share, why = book_rules.for_pickem(book, sport)
+        if not ok and why != book_rules.REASON_DIFFERENT:
+            continue
+        fam = book_rules.family_of(book)
         if kind == "mid" or plat in PREDICTION:
             bid, ask = _exchange(b.get("over"))
-            out.append(Quote(book=book, line=float(b["line"]), observed_at=seen, kind="exchange", bid=bid, ask=ask, cluster=book))
+            out.append(Quote(book=book, line=float(b["line"]), observed_at=seen, kind="exchange", bid=bid, ask=ask, cluster=fam,
+                             sit_out=share or 0.0, excluded=None if ok else why))
             continue
-        out.append(Quote(book=book, line=float(b["line"]), observed_at=seen, over=_num(b.get("over")), under=_num(b.get("under")), cluster=book))
+        out.append(Quote(book=book, line=float(b["line"]), observed_at=seen, over=_num(b.get("over")), under=_num(b.get("under")),
+                         cluster=fam, excluded=None if ok else why))
     return out
 
 
@@ -188,7 +218,7 @@ def _legs(srv):
             for (p, rid), x in (s.get("index") or {}).items():
                 if p in APPS:
                     same, other = x.get("books") or ([], [])
-                    books[(p, rid)] = (list(same) + list(other), x.get("st"))
+                    books[(p, rid)] = (list(same) + list(other), x.get("st"), x.get("scope"))
         for r in recs:
             o, m, sc = r.get("offer") or {}, r.get("market") or {}, r.get("scout") or {}
             app = o.get("platform")
@@ -200,7 +230,9 @@ def _legs(srv):
             start = wb._ts(ev.get("lock_utc") or ev.get("start_utc"))
             if ev.get("status") == "started" or (start is not None and start <= now):
                 continue
-            bk, stat = books.get((app, o.get("offer_id")), ((), m.get("stat")))
+            bk, stat, scope = books.get((app, o.get("offer_id")), ((), m.get("stat"), None))
+            if scope is not None and wb._per(scope) != wb._per(m.get("period")):
+                bk = ()                            # book rows of another period never price this line
             for side in ("over", "under"):
                 so = o.get(side) or {}
                 if so.get("offered") is False:
@@ -221,23 +253,20 @@ def _legs(srv):
 def _priced(srv, p, now):
     """The fair chance of every leg under these fair parameters, memoised per board generation (the entry type and the
     sports a member sees never re-price)."""
-    from gradecore import ev_board, line_shift
+    from gradecore import ev_board
     token, legs = _legs(srv)
     fkey = (token, p[3:])
     with _LOCK:
         hit = _FAIR.get(fkey)
         if hit is not None and now - hit[0] < TTL:
             return legs, hit[1]
-    opts = dict(_fair_opts(p), freshness=price_limits())
-    out, readers = {}, {}
+    opts = dict(_fair_opts(p), freshness=price_limits(), exact=True)
+    out = {}
     for leg in legs:
         if leg["sport"] not in MARKET_SPORTS or not leg["book_rows"]:
             continue
-        rk = (leg["sport"], leg["shape_market"])
-        if rk not in readers:
-            readers[rk] = line_shift.reader(*rk)
-        res = ev_board.price_leg(quotes_of(leg["book_rows"]), leg["side"], leg["line"], now, be=None, p_model=None,
-                                 p_model_other=None, reader=readers[rk], **opts)
+        res = ev_board.price_leg(quotes_of(leg["book_rows"], leg["sport"]), leg["side"], leg["line"], now, be=None, p_model=None,
+                                 p_model_other=None, reader=None, **opts)
         out[(leg["key"], leg["side"])] = (res["fair"], res["hidden"])
     with _LOCK:
         for k in [k for k, v in _FAIR.items() if now - v[0] >= TTL]:
@@ -249,7 +278,8 @@ def _priced(srv, p, now):
 # ------------------------------------------------------------------------------------------------------------- build
 
 def _source(s, sources_label):
-    return {"book": s["book"], "label": sources_label.get(s["book"], s["book"].title()), "kind": s["kind"], "line": s["line"],
+    return {"book": s["book"], "label": sources_label.get(s["book"], s["book"].title()), "family": s["group"], "kind": s["kind"], "line": s["line"],
+            "over": s.get("over"), "under": s.get("under"), "bid": s.get("bid"), "ask": s.get("ask"), "sit_out": s.get("sit_out") or None,
             "age_s": round(s["age_s"]) if s.get("age_s") is not None else None, "liquidity": s.get("liquidity"),
             "width": None if s.get("width") is None else round(s["width"], 4), "p": round(s["p"], 4), "shifted": s["shifted"],
             "weight": s["weight"]}
@@ -260,10 +290,14 @@ def build(srv, p, allowed, now=None):
     now = time.time() if now is None else now
     legs, priced = _priced(srv, p, now)
     app, entry, n = p[0], p[1], p[2]
-    labels = {}
+    from gradecore import book_rules
+    labels, usable = {}, set()
     for leg in legs:
         for b in leg["book_rows"] or ():
-            labels.setdefault(base_book(b.get("platform")), _label(base_book(b.get("platform"))))
+            bb = base_book(b.get("platform"))
+            labels.setdefault(bb, _label(bb))
+            if bb not in usable and book_rules.for_pickem(bb, leg["sport"])[0]:
+                usable.add(bb)                     # only books this board can price are offered as filters
     cfg = payouts.pickem_config()
     entry_be = payouts.entry_break_even(app, entry, n, cfg)
     rows, model_rows, hidden, plays = [], [], {}, {a: 0 for a in APPS}
@@ -275,7 +309,7 @@ def build(srv, p, allowed, now=None):
         f, why = priced.get((leg["key"], leg["side"]), (None, None))
         if leg["sport"] in MARKET_SPORTS and f is not None and f["p"] is not None and leg["app"] != app:
             # the other app's +EV count at its default entry (the "plays" chips)
-            dflt = ("power", 2) if leg["app"] == "prizepicks" else ("standard", 2)
+            dflt = default_entry(leg["app"])
             obe = ev_board.pickem_break_even(leg["app"], *dflt, leg["multiplier"], config=cfg)
             if obe is not None and fair.leg_ev(f["p"], obe) > 0:
                 plays[leg["app"]] += 1
@@ -302,7 +336,8 @@ def build(srv, p, allowed, now=None):
         if ev is not None and ev > 0:
             plays[app] += 1
         rows.append(dict(base, basis="market", p_market=round(f["p"], 4), ev=None if ev is None else round(ev, 4),
-                         books=len(f["books"]), sources=[_source(s, labels) for s in f["sources"]],
+                         books=len(f["books"]), independent_books=len(f["books"]), families=list(f["books"]), one_book=len(f["books"]) == 1,
+                         books_label=ev_board.ONE_BOOK_LABEL if len(f["books"]) == 1 else f"{len(f['books'])} books", sources=[_source(s, labels) for s in f["sources"]],
                          left_out=[{"label": labels.get(d["book"], d["book"].title()), "line": d["line"], "reason": d["reason"],
                                     "age_s": None if d.get("age_s") is None or d["age_s"] != d["age_s"] else round(d["age_s"])}
                                    for d in f["dropped"]]))
@@ -311,7 +346,7 @@ def build(srv, p, allowed, now=None):
     # audit review 2026-11-07: the list is headed "ranked by Scout's chance", so every sport ranks by its chance (pushes off),
     # whether or not it shows a return figure (T5 hid it on NBA / NFL, which had sorted them below every CS2 / LoL leg)
     model_rows = [r for _, r in sorted(model_rows, key=lambda t: (-t[0], t[1]["key"], t[1]["side"]))]
-    used = sorted({s["book"] for r in rows for s in r["sources"]} | set(labels))
+    used = sorted({s["book"] for r in rows for s in r["sources"]} | usable)
     src = cfg.get(app) or {}
     verified = {e["app"] for e in entries()}
     return {"as_of": wb._iso(now), "app": app, "app_label": APP_LABEL[app], "entry": entry, "n": n,
@@ -319,12 +354,14 @@ def build(srv, p, allowed, now=None):
             "break_even": None if entry_be is None else round(entry_be, 6),
             "american": None if entry_be is None else round(payouts.american_of(entry_be)),
             "payout_source": {"source": src.get("source"), "read_at": src.get("read_at"), "version": src.get("version")},
+            "payout": _payout(app, entry, n, cfg), "default_entry": dict(zip(("entry", "n"), default_entry(app))),
             "params": {"preset": p[3], "method": p[4], "min_books": p[5], "req": list(p[6]), "weights": dict(p[7]),
                        "min_liq": p[8], "max_width": p[9]},
             "options": {"entries": entries(), "presets": sorted(fair.PRESETS) + ["custom"], "methods": list(fair.METHODS),
                         "books": [{"id": b, "label": labels.get(b, b.title())} for b in used],
                         "weight_choices": list(ev_board.WEIGHT_CHOICES), "min_liq_choices": list(ev_board.MIN_LIQUIDITY_CHOICES),
                         "max_width_choices": list(ev_board.MAX_WIDTH_CHOICES), "min_books_max": ev_board.MIN_BOOKS_MAX,
+                        "min_books_default": ev_board.MIN_BOOKS_DEFAULT,
                         "freshness_s": price_limits(), "max_spread": fair.MAX_SPREAD},
             "plays": plays, "rows": rows[:MAX_ROWS], "rows_total": len(rows), "model_only": model_rows[:MAX_MODEL_ROWS],
             "model_only_total": len(model_rows), "hidden": {"count": sum(hidden.values()), "by": hidden,
@@ -332,10 +369,71 @@ def build(srv, p, allowed, now=None):
             "sports": sorted(s for s, v in allowed.items() if v)}
 
 
+ENTRY_WORD = {"power": "Power", "flex": "Flex", "standard": "Standard"}
+
+
+def _payout(app, entry, n, cfg):
+    """The payout this entry is priced on, with the day it was read - shown on the board as is (a fact with its date)."""
+    src = cfg.get(app) or {}
+    tbl = ((src.get("entries") or {}).get(entry) or {})
+    v = tbl.get(str(n), tbl.get(n))
+    day = str(src.get("read_at") or "")[:10]
+    if isinstance(v, dict):
+        tiers = ", ".join(f"{float(m):g}x all correct" if str(k) == "0" else f"{float(m):g}x with {k} missed"
+                          for k, m in sorted(v.items(), key=lambda kv: int(kv[0])))
+        text = f"{APP_LABEL[app]} {ENTRY_WORD.get(entry, entry)} {n}-pick pays {tiers}"
+    elif v is not None:
+        text = f"{APP_LABEL[app]} {ENTRY_WORD.get(entry, entry)} {n}-pick pays {float(v):g}x"
+    else:
+        return None
+    return {"multiple": v, "read_at": src.get("read_at"), "version": src.get("version"),
+            "text": text + (f", read from its help center on {day}." if day else ".")}
+
+
+def _log_rows(doc):
+    """The legs of one shared build that beat the entry, as record rows (workspace_ev_log)."""
+    pay = doc.get("payout") or {}
+    rows = []
+    for r in doc["rows"]:
+        if not (isinstance(r.get("ev"), (int, float)) and r["ev"] > 0):
+            continue
+        rows.append({"id": f"{r['key']}|{r['side']}", "leg": r["key"], "revision": r.get("revision"), "sport": r["sport"], "app": r["app"],
+                     "player": r.get("player"), "stat": r.get("stat_label"), "period": r.get("period_label"), "start_utc": r.get("start_utc"),
+                     "line": r["line"], "side": r["side"], "needed": r.get("be"), "fair": r.get("p_market"), "ev_pct": round(r["ev"] * 100, 2),
+                     "families": r.get("families"), "one_book": r.get("one_book"), "multiplier": r.get("multiplier"),
+                     "quotes": [{k: s.get(k) for k in ("book", "family", "kind", "line", "p", "age_s", "over", "under", "bid", "ask", "sit_out")}
+                                for s in r.get("sources") or ()],
+                     "entry": f"{doc['entry']}-{doc['n']}", "payout": pay.get("multiple"), "payout_version": pay.get("version"),
+                     "payout_read_at": pay.get("read_at")})
+    by = {}
+    for r in rows:
+        by[r["sport"]] = by.get(r["sport"], 0) + 1
+    summary = {"app": doc["app"], "entry": f"{doc['entry']}-{doc['n']}", "needed": doc.get("break_even"), "priced": doc["rows_total"],
+               "beat_entry": len(rows), "beat_entry_by_sport": by, "hidden": (doc.get("hidden") or {}).get("by"),
+               "no_book_price": doc.get("model_only_total"), "sports": doc.get("sports")}
+    return rows, summary
+
+
+_KNOWN = {}
+
+
+def rules_table():
+    """The book family map and the settlement table, as rows (the admin record view)."""
+    from gradecore import book_rules
+    return book_rules.table()
+
+
 def known_books(srv):
     """Books the NBA / NFL snapshots hold right now (for the required-books and per-book-weight parameters)."""
+    from gradecore import book_rules
     _token, legs = _legs(srv)
-    return sorted({base_book(b.get("platform")) for leg in legs for b in leg["book_rows"] or ()})
+    hit = _KNOWN.get("v")
+    if hit is not None and hit[0] is legs:             # every member request asks: answered once per leg list, not per request
+        return hit[1]
+    pairs = {(base_book(b.get("platform")), leg["sport"]) for leg in legs for b in leg["book_rows"] or ()}
+    out = sorted({b for b, sport in pairs if book_rules.for_pickem(b, sport)[0]})
+    _KNOWN["v"] = (legs, out)
+    return out
 
 
 def shared(srv, q, allowed):
@@ -344,5 +442,13 @@ def shared(srv, q, allowed):
     seen = tuple(sorted(s for s, v in allowed.items() if v))
 
     def compute():
-        return 200, json.dumps(build(srv, p, dict.fromkeys(seen, True)), default=str, separators=(",", ":")).encode()
+        doc = build(srv, p, dict.fromkeys(seen, True))
+        try:                                           # the record: queued here (once per shared build), written by its own thread
+            import workspace_ev_log
+            rows, summary = _log_rows(doc)
+            workspace_ev_log.record("ev", rows, summary, params="|".join(str(x) for x in (p[0], p[1], p[2], p[3], p[4], p[5], ",".join(p[6]),
+                                                                                              p[8], p[9], ",".join(seen))))
+        except Exception:                              # noqa: BLE001 - the record never breaks the board
+            pass
+        return 200, json.dumps(doc, default=str, separators=(",", ":")).encode()
     return srv.shared(("ws_pickem_ev", p, seen), compute, ttl=TTL)

@@ -40,7 +40,7 @@
     "read_at": "2026-10-23T20:35:00Z",
     "version": "ud-payouts-2026-10-23",
     "verified": true,
-    "status": "Verified from the Underdog help center on 2026-10-23 (recorded in gradecore/payouts.py UD_*). A re-read on 2026-11-05 was refused by the site (HTTP 403) and was not worked around; the 2026-10-23 table stands.",
+    "status": "Verified from the Underdog help center on 2026-10-23 (recorded in gradecore/payouts.py UD_*). A re-read on 2026-11-05 was refused by the site (HTTP 403) and was not worked around; the 2026-10-23 table stands. Re-reads on 2026-11-12 (the same article, under both its old and new address) were refused again (HTTP 403) and not worked around: the board shows this table with its 2026-10-23 date beside every Underdog entry until the owner confirms the payouts in the app.",
     "caveats": ["how several pick modifiers combine is not published (payouts.MODIFIER_RULE is an assumption)"]
   }
 }

@@ -24,6 +24,12 @@ def scout(r, side, p):
     return r
 
 
+@pytest.fixture(autouse=True)
+def fixture_books_settle_like_the_app(monkeypatch):
+    from tests.book_rules_fixture import like_the_app
+    like_the_app(monkeypatch)
+
+
 @pytest.fixture
 def board(monkeypatch):
     wb.reset(); we._FAIR.clear(); we._LEGS.clear()

@@ -47,6 +47,13 @@ def boards():
     return {"nba": (doc, view), "nfl": (ndoc, nview)}
 
 
+@pytest.fixture(autouse=True)
+def fixture_books_settle_like_the_app(monkeypatch):
+    """The page test prices fixture books; which real books qualify is gradecore.book_rules' table (tests/test_ev_two_books.py)."""
+    from tests.book_rules_fixture import like_the_app
+    like_the_app(monkeypatch)
+
+
 @pytest.fixture
 def live(env, monkeypatch):
     for k in server.DEFAULT_ON:

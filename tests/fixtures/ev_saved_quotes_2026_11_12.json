@@ -1,0 +1,3456 @@
+{
+"_about": "Real book rows saved from production sports board snapshots (NFL 2026-11-12T04:21:35Z, NBA 2026-11-05) - the +EV / arbitrage check of 2026-11-12. Each item: one pick'em line and every book row the snapshot attached to its market. Players are named only by a row number.",
+"items": [
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-1",
+"stat": "rec",
+"app": "underdog",
+"line": 3.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 3.5,
+"kind": "one_sided",
+"over": 1.73,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 3.5,
+"kind": "devig",
+"over": 1.741,
+"under": 2.05,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 1.7692,
+"under": 1.9804,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.54,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.01,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-2",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 36.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 37.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 38.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 36.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.47,
+0.48
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.01,
+0.49
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-3",
+"stat": "rec",
+"app": "prizepicks",
+"line": 1.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 1.5,
+"kind": "one_sided",
+"over": 1.87,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 1.5,
+"kind": "devig",
+"over": 1.9524,
+"under": 1.8,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 1.8475,
+"under": 1.8929,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.47,
+0.48
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-4",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 9.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 8.5,
+"kind": "devig",
+"over": 1.91,
+"under": 1.84,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 9.5,
+"kind": "devig",
+"over": 1.9091,
+"under": 1.8333,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 9.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 9.5,
+"kind": "mid",
+"over": [
+0.46,
+0.47
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-5",
+"stat": "rush_att",
+"app": "prizepicks",
+"line": 8.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 8.5,
+"kind": "one_sided",
+"over": 2.02,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 8.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "kalshi",
+"line": 7.5,
+"kind": "mid",
+"over": [
+0.57,
+0.58
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-6",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 29.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 28.5,
+"kind": "devig",
+"over": 1.84,
+"under": 1.9,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 29.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 29.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 29.5,
+"kind": "mid",
+"over": [
+0.47,
+0.48
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 29.5,
+"kind": "mid",
+"over": [
+0.01,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-7",
+"stat": "rec",
+"app": "underdog",
+"line": 1.5,
+"books": [
+{
+"platform": "bovada",
+"line": 1.5,
+"kind": "devig",
+"over": 2.3,
+"under": 1.5882,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 2.24,
+"under": 1.6024,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.4,
+0.41
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-8",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 7.5,
+"books": [
+{
+"platform": "bovada",
+"line": 7.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 7.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 9.5,
+"kind": "mid",
+"over": [
+0.42,
+0.44
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-9",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 53.5,
+"books": [
+{
+"platform": "bovada",
+"line": 53.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 52.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 49.5,
+"kind": "mid",
+"over": [
+0.54,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 49.5,
+"kind": "mid",
+"over": [
+0.01,
+0.57
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-10",
+"stat": "rec",
+"app": "prizepicks",
+"line": 4.0,
+"books": [
+{
+"platform": "bovada",
+"line": 3.5,
+"kind": "devig",
+"over": 1.6667,
+"under": 2.15,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.54,
+0.56
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.01,
+0.58
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-11",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 34.5,
+"books": [
+{
+"platform": "bovada",
+"line": 33.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "kalshi",
+"line": 29.5,
+"kind": "mid",
+"over": [
+0.58,
+0.6
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 29.5,
+"kind": "mid",
+"over": [
+0.01,
+0.61
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-12",
+"stat": "rec",
+"app": "prizepicks",
+"line": 1.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 1.5,
+"kind": "one_sided",
+"over": 1.97,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 1.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 1.9259,
+"under": 1.8197,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.46,
+0.48
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.01,
+0.48
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-13",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 14.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 16.5,
+"kind": "devig",
+"over": 1.88,
+"under": 1.86,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 14.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 14.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.51,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.01,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-14",
+"stat": "rec",
+"app": "underdog",
+"line": 1.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 1.5,
+"kind": "one_sided",
+"over": 2.12,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 1.5,
+"kind": "devig",
+"over": 2.05,
+"under": 1.741,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 2.14,
+"under": 1.6579,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.42,
+0.43
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-15",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 8.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 8.5,
+"kind": "devig",
+"over": 1.93,
+"under": 1.81,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 8.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 8.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 9.5,
+"kind": "mid",
+"over": [
+0.46,
+0.47
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-16",
+"stat": "rush_att",
+"app": "prizepicks",
+"line": 7.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 6.5,
+"kind": "one_sided",
+"over": 1.75,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 7.5,
+"kind": "devig",
+"over": 2.15,
+"under": 1.6667,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "kalshi",
+"line": 7.5,
+"kind": "mid",
+"over": [
+0.46,
+0.47
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-17",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 23.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 24.5,
+"kind": "devig",
+"over": 1.86,
+"under": 1.89,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 23.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 23.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.49,
+0.5
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.01,
+0.5
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-18",
+"stat": "rec",
+"app": "prizepicks",
+"line": 4.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 4.5,
+"kind": "one_sided",
+"over": 1.84,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 4.5,
+"kind": "devig",
+"over": 1.8,
+"under": 1.9524,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 4.5,
+"kind": "devig",
+"over": 1.8,
+"under": 1.9434,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 4.5,
+"kind": "mid",
+"over": [
+0.51,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 4.5,
+"kind": "mid",
+"over": [
+0.01,
+0.51
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-19",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 47.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 47.5,
+"kind": "devig",
+"over": 1.89,
+"under": 1.85,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 47.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 48.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 49.5,
+"kind": "mid",
+"over": [
+0.48,
+0.49
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 49.5,
+"kind": "mid",
+"over": [
+0.01,
+0.51
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-20",
+"stat": "pass_yds",
+"app": "prizepicks",
+"line": 210.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 204.5,
+"kind": "devig",
+"over": 1.88,
+"under": 1.86,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 211.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 210.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 199.5,
+"kind": "mid",
+"over": [
+0.55,
+0.56
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 199.5,
+"kind": "mid",
+"over": [
+0.01,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-21",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 15.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 15.5,
+"kind": "devig",
+"over": 1.91,
+"under": 1.83,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 14.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 15.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.52,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.01,
+0.54
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-22",
+"stat": "pass_yds",
+"app": "prizepicks",
+"line": 200.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 197.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 200.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 202.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 199.5,
+"kind": "mid",
+"over": [
+0.51,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 199.5,
+"kind": "mid",
+"over": [
+0.01,
+0.54
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-23",
+"stat": "rush_att",
+"app": "prizepicks",
+"line": 6.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 5.5,
+"kind": "one_sided",
+"over": 1.78,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 5.5,
+"kind": "devig",
+"over": 1.6667,
+"under": 2.15,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "kalshi",
+"line": 6.5,
+"kind": "mid",
+"over": [
+0.43,
+0.45
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-24",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 37.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 34.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 38.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 37.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.44,
+0.45
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.01,
+0.46
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-25",
+"stat": "rec",
+"app": "underdog",
+"line": 2.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 2.5,
+"kind": "one_sided",
+"over": 2.45,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 2.5,
+"kind": "devig",
+"over": 2.2,
+"under": 1.625,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 2.5,
+"kind": "devig",
+"over": 2.34,
+"under": 1.5556,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 2.5,
+"kind": "mid",
+"over": [
+0.38,
+0.39
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 2.5,
+"kind": "mid",
+"over": [
+0.01,
+0.4
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-26",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 25.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 24.5,
+"kind": "devig",
+"over": 1.88,
+"under": 1.86,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 27.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 25.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.52,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.01,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-27",
+"stat": "rec",
+"app": "prizepicks",
+"line": 5.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 5.5,
+"kind": "one_sided",
+"over": 1.83,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 5.5,
+"kind": "devig",
+"over": 1.7692,
+"under": 2.0,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 5.5,
+"kind": "devig",
+"over": 1.7692,
+"under": 1.9804,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 5.5,
+"kind": "mid",
+"over": [
+0.52,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 5.5,
+"kind": "mid",
+"over": [
+0.01,
+0.54
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-28",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 67.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 66.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 69.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 67.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 69.5,
+"kind": "mid",
+"over": [
+0.5,
+0.51
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 69.5,
+"kind": "mid",
+"over": [
+0.01,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-29",
+"stat": "rec",
+"app": "underdog",
+"line": 2.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 2.5,
+"kind": "one_sided",
+"over": 2.16,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 2.5,
+"kind": "devig",
+"over": 2.25,
+"under": 1.6061,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 2.5,
+"kind": "devig",
+"over": 2.24,
+"under": 1.6024,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 2.5,
+"kind": "mid",
+"over": [
+0.39,
+0.4
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-30",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 12.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 12.5,
+"kind": "devig",
+"over": 1.86,
+"under": 1.88,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 12.5,
+"kind": "devig",
+"over": 1.9091,
+"under": 1.8333,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 12.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.43,
+0.45
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-31",
+"stat": "rush_att",
+"app": "prizepicks",
+"line": 10.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 10.5,
+"kind": "one_sided",
+"over": 1.89,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 10.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "kalshi",
+"line": 10.5,
+"kind": "mid",
+"over": [
+0.51,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-32",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 37.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 36.5,
+"kind": "devig",
+"over": 1.85,
+"under": 1.89,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 37.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 37.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.46,
+0.47
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.06,
+0.49
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-33",
+"stat": "rec",
+"app": "prizepicks",
+"line": 4.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 3.5,
+"kind": "one_sided",
+"over": 1.63,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 4.5,
+"kind": "devig",
+"over": 2.25,
+"under": 1.6061,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 1.5814,
+"under": 2.28,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.57,
+0.58
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.01,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-34",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 38.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 39.5,
+"kind": "devig",
+"over": 1.86,
+"under": 1.88,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 38.5,
+"kind": "devig",
+"over": 1.9091,
+"under": 1.8333,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 36.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.49,
+0.5
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 39.5,
+"kind": "mid",
+"over": [
+0.01,
+0.51
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-35",
+"stat": "rec",
+"app": "underdog",
+"line": 0.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 0.5,
+"kind": "one_sided",
+"over": 1.52,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 0.5,
+"kind": "devig",
+"over": 1.5882,
+"under": 2.3,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 0.5,
+"kind": "devig",
+"over": 1.5556,
+"under": 2.34,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 0.5,
+"kind": "mid",
+"over": [
+0.6,
+0.61
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-36",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 5.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 5.5,
+"kind": "devig",
+"over": 1.85,
+"under": 1.89,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 4.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 5.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 4.5,
+"kind": "mid",
+"over": [
+0.5,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-37",
+"stat": "rec",
+"app": "prizepicks",
+"line": 2.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 2.5,
+"kind": "one_sided",
+"over": 2.35,
+"under": null,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 2.5,
+"kind": "devig",
+"over": 2.35,
+"under": 1.5556,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 2.5,
+"kind": "devig",
+"over": 2.48,
+"under": 1.5,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 2.5,
+"kind": "mid",
+"over": [
+0.35,
+0.38
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 2.5,
+"kind": "mid",
+"over": [
+0.01,
+0.38
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-38",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 26.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 30.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:05Z"
+},
+{
+"platform": "bovada",
+"line": 28.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 26.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.52,
+0.57
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 29.5,
+"kind": "mid",
+"over": [
+0.01,
+0.5
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-39",
+"stat": "rec",
+"app": "underdog",
+"line": 1.5,
+"books": [
+{
+"platform": "bovada",
+"line": 1.5,
+"kind": "devig",
+"over": 2.7,
+"under": 1.4348,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 2.58,
+"under": 1.4651,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.32,
+0.34
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.27,
+0.38
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-40",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 6.5,
+"books": [
+{
+"platform": "bovada",
+"line": 6.5,
+"kind": "devig",
+"over": 1.9091,
+"under": 1.8333,
+"seen_at": "2026-11-12T04:17:08Z"
+},
+{
+"platform": "fanduel",
+"line": 7.5,
+"kind": "devig",
+"over": 1.885,
+"under": 1.885,
+"seen_at": "2026-11-12T04:17:04Z"
+},
+{
+"platform": "kalshi",
+"line": 9.5,
+"kind": "mid",
+"over": [
+0.42,
+0.43
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 9.5,
+"kind": "mid",
+"over": [
+0.36,
+0.46
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-41",
+"stat": "rec",
+"app": "prizepicks",
+"line": 7.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 7.5,
+"kind": "one_sided",
+"over": 2.0,
+"under": null,
+"seen_at": "2026-11-11T18:21:21Z"
+},
+{
+"platform": "bovada",
+"line": 7.5,
+"kind": "devig",
+"over": 2.15,
+"under": 1.6667,
+"seen_at": "2026-11-12T04:17:10Z"
+},
+{
+"platform": "fanduel",
+"line": 7.5,
+"kind": "devig",
+"over": 2.02,
+"under": 1.7353,
+"seen_at": "2026-11-12T00:36:54Z"
+},
+{
+"platform": "polymarket",
+"line": 6.5,
+"kind": "mid",
+"over": [
+0.01,
+0.73
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-42",
+"stat": "rec_yds",
+"app": "prizepicks",
+"line": 78.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 78.5,
+"kind": "devig",
+"over": 1.84,
+"under": 1.83,
+"seen_at": "2026-11-11T18:21:21Z"
+},
+{
+"platform": "bovada",
+"line": 78.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:10Z"
+},
+{
+"platform": "fanduel",
+"line": 78.5,
+"kind": "devig",
+"over": 1.8772,
+"under": 1.8772,
+"seen_at": "2026-11-12T00:36:54Z"
+},
+{
+"platform": "kalshi",
+"line": 79.5,
+"kind": "mid",
+"over": [
+0.48,
+0.51
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 79.5,
+"kind": "mid",
+"over": [
+0.01,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-43",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 51.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 52.5,
+"kind": "devig",
+"over": 1.91,
+"under": 1.76,
+"seen_at": "2026-11-11T18:21:21Z"
+},
+{
+"platform": "bovada",
+"line": 51.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:10Z"
+},
+{
+"platform": "fanduel",
+"line": 51.5,
+"kind": "devig",
+"over": 1.8772,
+"under": 1.8772,
+"seen_at": "2026-11-12T00:36:54Z"
+},
+{
+"platform": "kalshi",
+"line": 49.5,
+"kind": "mid",
+"over": [
+0.5,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 49.5,
+"kind": "mid",
+"over": [
+0.42,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-44",
+"stat": "pass_yds",
+"app": "prizepicks",
+"line": 257.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 256.5,
+"kind": "devig",
+"over": 1.73,
+"under": 1.95,
+"seen_at": "2026-11-11T18:21:21Z"
+},
+{
+"platform": "bovada",
+"line": 261.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.87,
+"seen_at": "2026-11-12T04:17:10Z"
+},
+{
+"platform": "fanduel",
+"line": 262.5,
+"kind": "devig",
+"over": 1.8772,
+"under": 1.8772,
+"seen_at": "2026-11-12T00:36:54Z"
+},
+{
+"platform": "kalshi",
+"line": 249.5,
+"kind": "mid",
+"over": [
+0.55,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 249.5,
+"kind": "mid",
+"over": [
+0.49,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nfl",
+"as_of": "2026-11-12T04:21:35Z",
+"id": "nfl-45",
+"stat": "rush_yds",
+"app": "prizepicks",
+"line": 26.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 26.5,
+"kind": "devig",
+"over": 1.88,
+"under": 1.79,
+"seen_at": "2026-11-11T18:21:21Z"
+},
+{
+"platform": "bovada",
+"line": 26.5,
+"kind": "devig",
+"over": 1.9091,
+"under": 1.8333,
+"seen_at": "2026-11-12T04:17:10Z"
+},
+{
+"platform": "fanduel",
+"line": 26.5,
+"kind": "devig",
+"over": 1.8772,
+"under": 1.8772,
+"seen_at": "2026-11-12T00:36:54Z"
+},
+{
+"platform": "kalshi",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.51,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-12T03:30:21Z"
+},
+{
+"platform": "polymarket",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.01,
+0.56
+],
+"under": null,
+"seen_at": "2026-11-12T04:10:43Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-46",
+"stat": "assists",
+"app": "prizepicks",
+"line": 4.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 4.5,
+"kind": "devig",
+"over": 2.25,
+"under": 1.58,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 1.5747,
+"under": 2.3,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.58,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.49,
+0.6
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-47",
+"stat": "points",
+"app": "prizepicks",
+"line": 14.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 14.5,
+"kind": "devig",
+"over": 1.85,
+"under": 1.87,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 14.5,
+"kind": "devig",
+"over": 1.8333,
+"under": 1.9091,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.5,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.48,
+0.54
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-48",
+"stat": "rebounds",
+"app": "prizepicks",
+"line": 4.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 4.5,
+"kind": "devig",
+"over": 2.18,
+"under": 1.62,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 4.5,
+"kind": "devig",
+"over": 2.02,
+"under": 1.7353,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.59,
+0.62
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.38,
+0.63
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-49",
+"stat": "threes",
+"app": "underdog",
+"line": 1.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 1.5,
+"kind": "devig",
+"over": 1.74,
+"under": 2.0,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 1.7576,
+"under": 2.0,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.51,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.01,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-50",
+"stat": "assists",
+"app": "prizepicks",
+"line": 3.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 3.5,
+"kind": "devig",
+"over": 1.82,
+"under": 1.9,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 1.7812,
+"under": 1.9804,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.51,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.48,
+0.54
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-51",
+"stat": "points",
+"app": "prizepicks",
+"line": 9.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 9.5,
+"kind": "devig",
+"over": 1.86,
+"under": 1.86,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 9.5,
+"kind": "devig",
+"over": 1.8929,
+"under": 1.8475,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 9.5,
+"kind": "mid",
+"over": [
+0.49,
+0.51
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 9.5,
+"kind": "mid",
+"over": [
+0.46,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-52",
+"stat": "rebounds",
+"app": "underdog",
+"line": 3.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 3.5,
+"kind": "devig",
+"over": 2.1,
+"under": 1.67,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 2.16,
+"under": 1.6494,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.43,
+0.46
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.4,
+0.46
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-53",
+"stat": "threes",
+"app": "prizepicks",
+"line": 2.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 2.5,
+"kind": "devig",
+"over": 2.32,
+"under": 1.55,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 2.5,
+"kind": "devig",
+"over": 2.42,
+"under": 1.5208,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.58,
+0.65
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.55,
+0.66
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-54",
+"stat": "assists",
+"app": "underdog",
+"line": 3.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 3.5,
+"kind": "devig",
+"over": 2.15,
+"under": 1.64,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 2.04,
+"under": 1.7246,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.47,
+0.48
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.38,
+0.46
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-55",
+"stat": "points",
+"app": "prizepicks",
+"line": 20.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 20.5,
+"kind": "devig",
+"over": 1.93,
+"under": 1.79,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 20.5,
+"kind": "devig",
+"over": 2.0,
+"under": 1.7576,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 19.5,
+"kind": "mid",
+"over": [
+0.54,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 20.5,
+"kind": "mid",
+"over": [
+0.05,
+0.49
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-56",
+"stat": "rebounds",
+"app": "prizepicks",
+"line": 4.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 4.5,
+"kind": "devig",
+"over": 2.2,
+"under": 1.62,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 4.5,
+"kind": "devig",
+"over": 2.22,
+"under": 1.6173,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.56,
+0.64
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.39,
+0.65
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-57",
+"stat": "threes",
+"app": "prizepicks",
+"line": 3.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 2.5,
+"kind": "devig",
+"over": 1.6,
+"under": 2.23,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 2.34,
+"under": 1.5556,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 2.5,
+"kind": "mid",
+"over": [
+0.59,
+0.6
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 2.5,
+"kind": "mid",
+"over": [
+0.45,
+0.63
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-58",
+"stat": "assists",
+"app": "underdog",
+"line": 4.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 4.5,
+"kind": "devig",
+"over": 1.77,
+"under": 1.96,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 4.5,
+"kind": "devig",
+"over": 1.8,
+"under": 1.9434,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.66,
+0.71
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.62,
+0.74
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-59",
+"stat": "points",
+"app": "prizepicks",
+"line": 24.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 24.5,
+"kind": "devig",
+"over": 1.91,
+"under": 1.81,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 24.5,
+"kind": "devig",
+"over": 1.7692,
+"under": 1.9804,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.51,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.44,
+0.52
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-60",
+"stat": "rebounds",
+"app": "prizepicks",
+"line": 4.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 3.5,
+"kind": "devig",
+"over": 1.71,
+"under": 2.05,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 3.5,
+"kind": "devig",
+"over": 1.6579,
+"under": 2.14,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.55,
+0.57
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.51,
+0.56
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-61",
+"stat": "threes",
+"app": "prizepicks",
+"line": 1.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 1.5,
+"kind": "devig",
+"over": 1.8,
+"under": 1.92,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 1.7692,
+"under": 1.9804,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.53,
+0.55
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.47,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-62",
+"stat": "assists",
+"app": "underdog",
+"line": 2.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 2.5,
+"kind": "devig",
+"over": 2.14,
+"under": 1.64,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 2.5,
+"kind": "devig",
+"over": 2.18,
+"under": 1.6329,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.66,
+0.69
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.5,
+0.7
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-63",
+"stat": "points",
+"app": "prizepicks",
+"line": 16.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 16.5,
+"kind": "devig",
+"over": 1.95,
+"under": 1.78,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 16.5,
+"kind": "devig",
+"over": 1.9615,
+"under": 1.7812,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.58,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 14.5,
+"kind": "mid",
+"over": [
+0.26,
+0.61
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-64",
+"stat": "rebounds",
+"app": "prizepicks",
+"line": 4.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 4.5,
+"kind": "devig",
+"over": 2.23,
+"under": 1.6,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 4.5,
+"kind": "devig",
+"over": 2.26,
+"under": 1.5952,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.57,
+0.61
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 3.5,
+"kind": "mid",
+"over": [
+0.42,
+0.58
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-65",
+"stat": "threes",
+"app": "underdog",
+"line": 1.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 1.5,
+"kind": "devig",
+"over": 1.62,
+"under": 2.2,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 1.6173,
+"under": 2.22,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.57,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.01,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-66",
+"stat": "assists",
+"app": "prizepicks",
+"line": 6.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 6.5,
+"kind": "devig",
+"over": 1.78,
+"under": 1.95,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 6.5,
+"kind": "devig",
+"over": 1.8197,
+"under": 1.9259,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 5.5,
+"kind": "mid",
+"over": [
+0.62,
+0.64
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 6.5,
+"kind": "mid",
+"over": [
+0.56,
+0.57
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-67",
+"stat": "points",
+"app": "prizepicks",
+"line": 22.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 22.5,
+"kind": "devig",
+"over": 1.87,
+"under": 1.85,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 22.5,
+"kind": "devig",
+"over": 1.8,
+"under": 1.9434,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 24.5,
+"kind": "mid",
+"over": [
+0.39,
+0.42
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 22.5,
+"kind": "mid",
+"over": [
+0.04,
+0.53
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-68",
+"stat": "rebounds",
+"app": "prizepicks",
+"line": 6.0,
+"books": [
+{
+"platform": "betrivers",
+"line": 5.5,
+"kind": "devig",
+"over": 1.73,
+"under": 2.0,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 5.5,
+"kind": "devig",
+"over": 1.6494,
+"under": 2.16,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 5.5,
+"kind": "mid",
+"over": [
+0.57,
+0.59
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 5.5,
+"kind": "mid",
+"over": [
+0.38,
+0.58
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-69",
+"stat": "threes",
+"app": "underdog",
+"line": 1.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 1.5,
+"kind": "devig",
+"over": 2.18,
+"under": 1.63,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 1.5,
+"kind": "devig",
+"over": 2.14,
+"under": 1.6579,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.43,
+0.45
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.01,
+0.45
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+},
+{
+"sport": "nba",
+"as_of": "2026-11-05T14:18:13Z",
+"id": "nba-70",
+"stat": "assists",
+"app": "underdog",
+"line": 2.5,
+"books": [
+{
+"platform": "betrivers",
+"line": 2.5,
+"kind": "devig",
+"over": 1.64,
+"under": 2.15,
+"seen_at": "2026-11-05T13:15:49Z"
+},
+{
+"platform": "fanduel",
+"line": 2.5,
+"kind": "devig",
+"over": 1.6173,
+"under": 2.22,
+"seen_at": "2026-11-05T13:15:39Z"
+},
+{
+"platform": "kalshi",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.75,
+0.79
+],
+"under": null,
+"seen_at": "2026-11-05T13:18:01Z"
+},
+{
+"platform": "polymarket",
+"line": 1.5,
+"kind": "mid",
+"over": [
+0.6,
+0.82
+],
+"under": null,
+"seen_at": "2026-11-05T14:10:01Z"
+}
+]
+}
+]
+}
