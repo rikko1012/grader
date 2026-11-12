@@ -642,3 +642,25 @@ html[data-ui=next] #u-hub .h-player-head small{white-space:nowrap}
 html[data-ui=next] #u-hub .h-player-head .h-star{flex:0 0 auto}
 /* the bump note keeps its own line in the Line column at every width (a later span rule made it inline: "UD · 20mwas 37.5") */
 html[data-ui=next] #u-hub#u-hub #hub-table#hub-table .h-c-line small .h-was{display:block;white-space:nowrap}
+/* UI sweep 2026-11-12 #23: every app pill reachable at every width (NBA / NFL list 8 apps). The pill row was a hidden-scrollbar strip
+   squeezed to 170-180px on desktop (UA..BV cut off, the toolbar never wrapped) and squeezed pills with their counts clipped on phones.
+   Desktop: the row keeps its full width, the toolbar wraps (upgrade-hub.js fitBar) and a row wider than the board wraps inside itself;
+   search keeps a usable width. Phone / tablet: one strip that scrolls sideways, pills at full width, an accent edge on the side with more. */
+@media(min-width:1101px){
+ html[data-ui=next] #u-hub .h-toolbar .h-platform{flex:0 0 auto;max-width:100%;min-width:0;overflow:visible;flex-wrap:wrap}
+ html[data-ui=next] #u-hub .h-toolbar .h-platform>button{flex:none;white-space:nowrap}
+ html[data-ui=next] #u-hub .h-toolbar .h-search{flex:1 1 180px;min-width:180px}
+}
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub .h-toolbar .h-platform{min-width:0;max-width:100%;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none;
+  background:linear-gradient(90deg,var(--n-bg) 40%,transparent) left center/18px 100% no-repeat local,linear-gradient(270deg,var(--n-bg) 40%,transparent) right center/18px 100% no-repeat local,
+   linear-gradient(90deg,var(--n-acc-line),transparent) left center/4px 100% no-repeat scroll,linear-gradient(270deg,var(--n-acc-line),transparent) right center/4px 100% no-repeat scroll}
+ html[data-ui=next] #u-hub .h-toolbar .h-platform::-webkit-scrollbar{display:none}
+ html[data-ui=next] #u-hub .h-toolbar .h-platform>button{flex:1 0 auto;min-width:44px;white-space:nowrap}
+}
+/* #24: Scout's side not offered on this app - the offered side is a secondary action (outline), never the card's main button */
+html[data-ui=next] #u-hub .h-card .h-dec-unoffered{flex-wrap:wrap;align-items:center}
+html[data-ui=next] #u-hub .h-card .h-dec-unoffered .h-dec-note{flex:1 1 100%;font-size:12px;line-height:1.4}
+html[data-ui=next] #u-hub .h-card .h-dec-alt{min-height:40px;padding:0 12px;background:transparent;border:1px solid var(--n-line3);color:var(--n-t1);font-size:12px;font-weight:500;white-space:normal;text-align:left}
+html[data-ui=next] #u-hub .h-card .h-dec-alt:disabled{color:var(--n-t3);border-color:var(--n-line2)}
+@media(max-width:1100px){html[data-ui=next] #u-hub .h-card .h-dec-alt{min-height:44px;flex:1 1 100%}}

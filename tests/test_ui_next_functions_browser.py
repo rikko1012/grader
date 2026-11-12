@@ -437,3 +437,47 @@ def test_underdog_link_opens_the_chosen_line_from_the_card(browser, live, size):
         assert p.evaluate("fetch('/api/upgrade/mine').then(r => r.json())")["receipts"] == []
         no_h_scroll(p)
         assert not p.errors
+
+
+# --------------------------------------------- UI sweep 2026-11-12 #24: Scout's side not offered on the app (Over-only demon)
+
+DEMON = "cs2|prizepicks|pp:7012"            # vargo's PrizePicks demon 42.5, Scout Under 61.1%; here PrizePicks offers only More
+
+
+@pytest.fixture
+def over_only(live):
+    next(r for r in live.rows if r["id"] == "pp:7012").update(under_available=False)
+    workspace_api.reset()
+    return live
+
+
+@SIZES
+def test_card_opens_on_scouts_side_when_the_app_offers_only_the_other(browser, over_only, size):
+    with Hub(browser, over_only, "next", size) as h:
+        p = h.p
+        h.card(DEMON)
+        p.wait_for_timeout(300)
+        fix_shot(p, f"over-only-card-{size['width']}", before=True)
+        dec = p.locator("#hub-decision")
+        assert dec.locator("[data-hub=history-side][data-id=under]").get_attribute("aria-pressed") == "true"
+        assert "61.1%" in dec.locator(".h-dec-chance b").inner_text()
+        assert dec.locator(".h-dec-add").count() == 0                                      # no main Add for a side the app does not offer
+        note = flat(dec.locator(".h-dec-unoffered .h-dec-note").inner_text())
+        assert "offers only over 42.5" in note and "scout's side, under, is not offered here" in note
+        alt = dec.locator("[data-hub=detail-add-other]")
+        assert "against scout" in flat(alt.inner_text()) and "add over 42.5" in flat(alt.inner_text())
+        fix_shot(p, f"over-only-card-{size['width']}")
+        h.tall(alt).click()
+        p.wait_for_function("document.getElementById('hub-slip-count').textContent.trim()==='1'", timeout=5000)
+        assert not p.errors
+
+
+def fix_shot(p, name, before=False):
+    """FIX_SHOTS=<dir> FIX_TAG=before|after; the test's own pre-check frame is taken only on a 'before' run"""
+    import os
+    tag = os.environ.get("FIX_TAG", "after")
+    if os.environ.get("FIX_SHOTS") and before == (tag == "before"):
+        from pathlib import Path
+        out = Path(os.environ["FIX_SHOTS"])
+        out.mkdir(parents=True, exist_ok=True)
+        p.screenshot(path=str(out / f"{name}-{tag}.png"))

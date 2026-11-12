@@ -143,3 +143,70 @@ def test_mobile_shots(browser, live, width):
             p.screenshot(path=str(out / f"card-{name[6:]}-lines-{width}-{tag}.png"))
         finally:
             c.close()
+
+
+# ---- UI sweep 2026-11-12 batch 2 (#23): every app pill reachable at every width with all 8 apps on NBA / NFL ----
+ALL_BOOKS = ("SCOUT_BOOK_UNIBET_AU", "SCOUT_BOOK_POINTSBET_AU", "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_DABBLE", "SCOUT_BOOK_FANDUEL",
+             "SCOUT_BOOK_BETRIVERS", "SCOUT_BOOK_BOVADA")
+
+
+def fix_shot(p, name, full=False):
+    """FIX_SHOTS=<dir> FIX_TAG=before|after: the screenshot of each fix (release_screenshots_2026-11-11/fix_b2)"""
+    import os
+    if os.environ.get("FIX_SHOTS"):
+        from pathlib import Path
+        out = Path(os.environ["FIX_SHOTS"])
+        out.mkdir(parents=True, exist_ok=True)
+        p.evaluate("document.getElementById('hub-platform')&&(document.getElementById('hub-platform').scrollLeft=0)")
+        p.screenshot(path=str(out / f"{name}-{os.environ.get('FIX_TAG', 'after')}.png"), full_page=full)
+
+
+@pytest.fixture
+def many_apps(live, monkeypatch):
+    """PP + UD + the 7 extra books with lines on every sport (the live NBA tab shows 8 apps; counts as wide as the live ones)."""
+    import json
+    for k in ALL_BOOKS + tuple(server.DEFAULT_ON):
+        monkeypatch.setenv(k, "1")
+    monkeypatch.delenv("SCOUT_BOOK_ODDSAPI", raising=False)
+    import book_providers
+    ids = [i for i in book_providers.providers() if i != "oddsapi"]
+    monkeypatch.setattr(workspace_api, "_book_lines", lambda srv, sports: (200, json.dumps(
+        {"as_of": "x", "books": {pid: {s: 300 + 11 * n for s in sports} for n, pid in enumerate(ids)}})))
+    monkeypatch.setattr(book_providers, "start", lambda *a, **k: None)
+    return live
+
+
+PILLS = """()=>{const plat=document.getElementById('hub-platform'),pb=plat.getBoundingClientRect(),vw=document.documentElement.clientWidth,out=[];
+ const bs=[...plat.querySelectorAll('[data-hub=book]')].filter(b=>!b.hidden);
+ for(const b of bs){b.scrollIntoView({block:'nearest',inline:'nearest'});const r=b.getBoundingClientRect(),q=plat.getBoundingClientRect();
+  if(r.width<36||r.height<30)out.push(['tiny',b.dataset.id,Math.round(r.width)]);
+  if(r.left<q.left-1||r.right>q.right+1||r.left<-1||r.right>vw+1)out.push(['cut',b.dataset.id,Math.round(r.left),Math.round(r.right),Math.round(q.left),Math.round(q.right)]);
+  if(b.scrollWidth>b.clientWidth+1)out.push(['text clipped',b.dataset.id,b.scrollWidth,b.clientWidth]);}
+ plat.scrollLeft=0;const s=document.getElementById('hub-q').getBoundingClientRect();
+ return {n:bs.length,bad:out,search:Math.round(s.width),scrolls:plat.scrollWidth>plat.clientWidth+1,ox:getComputedStyle(plat).overflowX,
+   bar:document.querySelector('#u-hub .h-toolbar').scrollWidth<=document.querySelector('#u-hub .h-toolbar').clientWidth+1};}"""
+
+
+@pytest.mark.parametrize("width", (320, 360, 390, 430, 768, 1100, 1280, 1440, 1920))
+def test_every_app_pill_is_reachable_at_every_width(browser, many_apps, width):
+    c, p = page(browser, many_apps, width, "dark", "/sports")
+    try:
+        p.wait_for_function("document.querySelectorAll('#hub-platform [data-hub=book]:not([hidden])').length>=9", timeout=20000)
+        p.wait_for_timeout(300)
+        for card in (False, True):
+            if card:
+                p.locator("#hub-rows tr.h-row .h-player").first.click()
+                p.wait_for_selector("#hub-card:not([hidden])", timeout=20000)
+                p.wait_for_timeout(400)
+                if width < 1101:
+                    break                                   # the phone / tablet card is a sheet over the board
+            fix_shot(p, f"apps-{'card-' if card else ''}{width}")
+            r = p.evaluate(PILLS)
+            assert r["n"] >= 9 and r["bad"] == [], (width, card, r)
+            assert r["bar"], (width, card, r)               # nothing runs past the toolbar
+            assert r["search"] >= (150 if width >= 1101 else 120), (width, card, r)
+            if r["scrolls"]:
+                assert width < 1101 and r["ox"] in ("auto", "scroll"), (width, card, r)    # desktop wraps; only a phone strip scrolls
+        assert not p.errors
+    finally:
+        c.close()

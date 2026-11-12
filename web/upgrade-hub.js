@@ -917,7 +917,9 @@ export function mount(C) {
       if(!DESKTOP.matches&&!history.state?.hubCard){try{history.pushState({hubCard:1},'',location.href);H.cardPushed=true;}catch(e){}}
     }
     const sd=r.scout.side;
-    H.expanded=id;H.histN=10;H.histSide=sd&&r.offer[sd]?.offered?sd:r.offer.over.offered?'over':r.offer.under.offered?'under':(sd||'over');
+    /* #24: the card opens on Scout's side even when the app offers only the other one (it opened on the offered side: "Add Over 2.5"
+       under a 28.7% chance while the board said Lean Under); decisionHtml then says that side is not offered here */
+    H.expanded=id;H.histN=10;H.histSide=sd==='over'||sd==='under'?sd:r.offer.over.offered?'over':r.offer.under.offered?'under':'over';
     $('hub-card').hidden=false;$('u-hub').classList.add('h-card-open');
     const done=selectDetail(id);
     $('hub-card-title')?.focus({preventScroll:true});
@@ -1065,13 +1067,18 @@ export function mount(C) {
     const eligible=!r.extra&&H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r)&&r.offer[side].offered;
     const chance=C.chanceOf(r,side);
     const pick=C.oneSided(r)?gradeChip(r):s.side&&side===s.side?gradeChip(r):s.side?`<span class="h-grade-text">Scout side is ${sideWord(s.side)}</span>`:s.hold?'<span class="h-grade-text">Research estimate</span>':'';
+    /* #24: Scout's side is not offered on this app (Over-only demon, PrizePicks one-way lines): no main Add button. The board row
+       says "Side" there; the card says plainly which side the app offers, and adding that side is a secondary, labelled action. */
+    const other=s.side==='over'?'under':'over', against=!!s.side&&!C.oneSided(r)&&!r.extra&&!r.offer[s.side]?.offered&&!!r.offer[other]?.offered;
+    const otherOk=against&&!on&&H.detailState==='ready'&&!unavailableReason(r)&&!C.started(r);
+    const againstHtml=()=>`<div class="h-dec-act h-dec-unoffered"><small class="h-dec-note">${esc(r.offer.platform_label)} offers only ${sideWord(other)} ${esc(line)} on this line. Scout's side, ${sideWord(s.side)}, is not offered here.</small>${on?`<button class="h-dec-add is-on" data-hub="detail-add">On slip ✓</button>`:`<button class="h-dec-alt" data-hub="detail-add-other" ${otherOk?'':'disabled'}>Add ${sideWord(other)} ${esc(line)} (against Scout's side)</button>`}</div>`;
     const opt=q=>`<option value="${esc(key(q))}"${key(q)===key(r)?' selected':''}>${esc(q.offer.platform_label)} ${esc(q.offer.line)}${kindOf(q)?' · '+esc(kindOf(q)):q.market.line_type!=='standard'?' · '+esc(C.lineLabel(q)):''}</option>`;
     return `<label class="h-dec-line"><span>Line</span><select id="hub-card-line" aria-label="Line and book">${quotes.map(opt).join('')}</select></label>
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}${s.side===side?belowChip(r):''}</div>
       <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
-      ${C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
-      ${!r.offer[side].offered?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
+      ${against?againstHtml():C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
+      ${!r.offer[side].offered&&!against?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
   /* ---- "Why Scout leans Over / Under" (owner 2026-11-06: "people have no idea why they should take the props"). Plain facts at the
      top of the card, each with its number and its sample, sorted honestly:
@@ -2042,6 +2049,8 @@ export function mount(C) {
     'card-tab'(id){if(!CARD_TABS.some(t=>t[0]===id))return;H.cardTab=id;paintDetail();$('hub-card-body').scrollTop=0;$('hub-tab-'+id)?.focus({preventScroll:true});},
     'genie-ask'(q){genieAsk(q);},
     'detail-line':selectDetail,'detail-retry'(){selectDetail(H.detail);},'history-side'(id){H.histSide=id==='under'?'under':'over';paintDetail();},'history-window'(id){H.histN=Number(id);paintDetail();},
+    'detail-add-other'(){const r=rec(H.detail);if(!r||r.extra||C.oneSided(r)||!r.scout.side)return;const o=r.scout.side==='over'?'under':'over';
+      if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[o]?.offered||r.offer[r.scout.side]?.offered)return;C.addLeg(r,o);refreshSlip();},
     'detail-add'(){const r=rec(H.detail);if(!r||r.extra)return;if(C.oneSided(r))return;if(C.onSlip(r))return revealSlip(r);if(H.detailState!=='ready'||unavailableReason(r)||C.started(r)||!r.offer[H.histSide].offered)return;C.addLeg(r,H.histSide);refreshSlip();},
     // alert notices open the same card as the board
     research(id){const r=rec(id);if(!r)return C.say('This offer is no longer on the board. Refresh to see current lines.');if(H.section!=='board')section('board');openCard(id);},
@@ -2144,7 +2153,7 @@ export function mount(C) {
   const fitBar=()=>{const bar=document.querySelector('#u-hub .h-toolbar');if(!bar||!bar.offsetWidth)return;
     bar.classList.remove('h-bar-wrap');if(DESKTOP.matches&&bar.scrollWidth>bar.clientWidth+1)bar.classList.add('h-bar-wrap');};
   {const bar=document.querySelector('#u-hub .h-toolbar'),setBar=()=>{fitBar();if(bar.offsetHeight)$('u-hub').style.setProperty('--h-bar',bar.offsetHeight+'px');};
-    if(window.ResizeObserver)new ResizeObserver(setBar).observe(bar);setBar();document.fonts?.ready?.then(setBar);}
+    if(window.ResizeObserver){const ro=new ResizeObserver(setBar);ro.observe(bar);ro.observe($('hub-platform'));}setBar();   /* #23: the pill row grows as app counts arrive, the bar's own box does not */document.fonts?.ready?.then(setBar);}
   if(EVB){$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">Best prices</button>');fitBar();}
   if(TOKENS){
     // Skip link first in the hub (the classic page's own is inert under it) and one named account control in the top bar.
