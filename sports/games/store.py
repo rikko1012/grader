@@ -21,7 +21,7 @@ store; every table here is named sports_game_*). Times are UTC ISO strings 'YYYY
                              shows, with its provider named), ESPN predictor, injury report
   sports_game_market_lines   IMMUTABLE Kalshi game-market history (winner / spread / total / team total / halves /
                              quarters ...): a row when a market's bid / ask / status changes
-  sports_game_prop_lines     IMMUTABLE ESPN-supplied DraftKings player-prop LINES (ESPN publishes no prices for them):
+  sports_game_prop_lines     IMMUTABLE ESPN-supplied DraftKings player-prop LINES (reported prices have no side identity):
                              a row when a prop's current or opening line changes
   sports_game_line_state     per market / prop: its latest row and when it was last SEEN (staleness)
   sports_game_fetches        every collection request: kind, league, game, HTTP status, error, rows
@@ -120,7 +120,7 @@ MARKET_COLS = ("observed_at", "source", "league", "event_id", "provider_event_id
                "open_interest", "status", "provider_market_id", "close_time")
 PROP_COLS = ("observed_at", "source", "book", "provenance", "league", "event_id", "prop_key", "athlete_id", "player",
              "player_key", "team_id", "market", "period", "kind", "raw_type_id", "raw_type", "line", "line_open",
-             "price_over", "price_under", "provider_updated_at", "status")
+             "price_over", "price_under", "provider_updated_at", "status", "reported_prices")
 
 
 def connect(path=None, dsn=None):
@@ -131,6 +131,7 @@ def connect(path=None, dsn=None):
 
 
 MIGRATIONS = (
+    ("sports_game_prop_lines", "reported_prices", "TEXT"),
     ("sports_game_games", "ended_at", "TEXT"),
     ("sports_game_snapshots", "late", "INTEGER NOT NULL DEFAULT 0"),
     ("sports_game_market_lines", "late", "INTEGER NOT NULL DEFAULT 0"),
@@ -321,13 +322,15 @@ def save_market_lines(db, rows, now=None):
 
 
 def save_prop_lines(db, rows, now=None):
-    """ESPN-supplied DraftKings prop lines -> new immutable rows when a prop's line or opening line changes."""
+    """ESPN-supplied DraftKings prop lines -> new immutable rows when a prop's line, opening line or reported prices change."""
     return _save_lines(db, "sports_game_prop_lines", PROP_COLS, rows,
                        lambda r: f"prop:{r['source']}:{r['prop_key']}",
-                       lambda r: (r.get("line"), r.get("line_open"), r.get("status")), now,
+                       lambda r: (r.get("line"), r.get("line_open"), r.get("status")) +
+                                  ((r["reported_prices"],) if r.get("reported_prices") else ()), now,
                        srcf=lambda r: r.get("provider_updated_at"),
                        legacyf=lambda r: (r.get("line"), r.get("line_open"), r.get("status"),
-                                          r.get("provider_updated_at")))
+                                          r.get("provider_updated_at")) +
+                                         ((r["reported_prices"],) if r.get("reported_prices") else ()))
 
 
 def save_athletes(db, league, rows, now=None):

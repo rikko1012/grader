@@ -132,3 +132,7 @@ SPORTS_DATA_DIR=/tmp/s python sports_scout.py games-derive nfl         # or --re
 SPORTS_DATA_DIR=/tmp/s python sports_scout.py games-status
 SPORTS_DATA_DIR=/tmp/s python sports_scout.py factors nfl "DK Metcalf" rec_yds
 ```
+
+
+### DraftKings price update — 2026-11-12
+Live ESPN prop responses now include `odds.american.value`. The collector saves these as an unordered `reported_prices` set and publishes them in the reference table. ESPN still supplies no selection-side identity: item order is not treated as Over/Under. `price_over` and `price_under` remain null; these prices do not enter EV, arbitrage, forecasts or executable slips. Price changes append immutable revisions; existing historical rows are retained. This supersedes the earlier no-prices observation above.

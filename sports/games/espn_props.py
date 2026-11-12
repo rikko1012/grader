@@ -9,8 +9,8 @@ on NBA and NFL games read 2026-10-23):
 What it carries, verified on real NBA and NFL games: the game (competition $ref, checked against the requested event
 id), the athlete or team ($ref -> id), the prop type ("Total Receiving Yards (incl. overtime)", "Points Milestones",
 "1st Half Total Rushing Yards" ...), the CURRENT line and the OPENING line ("target"), and lastUpdated (minute
-precision, ESPN's time). What it does NOT carry: prices. Every prop appears twice (the two sides) with no odds and no side
-label. So these rows are LINES ONLY: they are never de-vigged, never given a probability and never counted in a price
+precision, ESPN's time). The live feed now also carries odds.american.value (verified 2026-11-12), but still no side
+label. Reported prices are saved unordered, never assigned by list position. These rows are reference data: they are never de-vigged, never given a probability and never counted in a price
 consensus - a line is not a 50% price. This is not a DraftKings connection: DraftKings' own site refuses this server and
 is not contacted; ESPN is the publisher of these rows.
 
@@ -19,6 +19,8 @@ its period ("1h", "1q") and is never matched to a full-game line. Types with no 
 doubles) carry no line and are skipped.
 """
 import re
+import json
+import math
 
 from .. import markets, net
 from .espn_game import CORE, ref_id
@@ -51,7 +53,7 @@ def market_of(family, type_name):
 
 
 def parse(body, league, family, event_id, provider_id, provider_name, athletes=None):
-    """propBets items -> prop-line rows. Items for another game are dropped (exact event check); the two unpriced sides
+    """propBets items -> prop-line rows. Items for another game are dropped (exact event check); the two side-unidentified prices
     of a prop (same athlete / team, type, current and opening line) collapse to one row with the later update time."""
     prov = PROVENANCE.format(provider=provider_name)
     athletes = athletes or {}
@@ -69,8 +71,17 @@ def parse(body, league, family, event_id, provider_id, provider_name, athletes=N
         opened = ((it.get("open") or {}).get("target") or {}).get("value")
         sig = (aid, tid, typ.get("id"), target, opened)
         upd = _iso_minute(it.get("lastUpdated"))
-        if sig in seen:                                  # the other (unpriced) side: keep the later update time
+        # ESPN supplies prices but no selection-side identity. Keep them as an
+        # unordered reported set; neither item order nor price implies O/U.
+        raw_price = ((it.get("odds") or {}).get("american") or {}).get("value")
+        try:
+            price = float(raw_price)
+            price = int(price) if math.isfinite(price) and price.is_integer() and 100 <= abs(price) <= 100000 else None
+        except (ValueError, TypeError):
+            price = None
+        if sig in seen:                                  # the other side-unidentified price: keep the later update time
             r0 = seen[sig]
+            if price is not None: r0["_prices"].add(price)
             r0["provider_updated_at"] = max(x for x in (r0["provider_updated_at"], upd) if x) if (upd or
                                                                                                 r0["provider_updated_at"]) else None
             continue
@@ -83,7 +94,7 @@ def parse(body, league, family, event_id, provider_id, provider_name, athletes=N
                      "kind": "milestone" if milestone else "line", "raw_type_id": typ.get("id"), "raw_type": name,
                      "line": line, "line_open": (float(opened) - 0.5 if milestone else float(opened))
                      if opened is not None else None, "price_over": None, "price_under": None,
-                     "provider_updated_at": upd, "status": "open", "_who": aid or f"team{tid}"})
+                     "provider_updated_at": upd, "status": "open", "_prices": {price} if price is not None else set(), "_who": aid or f"team{tid}"})
         seen[sig] = rows[-1]
     # prop identity: a standard line moves (same key, new history row); a milestone rung is its own prop. Two distinct
     # standard lines for one player and type at once (rare) are told apart by line.
@@ -93,6 +104,8 @@ def parse(body, league, family, event_id, provider_id, provider_name, athletes=N
             k = (r["_who"], r["raw_type_id"])
             count[k] = count.get(k, 0) + 1
     for r in rows:
+        prices = sorted(r.pop("_prices"))
+        r["reported_prices"] = json.dumps(prices, separators=(",", ":")) if prices else None
         k = (r["_who"], r["raw_type_id"])
         tail = f":{r['line']}" if r["kind"] == "milestone" or count.get(k, 0) > 1 else ""
         r["prop_key"] = f"{league}:{event_id}:{provider_id}:{r.pop('_who')}:{r['raw_type_id']}{tail}"
