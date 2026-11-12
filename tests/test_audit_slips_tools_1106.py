@@ -151,6 +151,14 @@ def test_t8_lol_comparison_rows_show_names_not_ids(tmp_path):
 
 # ------------------------------------------------------------------------------------------------ T6 Price check: closest prices
 
+@pytest.fixture(autouse=True)
+def fixture_books_settle_like_the_app(monkeypatch):
+    """These audit tests exercise the page and the sheet's arithmetic on fixture books; which real books qualify is
+    gradecore.book_rules' table (tests/test_ev_two_books.py)."""
+    from tests.book_rules_fixture import like_the_app
+    like_the_app(monkeypatch)
+
+
 @pytest.fixture
 def no_value(monkeypatch):
     import book_providers as bp
@@ -225,7 +233,9 @@ def test_t3_a_saved_view_that_hides_every_leg_opens_on_the_defaults(ctx, env, ev
     p = ev_page(ctx, env)
     text = p.locator("#hub-ev-body").inner_text()
     assert "Your saved view showed no legs right now, so the default view is shown." in text
-    assert p.locator("#hub-ev-body .ev-list:not(.ev-list-model) .ev-row").count() >= 1
+    # the defaults since 2026-11-12 need two independent books; the fixture's PrizePicks leg rests on FanDuel alone, and the page says so
+    assert p.locator("#hub-ev-body .ev-list:not(.ev-list-model) .ev-row").count() == 0
+    assert "No pick'em leg has 2 independent books on its exact line right now." in text
     assert p.locator("#hub-ev-body .ev-chips").count() == 0                              # the defaults: no filter chip
     # the same view cannot be saved again
     p.evaluate("localStorage.removeItem('scout-ev-view')")
