@@ -317,7 +317,7 @@ def _num(v):
 def book_quotes(s, pid=None):
     """Every sportsbook / exchange quote attached to an NBA / NFL snapshot: (records of that market, book row, x).
     One per (platform, event, player, stat, period, line)."""
-    seen, out = set(), []
+    chosen = {}
     index, props = s.get("index") or {}, s.get("props") or {}
     for (p, rid), x in index.items():
         if p not in PICKEM:
@@ -328,11 +328,17 @@ def book_quotes(s, pid=None):
             if pid is not None and not platform_of(pid, plat):
                 continue
             k = (plat, x.get("e"), x.get("pkey"), x.get("st"), x.get("scope"), b.get("line"))
-            if k in seen or b.get("line") is None:
+            if b.get("line") is None:
                 continue
-            seen.add(k)
-            out.append((k, b, x))
-    return out, props
+            # A quote can be attached to several pick'em offers. Keep its newest
+            # complete revision, not whichever offer happens to be iterated first.
+            # Never combine sides from different revisions.
+            previous = chosen.get(k)
+            stamp = _ts(b.get("seen_at"))
+            prior_stamp = _ts(previous[1].get("seen_at")) if previous else None
+            if previous is None or (stamp is not None and (prior_stamp is None or stamp > prior_stamp)):
+                chosen[k] = (k, b, x)
+    return list(chosen.values()), props
 
 
 def _recs_of(s, props, x):

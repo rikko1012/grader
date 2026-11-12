@@ -178,3 +178,30 @@ def test_best_prices_link_is_styled_sized_and_fits(browser, env, ev_on, size):
         assert not p.errors
     finally:
         c.close()
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_paging_searches_all_rows_not_just_the_first_page(browser, env, ev_on, monkeypatch, size):
+    original = we.build
+    def many(*a, **kw):
+        d = original(*a, **kw)
+        seed = original(a[0], we.params({"app": "underdog", "min_books": "1"}, []), a[2])["rows"][0]
+        d["rows"] = [dict(seed, key=f"coverage-{i}", player=f"Coverage Player {i:03}", ev=.05) for i in range(451)]
+        d["rows_total"] = 451
+        return d
+    monkeypatch.setattr(we, "build", many)
+    c = context(browser, env, size)
+    try:
+        p = ev_page(c, env, size)
+        rows = p.locator('section[aria-label="Market priced legs"] .ev-row')
+        assert rows.count() == 50
+        p.locator('[data-ev="page"][data-kind="market"][data-step="1"]').click()
+        assert 'Coverage Player 050' in rows.first.inner_text()
+        p.locator('#ev-q').fill('Coverage Player 450')
+        assert rows.count() == 1 and 'Coverage Player 450' in rows.first.inner_text()
+        p.locator('#ev-q').fill('')
+        assert rows.count() == 50 and 'Coverage Player 000' in rows.first.inner_text()
+        no_h_scroll(p)
+        assert not p.errors
+    finally:
+        c.close()
