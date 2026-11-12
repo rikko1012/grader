@@ -503,6 +503,7 @@ export function mount(C) {
     const s=r.scout;
     /* an extra book's line with no saved chance: the cell stays empty (no status sentence, owner rule 2026-10-16); with both chances
        it reads like any other row without a side */
+    if(r.extra?.reference_only)return `<div class="h-scout"><b>${esc(reportedOdds(r)||'Odds not supplied')}</b><small>Reported odds / side not supplied</small></div>`;
     if(r.extra&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return '';
     if(C.oneSided(r)) return `<div class="h-scout"><div class="h-direction-options" title="${esc(C.oneSidedNote(r))}"><span class="h-one-sided">${esc(C.oneSided(r))}</span></div></div>`;
     if(s.side&&notOffered(r)){const a=offeredAlt(r);return `<div class="h-scout h-scout-nf"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}</div>${a?`<small class="h-alt-note">${esc(altText({side:s.side,r:a}))}</small>`:''}</div>`;}
@@ -512,7 +513,9 @@ export function mount(C) {
     const oo=r.offer.over?.offered!==false,uo=r.offer.under?.offered!==false,one=oo!==uo;
     return `<div class="h-scout"><div class="h-direction-options" aria-label="${one?'Model probability for the offered side':'Model probabilities for both sides'}">${both?(one?`<span>${oo?'Over':'Under'} <b>${pct(oo?s.p_over:s.p_under)}</b></span><span class="h-one-side">${oo?'Over':'Under'} only</span>`:`<span>Over <b>${pct(s.p_over)}</b></span><span>Under <b>${pct(s.p_under)}</b></span>`):'<span>Forecast pending</span>'}</div>${s.hold?'<div class="h-scout-grade"><span class="h-grade-text">Research estimate</span></div>':''}</div>`;
   }
+  const reportedOdds = r => (r.offer.reported_prices||[]).map(n=>n>0?'+'+n:String(n)).join(' / ');
   function priceSummary(q) {
+    if(q.extra?.reference_only)return reportedOdds(q)||'Odds not supplied';
     const o=C.priceText(q,'over'), u=C.priceText(q,'under');
     if(o||u) return [o&&'O '+o,u&&'U '+u].filter(Boolean).join(' · ');
     return C.lineLabel(q)+' line';
@@ -628,7 +631,7 @@ export function mount(C) {
   const sortState = k => H.sortBy===k?(H.sortDir==='asc'?'ascending':'descending'):'none';
   const sortBtn = (k,label,extra='') => `<button class="h-th-sort" data-hub="sort-col" data-id="${k}" data-sort="${sortState(k)}" aria-label="Sort by ${esc(sortName(k))}${H.sortBy===k?`, now ${H.sortDir==='asc'?'low to high':'high to low'}`:''}"><span class="h-th-l">${label}</span>${extra}</button>`;
   function headHtml(showEdge) {
-    return `<tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player" aria-sort="${sortState('player')}">${sortBtn('player','Player')}</th><th class="h-c-market">Market</th><th class="h-c-line" aria-sort="${sortState('line')}">${sortBtn('line','Line')}</th><th class="h-c-proj">Proj.</th><th class="h-c-scout" aria-sort="${sortState('chance')}">${sortBtn('chance','Scout')}</th>`
+    return `<tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player" aria-sort="${sortState('player')}">${sortBtn('player','Player')}</th><th class="h-c-market">Market</th><th class="h-c-line" aria-sort="${sortState('line')}">${sortBtn('line','Line')}</th><th class="h-c-proj">Proj.</th><th class="h-c-scout" aria-sort="${sortState('chance')}">${H.book==='draftkings'?'Reported odds':sortBtn('chance','Scout')}</th>`
       +`<th class="h-c-hits"><span class="h-strip h-strip-head">${STRIP.map(([w,l])=>`<i class="h-strip-th" title="${esc(STRIP_TITLE[w])}">${sortBtn(w,l)}</i>`).join('')}</span></th>`
       +(showEdge?`<th class="h-c-edge" title="${esc(EDGE_WHY())}" aria-sort="${sortState('edge')}">${sortBtn('edge','Edge',' <small>vs break-even</small>')}</th>`:'')
       +(MX?`<th class="h-c-medge" title="${esc(MX_WHY())}" aria-sort="${sortState('medge')}">${sortBtn('medge','Market edge',' <small>books vs break-even</small>')}</th>`:'')
@@ -769,6 +772,7 @@ export function mount(C) {
       backoff:`${label} asked Scout to slow down. Lines return after its retry time.`,empty:`${label} lists no lines for these sports right now.`,
       not_offered:`${label} lists no lines for this sport.`}[x.state];
     if(msg)return `<p class="h-extra-state h-warning" role="status">${msg}</p>`;
+    if(H.book==='draftkings')return `<p class="h-extra-state">DraftKings player lines via ESPN / reported American odds. The feed does not identify the price's side; research only.</p>`;
     const r=p?.rules||{},src=(r.sources||[]).map(s=>/^https:\/\//.test(s.url)?`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url.replace(/^https:\/\//,''))}</a>`:esc(s.url)).join(' · ');
     return `<details class="h-extra-state"><summary>${label} lines · read ${esc(x.at?age(x.at):'time unavailable')} · view only</summary><p>Where ${label} offers the same line as PrizePicks or Underdog, the row shows Scout's saved side, chance and letter for that line, unchanged. Other lines show the line and price only. Slips stay PrizePicks or Underdog entries.</p>${r.pick_price?`<p>Price: ${esc(r.pick_price)}.</p>`:''}${r.entry_payout?`<p>Entry payout: ${esc(r.entry_payout)}.</p>`:''}${r.flex?`<p>Flex: ${esc(r.flex)}.</p>`:''}${src?`<p>Rules source: ${src}</p>`:''}</details>`;
   }
@@ -787,6 +791,7 @@ export function mount(C) {
   }
   /* an extra book's line in the full card (audit 2026-11-05 A2/B4): its own prices and Scout's read at this line, above the research */
   function extraOffer(r) {
+    if(r.extra?.reference_only)return `<section class="h-extra-detail"><h4>DraftKings / ${esc(r.offer.reference_kind==='milestone'?(r.offer.line+0.5)+'+':r.offer.line)}</h4><p><b>${esc(reportedOdds(r)||'Odds not supplied')}</b> / Reported American odds</p><p>Via ESPN / ${esc(age(r.offer.seen_at))}. Selection sides are not supplied. These prices are not assigned to Over or Under and cannot be added to a slip.</p></section>`;
     const o=r.offer,x=r.extra||{},price=sd=>!o[sd]?.offered?'Not offered':x.price_comparable===false?(num(o[sd].price)?esc(x.price_label||'App price')+' '+o[sd].price.toFixed(2)+' <small>(not what an entry pays)</small>':'Listed'):num(o[sd].price)?o[sd].price.toFixed(2)+' decimal':num(o[sd].payout)?o[sd].payout.toFixed(2)+'x pick multiplier':'Price unavailable';
     /* Scout's read: the side and its chance, or both chances; nothing saved at this line = no row (no status sentence) */
     const s=r.scout,both=num(s.p_over)&&num(s.p_under)?`Over ${pct(s.p_over)} · Under ${pct(s.p_under)}`:null;
