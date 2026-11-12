@@ -1696,6 +1696,22 @@ def test_model_hash_files_are_untouched():
     # node: its inputs on the pick row, its two reads before the lock, and shadow["vm2"] on the appended forecast row.
     baseline_picklog = subprocess.run(['git', 'show', '4877218:picklog.py'], cwd=ROOT,
                                      capture_output=True, text=True, encoding='utf-8', check=True).stdout
+    # Storage-only repair: readiness belongs to the opened database, not a global bool.
+    # Permit exactly these initialization edits; every forecast/scoring node remains frozen.
+    schema_edits = (
+        ('def _db():\n    con = sqlite3.connect(DB, timeout=30)',
+         'def _schema_key(path):\n    try:\n        return (str(path.absolute()), path.stat().st_ino)\n'
+         '    except FileNotFoundError:\n        return None\n\n\ndef _db():\n    db_path = DB\n'
+         '    key = _schema_key(db_path)\n    db_path.parent.mkdir(parents=True, exist_ok=True)\n'
+         '    con = sqlite3.connect(db_path, timeout=30)'),
+        ('if _SCHEMA_OK[0]:', 'if key is not None and _SCHEMA_OK[0] == key:'),
+        ('    DB.parent.mkdir(parents=True, exist_ok=True)\n', ''),
+        ('_SCHEMA_OK[0] = True', '_SCHEMA_OK[0] = _schema_key(db_path)'),
+        ('    if not _SCHEMA_OK[0]:', '    key = _schema_key(DB)\n    if key is None or _SCHEMA_OK[0] != key:'),
+    )
+    for old, new in schema_edits:
+        assert baseline_picklog.count(old) == 1
+        baseline_picklog = baseline_picklog.replace(old, new)
     vm2_pick_row = ('try:\n    import vm2\n    row["_vm2"] = vm2.inputs_of(res, g, gi, match_id=(row.get("_vm1") or {}).get("match_id"))\n'
                     'except Exception:\n    row["_vm2"] = None')
     vm2_shadow_if = ('if vm2_x is not None:\n    try:\n        import vm2\n'
