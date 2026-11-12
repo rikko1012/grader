@@ -124,6 +124,19 @@ def test_first_read_initialises_schema(db):
     assert picklog.export() == [] and picklog.rows_for_matches({"x"}) == []
 
 
+def test_schema_cache_belongs_to_the_opened_database(db, monkeypatch, tmp_path):
+    _insert()
+    # A completed initializer for another database must not bless this empty one.
+    monkeypatch.setattr(picklog, "DB", tmp_path / "replacement.db")
+    assert picklog.export() == []
+
+
+def test_schema_cache_does_not_bless_a_recreated_file(db):
+    _insert()
+    db.unlink()
+    assert picklog.export() == []
+
+
 # ------------------------------------------------------------------------------------------------ audit 41
 def test_settlement_rows_match_export_for_slip_legs(db):
     _insert(status="settled", actual=44.0, result=json.dumps({"source": "hltv"}))
