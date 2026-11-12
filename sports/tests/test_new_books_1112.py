@@ -32,12 +32,13 @@ def test_real_pointsbet_prices_identity_and_scope(lg):
                 if change=='line':o['points']+=1
         assert pb.parse_props(x,config.league(lg),ev,NOW)==[],change
 
-def test_unibet_au_real_prices_never_relabelled_betrivers():
-    d=json.loads((F/'unibet.json').read_text());ev=Event(**d['event'])
-    rows=betrivers.parse_props(d,config.league('nba'),ev,provider='unibet_au',book='unibet_au',region='AU')
+@pytest.mark.parametrize('lg,fixture',[('nba','unibet.json'),('nfl','unibet-nfl.json')])
+def test_unibet_au_real_prices_never_relabelled_betrivers(lg,fixture):
+    d=json.loads((F/fixture).read_text());ev=Event(**d['event'])
+    rows=betrivers.parse_props(d,config.league(lg),ev,provider='unibet_au',book='unibet_au',region='AU')
     assert rows and all(r['provider']=='unibet_au' and r['jurisdiction']=='AU' for r in rows)
-    assert UnibetAU().leagues==('nba',)
-    b=bridge.to_offers(rows,config.league('nba'),'espn:1','2026-11-12T12:00:00Z')
+    assert lg in UnibetAU().leagues
+    b=bridge.to_offers(rows,config.league(lg),'espn:1','2026-11-12T12:00:00Z')
     assert b.records and all(r.platform=='unibet_au' and dict(r.extras)['jurisdiction']=='AU' for r in b.records)
     for r in b.records:
         if r.variant=='alternate':assert not r.side('under').offered

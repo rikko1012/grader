@@ -1,6 +1,6 @@
 """Unibet Australia public Kambi offers. AU identity is retained end to end.
 
-Only NBA coverage verified. This is a separate operator, never a fallback for a
+NBA and NFL coverage verified. This is a separate operator, never a fallback for a
 refused US feed. No browser, login, location override or alternative host retry.
 """
 import os
@@ -11,10 +11,11 @@ from .betrivers import parse_events, parse_props
 
 BASE = "https://ap.offering-api.kambicdn.com/offering/v2018/ubau"
 PARAMS = {"lang": "en_AU", "market": "AU"}
+PATHS = {"nba": "basketball/nba", "nfl": "american_football/nfl"}
 
 
 class UnibetAU(Provider):
-    name, books, leagues = "unibet_au", ("unibet_au",), ("nba",)
+    name, books, leagues = "unibet_au", ("unibet_au",), ("nba", "nfl")
 
     def configured(self):
         return os.getenv("SPORTS_UNIBET_AU", os.getenv("SPORTS_INGEST", "0")) == "1", "SPORTS_UNIBET_AU is off"
@@ -37,7 +38,7 @@ class UnibetAU(Provider):
         def read(body, res):
             now = datetime.now(timezone.utc)
             res.events = [e for e in parse_events(body, lg) if datetime.fromisoformat(e.start.replace('Z','+00:00')) > now]
-        return self._read('/listView/basketball/nba.json', read)
+        return self._read('/listView/' + PATHS[lg['key']] + '.json', read)
 
     def props(self, lg, event):
         if lg['key'] not in self.leagues: return FetchResult()

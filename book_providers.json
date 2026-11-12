@@ -5,7 +5,7 @@
     "unibet_au": {
       "label": "Unibet (AU)", "short": "UA", "kind": "sportsbook",
       "flag": "SCOUT_BOOK_UNIBET_AU", "default_flag": "SCOUT_BOOK_FANDUEL",
-      "source": "sports_service", "platforms": ["unibet_au"], "sports": ["nba"],
+      "source": "sports_service", "platforms": ["unibet_au"], "sports": ["nba", "nfl"],
       "price_comparable": false,
       "price_note": "Australian reference prices. Not included in EV or arbitrage until settlement-rule compatibility is verified.",
       "feed": {"stale_after_s": 1800, "stale_min_s": 1200, "ladder": [[2,3],[8,5],[24,8],[72,8],[168,720]], "note": "Unibet Australia public Kambi feed; AU prices, not US availability. Collected only by Sports worker."},
