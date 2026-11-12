@@ -279,7 +279,7 @@ export function mount(C) {
      points gap too. Goblin / demon / promo lines pay an unpublished multiplier: their cell stays empty.
      A fact about the chance against the payout, not a grade: a held or contained letter does not change it. */
   function edgeValue(r) {
-    if(notOffered(r))return null;                     /* bug 3: no edge on a side this app does not offer */
+    if(typeof notOffered==='function'&&notOffered(r))return null;      /* bug 3: no edge on a side this app does not offer */
     if(P('edge')&&evOf(r))return evOf(r).ev*100;     /* SCOUT_PARITY_EDGE: EV in % only where the slip check rates the line */
     const par=edgeBe(r);
     if(par)return (r.scout.p_side-par.be)*100;      /* not rated: the points gap against this row's own book break-even */
@@ -301,7 +301,7 @@ export function mount(C) {
   const parOf = r => r.parity && typeof r.parity === 'object' && num(r.parity.be) ? r.parity : null;
   /* the server sends ev / band / sizes only for a line the live slip check would rate (CS2, letter not held, half-point line,
      a chance band that passed the settled-results check); every other row keeps the points gap and gets no band */
-  const evOf = r => {if(notOffered(r))return null;const p=parOf(r);return p&&num(p.ev)?p:null;};
+  const evOf = r => {if(typeof notOffered==='function'&&notOffered(r))return null;const p=parOf(r);return p&&num(p.ev)?p:null;};
   /* the row's own book break-even for the points gap: standard line, Scout side, a chance; never a goblin / demon / promo line */
   const edgeBe = r => {const p=parOf(r), s=r.scout||{};
     if(!p||r.market?.line_type!=='standard'||!s.side||!num(s.p_side))return null;
@@ -415,7 +415,7 @@ export function mount(C) {
      (Underdog standard per-pick, or the parity break-even of the line); no break-even = no chip. It sits under the Edge figure (in
      the Scout cell when the board has no Edge column), so the row keeps its height. */
   function belowBreakEven(r) {
-    const s=r.scout;if(!s.side||!num(s.p_side)||notOffered(r))return null;
+    const s=r.scout;if(!s.side||!num(s.p_side)||typeof notOffered==='function'&&notOffered(r))return null;
     const d=edgeValue(r);
     /* bug #55: the same break-even edgeValue measured against (rated EV, else the row's own book), as edgeCell names it */
     const par=evOf(r)||edgeBe(r);
