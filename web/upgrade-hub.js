@@ -1613,7 +1613,7 @@ export function mount(C) {
   }
   document.head.insertAdjacentHTML('beforeend',`<style id="hub-book-style">
 #u-hub .h-book-panel{min-width:0}#u-hub .h-book-controls{display:flex;align-items:end;flex-wrap:wrap;gap:12px;padding:12px 0;border-bottom:1px solid var(--u-line)}
-#u-hub .h-book-controls label{display:grid;gap:6px;font-size:12px;min-width:130px}#u-hub .h-book-controls :is(select,button){min-height:44px;max-width:100%;font:inherit}#u-hub .h-book-count{margin-left:auto;align-self:center;font-size:13px;color:var(--u-muted)}
+#u-hub .h-book-controls label{color:var(--u-text);display:grid;gap:6px;font-size:12px;min-width:130px}#u-hub .h-book-controls :is(select,button){min-height:44px;max-width:100%;font:inherit}#u-hub .h-book-count{margin-left:auto;align-self:center;font-size:13px;color:var(--u-muted)}
 #u-hub .h-book-status{font-size:12px;color:var(--u-muted);line-height:1.6}#u-hub .h-book-game{border:1px solid var(--u-line);margin:10px 0;background:var(--u-panel,var(--u-bg));border-radius:2px;min-width:0}
 #u-hub .h-book-game>summary{display:flex;align-items:center;gap:16px;padding:14px;cursor:pointer;list-style:none;min-height:64px}#u-hub .h-book-game>summary::-webkit-details-marker{display:none}#u-hub .h-book-game>summary::after{content:'+';margin-left:auto;font-size:20px;flex:none;transform:none;border:0;width:auto;height:auto}#u-hub .h-book-game[open]>summary::after{content:'−'}
 #u-hub .h-book-match{display:grid;gap:6px;min-width:0;flex:1}#u-hub .h-book-match strong{overflow-wrap:anywhere;font-size:15px}#u-hub .h-book-match strong span{color:var(--u-muted);font-weight:400}#u-hub .h-book-match time,#u-hub .h-book-seen{font-size:12px;color:var(--u-muted)}#u-hub .h-book-seen small{display:block;margin-top:4px}

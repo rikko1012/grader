@@ -32,6 +32,7 @@ def test_sportsbooks_route_filters_refresh_and_layout(browser, env, monkeypatch,
         panel.locator('summary').wait_for()
         assert p.locator('#hub-title').inner_text().lower() == 'sportsbooks'
         assert panel.locator('[data-gb=book]').input_value() == 'draftkings'
+        assert panel.locator('.h-book-controls label').first.evaluate('(e)=>getComputedStyle(e).color') == panel.locator('h2').evaluate('(e)=>getComputedStyle(e).color')
         assert 'Quote age unavailable' in panel.inner_text()
         panel.locator('summary').click()
         assert '+150' in panel.inner_text() and 'Over 231.5' in panel.inner_text()
