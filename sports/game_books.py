@@ -118,7 +118,9 @@ def reference_props(db, league, event_id, now):
         out.append({'revision_id':p['id'], 'player_id':p['athlete_id'], 'player':player,
                     'market':p['market'], 'period':p['period'], 'kind':p['kind'], 'line':line,
                     'label':p['raw_type'], 'seen_at':p['last_seen_at'], 'source':'ESPN-supplied DraftKings',
-                    'price_over':None, 'price_under':None})
+                    'price_over':None, 'price_under':None,
+                    'reported_prices':json.loads(p['reported_prices']) if p['reported_prices'] else [],
+                    'price_side_known':False})
     return out
 
 

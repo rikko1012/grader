@@ -143,8 +143,9 @@ def test_g8_existing_games_db_is_migrated_additively_and_old_digests_still_match
     old = DB(path=path, schema=store.SCHEMA)                  # pre-change shape (no late / provider-time columns)
     assert "late" not in old.columns("sports_game_prop_lines")
     r = prop(20.5, upd="2026-10-23T19:59:00Z")
-    rid = old.insert("INSERT INTO sports_game_prop_lines " + store._ins(store.PROP_COLS),
-                     [dict(r, observed_at="2026-10-23T20:00:00Z").get(c) for c in store.PROP_COLS])
+    legacy_cols = tuple(c for c in store.PROP_COLS if c != "reported_prices")
+    rid = old.insert("INSERT INTO sports_game_prop_lines " + store._ins(legacy_cols),
+                     [dict(r, observed_at="2026-10-23T20:00:00Z").get(c) for c in legacy_cols])
     legacy = store.digest((r["line"], r["line_open"], r["status"], r["provider_updated_at"]))   # the old change rule
     old.execute("INSERT INTO sports_game_line_state (key, tbl, last_id, digest, first_seen_at, last_seen_at) VALUES "
                 "(?,?,?,?,?,?)", ("prop:espn:p1", "sports_game_prop_lines", rid, legacy, "2026-10-23T20:00:00Z",
