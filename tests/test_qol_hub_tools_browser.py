@@ -140,6 +140,8 @@ def test_remove_alert_names_it_and_confirms(ctx, env, v2):
 
 def test_best_prices_search_ignores_accents_and_keeps_focus_on_redraws(ctx, env, ev_on):
     p = ev_page(ctx, env)
+    p.locator('[data-ev="app"][data-id="underdog"]').click()      # the fixture's leg with two independent books is an Underdog leg
+    p.wait_for_selector("#hub-ev-body .ev-row", timeout=30000)
     p.locator("#ev-q").fill("REAVES points")
     p.wait_for_timeout(100)
     assert "Austin Reaves" in p.locator("#hub-ev-body .ev-list").first.inner_text()
