@@ -966,7 +966,7 @@ def test_adder_asks_with_the_goblin_rule(ctx, env):
 
 
 @pytest.mark.parametrize('size',[DESK,PHONE])
-def test_game_books_filters_prices_retry_and_mobile(ctx,env,size,monkeypatch):
+def test_game_books_filters_prices_retry_and_mobile(ctx,env,size,monkeypatch,tmp_path):
     monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
     from datetime import datetime,timezone,timedelta
     p=ctx.new_page();p.set_viewport_size(size)
@@ -995,6 +995,6 @@ def test_game_books_filters_prices_retry_and_mobile(ctx,env,size,monkeypatch):
     p.wait_for_selector('#hub-game-prices summary')
     p.locator('#hub-game-prices summary').click()
     no_h_scroll(p)
-    shots=Path('../outputs/books-ui');shots.mkdir(exist_ok=True)
+    shots=SHOTS_DIR or tmp_path;shots.mkdir(parents=True,exist_ok=True)
     p.screenshot(path=str(shots / ('game-books-'+str(size['width'])+'.png')))
     assert 'nfl' in seen
