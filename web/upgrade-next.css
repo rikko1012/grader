@@ -805,7 +805,7 @@ html[data-ui=next] .u-face>img{opacity:1;transition:none}
  html[data-ui=next] #u-hub#u-hub:not(.h-card-open) #hub-table .h-c-player :is(.h-face,.u-face){display:inline-grid;--face:28px;width:28px;height:28px;flex-basis:28px;margin:2px 8px 0 0}
  html[data-ui=next] #u-hub#u-hub:not(.h-card-open) #hub-table td.h-c-player .u-face+.h-player{width:calc(100% - 36px)}
 }
-html[data-ui=next] #u-hub .h-m-vs{display:none}
+html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table .h-m-vs{display:none}
 @media(max-width:599px){
  /* -- toolbar: sport tabs, then search + Filters; it slides away on the way down and back on the way up -- */
  html[data-ui=next] #u-hub .h-toolbar{flex-wrap:wrap;gap:6px;padding:6px 0;transition:transform .18s ease}
