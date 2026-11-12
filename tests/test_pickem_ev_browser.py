@@ -76,7 +76,7 @@ def ev_on(monkeypatch):
 
 def ev_page(ctx, env, size=None):
     p = open_page(ctx, env, '/#scout/ev', size)
-    p.wait_for_selector('#hub-ev-body .ev-row', timeout=30000)
+    p.wait_for_selector('#hub-ev-body #ev-entry', timeout=30000)      # the default view may list no leg (two independent books needed)
     return p
 
 
@@ -94,10 +94,13 @@ def test_ev_board(browser, env, ev_on, size):
     c = context(browser, env, size)
     try:
         p = ev_page(c, env, size)
-        # both verified apps are offered (owner sign-off 2026-11-05 for the PrizePicks help-center table); PrizePicks Power 2 first
+        # both verified apps are offered (owner sign-off 2026-11-05 for the PrizePicks help-center table). PrizePicks opens on the
+        # entry that needs the lowest chance per leg (6-pick Flex), with the needed chance shown (owner 2026-11-12)
         assert p.locator('[data-ev="app"]').count() == 2 and p.locator('[data-ev="app"][data-id="prizepicks"]').count() == 1
-        assert 'need 57.7%' in p.locator('#hub-ev-body').inner_html()
-        assert p.evaluate("document.querySelector('#ev-entry').value").startswith('power-')
+        assert 'each leg needs 54.2%' in p.locator('#ev-entry').inner_text()
+        assert p.evaluate("document.querySelector('#ev-entry').value") == 'flex-6'
+        assert 'PrizePicks Flex 6-pick pays 25x all correct' in p.locator('#hub-ev-body').inner_text()
+        assert p.locator('#hub-ev-body .ev-row').count() == 0                # its one leg rests on a single book: not in the default view
         assert 'Flex 2-pick' not in p.locator('#ev-entry').inner_text()          # not an entry the PrizePicks app offers
         shot(p, 'ev_board_prizepicks', size)
         p.locator('[data-ev="app"][data-id="underdog"]').click()
@@ -105,7 +108,8 @@ def test_ev_board(browser, env, ev_on, size):
         p.wait_for_selector('#hub-ev-body .ev-row', timeout=30000)
         txt = p.locator('#hub-ev-body').inner_text()
         assert 'Best prices' in txt and 'need 53.5%' in p.locator('#hub-ev-body').inner_html()
-        assert '2 plays hidden: 2 with only old prices.' in txt
+        assert '6 plays hidden: 4 with fewer independent books than the minimum, 2 with only old prices.' in txt
+        assert 'Underdog Standard 2-pick pays 3.5x, read from its help center on 2026-10-23.' in txt
         assert p.evaluate("document.querySelector('#ev-entry').value").startswith('standard-')
         # Underdog standard 2: Reaves Over beats the entry against the market (shown beside Scout's chance); the toggle hides the rest
         rows = p.locator('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row')
@@ -115,7 +119,8 @@ def test_ev_board(browser, env, ev_on, size):
         rows.first.locator('[data-ev="books"]').click()
         p.wait_for_selector('#hub-ev-body .ev-src table')
         src = p.locator('#hub-ev-body .ev-src').first.inner_text()
-        assert 'FanDuel' in src and 'BetRivers' in src and 'read at 20.5' in src
+        assert 'FanDuel' in src and 'Kalshi' in src and 'read at' not in src and 'BetRivers' not in src     # exact line, two books
+        assert '2 books' in rows.first.inner_text()
         shot(p, 'ev_board_books', size)
         p.locator('#hub-ev-body .ev-drawer summary').click()
         assert p.locator('#ev-preset').count() == 1 and p.locator('#ev-method').count() == 0 and p.locator('#ev-min_books').count() == 1
@@ -125,7 +130,12 @@ def test_ev_board(browser, env, ev_on, size):
         low = p.locator('#hub-ev-body').inner_text().lower()
         assert not [w for w in JARGON if w in low], [w for w in JARGON if w in low]
         p.locator('[data-ev="evonly"]').first.click()
-        p.wait_for_function("document.querySelectorAll('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row').length >= 3")
+        p.wait_for_function("document.querySelectorAll('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row').length >= 2")
+        # the member lowers the filter to one book: those legs appear, each marked "1 book"
+        p.select_option('#ev-min_books', '1')
+        p.wait_for_function("document.querySelectorAll('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row').length >= 6")
+        one = p.locator('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row', has_text='Derrick White').first
+        assert '1 book' in one.inner_text() and '1 book is enough' in p.locator('#hub-ev-body').inner_text()
         p.locator('[data-ev="model"]').click()
         p.wait_for_selector('#hub-ev-body .ev-list-model .ev-row')
         assert 'No book price' in p.locator('#hub-ev-body .ev-list-model').inner_text()
@@ -141,7 +151,7 @@ def test_tools_card_and_board_link_open_the_ev_route(ctx, env, ev_on):
     p = open_page(ctx, env, '/#scout/tools')
     p.wait_for_selector('#hub-tools-body .h-tool-grid', timeout=30000)
     p.locator('#hub-tools-body [data-hub="section"][data-id="ev"]').click()
-    p.wait_for_selector('#hub-ev-body .ev-row', timeout=30000)
+    p.wait_for_selector('#hub-ev-body #ev-entry', timeout=30000)
     assert p.evaluate('location.hash').endswith('ev')
     assert p.locator('.h-ev-link').count() == 1
     assert not p.errors

@@ -6,8 +6,9 @@ Per pick'em leg (one app, one line, one side):
                payouts.pickem_config()). An Underdog pick with a payout modifier other than 1.0 on a standard entry uses
                payouts.break_even(multiplier=...) (MODIFIER_RULE); a modifier on a flex entry, a PrizePicks pick with a
                modifier, and any non-standard line are unavailable (None), never guessed.
-  market fair  fair.fair_chance at the app's line (stale / one-sided / wide quotes dropped first; other lines read through
-               the sport's measured shape).
+  market fair  fair.fair_chance at the app's EXACT line (stale / one-sided / wide quotes dropped first; a book on another
+               line, or one that settles the prop differently from the app, is dropped - gradecore.book_rules), over at
+               least MIN_BOOKS_DEFAULT independent pricing families (owner 2026-11-12).
   model        the chance the board prints today (calibration layers are off; no blend weight is fitted, so the two are
                shown side by side and never mixed).
   EV           fair.leg_ev(p, be) = p / be - 1 on the chance given no push (a push is a refunded / removed pick).
@@ -19,6 +20,8 @@ WEIGHT_CHOICES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0)
 MIN_LIQUIDITY_CHOICES = (0.0, 100.0, 500.0, 1000.0, 5000.0)
 MAX_WIDTH_CHOICES = (0.05, 0.08, fair.MAX_WIDTH)
 MIN_BOOKS_MAX = 4
+MIN_BOOKS_DEFAULT = 2          # owner 2026-11-12: "use 2 independent books by default"; counts pricing families, not sites
+ONE_BOOK_LABEL = "1 book"      # a row that rests on one family, shown only when the member lowers the filter to 1
 
 HIDDEN_WORDS = {
     "stale": "only old prices",
@@ -26,8 +29,9 @@ HIDDEN_WORDS = {
     "wide": "book margin too wide",
     "spread": "exchange spread too wide",
     "liquidity": "exchange liquidity below your minimum",
-    "line": "book line too far to read",
-    "books": "fewer books than your minimum",
+    "line": "no book on this exact line",
+    "rules": "books that settle a sit-out differently from the app",
+    "books": "fewer independent books than the minimum",
     "required": "a required book is missing",
     "weight": "every book set to weight 0",
     "other": "prices could not be read",
@@ -78,6 +82,8 @@ def hidden_reason(res):
             return "liquidity"
         if r.startswith("different line"):
             return "line"
+        if r == "settlement rules differ":
+            return "rules"
         if r == "stale":
             return "stale"
     return "other" if reasons else "books"

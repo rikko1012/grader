@@ -11,7 +11,14 @@ Per quote, in this order (every dropped quote keeps its reason, so a banner can 
   4. width      - a sportsbook market whose overround is above max_width: dropped.
   5. devig      - worst-case by default: the lowest chance multiplicative, power and Shin give the chosen side.
   6. line       - a quote on another line is read at the pick'em line through `reader`; no reader = dropped.
-Then copy-books (same cluster) count once, Required / Min books are checked, and the weighted average is the fair chance.
+                  With exact=True (the +EV board and Market edge, owner 2026-11-12) a quote on another line is dropped:
+                  nothing is shifted or interpolated.
+Before any of that a quote the caller marked `excluded` (its book settles the prop differently from the bet being priced,
+or its rules are not confirmed: gradecore.book_rules) is dropped with that reason. An exchange quote with `sit_out` > 0
+(a market that settles a player who sits out as No: Polymarket) is read as mid / (1 - sit_out), capped at 0.99 - the
+registered mc-1 rule of sports/model/market.py, so both places read that price the same way.
+Then books of one cluster (one pricing family: a copy feed, or two sites on one supplier) count once, Required / Min books
+are checked against the number of clusters, and the weighted average is the fair chance.
 
 Chances here are of the chosen side GIVEN NO PUSH (a refunded push is not a loss); `push` is reported beside it.
 """
@@ -52,6 +59,8 @@ class Quote:
     ask: float | None = None
     liquidity: float | None = None
     cluster: str | None = None
+    sit_out: float = 0.0                # exchange only: share of games the player sits out when a sit-out settles as No
+    excluded: str | None = None         # a reason = never priced (settlement rules differ / not confirmed)
 
     def group(self):
         return (self.cluster or self.book).lower()
@@ -157,7 +166,7 @@ def _no_push(r, side):
 
 def fair_chance(quotes, side, line, now, *, weights=None, preset="equal", method="worst", min_books=1,
                 required_books=(), min_liquidity=MIN_LIQUIDITY, max_spread=MAX_SPREAD, max_width=MAX_WIDTH,
-                freshness=None, reader=None):
+                freshness=None, reader=None, exact=False):
     """The weighted fair chance of `side` ('over' / 'under') at the pick'em `line`.
 
     -> {"p": chance given no push or None, "push", "books": clusters used, "sources": [...], "dropped": [...],
@@ -175,6 +184,9 @@ def fair_chance(quotes, side, line, now, *, weights=None, preset="equal", method
                         "age_s": None if not _finite(q.observed_at) else now - q.observed_at})
 
     for q in quotes:
+        if q.excluded:
+            drop(q, q.excluded)
+            continue
         if q.kind not in KINDS:
             drop(q, f"unknown quote kind {q.kind!r}")
             continue
@@ -190,6 +202,8 @@ def fair_chance(quotes, side, line, now, *, weights=None, preset="equal", method
             if mid is None:
                 drop(q, why)
                 continue
+            if _finite(q.sit_out) and 0 < q.sit_out < 1:
+                mid = min(0.99, mid / (1.0 - q.sit_out))        # mc-1: the price given the player plays
             p_over_q, used, width = mid, "exchange midpoint", q.ask - q.bid
         else:
             if not (_finite(q.over) and _finite(q.under)):
@@ -207,6 +221,9 @@ def fair_chance(quotes, side, line, now, *, weights=None, preset="equal", method
                 drop(q, "unusable prices")
                 continue
             p_over_q, used = d
+        if exact and abs(float(q.line) - float(line)) > 1e-9:
+            drop(q, "different line")
+            continue
         r = at_line(p_over_q, q.line, line, reader)
         if r is None:
             drop(q, "different line and no line-shift shape")
@@ -237,7 +254,8 @@ def fair_chance(quotes, side, line, now, *, weights=None, preset="equal", method
                 continue
         sources.append({"book": q.book, "group": q.group(), "kind": q.kind, "line": q.line, "age_s": age,
                         "width": width, "liquidity": q.liquidity, "method": used, "p": p, "push": r.get("push"),
-                        "shifted": bool(r.get("shifted")),
+                        "shifted": bool(r.get("shifted")), "sit_out": q.sit_out if q.kind == "exchange" else 0.0,
+                        "over": q.over, "under": q.under, "bid": q.bid, "ask": q.ask,
                         "weight": w_table.get(q.book.lower(), DEFAULT_BOOK_WEIGHT)})
 
     clusters = {}

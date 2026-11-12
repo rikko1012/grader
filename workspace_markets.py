@@ -27,6 +27,16 @@ per $100. Members see sportsbook and prediction-market (Kalshi, Polymarket) pric
 flagged pairs (stale / prediction-market / pick'em legs), exclusion counts and the formulas stay in the owner's view. Exclusions are also counted per line (excluded_lines), so they never exceed
 markets_checked, and sections_possible says whether a sport's prices can produce each section at all.
 
+Owner 2026-11-12 ("use 2 independent books by default, matching the exact line, period and settlement rules. Two sites using
+the same underlying feed shouldn't count twice") - gradecore.book_rules holds both tables:
+  - the consensus that prices a book needs MIN_BOOKS other pricing FAMILIES (two sites on one feed are one, and the priced
+    book's own family never prices it), each settling the prop the same way as the priced book (book_rules.same_bet; a rule
+    that is not confirmed = not used). Lines are grouped by event / player / stat / period / exact line, as before;
+  - a both-sides pair needs its two legs from different families that settle the same way. A pair whose books differ on a
+    sit-out (or whose rules are not confirmed) is not an arbitrage: it is not listed anywhere, only counted in `excluded`;
+  - `lag` (owner view) counts how often the 5-minute rule could be met at all with the prices as they arrive;
+  - every shared build's rows are queued for the record (workspace_ev_log: "price" and "arb"), off the request path.
+
 For 700 members: one build every TTL s for everyone (srv.shared); each member's answer is that build cut to the sports they see."""
 import heapq
 import json
@@ -123,6 +133,7 @@ def _quote(platform, over, under, seen, source, mult=False):
 
 def groups(srv, sport, now):
     """{group key: {"rec": a board record of this market, "line", "quotes": [...]}} for one sport."""
+    from gradecore import book_rules
     out = {}
     recs, s = wb.records(srv, sport)
     if recs is None:
@@ -136,6 +147,8 @@ def groups(srv, sport, now):
                 if not got:
                     continue
                 g = out[(e, pkey, st, wb._per(scope), line)] = {"recs": got, "line": line, "quotes": []}
+            if book_rules.base_book(plat) in book_rules.NEVER_A_SOURCE:
+                continue                                # Novig / Gemini rows a reverted release left: never a price here
             if plat in PREDICTION:
                 over, under = exchange_prices(b.get("over"))
                 q = _quote(plat, over, under, wb._ts(b.get("seen_at")), "sports service · " + _label(plat))
@@ -164,12 +177,24 @@ def groups(srv, sport, now):
     return out
 
 
-def _consensus(quotes, exclude, side, now, mt, devig):
-    """Mean of each other fresh, non-wide, two-sided sportsbook's worst-case fair chance for `side` -> (p, books, width) or None."""
-    ps, books, widths = [], [], []
-    for q in quotes:
-        if q["book"] == exclude or q["kind"] != "sportsbook" or not (q["over"] and q["under"]):
-            continue
+def _others(quotes, exclude, sport, book_rules):
+    """The other two-sided sportsbooks that may price `exclude`: a different pricing family, settling the prop the same way
+    (for a pick'em multiplier: the way the pick'em apps do, book_rules.for_pickem)."""
+    fam = book_rules.family_of(exclude)
+    if kind_of(exclude) == "pickem":
+        alike = lambda b: book_rules.for_pickem(b, sport)[0]
+    else:
+        alike = lambda b: book_rules.same_bet(b, exclude, sport)
+    return [q for q in quotes if q["book"] != exclude and q["kind"] == "sportsbook" and not q.get("exchange") and not q["multiplier"]
+            and q["over"] and q["under"] and book_rules.family_of(q["book"]) != fam and alike(q["book"])]
+
+
+def _consensus(quotes, exclude, side, now, mt, devig, sport=None):
+    """Mean over pricing FAMILIES of each other fresh, non-wide, two-sided sportsbook's worst-case fair chance for `side`
+    (books of one family are averaged first and count once) -> (p, books, width, families) or None."""
+    from gradecore import book_rules
+    by, books, widths = {}, [], []
+    for q in _others(quotes, exclude, sport, book_rules):
         if q["seen"] is None or now - q["seen"] > CONSENSUS_MAX_AGE_S:
             continue
         w = mt.market_width(q["over"], q["under"])
@@ -178,17 +203,20 @@ def _consensus(quotes, exclude, side, now, mt, devig):
         wc = devig.worst_case([q["over"], q["under"]], 0 if side == "over" else 1)
         if wc is None:
             continue
-        ps.append(wc[0]); books.append(q["book_label"]); widths.append(w["overround"])
-    if len(ps) < MIN_BOOKS:
+        by.setdefault(book_rules.family_of(q["book"]), []).append(wc[0]); books.append(q["book_label"]); widths.append(w["overround"])
+    if len(by) < MIN_BOOKS:
         return None
-    return sum(ps) / len(ps), books, sum(widths) / len(widths)
+    ps = [sum(v) / len(v) for v in by.values()]
+    return sum(ps) / len(ps), books, sum(widths) / len(widths), sorted(by)
 
 
 def _row_base(g, sport):
     r = g["recs"][0]
     return {"sport": sport, "event": r["event"].get("label"), "event_id": r["event"]["id"], "start_utc": r["event"].get("start_utc"),
             "player": r["player"].get("name"), "team": r["player"].get("team"), "stat": r["market"].get("stat"),
-            "stat_label": r["market"].get("stat_label"), "period_label": r["market"].get("period_label"), "line": g["line"]}
+            "stat_label": r["market"].get("stat_label"), "period_label": r["market"].get("period_label"), "line": g["line"],
+            "leg_id": "|".join(str(x) for x in (sport, r["event"]["id"], r["player"].get("key"), r["market"].get("stat"),
+                                                wb._per(r["market"].get("period")), g["line"]))}
 
 
 def _released_p(g, sport, side):
@@ -204,13 +232,14 @@ def _released_p(g, sport, side):
 
 
 def sheet(srv, sport, now):
-    from gradecore import devig, market_tools as mt
+    from gradecore import book_rules, devig, market_tools as mt
     gs = groups(srv, sport, now)
     if gs is None:
         return {"state": "unavailable", "error": "Board not loaded yet", "ev": [], "arbitrage": [], "flagged": [], "excluded": {}}
     ev, arb, flagged, excluded, newest, n_quotes, near = [], [], [], {}, None, 0, []
     excluded_lines, possible = {}, {"ev": False, "arb": False}
     here = {}
+    lag = {"two_family_lines": 0, "both_under_limit": 0, "same_rules_lines": 0, "same_rules_under_limit": 0, "limit_s": mt.ARB_MAX_AGE_S}
 
     def ex(why, n=1):
         excluded[why] = excluded.get(why, 0) + n
@@ -221,10 +250,25 @@ def sheet(srv, sport, now):
         n_ev = len(ev)
         books = {q["book"] for q in quotes if q["kind"] == "sportsbook" and not q.get("exchange") and not q["multiplier"] and (q["over"] or q["under"])}
         two_sided = {q["book"] for q in quotes if q["kind"] == "sportsbook" and not q.get("exchange") and q["over"] and q["under"]}
-        if len(books) >= 2:
-            possible["arb"] = True                          # two sportsbooks at one line: a both-sides pair can exist
-        if len(two_sided) > MIN_BOOKS:
-            possible["ev"] = True                           # a priced book plus MIN_BOOKS others: a fair chance can exist
+        sb = [q for q in quotes if q["book"] in books]
+        fams = {}
+        for q in sb:
+            fams.setdefault(book_rules.family_of(q["book"]), []).append(q)
+        if len(fams) >= 2:
+            # how often the 5-minute rule can be met: the newest price of each family, two families needed
+            lag["two_family_lines"] += 1
+            young = sorted(min((now - q["seen"]) if q["seen"] is not None else float("inf") for q in v) for v in fams.values())
+            if young[1] <= mt.ARB_MAX_AGE_S:
+                lag["both_under_limit"] += 1
+        same = [(a, b) for i, a in enumerate(sb) for b in sb[i + 1:]
+                if book_rules.family_of(a["book"]) != book_rules.family_of(b["book"]) and book_rules.same_bet(a["book"], b["book"], sport)]
+        if same:
+            possible["arb"] = True                          # two families that settle alike at one line: a pair can exist
+            lag["same_rules_lines"] += 1
+            if any(a["seen"] is not None and b["seen"] is not None and now - min(a["seen"], b["seen"]) <= mt.ARB_MAX_AGE_S for a, b in same):
+                lag["same_rules_under_limit"] += 1
+        if any(len({book_rules.family_of(o["book"]) for o in _others(quotes, b, sport, book_rules)}) >= MIN_BOOKS for b in two_sided):
+            possible["ev"] = True                           # a priced book plus MIN_BOOKS other families: a fair chance can exist
         whole = float(g["line"]).is_integer()
         for q in quotes:
             n_quotes += 1
@@ -251,10 +295,10 @@ def sheet(srv, sport, now):
                 else:
                     if whole:
                         ex("Whole-number line: push chance not priced"); continue
-                    c = _consensus(quotes, q["book"], side, now, mt, devig)
+                    c = _consensus(quotes, q["book"], side, now, mt, devig, sport)
                     if c is None:
-                        ex("No calibrated chance and fewer than two other books at this line"); continue
-                    p, books, cwidth = c
+                        ex(NO_CONSENSUS); continue
+                    p, books, cwidth, cfams = c
                     pp = 0.0
                     p_source = "No-vig consensus · " + ", ".join(books) + " (worst case of 4 devig methods)"
                     chance_from = "Other books (" + ", ".join(books) + ")"
@@ -272,7 +316,7 @@ def sheet(srv, sport, now):
                                width=own, consensus_width=round(cwidth, 4) if cwidth is not None else None,
                                age_s=round(age, 1), seen_at=wb._iso(q["seen"]), source=q["source"], flags=flags,
                                needs=round(mt.implied(price) * (1 - pp), 4), american=american(price), per_100=round(value * 100, 2),
-                               chance_from=chance_from))
+                               chance_from=chance_from, families=None if rel else cfams))
         if len(ev) == n_ev and here:                        # one reason per line, so the line counts add up to markets_checked
             why = max(here.items(), key=lambda kv: kv[1])[0]
             excluded_lines[why] = excluded_lines.get(why, 0) + 1
@@ -298,24 +342,26 @@ def sheet(srv, sport, now):
                 f.append("One-sided market")
             return f
 
-        def best(side, clean, exclude=None):
-            c = [q for s2, q in legs if s2 == side and q[side] and q["book"] != exclude and (not clean or not leg_flags(q, side))]
-            return max(c, key=lambda q: q[side]) if c else None
+        overs = [q for s2, q in legs if s2 == "over" and q["over"]]
+        unders = [q for s2, q in legs if s2 == "under" and q["under"]]
+        raw = [(x, y) for x in overs for y in unders if x["book"] != y["book"] and 1 / x["over"] + 1 / y["under"] < 1.0]
+        # the two legs must come from different pricing families and settle the prop the same way; anything else is not a pair
+        pairs = [(x, y) for x, y in raw if book_rules.family_of(x["book"]) != book_rules.family_of(y["book"])
+                 and book_rules.same_bet(x["book"], y["book"], sport)]
+        if raw and not pairs:
+            ex(PAIR_ONE_FEED if all(book_rules.family_of(x["book"]) == book_rules.family_of(y["book"]) for x, y in raw) else PAIR_RULES)
         for clean in (True, False):
-            a = best("over", clean)
-            b = best("under", clean, a["book"] if a else None) if a else None
-            b2 = best("under", clean)
-            a2 = best("over", clean, b2["book"]) if b2 else None
-            cands = [(x, y) for x, y in ((a, b), (a2, b2)) if x and y]
+            cands = [(x, y) for x, y in pairs if not clean or not (leg_flags(x, "over") or leg_flags(y, "under"))]
             if not cands:
                 continue
-            x, y = max(cands, key=lambda xy: -(1 / xy[0]["over"] + 1 / xy[1]["under"]))
+            x, y = min(cands, key=lambda xy: 1 / xy[0]["over"] + 1 / xy[1]["under"])
             r = mt.arb_two_way(x["over"], y["under"])
             if not r["arbitrage"]:
                 continue
             fl = leg_flags(x, "over") + leg_flags(y, "under")
             ages = [None if z["seen"] is None else round(now - z["seen"], 1) for z in (x, y)]
             row = dict(_row_base(g, sport), margin_pct=round(r["margin_pct"], 3), total_implied=round(r["total_implied"], 5),
+                       families=[book_rules.family_of(x["book"]), book_rules.family_of(y["book"])],
                        return_per_100=round(r["margin_pct"], 2), oldest_leg_s=None if None in ages else max(ages),
                        legs=[{"side": "over", "book": x["book"], "book_label": x["book_label"], "kind": x["kind"], "odds": round(x["over"], 3),
                               "implied": round(r["implied"][0], 5), "stake_share": round(r["stake_share"][0], 5),
@@ -341,12 +387,18 @@ def sheet(srv, sport, now):
     closest = heapq.nlargest(CLOSEST_ROWS, (x for x in near if x["kind"] in ("sportsbook", "prediction")), key=lambda x: (x["ev"], -x["age_s"]))
     return {"state": "ready" if n_quotes else "empty", "as_of": wb._iso(now), "newest_quote_at": wb._iso(newest),
             "quotes_checked": n_quotes, "markets_checked": len(gs), "ev": ev[:MAX_ROWS], "closest": closest, "arbitrage": arb[:MAX_ROWS],
-            "flagged": flagged[:MAX_ROWS], "excluded": excluded, "excluded_lines": excluded_lines, "sections_possible": possible}
+            "flagged": flagged[:MAX_ROWS], "excluded": excluded, "excluded_lines": excluded_lines, "sections_possible": possible,
+            "lag": lag}
 
+
+NO_CONSENSUS = "No calibrated chance and fewer than two other independent books with the same rules at this line"
+PAIR_RULES = "Both sides under 100% but the two books settle a sit-out differently, or a rule is not confirmed: not a pair"
+PAIR_ONE_FEED = "Both sides under 100% but both prices come from one feed: not a pair"
 
 METHOD = {"ev": "EV = p_cal x decimal odds - 1, push-adjusted (a push returns the stake)",
           "p_cal": "Scout's chance only where calibration has released the sport and stat; otherwise the no-vig consensus of at least "
-                   "two other sportsbooks at the same line (worst case of four devig methods). The priced book never prices itself.",
+                   "two other independent sportsbooks (two sites on one feed count once) at the same line that settle the prop the "
+                   "same way (worst case of four devig methods). The priced book never prices itself.",
           "arbitrage": "stake share A = impA / (impA + impB); margin % = (1 / (impA + impB) - 1) x 100",
           "wide_overround": None, "arb_max_age_s": None, "ev_stale_s": None, "fresh_filters": FRESH_FILTERS}
 
@@ -373,13 +425,44 @@ def _books(docs, flagged=False):
     return [{"id": b, "label": l} for b, l in sorted(out)]
 
 
+def _log(doc):
+    """Queue what this build shows for the record (workspace_ev_log): priced single bets above fair, and every both-sides pair
+    (clean or flagged), with a counts line per build window. Never raises."""
+    try:
+        import workspace_ev_log
+        price, arb, summ = [], [], {}
+        for sport, d in (doc.get("sports") or {}).items():
+            for r in d.get("ev") or ():
+                price.append({"id": f"{r.get('leg_id')}|{r['book']}|{r['side']}", "leg": r.get("leg_id"), "sport": sport, "app": r["book"],
+                              "player": r.get("player"), "stat": r.get("stat_label"), "period": r.get("period_label"), "start_utc": r.get("start_utc"),
+                              "line": r["line"], "side": r["side"], "odds": r["odds"], "needed": r.get("needs"), "fair": r.get("p_cal"),
+                              "ev_pct": r.get("per_100"), "chance_from": r.get("chance_from"), "families": r.get("families"),
+                              "kind": r.get("kind"), "age_s": r.get("age_s"), "flags": r.get("flags")})
+            for clean, key in ((True, "arbitrage"), (False, "flagged")):
+                for r in d.get(key) or ():
+                    arb.append({"id": f"{r.get('leg_id')}|{'+'.join(l['book'] for l in r['legs'])}", "leg": r.get("leg_id"), "sport": sport,
+                                "player": r.get("player"), "stat": r.get("stat_label"), "period": r.get("period_label"), "start_utc": r.get("start_utc"),
+                                "line": r["line"], "clean": clean, "margin_pct": r["margin_pct"], "total_implied": r["total_implied"],
+                                "families": r.get("families"), "flags": r.get("flags"),
+                                "quotes": [{k: l.get(k) for k in ("side", "book", "kind", "odds", "age_s", "flags")} for l in r["legs"]]})
+            summ[sport] = {"state": d.get("state"), "lines": d.get("markets_checked"), "quotes": d.get("quotes_checked"), "above_fair": len(d.get("ev") or ()),
+                           "pairs": len(d.get("arbitrage") or ()), "flagged_pairs": len(d.get("flagged") or ()), "lag": d.get("lag"),
+                           "possible": d.get("sections_possible")}
+        workspace_ev_log.record("price", price, {"sports": {k: {x: v[x] for x in ("state", "lines", "quotes", "above_fair", "possible")} for k, v in summ.items()}})
+        workspace_ev_log.record("arb", arb, {"sports": {k: {x: v[x] for x in ("state", "lines", "pairs", "flagged_pairs", "lag", "possible")} for k, v in summ.items()}})
+    except Exception:                                  # noqa: BLE001 - the record never breaks the sheet
+        pass
+
+
 def shared(srv):
     def compute():
-        return 200, json.dumps(build(srv), default=str, separators=(",", ":")).encode()
+        doc = build(srv)
+        _log(doc)
+        return 200, json.dumps(doc, default=str, separators=(",", ":")).encode()
     return srv.shared(("ws_market_sheet",), compute, ttl=TTL)
 
 
-MEMBER_HIDDEN = ("flagged", "excluded", "excluded_lines")
+MEMBER_HIDDEN = ("flagged", "excluded", "excluded_lines", "lag")
 
 
 def for_member(body, allowed, owner=False):

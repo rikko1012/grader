@@ -2,10 +2,10 @@
 books, for CS2, LoL, NBA and NFL. Display only: no grade, chance, letter, stake, slip rule or calibration reads anything here.
 
 Market edge (NBA / NFL pick'em lines, standard lines only):
-  the books' fair chance for a side at the app's line - margin removed, the +EV board's own devig and line shift
+  the books' fair chance for a side at the app's exact line - margin removed, the +EV board's own devig and rules
   (workspace_ev._priced -> gradecore.ev_board.price_leg -> gradecore.fair.fair_chance: equal weights, worst-case devig, the
-  same freshness limits workspace_ev.price_limits(), the measured line-shift shape) with at least MIN_BOOKS fresh books
-  (copy feeds such as oddsapi:fanduel and fanduel count once) - minus what one pick needs to break even on that app's 2-pick
+  same freshness limits workspace_ev.price_limits(); owner 2026-11-12: exact line only, books that settle like the app only,
+  gradecore.book_rules) with at least MIN_BOOKS fresh independent books (two sites on one feed count once) - minus what one pick needs to break even on that app's 2-pick
   entry (gradecore.payouts on gradecore/pickem_payouts.json: Underdog standard 2-pick 53.5%, PrizePicks Power 2-pick 57.7%;
   an Underdog payout modifier through ev_board.pickem_break_even). In percentage points. It is shown whether or not Scout has
   a side: for the side the books favour (the higher fair chance), and for Scout's side too when Scout's side is the other one.
@@ -47,12 +47,13 @@ WHY = {
     "none": "No sportsbook prices this line right now.",
     "app": "Market edge is measured on PrizePicks and Underdog lines.",
     "be": "No published break-even for this pick's payout.",
-    "books": f"Fewer than {MIN_BOOKS} books have a current price on this line.",
+    "books": f"Fewer than {MIN_BOOKS} independent books have a current price on this exact line.",
+    "rules": "The books on this line settle a sit-out differently from the app.",
     "stale": "The books' prices on this line are older than the freshness limit.",
     "one-sided": "The books price only one side of this line.",
     "wide": "The books' margin on this line is too wide to read a fair chance.",
     "spread": "The exchange spread on this line is too wide.",
-    "line": "The books' lines are too far from this line to read.",
+    "line": "No book prices this exact line.",
     "other": "The books' prices on this line could not be read.",
 }
 

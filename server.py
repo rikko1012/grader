@@ -5168,6 +5168,15 @@ class Handler(BaseHTTPRequestHandler):
                 # 2026-10-23 closeout: open picks held pending by an unpublished platform rule (bounded page, read-only)
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
                 return self.send(200, picklog.rule_pending_page(after_id=num("after") or 0, limit=num("limit")))
+            if u.path == "/admin/ev_log.json" and self.authed(q.get("token")):
+                # owner 2026-11-12: the record of what Best prices / Price check / the both-sides list showed (workspace_ev_log).
+                # No day = the file index, counters and the book family / settlement tables; tool + day = one bounded page.
+                import workspace_ev_log
+                if not q.get("day"):
+                    import workspace_ev
+                    return self.send(200, dict(workspace_ev_log.status(), book_rules=workspace_ev.rules_table()))
+                num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
+                return self.send(200, workspace_ev_log.page(q.get("tool"), q.get("day"), after=num("after") or 0, limit=num("limit") or 200))
             if u.path == "/admin/post_drafts.json" and self.authed(q.get("token")):
                 # publication drafts built ONLY from saved board forecasts of lines offered now (posts.py, owner 2026-10-16)
                 import posts

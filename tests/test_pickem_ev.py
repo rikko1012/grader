@@ -41,6 +41,12 @@ def snap(items):
     return {"body": json.dumps({"records": recs}).encode(), "index": index}
 
 
+@pytest.fixture(autouse=True)
+def fixture_books_settle_like_the_app(monkeypatch):
+    from tests.book_rules_fixture import like_the_app
+    like_the_app(monkeypatch)
+
+
 @pytest.fixture
 def fake(monkeypatch, reference_tables):
     """Board arithmetic on fixture quotes. PrizePicks rows are priced on its REFERENCE table here (never live: see pickem_ref)."""
@@ -48,7 +54,7 @@ def fake(monkeypatch, reference_tables):
     we._FAIR.clear(); we._LEGS.clear()
     items = [
         (rec("p1", 20.5, p_over=0.62, p_under=0.38), [book("fanduel", 20.5, 1.65, 2.30, 60), book("oddsapi:fanduel", 20.5, 1.66, 2.28, 60),
-                                                     book("betrivers", 19.5, 1.80, 2.00, 90)]),
+                                                     book("betrivers", 20.5, 1.68, 2.25, 90), book("bovada", 19.5, 1.80, 2.00, 90)]),
         (rec("p2", 9.5), [book("fanduel", 9.5, 1.5, 2.8, 4000), book("betrivers", 9.5, 1.5, 2.8, 5000)]),         # every price stale
         (rec("p3", 5.5), [book("fanduel", 1.9, None, None, 60, kind="one_sided") | {"line": 5.5, "over": 1.9}]),   # one-sided only
         (rec("p4", 30.5, p_over=0.70, p_under=0.30), []),                                                     # no book: model only
@@ -68,14 +74,17 @@ ALL = {"cs2": True, "lol": True, "nba": True, "nfl": True}
 
 def test_market_fair_beside_model_chance_and_ev_by_the_formula(fake):
     d = we.build(None, we.params({}, ["fanduel", "betrivers"]), ALL)
-    assert d["app"] == "prizepicks" and d["entry"] == "power" and d["n"] == 2
-    be = payouts.entry_break_even("prizepicks", "power", 2)
+    # the board opens on the entry that needs the lowest chance per leg (6-pick Flex), with that chance shown
+    assert d["app"] == "prizepicks" and (d["entry"], d["n"]) == we.default_entry("prizepicks") == ("flex", 6)
+    be = payouts.entry_break_even("prizepicks", "flex", 6)
+    assert be == min(e["break_even"] for e in we.entries() if e["app"] == "prizepicks")
     assert d["break_even"] == pytest.approx(be, abs=1e-4) and d["american"] == round(payouts.american_of(be))
     r = next(x for x in d["rows"] if x["key"].endswith("pr-p1") and x["side"] == "over")
     q = [fair.Quote("fanduel", 20.5, 0, over=1.65, under=2.30, cluster="fanduel"), fair.Quote("fanduel", 20.5, 0, over=1.66, under=2.28, cluster="fanduel")]
-    # the copy feed (oddsapi:fanduel) counts once with FanDuel; BetRivers on 19.5 is read at 20.5 through the points shape
-    assert r["books"] == 2 and {s["label"] for s in r["sources"]} == {"FanDuel", "BetRivers"}
-    assert any(s["shifted"] for s in r["sources"]) and r["basis"] == "market"
+    # the copy feed (oddsapi:fanduel) counts once with FanDuel; Bovada on 19.5 is NOT read at 20.5 (exact line only)
+    assert r["books"] == 2 and {s["label"] for s in r["sources"]} == {"FanDuel", "BetRivers"} and r["one_book"] is False
+    assert not any(s["shifted"] for s in r["sources"]) and r["basis"] == "market"
+    assert [(x["label"], x["line"], x["reason"]) for x in r["left_out"]] == [("Bovada", 19.5, "different line")]
     assert r["ev"] == pytest.approx(r["p_market"] / be - 1, abs=2e-4)
     assert r["p_model"] == 0.62 and r["ev_model"] == pytest.approx(0.62 / be - 1, abs=1e-4)     # model shown beside, never blended
     assert "p_cal" not in json.dumps(d)
@@ -151,7 +160,8 @@ def test_filters_change_the_fair(fake):
 def test_params_are_normalised(reference_tables):
     p = we.params({"app": "x", "entry": "power", "n": "99", "preset": "bad", "method": "bad", "min_books": "50", "min_liq": "123",
                    "max_width": "7", "req": "a,b,c"}, ["a", "b", "c"])
-    assert p[:6] == ("prizepicks", "power", 2, "equal", "worst", ev_board.MIN_BOOKS_MAX)
+    assert p[:6] == ("prizepicks", "flex", 6, "equal", "worst", ev_board.MIN_BOOKS_MAX)      # unknown entry -> the app's default
+    assert we.params({})[5] == 2 == ev_board.MIN_BOOKS_DEFAULT and we.params({"min_books": "1"})[5] == 1
     assert p[6] == ("a", "b") and p[8] == 100.0 and p[9] == fair.MAX_WIDTH
 
 
@@ -159,8 +169,9 @@ def test_live_tables_offer_both_apps_prizepicks_verified_by_owner():
     """Owner sign-off 2026-11-05: the PrizePicks help-center table is verified, so PrizePicks entries are priced (standard lines)."""
     assert {e["app"] for e in we.entries()} == {"prizepicks", "underdog"}
     assert not any(e["entry"] == "flex" and e["n"] == 2 for e in we.entries())     # no entry type the app does not show
-    assert we.params({})[:3] == ("prizepicks", "power", 2)
-    assert we.params({"app": "prizepicks", "entry": "flex", "n": "2"})[:3] == ("prizepicks", "power", 2)
+    assert we.params({})[:3] == ("prizepicks", "flex", 6)
+    assert we.params({"app": "prizepicks", "entry": "power", "n": "2"})[:3] == ("prizepicks", "power", 2)   # a chosen entry is kept
+    assert we.params({"app": "prizepicks", "entry": "flex", "n": "2"})[:3] == ("prizepicks", "flex", 6)
     assert we.params({"app": "underdog"})[:3] == ("underdog", "standard", 2)
 
 
