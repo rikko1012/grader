@@ -372,6 +372,17 @@ def _push(x):
         return None
 
 
+# Board order (owner 2026-11-12: "make sure map 1-2 lines show before map 1 lines"): records go out longest maps scope first - Maps 1-3,
+# then Maps 1-2, then Map 1 - by a STABLE sort, so every other order the board had is kept. The hub sorts by start, game and player
+# and keeps the server's order inside a tie (Array.sort is stable), so one player's Maps 1-2 rows come before his Map 1 rows; the
+# card's market strip and the player's "+N" props read the records in this order too. A member's chosen sort still decides.
+SCOPE_RANK = {"maps13": 0, "maps12": 1, "map1": 2}
+
+
+def scope_order(rec):
+    return SCOPE_RANK.get(((rec or {}).get("market") or {}).get("period"), 3)
+
+
 def record_of(x):
     """One dr-1 display record from one board row: saved values only, nothing recomputed."""
     book, side, scope = _book(x), _side(x), x.get("scope") or "12"
@@ -441,6 +452,7 @@ def _build(srv):
             records.append(rec)
             index[(_book(x), str(x.get("id")))] = x
             props.setdefault((rec["event"]["id"], rec["player"]["key"], x.get("prop"), x.get("scope") or "12"), []).append((_book(x), str(x.get("id"))))
+    records.sort(key=scope_order)                # owner 2026-11-12: Maps 1-2 lines before Map 1 lines (stable: nothing else moves)
     feeds = {bk: _feed_state(srv, bk, docs.get(bk), bk in failed) for bk in BOOKS}
     times = sorted(f["at"] for f in feeds.values() if f["at"])
     version = next((p.get("version") for p in docs.values() if p), None)

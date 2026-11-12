@@ -73,6 +73,10 @@ export function groupProps(sorted, universe, ranked) {
   return out;
 }
 
+/* Maps scopes longest first (owner 2026-11-12: Maps 1-2 lines before Map 1 lines; LoL BO5 Maps 1-3 first); other periods keep their order. */
+const PERIOD_RANK = new Map([['maps13', 0], ['maps12', 1], ['map1', 2]]);
+export const periodRank = p => (PERIOD_RANK.has(p) ? PERIOD_RANK.get(p) : 3);
+
 /* Rows by player: each player once (in the order of their first row), their props under them by stat then period. */
 export function groupPlayers(groups) {
   const players = new Map();
@@ -80,7 +84,7 @@ export function groupPlayers(groups) {
   for (const p of players.values()) {
     const order = new Map();
     p.props.forEach((g, i) => { const k = g.main.market.stat; if (!order.has(k)) order.set(k, i); });
-    p.props.sort((a, b) => order.get(a.main.market.stat) - order.get(b.main.market.stat) || String(a.main.market.period).localeCompare(String(b.main.market.period)));
+    p.props.sort((a, b) => order.get(a.main.market.stat) - order.get(b.main.market.stat) || periodRank(a.main.market.period) - periodRank(b.main.market.period) || String(a.main.market.period).localeCompare(String(b.main.market.period)));
     p.lines = p.props.reduce((n, g) => n + g.total, 0);
   }
   return [...players.values()];

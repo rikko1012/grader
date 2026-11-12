@@ -233,6 +233,11 @@ def record_of(x, raw, values):
             "market_chance": None, "state": {"kind": "ok", "reason": None}}
 
 
+def _scope_order(rec):
+    """Maps 1-3, then Maps 1-2, then Map 1, then anything else (the CS2 board's workspace_api.scope_order)."""
+    return {"maps13": 0, "maps12": 1, "map1": 2}.get(((rec or {}).get("market") or {}).get("period"), 3)
+
+
 def _build(srv):
     path = Path(srv.LOL_CENTER) / "board.json"
     try:
@@ -285,6 +290,7 @@ def _build(srv):
             ix.update(fid=None, po=None, pu=None, one_sided=rec["scout"]["hold"]["label"])
         index[(x.get("platform"), x.get("key"))] = ix
         props.setdefault((ix["eid"], ix["pkey"], ix["stat"], ix["period"]), []).append((x.get("platform"), x.get("key")))
+    records.sort(key=_scope_order)               # owner 2026-11-12: Maps 1-3, then Maps 1-2, then Map 1 (stable; workspace_api.scope_order)
     at = member.get("at")
     feeds = {}
     for p, label in LABEL.items():
