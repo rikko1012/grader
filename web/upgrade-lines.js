@@ -39,7 +39,10 @@ export function ladder(lines) {
    mark. */
 export function bestFor(lines, side) {
   if (side !== 'over' && side !== 'under') return null;
-  const offered = lines.filter(r => r.offer[side] && r.offer[side].offered && Number.isFinite(Number(r.offer.line)));
+  /* H6: only even-payout pick'em lines compare by line value (PrizePicks / Underdog standard): a sportsbook or prediction market's far
+     alt line with no price was marked "BEST UNDER". Lines that are not comparable are never marked. */
+  const offered = lines.filter(r => r.offer[side] && r.offer[side].offered && Number.isFinite(Number(r.offer.line))
+    && (r.offer.platform === 'prizepicks' || r.offer.platform === 'underdog') && (r.market.line_type || 'standard') === 'standard' && !r.extra);
   if (offered.length < 2) return null;
   const price = r => { const o = r.offer[side]; return num(o.price) ? o.price : -Infinity; };
   let best = offered[0];

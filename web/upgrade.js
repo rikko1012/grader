@@ -521,7 +521,7 @@
       if(!e?.ok||!e.open||!safeBookLink(e.open.url,slip.platform))return say('These picks could not be opened. Recheck the current lines; no picks were sent.');
       let dialog=$('u-book-open');
       if(!dialog){dialog=document.createElement('dialog');dialog.id='u-book-open';dialog.className='u-book-dialog';dialog.setAttribute('aria-label','Open checked slip');document.body.appendChild(dialog);}
-      dialog.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book links">×</button></form><h2>${esc(e.open.label)}</h2><p>${slip.platform==='prizepicks'?'Your checked selections open in PrizePicks. Confirm its current lines before submitting.':'Underdog opens each market separately. Select Higher or Lower in the app; this does not prefill or place an entry.'}</p><a class="u-btn u-gold" href="${esc(e.open.url)}" target="_blank" rel="noopener noreferrer">${esc(e.open.label)}</a>${(e.open.legs||[]).map((url,i)=>safeBookLink(url,slip.platform)?`<p><a class="u-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(slip.legs[i]?.player||'Pick '+(i+1))} · ${esc(slip.legs[i]?.side)} ${esc(slip.legs[i]?.line)}</a></p>`:'').join('')}`;
+      dialog.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book links">×</button></form><h2>${esc(e.open.label)}</h2><p>${slip.platform==='prizepicks'?'Your checked selections open in PrizePicks. Confirm its current lines before submitting.':'Underdog opens each market separately. Select Higher or Lower in the app; this does not prefill or place an entry.'}</p><a class="u-btn u-gold" href="${esc(e.open.url)}" target="_blank" rel="noopener noreferrer">${esc(e.open.label)}</a>${(e.open.legs||[]).map((url,i)=>safeBookLink(url,slip.platform)?`<p><a class="u-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(slip.legs[i]?.player||'Pick '+(i+1))} · ${esc(cap(slip.legs[i]?.side||''))} ${esc(slip.legs[i]?.line)}</a></p>`:'').join('')}`;
       dialog.showModal();
     }catch(e){say('The line check failed. No book was opened. Try again.');}
     finally{T.openBusy=false;}
@@ -737,7 +737,7 @@
     const n = T.legs.length, phase = slipPhase();
     const done = T.tracked ? `<div class="u-note good"><b>${plural(T.tracked.n, "pick")} tracked on ${esc(T.tracked.label)}.</b> <button class="u-link" type="button" data-u="tab" data-id="picks">View receipts</button></div>` : "";
     const saved = T.saveFail ? '<p class="u-dim">Your changes will save when the connection returns.</p>' : "";
-    if (!n) return `${done}${saved}<p class="u-empty">Add a line from any board with + Slip tray. It follows your account across CS2, LoL and Sports.</p>`;
+    if (!n) return `${done}${saved}<p class="u-empty">${HUB && !$("u-hub").hidden ? "No picks yet. Add a side from any board with + Add. Your slip follows your account across CS2, LoL, NBA and NFL." : "Add a line from any board with + Slip tray. It follows your account across CS2, LoL and Sports."}</p>`;
     const retry = phase === "down" ? `<button class="u-link" type="button" data-u="check">Retry</button>` : phase === "fresh" ? `<button class="u-link" type="button" data-u="check">Check again</button>` : "";
     const checks = phase === "fresh" ? `<details class="u-det" ${det("checks")}><summary>Check details</summary><ul>${CHECKS.map((t, i) => `<li><b class="${T.check.fails[i] ? "no" : "yes"}">${T.check.fails[i] ? "Refused" : "Pass"}</b> ${t}${T.check.fails[i] ? ` (${esc(T.check.fails[i])})` : ""}</li>`).join("")}</ul></details>` : "";
     return `${done}<div class="u-status"><p>${statusLine(phase)} ${retry}</p><button class="u-link" type="button" data-u="clear">Clear</button></div>${saved}${checks}${entries().map((e) => entryHtml(e, phase)).join("")}`;
@@ -1042,12 +1042,15 @@
 
   /* ---- feedback + shell ---- */
   let toastT;
-  function say(msg) {
+  function say(msg, undo) {
     const box = document.querySelector("dialog[open].u-dialog"), t = (box && box.querySelector(".u-toast")) || $("u-toast");
     document.querySelectorAll(".u-toast").forEach((x) => { x.textContent = ""; x.classList.remove("on"); });
     t.textContent = msg; t.classList.add("on");
+    /* T10: an action that empties the slip carries an Undo for as long as its note shows (8 s) */
+    if (undo) { const b = document.createElement("button"); b.type = "button"; b.className = "u-toast-undo"; b.textContent = "Undo";
+      b.addEventListener("click", () => { undo(); t.classList.remove("on"); }); t.append(" ", b); }
     clearTimeout(toastT);
-    toastT = setTimeout(() => t.classList.remove("on"), 3200);
+    toastT = setTimeout(() => t.classList.remove("on"), undo ? 8000 : 3200);
   }
   /* desktop: dock the tray button in the page's own top bar (re-docked when a page redraws its header); phone: bottom corner */
   function dockTray() {
@@ -1136,7 +1139,8 @@
     pclose() { $("u-drawer").close(); },
     tab(id) { T.tab = id; if (id !== "slip") loadMine(); paintTray(); },
     check() { T.checkErr = null; T.check = null; runCheck(); },
-    clear() { T.legs = []; slipChanged(); say(HUB && !$("u-hub").hidden ? "Slip cleared" : "Slip tray cleared"); },
+    clear() { const was = T.legs.slice(); T.legs = []; slipChanged();
+      say(HUB && !$("u-hub").hidden ? `Slip cleared (${plural(was.length, "pick")})` : "Slip tray cleared", () => { if (!T.legs.length) { T.legs = was; slipChanged(); say("Slip restored"); } }); },
     swap: swapLeg,
     replace: replaceLeg,
     "leg-x": removeLeg,

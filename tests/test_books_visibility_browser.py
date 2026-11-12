@@ -160,7 +160,7 @@ def test_draftkings_in_main_board_selector(browser, env, monkeypatch, width):
         p.locator('tr[data-record]').first.wait_for()
         assert 'Karl Anders' in p.locator('tr[data-record]').first.inner_text()
         assert '-117 / +105' in p.locator('tr[data-record]').first.inner_text()
-        assert 'side not supplied' in p.locator('tr[data-record]').first.inner_text()
+        assert 'side not supplied' in p.locator('tr[data-record]').first.inner_text().lower()   # shown in the row's small caps (DK restyle 2026-11-12)
         assert not p.locator('tr[data-record] button:has-text("+ Add")').count()
         assert 'reported odds' in p.locator('th.h-c-scout').inner_text().lower()
         p.locator('tr[data-record] .h-player').first.click()

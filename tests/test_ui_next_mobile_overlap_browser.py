@@ -147,7 +147,7 @@ def test_mobile_shots(browser, live, width):
 
 # ---- UI sweep 2026-11-12 batch 2 (#23): every app pill reachable at every width with all 8 apps on NBA / NFL ----
 ALL_BOOKS = ("SCOUT_BOOK_UNIBET_AU", "SCOUT_BOOK_POINTSBET_AU", "SCOUT_BOOK_SLEEPER", "SCOUT_BOOK_DABBLE", "SCOUT_BOOK_FANDUEL",
-             "SCOUT_BOOK_BETRIVERS", "SCOUT_BOOK_BOVADA")
+             "SCOUT_BOOK_BETRIVERS", "SCOUT_BOOK_BOVADA", "SCOUT_BOOK_DRAFTKINGS")
 
 
 def fix_shot(p, name, full=False):
@@ -191,7 +191,7 @@ PILLS = """()=>{const plat=document.getElementById('hub-platform'),pb=plat.getBo
 def test_every_app_pill_is_reachable_at_every_width(browser, many_apps, width):
     c, p = page(browser, many_apps, width, "dark", "/sports")
     try:
-        p.wait_for_function("document.querySelectorAll('#hub-platform [data-hub=book]:not([hidden])').length>=9", timeout=20000)
+        p.wait_for_function("document.querySelectorAll('#hub-platform [data-hub=book]:not([hidden])').length>=10", timeout=20000)
         p.wait_for_timeout(300)
         for card in (False, True):
             if card:
@@ -393,6 +393,80 @@ def test_sport_tab_counts_on_every_tab_or_none(browser, live):
         p.locator("#hub-sports [data-id=all]").click()
         p.wait_for_function("[...document.querySelectorAll('#hub-sports button span')].every(s=>!s.classList.contains('h-n-wait'))", timeout=20000)
         assert all(shown())
+        assert not p.errors
+    finally:
+        c.close()
+
+
+
+# ---- T1 / T5: every dialog outside the hub (save view, live highlight, the book-link dialog) is readable in both themes
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_dialogs_outside_the_hub_are_readable_in_both_themes(browser, live, theme):
+    c, p = page(browser, live, 390, theme, "/")
+    try:
+        for kind in ("save-view", "save-alert"):
+            p.locator("#hub-views-toggle").click()
+            p.locator(f"#hub-views-pop [data-hub={kind}]").click()
+            p.wait_for_selector("#hub-save-dialog[open]")
+            p.locator("#hub-save-name").fill("Unders tonight")
+            p.wait_for_timeout(150)
+            fix_shot(p, f"dialog-{kind}-{theme}")
+            box = p.locator("#hub-save-dialog")
+            assert p.evaluate(SCAN, "#hub-save-dialog") == [], (kind, theme)
+            inp = contrast(p.locator("#hub-save-name"))
+            assert inp["ratio"] >= 4.5, (kind, theme, inp)
+            if theme == "light":
+                assert sum(inp["bg"]) > 600, inp                                 # a light box to type in
+            for b in box.locator("button").all():
+                bb = b.bounding_box()
+                assert bb and bb["height"] >= 44, bb                            # T16: thumb-size buttons on the phone
+            assert p.locator("#hub-save-name").bounding_box()["height"] >= 44
+            assert p.locator("#hub-save-name").evaluate("e=>parseFloat(getComputedStyle(e).fontSize)") >= 16       # T11: no iOS zoom
+            box.locator("button[value=cancel]").click()
+            p.wait_for_function("!document.getElementById('hub-save-dialog').open")
+        assert not p.errors
+    finally:
+        c.close()
+
+
+# ---- H11: the phone toolbar is three rows (it took 165-215px) and every control stays reachable
+@pytest.mark.parametrize("width", (320, 375, 430))
+def test_phone_toolbar_is_three_rows(browser, many_apps, width):
+    for path in ("/", "/sports"):
+        c, p = page(browser, many_apps, width, "dark", path)
+        try:
+            p.wait_for_timeout(500)
+            fix_shot(p, f"toolbar-{path.strip('/') or 'cs2'}-{width}")
+            r = p.evaluate("""()=>{const bar=document.querySelector('#u-hub .h-toolbar'),kids=[...bar.children].filter(e=>e.offsetParent&&e.getBoundingClientRect().height>0);
+                const tops=kids.map(e=>Math.round(e.getBoundingClientRect().top/8));const rowsN=new Set(kids.map(e=>{const r=e.getBoundingClientRect();return Math.round((r.top+r.bottom)/2/12)})).size;
+                return {h:Math.round(bar.getBoundingClientRect().height),rows:rowsN,small:kids.flatMap(e=>[...e.querySelectorAll('button,input'),e].filter(x=>x.matches('button,input')&&x.offsetParent&&!x.closest('.h-pop')).map(x=>[x.id||x.textContent.trim().slice(0,8),Math.round(x.getBoundingClientRect().height)]).filter(([_,h])=>h<43.5))}}""")
+            assert r["rows"] <= 3 and r["h"] <= 170, (path, width, r)
+            assert r["small"] == [], (path, width, r)
+            assert p.evaluate("document.documentElement.scrollWidth<=document.documentElement.clientWidth+1")
+            assert not p.errors
+        finally:
+            c.close()
+
+
+# ---- T16: thumb-size controls in every section outside the board, on the phone
+TARGETS = """(sel)=>{const root=document.querySelector(sel);if(!root)return null;return [...root.querySelectorAll('button,select,input:not([type=checkbox]):not([type=radio]):not([type=hidden]),a.u-btn,a.h-link,.h-link,summary,.h-tool-grid a')]
+  .filter(e=>e.offsetParent&&getComputedStyle(e).visibility!=='hidden'&&!e.closest('[hidden],.h-pc-row,table')).map(e=>[(e.id||e.textContent.trim()).slice(0,24),Math.round(e.getBoundingClientRect().height)]).filter(([_,h])=>h>0&&h<43.5).slice(0,10)}"""
+
+
+def test_phone_targets_outside_the_board(browser, live):
+    c, p = page(browser, live, 390, "dark", "/")
+    try:
+        p.locator("#hub-rows tr.h-row [data-hub=add]").first.click()
+        p.wait_for_timeout(300)
+        bad = {}
+        for hash_, sec in (("#scout/studio", "#hub-studio-section"), ("#scout/picks", "#hub-picks-section"), ("#scout/record", "#hub-record-section"),
+                           ("#scout/tools", "#hub-tools-section"), ("#scout/alerts", "#hub-alerts-section"), ("#scout/ev", "#hub-ev-section"), ("#scout/arb", "#hub-arb-section")):
+            p.evaluate(f"location.hash={hash_!r}")
+            p.wait_for_timeout(900)
+            r = p.evaluate(TARGETS, sec)
+            if r:
+                bad[sec] = r
+        assert bad == {}, bad
         assert not p.errors
     finally:
         c.close()

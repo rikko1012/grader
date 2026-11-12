@@ -220,6 +220,7 @@ def test_card_grade_names_a_closed_side(browser):
     page.wait_for_selector(".sw-research-card")
     note = page.locator("[data-grade-closed]")
     assert note.count() == 1 and note.inner_text() == "Under not offered on Underdog"
+    assert page.locator(".sw-research-card [data-not-offered] .sw-grade").count() == 0    # bug 3 (owner 2026-11-12): no letter on it
     page.click('[data-tview="table"]')
     assert not errors, errors
     ctx.close()

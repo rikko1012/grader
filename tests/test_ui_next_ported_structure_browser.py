@@ -248,7 +248,7 @@ def test_empty_board_names_hidden_lines_and_tools_is_the_single_index(ctx, env):
     p.locator('#hub-q').fill('zzzz-nobody')
     p.wait_for_selector('#hub-empty:not([hidden])')
     empty = p.locator('#hub-empty')
-    assert re.search(r'\d+ lines hidden by filters', empty.text_content()) and empty.locator('[data-hub=clear-filters]').is_visible()
+    assert re.search(r'\d+ lines hidden by your search “zzzz-nobody”', empty.text_content()) and empty.locator('[data-hub=clear-filters]').is_visible()   # H17: names the search
     assert 'No lines match' not in empty.text_content()
     p.locator('.h-sidebar [data-id=tools]').click()
     tools = p.locator('#hub-tools-body').inner_text().lower()
