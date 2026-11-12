@@ -29,7 +29,7 @@ LEAGUES = ("nba", "nfl")
 PICKEM = ("underdog", "prizepicks")
 LABEL = {"underdog": "Underdog", "prizepicks": "PrizePicks"}
 BOOK_LABEL = {"fanduel": "FanDuel", "betrivers": "BetRivers", "kalshi": "Kalshi", "polymarket": "Polymarket", "pinnacle": "Pinnacle", "draftkings": "DraftKings",
-              "betmgm": "BetMGM", "caesars": "Caesars", "bovada": "Bovada", "fanatics": "Fanatics", "espnbet": "ESPN BET", "hardrockbet": "Hard Rock", "bet365": "bet365"}
+              "betmgm": "BetMGM", "caesars": "Caesars", "bovada": "Bovada", "unibet_au": "Unibet (AU)", "pointsbet_au": "PointsBet (AU)", "fanatics": "Fanatics", "espnbet": "ESPN BET", "hardrockbet": "Hard Rock", "bet365": "bet365"}
 PERIOD = {"full_game": "Full game", "1h": "First half", "2h": "Second half", "1q": "First quarter",
           "first_half": "First half", "second_half": "Second half", "q1": "First quarter", "q2": "Second quarter",
           "q3": "Third quarter", "q4": "Fourth quarter"}        # sports scopes (contracts SCOPES) + the older short keys
@@ -261,7 +261,7 @@ def book_label(p):
 
 
 BOOK_SHORT = {"fanduel": "FD", "betrivers": "BR", "kalshi": "KA", "polymarket": "PM", "pinnacle": "PN", "draftkings": "DK", "betmgm": "MG", "caesars": "CZ", "bovada": "BV", "fanatics": "FN", "espnbet": "EB",
-              "hardrockbet": "HR", "bet365": "36"}
+              "hardrockbet": "HR", "bet365": "36", "unibet_au": "UA", "pointsbet_au": "PA"}
 
 
 def book_short(p):

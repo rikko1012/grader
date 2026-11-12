@@ -83,6 +83,7 @@ def refresh(db, league, now=None):
             if datetime.fromisoformat(e["start_utc"].replace("Z", "+00:00")) <= now: continue
             e["seen_at"] = r["last_seen_at"]
             e["league"] = league
+            e["reference_props"] = reference_props(db, league, e["id"].removeprefix("espn:"), now)
             events.append(e)
         doc = {"league": league, "source": "ESPN", "source_time_unknown": True, "observed_at": now.isoformat(), "events": sorted(events, key=lambda e:e["start_utc"])}
         target = path(league);target.parent.mkdir(parents=True, exist_ok=True)
@@ -90,6 +91,35 @@ def refresh(db, league, now=None):
         return {"events": len(events)}
     except Exception as e:
         return {"error": type(e).__name__}
+
+
+def reference_props(db, league, event_id, now):
+    """Latest non-late ESPN thresholds for this event, never a sportsbook price.
+
+    Join the current pointer rather than historical MAX timestamps. Reconfirmed
+    unchanged rows retain their revision and last-seen time. Old/unmapped rows
+    cannot look like newly offered markets merely because a snapshot rebuilt.
+    """
+    rows = db.all("SELECT p.*, st.last_seen_at, a.player AS roster_player FROM sports_game_prop_lines p "
+        "JOIN sports_game_line_state st ON st.key=('prop:' || p.source || ':' || p.prop_key) "
+        "AND st.tbl='sports_game_prop_lines' AND st.last_id=p.id "
+        "LEFT JOIN sports_game_athletes a ON a.league=p.league AND a.athlete_id=p.athlete_id "
+        "WHERE p.league=? AND p.event_id=? AND p.source='espn' AND p.book='draftkings' AND p.late=0 "
+        "AND p.status='open' ORDER BY p.player,p.market,p.period,p.line LIMIT 10000", (league,event_id))
+    out = []
+    for p in rows:
+        player = p['player'] or p['roster_player']
+        if not player or not p['athlete_id'] or not p['market'] or p['period'] not in ('game','1h','2h','1q'): continue
+        line = number(p['line'])
+        if line is None or p['kind'] not in ('line','milestone'): continue
+        try: age = (now-datetime.fromisoformat(p['last_seen_at'].replace('Z','+00:00'))).total_seconds()
+        except (ValueError,TypeError): continue
+        if not 0 <= age <= 5400: continue
+        out.append({'revision_id':p['id'], 'player_id':p['athlete_id'], 'player':player,
+                    'market':p['market'], 'period':p['period'], 'kind':p['kind'], 'line':line,
+                    'label':p['raw_type'], 'seen_at':p['last_seen_at'], 'source':'ESPN-supplied DraftKings',
+                    'price_over':None, 'price_under':None})
+    return out
 
 
 def view(req):

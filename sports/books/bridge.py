@@ -26,8 +26,10 @@ RULE = "book house rules (not read)"
 PERIOD_SCOPE = {"game": "full_game", "regulation": "regulation"}
 FEED = {"fanduel": "fanduel sbapi (own public feed, Ohio)", "betrivers": "Kambi offering API (own public feed, Ohio)",
         "bovada": "Bovada public coupon feed (bovada.lv)",
+        "unibet_au": "Unibet Australia public Kambi feed (AU)",
+        "pointsbet_au": "PointsBet Australia public feed (AU)",
         "oddspapi": "OddsPapi v4 (documented feed)"}
-DIRECT = ("fanduel", "betrivers", "bovada")
+DIRECT = ("fanduel", "betrivers", "bovada", "unibet_au", "pointsbet_au")
 
 
 def platform_of(offer):
