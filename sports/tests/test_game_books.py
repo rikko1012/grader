@@ -32,6 +32,12 @@ def test_mismatched_total_rejected():
     d=fixture();d['pickcenter'][0]['total']['under']['close']['line']='u299.5'
     assert gb.parse_summary(d) is None
 
+
+def test_first_collection_is_pending_not_a_service_outage():
+    from types import SimpleNamespace
+    status, doc = gb.view(SimpleNamespace(query={"league":"nba"}))
+    assert status == 200 and doc["pending"] and doc["events"] == []
+
 def test_current_revision_persistence_and_seen_time(tmp_path):
     db=store.connect(tmp_path/'games.db',dsn='')
     try:

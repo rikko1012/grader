@@ -96,4 +96,10 @@ def view(req):
     from . import api_board
     league = req.query.get("league")
     if league not in ("nba", "nfl"): return 400, {"error": "league must be nba or nfl"}
-    return api_board._serve(path(league))
+    response = api_board._serve(path(league))
+    if response[0] == 503:
+        # An optional snapshot not built yet is not a service outage. A 503 here
+        # would trip the shared Sports connection breaker on the esports site.
+        return 200, {"league": league, "source": "ESPN", "pending": True,
+                     "observed_at": datetime.now(timezone.utc).isoformat(), "events": []}
+    return response
