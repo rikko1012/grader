@@ -686,3 +686,19 @@ html[data-ui=next] #u-hub .h-card .h-dec-alt:disabled{color:var(--n-t3);border-c
  html[data-ui=next] #u-hub .h-card-panel>.h-card>.h-card-body{overflow:visible;min-height:calc(100% - 46px);box-sizing:border-box}
  html[data-ui=next] #u-hub .h-card-panel>.h-card>.h-card-tabs{position:sticky;top:0;z-index:3}
 }
+/* #25: the card's Ask form kept the classic page's dark form panel (form{background:var(--panel)}) in the light theme: label 1.74:1.
+   Forms inside the hub sit on their own surface, in either theme. */
+html[data-ui=next] #u-hub form{background:transparent;color:var(--n-t1)}
+html[data-ui=next] #u-hub .h-ask label{color:var(--n-t2)}
+/* #26: Views opened as a half-width box at the bottom right (the base sheet's last-pop rule left:auto beat the phone sheet); on phones
+   and tablets Views and Filters are the same full-width sheet over a backdrop (a tap on it closes the sheet: the click-outside rule) */
+@media(max-width:1100px){
+ html[data-ui=next] #u-hub .h-toolbar .h-pop-wrap .h-pop{left:8px;right:8px;width:auto;max-width:none}
+ html[data-ui=next] #u-hub:has(.h-toolbar .h-pop:not([hidden]))::after{content:"";position:fixed;inset:0;z-index:4;background:var(--n-scrim)}
+}
+/* #28: the bump chips kept the dark design's mint / salmon (1.68:1 on white in the light theme): theme tokens in both themes */
+html[data-ui=next] :is(#u-hub,.scout-hub,.u-dialog) .u-bump.up{color:var(--n-over-t);background:var(--n-over-bg);border-color:var(--n-over-line2)}
+html[data-ui=next] :is(#u-hub,.scout-hub,.u-dialog) .u-bump.down{color:var(--n-under-t);background:var(--n-under-bg);border-color:var(--n-under-line2)}
+/* contrast sweep (H17): the Lines tab's "Best" badge (2.9:1 in dark) and the table header's "vs break-even" (4.4:1) reach AA */
+html[data-ui=next] #u-hub .h-odds-best{background:var(--n-over-bg);border:1px solid var(--n-over-line);color:var(--n-over-t)}
+html[data-ui=next] #u-hub #hub-table>thead th small{color:var(--n-t3)}

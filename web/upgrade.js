@@ -834,7 +834,11 @@
     const flat = Math.max(0, ...names.map((x) => Math.min(x.length, 14)), ...dates.map((x) => x.length));
     const slot0 = (w - 36) / Math.max(1, results.length), angled = flat * 6.2 > slot0 - 4;
     const longest = angled ? Math.max(0, ...results.map((d, i) => Math.min(names[i].length, 14) + (dates[i] ? dates[i].length + 3 : 0))) : flat;
-    const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 184, m = { l: 30, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 38 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
+    /* #27: an angled label runs down-left from under its bar; the first one ("ATL · Oct 23") ran past the chart's left edge. The plot
+       starts far enough right for the oldest game's label to fit (6.2px a character, cos 40deg = 0.77). */
+    const firstLen = results.length ? Math.min(names[results.length - 1].length, 14) + (dates[results.length - 1] ? dates[results.length - 1].length + 3 : 0) : 0;
+    const angledLeft = angled ? Math.max(30, Math.ceil(firstLen * 6.2 * 0.77) - Math.floor(Math.min(26, Math.max(6, slot0 * 0.62)) / 2) + 2) : 30;
+    const data = results.slice().reverse(), h = angled ? 166 + Math.round(longest * 4.4) : 184, m = { l: angledLeft, r: 6, t: 22, b: angled ? Math.round(longest * 4.4) + 20 : 38 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
     const vals = data.map((d) => d.value), closes = data.map((d) => d.closing).filter((c) => typeof c === "number"), top = Math.max(line, ...vals, ...closes, 1) * 1.12, y = (v) => m.t + ph - (v / top) * ph, base = m.t + ph;
     const slot = pw / data.length, bw = Math.min(26, Math.max(6, slot * 0.62)), step = niceStep(top / 3), every = angled ? Math.ceil(13 / slot) : Math.ceil(44 / slot);
     const label = (x) => (x.length > 14 ? x.slice(0, 13) + "…" : x);
