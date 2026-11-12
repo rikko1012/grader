@@ -259,8 +259,8 @@ def test_snapshot_lag_is_counted(monkeypatch):
 def test_new_books_family_and_settlement_rows():
     """Unibet AU is read from Kambi's offering API with BetRivers' parser: one family with BetRivers. PointsBet AU and
     DraftKings have no established independence. None of the three has a read settlement rule: never a price here."""
-    from sports.books import unibet_au
-    assert "kambicdn.com" in unibet_au.BASE
+    src = (Path(book_rules.__file__).parent.parent / "sports" / "books" / "unibet_au.py").read_text(encoding="utf-8")
+    assert "kambicdn.com/offering" in src and "from .betrivers import parse_events, parse_props" in src   # read as text: no sports import here
     assert book_rules.family_of("unibet_au") == book_rules.family_of("betrivers") == "kambi"
     assert book_rules.families(["betrivers", "unibet_au", "oddsapi:betrivers"]) == {"kambi"}
     for b in ("pointsbet_au", "draftkings", "oddsapi:draftkings", "espn:draftkings"):
