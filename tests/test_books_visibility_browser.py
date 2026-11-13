@@ -160,9 +160,12 @@ def test_draftkings_in_main_board_selector(browser, env, monkeypatch, width):
         p.locator('tr[data-record]').first.wait_for()
         assert 'Karl Anders' in p.locator('tr[data-record]').first.inner_text()
         assert '-117 / +105' in p.locator('tr[data-record]').first.inner_text()
-        assert 'side not supplied' in p.locator('tr[data-record]').first.text_content().lower()   # shown in the row's small caps (DK restyle 2026-11-12)
+        # owner 2026-11-13: Scout's saved read at the exact same line sits in the shared Scout cell (here both chances: no side at this
+        # line); the reported prices stay in the Line cell. A line with no saved read keeps the "side not supplied" small caps.
+        first = p.locator('tr[data-record]').first
+        assert 'side not supplied' in first.text_content().lower() or ('Over' in first.locator('.h-c-scout').inner_text() and 'Under' in first.locator('.h-c-scout').inner_text())
         assert not p.locator('tr[data-record] button:has-text("+ Add")').count()
-        assert 'reported odds' in p.locator('th.h-c-scout').inner_text().lower()
+        assert p.locator('th.h-c-scout').inner_text().strip().lower() == 'scout'          # the same column as every other book
         p.locator('tr[data-record] .h-player').first.click()
         p.locator('.h-extra-detail').wait_for()
         assert '-117 / +105' in p.locator('.h-extra-detail').inner_text()
