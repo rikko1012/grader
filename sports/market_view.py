@@ -148,7 +148,7 @@ def book_list(target, items, event, now, dnp):
             qd = dataclasses.replace(q, source_updated_at=None) if q.source_updated_at else q
             p, why = market.quote_prob(qd, event, now, meta.get("last_seen_at"),
                                        dnp if plat == "polymarket" else 0.0, None, display_books=("bovada",))
-        out.append({"p": plat, "l": line, "rid": rid, "kind": r["kind"], "c": r["c"], "over": r["over"],
+        out.append({"p": plat, "l": line, "v": capabilities.variant_of(q), "rid": rid, "kind": r["kind"], "c": r["c"], "over": r["over"],
                     "under": r["under"], "t": seen, "su": meta.get("last_source_updated_at") or q.source_updated_at,
                     "age": _age(now, seen), "in": p is not None, "pc": p, "why": None if p is not None else why})
     return out

@@ -40,6 +40,8 @@ def line_type_of(q):
     """The line's real type for members (audit 2026-11-05 S1/S2): 'standard' only for an ordinary line that lists
     both sides; an Underdog higher-only line is 'over only', never Standard; goblin / demon / alternate as named."""
     v, o = q.get("v"), q.get("o") or [1, 1]
+    if v == "ladder_rung" and q.get("p") not in PICKEM:
+        return "alternate"
     if v == "one_sided" or (v in ORDINARY_V and q.get("p") == "underdog" and len(o) == 2 and o[0] != o[1]):
         return "over only" if o and o[0] else "under only"
     return "standard" if v in ORDINARY_V else str(v).replace("_", " ")
@@ -486,7 +488,7 @@ def _book_rows(mk, line):
     same, other = [], []
     for b in (mk or {}).get("bk") or []:
         row = {"platform": b.get("p"), "platform_label": book_label(b.get("p")), "line": b.get("l"), "kind": b.get("kind"), "chance": b.get("c"), "over": _price(b.get("over")), "under": _price(b.get("under")),
-               "seen_at": b.get("t"), "in_consensus": bool(b.get("in"))}
+               "variant": b.get("v"), "seen_at": b.get("t"), "in_consensus": bool(b.get("in"))}
         (same if b.get("l") == line else other).append(row)
     return same, other
 

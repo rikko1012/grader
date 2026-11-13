@@ -558,6 +558,14 @@ export function mount(C) {
   /* owner 2026-11-08 ("i dont see players roles"): the row's second line opens with the player's role, the same text as the card's
      tag (r.player.role, every sport); no role, no tag. It sits before the matchup, which is cut first, so the name keeps its width. */
   const rowRole = r => r.player.role?`<em class="h-role h-row-role">${esc(r.player.role)}</em>`:'';
+  function bookPriceSummary(r,reference=false) {
+    if(['prizepicks','underdog'].includes(r.offer.platform)||r.extra?.kind==='pickem')return '';
+    if(r.extra?.reference_only){if(!reference)return '';const text=reportedOdds(r);return text?`<small title="Reported American odds; side not supplied">Reported ${esc(text)}</small>`:'';}
+    return ['over','under'].filter(sd=>r.offer[sd]?.offered&&num(r.offer[sd].price)&&r.offer[sd].price>1).map(sd=>{
+      const d=r.offer[sd].price,a=d>=2?Math.round((d-1)*100):-Math.round(100/(d-1));
+      return `<small class="h-book-price-summary" title="American odds">${sideWord(sd)} ${a>0?'+':''}${a}</small>`;
+    }).join('');
+  }
   function row(r, group=null, g=null) {
     const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r)||H.detail===key(r)||(!!g&&g.lines.some(x=>key(x)===H.detail));
     const choose=!side||!r.offer[side]?.offered;
@@ -571,7 +579,7 @@ export function mount(C) {
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${rowRole(r)}<span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
       <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small><small class="h-m-vs" aria-hidden="true"> · ${esc(r.player.team)}${r.player.opponent?' vs '+esc(r.player.opponent):''}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
-      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small></td>
+      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}${!kindOf(r)&&r.market.line_type!=='standard'?`<em class="u-lt">${esc(C.lineLabel(r))}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small>${bookPriceSummary(r)}</td>
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}${MX?booksLine(r):''}</td>`:''}${MX?`<td class="h-c-medge h-number${mxValue(r)==null?' is-empty':''}">${mxCell(r)}</td>`:''}
@@ -608,7 +616,7 @@ export function mount(C) {
       return `<button class="h-ld-act${on?' is-on':''}" data-hub="add" data-id="${k}" aria-label="${on?`On slip: ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:choose?`Choose a side for ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:`Add ${nm} ${sideWord(q.scout.side)} ${esc(q.offer.line)} on ${esc(q.offer.platform_label)} to slip`}">${on?'On slip':choose?'Side':'+ Add'}</button>`;};
     const body=g.lines.map(q=>{const k=key(q),kind=kindOf(q)||(q.market.line_type!=='standard'?C.lineLabel(q):''),hit=g.match.has(lineId(q));
       return `<tr class="${[k===key(g.main)?'is-main':'',dim&&!hit?'is-dim':'',dim&&hit?'is-match':'',H.detail===k?'is-open':''].filter(Boolean).join(' ')}" data-line="${esc(k)}">
-        <th scope="row"><button class="h-ld-book" data-hub="expand" data-id="${esc(k)}" aria-label="Open the card for ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">${esc(q.offer.platform_label)}${kind?` <em class="u-lt u-lt-${esc(String(kind).toLowerCase())}">${esc(kind)}</em>`:''}</button></th>
+        <th scope="row"><button class="h-ld-book" data-hub="expand" data-id="${esc(k)}" aria-label="Open the card for ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">${esc(q.offer.platform_label)}${kind?` <em class="u-lt u-lt-${esc(String(kind).toLowerCase())}">${esc(kind)}</em>`:''}</button>${bookPriceSummary(q,true)}</th>
         <td class="h-ld-line"><b>${esc(q.offer.line)}</b>${g.best&&key(g.best)===k?`<em class="h-ld-best">Best ${sideWord(side)}</em>`:''}${q.offer.moved_from!=null?`<small>was ${esc(q.offer.moved_from)}</small>`:''}</td>
         <td class="h-ld-px">${price(q,'over')}</td><td class="h-ld-px">${price(q,'under')}</td>
         <td class="h-ld-scout">${ladderScout(q)}<span class="h-ld-grade">${notOffered(q)||q.scout.side&&!q.scout.hold&&!q.scout.line_chance&&!C.oneSided(q)?gradeChip(q):''}</span></td>
