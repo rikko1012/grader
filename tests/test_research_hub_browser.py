@@ -307,8 +307,9 @@ def test_unoffered_scout_side_opens_side_choice_instead_of_dead_add(ctx, env):
     p.locator('#hub-sports [data-id=cs2]').click()
     book(p, 'prizepicks')
     p.locator('.h-toolbar [data-hub=refresh]').click()
-    p.wait_for_selector('#hub-rows .h-add[aria-label^="Choose a side"]', timeout=10000)
-    p.locator('#hub-rows .h-add').first.click()
+    # owner 2026-11-12: CS2 follows the "Not offered" rule - the row opens the card (no add for a side the app does not offer)
+    p.wait_for_selector('#hub-rows .h-add.h-add-info[title*="not offered on PrizePicks"]', timeout=10000)
+    p.locator('#hub-rows .h-add.h-add-info[title*="not offered"]').first.click()
     p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision', timeout=10000)      # the same card, side chooser pinned
     assert not p.locator('#u-drawer').is_visible()
     assert p.locator('#hub-slip-count').inner_text() == '0'
