@@ -1,5 +1,6 @@
 """Regression coverage for the November 13 Render memory incident."""
 import pytest
+import threading
 import membudget
 import server
 
@@ -56,6 +57,35 @@ def test_parsed_history_is_budgeted_once_not_as_a_tiny_placeholder(results, monk
     server._store_result("history-b", 200, body, 60, 60)
     assert list(results) == ["history-b"] and calls == [1, 1]
     assert results["history-b"][2] is body
+
+
+def test_sizing_a_document_does_not_block_other_shared_cache_hits(results, monkeypatch):
+    monkeypatch.setattr(server, "_INFLIGHT", {})
+    server.shared("warm", lambda: (200, b"ready"), ttl=60)
+    measuring, release, hit = threading.Event(), threading.Event(), threading.Event()
+    real = membudget.json_cost
+    def slow_cost(body):
+        measuring.set()
+        assert release.wait(5)
+        return real(body)
+    monkeypatch.setattr(membudget, "json_cost", slow_cost)
+    answers = []
+    builder = threading.Thread(target=lambda: server.shared("large", lambda: (200, {"games": [1, 2, 3]})))
+    def read_warm():
+        answers.append(server.shared("warm", lambda: pytest.fail("warm answer should not recompute")))
+        hit.set()
+    reader = threading.Thread(target=read_warm)
+    builder.start()
+    try:
+        assert measuring.wait(2)
+        reader.start()
+        assert hit.wait(2), "document sizing blocked an unrelated cached response"
+        assert answers == [(200, b"ready")]
+    finally:
+        release.set()
+        builder.join(5)
+        if reader.ident is not None:
+            reader.join(5)
 
 
 def test_lower_cache_cap_evicts_oldest_preserving_recent_values():

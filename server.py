@@ -207,7 +207,7 @@ def _result_size(value):
     return size
 
 
-def _store_result(key, status, body, ttl, keep):
+def _store_result(key, status, body, ttl, keep, cost=None):
     """(caller holds _RG) Keep one answer; expired answers leave on insert (2026-10-13 audit: they were evicted by count only,
     so up to 20,000 old grade bodies stayed in memory) - a sweep at most every 5 s, never more than RESULTS_MAX kept."""
     now = time.time()
@@ -222,7 +222,7 @@ def _store_result(key, status, body, ttl, keep):
     if old is not None:
         _RES_BYTES[0] -= size(old)
     value = (now - max(0, ttl - keep), status, body, now + keep)
-    incoming = size(value)
+    incoming = size(value) if cost is None else cost
     value += (incoming,)
     while _RESULTS and (len(_RESULTS) >= RESULTS_MAX or _RES_BYTES[0] + incoming > RESULTS_MAX_BYTES):
         _RES_BYTES[0] -= size(_RESULTS.pop(next(iter(_RESULTS))))   # the oldest go (recomputed if asked again)
@@ -278,8 +278,9 @@ def shared(key, compute, ttl=RESULT_TTL):
         status, body = out[0], out[1]
         keep = out[2] if len(out) > 2 and out[2] else ttl    # a result may ask to be reused for less time (outage grades)
         if status in (200, 404):
+            cost = _result_size((0, status, body, 0))     # sizing a parsed document must not hold the global cache lock
             with _RG:
-                _store_result(key, status, body, ttl, keep)
+                _store_result(key, status, body, ttl, keep, cost=cost)
         else:
             failed = (status, body)
         return status, body
