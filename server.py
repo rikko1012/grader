@@ -2850,6 +2850,8 @@ def _memory_report():
     out["processes_mb"] = membudget.processes()
     out["sampled_peaks"] = dict(membudget.PEAK)            # highest minute samples since this process started
     out["history_minutes"] = len(membudget.HISTORY)       # /admin/memprof.json?action=history
+    learning_module = sys.modules.get("learning")
+    out["learning_memory_admission"] = dict(getattr(learning_module, "STATE", {}).get("memory_admission") or {})
     out["caches"] = {"bo3_finished": bo3._MEM.stats(), "bo3_expiring": bo3._TMEM.stats(), "contexts": cs2_scout._CONTEXT.stats(),
                      "results": {"entries": len(_RESULTS), "mb": round(_RES_BYTES[0] / 1e6, 1),
                                  "budget_mb": round(RESULTS_MAX_BYTES / 1e6)}}

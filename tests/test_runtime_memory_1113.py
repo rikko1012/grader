@@ -71,6 +71,7 @@ def test_learning_defers_then_retries_and_releases_both_locks(monkeypatch, tmp_p
     assert server.learning_cycle_once() is False
     assert not calls and not server._LEARNING_SPAWN.locked()
     assert learning.STATE["memory_admission"]["reason"] == "memory pressure"
+    assert server._memory_report()["learning_memory_admission"]["reason"] == "memory pressure"
     memory["container_mb"] = 1200
     assert server.learning_cycle_once() is True and calls == [1]
 
