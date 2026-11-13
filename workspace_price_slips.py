@@ -11,14 +11,15 @@ def positive_pool(legs, doc, horizon=20):
     book consensus. No model-only, opposite-side or fallback leg fills a batch.
     """
     from workspace_books import _ts
-    from gradecore.fair import FRESHNESS_S
+    from workspace_ev import price_limits
+    limits = price_limits()
     built = _ts(doc.get('as_of'))
     elapsed = time.time()-built if built is not None else float('inf')
     def fresh(r):
         sources = r.get('sources') or []
         return 0 <= elapsed <= 60 and bool(sources) and all(
             isinstance(s.get('age_s'), (int, float)) and 0 <= s['age_s']
-            and s['age_s']+elapsed+horizon <= FRESHNESS_S.get(s.get('kind'), 0) for s in sources)
+            and s['age_s']+elapsed+horizon <= limits.get(s.get('kind'), 0) for s in sources)
     rows = {(r['key'], r['side']): r for r in doc.get('rows', [])
             if r.get('basis') == 'market' and isinstance(r.get('ev'), (int, float))
             and r['ev'] > 0 and 0 < r.get('p_market', 0) < 1 and fresh(r)}
