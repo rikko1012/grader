@@ -425,3 +425,20 @@ Caveats recorded with the promotion: about 43 tests, one pass (roughly the chanc
 too small to confirm. Table row "Roster continuity / stand-ins ... GATES ONLY" above is unchanged; the "AWP share (G1)"
 row is unchanged (the AWP rule still marks the player; it no longer zeroes the HS stake). Untested lead for a later
 frozen round: a stake rule on the favourite / underdog split (favourites 56.9% [54.5, 59.2] vs underdogs 51.7%).
+
+## Frozen test definition - round 9: lobby kill budget lkb-1 (frozen 2026-11-13 BEFORE running)
+
+Full definition: research/lkb1_2026_11_13/FROZEN_DEFINITIONS.md (committed before scoring). TEST ONLY - nothing goes live.
+- **Origin:** MOUZ-Vitality review 2026-11-13 - perf-cm2's negative own / opponent Elo terms pull all 10 players of an
+  elite-vs-elite lobby down together (implied 6.21 kills per round vs ~6.7). The review's quartile finding (lowest
+  implied-KPR quarter: kills Maps 1-2 Unders 46.7%) was post hoc and overlaps this test window, so TEST is not fresh.
+- **Candidate:** rescale all 10 players' saved Maps 1-2 (and, separately, Map 1) kills projections by one factor so the
+  match's implied kills (team total = 5 x mean of 4+ known players per team) moves a fraction alpha toward
+  N = trailing 90-day HLTV kills-per-round-per-map x mean rounds x maps (data before the match day only). HS inherits
+  (lam_hs x f). A side flips only where the projection crosses the line.
+- **alpha:** grid 0..1 step 0.1, minimum squared error of Maps 1-2 kills on FIT units (matches Oct 21-31); TEST Nov 1-13.
+- **Data:** saved first-grade pick rows (paged picks export, cutoff 27921) at real offered standard lines; not re-derived.
+- **Placebos (both must fail C1):** random-sign shift (seed 20261113); match-shuffled budgets (seed 20261114).
+- **Pass (all):** C1 hit-rate gain CI lower bound > 0 (match-grouped bootstrap); C2 Over-pick and Under-pick hit each not
+  lower; C3 graded count not lower; C4 Over share not > 1 point more lopsided; C5 Brier not worse; C6 gain >= 0 on upset,
+  OT and remaining matches separately; C7 >= 0 in both test halves; C8 both placebos fail C1.
