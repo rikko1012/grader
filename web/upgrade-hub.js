@@ -543,7 +543,7 @@ export function mount(C) {
      break-even (the server's parity figure: PrizePicks Power 2-pick, Underdog standard 2-pick) - and the price a sportsbook gives for
      this exact player, stat, period and line (Scout's side, else both sides); no such book = "No book odds at this line". A sportsbook
      or exchange row: its own price per side (an exchange in cents). Never another line's price. Format: the member's Odds format. */
-  const ODDS_SPORTS=['nba','nfl'], PICKEM=['prizepicks','underdog'];
+  const ODDS_SPORTS=['nba','nfl'];   /* PICKEM is the hub's own list above */
   const fmtDec = d => {if(!num(d)||d<=1)return null;if(H.par.odds==='decimal')return d.toFixed(2);const a=d>=2?Math.round((d-1)*100):-Math.round(100/(d-1));return (a>0?'+':'−')+Math.abs(a);};
   const ownOdds = (q,sd) => {const v=q.offer[sd];if(!v?.offered)return null;if(num(v.price))return fmtDec(v.price);if(num(v.ask)&&v.ask>0&&v.ask<1)return Math.round(v.ask*100)+'¢';return null;};
   function bookOddsAt(r) {
