@@ -10,6 +10,8 @@ const DEF_F = () => ({q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: tr
 const S = {doc: null, loading: false, error: null, seq: 0, open: new Set(), showModel: false, restored: false, notice: '',
   p: Object.assign({app: 'prizepicks', entry: '', n: 0}, DEF_P()), f: DEF_F()};
 let C = null, box = null;
+let generatedBatch = null, draftBusy = false, draftMessage = '';
+let generating = false, generateMessage = '', slipCount = 4, noRepeats = true;
 const PAGE_SIZE = 50;
 let pageKey = '', marketPage = 0, modelPage = 0;
 function pager(kind, page, count) {
@@ -117,6 +119,11 @@ function sourcesHtml(r) {
   return `<div class="ev-src"><table><thead><tr><th>Book</th><th>Line</th><th>${esc(side(r.side))} chance</th><th>Book cut</th><th>Money on it</th><th>Age</th><th>Counts as</th></tr></thead><tbody>${rows}</tbody></table>`
     + (out ? `<p class="ev-left">Left out (greyed, never priced):</p><ul class="ev-left-list">${out}</ul>` : '') + '</div>';
 }
+function generatedHtml() {
+  if (!generatedBatch) return '';
+  const b=generatedBatch, app=b.options.platform==='prizepicks'?'PrizePicks':'Underdog';
+  return `<section class="ev-generated" aria-label="Generated EV slips"><header><h3>${b.slips.length} generated EV slips</h3><p>${esc(app)} · ${esc(b.options.entryType)} · ${b.options.size} picks each · ${esc(C.when(b.created_at))}</p><p>${esc(b.note||'Each entry was rechecked against current offers.')} Generated slips stay here during this visit. Displayed chances are Scout’s model chances.</p></header><div class="ev-generated-grid">${b.slips.map((s,i)=>`<article class="ev-generated-card"><h4>Slip ${i+1}</h4><ol>${s.legs.map(l=>`<li><strong>${esc(l.player)}</strong><span>${esc(side(l.side))} ${esc(l.line)} ${esc(l.stat_label)}</span><small>${esc(C.SPORTS[l.sport]||l.sport)} · ${esc(l.period_label)} · ${esc(l.event_label)}</small><small>Scout ${pct(l.shown_p)}</small></li>`).join('')}</ol><footer><button data-ev="copy-generated" data-id="${i}"${draftBusy?' disabled':''}>Recheck & copy</button>${C.bookLinks?`<button data-ev="open-generated" data-id="${i}"${draftBusy?' disabled':''}>Open in ${esc(app)}</button>`:''}</footer></article>`).join('')}</div><p role="status">${esc(draftMessage)}</p></section>`;
+}
 function rowHtml(r, sports) {
   const id = r.key + '|' + r.side, open = S.open.has(id);
   return `<li class="ev-row"><div class="ev-cell ev-play" data-label="Play">${play(r, sports)}</div>`
@@ -212,6 +219,8 @@ function paintBox() {
     + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
     + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
     + (d.payout && d.payout.text ? `<p class="ev-banner">${esc(d.payout.text)}</p>` : '') + filtersHtml(d) + chipsHtml(d) + banner
+    + `<section class="ev-bar" aria-label="Generate EV slips"><label>Slips<select id="ev-slip-count">${[1,2,4,8,12].map(n=>`<option value="${n}"${n===slipCount?' selected':''}>${n} slips</option>`).join('')}</select></label><label><input type="checkbox" id="ev-no-repeats"${noRepeats?' checked':''}> No repeat props</label><button data-ev="generate"${generating||S.loading||S.error?' disabled':''}>${generating?'Checking slips…':'Generate EV slips'}</button><p>Uses this app, entry size, sport and book settings. Only positive-EV standard lines that meet the entry rules; different players and games in each slip.</p><p role="status">${esc(generateMessage)}</p></section>`
+    + generatedHtml()
     + `<section aria-label="Market priced legs"><div class="ev-quick"><button data-ev="evonly" aria-pressed="${S.f.evOnly}">Only picks that beat the entry</button>${S.f.evOnly ? '<span>Turn off to explore every priced line.</span>' : '<span>All priced lines, including those below break-even.</span>'}</div><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
     + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.slice(marketPage * PAGE_SIZE, (marketPage + 1) * PAGE_SIZE).map(r => rowHtml(r, sports)).join('')}</ol>${pager('market', marketPage, rows.length)}`
       : `<p class="ev-state">${d.rows_total ? (S.f.evOnly ? 'No leg beats the entry right now with these filters.' : 'No priced leg matches these filters.') : d.params.min_books > 1 ? `No pick'em leg has ${d.params.min_books} independent books on its exact line right now.` : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
@@ -227,7 +236,8 @@ function head() {
     + `<div class="ev-refresh"><button data-ev="refresh"${S.loading ? ' disabled' : ''}>${S.loading ? 'Checking…' : 'Refresh'}</button>${d ? `<small>Checked ${esc(C.when(d.as_of))}</small>` : ''}</div></div>`;
 }
 
-const CSS = '#u-hub .ev-pages{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px 0}#u-hub .ev-pages button{min-height:40px;padding:8px 16px}#u-hub .ev-pages button:disabled{opacity:.45}'
+const CSS = '#u-hub .ev-generated-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:16px}#u-hub .ev-generated-card{border:1px solid var(--u-line);border-radius:10px;padding:16px;min-width:0}#u-hub .ev-generated-card li{padding:12px 0;border-bottom:1px solid var(--u-line);overflow-wrap:anywhere}#u-hub .ev-generated-card li>*{display:block}#u-hub .ev-generated-card footer{display:flex;flex-wrap:wrap;gap:8px;padding-top:12px}#u-hub .ev-generated-card button{min-height:44px}'
+  + '#u-hub .ev-pages{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px 0}#u-hub .ev-pages button{min-height:40px;padding:8px 16px}#u-hub .ev-pages button:disabled{opacity:.45}'
   + '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}'
   + '#u-hub .ev-refresh{display:flex;flex-direction:column;align-items:flex-end;gap:4px}#u-hub .ev-refresh small{color:var(--u-muted)}'
   + '#u-hub .ev-apps{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px}#u-hub .ev-apps button{min-height:40px;display:inline-flex;align-items:center;gap:8px}'
@@ -263,6 +273,28 @@ function onClick(e) {
   const b = e.target.closest('[data-ev]'); if (!b || !box.contains(b) || b.disabled) return;
   const id = b.dataset.id, a = b.dataset.ev;
   if (a === 'page') { const step = Number(b.dataset.step); if (b.dataset.kind === 'market') marketPage = Math.max(0, marketPage + step); else modelPage = Math.max(0, modelPage + step); return render(); }
+  if (a === 'copy-generated' || a === 'open-generated') {
+    const slip=generatedBatch?.slips[Number(id)];if(!slip||draftBusy)return;
+    draftBusy=true;draftMessage='Checking current offers…';render();
+    Promise.resolve().then(async()=>{
+      await C.checkEV(slip);
+      if(a==='open-generated'){await C.openEV(slip);draftMessage='Current offers checked. Review the app before submitting.';}
+      else {
+        const text=[`${slip.platform==='prizepicks'?'PrizePicks':'Underdog'} ${slip.entry_type} · ${slip.legs.length} picks`,
+          ...slip.legs.map(l=>`${l.player}: ${side(l.side)} ${l.line} ${l.stat_label} · ${l.period_label} · ${l.event_label}`)].join('\n');
+        await navigator.clipboard.writeText(text);draftMessage='Rechecked and copied. No entry has been placed.';
+      }
+    }).catch(e=>{draftMessage=e.doc?.error||e.message||'Could not verify this slip. Generate again.';})
+      .finally(()=>{draftBusy=false;render();});return;
+  }
+  if (a === 'generate') {
+    generating=true;generatedBatch=null;draftMessage='';generateMessage='Reading current offers and entry rules…';render();
+    const sports=S.f.sport==='all'?S.doc.sports:[S.f.sport];
+    Promise.resolve(C.generateEV({platform:S.doc.app,entryType:S.doc.entry,size:S.doc.n,count:slipCount,
+      sports,noRepeatProps:noRepeats,evQuery:query()})).then(batch=>{generatedBatch=batch;generateMessage=batch.slips.length+' slips generated below.';})
+      .catch(e=>{generateMessage=e.message||'Could not verify current offers. Try again.';})
+      .finally(()=>{generating=false;render();});return;
+  }
   if (a === 'refresh') return fetchDoc();
   if (a === 'app' && id !== S.p.app) { S.p.app = id; S.p.entry = ''; S.p.n = 0; return fetchDoc();   /* the server opens each app on the entry that needs the lowest chance */ }
   if (a === 'books') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); return render(); }
@@ -301,6 +333,8 @@ function onClick(e) {
 }
 function onChange(e) {
   const t = e.target, id = t.id || '';
+  if(id==='ev-slip-count'){slipCount=Number(t.value);return;}
+  if(id==='ev-no-repeats'){noRepeats=t.checked;return;}
   if (t.dataset.evReq) { const b = t.dataset.evReq; S.p.req = t.checked ? [...new Set([...S.p.req, b])].slice(0, 2) : S.p.req.filter(x => x !== b); S.drawer = true; return fetchDoc(); }
   if (id === 'ev-entry') { const [en, n] = t.value.split('-'); S.p.entry = en; S.p.n = Number(n); return fetchDoc(); }
   if (id === 'ev-sport') { S.f.sport = t.value; return render(); }
