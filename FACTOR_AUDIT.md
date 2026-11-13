@@ -516,3 +516,58 @@ Measurements:
 - **Motivating five MOUZ / Vitality matches (apart):** every candidate is worse or no better there (A1 / A2 -6.9 pts).
 - **Forward (untouched):** matches after 2026-11-13 20:55:13 UTC. Frozen params sha `ea241b17a6b42cdc`; 306 recorded
   factors sha `c02a13d03734d6bb`. Review at 150 matches (about Nov 28-29), as confirmation of the negatives only.
+
+## Round 10 audit (Nov 13) - appended 2026-11-13; the round-10 definition and results above are kept unchanged
+
+Owner-requested audit of the experiment itself. Full log: cs2_scout_ops/logs/cs2_round10_audit_2026-11-13.md; scripts
+research/miss_decomp_2026_11_13/audit_1113*.py (read-only on frozen outputs). **No deployment is justified; no grading /
+stake / flag change.** Frozen forward files unchanged (fit_params `ea241b17a6b42cdc`, forward_predictions
+`c02a13d03734d6bb`, checked before and after); the forward review keeps C1-C9 as frozen, including C4. Every number
+below marked RERUN sits beside the original and does not replace it.
+
+**Valid:** all six candidates FAIL under the frozen criteria and under every rerun (strict pick timing, partial role
+dating, own-match date fix, strict relinking, local-only timestamped HLTV inputs, series clustering). Rounds measurement
+and placebo findings stand. 0 of 2,598 TEST rows were logged at or after the actual start.
+
+| Cand. | Original hit diff (CI) | RERUN strict pick timing | RERUN relinked | RERUN local-only HLTV | Series-cluster CI | Holm p |
+|---|---|---|---|---|---|---|
+| 10-A1 | +0.50 (-0.59..+1.59) | n/a | +0.54 | +0.42 | -0.55..+1.61 | 1.0 |
+| 10-A2 | +0.54 (-1.08..+2.12) | +0.38 (-1.18..+1.99) | +0.54 | +0.54 | -0.94..+2.17 | 1.0 |
+| 10-B1 | -0.35 (-1.46..+0.74) | n/a | -0.35 | -0.31 | -1.45..+0.71 | 1.0 |
+| 10-C1 | -0.15 (-0.80..+0.49) | n/a | -0.12 | -0.58 | -0.75..+0.55 | 1.0 |
+| 10-C2 | -0.27 (-0.81..+0.27) | n/a | -0.27 | -0.27 | -0.80..+0.28 | 1.0 (UNRELIABLE) |
+| 10-C3 | -0.69 (-1.27..-0.12) | -0.69 | -0.65 | -0.77 | -1.27..-0.07 | 0.11 |
+
+**Invalidated / corrected:**
+- A2 market price and C3 map chances were aggregated over all pre-START rows, so 1,889 / 1,969 TEST rows used inputs
+  logged after the scored row (794 / 663 with a different value). Strict-timing RERUN above; verdicts unchanged.
+- 10-C2 is UNRELIABLE: the AWP share is an undated snapshot (windows ~Aug 3-5 .. Nov 1-3) that contains the outcome match
+  for 9,932 of 9,939 fit units and ends on/after the match day for 354 TEST rows; the extract has no per-map AWP kills, so
+  a dated rebuild is not feasible. RERUN with dated labels only (912 / 1,071 units, frozen gammas): -0.19 (-0.67..+0.29).
+- 3 slugs were linked to an earlier series of the same teams dated the day before (genone-vs-megoshort-06-11 -> 2400124,
+  hltv-2400289 -> 2400282, low-cortisol-br-vs-rush-gaming-09-11 -> 2400095): 14 units, 0 scored rows (unit measures only).
+- Clusters were board slugs: TEST 101 slugs = 86 series. Re-clustered CIs above; no change.
+- The round-10 power note ("+1 pt needs ~250 matches"; "150 matches can confirm a negative") is withdrawn. "C3 significantly
+  worse" does not survive multiplicity (Holm p 0.11). "C1 / C2 / C3 each add nothing" and "do not explain those series"
+  overstate: read **no demonstrated improvement from these specific candidates in this sample**.
+
+**Unresolved:** the HLTV export rows (2026-10-28 ..; 447 matches) have no availability timestamp (2,203 of 2,598 TEST rows
+have such inputs in the last 30 days); local-extract `fetched_at` is the last fetch, and 8,866 pre-Oct-13 matches were
+(re)fetched on/after the Oct 13 backfill, so the history behind the fits was largely not in this DB at those match times
+(no match dated <= Oct 31 was fetched after Nov 1); Elo / refits are recomputes, availability unverified. The Oct 23
+map_rounds backfill is not used (rounds come from map scores). Linking (strict: settlement series id + date +-1 + identical
+event + exact team variants): 13 of 30 unlinked TEST slugs resolved (84 of 92 unlinked scored rows), 17 left unresolved
+(2 event mismatch, 15 no settlement id, all but keep-talking-vs-detonate with 0 scored rows); of the 118 name links 81 pass
+the strict rule, 7 lack a pick event, 30 lack a settlement id, none contradicts one. Unlinked matches are weaker (median
+HLTV rank 116 vs 65), tier-2/3 European, Over-heavy (79% vs 47% Overs), fewer OT (13% vs 23%); their rows mostly kept
+f = 1, so exclusion dilutes toward 0 rather than flipping signs (relinked RERUN moved estimates <= 0.04 pts).
+
+**Statistics:** ICC of hit outcomes 0.044 per match (design effect 2.1), Over outcomes 0.19, unit kills residuals 0.38.
+Best of 6 by chance (joint null bootstrap): expected +0.55 pts, 95th pct +1.42; observed best +0.54 (A2), P = 0.44.
+Minimum detectable effect at 150 forward matches (80% power, two-sided 5%, observed cluster SE): absolute hit rate
++-3.5-3.8 pts; paired candidate-vs-live 0.6-1.9 pts depending on flip rate (C 0.6-0.75, A1/B1 ~1.2-1.3, A2 ~1.7-1.9);
+kills-per-map MAE 0.005-0.03. A null forward result bounds the effect below these MDEs; it does not confirm absence.
+
+**Over / Under split (future rounds):** the Over share / split is a monitored directional-bias metric, not an accuracy
+target or pass criterion; from round 11 it is reported as a monitor only. Round 10's frozen C4 stays as frozen for its
+forward review; the revised analysis without C4 changes no verdict (all six met C4).
