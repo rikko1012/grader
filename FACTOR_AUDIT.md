@@ -464,3 +464,26 @@ the average TEST lobby implied 6.63, so f ran only 0.984-1.026 (MOUZ-Vitality 1.
 Excluding the five motivating MOUZ / Vitality matches: -0.03 pts (-0.97 to +0.96). FIT window in-sample: -0.49 pts.
 The shuffled-budget placebo beat the candidate, and the only positive cohort was overtime matches: the effect is a generic
 Over nudge, not lobby information. Logged as a measured negative result; no shadow, no flag, no grading change.
+
+## Frozen test definition - round 10: miss decomposition A rounds / B Elo / C player rates (frozen 2026-11-13 BEFORE running)
+
+Full definition: research/miss_decomp_2026_11_13/FROZEN_DEFINITIONS.md, scripts build.py / score.py, committed before
+any outcome was computed. TEST ONLY - nothing goes live. Owner direction: lkb-1 was rightly rejected; test the three parts
+of the MOUZ-Vitality miss SEPARATELY on chronological data, then validate on new matches.
+- **Data:** saved first-grade pick rows (ids 7001-27921) at real offered standard lines, Maps 1-2 kills + HS (cm-2 /
+  hs-cm2); cm-2 tables rebuilt locally with the live code from the HLTV extract + export (rebuilt vs saved projection:
+  corr 0.9955, median |diff| 0.003 kills - an input check, no outcome).
+- **Splits:** fit through 2026-10-31; TEST Nov 1-10 (halves Nov 1-5 / 6-10), the five MOUZ / Vitality BLAST matches
+  (Nov 11-13) reported apart; FORWARD = matches starting after this freeze commit (untouched; review at 150 matches).
+- **Candidates (each a multiplier on the saved kills and HS projection; HS inherits):**
+  - **10-A1** rounds by Elo closeness: f = (a + b |q_elo - 0.5|) / mean, OLS on HLTV BO3 Maps 1-2 rounds Jan-Oct 2026.
+  - **10-A2** rounds by market closeness: same with the saved market price, fit on board matches Oct 19-31.
+  - **10-B1** Elo re-centred level + gap: Poisson on actual kills, offset projection x actual rounds / 44 (rounds taken
+    out), terms (Elo_own + Elo_opp)/800 centred and (Elo_own - Elo_opp)/400; HLTV lobbies Oct 2026, recomputed cm-2.
+  - **10-C1** recent form (last 10 maps vs cm-2's shrunk rate, 100-round shrink), **10-C2** role (AWPer by roles.py's
+    AWP-share rule on the HLTV snapshot / entry by opening attempts per round, 80th pct / support), **10-C3** map-specific
+    (saved map chances x his shrunk per-map kill-rate ratio, 365 d) - each fitted alone, same Poisson set-up.
+- **Placebo per candidate (must fail C1):** its input permuted across TEST matches / units (seeds 20261115-20).
+- **Pass (all, per candidate):** C1 hit CI lower bound > 0; C2 Over and Under hit each not lower; C3 graded count; C4
+  Over share not > 1 pt more lopsided; C5 Brier not worse; C6 >= 0 on upset, OT and remaining matches; C7 >= 0 both
+  halves; C8 placebo fails C1; C9 kills-per-round MAE not worse (A: rounds MAE and kills MAE not worse).
