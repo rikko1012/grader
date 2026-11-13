@@ -17,7 +17,9 @@ import gzip
 import hashlib
 import workspace_h2h
 import json
+import os
 import re
+import sys
 import threading
 import time
 import urllib.error
@@ -63,6 +65,9 @@ HOLD_LABEL = "Research estimate"
 HOLD_DETAIL = "{LG} grades are switched off."     # only under the owner's kill switch SPORTS_CONTAIN_<LG>=1 (ct-1b)
 SERVICE_USER = "workspace-reader"       # the hook's member for reads no one member owns: shared boards, settled results
 BOARD_TTL, CHECK_TTL, PLAYER_TTL, RESULTS_TTL = 20, 5, 120, 300
+HISTORY_TTL = 600                       # bandwidth 2026-11-13: a player's game log changes only when a game ends; /api/sports/history was
+                                        # re-read every 120 s per player by every book board build (96k reads, 716 MB a day)
+INTERNAL_RETRY_S = 300                  # the private-network address refused a connection: the public URL for this long
 CALL_TIMEOUT, CHECK_TIMEOUT = 5.0, 3.0
 RESP_MAX = 16 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -80,6 +85,20 @@ _PLAYER = threading.BoundedSemaphore(PLAYER_SLOTS)
 _TOKEN = {"token": None, "exp": 0.0, "base": None}
 _TOKEN_LOCK = threading.Lock()
 _BREAK = {"until": 0.0}
+_INTERNAL = {"down_until": 0.0, "fallbacks": 0, "ok": 0, "public": 0, "last_ok_at": None, "last_error": None, "last_error_at": None}
+
+
+def internal_base():
+    """Bandwidth 2026-11-13: on Render the sports service is reached over the private network (Connect -> Internal:
+    scout-sports-api:10000), which Render does not bill as bandwidth; through the public URL every server-to-server read was
+    billed twice (the sports service's HTTP egress and this service's outbound). SPORTS_API_INTERNAL=0 turns it off; a URL
+    there is used as written. Off Render (no RENDER env): '' - the public base as before."""
+    v = (os.environ.get("SPORTS_API_INTERNAL") or "").strip()
+    if v.lower() in ("0", "off", "false", "no"):
+        return ""
+    if v:
+        return v.rstrip("/")
+    return "http://scout-sports-api:10000" if os.environ.get("RENDER") else ""
 _NOT_MODIFIED = object()
 
 
@@ -99,6 +118,7 @@ def reset():
         _SETTLED_MOVES.clear()
     _TOKEN.update(token=None, exp=0.0, base=None)
     _BREAK["until"] = 0.0
+    _INTERNAL.update(down_until=0.0, fallbacks=0, ok=0, public=0, last_ok_at=None, last_error=None, last_error_at=None)
 
 
 class Down(Exception):
@@ -185,16 +205,67 @@ def _token(srv):
     return _TOKEN["token"], _TOKEN["base"]
 
 
+def _open(url, head, timeout):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=head), timeout=timeout)
+
+
+def _open_routed(base, path_q, head, timeout):
+    """The private-network address first (when on), else / after a refused connection the public base. Only a failure to
+    connect falls back (5 min, never the breaker); an HTTP answer from the internal address is the service's answer."""
+    ib = internal_base()
+    if ib and time.time() >= _INTERNAL["down_until"]:
+        try:
+            r = _open(ib + path_q, head, timeout)
+        except urllib.error.HTTPError:
+            _INTERNAL["ok"] += 1                    # the service answered over the private network (a 304 / 4xx is its answer)
+            _INTERNAL["last_ok_at"] = time.time()
+            raise
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            now = time.time()
+            _INTERNAL.update(down_until=now + INTERNAL_RETRY_S, fallbacks=_INTERNAL["fallbacks"] + 1, last_error_at=now,
+                             last_error=f"{type(e).__name__}: {str(e)[:120]}")
+            sys.stderr.write(f"  sports private network failed ({_INTERNAL['last_error']}); public URL for {INTERNAL_RETRY_S} s\n")
+        else:
+            _INTERNAL["ok"] += 1
+            _INTERNAL["last_ok_at"] = time.time()
+            return r
+    if ib:
+        _INTERNAL["public"] += 1
+    return _open(base + path_q, head, timeout)
+
+
+def transport_status(now=None):
+    """/health: how server-to-server sports reads travel. state ok = private network answering; warn = the private address
+    failed and no private read has succeeded since (reads are on the public URL, billed as bandwidth); off = not on Render or
+    SPORTS_API_INTERNAL=0; idle = no read yet."""
+    now = time.time() if now is None else now
+    ib = internal_base()
+    ok_at, err_at = _INTERNAL["last_ok_at"], _INTERNAL["last_error_at"]
+    if not ib:
+        state = "off"
+    elif err_at and (not ok_at or ok_at < err_at):
+        state = "warn"
+    elif ok_at:
+        state = "ok"
+    else:
+        state = "idle"
+    iso = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if t else None
+    mode = "off" if not ib else "public" if _INTERNAL["down_until"] > now else "private"
+    return {"state": state, "mode": mode, "internal": ib or None, "internal_ok": _INTERNAL["ok"], "public_reads": _INTERNAL["public"],
+            "public_fallback": _INTERNAL["fallbacks"], "fallbacks": _INTERNAL["fallbacks"], "last_ok_at": iso(ok_at), "last_error": _INTERNAL["last_error"],
+            "last_error_at": iso(err_at), "public_until": iso(_INTERNAL["down_until"]) if _INTERNAL["down_until"] > now else None}
+
+
 def _service(srv, path, query, etag, timeout):
     tok, base = _token(srv)
     if not base:
         raise Down("no sports service")
-    url = base + path + ("?" + urlencode(query) if query else "")
+    path_q = path + ("?" + urlencode(query) if query else "")
     head = {"Authorization": f"Bearer {tok}", "Accept": "application/json", "Accept-Encoding": "gzip"}
     if etag:
         head["If-None-Match"] = etag
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers=head), timeout=timeout) as r:
+        with _open_routed(base, path_q, head, timeout) as r:
             raw = r.read(RESP_MAX + 1)
             if len(raw) > RESP_MAX:
                 raise Down("response over the cap")
@@ -935,7 +1006,7 @@ def _player(srv, lg, pid, path):
             return 200, None, 5
         finally:
             _PLAYER.release()
-    return srv.shared(("ws_sp_file", path, lg, pid), compute, ttl=PLAYER_TTL)[1]
+    return srv.shared(("ws_sp_file", path, lg, pid), compute, ttl=HISTORY_TTL if path == "/api/sports/history" else PLAYER_TTL)[1]
 
 
 SPLIT_GAMES = 82        # the classic player page's splits read the last 82 games held (web/sports/app.js historyPanel)

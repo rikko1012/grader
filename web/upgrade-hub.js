@@ -53,7 +53,7 @@ export function mount(C) {
   try{adoptSort(JSON.parse(localStorage.getItem(SORT_LS())||'null'));}catch(e){/* no saved sort on this device */}
   const CARD_TABS=[['overview','Overview'],['lines','Lines'],['stats','Stats'],['ask','Ask']];
   const DESKTOP=matchMedia('(min-width:1101px)');
-  H.extraRecs=[];H.extraState=null;H.mx={};
+  H.extraRecs=[];H.extraState=null;H.mx={};H.mxAt={};H.polledAt={};
   H.par={odds:'american',sizing:'quarter',bankroll:null};H.parKeep=null;
   /* owner 2026-11-05: a book shows in the Platform toggle only on a sport tab where it has lines right now. Extra books: the shared
      /book-lines counts (null until the first read, so extra buttons start hidden; a failed read keeps the last good copy). PrizePicks /
@@ -510,8 +510,17 @@ export function mount(C) {
   }
   /* the board's market-edge doc per sport, read with the board (one shared server build per sport every 30 s); a failed read keeps
      the last good copy (transient-failure rule) */
+  /* bandwidth 2026-11-13: the market-edge docs (NBA / NFL ~63 KB each) are read only while something on screen shows them: the board
+     section or an open card. Coming back to the board reads them again when they are older than a minute. */
+  const edgeVisible = () => H.section==='board'||cardOpen();
+  function edgeIfStale(sports=visibleSports()) {
+    if(!MX||!edgeVisible())return;
+    const old=sports.filter(s=>Date.now()-(H.mxAt[s]||0)>60000);
+    if(old.length)loadMarketEdge(old);
+  }
   async function loadMarketEdge(sports) {
     if(!MX)return;
+    sports.forEach(s=>{H.mxAt[s]=Date.now();});
     const res=await Promise.allSettled(sports.map(s=>api('market-edge?sport='+encodeURIComponent(s)).then(d=>[s,d])));
     let got=false;
     for(const x of res)if(x.status==='fulfilled'&&x.value[1]&&typeof x.value[1]==='object'){H.mx[x.value[0]]=x.value[1];got=true;}
@@ -904,7 +913,7 @@ export function mount(C) {
     if(H.loading){H.queued=[...new Set([...(H.queued||[]),...sports])];H.queuedForce=H.queuedForce||force;return;}
     H.loading=true; busyRefresh(true); paintBoard();
     await Promise.allSettled(sports.map(s=>C.loadBoard(s,force)));
-    H.lastLoad=Date.now();
+    H.lastLoad=Date.now();sports.forEach(s=>{H.polledAt[s]=H.lastLoad;});
     H.records=allowed().flatMap(s=>[...R.boards[s].recs.values()]);
     const current=rec(H.detail),shown=H.detailDoc?.record;
     /* H4: the open card's line moved (or its research was re-read) during a refresh: research for the new revision loads in place,
@@ -919,7 +928,7 @@ export function mount(C) {
     H.loading=false; busyRefresh(false); paintBoard(); checkAlerts();
     if(isExtra(H.book))loadExtra();
     loadBookLines();
-    loadMarketEdge(sports);
+    if(edgeVisible())loadMarketEdge(sports);
     openPending();
     if(sports.includes('cs2')) { await C.loadHits(); paintBoard(); pollHits(); }
     if(H.queued){const next=H.queued.filter(x=>visibleSports().includes(x)),f=H.queuedForce;H.queued=null;H.queuedForce=false;if(next.length)load(f,next);}
@@ -1029,6 +1038,7 @@ export function mount(C) {
   const cardOpen = () => !$('hub-card').hidden;
   function openCard(id,tab='overview') {
     const r=rec(id);if(!r)return Promise.resolve();
+    setTimeout(()=>edgeIfStale([r.sport]),0);          /* after the card is marked open (edgeVisible) */
     const same=cardOpen()&&H.expanded===id;
     H.cardTab=CARD_TABS.some(t=>t[0]===tab)?tab:'overview';
     if(same){paintDetail();return Promise.resolve();}
@@ -2139,7 +2149,7 @@ export function mount(C) {
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('u-hub').classList.toggle('h-board-mode',name==='board');
     $('hub-title').textContent=TITLES[name]||'Player props';hubTitle();
-    if(name==='board'){paintBoard();if(from!=='board'&&H.boardScroll!=null&&center){center.scrollTop=H.boardScroll;H.boardScroll=null;}}else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev'){paintEv();paintMarkets();}else if(name==='arb')paintMarkets();else if(name==='books')gameBooks($('hub-book-board'),H.gameBookLeague||allowed().find(s=>['nba','nfl'].includes(s)),H.gameBook||'draftkings');else paintAlerts();
+    if(name==='board'){paintBoard();edgeIfStale();if(from!=='board'&&H.boardScroll!=null&&center){center.scrollTop=H.boardScroll;H.boardScroll=null;}}else if(name==='studio'){paintStudio();paintBatch();C.loadMine();}else if(name==='record')showRecord();else if(name==='picks'){paintPicks();C.loadMine();}else if(name==='tools'){paintTools();paintMarkets();paintAlerts();}else if(name==='ev'){paintEv();paintMarkets();}else if(name==='arb')paintMarkets();else if(name==='books')gameBooks($('hub-book-board'),H.gameBookLeague||allowed().find(s=>['nba','nfl'].includes(s)),H.gameBook||'draftkings');else paintAlerts();
   }
   /* old Sports links (site audit 2026-11-06): /sports#/board?lg=nba opened the board on All. A route's sport= wins, then the old
      lg= (nba / nfl), then, for a bare board link on /sports, NBA as the classic sports page opened; else the tab kept */
@@ -2545,8 +2555,14 @@ export function mount(C) {
     if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey||document.querySelector('dialog[open]')||e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
     e.preventDefault();e.stopImmediatePropagation();if(cardOpen())closeCard(false);H.view='list';section('board');$('hub-q').focus();
   },true);
-  setInterval(()=>{if(isOpen()&&!document.hidden&&H.section==='board')load(true);},60000);
-  document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&H.section==='board'&&Date.now()-(H.lastLoad||0)>60000)load(true);});
+  /* bandwidth 2026-11-13: the timed refresh reads each on-screen sport when its own interval has passed - CS2 / LoL every 60 s, NBA / NFL
+     (0.5-0.6 MB a changed board) every 120 s - and nothing while the page is hidden. Coming back to the page reads the sports that are
+     due. The Refresh button still reads every on-screen sport at once (actions.refresh). */
+  const POLL_MS={nba:120000,nfl:120000}, POLL_DEFAULT=60000;
+  const pollDue=()=>visibleSports().filter(s=>Date.now()-(H.polledAt[s]||0)>=(POLL_MS[s]||POLL_DEFAULT)-1500);
+  function pollBoards(){if(!isOpen()||document.hidden||H.section!=='board')return;const due=pollDue();if(due.length)load(true,due);}
+  setInterval(pollBoards,30000);
+  document.addEventListener('visibilitychange',pollBoards);
   /* Price check left open: coming back to the tab reloads a sheet older than 2 min, and once a minute the rows are redrawn (no
      request) so a price or both-sides pair past the server's age limit drops off even if nobody touches the page */
   const mtOld=()=>{const t=Date.parse(H.marketDoc?.as_of);return !Number.isFinite(t)||Date.now()-t>120000;};
