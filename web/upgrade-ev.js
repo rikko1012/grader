@@ -49,7 +49,14 @@ function query() {
 async function fetchDoc() {
   const seq = ++S.seq; S.loading = true; S.error = null; render();
   try {
-    const d = await C.api('pickem-ev?' + query()); if (seq !== S.seq) return; S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; S.docP = JSON.parse(JSON.stringify(S.p));
+    let d;
+    try { d = await C.api('pickem-ev?' + query()); }
+    catch (e) {
+      // A cold price build may outlast the request. Retry this read once, never a generation action.
+      if (e.name !== 'AbortError' || seq !== S.seq) throw e;
+      d = await C.api('pickem-ev?' + query());
+    }
+    if (seq !== S.seq) return; S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; S.docP = JSON.parse(JSON.stringify(S.p));
     if (S.restored) {
       S.restored = false;
       if (filtersHideAll(d)) {
@@ -200,9 +207,12 @@ function render() {
   paintBox();
   if (fk && !box.contains(document.activeElement)) { const el = box.querySelector(fk); if (el && !el.disabled) el.focus({preventScroll: true}); }
 }
+function generatorHtml() {
+  return `<section class="ev-bar" aria-label="Generate EV slips"><label>Slips<select id="ev-slip-count">${[1,2,4,8,12].map(n=>`<option value="${n}"${n===slipCount?' selected':''}>${n} slips</option>`).join('')}</select></label><label><input type="checkbox" id="ev-no-repeats"${noRepeats?' checked':''}> No repeat props</label><button data-ev="generate"${generating||S.loading||S.error||!S.doc?' disabled':''}>${generating?'Checking slips…':'Generate EV slips'}</button><p>Uses this app, entry size, sport and book settings. Only positive-EV standard lines that meet the entry rules; different players and games in each slip.</p><p role="status">${esc(generateMessage)}</p></section>`;
+}
 function paintBox() {
   const d = S.doc;
-  if (!d) { box.innerHTML = head() + `<p class="ev-state" role="status">${S.error ? esc(S.error) + ' Use Refresh to try again.' : 'Checking current prices…'}</p>`; return; }
+  if (!d) { box.innerHTML = head() + generatorHtml() + `<p class="ev-state" role="status">${S.error ? esc(S.error) + ' Use Refresh to try again.' : 'Checking current prices…'}</p>`; return; }
   const sports = (d.sports || []).length, rows = d.rows.filter(r => keep(r) && (!S.f.evOnly || (typeof r.ev === 'number' && r.ev > 0)));
   const model = d.model_only.filter(keep), entries = d.options.entries.filter(e => e.app === d.app);
   const nextKey = JSON.stringify([S.f, d.as_of, d.app, d.entry, d.n]);
@@ -216,10 +226,10 @@ function paintBox() {
     + `<div class="ev-bar"><label>Entry<select id="ev-entry">${entries.map(e => `<option value="${e.entry}-${e.n}"${e.entry === d.entry && e.n === d.n ? ' selected' : ''}>${ENTRY[e.entry] || e.entry} ${e.n}-pick · each leg needs ${pct(e.break_even)} (${odds(Math.round(e.american))})</option>`).join('')}</select></label>`
     + `<label class="ev-search">Search<input id="ev-q" type="search" value="${esc(S.f.q)}" placeholder="Player, team or market"></label>`
     + (sports > 1 ? `<label>Sport<select id="ev-sport">${sportOpts.map(([k, t]) => `<option value="${k}"${S.f.sport === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>` : '') + `</div>`
+    + generatorHtml()
     + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
     + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
     + (d.payout && d.payout.text ? `<p class="ev-banner">${esc(d.payout.text)}</p>` : '') + filtersHtml(d) + chipsHtml(d) + banner
-    + `<section class="ev-bar" aria-label="Generate EV slips"><label>Slips<select id="ev-slip-count">${[1,2,4,8,12].map(n=>`<option value="${n}"${n===slipCount?' selected':''}>${n} slips</option>`).join('')}</select></label><label><input type="checkbox" id="ev-no-repeats"${noRepeats?' checked':''}> No repeat props</label><button data-ev="generate"${generating||S.loading||S.error?' disabled':''}>${generating?'Checking slips…':'Generate EV slips'}</button><p>Uses this app, entry size, sport and book settings. Only positive-EV standard lines that meet the entry rules; different players and games in each slip.</p><p role="status">${esc(generateMessage)}</p></section>`
     + generatedHtml()
     + `<section aria-label="Market priced legs"><div class="ev-quick"><button data-ev="evonly" aria-pressed="${S.f.evOnly}">Only picks that beat the entry</button>${S.f.evOnly ? '<span>Turn off to explore every priced line.</span>' : '<span>All priced lines, including those below break-even.</span>'}</div><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
     + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.slice(marketPage * PAGE_SIZE, (marketPage + 1) * PAGE_SIZE).map(r => rowHtml(r, sports)).join('')}</ol>${pager('market', marketPage, rows.length)}`

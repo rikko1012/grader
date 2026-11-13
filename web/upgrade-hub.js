@@ -2039,7 +2039,17 @@ export function mount(C) {
     +'#u-hub .h-pc-row>.h-pc-cell{grid-column:1}#u-hub .h-pc-row>.h-pc-value{grid-column:2;grid-row:1;align-self:start;text-align:right}'
     +'#u-hub .h-pc-wide{display:none}#u-hub .h-pc-narrow{display:inline}#u-hub .h-pc-fair small{display:inline;margin-left:6px}'
     +'#u-hub .h-pc-arb .h-pc-leg::before{content:attr(data-label) " · ";color:var(--u-muted);font-size:12px}#u-hub .h-pc-age{font-size:11px}}';
-  function paintMarketResults(){const box=$('hub-market-results');if(box)box.innerHTML=marketHTML();}
+  function paintMarketResults(){
+    const box=$('hub-market-results');if(!box)return;
+    box.innerHTML=marketHTML();
+    if(!['ev','arb'].includes(mtMode()))return;
+    const arb=mtMode()==='arb', row=box.querySelector('[data-hub="price-draft"]');
+    const ready=!!row&&!H.marketLoading&&!H.marketError;
+    const control=document.createElement('section');control.className='h-mt-state';
+    control.setAttribute('aria-label',arb?'Arbitrage slip generator':'Sportsbook slip generator');
+    control.innerHTML=`<h3>${arb?'Arbitrage slip generator':'Sportsbook slip generator'}</h3><button data-hub="price-draft" data-id="${esc(row?.dataset.id||'')}"${ready?'':' disabled'}>${arb?'Generate best paired slips':'Generate best bet slip'}</button><p>${H.marketLoading?'Checking current prices…':H.marketError?'Refresh prices to restore generation.':ready?(arb?'Creates two separate bets at matched odds. Set total stake below, or use Generate paired slips on any row.':'Creates one straight bet from the best qualifying row below. Each price is checked again before copying.'):(arb?'No qualifying pair matches these filters. Refresh prices to check again. Two fresh, compatible opposing prices are required.':'No positive-EV sportsbook price matches these filters. Pick’em generation is available above.')}</p>`;
+    box.prepend(control);
+  }
   /* N14: bring Tools' Alerts section to the top of the screen. The Price check above it fills in after its prices load and would
      push Alerts back down, so until the member scrolls, clicks or types (or 15 s pass) each Price check paint brings it back */
   function jumpAlerts(focus){
