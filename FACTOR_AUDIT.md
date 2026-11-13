@@ -571,3 +571,64 @@ kills-per-map MAE 0.005-0.03. A null forward result bounds the effect below thes
 **Over / Under split (future rounds):** the Over share / split is a monitored directional-bias metric, not an accuracy
 target or pass criterion; from round 11 it is reported as a monitor only. Round 10's frozen C4 stays as frozen for its
 forward review; the revised analysis without C4 changes no verdict (all six met C4).
+
+## Round 10 audit: owner corrections (Nov 13) - appended 2026-11-13; earlier round-10 text above is kept unchanged
+
+These corrections take precedence over any earlier round-10 wording that conflicts with them. Research only: no grading,
+chance, stake, flag or model change.
+
+**Label for every round-10 result (original and RERUN): RETROSPECTIVE, TIMING-UNVERIFIED - not clean validation.**
+2,203 of 2,598 TEST rows (85%) depend on HLTV inputs with no verified availability timestamp (the 2026-10-28 .. export
+rows, plus local-extract rows whose `fetched_at` is only the last fetch), and Elo / the weekly opponent refits are
+recomputed from current HLTV rows, not the values the live system had at the time.
+
+1. **No candidate demonstrated a reliable improvement.** Some point estimates were positive. The 95% CIs (match-clustered
+   bootstrap; paired hit-rate difference, candidate minus live, in points) are the result:
+
+   | Cand. | Original (board-slug clusters) | Series clusters | Strict pick timing RERUN |
+   |---|---|---|---|
+   | A1 | +0.50 (-0.59..+1.59) | (-0.55..+1.61) | n/a |
+   | A2 | +0.54 (-1.08..+2.12) | (-0.94..+2.17) | +0.38 (-1.18..+1.99) |
+   | B1 | -0.35 (-1.46..+0.74) | (-1.45..+0.71) | n/a |
+   | C1 | -0.15 (-0.80..+0.49) | (-0.75..+0.55) | n/a |
+   | C2 | -0.27 (-0.81..+0.27), unreliable | (-0.80..+0.28) | n/a |
+   | C3 | -0.69 (-1.27..-0.12) | (-1.27..-0.07) | -0.69 (-1.27..-0.12) |
+
+   Every CI except C3's includes 0. C3's excludes 0 only before the multiple-comparison adjustment (Holm p 0.11).
+   Kills-per-map MAE: no candidate shows an improvement whose CI excludes 0.
+2. **A nonsignificant result can miss a real effect; the CIs are the result.** The earlier sentence "a null forward
+   result means / bounds the effect below the MDE" is **withdrawn**. A forward result will be read from its CI: effects
+   inside the CI, including ones larger than the MDE, remain compatible with the data.
+3. **Unresolved matches and selection bias.** The 17 matches still unresolved after strict relinking (of 30 unlinked
+   slugs) belong to a group that differs from the linked set (measured on all 30 unlinked slugs): weaker teams (median best HLTV rank 116 vs 65; 10% vs 45%
+   with a top-50 team), mostly tier 2/3, Over-heavy (79% vs 47% Overs), fewer overtime maps (13% vs 23%). Selection bias
+   is possible. The earlier claim that their exclusion "shrinks / dilutes toward zero" rather than biasing the sign is
+   **withdrawn as not established**. The relinked RERUN (13 resolved) moved point estimates by at most 0.04 pts, but that
+   says nothing about the 17 that could not be linked.
+4. **Effective sample size depends on the metric, the group sizes and the correlation.** The earlier shorthand that each
+   row counts about half (design effect ~2.1 for every purpose) is **withdrawn**. Per-metric design effects, computed
+   2026-11-13 (`research/miss_decomp_2026_11_13/audit_1113_f.py`, output `audit/audit_1113_f.json`): variance of the
+   series-cluster bootstrap / variance of the independent-row bootstrap, 2,000 resamples, seed 7, TEST = 2,598 rows in
+   86 series (30.2 rows per series):
+
+   | Metric | SE clustered (pts) | SE independent rows (pts) | Design effect | Effective rows |
+   |---|---|---|---|---|
+   | Live hit rate | 1.64 | 0.99 | 2.73 | ~950 |
+   | Over-outcome share | 2.77 | 0.98 | 7.99 | ~325 |
+   | Paired hit diff A1 | 0.54 | 0.49 | 1.25 | ~2,080 |
+   | Paired hit diff A2 | 0.80 | 0.60 | 1.74 | ~1,490 |
+   | Paired hit diff B1 | 0.56 | 0.49 | 1.30 | ~2,010 |
+   | Paired hit diff C1 | 0.33 | 0.38 | 0.73 | ~3,570 |
+   | Paired hit diff C2 | 0.28 | 0.35 | 0.63 | ~4,120 |
+   | Paired hit diff C3 | 0.31 | 0.31 | 0.99 | ~2,630 |
+   | Unit kills residual (formula 1 + (k0-1) ICC; 947 units, 100 series incl. series without scored rows) | - | - | 4.33 (ICC 0.39, 9.45 units per series) | ~220 units |
+
+   Design effects below 1 (C1, C2) mean the flips were spread across series more evenly than independent rows would be;
+   with 86 clusters these ratios are themselves noisy (bootstrap estimates, not exact).
+5. **Timing.** See the label above. All round-10 results, including every RERUN, are RETROSPECTIVE, TIMING-UNVERIFIED.
+   The local-only RERUN uses timestamped rows but `fetched_at` is the last fetch, so it is not verified either.
+6. **The forward test stays frozen.** Hashes re-verified 2026-11-13 before and after the part-F script, unchanged:
+   `fit_params.json` sha `ea241b17a6b42cdc` (canonical JSON), file sha256 `692d353bd4ffa0c6...642841360`;
+   `forward_predictions.jsonl` sha `c02a13d03734d6bb` (text), file sha256 `c7f95433d6718257...2481fd22`.
+   Criteria C1-C9, the seed and the 150-match review are unchanged. **The forward review reports results grouped by actual
+   series (canonical HLTV series id) alongside the original match-slug analysis**, with both counts stated.
