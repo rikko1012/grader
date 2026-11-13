@@ -80,6 +80,15 @@ class BudgetLRU:
             self._d.clear()
             self._bytes = 0
 
+    def cap_mb(self, maximum):
+        """Lower a cache budget without changing the cached values or its disk backing."""
+        with self._lock:
+            self.max_bytes = min(self.max_bytes, max(0, int(maximum * 1e6)))
+            while self._d and self._bytes > self.max_bytes:
+                _, (_, cost) = self._d.popitem(last=False)
+                self._bytes -= cost
+                self.evictions += 1
+
     def __len__(self):
         return len(self._d)
 
@@ -104,6 +113,23 @@ def env_mb(name, default):
         return float(os.environ.get(name, default))
     except ValueError:
         return float(default)
+
+
+def worker_headroom(memory, reserve_mb=578):
+    """Admission check, not a promise about future usage. Discount only clean inactive file pages.
+
+    Keep 450 MB for the learning child plus 128 MB for concurrent request bursts. Missing
+    cgroup measurements leave local/non-container execution unchanged.
+    """
+    limit, current = memory.get("container_limit_mb"), memory.get("container_mb")
+    if not limit or current is None:
+        return {"allowed": True, "reason": "container measurement unavailable"}
+    detail = memory.get("container_detail_mb") or {}
+    reclaimable = max(0, detail.get("inactive_file", 0) - detail.get("dirty", 0)
+                      - detail.get("writeback", 0) - detail.get("shmem", 0))
+    headroom = max(0, limit - max(0, current - reclaimable))
+    return {"allowed": headroom >= reserve_mb, "headroom_mb": round(headroom, 1),
+            "required_mb": reserve_mb, "reason": "ready" if headroom >= reserve_mb else "memory pressure"}
 
 
 # memory.stat fields reported beside anon / file (cgroup v2 names, v1 names where they differ) - what part of the page cache

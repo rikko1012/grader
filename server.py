@@ -190,6 +190,16 @@ _RES_BYTES = [0, 0.0]                                 # approx bytes of cached b
 _SWEPT = [0.0]
 
 
+def _result_size(value):
+    body = value[2]
+    size = len(body) if isinstance(body, (bytes, str)) else 2000
+    # Encoded entries retain the original body as well as the compressed copy. Count
+    # both, even if another entry also references the original (conservative budget).
+    if isinstance(value[1], tuple) and value[1] and isinstance(value[1][0], bytes):
+        size += len(value[1][0])
+    return size
+
+
 def _store_result(key, status, body, ttl, keep):
     """(caller holds _RG) Keep one answer; expired answers leave on insert (2026-10-13 audit: they were evicted by count only,
     so up to 20,000 old grade bodies stayed in memory) - a sweep at most every 5 s, never more than RESULTS_MAX kept."""
@@ -197,14 +207,21 @@ def _store_result(key, status, body, ttl, keep):
     if now - _SWEPT[0] > 5:
         _SWEPT[0] = now
         for k in [k for k, v in _RESULTS.items() if len(v) > 3 and v[3] <= now]:
-            del _RESULTS[k]
-    size = lambda v: len(v[2]) if len(v) > 2 and isinstance(v[2], (bytes, str)) else 2000
+            _RES_BYTES[0] -= _result_size(_RESULTS.pop(k))
+    size = _result_size
     if now - _RES_BYTES[1] > 5:                       # re-count at most every 5 s (other code also removes answers)
         _RES_BYTES[0], _RES_BYTES[1] = sum(size(v) for v in _RESULTS.values()), now
-    while _RESULTS and (len(_RESULTS) >= RESULTS_MAX or _RES_BYTES[0] > RESULTS_MAX_BYTES):
+    old = _RESULTS.pop(key, None)
+    if old is not None:
+        _RES_BYTES[0] -= size(old)
+    value = (now - max(0, ttl - keep), status, body, now + keep)
+    incoming = size(value)
+    while _RESULTS and (len(_RESULTS) >= RESULTS_MAX or _RES_BYTES[0] + incoming > RESULTS_MAX_BYTES):
         _RES_BYTES[0] -= size(_RESULTS.pop(next(iter(_RESULTS))))   # the oldest go (recomputed if asked again)
-    _RESULTS[key] = (now - max(0, ttl - keep), status, body, now + keep)
-    _RES_BYTES[0] += size(_RESULTS[key])
+    # Retain a single oversized response for single-flight waiters, as before; it
+    # cannot coexist with other answers and is now visible in the byte accounting.
+    _RESULTS[key] = value
+    _RES_BYTES[0] += incoming
 
 
 FAIL_KEEP = 2.0         # a failed computation is handed to everyone asking within this many seconds - never longer
@@ -2574,6 +2591,11 @@ def learning_cycle_once():
         if fh is None:
             return False
         try:
+            import membudget
+            admission = membudget.worker_headroom(membudget.process_memory())
+            learning.STATE["memory_admission"] = admission
+            if not admission["allowed"]:
+                return False                         # retry next cycle; never kill an active worker
             learning._cycle_safe()
             return True
         finally:
@@ -6513,8 +6535,23 @@ def apply_default_flags(env=os.environ):
         env.setdefault(k, "1")
 
 
+def apply_container_cache_limits():
+    """Leave room for the LoL and learning children on the existing 2 GB instance.
+
+    Cache misses use the same disk-backed data/calculation. No model or record changes.
+    Smaller operator-configured budgets remain smaller; larger containers are unchanged.
+    """
+    import membudget
+    limit = membudget.process_memory().get("container_limit_mb")
+    if limit and limit <= 2300:
+        bo3._MEM.cap_mb(75)
+        bo3._TMEM.cap_mb(40)
+        cs2_scout._CONTEXT.cap_mb(60)
+
+
 if __name__ == "__main__":
     apply_default_flags()
+    apply_container_cache_limits()
     __import__("membudget").tune_allocator()          # before any thread starts (2026-10-18 out-of-memory fix)
     threading.Thread(target=warm_start, daemon=True, name="warm-start").start()
     threading.Thread(target=board_forever, daemon=True, name="underdog-board").start()
