@@ -387,7 +387,11 @@
         repeats: opts.noRepeatProps ? "none" : "allow", lines: opts.lines || "no_goblins", research: opts.research ? "1" : "0", side: opts.side || "any" });
       if (exclude.size) q.set("exclude", [...exclude].slice(0, 60).join(","));
       let doc;
-      try { doc = await api("generate?" + q.toString()); }
+      try { if (opts.source === 'ev') {
+        for (const [k,v] of new URLSearchParams(opts.evQuery || '')) q.set(k,v);
+        q.set('app',platform);q.set('entry',entryType);q.set('n',String(size));
+      }
+      doc = await api((opts.source === 'ev' ? 'ev-slips?' : 'generate?') + q.toString()); }
       catch (e) { if (e.doc && e.doc.error && e.status === 400) throw new Error(e.doc.error); throw e; }
       last = doc; picked = []; let failed = false;
       for (const s of doc.slips || []) {

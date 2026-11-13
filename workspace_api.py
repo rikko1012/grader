@@ -2127,7 +2127,7 @@ def _ranked(legs):
     return out
 
 
-def _generate(srv, o):
+def _generate(srv, o, ev_doc=None):
     now = datetime.now(timezone.utc)
     table = _slip_table(srv)
     legs, why, missing = [], {}, []
@@ -2150,6 +2150,9 @@ def _generate(srv, o):
                 legs.append(l)
         for k, v in got[1].items():
             why[k] = why.get(k, 0) + v
+    if ev_doc is not None:
+        from workspace_price_slips import positive_pool
+        legs = positive_pool(legs, ev_doc, horizon=GEN_TTL)
     legs = _ranked(legs)
     b = sq.build(legs, o)
     mine = [l for l in legs if l["book"] == o["platform"]]
@@ -2157,8 +2160,67 @@ def _generate(srv, o):
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,
                     "banded": bool(table and table.get("cells"))},
            "slips": [_wire_slip(s, srv, now) for s in b["slips"]], "shortage": b["shortage"], "search": b["search"]}
+    if ev_doc is not None:
+        doc['version'] = 'ev-slips-1'
+        for slip in doc['slips']:
+            slip.pop('ev', None)
+            slip.pop('all_hit', None)
+            slip['why'] = "Positive-EV legs priced by the selected books; standard lines, different players and matches in each entry. Model chances remain separate."
+            for leg in slip['legs']:
+                leg['record'] = 'Ranked by book consensus at this exact line'
     return 200, json.dumps(doc, default=str, separators=(",", ":")).encode()
 
+
+
+def get_ev_slips(h, srv, q, member, scratch, name):
+    import workspace_ev as we
+    if not we.enabled():
+        return h.send(404, {'error': 'not found'})
+    allowed = access(h, srv, q)
+    g = dict(q, platform=q.get('app'), type=q.get('entry'), picks=q.get('n'), games='spread', lines='standard')
+    o, why = _gen_opts(g, allowed)
+    if o is None:
+        return h.send(400, {'error': why})
+    if _limited(h, srv, 'generate', member, GEN_PER_MIN):
+        return None
+    try:
+        st, body = we.shared(srv, q, allowed)
+    except Exception:
+        return h.send(503, {'error': 'Prices are unavailable. Refresh and try again.'})
+    if st != 200:
+        return h.send(503, {'error': 'Prices are unavailable.'})
+    d = json.loads(body)
+    if (d['app'],d['entry'],d['n']) != (o['platform'],o['entry_type'],o['size']):
+        return h.send(400, {'error': 'Choose a verified payout and entry size.'})
+    key = ('ws_ev_slips', hashlib.sha256(body).hexdigest(), json.dumps(o,sort_keys=True))
+    try:
+        st, body = srv.shared(key, lambda: _generate(srv,o,d), ttl=GEN_TTL)
+    except Exception:
+        return h.send(503, {'error': 'Scout could not build slips just now. Try again.'})
+    return h.send(st, body)
+
+
+def get_market_slips(h, srv, q, member, scratch, name):
+    if os.getenv('SCOUT_MARKET_TOOLS') != '1':
+        return h.send(404, {'error': 'not found'})
+    if _limited(h, srv, 'generate', member, GEN_PER_MIN):
+        return None
+    import workspace_markets as wm
+    from workspace_price_slips import draft
+    try:
+        st, body = wm.shared(srv)
+    except Exception:
+        return h.send(503, {'error': 'Prices are unavailable. Refresh and try again.'})
+    if st != 200:
+        return h.send(503, {'error': 'Prices are unavailable.'})
+    try:
+        expected = json.loads(q.get('quote','null'))
+        if not isinstance(expected, list) or not expected:
+            raise ValueError('Refresh prices before generating slips.')
+        doc = wm.for_member(body, access(h,srv,q), owner=False)
+        return h.send(200, draft(doc,q.get('mode'),q.get('leg'),q.get('books'),q.get('stake','100'), expected=expected))
+    except ValueError as e:
+        return h.send(409, {'error': str(e)})
 
 def get_generate(h, srv, q, member, scratch, name):
     o, why = _gen_opts(q, access(h, srv, q))
@@ -2477,7 +2539,7 @@ def post_report_problem(h, srv, q, member, scratch, name, n):
 
 GET = {"game-books": get_game_books, "me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
-       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "book-board": get_book_board,
+       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "ev-slips": get_ev_slips, "market-slips": get_market_slips, "book-board": get_book_board,
        "book-lines": get_book_lines, "pickem-ev": get_pickem_ev, "market-edge": get_market_edge}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
         "book-line":post_book_line, "slip-advice": post_slip_advice}

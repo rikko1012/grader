@@ -10,6 +10,7 @@ const DEF_F = () => ({q: '', sport: 'all', lo: '', hi: '', quick: '', evOnly: tr
 const S = {doc: null, loading: false, error: null, seq: 0, open: new Set(), showModel: false, restored: false, notice: '',
   p: Object.assign({app: 'prizepicks', entry: '', n: 0}, DEF_P()), f: DEF_F()};
 let C = null, box = null;
+let generating = false, generateMessage = '', slipCount = 4, noRepeats = true;
 const PAGE_SIZE = 50;
 let pageKey = '', marketPage = 0, modelPage = 0;
 function pager(kind, page, count) {
@@ -212,6 +213,7 @@ function paintBox() {
     + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
     + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
     + (d.payout && d.payout.text ? `<p class="ev-banner">${esc(d.payout.text)}</p>` : '') + filtersHtml(d) + chipsHtml(d) + banner
+    + `<section class="ev-bar" aria-label="Generate EV slips"><label>Slips<select id="ev-slip-count">${[1,2,4,8,12].map(n=>`<option value="${n}"${n===slipCount?' selected':''}>${n} slips</option>`).join('')}</select></label><label><input type="checkbox" id="ev-no-repeats"${noRepeats?' checked':''}> No repeat props</label><button data-ev="generate"${generating||S.loading||S.error?' disabled':''}>${generating?'Checking slips…':'Generate EV slips'}</button><p>Uses this app, entry size, sport and book settings. Only positive-EV standard lines that also pass Slip Studio eligibility; one player per game per slip.</p><p role="status">${esc(generateMessage)}</p></section>`
     + `<section aria-label="Market priced legs"><div class="ev-quick"><button data-ev="evonly" aria-pressed="${S.f.evOnly}">Only picks that beat the entry</button>${S.f.evOnly ? '<span>Turn off to explore every priced line.</span>' : '<span>All priced lines, including those below break-even.</span>'}</div><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
     + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.slice(marketPage * PAGE_SIZE, (marketPage + 1) * PAGE_SIZE).map(r => rowHtml(r, sports)).join('')}</ol>${pager('market', marketPage, rows.length)}`
       : `<p class="ev-state">${d.rows_total ? (S.f.evOnly ? 'No leg beats the entry right now with these filters.' : 'No priced leg matches these filters.') : d.params.min_books > 1 ? `No pick'em leg has ${d.params.min_books} independent books on its exact line right now.` : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
@@ -263,6 +265,14 @@ function onClick(e) {
   const b = e.target.closest('[data-ev]'); if (!b || !box.contains(b) || b.disabled) return;
   const id = b.dataset.id, a = b.dataset.ev;
   if (a === 'page') { const step = Number(b.dataset.step); if (b.dataset.kind === 'market') marketPage = Math.max(0, marketPage + step); else modelPage = Math.max(0, modelPage + step); return render(); }
+  if (a === 'generate') {
+    generating=true;generateMessage='Reading current offers and entry rules…';render();
+    const sports=S.f.sport==='all'?S.doc.sports:[S.f.sport];
+    Promise.resolve(C.generateEV({platform:S.doc.app,entryType:S.doc.entry,size:S.doc.n,count:slipCount,
+      sports,noRepeatProps:noRepeats,evQuery:query()})).then(n=>{generateMessage=n+' slips rechecked and opened in Slip Studio.';})
+      .catch(e=>{generateMessage=e.message||'Could not verify current offers. Try again.';})
+      .finally(()=>{generating=false;render();});return;
+  }
   if (a === 'refresh') return fetchDoc();
   if (a === 'app' && id !== S.p.app) { S.p.app = id; S.p.entry = ''; S.p.n = 0; return fetchDoc();   /* the server opens each app on the entry that needs the lowest chance */ }
   if (a === 'books') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); return render(); }
@@ -301,6 +311,8 @@ function onClick(e) {
 }
 function onChange(e) {
   const t = e.target, id = t.id || '';
+  if(id==='ev-slip-count'){slipCount=Number(t.value);return;}
+  if(id==='ev-no-repeats'){noRepeats=t.checked;return;}
   if (t.dataset.evReq) { const b = t.dataset.evReq; S.p.req = t.checked ? [...new Set([...S.p.req, b])].slice(0, 2) : S.p.req.filter(x => x !== b); S.drawer = true; return fetchDoc(); }
   if (id === 'ev-entry') { const [en, n] = t.value.split('-'); S.p.entry = en; S.p.n = Number(n); return fetchDoc(); }
   if (id === 'ev-sport') { S.f.sport = t.value; return render(); }

@@ -1667,7 +1667,7 @@ export function mount(C) {
     const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
     const lineTag=l=>l.book==='prizepicks'&&C.lineKind?` <em class="h-line-tag">${esc(C.lineKind('prizepicks',l.gen?.line_type))}</em>`:l.gen?.line_type&&l.gen.line_type!=='standard'?` <em class="h-line-tag">${esc(l.gen.line_type[0].toUpperCase()+l.gen.line_type.slice(1))}</em>`:'';
     const legFace=l=>C.faceHtml?C.faceHtml(l.sport,{key:l.player_key,name:l.player,team:(R.boards[l.sport]?.recs.get(C.offerKey(l.book,l.row_id))?.player.team_abbr)||l.team,size:32,cls:'h-face'}):'';
-    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.</p><div class="h-batch-grid">${slips.map((s,i)=>{
+    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">${b.options?.source==='ev'?'Built from positive-EV book-priced legs using the selected entry rules. The chance beside each leg remains Scout’s published chance, not the book estimate. Every slip is rechecked when opened.':'Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.'}</p><div class="h-batch-grid">${slips.map((s,i)=>{
       const metrics=[num(s.all_hit)?`<span>All-hit chance <b>${pct(s.all_hit)}</b></span>`:(s.same_match?'<span>Legs share a match <b>No all-hit chance</b></span>':''),
         s.payout&&num(s.payout.multiple)?`<span>All-hit payout <b>${esc(s.payout.multiple)}×</b></span>`:'',
         s.ev&&num(s.ev.ev)?`<span>Expected return <b>${pct(s.ev.ev)}</b></span>`:''].filter(Boolean).join('');
@@ -1888,20 +1888,43 @@ export function mount(C) {
   const mtFrom=x=>x.chance_from==='Scout'?'from Scout':/^Other books/.test(x.chance_from||'')?'from other books'+(x.chance_from.match(/\((.*)\)/)?' ('+x.chance_from.match(/\((.*)\)/)[1]+')':''):'';
   /* owner audit 2026-11-06 (T6): a price below its fair chance, shown in the closest list: the same row, the gap in plain money */
   const mtSigned=v=>(Number(v)<0?'−':'+')+'$'+Math.abs(Number(v)).toFixed(2);
+  const draftKey=(x,mode)=>JSON.stringify({mode,leg:x.leg_id,books:mode==='arb'?x.legs.map(l=>l.book).join(','):x.book+':'+x.side,
+    quote:JSON.stringify((mode==='arb'?x.legs:[x]).map(l=>[l.book,l.side,l.odds]))});
+  const draftButton=(x,mode)=>`<button data-hub="price-draft" data-id="${esc(draftKey(x,mode))}">${mode==='arb'?'Generate paired slips':'Generate bet slip'}</button>`;
+  let priceDraftRequest=null, priceDraftBusy=false;
+  async function priceDraft(id,copy=false){
+    if(priceDraftBusy)return;
+    let q;
+    try{q=JSON.parse(id);}catch(e){return;}
+    priceDraftBusy=true;
+    let dlg=$('hub-price-draft');
+    if(!dlg){dlg=document.createElement('dialog');dlg.id='hub-price-draft';dlg.className='h-price-draft';$('u-hub').append(dlg);}
+    dlg.innerHTML='<form method="dialog"><button aria-label="Close generated slips">Close</button></form><h2>Checking current prices</h2><p role="status">Checking the exact lines and settlement-compatible books...</p>';
+    if(!dlg.open)dlg.showModal();
+    try{
+      const params=new URLSearchParams({...q,stake:String(H.mt.stake||100)});
+      const d=await api('market-slips?'+params);
+      priceDraftRequest=id;
+      const text=d.slips.map((l,i)=>`Bet ${i+1}: ${l.book_label} | ${l.player} | ${l.side} ${l.line} ${l.stat_label} (${l.period_label}) | ${l.event} | Odds ${l.american} | Stake $${l.stake.toFixed(2)}`).join('\n');
+      dlg.innerHTML=`<form method="dialog"><button aria-label="Close generated slips">Close</button></form><h2>${d.mode==='arb'?'Two separate matched slips':'Your sportsbook slip'}</h2><p>${esc(d.note)}</p><ol>${d.slips.map(l=>`<li><h3>${esc(l.book_label)}</h3><b>${esc(l.player)} - ${esc(mtSide(l.side))} ${esc(l.line)} ${esc(l.stat_label)}</b><p>${esc(l.period_label)} · ${esc(l.event)}</p><p>Odds ${esc(l.american)} · Stake <strong>${mtMoney(l.stake)}</strong></p></li>`).join('')}</ol>${num(d.profit_if_either_wins)?`<p>If either side wins at these prices: ${mtMoney(d.minimum_return)} returned on ${mtMoney(d.total_stake)} total (${mtMoney(d.profit_if_either_wins)} difference). A push or void is not a winning outcome.</p>`:''}<button data-hub="copy-price-draft">Recheck & copy slips</button><p role="status">${copy?'Rechecked. ':''}No bets have been placed.</p>`;
+      if(copy){await navigator.clipboard.writeText(text+'\n'+d.note);dlg.querySelector('[role="status"]').textContent='Rechecked and copied. No bets have been placed.';}
+    }catch(e){dlg.innerHTML='<form method="dialog"><button>Close</button></form><h2>Slip not generated</h2><p role="alert">'+esc(e.doc?.error||e.message||'Could not verify prices. Refresh and try again.')+'</p>';}
+    finally{priceDraftBusy=false;}
+  }
   function mtEvRow(x,near){
     return `<li class="h-pc-row"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick(x)}</div>`
       +`<div class="h-pc-cell" data-label="Book & price">${mtPrice(x.book_label,x.american)}${x.kind==='prediction'?'<small>Prediction market</small>':''}${H.marketDoc?.owner&&(x.flags||[]).includes('Wide market')?'<small>Wide market (owner)</small>':''}</div>`
       +`<div class="h-pc-cell h-pc-fair" data-label="Fair chance vs needed"><span class="h-pc-wide">${pct(x.p_cal)} vs ${pct(x.needs)}</span><span class="h-pc-narrow">Fair ${pct(x.p_cal)} · needs ${pct(x.needs)}</span><small>${esc(mtFrom(x))}</small>${num(x.p_push)&&x.p_push>0?`<small>Exactly ${esc(x.line)} refunds the stake (${pct(x.p_push)})</small>`:''}</div>`
       +(near?`<div class="h-pc-cell h-pc-value" data-label="Per $100 against fair"><span class="h-pc-chip h-pc-short">${mtSigned(x.per_100)}<i> / $100</i></span></div>`
         :`<div class="h-pc-cell h-pc-value" data-label="Expected per $100"><span class="h-pc-chip">+${mtMoney(x.per_100)}<i> / $100</i></span></div>`)
-      +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}</div></li>`;
+      +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}${!near&&x.kind==='sportsbook'?draftButton(x,'ev'):''}</div></li>`;
   }
   function mtArbRow(x){
     const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small><small class="h-pc-leg-age">checked ${esc(mtAgo(mtAge(l)).replace('Time unavailable','—').toLowerCase())}</small></div>`;   /* T21: each leg's own age */
     const back=(100+Number(x.return_per_100))*H.mt.stake/100;
     return `<li class="h-pc-row h-pc-arb"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick({...x,side:null})}</div>${(x.legs||[]).map(leg).join('')}`
       +`<div class="h-pc-cell h-pc-value" data-label="Either way you get"><span class="h-pc-chip"><b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney(back)}</b> back <i data-gain-per100="${Number(x.return_per_100)}">(+${mtMoney(back-H.mt.stake)})</i></span>${NEXT?`<small class="h-pc-margin">Margin ${Number(x.return_per_100).toFixed(2)}%</small>`:''}</div>`
-      +`<div class="h-pc-cell h-pc-age" data-label="Oldest leg checked">${esc(mtAgo(mtLegsAge(x)))}</div></li>`;
+      +`<div class="h-pc-cell h-pc-age" data-label="Oldest leg checked">${esc(mtAgo(mtLegsAge(x)))}${draftButton(x,'arb')}</div></li>`;
   }
   const mtHead=cols=>`<li class="h-pc-row h-pc-head" aria-hidden="true">${cols.map(c=>`<div class="h-pc-cell">${c}</div>`).join('')}</li>`;
   function marketHTML(){
@@ -1982,7 +2005,8 @@ export function mount(C) {
     box.querySelectorAll('[data-gain-per100]').forEach(b=>{b.textContent='(+'+mtMoney(Number(b.dataset.gainPer100)*v/100)+')';});
     box.querySelectorAll('[data-stake-total]').forEach(b=>{b.textContent=mtMoney(v);});
   }
-  const MT_CSS='#u-hub .h-market-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding:12px;margin:0 0 14px;border:1px solid var(--u-line);border-radius:9px;background:var(--u-panel)}'
+  const MT_CSS='#u-hub .h-price-draft{width:min(640px,90vw);max-height:85vh;overflow:auto;background:var(--u-bg);color:var(--u-text);border:1px solid var(--u-line);padding:24px;border-radius:12px}#u-hub .h-price-draft>form{padding:0;border:0;background:none;display:flex;justify-content:flex-end;margin:0 0 12px}#u-hub .h-price-draft ol{padding:0;list-style:none}#u-hub .h-price-draft li{border-top:1px solid var(--u-line);padding:12px 0}#u-hub .h-price-draft button,#u-hub .h-pc-age button{min-height:44px}#u-hub .h-pc-age button{display:block;margin-top:8px}'
+    +'#u-hub .h-market-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding:12px;margin:0 0 14px;border:1px solid var(--u-line);border-radius:9px;background:var(--u-panel)}'
     +'#u-hub .h-market-filters label{display:grid;gap:4px;flex:1 1 130px;min-width:0;font-size:11px;color:var(--u-muted)}#u-hub .h-market-filters .h-search{flex:2 1 220px}'
     +'#u-hub .h-market-filters :is(input,select){width:100%;min-height:40px}#u-hub .h-market-filters button{flex:0 0 auto;min-height:40px}'
     +'#u-hub .h-mt-more{flex:1 1 100%;margin:0}#u-hub .h-market-tools details.h-mt-more>summary{min-height:40px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border:1px solid var(--u-line);border-radius:8px;cursor:pointer;color:var(--u-text);background:var(--u-bg,transparent)}'
@@ -2067,9 +2091,24 @@ export function mount(C) {
   const BOOKS_ON=allowed().some(s=>['nba','nfl'].includes(s));
   const SECTIONS=['board','studio','record','alerts','picks','tools',...(BOOKS_ON?['books']:[]),...(EV_ON?['ev']:[]),...(ARB_ON?['arb']:[])];
   const TITLES={books:'Sportsbooks',tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:NEXT?'EV':'Best prices',arb:'Arbitrage'};
+  async function generateEV(options){
+    if(H.generating)throw new Error('A batch is already being checked.');
+    H.generating=true;
+    try{
+      await load(true,options.sports);
+      const opts={...options,source:'ev',mix:'any',games:'spread',lines:'standard',side:'any',research:true};
+      const batch=await C.generateBatch([],opts);
+      if(!batch.slips.length)throw new Error(batch.note||'Not enough eligible positive-EV legs to form this entry.');
+      H.batch=batch;H.batchSaved=false;await saveBatch();
+      H.studioTab='build';section('studio');
+      history.replaceState(null,'',location.hash.split('?')[0]+'?tab=build');H.routeHash=location.pathname+location.hash;paintBatch();
+      C.say(`${batch.slips.length} of ${options.count} EV slips generated. ${batch.note||''}`);
+      return batch.slips.length;
+    }finally{H.generating=false;}
+  }
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev'||!EVB)return;
-    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
+    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,generateEV,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
     catch(e){box.innerHTML=`<p class="h-mt-state">${NEXT?'EV':'Best prices'} could not be loaded. Use Refresh to try again.</p>`;}
   }
   function section(name,navigate=true) {
@@ -2172,6 +2211,7 @@ export function mount(C) {
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
     // By game keeps the board's filters: the games listed are the ones those filters show
     'game-board'(id){H.game=id;H.view='list';H.page=0;section('board');$('hub-center').scrollTop=0;},
+    'price-draft':id=>priceDraft(id), 'copy-price-draft':()=>priceDraft(priceDraftRequest,true),
     generate, 'use-generated':useGenerated, 'open-generated':i=>C.openGenerated(H.batch?.slips?.[Number(i)]), 'open-line':()=>C.openLine(rec(H.detail),H.histSide), 'save-batch':saveBatch,
     'player-market'(id){if(rec(id))openCard(id,H.cardTab);},
     /* QOL 2026-11-07: Done inside the pop-over hands focus back to the Filters button (it stayed on the hidden Done button) */
