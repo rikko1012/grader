@@ -90,8 +90,9 @@ _INTERNAL = {"down_until": 0.0, "fallbacks": 0, "ok": 0, "public": 0, "last_ok_a
 
 def internal_base():
     """Bandwidth 2026-11-13: on Render the sports service is reached over the private network (Connect -> Internal:
-    scout-sports-api:10000), which Render does not bill as bandwidth; through the public URL every server-to-server read was
-    billed twice (the sports service's HTTP egress and this service's outbound). SPORTS_API_INTERNAL=0 turns it off; a URL
+    scout-sports-api:10000), which Render does not bill as bandwidth. Through the public URL the sports service's response
+    bytes were billed as its HTTP egress, and this service's request bytes as its own outbound - separate traffic, not the same
+    payload twice (inbound is free: https://render.com/docs/outbound-bandwidth). SPORTS_API_INTERNAL=0 turns it off; a URL
     there is used as written. Off Render (no RENDER env): '' - the public base as before."""
     v = (os.environ.get("SPORTS_API_INTERNAL") or "").strip()
     if v.lower() in ("0", "off", "false", "no"):
