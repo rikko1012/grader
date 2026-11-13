@@ -106,6 +106,9 @@ export function mount(C) {
     const b=R.boards[r.sport], feed=b.feeds?.[r.offer.platform];
     if(b.error) return 'Refresh failed';
     if(feed && feed.state!=='ok') return 'Source '+(feed.state||'unavailable');
+    /* CS2 marks a line whose Scout side the app dropped as held ("Unavailable - side not offered") and the board left it off. It is
+       shown as a Not offered row instead (owner 2026-11-12), like NBA / NFL: Scout's side and chance, no letter, stake, edge or add */
+    if(r.state.kind==='held'&&/side not offered/i.test(r.state.reason||'')&&typeof notOffered==='function'&&notOffered(r)) return null;
     if(!['fresh','ok','ready','live'].includes(r.state.kind)) return r.state.kind;
     return null;
   };
@@ -396,7 +399,7 @@ export function mount(C) {
      offered, the row, ladder and card point to it ("Under 8.5 on Underdog") and add it from there; that line keeps its own grade.
      Display and slip eligibility only: the logged grade and the projection are unchanged (the server's slip pool and Auto-build already
      take offered sides only, slip_quality.py). */
-  const NOT_OFFERED_SPORTS=['nba','nfl'];
+  const NOT_OFFERED_SPORTS=['nba','nfl','cs2','lol'];   /* owner 2026-11-12: CS2 and LoL too, exactly as NBA / NFL */
   const notOffered=r=>!!r&&NOT_OFFERED_SPORTS.includes(r.sport)&&!r.extra&&!C.oneSided(r)&&(r.scout.side==='over'||r.scout.side==='under')&&!r.offer[r.scout.side]?.offered;
   const PICKEM=['prizepicks','underdog'];
   function offeredAlt(r) {

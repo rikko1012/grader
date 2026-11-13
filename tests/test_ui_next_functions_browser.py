@@ -465,12 +465,11 @@ def test_card_opens_on_scouts_side_when_the_app_offers_only_the_other(browser, o
         assert "61.1%" in dec.locator(".h-dec-chance b").inner_text()
         assert dec.locator(".h-dec-add").count() == 0                                      # no main Add for a side the app does not offer
         note = flat(dec.locator(".h-dec-unoffered .h-dec-note").inner_text())
-        assert "offers only over 42.5" in note and "scout's side, under, is not offered here" in note
-        alt = dec.locator("[data-hub=detail-add-other]")
-        assert "against scout" in flat(alt.inner_text()) and "add over 42.5" in flat(alt.inner_text())
+        # CS2 follows the NBA / NFL "Not offered" rule (owner 2026-11-12): no letter, no stake, no add for the other side
+        assert "not offered: prizepicks does not offer under 42.5, scout's side." in note, note
+        assert dec.locator("[data-hub=detail-add-other]").count() == 0 and dec.locator(".h-grade").count() == 0
+        assert "add over" not in flat(dec.inner_text())
         fix_shot(p, f"over-only-card-{size['width']}")
-        h.tall(alt).click()
-        p.wait_for_function("document.getElementById('hub-slip-count').textContent.trim()==='1'", timeout=5000)
         assert not p.errors
 
 
@@ -754,3 +753,97 @@ def test_book_link_dialog_is_readable_in_both_themes(browser, live, theme):
         font = box.evaluate("b=>getComputedStyle(b).fontFamily")
         assert "Plex" in font or "system-ui" in font, font                        # the new design's type, not the old Outfit
         assert not p.errors
+
+
+
+# ---------------- owner 2026-11-12: "Not offered" on CS2 too; the held "Unavailable - side not offered" line is shown, not left off
+
+@pytest.fixture
+def cs2_not_offered(live):
+    from tests.workspace_fixture import row
+    soon = iso(datetime.now(timezone.utc).replace(microsecond=0) + __import__("datetime").timedelta(hours=3))
+    held = "Unavailable—side not offered"
+    # vargo: PrizePicks 40.5 Maps 1-2, Over only, Scout Under -> held by the grader; Underdog lists the exact 40.5 Maps 1-2 Under
+    live.rows.append(row("pp:7401", "prizepicks", "vargo", "Halcyon", "Norrland", 40.5, "Less", 0.634, 900, live.rows[0]["start"], grade="B",
+                         under_available=False, unavailable=held))
+    live.rows.append(row("11111111-0000-4000-8000-0000000000c1", "underdog", "vargo", "Halcyon", "Norrland", 40.5, "Less", 0.634, 900, live.rows[0]["start"]))
+    # sable: PrizePicks 9.5 Headshots Map 1, Over only, Scout Under; Underdog's 9.5 is Maps 1-2 (another scope) -> never the alternate
+    live.rows.append(row("pp:7402", "prizepicks", "sable", "Vanta", "Kestrel Five", 9.5, "Less", 0.6, 901, soon, prop="hs", scope="1",
+                         under_available=False, unavailable=held))
+    live.rows.append(row("11111111-0000-4000-8000-0000000000c2", "underdog", "sable", "Vanta", "Kestrel Five", 9.5, "Less", 0.6, 901, soon, prop="hs", scope="12"))
+    workspace_api.reset()
+    return live
+
+
+@SIZES
+def test_cs2_not_offered_row_shows_and_points_to_the_exact_match_only(browser, cs2_not_offered, size):
+    with Hub(browser, cs2_not_offered, "next", size) as h:
+        p = h.p
+        key = "cs2|prizepicks|pp:7401"
+        h.card(key)
+        dec = p.locator("#hub-decision")
+        assert dec.locator("[data-hub=history-side][data-id=under]").get_attribute("aria-pressed") == "true"
+        txt = flat(dec.inner_text())
+        assert "63.4%" in txt and "not offered" in txt and "add over" not in txt and "stake" not in txt, txt
+        assert dec.locator(".h-grade").count() == 0
+        alt = dec.locator("[data-hub=add-alt]")
+        assert "add under 40.5 on underdog" in flat(alt.inner_text())
+        h.tall(alt).click()
+        p.wait_for_function("document.getElementById('hub-slip-count').textContent.trim()==='1'", timeout=5000)
+        h.close_card()
+        # the held line is on the board (it was left off) as a Not offered line, and the Map 1 line has no alternate (Maps 1-2 differs)
+        p.locator("#hub-q").fill("sable")
+        p.wait_for_timeout(400)
+        found = p.evaluate("""()=>[...document.querySelectorAll('#hub-rows tr[data-record], tr.h-ladder-row tr[data-line]')].map(r=>r.dataset.record||r.dataset.line)""")
+        if "cs2|prizepicks|pp:7402" not in found:
+            for b in p.locator("#hub-rows [data-hub=ladder]").all():
+                b.click()
+                p.wait_for_timeout(200)
+            found = p.evaluate("""()=>[...document.querySelectorAll('#hub-rows tr[data-record], tr.h-ladder-row tr[data-line]')].map(r=>r.dataset.record||r.dataset.line)""")
+        assert "cs2|prizepicks|pp:7402" in found, found
+        k2 = "cs2|prizepicks|pp:7402"
+        if p.locator(f'#hub-rows tr[data-record="{k2}"]').count():
+            p.locator(f'#hub-rows tr[data-record="{k2}"] .h-c-line').click()
+        else:
+            p.locator(f'tr.h-ladder-row tr[data-line="{k2}"] .h-ld-book').click()
+        p.wait_for_function("document.querySelector('#hub-card-line')&&document.querySelector('#hub-card-line').value.endsWith('pp:7402')", timeout=20000)
+        p.wait_for_timeout(500)
+        dec = p.locator("#hub-decision")
+        assert "not offered" in flat(dec.inner_text()) and dec.locator("[data-hub=add-alt]").count() == 0
+        assert not p.errors
+
+
+@SIZES
+def test_lol_not_offered_line_with_its_exact_underdog_line(browser, live, size):
+    """LoL follows the same rule: Harky PrizePicks 10.5 Maps 1-3 offers only the More; Scout leans Under (69.8%) -> Not offered, no
+    letter, no add for the Under there; Underdog's 10.5 Maps 1-3 Under is the exact match and adds from the card."""
+    harky = next(r for r in live.lol.rows if r["player"] == "Harky" and r["platform"] == "prizepicks")
+    harky["sides"] = {"basis": "allowed_wager_types", "higher": {"offered": True}, "lower": {"offered": False}}
+    live.lol.write()
+    workspace_api.reset()
+    live.mp.delenv("UI_NEXT", raising=False)
+    c = context(browser, live, size)
+    try:
+        p = open_page(c, live, "/#scout/board?sport=lol", size)
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=30000)
+        p.locator("#hub-q").fill("Harky")
+        p.wait_for_timeout(500)
+        key = p.evaluate("""()=>{for(const b of document.querySelectorAll('#hub-rows [data-hub=ladder]'))b.click();
+            return [...document.querySelectorAll('#hub-rows tr[data-record], tr.h-ladder-row tr[data-line]')].map(r=>r.dataset.record||r.dataset.line).find(k=>k.startsWith('lol|prizepicks'))}""")
+        assert key, "no PrizePicks Harky line"
+        p.wait_for_timeout(300)
+        loc = p.locator(f'#hub-rows tr[data-record="{key}"] .h-c-line')
+        (loc if loc.count() else p.locator(f'tr.h-ladder-row tr[data-line="{key}"] .h-ld-book')).first.click()
+        p.wait_for_function("document.querySelector('#hub-card-line')&&document.querySelector('#hub-card-line').value.startsWith('lol|prizepicks')", timeout=20000)
+        p.wait_for_timeout(600)
+        dec = p.locator("#hub-decision")
+        assert dec.locator("[data-hub=history-side][data-id=under]").get_attribute("aria-pressed") == "true"
+        txt = flat(dec.inner_text())
+        assert "not offered" in txt and "add over" not in txt and dec.locator(".h-grade").count() == 0, txt
+        alt = dec.locator("[data-hub=add-alt]")
+        assert "add under 10.5 on underdog" in flat(alt.inner_text())
+        alt.click()
+        p.wait_for_function("document.getElementById('hub-slip-count').textContent.trim()==='1'", timeout=5000)
+        assert not p.errors
+    finally:
+        c.close()
