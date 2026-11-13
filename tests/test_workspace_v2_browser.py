@@ -2,7 +2,7 @@
 import pytest
 import os
 from pathlib import Path
-from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, ctx, context, open_page, no_h_scroll
 
 
 @pytest.fixture(autouse=True)
@@ -149,7 +149,7 @@ def test_saved_filters_keep_freshness_and_grade_after_reload(ctx,env):
 def test_share_card_requires_checked_entry_and_does_not_track(ctx, env, tmp_path):
     p = start(ctx, env)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-platform [data-id=prizepicks]').click()
+    in_sheet(p, '#hub-platform [data-id=prizepicks]').click(); close_sheet(p)
     for name in ('vargo', 'orlo'):
         p.locator('#hub-q').fill(name)
         p.locator('#hub-rows .h-add:not([disabled])').first.click()
@@ -171,7 +171,7 @@ def test_classic_book_link_rechecks_without_tracking(ctx, env, monkeypatch):
     monkeypatch.setattr(server, 'PP_OPEN_LINK', True)
     p = start(ctx, env)
     p.locator('#hub-sports [data-id=cs2]').click()
-    p.locator('#hub-platform [data-id=prizepicks]').click()
+    in_sheet(p, '#hub-platform [data-id=prizepicks]').click(); close_sheet(p)
     for name in ('vargo', 'orlo'):
         p.locator('#hub-q').fill(name)
         p.locator('#hub-rows .h-add:not([disabled])').first.click()

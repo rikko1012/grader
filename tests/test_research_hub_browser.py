@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 import pytest
 import server
-from tests.test_upgrade_browser import browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, ctx, context, open_page, no_h_scroll, DESK, PHONE
 
 SHOTS_DIR = Path(os.environ['PHASE4_SHOTS']) if os.environ.get('PHASE4_SHOTS') else None
 
@@ -23,7 +23,7 @@ def saved_state(page, predicate):
 
 def book(p, b):
     """The platform toggle on the toolbar (All | PP | UD)."""
-    p.locator(f'#hub-platform [data-id={b}]').click()
+    in_sheet(p, f'#hub-platform [data-id={b}]').click(); close_sheet(p)
 
 
 def open_filters(p):

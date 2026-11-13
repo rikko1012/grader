@@ -201,10 +201,15 @@ def test_every_app_pill_is_reachable_at_every_width(browser, many_apps, width):
                 if width < 1101:
                     break                                   # the phone / tablet card is a sheet over the board
             fix_shot(p, f"apps-{'card-' if card else ''}{width}")
+            if width < 600:                                    # phones keep the app pills in the Filters sheet (2026-11-12)
+                p.locator("#hub-filters-toggle").click()
+                p.wait_for_timeout(200)
             r = p.evaluate(PILLS)
+            if width < 600:
+                p.keyboard.press("Escape")
             assert r["n"] >= 9 and r["bad"] == [], (width, card, r)
             assert r["bar"], (width, card, r)               # nothing runs past the toolbar
-            assert r["search"] >= (150 if width >= 1101 else 120), (width, card, r)
+            assert r["search"] >= (150 if width >= 1101 else 120) or width < 600, (width, card, r)
             if r["scrolls"]:
                 assert width < 1101 and r["ox"] in ("auto", "scroll"), (width, card, r)    # desktop wraps; only a phone strip scrolls
         assert not p.errors
@@ -308,6 +313,17 @@ POPBOX = """(id)=>{const p=document.getElementById(id),b=p.getBoundingClientRect
 def test_views_opens_like_filters(browser, live, width):
     c, p = page(browser, live, width, "dark", "/")
     try:
+        if width < 600:                     # phones (2026-11-12): Views lives inside the Filters sheet, shown open, with the sheet's backdrop
+            p.locator("#hub-filters-toggle").click()
+            p.wait_for_selector("#hub-filter-pop:not([hidden])")
+            for sel in ("#hub-views", "[data-hub=save-view]", "[data-hub=save-alert]", "[data-hub=manage-alerts]"):
+                el = p.locator("#hub-filter-pop " + sel)
+                el.scroll_into_view_if_needed()
+                assert el.is_visible(), sel
+            f = p.evaluate(POPBOX, "hub-filter-pop")
+            assert f["w"] >= f["vw"] - 20 and f["scrim"], f
+            fix_shot(p, f"views-{width}")
+            return
         out = {}
         for tog, pop in (("hub-filters-toggle", "hub-filter-pop"), ("hub-views-toggle", "hub-views-pop")):
             p.locator("#" + tog).click()
@@ -405,7 +421,7 @@ def test_dialogs_outside_the_hub_are_readable_in_both_themes(browser, live, them
     c, p = page(browser, live, 390, theme, "/")
     try:
         for kind in ("save-view", "save-alert"):
-            p.locator("#hub-views-toggle").click()
+            p.locator("#hub-filters-toggle").click()            # 390px: Views is inside the Filters sheet
             p.locator(f"#hub-views-pop [data-hub={kind}]").click()
             p.wait_for_selector("#hub-save-dialog[open]")
             p.locator("#hub-save-name").fill("Unders tonight")
@@ -431,7 +447,7 @@ def test_dialogs_outside_the_hub_are_readable_in_both_themes(browser, live, them
 
 # ---- H11: the phone toolbar is three rows (it took 165-215px) and every control stays reachable
 @pytest.mark.parametrize("width", (320, 375, 430))
-def test_phone_toolbar_is_three_rows(browser, many_apps, width):
+def test_phone_toolbar_is_two_short_rows(browser, many_apps, width):
     for path in ("/", "/sports"):
         c, p = page(browser, many_apps, width, "dark", path)
         try:
@@ -440,7 +456,7 @@ def test_phone_toolbar_is_three_rows(browser, many_apps, width):
             r = p.evaluate("""()=>{const bar=document.querySelector('#u-hub .h-toolbar'),kids=[...bar.children].filter(e=>e.offsetParent&&e.getBoundingClientRect().height>0);
                 const tops=kids.map(e=>Math.round(e.getBoundingClientRect().top/8));const rowsN=new Set(kids.map(e=>{const r=e.getBoundingClientRect();return Math.round((r.top+r.bottom)/2/12)})).size;
                 return {h:Math.round(bar.getBoundingClientRect().height),rows:rowsN,small:kids.flatMap(e=>[...e.querySelectorAll('button,input'),e].filter(x=>x.matches('button,input')&&x.offsetParent&&!x.closest('.h-pop')).map(x=>[x.id||x.textContent.trim().slice(0,8),Math.round(x.getBoundingClientRect().height)]).filter(([_,h])=>h<43.5))}}""")
-            assert r["rows"] <= 3 and r["h"] <= 170, (path, width, r)
+            assert r["rows"] <= 2 and r["h"] <= 120, (path, width, r)            # phones: sport tabs, then search + Filters (2026-11-12)
             assert r["small"] == [], (path, width, r)
             assert p.evaluate("document.documentElement.scrollWidth<=document.documentElement.clientWidth+1")
             assert not p.errors
@@ -470,3 +486,54 @@ def test_phone_targets_outside_the_board(browser, live):
         assert not p.errors
     finally:
         c.close()
+
+
+# ---- phone simplification (owner 2026-11-12: "this new ui is super confusing on mobile"): one compact row per prop, two-row header,
+# everything moved stays one tap away (Filters sheet, More list)
+@pytest.mark.parametrize("width", (320, 375, 390, 430))
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_phone_board_is_simple(browser, many_apps, width, theme):
+    for path in ("/", "/sports"):
+        c, p = page(browser, many_apps, width, theme, path)
+        try:
+            fix_shot(p, f"simple-board-{path.strip('/') or 'cs2'}-{width}-{theme}")
+            rows = p.locator("#hub-rows tr.h-row").evaluate_all("rs=>rs.slice(0,12).map(r=>Math.round(r.getBoundingClientRect().height))")
+            assert rows and all(56 <= h <= (124 if width <= 320 else 104) for h in rows), (path, width, sorted(rows))          # 64-72px; a PrizePicks kind or a below-break-even note adds a line
+            # the row: photo (sports), name, line, side + chance, one 44px add; no strip, no meta
+            r0 = p.locator("#hub-rows tr.h-row").first
+            assert r0.locator(".h-c-hits").is_hidden() and r0.locator(".h-c-line small").is_hidden()
+            add = r0.locator(".h-c-add button").bounding_box()
+            assert add["width"] >= 43.5 and add["height"] >= 43.5, add
+            if path == "/sports":
+                assert p.locator("#hub-rows tr.h-row .h-c-player .u-face").first.is_visible()
+            # the header: sport tabs, then search + Filters
+            bar = p.evaluate("""()=>[...document.querySelector('#u-hub .h-toolbar').children].filter(e=>e.offsetParent&&e.getBoundingClientRect().height).map(e=>e.className||e.id)""")
+            assert len(bar) == 3, bar
+            # moved controls are in the Filters sheet
+            p.locator("#hub-filters-toggle").click()
+            pop = p.locator("#hub-filter-pop")
+            for sel in ("#hub-platform [data-id=all]", "#hub-sort", "[data-hub=save-view]", "#hub-views"):
+                el = pop.locator(sel).first
+                el.scroll_into_view_if_needed()
+                assert el.is_visible(), sel
+            if pop.locator(".h-ev-link").count():
+                assert pop.locator(".h-ev-link").is_visible()
+            fix_shot(p, f"simple-filters-{path.strip('/') or 'cs2'}-{width}-{theme}")
+            p.locator("#hub-filter-pop .h-pop-foot [data-hub=filters]").click()
+            p.locator("#hub-board-section [data-hub=group-by][data-id=player]").click()        # By prop / By player stays on the board
+            p.wait_for_selector("tr.h-player-row")
+            # More: Record and the other sections, sign out
+            p.locator("#hub-more-toggle").click()
+            more = p.locator("#hub-more")
+            for t in ("Record", "Tools", "Sign out"):
+                assert more.get_by_text(t, exact=False).first.is_visible(), t
+            tabs = p.locator(".h-tabbar > button").evaluate_all("bs=>bs.filter(b=>getComputedStyle(b).display!=='none').map(b=>b.dataset.id||b.id)")
+            assert len(tabs) == 4, tabs
+            fix_shot(p, f"simple-more-{path.strip('/') or 'cs2'}-{width}-{theme}")
+            more.get_by_text("Record").first.click()
+            p.wait_for_selector("#hub-record-section:not([hidden])")
+            assert p.locator("#hub-more-toggle").get_attribute("aria-current") == "page"
+            assert p.evaluate("document.documentElement.scrollWidth<=document.documentElement.clientWidth+1")
+            assert not p.errors
+        finally:
+            c.close()

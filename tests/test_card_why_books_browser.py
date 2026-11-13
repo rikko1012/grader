@@ -14,7 +14,7 @@ import workspace_books as wb
 from tests.test_audit_esports_1105 import _cs2_row
 from tests.test_phase4_browser import lines_read, page, SHOWN_BOOKS
 from tests.test_pickem_readers import event_of
-from tests.test_upgrade_browser import browser, env, context, no_h_scroll, DESK, PHONE  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, no_h_scroll, DESK, PHONE  # noqa: F401
 
 SHOTS = Path(os.environ['AUDIT_SHOTS']) if os.environ.get('AUDIT_SHOTS') else None
 
@@ -80,7 +80,7 @@ def test_every_extra_book_row_has_hit_rates_and_the_why_card(browser, books, sp,
         lines_read(p, '/#all-sports')
         p.locator(f'#hub-sports [data-id={sp}]').click()
         p.wait_for_function(f"{SHOWN_BOOKS}.includes('{book}')", timeout=20000)
-        p.locator(f'#hub-platform [data-hub="book"][data-id="{book}"]').click()
+        in_sheet(p, f'#hub-platform [data-hub="book"][data-id="{book}"]').click(); close_sheet(p)
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length===2", timeout=20000)
         p.wait_for_function("!document.querySelector('#hub-rows .h-hit-wait')", timeout=20000)
         got = cells(p)

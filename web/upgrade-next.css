@@ -791,3 +791,117 @@ html[data-ui=next] .u-toast .u-toast-undo{margin-left:10px;min-height:36px;paddi
  html[data-ui=next] #u-hub :is(#hub-studio-section,#hub-picks-section,#hub-record-section,#hub-tools-section,#hub-alerts-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(button,select,input:not([type=checkbox]):not([type=radio]),a.u-btn,a.h-link,.h-link,summary,.h-tool-grid a){min-height:44px;box-sizing:border-box}
  html[data-ui=next] #u-hub :is(#hub-studio-section,#hub-picks-section,#hub-record-section,#hub-tools-section,#hub-alerts-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(a.u-btn,a.h-link,.h-link,.h-tool-grid a){display:inline-flex;align-items:center}
 }
+
+/* ======================================================================================================================================
+   Phone simplification (owner 2026-11-12: "this new ui is super confusing on mobile fix it"). Under 600px the board answers "who,
+   what line, which side, how sure, add it" in one compact row; everything else is one tap away (the card, the Filters sheet, More).
+   Tablets and desktop keep their layout. Rollback: UI_NEXT=0.
+   ====================================================================================================================================== */
+/* player photos: shown as soon as they load (the fade-in waited for a load event that a cached or re-inserted image may never send);
+   a failed image hides itself and the initials stay (upgrade.js error handler) */
+html[data-ui=next] .u-face>img{opacity:1;transition:none}
+/* 1101-1499px hid every row's photo for room: from 1401px (card closed) the photo is back, 28px; below that the name needs the room */
+@media(min-width:1401px) and (max-width:1499px){
+ html[data-ui=next] #u-hub#u-hub:not(.h-card-open) #hub-table .h-c-player :is(.h-face,.u-face){display:inline-grid;--face:28px;width:28px;height:28px;flex-basis:28px;margin:2px 8px 0 0}
+ html[data-ui=next] #u-hub#u-hub:not(.h-card-open) #hub-table td.h-c-player .u-face+.h-player{width:calc(100% - 36px)}
+}
+html[data-ui=next] #u-hub#u-hub #hub-table#hub-table#hub-table .h-m-vs{display:none}
+@media(max-width:599px){
+ /* -- toolbar: sport tabs, then search + Filters; it slides away on the way down and back on the way up -- */
+ html[data-ui=next] #u-hub .h-toolbar{flex-wrap:wrap;gap:6px;padding:6px 0;transition:transform .18s ease}
+ html[data-ui=next] #u-hub .h-toolbar.h-bar-away{transform:translateY(calc(-100% - 8px))}
+ html[data-ui=next] #u-hub .h-toolbar .h-sports{order:0;flex:1 1 100%}
+ html[data-ui=next] #u-hub .h-toolbar .h-sports [data-id=all]{order:9}
+ html[data-ui=next] #u-hub .h-toolbar .h-search{order:1;flex:1 1 0;min-width:0}
+ html[data-ui=next] #u-hub .h-toolbar .h-pop-wrap:has(#hub-filters-toggle){order:2;flex:none}
+ html[data-ui=next] #u-hub .h-toolbar .h-refresh{display:none}
+ html[data-ui=next] #u-hub .h-table-title{flex-wrap:wrap;gap:6px}
+ /* -- the Filters sheet carries apps, EV, Views, sort and the view switches -- */
+ html[data-ui=next] #u-hub #hub-filter-pop{max-height:78vh}
+ html[data-ui=next] #u-hub .h-phone-more{display:grid;gap:10px;margin:12px 0 4px;padding-top:12px;border-top:1px solid var(--n-line2)}
+ html[data-ui=next] #u-hub .h-phone-more>*{width:100%;max-width:100%;box-sizing:border-box}
+ html[data-ui=next] #u-hub .h-phone-more .h-platform{display:flex;flex-wrap:wrap;overflow:visible;background:none;border:0;gap:6px}
+ html[data-ui=next] #u-hub .h-phone-more .h-platform>button{flex:1 0 auto;min-width:56px;min-height:44px;border:1px solid var(--n-line2)!important;border-radius:var(--n-r)}
+ html[data-ui=next] #u-hub .h-phone-more .h-ev-link{min-height:44px;justify-content:center}
+ html[data-ui=next] #u-hub .h-phone-more #hub-views-toggle{display:none}
+ html[data-ui=next] #u-hub .h-phone-more #hub-views-pop,html[data-ui=next] #u-hub .h-phone-more #hub-views-pop[hidden]{display:grid!important;position:static;inset:auto;width:auto;max-height:none;gap:8px;padding:0;border:0;background:none;box-shadow:none}
+ html[data-ui=next] #u-hub .h-phone-more .h-sortbar{display:flex;gap:6px;align-items:center}
+ html[data-ui=next] #u-hub .h-phone-more .h-sortbar select{flex:1}
+ html[data-ui=next] #u-hub .h-phone-more :is(.h-groupmode,.h-viewmode){display:flex}
+ html[data-ui=next] #u-hub .h-phone-more :is(.h-groupmode,.h-viewmode) button{flex:1}
+ /* -- the board row: photo, name, stat + scope · matchup on the left; line, side + chance, letter on the right; one + -- */
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]{display:grid;grid-template-columns:minmax(36%,1fr) auto minmax(0,auto) 44px;
+  grid-template-areas:"player line scout add" "market market lines add";gap:2px 8px;align-items:center;padding:12px 8px;min-height:0;border-bottom:1px solid var(--n-line)}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>td{padding:0;border:0;min-width:0;background:transparent}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>:is(.h-c-watch,.h-c-proj,.h-c-hits,.h-c-edge,.h-c-medge){display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player{grid-area:player;display:flex;align-items:center;gap:8px;min-width:0}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .u-face{display:inline-grid;float:none;margin:0;--face:32px;width:32px;height:32px;flex:0 0 32px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player{width:auto;min-width:0;min-height:44px;margin:-12px 0;padding:0;display:flex;align-items:center;text-align:left}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player b{display:block;font:600 15px/1.25 var(--n-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-player .h-player small{display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market{grid-area:market;justify-self:stretch;text-align:left;min-width:0;padding-left:0}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]:has(.h-c-player .u-face)>.h-c-market{padding-left:40px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market .h-mcell{display:flex;flex-direction:row;align-items:center;justify-content:flex-start}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market .h-mcell>div{display:flex;flex-direction:row;flex-wrap:nowrap;flex:1 1 auto;align-items:baseline;gap:4px;min-width:0;white-space:nowrap;overflow:hidden}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market :is(b,small){display:inline;font:400 12px/1.3 var(--n-font);color:var(--n-t3);margin:0;overflow:hidden;text-overflow:ellipsis}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market b{color:var(--n-t2);flex:none;max-width:55%;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market small{flex:1 1 auto;min-width:0;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market b::after{content:" ·"}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market .h-m-vs{display:inline}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-market :is(.h-gap,.h-prop-toggle){display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line{grid-area:line;justify-self:end;text-align:right}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line b{font:600 16px/1.2 var(--n-mono);white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line b .u-lt{display:table;position:static;margin:2px 0 0 auto;font-size:8.5px;line-height:1.3}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line small{display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout{grid-area:scout;justify-self:end;min-width:0;max-width:min(44vw,170px,100%);overflow:hidden;padding:0}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-scout{display:flex;flex-wrap:nowrap;align-items:center;gap:6px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-direction{display:flex;gap:4px;white-space:nowrap;font-size:13px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-direction-options{display:flex;flex-direction:column;align-items:flex-end;gap:0;font-size:11px;white-space:nowrap;max-width:100%}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout :is(.h-band,.h-grade-tag,.h-alt-note,.h-one-side,.h-reported,.h-below:not(.h-below-alt)){display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-scout-grade:has(.h-est){flex:1 0 100%;justify-content:flex-end}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-est{font-size:9.5px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-scout{flex-wrap:wrap;justify-content:flex-end;row-gap:2px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-below.h-below-alt{display:block;flex:1 0 100%;text-align:right;font-size:10px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-scout-grade{display:flex;align-items:center}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-grade-text{font-size:10px;white-space:nowrap}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare{grid-area:lines;justify-self:end;min-width:0;padding:0}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare .h-lines-one{display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare .h-lines-btn{display:inline-flex;align-items:center;width:auto;padding:0 0 0 8px;border:0;background:none;gap:0;margin:-12px 0}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare .h-lines-btn b{font:500 12px/1.3 var(--n-font);color:var(--n-acc-t)}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-compare .h-lines-btn :is(small,em){display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-add{grid-area:add;align-self:center;justify-self:end}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-add .h-add{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;font-size:0;display:inline-grid;place-items:center;overflow:hidden}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-add .h-add::before{content:"+";font:500 22px/1 var(--n-font)}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-add .h-add.is-on::before{content:"\2713";font-size:18px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-add .h-add:is(.h-add-info,.selected)::before{content:"\203A";font-size:24px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-add .h-add.h-add-alt::before{content:"+"}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record] .h-row-role{display:none}
+ /* By player keeps the player's header (photo + name); its rows show the stat + scope where the name was */
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]{grid-template-areas:"market line scout add" "player player lines add"}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-player{display:flex;justify-self:start;width:auto}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-player :is(.u-face,.h-face,.h-player b,.h-player small){display:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-player .h-player::before{padding-left:0}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-player .h-player{min-width:56px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-market{padding-left:0}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-market b{font:600 14px/1.25 var(--n-font);color:var(--n-t1);max-width:100%}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-market .h-mcell>div{flex-direction:column;align-items:flex-start}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-market b::after{content:none}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table.h-by-player>tbody>tr[data-record]>.h-c-market .h-m-vs{display:none}
+ /* -- bottom bar: Board, Slip, My picks, More, with icons; Record lives in More -- */
+ html[data-ui=next] #u-hub .h-tabbar [data-hub=section][data-id=record]{display:none}
+ html[data-ui=next] #u-hub .h-tabbar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;letter-spacing:.04em}
+ html[data-ui=next] #u-hub .h-tabbar button::before{display:block;font:400 18px/1 var(--n-font);letter-spacing:0;text-transform:none}
+ html[data-ui=next] #u-hub .h-tabbar [data-id=board]::before{content:"\25A4"}
+ html[data-ui=next] #u-hub .h-tabbar [data-id=studio]::before{content:"\2630"}
+ html[data-ui=next] #u-hub .h-tabbar [data-id=picks]::before{content:"\2713"}
+ html[data-ui=next] #u-hub .h-tabbar #hub-more-toggle::before{content:"\22EF"}
+ html[data-ui=next] #u-hub .h-tabbar #hub-more-toggle[aria-current=page]{border-top-color:var(--n-acc);color:var(--n-t1)}
+}
+@media(min-width:600px){html[data-ui=next] #u-hub .h-more-sheet .h-more-phone{display:none}}
+html[data-ui=next] #u-hub .h-dec-stake{display:inline-flex;align-items:center;margin-left:8px;padding:1px 6px;border:1px solid var(--n-line2);border-radius:var(--n-r);font:600 11px/1.4 var(--n-mono);color:var(--n-t2)}
+@media(max-width:360px){
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]{grid-template-columns:minmax(33%,1fr) auto minmax(0,auto) 44px;gap:2px 6px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout{max-width:min(52vw,170px,100%)}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-scout .h-direction{font-size:12px;gap:3px}
+ html[data-ui=next] #u-hub#u-hub#u-hub #hub-table#hub-table#hub-table#hub-table>tbody>tr[data-record]>.h-c-line b{font-size:15px}
+}

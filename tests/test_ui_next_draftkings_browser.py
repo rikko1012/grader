@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import workspace_api
-from tests.test_upgrade_browser import browser, env, context, no_h_scroll  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, no_h_scroll  # noqa: F401
 
 SHOTS = Path(os.environ.get("DK_SHOTS", "")) if os.environ.get("DK_SHOTS") else None
 
@@ -62,6 +62,8 @@ def test_draftkings_uses_the_same_components_as_the_other_books(browser, dk, wid
     c, p = open_(browser, dk, width, theme)
     try:
         dkb = '#hub-platform [data-hub=book][data-id=draftkings]'
+        if width < 600:                                       # the phone keeps the app pills in the Filters sheet (2026-11-12)
+            p.locator("#hub-filters-toggle").click()
         p.wait_for_selector(dkb, timeout=20000)
         # the pill: same element, classes and look as FanDuel's / PrizePicks' (count badge included when the others have one)
         a, b, fd = p.evaluate(CLASSES, dkb), p.evaluate(CLASSES, '#hub-platform [data-hub=book][data-id=prizepicks]'), p.evaluate(CLASSES, '#hub-platform [data-hub=book][data-id=fanduel]')
@@ -71,25 +73,28 @@ def test_draftkings_uses_the_same_components_as_the_other_books(browser, dk, wid
         assert (p.locator(dkb + " .h-plays").count() > 0) == (p.locator('#hub-platform [data-hub=book][data-id=prizepicks] .h-plays').count() > 0)
         shot(p, f"board-all-{width}-{theme}")
         if SHOTS and p.locator('#hub-platform [data-hub=book][data-id=fanduel]:not([hidden])').count():
-            p.locator('#hub-platform [data-hub=book][data-id=fanduel]').click()
+            in_sheet(p, '#hub-platform [data-hub=book][data-id=fanduel]').click(); close_sheet(p)
             p.wait_for_timeout(1500)
             shot(p, f"board-fd-{width}-{theme}")
         p.locator(dkb).click()
+        if width < 600:
+            p.locator("#hub-filter-pop .h-pop-foot [data-hub=filters]").click()
         p.wait_for_selector('#hub-rows tr[data-record*="draftkings"]', timeout=20000)
         shot(p, f"board-dk-{width}-{theme}")
         row = p.locator('#hub-rows tr[data-record*="draftkings"]').first
         # the row: the same cells as any other row, the app + age meta in the Line cell, odds in the American form other books use
         cells = row.evaluate("r=>[...r.children].map(td=>td.className.split(' ').filter(c=>c.startsWith('h-c-')).join(' '))")
         assert {"h-c-player", "h-c-market", "h-c-line", "h-c-scout", "h-c-add"} <= set(cells), cells
-        meta = row.locator(".h-c-line small").inner_text()
+        meta = row.locator(".h-c-line small").text_content()
         assert meta.startswith("DK ·"), meta
-        txt = " ".join(row.inner_text().split())
+        txt = " ".join(row.text_content().split())
         assert "-117 / +105" in txt or "-110 / -110" in txt
         assert row.locator(".h-c-scout .h-reported").count() == 1                 # the shared reported-odds look (h-grade-text family)
-        assert row.locator(".h-c-add button").get_attribute("class").split()[:2] == ["h-add", "h-add-info"]   # like any view-only row
+        assert row.locator(".h-c-add button").get_attribute("class").split()[:2] == ["h-add", "h-add-info"]
+        txt = txt   # like any view-only row
         no_h_scroll(p)
         # the card: the same header, decision strip and tabs as another book's card
-        row.locator(".h-player").click()
+        (row.locator(".h-player") if row.locator(".h-player").is_visible() else row.locator(".h-c-line")).click()      # a phone row opens its card by a tap anywhere
         p.wait_for_selector("#hub-detail .h-card-head", timeout=20000)
         p.wait_for_timeout(300)
         shot(p, f"card-dk-{width}-{theme}")

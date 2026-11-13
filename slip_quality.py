@@ -351,6 +351,38 @@ def max_goblins(lines):
     return 1 if lines == "one_goblin" else None
 
 
+# Maps scope preference (owner 2026-11-12: "map 1-2 lines ... prioritized in slip builder over map 1 lines unless the map 1 line has
+# more value"). When one player's stat in one match is on offer for more than one maps scope, the builder uses the LONGEST scope
+# (Maps 1-3, then Maps 1-2, then Map 1); a shorter scope replaces it only when its value - the leg's rank_p, the per-leg number the
+# search already ranks by - is strictly higher. Ties go to the longer scope. The other scope's legs of that player + stat are left
+# out of the candidates, so one slip never holds both (one leg per player already held that) and a batch with repeats allowed never
+# trades one scope for the other. With "No repeat props" the preferred leg, once used, frees its other scope for a later slip
+# (a different prop, as before). Grades, chances, eligibility and the search itself are unchanged.
+SCOPE_MAPS = {"maps13": 3, "maps12": 2, "map1": 1}
+
+
+def scope_choice(legs, value=lambda l: l["rank_p"]):
+    """(legs kept in their order, [{kept, dropped, margin}] one per player + stat whose scope decided). Only legs whose period is a
+    known maps scope are grouped; everything else passes through."""
+    groups = {}
+    for l in legs:
+        n = SCOPE_MAPS.get(l.get("period"))
+        if n is not None:
+            groups.setdefault((l["sport"], l["book"], l["event"], l["pkey"], l["stat"]), {}).setdefault(n, []).append(l)
+    drop, notes = set(), []
+    for g in groups.values():
+        if len(g) < 2:
+            continue
+        best = {n: max(ls, key=value) for n, ls in g.items()}
+        win = max(best, key=lambda n: (value(best[n]), n))          # strictly more value wins; equal value: the longer scope
+        longest = max(g)
+        for n, ls in g.items():
+            if n != win:
+                drop.update(id(x) for x in ls)
+        notes.append({"kept": best[win], "longest": best[longest], "margin": value(best[win]) - value(best[longest])})
+    return [l for l in legs if id(l) not in drop], notes
+
+
 def _score(l, uses):
     return math.log(max(l["rank_p"], 1e-9)) - REUSE_PENALTY * uses(l)
 
@@ -468,7 +500,7 @@ def build(legs, opts):
         return 0 if no_repeat else used_prop.get(l["prop"], 0) + used_player.get((l["sport"], l["pkey"]), 0)
 
     for k in range(count):
-        free = [l for l in cands if not (no_repeat and l["prop"] in used_prop)]
+        free = scope_choice([l for l in cands if not (no_repeat and l["prop"] in used_prop)])[0]
         got, nn, ex = _best_slip(free, size, platform, et, same_match, mix, uses, taken, cap)
         nodes += nn
         exact = exact and ex

@@ -244,7 +244,7 @@ def test_matchroom_opens_from_the_tools_section_and_the_more_sheet(browser, live
 def bump_texts(h):
     """what the design says about vargo's bumped line: the row's note, the card's header and the card's line-move sentence"""
     p = h.p
-    row = flat(h.row("vargo").locator(".h-c-line small").inner_text())
+    row = __import__("re").sub(r"\s*·?\s*was ", " · was ", flat(h.row("vargo").locator(".h-c-line small").text_content()))
     h.card(VARGO_UD)
     head = flat(p.locator("#hub-detail .h-card-id p").inner_text())
     why = [flat(t) for t in p.locator("#hub-detail .h-why li").all_inner_texts() if "line moved" in t.lower()]
@@ -262,10 +262,11 @@ def test_a_bumped_line_says_so_on_the_row_the_ladder_line_and_the_card_header(br
         # the row: the same "was 37.5", whole and inside the Line column; a line that did not move says nothing
         row = n.row("vargo")
         was = row.locator(".h-c-line .h-was")
-        assert was.inner_text() == "was 37.5" == old_row.split("· ")[-1]
-        b, cell = n.in_view(was), row.locator(".h-c-line").evaluate(BOX)
-        assert b["x"] >= cell["x"] - 0.5 and b["r"] <= cell["r"] + 0.5 and cell["w"] >= 60, (b, cell)
-        assert flat(row.locator(".h-c-line small").inner_text()).replace(" was", " · was") == old_row
+        assert was.text_content() == "was 37.5" == old_row.split("· ")[-1]
+        if not n.phone:                     # phone simplification (owner 2026-11-12): the phone row drops app · age and bump notes; card + ladder say it
+            b, cell = n.in_view(was), row.locator(".h-c-line").evaluate(BOX)
+            assert b["x"] >= cell["x"] - 0.5 and b["r"] <= cell["r"] + 0.5 and cell["w"] >= 60, (b, cell)
+            assert flat(row.locator(".h-c-line small").inner_text()).replace(" was", " · was") == old_row
         assert row.locator(".h-c-line b").evaluate("b => b.firstChild.textContent") == "38.5"
         assert n.row("orlo").locator(".h-was").count() == 0 and "was" not in n.row("orlo").locator(".h-c-line").inner_text()
         # the ladder: the bumped lines (Underdog and PrizePicks standard) carry it, the goblin and demon do not
@@ -291,7 +292,7 @@ def gap_texts(h):
     the "Lines differ" filter keeps."""
     p = h.p
     chip = h.row("orlo").locator(".h-gap")
-    row = (chip.inner_text(), chip.get_attribute("title"))
+    row = (chip.text_content().strip(), chip.get_attribute("title"))
     h.card(ORLO_UD)
     h.tab("lines")
     p.wait_for_selector("#hub-detail .h-best-lines .h-gap")
@@ -318,7 +319,8 @@ def test_a_line_discrepancy_is_on_the_row_and_on_the_card_lines_tab(browser, liv
     assert old_card == old_row and old_kept == ["orlo", "vargo"]          # vargo: PrizePicks' goblin and demon sit off Underdog's line
     with Hub(browser, live, "next", size) as n:
         p = n.p
-        n.in_view(n.row("orlo").locator(".h-gap"))
+        if not n.phone:                     # the phone row drops the chip (owner 2026-11-12); the card's Lines tab carries it
+            n.in_view(n.row("orlo").locator(".h-gap"))
         assert p.locator("#hub-rows .h-gap").count() == 1                               # only where the apps differ by a full point
         row, card, shop, kept = gap_texts(n)
         assert row == old_row and card == old_card and kept == old_kept

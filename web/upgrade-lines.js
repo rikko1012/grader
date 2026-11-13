@@ -5,6 +5,16 @@
  */
 const num = v => typeof v === 'number' && Number.isFinite(v);
 const PICKEM = new Set(['prizepicks', 'underdog']);
+const pickem = r => PICKEM.has(r.offer.platform) || r.extra?.kind === 'pickem';
+const prices = r => ['over','under'].map(s => r.offer[s]?.price).filter(p => num(p) && p > 1)
+  .concat((r.offer.reported_prices || []).filter(p => num(p) && Math.abs(p) >= 100).map(p => p < 0 ? 1 + 100 / -p : 1 + p / 100));
+// Presentation only. A price never proves that a provider calls a line its main line.
+export function bookLineRank(r) {
+  if (pickem(r)) return 0;
+  if (prices(r).some(p => p <= 1.2)) return 3; // -500 or shorter: never the default headline ahead of normal prices.
+  return r.market.line_type === 'standard' ? 0 : ['alternate','ladder rung'].includes(r.market.line_type) ? 2 : 1;
+}
+const balance = r => { const ps = prices(r); return ps.length ? Math.max(...ps.map(p => Math.abs(1 / p - 0.5))) : Infinity; };
 
 export const propKey = r => [r.sport, r.event.id, r.player.key, r.market.stat, r.market.period].join('|');
 export const playerKey = r => [r.sport, r.event.id, r.player.key].join('|');
@@ -15,12 +25,17 @@ export const lineId = r => [r.sport, r.offer.platform, r.offer.offer_id].join('|
    projection. Lower sorts first. */
 export function mainRank(r) {
   const s = r.scout || {}, line = Number(r.offer.line);
-  return [s.grade && !s.hold ? 0 : 1, s.side ? 0 : 1, PICKEM.has(r.offer.platform) ? 0 : 1, r.market.line_type === 'standard' ? 0 : 1,
+  return [bookLineRank(r), s.grade && !s.hold ? 0 : 1, s.side ? 0 : 1, PICKEM.has(r.offer.platform) ? 0 : 1, r.market.line_type === 'standard' ? 0 : 1,
     num(s.projection) && Number.isFinite(line) ? Math.abs(line - s.projection) : Infinity];
 }
 const cmp = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; } return 0; };
 export function pickMain(lines, ranked) {
   if (!lines.length) return null;
+  if (lines.every(r => !pickem(r))) {
+    // In a sportsbook view, a high chance at a short price must not replace the main line.
+    // Where no main classification exists, show the most balanced quote, without calling it main.
+    return lines.slice().sort((a,b) => bookLineRank(a)-bookLineRank(b) || balance(a)-balance(b))[0];
+  }
   if (ranked) return lines[0];                          /* the sort ranked the lines: the row shows the one that put it there */
   let best = lines[0], rank = mainRank(best);
   for (let i = 1; i < lines.length; i++) { const k = mainRank(lines[i]); if (cmp(k, rank) < 0) { best = lines[i]; rank = k; } }
@@ -29,7 +44,7 @@ export function pickMain(lines, ranked) {
 
 /* The ladder: every line by line value, then the app's name, then the line type. */
 export function ladder(lines) {
-  return lines.slice().sort((a, b) => Number(a.offer.line) - Number(b.offer.line)
+  return lines.slice().sort((a, b) => bookLineRank(a) - bookLineRank(b) || Number(a.offer.line) - Number(b.offer.line)
     || String(a.offer.platform_label || a.offer.platform).localeCompare(String(b.offer.platform_label || b.offer.platform))
     || String(a.market.line_type).localeCompare(String(b.market.line_type)));
 }
@@ -76,6 +91,10 @@ export function groupProps(sorted, universe, ranked) {
   return out;
 }
 
+/* Maps scopes longest first (owner 2026-11-12: Maps 1-2 lines before Map 1 lines; LoL BO5 Maps 1-3 first); other periods keep their order. */
+const PERIOD_RANK = new Map([['maps13', 0], ['maps12', 1], ['map1', 2]]);
+export const periodRank = p => (PERIOD_RANK.has(p) ? PERIOD_RANK.get(p) : 3);
+
 /* Rows by player: each player once (in the order of their first row), their props under them by stat then period. */
 export function groupPlayers(groups) {
   const players = new Map();
@@ -83,7 +102,7 @@ export function groupPlayers(groups) {
   for (const p of players.values()) {
     const order = new Map();
     p.props.forEach((g, i) => { const k = g.main.market.stat; if (!order.has(k)) order.set(k, i); });
-    p.props.sort((a, b) => order.get(a.main.market.stat) - order.get(b.main.market.stat) || String(a.main.market.period).localeCompare(String(b.main.market.period)));
+    p.props.sort((a, b) => order.get(a.main.market.stat) - order.get(b.main.market.stat) || periodRank(a.main.market.period) - periodRank(b.main.market.period) || String(a.main.market.period).localeCompare(String(b.main.market.period)));
     p.lines = p.props.reduce((n, g) => n + g.total, 0);
   }
   return [...players.values()];

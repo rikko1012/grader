@@ -10,7 +10,7 @@ import server
 from tests.test_hub_structure_browser import FLAGS, board
 from tests.test_research_hub_browser import book, saved_state
 from tests.test_ui_next_browser import nxt
-from tests.test_upgrade_browser import browser, env, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 
 # a control a finger or pointer can hit: phone controls are 44px on the redesign, desktop controls 30-32px (was 40px on both)
 SMALL = """([root, min]) => [...document.querySelectorAll(root+' button,'+root+' select,'+root+' input,'+root+' summary,'+root+' a')]
@@ -60,7 +60,7 @@ def test_desktop_first_row_high_on_the_screen_with_ten_rows_and_one_toolbar(ctx,
     assert p.locator('#u-hub [data-hub=close]').locator('visible=true').count() == 1
     nav = [t.strip() for t in p.locator('.h-sidebar nav [data-hub=section]').all_text_contents()]
     assert [n for n in nav if n not in ('EV', 'Arbitrage', 'Sportsbooks')] == ['Board', 'Slips', 'My picks', 'Record', 'Tools'], nav     # Sportsbooks: main 3ef2fad
-    p.locator('#hub-sort').select_option('start')
+    in_sheet(p, '#hub-sort').select_option('start')
     head = p.locator('#hub-rows tr.h-game-row [data-hub=game]').first
     event = head.locator('.h-match').text_content()
     assert head.locator('.h-countdown').text_content().startswith('in ')
@@ -165,7 +165,7 @@ def test_phone_bottom_tab_bar_and_two_line_cards(ctx, env):
     assert bar.bounding_box()['y'] + bar.bounding_box()['height'] >= 843
     assert p.locator('.h-sidebar').is_hidden() and p.locator('.h-slip').is_hidden()
     heights = p.evaluate("[...document.querySelectorAll('#hub-rows tr[data-record]')].slice(0,6).map(r=>Math.round(r.getBoundingClientRect().height))")
-    assert all(90 <= h <= 215 for h in heights), heights
+    assert all(56 <= h <= 110 for h in heights), heights          # phone simplification (2026-11-12): one compact row per prop
     assert p.locator('#hub-rows tr[data-record]').first.bounding_box()['y'] < 320
     small = p.evaluate(SMALL, ['#u-hub', PHONE_MIN])
     assert small == [], small
@@ -173,7 +173,8 @@ def test_phone_bottom_tab_bar_and_two_line_cards(ctx, env):
     assert p.locator('#hub-more [data-hub=section][data-id=tools]').is_visible()
     p.locator('#hub-more [data-hub=section][data-id=tools]').click()
     assert p.locator('#hub-tools-section').is_visible() and p.locator('#hub-more').is_hidden()
-    p.locator('.h-tabbar [data-id=record]').click()
+    p.locator('.h-tabbar [data-hub=more]').click()                                    # phones: Record lives in More (2026-11-12)
+    p.locator('#hub-more [data-hub=section][data-id=record]').click()
     p.wait_for_selector('.h-record-card', timeout=30000)
     no_h_scroll(p)
     p.locator('.h-tabbar [data-id=studio]').click()
@@ -283,7 +284,7 @@ def test_every_page_keeps_its_targets_and_the_chart_dates(ctx, env, size):
     lim = PHONE_MIN if size == PHONE else DESK_MIN
     p = board(ctx, env, size)
     is_next(p)
-    p.locator('#hub-sort').select_option('start')
+    in_sheet(p, '#hub-sort').select_option('start')
     bad = p.evaluate(SMALL, ['#u-hub', lim])
     assert bad == [], bad
     p.locator('#hub-filters-toggle').click()

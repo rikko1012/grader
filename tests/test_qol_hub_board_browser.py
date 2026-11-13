@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from tests.test_upgrade_browser import browser, env, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
+from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, context, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 from tests.workspace_fixture import iso, row
 
 
@@ -57,7 +57,7 @@ def test_toolbar_state_survives_reload_but_not_a_new_tab(browser, env):
     c = context(browser, env, DESK)
     try:
         p = hub(c, env)
-        p.locator('#hub-platform [data-id=underdog]').click()
+        in_sheet(p, '#hub-platform [data-id=underdog]').click(); close_sheet(p)
         p.locator('#hub-q').fill('vargo')
         p.locator('#hub-filters-toggle').click()
         p.locator('#hub-side').select_option('over')

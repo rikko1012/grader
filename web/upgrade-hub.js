@@ -147,7 +147,7 @@ export function mount(C) {
     const byStart=(a,b)=>Date.parse(a.event.start_utc)-Date.parse(b.event.start_utc)||gameKey(a).localeCompare(gameKey(b))||a.player.name.localeCompare(b.player.name);
     /* an empty cell (no side, no games at this line, no edge) sorts after every filled one, in either direction */
     const byValue=(x,y)=>x==null&&y==null?0:x==null?1:y==null?-1:(asc?x-y:y-x);
-    return list.sort((a,b)=> {
+    return mapsFirst(list.sort((a,b)=> {
       if(H.sortBy==='start') return asc?byStart(a,b):byStart(b,a);
       if(H.sortBy==='player') return (asc?1:-1)*a.player.name.localeCompare(b.player.name)||byStart(a,b);
       if(H.sortBy==='line'||H.sortBy==='chance'||WINDOWS.has(H.sortBy)) return byValue(sortValue(a,H.sortBy),sortValue(b,H.sortBy))||byStart(a,b);
@@ -158,7 +158,18 @@ export function mount(C) {
          every line above it, and a line with no key after both, so 100% hit rates at a price that cannot pay never flood the top */
       if(H.sortBy==='hit'){const x=parOf(a)?.hit,y=parOf(b)?.hit,rk=h=>!h?2:h.below?1:0;return rk(x)-rk(y)||(x&&y?y.key-x.key:0)||byStart(a,b);}
       return byStart(a,b);
-    });
+    }));
+  }
+  /* owner 2026-11-12 ("make sure map 1-2 lines show before map 1 lines"): in the default view (no sort chosen by the member), one
+     player's stat on several maps scopes stays together where its first row landed, Maps 1-3, then Maps 1-2, then Map 1. A sort the
+     member chose is left exactly as sorted; rows with no maps scope (NBA / NFL periods) never move. */
+  function mapsFirst(list) {
+    if(H.sortChosen)return list;
+    const MAPS_RANK={maps13:0,maps12:1,map1:2};
+    const rk=r=>Object.prototype.hasOwnProperty.call(MAPS_RANK,r.market.period)?MAPS_RANK[r.market.period]:null;
+    const gk=(r,i)=>rk(r)==null?'#'+i:[r.sport,r.event.id,r.player.key,r.market.stat].join('|'), first=new Map();
+    list.forEach((r,i)=>{const k=gk(r,i);if(!first.has(k))first.set(k,i);});
+    return list.map((r,i)=>({r,i,g:first.get(gk(r,i)),s:rk(r)??3})).sort((a,b)=>a.g-b.g||a.s-b.s||a.i-b.i).map(x=>x.r);
   }
   /* the value a row sorts on: Scout's chance on its side; a window's hit rate for Scout's side (no side: empty, sorted last); the line */
   const WINDOWS=new Set(['l5','l10','l20','h2h','season']);
@@ -382,7 +393,7 @@ export function mount(C) {
      its full sentence in the tooltip); a page or row without the short text keeps the older label */
   const HOLD_SHORT_OF={'Scout grades lines priced near even.':'Priced far from even'};   /* an extra book's cap-3 row carries the sentence only */
   const holdText = s => s.hold?.short || HOLD_SHORT_OF[s.hold?.reason] || 'Research estimate';
-  const holdChip = s => `<span class="h-grade-text h-hold-why" style="display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom" title="${esc(s.hold?.reason||'')}">${esc(holdText(s))}</span>`;   /* one line: the row keeps its height */
+  const holdChip = s => `<span class="h-grade-text h-est h-hold-why" style="display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom" title="${esc(s.hold?.reason||'')}">${esc(holdText(s))}</span>`;   /* one line: the row keeps its height */
   /* the letter as on classic: gold for A, gold outline for B; a sub-threshold pick keeps its Lean wording; NBA/NFL letters carry no tag (ct-1b, owner 2026-11-08: released) */
   /* Bug 3 (owner 2026-11-12, "Not offered"): on NBA / NFL, when the app does not offer Scout's side on this line, the row keeps Scout's
      projection, side and chance and shows "Not offered" in place of the letter; no edge, no stake, no add for that side, and the card
@@ -562,6 +573,7 @@ export function mount(C) {
     const st='display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1;margin-top:0;font-size:10px';
     const cell=(text,title)=>`<small class="h-odds" style="${st}" title="${esc(title)}" aria-label="${esc('Odds: '+text+'. '+title)}">${esc(text)}</small>`;
     if(!PICKEM.includes(r.offer.platform)){
+      if(['over','under'].some(sd=>r.offer[sd]?.offered&&num(r.offer[sd].price)&&r.offer[sd].price>1))return '';   /* bookPriceSummary shows these (#69) */
       const sides=r.scout.side?[r.scout.side]:['over','under'], v=sides.map(sd=>[sd,ownOdds(r,sd)]).filter(([,x])=>x);
       return v.length?cell(v.map(([sd,x])=>(r.scout.side?sideWord(sd):(sd==='over'?'O':'U'))+' '+x).join(' · '),`${r.offer.platform_label}'s own price at ${r.offer.line}`):cell('No price listed',`${r.offer.platform_label} lists no price for this line right now`);
     }
@@ -595,6 +607,14 @@ export function mount(C) {
   /* owner 2026-11-08 ("i dont see players roles"): the row's second line opens with the player's role, the same text as the card's
      tag (r.player.role, every sport); no role, no tag. It sits before the matchup, which is cut first, so the name keeps its width. */
   const rowRole = r => r.player.role?`<em class="h-role h-row-role">${esc(r.player.role)}</em>`:'';
+  function bookPriceSummary(r,reference=false) {
+    if(['prizepicks','underdog'].includes(r.offer.platform)||r.extra?.kind==='pickem')return '';
+    if(r.extra?.reference_only){if(!reference)return '';const text=reportedOdds(r);return text?`<small title="Reported American odds; side not supplied">Reported ${esc(text)}</small>`:'';}
+    return ['over','under'].filter(sd=>r.offer[sd]?.offered&&num(r.offer[sd].price)&&r.offer[sd].price>1).map(sd=>{
+      const d=r.offer[sd].price,a=d>=2?Math.round((d-1)*100):-Math.round(100/(d-1));
+      return `<small class="h-book-price-summary" title="American odds">${sideWord(sd)} ${a>0?'+':''}${a}</small>`;
+    }).join('');
+  }
   function row(r, group=null, g=null) {
     const k=esc(key(r)), s=r.scout, side=s.side, on=C.onSlip(r), watched=H.watch.includes(playerKey(r)), open=H.expanded===key(r)||H.detail===key(r)||(!!g&&g.lines.some(x=>key(x)===H.detail));
     const choose=!side||!r.offer[side]?.offered;
@@ -607,8 +627,8 @@ export function mount(C) {
     return `<tr data-record="${k}" data-hub="expand" data-id="${k}" class="h-row${open?' is-expanded':''}${group||(g&&!g.inPlayer)?'':' is-sub'}${noHits(r)?' h-nohits':''}${g&&openLadders.has(g.key)?' has-ladder':''}"${g?` data-prop="${esc(g.key)}"`:''}>
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${rowRole(r)}<span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
-      <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
-      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small>${oddsLine(r)}</td>
+      <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small><small class="h-m-vs" aria-hidden="true"> · ${esc(r.player.team)}${r.player.opponent?' vs '+esc(r.player.opponent):''}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
+      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}${!kindOf(r)&&r.market.line_type!=='standard'?`<em class="u-lt">${esc(C.lineLabel(r))}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small>${bookPriceSummary(r)}${oddsLine(r)}</td>
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}${MX?booksLine(r):''}</td>`:''}${MX?`<td class="h-c-medge h-number${mxValue(r)==null?' is-empty':''}">${mxCell(r)}</td>`:''}
@@ -645,7 +665,7 @@ export function mount(C) {
       return `<button class="h-ld-act${on?' is-on':''}" data-hub="add" data-id="${k}" aria-label="${on?`On slip: ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:choose?`Choose a side for ${nm} ${esc(q.offer.platform_label)} ${esc(q.offer.line)}`:`Add ${nm} ${sideWord(q.scout.side)} ${esc(q.offer.line)} on ${esc(q.offer.platform_label)} to slip`}">${on?'On slip':choose?'Side':'+ Add'}</button>`;};
     const body=g.lines.map(q=>{const k=key(q),kind=kindOf(q)||(q.market.line_type!=='standard'?C.lineLabel(q):''),hit=g.match.has(lineId(q));
       return `<tr class="${[k===key(g.main)?'is-main':'',dim&&!hit?'is-dim':'',dim&&hit?'is-match':'',H.detail===k?'is-open':''].filter(Boolean).join(' ')}" data-line="${esc(k)}">
-        <th scope="row"><button class="h-ld-book" data-hub="expand" data-id="${esc(k)}" aria-label="Open the card for ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">${esc(q.offer.platform_label)}${kind?` <em class="u-lt u-lt-${esc(String(kind).toLowerCase())}">${esc(kind)}</em>`:''}</button></th>
+        <th scope="row"><button class="h-ld-book" data-hub="expand" data-id="${esc(k)}" aria-label="Open the card for ${esc(q.offer.platform_label)} ${esc(q.offer.line)}">${esc(q.offer.platform_label)}${kind?` <em class="u-lt u-lt-${esc(String(kind).toLowerCase())}">${esc(kind)}</em>`:''}</button>${bookPriceSummary(q,true)}</th>
         <td class="h-ld-line"><b>${esc(q.offer.line)}</b>${g.best&&key(g.best)===k?`<em class="h-ld-best">Best ${sideWord(side)}</em>`:''}${q.offer.moved_from!=null?`<small>was ${esc(q.offer.moved_from)}</small>`:''}${oddsLine(q)}</td>
         <td class="h-ld-px">${price(q,'over')}</td><td class="h-ld-px">${price(q,'under')}</td>
         <td class="h-ld-scout">${ladderScout(q)}<span class="h-ld-grade">${notOffered(q)||q.scout.side&&!q.scout.hold&&!q.scout.line_chance&&!C.oneSided(q)?gradeChip(q):q.scout.hold?.short&&!C.oneSided(q)?holdChip(q.scout):''}</span></td>
@@ -1178,7 +1198,7 @@ export function mount(C) {
     const opt=q=>`<option value="${esc(key(q))}"${key(q)===key(r)?' selected':''}>${esc(q.offer.platform_label)} ${esc(q.offer.line)}${kindOf(q)?' · '+esc(kindOf(q)):q.market.line_type!=='standard'?' · '+esc(C.lineLabel(q)):''}</option>`;
     return `<label class="h-dec-line"><span>Line</span><select id="hub-card-line" aria-label="Line and book">${quotes.map(opt).join('')}</select></label>
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
-      <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}${s.side===side?belowChip(r):''}</div>
+      <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}${num(s.units)&&s.side===side&&!notOffered(r)&&!C.oneSided(r)&&!r.extra?`<span class="h-dec-stake" title="Scout's stake on this line">Stake ${esc(String(s.units))}U</span>`:''}${s.side===side?belowChip(r):''}</div>
       <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)&&!notOffered(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
       ${against?againstHtml():C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
       ${!r.offer[side].offered&&!against&&!r.extra?.reference_only?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
@@ -2065,7 +2085,7 @@ export function mount(C) {
     const here=name==='alerts'||(name==='ev'&&!NEXT)?'tools':name;
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
     /* T13: a section reached from the More sheet (EV, Arbitrage, Sportsbooks, Tools, Alerts) lights up More on the phone's tab bar */
-    {const inBar=[...document.querySelectorAll('#u-hub .h-tabbar [data-hub="section"]')].some(b=>b.dataset.id===here);$('hub-more-toggle')?.setAttribute('aria-current',inBar?'false':'page');}
+    {const inBar=[...document.querySelectorAll('#u-hub .h-tabbar [data-hub="section"]')].some(b=>b.dataset.id===here&&getComputedStyle(b).display!=='none');$('hub-more-toggle')?.setAttribute('aria-current',inBar?'false':'page');}
     $('u-hub').classList.toggle('h-studio-mode',name==='studio');
     $('u-hub').classList.toggle('h-board-mode',name==='board');
     $('hub-title').textContent=TITLES[name]||'Player props';hubTitle();
@@ -2316,8 +2336,23 @@ export function mount(C) {
     const light=document.documentElement.dataset.theme==='light',preview=/(?:^|;\s*)scout_ui=next(?:;|$)/.test(document.cookie);
     const extra=`<button data-hub="theme" aria-pressed="${light}">${light?'Dark theme':'Light theme'}</button><a class="h-preview-off" href="/preview/current">Previous design</a>`;
     document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin',extra);
-    $('hub-more').insertAdjacentHTML('afterbegin',(EV_ON?'<button data-hub="section" data-id="ev">EV</button>':'')+(ARB_ON?'<button data-hub="section" data-id="arb">Arbitrage</button>':''));
+    $('hub-more').insertAdjacentHTML('afterbegin','<button class="h-more-phone" data-hub="section" data-id="record">Record</button>'+(EV_ON?'<button data-hub="section" data-id="ev">EV</button>':'')+(ARB_ON?'<button data-hub="section" data-id="arb">Arbitrage</button>':''));
     $('hub-more').insertAdjacentHTML('beforeend',extra);
+    /* Phone simplification (owner 2026-11-12, "this new ui is super confusing on mobile"): under 600px the toolbar is the sport tabs
+       and search + Filters only. The app pills, EV, Views and sort move INTO the Filters sheet (the same elements, so every handler and state is unchanged) and move back above 600px. */
+    {const PHONE=matchMedia('(max-width:599px)'),host=document.createElement('div');host.id='hub-phone-more';host.className='h-phone-more';
+      $('hub-filter-pop').querySelector('.h-pop-foot').before(host);
+      const parts=()=>[$('hub-platform'),document.querySelector('#u-hub .h-ev-link'),$('hub-views-toggle')?.closest('.h-pop-wrap'),document.querySelector('#hub-board-section .h-sortbar')].filter(Boolean);
+      const marks=new Map();
+      const place=()=>{for(const el of parts()){if(!marks.has(el)){const m=document.createComment('phone-move');el.before(m);marks.set(el,m);}
+          if(PHONE.matches){if(el.parentNode!==host)host.appendChild(el);}else{const m=marks.get(el);if(el.previousSibling!==m)m.after(el);}}
+        $('u-hub').classList.toggle('h-phone',PHONE.matches);};
+      place();PHONE.addEventListener?.('change',()=>{togglePop(null);place();});
+      /* the two-row header slides away while the board scrolls down and comes back on the way up */
+      let lastY=0;const sc=()=>{const c=$('hub-center');return c&&c.scrollHeight>c.clientHeight+2?c:null;};
+      const onScroll=()=>{if(!PHONE.matches)return;const c=sc(),y=c?c.scrollTop:window.scrollY;const bar=document.querySelector('#u-hub .h-toolbar');
+        if(Math.abs(y-lastY)<6)return;bar.classList.toggle('h-bar-away',y>lastY&&y>120&&!openPop());lastY=y;};
+      $('hub-center')?.addEventListener('scroll',onScroll,{passive:true});window.addEventListener('scroll',onScroll,{passive:true});}
     /* T9: the redesign had no sign-out anywhere unless ui_tokens was on (the account menu); the sidebar and the More sheet carry it */
     if(!TOKENS){const who=String(R.me.name||'').trim(),out=`<a class="h-signout" href="/auth/logout"${who?` title="${esc('Signed in as '+who)}"`:''}>Sign out</a>`;
       document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('beforeend',out);$('hub-more').insertAdjacentHTML('beforeend',out);}

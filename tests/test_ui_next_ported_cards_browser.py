@@ -229,6 +229,8 @@ def test_phone_rows_show_five_separated_windows_in_every_sport_and_book_on_next(
     Real bugs this proved on the redesign with the live flags on: the phone card's cells overlapped (line on the Scout side, Lines
     button cut at the screen edge), the Season window was cut at 360px, and a row with no Scout side ("L5 O-U" labels) ran its H2H and
     Season windows off the screen at every phone width. Sizes are the redesign's (the old 44px labelled boxes are old-layout-only)."""
+    if size["width"] < 600:
+        pytest.skip("phone simplification (owner 2026-11-12): the phone row no longer carries the L5-SZN windows; the card has it")
     p = is_next(ph.open_board(browser, live, size))
     try:
         assert p.evaluate("document.querySelector('#u-hub').classList.contains('h-cols')")   # the live flags: H2H and Season windows

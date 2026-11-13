@@ -903,6 +903,7 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
             continue                                      # the same row passed twice counts once
         seen.add(leg.uid)
         pool.append(leg)
+    pool = _scope_choice(pool, out)
     usage = _usage_from(prior)
     pins, pinned_left_out = _pins(rows, st, model, now, usage)
     pin_uids = {l.uid for l in pins}
@@ -957,6 +958,38 @@ def _compute(rows, st, model, now, batch_id, build_id, prior):
             # out with the builder's own reason (why_excluded / the batch's both-sides rule / clash with the other pin)
             "pinned": [{"id": l.rec["row_id"], "label": _leg_label(l.rec)} for l in pins],
             "pinned_left_out": pinned_left_out}
+
+
+SCOPE_MAPS = {"123": 3, "12": 2, "1": 1}
+SCOPE_REASON = "another maps scope of this player's stat has equal or more value (Maps 1-2 preferred over Map 1)"
+
+
+def _scope_choice(pool, out):
+    """Maps scope preference (owner 2026-11-12, the same rule as slip_quality.scope_choice): when one player's stat in one match
+    is eligible on more than one maps scope (settings scope "all"), the longest scope is used unless a shorter one has strictly
+    more value - this builder's per-leg value is the leg's chance (its search maximises sum(log chance)). Ties: the longer scope.
+    The other scope's legs are left out with SCOPE_REASON."""
+    groups = {}
+    for leg in pool:
+        n = SCOPE_MAPS.get(str(leg.row.get("scope") or "12"))
+        nm = next((k for k in leg.pk if k.startswith("nm:")), None)
+        mk = next((k for k in sorted(leg.mk) if k.startswith("mid:")), None) or next((k for k in sorted(leg.mk) if k.startswith("tm:")), None)
+        if n is None or nm is None or mk is None or is_moneyline(leg.row):
+            continue
+        groups.setdefault((nm, mk, leg.row.get("prop")), {}).setdefault(n, []).append(leg)
+    drop = set()
+    for g in groups.values():
+        if len(g) < 2:
+            continue
+        best = {n: max(ls, key=lambda l: l.p).p for n, ls in g.items()}
+        win = max(best, key=lambda n: (best[n], n))
+        for n, ls in g.items():
+            if n != win:
+                drop.update(l.uid for l in ls)
+    for leg in pool:
+        if leg.uid in drop:
+            out(SCOPE_REASON, leg.row)
+    return [l for l in pool if l.uid not in drop]
 
 
 def _leg_label(rec):

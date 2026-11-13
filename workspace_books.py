@@ -212,7 +212,7 @@ def _cap3(r, kind, over, under, market):
              read_rev="x-" + _sha(s.get("read_rev"), CAP_VERSION)[:16])
 
 
-def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed_at, offer_key, read=None):
+def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed_at, offer_key, read=None, variant=None):
     """One display record for an extra book's line, built from the board's own records of that player and market.
     read(base record, line) -> (chance at this line or None, history at this line or None): line_chance + the game log."""
     base, is_same = _pick_base(recs, line, nearest=sport in ("cs2", "lol"))
@@ -231,7 +231,9 @@ def derive(pid, label, kind, sport, recs, line, over, under, source_at, observed
             chance, hist = None, None
     r = copy.deepcopy(base)
     m = r["market"]
-    m["line_type"] = "standard"
+    # Preserve provider classification; price/chance cannot establish a main line.
+    m["line_type"] = ("standard" if kind == "pickem" or variant in ("main", "standard", "balanced")
+                      else "alternate" if variant in ("alternate", "ladder_rung") else "book line")
     r["key"] = ".".join(str(x) for x in (sport, r["event"]["id"], r["player"]["key"], m["stat"], m["period"], line, pid))
     r["offer"] = {"platform": pid, "platform_label": label, "offer_id": "x-" + _sha(pid, offer_key)[:24],
                   "revision": "x-" + _sha(line, over.get("payout"), under.get("payout"), over.get("price"), under.get("price"),
@@ -350,6 +352,31 @@ def _recs_of(s, props, x):
     return recs
 
 
+def display_book_quotes(s, pid):
+    """Include a book's own board quotes, not just its nearest pick'em comparison.
+
+    A comparison can select an alternate nearest the pick'em line. It must not
+    erase the actual main quote when the member opens that sportsbook's board.
+    """
+    quotes, props = book_quotes(s, pid)
+    selected = {k: (k, b, x) for k, b, x in quotes}
+    for (plat, _), x in (s.get("index") or {}).items():
+        if plat in PICKEM or not platform_of(pid, plat) or not x.get("rec"):
+            continue
+        rec = json.loads(x["rec"])
+        o = rec["offer"]
+        k = (plat, x.get("e"), x.get("pkey"), x.get("st"), x.get("scope"), o.get("line"))
+        if o.get("line") is None:
+            continue
+        b = {"platform": plat, "line": o["line"], "variant": x.get("variant"), "seen_at": o.get("seen_at"),
+             "over": o.get("over", {}).get("price") if o.get("over", {}).get("offered") else None,
+             "under": o.get("under", {}).get("price") if o.get("under", {}).get("offered") else None}
+        old = selected.get(k)
+        if old is None or (_ts(b["seen_at"]) or 0) >= (_ts(old[1].get("seen_at")) or 0):
+            selected[k] = (k, b, x)
+    return list(selected.values()), props
+
+
 # ---------------------------------------------------------------------------------------------------------------- build
 
 def build(srv, sport, pid, now=None):
@@ -391,7 +418,7 @@ def build(srv, sport, pid, now=None):
                 ages.append(now - o["source_at"])
             out.append(r)
     elif sport in ("nba", "nfl"):
-        quotes, props = book_quotes(s, pid)
+        quotes, props = display_book_quotes(s, pid)
         read = reader(srv, sport, s)
         newest = None
         for k, b, x in quotes:
@@ -408,7 +435,7 @@ def build(srv, sport, pid, now=None):
             cov["matched"] += 1
             over = {"offered": _num(b.get("over")) is not None, "payout": _num(b.get("over")), "price": _num(b.get("over"))}
             under = {"offered": _num(b.get("under")) is not None, "payout": _num(b.get("under")), "price": _num(b.get("under"))}
-            r = derive(pid, label, kind, sport, got, b.get("line"), over, under, None, t, k, read=read)
+            r = derive(pid, label, kind, sport, got, b.get("line"), over, under, None, t, k, read=read, variant=b.get("variant"))
             plat = b.get("platform")
             if plat != pid:                        # The Odds API: each book keeps its own name
                 r["offer"]["platform_label"] = (b.get("platform_label") or plat) + " · The Odds API"
