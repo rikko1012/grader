@@ -442,3 +442,25 @@ Full definition: research/lkb1_2026_11_13/FROZEN_DEFINITIONS.md (committed befor
 - **Pass (all):** C1 hit-rate gain CI lower bound > 0 (match-grouped bootstrap); C2 Over-pick and Under-pick hit each not
   lower; C3 graded count not lower; C4 Over share not > 1 point more lopsided; C5 Brier not worse; C6 gain >= 0 on upset,
   OT and remaining matches separately; C7 >= 0 in both test halves; C8 both placebos fail C1.
+
+## Round-9 results (run once 2026-11-13 after the definition above was pushed in 2e22af6; script research/lkb1_2026_11_13/score.py)
+
+**lkb-1: FAIL (C1, C2, C4, C6, C7 fail).** Full log: cs2_scout_ops/logs/lkb1_walkforward_2026-11-13.md.
+alpha = 0.4 (FIT 1,624 player-match units; SSE 101,113 -> 101,022). The normal was 6.67 kills per round x 21.5 rounds;
+the average TEST lobby implied 6.63, so f ran only 0.984-1.026 (MOUZ-Vitality 1.0205). 211 of 4,054 TEST rows flipped
+(195 to Over), all of them 0U.
+
+| Criterion (TEST Nov 1-13: 4,054 rows / 139 matches, match-grouped 95% CI) | Live | lkb-1 | Result |
+|---|---|---|---|
+| C1 hit rate | 52.57% | 52.59%, +0.02 pts (-0.94 to +0.98) | FAIL |
+| C2 Over-pick / Under-pick hit | 53.09% / 52.06% | 52.86% / 52.28% (Over -0.23, -1.12 to +0.63) | FAIL (Overs lower) |
+| C3 graded count | 4,054 | 4,054 | pass |
+| C4 Over share | 49.06% | 53.48% (+2.5 pts more lopsided) | FAIL |
+| C5 Brier on p_more | 0.2521 | 0.2513 (-0.0008, -0.0020 to +0.0003) | pass |
+| C6 upset (37 m) / OT (25 m) / rest (58 m) | 52.78 / 49.04 / 52.04% | -0.37 / +3.21 / -0.74 pts | FAIL |
+| C7 halves T1 / T2 | | +0.09 / -0.05 pts | FAIL |
+| C8 placebos fail C1 | | random sign -0.59 (-1.39 to +0.21); shuffled budgets +0.25 (-0.67 to +1.29) | pass |
+
+Excluding the five motivating MOUZ / Vitality matches: -0.03 pts (-0.97 to +0.96). FIT window in-sample: -0.49 pts.
+The shuffled-budget placebo beat the candidate, and the only positive cohort was overtime matches: the effect is a generic
+Over nudge, not lobby information. Logged as a measured negative result; no shadow, no flag, no grading change.
