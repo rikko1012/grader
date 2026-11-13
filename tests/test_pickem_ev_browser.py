@@ -172,7 +172,7 @@ def test_best_prices_link_is_styled_sized_and_fits(browser, env, ev_on, size):
         box = p.evaluate("""() => {const e=document.querySelector('.h-ev-link'), r=e.getBoundingClientRect(), s=getComputedStyle(e);
           return {h: r.height, w: r.width, right: r.right, left: r.left, vw: innerWidth, text: e.textContent.trim(), border: s.borderTopStyle}}""")
         assert box['h'] >= 40 and box['w'] >= 40 and box['left'] >= 0 and box['right'] <= box['vw'], box
-        assert box['text'] == 'Best prices' and box['border'] == 'solid', box
+        assert box['text'] == 'EV' and box['border'] == 'solid', box
         no_h_scroll(p)
         shot(p, 'ev_link', size)
         assert not p.errors

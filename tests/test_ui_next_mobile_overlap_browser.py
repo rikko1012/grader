@@ -35,7 +35,7 @@ return {n:boxes.length,bad:out.slice(0,8)};}"""
 def live(env, monkeypatch):
     for k in LIVE_FLAGS:
         monkeypatch.setenv(k, "1")
-    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("UI_NEXT", "1")
     soon = iso(datetime.now(timezone.utc) + timedelta(hours=3))
     env.rows += [row("pp:7101", "prizepicks", "Tuurtle", "ex-Zero Tenacity", "Walczaki Esports Club", 28.5, "More", 0.641, 902, soon),
                  row("11111111-0000-4000-8000-0000000000b1", "underdog", "Tuurtle", "ex-Zero Tenacity", "Walczaki Esports Club", 29.5, "Less", 0.531, 902, soon),

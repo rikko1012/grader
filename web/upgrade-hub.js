@@ -7,7 +7,7 @@ export function mount(C) {
   /* UI_NEXT (redesign 2026-11-11): the page's head script chose the design (UI_NEXT=1 or the member's /preview/next cookie) and
      loaded its sheets; hub.css is not loaded with it. Display only: no number on the board or a card differs between the designs. */
   const NEXT=document.documentElement.dataset.ui==='next';
-  if(!NEXT&&!document.querySelector('link[href="/upgrade/hub.css"]')){const style=document.createElement('link');style.rel='stylesheet';style.href='/upgrade/hub.css';document.head.appendChild(style);}
+  if(!NEXT)for(const href of ['/upgrade/hub.css','/upgrade/hub-plus.css'])if(!document.querySelector(`link[href="${href}"]`)){const style=document.createElement('link');style.rel='stylesheet';style.href=href;document.head.appendChild(style);}
   const {api, R, T, SPORTS, esc, pct, when} = C;
   const V2 = R.me.features?.workspace_v2 === true;
   // SCOUT_BOARD_H2H (default off): H2H + Season columns, 7-tone cells, start countdown, Edge vs the Underdog standard break-even
@@ -524,7 +524,9 @@ export function mount(C) {
        it reads like any other row without a side */
     /* DraftKings (PR #66, reported odds without a side): the Scout cell's own parts - the prices where a chance sits, and the small-caps
        note where "Research estimate" sits on any other view-only row (owner 2026-11-12: "looks like the other ones") */
-    if(r.extra?.reference_only)return `<div class="h-scout"><div class="h-direction-options" aria-label="Reported odds"><span>Odds <b>${esc(reportedOdds(r)||'not supplied')}</b></span></div><div class="h-scout-grade"><span class="h-grade-text h-reported">Reported odds · side not supplied</span></div></div>`;
+    /* owner 2026-11-13: a DraftKings line with Scout's saved grade at the exact same line reads like every other book (below); the
+       reported-odds cell is left only for a line with no saved chance */
+    if(r.extra?.reference_only&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return `<div class="h-scout"><div class="h-direction-options" aria-label="Reported odds"><span>Odds <b>${esc(reportedOdds(r)||'not supplied')}</b></span></div><div class="h-scout-grade"><span class="h-grade-text h-reported">Reported odds · side not supplied</span></div></div>`;
     if(r.extra&&!s.side&&!(num(s.p_over)&&num(s.p_under)))return '';
     if(C.oneSided(r)) return `<div class="h-scout"><div class="h-direction-options" title="${esc(C.oneSidedNote(r))}"><span class="h-one-sided">${esc(C.oneSided(r))}</span></div></div>`;
     if(s.side&&notOffered(r)){const a=offeredAlt(r);return `<div class="h-scout h-scout-nf"><div class="h-direction ${s.side}"><b>${s.side==='over'?'↗ Over':'↘ Under'}</b><span>${pct(s.p_side)}</span></div><div class="h-scout-grade">${gradeChip(r)}</div>${a?`<small class="h-alt-note">${esc(altText({side:s.side,r:a}))}</small>`:''}</div>`;}
@@ -571,7 +573,7 @@ export function mount(C) {
     return {text:`Needs ${o}`,title:`${p.entry||r.offer.platform_label}: each pick needs ${pct(p.be)} (${o}) to break even, from ${r.offer.platform_label}'s published payouts`};
   }
   function oddsLine(r) {
-    if(!NEXT||!ODDS_SPORTS.includes(r.sport)||r.extra)return '';     /* the live design (UI_NEXT); classic rows keep their layout */
+    if(!NEXT||!ODDS_SPORTS.includes(r.sport)||r.extra)return '';     /* the redesign's rows; the previous design keeps its row height and shows the prices in its Compare cell and the card */
     /* one line that never wraps (the row keeps its height); the whole sentence is the tooltip and the screen-reader label */
     const st='display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1;margin-top:0;font-size:10px';
     const cell=(text,title)=>`<small class="h-odds" style="${st}" title="${esc(title)}" aria-label="${esc('Odds: '+text+'. '+title)}">${esc(text)}</small>`;
@@ -631,7 +633,7 @@ export function mount(C) {
       <td class="h-c-watch"><button class="h-star" data-hub="watch" data-id="${k}" aria-label="Watch ${name}" aria-pressed="${watched}">${watched?'★':'☆'}</button></td>
       <td class="h-c-player">${faceOf(r,32)}<button class="h-player" data-hub="expand" data-id="${k}" aria-haspopup="dialog" aria-expanded="${open}"><b>${name}</b><small>${rowRole(r)}<span class="h-vs">${esc(r.player.team)}${esc(vs)}</span><i>${SPORTS[r.sport]}</i></small></button></td>
       <td class="h-c-market"><div class="h-mcell"><div><b title="${esc(r.market.stat_label)}">${esc(r.market.stat_label)}</b><small>${esc(r.market.period_label)}</small><small class="h-m-vs" aria-hidden="true"> · ${esc(r.player.team)}${r.player.opponent?' vs '+esc(r.player.opponent):''}</small>${MX?gapChip(r):''}</div>${toggle}</div></td>
-      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}${!kindOf(r)&&r.market.line_type!=='standard'?`<em class="u-lt">${esc(C.lineLabel(r))}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small>${bookPriceSummary(r)}${oddsLine(r)}</td>
+      <td class="h-c-line h-number"><b>${esc(r.offer.line)}${kindOf(r)?`<em class="u-lt u-lt-${kindOf(r).toLowerCase()}" title="PrizePicks ${kindOf(r).toLowerCase()} line">${kindOf(r)}</em>`:''}${!kindOf(r)&&r.market.line_type!=='standard'?`<em class="u-lt">${esc(C.lineLabel(r))}</em>`:''}</b><small title="${esc(`${r.offer.platform_label}${kindOf(r)?' '+kindOf(r):''} · Scout last read this line ${r.offer.seen_at||'at an unavailable time'}`)}">${esc(BOOK_SHORT[r.offer.platform]||r.offer.platform_label)} · ${esc(age(r.offer.seen_at).replace(' ago','').replace('Just now','now').replace('Time unavailable','—'))}${r.offer.moved_from!=null?(NEXT?`<span class="h-was" title="The line moved from ${esc(r.offer.moved_from)} to ${esc(r.offer.line)}">was ${esc(r.offer.moved_from)}</span>`:` · was ${esc(r.offer.moved_from)}`):''}</small>${bookPriceSummary(r,!!r.extra?.reference_only&&(!!r.scout.side||num(r.scout.p_over)&&num(r.scout.p_under)))}${oddsLine(r)}</td>
       <td class="h-c-proj h-number">${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</td>
       <td class="h-c-scout">${scoutCell(r)}</td>
       <td class="h-c-hits">${stripHtml(r)}</td>${H.showEdge?`<td class="h-c-edge h-number">${edgeCell(r)}${belowChip(r)}${MX?booksLine(r):''}</td>`:''}${MX?`<td class="h-c-medge h-number${mxValue(r)==null?' is-empty':''}">${mxCell(r)}</td>`:''}
@@ -704,7 +706,7 @@ export function mount(C) {
   const sortState = k => H.sortBy===k?(H.sortDir==='asc'?'ascending':'descending'):'none';
   const sortBtn = (k,label,extra='') => `<button class="h-th-sort" data-hub="sort-col" data-id="${k}" data-sort="${sortState(k)}" aria-label="Sort by ${esc(sortName(k))}${H.sortBy===k?`, now ${H.sortDir==='asc'?'low to high':'high to low'}`:''}"><span class="h-th-l">${label}</span>${extra}</button>`;
   function headHtml(showEdge) {
-    return `<tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player" aria-sort="${sortState('player')}">${sortBtn('player','Player')}</th><th class="h-c-market">Market</th><th class="h-c-line" aria-sort="${sortState('line')}">${sortBtn('line','Line')}</th><th class="h-c-proj">Proj.</th><th class="h-c-scout" aria-sort="${sortState('chance')}">${H.book==='draftkings'?'Reported odds':sortBtn('chance','Scout')}</th>`
+    return `<tr><th class="h-c-watch"><span class="u-sr">Watch</span></th><th class="h-c-player" aria-sort="${sortState('player')}">${sortBtn('player','Player')}</th><th class="h-c-market">Market</th><th class="h-c-line" aria-sort="${sortState('line')}">${sortBtn('line','Line')}</th><th class="h-c-proj">Proj.</th><th class="h-c-scout" aria-sort="${sortState('chance')}">${sortBtn('chance','Scout')}</th>`
       +`<th class="h-c-hits"><span class="h-strip h-strip-head">${STRIP.map(([w,l])=>`<i class="h-strip-th" title="${esc(STRIP_TITLE[w])}">${sortBtn(w,l)}</i>`).join('')}</span></th>`
       +(showEdge?`<th class="h-c-edge" title="${esc(EDGE_WHY())}" aria-sort="${sortState('edge')}">${sortBtn('edge','Edge',' <small>vs break-even</small>')}</th>`:'')
       +(MX?`<th class="h-c-medge" title="${esc(MX_WHY())}" aria-sort="${sortState('medge')}">${sortBtn('medge','Market edge',' <small>books vs break-even</small>')}</th>`:'')
@@ -865,7 +867,7 @@ export function mount(C) {
   /* an extra book's line in the full card (audit 2026-11-05 A2/B4): its own prices and Scout's read at this line, above the research */
   function extraOffer(r) {
     /* DraftKings: the same block as every other book's line (heading "App · line", read age, key-value list), PR #66's facts unchanged */
-    if(r.extra?.reference_only)return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(r.offer.platform_label||'DraftKings')} · ${esc(r.offer.reference_kind==='milestone'?(r.offer.line+0.5)+'+':r.offer.line)}</h4><small>Read ${esc(r.offer.seen_at?age(r.offer.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Reported odds</dt><dd>${esc(reportedOdds(r)||'Odds not supplied')} <small>American, via ESPN</small></dd></div><div><dt>Side</dt><dd>Not supplied by the feed</dd></div></dl><p class="h-history-note">Selection sides are not supplied. These prices are not assigned to Over or Under and cannot be added to a slip.</p></section>`;
+    if(r.extra?.reference_only)return `<section class="h-extra-detail"><div class="h-sec-head"><h4>${esc(r.offer.platform_label||'DraftKings')} · ${esc(r.offer.reference_kind==='milestone'?(r.offer.line+0.5)+'+':r.offer.line)}</h4><small>Read ${esc(r.offer.seen_at?age(r.offer.seen_at):'—')}</small></div><dl class="h-extra-kv"><div><dt>Reported odds</dt><dd>${esc(reportedOdds(r)||'Odds not supplied')} <small>American, via ESPN</small></dd></div><div><dt>Side of these prices</dt><dd>Not supplied by the feed</dd></div>${r.scout.side?`<div><dt>Scout</dt><dd>${esc(sideWord(r.scout.side))} ${pct(r.scout.p_side)}${r.scout.grade?' · '+esc(r.scout.grade):''}${r.extra.same_line_as?` <small>same line and saved chance as ${esc(r.extra.same_line_as)}</small>`:''}</dd></div>`:num(r.scout.p_over)&&num(r.scout.p_under)?`<div><dt>Scout</dt><dd>Over ${pct(r.scout.p_over)} · Under ${pct(r.scout.p_under)}</dd></div>`:''}${num(r.scout.projection)?`<div><dt>Projection</dt><dd>${esc(r.scout.projection.toFixed(1))}</dd></div>`:''}</dl><p class="h-history-note">Selection sides are not supplied. These prices are not assigned to Over or Under and cannot be added to a slip.</p></section>`;
     const o=r.offer,x=r.extra||{},price=sd=>!o[sd]?.offered?'Not offered':x.price_comparable===false?(num(o[sd].price)?esc(x.price_label||'App price')+' '+o[sd].price.toFixed(2)+' <small>(not what an entry pays)</small>':'Listed'):num(o[sd].price)?o[sd].price.toFixed(2)+' decimal':num(o[sd].payout)?o[sd].payout.toFixed(2)+'x pick multiplier':'Price unavailable';
     /* Scout's read: the side and its chance, or both chances; nothing saved at this line = no row (no status sentence) */
     const s=r.scout,both=num(s.p_over)&&num(s.p_under)?`Over ${pct(s.p_over)} · Under ${pct(s.p_under)}`:null;
@@ -1426,7 +1428,7 @@ export function mount(C) {
       :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span>${median!=null?`<span><i class="median"></i>Median ${esc(Math.round(median*10)/10)}</span>`:''}</div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>${movedRow(moves.get(g.date+'|'+g.opponent),4)}`).join('')}</tbody></table></div></details>`
       :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
     const lh=doc?.history?.line_history, avgClose=num(lh?.avg_closing_l10)?tile(esc(lh.avg_closing_l10),'Avg closing line',`<small>last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'} · ${esc(lh.closing_platform)}</small>`,' is-closing'):'';
-    return `${whyHtml(r)}${NEXT&&PX().grade?PX().grade(r,doc,pxCtx(r)):''}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
+    return `${whyHtml(r)}${PX().grade?PX().grade(r,doc,pxCtx(r)):''}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
       <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
@@ -2085,12 +2087,12 @@ export function mount(C) {
   /* UI_NEXT (owner 2026-11-11: "where is EV and Arbitrage section"): both get their own screen and nav item. EV = the pick'em +EV
      board plus Price check's priced-book rows; Arbitrage = Price check's both-sides pairs. The same server rows, limits and maths:
      only where they are shown changes. A member without the feature gets no nav item (never a locked one). */
-  const MT_ON=R.me.features?.market_tools===true, EV_ON=EVB||(NEXT&&MT_ON), ARB_ON=NEXT&&MT_ON;
-  const mtMode=()=>NEXT&&H.section==='arb'?'arb':NEXT&&H.section==='ev'?'ev':'all';
-  const mtSection=()=>H.section==='tools'||(NEXT&&MT_ON&&(H.section==='ev'||H.section==='arb'));
+  const MT_ON=R.me.features?.market_tools===true, EV_ON=EVB||MT_ON, ARB_ON=MT_ON;   /* both designs since 2026-11-13 */
+  const mtMode=()=>H.section==='arb'?'arb':H.section==='ev'?'ev':'all';
+  const mtSection=()=>H.section==='tools'||(MT_ON&&(H.section==='ev'||H.section==='arb'));
   const BOOKS_ON=allowed().some(s=>['nba','nfl'].includes(s));
   const SECTIONS=['board','studio','record','alerts','picks','tools',...(BOOKS_ON?['books']:[]),...(EV_ON?['ev']:[]),...(ARB_ON?['arb']:[])];
-  const TITLES={books:'Sportsbooks',tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:NEXT?'EV':'Best prices',arb:'Arbitrage'};
+  const TITLES={books:'Sportsbooks',tools:'Tools',record:'Record',picks:'My picks',alerts:ALERT_WORD,studio:'Slips',ev:'EV',arb:'Arbitrage'};
   async function generateEV(options){
     if(H.generating)throw new Error('A batch is already being checked.');
     H.generating=true;
@@ -2105,7 +2107,7 @@ export function mount(C) {
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev'||!EVB)return;
     try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,generateEV,checkEV:C.checkGenerated,openEV:C.openGenerated,bookLinks:!!R.me.features?.book_links,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
-    catch(e){box.innerHTML=`<p class="h-mt-state">${NEXT?'EV':'Best prices'} could not be loaded. Use Refresh to try again.</p>`;}
+    catch(e){box.innerHTML=`<p class="h-mt-state">EV could not be loaded. Use Refresh to try again.</p>`;}
   }
   function section(name,navigate=true) {
     if(name==='games'){H.view='games';name='board';}
@@ -2120,7 +2122,7 @@ export function mount(C) {
     const games=name==='board'&&H.view==='games';
     if(navigate){const hash=(V2?'#/'+(games?'games':({studio:'slips',record:'results'}[name]||name)):'#scout/'+(games?'games':name))+(name==='board'&&!games?'?sport='+H.sport:'');if(location.hash!==hash)history.pushState(null,'',hash);H.routeHash=location.pathname+location.hash;}
     for(const n of SECTIONS)$('hub-'+n+'-section').hidden=n!==name;
-    const here=name==='alerts'||(name==='ev'&&!NEXT)?'tools':name;
+    const here=name==='alerts'?'tools':name;
     document.querySelectorAll('#u-hub .h-sidebar nav [data-hub="section"], #u-hub .h-tabbar [data-hub="section"]').forEach(b=>b.setAttribute('aria-current',b.dataset.id===here?'page':'false'));
     /* T13: a section reached from the More sheet (EV, Arbitrage, Sportsbooks, Tools, Alerts) lights up More on the phone's tab bar */
     {const inBar=[...document.querySelectorAll('#u-hub .h-tabbar [data-hub="section"]')].some(b=>b.dataset.id===here&&getComputedStyle(b).display!=='none');$('hub-more-toggle')?.setAttribute('aria-current',inBar?'false':'page');}
@@ -2288,7 +2290,7 @@ export function mount(C) {
   const sectionFocus=(action,id)=>document.querySelector(`#u-hub [data-hub="${action}"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
   const PAGE_BACK=location.pathname==='/sports'?'#/board':location.pathname==='/lol'?'':'#board';
   function openSave(kind) {H.saveKind=kind;$('hub-save-title').textContent=kind==='alert'?(BG?'Alert on these filters':'Live highlight these filters'):'Save this research view';$('hub-save-note').textContent=kind!=='alert'?'Saved to your account.':BG?'Saved to your account. Whop delivers matches when Scout is closed once delivery is on under Alerts; this screen highlights them live.':'Saved to your account. New matches are highlighted while this research screen is open. Nothing is sent when it is closed.';$('hub-save-name').value='';$('hub-save-dialog').showModal();$('hub-save-name').focus();}
-  const NAV=[['board','Board'],['studio','Slips'],...(NEXT&&EV_ON?[['ev','EV']]:[]),...(ARB_ON?[['arb','Arbitrage']]:[]),...(BOOKS_ON?[['books','Sportsbooks']]:[]),['picks','My picks'],['record','Record'],['tools','Tools']];
+  const NAV=[['board','Board'],['studio','Slips'],...(EV_ON?[['ev','EV']]:[]),...(ARB_ON?[['arb','Arbitrage']]:[]),...(BOOKS_ON?[['books','Sportsbooks']]:[]),['picks','My picks'],['record','Record'],['tools','Tools']];
   const pickStatus=[['all','All outcomes'],['pending','Pending'],['hit','Won'],['miss','Lost'],['push','Pushed'],['void','Void']];
   document.body.insertAdjacentHTML('beforeend',`<section id="u-hub" class="scout-hub" aria-label="All sports research" hidden>
     <aside class="h-sidebar"><a class="h-brand" href="/"><span>1T</span><b>1TIME <em>SCOUT</em></b></a><nav aria-label="Research hub">${NAV.map(([id,label])=>`<button data-hub="section" data-id="${id}">${label}${id==='tools'?' <span id="hub-alert-count" aria-label="New filter matches"></span>':''}</button>`).join('')}</nav><div class="h-sidebar-foot"><button data-hub="close">Classic board ↗</button></div></aside>
@@ -2345,7 +2347,7 @@ export function mount(C) {
     bar.classList.remove('h-bar-wrap');if(DESKTOP.matches&&bar.scrollWidth>bar.clientWidth+1)bar.classList.add('h-bar-wrap');};
   {const bar=document.querySelector('#u-hub .h-toolbar'),setBar=()=>{fitBar();if(bar.offsetHeight)$('u-hub').style.setProperty('--h-bar',bar.offsetHeight+'px');};
     if(window.ResizeObserver){const ro=new ResizeObserver(setBar);ro.observe(bar);ro.observe($('hub-platform'));}setBar();   /* #23: the pill row grows as app counts arrive, the bar's own box does not */document.fonts?.ready?.then(setBar);}
-  if(EVB){$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">'+(NEXT?'EV':'Best prices')+'</button>');fitBar();}
+  if(EVB){$('hub-platform').insertAdjacentHTML('afterend','<button class="h-ev-link" data-hub="section" data-id="ev" title="Pick&#39;em legs the books price above what the entry needs">'+'EV</button>');fitBar();}
   if(TOKENS){
     // Skip link first in the hub (the classic page's own is inert under it) and one named account control in the top bar.
     $('u-hub').insertAdjacentHTML('afterbegin','<a class="h-skip" href="#hub-title" data-hub="skip" style="position:fixed;top:-80px;left:16px">Skip to content</a>');
@@ -2368,11 +2370,17 @@ export function mount(C) {
   /* QOL 2026-11-07: Enter in the name box saves (the form's first button is Cancel, so Enter cancelled and nothing was saved) */
   $('hub-board-section').querySelector('.h-viewmode').insertAdjacentHTML('afterend','<button id="hub-focus" class="h-focus-toggle" data-hub="focus-board" aria-pressed="false" aria-controls="hub-slip-content">Hide slip</button>');
   /* the design before the redesign, kept for comparison (/preview/current): its sidebar has the way back to the new one */
-  if(!NEXT&&/(?:^|;\s*)scout_ui=current(?:;|$)/.test(document.cookie))document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin','<a class="h-preview-on" href="/preview/next" style="display:block;margin:0 0 8px;font-size:11px">New design</a>');
+  if(!NEXT&&/(?:^|;\s*)scout_design=current(?:;|$)/.test(document.cookie))document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin','<a class="h-preview-on" href="/preview/next" style="display:block;margin:0 0 8px;font-size:11px">New design</a>');
+  /* the previous design (default again 2026-11-13): EV and Arbitrage are sections there too. Phone bottom bar (owner 2026-11-13: "add the
+     EV and Abritage sections back to the bottom of mobile"): Board / Slip / EV / Arbitrage / My picks / More; Record moves into More */
+  if(!NEXT&&(EV_ON||ARB_ON)){const bar=document.querySelector('#u-hub .h-tabbar'),rec=bar.querySelector('[data-hub="section"][data-id="record"]');
+    $('hub-tab-slip').insertAdjacentHTML('afterend',(EV_ON?'<button data-hub="section" data-id="ev">EV</button>':'')+(ARB_ON?'<button data-hub="section" data-id="arb">Arbitrage</button>':''));
+    if(rec){rec.remove();$('hub-more').insertAdjacentHTML('afterbegin','<button data-hub="section" data-id="record">Record</button>');}
+    bar.style.gridTemplateColumns=`repeat(${bar.querySelectorAll(':scope>button').length},minmax(0,1fr))`;bar.classList.add('h-tabbar-wide');}
   if(NEXT){
     /* UI_NEXT shell: By prop / By player, the theme switch, and (preview cookie only) the way back to the current design */
     $('hub-board-section').querySelector('.h-viewmode').insertAdjacentHTML('beforebegin','<div class="h-segment h-groupmode" role="group" aria-label="Group rows"><button data-hub="group-by" data-id="prop" aria-pressed="true">By prop</button><button data-hub="group-by" data-id="player" aria-pressed="false">By player</button></div>');
-    const light=document.documentElement.dataset.theme==='light',preview=/(?:^|;\s*)scout_ui=next(?:;|$)/.test(document.cookie);
+    const light=document.documentElement.dataset.theme==='light',preview=/(?:^|;\s*)scout_design=next(?:;|$)/.test(document.cookie);
     const extra=`<button data-hub="theme" aria-pressed="${light}">${light?'Dark theme':'Light theme'}</button><a class="h-preview-off" href="/preview/current">Previous design</a>`;
     document.querySelector('#u-hub .h-sidebar-foot').insertAdjacentHTML('afterbegin',extra);
     $('hub-more').insertAdjacentHTML('afterbegin','<button class="h-more-phone" data-hub="section" data-id="record">Record</button>'+(EV_ON?'<button data-hub="section" data-id="ev">EV</button>':'')+(ARB_ON?'<button data-hub="section" data-id="arb">Arbitrage</button>':''));

@@ -30,9 +30,24 @@ def test_exact_identity_keeps_reported_odds_not_executable(board):
     assert r['offer']['reported_prices'] == [-117, 105]
     assert not r['offer']['over']['offered'] and not r['offer']['under']['offered']
     assert not r['offer']['slip'] and not r['extra']['price_comparable']
-    assert r['scout']['grade'] is None and r['scout']['units'] is None
+    # owner 2026-11-13: the exact same line's saved grade is shown (side, chance, letter), never a stake
+    assert r['scout']['grade'] == 'A' and r['scout']['side'] == 'over' and r['scout']['p_side'] == .65 and r['scout']['units'] is None
+    assert 'stakes are set for that entry only' in r['scout']['stake_reason']
     assert r['scout']['projection'] == 23 and r['offer']['revision'] == '42'
     assert base == original
+
+
+def test_exact_line_priced_far_from_even_is_held_like_other_books(board):
+    board[1]['reported_prices'] = [-400, 300]                   # one side ~78% after the margin: cap-3, whichever side it is
+    r = dk.build(None, 'nba', 1000)[1]['records'][0]
+    assert r['scout']['grade'] is None and r['scout']['side'] is None and r['scout']['hold']['reason'] == dk.wb.CAP_TEXT
+    assert r['scout']['projection'] == 23
+
+
+def test_other_line_shows_projection_but_no_grade(board):
+    board[1]['line'] = 25.5
+    r = dk.build(None, 'nba', 1000)[1]['records'][0]
+    assert r['scout']['grade'] is None and r['scout']['side'] is None and r['scout']['projection'] == 23
 
 
 @pytest.mark.parametrize('field,value', [('player_id', '8'), ('market', 'assists'), ('period', '1q'),

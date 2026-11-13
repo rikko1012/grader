@@ -2,6 +2,7 @@
 The preview route and the one-flag default; one board row per player + stat with its ladder of lines; filters, search, sorting and the
 slip on grouped rows; rows by player; keyboard; the card beside the board and as a phone sheet; both themes; a 6,000-line board."""
 import json
+import os
 import re
 from datetime import timedelta
 
@@ -101,23 +102,31 @@ def sheets(p):
     return p.evaluate("[...document.querySelectorAll('link[rel=stylesheet]')].map(l=>new URL(l.href).pathname)")
 
 
-def test_the_redesign_is_the_default_and_one_flag_or_one_path_goes_back(browser, env, monkeypatch):
-    monkeypatch.delenv("UI_NEXT", raising=False)                          # unset = the redesign for every member
+def test_the_previous_design_is_the_default_and_one_flag_or_one_path_goes_to_the_redesign(browser, env, monkeypatch):
+    """owner 2026-11-13 ("bring previous ui back but keep the cards with this exact amount of data"): UI_NEXT unset = the design
+    before the redesign (hub.css + hub-plus.css, no redesign sheets or fonts) with the full card; UI_NEXT=1 = the redesign for every
+    member, read on each request; /preview/next and /preview/current still choose for one browser. An old scout_ui=next cookie from
+    the redesign preview no longer keeps a browser on the redesign."""
+    monkeypatch.delenv("UI_NEXT", raising=False)
     c = context(browser, env, DESK)
+    c.add_cookies([{"name": "scout_ui", "value": "next", "url": env.url}])               # the pre-2026-11-13 preview cookie: ignored
     try:
         p = open_page(c, env, "/#all-sports", DESK)
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.locator("html").get_attribute("data-ui") == "next"
-        assert "/upgrade/next.css" in sheets(p) and "/upgrade/next-base.css" in sheets(p) and "/upgrade/hub.css" not in sheets(p)
+        assert p.locator("html").get_attribute("data-ui") is None
+        assert "/upgrade/hub.css" in sheets(p) and "/upgrade/hub-plus.css" in sheets(p) and "/upgrade/next.css" not in sheets(p) and "/upgrade/next-base.css" not in sheets(p)
+        assert not any("Barlow" in (x or "") for x in p.evaluate("[...document.querySelectorAll('link')].map(l=>l.href)"))
+        assert p.locator("[data-hub=ladder],[data-hub=theme],[data-hub=group-by],.h-preview-off,.h-preview-on").count() == 0
+        nav = p.locator("#u-hub .h-sidebar nav").inner_text()
+        assert "Board" in nav and "Slips" in nav and "My picks" in nav and "Record" in nav and "Tools" in nav
+        p.goto(env.url + "/preview/next")                                                 # the redesign, for this browser (member-gated)
+        p.wait_for_selector("#hub-rows tr[data-record]")
+        assert p.url.endswith("/#all-sports") and p.locator("html").get_attribute("data-ui") == "next"
         assert p.locator(".h-sidebar-foot .h-preview-off").get_attribute("href") == "/preview/current"
-        p.goto(env.url + "/preview/current")                              # the design before it, for this browser (member-gated)
+        p.goto(env.url + "/preview/current")
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.url.endswith("/#all-sports") and p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub.css" in sheets(p)
-        assert p.locator("[data-hub=ladder],[data-hub=theme],[data-hub=group-by]").count() == 0
+        assert p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub.css" in sheets(p)
         assert p.locator(".h-preview-on").get_attribute("href") == "/preview/next"
-        p.goto(env.url + "/preview/next")
-        p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.locator("html").get_attribute("data-ui") == "next"
         assert not p.errors
     finally:
         c.close()
@@ -127,16 +136,56 @@ def test_the_redesign_is_the_default_and_one_flag_or_one_path_goes_back(browser,
         assert anon.request.get(env.url + "/preview/current", max_redirects=0).status == 404
     finally:
         anon.close()
-    monkeypatch.setenv("UI_NEXT", "0")                                    # the rollback switch, read on each request: no restart
+    monkeypatch.setenv("UI_NEXT", "1")                                    # the switch to the redesign, read on each request: no restart
     c = context(browser, env, DESK)
     try:
         p = open_page(c, env, "/#all-sports", DESK)
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub.css" in sheets(p) and "/upgrade/next.css" not in sheets(p)
+        assert p.locator("html").get_attribute("data-ui") == "next" and "/upgrade/next.css" in sheets(p) and "/upgrade/hub.css" not in sheets(p)
         monkeypatch.delenv("UI_NEXT")
         p.reload()
         p.wait_for_selector("#hub-rows tr[data-record]")
-        assert p.locator("html").get_attribute("data-ui") == "next"
+        assert p.locator("html").get_attribute("data-ui") is None and "/upgrade/hub-plus.css" in sheets(p)
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [DESK, {"width": 375, "height": 812}], ids=["desktop", "phone375"])
+def test_the_previous_design_card_keeps_behind_the_grade_and_every_panel(browser, env, monkeypatch, size):
+    """the previous design's card carries the redesign's card content: Why Scout leans with Used / Not used, Behind the grade, the
+    record tiles, All odds, Factors and matchup ("tap a section to open or close"); nothing wider than a 375px phone."""
+    monkeypatch.delenv("UI_NEXT", raising=False)
+    for k in ("SCOUT_WORKSPACE_V2", "SCOUT_BOARD_H2H", "SCOUT_CLOSING_LINES", "SCOUT_LINE_HISTORY"):
+        monkeypatch.setenv(k, "1")
+    env.sports.boards["nba"] = ladder_board()
+    workspace_api.reset()
+    c = context(browser, env, size)
+    try:
+        p = nba(c, env, size)
+        assert p.locator("html").get_attribute("data-ui") is None
+        row = row_of(p, "Reed Lean", "Assists")
+        row.locator(".h-player").click()
+        p.wait_for_selector("#hub-card .h-gi")
+        rec = next(r for r in records(p) if r["player"]["name"] == "Reed Lean" and r["offer"]["platform"] == row.get_attribute("data-record").split("|")[1])
+        gi = p.locator("#hub-card .h-gi")
+        text = gi.inner_text()
+        assert "BEHIND THE GRADE" in text.upper() and f"{rec['scout']['projection']:.1f}" in text and f"{rec['scout']['p_side'] * 100:.1f}%" in text
+        assert rec["scout"]["grade"] in text and "sm-1" in text and "Why this letter" in text
+        assert gi.evaluate("e=>getComputedStyle(e).borderTopStyle") == "solid"                       # styled by hub-plus.css, not bare
+        why = p.locator("#hub-card .h-why").inner_text()
+        assert "Used in the grade" in why and "Not used in the grade" in why
+        assert p.locator("#hub-card .h-history-summary").count() == 1
+        gi.scroll_into_view_if_needed()
+        box = gi.bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= size["width"] + 1
+        p.locator("#hub-tab-lines").click()
+        p.wait_for_selector("#hub-card .h-odds")
+        assert "All odds for this prop" in p.locator("#hub-card .h-odds").inner_text()
+        p.locator("#hub-tab-stats").click()
+        p.wait_for_selector("#hub-card .h-fx-wrap")
+        assert "tap a section to open or close" in p.locator("#hub-card .h-fx-wrap").inner_text()
+        no_h_scroll(p)
+        assert not p.errors
     finally:
         c.close()
 
@@ -147,7 +196,7 @@ def test_the_redesign_is_the_default_and_one_flag_or_one_path_goes_back(browser,
     ("/#/slips", None, "studio"), ("/#slips", None, "studio"), ("/#scout/studio", None, "studio"), ("/#scout/picks", None, "picks"), ("/#scout/record", None, "record"),
     ("/#scout/tools", None, "tools"), ("/#scout/games", None, "board")])
 def test_old_links_and_hash_routes_open_the_same_place_on_the_default_design(browser, env, monkeypatch, path, sport, section):
-    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("UI_NEXT", "1")
     c = context(browser, env, DESK)
     try:
         p = open_page(c, env, path, DESK)
@@ -179,7 +228,7 @@ def test_old_links_and_hash_routes_open_the_same_place_on_the_default_design(bro
 @pytest.mark.parametrize("size", [DESK, PHONE], ids=["desktop", "phone"])
 @pytest.mark.parametrize("theme", ["dark", "light"])
 def test_filters_sorting_views_and_the_slip_studio_work_on_the_default_design(browser, env, monkeypatch, size, theme):
-    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("UI_NEXT", "1")
     env.sports.boards["nba"] = ladder_board()
     workspace_api.reset()
     c = context(browser, env, size)
@@ -257,7 +306,7 @@ def test_filters_sorting_views_and_the_slip_studio_work_on_the_default_design(br
 
 
 def test_card_keeps_the_app_link_line_notes_and_chips_on_the_default_design(browser, env, monkeypatch):
-    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("UI_NEXT", "1")
     for k in ("SCOUT_BOOK_LINKS", "SCOUT_MARKET_EDGE", "SCOUT_PARITY_EDGE"):
         monkeypatch.setenv(k, "1")
     c = context(browser, env, DESK)
@@ -285,7 +334,7 @@ def test_card_keeps_the_app_link_line_notes_and_chips_on_the_default_design(brow
 
 
 def test_ev_and_arbitrage_have_their_own_screens_with_the_api_rows(browser, env, monkeypatch):
-    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("UI_NEXT", "1")
     import workspace_markets
     doc = {"as_of": iso(soon(0)), "owner": False, "method": {"ev_stale_s": 1800, "arb_max_age_s": 300},
            "sports": {"nba": {"state": "ok", "quotes_checked": 40, "markets_checked": 12, "sections_possible": {"ev": True, "arb": True},
@@ -635,3 +684,35 @@ def test_a_6000_line_board_paints_fast_and_ladders_are_built_only_when_opened(br
     print("PAINT6000", json.dumps(out))
     assert out["next"]["median"] <= max(250.0, out["current"]["median"] * 2), out          # generous: CI machines vary
     assert out["ladder_open_ms"] <= max(300.0, out["next"]["median"] * 3), out
+
+
+def test_previous_design_phone_bar_has_ev_and_arbitrage_tabs(browser, env, monkeypatch):
+    """owner 2026-11-13 ("add the EV and Abritage sections back to the bottom of mobile"): on the previous design the phone bar is
+    Board / Slip / EV / Arbitrage / My picks / More, every label on one line in its own cell at 375px; Record sits in More."""
+    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("SCOUT_MARKET_TOOLS", "1")
+    size = {"width": 375, "height": 812}
+    c = context(browser, env, size)
+    try:
+        p = open_page(c, env, "/#all-sports", size)
+        p.wait_for_selector("#hub-rows tr[data-record]")
+        bar = p.locator("#u-hub .h-tabbar")
+        labels = [t.strip().split("\n")[0].strip() for t in bar.locator(":scope>button").all_inner_texts()]
+        assert [x.split(" ")[0] if x.startswith("Slip") else x for x in labels] == ["Board", "Slip", "EV", "Arbitrage", "My picks", "More"], labels
+        cells = bar.locator(":scope>button").evaluate_all("bs=>bs.map(b=>{const r=b.getBoundingClientRect();return [r.left,r.right,b.scrollWidth<=b.clientWidth+1]})")
+        assert all(fit for *_, fit in cells), cells
+        assert all(a[1] <= b[0] + 0.5 for a, b in zip(cells, cells[1:])) and cells[-1][1] <= 375 + 0.5
+        if os.environ.get("PHONE_BAR_SHOT"):
+            p.screenshot(path=os.environ["PHONE_BAR_SHOT"])
+        bar.locator("[data-id=ev]").click()
+        assert p.locator("#hub-ev-section").is_visible()
+        assert bar.locator("[data-id=ev]").get_attribute("aria-current") == "page"
+        bar.locator("[data-id=arb]").click()
+        assert p.locator("#hub-arb-section").is_visible()
+        p.locator("#hub-more-toggle").click()
+        p.locator("#hub-more [data-id=record]").click()
+        assert p.locator("#hub-record-section").is_visible()
+        no_h_scroll(p)
+        assert not p.errors
+    finally:
+        c.close()

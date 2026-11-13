@@ -60,13 +60,13 @@ def live(env, monkeypatch):
 
 
 class Hub:
-    """One member's CS2 board on one design. ui: 'next' (the default, UI_NEXT unset) or 'old' (the rollback switch UI_NEXT=0)."""
+    """One member's CS2 board on one design. ui: 'next' (the redesign, UI_NEXT=1) or 'old' (the default again since 2026-11-13, UI_NEXT unset)."""
 
     def __init__(self, browser, env, ui, size, path="/"):
         if ui == "next":
-            env.mp.delenv("UI_NEXT", raising=False)
+            env.mp.setenv("UI_NEXT", "1")
         else:
-            env.mp.setenv("UI_NEXT", "0")
+            env.mp.delenv("UI_NEXT", raising=False)
         self.ui, self.size, self.env = ui, size, env
         self.c = context(browser, env, size)
         self.p = p = open_page(self.c, env, path, size)
@@ -489,7 +489,7 @@ def fix_shot(p, name, before=False):
 @SIZES
 @pytest.mark.parametrize("v2", ["1", "0"], ids=["v2", "no-v2"])
 def test_nfl_tab_survives_reload_back_forward_and_deep_links_with_matching_title(browser, live, size, v2):
-    live.mp.delenv("UI_NEXT", raising=False)
+    live.mp.setenv("UI_NEXT", "1")
     live.mp.setenv("SCOUT_WORKSPACE_V2", v2)              # the live site runs with V2 on (#/board?sport=); off: #scout/board?sport=
     c = context(browser, live, size)
     try:
@@ -530,7 +530,7 @@ def test_nfl_tab_survives_reload_back_forward_and_deep_links_with_matching_title
 @SIZES
 def test_player_markets_strip_shows_the_main_line_per_stat(browser, live, size):
     from tests.test_ui_next_browser import ladder_board
-    live.mp.delenv("UI_NEXT", raising=False)
+    live.mp.setenv("UI_NEXT", "1")
     live.sports.boards["nba"] = ladder_board()
     workspace_api.reset()
     c = context(browser, live, size)
@@ -652,7 +652,7 @@ def not_offered_board():
 
 @SIZES
 def test_not_offered_side_shows_no_letter_edge_or_add_and_points_to_the_exact_match(browser, live, size):
-    live.mp.delenv("UI_NEXT", raising=False)
+    live.mp.setenv("UI_NEXT", "1")
     live.sports.boards["nba"] = not_offered_board()
     workspace_api.reset()
     c = context(browser, live, size)
@@ -736,7 +736,7 @@ def test_auto_build_never_takes_a_side_the_app_does_not_offer():
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_book_link_dialog_is_readable_in_both_themes(browser, live, theme):
     from tests.test_ui_next_mobile_overlap_browser import SCAN, fix_shot as shot
-    live.mp.delenv("UI_NEXT", raising=False)
+    live.mp.setenv("UI_NEXT", "1")
     with Hub(browser, live, "next", PHONE) as h:
         p = h.p
         p.evaluate(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
@@ -821,7 +821,7 @@ def test_lol_not_offered_line_with_its_exact_underdog_line(browser, live, size):
     harky["sides"] = {"basis": "allowed_wager_types", "higher": {"offered": True}, "lower": {"offered": False}}
     live.lol.write()
     workspace_api.reset()
-    live.mp.delenv("UI_NEXT", raising=False)
+    live.mp.setenv("UI_NEXT", "1")
     c = context(browser, live, size)
     try:
         p = open_page(c, live, "/#scout/board?sport=lol", size)

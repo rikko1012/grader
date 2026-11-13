@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
+import server
 import workspace_api
 from tests.test_upgrade_browser import browser, env, context, open_page  # noqa: F401
 from tests.test_ui_next_browser import ladder_board
@@ -34,7 +35,7 @@ def test_shots(browser, env, size, monkeypatch):
     for tag, ui, theme in variants():
         c = context(browser, env, SIZES[size])
         if ui:
-            c.add_cookies([{"name": "scout_ui", "value": ui, "url": env.url}])
+            c.add_cookies([{"name": server.UI_NEXT_COOKIE, "value": ui, "url": env.url}])
             c.add_init_script("try{localStorage.setItem('scout-theme','%s')}catch(e){}" % theme)
             c.unroute("https://fonts.*/**")             # the real faces, for the pictures only
         try:

@@ -2,9 +2,39 @@
 import json
 import math
 import time
+import copy
 
 import workspace_books as wb
 import workspace_game_books
+
+
+def _implied(a):
+    """American odds -> implied chance, or None."""
+    try:
+        a = float(a)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(a) or -100 < a < 100:
+        return None
+    return 100.0 / (a + 100.0) if a > 0 else -a / (-a + 100.0)
+
+
+def _cap_reported(r, prices):
+    """cap-3 for a DraftKings line: the feed does not say which reported price is the Over, so the line counts as priced far from
+    even when EITHER side's de-vigged chance is above the cap (the same 65% as workspace_books.cap_held). One or no price = nothing
+    to read, as on a pick'em line. Display only: the board's saved chance is never changed."""
+    ps = [x for x in (_implied(a) for a in (prices or [])) if x is not None]
+    s = r['scout']
+    if len(ps) != 2 or not s.get('side'):
+        return
+    t = ps[0] + ps[1]
+    if max(ps) / t <= wb.CAP_MAX_SIDE_MARKET + 1e-12:
+        return
+    s.pop('letter_held', None)
+    s.update(side=None, p_side=None, grade=None, units=None, stake_reason=None,
+             hold={'label': wb.CAP_HOLD_LABEL, 'reason': wb.CAP_TEXT},
+             validation={'kind': 'research', 'label': wb.CAP_HOLD_LABEL, 'detail': wb.CAP_TEXT},
+             read_rev='x-' + wb._sha(s.get('read_rev'), wb.CAP_VERSION)[:16])
 
 
 def build(srv, sport, now=None):
@@ -51,9 +81,19 @@ def build(srv, sport, now=None):
             unknown = {'offered': False, 'price': None, 'payout': None}
             r = wb.derive('draftkings', 'DraftKings', 'sportsbook', sport, bases, line,
                           unknown, unknown, None, at, identity)
-            # A saved estimate may describe this threshold, but the source cannot
-            # identify an executable side. Never inherit an actionable grade.
-            r['scout'].update(grade=None, units=None, side=None, p_side=None, hold=None)
+            same = next((b for b in bases if r['extra'].get('same_line_as') and b['offer'].get('offer_id') == r['extra']['base'].get('offer_id')
+                         and b['offer'].get('line') == line), None)
+            if same is not None:
+                # owner 2026-11-13 ("draftking section should grades and look like the other sections"): the exact same player, event,
+                # stat, period and line already has Scout's saved grade on the board; this DraftKings line shows it as every other
+                # extra book does (side, chance, letter; no stake: stakes are set for that entry only). Nothing is graded here.
+                sc = copy.deepcopy(same['scout'])
+                sc.update(units=None, stake_reason=f"Same line and saved chance as {same['offer']['platform_label']}; stakes are set for that entry only.")
+                r['scout'] = sc
+                _cap_reported(r, p.get('reported_prices'))
+            else:
+                # another line: Scout's projection only (no chance is read at a DraftKings-only line), as other books show it
+                r['scout'].update(grade=None, units=None, side=None, p_side=None, hold=None)
             r['market_chance'] = None
             r['market']['line_type'] = 'alternate' if p['kind'] == 'milestone' else 'book line'
             r['offer'].update(reported_prices=p.get('reported_prices') or [],

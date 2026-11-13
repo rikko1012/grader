@@ -4495,6 +4495,7 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
                   "/upgrade/hub.js": ("upgrade-hub.js", "text/javascript; charset=utf-8"),
                   "/upgrade/cards.js": ("upgrade-cards.js", "text/javascript; charset=utf-8"),   # the hub card's restored panels + odds
                   "/upgrade/hub.css": ("upgrade-hub.css", "text/css; charset=utf-8"),
+                  "/upgrade/hub-plus.css": ("upgrade-hub-plus.css", "text/css; charset=utf-8"),   # the previous design's card + row additions
                   "/upgrade/upgrade.js": ("upgrade.js", "text/javascript; charset=utf-8"),
                   # UI_NEXT (the redesign, 2026-11-11): its own two sheets. hub.css is not loaded with it, and nothing asks for
                   # these unless the page's head script chose the new design (UI_NEXT=1, or the member's /preview/next cookie)
@@ -4504,14 +4505,17 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
 UPGRADE_API = "/api/upgrade/"
 UI_NEXT_PREVIEW = "/preview/next"                       # member-gated like the board: turns the redesign on for this browser only
 UI_PREV_PATH = "/preview/current"                       # member-gated: this browser goes back to the design before the redesign
-UI_NEXT_COOKIE = "scout_ui"                             # next = the redesign, current = the design before it; read by the page's head script
+UI_NEXT_COOKIE = "scout_design"                         # next = the redesign, current = the design before it; read by the page's head script.
+                                                        # Renamed from scout_ui on 2026-11-13 (previous design back): an old scout_ui=next
+                                                        # cookie from the redesign preview no longer keeps a browser on the redesign
 
 
 def ui_next_default():
-    """The redesigned hub is the default (owner 2026-11-11: "i like that ui"). UI_NEXT=0 puts every member back on the design before it,
-    in one step: the flag is read on each request, so a Render env change applies without a deploy. A member's own choice
-    (/preview/current, /preview/next) still wins over the default either way."""
-    return os.environ.get("UI_NEXT", "").strip().lower() not in ("0", "false", "off", "no")
+    """The design before the 2026-11-11 redesign is the default again (owner 2026-11-13: "bring previous ui back but keep the cards with
+    this exact amount of data"): its look, board, toolbar, navigation and fonts, with the redesign's full player card inside it
+    (web/upgrade-hub-plus.css). UI_NEXT=1 puts every member on the redesign in one step: the flag is read on each request, so a Render
+    env change applies without a deploy. A member's own choice (/preview/current, /preview/next) still wins over the default either way."""
+    return os.environ.get("UI_NEXT", "").strip().lower() in ("1", "true", "on", "yes")
 _UPGRADE_MEMO = {}                                      # (id(page bytes), name, tokens) -> (page bytes, upgraded page)
 _UPGRADE_LOCK = threading.Lock()
 UI_TOKENS_ROUTE = "/upgrade/tokens.css"                 # SCOUT_UI_TOKENS=1 only; off = the unknown-route answer
@@ -4579,14 +4583,14 @@ html.scout-boot[data-ui=next]::after{content:"Loading";font:500 13px ui-monospac
 const root=document.documentElement,q=new URLSearchParams(location.search);
 window.scoutClassic=q.get('view')==='classic'||q.has('slip')||q.has('p')||q.get('bv')==='1';
 window.scoutBootDone=function(){root.classList.remove('scout-boot');clearTimeout(window.scoutBootTimer);};
-const ck=document.cookie,NEXT=/(?:^|;\s*)scout_ui=next(?:;|$)/.test(ck)||(false/*UI_NEXT*/&&!/(?:^|;\s*)scout_ui=current(?:;|$)/.test(ck));
+const ck=document.cookie,NEXT=/(?:^|;\s*)scout_design=next(?:;|$)/.test(ck)||(false/*UI_NEXT*/&&!/(?:^|;\s*)scout_design=current(?:;|$)/.test(ck));
 if(NEXT){root.dataset.ui='next';let t=null;try{t=localStorage.getItem('scout-theme');}catch(e){}root.dataset.theme=t==='light'?'light':'dark';
 const f=document.createElement('link');f.rel='stylesheet';f.href='https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap';document.head.appendChild(f);}
 const h=location.hash;
 if(!window.scoutClassic&&root.dataset.upgrade!=='sports-results'&&(!h||h==='#all-sports'||/^#(?:board(?:\/|$)|scout\/|\/(?:board|games|slips|results|record|tools|picks|alerts|books|ev|arb))/.test(h))){
 root.classList.add('scout-boot');window.scoutBootTimer=setTimeout(window.scoutBootDone,8000);
 }
-window.scoutStylesReady=Promise.all(['/upgrade/upgrade.css','/upgrade/hub.css'].flatMap(h=>NEXT&&h.slice(-8)==='/hub.css'?['/upgrade/next-base.css','/upgrade/next.css']:[h]).map(href=>new Promise(resolve=>{
+window.scoutStylesReady=Promise.all(['/upgrade/upgrade.css','/upgrade/hub.css'].flatMap(h=>h.slice(-8)==='/hub.css'?(NEXT?['/upgrade/next-base.css','/upgrade/next.css']:[h,'/upgrade/hub-plus.css']):[h]).map(href=>new Promise(resolve=>{
 const link=document.createElement('link');link.rel='stylesheet';link.href=href;link.onload=link.onerror=resolve;document.head.appendChild(link);
 })));
 })();

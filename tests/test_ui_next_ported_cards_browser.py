@@ -27,7 +27,7 @@ PHONES = ph.PHONES
 @pytest.fixture(autouse=True)
 def on_next(env, monkeypatch):
     """the redesign is the default: the legacy fixture's rollback switch is taken away"""
-    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("UI_NEXT", "1")
 
 
 @pytest.fixture

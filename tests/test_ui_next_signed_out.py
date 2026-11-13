@@ -1,4 +1,5 @@
-"""The signed-out pages in the redesign's identity (owner 2026-11-11: "make all of the signed out pages match the new ui").
+"""The signed-out pages in the redesign's identity (owner 2026-11-11: "make all of the signed out pages match the new ui"), now behind
+UI_NEXT=1: since 2026-11-13 the previous design is the default for signed-out pages too (test_previous_design_is_the_default_again).
 Styling only: each signed-out route answers with the same status, the same gate and the same data as before; the page bytes differ
 from the previous design only by the added stylesheet block. Fixture data only."""
 import re
@@ -25,7 +26,7 @@ def anon_get(browser, env, path):
 def test_landing_routes_serve_the_same_page_with_only_the_style_block_added(browser, env, monkeypatch, path):
     monkeypatch.setenv("UI_NEXT", "0")
     st0, old, _ = anon_get(browser, env, path)
-    monkeypatch.delenv("UI_NEXT")
+    monkeypatch.setenv("UI_NEXT", "1")
     st1, new, ct = anon_get(browser, env, path)
     assert st0 == st1 == 200 and ct.startswith("text/html")
     assert new != old and STYLE.sub(b"", new) == old                    # the same landing.html, plus one stylesheet block
@@ -38,7 +39,7 @@ def test_landing_routes_serve_the_same_page_with_only_the_style_block_added(brow
 def test_gated_routes_answer_a_signed_out_visitor_exactly_as_before(browser, env, monkeypatch, path):
     monkeypatch.setenv("UI_NEXT", "0")
     before = anon_get(browser, env, path)
-    monkeypatch.delenv("UI_NEXT")
+    monkeypatch.setenv("UI_NEXT", "1")
     after = anon_get(browser, env, path)
     assert before[0] == after[0] and before[1] == after[1]
     if path != "/auth/me":
@@ -49,7 +50,7 @@ def test_public_record_keeps_its_data_and_takes_the_new_style(browser, env, monk
     monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
     monkeypatch.setenv("UI_NEXT", "0")
     page0, api0, js0 = anon_get(browser, env, "/record"), anon_get(browser, env, "/api/record"), anon_get(browser, env, "/record.js")
-    monkeypatch.delenv("UI_NEXT")
+    monkeypatch.setenv("UI_NEXT", "1")
     page1, api1, js1 = anon_get(browser, env, "/record"), anon_get(browser, env, "/api/record"), anon_get(browser, env, "/record.js")
     assert page0[0] == page1[0] == 200 and STYLE.sub(b"", page1[1]) == page0[1] and page1[1] != page0[1]
     assert api0[0] == api1[0] and api0[1] == api1[1] and js0[1] == js1[1]            # the record's numbers and script: untouched
@@ -60,7 +61,7 @@ def test_public_record_keeps_its_data_and_takes_the_new_style(browser, env, monk
 def test_unsubscribe_page_says_the_same_and_changes_nothing_without_a_valid_token(browser, env, monkeypatch):
     monkeypatch.setenv("UI_NEXT", "0")
     st0, old, _ = anon_get(browser, env, "/alerts/unsubscribe?m=someone&t=bad")
-    monkeypatch.delenv("UI_NEXT")
+    monkeypatch.setenv("UI_NEXT", "1")
     st1, new, _ = anon_get(browser, env, "/alerts/unsubscribe?m=someone&t=bad")
     assert st0 == st1 == 400
     text = lambda b: re.sub(rb"<style>.*?</style>", b"", b, flags=re.S)             # noqa: E731
@@ -69,7 +70,7 @@ def test_unsubscribe_page_says_the_same_and_changes_nothing_without_a_valid_toke
 
 def test_sign_in_and_sign_out_redirect_as_before(browser, env, monkeypatch):
     for flag in ("0", None):
-        monkeypatch.setenv("UI_NEXT", flag) if flag else monkeypatch.delenv("UI_NEXT")
+        monkeypatch.setenv("UI_NEXT", flag) if flag else monkeypatch.setenv("UI_NEXT", "1")
         c = browser.new_context()
         try:
             out = c.request.get(env.url + "/auth/logout", max_redirects=0)
@@ -83,7 +84,7 @@ def test_sign_in_and_sign_out_redirect_as_before(browser, env, monkeypatch):
 @pytest.mark.parametrize("size", list(SIZES))
 @pytest.mark.parametrize("scheme", ["dark", "light"])
 def test_signed_out_pages_render_in_the_new_identity(browser, env, monkeypatch, size, scheme, tmp_path):
-    monkeypatch.delenv("UI_NEXT", raising=False)
+    monkeypatch.setenv("UI_NEXT", "1")
     monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
     c = browser.new_context(viewport=SIZES[size], color_scheme=scheme)
     c.route("https://fonts.*/**", lambda r: r.abort())
@@ -112,3 +113,13 @@ def test_signed_out_pages_render_in_the_new_identity(browser, env, monkeypatch, 
 
 def test_the_flag_is_read_on_every_request():
     assert server.ui_next_default() in (True, False) and "UI_NEXT" in server.ui_next_default.__doc__
+
+
+@pytest.mark.parametrize("path", ["/", "/lol", "/sports"])
+def test_previous_design_is_the_default_again(browser, env, monkeypatch, path):
+    """owner 2026-11-13 ("bring previous ui back"): with UI_NEXT unset a signed-out visitor gets the previous page, byte for byte."""
+    monkeypatch.setenv("UI_NEXT", "0")
+    st0, old, _ = anon_get(browser, env, path)
+    monkeypatch.delenv("UI_NEXT", raising=False)
+    st1, now, _ = anon_get(browser, env, path)
+    assert st0 == st1 == 200 and now == old and b"Barlow" not in now
