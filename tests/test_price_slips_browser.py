@@ -9,10 +9,11 @@ from tests.test_upgrade_browser import browser, env, context, open_page, no_h_sc
 from tests.test_hub_shell_browser import market_doc, mt_page
 
 
+@pytest.mark.parametrize('design', ['0', '1'])
 @pytest.mark.parametrize('size', [DESK, PHONE])
-def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,size):
+def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,size,design):
     monkeypatch.setenv('SCOUT_MARKET_TOOLS','1')
-    monkeypatch.setenv('UI_NEXT','1')
+    monkeypatch.setenv('UI_NEXT',design)
     doc=market_doc()
     for sp,d in doc['sports'].items():
         for i,r in enumerate(d['ev']+d['arbitrage']):
@@ -21,7 +22,7 @@ def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,s
     c=context(browser,env,size)
     try:
         p=mt_page(c,env,doc,path='/#/arb')
-        p.locator('[data-hub="price-draft"]').filter(has_text='Generate paired slips').click()
+        p.get_by_role('button',name='Generate best paired slips',exact=True).click()
         p.wait_for_selector('#hub-price-draft li')
         assert p.locator('#hub-price-draft li').count()==2
         assert 'two separate matched slips' in p.locator('#hub-price-draft').inner_text().lower()
@@ -47,10 +48,11 @@ def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,s
     finally:c.close()
 
 
+@pytest.mark.parametrize('design', ['0', '1'])
 @pytest.mark.parametrize('size', [DESK, PHONE])
-def test_ev_generate_stays_on_ev_and_keeps_studio_untouched(browser,env,monkeypatch,size):
+def test_ev_generate_stays_on_ev_and_keeps_studio_untouched(browser,env,monkeypatch,size,design):
     monkeypatch.setenv('SCOUT_PICKEM_EV','1')
-    monkeypatch.setenv('UI_NEXT','1')
+    monkeypatch.setenv('UI_NEXT',design)
     c=context(browser,env,size)
     records=c.request.get(env.url+'/api/upgrade/board?sport=cs2').json()['records']
     board={r['key']:r for r in records}
@@ -98,4 +100,31 @@ def test_ev_generate_stays_on_ev_and_keeps_studio_untouched(browser,env,monkeypa
             p.screenshot(path=str(Path(os.environ['PRICE_SLIP_SHOTS'])/f'ev-dedicated-{size["width"]}.png'))
         no_h_scroll(p)
         assert not p.errors
+    finally:c.close()
+
+
+@pytest.mark.parametrize('design', ['0', '1'])
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_generators_remain_visible_without_prices(browser,env,monkeypatch,size,design):
+    monkeypatch.setenv('SCOUT_PICKEM_EV','1')
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS','1')
+    monkeypatch.setenv('UI_NEXT',design)
+    c=context(browser,env,size)
+    try:
+        c.route('**/api/upgrade/pickem-ev?*',lambda r:r.fulfill(status=502,json={'error':'unavailable'}))
+        p=open_page(c,env,'/#/ev',size)
+        p.wait_for_function("document.querySelector('#hub-ev-body')?.textContent.includes('Prices could not be loaded')")
+        assert p.get_by_role('button',name='Generate EV slips',exact=True).is_visible()
+        assert p.get_by_role('button',name='Generate EV slips',exact=True).is_disabled()
+        no_h_scroll(p)
+        doc=market_doc()
+        for d in doc['sports'].values():
+            d['arbitrage']=[];d['ev']=[];d['closest']=[]
+        p=mt_page(c,env,doc,path='/#/arb')
+        button=p.get_by_role('button',name='Generate best paired slips',exact=True)
+        button.wait_for()
+        assert button.is_disabled()
+        assert 'No qualifying pair' in p.locator('[aria-label="Arbitrage slip generator"]').inner_text()
+        assert not p.locator('#hub-studio-section').is_visible()
+        no_h_scroll(p)
     finally:c.close()
