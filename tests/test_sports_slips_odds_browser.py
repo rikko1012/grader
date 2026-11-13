@@ -33,7 +33,7 @@ ROWS = """() => [...document.querySelectorAll('#hub-rows tr[data-record]')].map(
   key: tr.dataset.record,
   grade: [...tr.querySelectorAll('.h-c-scout .h-grade, .h-c-scout .h-grade-text, .h-c-scout .h-one-sided')].map(e => e.textContent.trim()),
   why: [...tr.querySelectorAll('.h-c-scout .h-hold-why')].map(e => [e.textContent.trim(), e.title]),
-  odds: [...tr.querySelectorAll('.h-c-line .h-odds')].map(e => [e.textContent.trim(), e.title]),
+  odds: [...tr.querySelectorAll('.h-c-line .h-odds, .h-c-line .h-book-price-summary')].map(e => [e.textContent.trim(), e.title]),
   add: tr.querySelector('.h-c-add button')?.textContent.trim(),
 }))"""
 
