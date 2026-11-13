@@ -373,6 +373,53 @@ def encoded(key, body, keep=60):
     return etag, gz or None
 
 
+GZIP_SEND_LEVEL = 5
+GZIP_SEND_MAX = 64 * 1024 * 1024                      # larger bodies go as they are (one compression must stay cheap)
+_GZIP_TYPES = ("application/json", "text/", "application/javascript", "image/svg+xml", "application/xml")
+
+
+GZIP_BIG = 256 * 1024                                 # bodies above this compress in one of GZIP_BIG_SLOTS slots at a time
+GZIP_BIG_SLOTS = threading.BoundedSemaphore(2)
+GZIP_STATS = {"compressed": 0, "big_raw": 0}
+
+
+def gzip_send(data):
+    """The gzip copy of an uncached body, or None: a big body (> GZIP_BIG) takes one of two slots and, when none frees within
+    50 ms, goes uncompressed - 700 members never queue behind compression."""
+    if len(data) <= GZIP_BIG:
+        GZIP_STATS["compressed"] += 1
+        return gzip.compress(data, GZIP_SEND_LEVEL, mtime=0)
+    if not GZIP_BIG_SLOTS.acquire(timeout=0.05):
+        GZIP_STATS["big_raw"] += 1
+        return None
+    try:
+        GZIP_STATS["compressed"] += 1
+        return gzip.compress(data, GZIP_SEND_LEVEL, mtime=0)
+    finally:
+        GZIP_BIG_SLOTS.release()
+
+
+def vary_with(current, name):
+    """`current` Vary value with `name` added once (case-insensitive); other values (Origin, ...) kept in order."""
+    parts = [p.strip() for p in str(current or "").split(",") if p.strip()]
+    if not any(p.lower() == name.lower() for p in parts):
+        parts.append(name)
+    return ", ".join(parts)
+
+
+def wants_gzip(data, ctype, headers, accept):
+    """send() compresses a 200 body here only when nothing upstream did: no Content-Encoding already set (send_shared and the
+    workspace's private answers carry their own once-made gzip copy - never encoded twice), a compressible type, 1 KB..64 MB,
+    and the client accepts gzip. Bodies never change - only how they travel."""
+    if any(str(k).lower() == "content-encoding" for k in headers) or not isinstance(data, (bytes, bytearray)):
+        return False
+    if not (GZIP_MIN <= len(data) <= GZIP_SEND_MAX):
+        return False
+    if not str(ctype or "").lower().startswith(_GZIP_TYPES):
+        return False
+    return accepts_gzip(accept)
+
+
 def accepts_gzip(header):
     """True when Accept-Encoding allows gzip (q=0 refuses it)."""
     for part in (header or "").lower().split(","):
@@ -4758,6 +4805,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _write_response(self, code, data, ctype, headers):
         headers = dict(headers or {})
+        if code == 200 and wants_gzip(data, ctype, headers, self.headers.get("Accept-Encoding")):
+            gz = gzip_send(data)                                          # bandwidth 2026-11-13: the uncached answers (admin JSON
+            if gz is not None:                                            # pages, research pulls, per-member JSON) went out raw
+                data = gz
+                headers["Content-Encoding"] = "gzip"
+                vk = next((k for k in headers if k.lower() == "vary"), "Vary")
+                headers[vk] = vary_with(headers.get(vk), "Accept-Encoding")
+                ek = next((k for k in headers if k.lower() == "etag"), None)
+                if ek and headers[ek].endswith('"') and not headers[ek].endswith('-gz"'):
+                    headers[ek] = headers[ek][:-1] + '-gz"'
         self.send_response(code)
         if code != 304:                                # a 304 carries no body (and no length of one)
             self.send_header("Content-Type", ctype)
@@ -4887,8 +4944,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/alerts/unsubscribe":
                 return self.send(*unsubscribe_page(q.get("m"), q.get("t")))
             if u.path == "/health":
+                ws_ = sys.modules.get("workspace_sports")      # bandwidth 2026-11-13: private-network sports reads (never imported here)
                 return self.send(200, {**_HEALTH_SNAPSHOT.read(_health_diagnostics), "ok": True,
-                                       "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40]})
+                                       "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40],
+                                       **({"sports_transport": ws_.transport_status()} if ws_ and hasattr(ws_, "transport_status") else {})})
             if u.path in LANDING_PATHS and landing_route(u.path) and self.signed_out():     # signed-out visitors only
                 return self.send_shared(("page", "landing", ui_next_default()), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
