@@ -55,6 +55,7 @@ def build(srv, sport, now=None):
             # identify an executable side. Never inherit an actionable grade.
             r['scout'].update(grade=None, units=None, side=None, p_side=None, hold=None)
             r['market_chance'] = None
+            r['market']['line_type'] = 'alternate' if p['kind'] == 'milestone' else 'book line'
             r['offer'].update(reported_prices=p.get('reported_prices') or [],
                               price_side_known=False, reference_kind=p['kind'],
                               revision=str(p.get('revision_id') or r['offer']['revision']))

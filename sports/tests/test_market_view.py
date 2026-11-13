@@ -57,6 +57,7 @@ def test_every_book_on_the_identical_market_with_its_own_chance_and_the_mc1_cons
     mv = market_view.row_view([(its[0][0], pp), (its[1][0], fd), (its[2][0], br)], its, EV, NOW, "nba", 0.0)
     by = {b["p"]: b for b in mv["bk"]}
     assert set(by) == {"fanduel", "betrivers", "polymarket"}           # pick'em board is not a book
+    assert by["fanduel"]["v"] == "main"  # display adapters must not invent main/alternate status
     assert by["fanduel"]["kind"] == "devig" and by["fanduel"]["c"] == pytest.approx(devig(1.80, 2.05), abs=1e-4)
     assert by["polymarket"]["kind"] == "mid" and by["polymarket"]["c"] == pytest.approx(0.515, abs=1e-4)
     assert all(b["in"] for b in by.values()) and by["fanduel"]["age"] == 300
