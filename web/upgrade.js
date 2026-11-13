@@ -516,6 +516,13 @@
       box.innerHTML=`<form method="dialog"><button class="u-x" aria-label="Close book link">×</button></form><h2>${esc(l.player)}</h2><p>${cap(l.side)} ${esc(l.line)} ${esc(l.stat_label)} · ${esc(l.period_label)}</p><p>Choose the side in Underdog.</p><a class="u-btn u-gold" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer">Open in Underdog</a>`;box.showModal();
     }catch(e){say(e.message||'The current line could not be opened. Refresh and try again.');}
   }
+  async function checkGenerated(slip){
+    if(!slip||!Array.isArray(slip.legs)||!slip.legs.length)throw new Error('Generate a new slip first.');
+    const doc=await api('recheck',{idem:idem(),legs:slip.legs.map(wireLeg),entry_types:{[slip.platform]:slip.entry_type}});
+    if(!doc.entries?.[slip.platform]?.ok||slip.legs.some(l=>!doc.legs?.[l.id]?.ok))
+      throw new Error('A line changed or is no longer available. Generate again.');
+    return doc;
+  }
   async function openGenerated(slip){
     if(!slip||T.openBusy)return;
     T.openBusy=true;
@@ -1500,7 +1507,7 @@
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, moveHtml, movesOf, moveRow, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
+        research, researchDoc, chartSvg, addLeg, generateBatch, checkGenerated, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, moveHtml, movesOf, moveRow, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
     } catch (e) { window.scoutClassicMount?.(); console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();

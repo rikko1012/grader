@@ -20,7 +20,7 @@ def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,s
     monkeypatch.setattr(wm,'shared',lambda *a:(200,json.dumps(doc).encode()))
     c=context(browser,env,size)
     try:
-        p=mt_page(c,env,doc)
+        p=mt_page(c,env,doc,path='/#/arb')
         p.locator('[data-hub="price-draft"]').filter(has_text='Generate paired slips').click()
         p.wait_for_selector('#hub-price-draft li')
         assert p.locator('#hub-price-draft li').count()==2
@@ -36,6 +36,8 @@ def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,s
         assert 'price changed' in p.locator('#hub-price-draft').inner_text()
         assert p.locator('#hub-price-draft li').count()==0
         p.locator('#hub-price-draft form button').click()
+        assert p.url.endswith('/#/arb')
+        p.goto(env.url+'/#/ev')
         p.locator('[data-hub="price-draft"]').filter(has_text='Generate bet slip').first.click()
         p.wait_for_selector('#hub-price-draft li')
         assert p.locator('#hub-price-draft li').count()==1
@@ -46,7 +48,7 @@ def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,s
 
 
 @pytest.mark.parametrize('size', [DESK, PHONE])
-def test_ev_generate_enters_studio_rechecks_and_saves(browser,env,monkeypatch,size):
+def test_ev_generate_stays_on_ev_and_keeps_studio_untouched(browser,env,monkeypatch,size):
     monkeypatch.setenv('SCOUT_PICKEM_EV','1')
     monkeypatch.setenv('UI_NEXT','1')
     c=context(browser,env,size)
@@ -73,15 +75,27 @@ def test_ev_generate_enters_studio_rechecks_and_saves(browser,env,monkeypatch,si
         p.wait_for_function("document.querySelector('#ev-entry').value==='power-2' && !document.querySelector('[data-ev=generate]').disabled")
         p.locator('#ev-slip-count').select_option('1')
         p.locator('[data-ev="generate"]').click()
-        p.wait_for_selector('.h-batch-grid',timeout=30000)
-        assert '1 separate slips' in p.locator('.h-batch-head').inner_text().lower()
-        assert 'Saved to your account' in p.locator('.h-batch-head').inner_text()
-        assert 'positive-EV' in p.locator('.h-batch-note').inner_text()
+        p.wait_for_selector('.ev-generated-card',timeout=30000)
+        assert p.url.endswith('/#scout/ev')
+        assert p.locator('.ev-generated-card').count()==1
+        assert p.locator('.ev-generated-card li').count()==2
+        assert not p.locator('#hub-studio-section').is_visible()
+        state=c.request.get(env.url+'/api/upgrade/state').json()
+        assert state.get('studio') is None
+        assert p.locator('[data-ev="copy-generated"]').is_visible()
+        c.grant_permissions(['clipboard-read','clipboard-write'])
+        p.locator('[data-ev="copy-generated"]').click()
+        p.wait_for_function("document.querySelector('.ev-generated [role=status]').textContent.includes('Rechecked and copied')")
+        copied=p.evaluate('navigator.clipboard.readText()')
+        assert 'PrizePicks power' in copied
+        # Recheck failure must stay on EV and refuse copying the old offer.
+        p.route('**/api/upgrade/recheck',lambda r:r.fulfill(status=409,json={'error':'A line changed. Generate again.'}))
+        p.locator('[data-ev="copy-generated"]').click()
+        p.wait_for_function("document.querySelector('.ev-generated [role=status]').textContent.includes('line changed')")
+        assert p.url.endswith('/#scout/ev')
+        assert p.evaluate('navigator.clipboard.readText()')==copied
         if os.environ.get('PRICE_SLIP_SHOTS'):
-            p.screenshot(path=str(Path(os.environ['PRICE_SLIP_SHOTS'])/f'ev-{size["width"]}.png'))
-        p.reload()
-        p.wait_for_selector('.h-batch-grid',timeout=30000)
-        assert 'positive-EV' in p.locator('.h-batch-note').inner_text()
+            p.screenshot(path=str(Path(os.environ['PRICE_SLIP_SHOTS'])/f'ev-dedicated-{size["width"]}.png'))
         no_h_scroll(p)
         assert not p.errors
     finally:c.close()

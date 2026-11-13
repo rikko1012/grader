@@ -2099,16 +2099,12 @@ export function mount(C) {
       const opts={...options,source:'ev',mix:'any',games:'spread',lines:'standard',side:'any',research:true};
       const batch=await C.generateBatch([],opts);
       if(!batch.slips.length)throw new Error(batch.note||'Not enough eligible positive-EV legs to form this entry.');
-      H.batch=batch;H.batchSaved=false;await saveBatch();
-      H.studioTab='build';section('studio');
-      history.replaceState(null,'',location.hash.split('?')[0]+'?tab=build');H.routeHash=location.pathname+location.hash;paintBatch();
-      C.say(`${batch.slips.length} of ${options.count} EV slips generated. ${batch.note||''}`);
-      return batch.slips.length;
+      return batch;
     }finally{H.generating=false;}
   }
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev'||!EVB)return;
-    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,generateEV,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
+    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,generateEV,checkEV:C.checkGenerated,openEV:C.openGenerated,bookLinks:!!R.me.features?.book_links,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
     catch(e){box.innerHTML=`<p class="h-mt-state">${NEXT?'EV':'Best prices'} could not be loaded. Use Refresh to try again.</p>`;}
   }
   function section(name,navigate=true) {
