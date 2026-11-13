@@ -101,6 +101,8 @@ def map_ratio(r):
         pm = json.loads(r["pred_maps"])
     except (TypeError, ValueError):
         return np.nan
+    if not isinstance(pm, dict):        # deviation 1 (code fix): saved pred_maps can be JSON null
+        return np.nan
     w = defaultdict(float)
     for slot in ("map1", "map2"):
         ch = pm.get(slot) or {}
@@ -302,11 +304,11 @@ def factors(df, cand, placebo=False):
     if cand == "C2":
         roles = df.apply(lambda r: role_of(r, p["tau_open_rate"]) if pd.notna(r.get("elo_own")) else None, axis=1)
         if placebo:
-            ok = roles.notna().values
+            ok = roles.map(lambda k: isinstance(k, str)).values
             vals = roles.values.copy()
             vals[ok] = rng.permutation(vals[ok])
             roles = pd.Series(vals, index=df.index)
-        return roles.map(lambda k: math.exp(p["gamma"][k]) if k else np.nan).fillna(1.0)
+        return roles.map(lambda k: math.exp(p["gamma"][k]) if isinstance(k, str) else np.nan).fillna(1.0)  # deviation 2: None became NaN
     if cand == "C3":
         if placebo:     # each match takes another match's map chances; the player's own per-map rates
             slugs = sorted(df.match_slug.unique())

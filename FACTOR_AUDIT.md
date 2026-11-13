@@ -487,3 +487,32 @@ of the MOUZ-Vitality miss SEPARATELY on chronological data, then validate on new
 - **Pass (all, per candidate):** C1 hit CI lower bound > 0; C2 Over and Under hit each not lower; C3 graded count; C4
   Over share not > 1 pt more lopsided; C5 Brier not worse; C6 >= 0 on upset, OT and remaining matches; C7 >= 0 both
   halves; C8 placebo fails C1; C9 kills-per-round MAE not worse (A: rounds MAE and kills MAE not worse).
+
+## Round-10 results (run once 2026-11-13 after the definition above was pushed in 841b984; script research/miss_decomp_2026_11_13/score.py)
+
+**All six candidates FAIL; nothing gets a shadow.** Full log: cs2_scout_ops/logs/cs2_miss_decomposition_2026-11-13.md.
+Two code fixes after the freeze, no definition change (null `pred_maps`; NaN role for units without HLTV inputs).
+TEST Nov 1-10: 2,598 Maps 1-2 rows / 101 matches, live 52.23% (Overs 50.52%, Unders 53.82%, Over share 48.2%).
+
+| Cand. | Hit diff, pts (95% CI) | Over / Under hit | Brier diff | Upset / OT / rest | T1 / T2 | Placebo | Fails |
+|---|---|---|---|---|---|---|---|
+| 10-A1 rounds x Elo closeness | +0.50 (-0.59..+1.59) | 50.98 / 54.56 | -0.0014 | -0.10 / +4.03 / +0.17 | +1.17 / -0.35 | +0.54 (fails C1, but as good as A1) | C1 C6 C7 |
+| 10-A2 rounds x market closeness | +0.54 (-1.08..+2.12) | 51.01 / 54.65 | -0.0019 | 0.00 / +5.68 / -0.33 | +0.21 / +0.96 | +0.19 | C1 C6 |
+| 10-B1 Elo re-centred + gap | -0.35 (-1.46..+0.74) | 50.16 / 53.50 | +0.0003 | -0.21 / -0.92 / -0.08 | -1.03 / +0.53 | -1.62 | C1 C2 C5 C6 C7 |
+| 10-C1 recent form | -0.15 (-0.80..+0.49) | 50.35 / 53.78 | -0.0003 | -0.41 / +1.10 / -0.41 | -0.41 / +0.18 | -0.12 | C1 C2 C6 C7 |
+| 10-C2 role | -0.27 (-0.81..+0.27) | 50.23 / 53.65 | 0.0000 | -0.41 / +0.55 / -0.58 | -0.41 / -0.09 | +0.04 | C1 C2 C5 C6 C7 |
+| 10-C3 map-specific | -0.69 (-1.27..-0.12) | 49.80 / 53.19 | +0.0006 | -0.41 / +0.92 / -1.33 | -1.17 / -0.09 | -0.19 | C1 C2 C5 C6 C7 C9 |
+
+Measurements:
+- **A rounds:** not underestimated overall. Actual Maps 1-2 rounds were 43.4 (FIT) / 43.2 (TEST) vs 44 used.
+  - Close matches (market 40-60%): 43.8 / 44.7 rounds, OT 26% / 30%.
+  - Lopsided: 41-42 rounds.
+  - Slope about -9 rounds per unit |q - 0.5|. Rounds MAE 5.63 -> 5.61-5.62, CIs across 0.
+- **B Elo:** high-Elo lobbies are not over-shrunk.
+  - Actual / projected KPR in the lowest vs highest combined-Elo quintile: 1.041 vs 1.018 in HLTV Oct; 1.011 vs 1.022 in TEST.
+  - Fitted b_S = -0.027, the opposite of the hypothesis.
+  - Favourites' players beat the projection (gap term +0.029 per 400 Elo).
+- **C:** factor fits are tiny (form beta 0.096, role +/-1%, maps beta 0.39). They flipped only 0U rows.
+- **Motivating five MOUZ / Vitality matches (apart):** every candidate is worse or no better there (A1 / A2 -6.9 pts).
+- **Forward (untouched):** matches after 2026-11-13 20:55:13 UTC. Frozen params sha `ea241b17a6b42cdc`; 306 recorded
+  factors sha `c02a13d03734d6bb`. Review at 150 matches (about Nov 28-29), as confirmation of the negatives only.
