@@ -190,21 +190,46 @@ _RES_BYTES = [0, 0.0]                                 # approx bytes of cached b
 _SWEPT = [0.0]
 
 
-def _store_result(key, status, body, ttl, keep):
+def _result_size(value):
+    if len(value) > 4:
+        return value[4]                               # measured once; recounting must not serialize every cached object
+    body = value[2]
+    if isinstance(body, (bytes, str)):
+        size = len(body)
+    elif isinstance(body, (dict, list, tuple)):
+        size = __import__("membudget").json_cost(body)  # shared() also stores parsed history/player/board documents
+    else:
+        size = 2000
+    # Encoded entries retain the original body as well as the compressed copy. Count
+    # both, even if another entry also references the original (conservative budget).
+    if isinstance(value[1], tuple) and value[1] and isinstance(value[1][0], bytes):
+        size += len(value[1][0])
+    return size
+
+
+def _store_result(key, status, body, ttl, keep, cost=None):
     """(caller holds _RG) Keep one answer; expired answers leave on insert (2026-10-13 audit: they were evicted by count only,
     so up to 20,000 old grade bodies stayed in memory) - a sweep at most every 5 s, never more than RESULTS_MAX kept."""
     now = time.time()
     if now - _SWEPT[0] > 5:
         _SWEPT[0] = now
         for k in [k for k, v in _RESULTS.items() if len(v) > 3 and v[3] <= now]:
-            del _RESULTS[k]
-    size = lambda v: len(v[2]) if len(v) > 2 and isinstance(v[2], (bytes, str)) else 2000
+            _RES_BYTES[0] -= _result_size(_RESULTS.pop(k))
+    size = _result_size
     if now - _RES_BYTES[1] > 5:                       # re-count at most every 5 s (other code also removes answers)
         _RES_BYTES[0], _RES_BYTES[1] = sum(size(v) for v in _RESULTS.values()), now
-    while _RESULTS and (len(_RESULTS) >= RESULTS_MAX or _RES_BYTES[0] > RESULTS_MAX_BYTES):
+    old = _RESULTS.pop(key, None)
+    if old is not None:
+        _RES_BYTES[0] -= size(old)
+    value = (now - max(0, ttl - keep), status, body, now + keep)
+    incoming = size(value) if cost is None else cost
+    value += (incoming,)
+    while _RESULTS and (len(_RESULTS) >= RESULTS_MAX or _RES_BYTES[0] + incoming > RESULTS_MAX_BYTES):
         _RES_BYTES[0] -= size(_RESULTS.pop(next(iter(_RESULTS))))   # the oldest go (recomputed if asked again)
-    _RESULTS[key] = (now - max(0, ttl - keep), status, body, now + keep)
-    _RES_BYTES[0] += size(_RESULTS[key])
+    # Retain a single oversized response for single-flight waiters, as before; it
+    # cannot coexist with other answers and is now visible in the byte accounting.
+    _RESULTS[key] = value
+    _RES_BYTES[0] += incoming
 
 
 FAIL_KEEP = 2.0         # a failed computation is handed to everyone asking within this many seconds - never longer
@@ -253,8 +278,9 @@ def shared(key, compute, ttl=RESULT_TTL):
         status, body = out[0], out[1]
         keep = out[2] if len(out) > 2 and out[2] else ttl    # a result may ask to be reused for less time (outage grades)
         if status in (200, 404):
+            cost = _result_size((0, status, body, 0))     # sizing a parsed document must not hold the global cache lock
             with _RG:
-                _store_result(key, status, body, ttl, keep)
+                _store_result(key, status, body, ttl, keep, cost=cost)
         else:
             failed = (status, body)
         return status, body
@@ -354,6 +380,53 @@ def encoded(key, body, keep=60):
         with _RG:
             _store_result(ek, (body, etag), gz, keep, keep)
     return etag, gz or None
+
+
+GZIP_SEND_LEVEL = 5
+GZIP_SEND_MAX = 64 * 1024 * 1024                      # larger bodies go as they are (one compression must stay cheap)
+_GZIP_TYPES = ("application/json", "text/", "application/javascript", "image/svg+xml", "application/xml")
+
+
+GZIP_BIG = 256 * 1024                                 # bodies above this compress in one of GZIP_BIG_SLOTS slots at a time
+GZIP_BIG_SLOTS = threading.BoundedSemaphore(2)
+GZIP_STATS = {"compressed": 0, "big_raw": 0}
+
+
+def gzip_send(data):
+    """The gzip copy of an uncached body, or None: a big body (> GZIP_BIG) takes one of two slots and, when none frees within
+    50 ms, goes uncompressed - 700 members never queue behind compression."""
+    if len(data) <= GZIP_BIG:
+        GZIP_STATS["compressed"] += 1
+        return gzip.compress(data, GZIP_SEND_LEVEL, mtime=0)
+    if not GZIP_BIG_SLOTS.acquire(timeout=0.05):
+        GZIP_STATS["big_raw"] += 1
+        return None
+    try:
+        GZIP_STATS["compressed"] += 1
+        return gzip.compress(data, GZIP_SEND_LEVEL, mtime=0)
+    finally:
+        GZIP_BIG_SLOTS.release()
+
+
+def vary_with(current, name):
+    """`current` Vary value with `name` added once (case-insensitive); other values (Origin, ...) kept in order."""
+    parts = [p.strip() for p in str(current or "").split(",") if p.strip()]
+    if not any(p.lower() == name.lower() for p in parts):
+        parts.append(name)
+    return ", ".join(parts)
+
+
+def wants_gzip(data, ctype, headers, accept):
+    """send() compresses a 200 body here only when nothing upstream did: no Content-Encoding already set (send_shared and the
+    workspace's private answers carry their own once-made gzip copy - never encoded twice), a compressible type, 1 KB..64 MB,
+    and the client accepts gzip. Bodies never change - only how they travel."""
+    if any(str(k).lower() == "content-encoding" for k in headers) or not isinstance(data, (bytes, bytearray)):
+        return False
+    if not (GZIP_MIN <= len(data) <= GZIP_SEND_MAX):
+        return False
+    if not str(ctype or "").lower().startswith(_GZIP_TYPES):
+        return False
+    return accepts_gzip(accept)
 
 
 def accepts_gzip(header):
@@ -2574,6 +2647,11 @@ def learning_cycle_once():
         if fh is None:
             return False
         try:
+            import membudget
+            admission = membudget.worker_headroom(membudget.process_memory())
+            learning.STATE["memory_admission"] = admission
+            if not admission["allowed"]:
+                return False                         # retry next cycle; never kill an active worker
             learning._cycle_safe()
             return True
         finally:
@@ -2828,6 +2906,8 @@ def _memory_report():
     out["processes_mb"] = membudget.processes()
     out["sampled_peaks"] = dict(membudget.PEAK)            # highest minute samples since this process started
     out["history_minutes"] = len(membudget.HISTORY)       # /admin/memprof.json?action=history
+    learning_module = sys.modules.get("learning")
+    out["learning_memory_admission"] = dict(getattr(learning_module, "STATE", {}).get("memory_admission") or {})
     out["caches"] = {"bo3_finished": bo3._MEM.stats(), "bo3_expiring": bo3._TMEM.stats(), "contexts": cs2_scout._CONTEXT.stats(),
                      "results": {"entries": len(_RESULTS), "mb": round(_RES_BYTES[0] / 1e6, 1),
                                  "budget_mb": round(RESULTS_MAX_BYTES / 1e6)}}
@@ -4734,6 +4814,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _write_response(self, code, data, ctype, headers):
         headers = dict(headers or {})
+        if code == 200 and wants_gzip(data, ctype, headers, self.headers.get("Accept-Encoding")):
+            gz = gzip_send(data)                                          # bandwidth 2026-11-13: the uncached answers (admin JSON
+            if gz is not None:                                            # pages, research pulls, per-member JSON) went out raw
+                data = gz
+                headers["Content-Encoding"] = "gzip"
+                vk = next((k for k in headers if k.lower() == "vary"), "Vary")
+                headers[vk] = vary_with(headers.get(vk), "Accept-Encoding")
+                ek = next((k for k in headers if k.lower() == "etag"), None)
+                if ek and headers[ek].endswith('"') and not headers[ek].endswith('-gz"'):
+                    headers[ek] = headers[ek][:-1] + '-gz"'
         self.send_response(code)
         if code != 304:                                # a 304 carries no body (and no length of one)
             self.send_header("Content-Type", ctype)
@@ -4863,8 +4953,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/alerts/unsubscribe":
                 return self.send(*unsubscribe_page(q.get("m"), q.get("t")))
             if u.path == "/health":
+                ws_ = sys.modules.get("workspace_sports")      # bandwidth 2026-11-13: private-network sports reads (never imported here)
                 return self.send(200, {**_HEALTH_SNAPSHOT.read(_health_diagnostics), "ok": True,
-                                       "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40]})
+                                       "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40],
+                                       **({"sports_transport": ws_.transport_status()} if ws_ and hasattr(ws_, "transport_status") else {})})
             if u.path in LANDING_PATHS and landing_route(u.path) and self.signed_out():     # signed-out visitors only
                 return self.send_shared(("page", "landing", ui_next_default()), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
@@ -6513,8 +6605,23 @@ def apply_default_flags(env=os.environ):
         env.setdefault(k, "1")
 
 
+def apply_container_cache_limits():
+    """Leave room for the LoL and learning children on the existing 2 GB instance.
+
+    Cache misses use the same disk-backed data/calculation. No model or record changes.
+    Smaller operator-configured budgets remain smaller; larger containers are unchanged.
+    """
+    import membudget
+    limit = membudget.process_memory().get("container_limit_mb")
+    if limit and limit <= 2300:
+        bo3._MEM.cap_mb(75)
+        bo3._TMEM.cap_mb(40)
+        cs2_scout._CONTEXT.cap_mb(60)
+
+
 if __name__ == "__main__":
     apply_default_flags()
+    apply_container_cache_limits()
     __import__("membudget").tune_allocator()          # before any thread starts (2026-10-18 out-of-memory fix)
     threading.Thread(target=warm_start, daemon=True, name="warm-start").start()
     threading.Thread(target=board_forever, daemon=True, name="underdog-board").start()
