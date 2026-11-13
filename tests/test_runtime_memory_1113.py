@@ -41,6 +41,23 @@ def test_one_oversized_answer_preserves_existing_singleflight_contract(results):
     assert server._RES_BYTES[0] == 1
 
 
+def test_parsed_history_is_budgeted_once_not_as_a_tiny_placeholder(results, monkeypatch):
+    monkeypatch.setattr(server, "RESULTS_MAX_BYTES", 50000)
+    calls = []
+    real = membudget.json_cost
+    def cost(body):
+        calls.append(1)
+        return real(body)
+    monkeypatch.setattr(membudget, "json_cost", cost)
+    body = {"games": [{"points": 22, "context": "x" * 1000} for _ in range(8)]}
+    server._store_result("history-a", 200, body, 60, 60)
+    assert server._RES_BYTES[0] > 30000
+    server._RES_BYTES[1] = 0                          # a recount uses saved costs, not another serialization
+    server._store_result("history-b", 200, body, 60, 60)
+    assert list(results) == ["history-b"] and calls == [1, 1]
+    assert results["history-b"][2] is body
+
+
 def test_lower_cache_cap_evicts_oldest_preserving_recent_values():
     cache = membudget.BudgetLRU("test", 1)
     cache.put("old", 1, cost=400000)

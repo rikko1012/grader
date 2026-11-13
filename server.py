@@ -191,8 +191,15 @@ _SWEPT = [0.0]
 
 
 def _result_size(value):
+    if len(value) > 4:
+        return value[4]                               # measured once; recounting must not serialize every cached object
     body = value[2]
-    size = len(body) if isinstance(body, (bytes, str)) else 2000
+    if isinstance(body, (bytes, str)):
+        size = len(body)
+    elif isinstance(body, (dict, list, tuple)):
+        size = __import__("membudget").json_cost(body)  # shared() also stores parsed history/player/board documents
+    else:
+        size = 2000
     # Encoded entries retain the original body as well as the compressed copy. Count
     # both, even if another entry also references the original (conservative budget).
     if isinstance(value[1], tuple) and value[1] and isinstance(value[1][0], bytes):
@@ -216,6 +223,7 @@ def _store_result(key, status, body, ttl, keep):
         _RES_BYTES[0] -= size(old)
     value = (now - max(0, ttl - keep), status, body, now + keep)
     incoming = size(value)
+    value += (incoming,)
     while _RESULTS and (len(_RESULTS) >= RESULTS_MAX or _RES_BYTES[0] + incoming > RESULTS_MAX_BYTES):
         _RES_BYTES[0] -= size(_RESULTS.pop(next(iter(_RESULTS))))   # the oldest go (recomputed if asked again)
     # Retain a single oversized response for single-flight waiters, as before; it
