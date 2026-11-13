@@ -48,3 +48,4 @@ map_chance_check.db*
 # local screenshot / probe output from browser test runs (never shipped)
 .pt/
 sports/tests/_shots/
+pr1_records.db*

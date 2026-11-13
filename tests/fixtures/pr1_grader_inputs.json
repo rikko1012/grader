@@ -1,0 +1,372 @@
+{
+ "gi": {
+  "prop": "kills",
+  "line": 27.5,
+  "line_type": "standard",
+  "less_available": true,
+  "scope": "12",
+  "bo": 3,
+  "maps_played": 88,
+  "kpr": 0.652,
+  "hs_pct": 54.9,
+  "sample_maps": 171,
+  "kpr_last5": 0.647,
+  "form_trend": -0.066,
+  "environment": {
+   "online": {
+    "maps": 222,
+    "kpr": 0.687
+   },
+   "lan": {
+    "maps": 77,
+    "kpr": 0.695
+   },
+   "tonight": "online",
+   "event": "Test Event Series 1",
+   "ratio": null,
+   "ratio_maps": 222,
+   "stats_from": "online",
+   "stats_maps": 171,
+   "stats_weight": 1.0,
+   "form_from": "online"
+  },
+  "round_swing": -0.62,
+  "per_map": [],
+  "map_probs": [
+   {
+    "de_cache": 0.261,
+    "de_nuke": 0.227,
+    "de_ancient": 0.169,
+    "de_dust2": 0.098,
+    "de_anubis": 0.087,
+    "de_inferno": 0.081,
+    "de_mirage": 0.076
+   },
+   {
+    "de_cache": 0.273,
+    "de_nuke": 0.248,
+    "de_ancient": 0.168,
+    "de_dust2": 0.112,
+    "de_inferno": 0.097,
+    "de_anubis": 0.096,
+    "de_mirage": 0.091
+   }
+  ],
+  "map_stats": {
+   "de_nuke": {
+    "maps_played": 6,
+    "kpr": 0.649,
+    "hs_pct": 61.2
+   },
+   "de_cache": {
+    "maps_played": 9,
+    "kpr": 0.594,
+    "hs_pct": 63.4
+   },
+   "de_dust2": {
+    "maps_played": 16,
+    "kpr": 0.612,
+    "hs_pct": 53.4
+   },
+   "de_ancient": {
+    "maps_played": 12,
+    "kpr": 0.66,
+    "hs_pct": 49.7
+   },
+   "de_anubis": {
+    "maps_played": 12,
+    "kpr": 0.639,
+    "hs_pct": 50.9
+   },
+   "de_mirage": {
+    "maps_played": 8,
+    "kpr": 0.703,
+    "hs_pct": 58.6
+   }
+  },
+  "rating": 1.009,
+  "teammate_ratings": [
+   1.204,
+   1.077,
+   1.02,
+   1.16
+  ],
+  "is_igl": false,
+  "sniping": 0,
+  "firepower": null,
+  "trading": null,
+  "opening": null,
+  "dpr": 0.674,
+  "kast": 71.5,
+  "adr": 69.4,
+  "market_quality": "SOFT",
+  "days_since_last_map": 1,
+  "odds_provenance": {
+   "source": "thunderpick",
+   "policy": "tp-first-2",
+   "market": "Match Winner",
+   "market_id": "event-level main market",
+   "scope": "series winner",
+   "scope_basis": "explicit label 'Match Winner' (event-level main market) with per-map markets separately labelled 'Map N Winner' / '1X2 - Map N' in the same events; exactly two outcomes; no draw price on any observed event; not provider-confirmed",
+   "scope_provider_confirmed": false,
+   "series_format": "bo3",
+   "series_format_basis": "HLTV",
+   "bo1_note": null,
+   "draws_possible": false,
+   "match_id": "hltv:1000001",
+   "source_event_id": "thunderpick:fx:1",
+   "fixture_id": "1",
+   "url_id": "1",
+   "tournament": "Test tournament",
+   "competition": "Counter-Strike",
+   "api_path": "/api/partners-odds/esport/csgo",
+   "source_team1": "Test source_team1",
+   "source_team2": "Test source_team2",
+   "team_is_a": true,
+   "flipped": true,
+   "odds_team": 2.15,
+   "odds_opp": 1.62,
+   "implied_team_raw": 0.465116,
+   "implied_opp_raw": 0.617284,
+   "margin": 0.0824,
+   "p_team": 0.429708,
+   "p_opp": 0.570292,
+   "method": "proportional margin-adjusted market probability",
+   "retrieved_at": "2026-11-13T21:22:06+00:00",
+   "quote_age_s": 193.1,
+   "event_first_seen": "2026-11-13T08:37:55+00:00",
+   "event_last_observed": "2026-11-13T21:22:06+00:00",
+   "endpoint_last_success_at": "2026-11-13T20:59:18+00:00",
+   "endpoint_last_nonempty_at": "2026-11-13T20:59:18+00:00",
+   "availability": "current",
+   "source_updated_at": null,
+   "source_updated_note": "the feed publishes no quote update time - retrieved_at is our request time",
+   "snapshot_sha256": "7abb860e665974237307c240d1689842c5b001e79e68554ab587d3441449ba80",
+   "start_raw": "2026-11-14 15:00:00",
+   "start_utc_from_source": "2026-11-14T15:00:00+00:00",
+   "canonical_start": "2026-11-14T15:00:00+00:00",
+   "timezone": "startTime = UTC+0",
+   "timezone_basis": "inferred from 300 matched fixtures (60% at UTC+0); not provider-confirmed",
+   "timezone_provider_confirmed": false,
+   "match_url": "https://example.invalid/match/1",
+   "selection": "odds-source-3 (Thunderpick first, then the existing Polymarket rule, then OddsPapi - live for a member's own context build, cache-only otherwise; never a 50% stand-in; a Thunderpick blip grades on a found fallback)",
+   "odds_policy": "odds-source-3|tp-first-2",
+   "selected": "thunderpick",
+   "fallback_reason": null,
+   "tp_availability": "current",
+   "mapping_rev": "map-8aa707ea4f04",
+   "query": {
+    "team": "Team A",
+    "opponent": "Team B",
+    "start": "2026-11-14T15:00:00.000+00:00",
+    "bo": 3
+   },
+   "network": false,
+   "oddspapi_mode": null,
+   "selected_at": "2026-11-13T21:25:19.452+00:00",
+   "tp_error": null,
+   "pm_error": null,
+   "blip": false,
+   "tp_last_quote": null,
+   "sig": "7a99e5a957ca69a3b1b2edb34b525c70d5456444"
+  },
+  "p_team_market": 0.429708,
+  "odds_policy": "odds-source-3|tp-first-2",
+  "mapping_rev": "map-8aa707ea4f04",
+  "map_win_probs": [
+   null,
+   null
+  ],
+  "recent_avg": 29.3,
+  "recent_median": 28.5,
+  "perf": {
+   "version": "perf-cm2",
+   "lambda": 27.625791621267986,
+   "lambda_kills": 27.625791621267986,
+   "rate": 0.6567835289711107,
+   "rate_all_envs": 0.6560222127808748,
+   "opp_factor": 0.9977146647286693,
+   "hs_per_kill": 0.5509396944922428,
+   "rounds_per_map": 21.74132969862184,
+   "maps": 2,
+   "sd": 7.756060530763592,
+   "spread_c": 1.457,
+   "spread_c_kills": 1.457,
+   "history_rounds_weighted": 1468.785244579381,
+   "env_rounds_weighted": 1271.6711422660107,
+   "opp_rounds_weighted": 979.549810940661,
+   "data_quality": "HLTV history revision N0 from its last good evaluation (refresh failing - newer matches not counted)",
+   "round_share": {
+    "team": 0.5300174447909207,
+    "team_maps": 306,
+    "team_id": 900003,
+    "opp": 0.5090517226776441,
+    "opp_maps": 97,
+    "opp_id": 900002
+   },
+   "g7": {
+    "version": "perf-1",
+    "lambda": 28.625581747203185,
+    "lambda_kills": 28.625581747203185,
+    "hs_per_kill": 0.5464574633057648,
+    "sd": 7.73651645668353,
+    "spread_c": 1.446,
+    "spread_c_kills": 1.446,
+    "rate": 0.659829712429403,
+    "opp_factor": 0.9977146647286693,
+    "rounds_per_map": 21.74132969862184,
+    "data_quality": "ok"
+   },
+   "hltv_player_ids": [
+    900001
+   ],
+   "hltv_opp_team": 900002,
+   "player_maps": 138,
+   "opp_maps": 68,
+   "opp_known": true,
+   "lan_known": true,
+   "newest_map_day": 739926,
+   "hltv_data": {
+    "player_maps": {
+     "state": "live",
+     "as_of": "2026-11-13T21:19:12Z",
+     "age_min": 6.1
+    },
+    "opp_maps": {
+     "state": "live",
+     "as_of": "2026-11-13T21:18:07Z",
+     "age_min": 7.2
+    },
+    "input_revision": "N0/n0-r4:pre=8597;late_in=616;history_out=19580;late_out=207;no_snapshot=0;no_teams=0;no_raw_page=0;snapshots=2026-10-12..2026-11-07;sha=726f0670e11c;STALE evaluated 2026-11-07T20:54:15Z",
+    "row_policy": "verified-history-1",
+    "input_revision_stale": true
+   },
+   "perf2": {
+    "version": "perf-2",
+    "lambda": 28.49342829615402,
+    "lambda_kills": 28.49342829615402,
+    "rate": 0.6567835289711107,
+    "rate_all_envs": 0.6560222127808748,
+    "opp_factor": 0.9977146647286693,
+    "hs_per_kill": 0.5509396944922428,
+    "sd": 7.77735467656338,
+    "rounds_per_map": 21.74132969862184,
+    "spread_c": 1.457,
+    "spread_c_kills": 1.457,
+    "data_quality": "HLTV history revision N0 from its last good evaluation (refresh failing - newer matches not counted)"
+   },
+   "cm2_live": {
+    "model": "cm-2",
+    "lambda": 27.625791621267986,
+    "sd": 7.756060530763592,
+    "features": [
+     -0.41922246927432205,
+     -0.42177341351698117,
+     -0.01003660966224986,
+     7.699094879825837,
+     7.527006050274345,
+     5.703782474656201,
+     0.0,
+     4.058538276746752,
+     4.024173956864106,
+     0.03436431988264587,
+     3.0808018317396364,
+     3.0489053697645456,
+     -0.42057873310498,
+     -0.015076168212014658
+    ],
+    "inputs": {
+     "k": 1462.0395360400632,
+     "r": 2205.350075881619,
+     "ke": 1216.3293917255746,
+     "re": 1856.5358012101235,
+     "hk": 798.8892542181047,
+     "hkk": 1462.0395360400632,
+     "maps": 299,
+     "ka": 1459.8067242423356,
+     "ck": 3378.2063895160586,
+     "cr": 1030.1724812883683,
+     "t1r": 1963.8093228160064,
+     "t1w": 90.16641025678896,
+     "t2r": 1030.1724812883683,
+     "t2w": 49.148401018602875,
+     "dup": 0.9850369082455273,
+     "elo_own": 1623.4153106987008,
+     "elo_opp": 1609.6695827456424,
+     "lan": false,
+     "day": 739934,
+     "refit": "2026-11-09"
+    },
+    "tables_sha": "7a37cd1e4120f67b",
+    "artifact_sha": "6e586047c5b1823a"
+   }
+  },
+  "recent_n": 10,
+  "hltv_series": {
+   "state": "live",
+   "n": 246,
+   "as_of": "2026-11-13T21:19:12Z",
+   "age_min": 6.1,
+   "source": "HLTV"
+  },
+  "trade_pr": 0.1015,
+  "opp_rank": 52,
+  "rank_band": {
+   "opp_rank": 52,
+   "band": 10,
+   "maps": 10,
+   "kpr": 0.665,
+   "kpr_all": 0.689,
+   "ratio": 0.965,
+   "teams": [
+    "Team C",
+    "Team D",
+    "Team E",
+    "Team F"
+   ]
+  },
+  "scout": false,
+  "standin_for": null,
+  "recent": {
+   "n": 10,
+   "overs": 8
+  },
+  "on_listed_team": null,
+  "is_standin": false,
+  "roster_confirmed": true,
+  "gate_sources": {
+   "awp": "HLTV weapon stats: 1% of 1295 kills with the AWP (90 days to 2026-11-08)",
+   "rest": "BO3.gg (more recent than HLTV's data)",
+   "sample": "HLTV (88 Maps 1-2 in the window)"
+  },
+  "team_ml": 133,
+  "opp_ml": -133,
+  "odds_check": {
+   "checked_at": "2026-11-13T21:25:19.452+00:00",
+   "result": "changed",
+   "shared_evaluation": true,
+   "found_selected": "thunderpick",
+   "found_sig": "7a99e5a957ca69a3b1b2edb34b525c70d5456444",
+   "tp_availability": "current",
+   "fallback_reason": null,
+   "tp_error": null,
+   "pm_error": null,
+   "blip": false,
+   "transient": false,
+   "tp_last_quote": null,
+   "retrieved_at": "2026-11-13T21:22:06+00:00",
+   "quote_age_s": 193.1,
+   "event_last_observed": "2026-11-13T21:22:06+00:00",
+   "endpoint_last_success_at": "2026-11-13T20:59:18+00:00",
+   "used_selected": "thunderpick",
+   "used_sig": "7a99e5a957ca69a3b1b2edb34b525c70d5456444"
+  }
+ },
+ "expected": {
+  "lambda": 27.63,
+  "p_more": 0.506,
+  "pick": "More",
+  "grade": "LEAN",
+  "units": 0.0
+ }
+}

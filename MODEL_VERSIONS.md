@@ -1,5 +1,25 @@
 # Grader versions (test week from the 2026-10-07 freeze)
 
+## pr-1 — reproducible pre-match prediction records (branch pr1-records-1113, 2026-11-13; measurement only; CS2 model tag unchanged `042a5339de`; NOT deployed - on hold)
+
+- **What:** `pr1.py` writes one append-only record per graded CS2 line (kills + HS, every period, board + member cards;
+  owner load tests excluded) when a prediction is produced or changes before the match: identity (canonical match id,
+  series date / event), offer (app, offer id, offer revision = hash of the offer content, seen / provider times),
+  prediction (projection, P(Over), side, chance, letter, stake, state, shown, sides offered), model tag + version hash +
+  commit + grade-time flags, rating snapshot (cm-2 tables sha + refit), the exact grader inputs (value groups stored once
+  by content hash) and an availability entry per source. Separate SQLite file `pr1_records.db`; one background writer;
+  triggers refuse UPDATE / DELETE; later facts go to `pr1_corrections` (offer moved, rating snapshot superseded, HLTV
+  feeding match re-fetched). LoL is not covered (separate code path).
+- **Availability:** verified = offer (board fetch time), odds (our retrieval time), HLTV player / opponent maps (max
+  raw_pages / mapstats_pages fetch time read at record time; unverified if any feeding match has no time or was
+  re-fetched after the grade read it), rating (cm-2 tables built_at), BO3.gg (packed-cache save time), roles (HLTV
+  weapons_status / player_roles times). Unverified (null + flag): rank (snapshot date only), map chances, other inputs.
+- **Grades unchanged:** grader.py and the model hash are untouched; tests/test_pr1_records.py checks the grade / verdict
+  objects, the board payload and the member card are byte-identical with `PR1_RECORDS` on and off (wall-clock fields
+  masked). Admin: `/admin/pr1.json` (bounded pages; full=1 / verify=1 at 20 per page). Verify: `scripts/pr1_reconstruct.py`.
+- **Volume:** replay of the last 24 h of production forecasts (2,998 changes) -> 2,995 records, 15.3 MB/day.
+- **Rollback:** `PR1_RECORDS=0` on Render (read per call).
+
 ## `042a5339de` — awp-hs-1: stakes on AWPer headshot props (owner "yes", 2026-11-11; branch claude/grade-up-1111-cs2; stake rule only, no chance / letter / side / projection change)
 
 - **Change:** Gate A ("AWPer on a headshot prop" -> 0 units) is lifted in `grader.grade_leg`. An AWPer's headshot prop

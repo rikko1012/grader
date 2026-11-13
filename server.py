@@ -51,6 +51,7 @@ import underdog
 import grade_display
 import line_chance
 import perf_shadow
+import pr1
 import whop_auth
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
@@ -3790,6 +3791,10 @@ def board_forever():
                             picklog.log_async(res, v, test=2)
                         except Exception:
                             traceback.print_exc()
+                        try:                              # pr-1 pre-match prediction record (measurement only, background)
+                            pr1.submit(res, v, test=2, source="board")
+                        except Exception:
+                            traceback.print_exc()
                     if grade_display.bo3_shadow(g):
                         # sr-bo3-2: a BO3.gg-route projection is logged exactly as above but never shown - the stored row has
                         # no side, so the board, slips, compare table and content book skip the line (admin sees it as SHADOW)
@@ -5218,6 +5223,14 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     out["grader_record_at_real_lines"] = None
                 return self.send(200, out)
+            if u.path == "/admin/pr1.json" and self.authed(q.get("token")):
+                # pr-1 pre-match prediction records: status + one bounded keyset page (never the whole table); full=1 rebuilds
+                # each record's inputs + availability, verify=1 re-runs the grader on them (both capped at 20 per page)
+                num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
+                return self.send(200, {"status": pr1.status(),
+                                       "page": pr1.page(after_id=num("after") or 0, limit=num("limit"), cutoff_id=num("cutoff"),
+                                                        full=q.get("full") == "1", verify=q.get("verify") == "1",
+                                                        match_id=q.get("match_id") or None)})
             if u.path == "/admin/fh1.json" and self.authed(q.get("token")):
                 # fh-1 shadow (perf_shadow): status + a bounded page of its records; replay=1 re-runs a page from saved inputs
                 num = lambda k: int(q[k]) if (q.get(k) or "").isdigit() else None
@@ -6124,6 +6137,10 @@ class Handler(BaseHTTPRequestHandler):
             if not outage and not held:                  # an outage grade is never logged as a live forecast (2026-10-13 audit:
                 try:                                     # the board path skipped it, member card lookups did not)
                     picklog.log_async(res, res["verdict"], test=load_test)   # written in the background
+                except Exception:
+                    traceback.print_exc()
+                try:                                     # pr-1 pre-match prediction record (measurement only, background)
+                    pr1.submit(res, res["verdict"], test=load_test, source="member")
                 except Exception:
                     traceback.print_exc()
             tm["log"] = round(time.time() - t0, 2)
