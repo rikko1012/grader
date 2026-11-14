@@ -39,6 +39,7 @@ def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,s
         p.locator('#hub-price-draft form button').click()
         assert p.url.endswith('/#/arb')
         p.goto(env.url+'/#/ev')
+        assert p.locator('[data-hub="price-draft"]').filter(has_text='Generate bet slip').count()==sum(len(d['ev']) for d in doc['sports'].values())
         p.locator('[data-hub="price-draft"]').filter(has_text='Generate bet slip').first.click()
         p.wait_for_selector('#hub-price-draft li')
         assert p.locator('#hub-price-draft li').count()==1
@@ -127,4 +128,51 @@ def test_generators_remain_visible_without_prices(browser,env,monkeypatch,size,d
         assert 'No qualifying pair' in p.locator('[aria-label="Arbitrage slip generator"]').inner_text()
         assert not p.locator('#hub-studio-section').is_visible()
         no_h_scroll(p)
+    finally:c.close()
+
+
+@pytest.mark.parametrize('design', ['0', '1'])
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_reference_books_visible_without_opportunities(browser,env,monkeypatch,size,design):
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS','1')
+    monkeypatch.setenv('UI_NEXT',design)
+    doc=market_doc(empty=True)
+    template=market_doc()['sports']['nba']['ev'][0]
+    ref={k:v for k,v in template.items() if k not in ('p_cal','ev','side','per_100','odds','american')}
+    ref.update(book='reference',book_label='Reference Book',reference_only=True,rules_confirmed=False,
+               prices={'over':{'odds':1.91,'american':'-110'},'under':{'odds':1.95,'american':'-105'}})
+    doc['sports']['nba']['comparisons']=[ref]
+    pair=market_doc()['sports']['nba']['arbitrage'][0]
+    pair.update(margin_pct=-4.2,reference_only=True)
+    doc['sports']['nba']['closest_pairs']=[pair]
+    c=context(browser,env,size)
+    try:
+        p=mt_page(c,env,doc,path='/#/arb')
+        section=p.get_by_role('region',name='Current book comparisons',exact=True)
+        assert section.is_visible()
+        assert 'Over -110' in section.inner_text() and 'Under -105' in section.inner_text()
+        assert 'Settlement rules unverified' in section.inner_text()
+        assert p.get_by_role('region',name='Closest matched prices').is_visible()
+        assert p.get_by_role('button',name='Generate best paired slips',exact=True).is_disabled()
+        assert section.locator('[data-hub="price-draft"]').count()==0
+        p.locator('#hub-mt-book').select_option('reference')
+        assert section.is_visible()
+        assert p.get_by_role('region',name='Closest matched prices').count()==0
+        p.locator('.h-mt-more > summary').click()
+        p.locator('#hub-mt-side').select_option('over')
+        assert 'Hidden by side filter' in section.inner_text()
+        assert 'Not listed' not in section.inner_text()
+        p.locator('#hub-mt-side').select_option('all')
+        p.locator('#hub-mt-q').fill('no such player')
+        assert p.get_by_role('region',name='Current book comparisons').count()==0
+        p.locator('#hub-mt-q').fill('')
+        no_h_scroll(p)
+        if os.environ.get('PRICE_SLIP_SHOTS'):
+            section.scroll_into_view_if_needed()
+            p.screenshot(path=str(Path(os.environ['PRICE_SLIP_SHOTS'])/f'reference-{design}-{size["width"]}.png'))
+        p.goto(env.url+'/#/ev')
+        p.get_by_role('region',name='Current book comparisons').wait_for()
+        assert p.get_by_role('button',name='Generate best bet slip',exact=True).is_disabled()
+        no_h_scroll(p)
+        assert not p.errors
     finally:c.close()

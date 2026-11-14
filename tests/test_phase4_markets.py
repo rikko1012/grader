@@ -215,7 +215,7 @@ def test_member_view_has_sportsbook_rows_only_and_the_owner_keeps_everything(fak
     txt = json.dumps(m)
     assert "Stale" not in txt and "Prediction market" not in txt                     # no flagged pair or its reasons
     assert all(l["kind"] == "sportsbook" and (l["age_s"] or 0) <= 300 for a in nba["arbitrage"] for l in a["legs"])
-    rowbooks = {r["book"] for r in nba["ev"]} | {l["book"] for a in nba["arbitrage"] for l in a["legs"]}
+    rowbooks = {r["book"] for r in nba["ev"] + nba["comparisons"]} | {l["book"] for a in nba["arbitrage"] for l in a["legs"]}
     assert {b["id"] for b in m["books"]} == rowbooks                                 # no book that has no row the member can see
     o = wm.for_member(body, every, owner=True)
     assert o["owner"] is True and o["sports"]["nba"]["flagged"] and o["sports"]["nba"]["excluded"]
