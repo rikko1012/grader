@@ -40,6 +40,7 @@ the same underlying feed shouldn't count twice") - gradecore.book_rules holds bo
 For 700 members: one build every TTL s for everyone (srv.shared); each member's answer is that build cut to the sports they see."""
 import heapq
 import json
+import math
 import time
 
 import book_providers as bp
@@ -231,6 +232,57 @@ def _released_p(g, sport, side):
     return None
 
 
+def _comparisons(gs, sport, now):
+    """Bounded reference prices, never inputs to slip generation or an EV claim.
+
+    Keep ten markets per book so a busy feed cannot hide a smaller book. Closest
+    pairs require the same execution checks as arbitrage, but have no profit.
+    """
+    from gradecore import book_rules, market_tools as mt
+    by_book, pairs = {}, []
+    for g in gs.values():
+        quotes = [q for q in g["quotes"] if q["kind"] == "sportsbook"
+                  and not q.get("exchange") and not q.get("multiplier")
+                  and q["seen"] is not None and 0 <= now - q["seen"] <= mt.EV_STALE_S]
+        valid = []
+        for q in quotes:
+            prices = {side: q[side] for side in ("over", "under")
+                      if q.get(side) and math.isfinite(q[side]) and q[side] > 1}
+            if not prices:
+                continue
+            valid.append((q, prices))
+            row = dict(_row_base(g, sport), book=q["book"], book_label=q["book_label"],
+                       kind="sportsbook", reference_only=True, seen_at=wb._iso(q["seen"]),
+                       source=q["source"], prices={side: {"odds": price, "american": american(price)}
+                                                for side, price in prices.items()},
+                       rules_confirmed=book_rules.confirmed(q["book"], sport))
+            bucket = by_book.setdefault(q["book"], [])
+            bucket.append((q["seen"], row))
+            if len(bucket) > 10:
+                bucket.remove(min(bucket, key=lambda x: x[0]))
+        best = None
+        for x, xp in valid:
+            for y, yp in valid:
+                if ("over" not in xp or "under" not in xp or "over" not in yp or "under" not in yp
+                    or book_rules.family_of(x["book"]) == book_rules.family_of(y["book"])
+                    or not book_rules.same_bet(x["book"], y["book"], sport)
+                    or now - min(x["seen"], y["seen"]) > mt.ARB_MAX_AGE_S):
+                    continue
+                result = mt.arb_two_way(xp["over"], yp["under"])
+                if best is None or result["margin_pct"] > best[0]:
+                    best = (result["margin_pct"], x, y)
+        # A positive pair already belongs in arbitrage; don't present its inferior
+        # reverse pairing as the closest non-opportunity for the same market.
+        if best is not None and best[0] <= 0:
+            margin, x, y = best
+            pairs.append(dict(_row_base(g, sport), reference_only=True, margin_pct=round(margin, 3),
+                              legs=[dict(book=q["book"], book_label=q["book_label"], side=side,
+                                         odds=q[side], american=american(q[side]), seen_at=wb._iso(q["seen"]),
+                                         kind="sportsbook") for q, side in ((x, "over"), (y, "under"))]))
+            pairs = heapq.nlargest(CLOSEST_ROWS, pairs, key=lambda x: x["margin_pct"])
+    return [r for bucket in by_book.values() for _, r in sorted(bucket, key=lambda x: -x[0])], pairs
+
+
 def sheet(srv, sport, now):
     from gradecore import book_rules, devig, market_tools as mt
     gs = groups(srv, sport, now)
@@ -390,7 +442,8 @@ def sheet(srv, sport, now):
     # T6: the priced single bets that fall short of their fair chance, closest first (members: sportsbook / prediction rows only,
     # cut in for_member). Same row shape as "ev"; their ev / per_100 are 0 or below and are never counted as worth acting on.
     closest = heapq.nlargest(CLOSEST_ROWS, (x for x in near if x["kind"] in ("sportsbook", "prediction")), key=lambda x: (x["ev"], -x["age_s"]))
-    return {"state": "ready" if n_quotes else "empty", "as_of": wb._iso(now), "newest_quote_at": wb._iso(newest),
+    comparisons, closest_pairs = _comparisons(gs, sport, now)
+    return {"comparisons": comparisons, "closest_pairs": closest_pairs, "state": "ready" if n_quotes else "empty", "as_of": wb._iso(now), "newest_quote_at": wb._iso(newest),
             "quotes_checked": n_quotes, "markets_checked": len(gs), "ev": ev[:MAX_ROWS], "closest": closest, "arbitrage": arb[:MAX_ROWS],
             "flagged": flagged[:MAX_ROWS], "excluded": excluded, "excluded_lines": excluded_lines, "sections_possible": possible,
             "lag": lag}
@@ -427,6 +480,7 @@ def _books(docs, flagged=False):
     """Books that have a row in these sport docs (EV and both-sides rows; flagged pairs only for the owner's view)."""
     docs = list(docs)
     out = {(r["book"], r["book_label"]) for d in docs for r in d.get("ev", [])}
+    out |= {(r["book"], r["book_label"]) for d in docs for r in d.get("comparisons", [])}
     out |= {(l["book"], l["book_label"]) for d in docs for r in d.get("arbitrage", []) + (d.get("flagged", []) if flagged else []) for l in r["legs"]}
     return [{"id": b, "label": l} for b, l in sorted(out)]
 

@@ -1865,7 +1865,7 @@ export function mount(C) {
   function mtBooks(d){
     const out=new Map();
     for(const s of mtSports(d)){const x=d.sports[s]||{};
-      for(const r of [...(x.ev||[]),...(x.closest||[])].filter(r=>d.owner||mtBook(r)))out.set(r.book,r.book_label);
+      for(const r of [...(x.ev||[]),...(x.closest||[]),...(x.comparisons||[])].filter(r=>d.owner||mtBook(r)))out.set(r.book,r.book_label);
       for(const r of [...(x.arbitrage||[]),...(d.owner?x.flagged||[]:[])])for(const l of r.legs||[])out.set(l.book,l.book_label);}
     return [...out.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,label])=>({id,label}));
   }
@@ -1952,13 +1952,19 @@ export function mount(C) {
       :Number.isFinite(builtAge)&&builtAge>120?`<p class="h-mt-state" role="status">These prices were built ${ageText(builtAge)} ago. Refresh prices for the current sheet.</p>`:'';
     const ready=sports.filter(s=>d.sports[s]?.state!=='unavailable');
     if(sports.length&&!ready.length)return head+'<p class="h-mt-state" role="status">Prices could not be read just now. Use Refresh prices to try again.</p>';
-    let ev=[],arb=[],near=[],all=0,quotes=0,lines=0;
+    let ev=[],arb=[],near=[],comparisons=[],pairs=[],all=0,quotes=0,lines=0;
     /* the server's own age limits, applied again on every draw: a sheet left open never shows a pair or price it would no longer
        build (review 2026-11-05). The tab also reloads the sheet when it comes back into view (see visibilitychange below). */
     const m0=d.method||{},evMax=Number(m0.ev_stale_s)||1800,arbMax=Number(m0.arb_max_age_s)||300;
     const live=r=>(mtAge(r)??Infinity)<=evMax,liveArb=r=>mtLegsAge(r)<=arbMax;
     for(const s of ready){const x=d.sports[s]||{};
       quotes+=x.quotes_checked||0;lines+=x.markets_checked||0;
+      for(const r of x.comparisons||[]){
+        if(!live(r))continue;
+        const prices=Object.entries(r.prices||{}).filter(([side])=>mtKeep(s,{...r,side},false));
+        if(prices.length)comparisons.push({...r,prices:Object.fromEntries(prices)});
+      }
+      if(mode!=='ev')pairs.push(...(x.closest_pairs||[]).filter(r=>liveArb(r)&&mtKeep(s,r,true)));
       const e=mode==='arb'?[]:(x.ev||[]).filter(r=>mtBook(r)&&live(r)),a=mode==='ev'?[]:(x.arbitrage||[]).filter(liveArb);all+=e.length+a.length;
       ev.push(...e.filter(r=>mtKeep(s,r,false)&&num(r.ev)&&r.ev>=Number(f.minEv)));
       arb.push(...a.filter(r=>mtKeep(s,r,true)));
@@ -1982,19 +1988,26 @@ export function mount(C) {
     if(ev.length){const x=ev[0];
       body+=`<section class="h-pc-section" aria-label="Prices better than the fair chance"><h3>Prices better than the fair chance</h3><p class="h-pc-ask">Which single bets pay more than their real chance is worth?</p>`
         +`<p class="h-pc-example">${esc(x.book_label)} pays ${esc(x.american)} on ${esc(mtSide(x.side))} ${esc(x.line)}, which needs a ${pct(x.needs)} chance to break even${num(x.p_push)&&x.p_push>0?` (exactly ${esc(x.line)} refunds the stake)`:''}. The fair chance is ${pct(x.p_cal)}, so over many bets like this you would average about +${mtMoney(x.per_100)} per $100.</p>`
-        +`<ol class="h-pc-list h-pc-ev${f.dense?' is-compact':''}">${mtHead(['Pick','Book &amp; price','Fair chance vs needed','Expected per $100','Checked'])}${ev.map(mtEvRow).join('')}</ol></section>`;}
+        +`<ol class="h-pc-list h-pc-ev${f.dense?' is-compact':''}">${mtHead(['Pick','Book &amp; price','Fair chance vs needed','Expected per $100','Checked'])}${ev.map(x=>mtEvRow(x,false)).join('')}</ol></section>`;}
     if(arb.length){const x=arb[0],[l1,l2]=x.legs;
       body+=`<section class="h-pc-section" aria-label="Bet both sides at two books"><h3>Bet both sides at two books</h3><p class="h-pc-ask">Where can I cover Over and Under at different books and win either way?</p>`
         +`<label class="h-pc-stake">Total stake <span>$</span><input id="hub-mt-stake" type="number" inputmode="decimal" min="1" max="100000" step="1" value="${esc(H.mt.stake)}"></label>`
         +`<p class="h-pc-example">Put <b data-stake-per100="${Number(l1.stake_per_100)}">${mtMoney(l1.stake_per_100*H.mt.stake/100)}</b> on ${esc(mtSide(l1.side))} at ${esc(l1.book_label)} ${esc(l1.american)} and <b data-stake-per100="${Number(l2.stake_per_100)}">${mtMoney(l2.stake_per_100*H.mt.stake/100)}</b> on ${esc(mtSide(l2.side))} at ${esc(l2.book_label)} ${esc(l2.american)}: either result pays about <b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney((100+Number(x.return_per_100))*H.mt.stake/100)}</b> for <b data-stake-total>${mtMoney(H.mt.stake)}</b> staked.</p>`
         +`<ol class="h-pc-list h-pc-arbs${f.dense?' is-compact':''}">${mtHead(['Pick','Bet 1','Bet 2','Either way you get','Checked'])}${arb.map(mtArbRow).join('')}</ol></section>`;}
+    if(pairs.length){
+      pairs.sort((a,b)=>b.margin_pct-a.margin_pct);
+      body+=`<section class="h-pc-section" aria-label="Closest matched prices"><h3>Closest matched prices</h3><p>Not arbitrage: these fresh, settlement-compatible prices return less than or equal to the amount staked. No slips are generated from this list.</p><ol class="h-pc-list">${pairs.slice(0,25).map(r=>`<li class="h-pc-row"><div class="h-pc-cell">${mtPick(r)}</div>${r.legs.map(l=>`<div class="h-pc-cell">${esc(l.book_label)}<small>${esc(mtSide(l.side))} ${esc(r.line)} / ${esc(l.american)}</small></div>`).join('')}<div class="h-pc-cell">${Number(r.margin_pct).toFixed(2)}%<small>Matched-price margin</small></div><div class="h-pc-cell">${esc(mtAgo(mtLegsAge(r)))}</div></li>`).join('')}</ol></section>`;
+    }
+    if(comparisons.length){
+      body+=`<section class="h-pc-section" aria-label="Current book comparisons"><h3>Current book comparisons</h3><p>Reference prices, not betting recommendations. Each row keeps its exact line and period. Up to 10 recently checked markets per book; positive-EV and arbitrage slips appear separately above.</p><ol class="h-pc-list">${mtHead(['Player &amp; line','Book','Over','Under','Checked'])}${comparisons.map(r=>`<li class="h-pc-row"><div class="h-pc-cell">${mtPick(r)}</div><div class="h-pc-cell">${esc(r.book_label)}${r.rules_confirmed?'':'<small>Settlement rules unverified</small>'}</div><div class="h-pc-cell">${r.prices.over?'Over '+esc(r.prices.over.american):'Not listed'}</div><div class="h-pc-cell">${r.prices.under?'Under '+esc(r.prices.under.american):'Not listed'}</div><div class="h-pc-cell">${esc(mtAgo(mtAge(r)))}</div></li>`).join('')}</ol></section>`;
+    }
     const m=d.method||{},mins=s=>Math.round((s||0)/60);
     const method=`<details class="h-mt-method"><summary>How these numbers are worked out</summary><ul>`
       +`<li>The fair chance is Scout’s chance only where Scout’s chances have been checked against results. Otherwise it is the average of at least two other sportsbooks at the same line, with their cut removed.</li>`
       +`<li>A price is only used if it was seen in the last ${mins(m.ev_stale_s||1800)} minutes. A both-sides pair needs both prices seen in the last ${mins(m.arb_max_age_s||300)} minutes.</li>`
       +`<li>Prediction markets and pick’em apps are never used for both-sides bets.</li></ul>`
       +(owner&&m.ev?`<details class="h-mt-formulas"><summary>Formulas (owner)</summary><p>${esc(m.ev)}.</p><p>Fair chance: ${esc(m.p_cal)}</p><p>Both sides: ${esc(m.arbitrage)}. Wide market above ${Math.round((1+(m.wide_overround||.08))*100)}%.</p></details>`:'')+`</details>`;
-    return head+body+method+(owner?mtOwnerHTML(d,ageText):'');
+    return head+`<p class="h-pc-coverage">Checked ${quotes.toLocaleString()} prices across ${lines.toLocaleString()} lines / ${mtBooks(d).length} books with listed prices${clock?' / '+esc(clock):''}</p>`+body+method+(owner?mtOwnerHTML(d,ageText):'');
   }
   /* owner only: what members never see (flagged pairs, pick'em rows, exclusion counts), so no original detail is lost */
   function mtOwnerHTML(d,ageText){
@@ -2043,6 +2056,7 @@ export function mount(C) {
     +'#u-hub .h-market-tools details{margin:6px 0 12px}#u-hub .h-market-tools summary{min-height:40px;display:flex;align-items:center;cursor:pointer;font-weight:600}'
     /* QOL 2026-11-07: Refresh prices kept its own height (it stretched to the heading block, ~110px tall on desktop); the both-sides
        "Either way you get" figure wraps inside its column instead of running into Checked; the no-match Clear filters is a real target */
+    +'#u-hub #hub-market-results>section.h-mt-state{padding:12px 0;margin:12px 0}#u-hub .h-pc-coverage{font-size:12px;color:var(--u-muted)}'
     +'#u-hub .h-market-tools>.h-section-head>button{align-self:flex-start;min-height:40px;white-space:nowrap}'
     +'#u-hub .h-pc-arb .h-pc-value .h-pc-chip{white-space:normal}#u-hub .h-pc-none button{min-height:40px;margin-left:6px}'
     +'@media(max-width:639px){#u-hub .h-pc-head{display:none}#u-hub .h-pc-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:12px}'
@@ -2057,7 +2071,7 @@ export function mount(C) {
     const ready=!!row&&!H.marketLoading&&!H.marketError;
     const control=document.createElement('section');control.className='h-mt-state';
     control.setAttribute('aria-label',arb?'Arbitrage slip generator':'Sportsbook slip generator');
-    control.innerHTML=`<h3>${arb?'Arbitrage slip generator':'Sportsbook slip generator'}</h3><button data-hub="price-draft" data-id="${esc(row?.dataset.id||'')}"${ready?'':' disabled'}>${arb?'Generate best paired slips':'Generate best bet slip'}</button><p>${H.marketLoading?'Checking current prices…':H.marketError?'Refresh prices to restore generation.':ready?(arb?'Creates two separate bets at matched odds. Set total stake below, or use Generate paired slips on any row.':'Creates one straight bet from the best qualifying row below. Each price is checked again before copying.'):(arb?'No qualifying pair matches these filters. Refresh prices to check again. Two fresh, compatible opposing prices are required.':'No positive-EV sportsbook price matches these filters. Pick’em generation is available above.')}</p>`;
+    control.innerHTML=`<h3>${arb?'Arbitrage slip generator':'Sportsbook slip generator'}</h3><button data-hub="price-draft" data-id="${esc(row?.dataset.id||'')}"${ready?'':' disabled'}>${arb?'Generate best paired slips':'Generate best bet slip'}</button><p>${H.marketLoading?'Checking current prices…':H.marketError?'Refresh prices to restore generation.':ready?(arb?'Creates two separate bets at matched odds. Set total stake below, or use Generate paired slips on any row.':'Creates one straight bet from the best qualifying row below. Each price is checked again before copying.'):(arb?'No qualifying pair matches these filters. Refresh prices to check again. Two fresh, compatible opposing prices are required.':'No positive-EV sportsbook price matches these filters. Current reference prices are listed below when available.')}</p>`;
     box.prepend(control);
   }
   /* N14: bring Tools' Alerts section to the top of the screen. The Price check above it fills in after its prices load and would
