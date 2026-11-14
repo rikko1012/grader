@@ -74,11 +74,11 @@ def when(s):
         return None
 
 
-def upcoming_events():
+def upcoming_events(*, with_time=False):
     """Open LoL events (cached 60 s; a failed download keeps the last list)."""
     with _LOCK:
         if _EV["data"] is not None and time.time() - _EV["at"] < EVENTS_TTL:
-            return _EV["data"]
+            return (_EV["data"], _EV["at"]) if with_time else _EV["data"]
         since = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         events, offset = [], 0
         try:
@@ -91,10 +91,40 @@ def upcoming_events():
                 offset += 100
         except Exception:                   # noqa: BLE001 - Polymarket down: keep the last list if there is one
             if _EV["data"] is not None:
-                return _EV["data"]
+                return (_EV["data"], _EV["at"]) if with_time else _EV["data"]
             raise
         _EV.update(at=time.time(), data=events)
-        return events
+        return (events, _EV["at"]) if with_time else events
+
+
+def series_winners(events, observed):
+    """Two-team pre-match markets with a tight two-sided quote on an open listing."""
+    seen = datetime.fromtimestamp(observed, timezone.utc)
+    games = []
+    ids = set()
+    for event in events:
+        if any(event.get(flag) for flag in ("closed", "live", "ended", "archived")):
+            continue
+        for market in event.get("markets") or []:
+            if market.get("sportsMarketType") != "moneyline" or market.get("closed") or market.get("archived"):
+                continue
+            if market.get("closed") is not False or market.get("acceptingOrders") is False or market.get("active") is False:
+                continue
+            start = when(market.get("gameStartTime"))
+            names = _jl(market.get("outcomes")) or []
+            key = market.get("id")
+            if not start or start <= seen or not key or key in ids or len(names) != 2:
+                continue
+            if not all(isinstance(n, str) and n.strip() for n in names) or names[0] == names[1]:
+                continue
+            bid, ask = _num(market.get("bestBid")), _num(market.get("bestAsk"))
+            if not (0 < bid <= ask < 1 and ask - bid <= MAX_SPREAD + 1e-12):
+                continue
+            mid = (bid + ask) / 2
+            ids.add(key)
+            games.append({"id": str(key), "teams": names, "start": start.isoformat(), "seen_at": seen.isoformat(),
+                          "quotes": [{"source": "Polymarket", "kind": "midpoint", "prices": [mid, 1 - mid]}]})
+    return {"league": "lol", "observed_at": seen.isoformat(), "games": sorted(games, key=lambda g: g["start"])}
 
 
 def _oriented(m, team_name):

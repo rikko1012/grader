@@ -308,3 +308,17 @@ def test_line_archive_records_a_payout_move():
     lines.archive("underdog", rows, now="t1")
     moved = [dict(rows[0], mult_over=(rows[0].get("mult_over") or 1.0) + 0.1)] + rows[1:]
     assert lines.archive("underdog", moved, now="t2") == 1
+def test_winner_snapshot_excludes_invalid_quotes_and_started_games():
+    from lol import odds
+    from datetime import datetime, timezone
+    observed = datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp()
+    m = {"id": "1", "closed": False, "sportsMarketType": "moneyline", "gameStartTime": "2026-11-02T00:00:00Z",
+         "outcomes": ["ABC", "DEF"], "bestBid": "0.39", "bestAsk": "0.41", "acceptingOrders": True}
+    invalid = [dict(m, id="2", bestBid=.9), dict(m, id="3", bestAsk=.8),
+               dict(m, id="4", sportsMarketType="child_moneyline"), dict(m, id="5", acceptingOrders=False),
+               dict(m, id="6", gameStartTime="2026-10-31T00:00:00Z")]
+    doc = odds.series_winners([{"markets": [m, m] + invalid}, {"live": True, "markets": [dict(m, id="7")]}], observed)
+    assert len(doc["games"]) == 1
+    g = doc["games"][0]
+    assert g["teams"] == ["ABC", "DEF"] and g["quotes"][0]["prices"] == [0.4, 0.6]
+    assert g["seen_at"] == doc["observed_at"] == "2026-11-01T00:00:00+00:00"

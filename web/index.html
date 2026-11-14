@@ -706,6 +706,12 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
   .crow .c-pick{flex:1 1 auto;font-size:14px;overflow-wrap:anywhere}.crow .c-stake{flex:1 1 100%;font-size:11px}.crow .c-meta{flex:1 1 100%;margin:0}
   .crow .c-who{order:1}.crow .c-act{order:2}.crow .c-mkt{order:3}.crow .c-num{order:4}.crow .c-pick{order:5}.crow .c-stake{order:6}.crow .c-meta{order:7}}
 /* moneylines: compact rows with aligned source columns */
+.ml-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 18px}.ml-picker[hidden]{display:none}
+.ml-picker .seg{display:flex;flex-wrap:wrap}.ml-picker button{min-height:38px}.ml-division{margin:18px 0}
+.ml-division h3{font:650 16px var(--display);margin:0 0 8px}.ml-division h3 small{font:500 12px var(--display);color:var(--muted);margin-left:8px}
+.ml-game{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr);gap:12px 24px;padding:12px 0;border-top:1px solid var(--line);align-items:center}
+.ml-source,.ml-game time,.ml-side{display:block}.ml-side{overflow-wrap:anywhere}.ml-pricepair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ml-side strong{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+@media(max-width:580px){.ml-game{grid-template-columns:1fr;gap:8px}.ml-side strong{font-size:17px}}
 .mlrow{display:grid;grid-template-columns:minmax(180px,1.4fr) repeat(3,minmax(120px,1fr));gap:12px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 8px;background:#111a26}
 .mlrow.mlhdr{border:0;background:transparent;padding:0 14px;margin-bottom:4px;font:600 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
 .mlm b{display:block;font-size:14px}.mlq{display:flex;flex-direction:column;gap:2px;font-size:12px}.mlqn{display:none}.mlqv b{display:block;font-size:14px;font-variant-numeric:tabular-nums}
@@ -902,7 +908,7 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
   </section>
   <section class="card" id="board" hidden><div class="board-command"><span>Prop board</span><div><button type="button" id="scout-filters" aria-expanded="true" aria-controls="bbar">Hide filters</button></div></div>
     <div class="bbar" id="bbar">
-      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on"><span class="bk-l">All Books</span><span class="bk-s">All</span></button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button><button type="button" data-v="moneylines" title="Series-winner prices: Thunderpick bookmaker odds first; Polymarket and Kalshi exchange midpoints for comparison"><span class="bk-l">Moneylines</span><span class="bk-s">Lines</span></button></div>
+      <div class="seg" id="bbook" title="Which platform's lines"><button type="button" data-v="all" class="on"><span class="bk-l">All Books</span><span class="bk-s">All</span></button><button type="button" data-v="underdog">Underdog</button><button type="button" data-v="prizepicks">PrizePicks</button><button type="button" data-v="compare">Compare</button><button type="button" data-v="moneylines" title="Pre-game winner prices across CS2, LoL, NBA and NFL"><span class="bk-l">Moneylines</span><span class="bk-s">Lines</span></button></div>
       <div class="seg" id="bview" hidden title="Group by match or list every prop"><button type="button" data-v="matches" class="on">Matches</button><button type="button" data-v="all">All props</button></div>
       <div class="seg" id="bprop"><button type="button" data-v="kills" class="on">Kills</button><button type="button" data-v="hs">Headshots</button><button type="button" data-v="both">Both</button></div>
       <div class="seg" id="bscope" title="Which maps the lines cover"><button type="button" data-v="12" class="on">Maps 1–2</button><button type="button" data-v="1">Map 1</button><button type="button" data-v="123">Maps 1–3</button></div>
@@ -926,6 +932,13 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
     <div id="bstatus" class="small muted" style="margin:-2px 0 10px"></div>
     <div id="bhold" class="small lhold" role="status" hidden></div>
     <div id="ot-board-overview"></div>
+    <div class="ml-picker" id="mlpicker" hidden><div class="seg" role="group" aria-label="Moneyline sport">
+      <button type="button" data-mlsport="all" aria-pressed="true" class="on">All sports</button>
+      <button type="button" data-mlsport="cs2" aria-pressed="false">CS2</button>
+      <button type="button" data-mlsport="lol" aria-pressed="false">LoL</button>
+      <button type="button" data-mlsport="nba" aria-pressed="false">NBA</button>
+      <button type="button" data-mlsport="nfl" aria-pressed="false">NFL</button></div>
+      <label class="bchk" id="mlolderlabel"><input type="checkbox" id="mlolder"> Include older game odds</label></div>
     <div id="boardout"></div>
   </section>
   <section class="card" id="slips" hidden aria-labelledby="slips-title"><div class="workspace-section-title"><h2 id="slips-title">Slips</h2><p>Build suggested slips from today's graded picks, then check every line before you copy.</p></div>
@@ -2405,6 +2418,13 @@ const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: 
 // rows shown for a view: one platform, or both (All Books - every row keeps its own platform label and line)
 // research tools state (declared up here: drawBoard reads it)
 let ML = {data: null, at: 0, err: null};                                     // Moneylines tab
+const winnerFeeds = {}, winnerNames = {lol: "LoL", nba: "NBA", nfl: "NFL"};
+let winnerSport = "all", winnerLoading = false, winnerChecked = 0;
+$("#mlolder").addEventListener("change", () => drawMoneylines());
+$("#mlpicker").addEventListener("click", e => {
+  const button = e.target.closest("[data-mlsport]");
+  if (button) { winnerSport = button.dataset.mlsport; drawMoneylines(); }
+});
 const STUDIO = {open: false, off: true, batch: null, last: null, busy: false, notes: {}, copied: {}, opened: {}, pins: [], sort: "chance"};   // Slip studio
 const viewRows = b => b === "all" ? [...BK.underdog.rows, ...BK.prizepicks.rows] : BK[b === "compare" ? "underdog" : b].rows;
 // one match, whichever platform listed it (2026-10-12 fix): the same two teams with starts within 45 min. It used to prefer
@@ -2723,6 +2743,9 @@ function drawBoard() {
       if (o.left < a.left || o.right > a.right) bb.scrollLeft += o.left - a.left - (a.width - o.width) / 2; }
   } catch {}
   const ml = bbook === "moneylines", cmpv = bbook === "compare";   // Moneylines: series winners - the prop filters don't apply
+  $("#mlpicker").hidden = !ml;
+  $("#bsearch").placeholder = ml ? "Team or event" : "Player or team";
+  $("#bsearch").setAttribute("aria-label", ml ? "Search moneylines by team or event" : "Search a player or team");
   $("#bview").hidden = true;                  // Board / Matches are destinations now (the route sets the grouping)
   $("#bsort").hidden = cmpv || ml;            // sort doesn't apply to Compare
   for (const id of ["#bprop", "#bside", "#bscope"]) $(id).hidden = ml;
@@ -3103,10 +3126,26 @@ async function fetchMoneylines() {
 setInterval(() => { if (bbook === "moneylines" && !$("#board").hidden && document.visibilityState === "visible"
   && [...document.querySelectorAll("#boardout [data-tpexp]")].some(e => +e.dataset.tpexp <= Date.now())) drawBoard(); }, 5000);
 async function loadMoneylines(force) {
-  if (!force && ML.data && Date.now() - ML.at < 30000) return drawBoard();
-  $("#bstatus").textContent = ML.data ? "Refreshing… (showing the current prices)" : "Loading moneylines…";
-  try { await fetchMoneylines(); } catch (e) { ML.err = `Couldn't refresh (${e.message})`; }
-  drawBoard();
+  if (winnerLoading || (!force && Date.now() - winnerChecked < 30000)) return drawBoard();
+  winnerLoading = true;
+  const repaint = () => { if (bbook === "moneylines" && !$("#board").hidden) drawBoard(); };
+  repaint();
+  try {
+    await Promise.all([
+      fetchMoneylines().catch(() => { ML.err = "CS2 prices could not be refreshed."; }).finally(repaint),
+      ...Object.keys(winnerNames).map(async league => {
+        try {
+          const r = await fetchRetry("/api/moneyline-games?league=" + league, 1);
+          if (r.status === 404) { winnerFeeds[league] = {hidden: true}; return; }
+          if (!r.ok) throw new Error();
+          const doc = await r.json();
+          if (doc.league !== league || !Array.isArray(doc.games)) throw new Error();
+          winnerFeeds[league] = doc;
+        } catch { winnerFeeds[league] = {error: true}; }
+        finally { repaint(); }
+      })
+    ]);
+  } finally { winnerChecked = Date.now(); winnerLoading = false; }
 }
 setInterval(() => { if (bbook === "moneylines" && !$("#board").hidden && document.visibilityState === "visible") loadMoneylines(true); }, 60000);
 /* ML_RENDER_BEGIN - the Moneylines card renderers (pure: read ML and the payload, return HTML; tests run this block) */
@@ -3295,7 +3334,22 @@ function mlStatusText(d) {
 /* ML_RENDER_END */
 function drawMoneylines() {
   const box = $("#boardout"), d = ML.data;
-  if (!d) { $("#bcount").textContent = ""; $("#bstatus").textContent = ""; box.innerHTML = `<div class="muted">Loading moneylines…</div>`; return; }
+  const term = fold($("#bsearch").value.trim());
+  if (winnerFeeds[winnerSport]?.hidden) winnerSport = "all";
+  $("#mlolderlabel").hidden = !["all","nba","nfl"].includes(winnerSport) || (winnerFeeds.nba?.hidden && winnerFeeds.nfl?.hidden);
+  for (const b of $("#mlpicker").querySelectorAll("[data-mlsport]")) {
+    b.hidden = !!winnerFeeds[b.dataset.mlsport]?.hidden;
+    const on = winnerSport === b.dataset.mlsport;
+    b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+  }
+  const sections = Object.keys(winnerNames).filter(k => (winnerSport === "all" || k === winnerSport) && !winnerFeeds[k]?.hidden)
+    .map(k => winnerSection(k, term)).join("");
+  if (!["all", "cs2"].includes(winnerSport) || !d || ML.err) {
+    $("#bcount").textContent = ""; $("#bstatus").textContent = "";
+    box.innerHTML = sections + (["all", "cs2"].includes(winnerSport)
+      ? `<div class="ml-division"><h3>CS2</h3><p class="muted">${ML.err ? "Prices could not be refreshed. Try Refresh." : "Loading series prices…"}</p></div>` : "");
+    return;
+  }
   // Thunderpick first (owner 2026-10-13) - its own honest state, then the exchanges
   $("#bstatus").textContent = mlStatusText(d);
   const q = fold(($("#bsearch").value || "").trim());
@@ -3306,11 +3360,10 @@ function drawMoneylines() {
   // the search box is shared with the Prop Board: a leftover player search says so here (2026-10-13 audit: it emptied
   // the list and the tab read "No CS2 series-winner prices ... right now" and "0 of 0 matches" while 94 were listed)
   const all0 = d.matches.filter(m => !mlStarted(m));
-  $("#bcount").textContent = (q ? `search: ${up0.length} of ${all0.length} upcoming · ` : "") + mlCountText(up0);
+  $("#bcount").textContent = (q ? `search: ${up0.length} of ${all0.length} upcoming · ` : "") + "CS2 · " + mlCountText(up0);
   const clearQ = `<button type="button" class="chipbtn" data-mlclear="1">Clear search</button>`;
   const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
-  box.innerHTML = `<div class="mlintro"><b style="color:var(--text)">Series winner prices</b><span>Market prices only – each column is that source's own price with its age. The server reads each source about every minute; a read never makes an older quote newer.</span>
-</div>`
+  box.innerHTML = sections + `<div class="ml-division"><h3>CS2 <small>Series winner</small></h3></div>`
     + (up.length ? `<div class="mlrow mlhdr" aria-hidden="true"><span>Match</span><span>Thunderpick</span><span>Polymarket</span><span>Kalshi</span></div>` + up.map(m => mlRow(m)).join("")
        : `<div class="muted">${up0.length || !d.matches.length ? "No CS2 series-winner prices right now."
          : q && !list.length ? `No match for “${esc(q)}” among the ${d.matches.length} listed (the search box is shared with the Prop Board). ${clearQ}`
@@ -3321,6 +3374,29 @@ function drawMoneylines() {
         <p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (retrieved within the last 75 minutes, before the match starts).</p>
         <p><b>Exchanges.</b> Polymarket and Kalshi: each platform's bid/ask midpoint for the first team, shown to 0.1%, when the quote is open, current and tight. A last trade is never used as a price.</p>
         <p>Only matches with a current price are listed. This tab shows market prices – no stake or recommendation.</p></details>`;
+}
+
+function winnerSection(league, term) {
+  const doc = winnerFeeds[league], exchange = league === "lol";
+  const limit = exchange ? 600000 : 1800000, now = Date.now();
+  const fresh = t => { const age = now - Date.parse(t); return age >= -60000 && age <= limit; };
+  const upcoming = (doc?.games || []).filter(g => Date.parse(g.start) > now);
+  const current = g => fresh(doc.observed_at) && fresh(g.seen_at);
+  const showOlder = !exchange && $("#mlolder").checked;
+  const games = upcoming.filter(g => current(g) || (showOlder && now >= Date.parse(g.seen_at) && now - Date.parse(g.seen_at) <= 86400000));
+  const shown = games.filter(g => !term || [...g.teams, ...g.quotes.map(x => x.source)].some(s => fold(s).includes(term)));
+  const empty = !doc ? "Loading prices…" : doc.error ? "Prices could not be refreshed. Try Refresh."
+    : doc.pending ? "Waiting for the first prices." : term && games.length ? "No matching games."
+    : upcoming.length && !games.length ? "The last prices have expired. Waiting for fresh quotes."
+    : "No current pre-game prices.";
+  return `<section class="ml-division"><h3>${winnerNames[league]} <small>${exchange ? "Series winner" : "Full game"}${shown.length ? " · " + shown.length : ""}</small></h3>`
+    + (shown.map(g => `<article class="ml-game"><header><b>${g.teams.map(esc).join(exchange ? " vs " : " at ")}</b><time class="small muted">${when(g.start)}</time></header><div>`
+      + g.quotes.map(quote => `<span class="ml-source small muted">${esc(quote.source)} · ${quote.kind === "midpoint" ? "Exchange midpoint" : "American odds via ESPN"} · ${current(g) ? "read" : "Older quote · read"} ${esc(ago(g.seen_at))}</span>
+        <div class="ml-pricepair">${g.teams.map((team, i) => {
+          const v = quote.prices[i], price = !Number.isFinite(v) ? "—" : quote.kind === "midpoint"
+            ? (v * 100).toFixed(1) + "%" : (v > 0 ? "+" : "") + v;
+          return `<span class="ml-side">${esc(team)}<strong>${esc(price)}</strong></span>`;
+        }).join("")}</div>`).join("") + "</div></article>").join("") || `<p class="small muted">${empty}</p>`) + "</section>";
 }
 
 // ---------- Slip studio: the server's diversified builder (slip_builder studio-1). One batch at a time: no player,
@@ -4982,7 +5058,7 @@ function drawResults() {
 // Presentation controls only; routes delegate to the existing application controls.
 (() => {
  const q = s => document.querySelector(s);
- const modeCopy = {one:['Know the player. Read the match.','Projections, player history and the exact line you are researching.'],board:['Every graded line.','Each platform’s line, our projection, the chance and the stake – one row per offer.'],matches:['Match by match.','Every graded line grouped by match. Open a match to research all its players.'],moneylines:['Series winners.','Market prices from Thunderpick, Polymarket and Kalshi, with how old each one is.'],slips:['Your slips.','Build suggested slips and check every line before you copy.'],results:['How the picks did.','Grades saved before each match, against what happened.'],slate:['Your slate, together.','Research multiple lines and review their grades in one place.']};
+ const modeCopy = {one:['Know the player. Read the match.','Projections, player history and the exact line you are researching.'],board:['Every graded line.','Each platform’s line, our projection, the chance and the stake – one row per offer.'],matches:['Match by match.','Every graded line grouped by match. Open a match to research all its players.'],moneylines:['Moneylines','Compare upcoming games and series by team, source and time.'],slips:['Your slips.','Build suggested slips and check every line before you copy.'],results:['How the picks did.','Grades saved before each match, against what happened.'],slate:['Your slate, together.','Research multiple lines and review their grades in one place.']};
  const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
  const scrollToEl=el=>el?.scrollIntoView({behavior:reduced()?'instant':'smooth',block:'start'});
  function syncMode(){

@@ -127,7 +127,7 @@ def build(env, member, idem, settings=None, **kw):
 
 # ------------------------------------------------------------------ auth gate
 def test_auth_gate_same_as_board(env):
-    for path in ("/api/moneylines", "/api/slip_studio/batch", "/api/board"):
+    for path in ("/api/moneylines", "/api/moneyline-games?league=nfl", "/api/slip_studio/batch", "/api/board"):
         st, d = call(env, "GET", path)
         assert st == 401 and d["error"] == "members_only", path
     for path in ("/api/slip_studio/build", "/api/slip_studio/verify", "/api/slip_studio/event"):
@@ -146,6 +146,20 @@ def test_auth_gate_same_as_board(env):
 
 
 # ------------------------------------------------------------------ moneylines
+def test_winner_feed_checks_league_before_reading(env, monkeypatch):
+    import workspace_api
+    import workspace_game_books
+    monkeypatch.setattr(workspace_api, "access", lambda *args: {"lol": True, "nba": False})
+    reads = []
+    def feed(srv, league):
+        reads.append(league)
+        return 200, b'{"league":"lol","games":[]}'
+    monkeypatch.setattr(workspace_game_books, "moneylines", feed)
+    for league, expected in [("lol", 200), ("nba", 404), ("other", 404)]:
+        assert call(env, "GET", "/api/moneyline-games?league=" + league, member="alice")[0] == expected
+    assert reads == ["lol"]
+
+
 def test_moneylines_shape_shadow_labels_and_no_raw_payloads(env):
     st, d = call(env, "GET", "/api/moneylines", member="alice")
     assert st == 200
