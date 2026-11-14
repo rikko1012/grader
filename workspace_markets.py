@@ -88,7 +88,7 @@ def _num(v):
         x = float(v)
     except (TypeError, ValueError):
         return None
-    return x if x > 1 else None
+    return x if math.isfinite(x) and x > 1 else None
 
 
 def model_released(sport, stat):
@@ -297,8 +297,13 @@ def sheet(srv, sport, now):
         excluded[why] = excluded.get(why, 0) + n
         here[why] = here.get(why, 0) + n
     for g in gs.values():
-        quotes = g["quotes"]
         here.clear()
+        quotes = []
+        for quote in g["quotes"]:
+            if quote["seen"] is not None and quote["seen"] > now:
+                ex("Quote timestamp is in the future")
+            else:
+                quotes.append(quote)
         n_ev = len(ev)
         books = {q["book"] for q in quotes if q["kind"] == "sportsbook" and not q.get("exchange") and not q["multiplier"] and (q["over"] or q["under"])}
         two_sided = {q["book"] for q in quotes if q["kind"] == "sportsbook" and not q.get("exchange") and q["over"] and q["under"]}

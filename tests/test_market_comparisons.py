@@ -40,3 +40,13 @@ def test_reference_bounded_per_book_and_entitlement(fake,monkeypatch):
     assert set(m["sports"])=={"nba"}
     assert {b["id"] for b in m["books"]}=={"fanduel","betrivers"}
     assert wm.for_member(json.dumps(doc),{})["books"]==[]
+
+
+def test_future_price_and_infinite_odds_cannot_become_opportunities(fake,monkeypatch):
+    data=snap([('future',10.5,[('fanduel',3,1.9,-30),('betrivers',1.9,3,20)]),
+               ('invalid',11.5,[('fanduel','inf',1.9,20),('betrivers',1.9,1.9,20)])],fake)
+    monkeypatch.setattr(wb,'snap',lambda *a:data)
+    sheet=wm.sheet(None,'nba',fake)
+    assert sheet['state']=='ready' and not sheet['arbitrage'] and not sheet['ev']
+    assert sheet['excluded']['Quote timestamp is in the future']==1
+    assert 'over' not in next(r for r in sheet['comparisons'] if r['book']=='fanduel')['prices']
