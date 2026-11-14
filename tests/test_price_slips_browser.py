@@ -158,6 +158,11 @@ def test_reference_books_visible_without_opportunities(browser,env,monkeypatch,s
         p.locator('#hub-mt-book').select_option('reference')
         assert section.is_visible()
         assert p.get_by_role('region',name='Closest matched prices').count()==0
+        p.locator('.h-mt-more > summary').click()
+        p.locator('#hub-mt-side').select_option('over')
+        assert 'Hidden by side filter' in section.inner_text()
+        assert 'Not listed' not in section.inner_text()
+        p.locator('#hub-mt-side').select_option('all')
         p.locator('#hub-mt-q').fill('no such player')
         assert p.get_by_role('region',name='Current book comparisons').count()==0
         p.locator('#hub-mt-q').fill('')
