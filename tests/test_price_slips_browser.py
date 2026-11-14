@@ -39,7 +39,7 @@ def test_market_generate_pair_single_and_changed_price(browser,env,monkeypatch,s
         p.locator('#hub-price-draft form button').click()
         assert p.url.endswith('/#/arb')
         p.goto(env.url+'/#/ev')
-        assert p.locator('[data-hub="price-draft"]').filter(has_text='Generate bet slip').count()==sum(len(d['ev']) for d in doc['sports'].values())
+        assert p.locator('[data-hub="price-draft"]').filter(has_text='Generate bet slip').count()==sum(not r.get('flags') for d in doc['sports'].values() for r in d['ev'])
         p.locator('[data-hub="price-draft"]').filter(has_text='Generate bet slip').first.click()
         p.wait_for_selector('#hub-price-draft li')
         assert p.locator('#hub-price-draft li').count()==1
@@ -176,3 +176,26 @@ def test_reference_books_visible_without_opportunities(browser,env,monkeypatch,s
         no_h_scroll(p)
         assert not p.errors
     finally:c.close()
+
+
+def test_exact_line_price_comparison_and_started_game(browser,env,monkeypatch):
+    monkeypatch.setenv('SCOUT_MARKET_TOOLS','1')
+    doc=market_doc()
+    nba=doc['sports']['nba']
+    base=dict(nba['ev'][0],leg_id='nba|event|player|points|game|24.5',side=None,
+              rules_confirmed=True,prices={'over':{'odds':2.1,'american':'+110'}})
+    nba['comparisons']=[base,dict(base,book='beta',book_label='Beta',prices={'under':{'odds':1.9,'american':'-111'}}),
+                        dict(base,leg_id='nba|event|player|points|q1|24.5',period_label='First quarter')]
+    nba['ev'][0]['start_utc']='2000-01-01T00:00:00Z'
+    c=context(browser,env,PHONE)
+    try:
+        page=mt_page(c,env,doc,path='/#/ev')
+        group=page.locator('.h-compare-group')
+        group.locator('summary').click()
+        assert 'Over +110' in group.inner_text() and 'Under -111' in group.inner_text()
+        assert 'First quarter' not in group.inner_text()
+        assert 'First quarter' in page.locator('.h-compare-single').inner_text()
+        assert page.get_by_text('Game started',exact=True).is_visible()
+        no_h_scroll(page)
+    finally:
+        c.close()

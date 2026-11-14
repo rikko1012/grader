@@ -1923,22 +1923,53 @@ export function mount(C) {
     }catch(e){dlg.innerHTML='<form method="dialog"><button>Close</button></form><h2>Slip not generated</h2><p role="alert">'+esc(e.doc?.error||e.message||'Could not verify prices. Refresh and try again.')+'</p>';}
     finally{priceDraftBusy=false;}
   }
+  function mtDraftControl(row, mode){
+    const start=Date.parse(row.start_utc);
+    if(!Number.isFinite(start))return '<small>Start time unavailable</small>';
+    if(start<=Date.now())return '<small>Game started</small>';
+    if(row.flags?.length)return '<small>Price excluded from slips</small>';
+    return draftButton(row,mode);
+  }
   function mtEvRow(x,near){
     return `<li class="h-pc-row"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick(x)}</div>`
       +`<div class="h-pc-cell" data-label="Book & price">${mtPrice(x.book_label,x.american)}${x.kind==='prediction'?'<small>Prediction market</small>':''}${H.marketDoc?.owner&&(x.flags||[]).includes('Wide market')?'<small>Wide market (owner)</small>':''}</div>`
       +`<div class="h-pc-cell h-pc-fair" data-label="Fair chance vs needed"><span class="h-pc-wide">${pct(x.p_cal)} vs ${pct(x.needs)}</span><span class="h-pc-narrow">Fair ${pct(x.p_cal)} · needs ${pct(x.needs)}</span><small>${esc(mtFrom(x))}</small>${num(x.p_push)&&x.p_push>0?`<small>Exactly ${esc(x.line)} refunds the stake (${pct(x.p_push)})</small>`:''}</div>`
       +(near?`<div class="h-pc-cell h-pc-value" data-label="Per $100 against fair"><span class="h-pc-chip h-pc-short">${mtSigned(x.per_100)}<i> / $100</i></span></div>`
         :`<div class="h-pc-cell h-pc-value" data-label="Expected per $100"><span class="h-pc-chip">+${mtMoney(x.per_100)}<i> / $100</i></span></div>`)
-      +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}${!near&&x.kind==='sportsbook'?draftButton(x,'ev'):''}</div></li>`;
+      +`<div class="h-pc-cell h-pc-age" data-label="Checked">${esc(mtAgo(mtAge(x)))}${!near&&x.kind==='sportsbook'?mtDraftControl(x,'ev'):''}</div></li>`;
   }
   function mtArbRow(x){
     const leg=(l,i)=>`<div class="h-pc-cell h-pc-leg" data-label="Bet ${i+1}"><span>${esc(l.book_label)} ${esc(mtSide(l.side))} ${esc(x.line)} ${esc(l.american||'')}</span><small>stake <b data-stake-per100="${Number(l.stake_per_100)}">${mtMoney(l.stake_per_100*H.mt.stake/100)}</b></small><small class="h-pc-leg-age">checked ${esc(mtAgo(mtAge(l)).replace('Time unavailable','—').toLowerCase())}</small></div>`;   /* T21: each leg's own age */
     const back=(100+Number(x.return_per_100))*H.mt.stake/100;
     return `<li class="h-pc-row h-pc-arb"><div class="h-pc-cell h-pc-pick" data-label="Pick">${mtPick({...x,side:null})}</div>${(x.legs||[]).map(leg).join('')}`
       +`<div class="h-pc-cell h-pc-value" data-label="Either way you get"><span class="h-pc-chip"><b data-back-per100="${100+Number(x.return_per_100)}">${mtMoney(back)}</b> back <i data-gain-per100="${Number(x.return_per_100)}">(+${mtMoney(back-H.mt.stake)})</i></span>${NEXT?`<small class="h-pc-margin">Margin ${Number(x.return_per_100).toFixed(2)}%</small>`:''}</div>`
-      +`<div class="h-pc-cell h-pc-age" data-label="Oldest leg checked">${esc(mtAgo(mtLegsAge(x)))}${draftButton(x,'arb')}</div></li>`;
+      +`<div class="h-pc-cell h-pc-age" data-label="Oldest leg checked">${esc(mtAgo(mtLegsAge(x)))}${mtDraftControl(x,'arb')}</div></li>`;
   }
   const mtHead=cols=>`<li class="h-pc-row h-pc-head" aria-hidden="true">${cols.map(c=>`<div class="h-pc-cell">${c}</div>`).join('')}</li>`;
+  function mtCompareMarkets(rows,filters){
+    const markets=new Map();
+    for(const row of rows){
+      // Older sheets without a canonical ID remain individual rows.
+      const key=row.leg_id||row;
+      if(!markets.has(key))markets.set(key,[]);
+      markets.get(key).push(row);
+    }
+    function quote(row,side){
+      const price=row.prices[side];
+      if(price)return esc(mtSide(side))+' '+esc(price.american);
+      return filters.side!=='all'&&filters.side!==side?'Hidden by side filter':'Not listed';
+    }
+    function priceRow(row){
+      return `<li class="h-pc-row"><div class="h-pc-cell"><b>${esc(row.book_label)}</b>${row.rules_confirmed?'':'<small>Settlement rules unverified</small>'}</div><div class="h-pc-cell">${quote(row,'over')}</div><div class="h-pc-cell">${quote(row,'under')}</div><div class="h-pc-cell">${esc(mtAgo(mtAge(row)))}</div></li>`;
+    }
+    const groups=[...markets.values()].sort((a,b)=>b.length-a.length);
+    const content=groups.map(group=>{
+      const prices=`<ol class="h-pc-list">${group.map(priceRow).join('')}</ol>`;
+      if(group.length===1)return `<div class="h-compare-single">${mtPick(group[0])}${prices}</div>`;
+      return `<details class="h-compare-group"><summary><span>${mtPick(group[0])}</span><span>Compare ${group.length} books</span></summary>${prices}</details>`;
+    }).join('');
+    return `<section class="h-pc-section" aria-label="Current book comparisons"><h3>Current book comparisons</h3><p>Up to 10 recently checked markets per book. Expand a prop to compare the listed odds.</p>${content}</section>`;
+  }
   function marketHTML(){
     if(H.marketLoading&&!H.marketDoc)return '<p class="h-mt-state" role="status">Checking current prices…</p>';
     if(H.marketError&&!H.marketDoc)return `<p class="h-mt-state h-warning" role="status">${esc(H.marketError)} Use Refresh prices to try again.</p>`;
@@ -1998,9 +2029,7 @@ export function mount(C) {
       pairs.sort((a,b)=>b.margin_pct-a.margin_pct);
       body+=`<section class="h-pc-section" aria-label="Closest matched prices"><h3>Closest matched prices</h3><p>Not arbitrage: these fresh, settlement-compatible prices return less than or equal to the amount staked. No slips are generated from this list.</p><ol class="h-pc-list">${pairs.slice(0,25).map(r=>`<li class="h-pc-row"><div class="h-pc-cell">${mtPick(r)}</div>${r.legs.map(l=>`<div class="h-pc-cell">${esc(l.book_label)}<small>${esc(mtSide(l.side))} ${esc(r.line)} / ${esc(l.american)}</small></div>`).join('')}<div class="h-pc-cell">${Number(r.margin_pct).toFixed(2)}%<small>Matched-price margin</small></div><div class="h-pc-cell">${esc(mtAgo(mtLegsAge(r)))}</div></li>`).join('')}</ol></section>`;
     }
-    if(comparisons.length){
-      body+=`<section class="h-pc-section" aria-label="Current book comparisons"><h3>Current book comparisons</h3><p>Reference prices, not betting recommendations. Each row keeps its exact line and period. Up to 10 recently checked markets per book; positive-EV and arbitrage slips appear separately above.</p><ol class="h-pc-list">${mtHead(['Player &amp; line','Book','Over','Under','Checked'])}${comparisons.map(r=>`<li class="h-pc-row"><div class="h-pc-cell">${mtPick(r)}</div><div class="h-pc-cell">${esc(r.book_label)}${r.rules_confirmed?'':'<small>Settlement rules unverified</small>'}</div><div class="h-pc-cell">${r.prices.over?'Over '+esc(r.prices.over.american):f.side==='under'?'Hidden by side filter':'Not listed'}</div><div class="h-pc-cell">${r.prices.under?'Under '+esc(r.prices.under.american):f.side==='over'?'Hidden by side filter':'Not listed'}</div><div class="h-pc-cell">${esc(mtAgo(mtAge(r)))}</div></li>`).join('')}</ol></section>`;
-    }
+    if(comparisons.length)body+=mtCompareMarkets(comparisons,f);
     const m=d.method||{},mins=s=>Math.round((s||0)/60);
     const method=`<details class="h-mt-method"><summary>How these numbers are worked out</summary><ul>`
       +`<li>The fair chance is Scout’s chance only where Scout’s chances have been checked against results. Otherwise it is the average of at least two other sportsbooks at the same line, with their cut removed.</li>`
@@ -2057,6 +2086,7 @@ export function mount(C) {
     /* QOL 2026-11-07: Refresh prices kept its own height (it stretched to the heading block, ~110px tall on desktop); the both-sides
        "Either way you get" figure wraps inside its column instead of running into Checked; the no-match Clear filters is a real target */
     +'#u-hub #hub-market-results>section.h-mt-state{padding:12px 0;margin:12px 0}#u-hub .h-pc-coverage{font-size:12px;color:var(--u-muted)}'
+    +'#u-hub .h-compare-group>summary{justify-content:space-between;gap:12px}#u-hub .h-compare-group summary span:last-child{white-space:nowrap;color:var(--u-muted)}#u-hub .h-compare-group summary small,#u-hub .h-compare-single>small{display:block;font-weight:400}#u-hub .h-compare-single{padding:8px 0}'
     +'#u-hub .h-market-tools>.h-section-head>button{align-self:flex-start;min-height:40px;white-space:nowrap}'
     +'#u-hub .h-pc-arb .h-pc-value .h-pc-chip{white-space:normal}#u-hub .h-pc-none button{min-height:40px;margin-left:6px}'
     +'@media(max-width:639px){#u-hub .h-pc-head{display:none}#u-hub .h-pc-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:12px}'
