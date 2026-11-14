@@ -501,7 +501,9 @@ def test_phone_board_is_simple(browser, many_apps, width, theme):
             assert rows and all(56 <= h <= (124 if width <= 320 else 104) for h in rows), (path, width, sorted(rows))          # 64-72px; a PrizePicks kind or a below-break-even note adds a line
             # the row: photo (sports), name, line, side + chance, one 44px add; no strip, no meta
             r0 = p.locator("#hub-rows tr.h-row").first
-            assert r0.locator(".h-c-hits").is_hidden() and r0.locator(".h-c-line small").is_hidden()
+            assert r0.locator(".h-c-hits").is_hidden() and r0.locator(".h-c-line small:not(.h-odds)").is_hidden()
+            if path == "/sports":
+                assert r0.locator(".h-c-line .h-odds").is_visible()
             add = r0.locator(".h-c-add button").bounding_box()
             assert add["width"] >= 43.5 and add["height"] >= 43.5, add
             if path == "/sports":
