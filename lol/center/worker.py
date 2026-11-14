@@ -230,6 +230,17 @@ def lc1_autofit(con, now=None, run=None):
     return out
 
 
+def moneylines_loop():
+    from .. import odds
+    while True:
+        try:
+            events, observed = odds.upcoming_events(with_time=True)
+            _write("moneylines.json", odds.series_winners(events, observed))
+        except Exception as e:
+            _err("moneylines", e)
+        time.sleep(300)
+
+
 def markets_loop():
     from . import markets
     con = store.connect()
@@ -447,6 +458,7 @@ def main():
     threading.Thread(target=_mem_sampler, daemon=True, name="lol-mem").start()
     if os.environ.get("LOL_ARCHIVE", "1") != "0":
         threading.Thread(target=markets_loop, daemon=True, name="lol-markets").start()
+        threading.Thread(target=moneylines_loop, daemon=True, name="lol-moneylines").start()
     if os.environ.get("LOL_LP", "1") != "0":
         threading.Thread(target=ingest_loop, daemon=True, name="lol-ingest").start()
     threading.Thread(target=build_loop, daemon=True, name="lol-build").start()

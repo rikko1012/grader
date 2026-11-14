@@ -5028,7 +5028,7 @@ class Handler(BaseHTTPRequestHandler):
                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
-            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines", "/api/veto",
+            if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines", "/api/moneyline-games", "/api/veto",
                           "/api/slip_studio/batch", "/api/slip_studio/capacity", "/api/slip_studio/history", "/api/slip_studio/tails",
                           "/api/results") and not self.allowed():
                 sess = self.member()
@@ -5036,12 +5036,21 @@ class Handler(BaseHTTPRequestHandler):
                                        "upgrade": whop_auth.upgrade_url()})
             if u.path == "/api/search":
                 return self.search(q.get("q", "").strip())
-            if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/slip_studio/batch",
+            if u.path.startswith("/api/") and u.path not in ("/api/board", "/api/moneylines", "/api/moneyline-games", "/api/slip_studio/batch",
                                                              "/api/slip_studio/capacity", "/api/slip_studio/history",
                                                              "/api/slip_studio/tails", "/api/results"):
                 LAST_MEMBER[0] = time.time()      # research reads are cheap: they don't make the board worker step aside
             if u.path == "/api/moneylines":
                 return self.moneylines()
+            if u.path == "/api/moneyline-games":
+                import workspace_api
+                import workspace_game_books
+                league = q.get("league")
+                srv = sys.modules[__name__]
+                if league not in ("lol", "nba", "nfl") or not workspace_api.access(self, srv, q).get(league):
+                    return self.send(404, {"error": "not found"})
+                status, body = workspace_game_books.moneylines(srv, league)
+                return self.send_shared(("winner_games", league), status, body)
             if u.path == "/api/slip_studio/batch":
                 return self.studio_batch(q)
             if u.path == "/api/slip_studio/history":

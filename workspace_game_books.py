@@ -1,5 +1,6 @@
 """File-backed game quotes, shared across members; no bookmaker requests in the web process."""
 import json
+import math
 from datetime import datetime, timezone
 
 
@@ -21,3 +22,32 @@ def shared(srv, league):
         except Exception:
             return 503, b'{"error":"game_prices_unavailable"}'
     return srv.shared(("ws_game_books", league), compute, ttl=30)
+
+
+def moneylines(srv, league):
+    """Slim winner-only response for the classic tab. Never send player-prop reference rows."""
+    def compute():
+        if league == "lol":
+            try:
+                return 200, (srv.LOL_CENTER / "moneylines.json").read_bytes()
+            except FileNotFoundError:
+                return 200, b'{"league":"lol","pending":true,"games":[]}'
+        status, body = shared(srv, league)
+        if status != 200:
+            return status, body
+        doc = json.loads(body)
+        games = []
+        for event in doc["events"]:
+            quotes = []
+            for book in event["books"].values():
+                market = book["markets"].get("money-line") or {}
+                prices = [market.get(side) for side in ("awayOdds", "homeOdds")]
+                prices = [v if type(v) in (int, float) and math.isfinite(v) and abs(v) >= 100 else None for v in prices]
+                if any(v is not None for v in prices):
+                    quotes.append({"source": book["label"], "kind": "american", "prices": prices})
+            if quotes:
+                games.append({"id": event["id"], "teams": [event["away"], event["home"]], "start": event["start_utc"],
+                              "seen_at": event["seen_at"], "quotes": quotes})
+        return 200, json.dumps({"league": league, "observed_at": doc["observed_at"], "pending": bool(doc.get("pending")),
+                                "games": games}, separators=(",", ":")).encode()
+    return srv.shared(("winner_games", league), compute, ttl=30)

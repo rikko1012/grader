@@ -185,6 +185,25 @@ def test_every_regrade_says_which_platform_it_is_for():
 
 
 @needs_node
+def test_moneylines_filter_source_and_hide_expired_or_started_games(tmp_path):
+    result = run_page(tmp_path, """(() => {
+      const at = delta => new Date(Date.now() + delta).toISOString();
+      const g = {teams:['Away','Home'], start:at(3600000), seen_at:at(-60000),
+                 quotes:[{source:'DraftKings',kind:'american',prices:[125,null]}]};
+      winnerSport = 'nba';
+      winnerFeeds.nba = {observed_at:at(-30000), games:[g,{...g,teams:['Started','Other'],start:at(-1000)},
+        {...g,teams:['Old','Other'],seen_at:at(-1900000)}]};
+      $("#bsearch").value = 'draftkings'; drawMoneylines();
+      const nba = $("#boardout").innerHTML;
+      winnerSport = 'lol'; winnerFeeds.lol = {error:true}; drawMoneylines();
+      return [nba,$("#boardout").innerHTML];
+    })()""")
+    assert "+125" in result[0] and "—" in result[0] and "American odds via ESPN" in result[0]
+    assert "Started" not in result[0] and "Old" not in result[0] and "CS2" not in result[0]
+    assert "could not be refreshed" in result[1] and "DraftKings" not in result[1]
+
+
+@needs_node
 def test_moneylines_search_that_matches_nothing_says_so(tmp_path):
     from datetime import datetime, timedelta, timezone
     fut = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
