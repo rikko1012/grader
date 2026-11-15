@@ -1465,6 +1465,8 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
 #u-hub .h-insight-more{border-bottom:1px solid var(--n-line);margin-bottom:14px;padding-bottom:10px}
 #u-hub .h-insight-more summary{cursor:pointer;min-height:40px;display:list-item;align-content:center;font-weight:600;color:var(--n-acc-t)}
 #u-hub .h-insight-more p{line-height:1.6;font-size:13px}
+@media(min-width:1101px){#u-hub #hub-table .h-c-market{width:140px}}
+@media(min-width:1401px){#u-hub #hub-table .h-c-market{width:156px}#u-hub.h-focus-board #hub-table .h-c-market{width:164px}}
 /* "Behind the grade" (web/upgrade-cards.js panels().grade; data: card_grade_inputs.py -> /line doc grade_inputs).
  * New-design hub only. Tokens used: --n-bg --n-s1 --n-s2 --n-line --n-line2 --n-t1 --n-t2 --n-t3 --n-acc --n-over --n-under
  * --n-warn --n-font --n-mono. 2px radius, 1px borders, no shadows, no gradients. Numbers: right-aligned, mono, tabular. */
