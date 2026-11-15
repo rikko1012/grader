@@ -2,6 +2,15 @@
 import json
 import math
 from datetime import datetime, timezone
+from gradecore import winner
+
+
+def attach_series_pick(match, orient_names):
+    # Linked platform blocks already carry the canonical team A probability.
+    oriented = (lambda block, a, b: block.get("prob_a")) if match.get("match_id") else orient_names
+    match["research_pick"] = winner.cs2_pick(match, oriented)
+    if (match.get("thunderpick") or {}).get("eligible"):
+        match["pick_without_book"] = winner.cs2_pick(match, oriented, include_book=False)
 
 
 def shared(srv, league):
@@ -27,7 +36,6 @@ def shared(srv, league):
 def moneylines(srv, league):
     """Slim winner-only response for the classic tab. Never send player-prop reference rows."""
     def compute():
-        from gradecore import winner
         if league == "lol":
             try:
                 doc = json.loads((srv.LOL_CENTER / "moneylines.json").read_bytes())

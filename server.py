@@ -3134,21 +3134,15 @@ def moneylines_payload():
                                  f"Thunderpick: {moneyline.TP_STATE_LABEL[moneyline.TP_READ_ERROR].lower()}" if err else
                                  "Thunderpick: no event linked to this match" if m.get("match_id") else
                                  "Thunderpick: not checked - this card is not tied to one HLTV match")
-    from gradecore import winner
+    import workspace_game_books
     norm = _norm_team()
     for i, match in enumerate(extras, len(board)):
         if i < len(sides):
             match["side"] = sides[i]
     out.extend(extras)
     for m in out:
-        if m["started"]:
-            continue
-        def oriented(block, a, b):
-            # A linked platform block was oriented via canonical team keys upstream.
-            return block.get("prob_a") if m["match_id"] else _oriented_prob(block, a, b, norm)
-        m["research_pick"] = winner.cs2_pick(m, oriented)
-        if (m.get("thunderpick") or {}).get("eligible"):
-            m["pick_without_book"] = winner.cs2_pick(m, oriented, include_book=False)
+        if not m["started"]:
+            workspace_game_books.attach_series_pick(m, lambda block, a, b: _oriented_prob(block, a, b, norm))
     tps = _thunderpick_state()
     return {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "matches": out,
             "sources": {k: {x: (member_source_note(v.get(x)) if x == "note" else v.get(x))
