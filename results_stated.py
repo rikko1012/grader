@@ -5,12 +5,33 @@ from results_view import MAP1_RESULTS_MIN_STAKED, RULE, SCOPE, STAT, _line, map1
 
 LETTERS = ("A+", "A", "A-", "B+", "B", "B-")
 
+# rec-b1 (2026-11-15): since sr-bo3-2 went live (commit 3083184, 2026-10-28 17:32:15Z; no BO3.gg-route forecast was logged between
+# Oct 28 12:00Z and Oct 29 06:00Z, so the exact second changes no row) a BO3.gg-route forecast (performance model "...-bo3") is
+# logged but never shown to members: the board row has no side, chance, letter or stake (grade_display.shadow_board_row). The
+# record is "the chance members were shown", so it leaves those rows out. Fixed by the time the forecast was logged, never by the
+# current BO3_PROJ_SHADOW value, so a later env change cannot rewrite past rows. Earlier BO3.gg-route rows were shown (0U) and stay.
+# Pushes carry no source and are unchanged. No grade, chance, stake or letter changes.
+HIDDEN_BO3_FROM = "2026-10-28T17:32:15+00:00"
+
+
+def hidden_from_members(r):
+    """True when this P1 row is a BO3.gg-route forecast logged after sr-bo3-2 went live (members never saw it)."""
+    lm = r.get("lm0")
+    if isinstance(lm, str):
+        try:
+            import json
+            lm = json.loads(lm)
+        except ValueError:
+            lm = None
+    src = str((lm or {}).get("live_source") or "") if isinstance(lm, dict) else ""
+    return src.split(" (")[0].endswith("-bo3") and str(r.get("logged") or "") >= HIDDEN_BO3_FROM
+
 
 def rule_picks(export, map1_min=MAP1_RESULTS_MIN_STAKED):
     """The picks stated_observed counts, its pushes and its calendar rows, on the same rule and the same Map 1 hold.
     -> (picks, pushed, calendar_rows). A pick: {"match", "printed", "win", "letter", "market"}."""
     from grader import grade_from_p
-    rows = (export or {}).get("rows") or []
+    rows = [r for r in (export or {}).get("rows") or [] if not hidden_from_members(r)]
     pushes_in = (export or {}).get("pushes") or []
     if map1_staked_settled(export) < map1_min:
         rows = [r for r in rows if (r.get("scope") or "12") != "1"]
