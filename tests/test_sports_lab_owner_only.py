@@ -23,10 +23,15 @@ ROOT = Path(server.__file__).parent
 ADMIN = "fixture-owner-token"
 OWNER_USER = "fixture-owner"
 LAB_PAGES = ("/sports/lab.html", "/sports/lab", "/sports/lab.js", "/sports/lab.css", "/sports/LAB.html", "/sports/./lab.html",
-             "/sports/lab.html/", "/sports/Lab.Js")
+             "/sports/lab.html/", "/sports/Lab.Js",
+             # verify pass: pathlib drops "." segments, so these were served as the lab's own files
+             "/sports/lab.html/.", "/sports/lab.js/./", "/sports/LAB.HTML/.", "/sports/lab.css/./.")
 LAB_API = ("/api/sports/admin/lab/overview", "/api/sports/admin/lab/experiments", "/api/sports/admin/lab/experiment?id=lx-1",
            "/api/sports/admin/lab/export?id=lx-1&format=csv", "/api/sports/admin/lab/replay", "/api/sports/admin/lab",
-           "/api/sports/token?scope=lab")
+           "/api/sports/token?scope=lab",
+           # verify pass: these spellings reached the sports service with a member token
+           "/api/sports//admin/lab/overview", "/api/sports/./admin/lab/overview", "/api/sports/admin/%6cab/overview",
+           "/api/sports/admin/lab/overview/.")
 NAV = {"Sec-Fetch-Mode": "navigate", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
 
 
@@ -220,6 +225,9 @@ def test_the_lab_page_itself_asks_for_no_token():
 @pytest.mark.parametrize("path,q,want", [
     ("/sports/lab.html", {}, True), ("/sports/labels.js", {}, False), ("/sports/app.js", {}, False), ("/sports", {}, False),
     ("/api/sports/admin/lab/overview", {}, True), ("/api/sports/token", {}, False), ("/api/sports/token", {"scope": "lab"}, True),
-    ("/api/sports/board", {}, False), ("/sports/sub/lab.js", {}, True)])
+    ("/api/sports/board", {}, False), ("/sports/sub/lab.js", {}, True),
+    ("/sports/lab.html/.", {}, True), ("/sports/labels.js/.", {}, False), ("/api/sports//admin/lab/x", {}, True),
+    ("/api/sports/admin/%6Cab/x", {}, True), ("/api/sports/x/../admin/lab", {}, True), ("/sports/%6cab.html", {}, True),
+    ("/api/sports/admin/labels", {}, True), ("/api/sports/admin/model/x", {}, False)])
 def test_lab_path_matcher(path, q, want):
     assert server.sports_lab_path(path, q) is want

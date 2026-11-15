@@ -4496,13 +4496,28 @@ def sports_lab_path(path, q=None):
     """True for every lab URL: the page and its assets under any spelling the static server would resolve to them
     (/sports/lab, /sports/lab.html, /sports/./LAB.js, /sports/lab.css/ ...), the lab API (/api/sports/admin/lab/*)
     and the lab's own token mint (/api/sports/token?scope=lab)."""
-    p = (path or "").lower()
-    if p.startswith("/sports/"):
-        name = p[len("/sports/"):].replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
-        return name.split(".", 1)[0] == "lab"
-    if p.startswith(SPORTS_LAB_API):
-        return True
-    return p == "/api/sports/token" and (q or {}).get("scope") == "lab"
+    # Verify pass 2026-11-14: checked on the raw path AND on a normalised copy (percent-decoded, repeated slashes and
+    # dot segments collapsed). pathlib drops "." segments, so /sports/lab.html/. was served as lab.html; and
+    # /api/sports//admin/lab, /api/sports/./admin/lab, /api/sports/admin/%6cab reached the sports service.
+    from urllib.parse import unquote
+    raw = (path or "").replace("\\", "/")
+    parts = []
+    for seg in unquote(raw).replace("\\", "/").split("/"):
+        if seg in ("", "."):
+            continue
+        if seg == "..":
+            if parts:
+                parts.pop()
+            continue
+        parts.append(seg)
+    for p in {raw.lower(), ("/" + "/".join(parts)).lower()}:
+        if p.startswith("/sports/"):
+            segs = [s for s in p[len("/sports/"):].split("/") if s not in ("", ".")]
+            if segs and segs[-1].split(".", 1)[0] == "lab":
+                return True
+        elif p.startswith(SPORTS_LAB_API):
+            return True
+    return (path or "").lower() == "/api/sports/token" and (q or {}).get("scope") == "lab"
 
 
 def sports_nav(body):
