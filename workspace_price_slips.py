@@ -64,8 +64,17 @@ def draft(doc, mode, leg_id, books, budget, now=None, expected=None):
     limit = doc.get('method', {}).get('arb_max_age_s' if mode == 'arb' else 'ev_stale_s', 300 if mode == 'arb' else 1800)
     for l in legs:
         seen = _ts(l.get('seen_at'))
-        if l.get('kind') != 'sportsbook' or l.get('flags') or seen is None or not 0 <= now-seen <= limit:
+        if l.get('kind') != 'sportsbook' or l.get('flags'):
             raise ValueError('A price is stale or cannot be used as a standalone sportsbook bet.')
+        if seen is None or not 0 <= now-seen <= limit:
+            # owner 2026-11-14: an older price is named with its source and age, and never drafted
+            import price_freshness as pf
+            label = pf.checked_label(l.get('book_label') or l.get('book'), seen, now)
+            if seen is None:
+                raise ValueError(f'{label}: this price has no check time. Refresh prices and generate again.')
+            if now < seen:
+                raise ValueError(f'{label}: this price is stamped after the current time. Refresh prices and generate again.')
+            raise ValueError(f'{label}: older than the {round(limit / 60)}-minute limit for this price. Refresh prices and generate again.')
         if not isinstance(l.get('odds'), (int, float)) or not math.isfinite(l['odds']) or l['odds'] <= 1:
             raise ValueError('A valid price is missing.')
     if mode == 'arb':

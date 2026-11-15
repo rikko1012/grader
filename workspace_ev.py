@@ -265,6 +265,8 @@ def _priced(srv, p, now):
             continue
         res = ev_board.price_leg(quotes_of(leg["book_rows"], leg["sport"]), leg["side"], leg["line"], now, be=None, p_model=None,
                                  p_model_other=None, reader=None, **opts)
+        for q in ((res["fair"] or {}).get("sources") or []) + ((res["fair"] or {}).get("dropped") or []):
+            q["seen_ts"] = _seen_ts(now, q.get("age_s"))     # ages are as of THIS pricing pass; the memo outlives it
         out[(leg["key"], leg["side"])] = (res["fair"], res["hidden"])
     with _LOCK:
         for k in [k for k, v in _FAIR.items() if now - v[0] >= TTL]:
@@ -275,8 +277,22 @@ def _priced(srv, p, now):
 
 # ------------------------------------------------------------------------------------------------------------- build
 
+def _seen_ts(now, age):
+    """When a price was seen (epoch), from its age in the pricing pass that measured it. No age = no time (never now)."""
+    if not isinstance(age, (int, float)) or age != age:
+        return None
+    return now - age
+
+
+def _seen_iso(q):
+    """The ISO time a priced / left-out quote was seen: the page writes "FanDuel · checked 42 min ago" from it on its own clock
+    (web/upgrade-fresh.js), so the words stay true however long the shared build is held."""
+    t = q.get("seen_ts")
+    return None if t is None else wb._iso(t)
+
+
 def _source(s, sources_label):
-    return {"book": s["book"], "label": sources_label.get(s["book"], s["book"].title()), "family": s["group"], "kind": s["kind"], "line": s["line"],
+    return {"book": s["book"], "seen_at": _seen_iso(s), "label": sources_label.get(s["book"], s["book"].title()), "family": s["group"], "kind": s["kind"], "line": s["line"],
             "over": s.get("over"), "under": s.get("under"), "bid": s.get("bid"), "ask": s.get("ask"), "sit_out": s.get("sit_out") or None,
             "age_s": round(s["age_s"]) if s.get("age_s") is not None else None, "liquidity": s.get("liquidity"),
             "width": None if s.get("width") is None else round(s["width"], 4), "p": round(s["p"], 4), "shifted": s["shifted"],
@@ -337,7 +353,8 @@ def build(srv, p, allowed, now=None):
                          books=len(f["books"]), independent_books=len(f["books"]), families=list(f["books"]), one_book=len(f["books"]) == 1,
                          books_label=ev_board.ONE_BOOK_LABEL if len(f["books"]) == 1 else f"{len(f['books'])} books", sources=[_source(s, labels) for s in f["sources"]],
                          left_out=[{"label": labels.get(d["book"], d["book"].title()), "line": d["line"], "reason": d["reason"],
-                                    "age_s": None if d.get("age_s") is None or d["age_s"] != d["age_s"] else round(d["age_s"])}
+                                    "age_s": None if d.get("age_s") is None or d["age_s"] != d["age_s"] else round(d["age_s"]),
+                                    "seen_at": _seen_iso(d)}
                                    for d in f["dropped"]]))
     key = lambda r: (r.get("ev") is None, -(r.get("ev") or 0.0))
     rows.sort(key=key)

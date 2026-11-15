@@ -26,6 +26,7 @@ import json
 import os
 import time
 
+import price_freshness as pf
 import workspace_books as wb
 import workspace_ev as we
 
@@ -177,7 +178,8 @@ def _app_needs(app, mult, cfg):
 
 
 def _offers_of_record(r, cfg, limits, now):
-    """[(side, line, book, label, price text, needs, standard)] of one board record's offered sides."""
+    """[(side, line, book, label, price text, needs, standard, seen epoch)] of one board record's offered sides. A sportsbook's
+    own row is left out once its price is older than the sportsbook limit; a pick'em app line keeps its feed's rule."""
     o, m = r.get("offer") or {}, r.get("market") or {}
     book, line = o.get("platform"), o.get("line")
     if not _num(line) or book in we.PREDICTION:
@@ -186,9 +188,9 @@ def _offers_of_record(r, cfg, limits, now):
     if lt not in ("standard", "over only", "under only"):
         return []                                        # goblin / demon / promo lines pay differently: not compared
     kind = None if book in APPS else "decimal"           # a sportsbook's own board row (FanDuel...) carries decimal prices
+    t = wb._ts(o.get("seen_at"))
     if kind == "decimal":
-        t = wb._ts(o.get("seen_at"))
-        if t is None or now - t > limits["sportsbook"]:
+        if t is None or t > now + pf.FUTURE_SLACK_S or now - t > limits["sportsbook"]:
             return []
     label = o.get("platform_label") or book
     out = []
@@ -213,7 +215,7 @@ def _offers_of_record(r, cfg, limits, now):
             needs, px = 1.0 / v["price"], f"{v['price']:.2f}"
         else:
             needs, px = None, None
-        out.append((side, float(line), book, label, px, needs, lt == "standard"))
+        out.append((side, float(line), book, label, px, needs, lt == "standard", t))
     return out
 
 
@@ -232,14 +234,14 @@ def _offers_of_bookrow(b, limits, now):
     if exch:
         bid, ask = we._exchange(b.get("over"))
         if _num(ask) and 0 < ask < 1:
-            out.append(("over", float(line), book, label, f"{ask:.2f}", ask, False))
+            out.append(("over", float(line), book, label, f"{ask:.2f}", ask, False, t))
         if _num(bid) and 0 < bid < 1:
-            out.append(("under", float(line), book, label, f"{1 - bid:.2f}", 1 - bid, False))
+            out.append(("under", float(line), book, label, f"{1 - bid:.2f}", 1 - bid, False, t))
         return book, out
     for side in ("over", "under"):
         d = we._num(b.get(side))
         if d is not None:
-            out.append((side, float(line), book, label, f"{d:.2f}", 1.0 / d, True))
+            out.append((side, float(line), book, label, f"{d:.2f}", 1.0 / d, True, t))
     return book, out
 
 
@@ -276,7 +278,7 @@ def _better(a, b, side):
 
 def best_lines(srv, sport, recs, s, now):
     """{prop key: {"over": best, "under": best, "ls": [[label, line, book], ...] standard lines, "n": books,
-    "bk": [[label, line, book, Over price, Under price], ...] every book and line counted in n (site audit N8: the card listed
+    "bk": [[label, line, book, Over price, Under price, seen ISO or None], ...] every book and line counted in n (site audit N8: the card listed
     two of "4 books"; Sleeper and Dabble lines live in their own book-board builds, so the card lists them from here)}}."""
     from gradecore import payouts
     cfg = payouts.pickem_config()
@@ -323,6 +325,9 @@ def best_lines(srv, sport, recs, s, now):
         line = o.get("line")
         if not _num(line):
             continue
+        t = wb._ts(o.get("seen_at"))
+        if kind == "sportsbook" and comparable and not pf.fresh(t, now, limits["sportsbook"]):
+            continue                                     # a direct sportsbook's price past the sportsbook limit: never a best price
         offers = []
         for side in ("over", "under"):
             v = o.get(side) or {}
@@ -339,7 +344,7 @@ def best_lines(srv, sport, recs, s, now):
                 px, needs = f"{price_label or 'App price'} {float(v['price']):.2f}", None
             else:
                 px, needs = None, None
-            offers.append((side, float(line), o.get("platform"), o.get("platform_label") or o.get("platform"), px, needs, True))
+            offers.append((side, float(line), o.get("platform"), o.get("platform_label") or o.get("platform"), px, needs, True, t))
         add(prop_key(r), offers)
     out = {}
     for pk, d in per.items():
@@ -354,15 +359,21 @@ def best_lines(srv, sport, recs, s, now):
                     std[(x[2], x[1])] = x[3]
         if not best:
             continue
+        # "at": when that price was seen (ISO, None when the feed gave no time), so the page can write "FanDuel · checked 4 min ago"
         ent = {side: {"book": x[2], "label": x[3], "short": _short(x[2], x[3]), "line": x[1], "price": x[4],
-                      "needs": None if x[5] is None else round(x[5], 6)} for side, x in best.items()}
+                      "needs": None if x[5] is None else round(x[5], 6), "at": wb._iso(x[7]) if x[7] is not None else None}
+               for side, x in best.items()}
         ent["ls"] = sorted(([lab, ln, bk] for (bk, ln), lab in std.items()), key=lambda v: (v[1], v[0]))
         ent["n"] = len({bk for bk, _ln in d})
-        rows = {}
+        rows, seen = {}, {}
         for (bk, ln), offers in d.items():
             for x in offers:
                 row = rows.setdefault((bk, ln), [x[3], ln, bk, None, None])
                 row[3 if x[0] == "over" else 4] = x[4] or row[3 if x[0] == "over" else 4] or ""
+                if x[7] is not None and x[7] > seen.get((bk, ln), float("-inf")):
+                    seen[(bk, ln)] = x[7]
+        for k, row in rows.items():                      # 6th item: when the book's line was seen (ISO or None), never a made-up time
+            row.append(wb._iso(seen[k]) if k in seen else None)
         ent["bk"] = sorted(rows.values(), key=lambda v: (v[1], v[0]))
         out[pk] = ent
     return out

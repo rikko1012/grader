@@ -4590,6 +4590,7 @@ UPGRADE_ROUTES = {"/upgrade/upgrade.css": ("upgrade.css", "text/css; charset=utf
                   # UI_NEXT (the redesign, 2026-11-11): its own two sheets. hub.css is not loaded with it, and nothing asks for
                   # these unless the page's head script chose the new design (UI_NEXT=1, or the member's /preview/next cookie)
                   "/upgrade/lines.js": ("upgrade-lines.js", "text/javascript; charset=utf-8"),   # board rows by prop (pure grouping)
+                  "/upgrade/fresh.js": ("upgrade-fresh.js", "text/javascript; charset=utf-8"),   # price freshness + "checked N min ago" (pure)
                   "/upgrade/next-base.css": ("upgrade-next-base.css", "text/css; charset=utf-8"),
                   "/upgrade/next.css": ("upgrade-next.css", "text/css; charset=utf-8")}
 UPGRADE_API = "/api/upgrade/"

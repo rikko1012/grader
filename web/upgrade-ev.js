@@ -2,6 +2,7 @@
  * Every number on this page comes from the server (workspace_ev.py, math in gradecore/ev_board.py, fair.py, payouts.py,
  * line_shift.py). The page only filters and sorts what it is given; filters that change the fair chance are sent back as
  * parameters. Saved views live in this browser only (a per-viewer convenience). */
+import {ageSeconds, ageText} from '/upgrade/fresh.js';
 const KEY = 'scout-ev-view';
 const VIEW_V = 2;   /* saved-view format: 2 = saved under the 2-independent-books default */
 /* the default filters (Reset, Clear all, and the fall-back when a saved view would hide every leg) */
@@ -81,7 +82,9 @@ const pct = x => typeof x === 'number' ? (x * 100).toFixed(1) + '%' : '—';
 const odds = a => typeof a === 'number' ? (a > 0 ? '+' + a : '−' + Math.abs(a)) : '—';
 const evText = x => typeof x === 'number' ? (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x * 100).toFixed(1) + '%' : '—';
 const evClass = x => typeof x === 'number' ? (x > 0 ? ' is-pos' : ' is-neg') : '';
-const age = s => typeof s !== 'number' ? '—' : s < 90 ? Math.round(s) + 's' : s < 5400 ? Math.round(s / 60) + 'm' : Math.round(s / 3600) + 'h';
+/* owner 2026-11-14: each price says when it was checked ("checked 42 min ago"), measured on this page's clock from the server's
+   seen time, so the words stay true while the page is open; no time = a dash, never "0" */
+const checked = s => ageText(ageSeconds(s)) || (typeof s.age_s === 'number' ? ageText(s.age_s) : null);
 const side = s => s === 'over' ? 'Over' : 'Under';
 const ENTRY = {power: 'Power', flex: 'Flex', standard: 'Standard'};
 const MODEL_EV_HIDDEN = ['nba', 'nfl'];
@@ -121,9 +124,9 @@ function addBtn(r) {
 function sourcesHtml(r) {
   const rows = r.sources.map(s => `<tr><td>${esc(s.label)}${s.kind === 'exchange' ? ' <small>exchange</small>' : ''}</td><td class="ev-num">${esc(s.line)}${s.shifted ? ` <small>read at ${esc(r.line)}</small>` : ''}</td>`
     + `<td class="ev-num">${pct(s.p)}</td><td class="ev-num">${s.width == null ? '—' : s.kind === 'exchange' ? (s.width * 100).toFixed(0) + '¢ buy-sell gap' : (s.width * 100).toFixed(1) + '% book cut'}</td>`
-    + `<td class="ev-num">${typeof s.liquidity === 'number' ? '$' + Math.round(s.liquidity).toLocaleString() : '—'}</td><td class="ev-num">${age(s.age_s)}</td><td class="ev-num">${esc(s.weight)}</td></tr>`).join('');
-  const out = (r.left_out || []).map(d => `<li>${esc(d.label)} ${esc(d.line)}: ${esc(reason(d.reason))}${typeof d.age_s === 'number' ? ' · ' + age(d.age_s) + ' old' : ''}</li>`).join('');
-  return `<div class="ev-src"><table><thead><tr><th>Book</th><th>Line</th><th>${esc(side(r.side))} chance</th><th>Book cut</th><th>Money on it</th><th>Age</th><th>Counts as</th></tr></thead><tbody>${rows}</tbody></table>`
+    + `<td class="ev-num">${typeof s.liquidity === 'number' ? '$' + Math.round(s.liquidity).toLocaleString() : '—'}</td><td class="ev-num">${esc(checked(s) || '—')}</td><td class="ev-num">${esc(s.weight)}</td></tr>`).join('');
+  const out = (r.left_out || []).map(d => `<li>${esc(d.label)} ${esc(d.line)}: ${esc(reason(d.reason))}${checked(d) ? ' · ' + esc(checked(d)) : ''}</li>`).join('');
+  return `<div class="ev-src"><table><thead><tr><th>Book</th><th>Line</th><th>${esc(side(r.side))} chance</th><th>Book cut</th><th>Money on it</th><th>Checked</th><th>Counts as</th></tr></thead><tbody>${rows}</tbody></table>`
     + (out ? `<p class="ev-left">Left out (greyed, never priced):</p><ul class="ev-left-list">${out}</ul>` : '') + '</div>';
 }
 function generatedHtml() {
@@ -222,7 +225,7 @@ function paintBox() {
   const sportOpts = [['all', 'All sports'], ...d.sports.map(s => [s, C.SPORTS[s] || s])];
   const banner = d.hidden && d.hidden.text ? `<p class="ev-banner" role="status">${esc(d.hidden.text)} Old, one-sided or wide prices never set a chance.</p>` : '';
   box.innerHTML = head()
-    + `<div class="ev-apps" role="group" aria-label="App">${(d.apps || [d.app]).map(a => `<button data-ev="app" data-id="${a}" aria-pressed="${d.app === a}">${a === 'prizepicks' ? 'PrizePicks' : 'Underdog'} <span class="ev-chip">${d.plays[a] || 0} beat the entry</span></button>`).join('')}</div>`
+    + `<div class="ev-apps" role="group" aria-label="App">${(d.apps || [d.app]).map(a => `<button data-ev="app" data-id="${a}" aria-pressed="${d.app === a}">${a === 'prizepicks' ? 'PrizePicks' : 'Underdog'} <span class="ev-chip">${typeof d.plays?.[a] === 'number' ? d.plays[a] : '—'} beat the entry</span></button>`).join('')}</div>`
     + `<div class="ev-bar"><label>Entry<select id="ev-entry">${entries.map(e => `<option value="${e.entry}-${e.n}"${e.entry === d.entry && e.n === d.n ? ' selected' : ''}>${ENTRY[e.entry] || e.entry} ${e.n}-pick · each leg needs ${pct(e.break_even)} (${odds(Math.round(e.american))})</option>`).join('')}</select></label>`
     + `<label class="ev-search">Search<input id="ev-q" type="search" value="${esc(S.f.q)}" placeholder="Player, team or market"></label>`
     + (sports > 1 ? `<label>Sport<select id="ev-sport">${sportOpts.map(([k, t]) => `<option value="${k}"${S.f.sport === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>` : '') + `</div>`
