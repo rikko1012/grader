@@ -22,6 +22,7 @@ import json
 import os
 import socket
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from .. import config, espn, net
 from .. import worker as canonical
@@ -218,7 +219,9 @@ def backfill(db, league, season, types=(2, 3), limit=None, progress=print):
 # ----------------------------------------------------------------------------------------------------------- tick
 
 def _games_window(lg, now, back_days, ahead_days):
-    return espn.scoreboard(lg, (now - timedelta(days=back_days)).date(), (now + timedelta(days=ahead_days)).date())
+    # ESPN files evening games under their US schedule date, even after UTC midnight.
+    day = now.astimezone(ZoneInfo("America/New_York")).date()
+    return espn.scoreboard(lg, day - timedelta(days=back_days), day + timedelta(days=ahead_days))
 
 
 def _context(db, lg, games, now, clock):

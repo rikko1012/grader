@@ -12,6 +12,20 @@ from sports.tests.conftest import fixture
 NBA, NFL = config.league("nba"), config.league("nfl")
 
 
+@pytest.mark.parametrize(("as_of", "first_day"), [
+    ("2026-11-15T00:30:00+00:00", "2026-11-14"),
+    ("2026-03-09T03:59:00+00:00", "2026-03-08"),
+    ("2026-03-09T04:00:00+00:00", "2026-03-09"),
+    ("2026-11-02T04:59:00+00:00", "2026-11-01"),
+    ("2026-11-02T05:00:00+00:00", "2026-11-02"),
+])
+def test_evening_game_context_uses_espn_schedule_day(monkeypatch, as_of, first_day):
+    monkeypatch.setattr(espn, "scoreboard", lambda league, start, end: (start, end))
+    start, end = collect._games_window(NBA, datetime.fromisoformat(as_of), 0, 8)
+    assert start.isoformat() == first_day
+    assert (end - start).days == 8
+
+
 def g(name):
     return fixture(f"games/{name}")
 
