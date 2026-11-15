@@ -4480,6 +4480,31 @@ def sports_allow_id(user):
     return "sa_" + hashlib.sha256(f"scout-sports-allow|{user}".encode("utf-8")).hexdigest()[:24]
 
 
+# UI 1114 (owner 2026-11-14): the Sports model lab is owner/admin only ON THE SERVER - its page, assets, API and its own
+# token mint. Owner = the existing owner checks (Handler._sports_lab_owner). No grading, chance, stake or settlement change.
+SPORTS_LAB_API = "/api/sports/admin/lab"
+SPORTS_LAB_DENIED = (b"<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,"
+                     b"initial-scale=1'><meta name=robots content=noindex><title>Owner only - 1time Scout</title>"
+                     b"<body style='font:16px/1.5 system-ui,sans-serif;background:#111318;color:#f2f4f8;margin:0;padding:32px 16px'>"
+                     b"<main style='max-width:560px;margin:0 auto'><h1 style='font-size:22px;margin:0 0 8px'>This page is for the "
+                     b"site owner</h1><p style='margin:0 0 16px;color:#c4cad6'>The model lab is an owner tool. Your account "
+                     b"can't open it. Your Sports board and picks are unaffected.</p><p style='margin:0'>"
+                     b"<a href='/sports#/board' style='color:#4d8dff'>Go to the Sports board</a></p></main></body></html>")
+
+
+def sports_lab_path(path, q=None):
+    """True for every lab URL: the page and its assets under any spelling the static server would resolve to them
+    (/sports/lab, /sports/lab.html, /sports/./LAB.js, /sports/lab.css/ ...), the lab API (/api/sports/admin/lab/*)
+    and the lab's own token mint (/api/sports/token?scope=lab)."""
+    p = (path or "").lower()
+    if p.startswith("/sports/"):
+        name = p[len("/sports/"):].replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+        return name.split(".", 1)[0] == "lab"
+    if p.startswith(SPORTS_LAB_API):
+        return True
+    return p == "/api/sports/token" and (q or {}).get("scope") == "lab"
+
+
 def sports_nav(body):
     """The ONE Sports link on the esports pages, added only when SPORTS_UI is on (Handler._sports_on). Pure bytes edit
     after the game switcher - no sports import; with the flag off the page bytes are untouched
@@ -6391,17 +6416,50 @@ class Handler(BaseHTTPRequestHandler):
         sports API runs in its own process / Render service: this thread only mints a member token after the server-side
         paid check, serves the static page, or answers 404 - it never runs sports queries. Any sports failure is a 503
         for that sports request only (sports/tests/test_isolation_server.py)."""
+        allowed, admin = self.allowed, (lambda: self.authed(q.get("token")))
+        lab = sports_lab_path(u.path, q)
+        if lab:                                         # UI 1114: the model lab is the owner's alone (page, assets, API, token)
+            if not self._sports_lab_owner(q):
+                return self._sports_lab_denied(u.path)
+            allowed = admin = (lambda: True)            # checked just above; the lab token is minted admin by the server
         try:
             from sports import gateway
             code, body, ctype, hdrs = gateway.handle_get(
-                u.path, u.query, q, member=lambda: (self.member() or {}).get("user"), allowed=self.allowed,
-                admin=lambda: self.authed(q.get("token")), headers=self.headers)
+                u.path, u.query, q, member=lambda: (self.member() or {}).get("user"), allowed=allowed,
+                admin=admin, headers=self.headers)
         except Exception as e:                          # noqa: BLE001 - sports must not break esports
             sys.stderr.write(f"  sports route failed: {type(e).__name__}: {str(e)[:200]}\n")
             return self.send(503, {"error": "sports_unavailable"})
+        if lab:
+            hdrs = dict(hdrs or {}, **{"Cache-Control": "no-store"})
         if code == 200 and u.path in ("/sports", "/sports/", "/sports/results") and self._upgrade_on(q):
             body = upgrade_page(body, "sports-results" if u.path == "/sports/results" else "sports")
         return self.send(code, body, ctype, hdrs)
+
+    def _sports_lab_owner(self, q):
+        """The owner, by Scout's existing owner checks: the admin token (?token=, X-Admin-Token, or the same-origin
+        Referer of the lab page opened with the owner's ?token= link - its scripts and styles carry no token, as on
+        /preview/workspace) or the owner's signed-in paid session on the SPORTS_UI_ALLOW list (Handler._sports_owner)."""
+        token = q.get("token")
+        if not token and not self.headers.get("X-Admin-Token"):
+            ref = urlparse(self.headers.get("Referer") or "")
+            if ref.path.lower() in ("/sports/lab", "/sports/lab.html"):
+                token = (parse_qs(ref.query).get("token") or [None])[0]
+        return self.authed(token) or self._sports_owner()
+
+    def _sports_lab_denied(self, path):
+        """Not the owner: signed out -> the sign-in flow (browser) or 401 JSON; signed in -> 403, a readable page for a
+        browser navigation and JSON for /api and scripts. Never the lab's bytes, never a sports request."""
+        mode = (self.headers.get("Sec-Fetch-Mode") or "").lower()
+        nav = not path.lower().startswith("/api/") and (
+            mode == "navigate" or (not mode and "text/html" in (self.headers.get("Accept") or "")))
+        if self.signed_out():
+            if nav:
+                return self.redirect("/auth/login?next=" + quote("/sports/lab.html", safe=""))
+            return self.send(401, {"error": "members_only", "signed_in": False})
+        if nav:
+            return self.send(403, SPORTS_LAB_DENIED, "text/html; charset=utf-8")
+        return self.send(403, {"error": "owner_only", "message": "The model lab is an owner tool."})
 
     def authed(self, token):
         # the admin link's ?token= still works; scripts send the X-Admin-Token header instead, so the token stays out

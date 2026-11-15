@@ -1,17 +1,23 @@
-/* Scout Sports model lab (admin). Gets an admin sports token with the esports admin token (sent as a header), then
-   reads / queues through /api/sports/admin/lab/*. All numbers shown come from the experiment record. */
+/* Scout Sports model lab (owner only - the server answers 403 to anyone else, UI 1114). The server mints the lab's
+   sports token for the owner it has already recognised (signed-in owner session, or the owner's own ?token= link, sent
+   as a header and never typed into the page), then the page reads / queues through /api/sports/admin/lab/*.
+   All numbers shown come from the experiment record. */
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
-  var S = { admin: "", token: null, exp: 0, base: "", ov: null, timer: null };
+  var OWNER = new URLSearchParams(location.search).get("token") || "";
+  var S = { token: null, exp: 0, base: "", ov: null, timer: null };
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function n(x, d) { return x == null ? "-" : (typeof x === "number" ? x.toFixed(d == null ? 3 : d) : esc(x)); }
   function status(m, bad) { $("lab-status").textContent = m || ""; $("lab-status").className = "lab-meta" + (bad ? " lab-bad" : ""); }
 
   function token() {
     if (S.token && Date.now() / 1000 < S.exp - 60) return Promise.resolve();
-    return fetch("/api/sports/token", { headers: { "X-Admin-Token": S.admin }, credentials: "same-origin", cache: "no-store" })
-      .then(function (r) { if (!r.ok) throw new Error("Admin token refused (" + r.status + ")"); return r.json(); })
+    return fetch("/api/sports/token?scope=lab", { headers: OWNER ? { "X-Admin-Token": OWNER } : {}, credentials: "same-origin", cache: "no-store" })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) throw new Error("This page is for the site owner. Sign in with the owner account.");
+        if (!r.ok) throw new Error("The lab could not start (" + r.status + ").");
+        return r.json(); })
       .then(function (t) { S.token = t.token; S.exp = t.exp; S.base = (t.api_base || "").replace(/\/$/, ""); });
   }
   function api(path, opts) {
@@ -25,14 +31,11 @@
   }
   function apiJson(path, opts) { return api(path, opts).then(function (r) { return r.json().then(function (j) { j._status = r.status; return j; }); }); }
 
-  function login() {
-    S.admin = $("lab-token").value.trim();
-    try { sessionStorage.setItem("lab-admin", S.admin); } catch (e) {}
-    S.token = null;
-    overview().then(function () { $("lab-auth").classList.add("lab-hidden"); $("lab-main").classList.remove("lab-hidden"); })
+  function start() {
+    try { sessionStorage.removeItem("lab-admin"); } catch (e) {}   // the old typed-token copy, if a tab still holds one
+    overview().then(function () { $("lab-main").classList.remove("lab-hidden"); })
       .catch(function (e) { status(e.message, true); });
   }
-  $("lab-login").addEventListener("click", login);
 
   // bug #50: the 5-second poll (poll = true) refreshes the sources and the list only - never the admin's half-filled form
   function overview(poll) {
@@ -172,5 +175,5 @@
     });
   }
 
-  try { var t = sessionStorage.getItem("lab-admin"); if (t) { $("lab-token").value = t; login(); } } catch (e) {}
+  start();
 })();

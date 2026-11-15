@@ -184,6 +184,16 @@ def _req(path, role="admin", method="GET", body=None, **q):
     return out[0], (json.loads(out[1]) if out[2].startswith("application/json") else out[1])
 
 
+@pytest.mark.parametrize("sub,method", [("overview", "GET"), ("experiments", "POST"), ("experiment", "GET"),
+                                        ("export", "GET"), ("replay", "POST")])
+def test_every_lab_route_refuses_a_member_token(sub, method):
+    """UI 1114: in service mode the lab API lives on the sports service; a member token gets 403 and no token 401 on every
+    lab route (the esports server mints an admin-role token only for the owner: tests/test_sports_lab_owner_only.py)."""
+    path = "/api/sports/admin/lab/" + sub
+    assert _req(path, role="member", method=method, body={} if method == "POST" else None, id="lx-1")[0] == 403
+    assert _req(path, role=None, method=method, body={} if method == "POST" else None, id="lx-1")[0] == 401
+
+
 def test_lab_routes_are_admin_only_and_never_touch_production(history):
     assert _req("/api/sports/admin/lab/overview", role="member")[0] == 403
     assert _req("/api/sports/admin/lab/overview", role=None)[0] == 401

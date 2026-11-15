@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scout Sports - Model lab (admin)</title>
 <meta name="robots" content="noindex">
+<meta name="referrer" content="same-origin">
 <link rel="stylesheet" href="/sports/lab.css">
 </head>
 <body style="margin:0">
@@ -15,13 +16,6 @@
       <p class="lab-sub">Experiments train in the lab runner, never here. A result counts only if it replays from its
         saved inputs. Lab models never replace production.</p>
     </header>
-
-    <section class="lab-panel" id="lab-auth">
-      <label for="lab-token">Admin token</label>
-      <div class="lab-row"><input id="lab-token" type="password" autocomplete="off">
-        <button class="lab-btn" id="lab-login" type="button">Open lab</button></div>
-      <p class="lab-meta">Kept for this tab only (sessionStorage); sent as a header, never in a URL.</p>
-    </section>
 
     <div id="lab-main" class="lab-hidden">
       <section class="lab-panel">
@@ -54,7 +48,7 @@
 
       <section class="lab-panel lab-hidden" id="lab-detail" aria-live="polite"></section>
     </div>
-    <p id="lab-status" class="lab-meta" role="status"></p>
+    <p id="lab-status" class="lab-meta" role="status">Opening the lab...</p>
   </div>
 </div>
 <script src="/sports/lab.js"></script>

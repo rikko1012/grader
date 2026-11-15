@@ -135,9 +135,7 @@ def test_model_lab_poll_keeps_the_half_filled_form(browser):
         calls.append(1)
         return OVERVIEW
     ctx, page, errors = _page(browser, {"/api/sports/admin/lab/overview": overview})
-    page.goto("/sports/lab.html")
-    page.fill("#lab-token", "fixture-admin")
-    page.click("#lab-login")
+    page.goto("/sports/lab.html")                          # UI 1114: owner-only on the server; the page asks for no token
     page.wait_for_selector("#lab-list tr[data-id]")
     page.select_option("#lab-form select[name=stat]", "assists")
     page.check("#lab-feats input[value=rest_days]")

@@ -10,7 +10,8 @@
                                      source record refs)
   POST replay                        {"id"} -> queue a replay from the saved inputs (the runner compares hashes)
 Handlers only read / enqueue in lab.db; training runs in the lab runner process (python -m sports.lab.runner).
-Page: web/sports/lab.html (served at /sports/lab.html; it calls these routes with an admin token).
+Page: web/sports/lab.html (served at /sports/lab.html to the owner only - server.py answers 403 to anyone else, UI 1114;
+the server mints the admin-role token these routes need, the page never asks for one).
 """
 from __future__ import annotations
 
