@@ -203,3 +203,20 @@
  #u-hub .h-tabbar.h-tabbar-wide .h-count-badge{margin-left:2px;padding:1px 4px}}
 /* phones and tablets: every app pill stays reachable (DraftKings and the other extra books scroll inside the app segment) */
 @media(max-width:1100px){#u-hub .h-toolbar .h-platform{overflow-x:auto;scrollbar-width:none}#u-hub .h-toolbar .h-platform::-webkit-scrollbar{display:none}#u-hub .h-toolbar .h-platform>button{flex:1 0 auto}}
+
+/* ===== 1114 identity: charcoal / white / electric blue. Blue = interactive, selected or focused only. ===== */
+#u-hub,html.hub-open .u-dialog,html.hub-open .u-toast{--sc-bg:#0E1013;--sc-s1:#15181D;--sc-s2:#1C2026;--sc-s3:#252A31;--sc-line:#2C323A;--sc-line2:#3D4550;
+ --sc-t1:#F5F7FA;--sc-t2:#B8C0CC;--sc-t3:#8C95A1;--sc-acc:#1F66F0;--sc-acc-t:#7FB0FF;--sc-acc-ring:#4D94FF;--sc-acc-bg:#132443;
+ --sc-over:#3DD68C;--sc-under:#FF8A4C;--sc-push:#AEB6C2;--sc-warn:#E8B931;--sc-r-sm:4px;--sc-r:8px;
+ --u-bg:var(--sc-bg);--u-panel:var(--sc-s1);--u-panel2:var(--sc-s2);--u-line:var(--sc-line);--u-line2:var(--sc-line2);
+ --u-text:var(--sc-t1);--u-muted:var(--sc-t2);--u-faint:var(--sc-t3);--u-gold:var(--sc-acc-t)}
+#u-hub :focus-visible,html.hub-open .u-dialog :focus-visible{outline:2px solid var(--sc-acc-ring)!important;outline-offset:2px!important}
+#u-hub,#u-hub td,#u-hub .h-num{font-variant-numeric:tabular-nums}
+/* the toast's Undo is a real button: the toast itself never blocks the page, its buttons take clicks */
+html[data-upgrade] .u-toast.on button,html[data-upgrade] .u-toast.on a{pointer-events:auto}
+/* ===== 1114 board (board agent edits only between these markers) ===== */
+/* ===== end 1114 board ===== */
+/* ===== 1114 card (card agent edits only between these markers) ===== */
+/* ===== end 1114 card ===== */
+/* ===== 1114 shell (shell agent edits only between these markers) ===== */
+/* ===== end 1114 shell ===== */
