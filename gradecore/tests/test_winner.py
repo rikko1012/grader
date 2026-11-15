@@ -37,3 +37,12 @@ def test_cs2_context_and_expired_book():
     read = lambda b,a,c: b["prob_a"]
     assert winner.cs2_pick(m,read)["team"] == "Alpha"
     assert winner.cs2_pick(m,read,False)["team"] == "Beta"
+
+
+def test_cs2_matchup_tips_close_markets_but_not_a_clear_favourite():
+    m = {"teams":{"a":"Alpha","b":"Beta"}, "platforms":{"kalshi":{"usable":True,"prob_a":.502}},
+         "side":{"composite":{"signals":{"form":-2.0}}}}
+    read = lambda b,a,c: b["prob_a"]
+    assert winner.cs2_pick(m,read)["team"] == "Beta"
+    m["platforms"]["kalshi"]["prob_a"] = .55
+    assert winner.cs2_pick(m,read)["team"] == "Alpha"

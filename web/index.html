@@ -3312,7 +3312,7 @@ function winnerPickHtml(pick, older = false) {
   return `<details class="ml-pick"><summary><strong>${older ? "At last quote" : "Scout pick"} · ${esc(pick.team)}</strong>
     <small>${esc(pick.basis)}</small></summary>
     <ul>${pick.factors.map(f => `<li>${esc(f.label)} · ${f.team ? esc(f.team) : "Level"} · ${Math.round(100*f.weight)}% weight</li>`).join("")}</ul>
-    <small>Research pick. Market signals share two parts and matchup signals share one when both are available.</small></details>`;
+    <small>Weights show each input’s share of the decision. A factor near even has less influence.</small></details>`;
 }
 function mlRow(m) {
   const full = mlCard(m, {}, ""); if (!full) return "";
