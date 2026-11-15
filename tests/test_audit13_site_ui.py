@@ -200,7 +200,8 @@ def test_moneylines_filter_source_and_hide_expired_or_started_games(tmp_path):
       return [nba,$("#boardout").innerHTML];
     })()""")
     assert "+125" in result[0] and "—" in result[0] and "American odds via ESPN" in result[0]
-    assert "Scout pick · Home" in result[0] and "100% weight" in result[0]
+    assert "<small>Scout pick · Market only</small><strong>Home</strong>" in result[0]
+    assert "<span>DraftKings</span><strong>Home</strong><b>100%</b>" in result[0]
     assert "Started" not in result[0] and "Old" not in result[0] and "CS2" not in result[0]
     assert "could not be refreshed" in result[1] and "DraftKings" not in result[1]
 

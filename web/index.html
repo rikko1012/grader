@@ -705,21 +705,36 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
   .crow .c-mkt{display:block;flex:1 1 100%;font-size:11px}.crow .c-num{flex:0 0 auto;display:inline-flex;gap:4px;font-size:13px}.crow .c-num .k{display:inline;color:var(--faint);font-size:11px}
   .crow .c-pick{flex:1 1 auto;font-size:14px;overflow-wrap:anywhere}.crow .c-stake{flex:1 1 100%;font-size:11px}.crow .c-meta{flex:1 1 100%;margin:0}
   .crow .c-who{order:1}.crow .c-act{order:2}.crow .c-mkt{order:3}.crow .c-num{order:4}.crow .c-pick{order:5}.crow .c-stake{order:6}.crow .c-meta{order:7}}
-/* moneylines: compact rows with aligned source columns */
-.ml-pick{margin-top:8px;border-left:2px solid var(--accent);padding-left:9px;font-size:13px}.ml-pick summary{cursor:pointer;overflow-wrap:anywhere}.ml-pick small{display:block;color:var(--muted);margin:3px 0}.ml-pick ul{padding-left:16px;margin:5px 0}
-.ml-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 18px}.ml-picker[hidden]{display:none}
-.ml-picker .seg{display:flex;flex-wrap:wrap}.ml-picker button{min-height:38px}.ml-division{margin:18px 0}
-.ml-division h3{font:650 16px var(--display);margin:0 0 8px}.ml-division h3 small{font:500 12px var(--display);color:var(--muted);margin-left:8px}
-.ml-game{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr);gap:12px 24px;padding:12px 0;border-top:1px solid var(--line);align-items:center}
-.ml-source,.ml-game time,.ml-side{display:block}.ml-side{overflow-wrap:anywhere}.ml-pricepair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ml-side strong{display:block;font-size:19px;font-variant-numeric:tabular-nums}
-@media(max-width:580px){.ml-game{grid-template-columns:1fr;gap:8px}.ml-side strong{font-size:17px}}
-.mlrow{display:grid;grid-template-columns:minmax(180px,1.4fr) repeat(3,minmax(120px,1fr));gap:12px;align-items:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 8px;background:#111a26}
-.mlrow.mlhdr{border:0;background:transparent;padding:0 14px;margin-bottom:4px;font:600 10px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
-.mlm b{display:block;font-size:14px}.mlq{display:flex;flex-direction:column;gap:2px;font-size:12px}.mlqn{display:none}.mlqv b{display:block;font-size:14px;font-variant-numeric:tabular-nums}
-.mlqv span{color:var(--muted);font-variant-numeric:tabular-nums}.mlage{font-size:11px;color:var(--accent-2)}
-.mlmore{grid-column:1/-1}.mlmore>summary{cursor:pointer;color:var(--muted);font-size:12px;min-height:32px;display:flex;align-items:center}.mlmore .mlcard{margin:8px 0 0;padding:14px}
-@media(max-width:760px){.mlrow{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:11px}.mlrow.mlhdr{display:none}.mlm{grid-column:1/-1}
-  .mlqn{display:block;font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}.mlqn small{display:none}.mlqv b{font-size:13px}}
+/* Moneylines: the same matchup and price comparison across all four sports. */
+.ml-picker{display:flex;align-items:center;gap:10px 18px;flex-wrap:wrap;margin:6px 0 18px}
+.ml-picker[hidden],.ml-picker [hidden]{display:none}.ml-picker .seg{display:flex;flex-wrap:wrap;max-width:100%}
+.ml-picker button,.ml-picker label{min-height:40px}.ml-picker label{display:inline-flex;align-items:center}
+.ml-division{margin:22px 0 10px}.ml-division h3{display:flex;align-items:baseline;gap:10px;font:680 18px var(--display);margin:0 0 10px}
+.ml-division h3 small{font:500 12px var(--display);color:var(--muted)}
+#boardout:has(.ml-game,.mlrow){container-type:inline-size}
+.mlrow,.ml-game{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:start;gap:14px 28px;margin:0 0 10px;padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--panel,#151a21);color:var(--text);overflow-wrap:anywhere}
+.ml-match-info,.ml-compare{min-width:0}.ml-match-info .ml-fixture{margin:0 0 4px;font:650 17px/1.35 var(--display);text-transform:none;letter-spacing:normal}
+.ml-match-info time,.ml-match-info .ml-time{display:block;color:var(--muted);font-size:12px;line-height:1.5}
+.ml-compare table{width:100%;table-layout:fixed;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.ml-compare th,.ml-compare td{padding:8px 5px;border:0;border-bottom:1px solid var(--line);text-align:right;vertical-align:middle;white-space:normal;overflow-wrap:anywhere}
+.ml-compare thead th{color:var(--muted);font:550 12px/1.35 var(--display);letter-spacing:normal;text-transform:none}
+.ml-compare th:first-child{width:38%;text-align:left;padding-left:0}
+.ml-compare th{position:static;background:transparent;letter-spacing:normal;text-transform:none}
+.ml-compare tbody th{font:600 13px/1.4 var(--display);color:var(--text)}.ml-compare td{font-size:17px;font-weight:650}
+.ml-compare tr:last-child td,.ml-compare tbody tr:last-child th{border-bottom:0}
+.ml-compare th small{display:block;font:400 11px/1.4 var(--display);color:var(--muted)}
+.ml-pick{margin-top:10px}.ml-pick>summary,.mlmore>summary{display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;list-style:none}
+.ml-pick>summary::-webkit-details-marker,.mlmore>summary::-webkit-details-marker{display:none}
+.ml-pick>summary::after,.mlmore>summary::after{content:"";width:6px;height:6px;flex:none;margin-left:auto;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg)}
+.ml-pick[open]>summary::after,.mlmore[open]>summary::after{transform:rotate(225deg)}
+.ml-pick>summary{padding:5px 10px;border-radius:5px;background:#182738;border-left:3px solid #64a8ff}
+.ml-pick>summary span{display:grid;gap:2px}.ml-pick>summary small{color:#b6c9e0;font-size:11px}.ml-pick>summary strong{font:650 15px/1.35 var(--display);color:#f3f7ff}
+.ml-pick summary:focus-visible,.mlmore summary:focus-visible{outline:2px solid #79b5ff;outline-offset:2px}
+.ml-evidence{margin:7px 0 0;padding:0;list-style:none}.ml-evidence li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px}
+.ml-evidence li span,.ml-weight-note{color:var(--muted)}.ml-evidence li b{font-variant-numeric:tabular-nums}.ml-weight-note{display:block;font-size:11px;line-height:1.5;margin-top:5px}
+.mlmore{grid-column:1/-1;border-top:1px solid var(--line)}.mlmore>summary{font-size:12px;color:var(--muted)}.mlmore .mlcard{margin:0;padding:10px;min-width:0}
+@container (max-width:600px){.mlrow,.ml-game{grid-template-columns:minmax(0,1fr);padding:12px;gap:10px}.ml-match-info .ml-fixture{font-size:16px}}
+@media(max-width:760px){#board:has(#mlpicker:not([hidden])){scroll-margin-bottom:120px}#boardout:has(.ml-game,.mlrow){padding-bottom:72px}.ml-picker button,.ml-pick>summary,.mlmore>summary{min-height:44px}}
 /* slips page */
 #slips .studiobox{margin-top:8px}.studio-ess{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
 .sf{display:flex;flex-direction:column;gap:6px}.sl{font:600 11px var(--display);color:var(--muted)}
@@ -3303,16 +3318,15 @@ function mlCard(m, model, rec) {
 // its own price for both teams and how old it is (Thunderpick: our retrieval time - the feed has no quote time; exchanges:
 // when the quote was read). Market prices only: the series-winner model has no independent probability that has beaten
 // the market, so none is shown as one. The full detail (odds, margin, bid / ask, HLTV context) is one tap away.
-function mlCell(name, sub, pa, pb, A, B, age) {
-  return `<div class="mlq"><span class="mlqn">${name}<small>${sub}</small></span>${pa == null ? `<span class="muted mlqv">–</span>`
-    : `<span class="mlqv"><b>${esc(A)} ${pct(pa)}</b><span>${esc(B)} ${pct(pb)}</span></span>`}${pa != null && age ? `<span class="mlage">${esc(age)}</span>` : ""}</div>`;
+function moneylineComparison(teams, rows) {
+  return `<div class="ml-compare"><table aria-label="Moneyline prices"><thead><tr><th scope="col">Source</th>${teams.map(t => `<th scope="col">${esc(t)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map(q => `<tr><th scope="row">${esc(q.source)}<small>${esc(q.type)}</small><small>${esc(q.age)}</small></th>${q.values.map(v => `<td>${v == null ? '<span aria-label="Price unavailable">—</span>' : esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 function winnerPickHtml(pick, older = false) {
   if (!pick?.team) return "";
-  return `<details class="ml-pick"><summary><strong>${older ? "At last quote" : "Scout pick"} · ${esc(pick.team)}</strong>
-    <small>${esc(pick.basis)}</small></summary>
-    <ul>${pick.factors.map(f => `<li>${esc(f.label)} · ${f.team ? esc(f.team) : "Level"} · ${Math.round(100*f.weight)}% weight</li>`).join("")}</ul>
-    <small>Weights show each input’s share of the decision. A factor near even has less influence.</small></details>`;
+  return `<details class="ml-pick"><summary><span><small>${older ? "At last quote" : "Scout pick"} · ${esc(pick.basis)}</small><strong>${esc(pick.team)}</strong></span></summary>
+    <ul class="ml-evidence">${pick.factors.map(f => `<li><span>${esc(f.label)}</span><strong>${f.team ? esc(f.team) : "Level"}</strong><b>${Math.round(100*f.weight)}%</b></li>`).join("")}</ul>
+    ${pick.factors.length ? '<small class="ml-weight-note">Percentages are factor weights. A near-even factor has less influence.</small>' : ""}</details>`;
 }
 function mlRow(m) {
   const full = mlCard(m, {}, ""); if (!full) return "";
@@ -3324,10 +3338,14 @@ function mlRow(m) {
     return [pa, pa == null ? null : 1 - pa, k.received_ts ? "read " + (ago(k.received_ts) || "") : ""]; };
   const [pa1, pb1, a1] = ex("polymarket"), [pa2, pb2, a2] = ex("kalshi");
   const pick = !tu && m.pick_without_book ? m.pick_without_book : m.research_pick;
-  return `<article class="mlrow"><div class="mlm"><b>${esc(A)} vs ${esc(B)}</b><span class="small muted">${m.start ? when(m.start) : "start not listed"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""}</span>${winnerPickHtml(pick)}</div>
-    ${mlCell("Thunderpick", "bookmaker, margin removed", tu ? +t.p_a : null, tu ? +t.p_b : null, A, B, tu ? "retrieved " + agoSec(tpAge(t)) : "")}
-    ${mlCell("Polymarket", "exchange midpoint", pa1, pb1, A, B, a1)}
-    ${mlCell("Kalshi", "exchange midpoint", pa2, pb2, A, B, a2)}
+  const prices = [];
+  if (tu) prices.push({source:"Thunderpick", type:"Margin removed", age:"retrieved " + agoSec(tpAge(t)), values:[pct(t.p_a), pct(t.p_b)]});
+  for (const [source, a, b, age] of [["Polymarket",pa1,pb1,a1],["Kalshi",pa2,pb2,a2]]) {
+    if (a != null) prices.push({source, type:"Exchange midpoint", age, values:[pct(a),pct(b)]});
+  }
+  const key = JSON.stringify(["cs2", m.match_id || [A, B, m.start, m.event]]);
+  return `<article class="mlrow" data-ml-game="${esc(key)}"><div class="ml-match-info"><h4 class="ml-fixture">${esc(A)} vs ${esc(B)}</h4><span class="ml-time">${m.start ? when(m.start) : "Start not listed"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""}</span>${winnerPickHtml(pick)}</div>
+    ${moneylineComparison([A,B],prices)}
     <details class="mlmore"><summary>Context and quote details</summary>${full}</details></article>`;
 }
 // the count above the list - one rule with the "Usable price only" filter: Thunderpick's usable price OR an exchange's
@@ -3345,6 +3363,20 @@ function mlStatusText(d) {
   return [...tp, ...src].join(" · ");
 }
 /* ML_RENDER_END */
+function paintMoneylines(box, html) {
+  // Refresh quotes without dismissing the evidence or moving a keyboard reader.
+  const detailKey = el => JSON.stringify([el.closest("[data-ml-game]")?.dataset.mlGame || "",
+    el.classList.contains("ml-pick") ? "pick" : el.querySelector(":scope > summary")?.textContent.trim()]);
+  const open = new Set(Array.from(box.querySelectorAll("details[open]"), detailKey));
+  const focus = document.activeElement;
+  const focused = focus?.tagName === "SUMMARY" && box.contains(focus) ? detailKey(focus.parentElement) : null;
+  box.innerHTML = html;
+  for (const detail of box.querySelectorAll("details")) {
+    const key = detailKey(detail);
+    if (open.has(key)) detail.open = true;
+    if (focused === key) detail.querySelector(":scope > summary")?.focus({preventScroll:true});
+  }
+}
 function drawMoneylines() {
   const box = $("#boardout"), d = ML.data;
   const term = fold($("#bsearch").value.trim());
@@ -3359,8 +3391,8 @@ function drawMoneylines() {
     .map(k => winnerSection(k, term)).join("");
   if (!["all", "cs2"].includes(winnerSport) || !d || ML.err) {
     $("#bcount").textContent = ""; $("#bstatus").textContent = "";
-    box.innerHTML = sections + (["all", "cs2"].includes(winnerSport)
-      ? `<div class="ml-division"><h3>CS2</h3><p class="muted">${ML.err ? "Prices could not be refreshed. Try Refresh." : "Loading series prices…"}</p></div>` : "");
+    paintMoneylines(box, sections + (["all", "cs2"].includes(winnerSport)
+      ? `<div class="ml-division"><h3>CS2</h3><p class="muted">${ML.err ? "Prices could not be refreshed. Try Refresh." : "Loading series prices…"}</p></div>` : ""));
     return;
   }
   // Thunderpick first (owner 2026-10-13) - its own honest state, then the exchanges
@@ -3376,8 +3408,8 @@ function drawMoneylines() {
   $("#bcount").textContent = (q ? `search: ${up0.length} of ${all0.length} upcoming · ` : "") + "CS2 · " + mlCountText(up0);
   const clearQ = `<button type="button" class="chipbtn" data-mlclear="1">Clear search</button>`;
   const model = d.model || {}, rec = d.recommendation || "Shadow - not a staking recommendation";
-  box.innerHTML = sections + `<div class="ml-division"><h3>CS2 <small>Series winner</small></h3></div>`
-    + (up.length ? `<div class="mlrow mlhdr" aria-hidden="true"><span>Match</span><span>Thunderpick</span><span>Polymarket</span><span>Kalshi</span></div>` + up.map(m => mlRow(m)).join("")
+  paintMoneylines(box, sections + `<div class="ml-division"><h3>CS2 <small>Series winner</small></h3></div>`
+    + (up.length ? up.map(m => mlRow(m)).join("")
        : `<div class="muted">${up0.length || !d.matches.length ? "No CS2 series-winner prices right now."
          : q && !list.length ? `No match for “${esc(q)}” among the ${d.matches.length} listed (the search box is shared with the Prop Board). ${clearQ}`
          : q ? `No upcoming match for “${esc(q)}” – only started ones. ${clearQ}`
@@ -3386,7 +3418,7 @@ function drawMoneylines() {
     + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary>
         <p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (retrieved within the last 75 minutes, before the match starts).</p>
         <p><b>Exchanges.</b> Polymarket and Kalshi: each platform's bid/ask midpoint for the first team, shown to 0.1%, when the quote is open, current and tight. A last trade is never used as a price.</p>
-        <p>Expand the Scout pick to see which factors favour each team. The pick carries no stake or recommendation to wager.</p></details>`;
+        <p>Expand the Scout pick to see which factors favour each team. The pick carries no stake or recommendation to wager.</p></details>`);
 }
 
 function winnerSection(league, term) {
@@ -3403,13 +3435,15 @@ function winnerSection(league, term) {
     : upcoming.length && !games.length ? "The last prices have expired. Waiting for fresh quotes."
     : "No current pre-game prices.";
   return `<section class="ml-division"><h3>${winnerNames[league]} <small>${exchange ? "Series winner" : "Full game"}${shown.length ? " · " + shown.length : ""}</small></h3>`
-    + (shown.map(g => `<article class="ml-game"><header><b>${g.teams.map(esc).join(exchange ? " vs " : " at ")}</b><time class="small muted">${when(g.start)}</time>${winnerPickHtml(g.pick, !current(g))}</header><div>`
-      + g.quotes.map(quote => `<span class="ml-source small muted">${esc(quote.source)} · ${quote.kind === "midpoint" ? "Exchange midpoint" : "American odds via ESPN"} · ${current(g) ? "read" : "Older quote · read"} ${esc(ago(g.seen_at))}</span>
-        <div class="ml-pricepair">${g.teams.map((team, i) => {
-          const v = quote.prices[i], price = !Number.isFinite(v) ? "—" : quote.kind === "midpoint"
-            ? (v * 100).toFixed(1) + "%" : (v > 0 ? "+" : "") + v;
-          return `<span class="ml-side">${esc(team)}<strong>${esc(price)}</strong></span>`;
-        }).join("")}</div>`).join("") + "</div></article>").join("") || `<p class="small muted">${empty}</p>`) + "</section>";
+    + (shown.map(g => {
+      const rows = g.quotes.map(q => ({
+        source: q.source, type: q.kind === "midpoint" ? "Exchange midpoint" : "American odds via ESPN",
+        age: (current(g) ? "Read " : "Older quote · read ") + ago(g.seen_at),
+        values: q.prices.map(v => !Number.isFinite(v) ? null : q.kind === "midpoint" ? (100 * v).toFixed(1) + "%" : (v > 0 ? "+" : "") + v)
+      }));
+      const key = JSON.stringify([league, g.id || [g.teams,g.start]]);
+      return `<article class="ml-game" data-ml-game="${esc(key)}"><div class="ml-match-info"><h4 class="ml-fixture">${g.teams.map(esc).join(exchange ? " vs " : " at ")}</h4><time datetime="${esc(g.start)}">${when(g.start)}</time>${winnerPickHtml(g.pick,!current(g))}</div>${moneylineComparison(g.teams,rows)}</article>`;
+    }).join("") || `<p class="small muted">${empty}</p>`) + "</section>";
 }
 
 // ---------- Slip studio: the server's diversified builder (slip_builder studio-1). One batch at a time: no player,
