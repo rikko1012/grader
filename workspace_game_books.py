@@ -27,11 +27,15 @@ def shared(srv, league):
 def moneylines(srv, league):
     """Slim winner-only response for the classic tab. Never send player-prop reference rows."""
     def compute():
+        from gradecore import winner
         if league == "lol":
             try:
-                return 200, (srv.LOL_CENTER / "moneylines.json").read_bytes()
+                doc = json.loads((srv.LOL_CENTER / "moneylines.json").read_bytes())
             except FileNotFoundError:
                 return 200, b'{"league":"lol","pending":true,"games":[]}'
+            for game in doc["games"]:
+                game["pick"] = winner.game_pick(game, game.get("winner_matchup"))
+            return 200, json.dumps(doc, separators=(",", ":")).encode()
         status, body = shared(srv, league)
         if status != 200:
             return status, body
@@ -39,15 +43,22 @@ def moneylines(srv, league):
         games = []
         for event in doc["events"]:
             quotes = []
+            spreads = {}
             for book in event["books"].values():
                 market = book["markets"].get("money-line") or {}
                 prices = [market.get(side) for side in ("awayOdds", "homeOdds")]
                 prices = [v if type(v) in (int, float) and math.isfinite(v) and abs(v) >= 100 else None for v in prices]
                 if any(v is not None for v in prices):
                     quotes.append({"source": book["label"], "kind": "american", "prices": prices})
+                    spread = book["markets"].get("spread") or {}
+                    a, h = spread.get("awaySpread"), spread.get("homeSpread")
+                    if winner.finite(a) and winner.finite(h) and a == -h:
+                        spreads[book["label"]] = math.tanh(-a / 10)
             if quotes:
-                games.append({"id": event["id"], "teams": [event["away"], event["home"]], "start": event["start_utc"],
-                              "seen_at": event["seen_at"], "quotes": quotes})
+                game = {"id": event["id"], "teams": [event["away"], event["home"]], "start": event["start_utc"],
+                        "seen_at": event["seen_at"], "quotes": quotes}
+                game["pick"] = winner.game_pick(game, event.get("winner_matchup"), spreads)
+                games.append(game)
         return 200, json.dumps({"league": league, "observed_at": doc["observed_at"], "pending": bool(doc.get("pending")),
                                 "games": games}, separators=(",", ":")).encode()
     return srv.shared(("winner_games", league), compute, ttl=30)
