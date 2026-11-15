@@ -232,10 +232,21 @@ def lc1_autofit(con, now=None, run=None):
 
 def moneylines_loop():
     from .. import odds
+    from . import winner_form
     while True:
         try:
             events, observed = odds.upcoming_events(with_time=True)
-            _write("moneylines.json", odds.series_winners(events, observed))
+            doc = odds.series_winners(events, observed)
+            if doc["games"]:
+                try:
+                    con = store.connect()
+                    try:
+                        winner_form.attach(con, doc)
+                    finally:
+                        con.close()
+                except Exception as e:
+                    _err("moneyline matchup history", e)
+            _write("moneylines.json", doc)
         except Exception as e:
             _err("moneylines", e)
         time.sleep(300)

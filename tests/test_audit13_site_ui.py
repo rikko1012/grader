@@ -189,7 +189,8 @@ def test_moneylines_filter_source_and_hide_expired_or_started_games(tmp_path):
     result = run_page(tmp_path, """(() => {
       const at = delta => new Date(Date.now() + delta).toISOString();
       const g = {teams:['Away','Home'], start:at(3600000), seen_at:at(-60000),
-                 quotes:[{source:'DraftKings',kind:'american',prices:[125,null]}]};
+                 quotes:[{source:'DraftKings',kind:'american',prices:[125,null]}],
+                 pick:{team:'Home',basis:'Market only',factors:[{label:'DraftKings',team:'Home',weight:1}]}};
       winnerSport = 'nba';
       winnerFeeds.nba = {observed_at:at(-30000), games:[g,{...g,teams:['Started','Other'],start:at(-1000)},
         {...g,teams:['Old','Other'],seen_at:at(-1900000)}]};
@@ -199,6 +200,7 @@ def test_moneylines_filter_source_and_hide_expired_or_started_games(tmp_path):
       return [nba,$("#boardout").innerHTML];
     })()""")
     assert "+125" in result[0] and "—" in result[0] and "American odds via ESPN" in result[0]
+    assert "Scout pick · Home" in result[0] and "100% weight" in result[0]
     assert "Started" not in result[0] and "Old" not in result[0] and "CS2" not in result[0]
     assert "could not be refreshed" in result[1] and "DraftKings" not in result[1]
 

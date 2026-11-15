@@ -49,3 +49,5 @@ def test_winner_games_keep_only_real_moneylines_on_the_offered_team(monkeypatch)
     assert status == 200 and len(games) == 1 and games[0]["teams"] == ["Away", "Home"]
     assert games[0]["quotes"] == [{"source": "DraftKings", "kind": "american", "prices": [None, -120]}]
     assert games[0]["seen_at"] == "seen" and b"reference_props" not in body
+    assert games[0]["pick"]["team"] in games[0]["teams"]
+    assert "tie-break" in games[0]["pick"]["basis"]

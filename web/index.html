@@ -706,6 +706,7 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
   .crow .c-pick{flex:1 1 auto;font-size:14px;overflow-wrap:anywhere}.crow .c-stake{flex:1 1 100%;font-size:11px}.crow .c-meta{flex:1 1 100%;margin:0}
   .crow .c-who{order:1}.crow .c-act{order:2}.crow .c-mkt{order:3}.crow .c-num{order:4}.crow .c-pick{order:5}.crow .c-stake{order:6}.crow .c-meta{order:7}}
 /* moneylines: compact rows with aligned source columns */
+.ml-pick{margin-top:8px;border-left:2px solid var(--accent);padding-left:9px;font-size:13px}.ml-pick summary{cursor:pointer;overflow-wrap:anywhere}.ml-pick small{display:block;color:var(--muted);margin:3px 0}.ml-pick ul{padding-left:16px;margin:5px 0}
 .ml-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 18px}.ml-picker[hidden]{display:none}
 .ml-picker .seg{display:flex;flex-wrap:wrap}.ml-picker button{min-height:38px}.ml-division{margin:18px 0}
 .ml-division h3{font:650 16px var(--display);margin:0 0 8px}.ml-division h3 small{font:500 12px var(--display);color:var(--muted);margin-left:8px}
@@ -3255,7 +3256,11 @@ function mlCard(m, model, rec) {
   // of tags; the raw quotes stay one tap away
   if (m.thunderpick_only)    // listed by Thunderpick only (no exchange market): its block alone, no exchange side
     return tu ? `<article class="mlcard">${headL}${tpb}</article>` : "";
-  if (!pu && !ku) return tu ? `<article class="mlcard">${headL}${tpb}${mlSide(m.side, tu)}${quotes}</article>` : "";
+  const baselineNotes = (context = {}) => {
+    const notes = mlSide(m.side, tu, context);
+    return notes && m.research_pick ? `<details><summary>Original baseline and HLTV notes</summary>${notes}</details>` : notes;
+  };
+  if (!pu && !ku) return tu ? `<article class="mlcard">${headL}${tpb}${baselineNotes()}${quotes}</article>` : "";
   // one headline (2026-10-11 audit: "Market probability unavailable" sat above two usable prices): the market baseline when
   // there is one, else the first usable platform's own price for the first team - labelled a price, not a baseline
   const nrm = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -3288,7 +3293,7 @@ function mlCard(m, model, rec) {
   // the model / recommendation status is the same for every match: it is said once, above the list
   return `<article class="mlcard">${headL}
     ${base}
-    ${mlSide(m.side, tu, {quote: !!src, linked: !!m.match_id})}
+    ${baselineNotes({quote: !!src, linked: !!m.match_id})}
     <details><summary>Quote details</summary>
     ${quality ? `<div class="mlbadges"><span>Prices</span> ${quality}</div>` : ""}
     ${agree ? `<div class="mlbadges"><span>Agreement</span> ${agree}</div>` : ""}
@@ -3302,6 +3307,13 @@ function mlCell(name, sub, pa, pb, A, B, age) {
   return `<div class="mlq"><span class="mlqn">${name}<small>${sub}</small></span>${pa == null ? `<span class="muted mlqv">–</span>`
     : `<span class="mlqv"><b>${esc(A)} ${pct(pa)}</b><span>${esc(B)} ${pct(pb)}</span></span>`}${pa != null && age ? `<span class="mlage">${esc(age)}</span>` : ""}</div>`;
 }
+function winnerPickHtml(pick, older = false) {
+  if (!pick?.team) return "";
+  return `<details class="ml-pick"><summary><strong>${older ? "At last quote" : "Scout pick"} · ${esc(pick.team)}</strong>
+    <small>${esc(pick.basis)}</small></summary>
+    <ul>${pick.factors.map(f => `<li>${esc(f.label)} · ${f.team ? esc(f.team) : "Level"} · ${Math.round(100*f.weight)}% weight</li>`).join("")}</ul>
+    <small>Weights show each input’s share of the decision. A factor near even has less influence.</small></details>`;
+}
 function mlRow(m) {
   const full = mlCard(m, {}, ""); if (!full) return "";
   const A = m.teams.a || "Team A", B = m.teams.b || "Team B", P = m.platforms || {}, t = m.thunderpick, tu = tpLive(t, m);
@@ -3311,7 +3323,8 @@ function mlRow(m) {
     const pa = rev ? (p === "kalshi" ? k.prob_b_yes : (k.prob_a == null ? null : 1 - k.prob_a)) : k.prob_a;
     return [pa, pa == null ? null : 1 - pa, k.received_ts ? "read " + (ago(k.received_ts) || "") : ""]; };
   const [pa1, pb1, a1] = ex("polymarket"), [pa2, pb2, a2] = ex("kalshi");
-  return `<article class="mlrow"><div class="mlm"><b>${esc(A)} vs ${esc(B)}</b><span class="small muted">${m.start ? when(m.start) : "start not listed"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""}</span></div>
+  const pick = !tu && m.pick_without_book ? m.pick_without_book : m.research_pick;
+  return `<article class="mlrow"><div class="mlm"><b>${esc(A)} vs ${esc(B)}</b><span class="small muted">${m.start ? when(m.start) : "start not listed"}${m.event ? " · " + esc(m.event) : ""}${m.bo ? " · BO" + esc(m.bo) : ""}</span>${winnerPickHtml(pick)}</div>
     ${mlCell("Thunderpick", "bookmaker, margin removed", tu ? +t.p_a : null, tu ? +t.p_b : null, A, B, tu ? "retrieved " + agoSec(tpAge(t)) : "")}
     ${mlCell("Polymarket", "exchange midpoint", pa1, pb1, A, B, a1)}
     ${mlCell("Kalshi", "exchange midpoint", pa2, pb2, A, B, a2)}
@@ -3373,7 +3386,7 @@ function drawMoneylines() {
     + `<details class="small muted" style="margin-top:10px"><summary>Which price is shown</summary>
         <p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (retrieved within the last 75 minutes, before the match starts).</p>
         <p><b>Exchanges.</b> Polymarket and Kalshi: each platform's bid/ask midpoint for the first team, shown to 0.1%, when the quote is open, current and tight. A last trade is never used as a price.</p>
-        <p>Only matches with a current price are listed. This tab shows market prices – no stake or recommendation.</p></details>`;
+        <p>Expand the Scout pick to see which factors favour each team. The pick carries no stake or recommendation to wager.</p></details>`;
 }
 
 function winnerSection(league, term) {
@@ -3390,7 +3403,7 @@ function winnerSection(league, term) {
     : upcoming.length && !games.length ? "The last prices have expired. Waiting for fresh quotes."
     : "No current pre-game prices.";
   return `<section class="ml-division"><h3>${winnerNames[league]} <small>${exchange ? "Series winner" : "Full game"}${shown.length ? " · " + shown.length : ""}</small></h3>`
-    + (shown.map(g => `<article class="ml-game"><header><b>${g.teams.map(esc).join(exchange ? " vs " : " at ")}</b><time class="small muted">${when(g.start)}</time></header><div>`
+    + (shown.map(g => `<article class="ml-game"><header><b>${g.teams.map(esc).join(exchange ? " vs " : " at ")}</b><time class="small muted">${when(g.start)}</time>${winnerPickHtml(g.pick, !current(g))}</header><div>`
       + g.quotes.map(quote => `<span class="ml-source small muted">${esc(quote.source)} · ${quote.kind === "midpoint" ? "Exchange midpoint" : "American odds via ESPN"} · ${current(g) ? "read" : "Older quote · read"} ${esc(ago(g.seen_at))}</span>
         <div class="ml-pricepair">${g.teams.map((team, i) => {
           const v = quote.prices[i], price = !Number.isFinite(v) ? "—" : quote.kind === "midpoint"

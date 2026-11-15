@@ -21,6 +21,30 @@ def test_wrong_provider_team_and_started():
         if change=='started':d['header']['competitions'][0]['status']['type']['state']='in'
         assert gb.parse_summary(d) is None
 
+
+def test_matchup_uses_exact_teams_and_home_venue():
+    d = fixture()
+    c = d["header"]["competitions"][0]
+    ids = {r["homeAway"]:r["team"]["id"] for r in c["competitors"]}
+    d["predictor"] = {s+"Team":{"id":tid,"gameProjection":60 if s=="away" else 40} for s,tid in ids.items()}
+    signals = gb.parse_summary(d)["winner_matchup"]
+    assert signals["ESPN matchup projection"] == .2
+    assert signals["Season record"] < 0 and signals["Home/road record"] < 0
+    c["neutralSite"] = True
+    d["predictor"]["homeTeam"]["id"] = ids["away"]
+    assert set(gb.parse_summary(d)["winner_matchup"]) == {"Season record"}
+
+
+def test_recent_winners_ignore_scores_first_seen_after_quote():
+    event = {"winner_team_ids": ["A","B"]}
+    game = {"home_id":"B","away_id":"A","home_score":80,"away_score":110,
+            "start":"2026-11-01T00:00:00Z","fetched_at":"2026-11-02T00:00:00Z"}
+    late = dict(game, home_score=190, fetched_at="2026-11-09T00:00:00Z")
+    cutoff = "2026-11-08T00:00:00Z"
+    actual = gb.recent_matchup([late, game], event, cutoff, "nba")
+    assert actual == gb.recent_matchup([game], event, cutoff, "nba")
+    assert actual["Recent scoring margin"] > 0 and actual["Recent head-to-head"] > 0
+
 def test_no_opening_fallback_and_no_inferred_price():
     d=fixture()
     for key in ('pointSpread','moneyline','total'):
