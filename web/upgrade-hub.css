@@ -1580,3 +1580,7 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
 #u-hub .h-insight-more{border-bottom:1px solid #303b4a;margin-bottom:14px;padding-bottom:10px}
 #u-hub .h-insight-more summary{cursor:pointer;min-height:40px;display:list-item;align-content:center;font-weight:600;color:#b7cfff}
 #u-hub .h-insight-more p{line-height:1.6;font-size:13px}
+/* Board Market column (2026-11-15): at 110-116px "Headshots" broke mid-word ("Headsho/ts") and the line-gap chip ("≠ Underdog 45.5")
+   was cut off beside the alt-lines circle. Wider column; the player column still has 590px+ at 1920 and its ~120px floor below 1400. */
+@media(min-width:1101px){#u-hub #hub-table .h-c-market{width:140px}}
+@media(min-width:1401px){#u-hub #hub-table .h-c-market{width:156px}#u-hub.h-focus-board #hub-table .h-c-market{width:164px}}
