@@ -2,7 +2,7 @@
  * Every number on this page comes from the server (workspace_ev.py, math in gradecore/ev_board.py, fair.py, payouts.py,
  * line_shift.py). The page only filters and sorts what it is given; filters that change the fair chance are sent back as
  * parameters. Saved views live in this browser only (a per-viewer convenience). */
-import {ageSeconds, ageText} from '/upgrade/fresh.js';
+import {ageSeconds, ageText, isFresh} from '/upgrade/fresh.js';
 const KEY = 'scout-ev-view';
 const VIEW_V = 2;   /* saved-view format: 2 = saved under the 2-independent-books default */
 /* the default filters (Reset, Clear all, and the fall-back when a saved view would hide every leg) */
@@ -57,7 +57,7 @@ async function fetchDoc() {
       if (e.name !== 'AbortError' || seq !== S.seq) throw e;
       d = await C.api('pickem-ev?' + query());
     }
-    if (seq !== S.seq) return; S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; S.docP = JSON.parse(JSON.stringify(S.p));
+    if (seq !== S.seq) return; setSkew(d); S.doc = d; S.p.app = d.app; S.p.entry = d.entry; S.p.n = d.n; S.docP = JSON.parse(JSON.stringify(S.p));
     if (S.restored) {
       S.restored = false;
       if (filtersHideAll(d)) {
@@ -84,7 +84,21 @@ const evText = x => typeof x === 'number' ? (x > 0 ? '+' : x < 0 ? '−' : '') +
 const evClass = x => typeof x === 'number' ? (x > 0 ? ' is-pos' : ' is-neg') : '';
 /* owner 2026-11-14: each price says when it was checked ("checked 42 min ago"), measured on this page's clock from the server's
    seen time, so the words stay true while the page is open; no time = a dash, never "0" */
-const checked = s => ageText(ageSeconds(s)) || (typeof s.age_s === 'number' ? ageText(s.age_s) : null);
+const checked = s => ageText(ageSeconds(s, pageNow())) || (typeof s.age_s === 'number' ? ageText(s.age_s) : null);
+/* The page's clock, set to the server's: a phone clock minutes off must neither hide a current price nor keep an old one. A build
+   served from the shared cache can be up to 30 s old, so only a gap beyond that counts as the phone's clock being off. */
+let skewMs = 0;
+const pageNow = () => Date.now() - skewMs;
+function setSkew(d) {
+  const lag = Date.now() - Date.parse(d && d.as_of);
+  skewMs = !Number.isFinite(lag) ? 0 : lag < 0 ? lag : Math.max(0, lag - 35000);
+}
+/* owner 2026-11-14: a price too old to use never sets a return. The server never builds one; a page left open (or reopened from the
+   menu, which repaints the copy it already holds) would keep showing it, so each draw checks every book price behind a leg again
+   on the server's limits (gradecore.fair.FRESHNESS_S, mirrored in /upgrade/fresh.js): one old price = the leg leaves the list. */
+const rowFresh = (r, now) => !Array.isArray(r.sources) || r.sources.every(s => isFresh(s, now));
+const DOC_MAX_MS = 5 * 60 * 1000;   /* the shortest price limit (exchanges): a copy older than this is fetched again when shown */
+const docOld = d => !d || !(pageNow() - Date.parse(d.as_of) <= DOC_MAX_MS);
 const side = s => s === 'over' ? 'Over' : 'Under';
 const ENTRY = {power: 'Power', flex: 'Flex', standard: 'Standard'};
 const MODEL_EV_HIDDEN = ['nba', 'nfl'];
@@ -216,7 +230,8 @@ function generatorHtml() {
 function paintBox() {
   const d = S.doc;
   if (!d) { box.innerHTML = head() + generatorHtml() + `<p class="ev-state" role="status">${S.error ? esc(S.error) + ' Use Refresh to try again.' : 'Checking current prices…'}</p>`; return; }
-  const sports = (d.sports || []).length, rows = d.rows.filter(r => keep(r) && (!S.f.evOnly || (typeof r.ev === 'number' && r.ev > 0)));
+  const now = pageNow(), aged = d.rows.filter(r => keep(r) && !rowFresh(r, now)).length;
+  const sports = (d.sports || []).length, rows = d.rows.filter(r => keep(r) && rowFresh(r, now) && (!S.f.evOnly || (typeof r.ev === 'number' && r.ev > 0)));
   const model = d.model_only.filter(keep), entries = d.options.entries.filter(e => e.app === d.app);
   const nextKey = JSON.stringify([S.f, d.as_of, d.app, d.entry, d.n]);
   if (nextKey !== pageKey) { pageKey = nextKey; marketPage = modelPage = 0; }
@@ -234,6 +249,7 @@ function paintBox() {
     + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
     + (d.payout && d.payout.text ? `<p class="ev-banner">${esc(d.payout.text)}</p>` : '') + filtersHtml(d) + chipsHtml(d) + banner
     + generatedHtml()
+    + (aged ? `<p class="ev-banner" role="status">${aged} priced ${aged === 1 ? 'leg is' : 'legs are'} left out: a book price behind ${aged === 1 ? 'it' : 'them'} is now older than its limit. <button class="ev-link" data-ev="refresh">Check prices again</button></p>` : '')
     + `<section aria-label="Market priced legs"><div class="ev-quick"><button data-ev="evonly" aria-pressed="${S.f.evOnly}">Only picks that beat the entry</button>${S.f.evOnly ? '<span>Turn off to explore every priced line.</span>' : '<span>All priced lines, including those below break-even.</span>'}</div><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
     + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.slice(marketPage * PAGE_SIZE, (marketPage + 1) * PAGE_SIZE).map(r => rowHtml(r, sports)).join('')}</ol>${pager('market', marketPage, rows.length)}`
       : `<p class="ev-state">${d.rows_total ? (S.f.evOnly ? 'No leg beats the entry right now with these filters.' : 'No priced leg matches these filters.') : d.params.min_books > 1 ? `No pick'em leg has ${d.params.min_books} independent books on its exact line right now.` : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
@@ -372,5 +388,16 @@ export function paint(el, ctx) {
     box.addEventListener('toggle', e => { if (e.target.classList?.contains('ev-drawer')) S.drawer = e.target.open; }, true);
     load();
   }
-  if (!S.doc && !S.loading) fetchDoc(); else render();
+  if ((!S.doc || docOld(S.doc)) && !S.loading) fetchDoc(); else render();
 }
+/* while the page stays open: redraw only when a leg's price passes its limit (nothing else moves), and check again when the tab
+   comes back into view with a copy older than the shortest limit */
+let agedSig = '';
+setInterval(() => {
+  if (!box || !box.isConnected || !S.doc || S.loading) return;
+  const now = pageNow(), sig = S.doc.rows.filter(r => !rowFresh(r, now)).length + '|' + S.doc.as_of;
+  if (sig !== agedSig) { const first = !agedSig; agedSig = sig; if (!first) render(); }
+}, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && box && box.isConnected && S.doc && !S.loading && docOld(S.doc)) fetchDoc();
+});

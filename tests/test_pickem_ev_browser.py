@@ -205,3 +205,27 @@ def test_paging_searches_all_rows_not_just_the_first_page(browser, env, ev_on, m
         assert not p.errors
     finally:
         c.close()
+
+
+def test_a_price_that_ages_past_its_limit_while_open_leaves_the_list(browser, env, ev_on):
+    """Owner 2026-11-14: a price too old to use never sets a return. The server never builds one; a page left open kept the copy it
+    held, so the Kalshi price behind Reaves (exchange limit 5 min) kept setting his return. Each draw now checks every price again:
+    six minutes later the leg leaves the list with a plain note, and checking again brings it back with current prices."""
+    c = context(browser, env, PHONE)
+    try:
+        p = ev_page(c, env, PHONE)
+        p.locator('[data-ev="app"][data-id="underdog"]').click()
+        market = p.locator('section[aria-label="Market priced legs"]')
+        p.wait_for_function("document.querySelector('section[aria-label=\"Market priced legs\"]')?.innerText.includes('Austin Reaves')", timeout=30000)
+        assert 'left out: a book price' not in p.locator('#hub-ev-body').inner_text()
+        p.evaluate("(() => { const real = Date.now.bind(Date); Date.now = () => real() + 6 * 60 * 1000; })()")
+        p.locator('[data-ev="evonly"]').first.click()                       # any redraw, no new request
+        p.wait_for_function("!document.querySelector('section[aria-label=\"Market priced legs\"]').innerText.includes('Austin Reaves')", timeout=10000)
+        txt = p.locator('#hub-ev-body').inner_text()
+        assert 'left out: a book price behind' in txt and 'is now older than its limit' in txt
+        p.locator('#hub-ev-body .ev-banner [data-ev="refresh"]').click()      # check again: the server's prices are current
+        p.wait_for_function("document.querySelector('section[aria-label=\"Market priced legs\"]')?.innerText.includes('Austin Reaves')", timeout=30000)
+        assert 'left out: a book price' not in p.locator('#hub-ev-body').inner_text()
+        assert market.count() == 1 and not p.errors
+    finally:
+        c.close()

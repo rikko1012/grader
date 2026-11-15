@@ -326,8 +326,9 @@ def best_lines(srv, sport, recs, s, now):
         if not _num(line):
             continue
         t = wb._ts(o.get("seen_at"))
-        if kind == "sportsbook" and comparable and not pf.fresh(t, now, limits["sportsbook"]):
-            continue                                     # a direct sportsbook's price past the sportsbook limit: never a best price
+        if kind == "sportsbook" and not pf.fresh(t, now, limits["sportsbook"]):
+            continue                                     # a direct sportsbook's quote past the sportsbook limit: never a best price
+            #                                              or best line (its line is as old as its price, comparable or not)
         offers = []
         for side in ("over", "under"):
             v = o.get(side) or {}

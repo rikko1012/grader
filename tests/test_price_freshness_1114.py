@@ -240,14 +240,18 @@ def test_best_line_snapshot_book_rows_inside_and_outside(monkeypatch, platform, 
     assert (platform in [x[2] for x in best["bk"]]) is (delta < 0)
 
 
+@pytest.mark.parametrize("comparable", [True, False])
 @pytest.mark.parametrize("delta", [-5, 5])
-def test_best_line_direct_sportsbook_reader_inside_and_outside(monkeypatch, delta):
+def test_best_line_direct_sportsbook_reader_inside_and_outside(monkeypatch, delta, comparable):
+    """A direct sportsbook reader's quote past the limit is out whether or not its price is comparable: an easier line wins Best line
+    on the line alone, and an old quote's line is as old as its price (adversarial check 2026-11-14)."""
     lim = we.price_limits()["sportsbook"]
     ud = _rec("underdog", 20.5, iso(time.time() - 60))
     xb = _rec("unibet_au", 19.5, iso(time.time() - (lim + delta)), over=1.9, under=1.9, price=(1.9, 1.9))
     xb["offer"]["platform_label"] = "Unibet (AU)"
-    best = _best(monkeypatch, [ud], extra=[(xb, True, "sportsbook", None)])
+    best = _best(monkeypatch, [ud], extra=[(xb, comparable, "sportsbook", None)])
     assert (best["over"]["book"] == "unibet_au") is (delta < 0)
+    assert ("unibet_au" in [x[2] for x in best["bk"]]) is (delta < 0)
 
 
 def test_pickem_app_lines_keep_their_own_rules(monkeypatch):
