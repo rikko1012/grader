@@ -81,16 +81,17 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 .hero-bg,.hero-glow{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
 .hero-bg{-webkit-mask-image:radial-gradient(ellipse 85% 80% at 68% 42%,#000 18%,transparent 74%);mask-image:radial-gradient(ellipse 85% 80% at 68% 42%,#000 18%,transparent 74%)}
 .hero-bg::before{content:"";position:absolute;left:0;right:0;top:-64px;bottom:0;
-  background-image:linear-gradient(90deg,rgba(67,81,101,.34) 1px,transparent 1px),linear-gradient(rgba(67,81,101,.34) 1px,transparent 1px);background-size:64px 64px;
-  animation:gridpan 9s linear infinite}
+  background-image:linear-gradient(90deg,rgba(67,81,101,.34) 1px,transparent 1px),linear-gradient(rgba(67,81,101,.34) 1px,transparent 1px);background-size:64px 64px}
 .hero-bg::after{content:"";position:absolute;left:0;right:0;top:0;height:46%;transform:translateY(-110%);
-  background:linear-gradient(180deg,transparent 0,rgba(52,127,240,.035) 70%,rgba(119,173,255,.16) 98.5%,transparent 100%);animation:beam 9s var(--ease) 1.2s infinite}
+  background:linear-gradient(180deg,transparent 0,rgba(52,127,240,.035) 70%,rgba(119,173,255,.16) 98.5%,transparent 100%)}
 @keyframes gridpan{from{transform:translateY(0)}to{transform:translateY(64px)}}
 @keyframes beam{0%{transform:translateY(-110%)}55%,100%{transform:translateY(240%)}}
 .hero-glow::before,.hero-glow::after{content:"";position:absolute;border-radius:50%}
 .hero-glow::before{width:900px;height:640px;right:-180px;top:-120px;background:radial-gradient(closest-side,rgba(52,127,240,.2),transparent)}
 .hero-glow::after{width:560px;height:420px;left:-200px;bottom:-200px;background:radial-gradient(closest-side,rgba(119,173,255,.08),transparent)}
 @media (min-width:900px) and (hover:hover) and (pointer:fine){
+  .hero-bg::before{animation:gridpan 9s linear infinite}
+  .hero-bg::after{animation:beam 9s var(--ease) 1.2s infinite}
   .hero-glow::before{animation:drift 18s var(--ease) infinite alternate}
   .hero-glow::after{animation:drift 22s var(--ease) infinite alternate-reverse}
 }
@@ -570,6 +571,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .stage .board-shot{display:none}
   .stage .card-shot{right:4px;top:0;bottom:auto;width:56%;max-width:none;transform:rotate(3deg);transform-origin:100% 0;animation:none;opacity:.92}
   .hc{position:relative;left:auto;bottom:auto;width:auto;margin:118px 0 0;max-width:340px}
+  html:not(.js) .stage .card-shot{position:relative;right:auto;top:auto;width:100%;max-width:340px;margin:0 auto;transform:none;opacity:1}
   html.js .proofs.rated{grid-template-columns:1fr}
   html:not(.js) .proofs{grid-template-columns:1fr}
   .books{grid-template-columns:1fr;padding:var(--s4)}
@@ -1194,7 +1196,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
     function countTo(to) {
       cancelAnimationFrame(raf);
       var from = shown; shown = to;
-      if (RM.matches) { pctE.textContent = f1(to) + "%"; return; }
+      if (RM.matches || stopped) { pctE.textContent = f1(to) + "%"; return; }   // stopped = live region on: one final number, no per-frame rewrites
       if (!from) from = to * 0.6;
       var t0 = 0;
       raf = requestAnimationFrame(function step(t) {
