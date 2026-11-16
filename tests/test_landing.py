@@ -24,7 +24,7 @@ def srv(monkeypatch, tmp_path):
     monkeypatch.setattr(whop_auth, "enabled", lambda: True)
     monkeypatch.setattr(whop_auth, "has_access", lambda *a, **k: False)     # never a Whop call from a test
     monkeypatch.setenv("SESSION_SECRET", "landing-test-secret")
-    monkeypatch.setenv("WHOP_UPGRADE_URL", JOIN)
+    monkeypatch.setenv("LANDING_JOIN_URL", JOIN)
     monkeypatch.setenv("SPORTS_UI", "1")
     monkeypatch.delenv("SPORTS_UI_ALLOW", raising=False)
     monkeypatch.setattr(server, "lol_public", lambda: True)
@@ -120,7 +120,7 @@ def htmlunescape(s):
 
 def test_landing_content_and_wording(srv):
     """Sign-in refresh (owner 2026-11-06, "fix the sign in page now"): the page describes the product as it is live - one board
-    for four sports, the books it reads, hit rates, the "Why" card, HLTV map chances, line history, the +EV board, Slip Studio,
+    for four sports, the books it reads, hit rates, the "Why" card, HLTV map chances, line history, the price gap board, Slip Studio,
     the Genie and the public record - and none of the retired claims (letter range and units, The Odds API, the Results
     ledger, the long per-sport tool lists). No numbers about accuracy, no hedge labels."""
     page = landing()
@@ -134,7 +134,7 @@ def test_landing_content_and_wording(srv):
                  "Sign in with Whop", "Join on Whop", "Four sports, one board", "letter grade",
                  "PrizePicks", "Underdog", "Sleeper", "Dabble", "FanDuel", "BetRivers", "Kalshi", "Polymarket",
                  "L5, L10, L20, head-to-head and season", "Why Scout leans Over or Under", "HLTV map chances",
-                 "Line history", "+EV board", "Slip Studio", "break even", "Slips save to your account", "Ask the Genie",
+                 "Line history", "Price gap board", "Slip Studio", "break even", "Slips save to your account", "Ask the Genie",
                  "The record is public", "How it works", "One membership"):
         assert need in text, need
     for gone in ("A+ to B", "units", "The Odds API", "Results ledger", "Track pick", "Maps 1", "15 props", "Thunderpick",
@@ -200,9 +200,28 @@ def test_700_signed_out_visitors_at_once_get_one_shared_page(big_queue, srv):
 def test_landing_bytes_are_one_object_per_version(srv, monkeypatch):
     a, b = landing(), landing()
     assert a is b
-    monkeypatch.setenv("WHOP_UPGRADE_URL", "https://whop.com/other/")
+    monkeypatch.setenv("LANDING_JOIN_URL", "https://whop.com/other/")
     c = landing()
     assert c is not a and b"https://whop.com/other/" in c
+
+
+def test_landing_join_goes_to_checkout_by_default(srv, monkeypatch):
+    """Owner 2026-11-16: every Join button goes to Whop checkout (Monthly plan), never the member app page that paywalls an
+    ad visitor; the member upgrade link (WHOP_UPGRADE_URL) does not change it."""
+    monkeypatch.delenv("LANDING_JOIN_URL")
+    monkeypatch.setenv("WHOP_UPGRADE_URL", "https://whop.com/1timeesports/exp_W6a3m1Ps4dxbCG/app/")
+    s = landing().decode("utf-8")
+    assert s.count('href="https://whop.com/checkout/plan_8d2GVuU7671mD"') >= 3 and "exp_W6a3m1Ps4dxbCG" not in s
+
+
+def test_landing_ad_safe_wording(srv):
+    """Owner 2026-11-16, before ads: no offshore book named, no stake wording, no payout multipliers, and the review rating
+    shows only from ten reviews."""
+    s = landing().decode("utf-8")
+    text = _text(landing())
+    for gone in ("Bovada", "stake", "+EV", "Payout if all", "Flex pays"):
+        assert gone not in s, gone
+    assert "Price gap board" in text and "s.count >= 10 && s.average" in s
 
 
 def test_landing_price_only_when_set_and_screens_are_public(srv, monkeypatch):

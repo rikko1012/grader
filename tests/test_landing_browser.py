@@ -38,7 +38,7 @@ def base(monkeypatch):
     monkeypatch.setattr(whop_auth, "enabled", lambda: True)
     monkeypatch.setattr(whop_auth, "has_access", lambda *a, **k: False)
     monkeypatch.setenv("SESSION_SECRET", "landing-browser-secret")
-    monkeypatch.setenv("WHOP_UPGRADE_URL", JOIN)
+    monkeypatch.setenv("LANDING_JOIN_URL", JOIN)
     for name, val in (("_RESULTS", {}), ("_INFLIGHT", {}), ("_ENC_LOCKS", {}), ("_RES_BYTES", [0, 0.0])):
         monkeypatch.setattr(server, name, val)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)

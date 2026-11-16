@@ -4521,13 +4521,23 @@ LANDING_PATHS = ("/", "/index.html", "/lol", "/sports", "/sports/")
 def landing_page():
     """The signed-out landing page (web/landing.html) with the Join on Whop link filled in. ONE bytes object per (file
     version, join url): send_shared caches the ETag + gzip by body identity (see sports_nav)."""
-    raw, url = web_file("landing.html"), whop_auth.upgrade_url()
+    raw, url = web_file("landing.html"), landing_join_url()
     price = landing_price()
     if _LANDING["raw"] is not raw or _LANDING["url"] != url or _LANDING.get("price") != price:
         label = (" · " + htmllib.escape(price, quote=True)) if price else ""
         data = raw.replace(b"{{JOIN_URL}}", htmllib.escape(url, quote=True).encode("utf-8")).replace(b"{{PRICE_LABEL}}", label.encode("utf-8"))
         _LANDING.update(raw=raw, url=url, price=price, data=data, next=None)
     return landing_next() if ui_next_default() else _LANDING["data"]
+
+
+# Owner 2026-11-16: the landing page's Join buttons go straight to Whop checkout (Monthly plan), not the member app page,
+# so an ad click lands on the payment step. LANDING_JOIN_URL overrides it without a deploy. Member paywall links keep
+# whop_auth.upgrade_url().
+LANDING_CHECKOUT_URL = "https://whop.com/checkout/plan_8d2GVuU7671mD"
+
+
+def landing_join_url():
+    return (os.environ.get("LANDING_JOIN_URL") or "").strip() or LANDING_CHECKOUT_URL
 
 
 def landing_price():
