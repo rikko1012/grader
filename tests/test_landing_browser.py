@@ -16,7 +16,8 @@ import whop_auth
 sync_api = pytest.importorskip("playwright.sync_api")
 
 JOIN = "https://whop.com/joined/1time-test/"
-SIZES = ({"width": 360, "height": 780}, {"width": 390, "height": 844}, {"width": 1440, "height": 900})
+SIZES = ({"width": 360, "height": 780}, {"width": 390, "height": 844}, {"width": 768, "height": 1024}, {"width": 1280, "height": 800},
+         {"width": 1440, "height": 900})
 FONT_HOSTS = {"fonts.googleapis.com", "fonts.gstatic.com"}          # the same family request the member pages make
 SHOTS = Path(os.environ.get("LANDING_SHOTS") or "")
 
