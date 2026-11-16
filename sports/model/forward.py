@@ -325,7 +325,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     # so adding display coverage cannot accumulate unused quotes in this worker.
     for rid, q in store.iter_offers(scon, league=league, limit=500000,
                                    exclude_platforms=TARGETS + ("unibet_au", "pointsbet_au")):
-        if q.platform in TARGETS or q.event_id is None or q.player_id is None:
+        if (q.event_id, q.player_id) not in idmap or q.stat not in SPORT_MARKETS[league]:
             continue
         meta = store.row_meta(scon, rid)
         quotes.setdefault((q.event_id, q.player_id, q.stat), []).append((rid, q, meta.get("last_seen_at"),
@@ -373,7 +373,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         # the store.put calls below; once the books job (beside_exclusive since 2026-11-06) committed, that stale
         # snapshot could not become a write transaction -> "database is locked" (SQLITE_BUSY_SNAPSHOT, no busy wait)
         # and model-forward exited 1. Same query, same rows, same order: forecasts unchanged.
-        for rid, o in list(store.iter_offers(scon, league=league, stat=mk, limit=500000)):
+        for rid, o in list(store.iter_offers(scon, league=league, stat=mk, platforms=TARGETS, limit=500000)):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
             ok, _ = capabilities.gate(o)

@@ -90,11 +90,16 @@ def _layered(build, upcoming, with_lags):
     layers = split_upcoming(upcoming)
     if len(layers) < 2:
         return None
-    out = build(layers[0])
+    # Only the first layer contributes history. Finish the other layers before retaining
+    # that history so a later feature build never shares memory with a full earlier frame.
+    upcoming_rows = []
     for lay in layers[1:]:
         d = build(lay)
-        out = concat(out, d[np.flatnonzero(d["is_up"] == 1)])
+        upcoming_rows.append(d[np.flatnonzero(d["is_up"] == 1)])
         del d
+    out = build(layers[0])
+    for rows in upcoming_rows:
+        out = concat(out, rows)
     out = out.sort("player_id", "ts")
     out.attrs["prior_games_fix"] = len(layers)
     return out
@@ -163,6 +168,8 @@ def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None,
     tkey = key_of(tg["game_id"], tg["team"])
     # opponent allowance per position group (stat and minutes of the OPPOSING players, by defending team)
     played = pg[pg["played"] == 1]
+    dnp = _nba_dnp_rate(pg)
+    del pg
     akeys = key_of(played["game_id"], played["opp"], played["pos_g"])
     u, inv = np.unique(akeys, return_inverse=True)
     sums = {c: np.bincount(inv, weights=np.nan_to_num(played[c]), minlength=len(u))
@@ -181,6 +188,7 @@ def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None,
         ag[f"allow_{c}"] = roll_prior(ag[c], ags, 15, 5, how="sum")
     # ---- player history (played rows only) ---------------------------------------------------------------------
     df = played.sort("player_id", "ts")
+    del played, parts, sums, inv, u, akeys
     gs = group_starts(df["player_id"])
     _assert_pit(df, gs, "nba")
     df["prior_n"] = np.arange(len(df)) - gs
@@ -215,7 +223,7 @@ def nba_frame(con, h_min=5, h_rate=20, upcoming=None, as_of=None, absences=None,
     df["spread_abs"] = np.abs(df["spread_home"])
     df["team_spread"] = np.where(df["home"] == 1, df["spread_home"], -df["spread_home"])
     df.attrs["lags"] = lags
-    df.attrs["dnp"] = _nba_dnp_rate(pg)
+    df.attrs["dnp"] = dnp
     return df
 
 
