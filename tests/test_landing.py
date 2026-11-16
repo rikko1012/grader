@@ -146,7 +146,10 @@ def test_landing_content_and_wording(srv):
                 r"\bbeat\b", r"unconfirmed", r"not confirmed", r"uncertain", r"unsure", r"tentative", r"provisional", r"beta\b",
                 r"\bmaybe\b", r"research estimate", r"\bheld\b", r"\d+(\.\d+)?\s*%"):
         assert not re.search(bad, low), bad
-    assert "<script src" not in s and "<img" not in s and "url(" not in s       # no external scripts, no images
+    assert "<script src" not in s and "url(" not in s                          # no external scripts, no CSS images
+    # 2026-11-16 refresh: the product is shown with real screenshots, served from this app only (never a remote image)
+    assert set(re.findall(r'<img src="([^"]+)"', s)) == {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp"}
+    assert "{{PRICE_LABEL}}" not in s and "$" not in text                     # no price unless LANDING_PRICE is set
 
 
 def test_landing_uses_the_member_app_design():
@@ -199,3 +202,17 @@ def test_landing_bytes_are_one_object_per_version(srv, monkeypatch):
     monkeypatch.setenv("WHOP_UPGRADE_URL", "https://whop.com/other/")
     c = landing()
     assert c is not a and b"https://whop.com/other/" in c
+
+
+def test_landing_price_only_when_set_and_screens_are_public(srv, monkeypatch):
+    """LANDING_PRICE puts the price on the Join buttons (read per request, escaped); unset shows none. The screenshots are
+    public webp with a long cache, and only the three named files are served."""
+    monkeypatch.setenv("LANDING_PRICE", "$24.99/month <b>")
+    s = landing().decode("utf-8")
+    assert s.count("Join on Whop · $24.99/month &lt;b&gt;") == 2 and "<b>\"" not in s
+    monkeypatch.delenv("LANDING_PRICE")
+    assert "· $" not in landing().decode("utf-8")
+    for name in ("board", "card", "odds"):
+        st, h, body = get(srv, f"/landing/{name}.webp")
+        assert st == 200 and h["content-type"] == "image/webp" and "max-age=86400" in h["cache-control"] and body[:4] == b"RIFF"
+    assert get(srv, "/landing/../server.py")[0] != 200 and get(srv, "/landing/x.webp")[0] != 200

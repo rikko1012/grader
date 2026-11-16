@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>1time Scout · Player props for CS2, LoL, NBA and NFL</title>
-<meta name="description" content="One board for CS2, League of Legends, NBA and NFL player props: Scout's chance at every line, hit rates, market prices and a slip builder.">
+<meta name="description" content="One board for CS2, League of Legends, NBA and NFL player props: Scout's chance at every line, hit rates, every book side by side and a slip builder.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="/landing/board.webp" media="(min-width: 761px)">
+<link rel="preload" as="image" href="/landing/card.webp" media="(max-width: 760px)">
 <style>
-/* The member app's own tokens (web/upgrade-hub.css .scout-hub, web/upgrade.css html[data-upgrade]): charcoal, white, one blue. */
+/* The member app's own tokens (web/upgrade-hub.css .scout-hub, web/upgrade.css html[data-upgrade]): charcoal, white, one blue.
+   2026-11-16 landing refresh (owner: "fix our landing page so the product sells"): the real product above the fold, Join first,
+   live proof near the top, each feature shown with a real screenshot. Same palette and fonts as the app. */
 :root{
   --bg:#101215; --side:#121519; --panel:#171b21; --card:#161c24; --card-line:#303d4e; --line:#2b323c; --line-2:#435165;
   --text:#f4f6fa; --muted:#b3becb; --body:#a9b5c4; --faint:#98a5b5; --eyebrow:#91a3bb;
@@ -23,15 +27,16 @@
 html{overflow-x:clip;-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-behavior:smooth;background:var(--bg)}
 body{margin:0;background:var(--bg);color:var(--text);font:400 15px/1.55 var(--font);-webkit-font-smoothing:antialiased;min-height:100vh}
 a{color:var(--link)}
+img{display:block;max-width:100%;height:auto}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
 .skip{position:absolute;left:-9999px;top:8px;z-index:50;display:inline-flex;align-items:center;min-height:44px;padding:10px 18px;border-radius:6px;background:var(--btn);color:#fff;font-weight:600;text-decoration:none}
 .skip:focus{left:16px}
-.wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
 .eyebrow,.card p.eyebrow{font:400 11px/1.5 var(--mono);letter-spacing:.17em;text-transform:uppercase;color:var(--eyebrow);margin:0}
 
 /* header: the hub sidebar's brand block */
 header.top{position:sticky;top:0;z-index:20;background:var(--side);border-bottom:1px solid #272d35}
-header.top .wrap{display:flex;align-items:center;gap:12px;height:66px}
+header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 .brand{display:flex;gap:10px;align-items:center;color:#fff;text-decoration:none;min-height:44px}
 .brand>span{display:grid;place-items:center;width:34px;height:34px;flex:none;background:#f2f5fa;border-radius:8px;color:#111820;font-weight:800;font-size:14px}
 .brand>b{font-size:14px;font-weight:700;letter-spacing:.02em;line-height:1.15}
@@ -43,45 +48,64 @@ header.top .wrap{display:flex;align-items:center;gap:12px;height:66px}
 
 /* buttons: the hub's primary (blue) and card (navy) buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:10px 20px;border-radius:6px;border:1px solid transparent;
-  font:600 14px var(--font);text-decoration:none;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s}
+  font:600 14px var(--font);text-decoration:none;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s,transform .12s}
 .btn.primary{background:var(--btn);border-color:var(--btn);color:#fff;box-shadow:0 2px 8px #0003}
-.btn.primary:hover{background:var(--btn-hover);border-color:var(--btn-hover)}
+.btn.primary:hover{background:var(--btn-hover);border-color:var(--btn-hover);transform:translateY(-1px)}
+.btn.big{min-height:52px;padding:12px 26px;font-size:16px}
 .btn.second{background:var(--btn-2);border-color:var(--btn-2-line);color:var(--btn-2-text)}
 .btn.second:hover{background:#243e5e;color:#fff}
 .btn.quiet{min-height:44px;padding:8px 14px;background:#191e25;border-color:#36404d;color:#e5eaf2;font-size:13px}
 .btn.quiet:hover{background:#242d39;color:#fff}
-
-/* hero */
-.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:40px;align-items:center;padding:56px 0 44px}
-.hero h1{font:600 46px/1.12 var(--font);letter-spacing:-.035em;margin:12px 0 14px}
-.nb{white-space:nowrap}
-.lede{font-size:17px;line-height:1.6;color:var(--body);margin:0 0 26px;max-width:32em}
-.ctas{display:flex;flex-wrap:wrap;gap:10px}
-.note{font-size:13px;color:var(--faint);margin:14px 0 0}
+.btn .price{font-weight:500;color:#dbeaff}
+.member{margin:12px 0 0;font-size:14px;color:var(--faint)}
+.member a{display:inline-flex;align-items:center;min-height:44px;font-weight:600;color:var(--link);text-decoration:none}
+.member a:hover{text-decoration:underline}
 .err{margin:14px 0 0;padding:10px 14px;border-radius:6px;border:1px solid #344254;border-left:3px solid var(--bad);background:#1b222c;color:var(--text);font-size:14px}
+
+/* hero: the real board, with a real player card in front of it */
+.hero{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr);gap:44px;align-items:center;padding:52px 0 36px}
+.hero h1{font:600 52px/1.06 var(--font);letter-spacing:-.04em;margin:12px 0 14px}
+.nb{white-space:nowrap}
+.lede{font-size:17.5px;line-height:1.6;color:var(--body);margin:0 0 24px;max-width:31em}
+.ctas{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.shot{position:relative;min-width:0}
+.frame{border:1px solid var(--card-line);border-radius:12px;overflow:hidden;background:var(--card);box-shadow:0 24px 60px #0007}
+.frame .bar{display:flex;gap:6px;align-items:center;height:28px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--side)}
+.frame .bar i{width:9px;height:9px;border-radius:50%;background:#2b323c}
+.frame .bar small{margin-left:10px;font:400 11px var(--mono);color:var(--faint)}
+.hero .board-shot{aspect-ratio:1140/855}
+.hero .card-shot{position:absolute;right:-22px;bottom:-56px;width:33%;max-width:250px;border-radius:12px;border:1px solid var(--line-2);
+  overflow:hidden;box-shadow:0 18px 50px #000a;background:var(--card)}
+.hero .phone-shot{display:none}
+
+/* proof strip */
+.proof{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:34px 0 0}
+.proof>div,.proof>a{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:16px 18px;border-radius:10px;
+  background:var(--panel);border:1px solid #2a313b;color:var(--text);text-decoration:none}
+.proof>a:hover{border-color:var(--btn-2-line)}
+.proof b{font:600 20px/1.2 var(--font);letter-spacing:-.02em}
+.proof span{font-size:13px;color:var(--body)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 0;padding:0;list-style:none}
+.chips li{font-size:11px;color:var(--chip-text);border:1px solid var(--chip-line);border-radius:4px;padding:3px 7px}
+
+/* sections */
+section.block{padding:44px 0 10px}
+.sechead{margin:0 0 20px;max-width:40em}
+.sechead h2{font:600 32px/1.15 var(--font);letter-spacing:-.035em;margin:8px 0 6px}
+.sechead p{margin:0;color:var(--body);font-size:16px}
+.feature{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:36px;align-items:center;padding:26px 0}
+.feature.flip .copy{order:2}
+.feature h3{font:600 24px/1.2 var(--font);letter-spacing:-.03em;margin:8px 0 10px}
+.feature p{margin:0 0 12px;color:var(--body);font-size:15.5px;line-height:1.65}
+.ticks{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}
+.ticks li{position:relative;padding-left:22px;color:var(--muted);font-size:14.5px}
+.ticks li:before{content:"";position:absolute;left:2px;top:.55em;width:9px;height:9px;border-radius:2px;background:var(--accent)}
+.feature .frame.tall{max-width:380px;margin:0 auto}
 
 /* cards: the hub's game / tool cards */
 .card{min-width:0;background:var(--card);border:1px solid var(--card-line);border-radius:12px;padding:22px}
 .card h3{font:600 17px/1.3 var(--font);letter-spacing:-.02em;margin:8px 0 6px;color:var(--text)}
 .card p{margin:0;font-size:13.5px;line-height:1.65;color:var(--body)}
-.board{padding:0;overflow:hidden}
-.board .tabs{display:flex;gap:2px;padding:14px 16px 0;border-bottom:1px solid var(--line);overflow:hidden}
-.board .tabs span{padding:8px 10px 10px;font-size:13px;font-weight:500;color:#aebacc;border-bottom:2px solid transparent;white-space:nowrap}
-.board .tabs span:first-child{color:var(--text);border-bottom-color:var(--accent)}
-.board>ul{list-style:none;margin:0;padding:6px 16px}
-.board>ul>li{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:13.5px}
-.board>ul>li:last-child{border-bottom:0}
-.board>ul>li b{font-weight:600}
-.board>ul>li span{color:var(--body)}
-.board footer{padding:14px 16px 16px;border-top:1px solid var(--line);background:#141b24}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0;padding:0;list-style:none}
-.chips li{font-size:11px;color:var(--chip-text);border:1px solid var(--chip-line);border-radius:4px;padding:4px 8px}
-.chips.market li{border-color:#4775aa;color:var(--btn-2-text);background:#19283e}
-
-/* sections */
-section.block{padding:30px 0}
-.sechead{margin:0 0 18px}
-.sechead h2{font:600 28px/1.2 var(--font);letter-spacing:-.035em;margin:8px 0 0}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .steps .card{background:var(--panel);border-color:#2a313b}
@@ -94,43 +118,54 @@ section.block{padding:30px 0}
 .revlink:hover{text-decoration:underline}
 
 /* closing call */
-.final{margin:26px 0 0;padding:32px 24px;border-radius:12px;text-align:center;background:var(--card);border:1px solid var(--card-line)}
-.final h2{font:600 26px/1.2 var(--font);letter-spacing:-.035em;margin:0 0 8px}
+.final{margin:40px 0 0;padding:40px 24px;border-radius:14px;text-align:center;background:var(--card);border:1px solid var(--card-line)}
+.final h2{font:600 30px/1.15 var(--font);letter-spacing:-.035em;margin:0 0 8px}
 .final p{color:var(--body);margin:0 auto 20px;max-width:34em}
 .final .ctas{justify-content:center}
+.final .member{margin-top:8px}
+.final .fine{margin:6px auto 0;font-size:13px;color:var(--faint)}
 footer.foot{margin-top:40px;padding:18px 0 30px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 18px;color:var(--faint);font-size:13px}
 footer.foot nav{display:flex;flex-wrap:wrap;gap:4px}
 footer.foot a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:0 10px;border-radius:6px;color:var(--muted);text-decoration:none}
 footer.foot a:hover{color:#fff;background:#242d39}
 
+/* entrance: one short rise for the hero shot, nothing that loops */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.hero .shot{animation:rise .5s ease-out both}
+.hero .card-shot{animation:rise .55s .15s ease-out both}
+
 @media(max-width:1024px){
-  .hero{grid-template-columns:1fr;gap:28px;padding:40px 0 28px}
+  .hero{grid-template-columns:1fr;gap:34px;padding:40px 0 34px}
+  .hero .card-shot{right:-6px;bottom:-24px}
   .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .feature{grid-template-columns:1fr;gap:20px}
+  .feature.flip .copy{order:0}
+}
+@media(max-width:760px){
+  .hero .board-shot,.hero .card-shot{display:none}
+  .hero .phone-shot{display:block;max-width:380px;margin:0 auto}
+  .proof{grid-template-columns:1fr}
 }
 @media(max-width:640px){
   .wrap{padding:0 16px}
   header.top .wrap{height:60px}
-  .topnav{display:none}
-  .hero{padding:24px 0 20px;gap:24px}
-  .hero h1{font-size:31px;margin:10px 0 10px}
-  .lede{font-size:15.5px;margin-bottom:20px}
+  .topnav,.top .btn.primary{display:none}
+  .hero{padding:22px 0 20px;gap:22px}
+  .hero h1{font-size:34px;margin:8px 0 10px}
+  .lede{font-size:15.5px;margin-bottom:18px}
   .ctas .btn{flex:1 1 100%}
   .grid,.steps{grid-template-columns:1fr}
   .grid{gap:10px}
   .card{padding:18px}
-  .board{padding:0}
-  .board>ul>li{grid-template-columns:84px minmax(0,1fr)}
-  .sechead h2{font-size:23px}
-  section.block{padding:22px 0}
+  .sechead h2{font-size:25px}
+  .feature h3{font-size:21px}
+  section.block{padding:30px 0 6px}
   .record{padding:16px}
   .record .btn{flex:1 1 100%}
-  .final{padding:24px 16px}
-  .final h2{font-size:22px}
+  .final{padding:28px 16px}
+  .final h2{font-size:24px}
 }
-@media(max-width:380px){
-  .board .tabs span{padding:8px 7px 10px}
-}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;scroll-behavior:auto!important}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
@@ -139,8 +174,9 @@ footer.foot a:hover{color:#fff;background:#242d39}
   <div class="wrap">
     <a class="brand" href="/" aria-label="1time Scout"><span aria-hidden="true">1T</span><b>1TIME <em>SCOUT</em></b></a>
     <span class="grow"></span>
-    <nav class="topnav" aria-label="Page sections"><a href="#features">Features</a><a href="#how">How it works</a><a href="/record">Record</a></nav>
+    <nav class="topnav" aria-label="Page sections"><a href="#features">Features</a><a href="#how">How it works</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
     <a class="btn quiet" href="/auth/login">Sign in</a>
+    <a class="btn primary" href="{{JOIN_URL}}">Join</a>
   </div>
 </header>
 
@@ -149,42 +185,53 @@ footer.foot a:hover{color:#fff;background:#242d39}
     <div>
       <p class="eyebrow">CS2 · League of Legends · NBA · NFL</p>
       <h1 id="hero-title">Every player prop. <span class="nb">One board.</span></h1>
-      <p class="lede">Scout's chance for the Over and the Under at the exact line, with the player's history and the market prices beside it.</p>
+      <p class="lede">Scout's chance for the Over and the Under at the exact line, with the player's history and every book's line beside it.</p>
       <div class="ctas">
-        <a class="btn primary" href="/auth/login">Sign in with Whop</a>
-        <a class="btn second" href="{{JOIN_URL}}">Join on Whop</a>
+        <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
       </div>
-      <p class="note">Sign in with the Whop account you joined with.</p>
+      <p class="member">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
       <p class="err" id="signin-error" role="alert" hidden></p>
     </div>
-    <div class="card board" aria-label="What the board covers">
-      <div class="tabs" aria-hidden="true"><span>All</span><span>CS2</span><span>LoL</span><span>NBA</span><span>NFL</span></div>
-      <ul>
-        <li><b>CS2</b><span>Kills and headshots</span></li>
-        <li><b>League</b><span>Kills and assists</span></li>
-        <li><b>NBA</b><span>Points, rebounds, assists, threes and more</span></li>
-        <li><b>NFL</b><span>Yards, receptions, completions and more</span></li>
-      </ul>
-      <footer>
-        <p class="eyebrow">Lines from</p>
-        <ul class="chips"><li>PrizePicks</li><li>Underdog</li><li>Sleeper</li><li>Dabble</li><li>FanDuel</li><li>BetRivers</li></ul>
-        <p class="eyebrow" style="margin-top:12px">Market prices from</p>
-        <ul class="chips market"><li>Kalshi</li><li>Polymarket</li></ul>
-      </footer>
+    <div class="shot">
+      <div class="frame board-shot"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Scout · All sports</small></div>
+        <img src="/landing/board.webp" width="1140" height="855" alt="The Scout board: NFL and CS2 player props with Scout's chance, letter grade, projection and hit rates" fetchpriority="high"></div>
+      <div class="card-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card explaining why Scout leans Under" loading="lazy"></div>
+      <div class="frame phone-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card: Scout's chance, the projection and why Scout leans Under"></div>
     </div>
   </section>
 
+  <section class="proof" aria-label="Proof">
+    <a href="/record" id="proof-record"><b id="proof-record-n">The record is public</b><span id="proof-record-t">Every forecast saved before the game and scored after it</span></a>
+    <a href="/reviews" id="proof-reviews"><b id="proof-reviews-n">Member reviews</b><span>Every review is posted, good or bad</span></a>
+    <div><b>Every book, one board</b><ul class="chips" aria-label="Books"><li>PrizePicks</li><li>Underdog</li><li>Sleeper</li><li>Dabble</li><li>FanDuel</li><li>BetRivers</li><li>Kalshi</li><li>Polymarket</li></ul></div>
+  </section>
+
   <section class="block" id="features" aria-labelledby="features-title">
-    <div class="sechead"><p class="eyebrow">Inside Scout</p><h2 id="features-title">Everything for a line in one place</h2></div>
-    <div class="grid">
-      <article class="card"><p class="eyebrow">Board</p><h3>Four sports, one board</h3>
-        <p>Every line with Scout's chance and projection. Filter by sport, book, game or player. CS2 and League lines also carry a letter grade.</p></article>
-      <article class="card"><p class="eyebrow">Books</p><h3>Every book side by side</h3>
-        <p>PrizePicks, Underdog, Sleeper and Dabble for all four sports. FanDuel and BetRivers for NBA and NFL. Kalshi and Polymarket prices.</p></article>
-      <article class="card"><p class="eyebrow">History</p><h3>Hit rates at the line</h3>
-        <p>L5, L10, L20, head-to-head and season: how often the player went over the number.</p></article>
-      <article class="card"><p class="eyebrow">Player card</p><h3>Why Scout leans Over or Under</h3>
-        <p>Open any player for the reasons behind the lean, the projection and recent games.</p></article>
+    <div class="sechead"><p class="eyebrow">Inside Scout</p><h2 id="features-title">Everything for a line in one place</h2>
+      <p>Pick a sport, find the line and see the numbers behind it before you build your slip.</p></div>
+
+    <div class="feature">
+      <div class="copy"><p class="eyebrow">Board</p><h3>Four sports, one board</h3>
+        <p>Every line with Scout's chance and projection. Filter by sport, book, game or player. CS2 and League lines also carry a letter grade.</p>
+        <ul class="ticks"><li>L5, L10, L20, head-to-head and season: how often the player went over the number</li><li>Lines from every app on the same row</li></ul></div>
+      <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Board</small></div><img src="/landing/board.webp" width="1140" height="855" alt="Scout board rows with chance, grade, projection and L5 / L10 / L20 hit rates" loading="lazy"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="copy"><p class="eyebrow">Player card</p><h3>Why Scout leans Over or Under</h3>
+        <p>Open any player for the reasons behind the lean, the projection and recent games, all on one card.</p>
+        <ul class="ticks"><li>The projection against the line, in plain words</li><li>Last 10 results at this exact line</li><li>Average, median and recent range</li></ul></div>
+      <div class="frame tall"><img src="/landing/card.webp" width="372" height="726" alt="Scout player card with Scout's chance and the reasons for the lean" loading="lazy"></div>
+    </div>
+
+    <div class="feature">
+      <div class="copy"><p class="eyebrow">Books</p><h3>Every book side by side</h3>
+        <p>PrizePicks, Underdog, Sleeper and Dabble for all four sports. FanDuel and BetRivers for NBA and NFL. Kalshi and Polymarket prices.</p>
+        <ul class="ticks"><li>Every line and price for the prop in one table</li><li>Line history: how a line has moved on each app, with every change and when</li></ul></div>
+      <div class="frame tall"><img src="/landing/odds.webp" width="372" height="586" alt="Every book's line and price for one player prop" loading="lazy"></div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
       <article class="card"><p class="eyebrow">CS2</p><h3>HLTV map chances</h3>
         <p>Each map's chance to be played in a series, and the likeliest veto.</p></article>
       <article class="card"><p class="eyebrow">Lines</p><h3>Line history</h3>
@@ -195,15 +242,17 @@ footer.foot a:hover{color:#fff;background:#242d39}
         <p>Build a slip and see the payout and the chance it needs to break even. Slips save to your account.</p></article>
       <article class="card"><p class="eyebrow">Questions</p><h3>Ask the Genie</h3>
         <p>Ask about any line and get an answer from that line's own numbers.</p></article>
+      <article class="card"><p class="eyebrow">Record</p><h3>A public record</h3>
+        <p>Forecasts are saved before each game and scored after it, for all four sports.</p></article>
     </div>
   </section>
 
   <section class="block" id="how" aria-labelledby="how-title">
     <div class="sechead"><p class="eyebrow">Three steps</p><h2 id="how-title">How it works</h2></div>
     <ol class="steps">
-      <li class="card"><span class="n">01</span><h3>Sign in with Whop</h3><p>Use the Whop account you joined with. No new password.</p></li>
-      <li class="card"><span class="n">02</span><h3>Open the board</h3><p>Pick a sport, find a line and open the player card to see why.</p></li>
-      <li class="card"><span class="n">03</span><h3>Build your slip</h3><p>Add picks in Slip Studio, check the payout and take it to your app.</p></li>
+      <li class="card"><span class="n">01</span><h3>Join on Whop</h3><p>Pick the membership on Whop, then come straight back.</p></li>
+      <li class="card"><span class="n">02</span><h3>Sign in with Whop</h3><p>Use the Whop account you joined with. No new password.</p></li>
+      <li class="card"><span class="n">03</span><h3>Open the board</h3><p>Pick a sport, open the player card to see why, and build your slip.</p></li>
     </ol>
     <div class="record">
       <p><b>The record is public.</b> Scout's forecasts are saved before each game and scored after it.</p>
@@ -214,16 +263,17 @@ footer.foot a:hover{color:#fff;background:#242d39}
 
   <section class="final" aria-labelledby="final-title">
     <h2 id="final-title">CS2, League, NBA and NFL. One membership.</h2>
-    <p>Already a member? Sign in with Whop. New here? Join on Whop and come straight back.</p>
+    <p>Every player prop on one board, with the numbers behind each line.</p>
     <div class="ctas">
-      <a class="btn primary" href="/auth/login">Sign in with Whop</a>
-      <a class="btn second" href="{{JOIN_URL}}">Join on Whop</a>
+      <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
     </div>
+    <p class="member">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
+    <p class="fine">Cancel anytime from your Whop account.</p>
   </section>
 
   <footer class="foot">
     <span>1time Scout</span>
-    <nav aria-label="Footer"><a href="/auth/login">Sign in</a><a href="{{JOIN_URL}}">Join on Whop</a><a href="/record">Record</a></nav>
+    <nav aria-label="Footer"><a href="/auth/login">Sign in</a><a href="{{JOIN_URL}}">Join on Whop</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
   </footer>
 </main>
 <script>
@@ -233,15 +283,30 @@ footer.foot a:hover{color:#fff;background:#242d39}
     if (e) { var el = document.getElementById("signin-error"); el.textContent = e; el.hidden = false; }
   } catch (_) {}
 })();
-(function () {   // member reviews: the live rating line, shown only when the reviews page answers (never review text or photos here)
-  var a = document.getElementById("reviews-line");
-  if (!a || !window.fetch) return;
+(function () {   // live proof: the public record's decided count and the member review rating. Text only; on any failure the
+  if (!window.fetch) return;   // static wording stays (never a zero, never a guess)
+  function fmt(n) { return Number(n).toLocaleString("en-US"); }
   fetch("/api/reviews/summary", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-    var s = d && d.summary;
+    var s = d && d.summary, a = document.getElementById("reviews-line"), b = document.getElementById("proof-reviews-n");
     if (!s) return;
-    if (s.count > 0 && s.average) a.textContent = "★ " + s.average.toFixed(1) + " from " + s.count + (s.count === 1 ? " member review" : " member reviews");
-    a.hidden = false;
+    if (s.count > 0 && s.average) {
+      var t = "★ " + s.average.toFixed(1) + " from " + fmt(s.count) + (s.count === 1 ? " member review" : " member reviews");
+      if (a) a.textContent = t;
+      if (b) b.textContent = t;
+    }
+    if (a) a.hidden = false;
   }).catch(function () {});
+  var sports = ["cs2", "lol", "nba", "nfl"], total = 0, got = 0;
+  Promise.all(sports.map(function (sp) {
+    return fetch("/api/record?sport=" + sp, { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      var t = d && d.totals;
+      if (t && typeof t.wins === "number" && typeof t.losses === "number") { total += t.wins + t.losses; got += 1; }
+    }).catch(function () {});
+  })).then(function () {
+    if (!got || !total) return;
+    document.getElementById("proof-record-n").textContent = fmt(total) + " picks scored in public";
+    document.getElementById("proof-record-t").textContent = "Saved before each game, scored after it. See the record";
+  });
 })();
 </script>
 </body>

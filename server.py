@@ -4522,9 +4522,24 @@ def landing_page():
     """The signed-out landing page (web/landing.html) with the Join on Whop link filled in. ONE bytes object per (file
     version, join url): send_shared caches the ETag + gzip by body identity (see sports_nav)."""
     raw, url = web_file("landing.html"), whop_auth.upgrade_url()
-    if _LANDING["raw"] is not raw or _LANDING["url"] != url:
-        _LANDING.update(raw=raw, url=url, data=raw.replace(b"{{JOIN_URL}}", htmllib.escape(url, quote=True).encode("utf-8")), next=None)
+    price = landing_price()
+    if _LANDING["raw"] is not raw or _LANDING["url"] != url or _LANDING.get("price") != price:
+        label = (" · " + htmllib.escape(price, quote=True)) if price else ""
+        data = raw.replace(b"{{JOIN_URL}}", htmllib.escape(url, quote=True).encode("utf-8")).replace(b"{{PRICE_LABEL}}", label.encode("utf-8"))
+        _LANDING.update(raw=raw, url=url, price=price, data=data, next=None)
     return landing_next() if ui_next_default() else _LANDING["data"]
+
+
+def landing_price():
+    """LANDING_PRICE (e.g. "$24.99/month"): the price shown on the landing page's Join buttons, read per request so the owner sets
+    or changes it in Render without a deploy. Unset -> no price shown (never a guessed number). Plain text, 40 chars max."""
+    v = (os.environ.get("LANDING_PRICE") or "").strip()
+    return v[:40] if v else ""
+
+
+# The landing page's product screenshots (web/landing/*.webp, real board / player card / books table). Public, fixed names,
+# immutable per deploy: a long public cache so Cloudflare serves the ad traffic, not the container.
+LANDING_IMAGES = {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp"}
 
 
 LANDING_NEXT_FONTS = (b'<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500'
@@ -4927,6 +4942,8 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if u.path in LANDING_IMAGES:
+                return self.send(200, web_file(u.path.lstrip("/")), "image/webp", {"Cache-Control": "public, max-age=86400"})
             if reviews.handles_get(u.path):                 # public like /record: served before the signed-out landing gate
                 return reviews.handle_get(self, sys.modules[__name__], u.path, q)
             if u.path in ('/record','/record.js','/api/record','/api/record/slips'):
