@@ -4539,7 +4539,7 @@ def landing_price():
 
 # The landing page's product screenshots (web/landing/*.webp, real board / player card / books table). Public, fixed names,
 # immutable per deploy: a long public cache so Cloudflare serves the ad traffic, not the container.
-LANDING_IMAGES = {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp"}
+LANDING_IMAGES = {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp", "/landing/slips.webp", "/landing/slip.webp"}
 
 
 LANDING_NEXT_FONTS = (b'<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500'

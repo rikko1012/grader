@@ -130,7 +130,7 @@ def test_landing_content_and_wording(srv):
     for sec in ('id="features"', 'id="how"', 'id="signin-error"'):
         assert sec in s
     text = _text(page)
-    for need in ("1time Scout", "CS2", "League of Legends", "NBA", "NFL", "Every player prop. One board.",
+    for need in ("1time Scout", "CS2", "League of Legends", "NBA", "NFL", "Get your slips built. In one tap.", "Slips built for you", "Get your slips",
                  "Sign in with Whop", "Join on Whop", "Four sports, one board", "letter grade",
                  "PrizePicks", "Underdog", "Sleeper", "Dabble", "FanDuel", "BetRivers", "Kalshi", "Polymarket",
                  "L5, L10, L20, head-to-head and season", "Why Scout leans Over or Under", "HLTV map chances",
@@ -148,7 +148,7 @@ def test_landing_content_and_wording(srv):
         assert not re.search(bad, low), bad
     assert "<script src" not in s and "url(" not in s                          # no external scripts, no CSS images
     # 2026-11-16 refresh: the product is shown with real screenshots, served from this app only (never a remote image)
-    assert set(re.findall(r'<img src="([^"]+)"', s)) == {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp"}
+    assert set(re.findall(r'<img src="([^"]+)"', s)) == {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp", "/landing/slips.webp", "/landing/slip.webp"}
     assert "{{PRICE_LABEL}}" not in s and "$" not in text                     # no price unless LANDING_PRICE is set
 
 
@@ -212,7 +212,7 @@ def test_landing_price_only_when_set_and_screens_are_public(srv, monkeypatch):
     assert s.count("Join on Whop · $24.99/month &lt;b&gt;") == 2 and "<b>\"" not in s
     monkeypatch.delenv("LANDING_PRICE")
     assert "· $" not in landing().decode("utf-8")
-    for name in ("board", "card", "odds"):
+    for name in ("board", "card", "odds", "slips", "slip"):
         st, h, body = get(srv, f"/landing/{name}.webp")
         assert st == 200 and h["content-type"] == "image/webp" and "max-age=86400" in h["cache-control"] and body[:4] == b"RIFF"
     assert get(srv, "/landing/../server.py")[0] != 200 and get(srv, "/landing/x.webp")[0] != 200
