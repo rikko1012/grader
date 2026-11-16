@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="preload" as="image" href="/landing/board.webp" media="(min-width: 761px)">
 <link rel="preload" as="image" href="/landing/card.webp" media="(max-width: 760px)">
+<script>document.documentElement.className += " js";</script>
 <style>
 /* The member app's own tokens (web/upgrade-hub.css .scout-hub, web/upgrade.css html[data-upgrade]): charcoal, white, one blue.
    2026-11-16 landing refresh (owner: "fix our landing page so the product sells"): the real product above the fold, Join first,
@@ -21,6 +22,16 @@
   --accent:#77adff; --link:#a9cdff; --btn:#347ff0; --btn-hover:#417ff1;
   --btn-2:#20344e; --btn-2-line:#4775aa; --btn-2-text:#dbeaff; --chip-line:#35465b; --chip-text:#c8d7e9; --bad:#ff8a8a;
   --font:'Outfit',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:'DM Mono',ui-monospace,monospace;
+}
+/* Scout design system v4 (2026-11-16, landing below the hero): the line marker (a 2px blue rule with a mono value tag), the
+   scan grid, mono data with Outfit prose. Borders, not soft shadows. Existing app colours only. */
+:root{
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px; --s9:112px;
+  --r-chip:4px; --r-row:6px; --r-tile:8px; --r-frame:12px; --r-pill:999px;
+  --h2:clamp(28px,4vw,44px); --h3:20px;
+  --surf-1:#161c24; --surf-2:#171b20; --surf-3:#20262e; --rule:#2b323c; --rule-2:#303d4e;
+  --over:#a4dec2; --under:#e4aaaa; --sel:#20344e; --sel-line:#4775aa; --sel-text:#dbeaff;
+  --fast:150ms; --base:200ms; --panel-t:240ms; --reveal:500ms; --ease:cubic-bezier(.2,.7,.2,1);
 }
 *{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -57,12 +68,13 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 .btn.quiet{min-height:44px;padding:8px 14px;background:#191e25;border-color:#36404d;color:#e5eaf2;font-size:13px}
 .btn.quiet:hover{background:#242d39;color:#fff}
 .btn .price{font-weight:500;color:#dbeaff}
+.btn:active{transform:translateY(1px) scale(.985)}
 .member{margin:12px 0 0;font-size:14px;color:var(--faint)}
 .member a{display:inline-flex;align-items:center;min-height:44px;font-weight:600;color:var(--link);text-decoration:none}
 .member a:hover{text-decoration:underline}
 .err{margin:14px 0 0;padding:10px 14px;border-radius:6px;border:1px solid #344254;border-left:3px solid var(--bad);background:#1b222c;color:var(--text);font-size:14px}
 
-/* hero: the real board, with a real player card in front of it */
+/* hero: the real board, with a real player card in front of it (unchanged) */
 .hero{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr);gap:44px;align-items:center;padding:52px 0 36px}
 .hero h1{font:600 52px/1.06 var(--font);letter-spacing:-.04em;margin:12px 0 14px}
 .nb{white-space:nowrap}
@@ -77,103 +89,324 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 .hero .card-shot{position:absolute;right:-22px;bottom:-56px;width:33%;max-width:250px;border-radius:12px;border:1px solid var(--line-2);
   overflow:hidden;box-shadow:0 18px 50px #000a;background:var(--card)}
 .hero .phone-shot{display:none}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.hero .shot{animation:rise .5s ease-out both}
+.hero .card-shot{animation:rise .55s .15s ease-out both}
 
-/* proof strip */
-.proof{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:34px 0 0}
-.proof>div,.proof>a{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:16px 18px;border-radius:10px;
-  background:var(--panel);border:1px solid #2a313b;color:var(--text);text-decoration:none}
-.proof>a:hover{border-color:var(--btn-2-line)}
-.proof b{font:600 20px/1.2 var(--font);letter-spacing:-.02em}
-.proof span{font-size:13px;color:var(--body)}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 0;padding:0;list-style:none}
-.chips li{font-size:11px;color:var(--chip-text);border:1px solid var(--chip-line);border-radius:4px;padding:3px 7px}
+/* ---------- below the hero ---------- */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:-1px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.band{position:relative;padding:var(--s9) 0 0}
+.band.scan{isolation:isolate}
+.band.scan::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(90deg,rgba(32,38,46,.7) 1px,transparent 1px),linear-gradient(rgba(32,38,46,.7) 1px,transparent 1px);background-size:32px 32px;
+  -webkit-mask-image:radial-gradient(ellipse 70% 60% at 50% 45%,#000 20%,transparent 75%);mask-image:radial-gradient(ellipse 70% 60% at 50% 45%,#000 20%,transparent 75%)}
+.glow{overflow:hidden}
+@media (min-width:900px) and (hover:hover) and (pointer:fine){
+  .glow::after{content:"";position:absolute;z-index:-1;pointer-events:none;width:900px;height:520px;left:50%;top:10%;margin-left:-450px;border-radius:50%;
+    background:radial-gradient(closest-side,rgba(52,127,240,.09),transparent);animation:drift 24s var(--ease) infinite alternate;animation-play-state:paused}
+  .glow.on::after{animation-play-state:running}
+}
+@keyframes drift{from{transform:translate3d(-22%,0,0) scale(1)}to{transform:translate3d(22%,8%,0) scale(1.12)}}
+.head{max-width:44em;margin:0 0 var(--s6)}
+.head h2{font:600 var(--h2)/1.1 var(--font);letter-spacing:-.035em;margin:0 0 var(--s3);text-wrap:balance}
+.head h2::before{content:"";display:block;width:36px;height:2px;background:var(--btn);margin:0 0 var(--s4);border-radius:2px}
+.head p{margin:0;color:var(--muted);font-size:16px;line-height:1.6;max-width:64ch}
+.tag{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:var(--r-pill);border:1px solid var(--sel-line);background:var(--sel);color:var(--sel-text);font:500 11px/1 var(--mono);letter-spacing:.06em;white-space:nowrap}
+.tag.dim{border-color:var(--rule-2);background:var(--surf-2);color:var(--muted)}
+.demo{position:relative;border-radius:var(--r-frame);background:var(--surf-2);border:1px solid var(--rule-2);box-shadow:inset 0 1px 0 rgba(244,246,250,.04)}
+.demo-bar{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);flex-wrap:wrap;padding:var(--s3) var(--s4);border-bottom:1px solid var(--rule)}
+.demo-bar small{font:400 12px/1.4 var(--mono);color:var(--faint)}
+.nojs{margin:0;padding:var(--s5);color:var(--faint);font-size:14px}
+html.js .nojs{display:none}
+/* reveal: section heads and demo frames only */
+html.js .rv{opacity:0;transform:translateY(12px);transition:opacity var(--reveal) var(--ease),transform var(--reveal) var(--ease);transition-delay:calc(var(--i,0)*60ms)}
+html.js .rv.in{opacity:1;transform:none}
+/* spotlight: one pointer listener sets --mx/--my */
+.spot{position:relative;isolation:isolate}
+.spot::before,.spot::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity 300ms ease}
+.spot::before{z-index:-1;background:radial-gradient(240px circle at var(--mx,50%) var(--my,50%),rgba(119,173,255,.10),transparent 70%)}
+.spot::after{padding:1px;background:radial-gradient(200px circle at var(--mx,50%) var(--my,50%),rgba(119,173,255,.55),transparent 70%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+@media (hover:hover) and (pointer:fine){.spot:hover::before,.spot:hover::after{opacity:1;transition-duration:var(--fast)}}
+.spot:focus-within::after{opacity:1}
 
-/* sections */
-section.block{padding:44px 0 10px}
-.sechead{margin:0 0 20px;max-width:40em}
-.sechead h2{font:600 32px/1.15 var(--font);letter-spacing:-.035em;margin:8px 0 6px}
-.sechead p{margin:0;color:var(--body);font-size:16px}
-.feature{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:36px;align-items:center;padding:26px 0}
-.feature.flip .copy{order:2}
-.feature h3{font:600 24px/1.2 var(--font);letter-spacing:-.03em;margin:8px 0 10px}
-.feature p{margin:0 0 12px;color:var(--body);font-size:15.5px;line-height:1.65}
-.ticks{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}
-.ticks li{position:relative;padding-left:22px;color:var(--muted);font-size:14.5px}
-.ticks li:before{content:"";position:absolute;left:2px;top:.55em;width:9px;height:9px;border-radius:2px;background:var(--accent)}
-.feature .frame.tall{max-width:380px;margin:0 auto}
+/* segmented control (radiogroup) with a sliding indicator */
+.seg{--n:2;--seg-i:0;position:relative;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));padding:3px;border-radius:var(--r-pill);background:var(--surf-2);border:1px solid var(--rule)}
+.seg::before{content:"";position:absolute;top:3px;bottom:3px;left:3px;width:calc((100% - 6px)/var(--n));border-radius:var(--r-pill);background:var(--sel);border:1px solid var(--sel-line);
+  transform:translateX(calc(var(--seg-i)*100%));transition:transform var(--base) var(--ease)}
+.seg button{position:relative;min-height:44px;min-width:44px;padding:0 14px;border:0;background:none;border-radius:var(--r-pill);color:var(--muted);font:500 14px var(--font);cursor:pointer;transition:color var(--fast)}
+.seg button[aria-checked=true],.seg button[aria-selected=true]{color:var(--sel-text)}
+.seg button[aria-disabled=true]{color:#65758b;cursor:not-allowed}
+@media (hover:hover) and (pointer:fine){.seg button:not([aria-checked=true]):not([aria-selected=true]):not([aria-disabled=true]):hover{color:var(--text)}}
 
-/* why Scout: the without / with table, the section that sets Scout apart */
-.why{margin:40px 0 0;padding:34px 30px;border-radius:14px;background:var(--panel);border:1px solid var(--card-line)}
-.why .sechead{max-width:46em}
-.vs{width:100%;border-collapse:separate;border-spacing:0;margin-top:8px}
-.vs caption{text-align:left;margin-bottom:10px}
-.vs th{font:400 11px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--eyebrow);text-align:left;padding:0 14px 10px}
-.vs td{padding:14px;vertical-align:top;border-top:1px solid var(--line);font-size:14.5px;line-height:1.5}
-.vs td:first-child{font-weight:600;color:var(--text);width:19%}
-.vs td.no{color:var(--faint);width:30%}
-.vs td.no:before{content:"\2715";color:var(--bad);font-weight:700;margin-right:8px}
-.vs td.yes{color:var(--text);background:#19283e;border-left:1px solid var(--btn-2-line)}
-.vs td.yes:before{content:"\2713";color:var(--accent);font-weight:700;margin-right:8px}
+/* 1. proof band */
+.proofs{display:grid;grid-template-columns:1.25fr 1fr;gap:var(--s3);padding-top:var(--s7)}
+.stat{display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0;min-height:132px;padding:var(--s5);border-radius:var(--r-tile);background:var(--surf-1);border:1px solid var(--rule);color:var(--text);text-decoration:none;transition:border-color var(--fast)}
+a.stat:hover{border-color:var(--sel-line)}
+.stat b{font:500 clamp(26px,3.4vw,40px)/1.1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat b.word{font:600 clamp(22px,2.4vw,28px)/1.2 var(--font);letter-spacing:-.025em}
+.stat span{font-size:14px;color:var(--muted)}
+.stat b span{font:inherit;color:inherit}
+.stat .go{color:var(--link);font-weight:500}
+.sports{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0;padding:0;list-style:none}
+.sports li{font:400 12px/1 var(--mono);color:var(--chip-text);border:1px solid var(--chip-line);border-radius:var(--r-chip);padding:6px 8px}
+.books{grid-column:1/-1;display:flex;flex-direction:row;align-items:center;gap:var(--s4);min-height:0;padding:var(--s3) var(--s3) var(--s3) var(--s5)}
+.books h2{flex:none;margin:0;font:600 16px/1.2 var(--font);letter-spacing:-.01em}
+.mq{position:relative;flex:1;min-width:0;height:44px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent);mask-image:linear-gradient(90deg,transparent,#000 9%,#000 91%,transparent)}
+.mq>span{position:absolute;left:0;top:0;line-height:44px;white-space:pre;font:400 14px var(--mono);color:var(--muted);letter-spacing:.03em;animation:mq 46s linear infinite}
+.mq>span+span{animation-name:mq2}
+.mq:hover>span,.books:focus-within .mq>span,.mq.paused>span,.mq.off>span{animation-play-state:paused}
+@keyframes mq{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+@keyframes mq2{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.icon-btn{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-tile);border:1px solid var(--rule-2);background:var(--surf-2);color:var(--muted);cursor:pointer}
+.icon-btn:hover{color:var(--text);border-color:var(--sel-line)}
+.icon-btn svg{width:16px;height:16px}
+.icon-btn .i-play,.icon-btn[aria-pressed=true] .i-pause{display:none}
+.icon-btn[aria-pressed=true] .i-play{display:block}
 
-/* the slip builder's real slip: Scout's slip beside the entry it became */
-.realslip{margin:0}
-.realslip .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
-.realslip .pair img{width:100%;border-radius:12px;border:1px solid var(--card-line)}
-.realslip figcaption{margin-top:10px;font-size:13px;color:var(--faint);text-align:center}
-.realslip figcaption b{color:var(--text);font-weight:600}
+/* 2. why Scout: without / with */
+.vs-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;margin:0 0 var(--s4)}
+.vs-top .seg{width:320px;max-width:100%}
+.vs-sum{margin:0;font-size:15px;color:var(--muted);display:grid;text-align:right}
+.vs-sum>span,.vtxt>p{grid-area:1/1;transition:opacity var(--panel-t) var(--ease),transform var(--panel-t) var(--ease);transition-delay:calc(var(--i,0)*35ms)}
+.vs-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3)}
+.vrow{display:grid;grid-template-columns:150px minmax(0,1fr);gap:var(--s4);align-items:start;padding:var(--s4) var(--s5);border-radius:var(--r-tile);background:var(--surf-1);border:1px solid var(--rule);transition:background var(--panel-t),border-color var(--panel-t)}
+.vrow:last-child{grid-column:1/-1}
+.vrow h3{margin:0;font:600 15px/1.4 var(--font);color:var(--text)}
+.vtxt{display:grid}
+.vtxt>p{margin:0;font-size:15px;line-height:1.55;padding-left:26px;position:relative}
+.vtxt>p::before{position:absolute;left:0;top:0;font-weight:700}
+.vtxt .no{color:var(--faint)}
+.vtxt .no::before{content:"\2715";color:var(--under)}
+.vtxt .yes{color:var(--text)}
+.vtxt .yes::before{content:"\2713";color:var(--accent)}
+html.js .vs[data-mode=with] .vrow{background:#19283e;border-color:#2f4562}
+html.js .vs[data-mode=with] .no,html.js .vs[data-mode=without] .yes,html.js .vs[data-mode=with] .sum-no,html.js .vs[data-mode=without] .sum-yes{opacity:0;transform:translateY(6px);visibility:hidden;transition-delay:0s}
+html:not(.js) .vtxt{gap:6px}
+html:not(.js) .vtxt>p{grid-area:auto}
+html:not(.js) .vs-top .seg,html:not(.js) .vs-sum{display:none}
 
-/* cards: the hub's game / tool cards */
-.card{min-width:0;background:var(--card);border:1px solid var(--card-line);border-radius:12px;padding:22px}
-.card h3{font:600 17px/1.3 var(--font);letter-spacing:-.02em;margin:8px 0 6px;color:var(--text)}
-.card p{margin:0;font-size:13.5px;line-height:1.65;color:var(--body)}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-.steps .card{background:var(--panel);border-color:#2a313b}
-.steps .n{font:500 11px var(--mono);letter-spacing:.14em;color:var(--accent)}
-.record{margin:14px 0 0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px 22px;border-radius:9px;background:var(--panel);border:1px solid #2a313b;border-left:3px solid var(--accent)}
-.record p{margin:0;color:var(--body);font-size:14px;max-width:40em}
+/* 3. board demo */
+.tabs{--n:4;width:min(400px,100%)}
+.tabs button{padding:0 6px}
+.bd{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:0}
+.bd-list{padding:var(--s3);border-right:1px solid var(--rule);min-width:0}
+.bd-list ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:var(--s3);align-items:center;width:100%;min-height:60px;padding:10px 12px;border-radius:var(--r-row);border:1px solid transparent;background:none;color:var(--text);font:inherit;text-align:left;cursor:pointer;transition:background var(--fast),border-color var(--fast),transform var(--fast)}
+.prow:hover{background:var(--surf-3)}
+.prow:active{transform:scale(.995)}
+.prow[aria-pressed=true]{background:var(--sel);border-color:var(--sel-line);box-shadow:inset 3px 0 0 var(--btn)}
+.prow .who{min-width:0}
+.prow .who b{display:block;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .who small{display:block;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .ln{font:400 13px/1.3 var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+.prow .ln .ov{color:var(--over)}.prow .ln .un{color:var(--under)}
+.gchip{display:inline-grid;place-items:center;min-width:34px;height:28px;padding:0 6px;border-radius:var(--r-chip);font:600 13px/1 var(--font);background:var(--surf-3);border:1px solid var(--line-2);color:var(--muted)}
+.gchip.a{background:var(--sel);border-color:var(--sel-line);color:var(--sel-text)}
+.gchip.none{visibility:hidden}
+.bd-src{margin:var(--s3) 4px 0;font:400 12px/1.5 var(--mono);color:var(--faint)}
+.pcard{padding:var(--s5);min-width:0}
+.pcard.swap .pc-in{animation:pcin var(--panel-t) var(--ease)}
+@keyframes pcin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.pc-head{display:flex;justify-content:space-between;gap:var(--s3);align-items:flex-start}
+.pc-head h3{margin:0;font:600 22px/1.2 var(--font);letter-spacing:-.02em}
+.pc-head p{margin:2px 0 0;font-size:13px;color:var(--faint)}
+.pc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:var(--s3) 0 0}
+.pc-main{display:flex;align-items:center;gap:var(--s5);margin:var(--s5) 0}
+.ring{position:relative;width:112px;height:112px;flex:none}
+.ring svg{width:112px;height:112px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:8}
+.ring .bg{stroke:var(--rule)}
+.ring .fg{stroke:var(--btn);stroke-linecap:round;transition:stroke-dashoffset 700ms var(--ease)}
+.ring>div{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.ring b{font:500 22px/1 var(--mono);font-variant-numeric:tabular-nums}
+.ring small{font-size:12px;color:var(--faint);margin-top:4px}
+.pc-pick{min-width:0}
+.pc-pick .side{font:600 20px/1.2 var(--font)}
+.pc-pick .side.ov{color:var(--over)}.pc-pick .side.un{color:var(--under)}
+.pc-pick p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.big-grade{display:inline-grid;place-items:center;width:56px;height:56px;border-radius:var(--r-frame);font:600 24px/1 var(--font);background:var(--sel);border:1px solid var(--sel-line);color:var(--sel-text);margin-left:auto;flex:none}
+.big-grade.b{background:var(--surf-3);border-color:var(--line-2);color:var(--muted)}
+.big-grade.pop{animation:pop 180ms var(--ease)}
+@keyframes pop{from{transform:scale(.96)}to{transform:none}}
+.pbar{margin:0 0 var(--s5)}
+.pbar-k{display:flex;justify-content:space-between;font:400 12px/1.4 var(--mono);color:var(--faint);margin:0 0 22px}
+.pbar-t{position:relative;height:36px}
+.pbar-t::before{content:"";position:absolute;left:0;right:0;top:17px;height:2px;background:var(--rule);border-radius:2px}
+.pbar-fill{position:absolute;top:16px;height:4px;border-radius:2px;background:var(--accent);transition:left 500ms var(--ease),width 500ms var(--ease)}
+.pbar-m{position:absolute;top:0;width:2px;height:36px;background:var(--btn);transition:left 500ms var(--ease)}
+.pbar-m span{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font:500 11px/1 var(--mono);color:var(--sel-text);white-space:nowrap}
+.pbar-p{position:absolute;top:11px;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:var(--text);border:3px solid var(--bg);transition:left 500ms var(--ease)}
+.trk{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.trk li{display:grid;grid-template-columns:76px minmax(0,1fr) 52px;gap:var(--s3);align-items:center;font:400 13px/1.3 var(--mono);color:var(--muted)}
+.trk li>i{position:relative;height:6px;border-radius:3px;background:var(--rule);overflow:hidden}
+.trk li>i>i{position:absolute;inset:0;transform-origin:left;background:var(--accent);border-radius:3px;transition:transform 600ms var(--ease)}
+.trk li>b{font-weight:500;color:var(--text);text-align:right}
+.pc-note{margin:var(--s4) 0 0;font-size:12px;color:var(--faint);line-height:1.5}
+
+/* 4. grading demo */
+.gd{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:0}
+.gd-plot{padding:var(--s5);border-right:1px solid var(--rule);min-width:0}
+.gd-plot svg{display:block;width:100%;height:auto;overflow:visible}
+.c-under{fill:var(--surf-3)}
+.c-over{fill:var(--sel)}
+.c-push{fill:#2b3646}
+.c-line{fill:none;stroke:var(--accent);stroke-width:2}
+.c-axis{stroke:var(--rule);stroke-width:1}
+.c-tick{fill:var(--faint);font:400 11px var(--mono)}
+.c-mark{stroke:var(--btn);stroke-width:2}
+.c-proj{stroke:var(--text);stroke-width:1;stroke-dasharray:3 4}
+.c-tag{fill:var(--sel-text);font:500 12px var(--mono)}
+.c-tag2{fill:var(--muted);font:400 11px var(--mono)}
+.c-lab{font:500 12px var(--font)}
+.c-lab.u{fill:var(--under)}.c-lab.o{fill:var(--over)}
+.ctl{margin:var(--s4) 0 0}
+.ctl label{display:flex;justify-content:space-between;gap:var(--s3);font-size:14px;color:var(--muted)}
+.ctl label b{font:500 14px var(--mono);color:var(--text)}
+input[type=range]{-webkit-appearance:none;appearance:none;display:block;width:100%;height:44px;margin:0;background:none;cursor:pointer;--p:50%}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--btn) var(--p),var(--rule) var(--p))}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--rule)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--btn)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-7px;border-radius:50%;background:var(--text);border:0;box-shadow:0 0 0 1px rgba(16,18,21,.6);transition:transform var(--fast)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--text);border:0}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.12)}
+input[type=range]:focus-visible{outline:none}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 6px rgba(119,173,255,.3)}
+input[type=range]:focus-visible::-moz-range-thumb{box-shadow:0 0 0 6px rgba(119,173,255,.3)}
+.gd-out{padding:var(--s5);display:flex;flex-direction:column;gap:var(--s4);min-width:0}
+.gd-out>.tag{align-self:flex-start}
+.gd-read{display:flex;align-items:center;gap:var(--s4)}
+.gd-read .big{font:500 40px/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.gd-read .side{font:600 16px/1.3 var(--font);margin-bottom:4px}
+.gd-read .side.ov{color:var(--over)}.gd-read .side.un{color:var(--under)}
+.gd-break{margin:0;padding:0;list-style:none;display:grid;gap:6px;font:400 13px/1.4 var(--mono);color:var(--muted)}
+.gd-break li{display:flex;justify-content:space-between;gap:var(--s3);padding:8px 0;border-bottom:1px solid var(--rule)}
+.gd-break b{font-weight:500;color:var(--text)}
+.ladder{position:relative;display:flex;height:34px;border-radius:var(--r-row);overflow:hidden;border:1px solid var(--rule)}
+.ladder span{display:grid;place-items:center;font:500 11px/1 var(--mono);color:var(--faint);border-right:1px solid var(--rule);transition:background var(--base),color var(--base)}
+.ladder span:last-child{border-right:0}
+.ladder span.on{background:var(--sel);color:var(--sel-text)}
+.ladder-k{display:flex;justify-content:space-between;font:400 11px/1 var(--mono);color:var(--faint);margin-top:6px}
+.gd-note{margin:0;font-size:12px;line-height:1.5;color:var(--faint)}
+
+/* 5. line comparison */
+.lc{width:100%;border-collapse:separate;border-spacing:0 4px;padding:0 var(--s3) var(--s3)}
+.lc caption{caption-side:top;text-align:left;padding:var(--s3) var(--s3) 4px;font-size:13px;color:var(--faint)}
+.lc th{font:400 11px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--eyebrow);text-align:left;padding:8px 12px}
+.lc td{padding:0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);background:var(--surf-1);transition:background var(--fast)}
+.lc td:first-child{border-left:1px solid var(--rule);border-radius:var(--r-row) 0 0 var(--r-row)}
+.lc td:last-child{border-right:1px solid var(--rule);border-radius:0 var(--r-row) var(--r-row) 0}
+.lc label{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 12px;cursor:pointer;font-size:14px}
+.lc input{width:18px;height:18px;margin:0;accent-color:var(--btn);flex:none}
+.lc .num{font:500 15px var(--mono);font-variant-numeric:tabular-nums}
+.lc .px{font:400 14px var(--mono);color:var(--muted)}
+.lc .kind{color:var(--faint);font-size:13px}
+.lc tr:hover td{background:var(--surf-3)}
+.lc tr.best td:first-child{box-shadow:inset 3px 0 0 var(--btn)}
+.lc tr:has(input:checked) td{background:var(--sel);border-color:var(--sel-line)}
+.lc-live{margin:0;padding:var(--s3) var(--s4);border-top:1px solid var(--rule);font-size:14px;color:var(--muted);min-height:48px}
+
+/* 6. slip studio */
+.ss{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:var(--s6);align-items:start}
+.ss-img{margin:0}
+.ss-img img{width:100%;border-radius:var(--r-frame);border:1px solid var(--rule-2)}
+.ss-img figcaption{margin-top:10px;font-size:13px;color:var(--faint);text-align:center}
+.ticks{list-style:none;margin:var(--s4) 0 var(--s5);padding:0;display:grid;gap:8px}
+.ticks li{position:relative;padding-left:22px;color:var(--muted);font-size:15px}
+.ticks li::before{content:"";position:absolute;left:2px;top:.6em;width:10px;height:2px;border-radius:2px;background:var(--btn)}
+.sb{padding:var(--s5)}
+.sb-ctl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:var(--s3);align-items:end}
+.sb-ctl>div>span{display:block;font-size:12px;color:var(--faint);margin:0 0 6px}
+.spin{display:flex;align-items:center;gap:4px}
+.spin button{width:44px;height:44px;border-radius:var(--r-tile);border:1px solid var(--rule-2);background:var(--surf-1);color:var(--text);font:500 20px/1 var(--mono);cursor:pointer}
+.spin button:disabled{color:#65758b;cursor:not-allowed}
+.spin [role=spinbutton]{display:grid;place-items:center;min-width:48px;height:44px;border-radius:var(--r-tile);font:500 20px var(--mono)}
+.legs{list-style:none;margin:var(--s4) 0;padding:0;display:grid;gap:6px}
+.leg{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:var(--s3);align-items:center;padding:10px 12px;border-radius:var(--r-row);background:var(--surf-1);border:1px solid var(--rule);transition:opacity var(--base) var(--ease),transform var(--base) var(--ease)}
+.leg.enter,.leg.leave{opacity:0;transform:translateY(8px)}
+.leg .n{font:500 12px var(--mono);color:var(--faint)}
+.leg b{display:block;font-weight:600;font-size:14px}
+.leg small{display:block;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.leg .c{font:500 14px var(--mono);color:var(--over);text-align:right}
+.sb-out{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3)}
+.sb-out>div{padding:var(--s3) var(--s4);border-radius:var(--r-tile);background:var(--surf-1);border:1px solid var(--rule);min-width:0}
+.sb-out span{display:block;font-size:12px;color:var(--faint)}
+.sb-out b{display:block;font:500 22px/1.3 var(--mono);font-variant-numeric:tabular-nums}
+.sb-flex{margin:var(--s3) 0 0;font:400 13px/1.5 var(--mono);color:var(--muted)}
+.sb-all{margin:var(--s3) 0 0;padding:var(--s3) var(--s4);border-radius:var(--r-tile);border:1px solid var(--sel-line);background:var(--sel);color:var(--sel-text);font-size:14px}
+.sb-note{margin:var(--s3) 0 0;font-size:12px;line-height:1.5;color:var(--faint)}
+
+/* 7. features grid */
+.fgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3)}
+.fcard{display:block;min-width:0;padding:var(--s5);border-radius:var(--r-tile);background:var(--surf-1);border:1px solid var(--rule);color:var(--text);text-decoration:none}
+.fcard svg{width:28px;height:28px;color:var(--accent);margin:0 0 var(--s4)}
+.fcard h3{margin:0 0 6px;font:600 17px/1.3 var(--font);letter-spacing:-.015em}
+.fcard p{margin:0;font-size:14px;line-height:1.6;color:var(--muted)}
+.fcard .go{display:inline-block;margin-top:10px;color:var(--link);font-size:14px;font-weight:500}
+a.fcard{transition:border-color var(--fast),transform var(--fast)}
+@media (hover:hover) and (pointer:fine){a.fcard:hover{border-color:var(--sel-line);transform:translateY(-2px)}}
+
+/* how it works */
+.steps{position:relative;list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3)}
+.steps::before{content:"";position:absolute;left:24px;right:24px;top:28px;height:2px;background:var(--rule)}
+.steps::after{content:"";position:absolute;left:24px;right:24px;top:28px;height:2px;background:var(--btn);transform-origin:left;transform:scaleX(0);transition:transform 900ms var(--ease) 200ms}
+html:not(.js) .steps::after,.steps.in::after{transform:scaleX(1)}
+.steps li{position:relative;padding:0 var(--s4) 0 0}
+.steps .n{position:relative;z-index:1;display:grid;place-items:center;width:56px;height:56px;border-radius:var(--r-frame);background:var(--surf-2);border:1px solid var(--rule-2);font:500 15px var(--mono);color:var(--accent);margin:0 0 var(--s4)}
+.steps h3{margin:0 0 6px;font:600 var(--h3)/1.25 var(--font);letter-spacing:-.02em}
+.steps p{margin:0;color:var(--muted);font-size:15px;line-height:1.6}
+.record{margin:var(--s7) 0 0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px 22px;border-radius:var(--r-tile);background:var(--surf-1);border:1px solid var(--rule);border-left:3px solid var(--btn)}
+.record p{margin:0;color:var(--muted);font-size:15px;max-width:40em}
 .record p b{color:var(--text);font-weight:600}
 .record>p{margin-right:auto}
 .revlink{display:inline-flex;align-items:center;min-height:44px;color:var(--link);font-size:14px;font-weight:500;text-decoration:none}
 .revlink:hover{text-decoration:underline}
 
 /* closing call */
-.final{margin:40px 0 0;padding:40px 24px;border-radius:14px;text-align:center;background:var(--card);border:1px solid var(--card-line)}
-.final h2{font:600 30px/1.15 var(--font);letter-spacing:-.035em;margin:0 0 8px}
-.final p{color:var(--body);margin:0 auto 20px;max-width:34em}
+.final{position:relative;margin:var(--s9) 0 0;padding:var(--s8) var(--s5);border-radius:var(--r-frame);text-align:center;background:var(--surf-2);border:1px solid var(--rule-2);overflow:hidden;isolation:isolate}
+.final::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse 60% 70% at 50% 0%,rgba(52,127,240,.16),transparent 70%)}
+.final h2{font:600 var(--h2)/1.1 var(--font);letter-spacing:-.035em;margin:0 auto 12px;max-width:18em;text-wrap:balance}
+.final p{color:var(--muted);margin:0 auto 24px;max-width:34em;font-size:16px}
 .final .ctas{justify-content:center}
 .final .member{margin-top:8px}
 .final .fine{margin:6px auto 0;font-size:13px;color:var(--faint)}
-footer.foot{margin-top:40px;padding:18px 0 30px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 18px;color:var(--faint);font-size:13px}
+footer.foot{margin-top:var(--s7);padding:18px 0 30px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 18px;color:var(--faint);font-size:13px}
 footer.foot nav{display:flex;flex-wrap:wrap;gap:4px}
 footer.foot a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:0 10px;border-radius:6px;color:var(--muted);text-decoration:none}
 footer.foot a:hover{color:#fff;background:#242d39}
 
-/* entrance: one short rise for the hero shot, nothing that loops */
-@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.hero .shot{animation:rise .5s ease-out both}
-.hero .card-shot{animation:rise .55s .15s ease-out both}
+/* phone dock: the two buttons once the hero's are off screen */
+.dock{display:none}
 
 @media(max-width:1024px){
   .hero{grid-template-columns:1fr;gap:34px;padding:40px 0 34px}
   .hero .card-shot{right:-6px;bottom:-24px}
-  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .feature{grid-template-columns:1fr;gap:20px}
-  .feature.flip .copy{order:0}
+  .bd{grid-template-columns:minmax(0,1fr) 340px}
+  .gd{grid-template-columns:1fr}
+  .gd-plot{border-right:0;border-bottom:1px solid var(--rule)}
+  .fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ss{grid-template-columns:minmax(0,280px) minmax(0,1fr);gap:var(--s5)}
+}
+@media(max-width:899px){
+  .bd{grid-template-columns:1fr}
+  .bd-list{border-right:0}
+  .bd-list .pcard{margin:2px 0 6px;padding:var(--s4);border-radius:var(--r-tile);background:var(--surf-1);border:1px solid var(--sel-line)}
+  .vs-list{grid-template-columns:1fr}
 }
 @media(max-width:760px){
   .hero .board-shot,.hero .card-shot{display:none}
   .hero .phone-shot{display:block;max-width:380px;margin:0 auto}.hero .phone-shot img{width:100%}
-  .proof{grid-template-columns:1fr}
-}
-@media(max-width:760px){
-  .why{padding:24px 16px}
-  .vs thead{display:none}
-  .vs caption{display:block;width:auto}
-  .vs,.vs tbody,.vs tr,.vs td{display:block;width:auto!important}
-  .vs tr{padding:12px 0;border-top:1px solid var(--line)}
-  .vs td{border:0;padding:4px 0}
-  .vs td.yes{padding:8px 10px;border-radius:6px;border-left:2px solid var(--btn-2-line);margin-top:4px}
+  .proofs{grid-template-columns:1fr}
+  .books{flex-wrap:wrap;padding:var(--s4)}
+  .books h2{flex:1 1 100%}
+  .ss{grid-template-columns:1fr}
+  .ss-img{max-width:300px;margin:0 auto;order:2}
+  .dock{display:flex;gap:8px;position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(18,21,25,.96);border-top:1px solid var(--rule-2);
+    transform:translateY(110%);visibility:hidden;transition:transform var(--panel-t) var(--ease),visibility 0s linear var(--panel-t)}
+  .dock.show{transform:none;visibility:visible;transition:transform var(--panel-t) var(--ease)}
+  .dock .btn{flex:1}
+  body{padding-bottom:72px}
 }
 @media(max-width:640px){
   .wrap{padding:0 16px}
@@ -183,18 +416,59 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .hero h1{font-size:34px;margin:8px 0 10px}
   .lede{font-size:15.5px;margin-bottom:18px}
   .ctas .btn{flex:1 1 100%}
-  .grid,.steps{grid-template-columns:1fr}
-  .grid{gap:10px}
-  .card{padding:18px}
-  .sechead h2{font-size:25px}
-  .feature h3{font-size:21px}
-  section.block{padding:30px 0 6px}
+  .band{padding-top:var(--s8)}
+  .proofs{padding-top:var(--s5)}
+  .stat{min-height:0;padding:var(--s4)}
+  .vrow{grid-template-columns:1fr;gap:6px;padding:var(--s4)}
+  .vs-top .seg{width:100%}
+  .demo-bar{padding:var(--s3)}
+  .tabs{max-width:none;width:100%}
+  .bd-list{padding:var(--s2)}
+  .prow{padding:10px 8px;gap:var(--s2)}
+  .pc-main{gap:var(--s4)}
+  .ring,.ring svg{width:96px;height:96px}
+  .gd-plot,.gd-out,.sb{padding:var(--s4)}
+  .gd-read .big{font-size:34px}
+  .sb-ctl{grid-template-columns:1fr}
+  .vs-sum{text-align:left}
+  .c-tick{font-size:20px}.c-tag{font-size:22px}.c-tag2{font-size:19px}.c-lab{font-size:21px}
+  .c-line,.c-mark{stroke-width:3.5}.c-proj{stroke-width:2}
+  .sb-out{grid-template-columns:1fr 1fr}
+  .sb-out>div:first-child{grid-column:1/-1}
+  .fgrid{grid-template-columns:1fr}
+  .fcard{padding:var(--s4)}
+  .steps{grid-template-columns:1fr;gap:var(--s5)}
+  .steps::before,.steps::after{left:27px;right:auto;top:28px;bottom:28px;width:2px;height:auto}
+  .steps::after{transform-origin:top;transform:scaleY(0)}
+  .steps.in::after{transform:scaleY(1)}
+  .steps li{display:grid;grid-template-columns:56px minmax(0,1fr);gap:0 var(--s4);padding:0}
+  .steps .n{grid-row:span 2;margin:0}
   .record{padding:16px}
   .record .btn{flex:1 1 100%}
-  .final{padding:28px 16px}
-  .final h2{font-size:24px}
+  .final{padding:var(--s7) var(--s4)}
 }
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media(max-width:600px){
+  .lc thead{display:none}
+  .lc,.lc tbody,.lc tr,.lc td{display:block;width:auto}
+  .lc{padding:0 var(--s2) var(--s2)}
+  .lc tr{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;margin:0 0 6px;border:1px solid var(--rule);border-radius:var(--r-row);background:var(--surf-1);overflow:hidden}
+  .lc td,.lc td:first-child,.lc td:last-child{border:0;border-radius:0;background:none}
+  .lc caption{display:block;padding:var(--s3) 4px 6px}
+  .lc td:nth-child(1){grid-column:1;grid-row:1}
+  .lc td:nth-child(4){grid-column:2;grid-row:1;align-self:center;padding:0 12px;text-align:right}
+  .lc td:nth-child(2){grid-column:1;grid-row:2;padding:0 0 12px 40px;font-size:14px}
+  .lc td:nth-child(3){grid-column:2;grid-row:2;padding:0 12px 12px;text-align:right}
+  .lc tr:has(input:checked){background:var(--sel);border-color:var(--sel-line)}
+  .lc tr.best{box-shadow:inset 3px 0 0 var(--btn)}
+  .lc tr.best td:first-child{box-shadow:none}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+  html.js .rv{opacity:1;transform:none}
+  .mq{height:auto;-webkit-mask-image:none;mask-image:none}
+  .mq>span{position:static;white-space:normal;line-height:1.7}
+  .mq>span+span,.mq-pause{display:none}
+}
 </style>
 </head>
 <body>
@@ -203,13 +477,14 @@ footer.foot a:hover{color:#fff;background:#242d39}
   <div class="wrap">
     <a class="brand" href="/" aria-label="1time Scout"><span aria-hidden="true">1T</span><b>1TIME <em>SCOUT</em></b></a>
     <span class="grow"></span>
-    <nav class="topnav" aria-label="Page sections"><a href="#why">Why Scout</a><a href="#features">Features</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
+    <nav class="topnav" aria-label="Page sections"><a href="#why">Why Scout</a><a href="#demo">Try it</a><a href="#features">Features</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
     <a class="btn quiet" href="/auth/login">Sign in</a>
     <a class="btn primary" href="{{JOIN_URL}}">Join</a>
   </div>
 </header>
 
-<main id="main" class="wrap">
+<main id="main">
+ <div class="wrap">
   <section class="hero" aria-labelledby="hero-title">
     <div>
       <p class="eyebrow">CS2 · League of Legends · NBA · NFL</p>
@@ -229,104 +504,223 @@ footer.foot a:hover{color:#fff;background:#242d39}
     </div>
   </section>
 
-  <section class="proof" aria-label="Proof">
-    <a href="/record" id="proof-record"><b id="proof-record-n">The record is public</b><span id="proof-record-t">Every forecast saved before the game and scored after it, losses included</span></a>
-    <a href="/reviews" id="proof-reviews"><b id="proof-reviews-n">Member reviews</b><span>Every review is posted, good or bad</span></a>
-    <div><b>Four sports, one board</b><ul class="chips" aria-label="Books"><li>PrizePicks</li><li>Underdog</li><li>Sleeper</li><li>Dabble</li><li>DraftKings</li><li>FanDuel</li><li>BetRivers</li><li>Bovada</li><li>Unibet</li><li>Kalshi</li><li>Polymarket</li></ul></div>
+  <!-- 1. live proof -->
+  <section class="proofs" aria-label="Proof">
+    <a class="stat spot rv" href="/record" id="proof-record"><b class="word" id="proof-record-n">The record is public</b>
+      <span id="proof-record-t">Every forecast saved before the game and scored after it, losses included</span>
+      <ul class="sports" id="proof-sports" hidden></ul></a>
+    <a class="stat spot rv" style="--i:1" href="/reviews" id="proof-reviews"><b class="word" id="proof-reviews-n">Member reviews</b><span id="proof-reviews-t">Every review is posted, good or bad</span></a>
+    <div class="stat books rv" style="--i:2">
+      <h2>Four sports, one board</h2>
+      <ul class="sr" aria-label="Books"><li>PrizePicks</li><li>Underdog</li><li>Sleeper</li><li>Dabble</li><li>DraftKings</li><li>FanDuel</li><li>BetRivers</li><li>Bovada</li><li>Unibet</li><li>Kalshi</li><li>Polymarket</li></ul>
+      <div class="mq" id="mq" aria-hidden="true"><span>PrizePicks  ·  Underdog  ·  Sleeper  ·  Dabble  ·  DraftKings  ·  FanDuel  ·  BetRivers  ·  Bovada  ·  Unibet  ·  Kalshi  ·  Polymarket  ·  PrizePicks  ·  Underdog  ·  Sleeper  ·  Dabble  ·  DraftKings  ·  FanDuel  ·  BetRivers  ·  Bovada  ·  Unibet  ·  Kalshi  ·  Polymarket  ·  </span><span>PrizePicks  ·  Underdog  ·  Sleeper  ·  Dabble  ·  DraftKings  ·  FanDuel  ·  BetRivers  ·  Bovada  ·  Unibet  ·  Kalshi  ·  Polymarket  ·  PrizePicks  ·  Underdog  ·  Sleeper  ·  Dabble  ·  DraftKings  ·  FanDuel  ·  BetRivers  ·  Bovada  ·  Unibet  ·  Kalshi  ·  Polymarket  ·  </span></div>
+      <button class="icon-btn mq-pause" type="button" id="mq-pause" aria-pressed="false" aria-label="Pause the book list">
+        <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="currentColor"/></svg>
+        <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg></button>
+    </div>
   </section>
+ </div>
 
-  <section class="why" id="why" aria-labelledby="why-title">
-    <div class="sechead"><p class="eyebrow">Why Scout</p><h2 id="why-title">Most prop tools stop at the grid. Scout shows its work.</h2>
+  <!-- 2. why Scout -->
+  <section class="band" id="why" aria-labelledby="why-title">
+   <div class="wrap">
+    <div class="head rv"><h2 id="why-title">Most prop tools stop at the grid. Scout shows its work.</h2>
       <p>You still get the hit counts. You also get the reason for each pick, the exact line it was graded at, and the slip already built.</p></div>
-    <table class="vs"><caption class="eyebrow">Your prop night, without and with Scout</caption>
-      <thead><tr><th scope="col">The job</th><th scope="col">Without Scout</th><th scope="col">With Scout</th></tr></thead>
-      <tbody>
-        <tr><td>Find the line</td><td class="no">Six apps open in six tabs</td><td class="yes">PrizePicks, Underdog, Sleeper, Dabble and the sportsbooks on one row per player, with a chip when two apps list different lines</td></tr>
-        <tr><td>Know why it's a pick</td><td class="no">A screenshot from a group chat</td><td class="yes">Why Scout leans Over or Under, in plain English: a letter grade, a chance at that exact line and the reason for the stake</td></tr>
-        <tr><td>See how often he clears it</td><td class="no">A stat site and your own spreadsheet</td><td class="yes">L5, L10, L20, head-to-head and season, against this exact line, on the card</td></tr>
-        <tr><td>Check he's actually playing</td><td class="no">Roster posts and socials</td><td class="yes">CS2 lines count active players only. Stand-ins are flagged and their stake is capped</td></tr>
-        <tr><td>Catch a moved line</td><td class="no">Refresh and try to remember</td><td class="yes">Line history from the opening line, with every move and when it happened</td></tr>
-        <tr><td>Build the slip</td><td class="no">Copy picks across by hand and hope nothing moved</td><td class="yes">Slip Studio builds your slips, rechecks every line first and opens them in the app</td></tr>
-        <tr><td>Proof</td><td class="no">Take someone's word for it</td><td class="yes">The record is public: every forecast saved before the game and scored after it, losses included</td></tr>
-      </tbody></table>
+    <div class="vs rv" style="--i:1" data-mode="with">
+      <div class="vs-top">
+        <div class="seg" id="vs-seg" role="radiogroup" aria-label="Your prop night">
+          <button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="without">Without Scout</button>
+          <button type="button" role="radio" aria-checked="true" tabindex="0" data-v="with">With Scout</button>
+        </div>
+        <p class="vs-sum" aria-live="polite"><span class="sum-no">Six apps, a stat site, a spreadsheet and a group chat.</span><span class="sum-yes">One board, one card, one slip.</span></p>
+      </div>
+      <ul class="vs-list">
+        <li class="vrow"><h3>Find the line</h3><div class="vtxt"><p class="no" style="--i:0">Six apps open in six tabs</p><p class="yes" style="--i:0">PrizePicks, Underdog, Sleeper, Dabble and the sportsbooks on one row per player, with a chip when two apps list different lines</p></div></li>
+        <li class="vrow"><h3>Know why it's a pick</h3><div class="vtxt"><p class="no" style="--i:1">A screenshot from a group chat</p><p class="yes" style="--i:1">Why Scout leans Over or Under, in plain English: a letter grade, a chance at that exact line and the reason for the stake</p></div></li>
+        <li class="vrow"><h3>See how often he clears it</h3><div class="vtxt"><p class="no" style="--i:2">A stat site and your own spreadsheet</p><p class="yes" style="--i:2">L5, L10, L20, head-to-head and season, against this exact line, on the card</p></div></li>
+        <li class="vrow"><h3>Check he's actually playing</h3><div class="vtxt"><p class="no" style="--i:3">Roster posts and socials</p><p class="yes" style="--i:3">CS2 lines count active players only. Stand-ins are flagged and their stake is capped</p></div></li>
+        <li class="vrow"><h3>Catch a moved line</h3><div class="vtxt"><p class="no" style="--i:4">Refresh and try to remember</p><p class="yes" style="--i:4">Line history from the opening line, with every move and when it happened</p></div></li>
+        <li class="vrow"><h3>Build the slip</h3><div class="vtxt"><p class="no" style="--i:5">Copy picks across by hand and hope nothing moved</p><p class="yes" style="--i:5">Slip Studio builds your slips, rechecks every line first and opens them in the app</p></div></li>
+        <li class="vrow"><h3>Proof</h3><div class="vtxt"><p class="no" style="--i:6">Take someone's word for it</p><p class="yes" style="--i:6">The record is public: every forecast saved before the game and scored after it, losses included</p></div></li>
+      </ul>
+    </div>
+   </div>
   </section>
 
-  <section class="block" id="features" aria-labelledby="features-title">
-    <div class="sechead"><p class="eyebrow">Inside Scout</p><h2 id="features-title">Everything behind a pick, on one screen</h2></div>
-
-    <div class="feature">
-      <div class="copy"><p class="eyebrow">Board</p><h3>Esports first. NBA and NFL too.</h3>
-        <p>CS2 kills and headshots from HLTV pro match history, and League of Legends kills, assists and deaths, on the same board as NBA and NFL. Every line carries a letter grade.</p>
-        <ul class="ticks"><li>HLTV map chances and the likeliest map veto on CS2 cards</li><li>Roles under every CS2 name: AWPer, IGL, Entry, Lurker</li><li>Stand-ins flagged on CS2 lines, with their stake capped</li></ul></div>
-      <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Board</small></div><img src="/landing/board.webp" width="1140" height="855" alt="Scout board rows with Scout's chance, letter grade, projection and L5 / L10 / L20 hit rates" loading="lazy"></div>
+  <!-- 3. board demo -->
+  <section class="band scan glow" id="demo" aria-labelledby="demo-title">
+   <div class="wrap">
+    <div class="head rv"><h2 id="demo-title">Tap a prop. See why.</h2>
+      <p>Rows from real Scout boards for all four sports, as members saw them. Pick a sport, then a player, to open the card: the lean, the chance at that exact line, the projection and the hit rates.</p></div>
+    <div class="demo spot rv" style="--i:1">
+      <div class="demo-bar">
+        <div class="seg tabs" id="bd-tabs" role="tablist" aria-label="Sport">
+          <button type="button" role="tab" id="tab-cs2" aria-controls="bd-panel" aria-selected="true" tabindex="0" data-v="cs2">CS2</button>
+          <button type="button" role="tab" id="tab-lol" aria-controls="bd-panel" aria-selected="false" tabindex="-1" data-v="lol">League</button>
+          <button type="button" role="tab" id="tab-nba" aria-controls="bd-panel" aria-selected="false" tabindex="-1" data-v="nba">NBA</button>
+          <button type="button" role="tab" id="tab-nfl" aria-controls="bd-panel" aria-selected="false" tabindex="-1" data-v="nfl">NFL</button>
+        </div>
+        <span class="tag">Example from a real Scout board</span>
+      </div>
+      <div class="bd" id="bd-panel" role="tabpanel" aria-labelledby="tab-cs2" tabindex="0">
+        <div class="bd-list"><ul id="bd-rows"></ul><p class="bd-src" id="bd-src"></p><p class="nojs">Turn on JavaScript to try the example board.</p></div>
+        <div class="pcard" id="pcard" aria-live="polite"></div>
+      </div>
     </div>
-
-    <div class="feature flip">
-      <div class="copy"><p class="eyebrow">The player card</p><h3>The reason behind every grade</h3>
-        <p>Open any player for the lean, the letter grade, the stake and the reason, with the numbers that back it up.</p>
-        <ul class="ticks"><li>Hits at this exact line over L5, L10, L20, head-to-head and season</li><li>The stake reason spelled out: stand-in, small sample, long break</li><li>Ask the Genie: it answers from that line's own saved numbers</li></ul></div>
-      <div class="frame tall"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card with the reason for the lean" loading="lazy"></div>
-    </div>
-
-    <div class="feature">
-      <div class="copy"><p class="eyebrow">Every book</p><h3>Every app's line side by side</h3>
-        <p>PrizePicks, Underdog, Sleeper and Dabble for all four sports. For NBA and NFL, DraftKings, FanDuel, BetRivers, Bovada and Unibet prices and Kalshi and Polymarket markets sit beside the pick'em line.</p>
-        <ul class="ticks"><li>A chip when two apps list different lines</li><li>Line history: every move since the line opened</li><li>The +EV board: legs the books price above what your entry needs to break even</li></ul></div>
-      <div class="frame tall"><img src="/landing/odds.webp" width="372" height="586" alt="Every book's line and price for one player prop" loading="lazy"></div>
-    </div>
-
-    <div class="feature flip">
-      <div class="copy"><p class="eyebrow">Slips</p><h3>Slips built for you</h3>
-        <p>Tell Slip Studio how many. Auto-build makes 1 to 12 PrizePicks or Underdog slips of 2 to 6 picks each from the lines open right now, and rechecks every line before you see them.</p>
-        <ul class="ticks"><li>Each slip shows the chance every pick hits and the payout</li><li>Open the slip in the app, or edit it in My slip first</li><li>Slips save to your account, with a receipt when they settle</li></ul></div>
-      <div class="frame tall" style="max-width:380px"><img src="/landing/realslip-scout.webp" width="600" height="1067" style="width:100%" alt="A four-pick CS2 slip built by Scout Auto-build: oontoma, glowiing, Forester and flameZ, all Over" loading="lazy"></div>
-    </div>
-
-    <div class="grid" style="margin-top:18px">
-      <article class="card"><p class="eyebrow">CS2</p><h3>HLTV map chances</h3>
-        <p>Each map's chance to be played in a series, and the likeliest veto.</p></article>
-      <article class="card"><p class="eyebrow">Lines</p><h3>Line history</h3>
-        <p>How a line has moved on each app, with every change and when.</p></article>
-      <article class="card"><p class="eyebrow">Prices</p><h3>+EV board</h3>
-        <p>Lines where a book's price pays more than the fair chance from the other books.</p></article>
-      <article class="card"><p class="eyebrow">Slips</p><h3>Slip Studio</h3>
-        <p>Build your own slip and see the payout and the chance it needs to break even. Slips save to your account.</p></article>
-      <article class="card"><p class="eyebrow">Questions</p><h3>Ask the Genie</h3>
-        <p>Ask about any line and get an answer from that line's own numbers.</p></article>
-      <article class="card"><p class="eyebrow">Record</p><h3>A public record</h3>
-        <p>Forecasts are saved before each game and scored after it, for all four sports.</p></article>
-    </div>
+   </div>
   </section>
 
-  <section class="block" id="how" aria-labelledby="how-title">
-    <div class="sechead"><p class="eyebrow">Three steps</p><h2 id="how-title">How it works</h2></div>
-    <ol class="steps">
-      <li class="card"><span class="n">01</span><h3>Join on Whop</h3><p>Pick the membership on Whop, then come straight back.</p></li>
-      <li class="card"><span class="n">02</span><h3>Sign in with Whop</h3><p>Use the Whop account you joined with. No new password.</p></li>
-      <li class="card"><span class="n">03</span><h3>Get your slips</h3><p>Generate slips in one tap, or open the board and build your own.</p></li>
+  <!-- 4. grading demo -->
+  <section class="band" id="grade" aria-labelledby="grade-title">
+   <div class="wrap">
+    <div class="head rv"><h2 id="grade-title">Move the line. Watch the grade.</h2>
+      <p>This is Scout's CS2 kills formula running in your browser: a projection, Scout's spread around it, and the chance for each side at that exact line. A whole line can push, so the push is taken out before the chance is shown.</p></div>
+    <div class="demo spot gd rv" style="--i:1">
+      <div class="gd-plot">
+        <svg id="gd-svg" viewBox="0 0 640 250" role="img" aria-label="Scout's kills distribution with the line marked"></svg>
+        <div class="ctl"><label for="gd-line">Line <b id="gd-line-v" class="mono">28.5</b></label>
+          <input type="range" id="gd-line" min="15.5" max="45.5" step="0.5" value="28.5"></div>
+        <div class="ctl"><label for="gd-proj">Scout's projection <b id="gd-proj-v" class="mono">32.4</b></label>
+          <input type="range" id="gd-proj" min="20" max="40" step="0.1" value="32.4"></div>
+      </div>
+      <div class="gd-out">
+        <span class="tag">Example</span>
+        <div class="gd-read" aria-live="polite"><div><div class="side" id="gd-side"></div><div class="big" id="gd-big"></div></div><span class="big-grade" id="gd-grade"></span></div>
+        <ul class="gd-break" id="gd-break"></ul>
+        <div><div class="ladder" id="gd-ladder" aria-hidden="true"><span style="flex:5">Lean</span><span style="flex:2">B-</span><span style="flex:6">B</span><span style="flex:5">B+</span><span style="flex:6">A-</span><span style="flex:6">A</span><span style="flex:5">A+</span></div>
+          <div class="ladder-k" id="gd-ladder-k" aria-hidden="true"></div></div>
+        <p class="gd-note" id="gd-note">Drag either slider. The letter comes from the same cut points members see.</p>
+        <p class="nojs">Turn on JavaScript to try the grading example.</p>
+      </div>
+    </div>
+   </div>
+  </section>
+
+  <!-- 5. line comparison -->
+  <section class="band scan" id="lines" aria-labelledby="lines-title">
+   <div class="wrap">
+    <div class="head rv"><h2 id="lines-title">Every book's line, side by side.</h2>
+      <p>Pick'em apps, sportsbooks and prediction markets on one table. Here are 11 of the 39 lines Scout listed for one NFL prop. The lowest line for the Over is marked.</p></div>
+    <div class="demo spot rv" style="--i:1">
+      <div class="demo-bar"><small>Zay Flowers · Receptions · Over</small><span class="tag">Example from a real Scout board</span></div>
+      <table class="lc" id="lc">
+        <caption>Choose a line to compare it</caption>
+        <thead><tr><th scope="col">Line</th><th scope="col">Book</th><th scope="col">Type</th><th scope="col">Over price</th></tr></thead>
+        <tbody>
+          <tr class="best"><td><label><input type="radio" name="lc" value="0"><span class="num">2.5</span><span class="tag">Lowest line</span></label></td><td>BetRivers</td><td class="kind">Sportsbook · alternate</td><td class="px">-2500</td></tr>
+          <tr class="best"><td><label><input type="radio" name="lc" value="1"><span class="num">2.5</span><span class="tag">Lowest line</span></label></td><td>Polymarket</td><td class="kind">Prediction market</td><td class="px"><span aria-hidden="true">&mdash;</span><span class="sr">No price</span></td></tr>
+          <tr class="best"><td><label><input type="radio" name="lc" value="2"><span class="num">2.5</span><span class="tag">Lowest line</span></label></td><td>Unibet AU</td><td class="kind">Sportsbook · alternate</td><td class="px">-2500</td></tr>
+          <tr><td><label><input type="radio" name="lc" value="3"><span class="num">3.5</span></label></td><td>BetRivers</td><td class="kind">Sportsbook · alternate</td><td class="px">-588</td></tr>
+          <tr><td><label><input type="radio" name="lc" value="4"><span class="num">3.5</span></label></td><td>Polymarket</td><td class="kind">Prediction market</td><td class="px"><span aria-hidden="true">&mdash;</span><span class="sr">No price</span></td></tr>
+          <tr><td><label><input type="radio" name="lc" value="5"><span class="num">3.5</span></label></td><td>PrizePicks</td><td class="kind">Pick'em · goblin</td><td class="px"><span aria-hidden="true">&mdash;</span><span class="sr">No price</span></td></tr>
+          <tr><td><label><input type="radio" name="lc" value="6"><span class="num">3.5</span></label></td><td>Unibet AU</td><td class="kind">Sportsbook</td><td class="px">-588</td></tr>
+          <tr><td><label><input type="radio" name="lc" value="7"><span class="num">4.5</span></label></td><td>BetRivers</td><td class="kind">Sportsbook</td><td class="px">-238</td></tr>
+          <tr><td><label><input type="radio" name="lc" value="8"><span class="num">4.5</span></label></td><td>Polymarket</td><td class="kind">Prediction market</td><td class="px"><span aria-hidden="true">&mdash;</span><span class="sr">No price</span></td></tr>
+          <tr><td><label><input type="radio" name="lc" value="9"><span class="num">4.5</span></label></td><td>PrizePicks</td><td class="kind">Pick'em · goblin</td><td class="px"><span aria-hidden="true">&mdash;</span><span class="sr">No price</span></td></tr>
+          <tr><td><label><input type="radio" name="lc" value="10"><span class="num">4.5</span></label></td><td>Unibet</td><td class="kind">Sportsbook</td><td class="px">-238</td></tr>
+        </tbody>
+      </table>
+      <p class="lc-live" id="lc-live" aria-live="polite">Lines from one board capture. A lower line is easier to clear for the Over, and sportsbooks price it in.</p>
+    </div>
+   </div>
+  </section>
+
+  <!-- 6. slip studio -->
+  <section class="band glow" id="slips" aria-labelledby="slips-title">
+   <div class="wrap">
+    <div class="head rv"><h2 id="slips-title">Slips built for you</h2>
+      <p>Tell Slip Studio how many. Auto-build makes 1 to 12 PrizePicks or Underdog slips of 2 to 6 picks each from the lines open right now, and rechecks every line before you see them.</p></div>
+    <div class="ss">
+      <figure class="ss-img rv"><img src="/landing/realslip-scout.webp" width="600" height="1067" alt="A four-pick CS2 slip built by Scout Auto-build: oontoma, glowiing, Forester and flameZ, all Over" loading="lazy">
+        <figcaption>A real slip from Scout Auto-build</figcaption></figure>
+      <div>
+        <ul class="ticks rv">
+          <li>Each slip shows the chance every pick hits and the payout</li>
+          <li>Build your own slip and see the payout and the chance each pick needs to break even</li>
+          <li>Open the slip in the app, or edit it in My slip first. Slips save to your account, with a receipt when they settle</li>
+        </ul>
+        <div class="demo spot sb rv" style="--i:1" id="sb">
+          <div class="sb-ctl">
+            <div><span id="sb-app-l">App</span><div class="seg" id="sb-app" role="radiogroup" aria-labelledby="sb-app-l">
+              <button type="button" role="radio" aria-checked="true" tabindex="0" data-v="prizepicks">PrizePicks</button>
+              <button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="underdog">Underdog</button></div></div>
+            <div><span id="sb-play-l">Play</span><div class="seg" id="sb-play" role="radiogroup" aria-labelledby="sb-play-l">
+              <button type="button" role="radio" aria-checked="true" tabindex="0" data-v="std" id="sb-std">Power</button>
+              <button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="flex">Flex</button></div></div>
+            <div><span id="sb-n-l">Picks</span><div class="spin">
+              <button type="button" id="sb-minus" aria-label="Fewer picks">&minus;</button>
+              <div role="spinbutton" id="sb-n" tabindex="0" aria-labelledby="sb-n-l" aria-valuemin="2" aria-valuemax="6" aria-valuenow="4">4</div>
+              <button type="button" id="sb-plus" aria-label="More picks">+</button></div></div>
+          </div>
+          <ol class="legs" id="sb-legs"></ol>
+          <div aria-live="polite" id="sb-live"><div class="sb-out" id="sb-out"></div><p class="sb-flex" id="sb-flex" hidden></p><p class="sb-all" id="sb-all" hidden></p></div>
+          <p class="sb-note"><span class="tag dim">Example</span> Legs come from the real slip and real Scout boards. Payouts are each app's standard-line table; goblin and demon lines pay differently, and the app shows the final payout. In Scout, Slip Studio uses only lines open on the app you pick.</p>
+          <p class="nojs">Turn on JavaScript to try the slip example.</p>
+        </div>
+      </div>
+    </div>
+   </div>
+  </section>
+
+  <!-- 7. features -->
+  <section class="band scan" id="features" aria-labelledby="features-title">
+   <div class="wrap">
+    <div class="head rv"><h2 id="features-title">Everything behind a pick, on one screen</h2>
+      <p>CS2 kills and headshots from HLTV pro match history, League of Legends kills, assists and deaths, and NBA and NFL props, on one board. Every line carries a letter grade.</p></div>
+    <div class="fgrid">
+      <article class="fcard spot rv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 7l7-3 8 3 7-3v17l-7 3-8-3-7 3z"/><path d="M10 4v17M18 7v17"/></svg>
+        <h3>HLTV map chances</h3><p>Each map's chance to be played in a series, and the likeliest veto, on every CS2 card.</p></article>
+      <article class="fcard spot rv" style="--i:1"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="14" cy="9" r="4.5"/><path d="M5 24c1.5-5 5-7 9-7s7.5 2 9 7"/></svg>
+        <h3>Roles and stand-ins</h3><p>AWPer, IGL, Entry or Lurker under every CS2 name. Stand-ins are flagged and their stake is capped.</p></article>
+      <article class="fcard spot rv" style="--i:2"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 20l6-6 5 4 10-10"/><path d="M3 24h22"/></svg>
+        <h3>Line history</h3><p>How a line has moved on each app since it opened, with every change and when.</p></article>
+      <article class="fcard spot rv" style="--i:3"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 4v20M4 14h20"/><circle cx="14" cy="14" r="10"/></svg>
+        <h3>+EV board</h3><p>Lines where a book's price pays more than the fair chance from the other books.</p></article>
+      <article class="fcard spot rv"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="5" width="20" height="18" rx="2"/><path d="M4 11h20M10 11v12"/></svg>
+        <h3>Every book's price</h3><p>For NBA and NFL, DraftKings, FanDuel, BetRivers, Bovada and Unibet prices and Kalshi and Polymarket markets beside the pick'em line.</p></article>
+      <article class="fcard spot rv" style="--i:1"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 6h18v12H12l-5 4v-4H5z"/><path d="M10 12h8"/></svg>
+        <h3>Ask the Genie</h3><p>Ask about any line and get an answer from that line's own saved numbers.</p></article>
+      <a class="fcard spot rv" style="--i:2" href="/record"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 3h10l5 5v17H7z"/><path d="M11 13h7M11 17h7M11 21h4"/></svg>
+        <h3>A public record</h3><p>Forecasts are saved before each game and scored after it, for all four sports.</p><span class="go">See the record</span></a>
+      <a class="fcard spot rv" style="--i:3" href="/reviews"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M14 4l3 6.5 7 .8-5.2 4.8 1.5 7L14 19.6 7.7 23.1l1.5-7L4 11.3l7-.8z"/></svg>
+        <h3>Member reviews</h3><p>Every review is posted, good or bad.</p><span class="go">Read the reviews</span></a>
+    </div>
+   </div>
+  </section>
+
+  <!-- how it works -->
+  <section class="band" id="how" aria-labelledby="how-title">
+   <div class="wrap">
+    <div class="head rv"><h2 id="how-title">How it works</h2></div>
+    <ol class="steps rv" id="steps">
+      <li><span class="n">01</span><h3>Join on Whop</h3><p>Pick the membership on Whop, then come straight back.</p></li>
+      <li><span class="n">02</span><h3>Sign in with Whop</h3><p>Use the Whop account you joined with. No new password.</p></li>
+      <li><span class="n">03</span><h3>Get your slips</h3><p>Generate slips in one tap, or open the board and build your own.</p></li>
     </ol>
-    <div class="record">
+    <div class="record rv">
       <p><b>The record is public.</b> Scout's forecasts are saved before each game and scored after it.</p>
       <a class="btn second" href="/record">See the record</a>
       <a class="revlink" id="reviews-line" href="/reviews" hidden>Member reviews</a>
     </div>
-  </section>
 
-  <section class="final" aria-labelledby="final-title">
-    <h2 id="final-title">Your slips, built in one tap. One membership.</h2>
-    <p>CS2, League of Legends, NBA and NFL: every player prop graded, every book on one board, slips built for you.</p>
-    <div class="ctas">
-      <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
-    </div>
-    <p class="member">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
-    <p class="fine">Cancel anytime from your Whop account.</p>
-  </section>
+    <section class="final" id="final" aria-labelledby="final-title">
+      <h2 id="final-title">Your slips, built in one tap. One membership.</h2>
+      <p>CS2, League of Legends, NBA and NFL: every player prop graded, every book on one board, slips built for you.</p>
+      <div class="ctas">
+        <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
+      </div>
+      <p class="member">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
+      <p class="fine">Cancel anytime from your Whop account.</p>
+    </section>
 
-  <footer class="foot">
-    <span>1time Scout</span>
-    <nav aria-label="Footer"><a href="/auth/login">Sign in</a><a href="{{JOIN_URL}}">Join on Whop</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
-  </footer>
+    <footer class="foot">
+      <span>1time Scout</span>
+      <nav aria-label="Footer"><a href="/auth/login">Sign in</a><a href="{{JOIN_URL}}">Join on Whop</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
+    </footer>
+   </div>
+  </section>
 </main>
+<div class="dock" id="dock"><a class="btn primary" href="{{JOIN_URL}}">Join on Whop</a><a class="btn quiet" href="/auth/login">Sign in</a></div>
 <script>
 (function () {   // a failed sign-in comes back as /?signin_error=... (unchanged server flow): show it as text
   try {
@@ -334,29 +728,461 @@ footer.foot a:hover{color:#fff;background:#242d39}
     if (e) { var el = document.getElementById("signin-error"); el.textContent = e; el.hidden = false; }
   } catch (_) {}
 })();
-(function () {   // live proof: the public record's decided count and the member review rating. Text only; on any failure the
-  if (!window.fetch) return;   // static wording stays (never a zero, never a guess)
-  function fmt(n) { return Number(n).toLocaleString("en-US"); }
-  fetch("/api/reviews/summary", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-    var s = d && d.summary, a = document.getElementById("reviews-line"), b = document.getElementById("proof-reviews-n");
-    if (!s) return;
-    if (s.count > 0 && s.average) {
-      var t = "★ " + s.average.toFixed(1) + " from " + fmt(s.count) + (s.count === 1 ? " member review" : " member reviews");
-      if (a) a.textContent = t;
-      if (b) b.textContent = t;
+(function () {
+  "use strict";
+  var RM = window.matchMedia ? matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+  var FINE = window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches;
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+  var NS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, txt) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (txt != null) e.textContent = txt; return e; }
+  function f1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+  function pct(p) { return f1(p * 100) + "%"; }
+  var nf = window.Intl ? new Intl.NumberFormat("en-US") : { format: String };
+  function safe(fn) { try { fn(); } catch (e) { if (window.console) console.error(e); } }
+
+  /* ---------- reveal (one observer, unobserve once shown) ---------- */
+  var IO = "IntersectionObserver" in window;
+  function watch(nodes, cb, opts) {
+    if (!IO) { nodes.forEach(function (n) { cb(n, true); }); return null; }
+    var o = new IntersectionObserver(function (es) { es.forEach(function (e) { cb(e.target, e.isIntersecting, o); }); }, opts || {});
+    nodes.forEach(function (n) { o.observe(n); });
+    return o;
+  }
+  safe(function () {
+    var nodes = $$(".rv").concat($$("#steps"));
+    if (RM.matches || !IO) { nodes.forEach(function (n) { n.classList.add("in"); }); return; }
+    watch(nodes, function (n, vis, o) { if (vis) { n.classList.add("in"); if (o) o.unobserve(n); } }, { rootMargin: "0px 0px -6% 0px", threshold: 0.08 });
+  });
+  safe(function () {   // the light band runs only while its section is on screen
+    watch($$(".glow"), function (n, vis) { n.classList.toggle("on", vis); });
+  });
+
+  /* ---------- spotlight: one listener, rAF-throttled ---------- */
+  safe(function () {
+    if (!FINE) return;
+    var pend = null, ev = null;
+    document.addEventListener("pointermove", function (e) {
+      ev = e;
+      if (pend) return;
+      pend = requestAnimationFrame(function () {
+        pend = null;
+        var c = ev.target && ev.target.closest ? ev.target.closest(".spot") : null;
+        if (!c) return;
+        var r = c.getBoundingClientRect();
+        c.style.setProperty("--mx", (ev.clientX - r.left) + "px");
+        c.style.setProperty("--my", (ev.clientY - r.top) + "px");
+      });
+    }, { passive: true });
+  });
+
+  /* ---------- radiogroup / tablist with roving tabindex (APG) ---------- */
+  function group(root, attr, onChange) {
+    var opts = $$("[role=" + (attr === "aria-selected" ? "tab" : "radio") + "]", root), cur = 0;
+    function off(i) { return opts[i].getAttribute("aria-disabled") === "true"; }
+    function set(i, focus, quiet) {
+      cur = i;
+      opts.forEach(function (o, j) { o.setAttribute(attr, j === i ? "true" : "false"); o.tabIndex = j === i ? 0 : -1; });
+      root.style.setProperty("--seg-i", i);
+      if (focus) opts[i].focus();
+      if (!quiet) onChange(opts[i].getAttribute("data-v"), i);
     }
-    if (a) a.hidden = false;
-  }).catch(function () {});
-  var sports = ["cs2", "lol", "nba", "nfl"], total = 0, got = 0;
-  Promise.all(sports.map(function (sp) {
-    return fetch("/api/record?sport=" + sp, { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-      var t = d && d.totals;
-      if (t && typeof t.wins === "number" && typeof t.losses === "number") { total += t.wins + t.losses; got += 1; }
-    }).catch(function () {});
-  })).then(function () {
-    if (!got || !total) return;
-    document.getElementById("proof-record-n").textContent = fmt(total) + " picks scored in public";
-    document.getElementById("proof-record-t").textContent = "Saved before each game, scored after it. See the record";
+    opts.forEach(function (o, i) {
+      if (o.getAttribute(attr) === "true") cur = i;
+      o.addEventListener("click", function () { if (!off(i)) set(i); });
+      o.addEventListener("keydown", function (e) {
+        var n = opts.length, j = cur, step = 0, k = e.key;
+        if (k === "ArrowRight" || (attr !== "aria-selected" && k === "ArrowDown")) step = 1;
+        else if (k === "ArrowLeft" || (attr !== "aria-selected" && k === "ArrowUp")) step = -1;
+        else if (k === "Home") { j = 0; while (off(j) && j < n - 1) j++; }
+        else if (k === "End") { j = n - 1; while (off(j) && j > 0) j--; }
+        else return;
+        e.preventDefault();
+        if (step) { do { j = (j + step + n) % n; } while (off(j) && j !== cur); }
+        set(j, true);
+      });
+    });
+    root.style.setProperty("--seg-i", cur);
+    return { set: set, opts: opts, get: function () { return opts[cur].getAttribute("data-v"); } };
+  }
+
+  /* ---------- 1. live proof: public record + reviews (same origin only) ---------- */
+  safe(function () {
+    if (!window.fetch) return;
+    function getJSON(u) { return fetch(u, { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
+    var recEl = $("#proof-record"), seen = false, data = null;
+    function countTo(node, to) {
+      if (RM.matches) { node.textContent = nf.format(to); return; }
+      var from = Math.round(to * 0.55), t0 = 0;
+      (function step(t) {
+        if (!t0) t0 = t;
+        var k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3);
+        node.textContent = nf.format(Math.round(from + (to - from) * e));
+        if (k < 1) requestAnimationFrame(step);
+      })(performance.now());
+    }
+    function show() {
+      if (!seen || !data) return;
+      var b = $("#proof-record-n"), vis = el("span", null), srs = el("span", "sr", nf.format(data.total) + " picks scored in public");
+      b.className = ""; b.textContent = ""; vis.setAttribute("aria-hidden", "true"); vis.style.display = "inline-block";
+      vis.style.minWidth = (String(nf.format(data.total)).length + 0.5) + "ch";
+      b.appendChild(vis); b.appendChild(srs);
+      countTo(vis, data.total);
+      $("#proof-record-t").textContent = "picks scored in public. Saved before each game, scored after it, losses included.";
+      var ul = $("#proof-sports"), names = { cs2: "CS2", lol: "League", nba: "NBA", nfl: "NFL" };
+      data.per.forEach(function (p) { ul.appendChild(el("li", null, names[p[0]] + " " + nf.format(p[1]))); });
+      ul.hidden = !data.per.length;
+      data = null;
+    }
+    watch([recEl], function (n, vis, o) { if (vis) { seen = true; if (o) o.unobserve(n); show(); } }, { threshold: 0.4 });
+    var sports = ["cs2", "lol", "nba", "nfl"];
+    Promise.all(sports.map(function (sp) { return getJSON("/api/record?sport=" + sp); })).then(function (rs) {
+      var total = 0, per = [];
+      rs.forEach(function (d, i) {
+        var t = d && d.totals;
+        if (t && typeof t.wins === "number" && typeof t.losses === "number" && t.wins + t.losses > 0) { total += t.wins + t.losses; per.push([sports[i], t.wins + t.losses]); }
+      });
+      if (!total) return;                       // static wording stays: never a zero, never a guess
+      data = { total: total, per: per };
+      show();
+    });
+    getJSON("/api/reviews/summary").then(function (d) {
+      var s = d && d.summary, a = $("#reviews-line");
+      if (!s) return;
+      if (s.count > 0 && s.average) {
+        var t = "★ " + Number(s.average).toFixed(1) + " from " + nf.format(s.count) + (s.count === 1 ? " member review" : " member reviews");
+        if (a) a.textContent = t;
+        var b = $("#proof-reviews-n");
+        b.className = ""; b.textContent = "★ " + Number(s.average).toFixed(1);
+        $("#proof-reviews-t").textContent = "from " + nf.format(s.count) + (s.count === 1 ? " member review" : " member reviews") + ". Every review is posted, good or bad.";
+      }
+      if (a) a.hidden = false;
+    });
+  });
+
+  /* ---------- book marquee: pause button, pauses off screen ---------- */
+  safe(function () {
+    var mq = $("#mq"), b = $("#mq-pause");
+    b.addEventListener("click", function () { var on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", on ? "true" : "false"); mq.classList.toggle("paused", on); });
+    watch([mq], function (n, vis) { n.classList.toggle("off", !vis); });
+  });
+
+  /* ---------- 2. why Scout: without / with ---------- */
+  safe(function () {
+    var vs = $(".vs");
+    function apply(v) {
+      vs.setAttribute("data-mode", v);
+      $$(".no,.sum-no", vs).forEach(function (n) { n.setAttribute("aria-hidden", v === "with" ? "true" : "false"); });
+      $$(".yes,.sum-yes", vs).forEach(function (n) { n.setAttribute("aria-hidden", v === "with" ? "false" : "true"); });
+    }
+    group($("#vs-seg"), "aria-checked", apply);
+    apply("with");
+  });
+
+  /* ---------- 3. example board ---------- */
+  var BOARD = {
+    cs2: { src: "CS2 rows from a Scout board capture. Headshots and kills over two maps.", rows: [
+      { player: "tO0RO", meta: "Rifler · Virtus.pro vs Aces", stat: "Headshots", scope: "Maps 1-2", line: 20.5, book: "PrizePicks", variant: "Demon", side: "Under", chance: 71.8, proj: 17.4 },
+      { player: "danistzz", meta: "AWPer / Rifler · BAKS vs MASONIC", stat: "Headshots", scope: "Maps 1-2", line: 10.5, book: "Underdog", side: "Over", chance: 69.8, letter: "A-", proj: 13.1, hits: [["L5", 4, 5], ["L10", 7, 10]] },
+      { player: "whisper", meta: "Rifler · BAKS vs MASONIC", stat: "Kills", scope: "Maps 1-2", line: 28.5, book: "Underdog", side: "Over", chance: 67.7, letter: "B+", proj: 32.4, hits: [["L5", 4, 5], ["L10", 6, 10], ["L20", 9, 20]] }] },
+    lol: { src: "Worlds 2026 Main Event, Gen.G vs Bilibili Gaming, best of five, Nov 14. Kills over the first three games.", rows: [
+      { player: "Ruler", meta: "Bot · Gen.G vs BLG", stat: "Kills", scope: "Maps 1-3", line: 9.5, book: "PrizePicks", variant: "Goblin", side: "Over", chance: 72.6, letter: "A-", proj: 13.5 },
+      { player: "Kiin", meta: "Top · Gen.G vs BLG", stat: "Kills", scope: "Maps 1-3", line: 6.5, book: "PrizePicks", variant: "Goblin", side: "Over", chance: 70.1, letter: "A-", proj: 9.5 },
+      { player: "Viper", meta: "Bot · BLG vs Gen.G", stat: "Kills", scope: "Maps 1-3", line: 11.5, book: "Underdog", side: "Under", chance: 58.0, letter: "B", proj: 11.2 },
+      { player: "Canyon", meta: "Jungle · Gen.G vs BLG", stat: "Kills", scope: "Maps 1-3", line: 10.5, book: "Underdog", side: "Under", chance: 57.7, letter: "B", proj: 10.2 }] },
+    nba: { src: "NBA board of Nov 12, for games on Nov 13.", rows: [
+      { player: "Paul Reed", meta: "C · DET at WAS", stat: "Rebounds", line: 8.5, book: "PrizePicks / Underdog", side: "Under", chance: 75.3, letter: "A", proj: 6.6, median: 6, range: [3, 11] },
+      { player: "Oso Ighodaro", meta: "C · PHX vs CHA", stat: "Rebounds", line: 6.5, book: "PrizePicks / Underdog", side: "Under", chance: 72.5, letter: "A", proj: 5.2, median: 5, range: [2, 9] },
+      { player: "Zaccharie Risacher", meta: "SF · DAL at MIN", stat: "Rebounds", line: 2.5, book: "PrizePicks / Underdog", side: "Over", chance: 70.2, letter: "A", proj: 3.9, median: 4, range: [1, 7] },
+      { player: "Christian Anderson", meta: "PG · CHA at PHX", stat: "3-pointers made", line: 1.5, book: "Underdog", side: "Under", chance: 70.2, letter: "A", proj: 0.6, median: 0, range: [0, 2] }] },
+    nfl: { src: "NFL rows from a Scout board capture. Full game.", rows: [
+      { player: "Matt Hibner", meta: "TE · BAL vs LAC", stat: "Receptions", line: 1.5, book: "Underdog", side: "Under", chance: 88.1, letter: "A", proj: 0.7, hits: [["L5", 4, 5]] },
+      { player: "Zay Flowers", meta: "WR", stat: "Receptions", line: 6.5, book: "Polymarket", side: "Under", chance: 83.6, letter: "A", proj: 4.7, overHits: [3, 10], avg: 5.1, median: 5, range: [0, 8] },
+      { player: "Derrick Henry", meta: "RB", stat: "Rush yards", line: 90.5, book: "BetRivers · alternate", side: "Under", chance: 79.1, letter: "A", proj: 66.3 },
+      { player: "Josh Cuevas", meta: "TE", stat: "Receptions", line: 0.5, book: "Underdog", side: "Over", chance: 76.4, letter: "A", proj: 1.1 }] }
+  };
+  safe(function () {
+    var rowsUl = $("#bd-rows"), card = $("#pcard"), panel = $("#bd-panel"), src = $("#bd-src"), side = $(".bd"), sport = "cs2", sel = 0, lastLetter = null;
+    var narrow = window.matchMedia ? matchMedia("(max-width: 899px)") : { matches: false };
+    var C = 2 * Math.PI * 48;
+    // card skeleton, built once so the ring and bars animate between players
+    var inner = el("div", "pc-in");
+    var head = el("div", "pc-head"), hw = el("div"), h3 = el("h3"), meta = el("p"); hw.appendChild(h3); hw.appendChild(meta); head.appendChild(hw);
+    var tagE = el("span", "tag", "Example"); head.appendChild(tagE);
+    var chips = el("div", "pc-chips");
+    var main = el("div", "pc-main"), ring = el("div", "ring");
+    var rsv = sv("svg", { viewBox: "0 0 112 112", "aria-hidden": "true" });
+    rsv.appendChild(sv("circle", { "class": "bg", cx: 56, cy: 56, r: 48 }));
+    var fg = sv("circle", { "class": "fg", cx: 56, cy: 56, r: 48, "stroke-dasharray": C, "stroke-dashoffset": C });
+    rsv.appendChild(fg); ring.appendChild(rsv);
+    var rc = el("div"), rb = el("b"), rs = el("small", null, "chance"); rc.appendChild(rb); rc.appendChild(rs); ring.appendChild(rc);
+    var pick = el("div", "pc-pick"), sideE = el("div", "side"), pickP = el("p"); pick.appendChild(sideE); pick.appendChild(pickP);
+    var grade = el("span", "big-grade");
+    main.appendChild(ring); main.appendChild(pick); main.appendChild(grade);
+    var pbar = el("div", "pbar"), pk = el("div", "pbar-k"), pkl = el("span"), pkr = el("span"); pk.appendChild(pkl); pk.appendChild(pkr);
+    var pt = el("div", "pbar-t"), pfill = el("div", "pbar-fill"), pm = el("div", "pbar-m"), pmt = el("span"), pp = el("div", "pbar-p");
+    pm.appendChild(pmt); pt.appendChild(pfill); pt.appendChild(pm); pt.appendChild(pp); pbar.appendChild(pk); pbar.appendChild(pt);
+    var trk = el("ul", "trk"), note = el("p", "pc-note");
+    [head, chips, main, pbar, trk, note].forEach(function (n) { inner.appendChild(n); });
+    card.appendChild(inner);
+
+    function bar(label, n, d, txt) {
+      var li = el("li"), sp = el("span", null, label), i = el("i"), ii = el("i"), b = el("b", null, txt || (n + "/" + d));
+      ii.style.transform = "scaleX(0)"; i.appendChild(ii); li.appendChild(sp); li.appendChild(i); li.appendChild(b);
+      trk.appendChild(li);
+      requestAnimationFrame(function () { requestAnimationFrame(function () { ii.style.transform = "scaleX(" + (d ? n / d : 0) + ")"; }); });
+    }
+    function render() {
+      var r = BOARD[sport].rows[sel], ov = r.side === "Over";
+      h3.textContent = r.player; meta.textContent = r.meta;
+      chips.textContent = "";
+      [r.stat, r.scope, r.book, r.variant].forEach(function (c) { if (c) chips.appendChild(el("span", "tag dim", c)); });
+      rb.textContent = f1(r.chance) + "%";
+      fg.setAttribute("stroke-dashoffset", RM.matches ? C * (1 - r.chance / 100) : C);
+      requestAnimationFrame(function () { fg.setAttribute("stroke-dashoffset", C * (1 - r.chance / 100)); });
+      sideE.textContent = r.side + " " + r.line; sideE.className = "side " + (ov ? "ov" : "un");
+      pickP.textContent = r.stat + ". Scout's chance for the " + r.side + " at exactly " + r.line + ".";
+      if (r.letter) {
+        grade.hidden = false; grade.textContent = r.letter; grade.className = "big-grade" + (r.letter.charAt(0) === "A" ? "" : " b");
+        if (lastLetter !== r.letter && !RM.matches) { void grade.offsetWidth; grade.classList.add("pop"); }
+        grade.setAttribute("aria-label", "Grade " + r.letter);
+      } else { grade.hidden = true; }
+      lastLetter = r.letter || null;
+      // projection vs line
+      var hi = Math.max(r.line, r.proj) * 1.45, lo = 0, pos = function (v) { return ((v - lo) / (hi - lo) * 100) + "%"; };
+      pkl.textContent = "Projection " + r.proj; pkr.textContent = (r.proj >= r.line ? "+" : "") + f1(r.proj - r.line) + " vs line";
+      pm.style.left = pos(r.line); pmt.textContent = "Line " + r.line; pp.style.left = pos(r.proj);
+      var a = Math.min(r.line, r.proj), b = Math.max(r.line, r.proj);
+      pfill.style.left = pos(a); pfill.style.width = ((b - a) / (hi - lo) * 100) + "%";
+      // hit rates, only where the board had them
+      trk.textContent = "";
+      (r.hits || []).forEach(function (h) { bar(h[0], h[1], h[2]); });
+      if (r.overHits) bar("L10 Over", r.overHits[0], r.overHits[1]);
+      if (r.avg != null) bar("Average", r.avg, r.range[1], String(r.avg));
+      if (r.median != null) bar("Median", r.median, r.range[1], String(r.median));
+      if (r.range) { var li = el("li"); li.appendChild(el("span", null, "Range")); li.appendChild(el("span", null, r.range[0] + " to " + r.range[1])); li.appendChild(el("b")); trk.appendChild(li); }
+      trk.hidden = !trk.children.length;
+      note.textContent = r.hits || r.overHits ? "Hit rates at this line, as the board showed them." : (r.median != null ? "Median and range of recent games, as the board showed them." : "");
+      note.hidden = !note.textContent;
+      if (!RM.matches) { card.classList.remove("swap"); void card.offsetWidth; card.classList.add("swap"); }
+    }
+    function place() {
+      var btn = rowsUl.children[sel];
+      if (narrow.matches && btn) btn.appendChild(card); else if (card.parentNode !== side) side.appendChild(card);
+    }
+    function select(i, focus) {
+      sel = i;
+      $$(".prow", rowsUl).forEach(function (b, j) { b.setAttribute("aria-pressed", j === i ? "true" : "false"); });
+      render(); place();
+      if (focus) $$(".prow", rowsUl)[i].focus();
+    }
+    function load(sp) {
+      sport = sp; rowsUl.textContent = ""; src.textContent = BOARD[sp].src;
+      panel.setAttribute("aria-labelledby", "tab-" + sp);
+      BOARD[sp].rows.forEach(function (r, i) {
+        var li = el("li"), b = el("button", "prow"); b.type = "button"; b.setAttribute("aria-controls", "pcard");
+        var who = el("span", "who"), nm = el("b", null, r.player), mt = el("small", null, r.meta + " · " + r.stat); who.appendChild(nm); who.appendChild(mt);
+        var ln = el("span", "ln"), sd = el("span", r.side === "Over" ? "ov" : "un", r.side + " " + r.line); ln.appendChild(sd); ln.appendChild(el("br")); ln.appendChild(document.createTextNode(f1(r.chance) + "%"));
+        var g = el("span", "gchip" + (r.letter ? (r.letter.charAt(0) === "A" ? " a" : "") : " none"), r.letter || "-");
+        if (!r.letter) g.setAttribute("aria-hidden", "true");
+        b.appendChild(who); b.appendChild(ln); b.appendChild(g);
+        b.addEventListener("click", function () { select(i); });
+        li.appendChild(b); rowsUl.appendChild(li);
+      });
+      lastLetter = null; select(0);
+    }
+    group($("#bd-tabs"), "aria-selected", load);
+    if (narrow.addEventListener) narrow.addEventListener("change", place); else if (narrow.addListener) narrow.addListener(place);
+    load("cs2");
+  });
+
+  /* ---------- 4. grading: Scout's CS2 kills formula (grader.p_three + grade_from_p, live spread) ---------- */
+  function erf(x) {
+    var s = x < 0 ? -1 : 1; x = Math.abs(x);
+    if (x < 3) { var sum = x, term = x, x2 = x * x; for (var n = 1; n < 200; n++) { term *= -x2 / n; var t = term / (2 * n + 1); sum += t; if (Math.abs(t) < 1e-17) break; } return s * 2 / Math.sqrt(Math.PI) * sum; }
+    var u = 1 / (1 + 0.5 * x);
+    return s * (1 - u * Math.exp(-x * x - 1.26551223 + u * (1.00002368 + u * (0.37409196 + u * (0.09678418 + u * (-0.18628806 + u * (0.27886807 + u * (-1.13520398 + u * (1.48851587 + u * (-0.82215223 + u * 0.17087277))))))))));
+  }
+  function phi(z) { return 0.5 * (1 + erf(z / Math.SQRT2)); }
+  var SPREAD = 1.4756515691194962, BANDS = [[0.80, "A+"], [0.74, "A"], [0.68, "A-"], [0.63, "B+"], [0.57, "B"], [0.55, "B-"]];
+  function scoutKills(lam, line) {
+    var sd = SPREAD * Math.sqrt(Math.max(lam, 1)), whole = line % 1 === 0;
+    var up = whole ? line + 0.5 : Math.floor(line) + 0.5, dn = whole ? line - 0.5 : up;
+    var over = 1 - phi((up - lam) / sd), under = phi((dn - lam) / sd), push = Math.max(0, 1 - over - under);
+    var raw = over / (over + under), p = Math.min(0.78, Math.max(0.22, raw));
+    var side = p >= 0.5 ? "Over" : "Under", ch = Math.max(p, 1 - p), letter = "Lean " + side;
+    for (var i = 0; i < BANDS.length; i++) if (ch >= BANDS[i][0]) { letter = BANDS[i][1]; break; }
+    return { sd: sd, up: up, dn: dn, over: over, under: under, push: push, raw: raw, p: p, side: side, chance: ch, letter: letter, capped: raw !== p };
+  }
+  window.scoutKills = scoutKills;     // exposed for the page's own browser check
+  safe(function () {
+    var svg = $("#gd-svg"), L = $("#gd-line"), P = $("#gd-proj"), last = null, X0 = 10, X1 = 55, W = 640, top = 34, base = 214, YMAX = 0.066;
+    function x(v) { return 20 + (v - X0) / (X1 - X0) * (W - 40); }
+    function y(d) { return base - d / YMAX * (base - top); }
+    function pdf(v, m, s) { return Math.exp(-0.5 * Math.pow((v - m) / s, 2)) / (s * Math.sqrt(2 * Math.PI)); }
+    function area(a, b, m, s) {
+      a = Math.max(a, X0); b = Math.min(b, X1); if (b <= a) return "";
+      var d = "M" + x(a).toFixed(1) + " " + base, n = 60;
+      for (var i = 0; i <= n; i++) { var v = a + (b - a) * i / n; d += "L" + x(v).toFixed(1) + " " + y(pdf(v, m, s)).toFixed(1); }
+      return d + "L" + x(b).toFixed(1) + " " + base + "Z";
+    }
+    var gU = sv("path", { "class": "c-under" }), gP = sv("path", { "class": "c-push" }), gO = sv("path", { "class": "c-over" }), gL = sv("path", { "class": "c-line" });
+    svg.appendChild(sv("line", { "class": "c-axis", x1: 20, x2: W - 20, y1: base, y2: base }));
+    for (var t = 10; t <= 55; t += 5) svg.appendChild(sv("text", { "class": "c-tick", x: x(t), y: base + 18, "text-anchor": "middle" }, String(t)));
+    [gU, gP, gO, gL].forEach(function (n) { svg.appendChild(n); });
+    var pj = sv("line", { "class": "c-proj", y1: top - 6, y2: base }), pjt = sv("text", { "class": "c-tag2", y: base - 6, "text-anchor": "start" });
+    var mk = sv("line", { "class": "c-mark", y1: 18, y2: base }), mkt = sv("text", { "class": "c-tag", y: 12, "text-anchor": "middle" });
+    var lu = sv("text", { "class": "c-lab u", y: 52, "text-anchor": "end" }, "Under"), lo = sv("text", { "class": "c-lab o", y: 52, "text-anchor": "start" }, "Over");
+    [pj, pjt, mk, mkt, lu, lo].forEach(function (n) { svg.appendChild(n); });
+    var ladder = $$("#gd-ladder span"), lk = $("#gd-ladder-k");
+    lk.appendChild(el("span", null, "50%")); lk.appendChild(el("span", null, "55%")); lk.appendChild(el("span", null, "68%")); lk.appendChild(el("span", null, "80%+"));
+    var bigE = $("#gd-big"), sideE = $("#gd-side"), gE = $("#gd-grade"), brk = $("#gd-break"), noteE = $("#gd-note");
+    function fill(r) { r.style.setProperty("--p", ((r.value - r.min) / (r.max - r.min) * 100) + "%"); }
+    function draw() {
+      var line = parseFloat(L.value), lam = parseFloat(P.value), r = scoutKills(lam, line);
+      $("#gd-line-v").textContent = line.toFixed(1); $("#gd-proj-v").textContent = lam.toFixed(1);
+      fill(L); fill(P);
+      gU.setAttribute("d", area(X0, r.dn, lam, r.sd));
+      gO.setAttribute("d", area(r.up, X1, lam, r.sd));
+      gP.setAttribute("d", r.up > r.dn ? area(r.dn, r.up, lam, r.sd) : "");
+      gL.setAttribute("d", area(X0, X1, lam, r.sd).replace(/Z$/, "").replace(/^M[^L]+L/, "M"));
+      var lx = x(line);
+      mk.setAttribute("x1", lx); mk.setAttribute("x2", lx); mkt.setAttribute("x", lx); mkt.textContent = "Line " + line.toFixed(1);
+      var px = x(lam); pj.setAttribute("x1", px); pj.setAttribute("x2", px); pjt.setAttribute("x", px + 6); pjt.textContent = "Projection " + lam.toFixed(1);
+      lu.setAttribute("x", lx - 10); lo.setAttribute("x", lx + 10);
+      sideE.textContent = r.side + " " + line.toFixed(1) + " kills"; sideE.className = "side " + (r.side === "Over" ? "ov" : "un");
+      bigE.textContent = pct(r.chance);
+      var isLean = r.letter.indexOf("Lean") === 0;
+      gE.textContent = isLean ? "Lean" : r.letter; gE.className = "big-grade" + (r.letter.charAt(0) === "A" ? "" : " b"); gE.style.fontSize = isLean ? "15px" : "";
+      if (last !== null && last !== r.letter && !RM.matches) { gE.classList.remove("pop"); void gE.offsetWidth; gE.classList.add("pop"); }
+      last = r.letter;
+      brk.textContent = "";
+      function row(k, v) { var li = el("li"); li.appendChild(el("span", null, k)); li.appendChild(el("b", null, v)); brk.appendChild(li); }
+      row("Over " + line.toFixed(1), pct(r.p)); row("Under " + line.toFixed(1), pct(1 - r.p));
+      if (r.push > 0.0005) row("Push at " + line.toFixed(0) + ", taken out", pct(r.push));
+      row("Spread around the projection", r.sd.toFixed(2));
+      var ci = isLean ? 0 : 6 - BANDS.map(function (b) { return b[1]; }).indexOf(r.letter);
+      ladder.forEach(function (s, i) { s.classList.toggle("on", i === ci); });
+      noteE.textContent = r.capped ? "Kills chances are capped at 78% on either side, so this reads 78.0% (uncapped " + pct(Math.max(r.raw, 1 - r.raw)) + ")." :
+        "CS2 kills, Maps 1-2, with Scout's live spread. Letters use the cut points members see; under 55% it reads Lean " + r.side + ".";
+      var vt = "Line " + line.toFixed(1) + ", projection " + lam.toFixed(1) + ", " + r.side + " " + f1(r.chance * 100) + " percent, " + (isLean ? r.letter : "grade " + r.letter) + ", Example";
+      L.setAttribute("aria-valuetext", vt); P.setAttribute("aria-valuetext", vt);
+    }
+    function keys(e) {   // Radix-style big steps: PageUp/PageDown and Shift+arrows move 2.5
+      var big = e.key === "PageUp" || e.key === "PageDown" || (e.shiftKey && /^Arrow/.test(e.key));
+      if (!big) return;
+      e.preventDefault();
+      var dir = (e.key === "PageUp" || e.key === "ArrowUp" || e.key === "ArrowRight") ? 1 : -1, r = e.target;
+      r.value = Math.min(+r.max, Math.max(+r.min, parseFloat(r.value) + dir * 2.5)); draw();
+    }
+    [L, P].forEach(function (r) { r.addEventListener("input", draw); r.addEventListener("keydown", keys); });
+    draw();
+  });
+
+  /* ---------- 5. line comparison ---------- */
+  safe(function () {
+    var live = $("#lc-live");
+    $$("#lc input").forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        var tr = inp.closest("tr"), td = tr.children, best = tr.classList.contains("best");
+        var px = td[3].querySelector(".sr") ? "" : td[3].textContent.trim();
+        live.textContent = "Over " + td[0].querySelector(".num").textContent + " on " + td[1].textContent + " (" + td[2].textContent + ")" +
+          (px.length > 1 ? ", priced " + px : "") + (best ? ". The lowest line on this table." : ". The lowest line here is 2.5.") + " Example.";
+      });
+    });
+  });
+
+  /* ---------- 6. Slip Studio example ---------- */
+  safe(function () {
+    var LEGS = [
+      { p: "Flamez", m: "Falcons vs Vitality · CS2", pick: "Over 15 Headshots", src: "PrizePicks", c: 60.5 },
+      { p: "glowiing", m: "Azuolas vs BAKS · CS2", pick: "Over 30.5 Kills", src: "PrizePicks · demon", c: 66.4 },
+      { p: "Forester", m: "Butterfly vs Honved · CS2", pick: "Over 26.5 Kills", src: "PrizePicks · demon", c: 66.4 },
+      { p: "oontoma", m: "BRUTE vs Illyrians · CS2", pick: "Over 26.5 Kills", src: "PrizePicks", c: 60.3 },
+      { p: "Paul Reed", m: "DET at WAS · NBA", pick: "Under 8.5 Rebounds", src: "PrizePicks / Underdog", c: 75.3 },
+      { p: "Matt Hibner", m: "BAL vs LAC · NFL", pick: "Under 1.5 Receptions", src: "Underdog", c: 88.1 }];
+    var PAY = {
+      prizepicks: { std: { 2: 3, 3: 6, 4: 10, 5: 20, 6: 37.5 }, flex: { 3: { 0: 3, 1: 1 }, 4: { 0: 6, 1: 1.5 }, 5: { 0: 10, 1: 2, 2: 0.4 }, 6: { 0: 25, 1: 2, 2: 0.4 } }, std_name: "Power" },
+      underdog: { std: { 2: 3.5, 3: 6.5, 4: 12, 5: 20, 6: 35 }, flex: { 3: { 0: 3.25, 1: 1.09 }, 4: { 0: 6, 1: 1.4 }, 5: { 0: 10, 1: 2.5 }, 6: { 0: 25, 1: 2.6, 2: 0.25 } }, std_name: "Standard" }
+    };
+    var app = "prizepicks", play = "std", n = 4, ul = $("#sb-legs"), spin = $("#sb-n"), minus = $("#sb-minus"), plus = $("#sb-plus");
+    function choose(k, r) { var v = 1; for (var i = 0; i < r; i++) v = v * (k - i) / (i + 1); return v; }
+    function breakEven() {
+      if (play === "std") return Math.pow(PAY[app].std[n], -1 / n);
+      var F = PAY[app].flex[n], lo = 0.3, hi = 0.99;
+      function ev(p) { var s = 0; for (var k in F) { k = +k; s += choose(n, k) * Math.pow(p, n - k) * Math.pow(1 - p, k) * F[k]; } return s; }
+      for (var i = 0; i < 60; i++) { var mid = (lo + hi) / 2; if (ev(mid) < 1) lo = mid; else hi = mid; }
+      return (lo + hi) / 2;
+    }
+    function mult(v) { return (v % 1 ? String(v) : v.toFixed(0)) + "×"; }
+    function legEl(i) {
+      var g = LEGS[i], li = el("li", "leg"), d = el("div");
+      li.appendChild(el("span", "n", String(i + 1)));
+      d.appendChild(el("b", null, g.p + " · " + g.pick)); d.appendChild(el("small", null, g.m + " · " + g.src)); li.appendChild(d);
+      li.appendChild(el("span", "c", f1(g.c) + "%"));
+      return li;
+    }
+    function syncLegs() {
+      var have = ul.children.length;
+      for (var i = have; i < n; i++) {
+        var li = legEl(i); ul.appendChild(li);
+        if (!RM.matches) { li.classList.add("enter"); (function (x) { requestAnimationFrame(function () { requestAnimationFrame(function () { x.classList.remove("enter"); }); }); })(li); }
+      }
+      var kids = Array.prototype.slice.call(ul.children).filter(function (c) { return !c.classList.contains("leave"); });
+      kids.slice(n).forEach(function (li) {
+        if (RM.matches) { li.remove(); return; }
+        li.classList.add("leave"); setTimeout(function () { li.remove(); }, 190);
+      });
+    }
+    function out() {
+      var be = breakEven(), legs = LEGS.slice(0, n), above = legs.filter(function (g) { return g.c / 100 > be; }).length, box = $("#sb-out");
+      box.textContent = "";
+      function tile(k, v) { var d = el("div"); d.appendChild(el("span", null, k)); d.appendChild(el("b", null, v)); box.appendChild(d); }
+      var tbl = PAY[app][play === "std" ? "std" : "flex"][n];
+      tile(play === "std" ? "Payout if all " + n + " hit" : "Payout, all " + n + " hit", mult(play === "std" ? tbl : tbl[0]));
+      tile("Each pick needs", pct(be));
+      tile("Picks above that", above + " of " + n);
+      var fx = $("#sb-flex");
+      if (play === "flex") {
+        var parts = []; for (var k in tbl) parts.push((n - k) + " of " + n + " hit: " + mult(tbl[k]));
+        fx.textContent = "Flex pays " + parts.join(" · ") + ". Example."; fx.hidden = false;
+      } else fx.hidden = true;
+      var all = $("#sb-all");
+      if (n === 4) { all.textContent = "These are the four legs of the real slip pictured here. Scout printed the chance all four hit as 6.6%."; all.hidden = false; }
+      else all.hidden = true;
+    }
+    var playG, appG;
+    function update() {
+      spin.textContent = n; spin.setAttribute("aria-valuenow", n); spin.setAttribute("aria-valuetext", n + " picks");
+      minus.disabled = n <= 2; plus.disabled = n >= 6;
+      var flexOk = !!PAY[app].flex[n], flexBtn = playG.opts[1];
+      flexBtn.setAttribute("aria-disabled", flexOk ? "false" : "true");
+      flexBtn.title = flexOk ? "" : "Flex starts at 3 picks";
+      if (!flexOk && play === "flex") { play = "std"; playG.set(0, false, true); }
+      $("#sb-std").textContent = PAY[app].std_name;
+      syncLegs(); out();
+    }
+    playG = group($("#sb-play"), "aria-checked", function (v) { play = v; update(); });
+    appG = group($("#sb-app"), "aria-checked", function (v) { app = v; update(); });
+    function setN(v) { v = Math.max(2, Math.min(6, v)); if (v !== n) { n = v; update(); } }
+    minus.addEventListener("click", function () { setN(n - 1); });
+    plus.addEventListener("click", function () { setN(n + 1); });
+    spin.addEventListener("keydown", function (e) {
+      var k = e.key;
+      if (k === "ArrowUp" || k === "ArrowRight") setN(n + 1); else if (k === "ArrowDown" || k === "ArrowLeft") setN(n - 1);
+      else if (k === "Home") setN(2); else if (k === "End") setN(6); else return;
+      e.preventDefault();
+    });
+    update();
+  });
+
+  /* ---------- phone dock: shown once the hero buttons scroll away, hidden at the closing call ---------- */
+  safe(function () {
+    var dock = $("#dock"), heroOut = false, finalIn = false, hero = $(".hero .ctas"), fin = $("#final");
+    if (!IO || !hero || !fin) return;
+    function sync() { dock.classList.toggle("show", heroOut && !finalIn); }
+    watch([hero, fin], function (n, vis) { if (n === hero) heroOut = !vis && n.getBoundingClientRect().top < 0; else finalIn = vis; sync(); });
   });
 })();
 </script>

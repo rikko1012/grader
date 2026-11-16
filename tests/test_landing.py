@@ -150,6 +150,7 @@ def test_landing_content_and_wording(srv):
     # 2026-11-16 refresh: the product is shown with real screenshots, served from this app only (never a remote image)
     assert set(re.findall(r'<img src="([^"]+)"', s)) <= {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp", "/landing/slips.webp", "/landing/slip.webp", "/landing/realslip-scout.webp", "/landing/realslip-pp.webp"}
     assert "{{PRICE_LABEL}}" not in s and "$" not in text                     # no price unless LANDING_PRICE is set
+    assert "realslip-pp" not in s                  # owner 2026-11-16: the PrizePicks screenshot never comes back on the page
 
 
 def test_landing_uses_the_member_app_design():
