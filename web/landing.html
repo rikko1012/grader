@@ -74,24 +74,112 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 .member a:hover{text-decoration:underline}
 .err{margin:14px 0 0;padding:10px 14px;border-radius:6px;border:1px solid #344254;border-left:3px solid var(--bad);background:#1b222c;color:var(--text);font-size:14px}
 
-/* hero: the real board, with a real player card in front of it (unchanged) */
-.hero{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr);gap:44px;align-items:center;padding:52px 0 36px}
-.hero h1{font:600 52px/1.06 var(--font);letter-spacing:-.04em;margin:12px 0 14px}
+/* hero v4 (2026-11-16, owner: "you can upgrade hero too"): the copy, both buttons and a trust row on the left; on the right the
+   real board and player card behind one live example card that cycles NFL, NBA, CS2 and League using the board demo's own rows.
+   Background: a slow-panning grid, a scan beam and two soft glows, all transform-only, paused off screen and under reduced motion. */
+.hero{position:relative;isolation:isolate;overflow:hidden;border-bottom:1px solid var(--rule)}
+.hero-bg,.hero-glow{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.hero-bg{-webkit-mask-image:radial-gradient(ellipse 85% 80% at 68% 42%,#000 18%,transparent 74%);mask-image:radial-gradient(ellipse 85% 80% at 68% 42%,#000 18%,transparent 74%)}
+.hero-bg::before{content:"";position:absolute;left:0;right:0;top:-64px;bottom:0;
+  background-image:linear-gradient(90deg,rgba(67,81,101,.34) 1px,transparent 1px),linear-gradient(rgba(67,81,101,.34) 1px,transparent 1px);background-size:64px 64px;
+  animation:gridpan 9s linear infinite}
+.hero-bg::after{content:"";position:absolute;left:0;right:0;top:0;height:46%;transform:translateY(-110%);
+  background:linear-gradient(180deg,transparent 0,rgba(52,127,240,.035) 70%,rgba(119,173,255,.16) 98.5%,transparent 100%);animation:beam 9s var(--ease) 1.2s infinite}
+@keyframes gridpan{from{transform:translateY(0)}to{transform:translateY(64px)}}
+@keyframes beam{0%{transform:translateY(-110%)}55%,100%{transform:translateY(240%)}}
+.hero-glow::before,.hero-glow::after{content:"";position:absolute;border-radius:50%}
+.hero-glow::before{width:900px;height:640px;right:-180px;top:-120px;background:radial-gradient(closest-side,rgba(52,127,240,.2),transparent)}
+.hero-glow::after{width:560px;height:420px;left:-200px;bottom:-200px;background:radial-gradient(closest-side,rgba(119,173,255,.08),transparent)}
+@media (min-width:900px) and (hover:hover) and (pointer:fine){
+  .hero-glow::before{animation:drift 18s var(--ease) infinite alternate}
+  .hero-glow::after{animation:drift 22s var(--ease) infinite alternate-reverse}
+}
+html.js .hero:not(.on) .hero-bg::before,html.js .hero:not(.on) .hero-bg::after,html.js .hero:not(.on) .hero-glow::before,html.js .hero:not(.on) .hero-glow::after{animation-play-state:paused}
+.hero-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.04fr);gap:60px;align-items:center;padding-top:68px;padding-bottom:84px}
+.hero-k{display:flex;align-items:center;gap:12px}
+.hero-k::before{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:var(--btn)}
+.hero h1{font:600 clamp(42px,4.1vw,60px)/1.03 var(--font);letter-spacing:-.045em;margin:20px 0 20px}
+.hero h1>span{white-space:nowrap}
 .nb{white-space:nowrap}
-.lede{font-size:17.5px;line-height:1.6;color:var(--body);margin:0 0 24px;max-width:31em}
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .hero h1 .nb{background:linear-gradient(95deg,#dbeaff 0%,#a9cdff 38%,#77adff 72%,#347ff0 100%);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.06em}
+}
+.lede{font-size:18px;line-height:1.6;color:var(--body);margin:0 0 28px;max-width:30em}
 .ctas{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.shot{position:relative;min-width:0}
+.btn.ghost{background:rgba(22,28,36,.6);border-color:var(--rule-2);color:var(--text)}
+.btn.ghost:hover{border-color:var(--sel-line);background:var(--surf-3)}
+.btn.ghost svg{width:14px;height:14px}
+.trust{display:flex;margin:30px 0 0;padding:20px 0 0;list-style:none;border-top:1px solid var(--rule);max-width:520px}
+.trust>li{flex:1 1 0;min-width:0;padding:0 18px;border-left:1px solid var(--rule)}
+.trust>li:first-child{flex-grow:1.35;padding-left:0;border-left:0}
+.trust a,.trust>li>div{display:flex;flex-direction:column;justify-content:center;min-height:44px;color:inherit;text-decoration:none}
+.trust a:hover span{color:var(--link)}
+.trust b{font:500 24px/1.1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--text)}
+.trust b.word{font:600 20px/1.15 var(--font);letter-spacing:-.02em}
+.trust span{margin-top:3px;font-size:12.5px;line-height:1.35;color:var(--faint);transition:color var(--fast)}
 .frame{border:1px solid var(--card-line);border-radius:12px;overflow:hidden;background:var(--card);box-shadow:0 24px 60px #0007}
 .frame .bar{display:flex;gap:6px;align-items:center;height:28px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--side)}
 .frame .bar i{width:9px;height:9px;border-radius:50%;background:#2b323c}
 .frame .bar small{margin-left:10px;font:400 11px var(--mono);color:var(--faint)}
-.hero .board-shot{aspect-ratio:1140/883}
-.hero .card-shot{position:absolute;right:-22px;bottom:-56px;width:33%;max-width:250px;border-radius:12px;border:1px solid var(--line-2);
-  overflow:hidden;box-shadow:0 18px 50px #000a;background:var(--card)}
-.hero .phone-shot{display:none}
-@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.hero .shot{animation:rise .5s ease-out both}
-.hero .card-shot{animation:rise .55s .15s ease-out both}
+/* the stage: board at the back (slight turn), the real player card at the right, the live example card in front */
+.stage{position:relative;min-width:0;padding:0 0 116px}
+.stage .board-shot{position:relative;aspect-ratio:1140/883;transform:perspective(2000px) rotateY(-7deg) rotateX(2deg);transform-origin:0 50%;
+  box-shadow:0 40px 90px rgba(16,18,21,.85),0 0 0 1px rgba(119,173,255,.06)}
+.stage .board-shot::after{content:"";position:absolute;inset:28px 0 0;pointer-events:none;background:linear-gradient(180deg,transparent 55%,rgba(16,18,21,.55))}
+.stage .card-shot{position:absolute;right:-6px;bottom:6px;width:31%;max-width:236px;border-radius:14px;border:1px solid var(--line-2);overflow:hidden;
+  box-shadow:0 26px 60px rgba(16,18,21,.9);background:var(--card)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes lift{from{transform:perspective(2000px) rotateY(-7deg) rotateX(2deg) translateY(18px)}to{transform:perspective(2000px) rotateY(-7deg) rotateX(2deg)}}
+.stage .board-shot{animation:lift .7s var(--ease) both}
+@keyframes lift0{from{transform:translateY(18px)}to{transform:none}}
+.stage .card-shot{animation:rise .6s .12s var(--ease) both}
+/* the live example card */
+.hc{position:absolute;left:-44px;bottom:0;width:328px;z-index:2;display:flex;flex-direction:column;border-radius:14px;
+  background:var(--surf-2);border:1px solid var(--rule-2);box-shadow:0 30px 70px rgba(16,18,21,.9),inset 0 1px 0 rgba(244,246,250,.05);animation:rise .6s .22s var(--ease) both}
+.hc::before{content:"";position:absolute;left:18px;right:18px;top:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(119,173,255,.75),transparent)}
+html:not(.js) .hc{display:none}
+.hc-top{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 16px;border-bottom:1px solid var(--rule)}
+.hc-top .tag{height:22px;font-size:10.5px}
+.hc-src{flex:1;min-width:0;font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-pause{width:44px;height:44px;border-radius:10px;background:transparent;border-color:transparent}
+.hc-pause:hover{background:var(--surf-3)}
+.hc-pause .i-play,.hc.stopped .hc-pause .i-pause{display:none}
+.hc.stopped .hc-pause .i-play{display:block}
+.hc-body{padding:16px 16px 14px}
+.hc-who{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;align-items:center}
+.hc-who b{display:block;font:600 18px/1.2 var(--font);letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-who small{display:block;font-size:12.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc-chips{display:flex;gap:6px;margin:12px 0 0;height:24px;overflow:hidden}
+.hc-chips .tag{flex:none;height:22px;padding:0 8px;font-size:10.5px;letter-spacing:.03em}
+.hc-main{display:flex;align-items:center;gap:16px;margin:16px 0 0}
+.hc .ring,.hc .ring svg{width:96px;height:96px}
+.hc .ring .fg{transition:stroke-dashoffset 900ms var(--ease)}
+.hc .ring b{font-size:19px;letter-spacing:-.02em}
+.hc-pick{flex:1;min-width:0}
+.hc-pick .side{font:600 19px/1.2 var(--font);white-space:nowrap}
+.hc-pick p{margin:3px 0 0;font-size:12.5px;line-height:1.4;color:var(--muted)}
+.hc .big-grade{width:50px;height:50px;font-size:22px}
+.hc-proj{margin:16px 0 0}
+.hc-pk{display:flex;justify-content:space-between;font:400 11.5px/1 var(--mono);color:var(--faint);margin:0 0 9px}
+.hc-pk b{font-weight:500;color:var(--text)}
+.hc-trk{position:relative;height:14px}
+.hc-trk::before{content:"";position:absolute;left:0;right:0;top:6px;height:2px;border-radius:2px;background:var(--rule)}
+.hc-fill,.hc-m,.hc-p{position:absolute;left:0;top:0;width:100%;height:14px;transition:transform 700ms var(--ease)}
+.hc-fill{top:5px;height:4px;border-radius:2px;background:var(--accent);transform-origin:0 50%;transform:scaleX(0);opacity:.85}
+.hc-m i{position:absolute;left:-1px;top:-2px;width:2px;height:18px;border-radius:1px;background:var(--btn)}
+.hc-p i{position:absolute;left:-6px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--text);border:2px solid var(--bg)}
+.hc-body.swap .hc-who,.hc-body.swap .hc-chips,.hc-body.swap .hc-pick{animation:pcin 320ms var(--ease) both}
+.hc-body.swap .hc-chips{animation-delay:40ms}.hc-body.swap .hc-pick{animation-delay:80ms}
+.hc-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--rule);padding:0 6px}
+.hc-nav button{position:relative;min-height:46px;min-width:44px;padding:6px 0 0;border:0;background:none;color:var(--faint);font:500 12.5px var(--font);cursor:pointer;transition:color var(--fast)}
+.hc-nav button:hover{color:var(--text)}
+.hc-nav button[aria-pressed=true]{color:var(--sel-text)}
+.hc-nav button>i{position:absolute;left:8px;right:8px;top:0;height:2px;border-radius:2px;background:var(--rule);overflow:hidden}
+.hc-nav button>i>i{position:absolute;inset:0;background:var(--accent);transform:scaleX(0);transform-origin:0 50%}
+.hc-nav button[aria-pressed=true]>i>i{animation:hcprog 5.2s linear both}
+.hc.hold .hc-nav button>i>i{animation-play-state:paused}
+.hc.stopped .hc-nav button[aria-pressed=true]>i>i{animation:none;transform:none}
+@keyframes hcprog{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 
 /* ---------- below the hero ---------- */
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:-1px}
@@ -453,9 +541,15 @@ footer.foot a:hover{color:#fff;background:#242d39}
 /* phone dock: the two buttons once the hero's are off screen */
 .dock{display:none}
 
+@media(min-width:1280px){.stage .card-shot{right:-26px}}
+@media(max-width:1360px){.hc{left:-16px}}
 @media(max-width:1024px){
-  .hero{grid-template-columns:1fr;gap:34px;padding:40px 0 34px}
-  .hero .card-shot{right:-6px;bottom:-24px}
+  .hero-in{grid-template-columns:1fr;gap:48px;padding-top:52px;padding-bottom:64px}
+  .hero-copy{max-width:640px}
+  .stage{width:100%;max-width:760px;margin:0 auto;padding-bottom:72px}
+  .stage .board-shot{transform:none;animation-name:lift0}
+  .stage .card-shot{right:0}
+  .hc{left:0}
   .why{grid-template-columns:1fr}
   .why-l{position:static}
   .gd-wrap{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "plot" "out"}
@@ -471,8 +565,11 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .bd-list .pcard{margin:6px 0 4px;padding:var(--s4);border-color:var(--sel-line)}
 }
 @media(max-width:760px){
-  .hero .board-shot,.hero .card-shot{display:none}
-  .hero .phone-shot{display:block;max-width:380px;margin:0 auto}.hero .phone-shot img{width:100%}
+  .hero-in{gap:36px}
+  .stage{max-width:420px;padding:0}
+  .stage .board-shot{display:none}
+  .stage .card-shot{right:4px;top:0;bottom:auto;width:56%;max-width:none;transform:rotate(3deg);transform-origin:100% 0;animation:none;opacity:.92}
+  .hc{position:relative;left:auto;bottom:auto;width:auto;margin:118px 0 0;max-width:340px}
   html.js .proofs.rated{grid-template-columns:1fr}
   html:not(.js) .proofs{grid-template-columns:1fr}
   .books{grid-template-columns:1fr;padding:var(--s4)}
@@ -491,10 +588,18 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .wrap{padding:0 16px}
   header.top .wrap{height:60px}
   .topnav,.top .btn.primary{display:none}
-  .hero{padding:22px 0 20px;gap:22px}
-  .hero h1{font-size:34px;margin:8px 0 10px}
+  .hero-in{padding-top:26px;padding-bottom:40px;gap:30px}
+  .hero h1{font-size:clamp(32px,9.6vw,42px);line-height:1.04;margin:12px 0 12px}
   .lede{font-size:15.5px;margin-bottom:18px}
   .ctas .btn{flex:1 1 100%}
+  .ctas .btn.ghost{display:none}
+  .hero-k{font-size:10.5px;letter-spacing:.12em;gap:10px}.hero-k::before{width:20px}
+  .member{margin-top:6px}
+  .trust{margin-top:14px;padding-top:14px;max-width:none}
+  .trust>li{padding:0 12px}
+  .trust b{font-size:19px}.trust b.word{font-size:16px}
+  .trust span{font-size:11.5px}
+  .hero-bg::after{display:none}
   .band{padding-top:var(--s8)}
   .bleed{margin-top:var(--s8);padding:var(--s7) 0}
   .proofs{padding-top:var(--s5)}
@@ -544,6 +649,8 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .mq{height:auto;-webkit-mask-image:none;mask-image:none}
   .mq>span{position:static;white-space:normal;line-height:1.7}
   .mq>span+span,.mq-pause{display:none}
+  .hc-pause{display:none}
+  .hc-nav button[aria-pressed=true]>i>i{transform:none}
 }
 </style>
 </head>
@@ -560,26 +667,61 @@ footer.foot a:hover{color:#fff;background:#242d39}
 </header>
 
 <main id="main">
- <div class="wrap">
   <section class="hero" aria-labelledby="hero-title">
-    <div>
-      <p class="eyebrow">CS2 · League of Legends · NBA · NFL</p>
-      <h1 id="hero-title">Every player prop. <span class="nb">One board.</span></h1>
-      <p class="lede">Every app's line in one place. Each prop gets a letter grade, Scout's chance for the Over and the Under at that exact line, and the reason in plain English.</p>
-      <div class="ctas">
-        <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <p class="eyebrow hero-k">CS2 · League of Legends · NBA · NFL</p>
+        <h1 id="hero-title"><span>Every player prop.</span> <span class="nb">One board.</span></h1>
+        <p class="lede">Every app's line in one place. Each prop gets a letter grade, Scout's chance for the Over and the Under at that exact line, and the reason in plain English.</p>
+        <div class="ctas">
+          <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
+          <a class="btn ghost big" href="#demo">Try the example board <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        </div>
+        <p class="member">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
+        <p class="err" id="signin-error" role="alert" hidden></p>
+        <ul class="trust" aria-label="Scout in numbers">
+          <li><a href="/record"><b class="word" id="hero-rec-n">Public</b><span id="hero-rec-t">record, losses included</span></a></li>
+          <li><div><b>4</b><span>sports, one board</span></div></li>
+          <li><div><b id="hero-books">11</b><span>apps and books</span></div></li>
+        </ul>
       </div>
-      <p class="member">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
-      <p class="err" id="signin-error" role="alert" hidden></p>
-    </div>
-    <div class="shot">
-      <div class="frame board-shot"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Scout · All sports</small></div>
-        <img src="/landing/board.webp" width="1140" height="855" alt="The Scout board: NFL and CS2 player props with Scout's chance, letter grade, projection and hit rates" fetchpriority="high"></div>
-      <div class="card-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card explaining why Scout leans Under"></div>
-      <div class="frame phone-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card: Scout's chance, the projection and why Scout leans Under"></div>
+      <div class="stage">
+        <div class="frame board-shot"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Scout · All sports</small></div>
+          <img src="/landing/board.webp" width="1140" height="855" alt="The Scout board: NFL and CS2 player props with Scout's chance, letter grade, projection and hit rates" fetchpriority="high"></div>
+        <div class="card-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card: Scout's chance, the projection and why Scout leans Under"></div>
+        <div class="hc" id="hc" role="region" aria-roledescription="carousel" aria-label="Example prop card">
+          <div class="hc-top">
+            <span class="tag" id="hc-sport">Example</span><span class="hc-src">Real Scout board rows</span>
+            <button class="icon-btn hc-pause" type="button" id="hc-pause" aria-label="Stop rotating the examples">
+              <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="currentColor"/></svg>
+              <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg></button>
+          </div>
+          <div class="hc-body" id="hc-body" aria-live="off" aria-atomic="true">
+            <div class="hc-who"><span class="av" id="hc-av" aria-hidden="true"></span><div><b id="hc-name"></b><small id="hc-meta"></small></div></div>
+            <div class="hc-chips" id="hc-chips"></div>
+            <div class="hc-main">
+              <div class="ring"><svg viewBox="0 0 112 112" aria-hidden="true"><circle class="bg" cx="56" cy="56" r="48"/><circle class="fg" id="hc-fg" cx="56" cy="56" r="48"/></svg>
+                <div><b id="hc-pct"></b><small>chance</small></div></div>
+              <div class="hc-pick"><div class="side" id="hc-side"></div><p id="hc-why"></p></div>
+              <span class="big-grade" id="hc-grade"></span>
+            </div>
+            <div class="hc-proj"><div class="hc-pk"><span id="hc-pl"></span><span id="hc-ll"></span></div>
+              <div class="hc-trk" aria-hidden="true"><i class="hc-fill" id="hc-fill"></i><span class="hc-m" id="hc-m"><i></i></span><span class="hc-p" id="hc-p"><i></i></span></div></div>
+          </div>
+          <div class="hc-nav" id="hc-nav" role="group" aria-label="Pick a sport">
+            <button type="button" data-v="nfl" aria-pressed="true">NFL<i><i></i></i></button>
+            <button type="button" data-v="nba" aria-pressed="false">NBA<i><i></i></i></button>
+            <button type="button" data-v="cs2" aria-pressed="false">CS2<i><i></i></i></button>
+            <button type="button" data-v="lol" aria-pressed="false">League<i><i></i></i></button>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
+ <div class="wrap">
   <!-- 1. live proof -->
   <section class="proofs" id="proofs" aria-label="Proof">
     <div class="stat rec spot rv" id="proof-record">
@@ -842,7 +984,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
   });
   safe(function () {   // the scan line sweeps once per section; the light band runs only while its section is on screen
     if (!RM.matches) watch($$(".scan"), function (n, vis, o) { if (vis) { n.classList.add("lit"); if (o) o.unobserve(n); } }, { threshold: 0.2 });
-    watch($$(".gl").map(function (g) { return g.parentNode; }), function (n, vis) { n.classList.toggle("on", vis); });
+    watch($$(".gl").map(function (g) { return g.parentNode; }).concat($$(".hero")), function (n, vis) { n.classList.toggle("on", vis); });
   });
 
   /* ---------- spotlight: one listener, rAF-throttled ---------- */
@@ -893,10 +1035,38 @@ footer.foot a:hover{color:#fff;background:#242d39}
     return { set: set, opts: opts, get: function () { return opts[cur].getAttribute("data-v"); } };
   }
 
+  /* ---------- the public record: ONE round of /api/record calls, shared by the hero trust row and the proof band ---------- */
+  function getJSON(u) { return fetch(u, { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
+  var RECORD = !window.fetch || !window.Promise ? { then: function () {} } : (function () {
+    var sports = ["cs2", "lol", "nba", "nfl"];
+    return Promise.all(sports.map(function (sp) { return getJSON("/api/record?sport=" + sp); })).then(function (rs) {
+      var total = 0, per = [];
+      rs.forEach(function (d, i) {
+        var t = d && d.totals;
+        if (t && typeof t.wins === "number" && typeof t.losses === "number" && t.wins + t.losses > 0) { total += t.wins + t.losses; per.push([sports[i], t.wins + t.losses]); }
+      });
+      return total > 0 ? { total: total, per: per } : null;
+    }).catch(function () { return null; });
+  })();
+
+  /* ---------- hero trust row: the real record count (never a zero) and the number of books this page lists ---------- */
+  safe(function () {
+    var nb = $$('ul[aria-label="Books"] li').length;
+    if (nb) $("#hero-books").textContent = String(nb);
+    RECORD.then(function (d) {
+      if (!d || !(d.total > 0)) return;
+      safe(function () {
+        var b = $("#hero-rec-n");
+        b.className = ""; b.textContent = nf.format(d.total);
+        $("#hero-rec-t").textContent = "picks scored in public";
+        if (!RM.matches && b.animate) b.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 420, easing: "cubic-bezier(.2,.7,.2,1)" });
+      });
+    });
+  });
+
   /* ---------- 1. live proof: public record + reviews (same origin only) ---------- */
   safe(function () {
     if (!window.fetch) return;
-    function getJSON(u) { return fetch(u, { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
     var recEl = $("#proof-record"), seen = false, data = null;
     function countTo(node, to) {
       if (RM.matches) { node.textContent = nf.format(to); return; }
@@ -934,15 +1104,9 @@ footer.foot a:hover{color:#fff;background:#242d39}
       if (RM.matches) go(); else requestAnimationFrame(function () { requestAnimationFrame(go); });
     }
     watch([recEl], function (n, vis, o) { if (vis) { seen = true; if (o) o.unobserve(n); show(); } }, { threshold: 0.4 });
-    var sports = ["cs2", "lol", "nba", "nfl"];
-    Promise.all(sports.map(function (sp) { return getJSON("/api/record?sport=" + sp); })).then(function (rs) {
-      var total = 0, per = [];
-      rs.forEach(function (d, i) {
-        var t = d && d.totals;
-        if (t && typeof t.wins === "number" && typeof t.losses === "number" && t.wins + t.losses > 0) { total += t.wins + t.losses; per.push([sports[i], t.wins + t.losses]); }
-      });
-      if (!total) return;                       // static wording stays: never a zero, never a guess
-      data = { total: total, per: per };
+    RECORD.then(function (d) {
+      if (!d) return;                           // static wording stays: never a zero, never a guess
+      data = d;
       show();
     });
     getJSON("/api/reviews/summary").then(function (d) {
@@ -1013,6 +1177,94 @@ footer.foot a:hover{color:#fff;background:#242d39}
       { player: "Canyon", pos: "Jungle", match: "Gen.G vs BLG", stat: "Kills", scope: "Maps 1-3", line: 10.5, book: "Underdog", side: "Under", chance: 57.7, letter: "B", proj: 10.2 }] }
   };
   function initials(n) { var w = n.split(/\s+/); return (w.length > 1 ? w[0].charAt(0) + w[1].charAt(0) : n.slice(0, 2)).toUpperCase(); }
+
+  /* ---------- hero: one live example card. Cycles NFL -> NBA -> CS2 -> League through the BOARD rows above (graded rows only).
+     The active sport's progress bar is a CSS animation; its animationend advances the card, so pausing it pauses everything.
+     Holds while hovered (fine pointer), keyboard-focused, off screen or in a hidden tab; a pick or the button stops it for good.
+     Reduced motion: no rotation, no animation, the final numbers drawn at once. ---------- */
+  safe(function () {
+    var hc = $("#hc");
+    if (!hc) return;
+    var ORDER = ["nfl", "nba", "cs2", "lol"], NAMES = { nfl: "NFL", nba: "NBA", cs2: "CS2", lol: "League" };
+    var ROWS = {}; ORDER.forEach(function (sp) { ROWS[sp] = BOARD[sp].rows.filter(function (r) { return !!r.letter; }); });
+    var visits = { nfl: 0, nba: 0, cs2: 0, lol: 0 }, cur = null, shown = 0, lastLetter = null, holds = {}, stopped = !!RM.matches;
+    var body = $("#hc-body"), fg = $("#hc-fg"), pctE = $("#hc-pct"), gradeE = $("#hc-grade"), btn = $("#hc-pause");
+    var navBtns = $$("#hc-nav button"), C = 2 * Math.PI * 48, raf = 0;
+    fg.setAttribute("stroke-dasharray", C); fg.setAttribute("stroke-dashoffset", C);
+    function countTo(to) {
+      cancelAnimationFrame(raf);
+      var from = shown; shown = to;
+      if (RM.matches) { pctE.textContent = f1(to) + "%"; return; }
+      if (!from) from = to * 0.6;
+      var t0 = 0;
+      raf = requestAnimationFrame(function step(t) {
+        if (!t0) t0 = t;
+        var k = Math.min(1, (t - t0) / 800), e = 1 - Math.pow(1 - k, 3);
+        pctE.textContent = f1(from + (to - from) * e) + "%";
+        if (k < 1) raf = requestAnimationFrame(step);
+      });
+    }
+    function paint(sp) {
+      var rows = ROWS[sp], r = rows[visits[sp] % rows.length], ov = r.side === "Over";
+      cur = sp;
+      navBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-v") === sp ? "true" : "false"); });
+      $("#hc-sport").textContent = NAMES[sp] + " · Example";
+      $("#hc-av").textContent = initials(r.player);
+      $("#hc-name").textContent = r.player;
+      $("#hc-meta").textContent = r.pos + " · " + r.match;
+      var chips = $("#hc-chips"); chips.textContent = "";
+      chips.appendChild(el("span", "tag dim", r.stat + (r.scope ? " · " + r.scope : "")));
+      chips.appendChild(el("span", "tag dim", r.book + (r.variant ? " · " + r.variant : "")));
+      var side = $("#hc-side"); side.textContent = r.side + " " + r.line; side.className = "side " + (ov ? "ov" : "un");
+      $("#hc-why").textContent = "Scout's chance at exactly " + r.line;
+      countTo(r.chance);
+      fg.setAttribute("stroke-dashoffset", C * (1 - r.chance / 100));
+      gradeE.textContent = r.letter; gradeE.className = "big-grade" + (r.letter.charAt(0) === "A" ? "" : " b");
+      gradeE.setAttribute("aria-label", "Grade " + r.letter);
+      if (lastLetter !== null && !RM.matches) { gradeE.classList.remove("pop"); void gradeE.offsetWidth; gradeE.classList.add("pop"); }
+      lastLetter = r.letter;
+      // projection against the line, on one track (transform-only)
+      var hi = Math.max(r.line, r.proj) * 1.38, pos = function (v) { return v / hi * 100; };
+      $("#hc-pl").textContent = ""; $("#hc-pl").appendChild(document.createTextNode("Projection ")); $("#hc-pl").appendChild(el("b", null, String(r.proj)));
+      $("#hc-ll").textContent = ""; $("#hc-ll").appendChild(document.createTextNode("Line ")); $("#hc-ll").appendChild(el("b", null, String(r.line)));
+      $("#hc-m").style.transform = "translateX(" + pos(r.line).toFixed(2) + "%)";
+      $("#hc-p").style.transform = "translateX(" + pos(r.proj).toFixed(2) + "%)";
+      var a = Math.min(r.line, r.proj), b = Math.max(r.line, r.proj);
+      $("#hc-fill").style.transform = "translateX(" + pos(a).toFixed(2) + "%) scaleX(" + ((b - a) / hi).toFixed(4) + ")";
+      if (!RM.matches) { body.classList.remove("swap"); void body.offsetWidth; body.classList.add("swap"); }
+    }
+    function sync() {
+      var held = Object.keys(holds).some(function (k) { return holds[k]; });
+      hc.classList.toggle("hold", held);
+      hc.classList.toggle("stopped", stopped);
+      btn.setAttribute("aria-label", stopped ? "Start rotating the examples" : "Stop rotating the examples");
+      body.setAttribute("aria-live", stopped ? "polite" : "off");     // announce only when the visitor is in control
+    }
+    function hold(k, on) { holds[k] = on; sync(); }
+    function next() { var i = ORDER.indexOf(cur); visits[cur]++; paint(ORDER[(i + 1) % ORDER.length]); }
+    $("#hc-nav").addEventListener("animationend", function (e) {
+      if (stopped || e.animationName !== "hcprog") return;
+      next();
+    });
+    navBtns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var sp = b.getAttribute("data-v");
+        if (sp === cur) visits[sp]++;           // a second tap on the same sport shows its next row
+        stopped = true; sync(); paint(sp);
+      });
+    });
+    btn.addEventListener("click", function () { stopped = !stopped; if (!stopped) { holds.focus = false; } sync(); });
+    if (FINE) {
+      hc.addEventListener("mouseenter", function () { hold("hover", true); });
+      hc.addEventListener("mouseleave", function () { hold("hover", false); });
+    }
+    hc.addEventListener("focusin", function (e) { var fv = false; try { fv = e.target.matches(":focus-visible"); } catch (_) {} if (fv) hold("focus", true); });
+    hc.addEventListener("focusout", function (e) { if (!hc.contains(e.relatedTarget)) hold("focus", false); });
+    document.addEventListener("visibilitychange", function () { hold("tab", document.hidden); });
+    watch([hc], function (n, vis) { hold("off", !vis); });
+    sync();
+    paint("nfl");
+  });
   safe(function () {
     var rowsUl = $("#bd-rows"), card = $("#pcard"), panel = $("#bd-panel"), src = $("#bd-src"), live = $("#bd-live"), sport = "nfl", sel = 0, lastLetter = null;
     var narrow = mm("(max-width: 899px)");
