@@ -5236,7 +5236,8 @@ class Handler(BaseHTTPRequestHandler):
                                                           q.get("limit") or slip_audit.LIMIT_MAX,
                                                           role=lambda nick, team: awp_role(nick, {}, None, team),
                                                           paths={"studio": slip_builder.DB_PATH, "workspace": workspace_api.data_dir() / "workspace.db",
-                                                                 "recommended": slips.RECOMMENDED, "loaded": slips.LOADED, "batches": slip_batches.LOG}))
+                                                                 "recommended": slips.RECOMMENDED, "loaded": slips.LOADED, "batches": slip_batches.LOG,
+                                                                 "autobuild": workspace_api.data_dir() / "autobuild_log.jsonl"}))
                 except ValueError as e:
                     return self.send(400, {"error": str(e)})
             if u.path == "/admin/diagnostics.json" and self.authed(q.get("token")):

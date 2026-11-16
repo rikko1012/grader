@@ -7,6 +7,7 @@ Sources (every place a generated slip is kept):
   studio       Slip Studio (slip_builder, slip_studio.db): every slip a member's Build press made - immutable rows, + copy / load
                / void events
   hub          Auto-build in the new board (workspace.db member_state.studio): ONLY each member's latest saved batch is stored
+  autobuild    every distinct slip Auto-build generated since autobuild_log.py went live (autobuild_log.jsonl; no member id)
   tracked      slips members tracked (workspace.db slips + receipts + settlements: the member's own settled results)
   recommended  the old on-page builder's slips (slips_recommended.jsonl, first appearance of each)
   loaded       slips members loaded from the old on-page builder (slips_loaded.jsonl)
@@ -26,7 +27,7 @@ from pathlib import Path
 import picklog
 import slip_batches
 
-SOURCES = ("studio", "hub", "tracked", "recommended", "loaded", "batches")
+SOURCES = ("studio", "hub", "autobuild", "tracked", "recommended", "loaded", "batches")
 LIMIT_MAX = 200
 _PERIOD_SCOPE = {"map1": "1", "maps12": "12", "maps13": "123"}
 
@@ -219,7 +220,7 @@ def _settle(slips, role):
 
 
 def page(source, n=4, offset=0, limit=LIMIT_MAX, role=None, paths=None):
-    """One page of `source`'s n-pick slips, settled. paths: {"studio", "workspace", "recommended", "loaded", "batches"} (server.py)."""
+    """One page of `source`'s n-pick slips, settled. paths: {"studio", "workspace", "recommended", "loaded", "batches", "autobuild"} (server.py)."""
     if source not in SOURCES:
         raise ValueError("source must be one of " + ", ".join(SOURCES))
     n, offset, limit = int(n), max(0, int(offset)), max(1, min(LIMIT_MAX, int(limit)))
@@ -228,6 +229,14 @@ def page(source, n=4, offset=0, limit=LIMIT_MAX, role=None, paths=None):
         got, more = _studio(p["studio"], n, offset, limit)
     elif source == "hub":
         got, more = _hub(p["workspace"], n, offset, limit)
+    elif source == "autobuild":
+        got, more = _jsonl(p["autobuild"], n, offset, limit, lambda r: [(
+            hashlib.sha256("|".join(sorted(f"{l.get('book')}:{l.get('row_id')}:{l.get('side')}" for l in r.get("legs") or [])).encode()).hexdigest()[:16],
+            r.get("at"), r.get("platform"), r.get("entry_type"), None, {},
+            [_leg(l.get("sport"), l.get("player"), l.get("team"), l.get("stat"), _PERIOD_SCOPE.get(l.get("period"), l.get("period")), l.get("line"),
+                  l.get("side"), l.get("p"), l.get("grade"), l.get("match_slug") or l.get("event"),
+                  {"event": l.get("event"), "start": l.get("start"), "line_type": l.get("line_type"), "rank_p": l.get("rank_p"), "row_id": l.get("row_id"),
+                   "book": l.get("book"), **({"awper_hs": True} if l.get("awper_hs") else {})}) for l in r.get("legs") or []])])
     elif source == "tracked":
         got, more = _tracked(p["workspace"], n, offset, limit)
     elif source == "recommended":

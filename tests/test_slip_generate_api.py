@@ -311,3 +311,46 @@ def test_advice_never_suggests_an_awper_headshot_unless_allowed(env):
     assert st == 200 and {(r.get("replacement") or {}).get("player") for r in doc["legs"]} & {"scopey", "hybrido"}
     st, doc = post(env, "slip-advice", {"legs": wire(["scopey", "vargo"])})                 # the member's own AWPer leg keeps its facts
     assert st == 200 and doc["legs"][0]["in_pool"] is True
+
+
+# ------------------------------------------------------------------------------------------------- generated-slip log (owner 2026-11-16)
+
+def _log_lines():
+    import autobuild_log
+    p = workspace_api.data_dir() / autobuild_log.NAME
+    return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines()] if p.exists() else []
+
+
+def test_every_generated_slip_is_logged_once_with_its_settle_keys(env, monkeypatch):
+    """Owner 2026-11-16: only each member's latest batch was kept, so Auto-build could not be reviewed. Every distinct generated slip is
+    appended once per shared build (never per request, never with a member id), each CS2 leg with the pick log's match slug."""
+    import autobuild_log
+    monkeypatch.setattr(autobuild_log, "_SEEN", type(autobuild_log._SEEN)())
+    st, doc = gen(env, slips=4)
+    assert st == 200 and doc["slips"]
+    lines = _log_lines()
+    assert len(lines) == len(doc["slips"])
+    one = lines[0]
+    assert one["v"] == "abl-1" and one["platform"] == "prizepicks" and one["entry_type"] == "power" and one["n"] == 2 and one["options"]["awp_hs"] == "out"
+    assert {l["player"] for l in one["legs"]} == {l["player"] for l in doc["slips"][0]["legs"]}
+    assert all(l["match_slug"] and l["sport"] == "cs2" and l["row_id"] and l["side"] in ("over", "under") and l["p"] for l in one["legs"])
+    assert "member" not in json.dumps(lines) and "u1" not in json.dumps(lines)
+    for user in ("u1", "u2"):                                     # the same build again (another member, a fresh cache): nothing new
+        fresh()
+        assert gen(env, user=user, slips=4)[0] == 200
+    assert len(_log_lines()) == len(lines)
+    import slip_audit
+    page = slip_audit.page("autobuild", 2, 0, 50, None, {"autobuild": workspace_api.data_dir() / autobuild_log.NAME})
+    assert len(page["slips"]) == len(lines) and page["slips"][0]["legs"][0]["match"].startswith("slug-")
+
+
+def test_generated_slip_log_can_be_switched_off_and_never_costs_the_member(env, monkeypatch):
+    import autobuild_log
+    monkeypatch.setattr(autobuild_log, "_SEEN", type(autobuild_log._SEEN)())
+    monkeypatch.setenv("AUTOBUILD_LOG", "0")
+    assert gen(env, slips=2)[0] == 200 and _log_lines() == []
+    monkeypatch.setenv("AUTOBUILD_LOG", "1")
+    monkeypatch.setattr(autobuild_log, "record", lambda *a, **k: 1 / 0)
+    fresh()
+    st, doc = gen(env, slips=3)
+    assert st == 200 and doc["slips"]

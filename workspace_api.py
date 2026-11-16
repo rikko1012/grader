@@ -2148,6 +2148,27 @@ def _ranked(legs):
     return out
 
 
+def _log_generated(srv, o, slips, now, source):
+    """Every distinct generated slip, appended once per shared build (autobuild_log.py: no member id, admin read only). The CS2
+    legs carry the pick log's match slug so each can be settled later. Never raises: the log is for review, not for the member."""
+    try:
+        import autobuild_log
+        if not autobuild_log.enabled() or not slips:
+            return
+        index = (_SNAP.get("index") or {})
+
+        def slug_of(l):
+            x = index.get((l.get("book"), str(l.get("row_id"))))
+            return _slug_of(x) if x else None
+        opts = {k: (list(o[k]) if isinstance(o.get(k), tuple) else o.get(k)) for k in ("platform", "entry_type", "count", "size", "sports", "mix", "same_match",
+                                                                                     "no_repeat", "lines", "side", "awp_hs")}
+        opts["excluded"] = len(o.get("exclude") or ())
+        autobuild_log.record(data_dir() / autobuild_log.NAME, now.isoformat(timespec="seconds"), opts, slips, slug_of, source)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+
+
 def _generate(srv, o, ev_doc=None):
     now = datetime.now(timezone.utc)
     table = _slip_table(srv)
@@ -2183,6 +2204,7 @@ def _generate(srv, o, ev_doc=None):
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,
                     "banded": bool(table and table.get("cells"))},
            "slips": [_wire_slip(s, srv, now) for s in b["slips"]], "shortage": b["shortage"], "search": b["search"]}
+    _log_generated(srv, o, b["slips"], now, "ev-slips" if ev_doc is not None else "generate")
     if ev_doc is not None:
         doc['version'] = 'ev-slips-1'
         for slip in doc['slips']:
