@@ -15,6 +15,10 @@ forward_gate(...)      registered gate F per sport x market (>= 300 settled prop
 from __future__ import annotations
 
 import json
+import heapq
+import itertools
+from contextlib import ExitStack, closing
+from operator import itemgetter
 import math
 import sqlite3
 import time
@@ -174,24 +178,30 @@ def _score_one(lcon, icon, fid, fc, offer, cur):
     return 1, len(kinds)
 
 
-def scorecard(lcon=None, model_version=None):
-    own = lcon is None
-    lcon = lcon or db()
-    q = "SELECT * FROM scorecard WHERE superseded = 0"
+_group_key = itemgetter("model_version", "league", "stat")
+
+
+def _report_rows(con, table, model_version=None):
+    q = f"SELECT model_version, league, stat, event_id, p_side, p_push, status FROM {table} WHERE superseded = 0"
     a = []
     if model_version:
         q += " AND model_version = ?"
         a.append(model_version)
-    cur = lcon.execute(q, a)
+    cur = con.execute(q + " ORDER BY model_version, league, stat, rowid", a)
     names = [d[0] for d in cur.description]
-    rows = [dict(zip(names, r)) for r in cur.fetchall()]
-    if own:
-        lcon.close()
-    groups = {}
-    for r in rows:
-        groups.setdefault((r["model_version"], r["league"], r["stat"]), []).append(r)
+    return (dict(zip(names, r)) for r in cur)
+
+
+def scorecard(lcon=None, model_version=None):
+    with ExitStack() as stack:
+        con = lcon if lcon is not None else stack.enter_context(closing(db()))
+        return _scorecard_groups(_report_rows(con, "scorecard", model_version))
+
+
+def _scorecard_groups(rows):
     out = []
-    for (mv, lg, st), rs in sorted(groups.items()):
+    for (mv, lg, st), group in itertools.groupby(rows, _group_key):
+        rs = list(group)
         graded = [r for r in rs if r["status"] in ("win", "loss")]
         p = np.array([r["p_side"] / max(1e-9, 1 - (r["p_push"] or 0)) for r in graded], float)
         hit = np.array([1.0 if r["status"] == "win" else 0.0 for r in graded])
@@ -255,25 +265,24 @@ def grade_bands(rows):
 
 def grade_band_report(lcon=None):
     """Grade bands of the main scorecard + the sm-2 shadow scorecard (shadow.db), for the admin learning report."""
-    own = lcon is None
-    lcon = lcon or db()
-    cur = lcon.execute("SELECT model_version, league, stat, event_id, p_side, p_push, status FROM scorecard "
-                       "WHERE superseded = 0")
-    names = [d[0] for d in cur.description]
-    rows = [dict(zip(names, r)) for r in cur.fetchall()]
-    if own:
-        lcon.close()
-    try:
-        from . import shadow
-        rows += shadow.scorecard_rows()
-    except Exception:                                                   # noqa: BLE001 - report stays writable
-        pass
-    return grade_bands(rows)
+    with ExitStack() as stack:
+        con = lcon if lcon is not None else stack.enter_context(closing(db()))
+        rows = _report_rows(con, "scorecard")
+        path = config.DATA_DIR / "model" / "shadow.db"
+        if path.exists():
+            from . import shadow
+            try:
+                shadow_db = stack.enter_context(closing(shadow.db(path)))
+                shadow_rows = _report_rows(shadow_db, "shadow_scorecard")
+                rows = heapq.merge(rows, shadow_rows, key=_group_key)
+            except sqlite3.Error:
+                pass
+        return [result for _, group in itertools.groupby(rows, _group_key) for result in grade_bands(group)]
 
 
-def forward_gate(lcon=None):
+def forward_gate(lcon=None, *, scored=None):
     """Gate F as registered (REGISTER.md 7) - reported at review windows only."""
-    sc = scorecard(lcon)
+    sc = scorecard(lcon) if scored is None else scored
     by = {(r["model_version"], r["league"], r["stat"]): r for r in sc}
     out = []
     for (mv, lg, st), r in by.items():
