@@ -741,6 +741,15 @@ def test_batch_shortfall_is_explicit_and_controls_match_platform(ctx, env):
     p.locator('#hub-generation-book').select_option('prizepicks')
     assert p.locator('#hub-generation-count').input_value() == '6'
     assert p.locator('#hub-generation-count option').all_text_contents() == ['2 picks', '3 picks', '4 picks', '5 picks', '6 picks']
+    # owner 2026-11-16: Flex explained beside the entry type (no hit-rate claim); each platform keeps the member's own last choice
+    help_ = p.locator('#hub-generation-type-help').inner_text()
+    assert 'Flex can pay on partial hits' in help_ and 'Power requires every leg to hit' in help_ and 'PrizePicks' in help_
+    assert p.locator('#hub-generation-type').input_value() == 'power'                     # default unchanged
+    p.locator('#hub-generation-book').select_option('underdog')
+    assert p.locator('#hub-generation-type').input_value() == 'flex'                      # Underdog remembers its Flex
+    assert 'Standard requires every leg to hit' in p.locator('#hub-generation-type-help').inner_text()
+    p.locator('#hub-generation-book').select_option('prizepicks')
+    assert p.locator('#hub-generation-type').input_value() == 'power'
     assert not p.errors
 
 @pytest.mark.parametrize('size', [2,3,4,5,6])

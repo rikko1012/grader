@@ -66,6 +66,13 @@ export function mount(C) {
   /* owner 2026-11-16: AWPer headshot lines stay out of generated CS2 slips and suggested swaps unless the member allows them. Saved in prefs. */
   const cleanAwpHs=v=>v==='allow'?'allow':'out';
   H.awpHs='out';T.awpHs=H.awpHs;
+  /* owner 2026-11-16: the entry type stays each member's own last choice per platform (default unchanged: Power / Standard), with the
+     Flex vs Power / Standard difference said right beside it - never a hit-rate claim */
+  const ENTRY_DEFAULT={prizepicks:'power',underdog:'standard'};
+  const cleanEntry=v=>{const o={...ENTRY_DEFAULT};if(v&&typeof v==='object')for(const p of Object.keys(o)){if(C.PLATFORMS[p]?.types.some(t=>t[0]===v[p]))o[p]=v[p];}return o;};
+  H.genEntry={...ENTRY_DEFAULT};
+  const entryHelp=p=>{const all=p==='prizepicks'?'Power':'Standard',app=p==='prizepicks'?'PrizePicks':'Underdog';
+    return `<b>Flex</b> can pay on partial hits. <b>${all}</b> requires every leg to hit. Check the payout for your exact entry in ${app}.`;};
   H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',fresh:'all',sort:'ev',dense:false,stake:100,tab:null,moreOpen:false};
   try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
   /* QOL 2026-11-07: Price check's Book / Side / Minimum / Checked within / Sort are kept on this device across reloads (Sport still
@@ -967,7 +974,7 @@ export function mount(C) {
       for(let i=0;i<3;i++) {
         const state=await api('state');
         try {
-          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,awpHs:H.awpHs,...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
+          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,awpHs:H.awpHs,genEntry:H.genEntry,...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
           H.saveError=false; break;
         } catch(e) { if(e.status!==409||i===2) throw e; }
       }
@@ -1000,6 +1007,9 @@ export function mount(C) {
       H.slipLines=cleanLines(p.slipLines||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
       if($('hub-generation-lines'))$('hub-generation-lines').value=H.slipLines;
       H.awpHs=cleanAwpHs(p.awpHs);T.awpHs=H.awpHs;
+      H.genEntry=cleanEntry(p.genEntry);
+      if($('hub-generation-type')){const bk=$('hub-generation-book').value,el=$('hub-generation-type');
+        if([...el.options].some(o=>o.value===H.genEntry[bk])&&el.value!==H.genEntry[bk]){el.value=H.genEntry[bk];el.dispatchEvent(new Event('change',{bubbles:true}));}}
       if($('hub-generation-awphs'))$('hub-generation-awphs').value=H.awpHs;
       C.refreshAdvice?.();
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
@@ -1701,7 +1711,7 @@ export function mount(C) {
   function generatorHtml() {
     return `<section class="h-generator" aria-label="Generate slips"><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your batch</h2><p>Choose your sports and entry size. Review each generated slip before adding it to your picks.</p><fieldset id="hub-generation-sports"><legend>Eligible sports</legend>${allowed().map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls">
       <div class="h-generator-step"><span>01</span><h3>Entry setup</h3></div><label>Platform<select id="hub-generation-book"><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label>
-      <label>Entry type<select id="hub-generation-type"><option value="power">Power</option><option value="flex">Flex</option></select></label>
+      <label>Entry type<select id="hub-generation-type" aria-describedby="hub-generation-type-help"><option value="power">Power</option><option value="flex">Flex</option></select><small id="hub-generation-type-help">${entryHelp('prizepicks')}</small></label>
       <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} slips</option>`).join('')}</select></label>
       <label>Picks per slip<select id="hub-generation-count">${[2,3,4,5,6].map(n=>`<option value="${n}">${n} picks</option>`).join('')}</select></label>
       <div class="h-generator-step"><span>02</span><h3>Selection rules</h3></div><label>Sport mix<select id="hub-generation-mix"><option value="any">Any mix</option><option value="mixed">Mixed sports</option><option value="single">One sport</option></select></label>
@@ -2560,8 +2570,12 @@ export function mount(C) {
   $('hub-record-sport').addEventListener('change',showRecord);
   function generationControls() {
     const p=$('hub-generation-book').value,old=$('hub-generation-type').value;
+    const sameBook=$('hub-generation-type').dataset.book===p;
     $('hub-generation-type').innerHTML=C.PLATFORMS[p].types.map(([v,label])=>`<option value="${v}">${label}</option>`).join('');
-    if(C.PLATFORMS[p].types.some(t=>t[0]===old))$('hub-generation-type').value=old;
+    $('hub-generation-type').dataset.book=p;
+    const want=sameBook?old:(H.genEntry?.[p]||old);           /* another platform: that platform's own last choice */
+    if(C.PLATFORMS[p].types.some(t=>t[0]===want))$('hub-generation-type').value=want;
+    if($('hub-generation-type-help'))$('hub-generation-type-help').innerHTML=entryHelp(p);
     for(const o of $('hub-generation-count').options)o.disabled=(p==='prizepicks'&&Number(o.value)>6)||(p==='underdog'&&$('hub-generation-type').value==='flex'&&Number(o.value)<3);
     if($('hub-generation-count').selectedOptions[0]?.disabled)$('hub-generation-count').value=p==='prizepicks'?'6':'3';
     const stacks=$('hub-generation-games').querySelector('option[value="stacks"]');
@@ -2570,6 +2584,8 @@ export function mount(C) {
     mixed.disabled=p==='underdog';if(mixed.disabled&&$('hub-generation-mix').value==='mixed')$('hub-generation-mix').value='any';
   }
   for(const id of ['book','type'])$('hub-generation-'+id).addEventListener('change',generationControls);
+  $('hub-generation-type').addEventListener('change',()=>{const p=$('hub-generation-book').value,v=$('hub-generation-type').value;
+    if(H.genEntry[p]!==v){H.genEntry={...H.genEntry,[p]:v};savePreferences();}});
   $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
   if($('hub-generation-awphs')){
     $('hub-generation-awphs').addEventListener('change',()=>{H.awpHs=cleanAwpHs($('hub-generation-awphs').value);T.awpHs=H.awpHs;savePreferences();C.refreshAdvice?.();});
