@@ -96,7 +96,7 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 /* ---------- below the hero ---------- */
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:-1px}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.band{position:relative;padding:var(--s9) 0 0}
+.band{position:relative;isolation:isolate;padding:var(--s9) 0 0}
 .scan{isolation:isolate}
 .scan::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
   background-image:linear-gradient(90deg,rgba(32,38,46,.7) 1px,transparent 1px),linear-gradient(rgba(32,38,46,.7) 1px,transparent 1px);background-size:32px 32px;
@@ -899,21 +899,23 @@ footer.foot a:hover{color:#fff;background:#242d39}
     function getJSON(u) { return fetch(u, { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
     var recEl = $("#proof-record"), seen = false, data = null;
     function countTo(node, to) {
-      node.textContent = nf.format(RM.matches ? to : 0);
-      if (RM.matches) return;
-      var wait = Math.max(0, 700 - ((window.performance ? performance.now() : 0) - T0));   // after the hero has settled
-      setTimeout(function () {
-        var t0 = 0;
-        (function step(t) {
-          if (!t0) t0 = t;
-          var k = Math.min(1, (t - t0) / 1400), e = 1 - Math.pow(1 - k, 3);
-          node.textContent = nf.format(Math.round(to * e));
-          if (k < 1) requestAnimationFrame(step);
-        })(performance.now());
-      }, wait);
+      if (RM.matches) { node.textContent = nf.format(to); return; }
+      var from = Math.round(to * 0.5), t0 = 0;
+      node.textContent = nf.format(from);
+      (function step(t) {
+        if (!t0) t0 = t;
+        var k = Math.min(1, (t - t0) / 1400), e = 1 - Math.pow(1 - k, 3);
+        node.textContent = nf.format(Math.round(from + (to - from) * e));
+        if (k < 1) requestAnimationFrame(step);
+      })(performance.now());
     }
     function show() {
       if (!seen || !data) return;
+      var d = data; data = null;
+      var wait = RM.matches ? 0 : Math.max(0, 700 - ((window.performance ? performance.now() : 0) - T0));   // after the hero has settled
+      setTimeout(function () { paint(d); }, wait);
+    }
+    function paint(data) {
       var b = $("#proof-record-n"), vis = el("span", null), srs = el("span", "sr", nf.format(data.total));
       b.className = "rec-n"; b.textContent = ""; vis.setAttribute("aria-hidden", "true"); vis.style.display = "inline-block";
       vis.style.minWidth = (String(nf.format(data.total)).length + 0.3) + "ch";
@@ -929,8 +931,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       });
       ul.hidden = !data.per.length;
       var go = function () { fills.forEach(function (f) { f[0].style.transform = "scaleX(" + f[1] + ")"; }); };
-      if (RM.matches) go(); else setTimeout(function () { requestAnimationFrame(go); }, Math.max(0, 760 - ((window.performance ? performance.now() : 0) - T0)));
-      data = null;
+      if (RM.matches) go(); else requestAnimationFrame(function () { requestAnimationFrame(go); });
     }
     watch([recEl], function (n, vis, o) { if (vis) { seen = true; if (o) o.unobserve(n); show(); } }, { threshold: 0.4 });
     var sports = ["cs2", "lol", "nba", "nfl"];
@@ -1224,13 +1225,13 @@ footer.foot a:hover{color:#fff;background:#242d39}
       { b: "PrizePicks", k: "PP", t: "Pick'em · standard", l: 69.5, seen: "Nov 12, 04:10 UTC", c: 62.9, g: "A" },
       { b: "Underdog", k: "UD", t: "Pick'em", l: 69.5, seen: "Nov 12, 04:10 UTC", c: 62.9, g: "A" },
       { b: "Polymarket", k: "PM", t: "Prediction market", l: 69.5, seen: "Nov 12, 04:10 UTC", note: "Scout grades lines priced near even." }];
-    var MORE = [29.5, 39.5, 49.5, 59.5, 79.5, 89.5, 99.5, 109.5].map(function (v) { return { b: "Polymarket", k: "PM", t: "Market ladder", l: v, seen: "Nov 12, 04:10 UTC", note: "Scout grades lines priced near even.", small: true }; })
+    var MORE = [29.5, 39.5, 49.5, 59.5, 79.5, 89.5, 99.5, 109.5].map(function (v) { return { b: "Polymarket", k: "PM", t: "Market ladder", l: v, seen: "Nov 12, 04:10 UTC", note: v === 59.5 ? null : "Scout grades lines priced near even.", small: true }; })
       .concat([29.5, 39.5].map(function (v) { return { b: "Kalshi", k: "KA", t: "Market ladder", l: v, seen: "Nov 12, 03:30 UTC", small: true }; }));
     var list = $("#lt-list"), trackE = $("#lt-track"), liveE = $("#lt-live"), more = $("#lt-more"), chipsE = $("#lt-chips");
     var all = false, sel = 2, rows = MAIN;
     var lo0 = Math.min.apply(null, MAIN.map(function (r) { return r.l; })), hi0 = Math.max.apply(null, MAIN.map(function (r) { return r.l; }));
     chipsE.appendChild(el("span", "tag", "Lines differ by " + f1(hi0 - lo0) + " yards"));
-    chipsE.appendChild(el("span", "tag dim", (MAIN.length + MORE.length) + " lines on the board"));
+    chipsE.appendChild(el("span", "tag dim", (MAIN.length + MORE.length) + " lines shown here"));
     function current() { return all ? MAIN.concat(MORE.slice().sort(function (a, b) { return a.l - b.l; })) : MAIN; }
     function drawTrack() {
       trackE.textContent = "";
