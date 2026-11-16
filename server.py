@@ -52,6 +52,7 @@ import grade_display
 import line_chance
 import perf_shadow
 import whop_auth
+import reviews                  # member reviews (/reviews): its own SQLite file + photo store; never grades
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
 import letter_containment
@@ -4926,6 +4927,8 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if reviews.handles_get(u.path):                 # public like /record: served before the signed-out landing gate
+                return reviews.handle_get(self, sys.modules[__name__], u.path, q)
             if u.path in ('/record','/record.js','/api/record','/api/record/slips'):
                 if os.environ.get('SCOUT_PUBLIC_RECORD') != '1' or (u.path == '/api/record/slips' and os.environ.get('SCOUT_PUBLIC_RECORD_SLIPS') != '1'):
                     return self.send(404, {'error':'not found'})
@@ -5027,15 +5030,20 @@ class Handler(BaseHTTPRequestHandler):
                                        **({"pp_open_link": True} if PP_OPEN_LINK else {})})
             if u.path == "/auth/login" and whop_auth.enabled():
                 url, pkce = whop_auth.start_login()
-                return self.redirect(url, [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"])
+                cookies = [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"]
+                if q.get("next") in reviews.NEXT_PAGES:      # ?next=<key> from a FIXED allow-list - never a raw URL
+                    cookies.append(f"{reviews.NEXT_COOKIE}={q['next']}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax")
+                return self.redirect(url, cookies)
             if u.path == "/auth/callback" and whop_auth.enabled():
                 value, msg = whop_auth.finish_login(q.get("code", ""), q.get("state", ""),
                                                      self.cookie(whop_auth.PKCE_COOKIE))
                 if not value:
                     return self.redirect("/?signin_error=" + quote(msg))
-                return self.redirect("/", [f"{whop_auth.COOKIE}={value}; Max-Age={whop_auth.SESSION_DAYS * 86400}; "
-                                           f"Path=/; HttpOnly; Secure; SameSite=Lax",
-                                           f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/"])
+                back = reviews.NEXT_PAGES.get(self.cookie(reviews.NEXT_COOKIE) or "", "/")     # the allow-listed page, else /
+                return self.redirect(back, [f"{whop_auth.COOKIE}={value}; Max-Age={whop_auth.SESSION_DAYS * 86400}; "
+                                            f"Path=/; HttpOnly; Secure; SameSite=Lax",
+                                            f"{whop_auth.PKCE_COOKIE}=; Max-Age=0; Path=/",
+                                            f"{reviews.NEXT_COOKIE}=; Max-Age=0; Path=/"])
             if u.path == "/auth/logout":
                 return self.redirect("/", [f"{whop_auth.COOKIE}=; Max-Age=0; Path=/"])
             if u.path in ("/api/search", "/api/grade", "/api/board", "/api/line_check", "/api/match_compare", "/api/moneylines", "/api/moneyline-games", "/api/veto",
@@ -6437,6 +6445,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "bad Content-Length"})
         if u.path.startswith("/api/slip_studio/"):
             return self.studio_post(u.path, n)
+        if reviews.handles_post(u.path):                # before POST_MAX: the photo upload is larger; each route caps its own body,
+            return reviews.handle_post(self, sys.modules[__name__], u.path, n)   # and refuses unread (members/same-origin first)
         if u.path == "/alerts/unsubscribe":
             if n > 512:
                 self.close_connection = True

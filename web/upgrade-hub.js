@@ -1732,7 +1732,7 @@ export function mount(C) {
     const sports=sport==='all'?allowed():[sport];
     const docs=await Promise.allSettled(sports.map(s=>api(s==='cs2'?'stated':'results?sport='+s)));
     if(seq!==H.seq||H.section!=='record') return;
-    $('hub-record-body').innerHTML=(R.me.features?.public_record?'<p><a href="/record" target="_blank" rel="noopener">Open the shareable public record ↗</a></p>':'')+docs.map((res,i)=>{
+    $('hub-record-body').innerHTML=(R.me.features?.public_record?'<p><a href="/record" target="_blank" rel="noopener">Open the shareable public record ↗</a></p>':'')+(R.me.features?.reviews?'<p><a href="/reviews" target="_blank" rel="noopener">Member reviews ↗</a></p>':'')+docs.map((res,i)=>{
       const s=sports[i];
       if(res.status!=='fulfilled') return `<article class="h-record-card"><h2>${SPORTS[s]}</h2><p>Record unavailable. <button data-hub="record-retry">Retry</button></p></article>`;
       const d=res.value,t=d.totals||{},bands=s==='cs2'?d.by_letter:d.groups?.chance;

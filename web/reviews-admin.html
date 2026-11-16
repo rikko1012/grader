@@ -1,0 +1,93 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Scout | Reviews (owner)</title><style>
+:root{color-scheme:dark;font-family:Arial,sans-serif;background:#0c1016;color:#eef3fb}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0}main{max-width:1000px;margin:auto;padding:24px 16px}
+h1{font-size:28px;margin:0 0 6px}p{color:#a8b5c8;line-height:1.5}a{color:#8bb8ff}
+button,select{font:inherit;min-height:40px;border:1px solid #344256;background:#182230;color:#dce8f8;border-radius:7px;padding:8px 14px;cursor:pointer}
+.primary{background:#2471ed;border-color:#2471ed;color:#fff}.danger{border-color:#7e4c4c;background:#2a1717;color:#ffd6d6}
+textarea,input[type=text]{width:100%;font:inherit;color:#eef3fb;background:#0f151e;border:1px solid #344256;border-radius:7px;padding:10px}textarea{min-height:80px}
+.rv{background:#121924;border:1px solid #29313d;border-radius:10px;padding:16px;margin:12px 0}.rv.hidden{border-color:#7e4c4c;opacity:.85}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:#a8b5c8}.meta b{color:#eef3fb}.flag{color:#ffb3b3;font-weight:700}
+.body{white-space:pre-line;overflow-wrap:anywhere;color:#cfd9e6}.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.thumbs{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}.thumbs figure{margin:0;width:110px}.thumbs img{width:110px;height:110px;object-fit:cover;border-radius:6px;display:block}.thumbs button{width:100%;margin-top:4px;font-size:12px;padding:4px}
+.msg{min-height:1.3em;color:#dce8f8}.msg.bad{color:#ffb3b3}details{margin-top:18px;color:#a8b5c8}table{border-collapse:collapse;font-size:13px}td,th{padding:6px 8px;border-bottom:1px solid #29313d;text-align:left}
+</style></head><body><main>
+<h1>Member reviews (owner)</h1>
+<p>Every review is published straight away. Hide one only for <b>spam</b>, <b>slurs or abuse</b>, or <b>personal info</b>, whatever its rating; the reason is logged. Replies show as "1Time (owner)". <a href="/reviews">Open the public page</a></p>
+<p id="sum" class="meta"></p><p id="msg" class="msg" role="status"></p>
+<div id="list">Loading…</div>
+<details><summary>Moderation log</summary><div id="log"></div></details>
+</main><script>
+(function () {
+  "use strict";
+  /* The owner's link carries ?token= once: it is moved into this tab's memory and out of the address bar; every request sends it
+     in the X-Admin-Token header, never in a URL. */
+  var TOKEN = new URLSearchParams(location.search).get("token") || "";
+  try { if (location.search) history.replaceState(null, "", location.pathname); } catch (_) {}
+  var REASONS = {};
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === "text") e.textContent = attrs[k]; else if (k === "class") e.className = attrs[k];
+      else if (k.indexOf("on") === 0) e.addEventListener(k.slice(2), attrs[k]); else if (attrs[k] != null && attrs[k] !== false) e.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function say(t, bad) { $("msg").textContent = t || ""; $("msg").className = "msg" + (bad ? " bad" : ""); }
+  function call(path, body) {
+    var o = { headers: { "X-Admin-Token": TOKEN }, cache: "no-store" };
+    if (body) { o.method = "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
+    return fetch(path, o).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { d._status = r.status; return d; }); });
+  }
+  function act(body, done) {
+    call("/admin/reviews/action", body).then(function (d) {
+      if (d._status === 200) { say("Saved."); load(); } else say(d.error || "Failed", true);
+    });
+  }
+  function card(r) {
+    var meta = el("div", { class: "meta" }, [el("b", { text: "#" + r.id + " · " + r.stars + "★" }), el("span", { text: r.name + " (" + r.name_style + ")" }),
+      el("span", { text: "posted " + (r.created || "") }), r.edited ? el("span", { text: "edited " + r.edited }) : null,
+      r.hidden ? el("span", { class: "flag", text: "HIDDEN: " + (REASONS[r.hidden_reason] || r.hidden_reason) + (r.hidden_note ? " - " + r.hidden_note : "") }) : null]);
+    var kids = [meta];
+    if (r.title) kids.push(el("h3", { text: r.title }));
+    kids.push(el("p", { class: "body", text: r.body }));
+    if (r.photos.length) kids.push(el("div", { class: "thumbs" }, r.photos.map(function (p) {
+      return el("figure", null, [el("img", { src: p.thumb, alt: "" }), el("button", { type: "button", class: "danger", text: "Remove photo", onclick: function () {
+        var why = prompt("Remove this photo. Reason (spam / abuse / personal_info):", "personal_info");
+        if (why === null) return;
+        act({ action: "remove_photo", id: r.id, photo: p.id, reason: why.trim() });
+      } })]);
+    })));
+    var reply = el("textarea", { "aria-label": "Owner reply to review " + r.id, maxlength: "1500" });
+    reply.value = r.reply ? r.reply.text : "";
+    kids.push(el("div", null, [el("p", { text: "Reply publicly as 1Time (owner) - leave empty and save to remove the reply." }), reply,
+      el("div", { class: "row" }, [el("button", { type: "button", class: "primary", text: "Save reply", onclick: function () { act({ action: "reply", id: r.id, text: reply.value }); } })])]));
+    if (r.hidden) {
+      kids.push(el("div", { class: "row" }, [el("button", { type: "button", text: "Unhide (publish again)", onclick: function () { act({ action: "unhide", id: r.id }); } })]));
+    } else {
+      var sel = el("select", { "aria-label": "Reason to hide review " + r.id }, [el("option", { value: "", text: "Hide for…" })].concat(Object.keys(REASONS).map(function (k) { return el("option", { value: k, text: REASONS[k] }); })));
+      var note = el("input", { type: "text", placeholder: "Note (optional)", maxlength: "300", "aria-label": "Hide note" });
+      kids.push(el("div", { class: "row" }, [sel, note, el("button", { type: "button", class: "danger", text: "Hide", onclick: function () {
+        if (!sel.value) { say("Choose a reason first.", true); return; }
+        act({ action: "hide", id: r.id, reason: sel.value, note: note.value });
+      } })]));
+    }
+    return el("article", { class: "rv" + (r.hidden ? " hidden" : "") }, kids);
+  }
+  function load() {
+    call("/admin/reviews.json").then(function (d) {
+      if (d._status !== 200) { $("list").textContent = "Not signed in as the owner - open this page from the owner link."; return; }
+      REASONS = d.reasons || {};
+      var s = d.summary;
+      $("sum").textContent = s.count ? ("Published: " + s.count + " · average " + s.average + " · 5★ " + s.breakdown["5"] + " · 4★ " + s.breakdown["4"] + " · 3★ " + s.breakdown["3"] + " · 2★ " + s.breakdown["2"] + " · 1★ " + s.breakdown["1"] + " · total incl. hidden: " + d.reviews.length) : "No published reviews yet.";
+      $("list").textContent = "";
+      if (!d.reviews.length) $("list").textContent = "No reviews yet.";
+      d.reviews.forEach(function (r) { $("list").appendChild(card(r)); });
+      var t = el("table", null, [el("tr", null, ["When", "Review", "Stars", "Action", "Reason", "Note"].map(function (h) { return el("th", { text: h }); }))]);
+      (d.log || []).forEach(function (l) { t.appendChild(el("tr", null, [l.at, "#" + l.review, String(l.stars || ""), l.action, l.reason || "", l.note || ""].map(function (x) { return el("td", { text: x }); }))); });
+      $("log").textContent = ""; $("log").appendChild(t);
+    });
+  }
+  load();
+})();
+</script></body></html>

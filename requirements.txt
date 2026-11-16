@@ -2,3 +2,4 @@ requests>=2.31
 aiohttp>=3.8.0
 numpy>=1.26
 psycopg2-binary>=2.9   # hltv.py: reads the hltv-scraper database (optional)
+pillow>=11,<13      # reviews.py: member review photos re-encoded (metadata stripped); imported on the first upload only

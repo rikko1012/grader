@@ -89,6 +89,9 @@ section.block{padding:30px 0}
 .record{margin:14px 0 0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px 22px;border-radius:9px;background:var(--panel);border:1px solid #2a313b;border-left:3px solid var(--accent)}
 .record p{margin:0;color:var(--body);font-size:14px;max-width:40em}
 .record p b{color:var(--text);font-weight:600}
+.record>p{margin-right:auto}
+.revlink{display:inline-flex;align-items:center;min-height:44px;color:var(--link);font-size:14px;font-weight:500;text-decoration:none}
+.revlink:hover{text-decoration:underline}
 
 /* closing call */
 .final{margin:26px 0 0;padding:32px 24px;border-radius:12px;text-align:center;background:var(--card);border:1px solid var(--card-line)}
@@ -205,6 +208,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
     <div class="record">
       <p><b>The record is public.</b> Scout's forecasts are saved before each game and scored after it.</p>
       <a class="btn second" href="/record">See the record</a>
+      <a class="revlink" id="reviews-line" href="/reviews" hidden>Member reviews</a>
     </div>
   </section>
 
@@ -228,6 +232,16 @@ footer.foot a:hover{color:#fff;background:#242d39}
     var e = new URLSearchParams(location.search).get("signin_error");
     if (e) { var el = document.getElementById("signin-error"); el.textContent = e; el.hidden = false; }
   } catch (_) {}
+})();
+(function () {   // member reviews: the live rating line, shown only when the reviews page answers (never review text or photos here)
+  var a = document.getElementById("reviews-line");
+  if (!a || !window.fetch) return;
+  fetch("/api/reviews/summary", { credentials: "same-origin" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    var s = d && d.summary;
+    if (!s) return;
+    if (s.count > 0 && s.average) a.textContent = "★ " + s.average.toFixed(1) + " from " + s.count + (s.count === 1 ? " member review" : " member reviews");
+    a.hidden = false;
+  }).catch(function () {});
 })();
 </script>
 </body>
