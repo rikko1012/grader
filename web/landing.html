@@ -9,8 +9,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="preload" as="image" href="/landing/slips.webp" media="(min-width: 761px)">
-<link rel="preload" as="image" href="/landing/slip.webp" media="(max-width: 760px)">
+<link rel="preload" as="image" href="/landing/board.webp" media="(min-width: 761px)">
+<link rel="preload" as="image" href="/landing/card.webp" media="(max-width: 760px)">
 <style>
 /* The member app's own tokens (web/upgrade-hub.css .scout-hub, web/upgrade.css html[data-upgrade]): charcoal, white, one blue.
    2026-11-16 landing refresh (owner: "fix our landing page so the product sells"): the real product above the fold, Join first,
@@ -73,7 +73,7 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 .frame .bar{display:flex;gap:6px;align-items:center;height:28px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--side)}
 .frame .bar i{width:9px;height:9px;border-radius:50%;background:#2b323c}
 .frame .bar small{margin-left:10px;font:400 11px var(--mono);color:var(--faint)}
-.hero .board-shot{aspect-ratio:852/616}
+.hero .board-shot{aspect-ratio:1140/883}
 .hero .card-shot{position:absolute;right:-22px;bottom:-56px;width:33%;max-width:250px;border-radius:12px;border:1px solid var(--line-2);
   overflow:hidden;box-shadow:0 18px 50px #000a;background:var(--card)}
 .hero .phone-shot{display:none}
@@ -143,7 +143,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
 }
 @media(max-width:760px){
   .hero .board-shot,.hero .card-shot{display:none}
-  .hero .phone-shot{display:block;max-width:300px;margin:0 auto}.hero .phone-shot img{width:100%}
+  .hero .phone-shot{display:block;max-width:380px;margin:0 auto}.hero .phone-shot img{width:100%}
   .proof{grid-template-columns:1fr}
 }
 @media(max-width:640px){
@@ -184,8 +184,8 @@ footer.foot a:hover{color:#fff;background:#242d39}
   <section class="hero" aria-labelledby="hero-title">
     <div>
       <p class="eyebrow">CS2 · League of Legends · NBA · NFL</p>
-      <h1 id="hero-title">Get your slips built. <span class="nb">In one tap.</span></h1>
-      <p class="lede">Scout grades every player prop across PrizePicks, Underdog and 25+ more books, then builds your slips for you. Or build your own and see the payout before you play.</p>
+      <h1 id="hero-title">Every player prop. <span class="nb">One board.</span></h1>
+      <p class="lede">Scout's chance for the Over and the Under at the exact line, with the player's history and every book's line beside it.</p>
       <div class="ctas">
         <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
       </div>
@@ -193,9 +193,10 @@ footer.foot a:hover{color:#fff;background:#242d39}
       <p class="err" id="signin-error" role="alert" hidden></p>
     </div>
     <div class="shot">
-      <div class="frame board-shot"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Scout · Slips · Auto-build</small></div>
-        <img src="/landing/slips.webp" width="852" height="588" alt="Scout Auto-build: slips generated for Underdog with each slip's all-hit chance, payout and an Open in Underdog button" fetchpriority="high"></div>
-      <div class="frame phone-shot"><img src="/landing/slip.webp" width="237" height="560" alt="A slip built by Scout: two picks, the all-hit chance, the payout and Open in Underdog"></div>
+      <div class="frame board-shot"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Scout · All sports</small></div>
+        <img src="/landing/board.webp" width="1140" height="855" alt="The Scout board: NFL and CS2 player props with Scout's chance, letter grade, projection and hit rates" fetchpriority="high"></div>
+      <div class="card-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card explaining why Scout leans Under"></div>
+      <div class="frame phone-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card: Scout's chance, the projection and why Scout leans Under"></div>
     </div>
   </section>
 
@@ -207,27 +208,27 @@ footer.foot a:hover{color:#fff;background:#242d39}
 
   <section class="block" id="features" aria-labelledby="features-title">
     <div class="sechead"><p class="eyebrow">Inside Scout</p><h2 id="features-title">Everything for a line in one place</h2>
-      <p>Get slips built for you, or open any line and see the numbers behind it before you play.</p></div>
+      <p>Open any line and see the numbers behind it, then get your slips built for you.</p></div>
 
     <div class="feature">
-      <div class="copy"><p class="eyebrow">Slips</p><h3>Slips built for you</h3>
-        <p>Choose PrizePicks or Underdog, the entry type, how many slips and how many picks. Scout builds them from the best open lines across all four sports, one leg per game.</p>
-        <ul class="ticks"><li>Each slip shows the chance every pick hits and the payout</li><li>Every leg shows why it made the slip</li><li>Open the slip in the app, or edit it in My slip first</li><li>Lines are rechecked before the slips appear</li></ul></div>
-      <div class="frame tall" style="max-width:300px"><img src="/landing/slip.webp" width="237" height="560" style="width:100%" alt="A slip built by Scout: two picks with why each made the slip, the all-hit chance, the payout and Open in Underdog" loading="lazy"></div>
-    </div>
-
-    <div class="feature flip">
       <div class="copy"><p class="eyebrow">Board</p><h3>Four sports, one board</h3>
         <p>Every line with Scout's chance and projection. Filter by sport, book, game or player. CS2 and League lines also carry a letter grade.</p>
         <ul class="ticks"><li>L5, L10, L20, head-to-head and season: how often the player went over the number</li><li>Lines from every app on the same row</li></ul></div>
       <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Board</small></div><img src="/landing/board.webp" width="1140" height="855" alt="Scout board rows with chance, grade, projection and L5 / L10 / L20 hit rates" loading="lazy"></div>
     </div>
 
-    <div class="feature">
+    <div class="feature flip">
       <div class="copy"><p class="eyebrow">Player card</p><h3>Why Scout leans Over or Under</h3>
         <p>Open any player for the reasons behind the lean, the projection and recent games, all on one card.</p>
         <ul class="ticks"><li>The projection against the line, in plain words</li><li>Last 10 results at this exact line</li><li>Average, median and recent range</li></ul></div>
       <div class="frame tall"><img src="/landing/card.webp" width="372" height="726" alt="Scout player card with Scout's chance and the reasons for the lean" loading="lazy"></div>
+    </div>
+
+    <div class="feature">
+      <div class="copy"><p class="eyebrow">Slips</p><h3>Slips built for you</h3>
+        <p>Choose PrizePicks or Underdog, the entry type, how many slips and how many picks. Scout builds them from the best open lines across all four sports, one leg per game.</p>
+        <ul class="ticks"><li>Each slip shows the chance every pick hits and the payout</li><li>Every leg shows why it made the slip</li><li>Open the slip in the app, or edit it in My slip first</li><li>Lines are rechecked before the slips appear</li></ul></div>
+      <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Slips · Auto-build</small></div><img src="/landing/slips.webp" width="852" height="588" alt="Scout Auto-build settings and generated slips with all-hit chance, payout and Open in Underdog" loading="lazy"></div>
     </div>
 
     <div class="feature flip">

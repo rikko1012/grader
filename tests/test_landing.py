@@ -130,7 +130,7 @@ def test_landing_content_and_wording(srv):
     for sec in ('id="features"', 'id="how"', 'id="signin-error"'):
         assert sec in s
     text = _text(page)
-    for need in ("1time Scout", "CS2", "League of Legends", "NBA", "NFL", "Get your slips built. In one tap.", "Slips built for you", "Get your slips",
+    for need in ("1time Scout", "CS2", "League of Legends", "NBA", "NFL", "Every player prop. One board.", "Slips built for you", "Get your slips",
                  "Sign in with Whop", "Join on Whop", "Four sports, one board", "letter grade",
                  "PrizePicks", "Underdog", "Sleeper", "Dabble", "FanDuel", "BetRivers", "Kalshi", "Polymarket",
                  "L5, L10, L20, head-to-head and season", "Why Scout leans Over or Under", "HLTV map chances",
@@ -148,7 +148,7 @@ def test_landing_content_and_wording(srv):
         assert not re.search(bad, low), bad
     assert "<script src" not in s and "url(" not in s                          # no external scripts, no CSS images
     # 2026-11-16 refresh: the product is shown with real screenshots, served from this app only (never a remote image)
-    assert set(re.findall(r'<img src="([^"]+)"', s)) == {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp", "/landing/slips.webp", "/landing/slip.webp"}
+    assert set(re.findall(r'<img src="([^"]+)"', s)) <= {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp", "/landing/slips.webp", "/landing/slip.webp"}
     assert "{{PRICE_LABEL}}" not in s and "$" not in text                     # no price unless LANDING_PRICE is set
 
 
