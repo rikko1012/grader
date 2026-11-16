@@ -148,7 +148,7 @@ def test_landing_content_and_wording(srv):
         assert not re.search(bad, low), bad
     assert "<script src" not in s and "url(" not in s                          # no external scripts, no CSS images
     # 2026-11-16 refresh: the product is shown with real screenshots, served from this app only (never a remote image)
-    assert set(re.findall(r'<img src="([^"]+)"', s)) <= {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp", "/landing/slips.webp", "/landing/slip.webp"}
+    assert set(re.findall(r'<img src="([^"]+)"', s)) <= {"/landing/board.webp", "/landing/card.webp", "/landing/odds.webp", "/landing/slips.webp", "/landing/slip.webp", "/landing/realslip-scout.webp", "/landing/realslip-pp.webp"}
     assert "{{PRICE_LABEL}}" not in s and "$" not in text                     # no price unless LANDING_PRICE is set
 
 

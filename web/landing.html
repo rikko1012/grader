@@ -102,6 +102,26 @@ section.block{padding:44px 0 10px}
 .ticks li:before{content:"";position:absolute;left:2px;top:.55em;width:9px;height:9px;border-radius:2px;background:var(--accent)}
 .feature .frame.tall{max-width:380px;margin:0 auto}
 
+/* why Scout: the without / with table, the section that sets Scout apart */
+.why{margin:40px 0 0;padding:34px 30px;border-radius:14px;background:var(--panel);border:1px solid var(--card-line)}
+.why .sechead{max-width:46em}
+.vs{width:100%;border-collapse:separate;border-spacing:0;margin-top:8px}
+.vs caption{text-align:left;margin-bottom:10px}
+.vs th{font:400 11px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--eyebrow);text-align:left;padding:0 14px 10px}
+.vs td{padding:14px;vertical-align:top;border-top:1px solid var(--line);font-size:14.5px;line-height:1.5}
+.vs td:first-child{font-weight:600;color:var(--text);width:19%}
+.vs td.no{color:var(--faint);width:30%}
+.vs td.no:before{content:"\2715";color:var(--bad);font-weight:700;margin-right:8px}
+.vs td.yes{color:var(--text);background:#19283e;border-left:1px solid var(--btn-2-line)}
+.vs td.yes:before{content:"\2713";color:var(--accent);font-weight:700;margin-right:8px}
+
+/* the slip builder's real slip: Scout's slip beside the entry it became */
+.realslip{margin:0}
+.realslip .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+.realslip .pair img{width:100%;border-radius:12px;border:1px solid var(--card-line)}
+.realslip figcaption{margin-top:10px;font-size:13px;color:var(--faint);text-align:center}
+.realslip figcaption b{color:var(--text);font-weight:600}
+
 /* cards: the hub's game / tool cards */
 .card{min-width:0;background:var(--card);border:1px solid var(--card-line);border-radius:12px;padding:22px}
 .card h3{font:600 17px/1.3 var(--font);letter-spacing:-.02em;margin:8px 0 6px;color:var(--text)}
@@ -146,6 +166,15 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .hero .phone-shot{display:block;max-width:380px;margin:0 auto}.hero .phone-shot img{width:100%}
   .proof{grid-template-columns:1fr}
 }
+@media(max-width:760px){
+  .why{padding:24px 16px}
+  .vs thead{display:none}
+  .vs caption{display:block;width:auto}
+  .vs,.vs tbody,.vs tr,.vs td{display:block;width:auto!important}
+  .vs tr{padding:12px 0;border-top:1px solid var(--line)}
+  .vs td{border:0;padding:4px 0}
+  .vs td.yes{padding:8px 10px;border-radius:6px;border-left:2px solid var(--btn-2-line);margin-top:4px}
+}
 @media(max-width:640px){
   .wrap{padding:0 16px}
   header.top .wrap{height:60px}
@@ -174,7 +203,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
   <div class="wrap">
     <a class="brand" href="/" aria-label="1time Scout"><span aria-hidden="true">1T</span><b>1TIME <em>SCOUT</em></b></a>
     <span class="grow"></span>
-    <nav class="topnav" aria-label="Page sections"><a href="#features">Features</a><a href="#how">How it works</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
+    <nav class="topnav" aria-label="Page sections"><a href="#why">Why Scout</a><a href="#features">Features</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
     <a class="btn quiet" href="/auth/login">Sign in</a>
     <a class="btn primary" href="{{JOIN_URL}}">Join</a>
   </div>
@@ -185,7 +214,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
     <div>
       <p class="eyebrow">CS2 · League of Legends · NBA · NFL</p>
       <h1 id="hero-title">Every player prop. <span class="nb">One board.</span></h1>
-      <p class="lede">Scout's chance for the Over and the Under at the exact line, with the player's history and every book's line beside it.</p>
+      <p class="lede">Every app's line in one place. Each prop gets a letter grade, Scout's chance for the Over and the Under at that exact line, and the reason in plain English.</p>
       <div class="ctas">
         <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
       </div>
@@ -201,41 +230,56 @@ footer.foot a:hover{color:#fff;background:#242d39}
   </section>
 
   <section class="proof" aria-label="Proof">
-    <a href="/record" id="proof-record"><b id="proof-record-n">The record is public</b><span id="proof-record-t">Every forecast saved before the game and scored after it</span></a>
+    <a href="/record" id="proof-record"><b id="proof-record-n">The record is public</b><span id="proof-record-t">Every forecast saved before the game and scored after it, losses included</span></a>
     <a href="/reviews" id="proof-reviews"><b id="proof-reviews-n">Member reviews</b><span>Every review is posted, good or bad</span></a>
-    <div><b>Up to 29 books on one prop</b><ul class="chips" aria-label="Books"><li>PrizePicks</li><li>Underdog</li><li>Sleeper</li><li>Dabble</li><li>DraftKings</li><li>FanDuel</li><li>BetRivers</li><li>BetMGM</li><li>Caesars</li><li>Bovada</li><li>Pinnacle</li><li>Unibet</li><li>Novig</li><li>Kalshi</li><li>Polymarket</li><li>and more</li></ul></div>
+    <div><b>Four sports, one board</b><ul class="chips" aria-label="Books"><li>PrizePicks</li><li>Underdog</li><li>Sleeper</li><li>Dabble</li><li>DraftKings</li><li>FanDuel</li><li>BetRivers</li><li>Bovada</li><li>Unibet</li><li>Kalshi</li><li>Polymarket</li></ul></div>
+  </section>
+
+  <section class="why" id="why" aria-labelledby="why-title">
+    <div class="sechead"><p class="eyebrow">Why Scout</p><h2 id="why-title">Most prop tools stop at the grid. Scout shows its work.</h2>
+      <p>You still get the hit counts. You also get the reason for each pick, the exact line it was graded at, and the slip already built.</p></div>
+    <table class="vs"><caption class="eyebrow">Your prop night, without and with Scout</caption>
+      <thead><tr><th scope="col">The job</th><th scope="col">Without Scout</th><th scope="col">With Scout</th></tr></thead>
+      <tbody>
+        <tr><td>Find the line</td><td class="no">Six apps open in six tabs</td><td class="yes">PrizePicks, Underdog, Sleeper, Dabble and the sportsbooks on one row per player, with a chip when two apps list different lines</td></tr>
+        <tr><td>Know why it's a pick</td><td class="no">A screenshot from a group chat</td><td class="yes">Why Scout leans Over or Under, in plain English: a letter grade, a chance at that exact line and the reason for the stake</td></tr>
+        <tr><td>See how often he clears it</td><td class="no">A stat site and your own spreadsheet</td><td class="yes">L5, L10, L20, head-to-head and season, against this exact line, on the card</td></tr>
+        <tr><td>Check he's actually playing</td><td class="no">Roster posts and socials</td><td class="yes">CS2 lines count active players only. Stand-ins are flagged and their stake is capped</td></tr>
+        <tr><td>Catch a moved line</td><td class="no">Refresh and try to remember</td><td class="yes">Line history from the opening line, with every move and when it happened</td></tr>
+        <tr><td>Build the slip</td><td class="no">Copy picks across by hand and hope nothing moved</td><td class="yes">Slip Studio builds your slips, rechecks every line first and opens them in the app</td></tr>
+        <tr><td>Proof</td><td class="no">Take someone's word for it</td><td class="yes">The record is public: every forecast saved before the game and scored after it, losses included</td></tr>
+      </tbody></table>
   </section>
 
   <section class="block" id="features" aria-labelledby="features-title">
-    <div class="sechead"><p class="eyebrow">Inside Scout</p><h2 id="features-title">Everything for a line in one place</h2>
-      <p>Open any line and see the numbers behind it, then get your slips built for you.</p></div>
+    <div class="sechead"><p class="eyebrow">Inside Scout</p><h2 id="features-title">Everything behind a pick, on one screen</h2></div>
 
     <div class="feature">
-      <div class="copy"><p class="eyebrow">Board</p><h3>Four sports, one board</h3>
-        <p>Every line with Scout's chance and projection. Filter by sport, book, game or player. CS2 and League lines also carry a letter grade.</p>
-        <ul class="ticks"><li>L5, L10, L20, head-to-head and season: how often the player went over the number</li><li>Lines from every app on the same row</li></ul></div>
-      <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Board</small></div><img src="/landing/board.webp" width="1140" height="855" alt="Scout board rows with chance, grade, projection and L5 / L10 / L20 hit rates" loading="lazy"></div>
+      <div class="copy"><p class="eyebrow">Board</p><h3>Esports first. NBA and NFL too.</h3>
+        <p>CS2 kills and headshots from HLTV pro match history, and League of Legends kills, assists and deaths, on the same board as NBA and NFL. Every line carries a letter grade.</p>
+        <ul class="ticks"><li>HLTV map chances and the likeliest map veto on CS2 cards</li><li>Roles under every CS2 name: AWPer, IGL, Entry, Lurker</li><li>Stand-ins flagged on CS2 lines, with their stake capped</li></ul></div>
+      <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Board</small></div><img src="/landing/board.webp" width="1140" height="855" alt="Scout board rows with Scout's chance, letter grade, projection and L5 / L10 / L20 hit rates" loading="lazy"></div>
     </div>
 
     <div class="feature flip">
-      <div class="copy"><p class="eyebrow">Player card</p><h3>Why Scout leans Over or Under</h3>
-        <p>Open any player for the reasons behind the lean, the projection and recent games, all on one card.</p>
-        <ul class="ticks"><li>The projection against the line, in plain words</li><li>Last 10 results at this exact line</li><li>Average, median and recent range</li></ul></div>
-      <div class="frame tall"><img src="/landing/card.webp" width="372" height="726" alt="Scout player card with Scout's chance and the reasons for the lean" loading="lazy"></div>
+      <div class="copy"><p class="eyebrow">The player card</p><h3>The reason behind every grade</h3>
+        <p>Open any player for the lean, the letter grade, the stake and the reason, with the numbers that back it up.</p>
+        <ul class="ticks"><li>Hits at this exact line over L5, L10, L20, head-to-head and season</li><li>The stake reason spelled out: stand-in, small sample, long break</li><li>Ask the Genie: it answers from that line's own saved numbers</li></ul></div>
+      <div class="frame tall"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card with the reason for the lean" loading="lazy"></div>
     </div>
 
     <div class="feature">
-      <div class="copy"><p class="eyebrow">Slips</p><h3>Slips built for you</h3>
-        <p>Choose PrizePicks or Underdog, the entry type, how many slips and how many picks. Scout builds them from the best open lines across all four sports, one leg per game.</p>
-        <ul class="ticks"><li>Each slip shows the chance every pick hits and the payout</li><li>Every leg shows why it made the slip</li><li>Open the slip in the app, or edit it in My slip first</li><li>Lines are rechecked before the slips appear</li></ul></div>
-      <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Slips · Auto-build</small></div><img src="/landing/slips.webp" width="852" height="588" alt="Scout Auto-build settings and generated slips with all-hit chance, payout and Open in Underdog" loading="lazy"></div>
-    </div>
-
-    <div class="feature flip">
-      <div class="copy"><p class="eyebrow">Books</p><h3>Every book side by side</h3>
-        <p>PrizePicks, Underdog, Sleeper and Dabble for all four sports, plus DraftKings, FanDuel, BetRivers, BetMGM, Caesars, Bovada, Pinnacle and more for NBA and NFL. Kalshi and Polymarket prices.</p>
-        <ul class="ticks"><li>Every line and price for the prop in one table</li><li>Line history: how a line has moved on each app, with every change and when</li></ul></div>
+      <div class="copy"><p class="eyebrow">Every book</p><h3>Every app's line side by side</h3>
+        <p>PrizePicks, Underdog, Sleeper and Dabble for all four sports. For NBA and NFL, DraftKings, FanDuel, BetRivers, Bovada and Unibet prices and Kalshi and Polymarket markets sit beside the pick'em line.</p>
+        <ul class="ticks"><li>A chip when two apps list different lines</li><li>Line history: every move since the line opened</li><li>The +EV board: legs the books price above what your entry needs to break even</li></ul></div>
       <div class="frame tall"><img src="/landing/odds.webp" width="372" height="586" alt="Every book's line and price for one player prop" loading="lazy"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="copy"><p class="eyebrow">Slips</p><h3>Slips built for you</h3>
+        <p>Tell Slip Studio how many. Auto-build makes 1 to 12 PrizePicks or Underdog slips of 2 to 6 picks each from the lines open right now, and rechecks every line before you see them.</p>
+        <ul class="ticks"><li>Each slip shows the chance every pick hits and the payout</li><li>Open the slip in the app, or edit it in My slip first</li><li>Slips save to your account, with a receipt when they settle</li></ul></div>
+      <figure class="realslip"><div class="pair"><img src="/landing/realslip-scout.webp" width="600" height="1067" alt="A four-pick CS2 slip built by Scout Auto-build: oontoma, glowiing, Forester and flameZ, all Over" loading="lazy"><img src="/landing/realslip-pp.webp" width="600" height="1040" alt="The same four picks entered on PrizePicks as a 4-pick Power Play, all four hit" loading="lazy"></div><figcaption><b>Built by Scout. Played on PrizePicks.</b> The same four picks, all four hit.</figcaption></figure>
     </div>
 
     <div class="grid" style="margin-top:18px">
