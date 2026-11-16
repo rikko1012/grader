@@ -261,7 +261,9 @@ def make_leg(rec, table):
             "team": rec["player"].get("team") or "", "stat": m["stat"], "stat_label": m.get("stat_label") or m["stat"], "period": m["period"],
             "period_label": m.get("period_label") or m["period"], "p": p, "p_push": sc.get("p_push") or 0.0, "rank_p": q, "band": band,
             "research": research, "grade": sc.get("grade"), "multiplier": (offer.get(side) or {}).get("payout"), "model_version": sc.get("model_version"),
-            "prop": prop_key(rec)}
+            "prop": prop_key(rec),
+            # an AWPer's CS2 headshot line (record_of marks the AWPer): the member's AWPer-headshot rule (workspace_api._gen_opts)
+            "awper_hs": rec["sport"] == "cs2" and m["stat"] == "hs" and bool(rec["player"].get("awper"))}
 
 
 def pool(records, now=None, feeds=None, research_ok=False, table=None, exclude=()):

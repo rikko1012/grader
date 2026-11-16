@@ -63,6 +63,9 @@ export function mount(C) {
   const LINE_RULES=[['no_goblins','No goblins'],['one_goblin','At most 1 goblin per slip'],['standard','No goblins or demons'],['all','Any lines']];
   const cleanLines=v=>LINE_RULES.some(r=>r[0]===v)?v:'no_goblins';
   H.slipLines='no_goblins';T.slipLines=H.slipLines;
+  /* owner 2026-11-16: AWPer headshot lines stay out of generated CS2 slips and suggested swaps unless the member allows them. Saved in prefs. */
+  const cleanAwpHs=v=>v==='allow'?'allow':'out';
+  H.awpHs='out';T.awpHs=H.awpHs;
   H.mt={league:'all',book:'all',side:'all',q:'',minEv:'0',fresh:'all',sort:'ev',dense:false,stake:100,tab:null,moreOpen:false};
   try{H.mt.dense=localStorage.getItem('scout-market-density')==='compact';}catch(e){}
   /* QOL 2026-11-07: Price check's Book / Side / Minimum / Checked within / Sort are kept on this device across reloads (Sport still
@@ -964,7 +967,7 @@ export function mount(C) {
       for(let i=0;i<3;i++) {
         const state=await api('state');
         try {
-          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
+          await api('state',{rev:state.rev,prefs:{...state.prefs,researchHub:{views:H.views,watch:H.watch,alerts:H.alerts,slipLines:H.slipLines,awpHs:H.awpHs,...(H.sortChosen?{sort:{key:H.sort,dir:H.sortDir}}:{}),...(H.parKeep?{parity:H.parKeep}:{})}}});
           H.saveError=false; break;
         } catch(e) { if(e.status!==409||i===2) throw e; }
       }
@@ -996,6 +999,8 @@ export function mount(C) {
          old 'Standard lines only' was a deliberate opt-out and carries over as No goblins or demons (review 2026-11-05). */
       H.slipLines=cleanLines(p.slipLines||(state.studio?.options?.lines==='standard'?'standard':null));T.slipLines=H.slipLines;
       if($('hub-generation-lines'))$('hub-generation-lines').value=H.slipLines;
+      H.awpHs=cleanAwpHs(p.awpHs);T.awpHs=H.awpHs;
+      if($('hub-generation-awphs'))$('hub-generation-awphs').value=H.awpHs;
       C.refreshAdvice?.();
       H.watch=Array.isArray(p.watch)?p.watch.filter(v=>typeof v==='string').slice(0,100):[];
       if(p.parity&&typeof p.parity==='object'){   /* SCOUT_PARITY_PREFS: kept as saved even while the flag is off */
@@ -1651,7 +1656,7 @@ export function mount(C) {
       const pool=H.records.filter(r=>sports.includes(r.sport)&&!unavailableReason(r)&&!C.started(r));
       const options={platform:$('hub-generation-book').value,count:Number($('hub-generation-slips').value),size:Number($('hub-generation-count').value),entryType:$('hub-generation-type').value,
         mix:$('hub-generation-mix').value,games:$('hub-generation-games').value,noRepeatProps:$('hub-generation-repeats').value==='none',lines:$('hub-generation-lines').value,
-        research:sports.some(s=>s==='nba'||s==='nfl'),side:$('hub-generation-side').value,sports};
+        research:sports.some(s=>s==='nba'||s==='nfl'),side:$('hub-generation-side').value,awpHs:cleanAwpHs($('hub-generation-awphs')?.value),sports};
       const batch=await C.generateBatch(pool,options,text=>{status.textContent=text;});
       if(!batch.slips.length)throw new Error(batch.note||'No combinations passed recheck. Widen your settings.');
       H.batch=batch;H.batchSaved=false;paintBatch();
@@ -1679,7 +1684,7 @@ export function mount(C) {
     const use=new Map();slips.forEach(s=>s.legs.forEach(l=>{const k=l.sport+'|'+l.player_key;use.set(k,(use.get(k)||0)+1);}));
     const lineTag=l=>l.book==='prizepicks'&&C.lineKind?` <em class="h-line-tag">${esc(C.lineKind('prizepicks',l.gen?.line_type))}</em>`:l.gen?.line_type&&l.gen.line_type!=='standard'?` <em class="h-line-tag">${esc(l.gen.line_type[0].toUpperCase()+l.gen.line_type.slice(1))}</em>`:'';
     const legFace=l=>C.faceHtml?C.faceHtml(l.sport,{key:l.player_key,name:l.player,team:(R.boards[l.sport]?.recs.get(C.offerKey(l.book,l.row_id))?.player.team_abbr)||l.team,size:32,cls:'h-face'}):'';
-    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">${b.options?.source==='ev'?'Built from positive-EV book-priced legs using the selected entry rules. The chance beside each leg remains Scout’s published chance, not the book estimate. Every slip is rechecked when opened.':'Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.'}</p><div class="h-batch-grid">${slips.map((s,i)=>{
+    box.innerHTML=`<header class="h-batch-head"><div><span class="h-eyebrow">GENERATED LINEUPS</span><h2>${slips.length} separate slips</h2><p>${H.batchSaved?'Saved to your account':'Not yet saved across devices'} · generated ${esc(when(b.created_at))}${b.options?.noRepeatProps?' · No repeat props':''}${{no_goblins:' · No goblins',one_goblin:' · At most 1 goblin',standard:' · No goblins or demons'}[b.options?.lines]||''}${b.options?.awpHs==='out'&&(b.options?.sports||[]).includes('cs2')?' · No AWPer headshots':''}</p></div>${!H.batchSaved?'<button data-hub="save-batch">Retry save</button>':''}</header><p class="h-batch-note">${b.options?.source==='ev'?'Built from positive-EV book-priced legs using the selected entry rules. The chance beside each leg remains Scout’s published chance, not the book estimate. Every slip is rechecked when opened.':'Ranked by what each chance band has won on settled results. The chance beside a leg is the model’s published chance; all-hit chance multiplies the ranked leg chances across different matches, and a push counts as not winning. Repeated players across slips share risk. Every slip is rechecked when opened.'}</p><div class="h-batch-grid">${slips.map((s,i)=>{
       const metrics=[num(s.all_hit)?`<span>All-hit chance <b>${pct(s.all_hit)}</b></span>`:(s.same_match?'<span>Legs share a match <b>No all-hit chance</b></span>':''),
         s.payout&&num(s.payout.multiple)?`<span>All-hit payout <b>${esc(s.payout.multiple)}×</b></span>`:'',
         s.ev&&num(s.ev.ev)?`<span>Expected return <b>${pct(s.ev.ev)}</b></span>`:''].filter(Boolean).join('');
@@ -1701,10 +1706,11 @@ export function mount(C) {
       <label>Picks per slip<select id="hub-generation-count">${[2,3,4,5,6].map(n=>`<option value="${n}">${n} picks</option>`).join('')}</select></label>
       <div class="h-generator-step"><span>02</span><h3>Selection rules</h3></div><label>Sport mix<select id="hub-generation-mix"><option value="any">Any mix</option><option value="mixed">Mixed sports</option><option value="single">One sport</option></select></label>
       <label class="h-goblin-rule">Goblins<select id="hub-generation-lines" aria-describedby="hub-generation-lines-help">${LINE_RULES.map(([v,t])=>`<option value="${v}"${v===H.slipLines?' selected':''}>${t}</option>`).join('')}</select><small id="hub-generation-lines-help">Goblins are easier lines that pay less. Scout leaves them out unless you allow them.</small></label>
+      ${allowed().includes('cs2')?`<label class="h-goblin-rule h-awp-rule" id="hub-generation-awphs-wrap">AWPer headshots<select id="hub-generation-awphs" aria-describedby="hub-generation-awphs-help"><option value="out"${H.awpHs==='out'?' selected':''}>Leave out</option><option value="allow"${H.awpHs==='allow'?' selected':''}>Allow</option></select><small id="hub-generation-awphs-help">CS2 headshot lines for AWPers. Scout leaves them out of your slips and suggested swaps unless you allow them.</small></label>`:''}
       <label>Game selection<select id="hub-generation-games"><option value="spread">One per match</option><option value="stacks">Same match (Underdog)</option></select></label>
       <label>Prop reuse<select id="hub-generation-repeats"><option value="allow">Allow across slips</option><option value="none">No repeat props</option></select></label>
       <details class="h-generation-more"><summary>More filters <span id="hub-generation-filter-count"></span></summary><div><label>Pick side<select id="hub-generation-side"><option value="any">Either side</option><option value="over">Overs only</option><option value="under">Unders only</option></select><small>Uses Scout’s recommended side. Picks are never flipped to fill a slip.</small></label></div></details>
-      <div class="h-generation-submit"><p id="hub-generation-summary" role="status" aria-live="polite"></p><button id="hub-generate" data-hub="generate">Generate slips</button><small>Current lines are rechecked before results appear.</small></div></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL legs carry Scout’s letter (A to C) and rank by Scout’s chance until their bands have settled results. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
+      <div class="h-generation-submit"><p id="hub-generation-summary" role="status" aria-live="polite"></p><button id="hub-generate" data-hub="generate">Generate slips</button><small>Current lines are rechecked before results appear.</small></div></div><p id="hub-generation-status" role="status" aria-live="polite"></p><details><summary>How lineups are built</summary><p>Only open lines enter: the platform feed is current, the match has not started, Scout’s side is offered and the line is not held. CS2 legs carry a live grade of B or better with a stake; LoL legs carry the model’s letter; NBA and NFL legs carry Scout’s letter (A to C) and rank by Scout’s chance until their bands have settled results. Each leg ranks by what its chance band (sport, stat, side and chance) has won on settled results, so a band that has not held up ranks lower. A slip takes the combination with the best all-hit chance: one leg per player, one leg per match unless you choose same-match legs on Underdog, and the platform’s entry rules. All-hit chance multiplies the leg chances across different matches; a push counts as not winning. Goblins (PrizePicks lines set below the standard line, which pay less) stay out of every slip and every suggested swap unless you allow them under Goblins: at most one per slip, or any number; No goblins or demons keeps standard lines only. A goblin you add yourself is never removed. AWPer headshots (CS2 headshot lines for players Scout lists as AWPers) stay out of every CS2 slip and suggested swap unless you allow them; one you add yourself stays on your slip. No repeat props uses each player’s stat and period once across the batch, every line and side included; with repeats allowed, a leg already used ranks lower, and the same slip is never built twice. Every slip is rechecked against the current offer before it appears.</p></details></section>`;
   }
   /* 30 days of the record; a run of days with no decided pick folds into one quiet tile instead of a wall of dashes */
   function calendarHTML(doc){
@@ -2565,6 +2571,12 @@ export function mount(C) {
   }
   for(const id of ['book','type'])$('hub-generation-'+id).addEventListener('change',generationControls);
   $('hub-generation-lines').addEventListener('change',()=>{H.slipLines=cleanLines($('hub-generation-lines').value);T.slipLines=H.slipLines;savePreferences();C.refreshAdvice?.();});
+  if($('hub-generation-awphs')){
+    $('hub-generation-awphs').addEventListener('change',()=>{H.awpHs=cleanAwpHs($('hub-generation-awphs').value);T.awpHs=H.awpHs;savePreferences();C.refreshAdvice?.();});
+    /* shown only while CS2 is ticked: the rule is about CS2 lines */
+    const awpShown=()=>{$('hub-generation-awphs-wrap').hidden=!$('hub-generation-sports').querySelector('input[value="cs2"]:checked');};
+    $('hub-generation-sports').addEventListener('change',awpShown);awpShown();
+  }
   generationControls();
   $('hub-pick-sport').addEventListener('change',()=>{H.pickSport=$('hub-pick-sport').value;paintPicks();});
   $('hub-pick-status').addEventListener('change',()=>{H.pickStatus=$('hub-pick-status').value;paintPicks();});

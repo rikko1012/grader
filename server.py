@@ -5225,6 +5225,19 @@ class Handler(BaseHTTPRequestHandler):
                                        "recommended": slips.read(slips.RECOMMENDED), "loaded": slips.read(slips.LOADED)})
             if u.path == "/admin/slip_batches.json" and self.authed(q.get("token")):
                 return self.send(200, {"version": slip_batches.VERSION, "batches": slip_batches.read()})
+            if u.path == "/admin/slip_audit.json" and self.authed(q.get("token")):
+                # owner 2026-11-16 "go over every 4 man ever generated through scout": one read-only page (<= 200 slips) of one
+                # source's n-pick slips, each leg settled from the pick log; never a full export (slip_audit.py)
+                import slip_audit
+                import workspace_api
+                try:
+                    return self.send(200, slip_audit.page(q.get("source") or "studio", q.get("n") or 4, q.get("offset") or 0,
+                                                          q.get("limit") or slip_audit.LIMIT_MAX,
+                                                          role=lambda nick, team: awp_role(nick, {}, None, team),
+                                                          paths={"studio": slip_builder.DB_PATH, "workspace": workspace_api.data_dir() / "workspace.db",
+                                                                 "recommended": slips.RECOMMENDED, "loaded": slips.LOADED, "batches": slip_batches.LOG}))
+                except ValueError as e:
+                    return self.send(400, {"error": str(e)})
             if u.path == "/admin/diagnostics.json" and self.authed(q.get("token")):
                 import diagnostics                        # admin-only diagnostic dashboard (flags, never causes)
                 # bounded pages, never the whole forecast history with inputs in memory (2026-10-21 audit 0)

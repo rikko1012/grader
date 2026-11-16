@@ -258,3 +258,56 @@ def test_side_filter_never_backfills_opposite_side(env):
     assert doc['pool']['excluded']['side'] > 0
     st, doc = gen(env, side='invalid')
     assert st == 400 and 'side' in doc['error']
+
+
+# ------------------------------------------------------------------------------------------------- AWPer headshots (owner 2026-11-16)
+
+def _with_awpers(env):
+    """Two AWPers with the best headshot lines on the board (one by the AWP chip, one by the role tag only) and an AWPer's kills line."""
+    s = env.rows[0]["start"]
+    env.rows.append(row("pp:7500", "prizepicks", "scopey", "Lumen", "Ridge", 6.5, "Less", .80, 905, s, prop="hs", awp=True))
+    env.rows.append(row("pp:7501", "prizepicks", "hybrido", "Basalt", "Quarry", 7.5, "Less", .79, 906, s, prop="hs", role_label="Rifler · AWPer"))
+    env.rows.append(row("pp:7502", "prizepicks", "killawp", "Cinder", "Moss", 15.5, "More", .78, 907, s, awp=True))
+    fresh()
+
+
+def _players(doc):
+    return {l["player"] for s in doc["slips"] for l in s["legs"]}
+
+
+def test_generate_leaves_awper_headshots_out_unless_allowed(env):
+    """Owner 2026-11-16 "awper hs are costing alot of slips": with CS2 ticked, an AWPer's headshot line is never a generated leg unless the
+    member allows it. An AWPer's kills line and riflers' headshot lines are unchanged; the grade is untouched."""
+    _with_awpers(env)
+    st, doc = gen(env, slips=8)
+    assert st == 200 and doc["options"]["awp_hs"] == "out"
+    assert not _players(doc) & {"scopey", "hybrido"} and "killawp" in _players(doc)
+    assert doc["pool"]["excluded"].get("awp_hs") == 2
+    st, doc = gen(env, slips=8, awp_hs="allow")
+    assert st == 200 and {"scopey", "hybrido"} <= _players(doc) and not doc["pool"]["excluded"].get("awp_hs")
+    rec = {r["player"]["name"]: r for r in records(env).values()}
+    assert rec["scopey"]["scout"]["grade"] and rec["scopey"]["scout"]["units"] == 0.5        # display unchanged: still graded and staked
+
+
+def test_generate_refuses_an_unknown_awper_rule(env):
+    assert gen(env, awp_hs="maybe") == (400, {"error": "Choose supported generator settings."})
+
+
+def test_advice_never_suggests_an_awper_headshot_unless_allowed(env):
+    _with_awpers(env)
+    board = keys_on_board(env)
+    by = {(r["player"]["name"], b): r for (b, _), r in board.items()}
+
+    def wire(names):
+        return [dict(leg_of(by[(n, "prizepicks")]), stat=by[(n, "prizepicks")]["market"]["stat"], period=by[(n, "prizepicks")]["market"]["period"],
+                     player_key=by[(n, "prizepicks")]["player"]["key"], player=n, team=by[(n, "prizepicks")]["player"]["team"],
+                     event=by[(n, "prizepicks")]["event"]["id"]) for n in names]
+    legs = wire(["mika7", "vargo"])
+    assert post(env, "slip-advice", {"legs": legs, "awp_hs": "bogus"}) == (400, {"error": "Choose supported generator settings."})
+    st, doc = post(env, "slip-advice", {"legs": legs})
+    reps = {(r.get("replacement") or {}).get("player") for r in doc["legs"]}
+    assert st == 200 and not reps & {"scopey", "hybrido"}
+    st, doc = post(env, "slip-advice", {"legs": legs, "awp_hs": "allow"})
+    assert st == 200 and {(r.get("replacement") or {}).get("player") for r in doc["legs"]} & {"scopey", "hybrido"}
+    st, doc = post(env, "slip-advice", {"legs": wire(["scopey", "vargo"])})                 # the member's own AWPer leg keeps its facts
+    assert st == 200 and doc["legs"][0]["in_pool"] is True

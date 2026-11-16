@@ -365,6 +365,12 @@ def _role(x):
     return x.get("role_label") or ""
 
 
+def _awper(x):
+    # owner 2026-11-16 ("awper hs are costing alot of slips"): an AWPer is the board row's AWP chip (server.awp_role: HLTV AWP kill
+    # share, Liquipedia, BO3.gg, the known list) OR a role tag that names the AWP - the tag members see on the board and card.
+    return x.get("awp") is True or "awp" in str(x.get("role_label") or "").lower()
+
+
 def _push(x):
     try:
         return (x.get("model_outcomes") or {}).get("push")
@@ -401,7 +407,7 @@ def record_of(x):
             "event": {"id": eid, "id_kind": kind, "label": " vs ".join(t for t in teams if t), "teams": teams, "competition": x.get("event") or "",
                       "best_of": x.get("bo"), "start_utc": x.get("start"), "lock_utc": x.get("lock_at"), "status": "scheduled"},
             "player": {"id": x.get("player_id"), "key": _norm(nick), "name": nick, "team": x.get("team_name") or x.get("team") or "",
-                       "opponent": x.get("opp_name") or x.get("opponent") or "", "role": _role(x),
+                       "opponent": x.get("opp_name") or x.get("opponent") or "", "role": _role(x), **({"awper": True} if _awper(x) else {}),
                        **({"aka": aka} if (aka := _team_aka(x, (x.get("team_name") or x.get("team"), x.get("opp_name") or x.get("opponent")))) else {})},
             "market": {"stat": prop, "stat_label": STAT.get(prop, prop), "period": period, "period_label": period_label, "line_type": lt},
             "offer": {"platform": book, "platform_label": LABEL.get(book, book), "offer_id": str(x.get("id")), "revision": offer_rev(x), "revision_kind": "derived",
@@ -2056,6 +2062,12 @@ def _slip_pool(srv, sport, table):
         return legs, why
 
 
+# owner 2026-11-16: "awper hs are costing alot of slips add a filter to disable them when people have cs2 enabled in slip studio".
+# out (default) = no CS2 headshot leg of an AWPer in a generated slip or a suggested swap; allow = the old pool. Grades are untouched.
+AWP_HS_RULES = ("out", "allow")
+AWP_HS_DEFAULT = "out"
+
+
 def _gen_opts(q, allowed):
     """The member's Generate settings -> (options, None), or (None, the reason in member words)."""
     platform = q.get("platform") or "prizepicks"
@@ -2085,6 +2097,9 @@ def _gen_opts(q, allowed):
     if side not in ("any", "over", "under"):
         return None, "Choose Either side, Overs only or Unders only."
     lines = q.get("lines") or sq.LINE_RULE_DEFAULT        # owner 2026-11-05: goblins stay out unless the member allows them
+    awp_hs = q.get("awp_hs") or AWP_HS_DEFAULT           # owner 2026-11-16: AWPer headshot legs stay out unless the member allows them
+    if awp_hs not in AWP_HS_RULES:
+        return None, "Choose supported generator settings."
     if mix not in ("any", "mixed", "single") or games not in ("spread", "stacks") or repeats not in ("allow", "none") or lines not in sq.LINE_RULES:
         return None, "Choose supported generator settings."
     if mix == "mixed" and platform == "underdog":
@@ -2100,7 +2115,7 @@ def _gen_opts(q, allowed):
     # NBA or NFL box puts its A-C legs in the pool by default - no separate opt-in. The research param is still read for old pages.
     research = any(s in sq.RESEARCH_SPORTS for s in sports)
     return {"platform": platform, "entry_type": et, "count": count, "size": size, "sports": sports, "mix": mix, "same_match": games == "stacks",
-            "no_repeat": repeats == "none", "lines": lines, "research": research, "exclude": exclude, "side": side}, None
+            "no_repeat": repeats == "none", "lines": lines, "research": research, "exclude": exclude, "side": side, "awp_hs": awp_hs}, None
 
 
 def _ev_leg(l):
@@ -2152,6 +2167,8 @@ def _generate(srv, o, ev_doc=None):
                 why["side"] = why.get("side", 0) + 1
             elif l["key"] in o["exclude"]:
                 why["excluded"] = why.get("excluded", 0) + 1
+            elif o.get("awp_hs", AWP_HS_DEFAULT) == "out" and l.get("awper_hs"):
+                why["awp_hs"] = why.get("awp_hs", 0) + 1
             else:
                 legs.append(l)
         for k, v in got[1].items():
@@ -2235,7 +2252,7 @@ def get_generate(h, srv, q, member, scratch, name):
     if _limited(h, srv, "generate", member, GEN_PER_MIN):
         return None
     key = ("ws_gen", o["platform"], o["entry_type"], o["count"], o["size"], o["sports"], o["mix"], o["same_match"], o["no_repeat"], o["lines"],
-           o["research"], o["side"], hashlib.sha256("\n".join(o["exclude"]).encode()).hexdigest()[:16] if o["exclude"] else "")
+           o["research"], o["side"], o["awp_hs"], hashlib.sha256("\n".join(o["exclude"]).encode()).hexdigest()[:16] if o["exclude"] else "")
     try:
         st_, body = srv.shared(key, lambda: _generate(srv, o), ttl=GEN_TTL)
     except Exception:
@@ -2307,11 +2324,16 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
     lines = d.get("lines") if d.get("lines") is not None else sq.LINE_RULE_DEFAULT
     if lines not in sq.LINE_RULES:
         return h.send(400, {"error": "Choose supported generator settings."})
+    awp_hs = d.get("awp_hs") if d.get("awp_hs") is not None else AWP_HS_DEFAULT
+    if awp_hs not in AWP_HS_RULES:
+        return h.send(400, {"error": "Choose supported generator settings."})
+    # the member's own AWPer headshot leg keeps its band and in_pool facts (by_key); it is only never SUGGESTED as a swap
+    ranked = pool_legs if awp_hs == "allow" else [x for x in pool_legs if not x.get("awper_hs")]
     out = {}
     for platform in dict.fromkeys(l["book"] for l in slip):
         mine = [x for x in slip if x["book"] == platform]
         t = et.get(platform)
-        for m, r in zip(mine, sq.advise(mine, by_key, pool_legs, t if isinstance(t, str) and len(t) <= 16 else None, lines)):
+        for m, r in zip(mine, sq.advise(mine, by_key, ranked, t if isinstance(t, str) and len(t) <= 16 else None, lines)):
             if m["sport"] in lc.SPORTS and lc.contained(m["sport"], m.get("stat")):     # lc-1: a held letter has no rating
                 r = dict(r, notes=[{"code": "contained", "text": lc.banner(m["sport"])}] + list(r.get("notes") or []))
             out[m["id"]] = r
