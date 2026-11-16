@@ -129,7 +129,8 @@ def write_snapshot(now=None):
         except (OSError, ValueError):
             continue
     try:
-        sc, gates, diag = learning.scorecard(), learning.forward_gate(), learning.diagnostics(200)
+        sc = learning.scorecard()
+        gates, diag = learning.forward_gate(scored=sc), learning.diagnostics(200)
     except Exception as e:                                           # noqa: BLE001 - snapshot stays writable
         sc, gates, diag = [], [], [{"error": str(e)[:200]}]
     try:
