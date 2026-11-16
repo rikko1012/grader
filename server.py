@@ -5229,6 +5229,7 @@ class Handler(BaseHTTPRequestHandler):
                 # owner 2026-11-16 "go over every 4 man ever generated through scout": one read-only page (<= 200 slips) of one
                 # source's n-pick slips, each leg settled from the pick log; never a full export (slip_audit.py)
                 import slip_audit
+                import slip_builder                       # imported where used (server.py has no module-level import)
                 import workspace_api
                 try:
                     return self.send(200, slip_audit.page(q.get("source") or "studio", q.get("n") or 4, q.get("offset") or 0,

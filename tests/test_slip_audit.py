@@ -91,3 +91,25 @@ def test_bad_source_and_limits(stores):
     with pytest.raises(ValueError):
         slip_audit.page("everything", 4, 0, 10, None, stores)
     assert slip_audit.page("recommended", 4, 0, 10 ** 6, None, stores)["limit"] == slip_audit.LIMIT_MAX
+
+
+def test_admin_route_serves_a_page(stores, monkeypatch):
+    """The real handler path (server.py /admin/slip_audit.json): admin only, the page as JSON, a bad source is a 400."""
+    import server
+    import slip_batches
+    import slips
+    import workspace_api
+    from tests.test_audit13_site import get
+    monkeypatch.setattr(server, "ADMIN_TOKEN", "tok-slipaudit")
+    monkeypatch.setattr(slip_builder, "DB_PATH", stores["studio"])
+    monkeypatch.setattr(workspace_api, "data_dir", lambda: stores["workspace"].parent)
+    monkeypatch.setattr(slips, "RECOMMENDED", stores["recommended"])
+    monkeypatch.setattr(slips, "LOADED", stores["loaded"])
+    monkeypatch.setattr(slip_batches, "LOG", stores["batches"])
+    h = {"X-Admin-Token": "tok-slipaudit"}
+    for src in slip_audit.SOURCES:
+        r = get(f"/admin/slip_audit.json?source={src}&n=4&limit=2", headers=h)
+        assert r.code == 200, (src, r.body())
+    assert get("/admin/slip_audit.json?source=studio", headers=h).body()["slips"][0]["result"] == "lost"
+    assert get("/admin/slip_audit.json?source=nope", headers=h).code == 400
+    assert get("/admin/slip_audit.json?source=studio").code != 200
