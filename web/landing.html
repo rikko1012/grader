@@ -857,7 +857,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       <div>
         <ul class="ticks rv">
           <li>Each slip shows the chance every pick hits and the payout</li>
-          <li>Build your own slip and see the chance each pick needs to break even</li>
+          <li>Build your own slip and see the payout and the chance each pick needs to break even</li>
           <li>Open the slip in the app, or edit it in My slip first. Slips save to your account, with a receipt when they settle</li>
         </ul>
         <div class="demo spot sb rv" style="--i:1" id="sb">
@@ -875,7 +875,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
           </div>
           <ol class="legs" id="sb-legs"></ol>
           <div aria-live="polite" id="sb-live"><div class="sb-out" id="sb-out"></div><p class="sb-flex" id="sb-flex" hidden></p><p class="sb-all" id="sb-all" hidden></p></div>
-          <p class="sb-note"><span class="tag dim">Example</span> Each app shows only legs it listed: the real slip and rows from real Scout boards, from different days. Break-even chances use each app's standard lines; PrizePicks goblin and demon lines differ, and the app shows the final numbers. In Scout, Slip Studio uses only lines open on the app you pick.</p>
+          <p class="sb-note"><span class="tag dim">Example</span> Each app shows only legs it listed: the real slip and rows from real Scout boards, from different days. Payouts are each app's standard-line table; PrizePicks goblin and demon lines pay differently, and the app shows the final payout. In Scout, Slip Studio uses only lines open on the app you pick.</p>
           <p class="nojs">Turn on JavaScript to try the slip example.</p>
         </div>
       </div>
@@ -1587,6 +1587,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       for (var i = 0; i < 60; i++) { var mid = (lo + hi) / 2; if (ev(mid) < 1) lo = mid; else hi = mid; }
       return (lo + hi) / 2;
     }
+    function mult(v) { return (v % 1 ? String(v) : v.toFixed(0)) + "×"; }
     function legEl(g, i) {
       var li = el("li", "leg"), d = el("div");
       li.setAttribute("data-k", g.k);
@@ -1617,8 +1618,14 @@ footer.foot a:hover{color:#fff;background:#242d39}
       var be = breakEven(), box = $("#sb-out");
       box.textContent = "";
       function tile(k, v) { var d = el("div"); d.appendChild(el("span", null, k)); d.appendChild(el("b", null, v)); box.appendChild(d); }
+      var tbl = PAY[app][play === "std" ? "std" : "flex"][n];
+      tile(play === "std" ? "Payout if all " + n + " hit" : "Payout, all " + n + " hit", mult(play === "std" ? tbl : tbl[0]));
       tile("Break-even chance per pick", pct(be));
-      $("#sb-flex").hidden = true;
+      var fx = $("#sb-flex");
+      if (play === "flex") {
+        var parts = []; for (var k in tbl) parts.push((n - k) + " of " + n + " hit: " + mult(tbl[k]));
+        fx.textContent = "Flex pays " + parts.join(" · ") + ". Example."; fx.hidden = false;
+      } else fx.hidden = true;
       var all = $("#sb-all");
       if (app === "prizepicks" && n === 4) { all.textContent = "These are the four legs of the real slip pictured here. Scout printed the chance all four hit as 6.6%."; all.hidden = false; }
       else all.hidden = true;

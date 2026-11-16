@@ -215,12 +215,13 @@ def test_landing_join_goes_to_checkout_by_default(srv, monkeypatch):
 
 
 def test_landing_ad_safe_wording(srv):
-    """Owner 2026-11-16, before ads: no offshore book named, no stake wording, no payout multipliers, and the review rating
-    shows only from ten reviews."""
+    """Owner 2026-11-16, before ads: no offshore book named, no stake wording, and the review rating shows only from ten
+    reviews. The slip example keeps its payout lines (owner asked for them back the same day)."""
     s = landing().decode("utf-8")
     text = _text(landing())
-    for gone in ("Bovada", "stake", "+EV", "Payout if all", "Flex pays"):
+    for gone in ("Bovada", "stake", "+EV"):
         assert gone not in s, gone
+    assert '"Payout if all "' in s and '"Flex pays "' in s
     assert "Price gap board" in text and "s.count >= 10 && s.average" in s
 
 
