@@ -326,6 +326,10 @@ def problems(legs, platform, entry_type=None, same_match=False):
         mk = (l["sport"], l["event"])
         if mk in matches and not (same_match and same_match_allowed(platform)):
             out.append(f"{l['player']} and {matches[mk]['player']} share a match. One leg per match.")
+        elif mk in matches and matches[mk]["side"] != l["side"]:
+            # deep dive 2026-11-16: an Over and an Under from one match both hit 2-3 points less often than unrelated legs
+            # (every standard board row, both splits) - same-match legs stay on one side
+            out.append(f"{l['player']} and {matches[mk]['player']} share a match on opposite sides. Same-match picks go the same way.")
         matches.setdefault(mk, l)
     e = rules.entry_status(platform, [_rule_leg(l) for l in legs], entry_type)
     out.extend(p["text"] for p in e["problems"])
@@ -464,6 +468,9 @@ def all_hit(legs):
 def payout(platform, entry_type, legs):
     """The published all-hit multiple, or None: Underdog's table when every pick is a 1.0x pick; PrizePicks' verified help-center
     table (owner sign-off 2026-11-05) when every pick is a standard line with no modifier (goblin / demon / promo stay unknown)."""
+    if len({(l.get("sport"), l.get("event")) for l in legs}) < len(legs):
+        return None        # deep dive 2026-11-16: Underdog shifts the payout of same-match picks by an amount it does not publish -
+                           # the plain table multiple (e.g. 12x) was printed on stacked slips; no number is shown instead
     if platform == "prizepicks":
         if any((l.get("line_type") or "standard") != "standard" or l.get("multiplier") not in (None, 1, 1.0) for l in legs):
             return None

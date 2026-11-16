@@ -456,3 +456,18 @@ def test_adder_replacement_respects_platform():
     pp = rec("p", "e3", .8)
     out = advise([a, b], [a, b, pp])
     assert "replacement" not in out[0]
+
+
+def test_same_match_legs_go_one_way_and_carry_no_unshifted_payout():
+    """Deep dive 2026-11-16: an Over and an Under from one match both hit 2-3 points less often than unrelated legs, so a same-match
+    slip never pairs opposite sides; and Underdog shifts a same-match payout by an unpublished amount, so no table multiple is shown."""
+    recs = [rec("a", "e1", .7, book="underdog"), rec("b", "e1", .69, book="underdog", side="under"), rec("c", "e2", .55, book="underdog")]
+    s = build(recs, platform="underdog", entry_type="standard", same_match=True)["slips"][0]
+    assert {l["player"] for l in s["legs"]} != {"a", "b"}
+    legs, _ = legs_of(recs[:2])
+    assert any("opposite sides" in t for t in sq.problems(legs, "underdog", "standard", same_match=True))
+    same = [rec("a", "e1", .7, book="underdog"), rec("b", "e1", .69, book="underdog"), rec("c", "e2", .55, book="underdog")]
+    s = build(same, platform="underdog", entry_type="standard", same_match=True)["slips"][0]
+    assert s["same_match"] is True and s["payout"] is None
+    s = build(same, platform="underdog", entry_type="standard")["slips"][0]
+    assert s["same_match"] is False and s["payout"]["multiple"] == 3.5
