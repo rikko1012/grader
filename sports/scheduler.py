@@ -307,9 +307,10 @@ def default_jobs():
         # retrain. SPORTS_FORECAST - independent of SPORTS_TRAIN (owner 2026-10-24). Exclusive: never beside ingestion.
         "model-forward": dict(argv=_py("-m", "sports.model.fwd", "run", *lg), every_s=1800, timeout_s=900,
                               # 2026-11-16: the run peaked past its 720 MB (400 x1.8) on the grown offer set and was killed 9 times
-                              # in a row - 40 h with no new forecast, so the whole NBA slate showed no grade. Exclusive (nothing
-                              # heavy beside it): 600 x1.8 = 1,080 MB, inside the owner's 1,200 MB child budget on the 2 GB plan.
-                              flag="SPORTS_FORECAST", cap_mb=600 if std else 340, cls=EXCLUSIVE, prio=5),
+                              # in a row - 40 h with no new forecast, so the whole NBA slate showed no grade. 472 x1.8 = 850 MB: the
+                              # most the stall replays allow (test_sports_stall_1108: at 900 MB nothing may run beside the waiting
+                              # exclusive job inside the 1,200 MB child budget and the collectors back up).
+                              flag="SPORTS_FORECAST", cap_mb=472 if std else 340, cls=EXCLUSIVE, prio=5),
         # model (worker `train` commands need SPORTS_TRAIN - foundation rule)
         "model-forecast": dict(argv=_py("-m", "sports.worker", "train", "forecast", *lg), every_s=3600, timeout_s=900,
                                flag="SPORTS_TRAIN", cap_mb=340, cls=EXCLUSIVE, prio=5),   # 272-311 MB
