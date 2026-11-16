@@ -169,8 +169,8 @@ html:not(.js) .hc{display:none}
 .hc-fill{top:5px;height:4px;border-radius:2px;background:var(--accent);transform-origin:0 50%;transform:scaleX(0);opacity:.85}
 .hc-m i{position:absolute;left:-1px;top:-2px;width:2px;height:18px;border-radius:1px;background:var(--btn)}
 .hc-p i{position:absolute;left:-6px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--text);border:2px solid var(--bg)}
-.hc-body.swap .hc-who,.hc-body.swap .hc-chips,.hc-body.swap .hc-pick{animation:pcin 320ms var(--ease) both}
-.hc-body.swap .hc-chips{animation-delay:40ms}.hc-body.swap .hc-pick{animation-delay:80ms}
+.hc-body.swap .hc-who,.hc-body.swap .hc-chips,.hc-body.swap .hc-pick,.hc-body.swap .ring>div{animation:pcin 320ms var(--ease) both}
+.hc-body.swap .hc-chips{animation-delay:40ms}.hc-body.swap .hc-pick,.hc-body.swap .ring>div{animation-delay:80ms}
 .hc-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--rule);padding:0 6px}
 .hc-nav button{position:relative;min-height:46px;min-width:44px;padding:6px 0 0;border:0;background:none;color:var(--faint);font:500 12.5px var(--font);cursor:pointer;transition:color var(--fast)}
 .hc-nav button:hover{color:var(--text)}
@@ -695,12 +695,13 @@ footer.foot a:hover{color:#fff;background:#242d39}
         <div class="card-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card: Scout's chance, the projection and why Scout leans Under"></div>
         <div class="hc" id="hc" role="region" aria-roledescription="carousel" aria-label="Example prop card">
           <div class="hc-top">
-            <span class="tag" id="hc-sport">Example</span><span class="hc-src">Real Scout board rows</span>
+            <span class="tag" id="hc-sport">Example</span><span class="hc-src">Real board rows</span>
             <button class="icon-btn hc-pause" type="button" id="hc-pause" aria-label="Stop rotating the examples">
               <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="currentColor"/></svg>
               <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg></button>
           </div>
           <div class="hc-body" id="hc-body" aria-live="off" aria-atomic="true">
+            <span class="sr" id="hc-sr">Example.</span>
             <div class="hc-who"><span class="av" id="hc-av" aria-hidden="true"></span><div><b id="hc-name"></b><small id="hc-meta"></small></div></div>
             <div class="hc-chips" id="hc-chips"></div>
             <div class="hc-main">
@@ -1189,28 +1190,18 @@ footer.foot a:hover{color:#fff;background:#242d39}
     if (!hc) return;
     var ORDER = ["nfl", "nba", "cs2", "lol"], NAMES = { nfl: "NFL", nba: "NBA", cs2: "CS2", lol: "League" };
     var ROWS = {}; ORDER.forEach(function (sp) { ROWS[sp] = BOARD[sp].rows.filter(function (r) { return !!r.letter; }); });
-    var visits = { nfl: 0, nba: 0, cs2: 0, lol: 0 }, cur = null, shown = 0, lastLetter = null, holds = {}, stopped = !!RM.matches;
+    var visits = { nfl: 0, nba: 0, cs2: 0, lol: 0 }, cur = null, lastLetter = null, holds = {}, stopped = !!RM.matches;
     var body = $("#hc-body"), fg = $("#hc-fg"), pctE = $("#hc-pct"), gradeE = $("#hc-grade"), btn = $("#hc-pause");
-    var navBtns = $$("#hc-nav button"), C = 2 * Math.PI * 48, raf = 0;
+    var navBtns = $$("#hc-nav button"), C = 2 * Math.PI * 48;
     fg.setAttribute("stroke-dasharray", C); fg.setAttribute("stroke-dashoffset", C);
-    function countTo(to) {
-      cancelAnimationFrame(raf);
-      var from = shown; shown = to;
-      if (RM.matches || stopped) { pctE.textContent = f1(to) + "%"; return; }   // stopped = live region on: one final number, no per-frame rewrites
-      if (!from) from = to * 0.6;
-      var t0 = 0;
-      raf = requestAnimationFrame(function step(t) {
-        if (!t0) t0 = t;
-        var k = Math.min(1, (t - t0) / 800), e = 1 - Math.pow(1 - k, 3);
-        pctE.textContent = f1(from + (to - from) * e) + "%";
-        if (k < 1) raf = requestAnimationFrame(step);
-      });
-    }
+    // the chance is written once, final, and fades in with the card: no in-between number ever sits next to a real player's name
+    function showPct(to) { pctE.textContent = f1(to) + "%"; }
     function paint(sp) {
       var rows = ROWS[sp], r = rows[visits[sp] % rows.length], ov = r.side === "Over";
       cur = sp;
       navBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-v") === sp ? "true" : "false"); });
       $("#hc-sport").textContent = NAMES[sp] + " · Example";
+      $("#hc-sr").textContent = NAMES[sp] + " example, a real Scout board row.";
       $("#hc-av").textContent = initials(r.player);
       $("#hc-name").textContent = r.player;
       $("#hc-meta").textContent = r.pos + " · " + r.match;
@@ -1219,16 +1210,17 @@ footer.foot a:hover{color:#fff;background:#242d39}
       chips.appendChild(el("span", "tag dim", r.book + (r.variant ? " · " + r.variant : "")));
       var side = $("#hc-side"); side.textContent = r.side + " " + r.line; side.className = "side " + (ov ? "ov" : "un");
       $("#hc-why").textContent = "Scout's chance at exactly " + r.line;
-      countTo(r.chance);
+      showPct(r.chance);
       fg.setAttribute("stroke-dashoffset", C * (1 - r.chance / 100));
-      gradeE.textContent = r.letter; gradeE.className = "big-grade" + (r.letter.charAt(0) === "A" ? "" : " b");
-      gradeE.setAttribute("aria-label", "Grade " + r.letter);
+      gradeE.textContent = ""; gradeE.appendChild(el("span", "sr", "Grade ")); gradeE.appendChild(document.createTextNode(r.letter));
+      gradeE.className = "big-grade" + (r.letter.charAt(0) === "A" ? "" : " b");
       if (lastLetter !== null && !RM.matches) { gradeE.classList.remove("pop"); void gradeE.offsetWidth; gradeE.classList.add("pop"); }
       lastLetter = r.letter;
       // projection against the line, on one track (transform-only)
       var hi = Math.max(r.line, r.proj) * 1.38, pos = function (v) { return v / hi * 100; };
-      $("#hc-pl").textContent = ""; $("#hc-pl").appendChild(document.createTextNode("Projection ")); $("#hc-pl").appendChild(el("b", null, String(r.proj)));
-      $("#hc-ll").textContent = ""; $("#hc-ll").appendChild(document.createTextNode("Line ")); $("#hc-ll").appendChild(el("b", null, String(r.line)));
+      // labels follow the track: the lower value's label sits on the left
+      var lab = [["Projection", r.proj], ["Line", r.line]]; if (r.proj > r.line) lab.reverse();
+      [$("#hc-pl"), $("#hc-ll")].forEach(function (n, i) { n.textContent = ""; n.appendChild(document.createTextNode(lab[i][0] + " ")); n.appendChild(el("b", null, String(lab[i][1]))); });
       $("#hc-m").style.transform = "translateX(" + pos(r.line).toFixed(2) + "%)";
       $("#hc-p").style.transform = "translateX(" + pos(r.proj).toFixed(2) + "%)";
       var a = Math.min(r.line, r.proj), b = Math.max(r.line, r.proj);
@@ -1264,8 +1256,8 @@ footer.foot a:hover{color:#fff;background:#242d39}
     hc.addEventListener("focusout", function (e) { if (!hc.contains(e.relatedTarget)) hold("focus", false); });
     document.addEventListener("visibilitychange", function () { hold("tab", document.hidden); });
     watch([hc], function (n, vis) { hold("off", !vis); });
-    sync();
     paint("nfl");
+    sync();      // after the first paint, so a live region (stopped / reduced motion) never reads the card out on load
   });
   safe(function () {
     var rowsUl = $("#bd-rows"), card = $("#pcard"), panel = $("#bd-panel"), src = $("#bd-src"), live = $("#bd-live"), sport = "nfl", sel = 0, lastLetter = null;
