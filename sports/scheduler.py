@@ -343,7 +343,10 @@ def default_jobs():
         if os.environ.get(f"SCOUT_{sport.upper()}_ENABLED") != "1":
             continue
         J[f"{sport}-quotes"] = dict(argv=_py("-m", "sports.expansion_board", sport), every_s=180,
-            timeout_s=90, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=80, cls=HEAVY, prio=6,
+            # Independent quote stores, measured 58/42 MB and ~4 s per live run.
+            # Like books, keep fresh during long exclusive model jobs. Admission
+            # still reserves the cap against the existing child memory budget.
+            timeout_s=90, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=80, cls=LIGHT, prio=2,
             locks=(f"{sport}-quotes",))
         J[f"{sport}-history"] = dict(argv=_py("-m", "sports.expansion_history", sport), every_s=1800,
             timeout_s=180, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=120, cls=HEAVY, prio=8,

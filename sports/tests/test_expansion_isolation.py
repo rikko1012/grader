@@ -51,3 +51,17 @@ def test_new_collectors_are_explicitly_opt_in(monkeypatch):
     assert after['tennis-history']['argv'][-1]=='tennis'
     assert after['tennis-learning']['argv'][-1]=='tennis'
     assert {k:v for k,v in after.items() if k not in ('tennis-quotes','tennis-history','tennis-learning')}==before
+
+
+def test_quote_jobs_can_stay_fresh_beside_models_but_history_cannot(monkeypatch):
+    from sports.scheduler import Scheduler, default_jobs, LIGHT, HEAVY
+    monkeypatch.setenv('SCOUT_SOCCER_ENABLED','1')
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED','1')
+    jobs=default_jobs()
+    for sport in ('soccer','tennis'):
+        quote=jobs[sport+'-quotes']
+        assert quote['cls']==LIGHT and Scheduler._beside(quote)
+        assert quote['timeout_s']<=90 and quote['cap_mb']>0
+        assert jobs[sport+'-history']['cls']==HEAVY
+        assert not Scheduler._beside(jobs[sport+'-history'])
+        assert not Scheduler._beside(jobs[sport+'-learning'])
