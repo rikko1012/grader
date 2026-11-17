@@ -51,7 +51,8 @@
         el('td', game.value > data.line ? 'Over' : game.value < data.line ? 'Under' : 'Push'));
       body.append(tr);
     }
-    table.append(body); box.append(table, el('p', 'Source: ESPN. Results use this line, not historical closing lines. No predicted chance is inferred from the hit rate.', 'meta'));
+    const sources = [...new Set(data.games.map(g => g.source === 'thescore' ? 'theScore' : g.source === 'espn' ? 'ESPN' : g.source).filter(Boolean))];
+    table.append(body); box.append(table, el('p', `Source: ${sources.join(', ')}. Results use this line, not historical closing lines. No predicted chance is inferred from the hit rate.`, 'meta'));
   }
   function card(list, key) {
     list.sort((a, b) => a.label.localeCompare(b.label) || Number(b.scope === 'full_game') - Number(a.scope === 'full_game') ||

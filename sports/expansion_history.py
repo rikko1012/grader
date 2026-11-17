@@ -43,8 +43,16 @@ def atomic_json(path, value):
             os.unlink(temp)
 
 
+# League IDs verified from each ESPN scoreboard league header on 2026-11-17.
+# Future fixtures often omit the league links but retain this source UID.
+SOCCER_LEAGUE_IDS = {'700': 'eng.1', '740': 'esp.1', '720': 'ger.1', '730': 'ita.1', '710': 'fra.1', '770': 'usa.1', '630': 'bra.1', '745': 'arg.1', '760': 'mex.1', '725': 'ned.1', '715': 'por.1', '735': 'sco.1', '3901': 'bel.1', '3946': 'tur.1', '775': 'uefa.champions', '3922': 'fifa.friendly', '2395': 'uefa.nations', '786': 'fifa.worldq.uefa', '787': 'fifa.worldq.conmebol', '788': 'fifa.worldq.concacaf', '789': 'fifa.worldq.afc', '790': 'fifa.worldq.caf', '606': 'fifa.world', '19267': 'concacaf.nations.league'}
+
+
 def soccer_competition(event):
     found = set()
+    source_uid = re.search(r'(?:^|~)l:(\d+)(?:~|$)', event.get('uid') or '')
+    if source_uid and source_uid[1] in SOCCER_LEAGUE_IDS:
+        found.add(SOCCER_LEAGUE_IDS[source_uid[1]])
     for link in event.get('links') or []:
         match = re.search(r'/league/([a-z0-9.]+)(?:[/?#]|$)', link.get('href') or '')
         if match and COMPETITIONS.get(match[1], (None,))[0] == 'soccer':
@@ -96,7 +104,8 @@ def resolve(offer, matches):
             if len(teams) != 2 or not all(teams):
                 continue
             participants = match['participants']
-            aliases = [{normalized(p.get('name')), normalized(p.get('abbreviation'))} - {''} for p in participants]
+            aliases = [{normalized(p.get('name')), normalized(p.get('abbreviation')),
+                        normalized(p.get('short_name'))} - {''} for p in participants]
             if len(aliases) != 2 or not ((normalized(teams[0]) in aliases[0] and normalized(teams[1]) in aliases[1]) or
                                        (normalized(teams[0]) in aliases[1] and normalized(teams[1]) in aliases[0])):
                 continue
@@ -108,6 +117,102 @@ def resolve(offer, matches):
             answer[(match['event_id'], player['id'])] = {'competition': competition,
                 'event_id': match['event_id'], 'player_id': player['id']}
     return next(iter(answer.values())) if len(answer) == 1 else None
+
+
+def soccer_teams(offer, match):
+    """Match the offered fixture before requesting roster or schedule context."""
+    if (offer.get('sport') != 'soccer' or not match.get('start') or
+            abs((parse_utc(offer['start']) - parse_utc(match['start'])).total_seconds()) > 7200):
+        return []
+    teams = offer.get('teams') or []
+    participants = match.get('participants') or []
+    if len(teams) != 2 or not all(teams) or len(participants) != 2:
+        return []
+    aliases = [{normalized(p.get(k)) for k in ('name','abbreviation','short_name')} - {''} for p in participants]
+    a,b = map(normalized, teams)
+    if not ((a in aliases[0] and b in aliases[1]) or (a in aliases[1] and b in aliases[0])):
+        return []
+    return [p for p,names in zip(participants, aliases) if normalized(offer.get('team')) in names]
+
+
+def collect_soccer_teams(catalogs, get, persist, directory):
+    """Current rosters establish identity, never starting status or participation.
+
+    Team schedules discover recent result IDs; only match-specific summaries
+    supply stat observations. This is the same cached roster/schedule/box-score
+    pattern used by the existing collectors, in separate new-sport storage.
+    """
+    path = directory / 'team-history-state.json'
+    try:
+        state = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        state = {}
+    try:
+        snapshot = directory / 'board.json'
+        offers = json.loads(snapshot.read_text(encoding='utf-8')).get('offers', []) if snapshot.stat().st_size <= 3_000_000 else []
+    except (OSError, ValueError):
+        offers = []
+    now = datetime.now(timezone.utc)
+    teams = {}
+    for matches in catalogs.values():
+        for match in list(matches.values()):
+            if match.get('status') not in ('scheduled', 'in_progress'):
+                continue
+            for offer in offers:
+                for team in soccer_teams(offer, match):
+                    key = f"{match['competition']}:{team['id']}"
+                    teams.setdefault(key, {'competition':match['competition'], 'team':team['id'], 'matches':[]})['matches'].append(match)
+    errors = []
+    try:
+        # Reuse valid rosters every run, then refresh at most two teams so a busy
+        # slate cannot consume the entire history request budget indefinitely.
+        for key, item in teams.items():
+            saved = state.get(key, {})
+            if saved.get('checked_at') and (now-parse_utc(saved['checked_at'])).total_seconds() < 21600:
+                for match in item['matches']:
+                    known = {p['id']:p for p in saved.get('players', [])}
+                    known.update({p['id']:p for p in match.get('players', [])})
+                    match['players'] = list(known.values())
+        due = [(key,item) for key,item in teams.items() if not state.get(key, {}).get('checked_at') or
+               (now-parse_utc(state[key]['checked_at'])).total_seconds() >= 21600 or
+               not state.get(key, {}).get('schedule_checked_at') or
+               (now-parse_utc(state[key]['schedule_checked_at'])).total_seconds() >= 21600]
+        due.sort(key=lambda row:state.get(row[0], {}).get('checked_at') or '')
+        for key,item in due[:2]:
+            comp, tid = item['competition'], item['team'].split(':')[-1]
+            try:
+                saved = state.setdefault(key, {})
+                if not saved.get('checked_at') or (now-parse_utc(saved['checked_at'])).total_seconds() >= 21600:
+                    roster = get(f'https://site.api.espn.com/apis/site/v2/sports/soccer/{comp}/teams/{tid}/roster', {})
+                    if str((roster.get('team') or {}).get('id')) != tid:
+                        raise ValueError('roster team mismatch')
+                    players = [{'id':f"soccer:player:espn:{p['id']}", 'name':p['displayName'], 'team_id':item['team'],
+                                'identity_source':'espn_team_roster', 'identity_known_at':now_utc()}
+                               for p in roster.get('athletes') or [] if p.get('id') and p.get('displayName')]
+                    saved.update(players=players, checked_at=now_utc())
+                    for match in item['matches']:
+                        known = {p['id']:p for p in players}
+                        known.update({p['id']:p for p in match.get('players', [])})
+                        match['players'] = list(known.values())
+                schedule = get(f'https://site.api.espn.com/apis/site/v2/sports/soccer/{comp}/teams/{tid}/schedule', {})
+                if str((schedule.get('team') or {}).get('id')) != tid:
+                    raise ValueError('schedule team mismatch')
+                for event in schedule.get('events') or []:
+                    actual = soccer_competition(event)
+                    if not actual or not event.get('date') or parse_utc(event['date']) < now-timedelta(days=100):
+                        continue
+                    feed = parse_scoreboard({'events':[event]}, actual, now_utc())
+                    # A team schedule can contain other competitions. Keep their
+                    # canonical IDs and databases distinct, never relabel them.
+                    if all(any(p['id']==item['team'] for p in m['participants']) for m in feed.matches):
+                        persist(feed, actual)
+                saved['schedule_checked_at'] = now_utc()
+            except (net.HttpError, ValueError, OSError) as e:
+                errors.append(type(e).__name__)
+    finally:
+        atomic_json(path, {k:v for k,v in state.items() if v.get('checked_at') and
+                          (now-parse_utc(v['checked_at'])).total_seconds() < 7*86400})
+    return errors
 
 
 def collect(sport, max_requests=16, max_seconds=150):
@@ -164,20 +269,29 @@ def collect(sport, max_requests=16, max_seconds=150):
                 catalogs[competition] = {}
         for match in feed.matches:
             previous = catalogs[competition].get(match['event_id'], {})
+            for field in ('surface', 'best_of'):
+                if match.get(field) is None and previous.get(field) is not None:
+                    match[field] = previous[field]
             catalogs[competition][match['event_id']] = {**previous, **match}
         counts['matches'] += len(feed.matches)
 
     # A one-week scoreboard window also returns a tennis tournament's completed
     # rounds; the older cursor advances only after its scoreboard was fetched.
-    requests = ([('live', f'{today:%Y%m%d}'), ('live', f'{today+timedelta(days=1):%Y%m%d}')]
+    requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(3)]
                 if sport == 'soccer' else [('live', f'{today:%Y%m%d}-{today+timedelta(days=2):%Y%m%d}')])
     requests.append(('backfill', f'{today-timedelta(days=offset):%Y%m%d}'))
     advanced = False
     try:
         for phase, dates in requests:
+            phase_ok = True
             for comp in (('all',) if sport == 'soccer' else ('atp', 'wta')):
-                body = get(f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{comp}/scoreboard',
-                           {'dates': dates, 'limit': 200})
+                try:
+                    body = get(f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{comp}/scoreboard',
+                               {'dates': dates, 'limit': 200})
+                except (net.HttpError, ValueError, OSError) as e:
+                    counts['errors'].append(type(e).__name__)
+                    phase_ok = False
+                    continue
                 grouped = {}
                 for event in body.get('events') or []:
                     actual = soccer_competition(event) if sport == 'soccer' else comp
@@ -186,21 +300,32 @@ def collect(sport, max_requests=16, max_seconds=150):
                 for actual, events in grouped.items():
                     feed = parse_scoreboard({'events': events}, actual, now_utc())
                     persist(feed, actual)
-            if phase == 'backfill':
+            if phase == 'backfill' and phase_ok:
                 advanced = True
         if sport == 'soccer':
+            counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory))
             # Scoreboards get their budget first. Pending summaries stay in the
             # catalog across runs, so advancing the date cannot lose a busy day.
             pending = [m for matches in catalogs.values() for m in matches.values()
                        if (not m.get('summary_checked_at') or
                            (datetime.now(timezone.utc)-parse_utc(m['summary_checked_at'])).total_seconds() >=
-                           (86400 if m.get('status') == 'final' else 21600))]
-            pending.sort(key=lambda m:(m.get('summary_checked_at') or '', m.get('start') or '', m['event_id']))
+                           (86400 if m.get('status') == 'final' else 21600))
+                       and (not m.get('summary_attempt_at') or
+                            (datetime.now(timezone.utc)-parse_utc(m['summary_attempt_at'])).total_seconds() >= 1800)]
+            # Check imminent offered events first, then the oldest unchecked
+            # summary. Once checked, a game waits its interval and frees the queue.
+            offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
+                             for p in m.get('players', []) if p.get('identity_source') == 'espn_team_roster'}
+            pending.sort(key=lambda m:(bool(m.get('summary_checked_at')),
+                                       not any(p['id'] in offered_teams for p in m['participants']),
+                                       m.get('status') != 'final', m.get('summary_checked_at') or '',
+                                       -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id']))
             for match in pending:
                 actual = match['competition']
                 eid = match['event_id'].split(':')[-2]
                 try:
                     summary = get(f'https://site.api.espn.com/apis/site/v2/sports/soccer/{actual}/summary', {'event':eid})
+                    match['summary_attempt_at'] = now_utc()
                     if (summary.get('header', {}).get('league') or {}).get('slug') != actual:
                         raise ValueError('summary competition mismatch')
                     players = roster_identity(summary, match)
@@ -210,7 +335,11 @@ def collect(sport, max_requests=16, max_seconds=150):
                     persist(records, actual)
                     match['summary_checked_at'] = now_utc()
                 except (net.HttpError, ValueError, OSError) as e:
+                    match['summary_attempt_at'] = now_utc()
                     counts['errors'].append(type(e).__name__)
+        else:
+            from .expansion_tennis import collect_details
+            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
     except StopIteration:
         pass
     except (net.HttpError, ValueError, OSError, sqlite3.Error) as e:

@@ -17,10 +17,13 @@ claim to finish validated soccer/tennis grading, settlement or slip generation.
   Retry-After holds survive process restarts. Existing jobs are unchanged when
   `SCOUT_SOCCER_ENABLED` and `SCOUT_TENNIS_ENABLED` are absent.
 - History is matched by full player identity, exact opponent/team pair, tour or
-  competition and start time; ambiguous matches remain unmatched. Soccer roster
-  membership must belong to that event. Data availability times are never backdated.
+  competition and start time; ambiguous matches remain unmatched. Soccer identity uses the match roster or a freshly verified team roster with
+  an exact fixture/team match; a current roster never proves participation. Data availability times are never backdated.
 - Tennis completed-set arithmetic supplies games won/played, sets won/played and
-  normal tiebreak counts. No aces or double faults are invented from scores. TBD,
+  normal tiebreak counts. A bounded theScore fallback supplies explicitly reported aces, double faults,
+  break points won, points won and tiebreaks won. Both players and their ordered
+  set scores must match ESPN before saving anything. Source comparison percentages
+  are not imported as serve probabilities. TBD,
   doubles, retirements and inconsistent/incomplete set results are excluded.
 - Soccer summary stats are regulation-only, with explicit participation evidence.
   The parser refuses a summary from another event or competition. This matters:
@@ -35,20 +38,25 @@ claim to finish validated soccer/tennis grading, settlement or slip generation.
 
 ## Verified evidence
 
-- Public-feed collection into isolated local files: tennis 37 matches / 457
-  processed records; soccer 29 matches / 2,081 processed records, no collection
-  errors after fixing soccer's unsupported date-range request. These are processed
-  records, not a claim that every row is unique or every listed market has history.
-- 40 focused checks passed; the new authenticated HTTP test then passed outside
-  Windows' restricted local-network context.
-- Six local HTTP/browser tests passed, including the real esports Handler and
-  real Sports service, card history and nav at 1440px and 390px. Fixtures are
-  synthetic and this is not a live member-session certification.
-- Screenshots: `../outputs/soccer-tennis-ui-check/`.
-- Full Sports/shared-grader and esports/browser suites currently running;
-  results are written to `../outputs/soccer-tennis-full-*.xml`.
-- Render dashboard and GitHub browser session are signed out. No new feature
-  flags, production data or deployment were changed during this implementation.
+- Live-source verification in isolated local files: 1,552 soccer offers and 325
+  tennis offers in the saved source snapshots. First two roster batches linked
+  272 soccer offers; tennis linked 49. These counts are dated verification,
+  not guaranteed ongoing coverage or unique player counts.
+- Read-back verified Neymar's regulation shots and Carlos Alcaraz's 4 aces from
+  an independently score-matched completed game. Tennis saved 50 theScore count
+  observations in addition to ESPN score totals. Brazilian soccer saved explicit
+  player match stats; passes/tackles coverage remains incomplete.
+- Future soccer fixtures lack league links: verified ESPN league UID mapping
+  fixes their omission. Team schedules prioritize relevant recent matches.
+- 62 focused adapter, authenticated HTTP and browser checks passed. The wider
+  Sports run found the new cross-service test in the wrong directory; moving it
+  to sports/tests preserves the existing isolation gate, which now passes.
+- The 700-member existing Sports load check: 5,600 requests, zero errors or busy
+  responses; p95 1.196s, p99 2.179s on this Windows machine (not production).
+- Screenshots: `../outputs/soccer-tennis-ui-check/`; 1440px and 390px, current
+  light/dark styling, real local HTTP handlers with synthetic member fixtures.
+- Fresh CI/full checks and production enablement are still pending. Render access
+  is now confirmed; no production setting or data has been changed yet.
 
 ## Required before member grading / tracked settlement
 

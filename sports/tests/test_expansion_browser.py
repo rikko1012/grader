@@ -10,19 +10,11 @@ from pathlib import Path
 
 from urllib.parse import urlparse
 
-
-
 import pytest
-
-
 
 pw = pytest.importorskip('playwright.sync_api')
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
-
-
+ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize('width,theme',[(1440,'dark'),(390,'dark'),(390,'light')])
 
@@ -136,12 +128,9 @@ def test_matching_theme_filters_and_player_periods(width,theme):
 
         browser.close()
 
-
-
 # These fixtures start the real esports Handler. The new Sports HTTP process
 # below uses the actual service and route/auth table; only test login is faked.
 from tests.test_upgrade_browser import browser, env, ctx
-
 
 @pytest.mark.parametrize('width', [1440, 390])
 def test_real_servers_player_history_and_navigation(ctx, env, monkeypatch, tmp_path, width):

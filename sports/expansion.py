@@ -21,6 +21,10 @@ COMPETITIONS = {
     "eng.1": ("soccer", "soccer"), "esp.1": ("soccer", "soccer"),
     "ger.1": ("soccer", "soccer"), "ita.1": ("soccer", "soccer"),
     "fra.1": ("soccer", "soccer"), "usa.1": ("soccer", "soccer"),
+    "bra.1": ("soccer", "soccer"), "arg.1": ("soccer", "soccer"),
+    "mex.1": ("soccer", "soccer"), "ned.1": ("soccer", "soccer"),
+    "por.1": ("soccer", "soccer"), "sco.1": ("soccer", "soccer"),
+    "bel.1": ("soccer", "soccer"), "tur.1": ("soccer", "soccer"),
     "uefa.champions": ("soccer", "soccer"),
     "fifa.friendly": ("soccer", "soccer"), "uefa.nations": ("soccer", "soccer"),
     "fifa.worldq.uefa": ("soccer", "soccer"), "fifa.worldq.conmebol": ("soccer", "soccer"),
@@ -115,7 +119,8 @@ Retired / walkover / suspended matches never produce completed-match stats.
                 label = item.get("displayName") or item.get("name")
                 ident = f"{league}:{'player' if sport == 'tennis' else 'team'}:espn:{source_id}"
                 participants.append({"id": ident, "name": label,
-                                     "abbreviation": item.get("abbreviation")})
+                                     "abbreviation": item.get("abbreviation"),
+                                     "short_name": item.get("shortDisplayName")})
                 if sport == "tennis":
                     records.append(Player(ident, league, label or "", source_ids=(SourceId("espn", source_id),),
                                           observed_at=observed_at, known_at=observed_at))
@@ -160,6 +165,7 @@ Retired / walkover / suspended matches never produce completed-match stats.
                 if not valid:
                     out.rejected.append(f"{eid}: incomplete or nonstandard set scores")
                     continue
+                out.matches[-1]['set_scores'] = {p['id']: values[i] for i, p in enumerate(participants)}
                 for i, participant in enumerate(participants):
                     for j, value in enumerate(values[i]):
                         out.records.append(StatObservation(eid, league, participant["id"], "player", f"set{j+1}",

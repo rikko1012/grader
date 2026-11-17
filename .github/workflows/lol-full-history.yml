@@ -94,7 +94,7 @@ jobs:
       - run: pip install -r requirements-test.txt playwright==1.63.0
       - run: python -m playwright install --with-deps chromium
       - name: Original pages and four-sport research flows (isolated fixtures)
-        run: python -m pytest tests/test_upgrade_browser.py tests/test_reviews_browser.py tests/test_research_hub_browser.py tests/test_workspace_v2_browser.py tests/test_ui_usability_1111_browser.py tests/test_ui_next_browser.py tests/test_books_visibility_browser.py tests/test_price_slips_browser.py tests/test_expansion_browser.py -q -p no:cacheprovider --junitxml=test-results/browser.xml
+        run: python -m pytest tests/test_upgrade_browser.py tests/test_reviews_browser.py tests/test_research_hub_browser.py tests/test_workspace_v2_browser.py tests/test_ui_usability_1111_browser.py tests/test_ui_next_browser.py tests/test_books_visibility_browser.py tests/test_price_slips_browser.py sports/tests/test_expansion_browser.py -q -p no:cacheprovider --junitxml=test-results/browser.xml
       - name: Preserve test results even when checks fail
         if: always()
         uses: actions/upload-artifact@v4

@@ -130,3 +130,47 @@ def test_provider_hold_survives_separate_jobs(monkeypatch,tmp_path):
         return {}
     monkeypatch.setattr(net,'get_json',second)
     expansion_sources.get_json('tennis','https://example.test/lines')
+
+
+def test_future_soccer_uid_resolves_competition_and_conflicting_proof_is_rejected():
+    assert history.soccer_competition({'uid':'s:600~l:630~e:123','links':[]})=='bra.1'
+    assert history.soccer_competition({'uid':'s:600~l:630~e:123','links':[
+        {'href':'https://www.espn.com/soccer/table/_/league/eng.1'}]}) is None
+    assert history.soccer_competition({'uid':'s:600~l:99999~e:123'}) is None
+
+
+def test_team_roster_fallback_links_identity_without_inventing_stats(tmp_path):
+    import json
+    match={'event_id':'soccer:espn:bra.1:123:123','competition':'bra.1',
+           'start':now_utc(),'status':'scheduled', 'participants':[
+               {'id':'soccer:team:espn:1','name':'Home FC','short_name':'Home'},
+               {'id':'soccer:team:espn:2','name':'Away FC','short_name':'Away'}]}
+    offer={'sport':'soccer','teams':['Home','Away'],'team':'Home','player':'Test Player','start':match['start']}
+    history.atomic_json(tmp_path/'board.json',{'offers':[offer]})
+    calls=[];saved=[]
+    def get(url, params):
+        calls.append(url)
+        if url.endswith('/roster'):return {'team':{'id':'1'},'athletes':[{'id':'3','displayName':'Test Player'}]}
+        return {'team':{'id':'1'},'events':[]}
+    history.collect_soccer_teams({'bra.1':{'123':match}},get,lambda *a:saved.append(a),tmp_path)
+    assert history.resolve(offer,[match])['player_id']=='soccer:player:espn:3'
+    assert not saved  # Current roster is not a completed game's stat line.
+    assert len(calls)==2
+    match.pop('players')
+    history.collect_soccer_teams({'bra.1':{'123':match}},get,lambda *a:saved.append(a),tmp_path)
+    assert len(calls)==2 and history.resolve(offer,[match])
+    assert match['players'][0]['identity_source']=='espn_team_roster'
+
+
+def test_one_tour_outage_does_not_block_the_other(monkeypatch,tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
+    calls=[]
+    def get(url,**kwargs):
+        calls.append(url)
+        if '/atp/' in url:raise history.net.HttpError(503,url)
+        return scoreboard()
+    monkeypatch.setattr(history.net,'get_json',get)
+    result=history.collect('tennis',max_requests=2)
+    assert len(calls)==2 and result['errors']==['HttpError']
+    assert (tmp_path/'tennis/wta/canonical.db').exists()
+    assert not (tmp_path/'tennis/atp/canonical.db').exists()
