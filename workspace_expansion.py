@@ -49,7 +49,8 @@ def _forecast(o, research, forecasts):
     try:
         if (f['identity'] != research['identity'] or
                 any(f[k] != o[k] for k in ('sport','stat','scope','line','platform','offer_id','start')) or
-                f['offer_revision'] != o['revision'] or f['side'] not in o['sides'] or
+                f['offer_revision'] != o['revision'] or f['side'] not in ('over','under') or
+                (f['side'] not in o['sides'] and f.get('grade') is not None) or
                 not 0 <= time.time()-datetime.fromisoformat(f['made_at'].replace('Z','+00:00')).timestamp() < 86400 or
                 datetime.fromisoformat(f['made_at'].replace('Z','+00:00')) >= datetime.fromisoformat(o['start'].replace('Z','+00:00'))):
             return None
@@ -59,6 +60,8 @@ def _forecast(o, research, forecasts):
                 not math.isfinite(f['projection']) or f['projection']<0):
             return None
         if abs(f['p_side']-f['p_'+f['side']]/(1-f['p_push']))>1e-6:
+            return None
+        if f['p_side']+1e-6 < max(probabilities[:2])/(1-f['p_push']):
             return None
         return f
     except (KeyError,ValueError,TypeError):
