@@ -146,6 +146,17 @@ def test_soccer_scope_never_becomes_book_win_or_loss():
     assert r['absolute_error']==.5 and r['projected_side'] is None and r['settlement_status'] is None
 
 
+@pytest.mark.parametrize('status,start',[('in_progress','2026-11-17T20:30:00Z'),
+                                       ('scheduled','2026-11-17T20:30:00Z')])
+def test_book_start_cannot_override_started_source_event(setup,status,start):
+    _,path,m,_=setup
+    with closing(store.connect(path)) as c:
+        event=store._any_event(c,m['event_id'],NOW)
+        store.put_many(c,[replace(event,status=status,start_utc=start,observed_at=NOW,known_at=NOW)])
+    # The book still claims tomorrow. The result provider proves it already started.
+    assert learn.cycle('tennis',NOW)['forecasts']['saved']==0
+
+
 def test_sport_isolation_bounded_work_and_disabled_jobs(setup,monkeypatch):
     with closing(learn.connect('tennis')) as c:
         assert learn.capture(c,'tennis',NOW,time.monotonic()-1)['partial']

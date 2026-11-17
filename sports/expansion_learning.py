@@ -153,6 +153,10 @@ def capture(c, sport, now, deadline):
             counts['insufficient_history'] += 1
             continue
         with closing(store.connect(path,read_only=True)) as source:
+            event = store._any_event(source,identity['event_id'],now)
+            if not event or event.status!='scheduled' or not event.start_utc or event.start_utc<=now:
+                counts['event_not_pregame'] = counts.get('event_not_pregame',0)+1
+                continue
             games = history(source,identity,offer['stat'],scope,now)
             if len(games)<MIN_HISTORY:
                 counts['insufficient_history'] += 1
@@ -166,12 +170,13 @@ def capture(c, sport, now, deadline):
                        'payload':json.loads(r['payload'])} for r in facts],
                    'baseline':baseline,'candidate':max(0,baseline+fit['shift']),'fit':fit,
                    'projection_scope':scope,'line_for_review':line_for_review,
+                   'source_event_start':event.start_utc,'source_event_known_at':event.known_at,
                    'book_scope_verified':line_for_review is not None,
                    'inputs_used':['same_stat_period_history','prior_baseline_residuals'],
                    'context_used_in_model':False,'made_at':now,'release_allowed':False}
         c.execute('INSERT INTO predictions VALUES (?,?,?,?,?,?,?,?,?)',
                   (key,identity['competition'],identity['event_id'],identity['player_id'],offer['stat'],
-                   scope,offer['start'],now,encode(payload)))
+                   scope,min(offer['start'],event.start_utc),now,encode(payload)))
         counts['saved'] += 1
     c.commit()
     return counts
