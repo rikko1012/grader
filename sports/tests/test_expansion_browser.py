@@ -189,6 +189,8 @@ def test_real_servers_player_history_and_navigation(ctx, env, monkeypatch, tmp_p
         StatObservation(old,'atp','atp:player:espn:1','player','full_game','no','games_won','count',14,
                         'played','espn','old',True,known,known)])
     con.close()
+    from sports.expansion_research import publish
+    publish('tennis')
     srv=service.Server(('127.0.0.1',0),threads=4)
     monkeypatch.setenv('SPORTS_API_BASE', f'http://127.0.0.1:{srv.server_address[1]}')
     threading.Thread(target=srv.serve_forever,daemon=True).start()
@@ -196,19 +198,20 @@ def test_real_servers_player_history_and_navigation(ctx, env, monkeypatch, tmp_p
         page=ctx.new_page();page.set_viewport_size({'width':width,'height':900});errors=[]
         page.on('pageerror',lambda e:errors.append(str(e)))
         page.goto(env.url+'/sports/expansion.html?sport=tennis')
-        page.get_by_role('heading',name='Test Server',exact=True).wait_for(timeout=15000)
-        page.get_by_text('Player history',exact=True).click()
-        page.get_by_text('L5: 1 Over · 0 Under · 0 Push (1 games)',exact=True).wait_for(timeout=15000)
-        assert page.locator('.research tbody tr').count()==1
-        assert page.locator('.research tbody tr').inner_text().endswith('14\tOver')
+        page.wait_for_url('**/#scout/board?sport=tennis')
+        page.locator('#hub-rows .h-player').wait_for(timeout=15000)
+        assert 'Test Server' in page.locator('#hub-rows').inner_text()
+        page.locator('#hub-rows .h-player').first.click()
+        page.locator('#hub-detail .h-history-panel').wait_for(timeout=15000)
+        assert '14' in page.locator('#hub-detail .h-history-panel').inner_text()
+        assert page.locator('#hub-detail [data-hub="detail-add"]').count()==0
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         assert not errors
         target=os.environ.get('EXPANSION_SHOTS')
         if target: page.screenshot(path=str(Path(target)/f'history-real-servers-{width}.png'),full_page=True)
-        page.goto(env.url+'/#all-sports')
-        page.locator('#hub-sports [data-hub=expansion][data-id=tennis]').wait_for(timeout=30000)
+        page.keyboard.press('Escape')
         assert page.locator('#hub-sports [data-hub=sport][data-id=cs2]').count()==1
-        page.locator('#hub-sports [data-hub=expansion][data-id=tennis]').click()
-        page.get_by_role('heading',name='Test Server',exact=True).wait_for(timeout=15000)
+        assert page.locator('#hub-sports [data-hub=sport][data-id=tennis]').get_attribute('aria-pressed')=='true'
+        assert page.locator('#hub-sports [data-hub=expansion]').count()==0
     finally:
         srv.shutdown();srv.server_close()

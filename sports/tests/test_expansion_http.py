@@ -17,6 +17,9 @@ def test_http_board_history_and_disabled_paths(svc,monkeypatch,tmp_path):
     code,body,_=_get(svc,path,_auth())
     assert code==200 and body['offers'][0]['revision']==row['revision']
     assert _get(svc,path+'&version='+body['version'],_auth())[1]['unchanged']
+    # Research revisions are independent of quote versions: never return an empty unchanged envelope.
+    code,research,_=_get(svc,path+'&research=1&version='+body['version'],_auth())
+    assert code==200 and research['offers'] and 'research' in research
     hp='/api/sports/expansion/history?sport=soccer&offer_id=o1&platform=prizepicks'
     assert _get(svc,hp)[0]==401
     code,body,_=_get(svc,hp,_auth())

@@ -250,9 +250,6 @@ export function mount(C) {
        toolbar's search, platform and filters), so the open tab always equals the count over the list */
     const tabCount=s=>{const f=boardFilter(s);return boardSource().filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r,f)).length;};
     $('hub-sports').innerHTML=['all',...allowed()].map(s=>`<button type="button" data-hub="sport" data-id="${s}" aria-pressed="${H.sport===s}">${s==='all'?'All':SPORTS[s]}${read(s)?`<span>${tabCount(s)}</span>`:'<span class="h-n-wait" aria-hidden="true"></span>'}</button>`).join('');
-    if (Array.isArray(R.me.features?.expansion_sports) && allowed().some(s=>s==='nba'||s==='nfl')) {
-      $('hub-sports').insertAdjacentHTML('beforeend',R.me.features.expansion_sports.filter(s=>['soccer','tennis'].includes(s)).map(s=>`<button type="button" data-hub="expansion" data-id="${s}" title="Open separate ${s} lines and history">${s==='soccer'?'Soccer':'Tennis'} ↗</button>`).join(''));
-    }
     const sportRows=H.records.filter(r=>!C.started(r)&&(H.sport==='all'||r.sport===H.sport));
     const markets=[...new Map(sportRows.map(r=>[statKey(r),r.market.stat_label+(H.sport==='all'?' · '+SPORTS[r.sport]:'')])).entries()];
     $('hub-stat').innerHTML='<option value="all">All markets</option>'+markets.sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
@@ -533,6 +530,7 @@ export function mount(C) {
   }
   async function loadMarketEdge(sports) {
     if(!MX)return;
+    sports=sports.filter(s=>!['soccer','tennis'].includes(s));
     sports.forEach(s=>{H.mxAt[s]=Date.now();});
     const res=await Promise.allSettled(sports.map(s=>api('market-edge?sport='+encodeURIComponent(s)).then(d=>[s,d])));
     let got=false;
@@ -801,6 +799,10 @@ export function mount(C) {
     const heldSports=[...new Set(list.filter(r=>r.scout.letter_held).map(r=>r.sport))];
     // the Sports grades note belongs to the NBA and NFL boards only
     $('hub-health').innerHTML=(isExtra(H.book)?extraBanner():'')+heldSports.map(sp=>`<p class="h-letter-hold" role="status">${esc(SPORTS[sp]||sp.toUpperCase())} letters are held until stated chances match results.</p>`).join('')+(['nba','nfl'].includes(H.sport)&&list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About ${esc(SPORTS[H.sport])} grades</summary><p>Published letters rank the model’s current picks. Stakes are 0. See Record for stated chances and actual results.</p></details>`:'');
+    if(['soccer','tennis'].includes(H.sport)) {
+      const coverage=R.boards[H.sport]?.coverage;
+      if(coverage)$('hub-health').insertAdjacentHTML('beforeend',`<p class="h-history-note" role="status">${esc(SPORTS[H.sport])}: ${coverage.with_history} lines with verified player history${coverage.pending_history?` · ${coverage.pending_history} more await supporting game logs`:''}. Historical records are not forecast probabilities.</p>`);
+    }
     const games=H.view==='games';
     $('hub-board-section').classList.toggle('h-by-game',games);
     $('hub-board-section').querySelectorAll('[data-hub="view"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===(games?'games':'list'))));
@@ -1233,7 +1235,7 @@ export function mount(C) {
       <div class="h-segment h-side-toggle" role="group" aria-label="Side">${['over','under'].map(sd=>`<button data-hub="history-side" data-id="${sd}" aria-pressed="${side===sd}">${sideWord(sd)}</button>`).join('')}</div>
       <div class="h-dec-chance"><b title="Forecast chance · ${sideWord(side)} ${esc(line)}">${chance==null?'—':pct(chance)}</b>${pick?`<span class="h-dec-pick">${pick}</span>`:''}${num(s.units)&&s.side===side&&!notOffered(r)&&!C.oneSided(r)&&!r.extra?`<span class="h-dec-stake" title="Scout's stake on this line">Stake ${esc(String(s.units))}U</span>`:''}${s.side===side?belowChip(r):''}</div>
       <div class="h-dec-proj"><b>${num(s.projection)?esc(s.projection.toFixed(1)):'—'}</b><span>Proj.</span></div>${P('prefs')&&s.side===side&&parOf(r)&&!notOffered(r)?`<small class="h-dec-size">Break-even ${esc(beOdds(parOf(r)))}${sizeText(parOf(r))?` · ${esc(sizingLabel())}: ${esc(sizeText(parOf(r)))}`:''}</small>`:''}
-      ${against?againstHtml():C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
+      ${r.research_only?'<div class="h-dec-act h-dec-view"><small>Player history · tracked picks open with released forecasts.</small></div>':against?againstHtml():C.oneSided(r)&&!r.extra?`<div class="h-dec-act h-dec-view"><small>${esc(C.oneSidedNote(r))}</small></div>`:r.extra?`<div class="h-dec-act h-dec-view"><small>View only. Slips are PrizePicks or Underdog entries; open ${esc(r.offer.platform_label)} to play this line.</small></div>`:`<div class="h-dec-act"><button class="h-dec-add${on?' is-on':''}" data-hub="detail-add" ${on||eligible?'':'disabled'}>${on?'On slip ✓':`Add ${sideWord(side)} ${esc(line)}`}</button>${R.me.features?.book_links&&r.offer.platform==='underdog'?`<button data-hub="open-line" ${eligible?'':'disabled'}>Open in Underdog</button>`:''}</div>`}
       ${!r.offer[side].offered&&!against&&!r.extra?.reference_only?'<small class="h-dec-note">This side is not offered on the selected platform.</small>':''}`;
   }
   /* ---- "Why Scout leans Over / Under" (owner 2026-11-06: "people have no idea why they should take the props"). Plain facts at the
@@ -1415,7 +1417,7 @@ export function mount(C) {
     const streakSide=values[0]>line?'Over':values[0]<line?'Under':'Push';let streak=0;
     for(const value of values){if((value>line?'Over':value<line?'Under':'Push')!==streakSide)break;streak++;}
     const trend=previous5.length===5?`Last 5 average <b>${f1(mean(last5))}</b> vs <b>${f1(mean(previous5))}</b> in the previous 5.`:'';
-    return `<div class="h-insight-stats" aria-label="Key stats at the current line">${tile('Over '+esc(line),over+'/'+values.length,'Last '+values.length+' results')}${tile('Under '+esc(line),under+'/'+values.length,pushes+' '+(pushes===1?'push':'pushes')+' kept separate')}${tile('Average / median',f1(avg)+' / '+f1(median),esc(r.market.period_label))}${tile('Recent range',f1(sorted[0])+'–'+f1(sorted[sorted.length-1]),'Observed results, not a forecast')}</div><details class="h-insight-more"><summary>More supporting stats</summary><p>${trend}</p><p>Average result was <b>${f1(Math.abs(avg-line))}</b> ${avg>=line?'above':'below'} today’s line. Latest sequence: <b>${streak} ${streakSide}${streak>1?' results':' result'}</b> at this line.</p><small>Uses the same stat and period as this prop. Historical counts are not a predicted chance; a streak does not make the next result due.</small></details>`;
+    return `<div class="h-insight-stats" aria-label="Key stats at the current line">${tile('Over '+esc(line),over+'/'+values.length,'Last '+values.length+' results')}${tile('Under '+esc(line),under+'/'+values.length,pushes+' '+(pushes===1?'push':'pushes')+' kept separate')}${tile('Average / median',f1(avg)+' / '+f1(median),esc(r.history?.scope_label||r.market.period_label))}${tile('Recent range',f1(sorted[0])+'–'+f1(sorted[sorted.length-1]),'Observed results, not a forecast')}</div><details class="h-insight-more"><summary>More supporting stats</summary><p>${trend}</p><p>Average result was <b>${f1(Math.abs(avg-line))}</b> ${avg>=line?'above':'below'} today’s line. Latest sequence: <b>${streak} ${streakSide}${streak>1?' results':' result'}</b> at this line.</p><small>${r.research_only&&r.history?.scope!==r.market.period?'Regulation-time history for this stat; check the app’s settlement period.':'Uses the same stat and period as this prop.'} Historical counts are not a predicted chance; a streak does not make the next result due.</small></details>`;
   }
   function whyHtml(r) {
     const f=whyFacts(r), {lean,side,graded}=f, Side=sideWord(side);
@@ -1456,7 +1458,7 @@ export function mount(C) {
       :series.length?`<div class="h-history-chart" data-hub-chart role="img" aria-label="${series.length} past results compared with ${side} ${esc(line)}"></div><div class="h-legend"><span><i class="hit"></i>${sideWord(side)} hit</span><span><i class="miss"></i>Miss</span><span><i class="push"></i>Push</span><span><i class="line"></i>Line ${esc(line)}</span>${median!=null?`<span><i class="median"></i>Median ${esc(Math.round(median*10)/10)}</span>`:''}</div><details class="h-history-table"><summary>View dates and results</summary><div class="h-scroll-x"><table><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>At ${esc(line)}</th></tr></thead><tbody>${series.map(g=>`<tr><td>${esc(g.date)}</td><td>${esc(g.opponent)}</td><td>${esc(g.value)}</td><td class="h-at-${atLine(g.value,line).toLowerCase()}">${atLine(g.value,line)}</td></tr>${movedRow(moves.get(g.date+'|'+g.opponent),4)}`).join('')}</tbody></table></div></details>`
       :'<p class="h-detail-loading">Game-by-game results are not available for this market. The counts above come from its saved board summary.</p>';
     const lh=doc?.history?.line_history, avgClose=num(lh?.avg_closing_l10)?tile(esc(lh.avg_closing_l10),'Avg closing line',`<small>last ${lh.closing_n_l10} ${lh.closing_n_l10===1?'game':'games'} · ${esc(lh.closing_platform)}</small>`,' is-closing'):'';
-    return `${whyHtml(r)}${PX().grade?PX().grade(r,doc,pxCtx(r)):''}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
+    return `${r.research_only?`<p class="h-history-note">${esc(r.scout.validation.detail)}</p>`:''}${whyHtml(r)}${PX().grade?PX().grade(r,doc,pxCtx(r)):''}${r.extra?extraOffer(r):''}<div class="h-history-summary">${hitTiles}${h2hTile}${seasonTile}${closingTile}${avgClose}</div>
       <section class="h-history-panel"><div class="h-sec-head"><h4>Last ${series.length||H.histN} results · ${sideWord(side)} ${esc(line)}</h4><div class="h-history-controls"><div class="h-segment" role="group" aria-label="History window">${[5,10,20].map(n=>`<button data-hub="history-window" data-id="${n}" aria-pressed="${H.histN===n}">L${n}</button>`).join('')}</div></div></div>
         ${series.length?`<p class="h-history-stats"><span>Average <b>${(series.reduce((a,g)=>a+g.value,0)/series.length).toFixed(1)}</b></span>${V2?`<span>Median <b>${median.toFixed(1)}</b></span>`:''}<span>${series.length} ${series.length===1?'game':'games'}${series.length<H.histN?' on file':''}</span></p>`:''}
         ${chart}<p class="h-history-note">History uses today’s selected line, not the closing lines. Past hit rate is not a predicted chance.</p>${closingTable}</section>
@@ -1712,7 +1714,7 @@ export function mount(C) {
     finally{H.usingBatch=false;}
   }
   function generatorHtml() {
-    return `<section class="h-generator" aria-label="Generate slips"><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your batch</h2><p>Choose your sports and entry size. Review each generated slip before adding it to your picks.</p><fieldset id="hub-generation-sports"><legend>Eligible sports</legend>${allowed().map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls">
+    return `<section class="h-generator" aria-label="Generate slips"><span class="h-eyebrow">LINEUP GENERATOR</span><h2>Build your batch</h2><p>Choose your sports and entry size. Review each generated slip before adding it to your picks.</p><fieldset id="hub-generation-sports"><legend>Eligible sports</legend>${allowed().filter(s=>!['soccer','tennis'].includes(s)).map(s=>`<label><input type="checkbox" value="${s}" checked><span>${SPORTS[s]}</span></label>`).join('')}</fieldset><div class="h-generator-controls">
       <div class="h-generator-step"><span>01</span><h3>Entry setup</h3></div><label>Platform<select id="hub-generation-book"><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label>
       <label>Entry type<select id="hub-generation-type" aria-describedby="hub-generation-type-help"><option value="power">Power</option><option value="flex">Flex</option></select><small id="hub-generation-type-help">${entryHelp('prizepicks')}</small></label>
       <label>Number of slips<select id="hub-generation-slips">${[1,2,4,8,12].map(n=>`<option value="${n}" ${n===8?'selected':''}>${n} slips</option>`).join('')}</select></label>
@@ -1748,7 +1750,7 @@ export function mount(C) {
   async function showRecord() {
     const seq=++H.seq, sport=$('hub-record-sport').value;
     $('hub-record-body').innerHTML='<p class="h-empty">Loading the saved record…</p>';
-    const sports=sport==='all'?allowed():[sport];
+    const sports=(sport==='all'?allowed():[sport]).filter(s=>!['soccer','tennis'].includes(s));
     const docs=await Promise.allSettled(sports.map(s=>api(s==='cs2'?'stated':'results?sport='+s)));
     if(seq!==H.seq||H.section!=='record') return;
     $('hub-record-body').innerHTML=(R.me.features?.public_record?'<p><a href="/record" target="_blank" rel="noopener">Open the shareable public record ↗</a></p>':'')+(R.me.features?.reviews?'<p><a href="/reviews" target="_blank" rel="noopener">Member reviews ↗</a></p>':'')+docs.map((res,i)=>{
@@ -1781,7 +1783,6 @@ export function mount(C) {
     const leagues=['nba','nfl'].filter(s=>sports.includes(s));
     const classic=[sports.includes('cs2')&&a('/?view=classic#board','CS2 classic board'),sports.includes('lol')&&a('/lol?view=classic','LoL classic board'),leagues.length&&a('/sports?view=classic#/board','NBA / NFL classic board')].filter(Boolean).join('');
     $('hub-tools-body').innerHTML=`<div class="h-tool-grid">${card('MARKETS','Moneylines','Compare available game markets in the moneyline workspace.',a('/?view=classic#moneylines','Open moneylines'))}
-      ${Array.isArray(R.me.features?.expansion_sports)&&leagues.length?card('PLAYER LINES','Soccer & Tennis','Exact app lines, periods and verified player history. Separate from the graded boards.',R.me.features.expansion_sports.filter(s=>['soccer','tennis'].includes(s)).map(s=>a(`/sports/expansion.html?sport=${s}`,s==='soccer'?'Open soccer':'Open tennis')).join('')):''}
       ${card('RESEARCH','Single prop grader','Inspect a player and line with the grading tools.',a('/?view=classic#one','Open grader'))}
       ${card('RESEARCH','Match research','Team and map research for an upcoming CS2 match.',a('/?view=classic#matches','Open match research'))}
       ${leagues.length?card('NBA · NFL','Sheets and Compare','Stat sheets, player comparison and with/without splits from the sports pages.',leagues.map(l=>a(`/sports?view=classic#/sheets?lg=${l}`,`${SPORTS[l]} sheets`)+a(`/sports?view=classic#/compare?lg=${l}`,`${SPORTS[l]} compare`)).join('')):''}
@@ -2289,7 +2290,6 @@ export function mount(C) {
   window.addEventListener('resize',()=>{const w=openPop();if(w)fitPop($(POPS[w][1]));});
   const rec = id => H.records.find(r=>key(r)===id)||H.extraRecs.find(r=>key(r)===id);
   const actions={
-    expansion(id){if(['soccer','tennis'].includes(id)&&R.me.features?.expansion_sports?.includes(id))location.assign('/sports/expansion.html?sport='+id);},
     'share-card'(){C.shareSlip();},
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
     // By game keeps the board's filters: the games listed are the ones those filters show
@@ -2406,7 +2406,7 @@ export function mount(C) {
         <div data-studio-panel="build" role="tabpanel" aria-label="Auto-build" hidden>${generatorHtml()}<section id="hub-generated" aria-label="Generated slips"></section></div>
         <div data-studio-panel="tracked" role="tabpanel" aria-label="Tracked" hidden><section class="h-tracked-slips"><header><div><h2>Tracked slips</h2><p>Exact saved lines, grouped by entry. Each leg keeps its settlement receipt.</p></div><button data-hub="receipts">My picks →</button></header><div id="hub-slip-history"></div></section></div></section>
       <section id="hub-picks-section" hidden><div class="h-section-head"><div><p>Your tracked picks, with the line and chance saved when you tracked. Each settles at that line; pushes are counted apart.</p></div><div class="h-pick-filters" hidden><label>Sport<select id="hub-pick-sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></label><label>Status<select id="hub-pick-status">${pickStatus.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label></div></div><div id="hub-picks-body"></div></section>
-      <section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section>
+      <section id="hub-record-section" hidden><div class="h-section-head"><div><h2>The record, in context.</h2><p>Stated chances beside actual outcomes. Different sport cohorts stay separate.</p></div><select id="hub-record-sport" aria-label="Record sport"><option value="all">All sports</option>${allowed().filter(s=>!['soccer','tennis'].includes(s)).map(s=>`<option value="${s}">${SPORTS[s]}</option>`).join('')}</select></div><div id="hub-record-body"></div></section>
       ${BOOKS_ON?'<section id="hub-books-section" hidden><section id="hub-book-board" class="h-market-tools"></section></section>':''}<section id="hub-tools-section" hidden><div class="h-section-head"><div><p>Every research tool outside the board, in one place.</p></div></div><div id="hub-tools-body"></div></section>
       <section id="hub-alerts-section" hidden><div id="hub-alerts-body"></div></section>${EV_ON?'<section id="hub-ev-section" hidden><div id="hub-ev-body"></div><div id="hub-ev-priced"></div></section>':''}${ARB_ON?'<section id="hub-arb-section" hidden><div id="hub-arb-body"></div></section>':''}
     </div><aside class="h-slip" aria-label="Slip"><header><h2>Slip <span id="hub-slip-count">0</span></h2><button data-hub="receipts">My picks →</button></header><p id="hub-save-status" class="h-sync" aria-live="polite"></p><div id="hub-slip-content" tabindex="-1"></div><footer>One entry per platform. Rechecked against current offers before tracking.</footer></aside>

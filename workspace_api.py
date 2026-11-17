@@ -38,6 +38,7 @@ import workspace_rules as rules
 import workspace_store as wstore
 
 SPORTS = ("cs2", "lol", "nba", "nfl")
+READ_SPORTS = SPORTS + ("soccer", "tennis")
 LEAGUES = ("nba", "nfl")
 BOOKS = ("underdog", "prizepicks")
 SCOPE = {"1": ("map1", "Map 1"), "12": ("maps12", "Maps 1-2"), "123": ("maps13", "Maps 1-3")}
@@ -168,7 +169,7 @@ def reset():
     _LINE_TYPE_CACHE.clear()
     for d in _HITS.values():
         d.clear()
-    for name in ("workspace_lol", "workspace_sports", "workspace_genie", "workspace_books"):
+    for name in ("workspace_lol", "workspace_sports", "workspace_expansion", "workspace_genie", "workspace_books"):
         mod = sys.modules.get(name)
         if mod is not None:
             mod.reset()
@@ -187,7 +188,8 @@ def access(h, srv, q):
     league = workspace_sports.on(h, q, owner)
     if league:
         _ST["sports"] = True                    # the settler reads the sports API only once a member has been let in to it
-    return {"cs2": True, "lol": bool(srv.lol_public() or owner), "nba": league, "nfl": league}
+    return {"cs2": True, "lol": bool(srv.lol_public() or owner), "nba": league, "nfl": league,
+            **{s: league for s in ('soccer', 'tennis') if os.getenv(f'SCOUT_{s.upper()}_ENABLED') == '1'}}
 
 
 def _token_in_use(h, q):
@@ -806,6 +808,9 @@ def _slip_header_v2(platform, ls, results, ev_for=None, srv=None):
 
 
 def _adapter(sport):
+    if sport in ('soccer', 'tennis'):
+        import workspace_expansion
+        return workspace_expansion
     if sport == "lol":
         import workspace_lol
         return workspace_lol
@@ -1475,7 +1480,7 @@ def post_alert_delivery(h, srv, q, member, scratch, name, n):
 def _sport_q(h, srv, q):
     """The sport a read asks for, or None when this member does not see it. CS2 is the default."""
     sport = q.get("sport") or "cs2"
-    if sport not in SPORTS or (sport != "cs2" and not access(h, srv, q)[sport]):
+    if sport not in READ_SPORTS or (sport != "cs2" and not access(h, srv, q).get(sport)):
         return None
     return sport
 
@@ -1640,7 +1645,7 @@ def _sports_offer(r, settle_key):
 
 def get_results(h, srv, q, member, scratch, name):
     sport = _sport_q(h, srv, q)
-    if sport is None:
+    if sport is None or sport not in SPORTS:
         return h.send(404, {"error": "not found"})
     if sport == "cs2":
         st_, body_ = srv.shared(("results",), lambda: (200, json.dumps(srv.results_payload(), default=str).encode()), ttl=300)
@@ -2565,7 +2570,7 @@ def _record_for(h, srv, sport, book, rid):
     mod = _adapter(sport)
     snap = mod.snapshot(srv) if sport == "lol" else mod.snapshot(srv, sport)
     ix = snap["index"].get((book, rid)) if snap else None
-    return json.loads(ix["rec"]) if ix and ix.get("rec") else None
+    return (ix["rec"] if isinstance(ix["rec"], dict) else json.loads(ix["rec"])) if ix and ix.get("rec") else None
 
 
 def post_report_problem(h, srv, q, member, scratch, name, n):

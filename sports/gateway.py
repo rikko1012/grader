@@ -299,6 +299,10 @@ def handle_get(path, raw_query, query, member, allowed, admin, headers):
     """-> (status, body_bytes, content_type, headers). Called by server.py's hook only when the path's flag is on
     (SPORTS_UI for /sports and /sports/<asset>, SPORTS_API for /api/sports/*)."""
     if path == "/sports" or path.startswith("/sports/"):
+        if path == '/sports/expansion.html':
+            sport = 'tennis' if query.get('sport') == 'tennis' else 'soccer'
+            return 302, b'', 'text/html; charset=utf-8', {'Location': '/#scout/board?sport=' + sport,
+                                                       'Cache-Control': 'private, no-store'}
         rel = "" if path == "/sports" else path[len("/sports/"):]
         rel = PAGE_ALIASES.get(rel, rel)
         if rel == "results.html" and not admin():   # owner 2026-11-09: no member Results page; the admin token still opens it

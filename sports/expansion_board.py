@@ -75,6 +75,13 @@ def _prepared(path, st, now, sport):
 
 
 def http_board(req):
+    if req.query.get('research') == '1':
+        from types import SimpleNamespace
+        # Research has its own publication clock. A quote-only version must not
+        # suppress new history, nor make attach() consume an unchanged envelope.
+        code, data = board(SimpleNamespace(query={k:v for k,v in req.query.items() if k != 'version'}))
+        from .expansion_research import attach
+        return (code, attach(req.query.get('sport', 'soccer'), data)) if code == 200 else (code, data)
     code, data = board(req)
     if code == 200 and not data.get('unchanged'):
         with _SNAPSHOT_LOCK:

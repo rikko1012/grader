@@ -5092,7 +5092,7 @@ class Handler(BaseHTTPRequestHandler):
                 import workspace_game_books
                 league = q.get("league")
                 srv = sys.modules[__name__]
-                if league not in ("lol", "nba", "nfl") or not workspace_api.access(self, srv, q).get(league):
+                if league not in ("lol", "nba", "nfl", "soccer", "tennis") or not workspace_api.access(self, srv, q).get(league):
                     return self.send(404, {"error": "not found"})
                 status, body = workspace_game_books.moneylines(srv, league)
                 return self.send_shared(("winner_games", league), status, body)

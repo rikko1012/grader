@@ -348,8 +348,11 @@ def default_jobs():
             # still reserves the cap against the existing child memory budget.
             timeout_s=90, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=80, cls=LIGHT, prio=2,
             locks=(f"{sport}-quotes",))
-        J[f"{sport}-history"] = dict(argv=_py("-m", "sports.expansion_history", sport), every_s=1800,
-            timeout_s=180, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=120, cls=HEAVY, prio=8,
+        # Independent, bounded history stores (measured <60 MB including member
+        # research publication). Do not starve cards behind long NBA/NFL fits.
+        # LIGHT still reserves its full cap against the common child budget.
+        J[f"{sport}-history"] = dict(argv=_py("-m", "sports.expansion_history", sport), every_s=300,
+            timeout_s=180, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=120, cls=LIGHT, prio=6,
             locks=(f"{sport}-history",))
         J[f"{sport}-learning"] = dict(argv=_py("-m", "sports.expansion_learning", sport), every_s=180,
             timeout_s=45, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=100, cls=HEAVY, prio=8,

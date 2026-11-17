@@ -36,6 +36,31 @@ def shared(srv, league):
 def moneylines(srv, league):
     """Slim winner-only response for the classic tab. Never send player-prop reference rows."""
     def compute():
+        if league in ('soccer', 'tennis'):
+            import workspace_sports
+            import workspace_expansion
+            try:
+                doc, _ = workspace_sports.call(srv, '/api/sports/expansion/board', {'sport': league})
+                if doc.get('sport') != league:
+                    raise ValueError('wrong sport')
+                now = datetime.now(timezone.utc).timestamp()
+                games = []
+                for market in doc.get('game_odds', []):
+                    outcomes = market.get('outcomes') or []
+                    if (not workspace_expansion._eligible(market, league, now) or not market.get('main')
+                            or market.get('market_type') != 'Match'
+                            or len(outcomes) != (3 if league == 'soccer' else 2)
+                            or any(o.get('line') is not None for o in outcomes)):
+                        continue
+                    games.append({'id': market['platform'] + ':' + market['offer_id'], 'label': market['match'],
+                        'teams': [o['label'] for o in outcomes], 'start': market['start'], 'seen_at': market['observed_at'],
+                        'quotes': [{'source': workspace_sports.BOOK_LABEL.get(market['platform'], market['platform']),
+                                    'kind': 'american', 'prices': [o['american'] for o in outcomes],
+                                    'description': 'American odds · ' + market['jurisdiction']}],
+                        'pick': None})
+                return 200, json.dumps({'league': league, 'observed_at': doc['built_at'], 'games': games}, separators=(',', ':')).encode()
+            except Exception:
+                return 503, b'{"error":"game_prices_unavailable"}'
         if league == "lol":
             try:
                 doc = json.loads((srv.LOL_CENTER / "moneylines.json").read_bytes())
