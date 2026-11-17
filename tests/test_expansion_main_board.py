@@ -94,12 +94,9 @@ def test_existing_moneylines_keep_real_main_prices_and_draw(expansion, sport):
 
 @pytest.mark.parametrize('size', [DESK, PHONE])
 def test_saved_forecast_uses_existing_readable_board_and_card(ctx, env, expansion, size):
-    from sports.expansion_forecasts import make_forecast, offer_key
     doc=expansion['soccer'];offer=doc['offers'][0];facts=doc['research'][adapter._key(offer)]
-    facts['event']={'event_id':facts['identity']['event_id'],'start':offer['start'],'status':'scheduled'}
-    forecast,reason=make_forecast(offer,facts,datetime.now(timezone.utc).isoformat())
-    assert reason is None and forecast['grade']
-    doc['forecasts']={offer_key(offer):forecast}
+    forecast=forecast_fixture(offer,facts)
+    doc['forecasts']={forecast_key(offer):forecast}
     p=open_page(ctx,env,'/#scout/board?sport=soccer',size)
     expect(p.locator('#hub-rows')).to_contain_text('Verified Player',timeout=30000)
     p.locator('#hub-rows .h-player').first.click()
@@ -167,3 +164,30 @@ def test_main_moneylines_three_way_soccer_and_tennis(ctx,env,expansion,size):
  assert 'Draw' not in p.locator('#boardout').inner_text()
  no_h_scroll(p)
  assert not p.errors
+
+
+def forecast_key(o):
+    import hashlib
+    return hashlib.sha256(json.dumps([o[k] for k in ('sport','platform','offer_id','revision')],separators=(',',':')).encode()).hexdigest()
+
+
+def forecast_fixture(offer,facts):
+    return {'id':'saved-fixture-forecast','identity':facts['identity'],'sport':offer['sport'],
+            'stat':offer['stat'],'scope':offer['scope'],'line':offer['line'],'platform':offer['platform'],
+            'offer_id':offer['offer_id'],'offer_revision':offer['revision'],'start':offer['start'],
+            'made_at':datetime.now(timezone.utc).isoformat(),'p_over':.7,'p_under':.3,'p_push':0,
+            'p_side':.7,'side':'over','projection':3.7,'range80':[1,6],'grade':'A',
+            'sample':20,'model_version':'fixture-model','grade_reason':[],
+            'stake_reason':'No stake assigned.','context_used':{}}
+
+
+def test_adapter_refuses_forecast_from_another_identity_or_revision():
+    import copy
+    doc=source('soccer');offer=doc['offers'][0];facts=doc['research'][adapter._key(offer)]
+    f=forecast_fixture(offer,facts);key=forecast_key(offer)
+    assert adapter._forecast(offer,facts,{key:f})==f
+    for field,value in [('scope','first_half'),('stat','goals'),('offer_revision','other'),('line',1.5),('sport','tennis')]:
+        bad=copy.deepcopy(f);bad[field]=value
+        assert adapter._forecast(offer,facts,{key:bad}) is None
+    bad=copy.deepcopy(f);bad['identity']['event_id']='other'
+    assert adapter._forecast(offer,facts,{key:bad}) is None

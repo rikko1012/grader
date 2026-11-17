@@ -113,19 +113,6 @@ def test_worker_freezes_inputs_reuses_issuance_and_rejects_revision(tmp_path,mon
         assert c.execute('SELECT payload FROM forecasts ORDER BY rowid').fetchone()[0]==original
 
 
-def test_main_adapter_rejects_forecast_identity_and_revision_mismatch(monkeypatch):
-    import workspace_expansion as adapter
-    monkeypatch.setattr(adapter.time,'time',lambda:datetime.fromisoformat(NOW.replace('Z','+00:00')).timestamp())
-    offer,facts=fixture();f,_=model.make_forecast(offer,facts,NOW)
-    mapping={model.offer_key(offer):f}
-    assert adapter._forecast(offer,facts,mapping)==f
-    for field,value in [('scope','first_half'),('stat','goals'),('offer_revision','other'),('line',1.5),('sport','tennis')]:
-        bad=copy.deepcopy(f);bad[field]=value
-        assert adapter._forecast(offer,facts,{model.offer_key(offer):bad}) is None
-    bad=copy.deepcopy(f);bad['identity']['event_id']='other'
-    assert adapter._forecast(offer,facts,{model.offer_key(offer):bad}) is None
-
-
 def test_reviews_append_corrections_without_rewriting_forecasts(setup,monkeypatch):
     root,path,match,offer=setup
     offer.update(sport='tennis',variant='standard',player_id='native',event_id='native')
