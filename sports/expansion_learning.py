@@ -12,6 +12,7 @@ from contextlib import closing
 import hashlib
 import json
 import math
+import os
 import sqlite3
 import time
 
@@ -234,12 +235,16 @@ def settle_reviews(c,sport,now,deadline):
 
 def cycle(sport,now=None,budget_s=20):
     now=now or now_utc();deadline=time.monotonic()+budget_s
+    from .expansion_forecasts import publish, settle
+    published=(publish(sport, now, budget_s=budget_s/3) if os.environ.get('SPORTS_FORECAST')=='1'
+               else {'state':'forecast_disabled'})
+    settled=settle(sport, now, budget_s=budget_s/6)
     with closing(connect(sport)) as c:
-        reviewed=settle_reviews(c,sport,now,time.monotonic()+budget_s/2)
+        reviewed=settle_reviews(c,sport,now,min(deadline,time.monotonic()+budget_s/4))
         captured=capture(c,sport,now,deadline)
         totals={name:c.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('predictions','reviews')}
     result={'sport':sport,'at':now,'reviews':reviewed,'forecasts':captured,'totals':totals,
-            'mode':'shadow','release_allowed':False}
+            'mode':'shadow','release_allowed':False, 'published_model':published, 'published_reviews':settled}
     atomic_json(boards.root(sport)/'learning-status.json',result)
     return result
 

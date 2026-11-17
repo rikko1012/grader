@@ -281,7 +281,11 @@ def collect(sport, max_requests=16, max_seconds=150):
     # rounds; the older cursor advances only after its scoreboard was fetched.
     requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(3)]
                 if sport == 'soccer' else [('live', f'{today:%Y%m%d}-{today+timedelta(days=2):%Y%m%d}')])
-    requests.append(('backfill', f'{today-timedelta(days=offset):%Y%m%d}'))
+    # Tennis providers accept bounded date ranges. Seven days per request
+    # avoids spending 7.5 hours walking 90 individual dates on a new store.
+    width = 7 if sport == 'tennis' else 1
+    requests.append(('backfill', f'{today-timedelta(days=min(90,offset+width-1)):%Y%m%d}-{today-timedelta(days=offset):%Y%m%d}'
+                     if width>1 else f'{today-timedelta(days=offset):%Y%m%d}'))
     advanced = False
     try:
         for phase, dates in requests:
@@ -361,7 +365,7 @@ def collect(sport, max_requests=16, max_seconds=150):
     from .expansion_research import publish
     counts['research'] = publish(sport, budget_s=15)
     counts['finished_at'] = now_utc()
-    atomic_json(state_path, {**counts, 'offset': (offset % 90 + 1) if advanced else offset})
+    atomic_json(state_path, {**counts, 'offset': (1 if offset+width>90 else offset+width) if advanced else offset})
     return counts
 
 

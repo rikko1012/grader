@@ -1584,3 +1584,9 @@ html[data-upgrade] .h-save.u-dialog form>div>button{flex:none;height:auto;min-he
    was cut off beside the alt-lines circle. Wider column; the player column still has 590px+ at 1920 and its ~120px floor below 1400. */
 @media(min-width:1101px){#u-hub #hub-table .h-c-market{width:140px}}
 @media(min-width:1401px){#u-hub #hub-table .h-c-market{width:156px}#u-hub.h-focus-board #hub-table .h-c-market{width:164px}}
+
+/* The classic board remains supported: preserve player-name room immediately
+   above its phone/tablet breakpoint without removing stat or period columns. */
+@media(min-width:1101px) and (max-width:1180px){
+ html:not([data-ui=next]) #u-hub #hub-table .h-c-market{width:110px}
+}

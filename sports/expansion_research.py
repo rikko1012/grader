@@ -41,6 +41,7 @@ def publish(sport, budget_s=20):
     from . import expansion_history as history
     from .expansion import isolated_database
     from .contracts import parse_utc
+    from .expansion_formats import context as match_context
     from types import SimpleNamespace
     deadline = time.monotonic() + budget_s
     code, board = boards.board(SimpleNamespace(query={'sport': sport}))
@@ -84,11 +85,12 @@ def publish(sport, budget_s=20):
                     team = next((p.get('team_id') for p in past.get('players', []) if p['id'] == identity['player_id']), None)
                     others = [p['name'] for p in past.get('participants', []) if p['id'] != (team or identity['player_id'])]
                     enriched.append({**game, 'opponent': others[0] if len(others) == 1 else '',
+                                     'best_of': match_context(comp, past).get('best_of'), 'surface': past.get('surface'),
                                      'match': ' vs '.join(p['name'] for p in past.get('participants', []))})
                 entry['games'] = enriched
                 match = next((m for m in matches if m['event_id'] == identity['event_id']), {})
-                entry['context'] = {f: match[f] for f in ('surface', 'best_of', 'surface_source', 'surface_known_at')
-                                    if match.get(f) is not None}
+                entry['event'] = {k:match.get(k) for k in ('event_id','start','status')}
+                entry['context'] = match_context(comp, match)
                 from contextlib import closing
                 with closing(history.store.connect(path, read_only=True)) as con:
                     contexts = history.store._latest_rows(con, 'context', 'event_id=?', [identity['event_id']], before, 64)
@@ -131,5 +133,6 @@ def attach(sport, data):
     doc = saved(sport)
     players = doc.get('players', {})
     relevant = {key(o) for o in data['offers']}
-    return {**data, 'research': {k: v for k, v in players.items() if k in relevant},
-            'research_at': doc.get('at')}
+    from .expansion_forecasts import attach as attach_forecasts
+    return attach_forecasts(sport, {**data, 'research': {k: v for k, v in players.items() if k in relevant},
+            'research_at': doc.get('at')})
