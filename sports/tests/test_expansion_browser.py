@@ -65,8 +65,15 @@ def test_matching_theme_filters_and_player_periods(width,theme):
                 return r.fulfill(json={'token':'local-fixture','api_base':''})
 
             if u.path=='/api/sports/expansion/board':
-
-                return r.fulfill(json={'offers': [row,dict(row,scope='first_half',line=1.5)] if 'soccer' in u.query else []})
+                native={'sport':'soccer','platform':'betrivers','event_id':'book1','offer_id':'ml1',
+                        'match':'Example FC · Test United','competition':'Premier League','jurisdiction':'US-OH',
+                        'start':row['start'],'observed_at':row['observed_at'],'main':True,'label':'Full Time',
+                        'outcomes':[{'label':label,'american':price,'line':None} for label,price in
+                                    [('Example FC',125),('Draw',240),('Test United',210)]]}
+                alternate=dict(native,offer_id='alt1',label='Alternate Total',main=False,
+                               outcomes=[{'label':'Over','line':.5,'american':-1000}])
+                return r.fulfill(json={'offers': [row,dict(row,scope='first_half',line=1.5)] if 'soccer' in u.query else [],
+                                      'game_odds':[native,alternate] if 'soccer' in u.query else []})
 
             r.fulfill(status=404)
 
@@ -101,6 +108,21 @@ def test_matching_theme_filters_and_player_periods(width,theme):
         assert page.evaluate('document.documentElement.dataset.theme')==theme
 
         assert page.locator('body').evaluate('(e)=>getComputedStyle(e).fontFamily').startswith('"IBM Plex Sans"')
+
+        page.get_by_role('button',name='Sportsbook odds',exact=True).click()
+        assert page.locator('.book-outcome').count()==3
+        assert page.locator('.book-outcome').all_text_contents()==['Example FC+125','Draw+240','Test United+210']
+        assert not page.get_by_label('Market',exact=True).is_visible()
+        assert '-1000' not in page.locator('#players').inner_text()
+        page.get_by_label('Include other markets and alternate lines').check()
+        page.get_by_label('Example FC · Test United: sportsbook market').select_option('1')
+        assert '-1000' in page.locator('.book-outcome').inner_text()
+        assert 'Other market / alternate line' in page.locator('#players').inner_text()
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        if os.environ.get('EXPANSION_SHOTS'):
+            Path(os.environ['EXPANSION_SHOTS']).mkdir(parents=True,exist_ok=True)
+            page.screenshot(path=str(Path(os.environ['EXPANSION_SHOTS'])/f'odds-{width}-{theme}.png'),full_page=True)
+        page.get_by_role('button',name='Player lines',exact=True).click()
 
         target=os.environ.get('EXPANSION_SHOTS')
 

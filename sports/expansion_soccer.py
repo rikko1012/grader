@@ -5,12 +5,43 @@ Only records explicitly reported in that match are emitted. A roster listing
 is not evidence of playing; appearances must be reported as one. Extra-time
 matches are not treated as regulation-time history.
 """
-from .contracts import Player, SourceId, StatObservation, utc
+from .contracts import Player, SourceId, StatObservation, ContextSnapshot, utc
 from .expansion import COMPETITIONS, Feed, _number
 
 STATS = {'totalShots':'shots', 'shotsOnTarget':'shots_on_target', 'totalGoals':'goals',
          'goalAssists':'assists', 'saves':'saves', 'foulsCommitted':'fouls',
          'foulsSuffered':'fouls_suffered', 'yellowCards':'yellow_cards', 'redCards':'red_cards'}
+
+
+def parse_context(body, match, observed_at):
+    """Keep source-listed lineups separately from projected playing time.
+
+    A generic team roster is never a confirmed starting lineup. Require a
+    match-specific roster with exactly eleven explicit starters on that team.
+    Post-match collection stays post-match known_at, not usable in old forecasts.
+    """
+    out=Feed();header=body.get('header') or {};observed_at=utc(observed_at)
+    comp=match['competition'];parts=match['event_id'].split(':')
+    if (not observed_at or comp not in COMPETITIONS or COMPETITIONS[comp][0]!='soccer'
+            or (header.get('league') or {}).get('slug')!=comp or str(header.get('id'))!=parts[-2]):return out
+    teams={p['id'] for p in match['participants']}
+    for roster in body.get('rosters') or []:
+        tid='soccer:team:espn:'+str((roster.get('team') or {}).get('id'))
+        if tid not in teams:continue
+        players=roster.get('roster') or []
+        starters=[str((p.get('athlete') or {}).get('id')) for p in players if p.get('starter') is True]
+        if len(starters)!=11 or len(set(starters))!=11 or 'None' in starters:continue
+        for p in players:
+            pid='soccer:player:espn:'+str((p.get('athlete') or {}).get('id'))
+            if not any(x['id']==pid and x['team_id']==tid for x in match.get('players',[])):continue
+            if isinstance(p.get('starter'),bool):
+                out.records.append(ContextSnapshot('soccer','starter',pid,match['event_id'],'source_listed',
+                    'yes' if p['starter'] else 'no',source='espn',observed_at=observed_at,known_at=observed_at))
+            role=(p.get('position') or {}).get('displayName')
+            if role:
+                out.records.append(ContextSnapshot('soccer','role',pid,match['event_id'],'source_listed','yes',
+                    detail=role,source='espn',observed_at=observed_at,known_at=observed_at))
+    return out
 
 
 def parse_summary(body, competition, source_event_id, observed_at):

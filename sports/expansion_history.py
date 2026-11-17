@@ -20,7 +20,7 @@ import unicodedata
 from . import expansion_board as boards, net, store
 from .contracts import now_utc, parse_utc
 from .expansion import COMPETITIONS, isolated_database, parse_scoreboard
-from .expansion_soccer import parse_summary
+from .expansion_soccer import parse_summary, parse_context
 
 
 def normalized(value):
@@ -320,7 +320,7 @@ def collect(sport, max_requests=16, max_seconds=150):
                                        not any(p['id'] in offered_teams for p in m['participants']),
                                        m.get('status') != 'final', m.get('summary_checked_at') or '',
                                        -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id']))
-            for match in pending:
+            for match in pending[:6]:
                 actual = match['competition']
                 eid = match['event_id'].split(':')[-2]
                 try:
@@ -332,11 +332,14 @@ def collect(sport, max_requests=16, max_seconds=150):
                     if players:
                         match['players'] = players
                     records = parse_summary(summary, actual, eid, now_utc())
+                    records.records.extend(parse_context(summary,match,now_utc()).records)
                     persist(records, actual)
                     match['summary_checked_at'] = now_utc()
                 except (net.HttpError, ValueError, OSError) as e:
                     match['summary_attempt_at'] = now_utc()
                     counts['errors'].append(type(e).__name__)
+            from .expansion_soccer_detail import collect_details
+            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
         else:
             from .expansion_tennis import collect_details
             counts['errors'].extend(collect_details(catalogs, get, persist, directory))

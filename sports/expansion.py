@@ -142,6 +142,11 @@ Retired / walkover / suspended matches never produce completed-match stats.
             out.matches.append({"event_id": eid, "competition": competition, "name": parent.get("name"),
                                 "start": start, "status": state, "participants": participants,
                                 "best_of": None, "surface": None, "source_status": name})
+            if sport == 'soccer' and complete:
+                scores = [_number(s.get('score', {}).get('value') if isinstance(s.get('score'), dict)
+                                  else s.get('score')) for s in sides]
+                if all(v is not None and v.is_integer() for v in scores):
+                    out.matches[-1]['scores'] = {p['id']:scores[i] for i,p in enumerate(participants)}
             if sport == "tennis" and complete:
                 sets = [s.get("linescores") or [] for s in sides]
                 values = [[_number(x.get("value")) for x in rows] for rows in sets]

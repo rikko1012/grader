@@ -2,13 +2,13 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const names = {prizepicks: 'PrizePicks', underdog: 'Underdog'};
+  const names = {prizepicks: 'PrizePicks', underdog: 'Underdog', betrivers:'BetRivers', draftkings:'DraftKings'};
   const periods = {full_game: 'Full match', regulation: 'Regulation time', set1: 'First set', first_half: 'First half', second_half: 'Second half'};
   const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const el = (tag, text, cls) => {const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n;};
   const selections = new Map();
   let sport = new URLSearchParams(location.search).get('sport') === 'tennis' ? 'tennis' : 'soccer';
-  let rows = [], generation = 0, token = null, base = '', busy = false, limit = 36, version = null;
+  let rows = [], odds = [], view = 'props', generation = 0, token = null, base = '', busy = false, limit = 36, version = null;
 
   function options(id, values) {
     const select = $(id), old = select.value;
@@ -51,7 +51,7 @@
         el('td', game.value > data.line ? 'Over' : game.value < data.line ? 'Under' : 'Push'));
       body.append(tr);
     }
-    const sources = [...new Set(data.games.map(g => g.source === 'thescore' ? 'theScore' : g.source === 'espn' ? 'ESPN' : g.source).filter(Boolean))];
+    const sources = [...new Set(data.games.map(g => g.source === 'thescore' ? 'theScore' : g.source === 'espn' ? 'ESPN' : g.source === 'fotmob' ? 'FotMob' : g.source).filter(Boolean))];
     table.append(body); box.append(table, el('p', `Source: ${sources.join(', ')}. Results use this line, not historical closing lines. No predicted chance is inferred from the hit rate.`, 'meta'));
   }
   function card(list, key) {
@@ -98,6 +98,7 @@
     select.addEventListener('change', show); quote.append(select, detail); show(); article.append(intro, quote); return article;
   }
   function render() {
+    if(view==='odds'){renderOdds();return;}
     const now = Date.now(), q = fold($('search').value.trim()), m = $('market').value, p = $('period').value,
       book = $('book').value, side = $('side').value;
     const filtered = rows.filter(r => Date.parse(r.start) > now && now - Date.parse(r.observed_at) <= 300000 &&
@@ -119,12 +120,44 @@
     }
     $('status').textContent = `${groups.size} player/match groups · ${filtered.length} current lines. App identities are kept separate.`;
   }
+  function renderOdds() {
+    const now=Date.now(), q=fold($('search').value.trim()), box=$('players'), all=$('all-markets').checked;
+    const markets=odds.filter(r=>Date.parse(r.start)>now && now-Date.parse(r.observed_at)<=300000 &&
+      (all || r.main) && q.split(/\s+/).every(w=>fold(`${r.match} ${r.competition} ${r.label}`).includes(w)));
+    markets.sort((a,b)=>Date.parse(a.start)-Date.parse(b.start) || a.match.localeCompare(b.match) || Number(b.main)-Number(a.main));
+    const groups=new Map();
+    for (const r of markets) {const key=r.platform+'|'+r.event_id;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r);}
+    box.replaceChildren();
+    for (const list of [...groups.values()].slice(0,limit)) {
+      const r=list[0], article=el('article',undefined,'player odds-card'), intro=el('div',undefined,'intro');
+      intro.append(el('h2',r.match),el('p',r.competition,'context'),el('p',`${names[r.platform]} · ${r.jurisdiction}`,'context'),
+        el('p',new Date(r.start).toLocaleString(),'context'));
+      const quote=el('div',undefined,'quote'),select=el('select'),detail=el('div');
+      select.setAttribute('aria-label',`${r.match}: sportsbook market`);
+      list.forEach((m,i)=>select.add(new Option(`${m.label}${m.main?' · Main':''}${m.outcomes[0]?.line==null?'':' · '+m.outcomes[0].line}`,i)));
+      function show() {
+        const m=list[Number(select.value)||0];detail.replaceChildren(el('p',m.main?'Main market':'Other market / alternate line','scope'));
+        for (const o of m.outcomes) {
+          const row=el('div',undefined,'book-outcome');
+          row.append(el('span',`${o.label}${o.line==null?'':' '+(o.line>0 && m.market_type==='Handicap'?'+':'')+o.line}`),
+            el('strong',`${o.american>0?'+':''}${o.american}`));detail.append(row);
+        }
+        detail.append(el('p',`${names[m.platform]} · checked ${Math.max(0,Math.floor((Date.now()-Date.parse(m.observed_at))/60000))} min ago`,'meta'),
+          el('p','Book prices, not Scout predictions. Book-specific settlement rules apply.','meta'));
+      }
+      select.addEventListener('change',show);show();quote.append(select,detail);article.append(intro,quote);box.append(article);
+    }
+    if(!groups.size)box.append(el('div','No current book markets match this view. Try including other markets or refresh prices.','empty'));
+    if(groups.size>limit){const more=el('button',`Show more matches (${groups.size-limit} remaining)`,'show-more');more.addEventListener('click',()=>{limit+=36;renderOdds();});box.append(more);}
+    $('status').textContent=`${groups.size} book/match groups · ${markets.length} current markets. American odds; each book stays separate.`;
+  }
   async function load() {
     const run = ++generation; busy = true; $('refresh').disabled = true; $('status').textContent = 'Checking current lines…';
     try {
       const data = await api(`/api/sports/expansion/board?sport=${sport}${version ? '&version=' + encodeURIComponent(version) : ''}`);
       if (run !== generation) return;
       rows = data.unchanged ? rows.map(r => ({...r, observed_at: data.sources?.[r.platform]?.checked_at || r.observed_at})) : data.offers || [];
+      odds = data.unchanged ? odds.map(r => ({...r, observed_at: data.sources?.[r.platform]?.checked_at || r.observed_at})) : data.game_odds || [];
       version = data.version || null;
       options('market', [...new Map(rows.map(r => [r.stat, r.label]))].sort((a,b) => a[1].localeCompare(b[1])));
       options('period', [...new Set(rows.map(r => r.scope))].map(k => [k, periods[k] || k]));
@@ -132,11 +165,11 @@
       const failed = Object.entries(data.sources || {}).filter(([,v]) => !v.ok).map(([k]) => names[k] || k);
       $('feed-status').textContent = failed.length ? `${failed.join(', ')} is unavailable. Only current lines from responding sources are shown.` : '';
     } catch (e) {
-      if (run === generation) {rows = []; version = null; $('players').replaceChildren(); $('feed-status').textContent = ''; $('status').textContent = e.name === 'TimeoutError' ? 'The request took too long. Refresh to retry.' : e.message;}
+      if (run === generation) {rows = []; odds = []; version = null; $('players').replaceChildren(); $('feed-status').textContent = ''; $('status').textContent = e.name === 'TimeoutError' ? 'The request took too long. Refresh to retry.' : e.message;}
     } finally {if (run === generation) {busy = false; $('refresh').disabled = false;}}
   }
   function chooseSport(next, navigate = true) {
-    sport = next; rows = []; limit = 36; version = null; $('players').replaceChildren();
+    sport = next; rows = []; odds = []; limit = 36; version = null; $('players').replaceChildren();
     $('sport-title').textContent = sport === 'soccer' ? 'Soccer' : 'Tennis';
     document.querySelectorAll('[data-sport]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sport === sport)));
     for (const id of ['market','period','book','side']) $(id).value = '';
@@ -144,10 +177,17 @@
     load();
   }
   document.querySelectorAll('[data-sport]').forEach(b => b.addEventListener('click', () => chooseSport(b.dataset.sport)));
+  document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{
+    view=b.dataset.view;limit=36;
+    document.querySelectorAll('[data-view]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.view===view)));
+    $('market').parentElement.hidden=view==='odds';document.querySelector('.more-filters').hidden=view==='odds';
+    $('extra-markets').hidden=view!=='odds';render();
+  }));
+  $('all-markets').addEventListener('change',()=>{limit=36;render();});
   for (const id of ['search','market','period','book','side']) $(id).addEventListener('input', () => {limit = 36; render();});
   $('refresh').addEventListener('click', load);
   setInterval(() => {if (!document.hidden && !busy && !document.querySelector('.research[open]')) load();}, 180000);
-  setInterval(() => {if (!document.hidden && rows.some(r => Date.parse(r.start) <= Date.now() || Date.now()-Date.parse(r.observed_at)>300000)) render();}, 30000);
+  setInterval(() => {if (!document.hidden && [...rows,...odds].some(r => Date.parse(r.start) <= Date.now() || Date.now()-Date.parse(r.observed_at)>300000)) render();}, 30000);
   document.addEventListener('visibilitychange', () => {if (!document.hidden && !busy) load();});
   chooseSport(sport, false);
 })();
