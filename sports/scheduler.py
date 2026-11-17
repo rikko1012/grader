@@ -345,6 +345,9 @@ def default_jobs():
         J[f"{sport}-quotes"] = dict(argv=_py("-m", "sports.expansion_board", sport), every_s=180,
             timeout_s=90, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=80, cls=HEAVY, prio=6,
             locks=(f"{sport}-quotes",))
+        J[f"{sport}-history"] = dict(argv=_py("-m", "sports.expansion_history", sport), every_s=1800,
+            timeout_s=180, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=120, cls=HEAVY, prio=8,
+            locks=(f"{sport}-history",))
     scale, two = cap_scale(), max_heavy() >= 2
     for name, spec in J.items():
         key = "SPORTS_JOB_" + name.upper().replace("-", "_")

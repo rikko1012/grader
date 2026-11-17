@@ -87,6 +87,7 @@ def prizepicks(body, sport, observed_at):
             "event_id": f"{sport}:prizepicks:{rid('game')}", "player_id": f"{sport}:prizepicks:{rid('new_player')}",
             "player": player.get("display_name") or player.get("name"), "role": player.get("position"),
             "team": player.get("team"), "match": f"{away} · {home}" if away and home else a.get("description"),
+            "teams": [away, home] if away and home else [],
             "stat": stat, "label": a.get("stat_type"), "scope": scope, "line": line,
             "variant": a.get("odds_type") or "unknown", "start": start, "sides": {s: {"multiplier": None} for s in sides},
             "observed_at": now, "source_updated_at": timestamp(a.get("updated_at")),
@@ -129,10 +130,14 @@ def underdog(body, observed_at):
                     updates.append(update)
         if not sides:
             continue
+        opponent = players.get(next(x for x in participants if x != p['id'])) or {}
+        group = str(game.get('sport_group_name') or '')
+        tour = 'wta' if group.startswith('WTA ') else 'atp' if group.startswith('ATP ') else None
         rows.append(finish({"sport": "tennis", "platform": "underdog", "offer_id": str(line["id"]),
             "event_id": f"tennis:underdog:{game['id']}", "player_id": f"tennis:underdog:{p['id']}",
             "player": " ".join(x for x in (p.get("first_name"), p.get("last_name")) if x),
             "role": None, "team": None, "match": game.get("title"), "competition": game.get("sport_group_name"),
+            "tour": tour, "opponent": ' '.join(x for x in (opponent.get('first_name'), opponent.get('last_name')) if x),
             "stat": market[0], "label": st.get("display_stat") or market[0], "scope": market[1], "line": value,
             "variant": line.get("line_type") or "unknown", "start": start, "sides": sides,
             "observed_at": now, "source_updated_at": min(updates) if len(updates) == len(sides) else None,

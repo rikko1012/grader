@@ -1,67 +1,83 @@
-# Soccer / tennis implementation checkpoint — 2026-11-17
+# Soccer / tennis release status — 2026-11-17
 
 Branch: `codex/soccer-tennis-1117`, based on `a1b0a52`.
-This is an unreleased implementation checkpoint, NOT completed graded-sport support.
+This release adds isolated lines and verified historical research. It does not
+claim to finish validated soccer/tennis grading, settlement or slip generation.
 
 ## Implemented
 
-- Separate source-native soccer and tennis quote adapters. Actual PrizePicks soccer and
-  Underdog tennis feed structures checked on Nov 17. Snapshot probe: 1,814 accepted soccer
-  lines / 233 provider players; 332 tennis lines / 97 provider players. These are captures,
-  not a guarantee of current availability. PrizePicks tennis returned 429; no bypass/retry.
-- Independent quote stores under `SCOUT_EXPANSION_DATA_DIR/<sport>` (default
-  `SPORTS_DATA_DIR/expansion/<sport>`). Ownership guard rejects another sport. Append-only
-  quote revision chains preserve A→B→A changes. 250 MiB history budget stops writing;
-  no destructive retention and no automatic increase to paid resources.
-- Separate opt-in scheduled collectors `SCOUT_SOCCER_ENABLED=1` and
-  `SCOUT_TENNIS_ENABLED=1`. Defaults leave existing job registration unchanged.
-- Member-authenticated `/api/sports/expansion/board?sport=soccer|tennis`. No upstream
-  fetch or model work on request; two-entry snapshot cache, size limit, freshness rejection.
-- Unlinked `/sports/expansion.html` UI with search, market, period, app, side filters and
-  one card per provider player/match. Reuses `upgrade-next.css` tokens, existing fonts,
-  saved theme, source-listed modifiers, no invented grades or odds.
-- ESPN event inspection with tennis tournament/match distinction; separate ATP/WTA and
-  soccer-competition canonical database paths. Tennis singles only; conservative completed
-  set-score extraction excludes abnormal results and nonstandard set scores.
-- Soccer summary parser for explicitly reported shots, shots on target, goals, assists,
-  saves, fouls and cards. Completed regulation-time games only, exact event/team guards,
-  participation evidence required. One actual captured match produced 258 stat records.
+- PrizePicks soccer and Underdog tennis source-native lines, exact offered sides,
+  source timestamps and payout modifiers. Unknown prices stay missing. No fantasy
+  score, live, combined-player, promotion or unknown-period substitution.
+- Separate quote stores and immutable revision chains for each new sport. Separate
+  canonical history databases for every soccer competition and ATP/WTA tour. No
+  existing sport's dataset or grading path is used as a fallback.
+- Opt-in collectors and bounded historical ingestion: at most 16 source requests
+  and 150 seconds per history run, with resumable 90-day backfill. Source
+  Retry-After holds survive process restarts. Existing jobs are unchanged when
+  `SCOUT_SOCCER_ENABLED` and `SCOUT_TENNIS_ENABLED` are absent.
+- History is matched by full player identity, exact opponent/team pair, tour or
+  competition and start time; ambiguous matches remain unmatched. Soccer roster
+  membership must belong to that event. Data availability times are never backdated.
+- Tennis completed-set arithmetic supplies games won/played, sets won/played and
+  normal tiebreak counts. No aces or double faults are invented from scores. TBD,
+  doubles, retirements and inconsistent/incomplete set results are excluded.
+- Soccer summary stats are regulation-only, with explicit participation evidence.
+  The parser refuses a summary from another event or competition. This matters:
+  ESPN's player-log endpoint returned Champions League despite an EPL filter.
+- New pages use current Scout design tokens, light/dark theme, player roles,
+  grouped market/period controls, search, app and side filters, and on-demand
+  L5/L10/L20 history. Pagination limits rendered cards. Stale/started lines leave
+  the board. Changed quote revisions invalidate a pending history comparison.
+- Member-authenticated board/history routes. No provider access on member reads.
+  Unchanged refreshes return a compact confirmation instead of all line payloads.
+  Optional nav links are shown only with the corresponding environment flag.
 
-## Still required before calling the sport additions finished
+## Verified evidence
 
-1. Exact cross-provider event/player resolution, including international soccer competition
-   coverage and tennis tour/format/surface attribution. Provider-only identities MUST NOT
-   enter forecast, settlement, comparison or slip pools.
-2. Scheduled bounded historical ingestion, player history endpoints and card connection.
-   ESPN tennis summary attempts returned 400. A verified player-stat source for aces,
-   double faults and serve/return statistics remains necessary. Do not infer these from scores.
-3. Independent sport-specific projection models and frozen chronological validation using
-   inputs available before each forecast. No existing sport's model, calibration or grade
-   thresholds have been substituted. Soccer minutes and tennis expected service games need
-   observed inputs before implementing rate-times-exposure projections.
-4. Book-specific regulation/extra-time, retirement/walkover and push settlement rules;
-   prospective forecast records, grading policy integration and slip eligibility tests.
-5. Final navigation integration, actual member journey screenshots, server-backed browser
-   tests, load/memory/bandwidth measurements, CI and exact-SHA release verification.
-   Current UI tests mock the API and are not a live end-to-end certification.
+- Public-feed collection into isolated local files: tennis 37 matches / 457
+  processed records; soccer 29 matches / 2,081 processed records, no collection
+  errors after fixing soccer's unsupported date-range request. These are processed
+  records, not a claim that every row is unique or every listed market has history.
+- 40 focused checks passed; the new authenticated HTTP test then passed outside
+  Windows' restricted local-network context.
+- Six local HTTP/browser tests passed, including the real esports Handler and
+  real Sports service, card history and nav at 1440px and 390px. Fixtures are
+  synthetic and this is not a live member-session certification.
+- Screenshots: `../outputs/soccer-tennis-ui-check/`.
+- Full Sports/shared-grader and esports/browser suites currently running;
+  results are written to `../outputs/soccer-tennis-full-*.xml`.
+- Render dashboard and GitHub browser session are signed out. No new feature
+  flags, production data or deployment were changed during this implementation.
 
-## Validation so far
+## Required before member grading / tracked settlement
 
-- 82 focused contract/scheduler/web/isolation checks passed before broader testing.
-- Initial full Sports/gradecore run: 1,987 passed, 34 skipped, 2 failed (new jobs in default
-  schedule). Fixed by opt-in-only registration. All 16 service-job/isolation checks passed
-  afterward. This is not a claim of a clean final full-suite run.
-- Latest isolated adapter/storage/soccer-stat checks: 25 passed.
-- Browser component checks: desktop 1440px, phone 390px dark and light, 3 passed.
-  Fixed period ordering, accessible filter labels, encoding, and excessive mobile filter height.
-- Screenshots in `../outputs/soccer-tennis-ui-check/`; synthetic fixture players, not live data.
-- No commit merged, no deployment triggered, no production environment or data changed.
+1. Soccer expected minutes and confirmed-role inputs; tennis surface, format and
+   service/return inputs with actual timestamps. Available score totals are not
+   a replacement for unavailable player stats.
+2. Sport-specific projection models, frozen chronological evaluation and forward
+   validation at real offered lines. Existing sport calibration/letters must not
+   be copied. The common gradecore policy remains the target for grade decisions.
+3. Platform-specific retirement, walkover, extra-time, participation and push rules,
+   and immutable pre-start forecast receipts. Provider-only matches must not enter
+   settlement, exact-line book comparison or generated slip pools.
+4. Final CI/load checks and exact-SHA release; turn on each new sport separately
+   and verify source health, persistent reads and existing-sport performance.
 
-## Source rights / availability notes
+## Activation / rollback
 
-Owner states authorized use. Keep source provenance and any applicable permission records
-with the deployment. OpenFootball's repository dedicates its data to the public domain.
-Scraper code licenses do not themselves convey upstream data rights. Football-Data's
-current public contact page restricts its free files to personal/academic use; the listed
-Sackmann mirrors describe non-commercial terms. Neither is wired into a paid-site collector
-by this checkpoint. No new subscriptions, paid APIs or browser-dependent collection.
+On the existing Sports service: `SCOUT_SOCCER_ENABLED=1`,
+`SCOUT_TENNIS_ENABLED=1` register the corresponding quote/history jobs. On the
+existing esports web service the same flags expose nav links. Both default off.
+The new page is `/sports/expansion.html?sport=soccer` (or `tennis`) under existing
+Sports membership checks. Rollback is each flag off; saved records are preserved.
+No paid resource change is needed or authorized by this release.
+
+## Source rights / availability
+
+Owner states authorized use. No paid APIs, new subscriptions or browser-dependent
+collection. OpenFootball is CC0 but lacks player prop stats. Scraper code licenses
+are distinct from data permissions. Restricted historical mirrors are not copied
+into this release. The listed TML 2026 CSV currently has limited early-season
+coverage; it is not treated as a current ATP/WTA statistics feed. No claim is made
+that the owner's full source catalog has been integrated.

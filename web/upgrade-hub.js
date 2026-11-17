@@ -250,6 +250,9 @@ export function mount(C) {
        toolbar's search, platform and filters), so the open tab always equals the count over the list */
     const tabCount=s=>{const f=boardFilter(s);return boardSource().filter(r=>!C.started(r)&&!unavailableReason(r)&&matches(r,f)).length;};
     $('hub-sports').innerHTML=['all',...allowed()].map(s=>`<button type="button" data-hub="sport" data-id="${s}" aria-pressed="${H.sport===s}">${s==='all'?'All':SPORTS[s]}${read(s)?`<span>${tabCount(s)}</span>`:'<span class="h-n-wait" aria-hidden="true"></span>'}</button>`).join('');
+    if (Array.isArray(R.me.features?.expansion_sports) && allowed().some(s=>s==='nba'||s==='nfl')) {
+      $('hub-sports').insertAdjacentHTML('beforeend',R.me.features.expansion_sports.filter(s=>['soccer','tennis'].includes(s)).map(s=>`<button type="button" data-hub="expansion" data-id="${s}" title="Open separate ${s} lines and history">${s==='soccer'?'Soccer':'Tennis'} ↗</button>`).join(''));
+    }
     const sportRows=H.records.filter(r=>!C.started(r)&&(H.sport==='all'||r.sport===H.sport));
     const markets=[...new Map(sportRows.map(r=>[statKey(r),r.market.stat_label+(H.sport==='all'?' · '+SPORTS[r.sport]:'')])).entries()];
     $('hub-stat').innerHTML='<option value="all">All markets</option>'+markets.sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
@@ -1778,6 +1781,7 @@ export function mount(C) {
     const leagues=['nba','nfl'].filter(s=>sports.includes(s));
     const classic=[sports.includes('cs2')&&a('/?view=classic#board','CS2 classic board'),sports.includes('lol')&&a('/lol?view=classic','LoL classic board'),leagues.length&&a('/sports?view=classic#/board','NBA / NFL classic board')].filter(Boolean).join('');
     $('hub-tools-body').innerHTML=`<div class="h-tool-grid">${card('MARKETS','Moneylines','Compare available game markets in the moneyline workspace.',a('/?view=classic#moneylines','Open moneylines'))}
+      ${Array.isArray(R.me.features?.expansion_sports)&&leagues.length?card('PLAYER LINES','Soccer & Tennis','Exact app lines, periods and verified player history. Separate from the graded boards.',R.me.features.expansion_sports.filter(s=>['soccer','tennis'].includes(s)).map(s=>a(`/sports/expansion.html?sport=${s}`,s==='soccer'?'Open soccer':'Open tennis')).join('')):''}
       ${card('RESEARCH','Single prop grader','Inspect a player and line with the grading tools.',a('/?view=classic#one','Open grader'))}
       ${card('RESEARCH','Match research','Team and map research for an upcoming CS2 match.',a('/?view=classic#matches','Open match research'))}
       ${leagues.length?card('NBA · NFL','Sheets and Compare','Stat sheets, player comparison and with/without splits from the sports pages.',leagues.map(l=>a(`/sports?view=classic#/sheets?lg=${l}`,`${SPORTS[l]} sheets`)+a(`/sports?view=classic#/compare?lg=${l}`,`${SPORTS[l]} compare`)).join('')):''}
@@ -2285,6 +2289,7 @@ export function mount(C) {
   window.addEventListener('resize',()=>{const w=openPop();if(w)fitPop($(POPS[w][1]));});
   const rec = id => H.records.find(r=>key(r)===id)||H.extraRecs.find(r=>key(r)===id);
   const actions={
+    expansion(id){if(['soccer','tennis'].includes(id)&&R.me.features?.expansion_sports?.includes(id))location.assign('/sports/expansion.html?sport='+id);},
     'share-card'(){C.shareSlip();},
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
     // By game keeps the board's filters: the games listed are the ones those filters show

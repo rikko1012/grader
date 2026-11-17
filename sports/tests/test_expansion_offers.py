@@ -74,3 +74,26 @@ def test_stale_snapshot_refused(monkeypatch,tmp_path):
     row=offers.prizepicks(pp(),'soccer',NOW)[0]
     board.save('soccer',[row],{},'2000-01-01T00:00:00Z',tmp_path)
     assert board.board(SimpleNamespace(query={'sport':'soccer'}))[0]==503
+
+
+def test_unchanged_response_saves_bandwidth_but_never_hides_line_change(monkeypatch,tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from sports.contracts import now_utc, utc
+    monkeypatch.setenv('SCOUT_SOCCER_ENABLED','1')
+    monkeypatch.setattr(board,'root',lambda _:tmp_path)
+    now=now_utc();body=pp()
+    body['data'][0]['attributes']['start_time']=utc(datetime.now(timezone.utc)+timedelta(hours=2))
+    row=offers.prizepicks(body,'soccer',now)[0]
+    source={'prizepicks':{'ok':True,'checked_at':now,'offers':1}}
+    board.save('soccer',[row],source,now,tmp_path)
+    _,full=board.board(SimpleNamespace(query={'sport':'soccer'}))
+    query={'sport':'soccer','version':full['version']}
+    _,same=board.board(SimpleNamespace(query=query))
+    assert same['unchanged'] and 'offers' not in same
+    body['data'][0]['attributes']['line_score']=4.5
+    board.save('soccer',offers.prizepicks(body,'soccer',now),source,now,tmp_path)
+    _,moved=board.board(SimpleNamespace(query=query))
+    assert 'unchanged' not in moved and moved['offers'][0]['line']==4.5
+    board.save('soccer',[],{'prizepicks':{'ok':False,'checked_at':now}},now,tmp_path)
+    _,removed=board.board(SimpleNamespace(query=query))
+    assert 'unchanged' not in removed and removed['offers']==[]

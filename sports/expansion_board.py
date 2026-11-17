@@ -5,12 +5,14 @@ Quotes are source-native research offers until sport-specific identity, historic
 features, model validation and house-rule settlement have been connected.
 """
 import argparse
+import hashlib
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import sqlite3
 import tempfile
+import threading
 from functools import lru_cache
 
 from .contracts import now_utc, parse_utc
@@ -18,6 +20,7 @@ from . import expansion_offers as adapters
 
 MAX_AGE = 300
 SPORTS = ("soccer", "tennis")
+_SNAPSHOT_LOCK = threading.Lock()
 
 
 @lru_cache(maxsize=2)
@@ -79,6 +82,7 @@ def save(sport, rows, sources, observed_at, directory=None):
 
 def collect(sport):
     from . import net
+    from .expansion_sources import get_json
     rows, sources = [], {}
     jobs = [("prizepicks", "https://partner-api.prizepicks.com/projections",
              {"league_id": 82 if sport == "soccer" else 5, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})]
@@ -86,7 +90,7 @@ def collect(sport):
         jobs.append(("underdog", "https://api.underdogfantasy.com/v1/over_under_lines", {"sport_id": "TENNIS"}))
     for source, url, params in jobs:
         try:
-            body = net.get_json(url, params=params, timeout=25, tries=1)
+            body = get_json(sport, url, params=params, timeout=25, tries=1)
             observed = now_utc()
             found = adapters.prizepicks(body, sport, observed) if source == "prizepicks" else adapters.underdog(body, observed)
             rows.extend(found)
@@ -107,7 +111,8 @@ def board(req):
         st = path.stat()
         if st.st_size > 3_000_000:
             raise ValueError("oversize")
-        data = dict(_read_snapshot(str(path), st.st_mtime_ns, st.st_size))
+        with _SNAPSHOT_LOCK:
+            data = dict(_read_snapshot(str(path), st.st_mtime_ns, st.st_size))
         now = datetime.now(timezone.utc)
         age = (now - parse_utc(data["built_at"])).total_seconds()
         if age < 0 or age > MAX_AGE:
@@ -115,6 +120,14 @@ def board(req):
         data["offers"] = [r for r in data["offers"] if r.get("sport") == sport
                           and parse_utc(r["start"]) > now
                           and 0 <= (now - parse_utc(r["observed_at"])).total_seconds() <= MAX_AGE]
+        version = hashlib.sha256(json.dumps(sorted((r['platform'], r['offer_id'], r['revision'])
+                                  for r in data['offers']), separators=(',', ':')).encode()).hexdigest()
+        data['version'] = version
+        if req.query.get('version') == version:
+            # A source-wide sighting only applies because collect() never carries
+            # forward rows after a failed source fetch. Started/removed/changed
+            # offers change the version and force a full replacement.
+            return 200, {k:data[k] for k in ('sport','built_at','sources','version')} | {'unchanged':True}
         return 200, data
     except (OSError, ValueError, KeyError, TypeError):
         return 503, {"error": "board_not_ready", "sport": sport}

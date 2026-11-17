@@ -22,6 +22,11 @@ COMPETITIONS = {
     "ger.1": ("soccer", "soccer"), "ita.1": ("soccer", "soccer"),
     "fra.1": ("soccer", "soccer"), "usa.1": ("soccer", "soccer"),
     "uefa.champions": ("soccer", "soccer"),
+    "fifa.friendly": ("soccer", "soccer"), "uefa.nations": ("soccer", "soccer"),
+    "fifa.worldq.uefa": ("soccer", "soccer"), "fifa.worldq.conmebol": ("soccer", "soccer"),
+    "fifa.worldq.concacaf": ("soccer", "soccer"), "fifa.worldq.afc": ("soccer", "soccer"),
+    "fifa.worldq.caf": ("soccer", "soccer"), "fifa.world": ("soccer", "soccer"),
+    "concacaf.nations.league": ("soccer", "soccer"),
     "atp": ("tennis", "atp"), "wta": ("tennis", "wta"),
 }
 
@@ -72,11 +77,20 @@ Retired / walkover / suspended matches never produce completed-match stats.
             seen.add(eid)
             sides = c.get("competitors") or []
             expected = "athlete" if sport == "tennis" else "team"
+            category = str((c.get('type') or {}).get('slug') or '')
+            if sport == 'tennis' and category and category != ('mens-singles' if league == 'atp' else 'womens-singles'):
+                out.rejected.append(f'{eid}: wrong tour or format')
+                continue
             if len(sides) != 2 or any(s.get("type") != expected or not s.get("id") for s in sides):
                 out.rejected.append(f"{eid}: not a two-participant {expected} match")
                 continue
             if sides[0]["id"] == sides[1]["id"]:
                 out.rejected.append(f"{eid}: duplicate participant")
+                continue
+            if any(str(s['id']).startswith('-') or
+                   (s.get(expected) or {}).get('displayName', '').strip().lower() in ('', 'tbd', 'bye')
+                   for s in sides):
+                out.rejected.append(f"{eid}: unresolved participant")
                 continue
             try:
                 start = utc(c.get("startDate") or c.get("date"))
@@ -85,6 +99,9 @@ Retired / walkover / suspended matches never produce completed-match stats.
             typ = (c.get("status") or {}).get("type") or {}
             name = str(typ.get("name") or "").upper()
             abnormal = any(x in name for x in ("RETIR", "WALK", "SUSPEND", "CANCEL", "POSTPON", "ABANDON", "DEFAULT"))
+            detail = ' '.join([str(typ.get(k) or '') for k in ('description','detail','shortDetail')] +
+                              [str(n.get('text') or '') for n in c.get('notes') or []])
+            abnormal = abnormal or bool(re.search(r'\b(retired|retirement|walkover|abandoned|defaulted|w/o)\b', detail, re.I))
             final_names = {"STATUS_FINAL", "STATUS_FULL_TIME"} if sport == "soccer" else {"STATUS_FINAL"}
             complete = typ.get("completed") is True and name in final_names and not abnormal
             state = "final" if complete else {"pre": "scheduled", "in": "in_progress"}.get(typ.get("state"), "unknown")
@@ -97,7 +114,8 @@ Retired / walkover / suspended matches never produce completed-match stats.
                 item = s.get(expected) or {}
                 label = item.get("displayName") or item.get("name")
                 ident = f"{league}:{'player' if sport == 'tennis' else 'team'}:espn:{source_id}"
-                participants.append({"id": ident, "name": label})
+                participants.append({"id": ident, "name": label,
+                                     "abbreviation": item.get("abbreviation")})
                 if sport == "tennis":
                     records.append(Player(ident, league, label or "", source_ids=(SourceId("espn", source_id),),
                                           observed_at=observed_at, known_at=observed_at))
@@ -129,6 +147,16 @@ Retired / walkover / suspended matches never produce completed-match stats.
                     valid = all((max(a,b) == 6 and min(a,b) <= 4) or
                                 (max(a,b) == 7 and min(a,b) in (5,6))
                                 for a,b in zip(*values))
+                # Two completed sets must have one winner; 3 sets may be 2-1 or
+                # 3-0. In a 4/5-set match a player must win exactly three sets.
+                # Never count a set played after the match was already decided.
+                wins = [sum(a > b for a,b in zip(values[i], values[1-i]))
+                        for i in range(2)] if valid else []
+                if valid:
+                    target = 3 if len(values[0]) >= 4 or max(wins) == 3 else 2
+                    valid = max(wins) == target and min(wins) < target
+                    valid = valid and all(sum(a > b for a,b in zip(values[i][:-1], values[1-i][:-1])) < target
+                                          for i in range(2))
                 if not valid:
                     out.rejected.append(f"{eid}: incomplete or nonstandard set scores")
                     continue
@@ -138,6 +166,16 @@ Retired / walkover / suspended matches never produce completed-match stats.
                             "no", "games_won", "count", value, "played", "espn", cid, True, observed_at, observed_at))
                     out.records.append(StatObservation(eid, league, participant["id"], "player", "full_game",
                         "no", "games_won", "count", sum(values[i]), "played", "espn", cid, True, observed_at, observed_at))
+                    # These are exact arithmetic from completed set scores, not
+                    # inferred serve statistics or a guessed best-of format.
+                    for stat, value in (("games_played", sum(map(sum, values))),
+                                        ("sets_won", wins[i]), ("sets_played", len(values[i])),
+                                        ("tie_breakers_played", sum(max(a,b)==7 and min(a,b)==6 for a,b in zip(*values)))):
+                        out.records.append(StatObservation(eid, league, participant['id'], 'player', 'full_game',
+                            'no', stat, 'count', value, 'played', 'espn', cid, True, observed_at, observed_at))
+                    out.records.append(StatObservation(eid, league, participant['id'], 'player', 'set1',
+                        'no', 'games_played', 'count', values[0][0]+values[1][0], 'played', 'espn', cid,
+                        True, observed_at, observed_at))
     return out
 
 

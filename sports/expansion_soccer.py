@@ -21,6 +21,10 @@ def parse_summary(body, competition, source_event_id, observed_at):
         raise ValueError('observation time required')
     out=Feed()
     header=body.get('header') or {}
+    actual_competition = (header.get('league') or {}).get('slug')
+    if actual_competition and actual_competition != competition:
+        out.rejected.append('summary competition does not match request')
+        return out
     if str(header.get('id')) != str(source_event_id):
         out.rejected.append('summary event does not match request')
         return out
