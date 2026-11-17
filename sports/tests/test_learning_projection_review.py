@@ -10,7 +10,8 @@ from sports.model import learning
 from sports.tests import helpers as h
 
 
-@pytest.mark.parametrize('league,stat,mean,actual',[('nba','points',21,25),('nfl','pass_yds',250,210)])
+@pytest.mark.parametrize('league,stat,mean,actual',[('nba','points',21,25),('nfl','pass_yds',250,210),
+                                                 ('nfl','rush_yds',3,-2)])
 def test_point_error_review_is_separate_from_probability_and_corrections(monkeypatch,tmp_path,league,stat,mean,actual):
     monkeypatch.setattr(config,'DATA_DIR',tmp_path)
     icon=sqlite3.connect(':memory:')

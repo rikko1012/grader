@@ -179,7 +179,7 @@ def test_sport_isolation_bounded_work_and_disabled_jobs(setup,monkeypatch):
     assert default_jobs()['tennis-learning']['cap_mb']>0
 
 
-@pytest.mark.parametrize('bad',[float('nan'),float('inf'),-1,True])
+@pytest.mark.parametrize('bad',[float('nan'),float('inf'),None,True])
 def test_invalid_actual_is_rejected(bad):
     with pytest.raises(ValueError):review(5,bad,4.5)
 
