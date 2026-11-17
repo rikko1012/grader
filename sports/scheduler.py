@@ -338,6 +338,13 @@ def default_jobs():
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,
                                flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=8, locks=("canonical", "archive")),
     }
+    # Separate opt-in collectors and stores; never feed an existing sport's model.
+    for sport in ("soccer", "tennis"):
+        if os.environ.get(f"SCOUT_{sport.upper()}_ENABLED") != "1":
+            continue
+        J[f"{sport}-quotes"] = dict(argv=_py("-m", "sports.expansion_board", sport), every_s=180,
+            timeout_s=90, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=80, cls=HEAVY, prio=6,
+            locks=(f"{sport}-quotes",))
     scale, two = cap_scale(), max_heavy() >= 2
     for name, spec in J.items():
         key = "SPORTS_JOB_" + name.upper().replace("-", "_")

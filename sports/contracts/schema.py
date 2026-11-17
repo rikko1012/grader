@@ -30,13 +30,14 @@ from typing import ClassVar, Optional
 
 SCHEMA_VERSION = "sc-1"
 
-LEAGUES = ("nba", "nfl", "wnba", "cbb", "cfb")
-SPORT_OF = {"nba": "basketball", "wnba": "basketball", "cbb": "basketball", "nfl": "football", "cfb": "football"}
+LEAGUES = ("nba", "nfl", "wnba", "cbb", "cfb", "soccer", "atp", "wta")
+SPORT_OF = {"nba": "basketball", "wnba": "basketball", "cbb": "basketball", "nfl": "football", "cfb": "football",
+            "soccer": "soccer", "atp": "tennis", "wta": "tennis"}
 TRI = ("yes", "no", "unknown")
 EVENT_STATUS = ("scheduled", "in_progress", "final", "postponed", "cancelled", "suspended", "unknown")
 SEASON_TYPES = ("preseason", "regular", "postseason", "unknown")
 SCOPES = ("full_game", "first_half", "second_half", "q1", "q2", "q3", "q4", "first_quarter_group", "regulation",
-          "unknown")
+          "set1", "set2", "set3", "set4", "set5", "unknown")
 SIDES = ("over", "under")
 PRICE_FORMATS = ("none", "decimal", "american", "exchange_yes_no", "payout_multiplier")
 VARIANTS = ("standard", "goblin", "demon", "alternate", "balanced", "ladder_rung", "main", "unknown",

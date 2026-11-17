@@ -56,6 +56,7 @@ MEMBER, ADMIN = "member", "admin"
 
 # ------------------------------------------------------------------------------------------------------- ROUTE TABLE
 ROUTES = {
+    "/api/sports/expansion/board": ("sports.expansion_board:board", MEMBER, ("GET",)),
     "/api/sports/market-tools": ("sports.api_market_tools:view", MEMBER, ("GET",)),
     "/api/sports/game-books": ("sports.game_books:view", MEMBER, ("GET",)),
     "/api/sports/status": ("sports.web:status", MEMBER, ("GET",)),
