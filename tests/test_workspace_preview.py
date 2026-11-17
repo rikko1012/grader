@@ -188,7 +188,7 @@ def test_the_data_file_holds_names_and_no_rows(tmp_path):
     out = subprocess.run(["node", str(script), str(WEB / "workspace-data.js")], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     r = json.loads(out.stdout)
-    assert r["keys"] == ["platforms", "presets", "sports"] and r["sports"] == ["cs2", "lol", "nba", "nfl"] and r["slip"] == ["prizepicks", "underdog"]
+    assert r["keys"] == ["platforms", "presets", "sports"] and r["sports"] == ["cs2", "lol", "nba", "nfl", "soccer", "tennis"] and r["slip"] == ["prizepicks", "underdog"]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")

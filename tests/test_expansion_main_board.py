@@ -129,3 +129,19 @@ def test_same_sport_tabs_player_cards_history_and_stats(ctx, env, expansion, siz
     assert 'Double Faults' in p.locator('#hub-detail').inner_text()
     no_h_scroll(p)
     assert not p.errors
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_main_moneylines_three_way_soccer_and_tennis(ctx,env,expansion,size):
+ p=open_page(ctx,env,'/?view=classic#moneylines',size)
+ p.locator('[data-mlsport=soccer]').click()
+ p.wait_for_function("document.querySelector('#boardout').textContent.includes('Draw')")
+ text=p.locator('#boardout').inner_text()
+ assert '+220' in text and 'BetRivers' in text
+ assert '-1000' not in text
+ no_h_scroll(p)
+ p.locator('[data-mlsport=tennis]').click()
+ p.wait_for_function("document.querySelector('#boardout').textContent.includes('-170')")
+ assert 'Draw' not in p.locator('#boardout').inner_text()
+ no_h_scroll(p)
+ assert not p.errors
