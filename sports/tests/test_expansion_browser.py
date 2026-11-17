@@ -203,7 +203,8 @@ def test_real_servers_player_history_and_navigation(ctx, env, monkeypatch, tmp_p
         assert 'Test Server' in page.locator('#hub-rows').inner_text()
         page.locator('#hub-rows .h-player').first.click()
         page.locator('#hub-detail .h-history-panel').wait_for(timeout=15000)
-        assert '14' in page.locator('#hub-detail .h-history-panel').inner_text()
+        # The panel mounts before the asynchronous line detail has arrived.
+        pw.expect(page.locator('#hub-detail .h-history-panel')).to_contain_text('14', timeout=15000)
         assert page.locator('#hub-detail [data-hub="detail-add"]').count()==0
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         assert not errors
