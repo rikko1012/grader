@@ -68,6 +68,17 @@ def test_frozen_prediction_replays_and_has_no_publication_path(setup):
     assert learn.cycle('tennis',AFTER)['reviews']['added']==0
 
 
+def test_conflicting_participation_cannot_train_from_the_other_source(setup):
+    _,path,m,_=setup
+    known='2026-11-16T18:00:00Z'
+    with closing(store.connect(path)) as c:
+        store.put_many(c,[StatObservation('atp:espn:atp:tour:old0','atp',m['participants'][0]['id'],
+            'player','full_game','no','aces','count',None,'did_not_play','thescore','0',True,known,known)])
+    report=learn.cycle('tennis',NOW)
+    assert report['forecasts']['saved']==0
+    assert report['forecasts']['insufficient_history']==1
+
+
 def test_correction_append_only_training_uses_latest_and_no_same_event(setup):
     learn.cycle('tennis',NOW);result(setup);learn.cycle('tennis',AFTER)
     later='2026-11-18T19:00:00Z';result(setup,3,later);learn.cycle('tennis',later)

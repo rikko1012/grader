@@ -379,15 +379,24 @@ def _history(path, signature, player, stat, scope, before):
     try:
         # Bound the read by this player's stat, never all forecasts / all sports.
         rows = store._latest_rows(con, 'stat', 'player_id=? AND stat=?', [player,stat], before, 2000)
-        result = []
+        by_event = {}
         for row in rows:
             obs = store._rec(row)
-            if obs.scope != scope or not obs.final or obs.participation != 'played' or obs.value is None:
+            if obs.scope != scope:
                 continue
             event = store._any_event(con, obs.event_id, before)
             if event and event.start_utc and event.start_utc < before:
-                result.append({'event_id': obs.event_id, 'date': event.start_utc, 'value': obs.value,
-                               'source': obs.source, 'known_at': obs.known_at})
+                by_event.setdefault(obs.event_id, []).append((obs, event))
+        result = []
+        for observations in by_event.values():
+            # Multiple providers reporting one game are one observation. A
+            # disagreement (including participation) must not inflate L5/L10/L20.
+            if not all(o.final and o.participation == 'played' and o.value is not None
+                       for o, _ in observations) or len({o.value for o, _ in observations}) != 1:
+                continue
+            obs, event = sorted(observations, key=lambda item: item[0].source)[0]
+            result.append({'event_id': obs.event_id, 'date': event.start_utc, 'value': obs.value,
+                           'source': obs.source, 'known_at': obs.known_at})
         return sorted(result, key=lambda r:r['date'], reverse=True)[:20]
     finally:
         con.close()

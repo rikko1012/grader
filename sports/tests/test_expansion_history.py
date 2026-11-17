@@ -107,6 +107,21 @@ def test_collection_request_budget_and_sport_storage(monkeypatch,tmp_path):
     assert not (tmp_path/'soccer').exists()
 
 
+def test_history_counts_a_game_once_and_excludes_disagreeing_sources(tmp_path):
+    path=isolated_database(tmp_path,'atp'); con=store.connect(path)
+    pid='atp:player:espn:1'; eid='atp:espn:atp:tournament:m'
+    stamp='2026-11-16T18:00:00Z'
+    event=Event(eid,'atp',2026,'unknown',None,None,'2026-11-16T12:00:00Z','espn',
+                status='final',observed_at=stamp,known_at=stamp)
+    def obs(value,source,known=stamp):
+        return StatObservation(eid,'atp',pid,'player','full_game','no','aces','count',value,
+                               'played',source,'m',True,known,known)
+    store.put_many(con,[event,obs(8,'espn'),obs(8,'thescore')])
+    assert len(history._history(str(path),('same',),pid,'aces','full_game','2026-11-16T18:30:00Z'))==1
+    store.put_many(con,[obs(9,'thescore','2026-11-16T19:00:00Z')]);con.close()
+    assert not history._history(str(path),('different',),pid,'aces','full_game','2026-11-16T20:00:00Z')
+
+
 def test_history_cannot_query_arbitrary_players_or_unreleased_sport(monkeypatch,tmp_path):
     monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
     monkeypatch.delenv('SCOUT_TENNIS_ENABLED',raising=False)

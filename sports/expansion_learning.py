@@ -71,18 +71,19 @@ def history(c, identity, stat, scope, before):
     events = {}
     for row in rows:
         obs = store._rec(row)
-        if (obs.scope != scope or not obs.final or obs.participation != 'played' or
-                obs.value is None or not math.isfinite(obs.value) or obs.event_id == identity['event_id']):
+        if obs.scope != scope or obs.event_id == identity['event_id']:
             continue
         event = store._any_event(c, obs.event_id, before)
         if not event or not event.start_utc or event.start_utc >= before:
             continue
         value = {'record_id': row['record_id'], 'event_id': obs.event_id, 'start_at': event.start_utc,
-                 'value': obs.value, 'known_at': obs.known_at, 'source': obs.source}
+                 'value': obs.value, 'known_at': obs.known_at, 'source': obs.source,
+                 'valid': obs.final and obs.participation == 'played' and
+                          obs.value is not None and math.isfinite(obs.value)}
         events.setdefault(obs.event_id, []).append(value)
     # Two sources are not two games. Conflicting source values need reconciliation.
     good = [sorted(rs, key=lambda r:r['record_id'])[0] for rs in events.values()
-            if len({r['value'] for r in rs}) == 1]
+            if all(r['valid'] for r in rs) and len({r['value'] for r in rs}) == 1]
     return sorted(good, key=lambda r:(r['start_at'],r['event_id']), reverse=True)[:20]
 
 
