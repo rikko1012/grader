@@ -92,7 +92,9 @@ def resolve(offer, matches):
         if not match.get('start') or abs((parse_utc(match['start']) - parse_utc(offer['start'])).total_seconds()) > 7200:
             continue
         if offer['sport'] == 'tennis':
-            if offer.get('tour') != competition or not offer.get('opponent'):
+            level = ('atp_challenger' if str(offer.get('competition','')).startswith('ATP Challenger ') else
+                     'wta125' if str(offer.get('competition','')).startswith('WTA 125K ') else offer.get('tour'))
+            if level != competition or offer.get('tour') != COMPETITIONS[competition][1] or not offer.get('opponent'):
                 continue
             players = match['participants']
             pair = {normalized(p['name']) for p in players}
@@ -341,6 +343,8 @@ def collect(sport, max_requests=16, max_seconds=150):
             from .expansion_soccer_detail import collect_details
             counts['errors'].extend(collect_details(catalogs, get, persist, directory))
         else:
+            from .expansion_challenger import collect as collect_challenger
+            counts['errors'].extend(collect_challenger(catalogs,get,persist,directory,offset))
             from .expansion_tennis import collect_details
             counts['errors'].extend(collect_details(catalogs, get, persist, directory))
     except StopIteration:

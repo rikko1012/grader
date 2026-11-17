@@ -49,4 +49,5 @@ def test_new_collectors_are_explicitly_opt_in(monkeypatch):
     assert after['tennis-quotes']['argv'][-1]=='tennis'
     assert 'soccer-quotes' not in after
     assert after['tennis-history']['argv'][-1]=='tennis'
-    assert {k:v for k,v in after.items() if k not in ('tennis-quotes','tennis-history')}==before
+    assert after['tennis-learning']['argv'][-1]=='tennis'
+    assert {k:v for k,v in after.items() if k not in ('tennis-quotes','tennis-history','tennis-learning')}==before

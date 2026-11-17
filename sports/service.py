@@ -398,6 +398,26 @@ def sheets_stages():
         return None
 
 
+def expansion_learning_status():
+    """Small worker-written reports only. Never starts fitting or reads a DB."""
+    from pathlib import Path
+    from . import config
+    root = Path(os.environ.get('SCOUT_EXPANSION_DATA_DIR') or config.DATA_DIR / 'expansion')
+    out = {}
+    for sport in ('soccer','tennis'):
+        enabled = os.environ.get(f'SCOUT_{sport.upper()}_ENABLED') == '1'
+        row = {'enabled':enabled,'report':None}
+        if enabled:
+            try:
+                path = root / sport / 'learning-status.json'
+                if path.stat().st_size <= 65536:
+                    row['report'] = json.loads(path.read_text(encoding='utf-8'))
+            except (OSError,ValueError):
+                pass
+        out[sport] = row
+    return out
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -412,6 +432,7 @@ def ops():
             "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
             "sheets_stages": sheets_stages(),
             "grades_daily": settle_stages("model/daily_state.json"),
+            "expansion_learning": expansion_learning_status(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 

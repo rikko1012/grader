@@ -32,6 +32,7 @@ COMPETITIONS = {
     "fifa.worldq.caf": ("soccer", "soccer"), "fifa.world": ("soccer", "soccer"),
     "concacaf.nations.league": ("soccer", "soccer"),
     "atp": ("tennis", "atp"), "wta": ("tennis", "wta"),
+    "atp_challenger": ("tennis", "atp"), "wta125": ("tennis", "wta"),
 }
 
 
@@ -59,6 +60,8 @@ Soccer competition namespaces prevent accidental cross-league event joins.
 Tennis identities include tournament and match IDs; doubles are excluded.
 Retired / walkover / suspended matches never produce completed-match stats.
 """
+    if competition in ('atp_challenger', 'wta125'):
+        raise ValueError('this competition uses the separate 365Scores parser')
     sport, league = COMPETITIONS[competition]
     observed_at = utc(observed_at)
     if not observed_at:
@@ -207,7 +210,8 @@ pooling ATP/WTA history or different soccer competitions during future fitting.
                                       (league,)).fetchall()
                 if foreign:
                     raise ValueError("refusing a database containing another sport or tour")
-                prefix = f"{league}:espn:{competition}:"
+                source = '365scores' if competition in ('atp_challenger','wta125') else 'espn'
+                prefix = f"{league}:{source}:{competition}:"
                 if con.execute("SELECT 1 FROM records WHERE event_id IS NOT NULL AND event_id NOT LIKE ? LIMIT 1",
                                (prefix + "%",)).fetchone():
                     raise ValueError("refusing a database containing another competition")
@@ -218,7 +222,7 @@ pooling ATP/WTA history or different soccer competitions during future fitting.
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--competition", choices=COMPETITIONS, required=True)
+    parser.add_argument("--competition", choices=[c for c in COMPETITIONS if c not in ('atp_challenger','wta125')], required=True)
     parser.add_argument("--date", help="One date, YYYYMMDD")
     parser.add_argument("--data-root", help="Development root; each sport/competition gets its own database. Omitted = no writes")
     args = parser.parse_args()

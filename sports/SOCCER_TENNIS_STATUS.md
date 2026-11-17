@@ -3,6 +3,7 @@
 Branch: `codex/soccer-tennis-1117`, based on `a1b0a52`.
 This release adds isolated lines and verified historical research. It does not
 claim to finish validated soccer/tennis grading, settlement or slip generation.
+Prospective learning and existing-sport review details: `EXPANSION_LEARNING.md`.
 
 ## Implemented
 
@@ -120,3 +121,13 @@ returned an HTTP failure in this particular run, and no stale PP rows were
 carried forward. Counts are time-specific source observations, not coverage
 guarantees. 70 focused data/identity/isolation checks and 31 combined odds,
 source-parser, authenticated HTTP and desktop/mobile checks passed.
+
+## Challenger and result-review follow-up
+
+365Scores now supplies singles Challenger and WTA125 score/stats records in
+separate level stores. Exact level, player pair, time and ordered scores are
+checked; main-tour, doubles and retirement results cannot cross into them.
+The final pre-learning Sports suite passed 1,585 tests (34 skipped). Shared-core
+and new-learning checks passed 508 tests. The broader local esports suite passed
+4,680 and failed 23 old UI assertions; all 23 also failed on untouched main.
+These numbers do not replace final CI, current-tree checks or live verification.
