@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+expect = pytest.importorskip('playwright.sync_api').expect
+
 import workspace_expansion as adapter
 import workspace_sports
 from tests.test_upgrade_browser import browser, env, ctx, open_page, no_h_scroll, DESK, PHONE
@@ -109,12 +111,12 @@ def test_same_sport_tabs_player_cards_history_and_stats(ctx, env, expansion, siz
     assert '1 more await' in p.locator('#hub-health').inner_text()
     p.locator('#hub-rows .h-player').first.click()
     p.wait_for_selector('#hub-detail .h-history-panel', timeout=20000)
-    assert 'Opponent 0' in p.locator('#hub-detail').inner_text()
+    expect(p.locator('#hub-detail')).to_contain_text('Opponent 0', timeout=20000)
     assert 'Regulation time' in p.locator('#hub-detail').inner_text() or 'regulation time' in p.locator('#hub-detail').inner_text()
     assert p.locator('#hub-detail [data-hub="detail-add"]').count() == 0
     p.locator('#hub-detail [data-hub="card-tab"][data-id="stats"]').click()
-    assert 'Minutes' in p.locator('#hub-detail').inner_text()
-    assert '82' in p.locator('#hub-detail').inner_text()
+    expect(p.locator('#hub-detail')).to_contain_text('Minutes', timeout=15000)
+    expect(p.locator('#hub-detail')).to_contain_text('82')
     no_h_scroll(p)
     shots=Path(os.environ.get('UPGRADE_SHOTS') or tmp_path); shots.mkdir(parents=True,exist_ok=True)
     p.screenshot(path=str(shots/f'integrated-soccer-{size["width"]}.png'))
@@ -125,8 +127,8 @@ def test_same_sport_tabs_player_cards_history_and_stats(ctx, env, expansion, siz
     p.locator('#hub-rows .h-player').first.click()
     p.wait_for_selector('#hub-detail .h-history-panel')
     p.locator('#hub-detail [data-hub="card-tab"][data-id="stats"]').click()
-    assert 'Hard' in p.locator('#hub-detail').inner_text()
-    assert 'Double Faults' in p.locator('#hub-detail').inner_text()
+    expect(p.locator('#hub-detail')).to_contain_text('Hard', timeout=15000)
+    expect(p.locator('#hub-detail')).to_contain_text('Double Faults')
     no_h_scroll(p)
     assert not p.errors
 
