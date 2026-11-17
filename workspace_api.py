@@ -1252,9 +1252,11 @@ def _reviews_page_on():
 def get_me(h, srv, q, member, scratch, name):
     import workspace_alerts
     import workspace_market_edge
+    expansion = [s for s in ('soccer', 'tennis') if os.getenv(f'SCOUT_{s.upper()}_ENABLED') == '1']
     return h.send(200, {"member": member, "name": name, "scratch": scratch, "sports": access(h, srv, q), "rules_version": rules.RULES_VERSION,
                         "owner": bool(scratch) or bool(h._sports_owner()),
                         "features": {"workspace_v2": os.environ.get("SCOUT_WORKSPACE_V2") == "1",
+                                     **({'expansion_sports': expansion} if expansion else {}),
                                      "public_record": os.environ.get('SCOUT_PUBLIC_RECORD') == '1',
                                      **({"reviews": True} if _reviews_page_on() else {}),
                                      "background_alerts": bool(workspace_alerts.configured()),

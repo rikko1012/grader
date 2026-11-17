@@ -1,0 +1,236 @@
+{
+  "games": [
+    {
+      "id": 4894401,
+      "sportId": 3,
+      "competitionId": 6968,
+      "startTime": "2026-11-17T00:36:23+00:00",
+      "statusGroup": 4,
+      "statusText": "Ended",
+      "homeCompetitor": {
+        "id": 74804,
+        "sportId": 3,
+        "name": "Filip Jeff Planinsek",
+        "type": 4,
+        "score": 0.0
+      },
+      "awayCompetitor": {
+        "id": 73601,
+        "sportId": 3,
+        "name": "Andres Martin",
+        "type": 4,
+        "score": 2.0
+      },
+      "stages": [
+        {
+          "id": 27,
+          "name": "Set 1",
+          "shortName": "S1",
+          "homeCompetitorScore": 2.0,
+          "awayCompetitorScore": 6.0,
+          "time": "36'",
+          "isEnded": true
+        },
+        {
+          "id": 28,
+          "name": "Set 2",
+          "shortName": "S2",
+          "homeCompetitorScore": 3.0,
+          "awayCompetitorScore": 6.0,
+          "time": "36'",
+          "isEnded": true
+        },
+        {
+          "id": 29,
+          "name": "Set 3",
+          "shortName": "S3",
+          "homeCompetitorScore": -1.0,
+          "awayCompetitorScore": -1.0
+        },
+        {
+          "id": 35,
+          "name": "Sets",
+          "shortName": "Sets",
+          "homeCompetitorScore": 0.0,
+          "awayCompetitorScore": 2.0,
+          "time": "01:12",
+          "isCurrent": true,
+          "isEnded": true
+        }
+      ],
+      "hasStats": true
+    }
+  ],
+  "competitions": [
+    {
+      "id": 6968,
+      "sportId": 3,
+      "countryId": 301,
+      "name": "Champaign"
+    }
+  ],
+  "countries": [
+    {
+      "id": 301,
+      "name": "Challenger"
+    }
+  ],
+  "statistics": [
+    {
+      "id": 1,
+      "name": "Aces",
+      "competitorId": 74804,
+      "value": "4"
+    },
+    {
+      "id": 4,
+      "name": "Break Points Won",
+      "competitorId": 74804,
+      "value": "1/4 (25%)"
+    },
+    {
+      "id": 9,
+      "name": "Service Games",
+      "competitorId": 74804,
+      "value": "4/11 (36%)"
+    },
+    {
+      "id": 20,
+      "name": "Total Points Won",
+      "competitorId": 74804,
+      "value": "46/110 (42%)"
+    },
+    {
+      "id": 2,
+      "name": "Double Faults",
+      "competitorId": 74804,
+      "value": "4"
+    },
+    {
+      "id": 5,
+      "name": "Max Points In a Row",
+      "competitorId": 74804,
+      "value": "4"
+    },
+    {
+      "id": 6,
+      "name": "Max Games In a Row",
+      "competitorId": 74804,
+      "value": "2"
+    },
+    {
+      "id": 7,
+      "name": "Service Points",
+      "competitorId": 74804,
+      "value": "25/52 (48%)"
+    },
+    {
+      "id": 16,
+      "name": "2nd Return Points Won",
+      "competitorId": 74804,
+      "value": "5/16 (31%)"
+    },
+    {
+      "id": 12,
+      "name": "1st Serve Points Won",
+      "competitorId": 74804,
+      "value": "20/31 (65%)"
+    },
+    {
+      "id": 22,
+      "name": "Total Games Won",
+      "competitorId": 74804,
+      "value": "5/17 (29%)"
+    },
+    {
+      "id": 78,
+      "name": "Points won in last 10",
+      "competitorId": 74804,
+      "value": "2"
+    },
+    {
+      "id": 13,
+      "name": "2nd Serve Points Won",
+      "competitorId": 74804,
+      "value": "5/17 (29%)"
+    },
+    {
+      "id": 1,
+      "name": "Aces",
+      "competitorId": 73601,
+      "value": "0"
+    },
+    {
+      "id": 4,
+      "name": "Break Points Won",
+      "competitorId": 73601,
+      "value": "5/5 (100%)"
+    },
+    {
+      "id": 9,
+      "name": "Service Games",
+      "competitorId": 73601,
+      "value": "7/11 (64%)"
+    },
+    {
+      "id": 20,
+      "name": "Total Points Won",
+      "competitorId": 73601,
+      "value": "64/110 (58%)"
+    },
+    {
+      "id": 2,
+      "name": "Double Faults",
+      "competitorId": 73601,
+      "value": "3"
+    },
+    {
+      "id": 5,
+      "name": "Max Points In a Row",
+      "competitorId": 73601,
+      "value": "7"
+    },
+    {
+      "id": 6,
+      "name": "Max Games In a Row",
+      "competitorId": 73601,
+      "value": "4"
+    },
+    {
+      "id": 7,
+      "name": "Service Points",
+      "competitorId": 73601,
+      "value": "37/58 (64%)"
+    },
+    {
+      "id": 16,
+      "name": "2nd Return Points Won",
+      "competitorId": 73601,
+      "value": "12/17 (71%)"
+    },
+    {
+      "id": 12,
+      "name": "1st Serve Points Won",
+      "competitorId": 73601,
+      "value": "26/39 (67%)"
+    },
+    {
+      "id": 22,
+      "name": "Total Games Won",
+      "competitorId": 73601,
+      "value": "12/17 (71%)"
+    },
+    {
+      "id": 78,
+      "name": "Points won in last 10",
+      "competitorId": 73601,
+      "value": "8"
+    },
+    {
+      "id": 13,
+      "name": "2nd Serve Points Won",
+      "competitorId": 73601,
+      "value": "11/16 (69%)"
+    }
+  ]
+}

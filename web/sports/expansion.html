@@ -1,0 +1,27 @@
+<!doctype html>
+
+<html lang="en" data-ui="next"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Soccer & Tennis · 1time Scout</title>
+
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('scout-theme')==='light'?'light':'dark';}catch(e){}</script>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<link rel="stylesheet" href="/upgrade/next.css"><link rel="stylesheet" href="/sports/expansion.css"></head>
+
+<body><header><a class="brand" href="/">1time <strong>SCOUT</strong></a><a href="/">Back to Scout</a></header>
+
+<main><div class="heading"><div><p class="eyebrow">PLAYER LINES</p><h1 id="sport-title">Soccer</h1><p>Browse the exact market, period and side available at your app.</p></div><button id="refresh">Refresh lines</button></div>
+
+<nav aria-label="Sport"><button data-sport="soccer" aria-pressed="true">Soccer</button><button data-sport="tennis" aria-pressed="false">Tennis</button></nav>
+<nav aria-label="Market view"><button data-view="props" aria-pressed="true">Player lines</button><button data-view="odds" aria-pressed="false">Sportsbook odds</button></nav>
+<label id="extra-markets" hidden><input type="checkbox" id="all-markets"> Include other markets and alternate lines</label>
+
+<section class="filters" aria-label="Filter lines"><label>Player or match<input id="search" aria-label="Player or match" type="search" placeholder="Search players, teams…"></label><label>Market<select id="market" aria-label="Market"><option value="">All markets</option></select></label><details class="more-filters"><summary>More filters</summary><div class="filter-extra"><label>Period<select id="period" aria-label="Period"><option value="">All periods</option></select></label><label>App<select id="book" aria-label="App"><option value="">All apps</option><option value="prizepicks">PrizePicks</option><option value="underdog">Underdog</option></select></label><label>Side<select id="side" aria-label="Side"><option value="">All offered sides</option><option value="over">Over available</option><option value="under">Under available</option></select></label></div></details></section>
+
+<details class="notice"><summary>Live lines · projections not released</summary><p> Soccer and tennis projections, grades and tracked-pick settlement are not released yet. Player history appears only for an exact verified match, stat and period. Pick’em multipliers below are source-listed modifiers, not sportsbook odds or a complete entry payout.</p></details>
+
+<p id="feed-status" role="status"></p><p id="status" role="status" aria-live="polite">Loading lines…</p><section id="players" class="players" aria-label="Player lines"></section>
+
+</main><script src="/sports/expansion.js" defer></script></body></html>

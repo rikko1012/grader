@@ -114,6 +114,17 @@ def test_only_explicit_forecast_capture_boundaries_import_core():
                                      for n in nodes)
                 assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
                 continue
+            if p.relative_to(ROOT).as_posix() in ('sports/expansion_learning.py','sports/model/learning.py'):
+                # Post-result point-error diagnostics only, not policy/calibration
+                # or live grades. Keep this boundary narrower than a core import.
+                tree = ast.parse(p.read_text(encoding='utf-8'))
+                nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
+                         and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore.projection_review' and
+                                     [a.name for a in n.names] == ['review'] for n in nodes)
+                assert not any(isinstance(n,ast.Import) and any(a.name.startswith('gradecore') for a in n.names)
+                               for n in ast.walk(tree))
+                continue
             if p.relative_to(ROOT).as_posix() in reporting:
                 # Shared calendar formatting cannot introduce live grading.
                 nodes = [n for n in ast.walk(ast.parse(p.read_text(encoding='utf-8')))

@@ -51,6 +51,12 @@ def db():
     # per-event progress of on_settled (2026-11-08): the event's stored settlement + forecast records (count, newest
     # rid, rid sum) at its last full pass - an unchanged event is a no-op and is skipped without decoding anything
     con.execute("CREATE TABLE IF NOT EXISTS learn_events (event_id TEXT PRIMARY KEY, sig TEXT, scored_at TEXT)")
+    # Separate additive table: immutable forecast/settlement IDs preserve replay.
+    # Probabilities alone cannot tell whether the point projection improved.
+    con.execute("""CREATE TABLE IF NOT EXISTS projection_reviews (
+        forecast_id TEXT, settlement_id TEXT, projection REAL, actual REAL,
+        error REAL, absolute_error REAL, squared_error REAL, reason TEXT,
+        PRIMARY KEY(forecast_id,settlement_id))""")
     return con
 
 
@@ -62,7 +68,7 @@ def event_sig(scon, ev):
         n, top, tot = scon.execute("SELECT COUNT(*), MAX(rid), SUM(rid) FROM records WHERE kind=? AND event_id=?",
                                    (kind, ev)).fetchone()
         out.append(f"{n}:{top}:{tot}")
-    return "|".join(out)
+    return "projection-review-1|" + "|".join(out)
 
 
 def _pit(fc, value, pmf_row=None, lo=None):
@@ -126,7 +132,7 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None):
             if not sts:
                 continue
             cur = max(sts, key=lambda x: x.revision)
-            if lcon.execute("SELECT 1 FROM scorecard WHERE forecast_id=? AND settlement_id=?",
+            if lcon.execute("SELECT 1 FROM projection_reviews WHERE forecast_id=? AND settlement_id=?",
                             (fid, cur.settlement_id)).fetchone():
                 continue
             a, d = _score_one(lcon, icon, fid, fc, offer, cur)
@@ -161,10 +167,25 @@ def _score_one(lcon, icon, fid, fc, offer, cur):
     pit = _pit(fc, cur.source_value, json.loads(r[1]) if r and r[1] else None, r[0] if r else None)
     p_side = fc.p_over if fc.chosen_side == "over" else fc.p_under
     lcon.execute("UPDATE scorecard SET superseded=1 WHERE forecast_id=?", (fid,))
-    lcon.execute("INSERT OR IGNORE INTO scorecard VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+    inserted = lcon.execute("INSERT OR IGNORE INTO scorecard VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
                  (fid, cur.settlement_id, fc.model_version, fc.league, fc.stat, fc.event_id, offer.platform,
                   fc.line, fc.chosen_side, p_side, fc.p_over, fc.p_under, fc.p_push, st_status, st_outcome,
-                  cur.source_value, pit, fc.forecast_at, cur.settled_at))
+                  cur.source_value, pit, fc.forecast_at, cur.settled_at)).rowcount
+    # A migration may revisit an already-scored immutable pair to fill the new
+    # projection review. Restore that pair as current after superseding others.
+    lcon.execute("UPDATE scorecard SET superseded=0 WHERE forecast_id=? AND settlement_id=?",
+                 (fid, cur.settlement_id))
+    from gradecore.projection_review import review
+    pr = None
+    if st_status in ('win', 'loss', 'push') and fc.projection_mean is not None and cur.source_value is not None:
+        try:
+            pr = review(fc.projection_mean, cur.source_value, fc.line)
+        except ValueError:
+            pass
+    lcon.execute("INSERT OR IGNORE INTO projection_reviews VALUES (?,?,?,?,?,?,?,?)",
+                 (fid,cur.settlement_id,fc.projection_mean,cur.source_value,
+                  pr['error'] if pr else None,pr['absolute_error'] if pr else None,
+                  pr['squared_error'] if pr else None,None if pr else 'not_a_scored_point_projection'))
     kinds = []
     if pit is not None and abs(pit - 0.5) >= 0.45:
         kinds.append(("large_miss", f"PIT {pit:.3f}, value {cur.source_value}, line {fc.line}"))
@@ -175,19 +196,27 @@ def _score_one(lcon, icon, fid, fc, offer, cur):
     for k, d in kinds:
         lcon.execute("INSERT OR IGNORE INTO diagnostics VALUES (?,?,?,?,?,0)", (fid, cur.settlement_id, k, d[:300],
                                                                                 now_utc()))
-    return 1, len(kinds)
+    return inserted, len(kinds)
 
 
 _group_key = itemgetter("model_version", "league", "stat")
 
 
 def _report_rows(con, table, model_version=None):
-    q = f"SELECT model_version, league, stat, event_id, p_side, p_push, status FROM {table} WHERE superseded = 0"
+    # Shadow tables may have no point estimate; their probability scoring stays
+    # unchanged. The champion scorecard gains projection diagnostics separately.
+    fields = "model_version, league, stat, event_id, p_side, p_push, status"
+    if table == 'scorecard':
+        q = (f"SELECT {fields},pr.error AS projection_error,pr.absolute_error AS projection_absolute_error,"
+             "pr.squared_error AS projection_squared_error FROM scorecard LEFT JOIN projection_reviews pr "
+             "ON pr.forecast_id=scorecard.forecast_id AND pr.settlement_id=scorecard.settlement_id WHERE superseded=0")
+    else:
+        q = f"SELECT {fields} FROM {table} WHERE superseded = 0"
     a = []
     if model_version:
         q += " AND model_version = ?"
         a.append(model_version)
-    cur = con.execute(q + " ORDER BY model_version, league, stat, rowid", a)
+    cur = con.execute(q + f" ORDER BY model_version, league, stat, {table}.rowid", a)
     names = [d[0] for d in cur.description]
     return (dict(zip(names, r)) for r in cur)
 
@@ -209,6 +238,13 @@ def _scorecard_groups(rows):
         row = {"model_version": mv, "league": lg, "stat": st, "settled": len(rs), "graded": len(graded),
                "games": len(set(games)), "pushes": sum(r["status"] == "push" for r in rs),
                "voids": sum(r["status"] == "void" for r in rs)}
+        projected = [r for r in rs if r.get('projection_error') is not None]
+        if projected:
+            row['projection'] = {'rows':len(projected),
+                'mae':float(np.mean([r['projection_absolute_error'] for r in projected])),
+                'rmse':float(np.sqrt(np.mean([r['projection_squared_error'] for r in projected]))),
+                'bias':evaluate.boot_mean(np.array([r['projection_error'] for r in projected]),
+                                         np.array([r['event_id'] for r in projected],dtype=object))}
         if len(graded):
             pc = np.clip(p, 1e-6, 1 - 1e-6)
             row["mean_p_chosen_given_no_push"] = float(p.mean())
