@@ -353,10 +353,10 @@ def default_jobs():
         # LIGHT still reserves its full cap against the common child budget.
         J[f"{sport}-history"] = dict(argv=_py("-m", "sports.expansion_history", sport), every_s=300,
             timeout_s=180, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=120, cls=LIGHT, prio=6,
-            locks=(f"{sport}-history",))
+            locks=(f"{sport}-history",), serial_group=f"expansion:{sport}")
         J[f"{sport}-learning"] = dict(argv=_py("-m", "sports.expansion_learning", sport), every_s=180,
             timeout_s=45, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=100, cls=HEAVY, prio=8,
-            locks=(f"{sport}-history",f"{sport}-learning"))
+            locks=(f"{sport}-history",f"{sport}-learning"), serial_group=f"expansion:{sport}")
     scale, two = cap_scale(), max_heavy() >= 2
     for name, spec in J.items():
         key = "SPORTS_JOB_" + name.upper().replace("-", "_")
@@ -620,6 +620,11 @@ class Scheduler:
 
     def _fits(self, name):
         spec = self.specs[name]
+        # Explicit cross-class serialization for isolated history writers and their
+        # learning readers. Existing jobs have no serial_group and are unchanged.
+        group = spec.get("serial_group")
+        if group and any(self.specs[n].get("serial_group") == group for n in self.running):
+            return False
         others = [n for n in self.running if not self._beside(self.specs[n])]
         if any(self.specs[n]["cls"] == EXCLUSIVE for n in self.running) and not self._beside(spec):
             return False
