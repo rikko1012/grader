@@ -53,10 +53,15 @@ claim to finish validated soccer/tennis grading, settlement or slip generation.
   to sports/tests preserves the existing isolation gate, which now passes.
 - The 700-member existing Sports load check: 5,600 requests, zero errors or busy
   responses; p95 1.196s, p99 2.179s on this Windows machine (not production).
+- New-board cold-snapshot test: 700 members, 1,400 requests against 1,800 offers
+  per sport; zero errors/retries, initial p99 1.060s, refresh p99 1.047s. Shared
+  encoding removed repeated per-member work; a refresh was 232 bytes, full gzip
+  response 19,450 bytes. Cache expires at the first quote expiry or game start.
 - Screenshots: `../outputs/soccer-tennis-ui-check/`; 1440px and 390px, current
   light/dark styling, real local HTTP handlers with synthetic member fixtures.
 - Fresh CI/full checks and production enablement are still pending. Render access
-  is now confirmed; no production setting or data has been changed yet.
+  is now confirmed; both new-sport flags have been saved on Sports with Save only,
+  pending the checked deployment. No collector has been enabled in a running build yet.
 
 ## Required before member grading / tracked settlement
 

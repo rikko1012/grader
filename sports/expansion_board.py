@@ -21,12 +21,58 @@ from . import expansion_offers as adapters
 MAX_AGE = 300
 SPORTS = ("soccer", "tennis")
 _SNAPSHOT_LOCK = threading.Lock()
+_PREPARED = {}  # At most two eligible, encoded boards; shared by concurrent members.
 
 
 @lru_cache(maxsize=2)
 def _read_snapshot(path, stamp, size):
     # At most one parsed snapshot per new sport, rather than per member request.
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+
+def _prepared(path, st, now, sport):
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    instant = now.timestamp()
+    with _SNAPSHOT_LOCK:
+        hit = _PREPARED.get(key)
+        if hit and hit['checked'] <= instant < hit['expires']:
+            return hit['data']
+        data = dict(_read_snapshot(*key))
+        built = parse_utc(data['built_at']).timestamp()
+        if not 0 <= instant - built <= MAX_AGE:
+            raise ValueError('prices_stale')
+        rows, deadlines = [], [built + MAX_AGE]
+        for row in data['offers']:
+            if row.get('sport') != sport:
+                continue
+            start = parse_utc(row['start']).timestamp()
+            observed = parse_utc(row['observed_at']).timestamp()
+            if start > instant and 0 <= instant-observed <= MAX_AGE:
+                rows.append(row)
+                deadlines.extend((start, observed+MAX_AGE))
+            elif observed > instant:
+                deadlines.append(observed)  # Never hide a future-dated sighting forever.
+        data['offers'] = rows
+        data['version'] = hashlib.sha256(json.dumps(sorted((r['platform'],r['offer_id'],r['revision'])
+            for r in rows),separators=(',',':')).encode()).hexdigest()
+        # Serialize once per snapshot/eligibility boundary, not per member.
+        encoded = json.dumps(data,separators=(',',':')).encode('utf-8')
+        _PREPARED.pop(key, None)
+        while len(_PREPARED) >= 2:
+            _PREPARED.pop(next(iter(_PREPARED)))
+        _PREPARED[key] = {'data':data, 'body':encoded, 'checked':instant, 'expires':min(deadlines)}
+        return data
+
+
+def http_board(req):
+    code, data = board(req)
+    if code == 200 and not data.get('unchanged'):
+        with _SNAPSHOT_LOCK:
+            body = next((v['body'] for v in _PREPARED.values() if v['data'] is data), None)
+        if body is not None:
+            return code, body, 'application/json'
+    return code, data
 
 
 def root(sport):
@@ -111,18 +157,8 @@ def board(req):
         st = path.stat()
         if st.st_size > 3_000_000:
             raise ValueError("oversize")
-        with _SNAPSHOT_LOCK:
-            data = dict(_read_snapshot(str(path), st.st_mtime_ns, st.st_size))
-        now = datetime.now(timezone.utc)
-        age = (now - parse_utc(data["built_at"])).total_seconds()
-        if age < 0 or age > MAX_AGE:
-            return 503, {"error": "prices_stale", "sport": sport, "last_checked": data["built_at"]}
-        data["offers"] = [r for r in data["offers"] if r.get("sport") == sport
-                          and parse_utc(r["start"]) > now
-                          and 0 <= (now - parse_utc(r["observed_at"])).total_seconds() <= MAX_AGE]
-        version = hashlib.sha256(json.dumps(sorted((r['platform'], r['offer_id'], r['revision'])
-                                  for r in data['offers']), separators=(',', ':')).encode()).hexdigest()
-        data['version'] = version
+        data = _prepared(path, st, datetime.now(timezone.utc), sport)
+        version = data['version']
         if req.query.get('version') == version:
             # A source-wide sighting only applies because collect() never carries
             # forward rows after a failed source fetch. Started/removed/changed

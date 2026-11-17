@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 import sqlite3
@@ -97,3 +98,29 @@ def test_unchanged_response_saves_bandwidth_but_never_hides_line_change(monkeypa
     board.save('soccer',[],{'prizepicks':{'ok':False,'checked_at':now}},now,tmp_path)
     _,removed=board.board(SimpleNamespace(query=query))
     assert 'unchanged' not in removed and removed['offers']==[]
+
+
+def test_shared_response_cache_expires_at_game_start_and_quote_expiry(monkeypatch,tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from sports.contracts import utc
+    base=datetime.now(timezone.utc).replace(microsecond=0)
+    class Clock(datetime):
+        current=base
+        @classmethod
+        def now(cls,tz=None):return cls.current
+    monkeypatch.setattr(board,'datetime',Clock)
+    monkeypatch.setenv('SCOUT_SOCCER_ENABLED','1')
+    monkeypatch.setattr(board,'root',lambda _:tmp_path)
+    body=pp();body['data'][0]['attributes']['start_time']=utc(base+timedelta(seconds=1))
+    first=offers.prizepicks(body,'soccer',utc(base))[0]
+    second={**first,'offer_id':'older','start':utc(base+timedelta(hours=2)),
+            'observed_at':utc(base-timedelta(seconds=299))}
+    board.save('soccer',[first,second],{},utc(base),tmp_path)
+    req=SimpleNamespace(query={'sport':'soccer'})
+    code,encoded,_=board.http_board(req)
+    assert code==200 and len(json.loads(encoded)['offers'])==2
+    assert board.http_board(req)[1] is encoded
+    Clock.current=base+timedelta(seconds=2)
+    assert json.loads(board.http_board(req)[1])['offers']==[]
+    Clock.current=base+timedelta(seconds=301)
+    assert board.http_board(req)[0]==503
