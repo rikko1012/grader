@@ -1,5 +1,12 @@
 # Upgrade checklist
 
+2026-11-17 expansion integration: soccer/tennis model estimates call the existing
+shared `policy.grade` without duplicating or changing its cuts/payout rules.
+Owner explicitly requested publication. Their independent forecast versions,
+evidence limits and forward review are documented in `sports/EXPANSION_GRADES.md`.
+Existing four-sport models/containment and the shadow residual challenger remain
+unchanged. This does not complete their calibration or integration checkboxes.
+
 Status of `1Time_Scout_Ultimate_Upgrade_Brief.md`. A box is ticked only with evidence.
 
 ## Phase 0

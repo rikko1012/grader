@@ -92,6 +92,26 @@ def test_existing_moneylines_keep_real_main_prices_and_draw(expansion, sport):
     if sport=='soccer': assert game['teams'][1]=='Draw'
 
 
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_saved_forecast_uses_existing_readable_board_and_card(ctx, env, expansion, size):
+    from sports.expansion_forecasts import make_forecast, offer_key
+    doc=expansion['soccer'];offer=doc['offers'][0];facts=doc['research'][adapter._key(offer)]
+    facts['event']={'event_id':facts['identity']['event_id'],'start':offer['start'],'status':'scheduled'}
+    forecast,reason=make_forecast(offer,facts,datetime.now(timezone.utc).isoformat())
+    assert reason is None and forecast['grade']
+    doc['forecasts']={offer_key(offer):forecast}
+    p=open_page(ctx,env,'/#scout/board?sport=soccer',size)
+    expect(p.locator('#hub-rows')).to_contain_text('Verified Player',timeout=30000)
+    p.locator('#hub-rows .h-player').first.click()
+    expect(p.locator('#hub-detail')).to_contain_text('Model estimate',timeout=20000)
+    expect(p.locator('#hub-detail')).to_contain_text(forecast['grade'])
+    expect(p.locator('#hub-detail')).to_contain_text('Opponent 0')
+    p.locator('#hub-detail [data-hub="card-tab"][data-id="stats"]').click()
+    expect(p.locator('#hub-detail')).to_contain_text('20 completed games')
+    expect(p.locator('#hub-detail')).to_contain_text('Minutes')
+    no_h_scroll(p)
+
+
 def test_old_page_redirects_to_main_board_and_private_routes_stay_gated(ctx, env, expansion):
     p = open_page(ctx, env, '/sports/expansion.html?sport=tennis')
     p.wait_for_url('**/#scout/board?sport=tennis')

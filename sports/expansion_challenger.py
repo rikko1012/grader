@@ -107,7 +107,8 @@ def collect(catalogs,get,persist,directory,offset):
     try:state=json.loads(path.read_text(encoding='utf-8'))
     except (OSError,ValueError):state={}
     try:
-        for a,b in [(today-timedelta(days=1),today+timedelta(days=2)),(today-timedelta(days=offset),)*2]:
+        for a,b in [(today-timedelta(days=1),today+timedelta(days=2)),
+                    (today-timedelta(days=min(90,offset+6)),today-timedelta(days=offset))]:
             data=get(BASE+'games/allscores/',{**PARAMS,'sports':3,'startDate':a.strftime('%d/%m/%Y'),'endDate':b.strftime('%d/%m/%Y')})
             for comp,feed in parse_games(data,now_utc()).items():persist(feed,comp)
         pending=[m for comp in ('atp_challenger','wta125') for m in catalogs.get(comp,{}).values()
