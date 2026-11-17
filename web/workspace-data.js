@@ -2,7 +2,7 @@
    page comes from /preview/workspace/api/*. A book a board sends beyond these is added from that board's own answer. */
 window.WORKSPACE_DATA = (function () {
   "use strict";
-  var SPORTS = { cs2: "CS2", lol: "LoL", nba: "NBA", nfl: "NFL" };
+  var SPORTS = { cs2: "CS2", lol: "LoL", nba: "NBA", nfl: "NFL", soccer: "Soccer", tennis: "Tennis" };
   var PLATFORMS = {
     prizepicks: { label: "PrizePicks", short: "PP", slip: true, kind: "modifier", types: [["power", "Power"], ["flex", "Flex"]] },
     underdog: { label: "Underdog", short: "UD", slip: true, kind: "multiplier", types: [["standard", "Standard"], ["flex", "Flex"]] }

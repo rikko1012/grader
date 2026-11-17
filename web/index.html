@@ -953,7 +953,9 @@ body.mode-matches .research-strip,body.mode-moneylines .research-strip,body.mode
       <button type="button" data-mlsport="cs2" aria-pressed="false">CS2</button>
       <button type="button" data-mlsport="lol" aria-pressed="false">LoL</button>
       <button type="button" data-mlsport="nba" aria-pressed="false">NBA</button>
-      <button type="button" data-mlsport="nfl" aria-pressed="false">NFL</button></div>
+      <button type="button" data-mlsport="nfl" aria-pressed="false">NFL</button>
+      <button type="button" data-mlsport="soccer" aria-pressed="false" hidden>Soccer</button>
+      <button type="button" data-mlsport="tennis" aria-pressed="false" hidden>Tennis</button></div>
       <label class="bchk" id="mlolderlabel"><input type="checkbox" id="mlolder"> Include older game odds</label></div>
     <div id="boardout"></div>
   </section>
@@ -2434,7 +2436,7 @@ const BK = {underdog: {rows: [], at: 0, ver: "", err: null, feed: null, loaded: 
 // rows shown for a view: one platform, or both (All Books - every row keeps its own platform label and line)
 // research tools state (declared up here: drawBoard reads it)
 let ML = {data: null, at: 0, err: null};                                     // Moneylines tab
-const winnerFeeds = {}, winnerNames = {lol: "LoL", nba: "NBA", nfl: "NFL"};
+const winnerFeeds = {}, winnerNames = {lol: "LoL", nba: "NBA", nfl: "NFL", soccer: "Soccer", tennis: "Tennis"};
 let winnerSport = "all", winnerLoading = false, winnerChecked = 0;
 $("#mlolder").addEventListener("change", () => drawMoneylines());
 $("#mlpicker").addEventListener("click", e => {
@@ -3423,11 +3425,12 @@ function drawMoneylines() {
 
 function winnerSection(league, term) {
   const doc = winnerFeeds[league], exchange = league === "lol";
-  const limit = exchange ? 600000 : 1800000, now = Date.now();
+  const expansion = ['soccer','tennis'].includes(league);
+  const limit = expansion ? 300000 : exchange ? 600000 : 1800000, now = Date.now();
   const fresh = t => { const age = now - Date.parse(t); return age >= -60000 && age <= limit; };
   const upcoming = (doc?.games || []).filter(g => Date.parse(g.start) > now);
   const current = g => fresh(doc.observed_at) && fresh(g.seen_at);
-  const showOlder = !exchange && $("#mlolder").checked;
+  const showOlder = !expansion && !exchange && $("#mlolder").checked;
   const games = upcoming.filter(g => current(g) || (showOlder && now >= Date.parse(g.seen_at) && now - Date.parse(g.seen_at) <= 86400000));
   const shown = games.filter(g => !term || [...g.teams, ...g.quotes.map(x => x.source)].some(s => fold(s).includes(term)));
   const empty = !doc ? "Loading prices…" : doc.error ? "Prices could not be refreshed. Try Refresh."
@@ -3437,12 +3440,12 @@ function winnerSection(league, term) {
   return `<section class="ml-division"><h3>${winnerNames[league]} <small>${exchange ? "Series winner" : "Full game"}${shown.length ? " · " + shown.length : ""}</small></h3>`
     + (shown.map(g => {
       const rows = g.quotes.map(q => ({
-        source: q.source, type: q.kind === "midpoint" ? "Exchange midpoint" : "American odds via ESPN",
+        source: q.source, type: q.description || (q.kind === "midpoint" ? "Exchange midpoint" : "American odds via ESPN"),
         age: (current(g) ? "Read " : "Older quote · read ") + ago(g.seen_at),
         values: q.prices.map(v => !Number.isFinite(v) ? null : q.kind === "midpoint" ? (100 * v).toFixed(1) + "%" : (v > 0 ? "+" : "") + v)
       }));
       const key = JSON.stringify([league, g.id || [g.teams,g.start]]);
-      return `<article class="ml-game" data-ml-game="${esc(key)}"><div class="ml-match-info"><h4 class="ml-fixture">${g.teams.map(esc).join(exchange ? " vs " : " at ")}</h4><time datetime="${esc(g.start)}">${when(g.start)}</time>${winnerPickHtml(g.pick,!current(g))}</div>${moneylineComparison(g.teams,rows)}</article>`;
+      return `<article class="ml-game" data-ml-game="${esc(key)}"><div class="ml-match-info"><h4 class="ml-fixture">${g.label?esc(g.label):g.teams.map(esc).join(exchange ? " vs " : " at ")}</h4><time datetime="${esc(g.start)}">${when(g.start)}</time>${winnerPickHtml(g.pick,!current(g))}</div>${moneylineComparison(g.teams,rows)}</article>`;
     }).join("") || `<p class="small muted">${empty}</p>`) + "</section>";
 }
 

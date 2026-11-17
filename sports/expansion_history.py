@@ -358,6 +358,8 @@ def collect(sport, max_requests=16, max_seconds=150):
     earliest = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat().replace('+00:00','Z')
     atomic_json(directory / 'current-matches.json',
                 [m for matches in catalogs.values() for m in matches.values() if (m.get('start') or '') >= earliest])
+    from .expansion_research import publish
+    counts['research'] = publish(sport, budget_s=15)
     counts['finished_at'] = now_utc()
     atomic_json(state_path, {**counts, 'offset': (offset % 90 + 1) if advanced else offset})
     return counts

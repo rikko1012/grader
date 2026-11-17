@@ -25,7 +25,7 @@
   const debounce = (fn, ms) => { let t = null; return (...a) => { clearTimeout(t); t = setTimeout(() => { t = null; fn(...a); }, ms); }; };
   const X_ICON = '<svg class="u-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
-  const SPORTS = { cs2: "CS2", lol: "LoL", nba: "NBA", nfl: "NFL" };
+  const SPORTS = { cs2: "CS2", lol: "LoL", nba: "NBA", nfl: "NFL", soccer: "Soccer", tennis: "Tennis" };
   const PLATFORMS = {
     prizepicks: { label: "PrizePicks", short: "PP", slip: true, kind: "modifier", types: [["power", "Power"], ["flex", "Flex"]] },
     underdog: { label: "Underdog", short: "UD", slip: true, kind: "multiplier", types: [["standard", "Standard"], ["flex", "Flex"]] }
@@ -146,7 +146,7 @@
           props.get(k).push(r);
         });
         props.forEach((l) => l.sort((a, b2) => a.offer.line - b2.offer.line));
-        Object.assign(b, { at: Date.now(), recs, props, keys, feeds: doc.feeds || {}, error: false });
+        Object.assign(b, { at: Date.now(), recs, props, keys, feeds: doc.feeds || {}, coverage: doc.coverage || null, error: false });
       } catch (e) { b.error = true; b.at = Date.now() - BOARD_KEEP + 10000; }     /* stale rows stay labelled, never silently current */
       b.busy = null;
       return b;
@@ -333,6 +333,7 @@
     if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
   }
   function addRefusal(rec, side) {
+    if (rec.research_only) return 'This prop has verified history; tracked slips need a released forecast and settlement rules.';
     if (started(rec)) return `${startWord(rec)} at ${when(rec.event.start_utc)}.`;
     if (!slipOffer(rec)) return `${rec.offer.platform_label} is shown for comparison. Slips cover PrizePicks and Underdog.`;
     if (oneSided(rec)) return oneSidedNote(rec);

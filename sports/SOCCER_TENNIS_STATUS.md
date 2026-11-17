@@ -1,4 +1,4 @@
-# Soccer / tennis release status — 2026-11-17
+# Soccer / tennis release status â€” 2026-11-17
 
 Branch: `codex/soccer-tennis-1117`, based on `a1b0a52`.
 This release adds isolated lines and verified historical research. It does not
@@ -99,9 +99,10 @@ Prospective learning and existing-sport review details: `EXPANSION_LEARNING.md`.
 
 On the existing Sports service: `SCOUT_SOCCER_ENABLED=1`,
 `SCOUT_TENNIS_ENABLED=1` register the corresponding quote/history jobs. On the
-existing esports web service the same flags expose nav links. Both default off.
-The new page is `/sports/expansion.html?sport=soccer` (or `tennis`) under existing
-Sports membership checks. Rollback is each flag off; saved records are preserved.
+existing esports web service the same flags expose the ordinary sport selectors. Both default off.
+Soccer and tennis use `/#scout/board?sport=soccer` (or `tennis`) in the main
+Scout interface, under existing Sports membership checks. Old expansion-page
+links redirect there. Rollback is each flag off; saved records are preserved.
 No paid resource change is needed or authorized by this release.
 
 ## Source rights / availability
@@ -131,3 +132,29 @@ The final pre-learning Sports suite passed 1,585 tests (34 skipped). Shared-core
 and new-learning checks passed 508 tests. The broader local esports suite passed
 4,680 and failed 23 old UI assertions; all 23 also failed on untouched main.
 These numbers do not replace final CI, current-tree checks or live verification.
+
+## Main-interface correction (2026-11-17)
+
+The separate member page was the wrong integration. Soccer and tennis now use
+the existing main board, player drawer, market/period filters, history charts
+and Stats tab. Only offers with a verified current-event/player identity and
+a saved exact-stat history appear in the default board. Coverage counts disclose
+how many current offers still await history. L5/L10/L20 use actual sample sizes;
+missing data never becomes a zero. Full-match soccer cards explicitly distinguish
+regulation-time historical statistics.
+
+History workers materialize a bounded research file in each isolated sport store.
+Member requests read that file over the existing private Sports connection;
+they never query providers or scan canonical databases. Stats include source-backed
+role/lineup context, recent exact-stat averages and tennis surface/format when
+present. History jobs now run every five minutes as bounded light jobs with the
+existing 120 MB cap and shared memory admission. Learning jobs remain isolated.
+
+Main sportsbook winner prices appear in the existing Moneylines tab. Soccer keeps
+all three outcomes including Draw. Alternates and stale prices are excluded from
+that feed. No artificial winner, model chance, grade or stake is supplied.
+
+New-sport forecast/settlement validation is still incomplete: they are excluded
+from generated/tracked slips and Public Record, not represented as validated
+grades. CS2/LoL/NBA/NFL continue their existing grading paths. No paid-resource
+changes are part of this correction.
