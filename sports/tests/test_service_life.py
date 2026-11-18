@@ -38,6 +38,18 @@ def test_watchdog_exit_record_is_named_on_the_next_boot(data_dir):
     assert len(service_life.recent(10)) == 2
 
 
+def test_exit_record_is_bounded_in_time_and_written_before_exit(data_dir, monkeypatch):
+    import threading, time
+    service._record_exit("rss_over_max", 401.0)
+    assert json.loads((data_dir / "service_life/last_exit.json").read_text())["reason"] == "rss_over_max"
+    gate = threading.Event()
+    monkeypatch.setattr(service, "_exit_detail", lambda mb: gate.wait(10) or {})   # a lock that never frees
+    t0 = time.time()
+    service._record_exit("rss_over_max", 401.0, wait_s=0.2)
+    assert time.time() - t0 < 2
+    gate.set()
+
+
 def test_records_never_raise_when_the_disk_write_fails(monkeypatch):
     monkeypatch.setattr(service_life, "_write", lambda *a: (_ for _ in ()).throw(OSError("disk full")))
     service_life.exit_record("rss_over_max", rss_mb=1)

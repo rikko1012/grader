@@ -227,6 +227,7 @@ def test_prizepicks_tennis_without_tour_resolves_exact_pair_only():
     assert history.resolve(offer, [m, dict(m, event_id='atp:365scores:atp_challenger:1:2',
                                             competition='atp_challenger')]) is None    # two answers: abstain
     assert history.resolve(dict(offer, opponent=None), [m]) is None
+    assert history.resolve(dict(offer, platform='underdog'), [m]) is None          # Underdog keeps its tour rule
 
 
 def test_board_fit_drops_only_hidden_prizepicks_variants_latest_first():

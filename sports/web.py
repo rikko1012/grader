@@ -175,10 +175,10 @@ def cached(key, fn, ttl=None):
         if hit and now - hit[0] < ttl:
             return hit[1]
         if stale and os.environ.get("SPORTS_PREBUILT_STALE_BUILD") != "1":
-            # 2026-11-18: the worker's slips_pool build was killed over its cap for hours; every member miss then
-            # built the same heavy answer INSIDE the 400 MB service (the likely restart culprit). A stale snapshot
-            # means the worker is behind: answer 503 sports_busy instead of building it here. No snapshot at all
-            # (fresh deploy, tests) still builds.
+            # 2026-11-18: the worker's slips_pool build was killed over its cap for hours; any member miss then
+            # built the same heavy answer INSIDE the 400 MB service (one possible cause of the 16:09 restart; not
+            # proven). A stale snapshot means the worker is behind: answer 503 sports_busy instead of building it
+            # here. No snapshot at all (fresh deploy, tests) still builds. SPORTS_PREBUILT_STALE_BUILD=1 = old way.
             STALE_REFUSED["n"] += 1
             raise Busy("prebuilt snapshot is being rebuilt")
         flight = _FLIGHTS.get(key)

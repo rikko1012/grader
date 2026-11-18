@@ -686,6 +686,25 @@ def _exit_detail(mb):
     return d
 
 
+def _record_exit(reason, mb=None, wait_s=3.0):
+    """Write the exit record from a daemon thread and wait at most wait_s: a lock held by a request thread or a slow
+    disk never stops the process from exiting."""
+    t = threading.Thread(target=lambda: service_life.exit_record(reason, **_exit_detail(mb if mb is not None else rss_mb())),
+                         daemon=True, name="sports-exit-record")
+    t.start()
+    t.join(wait_s)
+
+
+def _on_sigterm(signum, frame):
+    """Render stops (deploys, restarts it starts) arrive as SIGTERM: record them so the next boot can tell them from an
+    OOM kill / crash ("unclean"), then terminate exactly as before."""
+    import signal
+    _STATE["draining"] = True
+    _record_exit("sigterm", wait_s=2.0)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
 def _watchdog(srv, every=5.0):
     last_trim = 0.0
     while True:
@@ -698,8 +717,8 @@ def _watchdog(srv, every=5.0):
                 mb = rss_mb()
         if mb and mb > MAX_MB and not _STATE["draining"]:
             sys.stderr.write(f"sports service rss {mb:.0f} MB > {MAX_MB} MB: draining for a restart\n")
-            service_life.exit_record("rss_over_max", **_exit_detail(mb))
-            _STATE["draining"] = True
+            _STATE["draining"] = True                   # stop taking work first; the record can never delay the exit
+            _record_exit("rss_over_max", mb)
             deadline = time.time() + 20
             while STATS["inflight"] > 0 and time.time() < deadline:
                 time.sleep(0.2)
@@ -737,6 +756,11 @@ def serve(host="0.0.0.0", port=None):
     boot = service_life.boot(VERSION)                   # names the previous exit (or "unclean") on disk + in ops
     if boot and boot.get("previous_exit") == "unclean":
         sys.stderr.write("sports service: previous run ended without an exit record (OOM kill / crash / host restart)\n")
+    try:
+        import signal
+        signal.signal(signal.SIGTERM, _on_sigterm)
+    except (ValueError, AttributeError, OSError):          # not the main thread / platform without it: no record
+        pass
     threading.Thread(target=_watchdog, args=(srv,), daemon=True, name="sports-watchdog").start()
     supervise()
     print(f"scout sports service {VERSION} on {host}:{srv.server_address[1]} (threads {THREADS}, db pool "

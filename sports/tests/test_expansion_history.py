@@ -249,6 +249,18 @@ def test_live_window_starts_yesterday(monkeypatch, tmp_path):
     assert calls[0]['dates'] == f'{today-timedelta(days=1):%Y%m%d}-{today+timedelta(days=2):%Y%m%d}'
 
 
+def test_a_full_store_that_stores_nothing_exits_1(monkeypatch, tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED', '1')
+    monkeypatch.setenv('SCOUT_EXPANSION_HISTORY_MB', '16')
+    _fill(tmp_path / 'tennis/old/canonical.db', 30)
+    monkeypatch.setattr(history.net, 'get_json', lambda url, **kw: scoreboard() if 'espn' in url else {'games': []})
+    monkeypatch.setattr('sys.argv', ['x', 'tennis'])
+    with pytest.raises(SystemExit) as e:
+        history.main()
+    assert e.value.code == 1
+
+
 def test_every_request_failing_still_exits_1(monkeypatch, tmp_path):
     monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('SCOUT_TENNIS_ENABLED', '1')

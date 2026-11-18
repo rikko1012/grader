@@ -118,8 +118,8 @@ def resolve(offer, matches):
         if not match.get('start') or abs((parse_utc(match['start']) - parse_utc(offer['start'])).total_seconds()) > 7200:
             continue
         if offer['sport'] == 'tennis':
-            if offer.get('tour') is None and 'tour' in offer:
-                # No tour from the book (PrizePicks): any tennis store, still exact pair + start + unique answer.
+            if offer.get('platform') == 'prizepicks' and offer.get('tour') is None and 'tour' in offer:
+                # No tour from PrizePicks: any tennis store, still exact pair + start + unique answer.
                 if not offer.get('opponent'):
                     continue
             else:
@@ -546,9 +546,9 @@ def main():
         raise SystemExit('sport disabled')
     result = collect(args.sport)
     print(json.dumps(result))
-    # Failure means no provider answered at all (outage / persisted hold). A partial run that fetched and stored
-    # live results is a success; its per-source errors stay in the printed result and history-state.json.
-    if result['errors'] and not result['ok_requests']:
+    # Failure = nothing stored while something went wrong (outage / persisted hold / every write failed / store
+    # full). A run that stored results is a success; its per-source errors stay in the output and history-state.json.
+    if not result['records'] and (result['errors'] or result['storage'] == 'full'):
         raise SystemExit(1)
 
 
