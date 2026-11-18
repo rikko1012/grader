@@ -322,6 +322,34 @@ def test_a_polymarket_failure_costs_only_its_own_rows(tennis_store,monkeypatch):
     assert snap['sources']['prizepicks']['ok']
 
 
+def test_reference_steps_are_skipped_when_line_sources_used_the_runs_time(tennis_store,monkeypatch):
+    from sports import expansion_odds
+    seen=_quotes_job(monkeypatch)
+    clock=[5000.0]
+    monkeypatch.setattr(boards.time,'monotonic',lambda:clock[0])
+    def slow(sport,get,directory):
+        clock[0]+=boards.REFERENCE_START_BY_S-1;return [],{'betrivers':{'ok':True}}
+    monkeypatch.setattr(expansion_odds,'collect',slow)
+    snap=boards.collect('tennis')                             # 39 s of lines: both steps still run
+    assert seen==[('kalshi','tennis'),('polymarket','tennis')] and len(snap['reference_prices'])==2
+    def slower(sport,get,directory):
+        clock[0]+=boards.REFERENCE_START_BY_S+1;return [],{'betrivers':{'ok':True}}
+    monkeypatch.setattr(expansion_odds,'collect',slower)
+    seen.clear();snap=boards.collect('tennis')
+    assert seen==[] and snap['reference_prices']==[] and snap['sources']['betrivers']['ok']
+    for name in ('kalshi','polymarket'):
+        assert snap['sources'][name]=={**snap['sources'][name],'ok':False,'reference':True,'error':'no_time'}
+    # Kalshi itself taking the time leaves Polymarket for the next run; the worst case stays inside the 90 s timeout.
+    from sports import expansion_kalshi
+    def long_kalshi(sport,get,directory):
+        clock[0]+=15;return [],{'ok':True,'reference':True,'markets':0}
+    monkeypatch.setattr(expansion_kalshi,'collect',long_kalshi)
+    monkeypatch.setattr(expansion_odds,'collect',lambda sport,get,directory:(clock.__setitem__(0,clock[0]+30) or [],{}))
+    snap=boards.collect('tennis')
+    assert snap['sources']['kalshi']['ok'] and snap['sources']['polymarket']['error']=='no_time'
+    assert boards.REFERENCE_START_BY_S+21<90
+
+
 @pytest.mark.parametrize('status',[429,403,500])
 def test_a_polymarket_refusal_is_one_request_and_keeps_every_other_row(tennis_store,monkeypatch,status):
     from sports import expansion_kalshi, expansion_odds, expansion_polymarket, expansion_sources, net

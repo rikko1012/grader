@@ -13,12 +13,14 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import threading
+import time
 from functools import lru_cache
 
 from .contracts import now_utc, parse_utc, utc
 from . import expansion_offers as adapters
 
 MAX_AGE = 300
+REFERENCE_START_BY_S = 40  # a reference step never starts later than this into a run (the job is killed at 90 s)
 REFERENCE_KEEP_DAYS = 14   # quotes.db history of exchange reference prices (`ref:` rows); fixtures are at most 8 days out
 SPORTS = ("soccer", "tennis")
 _SNAPSHOT_LOCK = threading.Lock()
@@ -238,6 +240,7 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None, refe
 def collect(sport):
     from . import net
     from .expansion_sources import get_json
+    started = time.monotonic()
     rows, sources = [], {}
     pp = lambda league: ("https://partner-api.prizepicks.com/projections",
                          {"league_id": league, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
@@ -283,6 +286,11 @@ def collect(sport):
         if not module.switched_on(sport):
             continue
         reference = reference or []
+        if time.monotonic() - started > REFERENCE_START_BY_S:
+            # Slow line sources used the run's time. A reference step can take 15 s (Kalshi) or 21 s (Polymarket),
+            # and a job killed at its 90 s timeout stores nothing: the lines are saved, the reference waits a run.
+            sources[name] = {'ok': False, 'reference': True, 'checked_at': now_utc(), 'error': 'no_time'}
+            continue
         try:
             found, sources[name] = module.collect(
                 sport, lambda url, limit=module.MAX_BYTES, **kw: get_limited(sport, url, limit, **kw), directory)
