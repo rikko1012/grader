@@ -133,6 +133,9 @@ PLACEHOLDER = (b"<!doctype html><meta charset=utf-8><meta name=viewport content=
                b"<p>Sports is being built and is not available yet.</p></body>")
 
 
+STALE_REFUSED = {"n": 0}                                # members answered 503 instead of an in-service heavy build
+
+
 class Busy(RuntimeError):
     """The bounded store pool (or a single-flight wait) is saturated: answered 503 sports_busy, never queued forever."""
 
@@ -159,16 +162,25 @@ def cached(key, fn, ttl=None):
     the load and the rest wait (at most REQUEST_BUDGET_S) for its answer (measured 2026-10-23: without it, 466
     simultaneous misses ran 466 store queries and pushed the web process to 271 MB). Bounded to CACHE_MAX entries."""
     ttl = CACHE_S if ttl is None else ttl
+    stale = False
     if isinstance(key, tuple) and key and key[0] in SNAPSHOTS:
         from . import prebuilt
-        val = prebuilt.lookup(key)
+        val, why = prebuilt.lookup_why(key)
         if val is not prebuilt.MISS:
             return val
+        stale = why == "stale"
     now = time.time()
     with _LOCK:
         hit = _CACHE.get(key)
         if hit and now - hit[0] < ttl:
             return hit[1]
+        if stale and os.environ.get("SPORTS_PREBUILT_STALE_BUILD") != "1":
+            # 2026-11-18: the worker's slips_pool build was killed over its cap for hours; every member miss then
+            # built the same heavy answer INSIDE the 400 MB service (the likely restart culprit). A stale snapshot
+            # means the worker is behind: answer 503 sports_busy instead of building it here. No snapshot at all
+            # (fresh deploy, tests) still builds.
+            STALE_REFUSED["n"] += 1
+            raise Busy("prebuilt snapshot is being rebuilt")
         flight = _FLIGHTS.get(key)
         leader = flight is None
         if leader:
@@ -298,7 +310,8 @@ def pool_stats():
 
 def cache_stats():
     with _LOCK:
-        return {"entries": len(_CACHE), "max": CACHE_MAX, "in_flight": len(_FLIGHTS), "ttl_s": CACHE_S}
+        return {"entries": len(_CACHE), "max": CACHE_MAX, "in_flight": len(_FLIGHTS), "ttl_s": CACHE_S,
+                "stale_snapshot_refused": STALE_REFUSED["n"]}
 
 
 # ------------------------------------------------------------------------------------------------- built-in routes

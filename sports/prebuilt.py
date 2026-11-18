@@ -159,23 +159,29 @@ def index(name):
 
 def lookup(key):
     """web.cached's first step: the prebuilt value for this cache key, or MISS."""
+    return lookup_why(key)[0]
+
+
+def lookup_why(key):
+    """-> (value or MISS, why): why is None on a hit, "stale" when a valid signed snapshot exists but is older than
+    its max age (the worker is failing to rebuild it), else "miss"."""
     if not isinstance(key, tuple) or not key:
-        return MISS
+        return MISS, "miss"
     entry = _table().get(key[0])
     if entry is None:
-        return MISS
+        return MISS, "miss"
     o = _read_tagged(_key_file(key[0], key))
     if o is None or o.get("key") != key:
         with _LOCK:
             STATS["misses"] += 1
-        return MISS
+        return MISS, "miss"
     if time.time() - o["built_at"] > entry[2]:
         with _LOCK:
             STATS["stale"] += 1
-        return MISS
+        return MISS, "stale"
     with _LOCK:
         STATS["hits"] += 1
-    return o["value"]
+    return o["value"], None
 
 
 def state():

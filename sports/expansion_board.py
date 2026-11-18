@@ -74,14 +74,49 @@ def _prepared(path, st, now, sport):
         return data
 
 
+_RESEARCH_BODIES = {}  # (sport, board version/built_at, research.json + forecasts.json signatures) -> encoded answer
+
+
+def _signature(path):
+    try:
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (0, 0)
+
+
+def research_body(sport, data):
+    """The research=1 answer encoded ONCE per board / research / forecast file version and shared by every caller
+    (2026-11-18: it was rebuilt and json-encoded inside the service on every request). Bytes are identical to the
+    former per-request encoding (web._json: json.dumps(obj, default=str))."""
+    from .expansion_research import attach
+    directory = root(sport)
+    key = (sport, data.get('version'), data.get('built_at'), _signature(directory / 'research.json'),
+           _signature(directory / 'forecasts.json'))
+    instant = datetime.now(timezone.utc).timestamp()
+    with _SNAPSHOT_LOCK:
+        hit = _RESEARCH_BODIES.get(key)
+        if hit and instant < hit['expires']:
+            return hit['body']
+        expires = next((v['expires'] for v in _PREPARED.values() if v['data'] is data), instant + 30)
+    body = json.dumps(attach(sport, data), default=str).encode('utf-8')
+    with _SNAPSHOT_LOCK:
+        _RESEARCH_BODIES.pop(key, None)
+        while len(_RESEARCH_BODIES) >= 2:
+            _RESEARCH_BODIES.pop(next(iter(_RESEARCH_BODIES)))
+        _RESEARCH_BODIES[key] = {'body': body, 'expires': expires}
+    return body
+
+
 def http_board(req):
     if req.query.get('research') == '1':
         from types import SimpleNamespace
         # Research has its own publication clock. A quote-only version must not
         # suppress new history, nor make attach() consume an unchanged envelope.
         code, data = board(SimpleNamespace(query={k:v for k,v in req.query.items() if k != 'version'}))
-        from .expansion_research import attach
-        return (code, attach(req.query.get('sport', 'soccer'), data)) if code == 200 else (code, data)
+        if code != 200:
+            return code, data
+        return code, research_body(req.query.get('sport', 'soccer'), data), 'application/json'
     code, data = board(req)
     if code == 200 and not data.get('unchanged'):
         with _SNAPSHOT_LOCK:

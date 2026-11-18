@@ -39,7 +39,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import authtoken, flags, web
+from . import authtoken, flags, service_life, web
 
 VERSION = "svc-1"
 
@@ -61,6 +61,8 @@ STATS = {"requests": 0, "errors_5xx": 0, "rejected_busy": 0, "unauthorized": 0, 
          "inflight": 0, "peak_inflight": 0, "ms_total": 0.0, "started": time.time()}
 _SLOCK = threading.Lock()
 _STATE = {"draining": False}
+_PATHS = {}                                             # thread id -> path being served (named in the exit record)
+TRIM_FRAC = 0.8                                         # malloc_trim when RSS passes this share of MAX_MB (<= 1/min)
 BUSY_RESPONSE = (b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 23\r\n"
                  b"Retry-After: 2\r\nConnection: close\r\n\r\n{\"error\":\"sports_busy\"}")
 
@@ -434,7 +436,8 @@ def ops():
             "grades_daily": settle_stages("model/daily_state.json"),
             "expansion_learning": expansion_learning_status(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
-            "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
+            "encoding": dict(ENC_STATS, cached_bodies=len(_ENC)),
+            "restarts": service_life.recent(10), "cgroup": service_life.cgroup()}
 
 
 def ops_with_alerts():
@@ -527,10 +530,18 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(204, b"", "text/plain", cors)
 
     def do_GET(self):
-        self._serve("GET")
+        _PATHS[threading.get_ident()] = "GET " + self.path.split("?")[0][:120]
+        try:
+            self._serve("GET")
+        finally:
+            _PATHS.pop(threading.get_ident(), None)
 
     def do_POST(self):
-        self._serve("POST")
+        _PATHS[threading.get_ident()] = "POST " + self.path.split("?")[0][:120]
+        try:
+            self._serve("POST")
+        finally:
+            _PATHS.pop(threading.get_ident(), None)
 
     def _serve(self, method):
         self._t0 = time.time()
@@ -655,12 +666,39 @@ class Server(ThreadingHTTPServer):
 
 
 # ------------------------------------------------------------------------------------------- memory watchdog
+def _exit_detail(mb):
+    """What the service held when the watchdog fired (every part optional; never raises)."""
+    d = {"rss_mb": round(mb or 0, 1), "max_mb": MAX_MB, "inflight": STATS.get("inflight"),
+         "serving": sorted(_PATHS.values())[:40]}
+    for name, fn in (("web_cache", web.cache_stats), ("encoded_bodies", lambda: len(_ENC)),
+                     ("encoded_bytes", lambda: sum(len(v) for v in list(_ENC.values()))),
+                     ("children", lambda: {k: v.get("rss_mb") for k, v in (scheduler_state().get("jobs") or {}).items()
+                                           if v.get("pid")})):
+        try:
+            d[name] = fn()
+        except Exception:                               # noqa: BLE001
+            d[name] = None
+    try:
+        from . import expansion_board
+        d["expansion_prepared"] = len(expansion_board._PREPARED)
+    except Exception:                                   # noqa: BLE001
+        pass
+    return d
+
+
 def _watchdog(srv, every=5.0):
+    last_trim = 0.0
     while True:
         time.sleep(every)
         mb = rss_mb()
+        service_life.sample(mb)
+        if mb and mb > TRIM_FRAC * MAX_MB and time.time() - last_trim >= 60:
+            last_trim = time.time()                     # freed heap back to the OS before deciding to restart
+            if service_life.trim():
+                mb = rss_mb()
         if mb and mb > MAX_MB and not _STATE["draining"]:
             sys.stderr.write(f"sports service rss {mb:.0f} MB > {MAX_MB} MB: draining for a restart\n")
+            service_life.exit_record("rss_over_max", **_exit_detail(mb))
             _STATE["draining"] = True
             deadline = time.time() + 20
             while STATS["inflight"] > 0 and time.time() < deadline:
@@ -696,6 +734,9 @@ def supervise(stop=None, jobs=None):
 def serve(host="0.0.0.0", port=None):
     port = int(port or os.environ.get("PORT", "10000"))
     srv = Server((host, port))
+    boot = service_life.boot(VERSION)                   # names the previous exit (or "unclean") on disk + in ops
+    if boot and boot.get("previous_exit") == "unclean":
+        sys.stderr.write("sports service: previous run ended without an exit record (OOM kill / crash / host restart)\n")
     threading.Thread(target=_watchdog, args=(srv,), daemon=True, name="sports-watchdog").start()
     supervise()
     print(f"scout sports service {VERSION} on {host}:{srv.server_address[1]} (threads {THREADS}, db pool "
