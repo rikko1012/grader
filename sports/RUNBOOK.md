@@ -230,6 +230,17 @@ Rules now (scheduling only; no grade, chance, stake, projection or settlement ch
   waiting on the archive's canonical lock held the free slot for the archive's whole run (c31637d too).
 - settle is urgent after 15 min overdue on Standard; any other non-exclusive job overdue past `SPORTS_JOB_STARVE_S`
   (3,600 s) counts as urgent and ages from then on, so it takes a turn between the board builds.
+- heavy-1118 (live 2026-11-18, c7e7114): 36 min after a deploy archive / settle-post / history / player-context /
+  Kalshi / archive-verify had 0 starts. All share a store lock (canonical / model-daily / games) with settle or the
+  collectors, and on live run times that lane is oversubscribed (replayed with `sched_sim.LIVE_1118_RUN_S`: both heavy
+  slots or the exclusive model-forward busy ~94% of the time). The archive lost every tie to history (same prio, same
+  boot tick) and waited for the 1-h rule (76-92 min after boot); deploys came sooner, so its pass never ran. The archive
+  now counts as starved after `starve_after_s` 1,800 s (first start 34-39 min in the replays); history / player-context
+  / Kalshi start later after a deploy instead. prebuilt every 600 s (was 45 s at a 362-419 s run), pool max age
+  1,200 s. The replays' prebuilt gap is still 20-40 min (the model-forward drain + run), so the pool is stale part of
+  each such cycle (503 on the /sports slips page, SPORTS_UI off). At 22:40 one heavy slot sat empty: settle's 600 MB
+  (a Render env override; the table gives 432) + books left no room for a board build (540), which was held - with 432
+  it starts (`test_sports_heavy_1118.py`).
 - settle-post never starts while settle is due (`yields_to`), and `--budget-s` (`SPORTS_SETTLE_POST_BUDGET_S`, 600 s)
   stops its scorecards between events (per-event marks keep the progress; shadow's closing mark is not advanced), then
   the ledger runs; timeout 1,500 s. Its first production run held model-daily - and so settle - for the whole 2,400 s
@@ -262,7 +273,7 @@ filling in (and `DATA_DIR/scheduler_runs.json` present after the first heavy exi
 
 **Standard cadences (code defaults when the plan is >= 1.5 GB, 2026-10-25; Starter in brackets):** collector per
 league 3 / 5 / 10 min near tip / game day / otherwise [5 / 10 / 15]; Kalshi 10 / 30 min [20 / 60]; board build per
-league every 60 s and right after each collector cycle [180 s]; slip pool 45 s [90 s]; settle, settle-post (results
+league every 60 s and right after each collector cycle [180 s]; slip pool 600 s [600 s] (heavy-1118); settle, settle-post (results
 ledger + scorecards, scorecards bounded by --budget-s 600 s), picks-settle, slips-settle every 15 min [60 min]; results-public 30 min. Model-forward stays 30 min (exclusive: on 1 CPU a 15-min cycle
 would pause every other job ~20% of the time). The board build runs beside the OTHER league's collector, so pages keep
 updating while lines are collected.
@@ -295,7 +306,7 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | Job | Command | Every (Starter) | Class | Cap MB | Measured peak MB | Flag |
 |---|---|---|---|---|---|---|
 | assistant | `sports.assistant.runner --once` | on demand (a queued question, checked every 2 s) | light | 120 | not measurable here (no SDK / key) | SPORTS_ASSISTANT |
-| prebuilt | `sports.service snapshots` (slip pool) | 90 s | heavy | 160 | 105-109 | SPORTS_API |
+| prebuilt | `sports.service snapshots` (slip pool) | 600 s (heavy-1118: 362-419 s a run live after c7e7114) | heavy | 160 | 105-117 | SPORTS_API |
 | ui-snapshots-nba / ui-snapshots-nfl | `sports.snapshots build <league> --no-results` (one process per league; slate games only, 2026-10-24) | 180 s AND right after every collector cycle of that league | heavy | 300 | live read 2026-10-25: NBA 90, NFL 137 (both in one process 152; prod both 251-265 = killed at 250). Stage RSS in manifest build_rss_mb, seconds in build_stage_s + service log "snapshots stage". Timeout 420 s on Standard. Overdue 300 s = urgent: goes first and later jobs may not take its slot (2026-10-31) | SPORTS_INGEST |
 | slips-ingest | `sports.slips ingest` | 5 min | light | 60 | 23 | SPORTS_INGEST |
 | books | `sports.worker books nba nfl` (FanDuel / BetRivers own feeds + OddsPapi when its guard allows; 2026-11-06 book-cadence). Each run first checks books.db (`books.worker.pending`, no request) and exits in ~1 s unless a game list, a game on the **direct** ladder (3 / 5 / 8 / 8 min inside 2 / 8 / 24 / 72 h of the start, then 12 h inside 7 days; the 24-72 h rung was 3 h until the 2026-11-06 site audit N1) or a blocked-book probe is due; then the ESPN resolver (shared caches) and one `run_once` pass. Store cap / `SPORTS_DISK_FREE_FLOOR_MB` checked before any write (exit 3 when paused). `SPORTS_BOOKS_JOB=0` = rollback (books back inside ingest-<league>) | every 60 s when a league is hot or has a game within 72 h (SPORTS_BOOKS_GAMEDAY_H, site audit N1), 180 s otherwise (SPORTS_BOOKS_HOT_S / _GAMEDAY_S / _IDLE_S) | light | 60 | 46 local, full 17-game NBA slate at real volume (28.6k side quotes, fake feeds); due check 35 MB / 0.6 s | SPORTS_INGEST |
@@ -343,7 +354,7 @@ Heavy shared answers are registered in `web.SNAPSHOTS` and built by the `prebuil
 prebuilt value (HMAC-tagged pickle, ONE FILE PER KEY under `<SPORTS_DATA_DIR>/prebuilt/<name>/`, key derived from
 SPORTS_TOKEN_SECRET; the service loads only the keys members ask for) and only falls back to a request-time build on
 a miss (counted in `/api/sports/admin/ops` -> `prebuilt.stats`). The slips leg pool is the first entry (served when at
-most 270 s old).
+most 1,200 s old; rebuilt every 600 s - heavy-1118).
 
 ## 6. The Render service (owner created `scout-sports-api` on 2026-10-24 - apply these settings by hand)
 
@@ -373,7 +384,7 @@ esports-only (auto-synced - a service declared there would be created and billed
 flags `SPORTS_UI=0`, `SPORTS_API=0`):
 
 1. scout-sports-api `SPORTS_INGEST=1` and `SPORTS_API=1` -> Save (restart). The scheduler starts the jobs whose flags
-   are on: collector every 15 min, Kalshi hourly, settle hourly, UI snapshots every 3 min, prebuilt every 90 s,
+   are on: collector every 15 min, Kalshi hourly, settle hourly, UI snapshots every 3 min, prebuilt every 600 s,
    history daily, archive every 6 h (it has nothing to do until offers are 72 h old). `SPORTS_TRAIN` stays `0` (no
    model forecasts on staging unless the coordinator asks; then see 13.1 - forecast / fit run exclusive).
 2. About 20 min after the deploy, from a checkout of the deployed commit:
@@ -635,7 +646,7 @@ Freshness changes members would see on Starter (all in deploy/render.sports-api.
 | pick'em / book / Polymarket lines collected | every 10 min | every 15 min |
 | Kalshi prices collected | every 30 min | every 60 min |
 | member board / slate / player pages rebuilt | every 60 s | every 3 min |
-| slip leg pool rebuilt (served when <= 270 s old) | every 45 s (<= 90 s) | every 90 s |
+| slip leg pool rebuilt (served when <= 1,200 s old) | every 600 s | every 600 s |
 | assistant answer start | immediate | waits for a running collector cycle (~2-3 min) or forecast run (~30-45 s) |
 | model forecasts (SPORTS_TRAIN=1) | - | hourly, exclusive |
 | a burst of 700 simultaneous sports requests | p99 ~0.3 s (16 local cores) | p99 ~2 s on one local core; slower on 0.5 CPU |

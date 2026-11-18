@@ -43,7 +43,7 @@ def _overlap(iv, a, b):
 
 @pytest.fixture(scope="module")
 def six_hours():
-    res = sim.simulate(scheduler, hours=6.0)
+    res = sim.simulate(scheduler, hours=6.0, run_s=sim.NOV9_RUN_S)        # the incident's run times (prebuilt 59 s)
     print("\n" + sim.summary(res))
     return res
 
@@ -59,7 +59,10 @@ def test_the_old_rules_reproduce_the_stall(monkeypatch):
         sp.pop("yields_to")
         sp["argv"] = sp["argv"][:sp["argv"].index("--budget-s")]
         sp["timeout_s"] = 2400
-    res = sim.simulate(scheduler, hours=1.2, env={"SPORTS_JOB_EXCL_DRAIN_S": "0", "SPORTS_JOB_STARVE_S": "0"},
+        J["prebuilt"]["every_s"] = 45.0                     # heavy-1118 changed these two; c31637d had neither
+        J["archive"].pop("starve_after_s", None)
+    res = sim.simulate(scheduler, hours=1.2, run_s=sim.NOV9_RUN_S,
+                       env={"SPORTS_JOB_EXCL_DRAIN_S": "0", "SPORTS_JOB_STARVE_S": "0"},
                        jobs_hook=c31637d)
     assert len(res["starts"]["settle-post"]) == 1                          # one long first run (live: 2,400 s kill)
     assert res["starts"].get("model-forward", []) == []                     # queued from boot, never started
@@ -113,7 +116,8 @@ def test_nothing_starves_and_the_earlier_fixes_hold(six_hours):
         assert r["starts"].get(n), n                                        # every enabled job ran at least once
     for n in ("sheets", "results-public", "mapping-audit", "archive", "history", "player-context", "grades-daily"):
         assert r["waits"][n] <= 100 * 60, (n, r["waits"][n])               # bounded (live: 0 starts / 4 h)
-    assert len(r["starts"]["prebuilt"]) >= 25
+    # heavy-1118: prebuilt every 600 s (was 45 s): ~18-36 runs in 6 h; at 45 s this replay gave 25+
+    assert len(r["starts"]["prebuilt"]) >= 18
     assert "--skip-results" in r["specs"]["sheets"]["argv"]
     assert r["specs"]["settle"]["then"] == ("settle-post",) and "--no-post" in r["specs"]["settle"]["argv"]
 
@@ -121,8 +125,12 @@ def test_nothing_starves_and_the_earlier_fixes_hold(six_hours):
 # --------------------------------------------------------------- review 2026-11-09: what the drain costs the boards
 # c31637d on the same replay (seed 1108, 6 h): longest start-to-start gap in minutes. scripts/sim_sports_scheduler.py
 # --ref c31637d --seeds 8 prints the medians over 8 jitter seeds (RUNBOOK "Bounded waits").
-C31637D_GAP = {"ok": {"ui-snapshots-nba": 25.8, "ui-snapshots-nfl": 21.8, "prebuilt": 17.2},
-               "long": {"ui-snapshots-nba": 35.8, "ui-snapshots-nfl": 30.4, "prebuilt": 30.4}}
+C31637D_GAP = {"ok": {"ui-snapshots-nba": 25.8, "ui-snapshots-nfl": 21.8},
+               "long": {"ui-snapshots-nba": 35.8, "ui-snapshots-nfl": 30.4}}
+# heavy-1118: prebuilt every 600 s (was 45 s: 17.2 / 30.4 here against a 270 s max age; now a 1,200 s max age):
+# measured 21.8 / 29.8 on this replay (seed 1108). The longest gap is set by model-forward (its drain + run stop every
+# heavy start), not by the cadence. Bounded at the measured value + ~1 min so a further slide fails.
+PREBUILT_GAP = {"ok": 23.0, "long": 31.0}
 # the collectors (canonical lock) pay for settle / history / archive now running and one model-forward drain per run:
 # bounded here at the measured value + ~2 min so a further slide fails (c31637d: 25.8 ok / 35.8 long)
 COLLECTOR_GAP = {"ok": 34.0, "long": 54.0}
@@ -131,7 +139,7 @@ LONG_RUN_S = {"settle-post": 900, "grades-daily": 1200, "archive": 1500}
 
 @pytest.fixture(scope="module", params=["ok", "long"])
 def replay(request):
-    kw = {"run_s": LONG_RUN_S} if request.param == "long" else {}
+    kw = {"run_s": dict(sim.NOV9_RUN_S, **(LONG_RUN_S if request.param == "long" else {}))}
     return request.param, sim.simulate(scheduler, hours=6.0, probe=True, **kw)
 
 
@@ -146,6 +154,7 @@ def test_board_builds_and_prebuilt_keep_c31637d_gaps_and_collectors_are_bounded(
     sc, r = replay
     for n, base in C31637D_GAP[sc].items():
         assert r["max_gap"][n] <= (base + 1.0) * 60, (sc, n, r["max_gap"][n] / 60, base)
+    assert r["max_gap"]["prebuilt"] <= PREBUILT_GAP[sc] * 60, (sc, r["max_gap"]["prebuilt"] / 60)
     for n in ("ui-snapshots-nba", "ui-snapshots-nfl"):
         assert len(r["starts"][n]) >= (25 if sc == "ok" else 20), (sc, n)
     for n in ("ingest-nba", "ingest-nfl"):
