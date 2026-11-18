@@ -14,7 +14,8 @@ def fixture():
     values={'minutes_played':{'value':79},'accurate_passes':{'value':41,'total':46},
             'dribbles_succeeded':{'value':2,'total':3},'expected_goals':{'value':.58},
             'matchstats.headers.tackles':{'value':0},'accurate_crosses':{'value':0,'total':1}}
-    body={'general':{'matchId':44,'countryCode':'BRA','leagueName':'Série A','finished':True},
+    body={'general':{'matchId':44,'countryCode':'BRA','leagueName':'Série A','leagueId':268,'parentLeagueId':268,
+                     'finished':True},
           'header':{'status':status,'teams':[{'id':11,'name':'Santos','score':2},{'id':12,'name':'Example','score':1}]},
           'content':{'playerStats':{'1':{'name':'Test Player','teamId':11,'stats':[
               {'stats':{k:{'key':k,'stat':v} for k,v in values.items()}}]}}}}
@@ -37,21 +38,21 @@ def test_unverified_identity_scope_or_participation_is_refused(bad):
     if bad=='extra_time':b['header']['status']['reason']['longKey']='after_extra_time'
     if bad=='unplayed':b['content']['playerStats']['1']['stats'][0]['stats']['minutes_played']['stat']['value']=0
     if bad=='too_many_minutes':b['content']['playerStats']['1']['stats'][0]['stats']['minutes_played']['stat']['value']=120
-    if bad=='competition':b['general']['leagueName']='Other'
+    if bad=='competition':b['general'].update(leagueId=47,parentLeagueId=47)
     if bad=='duplicate_player':m['players'].append(dict(m['players'][0],id='player2'))
     assert not parse_detail(b,'bra.1',[m],NOW).records
 
 def test_unmatched_date_does_not_starve_older_history(tmp_path):
     m,b=fixture(); m['start']='2026-11-15T23:00:00Z'
     older=dict(m,event_id='older',start='2026-11-14T23:00:00Z')
-    unsupported=dict(m,event_id='unsupported',competition='usa.1',start='2026-11-16T23:00:00Z')
-    catalogs={'bra.1':{'m':m,'old':older},'usa.1':{'u':unsupported}};dates=[]
+    unsupported=dict(m,event_id='unsupported',competition='chn.1',start='2026-11-16T23:00:00Z')
+    catalogs={'bra.1':{'m':m,'old':older},'chn.1':{'u':unsupported}};dates=[]
     def get(url,params):dates.append(params['date']);return {'leagues':[]}
     for _ in range(2):collect_details(catalogs,get,lambda *a:None,tmp_path)
     assert dates==['20261115','20261114']
 
 def test_request_budget_does_not_mark_unrequested_detail_complete(tmp_path):
-    m,b=fixture();listing={'leagues':[{'ccode':'BRA','name':'Série A','matches':[
+    m,b=fixture();listing={'leagues':[{'ccode':'BRA','name':'Série A','primaryId':268,'matches':[
         {'id':44,'home':b['header']['teams'][0],'away':b['header']['teams'][1],'status':b['header']['status']}]}]}
     def get(url,params):
         if 'matchDetails' in url:raise StopIteration

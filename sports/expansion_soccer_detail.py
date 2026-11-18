@@ -14,11 +14,31 @@ from . import net
 
 # Source team name verified against the Nov 2 fixture in both feeds.
 TEAM_ALIASES = {109705: ('RB Bragantino', 'Red Bull Bragantino', 'Bragantino')}
+# FotMob league id (listing primaryId; matchDetails parentLeagueId, = leagueId for a plain league) -> ESPN slug.
+# Keyed by id since 2026-11-18: (country, name) broke on group / stage names ("K-League 1 Final Group A") and on
+# renames ("Major League Soccer" in the listing, "MLS" in allLeagues). Every id checked against FotMob allLeagues
+# (sources_1118/probe/fotmob_allLeagues.json) and a live listing; club competitions only (no national-team ids).
 LEAGUES = {
-    ('BRA','Série A'):'bra.1', ('ENG','Premier League'):'eng.1',
-    ('ESP','LaLiga'):'esp.1', ('GER','Bundesliga'):'ger.1',
-    ('ITA','Serie A'):'ita.1', ('FRA','Ligue 1'):'fra.1',
+    268: 'bra.1', 47: 'eng.1', 87: 'esp.1', 54: 'ger.1', 55: 'ita.1', 53: 'fra.1',          # 53dad0b's six
+    57: 'ned.1', 61: 'por.1', 130: 'usa.1', 230: 'mex.1', 112: 'arg.1', 64: 'sco.1', 40: 'bel.1', 71: 'tur.1',
+    42: 'uefa.champions', 73: 'uefa.europa', 10216: 'uefa.europa.conf', 48: 'eng.2', 146: 'ger.2', 86: 'ita.2',
+    140: 'esp.2', 110: 'fra.2', 223: 'jpn.1', 113: 'aus.1', 536: 'ksa.1',
 }
+ORIGINAL = frozenset({'bra.1', 'eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1'})   # always collected (forecast inputs)
+
+
+def league_of_listing(league):
+    try:
+        return LEAGUES.get(int(league.get('primaryId')))
+    except (TypeError, ValueError):
+        return None
+
+
+def league_of_detail(general):
+    try:
+        return LEAGUES.get(int(general.get('parentLeagueId') or general.get('leagueId')))
+    except (TypeError, ValueError):
+        return None
 # These do not overlap ESPN's existing exact-stat observations.
 FIELDS = {
     'minutes_played':('minutes','value','minutes'),
@@ -74,7 +94,7 @@ def parse_detail(body, competition, matches, observed_at):
             or (status.get('reason') or {}).get('longKey') != 'finished'
             or any(v for k,v in (status.get('halfs') or {}).items() if 'Extra' in k)):
         return out
-    if LEAGUES.get((general.get('countryCode'),general.get('leagueName'))) != competition:
+    if league_of_detail(general) != competition:
         return out
     teams=header.get('teams') or []
     if len(teams)!=2:
@@ -111,7 +131,8 @@ def parse_detail(body, competition, matches, observed_at):
     return out
 
 
-def collect_details(catalogs,get,persist,directory):
+def collect_details(catalogs,get,persist,directory,recent=None):
+    """recent: competitions with an offer in the last 30 days (beyond the original six); None = all mapped."""
     from .expansion_history import atomic_json
     path=directory/'detail-history-state.json'
     try:state=json.loads(path.read_text(encoding='utf-8'))
@@ -120,6 +141,7 @@ def collect_details(catalogs,get,persist,directory):
     # A detail requires an ESPN match roster and final score before any fetch.
     available=[m for rows in catalogs.values() for m in rows.values()
                if m.get('competition') in LEAGUES.values() and
+               (recent is None or m['competition'] in ORIGINAL or m['competition'] in recent) and
                m.get('status')=='final' and m.get('scores') and m.get('players')]
     due=[m for m in available if not state.get(m['event_id']) or
          (now-parse_utc(state[m['event_id']])).total_seconds()>=86400]
@@ -132,7 +154,7 @@ def collect_details(catalogs,get,persist,directory):
         body=get('https://www.fotmob.com/api/data/matches',{'date':day.replace('-','')})
         pending=[]
         for league in body.get('leagues') or []:
-            competition=LEAGUES.get((league.get('ccode'),league.get('name')))
+            competition=league_of_listing(league)
             if not competition:continue
             for row in league.get('matches') or []:
                 identity=resolve_match(row,competition,due)

@@ -94,6 +94,7 @@ def test_history_uses_exact_stat_period_current_revision_and_known_time(tmp_path
 
 def test_collection_request_budget_and_sport_storage(monkeypatch,tmp_path):
     monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
+    monkeypatch.setattr('sports.expansion_collect.PHASES',{'soccer':(),'tennis':()})   # main phases only (own caps: test_expansion_sources_1118)
     calls=[]
     def get(url,**kw):
         calls.append(url)
@@ -179,6 +180,7 @@ def test_team_roster_fallback_links_identity_without_inventing_stats(tmp_path):
 
 def test_one_tour_outage_does_not_block_the_other(monkeypatch,tmp_path):
     monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
+    monkeypatch.setattr('sports.expansion_collect.PHASES',{'soccer':(),'tennis':()})   # main phases only (own caps: test_expansion_sources_1118)
     calls=[]
     def get(url,**kwargs):
         calls.append(url)

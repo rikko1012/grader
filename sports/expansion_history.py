@@ -361,6 +361,10 @@ def collect(sport, max_requests=16, max_seconds=150):
     counts = {'requests': 0, 'ok_requests': 0, 'records': 0, 'matches': 0, 'errors': [], 'finished_at': None,
               'storage': 'ok', 'phases': {}}
     deadline = time.monotonic() + max_seconds
+    # 2026-11-18: the ESPN / 365Scores phases stop requesting RESERVE_S early; the research sources run in that reserve
+    # (expansion_collect), each with its own cap, never past the same request deadline.
+    from .expansion_collect import RESERVE_S
+    main_deadline = deadline - min(RESERVE_S, max_seconds / 3)
     catalogs = {}
     for comp, (kind, _) in COMPETITIONS.items():
         if kind != sport:
@@ -374,7 +378,7 @@ def collect(sport, max_requests=16, max_seconds=150):
 
     def get(url, params, timeout=10):
         from .expansion_sources import get_json
-        if counts['requests'] >= max_requests or time.monotonic() >= deadline:
+        if counts['requests'] >= max_requests or time.monotonic() >= main_deadline:
             raise StopIteration
         counts['requests'] += 1
         body = get_json(sport, url, params=params, timeout=timeout, tries=1)
@@ -500,17 +504,20 @@ def collect(sport, max_requests=16, max_seconds=150):
                 except (net.HttpError, ValueError, OSError) as e:
                     match['summary_attempt_at'] = now_utc()
                     counts['errors'].append(type(e).__name__)
-            from .expansion_soccer_detail import collect_details
-            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
         else:
             from .expansion_challenger import collect as collect_challenger
             counts['errors'].extend(collect_challenger(catalogs,get,persist,directory,persist_backfill))
-            from .expansion_tennis import collect_details
-            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
     except StopIteration:
         pass
     except (net.HttpError, ValueError, OSError, sqlite3.Error) as e:
         counts['errors'].append(type(e).__name__)
+    # FotMob (soccer) and theScore (tennis) moved here from the main phases, with football-data and exchange prices.
+    from .expansion_collect import run as run_sources
+    counts['sources'] = run_sources(sport, catalogs, persist, directory, deadline)
+    for phase in counts['sources'].values():
+        counts['errors'].extend(phase['errors'])
+        counts['requests'] += phase['requests']
+        counts['ok_requests'] += phase['ok']
     cutoff = (today - timedelta(days=100)).isoformat()
     for competition, matches in catalogs.items():
         atomic_json(isolated_database(directory.parent, competition).parent / 'matches.json',

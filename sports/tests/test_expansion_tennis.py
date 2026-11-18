@@ -25,9 +25,12 @@ def source():
 def test_verified_serve_stats_include_explicit_zero_but_never_percentages():
     matches = parse_scoreboard(scoreboard(), 'atp', now_utc()).matches
     result = tennis.parse_match(source(), matches, now_utc())
-    assert len(result.records) == 7
+    assert len(result.records) == 8
     assert all(not r.validate() and r.source == 'thescore' for r in result.records)
-    assert {r.stat for r in result.records} == set(tennis.COUNT_STATS)
+    counts = [r for r in result.records if r.unit == 'count']
+    assert {r.stat for r in counts} == set(tennis.COUNT_STATS)
+    # 2026-11-18: the serve RATE is kept under its own name as a percentage (research only), never as a count
+    assert [(r.stat, r.unit, r.value) for r in result.records if r.unit != 'count'] == [('first_serve_in_pct', 'percent', 78)]
     assert next(r.value for r in result.records if r.stat == 'double_faults' and r.participant_id.endswith(':1')) == 0
     assert matches[0]['surface'] == 'Hardcourt Indoor'
     assert matches[0]['surface_source'] == 'thescore'
