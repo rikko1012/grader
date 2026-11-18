@@ -58,7 +58,7 @@ from . import scheduler as _plan                        # noqa: E402 - plan size
 # service drain-and-restart ceiling: Starter 160 MB, Standard (>= 1.5 GB, 2026-10-25) 400 MB; children <= budget
 MAX_MB = _int("SPORTS_SERVICE_MAX_MB", "400" if _plan.standard() else "160")
 STATS = {"requests": 0, "errors_5xx": 0, "rejected_busy": 0, "unauthorized": 0, "forbidden_origin": 0,
-         "inflight": 0, "peak_inflight": 0, "ms_total": 0.0, "started": time.time()}
+         "health_bypass": 0, "inflight": 0, "peak_inflight": 0, "ms_total": 0.0, "started": time.time()}
 _SLOCK = threading.Lock()
 _STATE = {"draining": False}
 BUSY_RESPONSE = (b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 23\r\n"
@@ -345,6 +345,15 @@ def alerts(o):
                 out.append({"level": "warn", "code": "snapshot_stale", "detail": {"snapshot": name, **sn}})
     if not o.get("token_configured"):
         out.append({"level": "page", "code": "token_secret_missing", "detail": "SPORTS_TOKEN_SECRET unset or short"})
+    # a restart loop: more than one start of the SAME commit inside 6 h (a new commit is a deploy, not a restart)
+    starts = [r for r in o.get("restarts") or [] if isinstance(r, dict)]
+    if starts:
+        same = [r for r in starts if r.get("commit") == starts[-1].get("commit")
+                and time.time() - (r.get("started_at") or 0) <= 6 * 3600]
+        if len(same) >= 2:
+            out.append({"level": "page" if len(same) >= 3 else "warn", "code": "service_restarted", "detail": {
+                "starts_6h": len(same), "commit": starts[-1].get("commit"),
+                "reasons": [(r.get("prev_exit") or {}).get("reason") or "no_exit_recorded" for r in same[1:]]}})
     return out
 
 
@@ -418,6 +427,82 @@ def expansion_learning_status():
     return out
 
 
+# ------------------------------------------------------------------------------------------- restart record
+# 2026-11-18: the service showed 2 h of uptime with no code push and nothing said why - the RSS-ceiling exit leaves one
+# stderr line, an OOM kill or a failed health check leaves nothing. Every start is now recorded with the reason the
+# previous process wrote before it exited; a start on the SAME commit with no recorded exit was an outside kill.
+def _state_file(name):
+    from . import config
+    return config.DATA_DIR / name
+
+
+def _write_state(name, value):
+    try:
+        path = _state_file(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(value, default=str), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        pass                                            # a record, never a reason to fail
+
+
+def _read_state(name, default=None):
+    try:
+        return json.loads(_state_file(name).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def record_exit(reason, **detail):
+    _write_state("service_exit.json", {"reason": reason, "at": round(time.time()), "pid": os.getpid(), **detail})
+
+
+def record_start():
+    starts = _read_state("service_starts.json", [])
+    starts = starts if isinstance(starts, list) else []
+    entry = {"started_at": round(time.time()), "pid": os.getpid(),
+             "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40]}
+    prev = _read_state("service_exit.json")
+    if isinstance(prev, dict):
+        entry["prev_exit"] = prev
+        try:
+            _state_file("service_exit.json").unlink()
+        except OSError:
+            pass
+    _write_state("service_starts.json", (starts + [entry])[-20:])
+    return entry
+
+
+def restarts():
+    got = _read_state("service_starts.json", [])
+    return got if isinstance(got, list) else []
+
+
+def container():
+    """cgroup v2 memory of the whole container (service + every job): current / peak and the kernel's own OOM
+    counters - an oom_kill > 0 is a memory kill no process could record. {} where the files do not exist."""
+    out = {}
+    base = "/sys/fs/cgroup/"
+    for key, name in (("current_mb", "memory.current"), ("peak_mb", "memory.peak"), ("limit_mb", "memory.max")):
+        try:
+            with open(base + name, encoding="ascii") as f:
+                out[key] = round(int(f.read().strip()) / 1048576, 1)
+        except (OSError, ValueError):
+            pass
+    for name, keep in (("memory.events", ("oom", "oom_kill", "max")), ("memory.stat", ("anon", "file"))):
+        try:
+            with open(base + name, encoding="ascii") as f:
+                for line in f:
+                    k, _, v = line.partition(" ")
+                    if k in keep:
+                        out[k if name == "memory.events" else k + "_mb"] = \
+                            int(v) if name == "memory.events" else round(int(v) / 1048576, 1)
+        except (OSError, ValueError):
+            pass
+    return out
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -434,6 +519,7 @@ def ops():
             "grades_daily": settle_stages("model/daily_state.json"),
             "expansion_learning": expansion_learning_status(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
+            "restarts": restarts(), "container": container(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}
 
 
@@ -446,6 +532,7 @@ def ops_with_alerts():
 # ------------------------------------------------------------------------------------------------------- handler
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"                       # keep-alive (browsers, the gateway pool)
+    one_shot = False                                    # True: the reserved health path (Server.process_request)
     server_version = "scout-sports"
     sys_version = ""
 
@@ -536,6 +623,10 @@ class Handler(BaseHTTPRequestHandler):
         self._t0 = time.time()
         self._member_ok = False
         u = urlparse(self.path)
+        if self.one_shot:                               # no request slot is held: health only, one answer, then close
+            self.close_connection = True
+            if method != "GET" or u.path != "/api/sports/health":
+                return self._send(503, {"error": "sports_busy"})
         cors, ok = self._cors()
         body = b""
         if method == "POST":
@@ -616,9 +707,31 @@ class Server(ThreadingHTTPServer):
     def __init__(self, addr, handler=Handler, threads=None):
         super().__init__(addr, handler)
         self.slots = threading.BoundedSemaphore(threads or THREADS)
+        # The platform's health check must not depend on the request slots: slow store reads or idle keep-alive
+        # connections filling them answered it with the canned 503, which reads as an unhealthy instance.
+        self.health_slots = threading.BoundedSemaphore(2)
+        self._health_handler = type("HealthHandler", (handler,), {"one_shot": True})
+
+    @staticmethod
+    def _is_health(request):
+        try:
+            request.settimeout(0.05)
+            return request.recv(64, socket.MSG_PEEK).startswith(b"GET /api/sports/health")
+        except (OSError, ValueError):
+            return False
 
     def process_request(self, request, client_address):
         if _STATE["draining"] or not self.slots.acquire(timeout=QUEUE_S):
+            if not _STATE["draining"] and self._is_health(request) and self.health_slots.acquire(blocking=False):
+                with _SLOCK:
+                    STATS["health_bypass"] += 1
+                try:
+                    request.settimeout(5)
+                    threading.Thread(target=self._run_health, args=(request, client_address), daemon=True).start()
+                except (OSError, RuntimeError):
+                    self.health_slots.release()
+                    self.shutdown_request(request)
+                return
             with _SLOCK:
                 STATS["rejected_busy"] += 1
             try:
@@ -634,8 +747,22 @@ class Server(ThreadingHTTPServer):
             request.settimeout(30)                      # an idle kept-alive / slow client frees its slot
         except OSError:
             pass
-        t = threading.Thread(target=self._run, args=(request, client_address), daemon=True)
-        t.start()
+        try:
+            threading.Thread(target=self._run, args=(request, client_address), daemon=True).start()
+        except RuntimeError:                            # no thread could start: give the slot back (it leaked before)
+            with _SLOCK:
+                STATS["inflight"] -= 1
+            self.slots.release()
+            self.shutdown_request(request)
+
+    def _run_health(self, request, client_address):
+        try:
+            self._health_handler(request, client_address, self)
+        except Exception:                               # noqa: BLE001
+            self.handle_error(request, client_address)
+        finally:
+            self.shutdown_request(request)
+            self.health_slots.release()
 
     def _run(self, request, client_address):
         try:
@@ -662,6 +789,8 @@ def _watchdog(srv, every=5.0):
         if mb and mb > MAX_MB and not _STATE["draining"]:
             sys.stderr.write(f"sports service rss {mb:.0f} MB > {MAX_MB} MB: draining for a restart\n")
             _STATE["draining"] = True
+            record_exit("rss_ceiling", rss_mb=round(mb, 1), max_mb=MAX_MB, inflight=STATS["inflight"],
+                        cache=web.cache_stats(), commit=os.environ.get("RENDER_GIT_COMMIT", "")[:40])
             deadline = time.time() + 20
             while STATS["inflight"] > 0 and time.time() < deadline:
                 time.sleep(0.2)
@@ -696,6 +825,7 @@ def supervise(stop=None, jobs=None):
 def serve(host="0.0.0.0", port=None):
     port = int(port or os.environ.get("PORT", "10000"))
     srv = Server((host, port))
+    record_start()
     threading.Thread(target=_watchdog, args=(srv,), daemon=True, name="sports-watchdog").start()
     supervise()
     print(f"scout sports service {VERSION} on {host}:{srv.server_address[1]} (threads {THREADS}, db pool "

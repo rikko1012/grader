@@ -614,3 +614,125 @@ def test_gzip_single_flight_compresses_once_under_simultaneous_misses():
         t.join(10)
     assert len(out) == 30 and len(set(out)) == 1 and service.ENC_STATS["gzip_built"] - n0 == 1
     assert service.accepts_gzip("br, gzip;q=0.8") and not service.accepts_gzip("gzip;q=0") and not service.accepts_gzip(None)
+
+
+# ------------------------------------------------------------------- restart record, health under load (2026-11-18)
+@pytest.fixture
+def data_dir(monkeypatch, tmp_path):
+    from sports import config
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    return tmp_path
+
+
+def test_rss_ceiling_exit_is_recorded_and_attached_to_the_next_start(data_dir, monkeypatch):
+    class Exited(Exception):
+        pass
+
+    def no_exit(code):
+        raise Exited(code)
+    monkeypatch.setattr(service, "_STATE", {"draining": False})
+    monkeypatch.setattr(service, "MAX_MB", 1)
+    monkeypatch.setattr(service, "rss_mb", lambda: 412.4)
+    monkeypatch.setattr(service.os, "_exit", no_exit)
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abc123")
+    with pytest.raises(Exited):
+        service._watchdog(None, every=0)
+    left = json.loads((data_dir / "service_exit.json").read_text())
+    assert left["reason"] == "rss_ceiling" and left["rss_mb"] == 412.4 and left["max_mb"] == 1
+    first = service.record_start()
+    assert first["prev_exit"]["reason"] == "rss_ceiling" and first["commit"] == "abc123"
+    assert not (data_dir / "service_exit.json").exists()
+    second = service.record_start()                     # killed from outside: nothing was written
+    assert "prev_exit" not in second
+    got = service.restarts()
+    assert [("prev_exit" in r) for r in got] == [True, False] and got == json.loads(
+        (data_dir / "service_starts.json").read_text())
+    for _ in range(30):
+        service.record_start()
+    assert len(service.restarts()) == 20
+    (data_dir / "service_starts.json").write_text("{not json")
+    assert service.restarts() == [] and service.record_start()["pid"] == service.os.getpid()
+
+
+def test_ops_reports_restarts_and_container_memory(data_dir, monkeypatch):
+    service.record_start()
+    o = service.ops()
+    assert len(o["restarts"]) == 1 and isinstance(o["container"], dict)
+    assert all(isinstance(v, (int, float)) for v in o["container"].values())
+    real = open
+    monkeypatch.setattr("builtins.open", lambda p, *a, **k: (_ for _ in ()).throw(OSError())
+                        if str(p).startswith("/sys/fs/cgroup/") else real(p, *a, **k))
+    assert service.container() == {}
+
+
+def test_restart_loop_alert_ignores_deploys():
+    now = time.time()
+    codes = lambda o: [(a["code"], a["level"], a["detail"]["reasons"]) for a in service.alerts(o)]   # noqa: E731
+    same = [{"started_at": now - 7000, "commit": "c1"},
+            {"started_at": now - 3000, "commit": "c1", "prev_exit": {"reason": "rss_ceiling"}},
+            {"started_at": now - 60, "commit": "c1"}]
+    assert codes(_ops(restarts=same)) == [("service_restarted", "page", ["rss_ceiling", "no_exit_recorded"])]
+    assert codes(_ops(restarts=same[1:])) == [("service_restarted", "warn", ["no_exit_recorded"])]
+    deploys = [{"started_at": now - 7000, "commit": "c1"}, {"started_at": now - 60, "commit": "c2"}]
+    assert service.alerts(_ops(restarts=deploys)) == []
+    old = [{"started_at": now - 9 * 3600, "commit": "c1"}, {"started_at": now - 60, "commit": "c1"}]
+    assert service.alerts(_ops(restarts=old)) == [] and service.alerts(_ops(restarts=[])) == []
+
+
+def test_health_answers_while_every_request_slot_is_busy(monkeypatch):
+    monkeypatch.setattr(service, "_STATE", {"draining": False})
+    monkeypatch.setattr(service, "QUEUE_S", 0.05)
+    gate = threading.Event()
+    monkeypatch.setitem(web.ROUTES, "/api/sports/slow", ("sports.web:slow", web.MEMBER, ("GET",)))
+    monkeypatch.setitem(web._HANDLERS, "sports.web:slow", lambda req: (gate.wait(5), (200, {"ok": 1}))[1])
+    srv = service.Server(("127.0.0.1", 0), threads=2)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        res = []
+        ts = [threading.Thread(target=lambda: res.append(_get(port, "/api/sports/slow", _auth())[0])) for _ in range(2)]
+        for t in ts:
+            t.start()
+        time.sleep(0.3)
+        before = service.STATS["health_bypass"]
+        for _ in range(3):                              # each answer closes its connection and frees the health slot
+            code, body, hdrs = _get(port, "/api/sports/health")
+            assert code == 200 and body["ok"] is True
+        assert service.STATS["health_bypass"] == before + 3
+        assert _get(port, "/api/sports/slow", _auth())[:2] == (503, {"error": "sports_busy"})
+        assert _get(port, "/api/sports/healthz-other", _auth())[0] == 503          # only the exact health route
+        assert _get(port, "/api/sports/health", method="POST", body=b"")[0] == 503
+        gate.set()
+        for t in ts:
+            t.join(5)
+        assert res == [200, 200]
+        assert _get(port, "/api/sports/health")[0] == 200                           # and normally when slots are free
+    finally:
+        gate.set()
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_thread_that_cannot_start_gives_its_slot_back(monkeypatch):
+    monkeypatch.setattr(service, "_STATE", {"draining": False})
+    monkeypatch.setattr(service, "QUEUE_S", 0.05)
+    srv = service.Server(("127.0.0.1", 0), threads=1)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    real, fail = threading.Thread.start, {"on": True}
+
+    def start(self):
+        if fail["on"] and self._target == srv._run:
+            raise RuntimeError("can't start new thread")
+        return real(self)
+    monkeypatch.setattr(threading.Thread, "start", start)
+    try:
+        before = service.STATS["inflight"]
+        with pytest.raises((OSError, http.client.HTTPException)):
+            _get(port, "/api/sports/health")
+        assert service.STATS["inflight"] == before
+        fail["on"] = False
+        assert _get(port, "/api/sports/health")[0] == 200                           # the one slot is still usable
+    finally:
+        srv.shutdown()
+        srv.server_close()
