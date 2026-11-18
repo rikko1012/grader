@@ -480,23 +480,112 @@ def _dim(con, cache, v):
     return i
 
 
-def candidates(con, now=None):
-    """[(league, day, [rids...])] cold offer rows grouped by league and the day of the identity's last sighting."""
-    now = now or datetime.now(timezone.utc)
-    cutoff = (now - timedelta(hours=AFTER_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    q = ("WITH ident AS (SELECT source, source_key, MAX(COALESCE(last_seen_at, observed_at, known_at)) AS seen "
-         "FROM records WHERE kind = 'offer' GROUP BY source, source_key HAVING seen < ?) "
-         "SELECT r.rid, r.league, substr(i.seen, 1, 10) AS day FROM records r JOIN ident i "
-         "ON r.source = i.source AND r.source_key = i.source_key WHERE r.kind = 'offer' ORDER BY r.league, day, "
-         "r.source, r.source_key, r.revision")
+# newest sighting of a stored row, readable from the covering index records_offer_seen (store.SEEN_SQL)
+_SEEN = "COALESCE(last_seen_at, observed_at, known_at)"
+_SCAN = (f"SELECT rid, source, league, source_key, {_SEEN} FROM records INDEXED BY records_offer_seen "
+         "WHERE kind = 'offer'%s ORDER BY kind, source, league, source_key")
+SCAN_BUDGET_S = 120          # share of a deadline-bound pass the candidate scan may use before the parts start
+
+
+class _Deadline(RuntimeError):
+    """The pass reached its hard deadline between two steps of a part: nothing was removed, the rows stay hot."""
+
+
+_DEADLINE = None             # run_pass installs a callable -> True once the hard deadline has passed
+
+
+def _check_deadline(stage):
+    if _DEADLINE and _DEADLINE():
+        raise _Deadline(f"deadline reached before {stage}")
+
+
+def _parts(rows):
+    """[(rid, league, day, source, source_key, revision)] -> [(league, day, [rids])] in the pass's part order."""
     parts = OrderedDict()
-    for rid, league, day in con.execute(q, (cutoff,)):
+    for rid, league, day, *_ in sorted(rows, key=lambda r: (r[1] is not None, r[1] or "", r[2], r[3], r[4], r[5])):
         parts.setdefault((league or "-", day), []).append(rid)
     out = []
     for (league, day), rids in parts.items():
         for i in range(0, len(rids), PART_ROWS):
             out.append((league, day, rids[i:i + PART_ROWS]))
     return out
+
+
+def select_cold(con, now=None, max_rows=None, cursor=None, deadline=None, clock=time.monotonic):
+    """A BOUNDED choice of cold identities -> {"parts": [(league, day, [rids])], "cursor", "scanned", "complete"}.
+
+    The old selection aggregated, joined and sorted every hot offer row of the store before the first part could
+    start (two table-row reads per revision, a transient index and a full sort - unbounded, and longer after every
+    failed pass). This one walks the covering index records_offer_seen in its own order (index entries only, no
+    sort), groups an identity's consecutive rows and stops as soon as max_rows cold rows are chosen or `deadline`
+    (on `clock`) passes. `cursor` (source, league, source_key) resumes after the last identity a previous pass
+    examined and the walk wraps to the start once, so a long stretch of hot identities cannot starve the rest.
+    The chosen identities are then confirmed with the ORIGINAL rule - the newest sighting over ALL their rows -
+    which also brings in rows listed under another league; an identity with any fresh row is dropped."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = (now - timedelta(hours=AFTER_H)).strftime(TS)
+    chosen, picked, scanned = {}, 0, 0
+    state = {"last": None, "stopped": False}
+
+    def walk(where, args, until=None):
+        nonlocal picked, scanned
+        key, newest, n = None, "", 0
+
+        def close():
+            nonlocal picked
+            if key is not None:
+                if newest < cutoff and (key[0], key[2]) not in chosen:
+                    chosen[(key[0], key[2])] = None
+                    picked += n
+                state["last"] = key
+        for rid, source, league, source_key, seen in con.execute(_SCAN % where, args):
+            k = (source, league, source_key)
+            if k != key:
+                close()
+                if (max_rows is not None and picked >= max_rows) or (deadline is not None and clock() > deadline):
+                    state["stopped"] = True
+                    return
+                if until is not None and league is not None and (source, league, source_key) > until:
+                    return
+                key, newest, n = k, "", 0
+            scanned += 1
+            n += 1
+            newest = max(newest, seen or "")
+        close()
+
+    resume = tuple(cursor) if cursor and len(cursor) == 3 and all(isinstance(x, str) for x in cursor) else None
+    if resume:
+        walk(" AND (source, league, source_key) > (?, ?, ?)", resume)
+        if not state["stopped"]:
+            walk("", (), until=resume)
+    else:
+        walk("", ())
+    out = {"parts": [], "scanned": scanned, "complete": not state["stopped"],
+           "cursor": list(state["last"]) if state["stopped"] and state["last"] and state["last"][1] is not None else None}
+    if not chosen:
+        return out
+    con.execute("CREATE TEMP TABLE IF NOT EXISTS arch_idents (source TEXT NOT NULL, source_key TEXT NOT NULL, "
+                "PRIMARY KEY (source, source_key)) WITHOUT ROWID")
+    con.execute("DELETE FROM temp.arch_idents")
+    con.executemany("INSERT INTO temp.arch_idents (source, source_key) VALUES (?, ?)", list(chosen))
+    rows, newest = [], {}
+    for rid, league, source, source_key, revision, seen in con.execute(
+            "SELECT r.rid, r.league, r.source, r.source_key, r.revision, "
+            "COALESCE(r.last_seen_at, r.observed_at, r.known_at) FROM temp.arch_idents i JOIN records r ON r.kind = 'offer' AND r.source = i.source "
+            "AND r.source_key = i.source_key"):
+        k = (source, source_key)
+        newest[k] = max(newest.get(k, ""), seen or "")
+        rows.append((rid, league, k, revision))
+    con.execute("DELETE FROM temp.arch_idents")
+    out["parts"] = _parts([(rid, league, newest[k][:10], k[0], k[1], revision) for rid, league, k, revision in rows
+                           if newest[k] < cutoff])
+    return out
+
+
+def candidates(con, now=None):
+    """[(league, day, [rids...])] every cold offer row grouped by league and the day of the identity's last sighting
+    (the unbounded form of select_cold: reports and tests; the pass itself selects a bounded batch)."""
+    return select_cold(con, now)["parts"]
 
 
 def _archive_part(con, league, day, rids, now_s):
@@ -518,12 +607,14 @@ def _archive_part(con, league, day, rids, now_s):
     con.executemany("INSERT INTO temp.arch_ids (r) VALUES (?)", ((r,) for r in rids))
     stat = con.execute("SELECT COUNT(*), TOTAL(rid), MAX(COALESCE(last_seen_at, '')), TOTAL(seen_count) FROM records "
                        "WHERE rid IN (SELECT r FROM temp.arch_ids) AND kind = 'offer'").fetchone()
+    _check_deadline("read")
     rows = con.execute("SELECT * FROM records WHERE rid IN (SELECT r FROM temp.arch_ids) "
                        "ORDER BY event_id, player_id, source, source_key, revision").fetchall()
     # event-clustered and identity-contiguous: an event's offers sit in few files, an identity's revisions are
     # adjacent (lzma sees the repeats)
     if len(rows) != len(rids):
         raise RuntimeError("archive candidates changed before the write")
+    _check_deadline("write")
     h = hashlib.sha256()
     with lzma.open(tmp, "wb", preset=6) as f:
         for r in rows:
@@ -533,6 +624,7 @@ def _archive_part(con, league, day, rids, now_s):
     _fsync(tmp)
     digest = h.hexdigest()
     _step("written", tmp=tmp)
+    _check_deadline("verify")
     n, d2, back = _read_file(tmp)
     if n != len(rows) or d2 != digest or back != [r["rid"] for r in rows]:
         raise RuntimeError(f"archive {name} failed verification ({len(rows)} expected, {n} re-read)")
@@ -548,6 +640,7 @@ def _archive_part(con, league, day, rids, now_s):
         raise RuntimeError(f"archive {name} re-read after the rename does not match; nothing removed")
     size = final.stat().st_size
     dims = {}
+    _check_deadline("commit")
     con.execute("BEGIN IMMEDIATE")
     try:
         again = con.execute("SELECT COUNT(*), TOTAL(rid), MAX(COALESCE(last_seen_at, '')), TOTAL(seen_count) FROM "
@@ -567,7 +660,8 @@ def _archive_part(con, league, day, rids, now_s):
         _step("deleted", final=final)
         con.execute("COMMIT")
     except BaseException:
-        con.execute("ROLLBACK")
+        if con.in_transaction:                          # an interrupted statement may already have rolled back
+            con.execute("ROLLBACK")
         raise
     return {"file": name, "rows": len(rows), "bytes": size}
 
@@ -649,13 +743,62 @@ def _remove_orphans(con):
     return n
 
 
-def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
+def _state_path(name):
+    return archive_dir().parent / name
+
+
+def _write_json(path, value):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(value, separators=(",", ":"), default=str), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        pass                                            # progress notes never fail a pass
+
+
+def _read_json(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def last_pass():
+    """Stage timings of the newest pass (<SPORTS_DATA_DIR>/archive/last_pass.json), rewritten after every stage - a
+    pass killed from outside leaves the stage it died in and no "stopped" key."""
+    return _read_json(_state_path("last_pass.json"))
+
+
+def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200, deadline_s=None, clock=time.monotonic):
+    """One bounded pass. time_budget_s limits the PARTS (counted from the end of setup, so a slow setup no longer
+    eats the whole budget and archives nothing). deadline_s is a hard limit for the whole pass, setup included: the
+    candidate scan gets SCAN_BUDGET_S of it, no part starts unless twice the slowest part so far still fits, a
+    running statement is interrupted at the deadline (the part rolls back, its rows stay hot) and the final
+    checkpoint is PASSIVE and skipped when under 60 s remain. Stops are reported in out["stopped"]: done |
+    max_parts | budget | deadline - none of them an error."""
+    global _DEADLINE
     from . import store
     own = con is None
     con = con or store.connect()
     con.isolation_level = None
     out = {"at": None, "parts": [], "rows": 0, "bytes": 0, "error": None}
-    t0 = time.time()
+    t0, wall = clock(), time.time()
+    hard = t0 + deadline_s if deadline_s else None
+    note = {"started_at": datetime.now(timezone.utc).strftime(TS), "pid": os.getpid(), "stage": "setup", "parts": []}
+    path = _state_path("last_pass.json")
+
+    def left():
+        return None if hard is None else hard - clock()
+
+    def stage(name, **kw):
+        note.update(kw, stage=name, elapsed_s=round(clock() - t0, 2))
+        _write_json(path, note)
+
+    stage("setup")
+    if hard is not None:
+        _DEADLINE = lambda: clock() > hard                           # noqa: E731
+        con.set_progress_handler(lambda: 1 if clock() > hard else 0, 20000)
     try:
         ensure_schema(con)
         install(con)
@@ -663,23 +806,70 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
         out["at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         out["removed_tmp"] = _remove_stale_tmp()
         out["removed_orphans"] = _remove_orphans(con)
-        parts = candidates(con, now)
+        stage("scan", setup_s=round(clock() - t0, 2))
+        t1 = clock()
+        saved = _read_json(_state_path("scan_cursor.json")) or {}
+        sel = select_cold(con, now, max_rows=max_parts * PART_ROWS, cursor=saved.get("cursor"), clock=clock,
+                          deadline=None if hard is None else min(hard, t1 + SCAN_BUDGET_S))
+        parts = sel["parts"]
+        _write_json(_state_path("scan_cursor.json"), {"cursor": sel["cursor"], "at": out["at"]})
         out["pending_parts"] = len(parts)
-        for league, day, rids in parts[:max_parts]:
-            if time.time() - t0 > time_budget_s:
+        stage("part", scan_s=round(clock() - t1, 2), scanned_rows=sel["scanned"], scan_complete=sel["complete"],
+              selected_rows=sum(len(p[2]) for p in parts), cursor=sel["cursor"])
+        t_parts, slowest = clock(), 0.0
+        out["stopped"] = "done" if sel["complete"] else "max_parts"
+        for i, (league, day, rids) in enumerate(parts):
+            if i >= max_parts:
+                out["stopped"] = "max_parts"
                 break
+            if hard is not None and left() < 2 * slowest:
+                out["stopped"] = "deadline"
+                break
+            if clock() - t_parts > time_budget_s:
+                out["stopped"] = "budget"
+                break
+            t = clock()
             r = _archive_part(con, league, day, rids, out["at"])
+            took = clock() - t
+            slowest = max(slowest, took)
             out["parts"].append(r["file"])
             out["rows"] += r["rows"]
             out["bytes"] += r["bytes"]
+            note["parts"].append({"file": r["file"], "rows": r["rows"], "s": round(took, 2)})
+            stage("part", rows=out["rows"])
+        stage("checkpoint")
+        t = clock()
         try:
-            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            if hard is None:
+                con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            elif left() >= 60:                          # never waits on readers, never outlives the deadline
+                con.execute("PRAGMA wal_checkpoint(PASSIVE)")
+            else:
+                out["checkpoint"] = "skipped"
         except sqlite3.Error:
             pass
+        note["checkpoint_s"] = round(clock() - t, 2)
     except Exception as e:                              # noqa: BLE001 - every row stays hot on any failure
-        out["error"] = f"{type(e).__name__}: {str(e)[:300]}"
+        if hard is not None and clock() > hard and isinstance(e, (_Deadline, sqlite3.OperationalError)):
+            out["stopped"] = "deadline"                 # a bounded stop: the part in flight rolled back
+        else:
+            out["error"] = f"{type(e).__name__}: {str(e)[:300]}"
+            out.pop("stopped", None)
     finally:
-        out["took_s"] = round(time.time() - t0, 2)
+        if hard is not None:
+            _DEADLINE = None
+            con.set_progress_handler(None, 0)
+            if out.get("stopped") == "deadline":        # leave no half-written file for the next pass to find
+                try:
+                    if con.in_transaction:
+                        con.execute("ROLLBACK")
+                    _remove_stale_tmp()
+                    _remove_orphans(con)
+                except (sqlite3.Error, OSError):
+                    pass
+        out["took_s"] = round(clock() - t0, 2)
+        stage("end", stopped=out.get("stopped"), error=out["error"], rows=out["rows"], took_s=out["took_s"],
+              wall_s=round(time.time() - wall, 2))
         if own:
             con.close()
     return out
@@ -721,7 +911,8 @@ def stats(con):
         return {"files": 0, "rows": 0, "file_mb": 0.0}
     f, r, b = con.execute("SELECT COUNT(*), TOTAL(rows), TOTAL(bytes) FROM archive_files").fetchone()
     return {"files": f, "rows": int(r), "file_mb": round(b / 1e6, 2),
-            "hot_offer_rows": con.execute("SELECT COUNT(*) FROM records WHERE kind='offer'").fetchone()[0]}
+            "hot_offer_rows": con.execute("SELECT COUNT(*) FROM records WHERE kind='offer'").fetchone()[0],
+            "last_pass": last_pass()}
 
 
 def main(argv=None):
@@ -729,11 +920,12 @@ def main(argv=None):
     p.add_argument("cmd", choices=("pass", "verify", "stats"))
     p.add_argument("--max-parts", type=int, default=40)
     p.add_argument("--time-budget-s", type=int, default=1200)
+    p.add_argument("--deadline-s", type=int, default=780, help="hard limit for the whole pass, setup included")
     a = p.parse_args(argv)
     from . import flags, store
     if a.cmd == "pass":
         flags.require("SPORTS_INGEST")
-        out = run_pass(max_parts=a.max_parts, time_budget_s=a.time_budget_s)
+        out = run_pass(max_parts=a.max_parts, time_budget_s=a.time_budget_s, deadline_s=a.deadline_s)
     elif a.cmd == "verify":
         out = verify()
     else:

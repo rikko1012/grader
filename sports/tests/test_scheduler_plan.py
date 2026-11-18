@@ -204,3 +204,17 @@ def test_a_collector_gets_one_long_attempt_inside_the_scheduler_kill(monkeypatch
     for name in ("ingest-nba", "ingest-nfl", "ingest-kalshi"):
         inner = int(scheduler._child_env(jobs[name])["SPORTS_JOB_TIMEOUT_S"])
         assert 600 < inner < jobs[name]["timeout_s"], name
+
+
+def test_archive_pass_ends_itself_before_the_scheduler_backstop():
+    spec = scheduler.default_jobs()["archive"]
+    argv = list(spec["argv"])
+    deadline = int(argv[argv.index("--deadline-s") + 1])
+    budget = int(argv[argv.index("--time-budget-s") + 1])
+    # the lock on "canonical" must stay well under the 25-min pick freshness rule (sports/picks.py STALE_S)
+    assert deadline <= 900 and deadline <= spec["timeout_s"] - 60 and budget < deadline
+    assert set(spec["locks"]) == {"canonical", "archive"}
+    audit = scheduler.default_jobs()["mapping-audit"]
+    from sports import mapping_audit
+    import inspect
+    assert "default=180" in inspect.getsource(mapping_audit.main) and audit["timeout_s"] >= 240

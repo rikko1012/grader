@@ -314,7 +314,7 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | model-fit | `sports.worker train fit` | 7 days | exclusive | 340 | 306-309 | SPORTS_TRAIN |
 | lab | `sports.lab.runner --once` | 15 min | exclusive | 340 | 34 idle (training up to the fit size) | SPORTS_TRAIN |
 | history | `sports.snapshots history nba nfl --max-players 400` | daily | heavy | 200 | 107 (40 players) | SPORTS_INGEST |
-| archive | `sports.archive pass` (13.3; locks canonical + archive since 2026-11-08) | 6 h | heavy | 200 | 140 (80k rows) | SPORTS_INGEST |
+| archive | `sports.archive pass --time-budget-s 540 --deadline-s 780` (13.3; locks canonical + archive since 2026-11-08; ends itself at the deadline with exit 0, job timeout 1800 s is the backstop only; stage timings in `archive/last_pass.json` and ops `archive.last_pass`) | 6 h | heavy | 200 | 140 (80k rows) | SPORTS_INGEST |
 | archive-verify | `sports.archive verify` (locks canonical + archive) | daily | heavy | 120 | - | SPORTS_INGEST |
 | player-context | `sports.player_context build nba nfl` (factor-engine context for the player page; ui-snapshots embeds the result per player) | 30 min | heavy | 260 | 170 (1,724 games, 13 s) | SPORTS_INGEST |
 | games-backfill | `sports.games.backfill_job --budget 120` (game store: current + previous season, resumable; ~2 h to fill, then a no-op) | 15 min | light | 60 | 43-47 | SPORTS_INGEST |

@@ -307,6 +307,28 @@ def test_mapping_audit_lists_mismatches_with_counts(built):
     assert (snapshots.snap_root() / "nba" / "mapping_audit.json").exists()
 
 
+def test_scheduled_mapping_audit_reads_current_offers_bounded(built, monkeypatch):
+    from sports import mapping_audit
+    con = store.connect()
+    store.put(con, book("fanduel", "fd:ghost", player_id=None, observed_at="2026-10-23T20:55:00Z"))
+    store.put(con, book("betrivers", "br:noev", event_id=None, observed_at="2026-10-23T20:55:00Z"))
+    store.put(con, book("fanduel", "fd:wrongteam", team="BOS", observed_at="2026-10-23T20:55:00Z"))
+    replay = mapping_audit.run(con, "nba", now="2026-10-23T21:00:00Z")
+    monkeypatch.setattr(mapping_audit, "now_utc", lambda: "2026-10-23T21:00:00Z")
+    live = mapping_audit.run(con, "nba", budget_s=90)
+    assert live["truncated"] is False and live["offers_checked"] == replay["offers_checked"] >= 3
+    assert {k: (c["count"], c["by_platform"]) for k, c in live["checks"].items()} == \
+        {k: (c["count"], c["by_platform"]) for k, c in replay["checks"].items()}
+    plan = " | ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN " + mapping_audit._CURRENT_OFFERS, ("nba",)))
+    assert "COVERING INDEX records_current_league" in plan and "TEMP B-TREE" not in plan, plan
+    # out of time: the file is still written, marked truncated, and the job ends normally
+    cut = mapping_audit.run(con, "nba", budget_s=0, clock=iter(range(0, 10 ** 6, 10)).__next__)
+    con.close()
+    assert cut["truncated"] is True and cut["offers_checked"] == 0
+    saved = json.loads((snapshots.snap_root() / "nba" / "mapping_audit.json").read_text())
+    assert saved["truncated"] is True and saved["version"] == mapping_audit.VERSION
+
+
 def test_admin_books_route_serves_sources_and_audit(built):
     from sports import api_books, mapping_audit, web
     assert web.ROUTES["/api/sports/admin/books"] == ("sports.api_books:admin", web.ADMIN, ("GET",))

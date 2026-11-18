@@ -336,7 +336,13 @@ def default_jobs():
         # on the 23 GB store, past the 25-min freshness rule (sports/picks.py STALE_S): every pick'em line went stale and every Auto-build
         # slip with an NBA / NFL leg failed its recheck. A 10-min parts budget keeps the lock well under 25 min (same 6-h cadence: the
         # stall replays allow no more runs); the rest waits for the next pass.
-        "archive": dict(argv=_py("-m", "sports.archive", "pass", "--time-budget-s", "600"), every_s=6 * 3600, timeout_s=1800,
+        # 2026-11-18: it still ran into the 1800 s kill - the budget only guarded the start of each part, while the candidate query
+        # (every hot offer row, before the first check) and the final checkpoint were unbounded. The pass now ends ITSELF: a bounded
+        # index scan, 540 s of parts counted after setup, a hard --deadline-s 780 for everything (exit 0, progress committed per
+        # part, stage timings in archive/last_pass.json), so the lock is held ~13 min. timeout_s stays 1800 as the backstop only: it is
+        # also the scheduler's first-run duration estimate, and the 2026-11-08 stall replays fail their board-gap limits at 900.
+        "archive": dict(argv=_py("-m", "sports.archive", "pass", "--time-budget-s", "540", "--deadline-s", "780"),
+                        every_s=6 * 3600, timeout_s=1800,
                         flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6,
                         locks=("canonical", "archive")),      # 140 MB (80k rows)
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,

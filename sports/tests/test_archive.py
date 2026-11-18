@@ -197,3 +197,193 @@ def test_compaction_shrinks_what_cold_rows_cost_on_disk(world):
     archive.run_pass(con, now=NOW)
     files = sum(f.stat().st_size for f in archive.archive_dir().glob("*.xz"))
     assert files < hot_payload / 3
+
+
+# ------------------------------------------------------------- bounded selection, hard deadline, stage notes
+_OLD_SELECTION = (
+    "WITH ident AS (SELECT source, source_key, MAX(COALESCE(last_seen_at, observed_at, known_at)) AS seen "
+    "FROM records WHERE kind = 'offer' GROUP BY source, source_key HAVING seen < ?) "
+    "SELECT r.rid, r.league, substr(i.seen, 1, 10) AS day FROM records r JOIN ident i "
+    "ON r.source = i.source AND r.source_key = i.source_key WHERE r.kind = 'offer' ORDER BY r.league, day, "
+    "r.source, r.source_key, r.revision")
+
+
+def _old_parts(con, now=NOW):
+    cutoff = (now - timedelta(hours=archive.AFTER_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    parts = {}
+    for rid, league, day in con.execute(_OLD_SELECTION, (cutoff,)):
+        parts.setdefault((league or "-", day), []).append(rid)
+    return [(lg, day, rids[i:i + archive.PART_ROWS]) for (lg, day), rids in parts.items()
+            for i in range(0, len(rids), archive.PART_ROWS)]
+
+
+class Clock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+def test_bounded_selection_equals_the_old_full_query(world, monkeypatch):
+    con = world[0]
+    # an identity listed under two leagues: cold in one, fresh in the other -> hot as a whole (the old rule)
+    store.put(con, h.offer(oid="pp:x", league="nba", line=1.5, observed_at=T_OLD))
+    store.put(con, h.offer(oid="pp:x", league="nfl", line=2.5, observed_at="2026-10-24T11:00:00Z"))
+    # ... and one that is cold in both: every row goes, each under its own league
+    store.put(con, h.offer(oid="pp:y", league="nba", line=1.5, observed_at=T_OLD))
+    store.put(con, h.offer(oid="pp:y", league="nfl", line=2.5, observed_at="2026-10-10T23:00:00Z"))
+    old = _old_parts(con)
+    assert archive.candidates(con, NOW) == old and len(old) >= 3
+    monkeypatch.setattr(archive, "PART_ROWS", 7)
+    assert archive.candidates(con, NOW) == _old_parts(con)
+    chosen = {r for _, _, rids in old for r in rids}
+    x = {r[0] for r in con.execute("SELECT rid FROM records WHERE source_key = 'pp:x'")}
+    y = {r[0] for r in con.execute("SELECT rid FROM records WHERE source_key = 'pp:y'")}
+    assert not x & chosen and y <= chosen and len(y) == 2
+
+
+def test_selection_scan_reads_the_covering_index_without_a_sort(world):
+    con = world[0]
+    for where, args in (("", ()), (" AND (source, league, source_key) > (?, ?, ?)", ("prizepicks", "nba", "pp:2"))):
+        plan = " | ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN " + archive._SCAN % where, args).fetchall())
+        assert "COVERING INDEX records_offer_seen" in plan and "TEMP B-TREE" not in plan, plan
+
+
+def test_small_passes_resume_wrap_and_archive_everything(world, monkeypatch):
+    con, before = world[0], world[1]
+    monkeypatch.setattr(archive, "PART_ROWS", 9)
+    cursors, rows = [], 0
+    for _ in range(40):
+        out = archive.run_pass(con, now=NOW, max_parts=1)
+        assert out["error"] is None and out["rows"] <= 9
+        rows += out["rows"]
+        cursors.append(json.loads((archive.archive_dir().parent / "scan_cursor.json").read_text())["cursor"])
+        if out["stopped"] == "done" and not out["rows"]:
+            break
+    assert rows == len(before) - 10 and out["stopped"] == "done"
+    moved = [c for c in cursors if c]
+    assert len({tuple(c) for c in moved}) > 1 and cursors[-1] is None           # it advanced, then wrapped
+    assert _all_rows(con, "records_all") == before and archive.verify(con)["bad"] == []
+
+
+def test_slow_setup_does_not_eat_the_parts_budget_and_checkpoint_is_skipped_near_the_deadline(world, monkeypatch):
+    con, before = world[0], world[1]
+    clock = Clock()
+    real = archive.select_cold
+
+    def slow_scan(*a, **kw):                           # setup + scan take 730 s: longer than the parts budget
+        got = real(*a, **kw)
+        clock.t += 730
+        return got
+    monkeypatch.setattr(archive, "select_cold", slow_scan)
+    monkeypatch.setattr(archive, "PART_ROWS", 20)
+    out = archive.run_pass(con, now=NOW, time_budget_s=600, deadline_s=780, clock=clock)
+    assert out["error"] is None and len(out["parts"]) >= 1 and out["rows"] == len(before) - 10
+    assert out["checkpoint"] == "skipped"                                        # under 60 s were left
+    assert _all_rows(con, "records_all") == before
+
+
+def test_deadline_during_the_scan_is_a_bounded_stop_not_an_error(world):
+    con, before = world[0], world[1]
+    clock = Clock()
+    seen = []
+
+    def ticking():                                     # every look at the clock costs 100 s
+        clock.t += 100
+        seen.append(clock.t)
+        return clock.t
+    out = archive.run_pass(con, now=NOW, deadline_s=780, clock=ticking)
+    assert out["error"] is None and out["stopped"] == "deadline", out
+    assert _all_rows(con) == before and _all_rows(con, "records_all") == before  # every row readable exactly once
+    assert con.execute("SELECT COUNT(*) FROM archive_files").fetchone()[0] == 0
+    assert not list(archive.archive_dir().glob("*")) if archive.archive_dir().exists() else True
+    out = archive.run_pass(con, now=NOW, deadline_s=780)                         # the next pass completes
+    assert out["error"] is None and out["stopped"] == "done" and out["rows"] == len(before) - 10
+
+
+@pytest.mark.parametrize("step", ["written", "renamed", "manifest"])
+def test_deadline_reached_inside_a_part_keeps_every_row_hot(world, monkeypatch, step):
+    con, before = world[0], world[1]
+    clock = Clock()
+
+    def late(name, **kw):
+        if name == step:
+            clock.t = 10_000
+    monkeypatch.setattr(archive, "_STEP_HOOK", late)
+    out = archive.run_pass(con, now=NOW, deadline_s=780, clock=clock)
+    if step == "manifest":      # inside the short commit transaction no check runs: the part completes, then stops
+        assert out["error"] is None and out["stopped"] == "deadline" and len(out["parts"]) == 1
+    else:
+        assert out["error"] is None and out["stopped"] == "deadline" and out["rows"] == 0, out
+        assert _all_rows(con) == before and con.execute("SELECT COUNT(*) FROM archive_files").fetchone()[0] == 0
+        assert not list(archive.archive_dir().glob(".*.tmp")) and not list(archive.archive_dir().glob("offer-*"))
+    assert _all_rows(con, "records_all") == before
+    monkeypatch.setattr(archive, "_STEP_HOOK", None)
+    out = archive.run_pass(con, now=NOW, deadline_s=780)
+    assert out["error"] is None and _all_rows(con, "records_all") == before and archive.verify(con)["bad"] == []
+    assert set(_all_rows(con)) == {r for r, d in before.items() if d["source_key"] in {f"pp:{i}" for i in range(100, 110)}}
+
+
+def test_a_running_statement_is_interrupted_at_the_deadline(world):
+    con, before = world[0], world[1]
+    clock = Clock()
+    con.create_function("tick", 0, lambda: setattr(clock, "t", 10_000) or 0)
+
+    def run(con_, league, day, rids, now_s):           # a statement that runs past the deadline mid-transaction
+        con_.execute("BEGIN IMMEDIATE")
+        try:
+            con_.execute("DELETE FROM records WHERE kind = 'offer'")
+            con_.execute("WITH RECURSIVE n(i) AS (SELECT tick() UNION ALL SELECT i + 1 FROM n WHERE i < 5000000) "
+                         "SELECT COUNT(*) FROM n").fetchone()
+            con_.execute("COMMIT")
+        except BaseException:
+            if con_.in_transaction:
+                con_.execute("ROLLBACK")
+            raise
+    import unittest.mock as mock
+    with mock.patch.object(archive, "_archive_part", run):
+        out = archive.run_pass(con, now=NOW, deadline_s=780, clock=clock)
+    assert out["error"] is None and out["stopped"] == "deadline", out
+    assert _all_rows(con) == before
+
+
+def test_last_pass_records_stage_timings_and_a_kill_leaves_the_stage(world, monkeypatch):
+    con, before = world[0], world[1]
+    monkeypatch.setattr(archive, "PART_ROWS", 30)
+
+    class Killed(BaseException):
+        pass
+
+    def kill(name, **kw):
+        if name == "written":
+            raise Killed()
+    monkeypatch.setattr(archive, "_STEP_HOOK", kill)
+    real = archive._write_json
+    notes = []
+    monkeypatch.setattr(archive, "_write_json", lambda path, value: (notes.append(dict(value)), real(path, value)))
+    with pytest.raises(Killed):
+        archive.run_pass(con, now=NOW)
+    died = [n for n in notes if n.get("stage") == "part"][-1]                   # what a SIGKILL would leave on disk
+    assert "stopped" not in died and died["selected_rows"] == len(before) - 10 and "scan_s" in died
+    monkeypatch.setattr(archive, "_STEP_HOOK", None)
+    out = archive.run_pass(con, now=NOW)
+    note = archive.last_pass()
+    assert note["stage"] == "end" and note["stopped"] == "done" == out["stopped"] and note["error"] is None
+    assert [p["file"] for p in note["parts"]] == out["parts"] and all("s" in p and p["rows"] for p in note["parts"])
+    assert note["rows"] == len(before) - 10 and note["scanned_rows"] >= note["selected_rows"]
+    assert archive.stats(con)["last_pass"] == note
+
+
+def test_cli_exits_zero_on_a_bounded_stop(monkeypatch, capsys):
+    monkeypatch.setenv("SPORTS_INGEST", "1")
+    seen = {}
+
+    def fake(**kw):
+        seen.update(kw)
+        return {"error": None, "stopped": "deadline", "parts": []}
+    monkeypatch.setattr(archive, "run_pass", fake)
+    assert archive.main(["pass", "--time-budget-s", "540", "--deadline-s", "780"]) == 0
+    assert seen == {"max_parts": 40, "time_budget_s": 540, "deadline_s": 780}
+    monkeypatch.setattr(archive, "run_pass", lambda **kw: {"error": "RuntimeError: x"})
+    assert archive.main(["pass"]) == 1
