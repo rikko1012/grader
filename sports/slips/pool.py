@@ -48,7 +48,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from .. import availability, board_view, capabilities, containment, markets, store
-from ..contracts import SPORT_OF, from_dict, parse_utc
+from ..contracts import SPORT_OF, parse_utc
 from . import POLICY_VERSION, rules
 
 STALE_S = 25 * 60            # ingestion runs every 10 min; two missed cycles + margin = not fresh
@@ -129,40 +129,30 @@ def prop_keys(league, player_id, stat):
     return tuple(f"{player_id}|{p}" for p in spec["parts"])
 
 
-def _forecasts_by_offer(con, league, now, event_ids=None, wanted=None):
+def _forecasts_by_offer(con, league, now, event_ids=None, want=None):
     """Forecasts by the offer record id they were made for. Forecasting is incremental (LINE_CORRECTNESS.md C11): an
     unchanged offer revision keeps its first forecast however old, so forecasts are selected by the EVENTS of the
     current offers, not by a time window (the window is the fallback when no event list is given).
-    `wanted` (a set of offer record ids) keeps only forecasts made for those revisions: an event's forecasts cover
-    every stored revision x model version x platform, the pool reads one platform's current revisions. Rows are
-    streamed and a forecast for no wanted revision is never built (prebuilt was killed at its RSS cap loading all)."""
-    by = {}
-
-    def take(cur):
-        for r in cur:
-            d = store._unpack(r["payload"])
-            hit = [rid for rid in d.get("offer_snapshot_ids") or () if wanted is None or rid in wanted]
-            if hit:
-                f = from_dict(d)
-                for rid in hit:
-                    by.setdefault(rid, []).append(f)
-
+    Rows are decoded one at a time (prebuilt-mem 2026-11-18: every payload of the live events was held at once);
+    want = the only offer record ids the caller will look up (build: the offers that reach the forecast step) - the
+    other forecasts are dropped as they are read. Same lists, same order, for every wanted id."""
     if event_ids is None:
         since = _iso(now - timedelta(hours=FORECAST_LOOKBACK_H))
-        take(con.execute("SELECT payload FROM records WHERE kind='forecast' AND league=? AND known_at >= ?",
-                         (league, since)))
+        queries = [("SELECT payload FROM records WHERE kind='forecast' AND league=? AND known_at >= ?",
+                    (league, since))]
     else:
         ids = sorted(e for e in event_ids if e)
-        for i in range(0, len(ids), 400):
-            chunk = ids[i:i + 400]
-            take(con.execute(_FORECAST_EVENT_SQL % ",".join("?" * len(chunk)), [league, *chunk]))
+        queries = [(f"SELECT payload FROM records WHERE kind='forecast' AND league=? AND event_id IN "
+                    f"({','.join('?' * len(ids[i:i + 400]))})", [league, *ids[i:i + 400]])
+                   for i in range(0, len(ids), 400)]
+    by = {}
+    for sql, args in queries:
+        for r in con.execute(sql, args):
+            f = store._rec(r)
+            for rid in f.offer_snapshot_ids:
+                if want is None or rid in want:
+                    by.setdefault(rid, []).append(f)
     return by
-
-
-# +league: the unary plus keeps league out of the index choice, so the read is served by records_event (kind,
-# event_id) - this event's forecasts - instead of records_league, which walks every forecast the league ever stored
-# (forecasts are never archived). Same rows either way; the planner trap documented in sports/store.py.
-_FORECAST_EVENT_SQL = "SELECT payload FROM records WHERE kind='forecast' AND +league=? AND event_id IN (%s)"
 
 
 def _pick_forecast(fs, policy):
@@ -180,7 +170,8 @@ def _pick_forecast(fs, policy):
 def market_by_record(boards):
     """{offer record id: (p_over, p_under)} - the market chance at each quote's own line from compact board snapshot
     objects (snapshots.compact_row "mk": {l, c, at}); mirrors SportsRows.marketAt (web/sports/table.js): at[rid] when
-    present (None = no consensus), else the headline c when the quote is at the headline line; n > 0 only."""
+    present (None = no consensus), else the headline c when the quote is at the headline line; n > 0 only.
+    The fields read here are the ones api_slips._slim keeps when it parses a board file: change both together."""
     out = {}
     for b in boards or ():
         for m in (b or {}).get("markets") or ():
@@ -197,7 +188,8 @@ def market_by_record(boards):
 
 def cal_by_record(boards):
     """{offer record id: cal-mi-1 chance dict (po, pu, pp, f, v, mode)} from compact board snapshot objects (the
-    quote's `ca`, REGISTER A8) - a slip leg uses the SAME calibrated chance the board shows for that forecast."""
+    quote's `ca`, REGISTER A8) - a slip leg uses the SAME calibrated chance the board shows for that forecast.
+    The fields read here are the ones api_slips._slim keeps when it parses a board file: change both together."""
     out = {}
     for b in boards or ():
         for m in (b or {}).get("markets") or ():
@@ -216,34 +208,60 @@ def build(con, league, platform, now=None, policy="member", market_at=None, cal_
         raise ValueError("policy")
     now = now or datetime.now(timezone.utc)
     now_s = _iso(now)
-    offers = store.offers(con, league=league, platform=platform, limit=100000)
-    seen, revs = {}, {}
-    # Only metadata for the selected revisions is needed. Historical revisions can number in the millions.
-    rids = [rid for rid, _ in offers]
-    for i in range(0, len(rids), 400):
-        part = rids[i:i + 400]
-        for r in con.execute("SELECT record_id, revision, last_seen_at FROM records WHERE record_id IN "
-                             f"({','.join('?' * len(part))})", part):
-            seen[r["record_id"]] = r["last_seen_at"]
-            revs[r["record_id"]] = r["revision"]
     events = {e.event_id: e for _, e in store.events(con, league=league, limit=100000)}
-    live = {o.event_id for _, o in offers if o.availability == "open" and o.event_id and
-            (events.get(o.event_id) is None or (events[o.event_id].start_utc or "9") > now_s)}
-    fby = _forecasts_by_offer(con, league, now, live, wanted=set(rids))
+    # STREAMED (prebuilt-mem 2026-11-18: the job was killed over its cap holding every current offer of the hot window -
+    # ~60k OfferSnapshots for NBA PrizePicks with an archive backlog - plus every forecast payload of the live events).
+    # Offers are read in the listing's order, 400 at a time with their metadata; each one gets the forecast-free checks
+    # (_early) right away and only its state row is kept. An offer that passes them (open, gradable, not started, fresh:
+    # the current slate, a few thousand) is kept whole and evaluated in full once the forecasts are read. The forecast
+    # step is the first that reads fby, so the result is the same pool as reading everything first.
+    rows, keep, live, buf = [], [], set(), []
+    seen = {}
+
+    def chunk():
+        # Only metadata for the selected revisions is needed. Historical revisions can number in the millions.
+        meta = {}
+        for r in con.execute("SELECT record_id, revision, last_seen_at FROM records WHERE record_id IN "
+                             f"({','.join('?' * len(buf))})", [rid for rid, _ in buf]):
+            meta[r["record_id"]] = (r["revision"], r["last_seen_at"])
+        for rid, o in buf:
+            if o.availability == "open" and o.event_id and (events.get(o.event_id) is None or
+                                                             (events[o.event_id].start_utc or "9") > now_s):
+                live.add(o.event_id)
+            rev, last = meta[rid] if rid in meta else (None, None)
+            reason, _ = _early(rid, o, platform, events, {rid: last} if rid in meta else {}, now, now_s)
+            if reason:
+                rows.append((o.offer_id, rid, rev, o.line, reason, None))
+            else:
+                if rid in meta:
+                    seen[rid] = last
+                keep.append((len(rows), rid, o, rev))
+                rows.append(None)
+        buf.clear()
+
+    for rid, o in store.iter_offers(con, league=league, platform=platform, limit=100000):
+        buf.append((rid, o))
+        if len(buf) == 400:
+            chunk()
+    if buf:
+        chunk()
+    fby = _forecasts_by_offer(con, league, now, live, want={rid for _, rid, _, _ in keep})
     held = _sanity_held(league) if policy == "member" else set()
-    legs, excluded, rows = [], Counter(), []
-    ids = []
-    for rid, o in offers:
+    for i, rid, o, rev in keep:
         reason, leg = _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at, held, cal_at)
+        rows[i] = (o.offer_id, rid, rev, o.line, reason, leg)
+    keep.clear()                                        # the kept offers and forecasts are garbage now
+    fby = None
+    legs, excluded, ids = [], Counter(), []
+    for n, (oid, rid, rev, line, reason, leg) in enumerate(rows):
         if reason:
             reason = sys.intern(reason)
             excluded[reason.split(":")[0]] += 1
         else:
-            leg = Leg(revision=revs.get(rid), **leg)
+            leg = Leg(revision=rev, **leg)
             legs.append(leg)
             ids.append(f"{rid}|{leg['forecast_id']}")
-        rows.append((o.offer_id, rid, revs.get(rid), o.line, reason, leg))
-    del offers
+        rows[n] = (oid, rid, rev, line, reason, leg)
     legs.sort(key=lambda l: (-l["p_win"], l["leg_id"]))
     index = {id(l): i for i, l in enumerate(legs)}
     state = {oid: (rid, rev, line, reason is None, reason, index[id(leg)] if leg is not None else -1)
@@ -318,7 +336,10 @@ def guard_reason(f, league, rid=None, held=(), chances=()):
     return f"held by the sanity guard: {board_view.SANITY_TEXT[code][6:]}" if code else None
 
 
-def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at=None, held=(), cal_at=None):
+def _early(rid, o, platform, events, seen, now, now_s):
+    """The checks of _evaluate that need no forecast (platform, gate, start, lock, freshness), in _evaluate's order.
+    -> (exclusion text or None, start). build runs only these on every current offer while streaming; an offer
+    that passes them is evaluated in full (_evaluate) once the forecasts are read."""
     if platform not in rules.PLATFORMS:
         return "not a pick'em platform", None
     ok, why = capabilities.gate(o)
@@ -336,6 +357,13 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
     age = (now - parse_utc(last)).total_seconds()
     if age > STALE_S:
         return f"price not fresh: last seen {int(age // 60)} min ago", None
+    return None, start
+
+
+def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at=None, held=(), cal_at=None):
+    early, start = _early(rid, o, platform, events, seen, now, now_s)
+    if early:
+        return early, None
     f, why = _pick_forecast(fby.get(rid, []), policy)
     if f is None:
         return why, None

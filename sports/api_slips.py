@@ -68,15 +68,41 @@ def _live_current(platform, offer_id):
         return store.current_record_id(con, "offer", platform, offer_id)
 
 
+_QUOTE_KEYS = frozenset(("r", "p", "l", "v", "o", "t", "g"))      # snapshots.compact_quote (always present)
+_ROW_KEYS = frozenset(("k", "e", "pid", "st", "q", "mk"))          # snapshots.compact_row
+_MK_KEYS = frozenset(("l", "c", "at", "bk"))                       # market_view.row_view
+_FC_KEYS = frozenset(("m", "mu", "po", "pu", "at", "ro", "rv", "ln"))   # snapshots.compact_forecasts entry
+
+
+def _slim(pairs):
+    """json object_pairs_hook for a board file read only for market_by_record / cal_by_record: each object is cut to
+    the fields those two read AS IT IS PARSED, so the whole board (every quote's ~15 fields, every market's book list,
+    the forecast table) is never held at once (prebuilt-mem 2026-11-18: the NBA board parse was the job's largest
+    phase and its survivors pinned the freed heap under the pool builds). Recognised only by the full key set each
+    writer always emits; any other object is returned unchanged. Same mk / ca values as the full parse."""
+    d = dict(pairs)
+    ks = d.keys()
+    if _QUOTE_KEYS <= ks:                                    # a quote (q / kn): its record, line and cal chance
+        return {k: d[k] for k in ("r", "l", "ca") if k in d}
+    if _ROW_KEYS <= ks:                                      # a market row: its quotes and market view
+        return {"q": d["q"], "mk": d["mk"]}
+    if _MK_KEYS <= ks:                                       # a market view: headline line, consensus, per-quote at
+        return {"l": d["l"], "c": d["c"], "at": d["at"]}
+    if _FC_KEYS <= ks:                                       # the board's forecast table: not read here
+        return None
+    return d
+
+
 def _board_markets(league, cached=True):
     """Market chance (N4 lean rule) and cal-mi-1 chance per offer record from the precomputed board snapshots; no
-    snapshot -> {}. One board parsed at a time (memory); cached=False (worker prebuild) skips the service file cache."""
+    snapshot -> {}. One board parsed at a time, slimmed while parsed (_slim); cached=False (worker prebuild) skips
+    the service file cache."""
     from . import api_board
     mk, ca = {}, {}
     for name in ("board.json", "board_more.json"):
         p = api_board._root() / league / name
         try:
-            b = json.loads(api_board._read(p) if cached else p.read_bytes())
+            b = json.loads(api_board._read(p) if cached else p.read_bytes(), object_pairs_hook=_slim)
         except (api_board.NotReady, ValueError, OSError):
             continue
         mk.update(poolmod.market_by_record([b]))
