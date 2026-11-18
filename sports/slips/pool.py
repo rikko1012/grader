@@ -48,7 +48,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from .. import availability, board_view, capabilities, containment, markets, store
-from ..contracts import SPORT_OF, parse_utc
+from ..contracts import SPORT_OF, from_dict, parse_utc
 from . import POLICY_VERSION, rules
 
 STALE_S = 25 * 60            # ingestion runs every 10 min; two missed cycles + margin = not fresh
@@ -129,26 +129,40 @@ def prop_keys(league, player_id, stat):
     return tuple(f"{player_id}|{p}" for p in spec["parts"])
 
 
-def _forecasts_by_offer(con, league, now, event_ids=None):
+def _forecasts_by_offer(con, league, now, event_ids=None, wanted=None):
     """Forecasts by the offer record id they were made for. Forecasting is incremental (LINE_CORRECTNESS.md C11): an
     unchanged offer revision keeps its first forecast however old, so forecasts are selected by the EVENTS of the
-    current offers, not by a time window (the window is the fallback when no event list is given)."""
+    current offers, not by a time window (the window is the fallback when no event list is given).
+    `wanted` (a set of offer record ids) keeps only forecasts made for those revisions: an event's forecasts cover
+    every stored revision x model version x platform, the pool reads one platform's current revisions. Rows are
+    streamed and a forecast for no wanted revision is never built (prebuilt was killed at its RSS cap loading all)."""
+    by = {}
+
+    def take(cur):
+        for r in cur:
+            d = store._unpack(r["payload"])
+            hit = [rid for rid in d.get("offer_snapshot_ids") or () if wanted is None or rid in wanted]
+            if hit:
+                f = from_dict(d)
+                for rid in hit:
+                    by.setdefault(rid, []).append(f)
+
     if event_ids is None:
         since = _iso(now - timedelta(hours=FORECAST_LOOKBACK_H))
-        rows = con.execute("SELECT payload FROM records WHERE kind='forecast' AND league=? AND known_at >= ?",
-                           (league, since)).fetchall()
+        take(con.execute("SELECT payload FROM records WHERE kind='forecast' AND league=? AND known_at >= ?",
+                         (league, since)))
     else:
-        ids, rows = sorted(e for e in event_ids if e), []
+        ids = sorted(e for e in event_ids if e)
         for i in range(0, len(ids), 400):
             chunk = ids[i:i + 400]
-            rows += con.execute(f"SELECT payload FROM records WHERE kind='forecast' AND league=? AND event_id IN "
-                                f"({','.join('?' * len(chunk))})", [league, *chunk]).fetchall()
-    by = {}
-    for r in rows:
-        f = store._rec(r)
-        for rid in f.offer_snapshot_ids:
-            by.setdefault(rid, []).append(f)
+            take(con.execute(_FORECAST_EVENT_SQL % ",".join("?" * len(chunk)), [league, *chunk]))
     return by
+
+
+# +league: the unary plus keeps league out of the index choice, so the read is served by records_event (kind,
+# event_id) - this event's forecasts - instead of records_league, which walks every forecast the league ever stored
+# (forecasts are never archived). Same rows either way; the planner trap documented in sports/store.py.
+_FORECAST_EVENT_SQL = "SELECT payload FROM records WHERE kind='forecast' AND +league=? AND event_id IN (%s)"
 
 
 def _pick_forecast(fs, policy):
@@ -215,7 +229,7 @@ def build(con, league, platform, now=None, policy="member", market_at=None, cal_
     events = {e.event_id: e for _, e in store.events(con, league=league, limit=100000)}
     live = {o.event_id for _, o in offers if o.availability == "open" and o.event_id and
             (events.get(o.event_id) is None or (events[o.event_id].start_utc or "9") > now_s)}
-    fby = _forecasts_by_offer(con, league, now, live)
+    fby = _forecasts_by_offer(con, league, now, live, wanted=set(rids))
     held = _sanity_held(league) if policy == "member" else set()
     legs, excluded, rows = [], Counter(), []
     ids = []
