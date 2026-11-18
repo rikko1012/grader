@@ -38,8 +38,8 @@ POLY_TAGS = {'soccer': {82: 'eng.1', 780: 'esp.1', 101962: 'ita.1', 1494: 'ger.1
                         102564: 'tur.1', 102648: 'bra.1', 102448: 'mex.1', 102561: 'arg.1', 102872: 'sco.1',
                         105725: 'bel.1', 102525: 'eng.2', 102864: 'ger.2', 102649: 'jpn.1', 102765: 'aus.1'}}
 POLY_SERIES = {'tennis': {10365: ('atp', 'atp_challenger'), 10366: ('wta', 'wta125')}}
-# (competition, venue team name) -> ESPN team id. Verified entries only (same fixture in both feeds); candidates come
-# from `python -m sports.expansion_aliases exchanges` and are reviewed by hand, never applied automatically.
+# (competition, venue team name) -> ESPN team id. Verified entries only (same fixture in both feeds), checked by
+# hand; none committed yet and there is no proposer for venue names yet (backlog), so unknown names abstain.
 KALSHI_ALIASES = {}
 POLY_ALIASES = {}
 PRICES_BYTES = 500_000

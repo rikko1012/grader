@@ -120,3 +120,16 @@ def test_current_matches_guard_keeps_offered_competitions_first():
     comps = [r['competition'] for r in kept]
     assert comps.count('eng.2') == 100 and comps.count('jpn.1') == 0   # offered first, then base (eng.1)
     assert kept == [r for r in rows if r in kept]                      # original order kept
+
+
+def test_new_competitions_never_take_a_summary_slot_from_a_graded_league():
+    def m(comp, i, checked=None):
+        return {'event_id': f'soccer:espn:{comp}:{i}:{i}', 'competition': comp, 'status': 'final',
+                'start': f'2026-11-{10 + i:02}T12:00:00Z', 'summary_checked_at': checked,
+                'participants': [{'id': f'{comp}:t{i}'}, {'id': f'{comp}:u{i}'}]}
+    base = [m('eng.1', i, checked='2026-11-01T00:00:00Z') for i in range(8)]       # re-reads, team not offered
+    new = [m('eng.2', i) for i in range(5)]                                        # unchecked, offered team
+    offered_teams = {f'eng.2:t{i}' for i in range(5)}
+    queue = history.summary_queue(base + new, offered_teams)
+    assert [x['competition'] for x in queue] == ['eng.1'] * 6 + ['eng.2'] * 2
+    assert history.summary_queue(base, set()) == sorted(base, key=lambda x: x['start'], reverse=True)[:6]

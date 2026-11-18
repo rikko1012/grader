@@ -310,6 +310,18 @@ def summary_due(match, recent, now):
             (86400 if match.get('status') == 'final' else 21600))
 
 
+def summary_queue(pending, offered_teams, base_slots=6, new_slots=2):
+    """This run's summaries: the 53dad0b order and 6 slots for the 53dad0b competitions (unchanged), plus at most 2
+    more for the newer competitions, so they never take a slot from a graded league."""
+    def key(m):
+        return (bool(m.get('summary_checked_at')), not any(p['id'] in offered_teams for p in m['participants']),
+                m.get('status') != 'final', m.get('summary_checked_at') or '',
+                -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id'])
+    base = sorted((m for m in pending if m['competition'] in BASE_COMPETITIONS), key=key)
+    new = sorted((m for m in pending if m['competition'] not in BASE_COMPETITIONS), key=key)
+    return base[:base_slots] + new[:new_slots]
+
+
 CURRENT_MATCHES_BYTES = 2_900_000   # readers ignore a current-matches.json over 3,000,000 bytes (every identity pending)
 
 
@@ -481,12 +493,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             # summary. Once checked, a game waits its interval and frees the queue.
             offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
                              for p in m.get('players', []) if p.get('identity_source') == 'espn_team_roster'}
-            pending.sort(key=lambda m:(bool(m.get('summary_checked_at')),
-                                       not any(p['id'] in offered_teams for p in m['participants']),
-                                       m['competition'] not in BASE_COMPETITIONS,
-                                       m.get('status') != 'final', m.get('summary_checked_at') or '',
-                                       -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id']))
-            for match in pending[:6]:
+            for match in summary_queue(pending, offered_teams):
                 actual = match['competition']
                 eid = match['event_id'].split(':')[-2]
                 try:
