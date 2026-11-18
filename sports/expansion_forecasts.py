@@ -29,6 +29,34 @@ SOCCER_COUNTS = {'shots', 'shots_on_target', 'passes_attempted', 'tackles', 'sav
                  'goals', 'assists', 'crosses', 'clearances', 'fouls', 'attempted_dribbles', 'shots_assisted'}
 
 
+def _inputs():
+    """The (competition, source, stat) history rows the forecast may read: exactly what 53dad0b's collectors wrote,
+    written out here (NOT derived from the collectors' tables, which grow). A new competition, a new source or a new
+    stat name gets no forecast input until a walk-forward test promotes it (factor rule). Research shows everything."""
+    base_soccer = ('eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1', 'usa.1', 'bra.1', 'arg.1', 'mex.1', 'ned.1', 'por.1',
+                   'sco.1', 'bel.1', 'tur.1', 'uefa.champions', 'fifa.friendly', 'uefa.nations', 'fifa.worldq.uefa',
+                   'fifa.worldq.conmebol', 'fifa.worldq.concacaf', 'fifa.worldq.afc', 'fifa.worldq.caf', 'fifa.world',
+                   'concacaf.nations.league')
+    espn_soccer = ('shots', 'shots_on_target', 'goals', 'assists', 'saves', 'fouls', 'fouls_suffered', 'yellow_cards',
+                   'red_cards')
+    fotmob = ('minutes', 'passes_attempted', 'tackles', 'crosses', 'clearances', 'attempted_dribbles', 'chances_created',
+              'xg', 'xa', 'touches', 'touches_opposition_box', 'interceptions', 'corners_taken')
+    sets = ('games_won', 'games_played', 'sets_won', 'sets_played', 'tie_breakers_played')
+    rows = {(c, 'espn', s) for c in base_soccer for s in espn_soccer}
+    rows |= {(c, 'fotmob', s) for c in ('bra.1', 'eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1') for s in fotmob}
+    rows |= {(c, 'espn', s) for c in ('atp', 'wta') for s in sets}
+    rows |= {(c, 'thescore', s) for c in ('atp', 'wta')
+             for s in ('aces', 'double_faults', 'breakpoints_won', 'points_won', 'tiebreaks_won')}
+    rows |= {(c, '365scores', s) for c in ('atp_challenger', 'wta125') for s in sets + (
+        'aces', 'double_faults', 'breakpoints_won', 'service_games_won', 'points_won', 'service_points_won',
+        'first_serve_points_won', 'second_serve_points_won')}
+    return frozenset(rows)
+
+
+# Grade leak guard (2026-11-18). Frozen: changing it changes grades and needs a walk-forward test first.
+FORECAST_INPUTS = _inputs()
+
+
 def encode(x):
     return json.dumps(x, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
@@ -94,6 +122,8 @@ def fit(offer, facts, now):
     seen = set()
     for g in sorted(facts.get('games') or [], key=lambda x: x['date'], reverse=True):
         value = g.get('value')
+        if (ident.get('competition'), g.get('source'), stat) not in FORECAST_INPUTS:
+            continue   # weight 0: research-only source / competition / stat (grade leak guard)
         if (g['event_id'] == ident['event_id'] or g['event_id'] in seen or
                 not g.get('known_at') or parse_utc(g['known_at']) > parse_utc(now) or
                 parse_utc(g['date']) >= parse_utc(now) or isinstance(value, bool) or

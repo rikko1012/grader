@@ -23,7 +23,8 @@ def fixture(sport='soccer'):
            'event':{'event_id':identity['event_id'],'status':'scheduled','start':offer['start']}}
     for i,value in enumerate([5,2,4,3,5,2,4,1,3,4]):
         stamp=(datetime(2026,11,16,tzinfo=timezone.utc)-timedelta(days=i)).isoformat()
-        facts['games'].append({'event_id':f'{sport}:old:{i}','date':stamp,'known_at':stamp,'value':value,'source':'fixture'})
+        facts['games'].append({'event_id':f'{sport}:old:{i}','date':stamp,'known_at':stamp,'value':value,
+                               'source':'espn' if sport=='soccer' else '365scores'})   # a FORECAST_INPUTS source
     if sport=='tennis':
         offer.update(stat='games_won',scope='set1',line=4.5)
         facts['scope']='set1'
@@ -127,7 +128,7 @@ def test_reviews_append_corrections_without_rewriting_forecasts(setup,monkeypatc
     facts.update(identity={'competition':'atp','event_id':match['event_id'],'player_id':match['participants'][0]['id']},
                  scope='full_game',context={'best_of':3},
                  event={'event_id':match['event_id'],'start':offer['start'],'status':'scheduled'})
-    for game in facts['games']:game['best_of']=3
+    for game in facts['games']:game.update(best_of=3,source='thescore')   # ATP aces: a FORECAST_INPUTS source
     monkeypatch.setattr(boards,'board',lambda req:(200,{'offers':[offer]}))
     monkeypatch.setattr(research,'saved',lambda sport:{'players':{research.key(offer):facts}})
     assert model.publish('tennis',NOW)['published']==1
