@@ -22,6 +22,15 @@ PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10), ('exchanges', 
           'tennis': (('thescore', 10, 25), ('exchanges', 6, 15))}
 
 
+def enabled(name):
+    """Kill switches, no deploy needed: SCOUT_EXPANSION_SOURCES=0 stops every research phase (the history job then
+    runs as at 53dad0b, FotMob / theScore included - they are phases now, so they stop too);
+    SCOUT_EXPANSION_PHASE_<NAME>=0 (FOTMOB, THESCORE, FOOTBALL_DATA, EXCHANGES) stops one."""
+    import os
+    return (os.environ.get('SCOUT_EXPANSION_SOURCES', '1') != '0'
+            and os.environ.get('SCOUT_EXPANSION_PHASE_' + name.upper(), '1') != '0')
+
+
 def _phase(name, sport, catalogs, persist, directory, get, get_text):
     from .expansion_history import offered
     if name == 'fotmob':
@@ -46,6 +55,9 @@ def run(sport, catalogs, persist, directory, deadline):
     for name, max_requests, max_seconds in PHASES[sport]:
         info = {'requests': 0, 'ok': 0, 'rows': 0, 'errors': [], 'state': 'ok'}
         out[name] = info
+        if not enabled(name):
+            info['state'] = 'off'
+            continue
         began = time.monotonic()
         end = min(deadline, began + max_seconds)
         if began >= deadline:

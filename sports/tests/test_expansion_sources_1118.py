@@ -118,3 +118,14 @@ def test_a_503_keeps_the_detail_state(tmp_path):
     errors = fotmob.collect_details({'bra.1': {'x': m}}, get, lambda *a: None, tmp_path)
     assert errors == ['HttpError']
     assert 'older' in json.loads((tmp_path / 'detail-history-state.json').read_text())
+
+
+def test_kill_switches_stop_one_phase_or_all(monkeypatch, tmp_path):
+    ran = []
+    monkeypatch.setattr(phases, '_phase', lambda name, *a: ran.append(name) or {'errors': []})
+    monkeypatch.setenv('SCOUT_EXPANSION_PHASE_EXCHANGES', '0')
+    out = phases.run('soccer', {}, lambda *a: True, tmp_path, time.monotonic() + 60)
+    assert ran == ['fotmob', 'football_data'] and out['exchanges']['state'] == 'off'
+    monkeypatch.setenv('SCOUT_EXPANSION_SOURCES', '0')
+    out = phases.run('tennis', {}, lambda *a: True, tmp_path, time.monotonic() + 60)
+    assert ran == ['fotmob', 'football_data'] and all(v['state'] == 'off' for v in out.values())
