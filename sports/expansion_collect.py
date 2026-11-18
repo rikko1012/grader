@@ -18,8 +18,8 @@ import time
 from . import net
 
 RESERVE_S = 45
-PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10)),
-          'tennis': (('thescore', 10, 25),)}
+PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10), ('exchanges', 12, 15)),
+          'tennis': (('thescore', 10, 25), ('exchanges', 6, 15))}
 
 
 def _phase(name, sport, catalogs, persist, directory, get, get_text):
