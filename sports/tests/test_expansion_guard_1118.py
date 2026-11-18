@@ -44,7 +44,7 @@ def test_only_frozen_inputs_feed_the_forecast(comp, source, stat, allowed):
     f, reason = model.fit(offer, facts, NOW)
     assert (f is not None) is allowed, reason
     if not allowed:
-        assert reason in ('more_exact_history_needed', 'competition_mismatch')
+        assert reason == 'more_exact_history_needed'
 
 
 def test_the_allowlist_is_frozen_not_derived_from_growing_tables():

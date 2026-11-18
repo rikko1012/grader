@@ -31,9 +31,47 @@ COMPETITIONS = {
     "fifa.worldq.concacaf": ("soccer", "soccer"), "fifa.worldq.afc": ("soccer", "soccer"),
     "fifa.worldq.caf": ("soccer", "soccer"), "fifa.world": ("soccer", "soccer"),
     "concacaf.nations.league": ("soccer", "soccer"),
+    # 2026-11-18: 77 more ESPN soccer slugs, each verified by its own scoreboard league header (id + slug + name,
+    # logs/sources_1118/probe/espn_slug_ids.json). Research only: no slug here is a forecast input (FORECAST_INPUTS).
+    "eng.2": ("soccer", "soccer"), "eng.3": ("soccer", "soccer"), "eng.4": ("soccer", "soccer"),
+    "eng.5": ("soccer", "soccer"), "ger.2": ("soccer", "soccer"), "ita.2": ("soccer", "soccer"),
+    "esp.2": ("soccer", "soccer"), "fra.2": ("soccer", "soccer"), "ned.2": ("soccer", "soccer"),
+    "sco.2": ("soccer", "soccer"), "aut.1": ("soccer", "soccer"), "sui.1": ("soccer", "soccer"),
+    "den.1": ("soccer", "soccer"), "nor.1": ("soccer", "soccer"), "swe.1": ("soccer", "soccer"),
+    "gre.1": ("soccer", "soccer"), "rus.1": ("soccer", "soccer"), "jpn.1": ("soccer", "soccer"),
+    "aus.1": ("soccer", "soccer"), "ksa.1": ("soccer", "soccer"), "chn.1": ("soccer", "soccer"),
+    "usa.usl.1": ("soccer", "soccer"), "usa.nwsl": ("soccer", "soccer"), "uefa.europa": ("soccer", "soccer"),
+    "uefa.europa.conf": ("soccer", "soccer"), "eng.fa": ("soccer", "soccer"), "eng.league_cup": ("soccer", "soccer"),
+    "esp.copa_del_rey": ("soccer", "soccer"), "ger.dfb_pokal": ("soccer", "soccer"),
+    "ita.coppa_italia": ("soccer", "soccer"), "fra.coupe_de_france": ("soccer", "soccer"),
+    "arg.2": ("soccer", "soccer"), "mex.2": ("soccer", "soccer"), "bra.2": ("soccer", "soccer"),
+    "col.1": ("soccer", "soccer"), "chi.1": ("soccer", "soccer"), "per.1": ("soccer", "soccer"),
+    "uru.1": ("soccer", "soccer"), "ecu.1": ("soccer", "soccer"), "par.1": ("soccer", "soccer"),
+    "bol.1": ("soccer", "soccer"), "ven.1": ("soccer", "soccer"), "eng.w.1": ("soccer", "soccer"),
+    "esp.w.1": ("soccer", "soccer"), "ned.w.1": ("soccer", "soccer"), "fra.w.1": ("soccer", "soccer"),
+    "usa.w.usl.1": ("soccer", "soccer"), "club.friendly": ("soccer", "soccer"),
+    "uefa.wchampions": ("soccer", "soccer"), "esp.copa_de_la_reina": ("soccer", "soccer"),
+    "eng.w.league_cup": ("soccer", "soccer"), "mex.w.1": ("soccer", "soccer"), "ind.1": ("soccer", "soccer"),
+    "ind.2": ("soccer", "soccer"), "bol.copa": ("soccer", "soccer"), "concacaf.champions": ("soccer", "soccer"),
+    "conmebol.libertadores": ("soccer", "soccer"), "conmebol.sudamericana": ("soccer", "soccer"),
+    "afc.champions": ("soccer", "soccer"), "caf.champions": ("soccer", "soccer"), "irl.1": ("soccer", "soccer"),
+    "wal.1": ("soccer", "soccer"), "isr.1": ("soccer", "soccer"), "cyp.1": ("soccer", "soccer"),
+    "cze.1": ("soccer", "soccer"), "rou.1": ("soccer", "soccer"), "rsa.1": ("soccer", "soccer"),
+    "ger.super_cup": ("soccer", "soccer"), "idn.1": ("soccer", "soccer"), "tha.1": ("soccer", "soccer"),
+    "mys.1": ("soccer", "soccer"), "crc.1": ("soccer", "soccer"), "hon.1": ("soccer", "soccer"),
+    "gua.1": ("soccer", "soccer"), "slv.1": ("soccer", "soccer"), "jam.1": ("soccer", "soccer"),
+    "aus.w.1": ("soccer", "soccer"),
     "atp": ("tennis", "atp"), "wta": ("tennis", "wta"),
     "atp_challenger": ("tennis", "atp"), "wta125": ("tennis", "wta"),
 }
+
+# The competitions of 53dad0b (soccer 24 + tennis 4). Their history / summary behaviour is unchanged by the
+# 2026-11-18 additions; the newer slugs get research-only collection with a smaller summary queue.
+BASE_COMPETITIONS = frozenset((
+    'eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1', 'usa.1', 'bra.1', 'arg.1', 'mex.1', 'ned.1', 'por.1', 'sco.1', 'bel.1',
+    'tur.1', 'uefa.champions', 'fifa.friendly', 'uefa.nations', 'fifa.worldq.uefa', 'fifa.worldq.conmebol',
+    'fifa.worldq.concacaf', 'fifa.worldq.afc', 'fifa.worldq.caf', 'fifa.world', 'concacaf.nations.league',
+    'atp', 'wta', 'atp_challenger', 'wta125'))
 
 
 @dataclass

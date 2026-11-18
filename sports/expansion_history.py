@@ -19,7 +19,7 @@ import unicodedata
 
 from . import expansion_board as boards, net, store
 from .contracts import now_utc, parse_utc
-from .expansion import COMPETITIONS, isolated_database, parse_scoreboard
+from .expansion import BASE_COMPETITIONS, COMPETITIONS, isolated_database, parse_scoreboard
 from .expansion_soccer import parse_summary, parse_context
 
 
@@ -46,6 +46,25 @@ def atomic_json(path, value):
 # League IDs verified from each ESPN scoreboard league header on 2026-11-17.
 # Future fixtures often omit the league links but retain this source UID.
 SOCCER_LEAGUE_IDS = {'700': 'eng.1', '740': 'esp.1', '720': 'ger.1', '730': 'ita.1', '710': 'fra.1', '770': 'usa.1', '630': 'bra.1', '745': 'arg.1', '760': 'mex.1', '725': 'ned.1', '715': 'por.1', '735': 'sco.1', '3901': 'bel.1', '3946': 'tur.1', '775': 'uefa.champions', '3922': 'fifa.friendly', '2395': 'uefa.nations', '786': 'fifa.worldq.uefa', '787': 'fifa.worldq.conmebol', '788': 'fifa.worldq.concacaf', '789': 'fifa.worldq.afc', '790': 'fifa.worldq.caf', '606': 'fifa.world', '19267': 'concacaf.nations.league'}
+SOCCER_LEAGUE_IDS.update({
+    # 2026-11-18: each id read from that slug's own scoreboard league header (sources_1118/probe/espn_slug_ids.json).
+    # Unverified ids (NCAA, U-17 World Cup, Women's FA Cup, Taça de Portugal, play-offs) stay out - never guessed.
+    '3914': 'eng.2', '3915': 'eng.3', '3916': 'eng.4', '3917': 'eng.5', '3927': 'ger.2', '3931': 'ita.2',
+    '3921': 'esp.2', '3926': 'fra.2', '3933': 'ned.2', '3940': 'sco.2', '3907': 'aut.1', '3944': 'sui.1',
+    '3913': 'den.1', '3960': 'nor.1', '3945': 'swe.1', '3955': 'gre.1', '3939': 'rus.1', '750': 'jpn.1',
+    '3906': 'aus.1', '21231': 'ksa.1', '8376': 'chn.1', '4002': 'usa.usl.1', '8301': 'usa.nwsl',
+    '776': 'uefa.europa', '20296': 'uefa.europa.conf', '3918': 'eng.fa', '3920': 'eng.league_cup',
+    '3951': 'esp.copa_del_rey', '3954': 'ger.dfb_pokal', '3956': 'ita.coppa_italia', '3952': 'fra.coupe_de_france',
+    '3903': 'arg.2', '3932': 'mex.2', '4007': 'bra.2', '650': 'col.1', '640': 'chi.1', '670': 'per.1',
+    '680': 'uru.1', '660': 'ecu.1', '3934': 'par.1', '620': 'bol.1', '3949': 'ven.1', '8097': 'eng.w.1',
+    '20956': 'esp.w.1', '19945': 'ned.w.1', '20955': 'fra.w.1', '23633': 'usa.w.usl.1', '19834': 'club.friendly',
+    '19483': 'uefa.wchampions', '20381': 'esp.copa_de_la_reina', '23390': 'eng.w.league_cup', '23541': 'mex.w.1',
+    '8316': 'ind.1', '18505': 'ind.2', '23284': 'bol.copa', '5699': 'concacaf.champions',
+    '783': 'conmebol.libertadores', '5454': 'conmebol.sudamericana', '3902': 'afc.champions',
+    '2391': 'caf.champions', '3930': 'irl.1', '3963': 'wal.1', '10750': 'isr.1', '5346': 'cyp.1', '5347': 'cze.1',
+    '10747': 'rou.1', '3937': 'rsa.1', '8101': 'ger.super_cup', '8339': 'idn.1', '8344': 'tha.1', '8340': 'mys.1',
+    '4005': 'crc.1', '3929': 'hon.1', '3928': 'gua.1', '3943': 'slv.1', '8347': 'jam.1', '18992': 'aus.w.1',
+})
 
 
 def soccer_competition(event):
@@ -196,6 +215,7 @@ def collect_soccer_teams(catalogs, get, persist, directory):
                     key = f"{match['competition']}:{team['id']}"
                     teams.setdefault(key, {'competition':match['competition'], 'team':team['id'], 'matches':[]})['matches'].append(match)
     errors = []
+    mark_offered(directory, {item['competition'] for item in teams.values()})
     try:
         # Reuse valid rosters every run, then refresh at most two teams so a busy
         # slate cannot consume the entire history request budget indefinitely.
@@ -246,6 +266,69 @@ def collect_soccer_teams(catalogs, get, persist, directory):
         atomic_json(path, {k:v for k,v in state.items() if v.get('checked_at') and
                           (now-parse_utc(v['checked_at'])).total_seconds() < 7*86400})
     return errors
+
+
+OFFERED_DAYS = 30
+
+
+def mark_offered(directory, competitions):
+    """Remember when each competition last had an offered fixture (offered-competitions.json, last 30 days)."""
+    path = directory / 'offered-competitions.json'
+    seen = offered(directory)
+    now = now_utc()
+    seen.update({c: now for c in competitions})
+    if competitions:
+        atomic_json(path, seen)
+    return seen
+
+
+def offered(directory):
+    """{competition: last offered at} within OFFERED_DAYS. A missing / unreadable file = nothing recent."""
+    try:
+        seen = json.loads((directory / 'offered-competitions.json').read_text(encoding='utf-8'))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=OFFERED_DAYS)
+        return {c: t for c, t in seen.items() if isinstance(t, str) and parse_utc(t) >= cutoff}
+    except (OSError, ValueError, AttributeError, TypeError):
+        return {}
+
+
+def summary_due(match, recent, now):
+    """Is this soccer match's ESPN summary due? Base competitions keep the 53dad0b rule (final: every 24 h, else 6 h).
+    A newer competition (2026-11-18) is summarised only while it had an offer in the last 30 days, and a final that
+    already has a stored summary is re-read only inside a 48 h correction window - otherwise ~4x the events would
+    never drain through 6 summaries a run."""
+    checked, attempt = match.get('summary_checked_at'), match.get('summary_attempt_at')
+    if attempt and (now - parse_utc(attempt)).total_seconds() < 1800:
+        return False
+    if match.get('competition') not in BASE_COMPETITIONS:
+        if match.get('competition') not in recent:
+            return False
+        if checked and match.get('status') == 'final' and (
+                not match.get('start') or (now - parse_utc(match['start'])).total_seconds() > 48 * 3600):
+            return False
+    return (not checked or (now - parse_utc(checked)).total_seconds() >=
+            (86400 if match.get('status') == 'final' else 21600))
+
+
+CURRENT_MATCHES_BYTES = 2_900_000   # readers ignore a current-matches.json over 3,000,000 bytes (every identity pending)
+
+
+def fit_matches(rows, recent, limit=CURRENT_MATCHES_BYTES):
+    """Keep current-matches.json readable: when too large, keep offered competitions first, then the 53dad0b ones,
+    then the rest, earliest start first. Under the limit nothing changes (same list, same order)."""
+    sizes = [len(json.dumps(r, separators=(',', ':'))) + 1 for r in rows]
+    if sum(sizes) + 2 <= limit:
+        return rows
+    order = sorted(range(len(rows)), key=lambda i: (rows[i].get('competition') not in recent,
+                                                     rows[i].get('competition') not in BASE_COMPETITIONS,
+                                                     rows[i].get('start') or '', rows[i].get('event_id') or ''))
+    keep, used = set(), 2
+    for i in order:
+        if used + sizes[i] > limit:
+            continue
+        keep.add(i)
+        used += sizes[i]
+    return [r for i, r in enumerate(rows) if i in keep]
 
 
 def storage_budget_mb():
@@ -362,7 +445,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             for comp in (('all',) if sport == 'soccer' else ('atp', 'wta')):
                 try:
                     body = get(f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{comp}/scoreboard',
-                               {'dates': dates, 'limit': 200})
+                               {'dates': dates, 'limit': 1000})   # 200 cut busy days (Nov 21: 225 events)
                 except (net.HttpError, ValueError, OSError) as e:
                     counts['errors'].append(type(e).__name__)
                     phase_ok = False
@@ -388,18 +471,15 @@ def collect(sport, max_requests=16, max_seconds=150):
             counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory))
             # Scoreboards get their budget first. Pending summaries stay in the
             # catalog across runs, so advancing the date cannot lose a busy day.
-            pending = [m for matches in catalogs.values() for m in matches.values()
-                       if (not m.get('summary_checked_at') or
-                           (datetime.now(timezone.utc)-parse_utc(m['summary_checked_at'])).total_seconds() >=
-                           (86400 if m.get('status') == 'final' else 21600))
-                       and (not m.get('summary_attempt_at') or
-                            (datetime.now(timezone.utc)-parse_utc(m['summary_attempt_at'])).total_seconds() >= 1800)]
+            recent, instant = offered(directory), datetime.now(timezone.utc)
+            pending = [m for matches in catalogs.values() for m in matches.values() if summary_due(m, recent, instant)]
             # Check imminent offered events first, then the oldest unchecked
             # summary. Once checked, a game waits its interval and frees the queue.
             offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
                              for p in m.get('players', []) if p.get('identity_source') == 'espn_team_roster'}
             pending.sort(key=lambda m:(bool(m.get('summary_checked_at')),
                                        not any(p['id'] in offered_teams for p in m['participants']),
+                                       m['competition'] not in BASE_COMPETITIONS,
                                        m.get('status') != 'final', m.get('summary_checked_at') or '',
                                        -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id']))
             for match in pending[:6]:
@@ -437,7 +517,8 @@ def collect(sport, max_requests=16, max_seconds=150):
                     {key: match for key, match in matches.items() if (match.get('start') or '') >= cutoff})
     earliest = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat().replace('+00:00','Z')
     atomic_json(directory / 'current-matches.json',
-                [m for matches in catalogs.values() for m in matches.values() if (m.get('start') or '') >= earliest])
+                fit_matches([m for matches in catalogs.values() for m in matches.values()
+                             if (m.get('start') or '') >= earliest], offered(directory)))
     from .expansion_research import publish
     # When results were last really stored (not when research.json was rebuilt): the freshness members see.
     counts['stored_at'] = now_utc() if counts['records'] else state.get('stored_at')
