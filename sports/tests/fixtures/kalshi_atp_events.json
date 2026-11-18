@@ -1,0 +1,262 @@
+{
+ "_note": "Trimmed from a real GET /trade-api/v2/events answer read 2026-11-18 (series_ticker, status=open, with_nested_markets=true); fields and values unchanged, other events and market fields left out.",
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXATPMATCH-26NOV17ALCCOB",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-17T21:30:51.491415Z",
+   "markets": [
+    {
+     "ticker": "KXATPMATCH-26NOV17ALCCOB-ALC",
+     "event_ticker": "KXATPMATCH-26NOV17ALCCOB",
+     "title": "Carlos Alcaraz wins",
+     "yes_sub_title": "Carlos Alcaraz",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "527915ea-e368-4c7f-a203-c83ebb6f6572"
+     },
+     "yes_bid_dollars": "0.8300",
+     "yes_ask_dollars": "0.8900",
+     "volume_fp": "4005.22",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Carlos Alcaraz wins the Alcaraz vs Cobolli professional tennis match in the 2026 ATP World Tour Finals Men Singles Ivan Lendl Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:30:51.502235Z"
+    },
+    {
+     "ticker": "KXATPMATCH-26NOV17ALCCOB-COB",
+     "event_ticker": "KXATPMATCH-26NOV17ALCCOB",
+     "title": "Flavio Cobolli wins",
+     "yes_sub_title": "Flavio Cobolli",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "05040645-e988-4e97-a807-752b464c147b"
+     },
+     "yes_bid_dollars": "0.1200",
+     "yes_ask_dollars": "0.1700",
+     "volume_fp": "2331.78",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Flavio Cobolli wins the Alcaraz vs Cobolli professional tennis match in the 2026 ATP World Tour Finals Men Singles Ivan Lendl Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:30:51.502235Z"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "ATP World Tour Finals Men Singles",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXATPMATCH",
+   "settlement_sources": [
+    {
+     "name": "ATP",
+     "url": "https://www.atptour.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Alcaraz vs Cobolli (Nov 17)",
+   "title": "Alcaraz vs Cobolli"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXATPMATCH-26NOV17MEDTIA",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-17T21:30:53.15359Z",
+   "markets": [
+    {
+     "ticker": "KXATPMATCH-26NOV17MEDTIA-MED",
+     "event_ticker": "KXATPMATCH-26NOV17MEDTIA",
+     "title": "Daniil Medvedev wins",
+     "yes_sub_title": "Daniil Medvedev",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "d2257e62-3f76-4724-8a3f-745799aeae46"
+     },
+     "yes_bid_dollars": "0.6900",
+     "yes_ask_dollars": "0.7800",
+     "volume_fp": "1566.17",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Daniil Medvedev wins the Medvedev vs Tiafoe professional tennis match in the 2026 ATP World Tour Finals Men Singles Ivan Lendl Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:30:53.163895Z"
+    },
+    {
+     "ticker": "KXATPMATCH-26NOV17MEDTIA-TIA",
+     "event_ticker": "KXATPMATCH-26NOV17MEDTIA",
+     "title": "Frances Tiafoe wins",
+     "yes_sub_title": "Frances Tiafoe",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "35b9acda-2a7c-4255-aaf0-ce912d35b3b5"
+     },
+     "yes_bid_dollars": "0.2100",
+     "yes_ask_dollars": "0.3000",
+     "volume_fp": "1569.27",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Frances Tiafoe wins the Medvedev vs Tiafoe professional tennis match in the 2026 ATP World Tour Finals Men Singles Ivan Lendl Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:30:53.163895Z"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "ATP World Tour Finals Men Singles",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXATPMATCH",
+   "settlement_sources": [
+    {
+     "name": "ATP",
+     "url": "https://www.atptour.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Medvedev vs Tiafoe (Nov 17)",
+   "title": "Medvedev vs Tiafoe"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXATPMATCH-26NOV17SHEJOD",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-17T21:35:34.820256Z",
+   "markets": [
+    {
+     "ticker": "KXATPMATCH-26NOV17SHEJOD-SHE",
+     "event_ticker": "KXATPMATCH-26NOV17SHEJOD",
+     "title": "Ben Shelton wins",
+     "yes_sub_title": "Ben Shelton",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "241ad35b-edbe-4ea0-a2bc-647102e62d3e"
+     },
+     "yes_bid_dollars": "0.6600",
+     "yes_ask_dollars": "0.6700",
+     "volume_fp": "12364.93",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Ben Shelton wins the Shelton vs Jodar professional tennis match in the 2026 ATP World Tour Finals Men Singles John Mcenroe Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:35:34.83067Z"
+    },
+    {
+     "ticker": "KXATPMATCH-26NOV17SHEJOD-JOD",
+     "event_ticker": "KXATPMATCH-26NOV17SHEJOD",
+     "title": "Rafael Jodar wins",
+     "yes_sub_title": "Rafael Jodar",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "2bb8d0af-e0ad-4482-9562-beb15a1d208c"
+     },
+     "yes_bid_dollars": "0.3300",
+     "yes_ask_dollars": "0.3400",
+     "volume_fp": "2207.19",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Rafael Jodar wins the Shelton vs Jodar professional tennis match in the 2026 ATP World Tour Finals Men Singles John Mcenroe Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:35:34.83067Z"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "ATP World Tour Finals Men Singles",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXATPMATCH",
+   "settlement_sources": [
+    {
+     "name": "ATP",
+     "url": "https://www.atptour.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Shelton vs Jodar (Nov 17)",
+   "title": "Shelton vs Jodar"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXATPMATCH-26NOV17ZVEFIL",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-17T21:35:35.784713Z",
+   "markets": [
+    {
+     "ticker": "KXATPMATCH-26NOV17ZVEFIL-ZVE",
+     "event_ticker": "KXATPMATCH-26NOV17ZVEFIL",
+     "title": "Alexander Zverev wins",
+     "yes_sub_title": "Alexander Zverev",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "dc4002ad-fb32-4f36-b59f-7c7af1927c57"
+     },
+     "yes_bid_dollars": "0.7000",
+     "yes_ask_dollars": "0.7100",
+     "volume_fp": "29771.87",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Alexander Zverev wins the Zverev vs Fils professional tennis match in the 2026 ATP World Tour Finals Men Singles John Mcenroe Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:35:35.790932Z"
+    },
+    {
+     "ticker": "KXATPMATCH-26NOV17ZVEFIL-FIL",
+     "event_ticker": "KXATPMATCH-26NOV17ZVEFIL",
+     "title": "Arthur Fils wins",
+     "yes_sub_title": "Arthur Fils",
+     "floor_strike": null,
+     "custom_strike": {
+      "tennis_competitor": "df899172-1dd3-476f-9945-44b478502d33"
+     },
+     "yes_bid_dollars": "0.2900",
+     "yes_ask_dollars": "0.3000",
+     "volume_fp": "7998.75",
+     "close_time": "2026-12-01T10:30:00Z",
+     "status": "active",
+     "market_type": "binary",
+     "strike_type": "structured",
+     "rules_primary": "If Arthur Fils wins the Zverev vs Fils professional tennis match in the 2026 ATP World Tour Finals Men Singles John Mcenroe Group after a ball has been played, then the market resolves to Yes.",
+     "occurrence_datetime": "2026-11-17T13:30:00Z",
+     "updated_time": "2026-11-17T21:35:35.790932Z"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "ATP World Tour Finals Men Singles",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXATPMATCH",
+   "settlement_sources": [
+    {
+     "name": "ATP",
+     "url": "https://www.atptour.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Zverev vs Fils (Nov 17)",
+   "title": "Zverev vs Fils"
+  }
+ ]
+}
