@@ -103,7 +103,7 @@ def parse(events, tour, fixtures, observed):
         raise ValueError('tour and observation time required')
     candidates = [f for c in SERIES['tennis'][tour]['competitions'] for f in _open(fixtures, c, now)]
     stats = {'events': 0, 'matched': 0, 'started': 0, 'dropped_invalid': 0, 'dropped_wide': 0, 'dropped_thin': 0,
-             'ambiguous': 0, 'unmatched': [], 'unparsed_types': []}
+             'ambiguous': 0, 'unmatched_count': 0, 'unmatched': [], 'unparsed_types': []}
     found, claims, unknown = [], {}, set()
     for event in events or []:
         if not isinstance(event, dict):
@@ -136,6 +136,7 @@ def parse(events, tour, fixtures, observed):
     rows = []
     for event, names, market, hits in found:
         if not hits:
+            stats['unmatched_count'] += 1
             if len(stats['unmatched']) < 10:
                 stats['unmatched'].append(' vs '.join(names)[:80])
             continue
@@ -197,7 +198,7 @@ def collect(sport, get, directory):
               'end_date_max': _stamp(moment + timedelta(days=END_WINDOW_DAYS[1]))}
     rows, deadline, requests = [], time.monotonic() + WALL_S, 0
     totals = {'events': 0, 'matched': 0, 'started': 0, 'dropped_invalid': 0, 'dropped_wide': 0, 'dropped_thin': 0,
-              'ambiguous': 0, 'unmatched': [], 'unparsed_types': []}
+              'ambiguous': 0, 'unmatched_count': 0, 'unmatched': [], 'unparsed_types': []}
     for tour, spec in wanted:
         events, seen, offset, more = [], set(), 0, True
         while more and requests < MAX_REQUESTS and time.monotonic() < deadline:

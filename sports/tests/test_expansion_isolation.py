@@ -93,8 +93,9 @@ def test_grading_and_model_code_never_reads_reference_prices():
     for path in files:
         text = path.read_text(encoding='utf-8').casefold()
         assert 'reference_prices' not in text and 'expansion_kalshi' not in text, path
+        assert 'expansion_polymarket' not in text, path
         if path.parent.name != 'gradecore' and 'gradecore' not in path.parts[-3:]:
-            assert 'kalshi' not in text, path
+            assert 'kalshi' not in text and 'polymarket' not in text, path
 
 
 def _reference_row(sport):
@@ -159,8 +160,24 @@ def test_kalshi_adds_no_job_and_changes_no_job_spec(monkeypatch):
     on = default_jobs()
     monkeypatch.setenv('SCOUT_SOCCER_KALSHI', '0')
     monkeypatch.setenv('SCOUT_TENNIS_KALSHI', '0')
+    monkeypatch.setenv('SCOUT_TENNIS_POLYMARKET', '0')
     assert default_jobs() == on
     assert {k for k in on if k.startswith(('soccer-', 'tennis-'))} == {
         f'{s}-{j}' for s in ('soccer', 'tennis') for j in ('quotes', 'history', 'learning')}
     quotes = on['soccer-quotes']
     assert quotes['timeout_s'] == 90 and quotes['every_s'] == 180 and quotes['argv'][-2:] == ['sports.expansion_board', 'soccer']
+
+
+def test_polymarket_reference_rows_are_written_only_under_the_tennis_expansion_folder(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from sports import config, expansion_board as boards
+    from sports.contracts import utc
+    monkeypatch.delenv('SCOUT_EXPANSION_DATA_DIR', raising=False)
+    monkeypatch.setattr(config, 'DATA_DIR', tmp_path)
+    (tmp_path / 'canonical.db').write_bytes(b'nba-nfl')
+    now = datetime.now(timezone.utc)
+    row = dict(_reference_row('tennis'), platform='polymarket', start=utc(now + timedelta(hours=1)), observed_at=utc(now))
+    boards.save('tennis', [], {}, utc(now), reference_prices=[row])
+    written = sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob('*') if p.is_file())
+    assert written == ['canonical.db', 'expansion/tennis/board.json', 'expansion/tennis/quotes.db']
+    assert (tmp_path / 'canonical.db').read_bytes() == b'nba-nfl'

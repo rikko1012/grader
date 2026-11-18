@@ -186,6 +186,7 @@ def test_board_stays_under_the_member_limit_with_150_reference_rows(tennis_store
 
 def test_quotes_job_kill_switch_and_reference_failure_never_cost_the_lines(tennis_store,monkeypatch):
     from sports import expansion_kalshi, expansion_odds
+    monkeypatch.setenv('SCOUT_TENNIS_POLYMARKET','0')       # this test is about the Kalshi switch alone
     monkeypatch.setattr('sports.expansion_sources.get_json',lambda sport,url,**kw:{})
     monkeypatch.setattr(expansion_odds,'collect',lambda sport,get,directory:([],{}))
     seen=[]
@@ -212,3 +213,116 @@ def test_quotes_job_fails_when_only_the_reference_source_answered(tennis_store,m
         'prizepicks':{'ok':False},'kalshi':{'ok':True,'reference':True}}})
     with pytest.raises(SystemExit) as e:boards.main()
     assert e.value.code==1
+
+
+# ---- Polymarket tennis reference prices: beside Kalshi's, same key, their own quotes.db namespace ----------------
+
+def polymarket_reference(mid=.665,offer='atp-shelton-jodar-2026-11-17'):
+    row=reference(mid=mid,offer=offer)
+    return finish_again(dict(row,platform='polymarket',source='gamma'))
+
+
+def finish_again(row):
+    from sports.expansion_offers import finish
+    return finish({k:v for k,v in row.items() if k!='revision'})
+
+
+def _quotes_job(monkeypatch):
+    from sports import expansion_kalshi, expansion_odds, expansion_polymarket
+    monkeypatch.setattr('sports.expansion_sources.get_json',lambda sport,url,**kw:{})
+    monkeypatch.setattr(expansion_odds,'collect',lambda sport,get,directory:([],{}))
+    seen=[];first,second=reference(),polymarket_reference()
+    def kalshi(sport,get,directory):
+        seen.append(('kalshi',sport));return [dict(first,sport=sport)],{'ok':True,'reference':True,'markets':1}
+    def polymarket(sport,get,directory):
+        seen.append(('polymarket',sport));return [dict(second)],{'ok':True,'reference':True,'markets':1}
+    monkeypatch.setattr(expansion_kalshi,'collect',kalshi)
+    monkeypatch.setattr(expansion_polymarket,'collect',polymarket)
+    return seen
+
+
+def test_quotes_job_stores_polymarket_beside_kalshi_in_the_tennis_store_only(tennis_store,monkeypatch):
+    import sqlite3
+    seen=_quotes_job(monkeypatch)
+    snap=boards.collect('tennis')
+    assert seen==[('kalshi','tennis'),('polymarket','tennis')]
+    assert [r['platform'] for r in snap['reference_prices']]==['kalshi','polymarket']
+    assert snap['sources']['polymarket']=={'ok':True,'reference':True,'markets':1} and snap['game_odds']==[]==snap['offers']
+    with sqlite3.connect(tennis_store/'quotes.db') as con:
+        assert sorted(r[0] for r in con.execute('SELECT platform FROM revisions'))==['ref:kalshi','ref:polymarket']
+    boards.collect('tennis')                                  # same prices: no new revision
+    with sqlite3.connect(tennis_store/'quotes.db') as con:
+        assert con.execute('SELECT count(*) FROM revisions').fetchone()[0]==2
+    code,b=boards.board(SimpleNamespace(query={'sport':'tennis'}))
+    assert code==200 and [r['platform'] for r in b['reference_prices']]==['kalshi','polymarket']
+    # Soccer never asks Polymarket, whatever its switch says, and its store refuses a tennis row.
+    seen.clear();monkeypatch.setenv('SCOUT_SOCCER_POLYMARKET','1')
+    snap=boards.collect('soccer')
+    assert seen==[('kalshi','soccer')] and 'polymarket' not in snap['sources']
+    with pytest.raises(ValueError,match='mixed sport'):
+        boards.save('soccer',[],{},snap['built_at'],reference_prices=[polymarket_reference()])
+    with sqlite3.connect(tennis_store.parent/'soccer'/'quotes.db') as con:
+        assert con.execute('SELECT DISTINCT platform FROM revisions').fetchall()==[('ref:kalshi',)]
+
+
+def test_polymarket_kill_switch_sends_nothing(tennis_store,monkeypatch):
+    seen=_quotes_job(monkeypatch)
+    monkeypatch.setenv('SCOUT_TENNIS_POLYMARKET','0')
+    snap=boards.collect('tennis')
+    assert seen==[('kalshi','tennis')] and 'polymarket' not in snap['sources']
+    assert [r['platform'] for r in snap['reference_prices']]==['kalshi']
+    monkeypatch.setenv('SCOUT_TENNIS_KALSHI','0')
+    snap=boards.collect('tennis')
+    assert seen==[('kalshi','tennis')] and 'reference_prices' not in snap
+
+
+def test_a_polymarket_failure_costs_only_its_own_rows(tennis_store,monkeypatch):
+    from sports import expansion_polymarket
+    seen=_quotes_job(monkeypatch)
+    def broken(sport,get,directory):raise RuntimeError('unexpected')
+    monkeypatch.setattr(expansion_polymarket,'collect',broken)
+    snap=boards.collect('tennis')
+    assert [r['platform'] for r in snap['reference_prices']]==['kalshi'] and snap['sources']['kalshi']['ok']
+    assert snap['sources']['polymarket']=={**snap['sources']['polymarket'],'ok':False,'reference':True,'error':'RuntimeError'}
+    assert snap['sources']['prizepicks']['ok']
+
+
+@pytest.mark.parametrize('status',[429,403,500])
+def test_a_polymarket_refusal_is_one_request_and_keeps_every_other_row(tennis_store,monkeypatch,status):
+    from sports import expansion_kalshi, expansion_odds, expansion_polymarket, expansion_sources, net
+    monkeypatch.setattr(net,'_HOLD',{})
+    now=datetime.now(timezone.utc)
+    tennis_store.mkdir(parents=True)
+    (tennis_store/'current-matches.json').write_text(json.dumps([{'event_id':'atp:espn:atp:1:1','competition':'atp',
+        'name':'Nitto ATP Finals','start':utc(now+timedelta(hours=20)),'status':'scheduled',
+        'participants':[{'id':'a','name':'Ben Shelton'},{'id':'b','name':'Rafael Jodar'}]}]),encoding='utf-8')
+    e,m=fixture();e['start']=utc(now+timedelta(minutes=5))
+    for o in m['outcomes']:o['changedDate']=utc(now)
+    odds=kambi_event(e,[m],'tennis',utc(now))
+    monkeypatch.setattr('sports.expansion_sources.get_json',lambda sport,url,**kw:{})
+    monkeypatch.setattr(expansion_odds,'collect',lambda sport,get,directory:(odds,{'betrivers':{'ok':True}}))
+    monkeypatch.setattr(expansion_kalshi,'collect',lambda sport,get,directory:([reference()],{'ok':True,'reference':True}))
+    calls=[]
+    def get_limited(sport,url,limit,**kw):
+        calls.append((url,limit,kw));raise net.HttpError(status,url,'')
+    monkeypatch.setattr(expansion_sources,'get_limited',get_limited)
+    snap=boards.collect('tennis')
+    assert len(calls)==1 and calls[0][0]==expansion_polymarket.API+'/events' and calls[0][1]==2_000_000
+    assert calls[0][2]['tries']==1 and 'headers' not in calls[0][2]
+    assert snap['sources']['polymarket']['ok'] is False and snap['sources']['polymarket']['error']==f'http_{status}'
+    assert ('held_until' in snap['sources']['polymarket'])==(status!=500)
+    assert len(snap['game_odds'])==1 and [r['platform'] for r in snap['reference_prices']]==['kalshi']
+    calls.clear();snap=boards.collect('tennis')              # the next run: a held source sends nothing
+    assert len(calls)==(1 if status==500 else 0)
+
+
+def test_board_stays_under_the_member_limit_with_both_reference_sources_full(tennis_store):
+    from sports import expansion_kalshi, expansion_polymarket
+    now=datetime.now(timezone.utc);stamp=utc(now)
+    rows=[reference(offer=f'KXATPMATCH-26NOV17{i:06d}') for i in range(expansion_kalshi.MAX_ROWS)]
+    rows+=[polymarket_reference(offer=f'atp-someone-another-2026-11-17-{i:06d}') for i in range(expansion_polymarket.MAX_ROWS)]
+    offers=[{'sport':'tennis','platform':'prizepicks','variant':'demon','offer_id':str(i),'revision':str(i),
+             'start':utc(now+timedelta(hours=2)),'observed_at':stamp,'pad':'x'*2000} for i in range(1500)]
+    snap=boards.save('tennis',offers,{},stamp,reference_prices=rows)
+    assert (tennis_store/'board.json').stat().st_size<=3_000_000 and len(snap['reference_prices'])==300
+    assert boards.board(SimpleNamespace(query={'sport':'tennis'}))[0]==200

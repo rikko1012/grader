@@ -155,7 +155,7 @@ def test_matching(case, linked):
     if case == 'two_fixtures':
         assert stats['ambiguous'] == 1
     elif not linked:
-        assert stats['unmatched'] == ['Ben Shelton vs Rafael Jodar']
+        assert stats['unmatched'] == ['Ben Shelton vs Rafael Jodar'] and stats['unmatched_count'] == 1
 
 
 def test_two_events_for_one_fixture_drop_both():
@@ -195,7 +195,7 @@ def test_recorded_answer_against_a_catalogue_counts_every_drop():
     assert sorted(r['offer_id'] for r in rows) == ['atp-shelton-jodar-2026-11-17', 'atp-zverev-fils-2026-11-17']
     unmatched = next(e for e in evs if 'schoolk-ayeni' in e['slug'])['teams']                  # no fixture given
     assert stats == {'events': 8, 'matched': 2, 'started': 2, 'dropped_invalid': 0, 'dropped_wide': 2, 'dropped_thin': 1,
-                     'ambiguous': 0, 'unmatched': [' vs '.join(unmatched)], 'unparsed_types': []}
+                     'ambiguous': 0, 'unmatched_count': 1, 'unmatched': [' vs '.join(unmatched)], 'unparsed_types': []}
 
 
 def test_unknown_market_type_is_reported_and_never_parsed():

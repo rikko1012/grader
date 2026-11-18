@@ -78,7 +78,7 @@ def _prepared(path, st, now, sport):
                 odds.append(row);deadlines.extend((start,observed+MAX_AGE))
             elif observed>instant:deadlines.append(observed)
         data['game_odds']=odds
-        # Exchange reference prices (Kalshi): their own key, never mixed into offers or game_odds. A snapshot
+        # Exchange reference prices (Kalshi, Polymarket): their own key, never mixed into offers or game_odds. A snapshot
         # without the key answers exactly as before.
         reference = []
         if 'reference_prices' in data:
@@ -269,17 +269,20 @@ def collect(sport):
     odds, odds_sources=collect_odds(sport,lambda url,**kw:get_json(sport,url,**kw),directory)
     sources.update(odds_sources)
     reference = None
-    from . import expansion_kalshi
-    if expansion_kalshi.switched_on(sport):
-        # Kalshi match-winner prices: a price reference only (SCOUT_<SPORT>_KALSHI=0 turns it off). Last, so its
-        # pacing never delays a line source; any failure costs only these rows.
-        from .expansion_sources import get_limited
+    from . import expansion_kalshi, expansion_polymarket
+    from .expansion_sources import get_limited
+    # Exchange match-winner prices: a price reference only. Last, so their pacing never delays a line source; any
+    # failure costs only that source's rows. Off switches: SCOUT_<SPORT>_KALSHI=0, SCOUT_TENNIS_POLYMARKET=0.
+    for name, module in (('kalshi', expansion_kalshi), ('polymarket', expansion_polymarket)):
+        if not module.switched_on(sport):
+            continue
+        reference = reference or []
         try:
-            reference, sources['kalshi'] = expansion_kalshi.collect(
-                sport, lambda url, **kw: get_limited(sport, url, expansion_kalshi.MAX_BYTES, **kw), directory)
+            found, sources[name] = module.collect(
+                sport, lambda url, limit=module.MAX_BYTES, **kw: get_limited(sport, url, limit, **kw), directory)
+            reference.extend(found)
         except Exception as e:      # a reference source can never cost the run its lines
-            reference, sources['kalshi'] = [], {'ok': False, 'reference': True, 'checked_at': now_utc(),
-                                                'error': type(e).__name__}
+            sources[name] = {'ok': False, 'reference': True, 'checked_at': now_utc(), 'error': type(e).__name__}
     return save(sport, rows, sources, now_utc(),game_odds=odds,reference_prices=reference)
 
 
