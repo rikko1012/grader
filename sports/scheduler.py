@@ -332,7 +332,11 @@ def default_jobs():
         # archive lets the hot records table grow). They write canonical.db (archive moves cold offers in one
         # transaction, verify stamps verified_at): "canonical" keeps them off every store writer (collectors, settle,
         # history, kalshi), "archive" off each other; beside the read-only heavies (board builds, sheets, results)
-        "archive": dict(argv=_py("-m", "sports.archive", "pass"), every_s=6 * 3600, timeout_s=1800,
+        # 2026-11-17: the pass holds the "canonical" lock the NBA / NFL collectors need. A 20-min parts budget plus setup ran it 24-28 min
+        # on the 23 GB store, past the 25-min freshness rule (sports/picks.py STALE_S): every pick'em line went stale and every Auto-build
+        # slip with an NBA / NFL leg failed its recheck. A 10-min parts budget keeps the lock well under 25 min (same 6-h cadence: the
+        # stall replays allow no more runs); the rest waits for the next pass.
+        "archive": dict(argv=_py("-m", "sports.archive", "pass", "--time-budget-s", "600"), every_s=6 * 3600, timeout_s=1800,
                         flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6,
                         locks=("canonical", "archive")),      # 140 MB (80k rows)
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,

@@ -728,11 +728,12 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m sports.archive")
     p.add_argument("cmd", choices=("pass", "verify", "stats"))
     p.add_argument("--max-parts", type=int, default=40)
+    p.add_argument("--time-budget-s", type=int, default=1200)
     a = p.parse_args(argv)
     from . import flags, store
     if a.cmd == "pass":
         flags.require("SPORTS_INGEST")
-        out = run_pass(max_parts=a.max_parts)
+        out = run_pass(max_parts=a.max_parts, time_budget_s=a.time_budget_s)
     elif a.cmd == "verify":
         out = verify()
     else:

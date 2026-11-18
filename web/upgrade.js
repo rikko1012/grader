@@ -409,7 +409,7 @@
           progress?.(`Checking slip ${picked.length + 1} of ${count}…`);
           let c;
           try { c = await api("recheck", { idem: idem(), legs: legs.map(wireLeg), entry_types: { [platform]: entryType } }); }
-          catch (e) { if (!picked.length) throw e; note = "The server could not finish checking more combinations."; break; }
+          catch (e) { if (!picked.length) throw e; note = e.status === 429 ? "Scout checks a limited number of slips a minute. Generate again in a minute for the rest." : "The server could not finish checking more combinations."; break; }
           const bad = s.legs.filter((l, i) => !c.legs?.[legs[i].id]?.ok);
           if (bad.length || !c.entries?.[platform]?.ok) {
             (bad.length ? bad : s.legs).forEach((l) => exclude.add([l.book, l.row_id, l.side].join("|")));
