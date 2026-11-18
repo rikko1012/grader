@@ -225,6 +225,13 @@ def feed_state():
         out["store"] = "not_created"
     except Exception as e:                              # noqa: BLE001
         out["error"] = type(e).__name__
+    try:                                                # how far the latest archive pass got (a killed one included)
+        from . import archive
+        last = archive.last_pass()
+        if last is not None:
+            out.setdefault("archive", {})["last_pass"] = last
+    except Exception:                                   # noqa: BLE001
+        pass
     try:                                                # the disk the Starter plan pays for (alerts at 80 / 90 %)
         import shutil
         from . import config

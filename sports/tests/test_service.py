@@ -674,3 +674,22 @@ def test_a_thread_that_cannot_start_gives_its_slot_back(monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# ------------------------------------------------------------------- archive: the latest pass is readable from ops
+def test_ops_feeds_show_the_latest_archive_pass(monkeypatch):
+    from sports import archive
+    monkeypatch.setattr(service, "_OPS", {"t": 0.0, "v": None})
+    assert "last_pass" not in (service.feed_state().get("archive") or {})        # no pass has run: nothing invented
+    con = store.connect()
+    store.put(con, h.offer())
+    out = archive.run_pass(con)
+    con.close()
+    monkeypatch.setattr(service, "_OPS", {"t": 0.0, "v": None})
+    got = service.feed_state()["archive"]
+    assert got["last_pass"]["finished"] is True and got["last_pass"]["at"] == out["at"]
+    assert [s[0] for s in got["last_pass"]["stages"]] == ["setup", "candidates", "parts", "checkpoint"]
+    assert "files" in got and "parts" not in got["last_pass"]                    # beside archive.stats, no file list
+    (archive.archive_dir() / archive.LAST_PASS).write_text("{not json")
+    monkeypatch.setattr(service, "_OPS", {"t": 0.0, "v": None})
+    assert "last_pass" not in service.feed_state()["archive"]
