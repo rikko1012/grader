@@ -137,7 +137,8 @@ def _build(srv, sport):
         r = _record(o, research, forecast)
         records.append(r)
         k = (o['platform'], r['offer']['offer_id'])
-        index[k] = {'rec': r, 'research': research, 'offer': o, 'forecast': forecast}
+        index[k] = {'rec': r, 'research': research, 'offer': o, 'forecast': forecast,
+                    'events': (doc.get('research_events') or {}).get(research['identity'].get('event_id')) or []}
         pk = (r['event']['id'], r['player']['key'], r['market']['stat'], r['market']['period'])
         props.setdefault(pk, []).append(k)
     feeds = {k: {'state': 'ok' if v.get('ok') else 'failed', 'at': v.get('checked_at'),
@@ -162,6 +163,29 @@ def snapshot(srv, sport):
     return _SNAP.get(sport)
 
 
+PRICE_FRESH_S = 15 * 60
+
+
+def _event_rows(rows, now):
+    """Research-only match rows (exchange prices, tennis context, soccer team form) as drawer context rows, weight 0.
+    A price is shown only while its own check is under 15 minutes old, with its age; older prices are left out."""
+    out = []
+    for row in rows or []:
+        if not isinstance(row, dict) or not row.get('label') or row.get('value') in (None, ''):
+            continue
+        item = {'label': row['label'], 'value': row['value'], 'group': row.get('group') or 'Match'}
+        if row.get('checked_at') is not None:
+            try:
+                age = now - datetime.fromisoformat(str(row['checked_at']).replace('Z', '+00:00')).timestamp()
+            except ValueError:
+                continue
+            if not 0 <= age < PRICE_FRESH_S:
+                continue
+            item['value'] = f"{row['value']} \u00b7 checked {max(1, round(age / 60))} min ago"
+        out.append(item)
+    return out
+
+
 def line_doc(srv, sport, book, rid):
     snap = _SNAP.get(sport) or {}
     x = snap.get('index', {}).get((book, rid))
@@ -179,6 +203,7 @@ def line_doc(srv, sport, book, rid):
         if k in ('surface','best_of'):
             context.append({'label': 'Surface' if k=='surface' else 'Match format',
                             'value':value if k=='surface' else f'Best of {value} sets', 'group': 'Match'})
+    context.extend(_event_rows(x.get('events'), time.time()))
     for stat in research.get('stats', []):
         context.append({'label': f"{stat['stat'].replace('_', ' ').title()} · last {stat['games']}",
                         'value': round(stat['average'], 2),

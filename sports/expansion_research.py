@@ -56,6 +56,99 @@ def fit(players, starts, limit=RESEARCH_BYTES):
     return keep
 
 
+EVENTS_BYTES = 400_000   # the research-only match block (exchange prices, tennis context, soccer team form)
+
+
+def _cents(x):
+    return f"{round(x * 100)}\u00a2"
+
+
+def event_rows(sport, eid, match, prices, contexts, form):
+    """Weight-0 match rows for one canonical event: never a grade input, labelled with their source."""
+    rows = []
+    for venue, entry in sorted((prices.get(eid) or {}).items()):
+        parts = [f"{o['label']}{'' if o['label'] == 'Draw' or sport == 'tennis' else ' win'} {_cents(o['mid'])}"
+                 for o in entry.get('outcomes') or [] if isinstance(o.get('mid'), (int, float))]
+        if parts:
+            rows.append({'label': f"Match market ({'Kalshi' if venue == 'kalshi' else 'Polymarket'}, mid)",
+                         'value': ' \u00b7 '.join(parts), 'group': 'Match market (exchange)', 'source': venue,
+                         'checked_at': entry.get('checked_at')})
+    ctx = contexts.get(eid) or {}
+    if ctx:
+        tour = (ctx.get('tour') or '').upper()
+        base = {'group': 'Match context', 'source': 'thescore', 'known_at': ctx.get('known_at')}
+        for key, label in (('round', 'Round'), ('court', 'Court')):
+            if ctx.get(key):
+                rows.append({**base, 'label': label, 'value': ctx[key]})
+        for p in (ctx.get('players') or {}).values():
+            name = p.get('name') or ''
+            if 'rank' in p:
+                rows.append({**base, 'label': f'{name} \u00b7 {tour} rank'.strip(),
+                             'value': f"{p['rank']}" + (f" ({p['points']} pts)" if 'points' in p else '')})
+            for key, label in (('seed', 'Seed'), ('h2h', 'H2H'), ('last10', 'Last 10'), ('streak', 'Streak'),
+                               ('season', 'Season W-L')):
+                if key in p:
+                    rows.append({**base, 'label': f'{name} \u00b7 {label}', 'value': str(p[key])})
+            for key, label in (('h2h_surface', 'H2H'), ('season_surface', 'Season W-L')):
+                if key in p:
+                    rows.append({**base, 'label': f"{name} \u00b7 {label} ({p.get('surface')})", 'value': p[key]})
+    for team in (match or {}).get('participants') or []:
+        f = form.get(team.get('id'))
+        if not f:
+            continue
+        base = {'group': 'Team form (football-data)', 'source': 'football-data', 'known_at': f.get('known_at')}
+        for stat, label in (('shots', 'Shots'), ('shots_on_target', 'Shots on target'), ('corners', 'Corners'),
+                            ('cards', 'Cards'), ('xg', 'xG')):
+            for n in (5, 10):
+                a, b = f.get(f'for_{stat}_l{n}'), f.get(f'against_{stat}_l{n}')
+                if a is not None and b is not None and f.get(f'games_l{n}') == n:
+                    rows.append({**base, 'label': f"{team['name']} \u00b7 {label} for / against \u00b7 last {n}",
+                                 'value': f'{a:g} / {b:g}'})
+        for c in (f.get('closing') or [])[:1]:
+            if all(isinstance(c.get(k), (int, float)) for k in ('win', 'draw', 'loss')):
+                rows.append({**base, 'label': f"{team['name']} \u00b7 Past closing price (market average)",
+                             'value': f"{c['start']} ({c['result']}): win {c['win']:g} \u00b7 draw {c['draw']:g} \u00b7 loss {c['loss']:g}"})
+    return rows
+
+
+def fit_events(events, starts, limit=EVENTS_BYTES):
+    sizes = {k: len(json.dumps(v, separators=(',', ':'))) + 40 for k, v in events.items()}
+    if sum(sizes.values()) <= limit:
+        return events
+    keep, used = {}, 0
+    for k in sorted(events, key=lambda k: (starts.get(k, ''), k)):
+        if used + sizes[k] > limit:
+            break
+        keep[k] = events[k]
+        used += sizes[k]
+    return keep
+
+
+def _events(sport, players, matches):
+    """research.json events: rows per offered canonical event, from the small files of the research-source phases."""
+    from . import expansion_exchanges as exchanges
+    directory = boards.root(sport)
+    prices = exchanges.load(directory)
+    contexts, form = {}, {}
+    if sport == 'tennis':
+        from .expansion_tennis import load_contexts
+        contexts = load_contexts(directory)
+    else:
+        from .expansion_footballdata import load_form
+        form = load_form(directory)
+    by_id = {m['event_id']: m for m in matches if m.get('event_id')}
+    out, starts = {}, {}
+    for entry in players.values():
+        eid = (entry.get('identity') or {}).get('event_id')
+        if not eid or eid in out:
+            continue
+        rows = event_rows(sport, eid, by_id.get(eid), prices, contexts, form)
+        if rows:
+            out[eid] = rows
+            starts[eid] = (by_id.get(eid) or {}).get('start') or ''
+    return fit_events(out, starts)
+
+
 def publish(sport, budget_s=20, results_at=None):
     from . import expansion_history as history
     from .expansion import isolated_database
@@ -142,8 +235,15 @@ def publish(sport, budget_s=20, results_at=None):
             except (OSError, ValueError, history.sqlite3.Error):
                 entry['error'] = 'history_unavailable'
         players[k] = entry
-    players = fit(players, {k: unique[k].get('start') or '' for k in players})
+    try:
+        events = _events(sport, players, matches)
+    except (OSError, ValueError, KeyError, TypeError):
+        events = {}                                   # research rows never block the player research
+    players = fit(players, {k: unique[k].get('start') or '' for k in players},
+                  RESEARCH_BYTES - len(json.dumps(events, separators=(',', ':'))))
     doc = {'sport': sport, 'at': now_utc(), 'results_at': results_at or history.results_at(sport), 'players': players}
+    if events:
+        doc['events'] = events
     history.atomic_json(boards.root(sport) / 'research.json', doc)
     return {'offers': len(board['offers']), 'markets': len(players),
             'with_history': sum(bool(x['games']) for x in players.values()), 'at': doc['at']}
@@ -153,6 +253,11 @@ def attach(sport, data):
     doc = saved(sport)
     players = doc.get('players', {})
     relevant = {key(o) for o in data['offers']}
+    research = {k: v for k, v in players.items() if k in relevant}
     from .expansion_forecasts import attach as attach_forecasts
-    return attach_forecasts(sport, {**data, 'research': {k: v for k, v in players.items() if k in relevant},
-            'research_at': doc.get('at'), 'results_at': doc.get('results_at')})
+    out = {**data, 'research': research, 'research_at': doc.get('at'), 'results_at': doc.get('results_at')}
+    events = doc.get('events') or {}
+    if events:                                        # absent when empty: the research=1 bytes stay as before
+        ids = {(v.get('identity') or {}).get('event_id') for v in research.values()}
+        out['research_events'] = {k: v for k, v in events.items() if k in ids}
+    return attach_forecasts(sport, out)
