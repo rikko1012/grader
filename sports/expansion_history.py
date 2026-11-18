@@ -365,9 +365,11 @@ def collect(sport, max_requests=16, max_seconds=150):
     # today..today+2 range returned no events during the ATP Finals (started
     # three days earlier), so live fixtures only refreshed when the backfill
     # cursor passed them. A single date returns every tournament in progress
-    # with all its rounds (verified 2026-11-18: 30 ATP and 42 WTA matches).
-    requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(3)]
-                if sport == 'soccer' else [('live', f'{today:%Y%m%d}')])
+    # with all its rounds (verified 2026-11-18: 30 ATP and 42 WTA matches) but
+    # not one whose ESPN start is the next day (20250105 lacked the Australian
+    # Open, start 2025-01-06T05:00Z), so tomorrow is asked as its own single
+    # date: 4 live requests of the 16 per run.
+    requests = [('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(3 if sport == 'soccer' else 2)]
     # Tennis providers accept bounded date ranges. Seven days per request
     # avoids spending 7.5 hours walking 90 individual dates on a new store.
     width = 7 if sport == 'tennis' else 1
@@ -387,7 +389,6 @@ def collect(sport, max_requests=16, max_seconds=150):
                     counts['errors'].append(error_label(e))
                     phase_ok = False
                     continue
-                counts['scoreboards_ok'] += 1
                 grouped = {}
                 for event in body.get('events') or []:
                     actual = soccer_competition(event) if sport == 'soccer' else comp
@@ -396,6 +397,9 @@ def collect(sport, max_requests=16, max_seconds=150):
                 for actual, events in grouped.items():
                     feed = parse_scoreboard({'events': events}, actual, now_utc())
                     persist(feed, actual)
+                # Counted only once parsed and stored: a scoreboard that
+                # answered but could not be written is not a working run.
+                counts['scoreboards_ok'] += 1
             if phase == 'backfill' and phase_ok:
                 advanced = True
         if sport == 'soccer':
@@ -557,9 +561,10 @@ def main():
         raise SystemExit('sport disabled')
     result = collect(args.sport)
     print(json.dumps(result))
-    # A quiet day with one detail-source error did its job; so did a run that
-    # degraded for a recorded reason. Fail only when no scoreboard answered.
-    if result['errors'] and not result.get('scoreboards_ok') and not result.get('degraded'):
+    # A quiet day with one detail-source error did its job. Fail when no
+    # scoreboard was fetched, parsed and stored. `degraded` (storage budget)
+    # excuses only the skipped backfill, never a run that stored nothing.
+    if result['errors'] and not result.get('scoreboards_ok'):
         raise SystemExit(1)
 
 

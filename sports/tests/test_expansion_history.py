@@ -249,10 +249,10 @@ def test_budget_reached_skips_backfill_keeps_live_and_exits_zero(monkeypatch,tmp
     monkeypatch.setattr(history.net,'get_json',get)
     result=history.collect('tennis')
     boards_asked=[p['dates'] for u,p in calls if 'scoreboard' in u]
-    assert len(boards_asked)==2 and len(set(boards_asked))==1  # live window only, no backfill range
+    assert len(boards_asked)==4 and all('-' not in d for d in boards_asked)  # live dates only, no backfill range
     assert len([u for u,_ in calls if 'allscores' in u])==1
     assert result['degraded']=='storage_budget' and result['errors']==[] and result['budget_mb']==1
-    assert result['records']>0 and result['scoreboards_ok']==2
+    assert result['records']>0 and result['scoreboards_ok']==4
     import json
     state=json.loads((tmp_path/'tennis/history-state.json').read_text())
     assert state['offset']==22 and state['degraded']=='storage_budget'
@@ -273,9 +273,29 @@ def test_main_exit_codes(monkeypatch,capsys):
         history.main()
     run();run(matches=4)
     run(errors=['HttpError'])  # quiet day, one detail source failed
-    run(errors=['ValueError'],scoreboards_ok=0,degraded='storage_budget')
+    run(errors=['HttpError'],degraded='storage_budget')  # a full store excuses only the skipped backfill
+    for change in ({},{'degraded':'storage_budget'}):  # no scoreboard stored: a failure, full store or not
+        with pytest.raises(SystemExit) as stop:
+            run(errors=['HttpError','HttpError'],scoreboards_ok=0,**change)
+        assert stop.value.code==1
+
+
+@pytest.mark.parametrize('broken',['store','parse'])
+def test_a_scoreboard_that_answered_but_was_not_stored_is_a_failed_run(monkeypatch,tmp_path,capsys,broken):
+    import sqlite3, sys
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED','1')
+    monkeypatch.setattr(history.net,'get_json',lambda url,**kw:scoreboard() if 'espn' in url else {})
+    def fail(*a,**kw):
+        raise (sqlite3.OperationalError('database or disk is full') if broken=='store' else ValueError('schema changed'))
+    if broken=='store':monkeypatch.setattr(history.store,'put_many',fail)
+    else:monkeypatch.setattr(history,'parse_scoreboard',fail)
+    result=history.collect('tennis')
+    assert result['scoreboards_ok']==0 and result['records']==0 and result['matches']==0
+    assert result['errors'] and result['errors'][0].startswith('OperationalError' if broken=='store' else 'ValueError')
+    monkeypatch.setattr(sys,'argv',['x','tennis'])
     with pytest.raises(SystemExit) as stop:
-        run(errors=['HttpError','HttpError'],scoreboards_ok=0)
+        history.main()
     assert stop.value.code==1
 
 
@@ -286,8 +306,12 @@ def test_tennis_live_window_is_one_date_and_soccer_asks_for_the_whole_slate(monk
         asked.append((url,dict(kw.get('params') or {})));return {}
     monkeypatch.setattr(history.net,'get_json',get)
     history.collect('tennis',max_requests=2)
-    today=f'{datetime.now(timezone.utc).date():%Y%m%d}'
+    day=datetime.now(timezone.utc).date()
+    today,tomorrow=f'{day:%Y%m%d}',f'{day+timedelta(days=1):%Y%m%d}'
     assert [p['dates'] for _,p in asked]==[today,today]  # a range selects tournaments by START date
+    asked.clear()
+    history.collect('tennis',max_requests=4)  # ... and a single date omits a tournament that starts tomorrow
+    assert [p['dates'] for _,p in asked]==[today,today,tomorrow,tomorrow]
     assert all(p['limit']==200 for _,p in asked)
     asked.clear()
     history.collect('soccer',max_requests=1)
