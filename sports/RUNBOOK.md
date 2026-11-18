@@ -339,6 +339,22 @@ in the sport's own `board.json` / `quotes.db` (`ref:kalshi`). Reference only - n
   by hand after checking both sources. Never add abbreviations.
 - Details and what is not verified: `sports/SOCCER_TENNIS_STATUS.md`.
 
+#### Tennis Polymarket reference prices (2026-11-18)
+
+The `tennis-quotes` job (unchanged spec) then runs one Polymarket step (`sports/expansion_polymarket.py`): at most
+6 requests and 18 s, singles match winner only, stored beside Kalshi's rows in `reference_prices` / `quotes.db`
+(`ref:polymarket`). Reference only - never a grade input. Not tradable from the US; public prices only.
+
+- Off (rollback): `SCOUT_TENNIS_POLYMARKET=0`, then restart. The next run stores no Polymarket rows and the cards
+  disappear within 5 minutes. The `reference_prices` key stays while Kalshi is on for tennis.
+- Check: `sources.polymarket` in the job's output line or `board.json`: `markets`, `events`, `matched`,
+  `unmatched_count`, `dropped_wide`, `dropped_thin`, `started`, `truncated`, `unparsed_types`.
+- `error: http_429` / `http_403` / `held`: Polymarket refused; the hold is in `request-holds.db`. Do nothing; if it
+  repeats, turn the switch off. `http_500` or `ValueError` (answer over 2 MB): that run stores no Polymarket rows
+  and the next run tries again.
+- If the job's peak RSS nears its 80 MB cap, lower `PAGE` in `sports/expansion_polymarket.py` rather than raise
+  the cap (measured 44.1 MB for the whole job on 2026-11-18).
+
 ### 5b. Write path from handlers (blessed 2026-10-23)
 
 Handlers never write the canonical store or any SQLite file. The only handler-caused write is a **spool**: bounded,

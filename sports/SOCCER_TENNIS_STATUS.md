@@ -188,3 +188,43 @@ changes are part of this correction.
 - **Not verified:** a live Premier League match end to end (parser and matcher are tested on the recorded
   answer only); the Kalshi rate limit on the production host, where the NBA/NFL `ingest-kalshi` job uses the
   same host from another process; any series marked `verified: False`.
+
+## Polymarket tennis match-winner prices (2026-11-18, reference only)
+
+`sports/expansion_polymarket.py`, called by the tennis quotes job after Kalshi. Tennis only; soccer was not checked.
+
+- **Ingested:** the match-winner (`moneyline`) market of singles matches in Polymarket's `atp` series (10365: ATP
+  Finals and Challengers) and `wta` series (10366). Doubles series are never requested. Set, total and handicap
+  markets are not stored (many sit at 1c / 99c). A market type not seen on 2026-11-18 (for example a
+  "match completed" market) is listed in `sources.polymarket.unparsed_types` and not parsed.
+- **Quote rule:** both sides quoted, bid/ask at most 5 cents apart, at least $500 resting, market active and
+  accepting orders, and the match not started by Polymarket's own start time and live / ended flags. The row
+  holds bid, ask and midpoint per player - no American or decimal odds. Traded volume is small, so a midpoint
+  can be a market maker's quote; it is labelled a reference.
+- **Matching:** the Kalshi rule and code: Scout's own scheduled fixture in `current-matches.json` (ATP series
+  -> `atp` / `atp_challenger`, WTA series -> `wta` / `wta125`), exact normalized full names on both sides, one
+  fixture per event and one event per fixture - plus Polymarket's start within 2 hours of the fixture's. When
+  one match is catalogued under two levels, it links only if exactly one tournament name equals Polymarket's.
+  Everything else is dropped and counted (`unmatched_count`, first 10 names in `unmatched`, `ambiguous`,
+  `dropped_wide`, `dropped_thin`, `started`). The start shown is the fixture's.
+- **Storage / display:** `board.json` key `reference_prices` (beside Kalshi's rows) and `quotes.db` platform
+  `ref:polymarket`, in the tennis expansion folder only. A new revision is stored only when the bid or ask
+  changes. Shown on the tennis Moneylines tab as a separate "Polymarket" card (midpoint in percent, no pick,
+  "not tradable from the US"). Not read by forecasts, learning or `gradecore/`; tests pin that.
+- **Switch:** `SCOUT_TENNIS_POLYMARKET=0` turns it off (on otherwise, inside the tennis quotes job only).
+- **Budget per quotes run:** at most 6 requests of 25 events (about 1.1 MB each as sent, trimmed to under 1 KB
+  an event page by page), one try each, 12 s timeout, 18 s for the step, the shared 1 s gap for the host; no
+  request for a tour with no scheduled fixture within 8 days; an answer over 2 MB is refused; at most 150
+  rows. A 429 stops it for max(Retry-After, 15 min) and a 403 for 6 h (`request-holds.db`); any other error
+  ends the step for that run. Never retried around.
+- **Real run 2026-11-18 22:15 UTC (temp data folder, catalogue from a real history run a minute earlier):**
+  4 Polymarket requests (3 ATP pages, 1 WTA), 56 events, 34 matched and stored (26 Challenger, 5 WTA 125,
+  3 ATP Finals; 40.8 KB of rows), 6 dropped as wide, 5 already started, 11 unmatched. Whole tennis quotes job:
+  peak RSS 44.1 MB, 6.8 s, no 429 or 403. The 38 exchange cards (34 Polymarket, 4 Kalshi) were built from that
+  board by the Moneylines code.
+- **Not verified:** the same job on the production host and under its 80 MB cap; a second run (that an
+  unchanged price adds no revision is tested, not run live); a Grand Slam week (more events than 6 pages of 25
+  would be cut and reported as `truncated`); why 11 events did not match (names or start times differing from
+  the catalogue were not examined one by one); the card at 390 px and desktop in a browser (the browser tests
+  cannot run in this environment; the card reuses the Kalshi card's markup with a longer label); transfer of
+  roughly 3 MB per run as sent, every 180 s.
