@@ -253,7 +253,9 @@ def test_quotes_job_requests_mls_and_underdog_soccer_only_when_flagged(monkeypat
     monkeypatch.setattr(expansion_odds, 'collect', lambda sport, get, directory: ([], {}))
     snap = board.collect('soccer')
     assert [p.get('league_id') or p.get('sport_id') for _, p in calls] == [82]          # defaults: unchanged
-    assert set(snap['sources']) == {'prizepicks'}
+    # Kalshi (price reference) reports itself; with no fixture catalogue it sends no request at all.
+    assert set(snap['sources']) == {'prizepicks', 'kalshi'} and snap['sources']['kalshi']['skipped'] == 'no_fixture'
+    assert snap['reference_prices'] == []
     calls.clear(); monkeypatch.setenv('SCOUT_SOCCER_UNDERDOG', '1'); monkeypatch.setenv('SCOUT_SOCCER_PP_MLS', '1')
     snap = board.collect('soccer')
     assert [p.get('league_id') or p.get('sport_id') for _, p in calls] == [82, 6, 'FIFA']

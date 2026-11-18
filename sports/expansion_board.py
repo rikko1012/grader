@@ -31,6 +31,22 @@ def _read_snapshot(path, stamp, size):
 
 
 
+def _current(rows, sport, instant, deadlines):
+    """Rows of this sport that have not started and were seen within MAX_AGE (the offers / game_odds rule)."""
+    kept = []
+    for row in rows:
+        if row.get('sport') != sport:
+            continue
+        start = parse_utc(row['start']).timestamp()
+        observed = parse_utc(row['observed_at']).timestamp()
+        if start > instant and 0 <= instant-observed <= MAX_AGE:
+            kept.append(row)
+            deadlines.extend((start, observed+MAX_AGE))
+        elif observed > instant:
+            deadlines.append(observed)
+    return kept
+
+
 def _prepared(path, st, now, sport):
     key = (str(path), st.st_mtime_ns, st.st_size)
     instant = now.timestamp()
@@ -62,9 +78,15 @@ def _prepared(path, st, now, sport):
                 odds.append(row);deadlines.extend((start,observed+MAX_AGE))
             elif observed>instant:deadlines.append(observed)
         data['game_odds']=odds
+        # Exchange reference prices (Kalshi): their own key, never mixed into offers or game_odds. A snapshot
+        # without the key answers exactly as before.
+        reference = []
+        if 'reference_prices' in data:
+            reference = data['reference_prices'] = _current(data['reference_prices'], sport, instant, deadlines)
         data['version'] = hashlib.sha256(json.dumps(sorted(
             [(r['platform'],r['offer_id'],r['revision']) for r in rows]+
-            [('odds:'+r['platform'],r['offer_id'],r['revision']) for r in odds]),separators=(',',':')).encode()).hexdigest()
+            [('odds:'+r['platform'],r['offer_id'],r['revision']) for r in odds]+
+            [('ref:'+r['platform'],r['offer_id'],r['revision']) for r in reference]),separators=(',',':')).encode()).hexdigest()
         # Serialize once per snapshot/eligibility boundary, not per member.
         encoded = json.dumps(data,separators=(',',':')).encode('utf-8')
         _PREPARED.pop(key, None)
@@ -157,10 +179,12 @@ def fit(rows, limit=SNAPSHOT_BYTES):
     return [r for i, r in enumerate(rows) if i not in drop]
 
 
-def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
+def save(sport, rows, sources, observed_at, directory=None, game_odds=None, reference_prices=None):
     directory = Path(directory) if directory else root(sport)
     game_odds=game_odds or []
-    if any(r.get("sport") != sport for r in rows+game_odds):
+    # Exchange reference prices: stored and published under their own key (None: the key is not written at all).
+    reference = list(reference_prices or [])
+    if any(r.get("sport") != sport for r in rows+game_odds+reference):
         raise ValueError("mixed sport batch refused")
     directory.mkdir(parents=True, exist_ok=True)
     db = directory / "quotes.db"
@@ -179,7 +203,8 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
             con.execute("CREATE INDEX IF NOT EXISTS quote_latest ON revisions(platform, offer_id, id DESC)")
             # Namespace native sportsbook markets so their IDs cannot collide
             # with player-prop quotes from a future book adapter.
-            for row in rows+[dict(r,platform='odds:'+r['platform']) for r in game_odds]:
+            for row in (rows+[dict(r,platform='odds:'+r['platform']) for r in game_odds]
+                        +[dict(r,platform='ref:'+r['platform']) for r in reference]):
                 previous = con.execute("SELECT revision FROM revisions WHERE platform=? AND offer_id=? ORDER BY id DESC LIMIT 1",
                                        (row['platform'], row['offer_id'])).fetchone()
                 if not previous or previous[0] != row['revision']:
@@ -187,9 +212,12 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
                                 (row['platform'], row['offer_id'], row['revision'], observed_at, json.dumps(row)))
     finally:
         con.close()
-    rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":"))))
+    rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":")))
+               - (len(json.dumps(reference, separators=(",", ":"))) if reference_prices is not None else 0))
     snapshot = {"sport": sport, "built_at": observed_at, "sources": sources, "offers": rows,
                 "mode": "lines", "grading_ready": False, "game_odds":game_odds}
+    if reference_prices is not None:
+        snapshot["reference_prices"] = reference
     fd, temporary = tempfile.mkstemp(prefix="board-", suffix=".tmp", dir=directory)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -240,7 +268,19 @@ def collect(sport):
     directory=root(sport);directory.mkdir(parents=True,exist_ok=True)
     odds, odds_sources=collect_odds(sport,lambda url,**kw:get_json(sport,url,**kw),directory)
     sources.update(odds_sources)
-    return save(sport, rows, sources, now_utc(),game_odds=odds)
+    reference = None
+    from . import expansion_kalshi
+    if expansion_kalshi.switched_on(sport):
+        # Kalshi match-winner prices: a price reference only (SCOUT_<SPORT>_KALSHI=0 turns it off). Last, so its
+        # pacing never delays a line source; any failure costs only these rows.
+        from .expansion_sources import get_limited
+        try:
+            reference, sources['kalshi'] = expansion_kalshi.collect(
+                sport, lambda url, **kw: get_limited(sport, url, expansion_kalshi.MAX_BYTES, **kw), directory)
+        except Exception as e:      # a reference source can never cost the run its lines
+            reference, sources['kalshi'] = [], {'ok': False, 'reference': True, 'checked_at': now_utc(),
+                                                'error': type(e).__name__}
+    return save(sport, rows, sources, now_utc(),game_odds=odds,reference_prices=reference)
 
 
 def board(req):
@@ -274,7 +314,7 @@ def main():
         raise SystemExit("sport collector disabled")
     result = collect(args.sport)
     print(json.dumps({"sport": args.sport, "offers": len(result["offers"]), "sources": result["sources"]}))
-    if not any(s["ok"] for s in result["sources"].values()):
+    if not any(s["ok"] for s in result["sources"].values() if not s.get("reference")):
         raise SystemExit(1)
 
 
