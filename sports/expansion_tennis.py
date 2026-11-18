@@ -270,6 +270,28 @@ def collect_details(catalogs, get, persist, directory):
                 pending[key] = {**pending.get(key, {}), 'id':match['id'], 'tour':row['tour'],
                                 'player':people[0], 'opponent':people[1], 'start':start}
             row['checked_at'] = now_utc()
+        # Pre-match context for OFFERED upcoming matches first (at most 4 details a run, each re-read every 6 h),
+        # so a long finals backlog on a new store cannot starve it; the finals stats take the rest of the budget.
+        offered = offered_events(directory, catalogs)
+        todo = []
+        for m in upcoming.values():
+            joined = _pair_event([m['player'], m['opponent']], m['start'], catalogs, m['tour'])
+            if (joined and joined[0]['event_id'] in offered and m['start'] > utc(now)
+                    and due(m.get('checked_at'), 21600) and due(m.get('attempt_at'), 1800)):
+                todo.append(m)
+        todo.sort(key=lambda m: (m.get('checked_at') or '', m['start']))
+        for row in todo[:4]:
+            try:
+                row['attempt_at'] = now_utc()
+                body = get(f"https://api.thescore.com/{row['tour']}/matches/{row['id']}", {})
+                if str(body.get('id')) != str(row['id']) or (body.get('league') or {}).get('slug') != row['tour']:
+                    raise ValueError('tennis detail identity mismatch')
+                found = prematch(body, catalogs, now_utc())
+                if found:
+                    contexts[found[0]] = found[1]
+                row['checked_at'] = now_utc()
+            except (net.HttpError, ValueError, OSError) as e:
+                errors.append(type(e).__name__)
         todo = [m for m in pending.values() if due(m.get('checked_at'), 86400) and due(m.get('attempt_at'), 1800)
                 and resolve({**m, 'sport':'tennis'}, list(catalogs.get(m['tour'], {}).values()))]
         todo.sort(key=lambda m:(m.get('checked_at') or '', -parse_utc(m['start']).timestamp()))
@@ -285,27 +307,6 @@ def collect_details(catalogs, get, persist, directory):
                 row['stored_stats'] = len(feed.records)
             except (net.HttpError, ValueError, OSError) as e:
                 row['attempt_at'] = now_utc()
-                errors.append(type(e).__name__)
-        # Pre-match context for OFFERED upcoming matches only: at most 10 details a run, each re-read every 6 h.
-        offered = offered_events(directory, catalogs)
-        todo = []
-        for m in upcoming.values():
-            joined = _pair_event([m['player'], m['opponent']], m['start'], catalogs, m['tour'])
-            if (joined and joined[0]['event_id'] in offered and m['start'] > utc(now)
-                    and due(m.get('checked_at'), 21600) and due(m.get('attempt_at'), 1800)):
-                todo.append(m)
-        todo.sort(key=lambda m: (m.get('checked_at') or '', m['start']))
-        for row in todo[:10]:
-            try:
-                row['attempt_at'] = now_utc()
-                body = get(f"https://api.thescore.com/{row['tour']}/matches/{row['id']}", {})
-                if str(body.get('id')) != str(row['id']) or (body.get('league') or {}).get('slug') != row['tour']:
-                    raise ValueError('tennis detail identity mismatch')
-                found = prematch(body, catalogs, now_utc())
-                if found:
-                    contexts[found[0]] = found[1]
-                row['checked_at'] = now_utc()
-            except (net.HttpError, ValueError, OSError) as e:
                 errors.append(type(e).__name__)
     except (net.HttpError, ValueError, OSError) as e:
         errors.append(type(e).__name__)
