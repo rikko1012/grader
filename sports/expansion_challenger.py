@@ -100,17 +100,35 @@ def parse_stats(body,match,observed):
     return out
 
 
-def collect(catalogs,get,persist,directory,offset):
+def collect(catalogs,get,persist,directory,persist_backfill=None):
+    """Live window (yesterday..+2) then one 7-day backfill window on this source's OWN cursor.
+
+    The cursor lives in challenger-state.json and advances only when the 365Scores backfill window was fetched and
+    stored (2026-11-18: it shared the ESPN cursor and moved on after a 365Scores timeout, leaving permanent holes).
+    persist_backfill (may decline at the storage budget) stores the older window; None = persist.
+    """
     from .expansion_history import atomic_json
     from . import net
+    persist_backfill=persist_backfill or persist
     errors=[];today=datetime.now(timezone.utc).date();path=directory/'challenger-state.json'
     try:state=json.loads(path.read_text(encoding='utf-8'))
     except (OSError,ValueError):state={}
+    if not isinstance(state,dict):state={}
+    try:offset=max(1,min(90,int(state.pop('_offset',1))))
+    except (TypeError,ValueError):offset=1
     try:
-        for a,b in [(today-timedelta(days=1),today+timedelta(days=2)),
-                    (today-timedelta(days=min(90,offset+6)),today-timedelta(days=offset))]:
-            data=get(BASE+'games/allscores/',{**PARAMS,'sports':3,'startDate':a.strftime('%d/%m/%Y'),'endDate':b.strftime('%d/%m/%Y')})
-            for comp,feed in parse_games(data,now_utc()).items():persist(feed,comp)
+        for phase,(a,b) in [('live',(today-timedelta(days=1),today+timedelta(days=2))),
+                            ('backfill',(today-timedelta(days=min(90,offset+6)),today-timedelta(days=offset)))]:
+            try:
+                data=get(BASE+'games/allscores/',{**PARAMS,'sports':3,'startDate':a.strftime('%d/%m/%Y'),
+                                                  'endDate':b.strftime('%d/%m/%Y')},timeout=20)
+            except (net.HttpError,ValueError,OSError) as exc:
+                errors.append(type(exc).__name__);continue
+            stored=True
+            for comp,feed in parse_games(data,now_utc()).items():
+                stored=(persist_backfill if phase=='backfill' else persist)(feed,comp) is not False and stored
+            if phase=='backfill' and stored:
+                offset=1 if offset+7>90 else offset+7
         pending=[m for comp in ('atp_challenger','wta125') for m in catalogs.get(comp,{}).values()
                  if m.get('set_scores') and m.get('has_stats') and (not state.get(m['event_id']) or
                  (datetime.now(timezone.utc)-parse_utc(state[m['event_id']])).total_seconds()>=86400)]
@@ -125,5 +143,5 @@ def collect(catalogs,get,persist,directory,offset):
     except (net.HttpError,ValueError,OSError) as exc:errors.append(type(exc).__name__)
     finally:
         cutoff=utc(datetime.now(timezone.utc)-timedelta(days=100))
-        atomic_json(path,{k:v for k,v in state.items() if v>=cutoff})
+        atomic_json(path,{**{k:v for k,v in state.items() if isinstance(v,str) and v>=cutoff},'_offset':offset})
     return errors

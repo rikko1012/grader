@@ -217,6 +217,16 @@ def collect_soccer_teams(catalogs, get, persist, directory):
     return errors
 
 
+def storage_budget_mb():
+    """Per-sport isolated history budget. Backfill stops at it; live, summary and detail writes keep going up to
+    1.5x so current results are never frozen by old-date backfill (2026-11-18: a fixed 128 MB cap raised on the
+    first write of every run, exit 1 forever, nothing stored)."""
+    try:
+        return max(16, int(os.environ.get('SCOUT_EXPANSION_HISTORY_MB', '512')))
+    except ValueError:
+        return 512
+
+
 def collect(sport, max_requests=16, max_seconds=150):
     """One resumable small batch; live dates first, one older date per run.
 
@@ -234,7 +244,8 @@ def collect(sport, max_requests=16, max_seconds=150):
         state = {}
     offset = int(state.get('offset', 1))
     today = datetime.now(timezone.utc).date()
-    counts = {'requests': 0, 'records': 0, 'matches': 0, 'errors': [], 'finished_at': None}
+    counts = {'requests': 0, 'ok_requests': 0, 'records': 0, 'matches': 0, 'errors': [], 'finished_at': None,
+              'storage': 'ok', 'phases': {}}
     deadline = time.monotonic() + max_seconds
     catalogs = {}
     for comp, (kind, _) in COMPETITIONS.items():
@@ -247,17 +258,34 @@ def collect(sport, max_requests=16, max_seconds=150):
         except (OSError, ValueError):
             pass
 
-    def get(url, params):
+    def get(url, params, timeout=10):
         from .expansion_sources import get_json
         if counts['requests'] >= max_requests or time.monotonic() >= deadline:
             raise StopIteration
         counts['requests'] += 1
-        return get_json(sport, url, params=params, timeout=10, tries=1)
+        body = get_json(sport, url, params=params, timeout=timeout, tries=1)
+        counts['ok_requests'] += 1
+        return body
 
-    def persist(feed, competition):
+    budget = storage_budget_mb() * 1024 * 1024
+
+    def stored_bytes():
+        total = 0
+        for p in directory.glob('*/canonical.db*'):
+            try:
+                total += p.stat().st_size
+            except OSError:
+                pass
+        return total
+
+    def persist(feed, competition, phase='live'):
+        """Store one feed. Never raises for the storage budget: backfill is skipped at the budget, everything is
+        skipped at 1.5x it, and the run carries on with the next source. -> True when written."""
         path = isolated_database(directory.parent, competition)
-        if sum(p.stat().st_size for p in directory.glob('*/canonical.db*')) > 128 * 1024 * 1024:
-            raise ValueError('isolated history storage budget reached')
+        size = stored_bytes()
+        if size > budget * 1.5 or (phase == 'backfill' and size > budget):
+            counts['storage'] = 'full' if size > budget * 1.5 else 'backfill_paused'
+            return False
         con = store.connect(path)
         try:
             result = store.put_many(con, feed.records)
@@ -276,11 +304,17 @@ def collect(sport, max_requests=16, max_seconds=150):
                     match[field] = previous[field]
             catalogs[competition][match['event_id']] = {**previous, **match}
         counts['matches'] += len(feed.matches)
+        return True
+
+    def persist_backfill(feed, competition):
+        return persist(feed, competition, 'backfill')
 
     # A one-week scoreboard window also returns a tennis tournament's completed
     # rounds; the older cursor advances only after its scoreboard was fetched.
-    requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(3)]
-                if sport == 'soccer' else [('live', f'{today:%Y%m%d}-{today+timedelta(days=2):%Y%m%d}')])
+    # Live window starts yesterday (UTC): evening matches that end after midnight must reach final now, not on
+    # the next 90-day backfill cycle.
+    requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(-1, 3)]
+                if sport == 'soccer' else [('live', f'{today-timedelta(days=1):%Y%m%d}-{today+timedelta(days=2):%Y%m%d}')])
     # Tennis providers accept bounded date ranges. Seven days per request
     # avoids spending 7.5 hours walking 90 individual dates on a new store.
     width = 7 if sport == 'tennis' else 1
@@ -290,6 +324,10 @@ def collect(sport, max_requests=16, max_seconds=150):
     try:
         for phase, dates in requests:
             phase_ok = True
+            if phase == 'backfill' and stored_bytes() > budget:
+                counts['storage'] = 'full' if stored_bytes() > budget * 1.5 else 'backfill_paused'
+                counts['phases']['backfill'] = 'paused'
+                continue
             for comp in (('all',) if sport == 'soccer' else ('atp', 'wta')):
                 try:
                     body = get(f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{comp}/scoreboard',
@@ -304,8 +342,15 @@ def collect(sport, max_requests=16, max_seconds=150):
                     if actual:
                         grouped.setdefault(actual, []).append(event)
                 for actual, events in grouped.items():
-                    feed = parse_scoreboard({'events': events}, actual, now_utc())
-                    persist(feed, actual)
+                    # One competition's write failure never aborts the other competitions or sources.
+                    try:
+                        feed = parse_scoreboard({'events': events}, actual, now_utc())
+                        if not persist(feed, actual, phase):
+                            phase_ok = False
+                    except (ValueError, OSError, sqlite3.Error) as e:
+                        counts['errors'].append(type(e).__name__)
+                        phase_ok = False
+            counts['phases'][phase] = 'ok' if phase_ok else 'partial'
             if phase == 'backfill' and phase_ok:
                 advanced = True
         if sport == 'soccer':
@@ -348,7 +393,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             counts['errors'].extend(collect_details(catalogs, get, persist, directory))
         else:
             from .expansion_challenger import collect as collect_challenger
-            counts['errors'].extend(collect_challenger(catalogs,get,persist,directory,offset))
+            counts['errors'].extend(collect_challenger(catalogs,get,persist,directory,persist_backfill))
             from .expansion_tennis import collect_details
             counts['errors'].extend(collect_details(catalogs, get, persist, directory))
     except StopIteration:
@@ -365,8 +410,18 @@ def collect(sport, max_requests=16, max_seconds=150):
     from .expansion_research import publish
     counts['research'] = publish(sport, budget_s=15)
     counts['finished_at'] = now_utc()
+    # When results were last really stored (not when research.json was rebuilt): the freshness members see.
+    counts['stored_at'] = counts['finished_at'] if counts['records'] else state.get('stored_at')
     atomic_json(state_path, {**counts, 'offset': (1 if offset+width>90 else offset+width) if advanced else offset})
     return counts
+
+
+def results_at(sport):
+    """Last time this sport's history job really stored result rows (None when never)."""
+    try:
+        return json.loads((boards.root(sport) / 'history-state.json').read_text(encoding='utf-8')).get('stored_at')
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def _file_signature(path):
@@ -460,7 +515,9 @@ def main():
         raise SystemExit('sport disabled')
     result = collect(args.sport)
     print(json.dumps(result))
-    if not result['matches'] and result['errors']:
+    # Failure means no provider answered at all (outage / persisted hold). A partial run that fetched and stored
+    # live results is a success; its per-source errors stay in the printed result and history-state.json.
+    if result['errors'] and not result['ok_requests']:
         raise SystemExit(1)
 
 

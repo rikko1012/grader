@@ -189,3 +189,90 @@ def test_one_tour_outage_does_not_block_the_other(monkeypatch,tmp_path):
     assert len(calls)==2 and result['errors']==['HttpError']
     assert (tmp_path/'tennis/wta/canonical.db').exists()
     assert not (tmp_path/'tennis/atp/canonical.db').exists()
+
+
+# ---- 2026-11-18: history jobs exited 1 forever once the isolated stores passed a fixed 128 MB cap ----------------
+def _fill(path, mb):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'wb') as f:                      # sparse: size counts toward the budget, no real disk used
+        f.seek(mb * 1024 * 1024 - 1)
+        f.write(b'\0')
+
+
+def test_over_budget_store_keeps_live_results_pauses_backfill_and_exits_0(monkeypatch, tmp_path, capsys):
+    import json
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED', '1')
+    monkeypatch.setenv('SCOUT_EXPANSION_HISTORY_MB', '16')
+    _fill(tmp_path / 'tennis/old/canonical.db', 20)    # over the 16 MB budget, under 1.5x
+    calls = []
+    def get(url, params=None, **kw):
+        calls.append((url, dict(params or {})))
+        return scoreboard() if 'espn' in url else {}
+    monkeypatch.setattr(history.net, 'get_json', get)
+    monkeypatch.setattr('sys.argv', ['x', 'tennis'])
+    history.main()                                     # no SystemExit: success
+    result = json.loads(capsys.readouterr().out)
+    assert result['records'] > 0 and result['storage'] == 'backfill_paused'
+    assert result['phases'] == {'live': 'ok', 'backfill': 'paused'}
+    assert result['ok_requests'] == result['requests']          # the fake theScore body is an empty dict (ValueError there)
+    assert (tmp_path / 'tennis/atp/canonical.db').exists()
+    state = json.loads((tmp_path / 'tennis/history-state.json').read_text())
+    assert state['offset'] == 1 and state['stored_at'] == result['finished_at']   # cursor never skips a window
+    espn_dates = [p['dates'] for u, p in calls if 'site.api.espn.com' in u and 'scoreboard' in u]
+    assert espn_dates and all('-' in d for d in espn_dates)
+    assert history.results_at('tennis') == result['finished_at']
+
+
+def test_full_store_writes_nothing_but_never_raises(monkeypatch, tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_EXPANSION_HISTORY_MB', '16')
+    _fill(tmp_path / 'tennis/old/canonical.db', 30)    # past 1.5x
+    monkeypatch.setattr(history.net, 'get_json', lambda url, **kw: scoreboard() if 'espn' in url else {})
+    result = history.collect('tennis', max_requests=3)
+    assert result['records'] == 0 and result['storage'] == 'full'
+    assert not (tmp_path / 'tennis/atp/canonical.db').exists()
+
+
+def test_live_window_starts_yesterday(monkeypatch, tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    calls = []
+    def get(url, params=None, **kw):
+        calls.append(dict(params or {}))
+        return {'events': []}
+    monkeypatch.setattr(history.net, 'get_json', get)
+    history.collect('soccer', max_requests=4)
+    today = datetime.now(timezone.utc).date()
+    assert [c['dates'] for c in calls[:4]] == [f'{today+timedelta(days=i):%Y%m%d}' for i in range(-1, 3)]
+    calls.clear()
+    history.collect('tennis', max_requests=1)
+    assert calls[0]['dates'] == f'{today-timedelta(days=1):%Y%m%d}-{today+timedelta(days=2):%Y%m%d}'
+
+
+def test_every_request_failing_still_exits_1(monkeypatch, tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED', '1')
+    def get(url, **kw):
+        raise history.net.HttpError(429, url)
+    monkeypatch.setattr(history.net, 'get_json', get)
+    monkeypatch.setattr('sys.argv', ['x', 'tennis'])
+    with pytest.raises(SystemExit) as e:
+        history.main()
+    assert e.value.code == 1
+
+
+def test_challenger_cursor_moves_only_when_its_own_backfill_was_fetched(tmp_path):
+    import json
+    from sports import expansion_challenger as ch
+    def failing(url, params, timeout=10):
+        if 'allscores' in url and \
+                datetime.strptime(params['startDate'], '%d/%m/%Y').date() < datetime.now(timezone.utc).date() - timedelta(days=1):
+            raise history.net.HttpError(None, url)       # the older (backfill) window times out
+        return {'games': []}
+    ch.collect({}, failing, lambda *a: True, tmp_path)
+    assert json.loads((tmp_path / 'challenger-state.json').read_text())['_offset'] == 1
+    ch.collect({}, lambda url, params, timeout=10: {'games': []}, lambda *a: True, tmp_path)
+    assert json.loads((tmp_path / 'challenger-state.json').read_text())['_offset'] == 8
+    # a backfill the storage budget declines does not move the cursor either
+    ch.collect({}, lambda url, params, timeout=10: {'games': []}, lambda *a: True, tmp_path, lambda *a: False)
+    assert json.loads((tmp_path / 'challenger-state.json').read_text())['_offset'] == 15   # no feeds -> nothing declined

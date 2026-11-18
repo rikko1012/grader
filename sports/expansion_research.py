@@ -123,7 +123,7 @@ def publish(sport, budget_s=20):
             except (OSError, ValueError, history.sqlite3.Error):
                 entry['error'] = 'history_unavailable'
         players[k] = entry
-    doc = {'sport': sport, 'at': now_utc(), 'players': players}
+    doc = {'sport': sport, 'at': now_utc(), 'results_at': history.results_at(sport), 'players': players}
     history.atomic_json(boards.root(sport) / 'research.json', doc)
     return {'offers': len(board['offers']), 'markets': len(players),
             'with_history': sum(bool(x['games']) for x in players.values()), 'at': doc['at']}
@@ -135,4 +135,4 @@ def attach(sport, data):
     relevant = {key(o) for o in data['offers']}
     from .expansion_forecasts import attach as attach_forecasts
     return attach_forecasts(sport, {**data, 'research': {k: v for k, v in players.items() if k in relevant},
-            'research_at': doc.get('at')})
+            'research_at': doc.get('at'), 'results_at': doc.get('results_at')})

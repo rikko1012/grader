@@ -144,7 +144,8 @@ def _build(srv, sport):
                  'error': None if v.get('ok') else 'Source unavailable'} for k, v in doc.get('sources', {}).items()}
     body = json.dumps({'sport': sport, 'records': records, 'feeds': feeds,
         'coverage': {'current_offers': eligible, 'with_history': len(records), 'pending_history': eligible-len(records),
-                     'history_at': doc.get('research_at')},
+                     # when results were last stored, not when research.json was rebuilt (2026-11-18)
+                     'history_at': doc.get('results_at') if 'results_at' in doc else doc.get('research_at')},
         'platforms': {k: {'label': v, 'kind': 'pickem'} for k, v in remote.LABEL.items()}}, separators=(',', ':')).encode()
     _SNAP[sport] = {'body': body, 'index': index, 'props': props, 'at': now}
     return 200, body
