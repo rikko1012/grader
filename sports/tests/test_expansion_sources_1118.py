@@ -62,7 +62,7 @@ def test_main_phases_leave_the_reserve_and_sources_still_run(monkeypatch, tmp_pa
     monkeypatch.setattr('sports.expansion_challenger.collect', lambda catalogs, get, *a: [get(f'u{i}', {}) for i in range(9)])
     history.collect('tennis', max_requests=16, max_seconds=150)
     # 4 scoreboards sent at 1000 / 1030 / 1060 / 1090; at 1120 (>= 1000 + 150 - 45) the main phases stop requesting
-    assert len(seen) == 4 and ran == [('thescore', 1120)]   # theScore runs in the reserve, before the deadline
+    assert len(seen) == 4 and ran == [('thescore', 1120), ('exchanges', 1120)]   # sources run in the reserve
 
 
 # --------------------------------------------------------------------------------------------- FotMob league ids
