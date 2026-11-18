@@ -323,6 +323,22 @@ Flags are read when the service starts: flip a flag, then restart (Render: Save 
 `/api/sports/admin/ops` -> `scheduler.jobs.<name>` shows each job's last exit, peak RSS, cap, over-cap kills, queue
 time; `scheduler.stats` the peak reservation and peak children RSS.
 
+#### Soccer / tennis Kalshi reference prices (2026-11-18)
+
+The `soccer-quotes` / `tennis-quotes` jobs (unchanged: 80 MB cap, 90 s timeout, every 180 s) end with one Kalshi
+step (`sports/expansion_kalshi.py`): at most 3 requests and 12 s, match winner only, stored as `reference_prices`
+in the sport's own `board.json` / `quotes.db` (`ref:kalshi`). Reference only - never a grade input.
+
+- Off: `SCOUT_SOCCER_KALSHI=0` / `SCOUT_TENNIS_KALSHI=0` (the next run writes no `reference_prices` key).
+- Check: the job's output line, or `sources.kalshi` in `board.json`: `markets`, `events`, `matched`,
+  `dropped_wide`, `ambiguous`, `unmatched`; `skipped: no_fixture` means no request was needed.
+- `error: http_429` / `http_403` / `held` with `held_until`: Kalshi refused; the hold (15 min or Retry-After
+  for a 429, 6 h for a 403) is in `<SPORTS_DATA_DIR>/expansion/request-holds.db` and both sports wait it out.
+  Do nothing; if 429s repeat, turn the switch off for one sport rather than work around it.
+- A team that never matches: add its exact Kalshi name -> ESPN name to `sports/kalshi_expansion_aliases.json`
+  by hand after checking both sources. Never add abbreviations.
+- Details and what is not verified: `sports/SOCCER_TENNIS_STATUS.md`.
+
 ### 5b. Write path from handlers (blessed 2026-10-23)
 
 Handlers never write the canonical store or any SQLite file. The only handler-caused write is a **spool**: bounded,

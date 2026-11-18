@@ -33,6 +33,32 @@ def shared(srv, league):
     return srv.shared(("ws_game_books", league), compute, ttl=30)
 
 
+def _exchange_cards(rows, league, now):
+    """Kalshi match-winner midpoints as their own card per matched fixture: a price reference, never a pick or a
+    grade input. A malformed row is skipped; it can never take the tab down."""
+    import workspace_expansion
+    cards = []
+    for row in rows if isinstance(rows, list) else []:
+        try:
+            outcomes = row['outcomes']
+            prices = [o['mid'] for o in outcomes]
+            if (not workspace_expansion._eligible(row, league, now) or row['platform'] != 'kalshi'
+                    or len(outcomes) != (3 if league == 'soccer' else 2)
+                    or any(type(v) is not float or not 0 < v < 1 for v in prices)
+                    or not all(isinstance(o['label'], str) and o['label'] for o in outcomes)
+                    or (league == 'soccer' and outcomes[1]['label'] != 'Draw')
+                    or not isinstance(row['match'], str) or not isinstance(row['offer_id'], str)):
+                continue
+            cards.append({'id': 'kalshi:' + row['offer_id'], 'label': row['match'],
+                'teams': [o['label'] for o in outcomes], 'start': row['start'], 'seen_at': row['observed_at'],
+                'quotes': [{'source': 'Kalshi', 'kind': 'midpoint', 'prices': prices,
+                            'description': 'Exchange bid/ask midpoint · price reference, not used in grades'}],
+                'pick': None})
+        except (KeyError, TypeError, IndexError, AttributeError):
+            continue
+    return cards
+
+
 def moneylines(srv, league):
     """Slim winner-only response for the classic tab. Never send player-prop reference rows."""
     def compute():
@@ -58,6 +84,7 @@ def moneylines(srv, league):
                                     'kind': 'american', 'prices': [o['american'] for o in outcomes],
                                     'description': 'American odds · ' + market['jurisdiction']}],
                         'pick': None})
+                games.extend(_exchange_cards(doc.get('reference_prices'), league, now))
                 return 200, json.dumps({'league': league, 'observed_at': doc['built_at'], 'games': games}, separators=(',', ':')).encode()
             except Exception:
                 return 503, b'{"error":"game_prices_unavailable"}'

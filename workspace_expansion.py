@@ -141,7 +141,9 @@ def _build(srv, sport):
         pk = (r['event']['id'], r['player']['key'], r['market']['stat'], r['market']['period'])
         props.setdefault(pk, []).append(k)
     feeds = {k: {'state': 'ok' if v.get('ok') else 'failed', 'at': v.get('checked_at'),
-                 'error': None if v.get('ok') else 'Source unavailable'} for k, v in doc.get('sources', {}).items()}
+                 'error': None if v.get('ok') else 'Source unavailable'} for k, v in doc.get('sources', {}).items()
+             # A price reference (Kalshi) has no lines on this board: its pauses are not a line-feed warning.
+             if not v.get('reference')}
     body = json.dumps({'sport': sport, 'records': records, 'feeds': feeds,
         'coverage': {'current_offers': eligible, 'with_history': len(records), 'pending_history': eligible-len(records),
                      # when results were last stored, not when research.json was rebuilt (2026-11-18)

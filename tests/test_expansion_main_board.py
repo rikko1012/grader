@@ -92,6 +92,78 @@ def test_existing_moneylines_keep_real_main_prices_and_draw(expansion, sport):
     if sport=='soccer': assert game['teams'][1]=='Draw'
 
 
+def kalshi_reference(doc, sport):
+    """A stored Kalshi reference row (sports/expansion_kalshi.py shape) for the fixture board."""
+    labels = ['Example FC', 'Draw', 'Test United'] if sport == 'soccer' else ['Ana Example', 'Bea Test']
+    mids = [.455, .265, .275] if sport == 'soccer' else [.665, .335]
+    odds = doc['game_odds'][0]
+    return {'sport': sport, 'platform': 'kalshi', 'source': 'kalshi', 'offer_id': 'KXFIXTURE-26NOV21AAABBB',
+            'event_id': sport + ':espn:fixture:1', 'match': f'{labels[0]} vs {labels[-1]}', 'teams': [labels[0], labels[-1]],
+            'start': odds['start'], 'observed_at': odds['observed_at'], 'main': True, 'market_type': 'Exchange match',
+            'reference_only': True, 'revision': 'r1', 'jurisdiction': 'US exchange',
+            'outcomes': [{'selection_id': str(i), 'label': label, 'bid': round(mid-.005, 4), 'ask': round(mid+.005, 4), 'mid': mid}
+                         for i, (label, mid) in enumerate(zip(labels, mids))]}
+
+
+@pytest.mark.parametrize('sport', adapter.SPORTS)
+def test_moneylines_show_kalshi_midpoints_as_their_own_reference_card(expansion, sport):
+    import server, workspace_game_books
+    good = kalshi_reference(expansion[sport], sport)
+    junk = [dict(good, offer_id='american', outcomes=[{'label': o['label'], 'american': 150, 'line': None} for o in good['outcomes']]),
+            dict(good, offer_id='no-mid', outcomes=[{k: v for k, v in o.items() if k != 'mid'} for o in good['outcomes']]),
+            dict(good, offer_id='not-a-price', outcomes=[dict(o, mid=1.2) for o in good['outcomes']]),
+            dict(good, offer_id='text-price', outcomes=[dict(o, mid='0.5') for o in good['outcomes']]),
+            dict(good, offer_id='one-leg', outcomes=good['outcomes'][:1]),
+            dict(good, offer_id='other-book', platform='polymarket'),
+            dict(good, offer_id='other-sport', sport='tennis' if sport == 'soccer' else 'soccer'),
+            dict(good, offer_id='started', start=good['observed_at']),
+            dict(good, offer_id='no-outcomes', outcomes=None), 'not-a-row', None]
+    expansion[sport]['reference_prices'] = junk + [good]
+    status, raw = workspace_game_books.moneylines(server, sport)
+    doc = json.loads(raw)
+    assert status == 200 and [g['id'] for g in doc['games']] == ['betrivers:ml', 'kalshi:KXFIXTURE-26NOV21AAABBB']
+    book, card = doc['games']
+    assert book['quotes'][0]['prices'] == ([150,220,175] if sport=='soccer' else [150,-170])     # BetRivers card unchanged
+    assert card['pick'] is None and card['label'] == good['match']
+    assert card['quotes'] == [{'source': 'Kalshi', 'kind': 'midpoint',
+        'prices': [.455, .265, .275] if sport == 'soccer' else [.665, .335],
+        'description': 'Exchange bid/ask midpoint · price reference, not used in grades'}]
+    assert card['teams'] == (['Example FC', 'Draw', 'Test United'] if sport == 'soccer' else ['Ana Example', 'Bea Test'])
+
+
+@pytest.mark.parametrize('sport', adapter.SPORTS)
+def test_reference_rows_never_reach_the_prop_board_or_its_feed_warnings(expansion, sport):
+    import server
+    doc = expansion[sport]
+    before = json.loads(adapter.snapshot(server, sport)['body'])
+    adapter._SNAP.pop(sport, None); server._RESULTS.clear()      # a new shared read, not the 20 s copy
+    doc['reference_prices'] = [kalshi_reference(doc, sport)]
+    doc['sources']['kalshi'] = {'ok': False, 'reference': True, 'error': 'held', 'checked_at': doc['built_at']}
+    after = json.loads(adapter.snapshot(server, sport)['body'])
+    assert after['feeds'] == before['feeds'] and 'kalshi' not in after['feeds']
+    assert after['records'] == before['records'] and 'kalshi' not in json.dumps(after['records']).lower()
+
+
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_main_moneylines_kalshi_reference_card(ctx,env,expansion,size):
+    for sport in adapter.SPORTS:
+        expansion[sport]['reference_prices'] = [kalshi_reference(expansion[sport], sport)]
+    p=open_page(ctx,env,'/?view=classic#moneylines',size)
+    p.locator('[data-mlsport=soccer]').click()
+    p.wait_for_function("document.querySelector('#boardout').textContent.includes('Kalshi')")
+    text=p.locator('#boardout').inner_text()
+    assert '45.5%' in text and '26.5%' in text and '27.5%' in text and 'Example FC vs Test United' in text
+    assert 'price reference, not used in grades' in text
+    assert '+220' in text and 'BetRivers' in text and 'Scout pick' not in text
+    no_h_scroll(p)
+    p.locator('[data-mlsport=tennis]').click()
+    p.wait_for_function("document.querySelector('#boardout').textContent.includes('66.5%')")
+    text=p.locator('#boardout').inner_text()
+    assert '33.5%' in text and '-170' in text and 'Draw' not in text
+    no_h_scroll(p)
+    assert not p.errors
+
+
 @pytest.mark.parametrize('size', [DESK, PHONE])
 def test_saved_forecast_uses_existing_readable_board_and_card(ctx, env, expansion, size):
     doc=expansion['soccer'];offer=doc['offers'][0];facts=doc['research'][adapter._key(offer)]

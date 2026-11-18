@@ -158,3 +158,33 @@ New-sport forecast/settlement validation is still incomplete: they are excluded
 from generated/tracked slips and Public Record, not represented as validated
 grades. CS2/LoL/NBA/NFL continue their existing grading paths. No paid-resource
 changes are part of this correction.
+
+## Kalshi match-winner prices (2026-11-18, reference only)
+
+`sports/expansion_kalshi.py`, called last by each sport's existing quotes job.
+
+- **Ingested:** match winner only, for the two series read live: `KXEPLGAME` (Premier League, 3-way after
+  90 minutes plus stoppage time) and `KXATPMATCH` (ATP singles). WTA and Challenger series are listed with
+  `verified: False` and are never requested. No totals, no player props.
+- **Matching:** only against Scout's own ESPN fixtures (`current-matches.json`): exact normalized full or short
+  names (or a hand-checked entry in `sports/kalshi_expansion_aliases.json`), both sides, a scheduled fixture
+  that has not started, exactly one fixture per event and one event per fixture. Abbreviations are never used.
+  Kalshi's dates are only a sanity window (soccer -1..+1 days, tennis -1..+4) and the start shown is ESPN's.
+  Unmatched, ambiguous, one-sided or wide (over 5 cents) events are dropped and counted in `sources.kalshi`
+  (`unmatched` lists up to 10 event titles, including matches ESPN's catalogue does not reach yet).
+- **Storage / display:** `board.json` key `reference_prices` and `quotes.db` platform `ref:kalshi`, inside the
+  sport's own expansion folder. Shown on the Moneylines tab as a separate "Kalshi" card (bid/ask midpoint, in
+  percent, no pick). Not read by forecasts, learning or `gradecore/`; tests pin that.
+- **Switch:** `SCOUT_SOCCER_KALSHI=0` / `SCOUT_TENNIS_KALSHI=0` turn it off (on otherwise; only read inside the
+  quotes job, which needs `SCOUT_<SPORT>_ENABLED=1`).
+- **Budget per quotes run:** at most 3 requests (1 today), one try each, 10 s timeout, 12 s for the step, the
+  shared 2 s gap for the host; no request when the catalogue has no scheduled fixture for the series within
+  8 days; an answer over 2 MB is refused; at most 150 rows. A 429 stops Kalshi for max(Retry-After, 15 min)
+  and a 403 for 6 h, persisted in `request-holds.db` for both sports and never retried around.
+- **Real run 2026-11-18 22:00 UTC (temp data folder):** tennis quotes job: 1 Kalshi request, 4 `KXATPMATCH`
+  events, 4 matched to ESPN ATP Finals fixtures (4.2 KB of reference rows), job peak RSS 39.8 MB, 4.2 s.
+  Soccer quotes job: no Kalshi request, because ESPN's catalogue held no scheduled Premier League fixture yet
+  (the next matches were three days out); peak RSS 59.0 MB. No 429 or 403.
+- **Not verified:** a live Premier League match end to end (parser and matcher are tested on the recorded
+  answer only); the Kalshi rate limit on the production host, where the NBA/NFL `ingest-kalshi` job uses the
+  same host from another process; any series marked `verified: False`.
