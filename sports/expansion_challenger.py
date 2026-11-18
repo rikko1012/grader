@@ -100,7 +100,7 @@ def parse_stats(body,match,observed):
     return out
 
 
-def collect(catalogs,get,persist,directory,offset):
+def collect(catalogs,get,persist,directory,offset,backfill=True):
     from .expansion_history import atomic_json
     from . import net
     errors=[];today=datetime.now(timezone.utc).date();path=directory/'challenger-state.json'
@@ -108,7 +108,7 @@ def collect(catalogs,get,persist,directory,offset):
     except (OSError,ValueError):state={}
     try:
         for a,b in [(today-timedelta(days=1),today+timedelta(days=2)),
-                    (today-timedelta(days=min(90,offset+6)),today-timedelta(days=offset))]:
+                    (today-timedelta(days=min(90,offset+6)),today-timedelta(days=offset))][:2 if backfill else 1]:
             data=get(BASE+'games/allscores/',{**PARAMS,'sports':3,'startDate':a.strftime('%d/%m/%Y'),'endDate':b.strftime('%d/%m/%Y')})
             for comp,feed in parse_games(data,now_utc()).items():persist(feed,comp)
         pending=[m for comp in ('atp_challenger','wta125') for m in catalogs.get(comp,{}).values()

@@ -217,6 +217,48 @@ def collect_soccer_teams(catalogs, get, persist, directory):
     return errors
 
 
+DEFAULT_HISTORY_MB = 4096
+
+
+def storage_budget_bytes(sport):
+    """Per-sport cap for the isolated history stores, tunable without a deploy.
+
+    SCOUT_<SPORT>_HISTORY_MAX_MB, then SCOUT_EXPANSION_HISTORY_MAX_MB. The old
+    fixed 128 MB was smaller than the 90-day window the collector is built to
+    hold (tennis measured 135 MB at day 64). A bad value keeps the default.
+    These stores still count toward the global data cap in sports/worker.py.
+    """
+    for name in (f'SCOUT_{sport.upper()}_HISTORY_MAX_MB', 'SCOUT_EXPANSION_HISTORY_MAX_MB'):
+        try:
+            value = int(os.environ.get(name) or '')
+        except ValueError:
+            continue
+        if value > 0:
+            return value * 1024 * 1024
+    return DEFAULT_HISTORY_MB * 1024 * 1024
+
+
+def storage_bytes(directory):
+    total = 0
+    for path in Path(directory).glob('*/canonical.db*'):
+        try:
+            total += path.stat().st_size
+        except OSError:
+            pass
+    return total
+
+
+def _unchanged(con, rec):
+    """(identity already stored, content equal to its current revision)."""
+    try:
+        source, key = rec.identity()
+        row = con.execute("SELECT content_hash FROM records WHERE kind=? AND source=? AND source_key=? AND late=0 "
+                          "ORDER BY revision DESC LIMIT 1", (rec.KIND, source, key)).fetchone()
+        return row is not None, row is not None and row[0].split('~', 1)[0] == rec.content_hash()
+    except Exception:  # an invalid record is left to store.put_many's quarantine
+        return False, False
+
+
 def collect(sport, max_requests=16, max_seconds=150):
     """One resumable small batch; live dates first, one older date per run.
 
@@ -234,7 +276,17 @@ def collect(sport, max_requests=16, max_seconds=150):
         state = {}
     offset = int(state.get('offset', 1))
     today = datetime.now(timezone.utc).date()
-    counts = {'requests': 0, 'records': 0, 'matches': 0, 'errors': [], 'finished_at': None}
+    counts = {'requests': 0, 'records': 0, 'unchanged': 0, 'matches': 0, 'scoreboards_ok': 0,
+              'errors': [], 'finished_at': None}
+    # Measured once per run. A full store is a recorded, non-failing state:
+    # the backfill stops, current matches still settle and identity catalogs
+    # and research keep refreshing. Nothing is deleted.
+    used, budget = storage_bytes(directory), storage_budget_bytes(sport)
+    full = used >= budget
+    counts['storage_mb'], counts['budget_mb'] = round(used / 1048576, 1), budget // 1048576
+    if full:
+        counts['degraded'] = 'storage_budget'
+    recent = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat().replace('+00:00', 'Z')
     deadline = time.monotonic() + max_seconds
     catalogs = {}
     for comp, (kind, _) in COMPETITIONS.items():
@@ -256,12 +308,29 @@ def collect(sport, max_requests=16, max_seconds=150):
 
     def persist(feed, competition):
         path = isolated_database(directory.parent, competition)
-        if sum(p.stat().st_size for p in directory.glob('*/canonical.db*')) > 128 * 1024 * 1024:
-            raise ValueError('isolated history storage budget reached')
+        starts = {m['event_id']: m.get('start') or '' for m in catalogs.get(competition, {}).values()}
+        starts.update({m['event_id']: m.get('start') or '' for m in feed.matches})
+        live = any((m.get('start') or '') >= recent for m in feed.matches)
         con = store.connect(path)
         try:
-            result = store.put_many(con, feed.records)
-            counts['records'] += len(result.get('record_ids', []))
+            # Re-reading a scoreboard must not rewrite every stored row: an
+            # unchanged fact is skipped here (store sighting columns are for
+            # NBA/NFL offers). A changed fact is still a new revision.
+            fresh = []
+            for rec in feed.records:
+                known, same = _unchanged(con, rec)
+                if same:
+                    counts['unchanged'] += 1
+                    continue
+                if full and not known:
+                    event = getattr(rec, 'event_id', None)
+                    if not (starts.get(event, '') >= recent if event else live):
+                        continue
+                fresh.append(rec)
+            if fresh:
+                result = store.put_many(con, fresh)
+                counts['records'] += result.get('inserted', 0) + result.get('revision', 0)
+                counts['unchanged'] += result.get('duplicate', 0)
         finally:
             con.close()
         if competition not in catalogs:
@@ -284,8 +353,9 @@ def collect(sport, max_requests=16, max_seconds=150):
     # Tennis providers accept bounded date ranges. Seven days per request
     # avoids spending 7.5 hours walking 90 individual dates on a new store.
     width = 7 if sport == 'tennis' else 1
-    requests.append(('backfill', f'{today-timedelta(days=min(90,offset+width-1)):%Y%m%d}-{today-timedelta(days=offset):%Y%m%d}'
-                     if width>1 else f'{today-timedelta(days=offset):%Y%m%d}'))
+    if not full:
+        requests.append(('backfill', f'{today-timedelta(days=min(90,offset+width-1)):%Y%m%d}-{today-timedelta(days=offset):%Y%m%d}'
+                         if width>1 else f'{today-timedelta(days=offset):%Y%m%d}'))
     advanced = False
     try:
         for phase, dates in requests:
@@ -298,6 +368,7 @@ def collect(sport, max_requests=16, max_seconds=150):
                     counts['errors'].append(type(e).__name__)
                     phase_ok = False
                     continue
+                counts['scoreboards_ok'] += 1
                 grouped = {}
                 for event in body.get('events') or []:
                     actual = soccer_competition(event) if sport == 'soccer' else comp
@@ -317,7 +388,8 @@ def collect(sport, max_requests=16, max_seconds=150):
                            (datetime.now(timezone.utc)-parse_utc(m['summary_checked_at'])).total_seconds() >=
                            (86400 if m.get('status') == 'final' else 21600))
                        and (not m.get('summary_attempt_at') or
-                            (datetime.now(timezone.utc)-parse_utc(m['summary_attempt_at'])).total_seconds() >= 1800)]
+                            (datetime.now(timezone.utc)-parse_utc(m['summary_attempt_at'])).total_seconds() >= 1800)
+                       and (not full or (m.get('start') or '') >= recent)]
             # Check imminent offered events first, then the oldest unchecked
             # summary. Once checked, a game waits its interval and frees the queue.
             offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
@@ -344,13 +416,19 @@ def collect(sport, max_requests=16, max_seconds=150):
                 except (net.HttpError, ValueError, OSError) as e:
                     match['summary_attempt_at'] = now_utc()
                     counts['errors'].append(type(e).__name__)
+            # While full, detail sources see only recent matches, so an older
+            # match is not marked checked without its facts being stored.
+            current = catalogs if not full else {c: {k: m for k, m in rows.items() if (m.get('start') or '') >= recent}
+                                                 for c, rows in catalogs.items()}
             from .expansion_soccer_detail import collect_details
-            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
+            counts['errors'].extend(collect_details(current, get, persist, directory))
         else:
+            current = catalogs if not full else {c: {k: m for k, m in rows.items() if (m.get('start') or '') >= recent}
+                                                 for c, rows in catalogs.items()}
             from .expansion_challenger import collect as collect_challenger
-            counts['errors'].extend(collect_challenger(catalogs,get,persist,directory,offset))
+            counts['errors'].extend(collect_challenger(current,get,persist,directory,offset,backfill=not full))
             from .expansion_tennis import collect_details
-            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
+            counts['errors'].extend(collect_details(current, get, persist, directory))
     except StopIteration:
         pass
     except (net.HttpError, ValueError, OSError, sqlite3.Error) as e:
@@ -460,7 +538,9 @@ def main():
         raise SystemExit('sport disabled')
     result = collect(args.sport)
     print(json.dumps(result))
-    if not result['matches'] and result['errors']:
+    # A quiet day with one detail-source error did its job; so did a run that
+    # degraded for a recorded reason. Fail only when no scoreboard answered.
+    if result['errors'] and not result.get('scoreboards_ok') and not result.get('degraded'):
         raise SystemExit(1)
 
 

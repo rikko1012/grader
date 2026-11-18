@@ -55,3 +55,13 @@ def test_wrong_game_or_non_match_stat_is_not_used():
     assert not parse_stats(b,m,NOW).records
     b=fixture();b['games'][0]['id']=12
     assert not parse_stats(b,m,NOW).records
+
+
+def test_collect_without_backfill_requests_only_the_live_window(tmp_path):
+    from sports import expansion_challenger as challenger
+    calls=[]
+    def get(url,params):
+        calls.append(params);return {}
+    assert challenger.collect({},get,lambda *a:None,tmp_path,8,backfill=False)==[]
+    assert len(calls)==1
+    assert challenger.collect({},get,lambda *a:None,tmp_path,8)==[] and len(calls)==3

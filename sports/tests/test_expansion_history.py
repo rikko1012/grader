@@ -189,3 +189,91 @@ def test_one_tour_outage_does_not_block_the_other(monkeypatch,tmp_path):
     assert len(calls)==2 and result['errors']==['HttpError']
     assert (tmp_path/'tennis/wta/canonical.db').exists()
     assert not (tmp_path/'tennis/atp/canonical.db').exists()
+
+
+def _rows(path):
+    import sqlite3
+    con=sqlite3.connect(path)
+    try:return con.execute('SELECT record_id,revision,seen_count,last_seen_at FROM records ORDER BY rid').fetchall()
+    finally:con.close()
+
+
+def test_budget_env_default_override_and_bad_value(monkeypatch,tmp_path):
+    for name in ('SCOUT_TENNIS_HISTORY_MAX_MB','SCOUT_SOCCER_HISTORY_MAX_MB','SCOUT_EXPANSION_HISTORY_MAX_MB'):
+        monkeypatch.delenv(name,raising=False)
+    assert history.storage_budget_bytes('tennis')==4096*1024*1024
+    monkeypatch.setenv('SCOUT_EXPANSION_HISTORY_MAX_MB','512')
+    monkeypatch.setenv('SCOUT_TENNIS_HISTORY_MAX_MB','1')
+    assert history.storage_budget_bytes('tennis')==1024*1024
+    assert history.storage_budget_bytes('soccer')==512*1024*1024
+    for bad in ('lots','0','-5',''):
+        monkeypatch.setenv('SCOUT_TENNIS_HISTORY_MAX_MB',bad)
+        monkeypatch.setenv('SCOUT_EXPANSION_HISTORY_MAX_MB',bad)
+        assert history.storage_budget_bytes('tennis')==4096*1024*1024
+    (tmp_path/'atp').mkdir();(tmp_path/'atp/canonical.db').write_bytes(b'x'*10)
+    (tmp_path/'atp/canonical.db-wal').write_bytes(b'x'*5);(tmp_path/'atp/matches.json').write_bytes(b'x'*99)
+    assert history.storage_bytes(tmp_path)==15 and history.storage_bytes(tmp_path/'missing')==0
+
+
+def test_persist_is_idempotent_and_a_changed_fact_is_a_revision(monkeypatch,tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
+    body=scoreboard()
+    monkeypatch.setattr(history.net,'get_json',lambda url,**kw:body)
+    first=history.collect('tennis',max_requests=2)
+    path=tmp_path/'tennis/atp/canonical.db';before=_rows(path)
+    assert first['records']>0 and first['unchanged']==0 and before
+    second=history.collect('tennis',max_requests=2)
+    assert second['records']==0 and second['unchanged']>=len(before) and second['errors']==[]
+    assert _rows(path)==before  # no row, sighting count or sighting time was rewritten
+    body=scoreboard(((6,7),(4,5)))
+    third=history.collect('tennis',max_requests=2)
+    assert third['records']>0 and max(r[1] for r in _rows(path))==2
+
+
+def test_budget_reached_skips_backfill_keeps_live_and_exits_zero(monkeypatch,tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
+    monkeypatch.setenv('SCOUT_TENNIS_HISTORY_MAX_MB','1')
+    (tmp_path/'tennis/wta').mkdir(parents=True)
+    (tmp_path/'tennis/wta/canonical.db-wal').write_bytes(b'\0'*(1024*1024+1))
+    history.atomic_json(tmp_path/'tennis/history-state.json',{'offset':22})
+    today=datetime.now(timezone.utc)
+    def board(day,mid):
+        body=scoreboard();c=body['events'][0]['competitions'][0]
+        c['id']=mid;c['date']=day.strftime('%Y-%m-%dT%H:%MZ');return body
+    calls=[]
+    def get(url,**kw):
+        calls.append((url,dict(kw.get('params') or {})))
+        if 'espn' not in url:return {} if 'allscores' in url else []
+        if '/atp/' in url:return board(today-timedelta(hours=1),'live')
+        return board(today-timedelta(days=40),'old')
+    monkeypatch.setattr(history.net,'get_json',get)
+    result=history.collect('tennis')
+    boards_asked=[p['dates'] for u,p in calls if 'scoreboard' in u]
+    assert len(boards_asked)==2 and len(set(boards_asked))==1  # live window only, no backfill range
+    assert len([u for u,_ in calls if 'allscores' in u])==1
+    assert result['degraded']=='storage_budget' and result['errors']==[] and result['budget_mb']==1
+    assert result['records']>0 and result['scoreboards_ok']==2
+    import json
+    state=json.loads((tmp_path/'tennis/history-state.json').read_text())
+    assert state['offset']==22 and state['degraded']=='storage_budget'
+    assert any('live' in r[0] for r in _rows(tmp_path/'tennis/atp/canonical.db'))
+    # the 40-day-old match adds no rows while full, but its catalog entry (JSON) still refreshes
+    assert not [r for r in _rows(tmp_path/'tennis/wta/canonical.db') if ':old' in r[0]]
+    assert json.loads((tmp_path/'tennis/current-matches.json').read_text())
+    assert 'research' in result
+
+
+def test_main_exit_codes(monkeypatch,capsys):
+    import sys
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED','1')
+    monkeypatch.setattr(sys,'argv',['x','tennis'])
+    base={'matches':0,'errors':[],'scoreboards_ok':2,'requests':3}
+    def run(**change):
+        monkeypatch.setattr(history,'collect',lambda sport:{**base,**change})
+        history.main()
+    run();run(matches=4)
+    run(errors=['HttpError'])  # quiet day, one detail source failed
+    run(errors=['ValueError'],scoreboards_ok=0,degraded='storage_budget')
+    with pytest.raises(SystemExit) as stop:
+        run(errors=['HttpError','HttpError'],scoreboards_ok=0)
+    assert stop.value.code==1
