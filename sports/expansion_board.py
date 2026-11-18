@@ -21,6 +21,7 @@ from . import expansion_offers as adapters
 
 MAX_AGE = 300
 REFERENCE_START_BY_S = 40  # a reference step never starts later than this into a run (the job is killed at 90 s)
+REFERENCE_STATUS = 'reference-status.json'
 REFERENCE_KEEP_DAYS = 14   # quotes.db history of exchange reference prices (`ref:` rows); fixtures are at most 8 days out
 SPORTS = ("soccer", "tennis")
 _SNAPSHOT_LOCK = threading.Lock()
@@ -226,15 +227,42 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None, refe
                 "mode": "lines", "grading_ready": False, "game_odds":game_odds}
     if reference_prices is not None:
         snapshot["reference_prices"] = reference
+    _write(directory, "board.json", snapshot)
+    # The reference sources' last answer (ok / error / held_until / truncated) as a small file for admin ops: the
+    # job exits 0 when only a reference source fails and the member feeds leave these sources out.
+    status = {k: v for k, v in sources.items() if isinstance(v, dict) and v.get("reference")}
+    if status:
+        _write(directory, REFERENCE_STATUS, {"sport": sport, "built_at": observed_at, "sources": status})
+    else:
+        try:
+            os.unlink(directory / REFERENCE_STATUS)        # switched off: no stale status left behind
+        except OSError:
+            pass
+    return snapshot
+
+
+def _write(directory, name, document):
     fd, temporary = tempfile.mkstemp(prefix="board-", suffix=".tmp", dir=directory)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(snapshot, f, separators=(",", ":"))
-        os.replace(temporary, directory / "board.json")
+            json.dump(document, f, separators=(",", ":"))
+        os.replace(temporary, directory / name)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-    return snapshot
+
+
+def reference_status(sport):
+    """The quotes job's last reference-source status ({built_at, sources}), None when there is none. A small file
+    read; never board.json or a database."""
+    try:
+        path = root(sport) / REFERENCE_STATUS
+        if path.stat().st_size > 65536:
+            return None
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        return {"built_at": doc["built_at"], "sources": doc["sources"]} if isinstance(doc.get("sources"), dict) else None
+    except (OSError, ValueError, KeyError, AttributeError):
+        return None
 
 
 def collect(sport):

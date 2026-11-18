@@ -350,6 +350,31 @@ def test_reference_steps_are_skipped_when_line_sources_used_the_runs_time(tennis
     assert boards.REFERENCE_START_BY_S+21<90
 
 
+def test_reference_source_failures_are_readable_from_admin_ops(tennis_store,monkeypatch):
+    from sports import expansion_kalshi, expansion_polymarket, service
+    _quotes_job(monkeypatch)
+    held={'ok':False,'reference':True,'checked_at':'2026-11-18T10:00:00Z','error':'held','held_until':'2026-11-18T16:00:00Z'}
+    cut={'ok':True,'reference':True,'markets':3,'truncated':True}
+    monkeypatch.setattr(expansion_kalshi,'collect',lambda sport,get,directory:([],held))
+    monkeypatch.setattr(expansion_polymarket,'collect',lambda sport,get,directory:([],cut))
+    snap=boards.collect('tennis')
+    assert sorted(p.name for p in tennis_store.iterdir())==['board.json','quotes.db','reference-status.json']
+    got=service.expansion_reference_status()
+    assert got['soccer']=={'enabled':False}                    # not released: nothing read
+    assert got['tennis']=={'enabled':True,'built_at':snap['built_at'],'sources':{'kalshi':held,'polymarket':cut}}
+    assert 'prizepicks' in snap['sources'] and 'prizepicks' not in got['tennis']['sources']   # line feeds stay where they are
+    assert service.ops()['expansion_reference']==got
+    # Both switched off: the next run leaves no stale status behind.
+    monkeypatch.setenv('SCOUT_TENNIS_KALSHI','0');monkeypatch.setenv('SCOUT_TENNIS_POLYMARKET','0')
+    boards.collect('tennis')
+    assert service.expansion_reference_status()['tennis']=={'enabled':True}
+    # A damaged or oversize file is never an error in ops.
+    (tennis_store/'reference-status.json').write_text('{not json',encoding='utf-8')
+    assert service.expansion_reference_status()['tennis']=={'enabled':True}
+    (tennis_store/'reference-status.json').write_text(json.dumps({'built_at':'x','sources':{},'pad':'x'*70000}),encoding='utf-8')
+    assert service.expansion_reference_status()['tennis']=={'enabled':True}
+
+
 @pytest.mark.parametrize('status',[429,403,500])
 def test_a_polymarket_refusal_is_one_request_and_keeps_every_other_row(tennis_store,monkeypatch,status):
     from sports import expansion_kalshi, expansion_odds, expansion_polymarket, expansion_sources, net

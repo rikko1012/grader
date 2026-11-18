@@ -427,6 +427,17 @@ def expansion_learning_status():
     return out
 
 
+def expansion_reference_status():
+    """Soccer / tennis exchange reference sources (Kalshi, Polymarket) as the quotes job last saw them: ok, error,
+    held_until, truncated. Admin ops only - the member feeds leave reference sources out. One small file per sport."""
+    from . import expansion_board
+    out = {}
+    for sport in expansion_board.SPORTS:
+        enabled = expansion_board.enabled(sport)
+        out[sport] = {'enabled': enabled, **((expansion_board.reference_status(sport) or {}) if enabled else {})}
+    return out
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -442,6 +453,7 @@ def ops():
             "sheets_stages": sheets_stages(),
             "grades_daily": settle_stages("model/daily_state.json"),
             "expansion_learning": expansion_learning_status(),
+            "expansion_reference": expansion_reference_status(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC)),
             "restarts": service_life.recent(10), "cgroup": service_life.cgroup()}
