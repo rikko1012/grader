@@ -220,7 +220,7 @@ def test_over_budget_store_keeps_live_results_pauses_backfill_and_exits_0(monkey
     state = json.loads((tmp_path / 'tennis/history-state.json').read_text())
     assert state['offset'] == 1 and state['stored_at'] <= result['finished_at']   # cursor never skips a window
     espn_dates = [p['dates'] for u, p in calls if 'site.api.espn.com' in u and 'scoreboard' in u]
-    assert espn_dates and all('-' in d for d in espn_dates)
+    assert espn_dates and not any('-' in d for d in espn_dates)   # live single dates only; the backfill range is paused
     assert history.results_at('tennis') == result['stored_at'] == state['stored_at']
 
 
@@ -245,8 +245,13 @@ def test_live_window_starts_yesterday(monkeypatch, tmp_path):
     today = datetime.now(timezone.utc).date()
     assert [c['dates'] for c in calls[:4]] == [f'{today+timedelta(days=i):%Y%m%d}' for i in range(-1, 3)]
     calls.clear()
-    history.collect('tennis', max_requests=1)
-    assert calls[0]['dates'] == f'{today-timedelta(days=1):%Y%m%d}-{today+timedelta(days=2):%Y%m%d}'
+    history.collect('tennis', max_requests=8)
+    today = datetime.now(timezone.utc).date()
+    # ESPN picks tennis tournaments by START date for a range, so the live requests are single dates (no '-'):
+    # today, yesterday (a final that ended after midnight), tomorrow - each for ATP and WTA; then the 7-day backfill.
+    live = [f'{today+timedelta(days=i):%Y%m%d}' for i in (0, 0, -1, -1, 1, 1)]
+    assert [c['dates'] for c in calls[:6]] == live and not any('-' in d for d in live)
+    assert [c['dates'] for c in calls[6:8]] == [f'{today-timedelta(days=7):%Y%m%d}-{today-timedelta(days=1):%Y%m%d}'] * 2
 
 
 def test_a_full_store_that_stores_nothing_exits_1(monkeypatch, tmp_path):
