@@ -128,6 +128,41 @@ def test_reference_prices_have_their_own_key_namespace_and_version(tennis_store)
         assert not con.execute("SELECT 1 FROM revisions WHERE platform NOT LIKE 'ref:%'").fetchall()
 
 
+def test_reference_history_is_bounded_and_line_history_is_never_deleted(tennis_store):
+    import sqlite3
+    now=datetime.now(timezone.utc).replace(microsecond=0)
+    line=lambda i:{'sport':'tennis','platform':'prizepicks','offer_id':'line','revision':f'r{i}'}
+    odds=lambda i:{'sport':'tennis','platform':'betrivers','offer_id':'odds','revision':f'r{i}'}
+    # 40 days of runs, a new price every day on both exchanges.
+    for day in range(40,-1,-1):
+        stamp=utc(now-timedelta(days=day))
+        ref=[reference(mid=round(.3+day/100,3),observed=stamp),
+             dict(reference(mid=round(.3+day/100,3),observed=stamp),platform='polymarket')]
+        boards.save('tennis',[line(day)],{},stamp,game_odds=[odds(day)],reference_prices=ref)
+    with sqlite3.connect(tennis_store/'quotes.db') as con:
+        counts=dict(con.execute('SELECT platform,count(*) FROM revisions GROUP BY platform'))
+        oldest=con.execute("SELECT min(observed_at) FROM revisions WHERE platform LIKE 'ref:%'").fetchone()[0]
+    keep=boards.REFERENCE_KEEP_DAYS
+    assert keep==14 and counts=={'prizepicks':41,'odds:betrivers':41,'ref:kalshi':keep+1,'ref:polymarket':keep+1}
+    assert oldest==utc(now-timedelta(days=keep))
+    # Same price on the next run: nothing is added, and the latest revision is still there to compare against.
+    boards.save('tennis',[],{},utc(now),reference_prices=ref[:1])
+    with sqlite3.connect(tennis_store/'quotes.db') as con:
+        assert con.execute("SELECT count(*) FROM revisions WHERE platform='ref:kalshi'").fetchone()[0]==keep+1
+
+
+def test_reference_churn_does_not_grow_the_file_once_the_window_is_full(tennis_store):
+    now=datetime.now(timezone.utc).replace(microsecond=0)
+    sizes=[]
+    for step in range(600,-1,-1):             # a new price every hour for 25 days, 30 rows of about 1 KB
+        stamp=utc(now-timedelta(hours=step))
+        boards.save('tennis',[],{},stamp,reference_prices=[
+            dict(reference(mid=round(.2+(step%50)/100,3),observed=stamp,offer=f'm{i}'),note='x'*600) for i in range(30)])
+        if step in (200,0):
+            sizes.append(sum(p.stat().st_size for p in tennis_store.glob('quotes.db*')))
+    assert sizes[1]<=sizes[0]*1.1
+
+
 def test_reference_prices_expire_with_age_and_at_the_start(tennis_store):
     now=datetime.now(timezone.utc);stamp=utc(now)
     soon=reference(start=utc(now+timedelta(seconds=30)),observed=stamp,offer='soon');later=reference(observed=stamp,offer='later')

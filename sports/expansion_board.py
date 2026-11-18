@@ -6,7 +6,7 @@ features, model validation and house-rule settlement have been connected.
 """
 import argparse
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -15,10 +15,11 @@ import tempfile
 import threading
 from functools import lru_cache
 
-from .contracts import now_utc, parse_utc
+from .contracts import now_utc, parse_utc, utc
 from . import expansion_offers as adapters
 
 MAX_AGE = 300
+REFERENCE_KEEP_DAYS = 14   # quotes.db history of exchange reference prices (`ref:` rows); fixtures are at most 8 days out
 SPORTS = ("soccer", "tennis")
 _SNAPSHOT_LOCK = threading.Lock()
 _PREPARED = {}  # At most two eligible, encoded boards; shared by concurrent members.
@@ -210,6 +211,11 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None, refe
                 if not previous or previous[0] != row['revision']:
                     con.execute("INSERT INTO revisions(platform,offer_id,revision,observed_at,payload) VALUES (?,?,?,?,?)",
                                 (row['platform'], row['offer_id'], row['revision'], observed_at, json.dumps(row)))
+            # Exchange reference prices tick far more often than lines and nothing reads their history back, so only
+            # the last REFERENCE_KEEP_DAYS of `ref:` revisions are kept (freed pages are reused: the file stops
+            # growing). Line and game-odds revisions are never deleted.
+            con.execute("DELETE FROM revisions WHERE platform >= 'ref:' AND platform < 'ref;' AND observed_at < ?",
+                        (utc(parse_utc(observed_at) - timedelta(days=REFERENCE_KEEP_DAYS)),))
     finally:
         con.close()
     rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":")))
