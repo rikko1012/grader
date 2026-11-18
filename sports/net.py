@@ -127,7 +127,7 @@ def _clear_to_send(host, url, budget):
         budget[0] -= remaining
 
 
-def _request(url, params, headers, timeout, tries, ok, send):
+def _request(url, params, headers, timeout, tries, ok, send, snippet=lambda r: r.text[:300]):
     host = urlsplit(url).netloc
     budget = [MAX_SLEEP_S]                   # the most this call ever sleeps for holds (a source's Retry-After)
     last = None
@@ -142,15 +142,17 @@ def _request(url, params, headers, timeout, tries, ok, send):
             if r.status_code in ok:
                 return r
             if r.status_code not in RETRY_STATUS:
-                raise HttpError(r.status_code, url, r.text[:300])
+                raise HttpError(r.status_code, url, snippet(r))
             ra = retry_after_s(r.headers.get("Retry-After")) if r.status_code in (429, 503) else None
             if ra is not None:
                 until = time.time() + ra
                 hold(host, until)
                 if ra <= budget[0] and attempt + 1 < tries:
+                    if snippet is _head:
+                        r.close()            # a streamed answer's connection is given back unread
                     continue                 # the next attempt's _clear_to_send waits out the full hold
-                raise HttpError(r.status_code, url, r.text[:300], not_before=until)
-            last = HttpError(r.status_code, url, r.text[:300])
+                raise HttpError(r.status_code, url, snippet(r), not_before=until)
+            last = HttpError(r.status_code, url, snippet(r))
         if attempt + 1 < tries:
             time.sleep(backoff(attempt))
     if isinstance(last, HttpError):
@@ -160,3 +162,44 @@ def _request(url, params, headers, timeout, tries, ok, send):
 
 def get_json(url, params=None, headers=None, **kw):
     return get(url, params=params, headers=headers, **kw).json()
+
+
+class Oversize(ValueError):
+    """The answer is larger than the caller's limit; refused before it was held in memory."""
+
+
+def _head(r):
+    """The first 300 characters of a streamed error body; the rest is never downloaded."""
+    try:
+        return r.raw.read(300, decode_content=True).decode("utf-8", "replace")
+    except Exception:
+        return ""
+    finally:
+        r.close()
+
+
+def get_json_limited(url, limit, params=None, headers=None, timeout=30, tries=3):
+    """get_json for a job under a small memory cap: the body is streamed and the download stops as soon as it passes
+    `limit` bytes (Oversize, a ValueError) - a declared Content-Length over the limit is refused before any body byte
+    is read. Reading the body also ends `timeout` seconds after it began (a slow drip is a transport failure)."""
+    r = _request(url, params, headers, timeout, tries, (200,),
+                 lambda: session().get(url, params=params, headers=headers, timeout=timeout, stream=True), _head)
+    try:
+        declared = r.headers.get("Content-Length")
+        if declared and str(declared).isdigit() and int(declared) > limit:
+            raise Oversize("oversize response refused")
+        parts, size, deadline = [], 0, time.monotonic() + timeout
+        try:
+            for chunk in r.iter_content(65536):
+                size += len(chunk)
+                if size > limit:
+                    raise Oversize("oversize response refused")
+                if time.monotonic() > deadline:
+                    raise HttpError(None, url, "body read timed out")
+                parts.append(chunk)
+        except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as e:
+            raise HttpError(None, url, str(e))
+    finally:
+        r.close()
+    import json
+    return json.loads(b"".join(parts))

@@ -37,15 +37,9 @@ def get_json(sport, url, **kwargs):
 
 
 def get_limited(sport, url, limit, **kwargs):
-    """get_json that refuses an answer over `limit` bytes before parsing it (a parsed body costs several times its
-    size, and the quote jobs run under a small memory cap)."""
-    def send():
-        r = net.get(url, **kwargs)
-        declared = r.headers.get('Content-Length')
-        if (declared and declared.isdigit() and int(declared) > limit) or len(r.content) > limit:
-            raise ValueError('oversize response refused')
-        return r.json()
-    return _held(sport, url, send)
+    """get_json that refuses an answer over `limit` bytes: the body is streamed and the download stops at the limit
+    (net.get_json_limited), so an oversize answer is never held in memory - the quote jobs run under a small cap."""
+    return _held(sport, url, lambda: net.get_json_limited(url, limit, **kwargs))
 
 
 def held_until(sport, host):

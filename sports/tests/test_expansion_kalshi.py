@@ -382,31 +382,98 @@ def test_other_failures_return_no_rows_and_no_long_hold(store, failure):
     assert expansion_sources.held_until('soccer', xk.HOST) - time.time() <= 2
 
 
-def test_oversize_answer_is_refused_before_parsing(store, monkeypatch):
-    class Reply:
-        def __init__(self, content, declared=None):
-            self.content, self.headers = content, ({'Content-Length': declared} if declared else {})
+class Streamed:
+    """A requests answer as net sees it with stream=True: the body is produced only as it is read."""
+    def __init__(self, total, declared=None, status=200, chunk=65536):
+        self.status_code, self.total, self.chunk = status, total, chunk
+        self.headers = {'Content-Length': str(declared)} if declared is not None else {}
+        self.read, self.closed = 0, False
 
-        def json(self):
-            raise AssertionError('an oversize body must not be parsed')
+    def iter_content(self, size):
+        while self.read < self.total:
+            n = min(self.chunk, self.total - self.read)
+            self.read += n
+            yield b' ' * n
 
-    seen = []
-    def fake(url, **kw):
-        seen.append(kw)
-        return replies.pop(0)
-    monkeypatch.setattr(net, 'get', fake)
-    replies = [Reply(b'x' * 101), Reply(b'{}', declared='5000000')]
-    for _ in range(2):
-        with pytest.raises(ValueError, match='oversize'):
-            expansion_sources.get_limited('soccer', 'https://example.test/x', 100, tries=1)
-    assert seen == [{'tries': 1}, {'tries': 1}]
+    @property
+    def content(self):
+        raise AssertionError('the whole body must never be buffered')
 
-    class Small(Reply):
-        def json(self):
-            return {'ok': 1}
-    replies.append(Small(b'{"ok":1}'))
+    text = content
+
+    def close(self):
+        self.closed = True
+
+
+def _streamed(monkeypatch, *replies):
+    replies, seen = list(replies), []
+
+    class Session:
+        def get(self, url, **kw):
+            seen.append(kw)
+            return replies.pop(0)
+    monkeypatch.setattr(net, 'session', lambda: Session())
+    return seen
+
+
+def test_oversize_answer_stops_the_download_at_the_limit(store, monkeypatch):
+    # 26 MB without a Content-Length (chunked / compressed): reading stops one chunk past the 2 MB limit.
+    big = Streamed(26_000_000)
+    seen = _streamed(monkeypatch, big)
+    with pytest.raises(ValueError, match='oversize'):
+        expansion_sources.get_limited('soccer', 'https://example.test/x', xk.MAX_BYTES, tries=1)
+    assert seen[0]['stream'] is True and big.closed
+    assert xk.MAX_BYTES < big.read <= xk.MAX_BYTES + 65536 and xk.MAX_BYTES == 2_000_000
+
+
+def test_declared_oversize_answer_is_refused_before_any_body_byte(store, monkeypatch):
+    big = Streamed(5_000_000, declared=5_000_000)
+    _streamed(monkeypatch, big)
+    with pytest.raises(net.Oversize):
+        expansion_sources.get_limited('soccer', 'https://example.test/x', 100, tries=1)
+    assert big.read == 0 and big.closed
+
+
+def test_answer_within_the_limit_is_parsed_and_closed(store, monkeypatch):
+    class Small(Streamed):
+        def iter_content(self, size):
+            yield b'{"ok":'
+            yield b'1}'
+    small = Small(8, declared=8)
+    _streamed(monkeypatch, small)
     assert expansion_sources.get_limited('soccer', 'https://example.test/x', 100) == {'ok': 1}
-    assert xk.MAX_BYTES == 2_000_000
+    assert small.closed
+
+
+def test_streamed_refusal_reads_only_the_start_of_the_error_body(store, monkeypatch):
+    class Raw:
+        def __init__(self): self.asked = []
+        def read(self, n, decode_content=False):
+            self.asked.append(n)
+            return b'forbidden'
+    refusal = Streamed(50_000_000, status=403)
+    refusal.raw = Raw()
+    _streamed(monkeypatch, refusal)
+    with pytest.raises(net.HttpError) as e:
+        expansion_sources.get_limited('soccer', 'https://example.test/x', 100, tries=1)
+    assert e.value.status == 403 and e.value.body == 'forbidden' and refusal.raw.asked == [300]
+    assert refusal.read == 0 and refusal.closed
+
+
+def test_slow_body_ends_at_the_timeout(store, monkeypatch):
+    clock = [1000.0]
+    class Drip(Streamed):
+        def iter_content(self, size):
+            for _ in range(100):
+                clock[0] += 10
+                yield b' '
+    drip = Drip(100)
+    _streamed(monkeypatch, drip)
+    monkeypatch.setattr(net.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(net.time, 'sleep', lambda s: None)
+    with pytest.raises(net.HttpError) as e:
+        net.get_json_limited('https://example.test/x', 1000, timeout=25, tries=1)
+    assert e.value.status is None and drip.closed and clock[0] <= 1040
 
 
 def test_row_cap_keeps_the_nearest_starts(store, monkeypatch):
