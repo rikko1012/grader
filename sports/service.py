@@ -343,6 +343,18 @@ def alerts(o):
         for name, sn in ((o.get("prebuilt") or {}).get("snapshots") or {}).items():
             if sn.get("age_s") is None or sn["age_s"] > 3 * sn["max_age_s"]:
                 out.append({"level": "warn", "code": "snapshot_stale", "detail": {"snapshot": name, **sn}})
+    # soccer / tennis history: a store at its budget keeps exiting 0 (the backfill is off, live matches still
+    # settle), so the state is shown here - from 80 % of the budget, before it is reached
+    for sport, row in sorted((o.get("expansion_learning") or {}).items()):
+        hist = (row or {}).get("history") or {}
+        used, cap = hist.get("storage_mb"), hist.get("budget_mb")
+        if hist.get("degraded") or (isinstance(used, (int, float)) and isinstance(cap, (int, float)) and cap > 0
+                                    and used >= 0.8 * cap):
+            out.append({"level": "warn", "code": "history_storage", "detail": {"sport": sport, **hist}})
+    # a mapping audit stopped at its time budget covers only part of the offers
+    for lg, a in sorted((o.get("mapping_audit") or {}).items()):
+        if (a or {}).get("truncated"):
+            out.append({"level": "warn", "code": "mapping_audit_truncated", "detail": {"league": lg, **a}})
     if not o.get("token_configured"):
         out.append({"level": "page", "code": "token_secret_missing", "detail": "SPORTS_TOKEN_SECRET unset or short"})
     # a restart loop: more than one start of the SAME commit inside 6 h (a new commit is a deploy, not a restart)
@@ -423,7 +435,28 @@ def expansion_learning_status():
                     row['report'] = json.loads(path.read_text(encoding='utf-8'))
             except (OSError,ValueError):
                 pass
+            try:                                        # the collector's own last-run record (sports.expansion_history)
+                path = root / sport / 'history-state.json'
+                if path.stat().st_size <= 65536:
+                    st = json.loads(path.read_text(encoding='utf-8'))
+                    row['history'] = {k: st.get(k) for k in ('finished_at','storage_mb','budget_mb','degraded')}
+            except (OSError,ValueError,AttributeError):
+                pass
         out[sport] = row
+    return out
+
+
+def mapping_audit_status():
+    """{league: {as_of, truncated}} from the audit's own small files. No store query."""
+    out = {}
+    try:
+        from . import snapshots
+        for f in sorted(snapshots.snap_root().glob('*/mapping_audit.json')):
+            if f.stat().st_size <= 1048576:
+                a = json.loads(f.read_text(encoding='utf-8'))
+                out[f.parent.name] = {'as_of': a.get('as_of'), 'truncated': bool(a.get('truncated'))}
+    except Exception:                                   # noqa: BLE001 - a status read never breaks ops
+        pass
     return out
 
 
@@ -517,7 +550,7 @@ def ops():
             "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
             "sheets_stages": sheets_stages(),
             "grades_daily": settle_stages("model/daily_state.json"),
-            "expansion_learning": expansion_learning_status(),
+            "expansion_learning": expansion_learning_status(), "mapping_audit": mapping_audit_status(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "restarts": restarts(), "container": container(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC))}

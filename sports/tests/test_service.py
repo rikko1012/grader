@@ -554,6 +554,13 @@ def test_alerts_clean_and_each_rule(monkeypatch):
     assert codes(_ops(feeds={"store_mb": 6500, "platforms": {}})) == {"store_large"}
     assert codes(_ops(feeds={"store_mb": 8100, "platforms": {}})) == {"store_full_ingest_paused"}
     assert codes(_ops(rss_mb=140)) == {"service_memory_high"}
+    hist = lambda **h: {"tennis": {"enabled": True, "report": None, "history": h}, "soccer": {"enabled": False}}  # noqa: E731
+    assert codes(_ops(expansion_learning=hist(storage_mb=3000.0, budget_mb=4096))) == set()
+    assert codes(_ops(expansion_learning=hist(storage_mb=3300.0, budget_mb=4096))) == {"history_storage"}
+    assert codes(_ops(expansion_learning=hist(storage_mb=1.0, budget_mb=4096, degraded="storage_budget"))) \
+        == {"history_storage"}
+    assert codes(_ops(mapping_audit={"nba": {"as_of": "t", "truncated": False}})) == set()
+    assert codes(_ops(mapping_audit={"nba": {"as_of": "t", "truncated": True}})) == {"mapping_audit_truncated"}
     assert codes(_ops(feeds={"store_mb": 1, "platforms": {}, "disk": {"used_pct": 81.0}})) == {"disk_80"}
     assert codes(_ops(feeds={"store_mb": 1, "platforms": {}, "disk": {"used_pct": 93.0}})) == {"disk_90"}
     assert codes(_ops(service={"requests": 100, "rejected_busy": 5, "errors_5xx": 0})) == {"service_shedding"}

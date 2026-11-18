@@ -452,6 +452,8 @@ deploys and health-check failures).
 | job_failing | warn | any job failed 3 times in a row | ops `jobs.<name>.last_exit`; Render logs |
 | job_over_cap | page | a job killed at its memory cap twice in a row | section 13.4 |
 | job_starved | warn | a job queued for > 30 min | section 13.4 |
+| history_storage | warn | soccer / tennis history store >= 80% of its budget, or at it (`degraded`) | raise `SCOUT_<SPORT>_HISTORY_MAX_MB` if the disk allows; at the budget the backfill is off, live matches still settle |
+| mapping_audit_truncated | warn | the hourly mapping audit stopped at its time budget | counts cover part of the offers; the next run resumes after the stop. Persistent: check the archive pass / store read speed |
 | disk_80 / disk_90 | warn / page | the sports disk >= 80 % / 90 % used | section 13.3 (enlarge) |
 | snapshot_stale | warn | API on and a prebuilt snapshot older than 3x its max age (or never built) | the `snapshots` job; members fall back to request-time builds (slower, still correct) |
 

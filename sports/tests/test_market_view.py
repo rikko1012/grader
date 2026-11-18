@@ -319,14 +319,60 @@ def test_scheduled_mapping_audit_reads_current_offers_bounded(built, monkeypatch
     assert live["truncated"] is False and live["offers_checked"] == replay["offers_checked"] >= 3
     assert {k: (c["count"], c["by_platform"]) for k, c in live["checks"].items()} == \
         {k: (c["count"], c["by_platform"]) for k, c in replay["checks"].items()}
-    plan = " | ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN " + mapping_audit._CURRENT_OFFERS, ("nba",)))
+    plan = " | ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN " + mapping_audit._CURRENT_OFFERS % "", ("nba",)))
     assert "COVERING INDEX records_current_league" in plan and "TEMP B-TREE" not in plan, plan
+    assert "payload" not in mapping_audit._CURRENT_OFFERS         # fetched per upcoming offer only
     # out of time: the file is still written, marked truncated, and the job ends normally
     cut = mapping_audit.run(con, "nba", budget_s=0, clock=iter(range(0, 10 ** 6, 10)).__next__)
     con.close()
     assert cut["truncated"] is True and cut["offers_checked"] == 0
     saved = json.loads((snapshots.snap_root() / "nba" / "mapping_audit.json").read_text())
     assert saved["truncated"] is True and saved["version"] == mapping_audit.VERSION
+
+
+def test_truncated_audit_resumes_after_its_stop_and_is_shown_as_truncated(built, monkeypatch):
+    from sports import api_books, mapping_audit, service
+    con = store.connect()
+    for i in range(3):                                 # sources on both sides of whatever the board already holds
+        store.put(con, book("aaa", f"a:{i}", player_id=None, observed_at="2026-10-23T20:55:00Z"))
+        store.put(con, book("zzz", f"z:{i}", player_id=None, observed_at="2026-10-23T20:55:00Z"))
+    monkeypatch.setattr(mapping_audit, "now_utc", lambda: "2026-10-23T21:00:00Z")
+    full = mapping_audit.run(con, "nba", budget_s=90)
+    assert full["truncated"] is False and full["resume"] is None
+    seen, real = [], mapping_audit._upcoming
+
+    def spy(events, event_id, now):
+        seen.append(1)
+        return real(events, event_id, now)
+    monkeypatch.setattr(mapping_audit, "_upcoming", spy)
+
+    def cut_after(n_checks):                           # the deadline is checked every 200 identities: shrink that
+        t = iter([0] + [0] * n_checks + [10] * 10 ** 4)
+        return mapping_audit.run(con, "nba", budget_s=5, clock=lambda: next(t))
+    src = mapping_audit._CURRENT_OFFERS
+    monkeypatch.setattr(mapping_audit, "_STEP", 1)
+    first = cut_after(2)
+    n_first = len(seen)
+    assert first["truncated"] is True and n_first == 2 and first["resume"][0] == "aaa"
+    idents = [(r["source"], r["source_key"]) for r in con.execute(src % "", ("nba",))]
+    assert first["resume"] == list(idents[1])
+    # the next run starts AFTER that identity, not at the first source again
+    del seen[:]
+    order = []
+    monkeypatch.setattr(mapping_audit, "_upcoming", lambda ev, eid, now: order.append(1) or real(ev, eid, now))
+    second = mapping_audit.run(con, "nba", budget_s=90)
+    assert second["truncated"] is False and second["resume"] is None and len(order) == len(idents)
+    assert second["offers_checked"] == full["offers_checked"]                     # wrapped: everything was covered
+    third = cut_after(2)
+    assert third["resume"] == list(idents[1])
+    fourth = cut_after(2)
+    assert fourth["truncated"] is True and fourth["resume"] == list(idents[3])     # moved on from the last stop
+    con.close()
+
+    class R:
+        query = {"league": "nba"}
+    assert api_books.admin(R())[1]["nba"]["mapping_audit"]["truncated"] is True
+    assert service.mapping_audit_status()["nba"]["truncated"] is True
 
 
 def test_admin_books_route_serves_sources_and_audit(built):

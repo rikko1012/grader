@@ -193,3 +193,8 @@ def test_owner_status_reads_only_small_worker_report(setup,monkeypatch):
     assert view['soccer']['report'] is None
     (setup[0]/'learning-status.json').write_text(' '*65537)
     assert expansion_learning_status()['tennis']['report'] is None
+    assert 'history' not in expansion_learning_status()['tennis']
+    (setup[0]/'history-state.json').write_text(
+        '{"finished_at":"t","storage_mb":3400.0,"budget_mb":4096,"offset":8,"errors":[]}')
+    assert expansion_learning_status()['tennis']['history']=={
+        'finished_at':'t','storage_mb':3400.0,'budget_mb':4096,'degraded':None}

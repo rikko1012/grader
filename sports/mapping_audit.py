@@ -31,9 +31,13 @@ TARGETS = ("prizepicks", "underdog")
 # The league's CURRENT offer revisions: the grouping reads index entries only (records_current_league), then ONE table
 # row per identity, streamed. The scheduled audit used the point-in-time reader, which reads the table row of every
 # stored revision and decodes every identity - cost grew with the hot offer backlog until it hit its 240 s timeout.
-_CURRENT_OFFERS = (f"SELECT r.record_id, r.event_id, r.payload FROM (SELECT rid, MAX(revision) AS rv FROM records "
-                   f"WHERE kind = 'offer' AND {store.CURRENT_SQL} AND league = ? GROUP BY source, source_key) z "
-                   f"CROSS JOIN records r WHERE r.rid = z.rid")
+# The payload is NOT selected here: it is fetched (_PAYLOAD) only for an offer of a game not yet started, so a played
+# game's payload pages are never read. %s: the resume range, see _current_offers.
+_CURRENT_OFFERS = (f"SELECT r.rid, r.record_id, r.event_id, z.source, z.source_key FROM (SELECT rid, source, source_key, "
+                   f"MAX(revision) AS rv FROM records WHERE kind = 'offer' AND {store.CURRENT_SQL} AND league = ?%s "
+                   f"GROUP BY source, source_key) z CROSS JOIN records r WHERE r.rid = z.rid")
+_PAYLOAD = "SELECT payload FROM records WHERE rid = ?"
+_STEP = 200                                         # identities between two looks at the clock
 
 
 def _upcoming(events, event_id, now):
@@ -41,18 +45,29 @@ def _upcoming(events, event_id, now):
 
 
 def _current_offers(con, league, events, now, state):
-    """(record id, offer) of the open offers of games not yet started; a played game's payload is never decoded.
-    Stops (state["truncated"]) when state["deadline"] on state["clock"] passes."""
+    """(record id, offer) of the open offers of games not yet started; a played game's payload is never read.
+    Stops (state["truncated"]) when state["deadline"] on state["clock"] passes and leaves the last identity it
+    examined in state["resume"]. A run given state["resume"] starts AFTER that identity and wraps to the start, so
+    successive budget stops cover the rest of the index instead of the same leading source every hour."""
     from .contracts import from_dict
-    for n, r in enumerate(con.execute(_CURRENT_OFFERS, (league,))):
-        if state.get("deadline") is not None and n % 200 == 0 and state["clock"]() > state["deadline"]:
-            state["truncated"] = True
-            return
-        if not _upcoming(events, r["event_id"], now):
-            continue
-        o = from_dict(store._unpack(r["payload"]))
-        if o.availability == "open":
-            yield r["record_id"], o
+    resume = state.get("resume")
+    resume = tuple(resume) if resume and len(resume) == 2 and all(isinstance(x, str) for x in resume) else None
+    spans = [(" AND (source, source_key) > (?, ?)", resume), (" AND (source, source_key) <= (?, ?)", resume)] \
+        if resume else [("", ())]
+    state["resume"], n, last = None, 0, resume
+    for where, args in spans:
+        for r in con.execute(_CURRENT_OFFERS % where, (league, *args)):
+            if state.get("deadline") is not None and n % _STEP == 0 and state["clock"]() > state["deadline"]:
+                state["truncated"] = True
+                state["resume"] = list(last) if last else None
+                return
+            n += 1
+            last = (r["source"], r["source_key"])
+            if not _upcoming(events, r["event_id"], now):
+                continue
+            o = from_dict(store._unpack(con.execute(_PAYLOAD, (r["rid"],)).fetchone()[0]))
+            if o.availability == "open":
+                yield r["record_id"], o
 
 
 def run(con, league, now=None, budget_s=None, clock=time.monotonic):
@@ -61,6 +76,12 @@ def run(con, league, now=None, budget_s=None, clock=time.monotonic):
     from .snapshots import _latest, _iter_latest, snap_root
     state = {"clock": clock, "deadline": None if budget_s is None else clock() + budget_s, "truncated": False}
     replay = now is not None
+    p = snap_root() / league / "mapping_audit.json"
+    if not replay:                                      # where the previous run stopped at its budget, if it did
+        try:
+            state["resume"] = json.loads(p.read_text(encoding="utf-8")).get("resume")
+        except (OSError, ValueError, AttributeError):
+            pass
     now = now or now_utc()
     teams = {t.team_id: t for _, t, _ in _latest(con, "team", "league = ?", [league], now)}
     events = {e.event_id: e for _, e, _ in _latest(con, "event", "league = ?", [league], now)}
@@ -118,8 +139,8 @@ def run(con, league, now=None, budget_s=None, clock=time.monotonic):
     for c in checks.values():
         c["by_platform"] = dict(c["by_platform"])
     out = {"version": VERSION, "league": league, "as_of": now, "offers_checked": offers_checked, "checks": checks,
-           "total_mismatches": sum(c["count"] for c in checks.values()), "truncated": state["truncated"]}
-    p = snap_root() / league / "mapping_audit.json"
+           "total_mismatches": sum(c["count"] for c in checks.values()), "truncated": state["truncated"],
+           "resume": None if replay else state.get("resume")}
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(out, indent=1, default=str), encoding="utf-8")
     return out

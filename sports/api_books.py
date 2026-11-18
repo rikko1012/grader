@@ -34,6 +34,8 @@ def admin(req):
                    "mapping_audit": None if audit is None else {
                        "as_of": audit.get("as_of"), "offers_checked": audit.get("offers_checked"),
                        "total_mismatches": audit.get("total_mismatches"),
+                       # a budget stop: the counts cover only part of the offers (the next run resumes after it)
+                       "truncated": bool(audit.get("truncated")),
                        "checks": {k: {"count": v["count"], "by_platform": v["by_platform"],
                                       "examples": v["examples"][:5]} for k, v in (audit.get("checks") or {}).items()}}}
     return 200, out
