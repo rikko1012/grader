@@ -2033,7 +2033,17 @@ def _slip_table(srv):
             units += sq.units_from_lol(_lol_settled(srv))
         except Exception:                       # no LoL record on this host: LoL legs rank at their published chance
             pass
-        return 200, sq.calibration_table(units)
+        table = sq.calibration_table(units)
+        bands = {}
+        for lg in sq.RESEARCH_SPORTS:          # sb-1: NBA / NFL legs rank by their league's settled chance band
+            try:
+                got = sq.sport_bands_from_results(_adapter(lg).results(srv, lg))
+            except Exception:                   # the sports Results file is down: that league ranks at the research weight
+                got = []
+            if got:
+                bands[lg] = got
+        table["sport_bands"] = bands
+        return 200, table
     try:
         return srv.shared(("ws_slip_cal",), compute, ttl=CAL_TTL)[1]
     except Exception:
@@ -2134,7 +2144,7 @@ def _wire_slip(s, srv, now):
     out = {"platform": s["platform"], "entry_type": s["entry_type"], "why": s["why"], "same_match": s["same_match"],
            "legs": [{"sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "line": l["line"], "line_type": l["line_type"],
                      "player": l["player"], "p": l["p"], "rank": l["rank"], "rank_p": round(l["rank_p"], 4), "research": l["research"],
-                     "record": sq.band_text(None if l["research"] else l["band"], l["sport"], l["line_type"])} for l in s["legs"]]}
+                     "record": sq.band_text(l["band"], l["sport"], l["line_type"])} for l in s["legs"]]}
     if s["all_hit"] is not None:
         out["all_hit"] = round(s["all_hit"], 4)
     if s["payout"]:

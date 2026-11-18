@@ -27,10 +27,14 @@ def test_nba_nfl_letters_enter_by_default_without_research_label(env, monkeypatc
         st, doc = gen(env, sports="cs2,nba", slips=8, **extra)
         assert st == 200, doc
         assert doc["pool"]["excluded"].get("research", 0) == 0
+        st0, only = gen(env, sports="cs2", slips=8, **extra)
+        assert doc["pool"]["legs"] > only["pool"]["legs"]                       # the NBA letters are in the pool
+        # sb-1 (2026-11-17): an NBA / NFL leg ranks at its league's settled chance band when the sports Results file is up, so it no
+        # longer outranks CS2 on its stated chance alone; whichever legs make a slip carry their own record line
         sports = [l for l in legs(doc) if l["sport"] in ("nba", "nfl")]
-        assert sports and all(l["record"] == "No settled record for this band yet" for l in sports), legs(doc)
+        assert all(l["record"].startswith(("NBA picks stated", "NFL picks stated")) or l["record"] == "No settled record for this band yet"
+                   for l in sports), legs(doc)
         assert all("research estimate" not in s["why"].lower() for s in doc["slips"])
-        assert all("ranked by Scout chance" in s["why"] for s in doc["slips"] if any(l["sport"] == "nba" for l in s["legs"]))
 
 
 def test_held_lines_never_enter_even_with_research(env, monkeypatch):

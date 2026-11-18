@@ -471,3 +471,33 @@ def test_same_match_legs_go_one_way_and_carry_no_unshifted_payout():
     assert s["same_match"] is True and s["payout"] is None
     s = build(same, platform="underdog", entry_type="standard")["slips"][0]
     assert s["same_match"] is False and s["payout"]["multiple"] == 3.5
+
+
+# ------------------------------------------------------------------------------------------------------------- sb-1 (2026-11-17)
+NFL_RESULTS = {"groups": {"chance": [{"name": "50-55%", "wins": 142, "losses": 153, "printed": 0.5233},
+                                     {"name": "55-60%", "wins": 195, "losses": 193, "printed": 0.5784},
+                                     {"name": "60-65%", "wins": 197, "losses": 163, "printed": 0.6211},
+                                     {"name": "65%+", "wins": 314, "losses": 261, "printed": 0.7567}]}}
+
+
+def test_nba_nfl_legs_rank_by_their_leagues_settled_band_not_the_stated_chance():
+    """Live 2026-11-17: every leg of the default batch was an NFL leg stated 77-92% (ranked 64-71%, 'all-hit 43-50%' on 2-picks)
+    while the NFL 65%+ band had won 54.6% of 575 settled. NBA / NFL now rank at their league's settled band."""
+    bands = sq.sport_bands_from_results(NFL_RESULTS)
+    assert [b["name"] for b in bands] == ["50-55%", "55-60%", "60-65%", "65%+"] and bands[3]["n"] == 575
+    table = {"k": sq.PRIOR_K, "cells": {}, "lines": {}, "sport_bands": {"nfl": bands}}
+    q, band = sq.ranked_chance("nfl", "rush_att", "under", 0.88, 0.0, True, table)
+    assert 0.55 < q < 0.60 and band["band"] == "65%+" and band["n"] == 575
+    assert sq.band_text(band, "nfl") == "NFL picks stated 65%+: won 54.6% of 575 settled"
+    old, _ = sq.ranked_chance("nfl", "rush_att", "under", 0.88, 0.0, True, None)      # no sports results: research weight, as before
+    assert round(old, 2) == 0.69
+    recs = [rec("n1", "f1", .88, sport="nfl", grade="A"), rec("n2", "f2", .86, sport="nfl", grade="A"),
+            rec("c1", "e1", .62, grade="A-"), rec("c2", "e2", .61, grade="B+")]
+    cs2 = {"cs2|kills|over|2": {"n": 900, "matches": 200, "printed": 0.62, "observed": 0.60}}
+    t2 = dict(table, cells=cs2, lines={})
+    legs, _ = legs_of(recs, table=t2, research_ok=True)
+    s = sq.build(legs, {"platform": "prizepicks", "entry_type": "power", "count": 1, "size": 2})["slips"][0]
+    assert {l["sport"] for l in s["legs"]} == {"cs2"}                                   # the 60%-record CS2 legs now go first
+    assert s["all_hit"] < 0.40
+    nfl = next(l for l in legs if l["sport"] == "nfl")
+    assert sq.band_text(nfl["band"], "nfl").startswith("NFL picks stated 65%+") and "no settled record" not in sq.why_line([nfl], 4, True, False)

@@ -144,12 +144,40 @@ def calibration_table(units, k=PRIOR_K, k_line=LINE_K):
     return {"version": VERSION, "k": k, "k_line": k_line, "cells": cells, "lines": lines, "sports": sorted({u["sport"] for u in units or ()})}
 
 
+SPORT_BANDS = ((0.50, 0.55, "50-55%"), (0.55, 0.60, "55-60%"), (0.60, 0.65, "60-65%"), (0.65, 1.0001, "65%+"))
+
+
+def sport_bands_from_results(doc):
+    """{lo, hi, name, n, observed, printed} per chance band of one NBA / NFL league, from the sports Results file the hub's Record shows
+    (workspace_sports.results: saved forward forecasts with a lean, each scored at its own line). Pushes are out of n."""
+    out = []
+    by = {b.get("name"): b for b in ((doc or {}).get("groups") or {}).get("chance") or []}
+    for lo, hi, name in SPORT_BANDS:
+        b = by.get(name) or {}
+        w, l = b.get("wins") or 0, b.get("losses") or 0
+        if w + l:
+            out.append({"lo": lo, "hi": hi, "name": name, "n": w + l, "observed": w / (w + l), "printed": b.get("printed")})
+    return out
+
+
 def ranked_chance(sport, stat, side, p, p_push, research, table):
     """(chance to hit used for ranking, band record or None). p is the published unconditional chance of the side.
-    The band's settled hit rate, shrunk by k picks toward its stat's line at this chance; no record at all = the published chance."""
+    The band's settled hit rate, shrunk by k picks toward its stat's line at this chance; no record at all = the published chance.
+    NBA / NFL (sb-1, 2026-11-17): the league's settled chance band from the sports Results file, shrunk by k picks toward the
+    research weight; before sb-1 every NFL leg stated 77-92% ranked 64-71% and took every slot of the default batch, while the
+    NFL 65%+ band had won 54.6% of 575 settled (NBA 58.7% of 1,003)."""
     push = p_push if isinstance(p_push, (int, float)) and 0 <= p_push < 1 else 0.0
     if research:
-        return 0.5 + (p - 0.5) * RESEARCH_WEIGHT, None
+        base = 0.5 + (p - 0.5) * RESEARCH_WEIGHT
+        bands = ((table or {}).get("sport_bands") or {}).get(sport) or []
+        cell = next((b for b in bands if b["lo"] <= p < b["hi"]), None)
+        if not cell:
+            return base, None
+        k = (table or {}).get("k") or PRIOR_K
+        q = min(0.99, max(0.01, (cell["n"] * cell["observed"] + k * base) / (cell["n"] + k)))
+        return q, {"band": cell["name"], "stat": "all", "side": "all", "n": cell["n"], "matches": None,
+                   "printed": round(cell["printed"], 4) if isinstance(cell.get("printed"), (int, float)) else None,
+                   "observed": round(cell["observed"], 4), "sport_band": True}
     cond = p / (1 - push) if push else p
     i = band_index(cond)
     t = table or {}
@@ -168,6 +196,8 @@ def ranked_chance(sport, stat, side, p, p_push, research, table):
 def band_text(rec, sport, line_type="standard"):
     if not rec or not rec.get("n"):
         return "No settled record for this band yet"
+    if rec.get("sport_band"):
+        return f"{SPORT_LABEL.get(sport, sport)} picks stated {rec['band']}: won {rec['observed'] * 100:.1f}% of {rec['n']} settled"
     alt = " (standard lines)" if sport == "cs2" and line_type in ("goblin", "demon") else ""
     return (f"{SPORT_LABEL.get(sport, sport)} {STAT_WORD.get(rec['stat'], rec['stat'])} {rec['side'].title()} {rec['band']}{alt}: "
             f"won {rec['observed'] * 100:.1f}% of {rec['n']} settled")
@@ -488,7 +518,7 @@ def why_line(legs, pool_size, first, reused):
     ranks = ", ".join(str(l["rank"]) for l in sorted(legs, key=lambda l: l["rank"]))
     head = "Best all-hit chance on the board" if first else "Best all-hit chance left" + ("" if reused else " with unused props")
     one = "one leg each" if matches == len(legs) else "same-match legs"
-    research = sum(1 for l in legs if l["research"])
+    research = sum(1 for l in legs if l["research"] and not l.get("band"))
     tail = f"; {research} NBA/NFL {'leg' if research == 1 else 'legs'} ranked by Scout chance (no settled record yet)" if research else ""
     return f"{head}: {matches} matches, {one}; legs rank {ranks} of {pool_size} by settled hit rate{tail}."
 
@@ -552,7 +582,7 @@ def build(legs, opts):
 def _brief(l):
     return {"key": l["key"], "sport": l["sport"], "book": l["book"], "row_id": l["row_id"], "side": l["side"], "player": l["player"],
             "line": l["line"], "stat_label": l["stat_label"], "period_label": l["period_label"], "p": l["p"], "rank": l["rank"],
-            "band": band_text(None if l["research"] else l["band"], l["sport"], l["line_type"])}
+            "band": band_text(l["band"], l["sport"], l["line_type"])}
 
 
 def advise(slip, legs_by_key, ranked, entry_type=None, lines="all"):
