@@ -614,3 +614,63 @@ def test_gzip_single_flight_compresses_once_under_simultaneous_misses():
         t.join(10)
     assert len(out) == 30 and len(set(out)) == 1 and service.ENC_STATS["gzip_built"] - n0 == 1
     assert service.accepts_gzip("br, gzip;q=0.8") and not service.accepts_gzip("gzip;q=0") and not service.accepts_gzip(None)
+
+
+# ---------------------------------------------------------- health under load: no request slot needed (2026-11-18)
+def test_health_answers_while_every_request_slot_is_busy(monkeypatch):
+    monkeypatch.setattr(service, "_STATE", {"draining": False})
+    monkeypatch.setattr(service, "QUEUE_S", 0.05)
+    gate = threading.Event()
+    monkeypatch.setitem(web.ROUTES, "/api/sports/slow", ("sports.web:slow", web.MEMBER, ("GET",)))
+    monkeypatch.setitem(web._HANDLERS, "sports.web:slow", lambda req: (gate.wait(5), (200, {"ok": 1}))[1])
+    srv = service.Server(("127.0.0.1", 0), threads=2)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        res = []
+        ts = [threading.Thread(target=lambda: res.append(_get(port, "/api/sports/slow", _auth())[0])) for _ in range(2)]
+        for t in ts:
+            t.start()
+        time.sleep(0.3)
+        before = service.STATS["health_bypass"]
+        for _ in range(3):                              # each answer closes its connection and frees the health slot
+            code, body, hdrs = _get(port, "/api/sports/health")
+            assert code == 200 and body["ok"] is True
+        assert service.STATS["health_bypass"] == before + 3
+        assert _get(port, "/api/sports/slow", _auth())[:2] == (503, {"error": "sports_busy"})
+        assert _get(port, "/api/sports/healthz-other", _auth())[0] == 503          # only the exact health route
+        assert _get(port, "/api/sports/health", method="POST", body=b"")[0] == 503
+        gate.set()
+        for t in ts:
+            t.join(5)
+        assert res == [200, 200]
+        assert _get(port, "/api/sports/health")[0] == 200                           # and normally when slots are free
+    finally:
+        gate.set()
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_thread_that_cannot_start_gives_its_slot_back(monkeypatch):
+    monkeypatch.setattr(service, "_STATE", {"draining": False})
+    monkeypatch.setattr(service, "QUEUE_S", 0.05)
+    srv = service.Server(("127.0.0.1", 0), threads=1)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    real, fail = threading.Thread.start, {"on": True}
+
+    def start(self):
+        if fail["on"] and self._target == srv._run:
+            raise RuntimeError("can't start new thread")
+        return real(self)
+    monkeypatch.setattr(threading.Thread, "start", start)
+    try:
+        before = service.STATS["inflight"]
+        with pytest.raises((OSError, http.client.HTTPException)):
+            _get(port, "/api/sports/health")
+        assert service.STATS["inflight"] == before
+        fail["on"] = False
+        assert _get(port, "/api/sports/health")[0] == 200                           # the one slot is still usable
+    finally:
+        srv.shutdown()
+        srv.server_close()
