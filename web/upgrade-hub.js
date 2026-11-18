@@ -414,7 +414,7 @@ export function mount(C) {
      offered, the row, ladder and card point to it ("Under 8.5 on Underdog") and add it from there; that line keeps its own grade.
      Display and slip eligibility only: the logged grade and the projection are unchanged (the server's slip pool and Auto-build already
      take offered sides only, slip_quality.py). */
-  const NOT_OFFERED_SPORTS=['nba','nfl','cs2','lol'];   /* owner 2026-11-12: CS2 and LoL too, exactly as NBA / NFL */
+  const NOT_OFFERED_SPORTS=['nba','nfl','cs2','lol','soccer','tennis'];
   const notOffered=r=>!!r&&NOT_OFFERED_SPORTS.includes(r.sport)&&!r.extra&&!C.oneSided(r)&&(r.scout.side==='over'||r.scout.side==='under')&&!r.offer[r.scout.side]?.offered;
   const PICKEM=['prizepicks','underdog'];
   function offeredAlt(r) {

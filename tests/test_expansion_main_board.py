@@ -175,7 +175,7 @@ def forecast_fixture(offer,facts):
     return {'id':'saved-fixture-forecast','identity':facts['identity'],'sport':offer['sport'],
             'stat':offer['stat'],'scope':offer['scope'],'line':offer['line'],'platform':offer['platform'],
             'offer_id':offer['offer_id'],'offer_revision':offer['revision'],'start':offer['start'],
-            'made_at':datetime.now(timezone.utc).isoformat(),'p_over':.7,'p_under':.3,'p_push':0,
+            'made_at':(datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat(),'p_over':.7,'p_under':.3,'p_push':0,
             'p_side':.7,'side':'over','projection':3.7,'range80':[1,6],'grade':'A',
             'sample':20,'model_version':'fixture-model','grade_reason':[],
             'stake_reason':'No stake assigned.','context_used':{}}
@@ -191,3 +191,22 @@ def test_adapter_refuses_forecast_from_another_identity_or_revision():
         assert adapter._forecast(offer,facts,{key:bad}) is None
     bad=copy.deepcopy(f);bad['identity']['event_id']='other'
     assert adapter._forecast(offer,facts,{key:bad}) is None
+
+
+@pytest.mark.parametrize('sport',adapter.SPORTS)
+@pytest.mark.parametrize('size',[DESK,PHONE])
+def test_unoffered_model_direction_is_clear_without_reversing_the_pick(ctx,env,expansion,sport,size):
+    doc=expansion[sport];offer=doc['offers'][0];offer['sides']={'over':{}}
+    facts=doc['research'][adapter._key(offer)]
+    f=forecast_fixture(offer,facts)
+    f.update(side='under',p_under=.7,p_over=.3,projection=1.3,grade=None,
+             grade_reason=['Model side not offered on this line.'])
+    doc['forecasts']={forecast_key(offer):f}
+    assert adapter._forecast(offer,facts,doc['forecasts'])==f
+    p=open_page(ctx,env,'/#scout/board?sport='+sport,size)
+    expect(p.locator('#hub-rows')).to_contain_text('Not offered',timeout=30000)
+    p.locator('#hub-rows .h-player').first.click()
+    expect(p.locator('#hub-detail')).to_contain_text('1.3',timeout=20000)
+    no_h_scroll(p)
+    bad=dict(f,side='over',p_side=.3,grade='Lean')
+    assert adapter._forecast(offer,facts,{forecast_key(offer):bad}) is None

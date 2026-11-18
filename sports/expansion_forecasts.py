@@ -19,7 +19,7 @@ from .contracts import now_utc, parse_utc
 from .expansion import COMPETITIONS, isolated_database
 from .expansion_history import atomic_json
 
-VERSION = 'expansion-count-predictive-v1'
+VERSION = 'expansion-count-predictive-v1.1'
 MIN_GAMES = 5
 MAX_BYTES = 128 * 1024 * 1024
 # These competitions do not use extra time in league fixtures. Knockout,
@@ -172,9 +172,12 @@ def make_forecast(offer, facts, now):
     offered = [s for s in side_probs if s in offer['sides']]
     if not offered:
         return None, 'no_offered_side'
-    chosen = max(offered, key=lambda s:side_probs[s])
-    grade = policy.grade(side_probs[chosen], offer['platform'], offer.get('variant') or 'unknown',
-                         multiplier=offer['sides'][chosen].get('multiplier'))
+    # Preserve the model's direction even when an app lists only the other side.
+    # Availability must never turn a strong Under forecast into an Over lean.
+    chosen = max(side_probs, key=side_probs.get)
+    grade = (policy.grade(side_probs[chosen], offer['platform'], offer.get('variant') or 'unknown',
+                         multiplier=offer['sides'][chosen].get('multiplier')) if chosen in offered
+             else policy.Grade(None, None, 0.0, ('Model side not offered on this line.',)))
     result = {**fitted, 'identity': facts['identity'], 'sport':offer['sport'], 'stat':offer['stat'],
               'scope':offer['scope'], 'line':offer['line'], 'platform':offer['platform'],
               'offer_id':offer['offer_id'], 'offer_revision':offer['revision'], 'start':offer['start'],

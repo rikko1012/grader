@@ -3,7 +3,7 @@
 Owner request, 2026-11-17: connect forecasts and publish grades on the existing
 Scout board. This releases model estimates, not a claim of validated accuracy.
 
-`expansion-count-predictive-v1` uses up to 20 distinct completed games at the
+`expansion-count-predictive-v1.1` uses up to 20 distinct completed games at the
 same player, competition, stat and period; at least five are required. Inputs
 must be known before issuance, and the canonical event must still be scheduled.
 Missing, conflicting or nonparticipating results never become zeros.
@@ -28,6 +28,10 @@ The unchanged `gradecore.policy` assigns letters to offered sides using its
 existing payout policy and non-push probabilities. Unknown variant payouts do
 not receive invented letters or EV. No stakes are assigned by this new model.
 Cards identify Model estimates and retain real sample counts and push counts.
+The model keeps its most likely side even when the app only offers the other
+side. That case is labelled Not offered, with no letter. Availability never
+turns an Under prediction into an Over recommendation. Version 1.1 corrects
+this selection issue; the forecast distributions are unchanged.
 No existing sport's grading rules, models or containment change.
 
 The existing learning worker publishes with `SPORTS_FORECAST=1`; training stays

@@ -50,9 +50,16 @@ def test_integer_push_is_separate_and_chance_conditional():
 
 
 def test_only_offered_side_unknown_payout_not_invented():
-    offer,facts=fixture();offer.update(sides={'under':{}},variant='goblin')
+    offer,facts=fixture();offer.update(sides={'under':{}},variant='goblin',line=8.5)
     f,_=model.make_forecast(offer,facts,NOW)
     assert f['side']=='under' and f['grade'] is None
+
+
+def test_one_sided_app_never_reverses_the_model_direction():
+    offer,facts=fixture();offer.update(line=8.5,sides={'over':{}})
+    f,_=model.make_forecast(offer,facts,NOW)
+    assert f['side']=='under' and f['p_side']>.5 and f['grade'] is None
+    assert 'not offered' in f['grade_reason'][0]
 
 
 def test_leakage_duplicates_wrong_period_and_too_few_are_refused():
