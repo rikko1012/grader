@@ -124,3 +124,137 @@ def test_shared_response_cache_expires_at_game_start_and_quote_expiry(monkeypatc
     assert json.loads(board.http_board(req)[1])['offers']==[]
     Clock.current=base+timedelta(seconds=301)
     assert board.http_board(req)[0]==503
+
+
+# ---- 2026-11-18 collection fixes: PrizePicks tennis labels / missing wager field, MLS, Underdog soccer ----------
+def pp_tennis(stat='Total Games Won', allowed=None, odds='standard', duration='Full', description='Flavio Cobolli',
+              teams=None):
+    b = pp()
+    a = b['data'][0]['attributes']
+    a.update(stat_type=stat, odds_type=odds, description=description)
+    if allowed is None:
+        a.pop('allowed_wager_types')
+    else:
+        a['allowed_wager_types'] = allowed
+    b['included'][0]['attributes'] = {'league': 'TENNIS', 'display_name': 'Frances Tiafoe', 'position': 'Player'}
+    b['included'][1]['attributes'] = {'name': duration}
+    if teams:
+        b['included'][2]['attributes'] = {'metadata': {'game_info': {'teams': {
+            'away': {'abbreviation': teams[0]}, 'home': {'abbreviation': teams[1]}}}}}
+    return b
+
+
+@pytest.mark.parametrize('label,stat,scope,duration', [('Total Games Won', 'games_won', 'full_game', 'Full'),
+    ('Total Sets', 'sets_played', 'full_game', 'Full'), ('Total Tie Breaks', 'tie_breakers_played', 'full_game', 'Full'),
+    ('1st Set Total Games', 'games_played', 'set1', '1st Set')])
+def test_prizepicks_tennis_labels_map_to_stored_stats(label, stat, scope, duration):
+    row = offers.prizepicks(pp_tennis(label, duration=duration), 'tennis', NOW)[0]
+    assert (row['stat'], row['scope']) == (stat, scope)
+    assert row['opponent'] == 'Flavio Cobolli' and 'tour' in row and row['tour'] is None
+
+
+def test_prizepicks_missing_wager_field_is_both_sides_only_on_standard_lines():
+    assert offers.prizepicks(pp_tennis(), 'tennis', NOW)[0]['sides'] == {'over': {'multiplier': None},
+                                                                        'under': {'multiplier': None}}
+    assert offers.prizepicks(pp_tennis(odds='demon'), 'tennis', NOW) == []      # side unknown: never invented
+    assert offers.prizepicks(pp_tennis(odds='goblin'), 'tennis', NOW) == []
+    assert list(offers.prizepicks(pp_tennis(odds='demon', allowed='over'), 'tennis', NOW)[0]['sides']) == ['over']
+    assert offers.prizepicks(pp_tennis('Fantasy Score'), 'tennis', NOW) == []    # still unmapped
+
+
+def test_prizepicks_tennis_opponent_must_agree_and_never_a_doubles_pair():
+    row = offers.prizepicks(pp_tennis(teams=('Frances Tiafoe', 'Flavio Cobolli'), description=None), 'tennis', NOW)[0]
+    assert row['opponent'] == 'Flavio Cobolli'
+    row = offers.prizepicks(pp_tennis(teams=('Frances Tiafoe', 'Flavio Cobolli'), description='Ben Shelton'), 'tennis', NOW)[0]
+    assert row['opponent'] is None
+    assert offers.prizepicks(pp_tennis(description='Luz O / Matos R'), 'tennis', NOW)[0]['opponent'] is None
+    assert offers.prizepicks(pp_tennis('1st Set Total Games', duration='Full'), 'tennis', NOW) == []
+
+
+def test_prizepicks_mls_players_are_soccer():
+    b = pp(); b['included'][0]['attributes']['league'] = 'MLS'
+    assert offers.prizepicks(b, 'soccer', NOW)[0]['sport'] == 'soccer'
+    b = pp(); b['included'][1]['attributes']['name'] = '1st Set'
+    assert offers.prizepicks(b, 'soccer', NOW) == []
+
+
+def ud_soccer(stat='period_1_2_shots_attempted', choices=('higher',), team='h'):
+    return {'games': [{'id': 9, 'sport_id': 'FIFA', 'status': 'scheduled', 'scheduled_at': '2026-11-20T19:30:00Z',
+                       'home_team_id': 'h', 'away_team_id': 'a', 'title': 'BAY vs KOE',
+                       'full_team_names_title': 'Bayern München vs 1. FC Köln',
+                       'short_title': 'Bayern vs Köln',
+                       'abbreviated_title': 'BAY vs KOE', 'sport_group_name': 'Bundesliga'}],
+            'players': [{'id': 'p', 'sport_id': 'FIFA', 'first_name': 'Harry', 'last_name': 'Kane', 'team_id': team,
+                         'position_display_name': 'Forward'}],
+            'appearances': [{'id': 'ap', 'player_id': 'p', 'match_id': 9, 'team_id': team}],
+            'over_under_lines': [{'id': 'L1', 'status': 'active', 'stat_value': '6.5', 'line_type': 'balanced',
+                'over_under': {'category': 'player_prop', 'appearance_stat': {'appearance_id': 'ap', 'stat': stat,
+                                                                              'display_stat': 'Shots Attempted'}},
+                'options': [{'choice': c, 'status': 'active', 'payout_multiplier': '0.86',
+                             'updated_at': '2026-11-18T16:43:33Z'} for c in choices]}]}
+
+
+def test_underdog_soccer_keeps_only_listed_sides_and_exact_team_names():
+    row = offers.underdog_soccer(ud_soccer(), NOW)[0]
+    assert row['sides'] == {'over': {'multiplier': 0.86}} and row['stat'] == 'shots' and row['scope'] == 'full_game'
+    assert row['teams'] == ['Bayern München', '1. FC Köln'] and row['team'] == 'Bayern München'
+    assert row['team_aliases'] == [['Bayern München', 'Bayern', 'BAY'], ['1. FC Köln', 'Köln', 'KOE']]
+    assert offers.underdog_soccer(ud_soccer(team='a'), NOW)[0]['team'] == '1. FC Köln'
+    for stat in ('period_1_2_goals_assists', 'period_1_goals', 'period_1_2_cards'):
+        assert offers.underdog_soccer(ud_soccer(stat), NOW) == []
+    assert offers.underdog_soccer(ud_soccer(team='x'), NOW) == []
+
+
+def test_underdog_soccer_identity_needs_both_teams_exactly():
+    from sports import expansion_history as history
+    offer = offers.underdog_soccer(ud_soccer(), NOW)[0]
+    match = {'event_id': 'ger.1:espn:1:x', 'competition': 'ger.1', 'start': '2026-11-20T19:30:00Z',
+             'participants': [{'id': 'T1', 'name': 'Bayern Munich', 'abbreviation': 'BAY', 'short_name': 'Bayern'},
+                              {'id': 'T2', 'name': '1. FC Cologne', 'abbreviation': 'KOE', 'short_name': 'Köln'}],
+             'players': [{'id': 'P9', 'name': 'Harry Kane', 'team_id': 'T1'}]}
+    assert history.resolve(offer, [match])['player_id'] == 'P9'
+    other = dict(match, participants=[match['participants'][0], {'id': 'T3', 'name': 'Mainz', 'abbreviation': 'M05'}])
+    assert history.resolve(offer, [other]) is None
+
+
+def test_prizepicks_tennis_without_tour_resolves_exact_pair_only():
+    from sports import expansion_history as history
+    offer = offers.prizepicks(pp_tennis(), 'tennis', NOW)[0]
+    offer['start'] = '2026-11-18T14:00:00Z'
+    m = {'event_id': 'atp:espn:atp:t:1', 'competition': 'atp', 'start': '2026-11-18T14:30:00Z',
+         'participants': [{'id': 'A', 'name': 'Frances Tiafoe'}, {'id': 'B', 'name': 'Flavio Cobolli'}]}
+    assert history.resolve(offer, [m])['player_id'] == 'A'
+    assert history.resolve(offer, [m, dict(m, event_id='atp:365scores:atp_challenger:1:2',
+                                            competition='atp_challenger')]) is None    # two answers: abstain
+    assert history.resolve(dict(offer, opponent=None), [m]) is None
+
+
+def test_board_fit_drops_only_hidden_prizepicks_variants_latest_first():
+    rows = [{'platform': 'prizepicks', 'variant': v, 'start': s, 'pad': 'x' * 100}
+            for v, s in [('standard', '1'), ('demon', '1'), ('goblin', '3'), ('demon', '2')]]
+    rows.append({'platform': 'underdog', 'variant': 'balanced', 'start': '9', 'pad': 'x' * 100})
+    import json
+    size = lambda r: len(json.dumps(r, separators=(',', ':'))) + 1
+    kept = board.fit(rows, limit=size(rows[0]) + size(rows[1]) + size(rows[4]))
+    assert [(r['platform'], r['variant'], r['start']) for r in kept] == [
+        ('prizepicks', 'standard', '1'), ('prizepicks', 'demon', '1'), ('underdog', 'balanced', '9')]
+    assert board.fit(rows, limit=10**6) is rows
+
+
+def test_quotes_job_requests_mls_and_underdog_soccer_only_when_flagged(monkeypatch, tmp_path):
+    from sports import expansion_odds
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    calls = []
+    def get_json(sport, url, params=None, **kw):
+        calls.append((url, dict(params or {})))
+        return {}
+    monkeypatch.setattr('sports.expansion_sources.get_json', get_json)
+    monkeypatch.setattr(expansion_odds, 'collect', lambda sport, get, directory: ([], {}))
+    board.collect('soccer')
+    assert [p.get('league_id') or p.get('sport_id') for _, p in calls] == [82, 6]
+    calls.clear(); monkeypatch.setenv('SCOUT_SOCCER_UNDERDOG', '1'); monkeypatch.setenv('SCOUT_SOCCER_PP_MLS', '0')
+    snap = board.collect('soccer')
+    assert [p.get('league_id') or p.get('sport_id') for _, p in calls] == [82, 'FIFA']
+    assert snap['sources']['underdog']['ok'] and 'prizepicks_mls' not in snap['sources']
+    calls.clear(); board.collect('tennis')
+    assert [p.get('league_id') or p.get('sport_id') for _, p in calls] == [5, 'TENNIS']

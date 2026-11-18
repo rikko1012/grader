@@ -102,6 +102,26 @@ def enabled(sport):
     return sport in SPORTS and os.environ.get(f"SCOUT_{sport.upper()}_ENABLED") == "1"
 
 
+SNAPSHOT_BYTES = 2_850_000   # offers + game odds; board() refuses a board.json over 3,000,000 bytes (the whole sport would go dark)
+
+
+def fit(rows, limit=SNAPSHOT_BYTES):
+    """Keep the board under the member size limit: when too large, leave out PrizePicks demon / goblin rows (never
+    shown on the board), latest start first, until it fits. Standard and Underdog lines are never dropped."""
+    sizes = [len(json.dumps(r, separators=(",", ":"))) + 1 for r in rows]
+    total = sum(sizes)
+    if total <= limit:
+        return rows
+    drop = set()
+    for i in sorted((i for i, r in enumerate(rows) if r.get("platform") == "prizepicks"
+                     and r.get("variant") not in ("standard",)), key=lambda i: rows[i].get("start") or "", reverse=True):
+        if total <= limit:
+            break
+        drop.add(i)
+        total -= sizes[i]
+    return [r for i, r in enumerate(rows) if i not in drop]
+
+
 def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
     directory = Path(directory) if directory else root(sport)
     game_odds=game_odds or []
@@ -132,6 +152,7 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
                                 (row['platform'], row['offer_id'], row['revision'], observed_at, json.dumps(row)))
     finally:
         con.close()
+    rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":"))))
     snapshot = {"sport": sport, "built_at": observed_at, "sources": sources, "offers": rows,
                 "mode": "lines", "grading_ready": False, "game_odds":game_odds}
     fd, temporary = tempfile.mkstemp(prefix="board-", suffix=".tmp", dir=directory)
@@ -149,15 +170,31 @@ def collect(sport):
     from . import net
     from .expansion_sources import get_json
     rows, sources = [], {}
-    jobs = [("prizepicks", "https://partner-api.prizepicks.com/projections",
-             {"league_id": 82 if sport == "soccer" else 5, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})]
+    pp = lambda league: ("https://partner-api.prizepicks.com/projections",
+                         {"league_id": league, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
+    # (source, provider, request): one serial request each, through the shared Retry-After holds.
+    jobs = [("prizepicks", "prizepicks", pp(82 if sport == "soccer" else 5))]
+    if sport == "soccer" and os.environ.get("SCOUT_SOCCER_PP_MLS", "1") != "0":
+        jobs.append(("prizepicks_mls", "prizepicks", pp(6)))      # MLS is its own PrizePicks league
     if sport == "tennis":
-        jobs.append(("underdog", "https://api.underdogfantasy.com/v1/over_under_lines", {"sport_id": "TENNIS"}))
-    for source, url, params in jobs:
+        jobs.append(("underdog", "underdog", ("https://api.underdogfantasy.com/v1/over_under_lines", {"sport_id": "TENNIS"})))
+    if sport == "soccer" and os.environ.get("SCOUT_SOCCER_UNDERDOG") == "1":
+        # Always filtered by sport_id: the unfiltered answer is ~26 MB.
+        jobs.append(("underdog", "underdog", ("https://api.underdogfantasy.com/v1/over_under_lines", {"sport_id": "FIFA"})))
+    seen = set()
+    for source, provider, (url, params) in jobs:
         try:
             body = get_json(sport, url, params=params, timeout=25, tries=1)
             observed = now_utc()
-            found = adapters.prizepicks(body, sport, observed) if source == "prizepicks" else adapters.underdog(body, observed)
+            if provider == "prizepicks":
+                found = adapters.prizepicks(body, sport, observed)
+            else:
+                found = adapters.underdog(body, observed) if sport == "tennis" else adapters.underdog_soccer(body, observed)
+            del body
+            if source == "prizepicks_mls":
+                found = [r for r in found if r["variant"] == "standard"]   # members see standard lines only
+            found = [r for r in found if (r["platform"], r["offer_id"]) not in seen]   # one projection id once
+            seen.update((r["platform"], r["offer_id"]) for r in found)
             rows.extend(found)
             sources[source] = {"ok": True, "checked_at": observed, "offers": len(found)}
         except (net.HttpError, ValueError, OSError) as e:

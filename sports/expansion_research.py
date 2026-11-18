@@ -37,6 +37,25 @@ def saved(sport):
         return {}
 
 
+RESEARCH_BYTES = 3_600_000   # saved() ignores a research.json over 4,000,000 bytes (all research would vanish)
+
+
+def fit(players, starts, limit=RESEARCH_BYTES):
+    """Keep research.json under its read limit: when too large, leave out the entries for the latest-starting
+    offers first (they are researched again on a later run)."""
+    sizes = {k: len(json.dumps(v, separators=(',', ':'))) + 40 for k, v in players.items()}
+    total = sum(sizes.values())
+    if total <= limit:
+        return players
+    keep, used = {}, 0
+    for k in sorted(players, key=lambda k: (starts.get(k, ''), k)):
+        if used + sizes[k] > limit:
+            break
+        keep[k] = players[k]
+        used += sizes[k]
+    return keep
+
+
 def publish(sport, budget_s=20):
     from . import expansion_history as history
     from .expansion import isolated_database
@@ -123,6 +142,7 @@ def publish(sport, budget_s=20):
             except (OSError, ValueError, history.sqlite3.Error):
                 entry['error'] = 'history_unavailable'
         players[k] = entry
+    players = fit(players, {k: unique[k].get('start') or '' for k in players})
     doc = {'sport': sport, 'at': now_utc(), 'results_at': history.results_at(sport), 'players': players}
     history.atomic_json(boards.root(sport) / 'research.json', doc)
     return {'offers': len(board['offers']), 'markets': len(players),

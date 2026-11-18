@@ -82,6 +82,32 @@ def roster_identity(summary, match):
     return rows
 
 
+def _team_sets(offer):
+    """Exact normalized names per offered team (PrizePicks: one name each; Underdog: its full / short / code
+    names). -> ([set_a, set_b], own_set) or None. Exact equality only, never fuzzy."""
+    teams = offer.get('teams') or []
+    if len(teams) != 2 or not all(teams):
+        return None
+    extra = offer.get('team_aliases') or [[], []]
+    if len(extra) != 2:
+        return None
+    sets = [({normalized(teams[i])} | {normalized(x) for x in extra[i] or []}) - {''} for i in range(2)]
+    own = normalized(offer.get('team'))
+    mine = [s for s in sets if own in s]
+    return sets, (mine[0] if len(mine) == 1 else {own})
+
+
+def _pair(sets, aliases):
+    """Both offered teams equal both participants (either order). -> [participant index per offered team] or None."""
+    if len(aliases) != 2:
+        return None
+    if sets[0] & aliases[0] and sets[1] & aliases[1] and not (sets[0] & aliases[1] and sets[1] & aliases[0]):
+        return [0, 1]
+    if sets[0] & aliases[1] and sets[1] & aliases[0] and not (sets[0] & aliases[0] and sets[1] & aliases[1]):
+        return [1, 0]
+    return None
+
+
 def resolve(offer, matches):
     """A single matching event AND player, otherwise abstain. No name-only join."""
     answer = {}
@@ -92,26 +118,31 @@ def resolve(offer, matches):
         if not match.get('start') or abs((parse_utc(match['start']) - parse_utc(offer['start'])).total_seconds()) > 7200:
             continue
         if offer['sport'] == 'tennis':
-            level = ('atp_challenger' if str(offer.get('competition','')).startswith('ATP Challenger ') else
-                     'wta125' if str(offer.get('competition','')).startswith('WTA 125K ') else offer.get('tour'))
-            if level != competition or offer.get('tour') != COMPETITIONS[competition][1] or not offer.get('opponent'):
-                continue
+            if offer.get('tour') is None and 'tour' in offer:
+                # No tour from the book (PrizePicks): any tennis store, still exact pair + start + unique answer.
+                if not offer.get('opponent'):
+                    continue
+            else:
+                level = ('atp_challenger' if str(offer.get('competition','')).startswith('ATP Challenger ') else
+                         'wta125' if str(offer.get('competition','')).startswith('WTA 125K ') else offer.get('tour'))
+                if level != competition or offer.get('tour') != COMPETITIONS[competition][1] or not offer.get('opponent'):
+                    continue
             players = match['participants']
             pair = {normalized(p['name']) for p in players}
             if len(pair) != 2 or pair != {normalized(offer['player']), normalized(offer['opponent'])}:
                 continue
             player = next((p for p in players if normalized(p['name']) == normalized(offer['player'])), None)
         else:
-            teams = offer.get('teams') or []
-            if len(teams) != 2 or not all(teams):
+            found = _team_sets(offer)
+            if not found:
                 continue
+            sets, own = found
             participants = match['participants']
             aliases = [{normalized(p.get('name')), normalized(p.get('abbreviation')),
                         normalized(p.get('short_name'))} - {''} for p in participants]
-            if len(aliases) != 2 or not ((normalized(teams[0]) in aliases[0] and normalized(teams[1]) in aliases[1]) or
-                                       (normalized(teams[0]) in aliases[1] and normalized(teams[1]) in aliases[0])):
+            if not _pair(sets, aliases):
                 continue
-            owners = [p['id'] for p, names in zip(participants, aliases) if normalized(offer.get('team')) in names]
+            owners = [p['id'] for p, names in zip(participants, aliases) if own & names]
             candidates = [p for p in match.get('players', []) if p['team_id'] in owners
                           and normalized(p['name']) == normalized(offer['player'])]
             player = candidates[0] if len(candidates) == 1 else None
@@ -126,15 +157,15 @@ def soccer_teams(offer, match):
     if (offer.get('sport') != 'soccer' or not match.get('start') or
             abs((parse_utc(offer['start']) - parse_utc(match['start'])).total_seconds()) > 7200):
         return []
-    teams = offer.get('teams') or []
+    found = _team_sets(offer)
     participants = match.get('participants') or []
-    if len(teams) != 2 or not all(teams) or len(participants) != 2:
+    if not found or len(participants) != 2:
         return []
+    sets, own = found
     aliases = [{normalized(p.get(k)) for k in ('name','abbreviation','short_name')} - {''} for p in participants]
-    a,b = map(normalized, teams)
-    if not ((a in aliases[0] and b in aliases[1]) or (a in aliases[1] and b in aliases[0])):
+    if not _pair(sets, aliases):
         return []
-    return [p for p,names in zip(participants, aliases) if normalized(offer.get('team')) in names]
+    return [p for p,names in zip(participants, aliases) if own & names]
 
 
 def collect_soccer_teams(catalogs, get, persist, directory):

@@ -40,3 +40,13 @@ def test_read_is_file_only_and_bounded(tmp_path, monkeypatch):
     assert research.saved('soccer') == {}
     (root/'research.json').write_text(' ' * 4_000_001)
     assert research.saved('soccer') == {}
+
+
+def test_research_fit_keeps_earliest_starts_under_the_read_limit():
+    from sports import expansion_research as research
+    players = {k: {'games': ['x' * 50]} for k in 'abc'}
+    starts = {'a': '2026-11-20', 'b': '2026-11-18', 'c': '2026-11-19'}
+    assert research.fit(players, starts) is players
+    import json
+    one = len(json.dumps(players['a'], separators=(',', ':'))) + 40
+    assert list(research.fit(players, starts, limit=2 * one)) == ['b', 'c']

@@ -17,8 +17,19 @@ PP_MARKETS = {
                "Crosses": "crosses", "Clearances": "clearances", "Fouls": "fouls",
                "Attempted Dribbles": "attempted_dribbles", "Shots Assisted": "shots_assisted"},
     "tennis": {"Aces": "aces", "Double Faults": "double_faults", "Total Games": "games_played",
-               "Games Won": "games_won", "Sets Won": "sets_won", "Break Points Won": "breakpoints_won"},
+               "Games Won": "games_won", "Sets Won": "sets_won", "Break Points Won": "breakpoints_won",
+               # PrizePicks' own labels (raw board 2026-11-18); same stats the result stores already hold.
+               "Total Games Won": "games_won", "Total Sets": "sets_played", "Total Tie Breaks": "tie_breakers_played",
+               "1st Set Total Games": "games_played"},
 }
+# PrizePicks league per player: soccer board 82 (SOCCER / EPL) and MLS on its own league 6.
+PP_LEAGUES = {"soccer": {"SOCCER", "EPL", "MLS"}, "tennis": {"TENNIS"}}
+PP_SCOPES = {"Full": "full_game", "1H": "first_half", "2H": "second_half", "1st Set": "set1"}
+# Underdog soccer (sport_id FIFA): full-match stats the ESPN box score holds. Goals + Assists, 1H goals and cards
+# stay unmapped (no summed stat / first-half scope / combined-cards house rule registered).
+UD_SOCCER_MARKETS = {"period_1_2_goals": "goals", "period_1_2_assists": "assists",
+                     "period_1_2_shots_on_target": "shots_on_target", "period_1_2_shots_attempted": "shots",
+                     "period_1_2_saves": "saves"}
 UD_MARKETS = {s: (s, "full_game") for s in (
     "aces", "double_faults", "breakpoints_won", "games_played", "games_won", "sets_played", "sets_won", "tie_breakers_played")}
 UD_MARKETS.update({"period_1_games_played": ("games_played", "set1"), "period_1_games_won": ("games_won", "set1")})
@@ -65,11 +76,15 @@ def prizepicks(body, sport, observed_at):
         if not (player.get("display_name") or player.get("name")):
             continue
         actual = str(player.get("league") or "").upper()
-        if actual not in ({"SOCCER", "EPL"} if sport == "soccer" else {"TENNIS"}):
+        if actual not in PP_LEAGUES[sport]:
             continue
         stat = PP_MARKETS[sport].get(a.get("stat_type"))
         duration = item("duration").get("name")
-        scope = {"Full": "full_game", "1H": "first_half", "2H": "second_half"}.get(duration)
+        scope = PP_SCOPES.get(duration)
+        if a.get("stat_type") == "1st Set Total Games" and scope != "set1":
+            continue                                   # the label and the period must agree
+        if scope == "set1" and sport != "tennis":
+            continue
         line, start = number(a.get("line_score")), timestamp(a.get("start_time"))
         if (not stat or not scope or line is None or line < 0 or not start or start <= now
                 or not p.get("id") or not rid("game") or not rid("new_player") or player.get("combo")
@@ -79,11 +94,25 @@ def prizepicks(body, sport, observed_at):
             continue
         allowed = a.get("allowed_wager_types")
         sides = {"over": ["over"], "under": ["under"], "under_or_over": ["over", "under"]}.get(allowed)
+        if allowed is None and a.get("odds_type") == "standard":
+            sides = ["over", "under"]                  # sports/lines.py rule: missing = both sides (standard lines)
         if not sides:
-            continue
+            continue                                   # demon / goblin without the field: side unknown, left out
         teams = ((game.get("metadata") or {}).get("game_info") or {}).get("teams") or {}
         away, home = (teams.get("away") or {}).get("abbreviation"), (teams.get("home") or {}).get("abbreviation")
-        rows.append(finish({"sport": sport, "platform": "prizepicks", "offer_id": str(p["id"]),
+        extra = {}
+        if sport == "tennis":
+            # PrizePicks tennis "teams" are the two players' full names; some games only carry the opponent in the
+            # projection description. Both must agree when both exist; doubles pairs ("A / B") never resolve.
+            me = player.get("display_name") or player.get("name")
+            pair = [x for x in (away, home) if x]
+            by_game = next((x for x in pair if x != me), None) if len(pair) == 2 and me in pair else None
+            by_text = a.get("description") if a.get("description") and a.get("description") != me else None
+            opponent = by_game or by_text
+            if (by_game and by_text and by_game != by_text) or not opponent or "/" in opponent or "/" in str(me):
+                opponent = None
+            extra = {"opponent": opponent, "tour": None}
+        rows.append(finish({**extra, "sport": sport, "platform": "prizepicks", "offer_id": str(p["id"]),
             "event_id": f"{sport}:prizepicks:{rid('game')}", "player_id": f"{sport}:prizepicks:{rid('new_player')}",
             "player": player.get("display_name") or player.get("name"), "role": player.get("position"),
             "team": player.get("team"), "match": f"{away} · {home}" if away and home else a.get("description"),
@@ -139,6 +168,61 @@ def underdog(body, observed_at):
             "role": None, "team": None, "match": game.get("title"), "competition": game.get("sport_group_name"),
             "tour": tour, "opponent": ' '.join(x for x in (opponent.get('first_name'), opponent.get('last_name')) if x),
             "stat": market[0], "label": st.get("display_stat") or market[0], "scope": market[1], "line": value,
+            "variant": line.get("line_type") or "unknown", "start": start, "sides": sides,
+            "observed_at": now, "source_updated_at": min(updates) if len(updates) == len(sides) else None,
+            "identity_status": "provider_only", "forecast": None}))
+    return rows
+
+
+def underdog_soccer(body, observed_at):
+    """Underdog soccer (sport_id FIFA) player lines from body['games']. Only the sides Underdog lists are kept
+    (2026-11-18: every line is 'higher' only); no Under is ever invented."""
+    now = timestamp(observed_at)
+    if not now:
+        raise ValueError("observation time required")
+    players = {x["id"]: x for x in body.get("players") or []}
+    apps = {x["id"]: x for x in body.get("appearances") or []}
+    games = {x["id"]: x for x in body.get("games") or []}
+    rows = []
+    for line in body.get("over_under_lines") or []:
+        ou = line.get("over_under") or {}
+        st = ou.get("appearance_stat") or {}
+        app = apps.get(st.get("appearance_id")) or {}
+        p = players.get(app.get("player_id")) or {}
+        game = games.get(app.get("match_id")) or {}
+        stat = UD_SOCCER_MARKETS.get(st.get("stat"))
+        value, start = number(line.get("stat_value")), timestamp(game.get("scheduled_at"))
+        home, away = game.get("home_team_id"), game.get("away_team_id")
+        full = str(game.get("full_team_names_title") or "").split(" vs ")
+        short = str(game.get("short_title") or "").split(" vs ")
+        abbr = str(game.get("abbreviated_title") or "").split(" vs ")
+        team = app.get("team_id") or p.get("team_id")
+        if (p.get("sport_id") != "FIFA" or game.get("sport_id") != "FIFA" or not stat or value is None or value < 0
+                or not start or start <= now or line.get("status") != "active" or line.get("live_event")
+                or game.get("status") != "scheduled" or ou.get("category") != "player_prop" or not line.get("id")
+                or not home or not away or home == away or team not in (home, away) or len(full) != 2
+                or not all(x.strip() for x in full) or not p.get("last_name")):
+            continue
+        sides, updates = {}, []
+        for option in line.get("options") or []:
+            side = {"higher": "over", "lower": "under"}.get(option.get("choice"))
+            if side and option.get("status") == "active":
+                sides[side] = {"multiplier": number(option.get("payout_multiplier"))}
+                update = timestamp(option.get("updated_at"))
+                if update:
+                    updates.append(update)
+        if not sides:
+            continue
+        # "X vs Y" titles list the home team first (abbreviated_title BAY vs KOE: Bayern home_team_id).
+        aliases = [[x for x in (full[i], short[i] if len(short) == 2 else None, abbr[i] if len(abbr) == 2 else None)
+                    if x] for i in range(2)]
+        mine = 0 if team == home else 1
+        rows.append(finish({"sport": "soccer", "platform": "underdog", "offer_id": str(line["id"]),
+            "event_id": f"soccer:underdog:{game['id']}", "player_id": f"soccer:underdog:{p['id']}",
+            "player": " ".join(x for x in (p.get("first_name"), p.get("last_name")) if x),
+            "role": p.get("position_display_name"), "team": full[mine], "match": game.get("title"),
+            "competition": game.get("sport_group_name"), "teams": [full[0], full[1]], "team_aliases": aliases,
+            "stat": stat, "label": st.get("display_stat") or stat, "scope": "full_game", "line": value,
             "variant": line.get("line_type") or "unknown", "start": start, "sides": sides,
             "observed_at": now, "source_updated_at": min(updates) if len(updates) == len(sides) else None,
             "identity_status": "provider_only", "forecast": None}))
