@@ -56,7 +56,7 @@ def fit(players, starts, limit=RESEARCH_BYTES):
     return keep
 
 
-def publish(sport, budget_s=20):
+def publish(sport, budget_s=20, results_at=None):
     from . import expansion_history as history
     from .expansion import isolated_database
     from .contracts import parse_utc
@@ -143,7 +143,7 @@ def publish(sport, budget_s=20):
                 entry['error'] = 'history_unavailable'
         players[k] = entry
     players = fit(players, {k: unique[k].get('start') or '' for k in players})
-    doc = {'sport': sport, 'at': now_utc(), 'results_at': history.results_at(sport), 'players': players}
+    doc = {'sport': sport, 'at': now_utc(), 'results_at': results_at or history.results_at(sport), 'players': players}
     history.atomic_json(boards.root(sport) / 'research.json', doc)
     return {'offers': len(board['offers']), 'markets': len(players),
             'with_history': sum(bool(x['games']) for x in players.values()), 'at': doc['at']}

@@ -218,10 +218,10 @@ def test_over_budget_store_keeps_live_results_pauses_backfill_and_exits_0(monkey
     assert result['ok_requests'] == result['requests']          # the fake theScore body is an empty dict (ValueError there)
     assert (tmp_path / 'tennis/atp/canonical.db').exists()
     state = json.loads((tmp_path / 'tennis/history-state.json').read_text())
-    assert state['offset'] == 1 and state['stored_at'] == result['finished_at']   # cursor never skips a window
+    assert state['offset'] == 1 and state['stored_at'] <= result['finished_at']   # cursor never skips a window
     espn_dates = [p['dates'] for u, p in calls if 'site.api.espn.com' in u and 'scoreboard' in u]
     assert espn_dates and all('-' in d for d in espn_dates)
-    assert history.results_at('tennis') == result['finished_at']
+    assert history.results_at('tennis') == result['stored_at'] == state['stored_at']
 
 
 def test_full_store_writes_nothing_but_never_raises(monkeypatch, tmp_path):

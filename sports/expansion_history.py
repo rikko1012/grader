@@ -439,10 +439,10 @@ def collect(sport, max_requests=16, max_seconds=150):
     atomic_json(directory / 'current-matches.json',
                 [m for matches in catalogs.values() for m in matches.values() if (m.get('start') or '') >= earliest])
     from .expansion_research import publish
-    counts['research'] = publish(sport, budget_s=15)
-    counts['finished_at'] = now_utc()
     # When results were last really stored (not when research.json was rebuilt): the freshness members see.
-    counts['stored_at'] = counts['finished_at'] if counts['records'] else state.get('stored_at')
+    counts['stored_at'] = now_utc() if counts['records'] else state.get('stored_at')
+    counts['research'] = publish(sport, budget_s=15, results_at=counts['stored_at'])
+    counts['finished_at'] = now_utc()
     atomic_json(state_path, {**counts, 'offset': (1 if offset+width>90 else offset+width) if advanced else offset})
     return counts
 
