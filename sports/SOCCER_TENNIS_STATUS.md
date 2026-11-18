@@ -187,7 +187,27 @@ changes are part of this correction.
   (the next matches were three days out); peak RSS 59.0 MB. No 429 or 403.
 - **Not verified:** a live Premier League match end to end (parser and matcher are tested on the recorded
   answer only); the Kalshi rate limit on the production host, where the NBA/NFL `ingest-kalshi` job uses the
-  same host from another process; any series marked `verified: False`.
+  same host from another process (the shared pacing below is tested, not run there); any series marked
+  `verified: False`.
+
+### Review fixes (2026-11-18, both exchange sources)
+
+- **One pacing mark and rate-limit hold per host for the whole box** (`sports/host_marks.py`,
+  `<SPORTS_DATA_DIR>/request-marks.db`, request metadata only). `ingest-kalshi`, the NBA/NFL ingest's Polymarket
+  source and the soccer / tennis quotes jobs now take turns on Kalshi (2 s) and Polymarket (1 s), and a
+  Retry-After or bare 429 (15 min) seen by any of them stops all of them without a request. This reaches into
+  the NBA/NFL collectors' request path (not their data or grading): while a hold is in force `ingest-kalshi`
+  stores no new Kalshi quotes. A soccer / tennis 403 hold (6 h) is NOT published - it stays in
+  `expansion/request-holds.db`. Off switch: `SPORTS_SHARED_HOLDS=0`. Tested with fakes and three real local
+  processes; not run against Kalshi or Polymarket and not on the production host.
+- **Download limit:** the 2 MB limit now stops the download (streamed), not only the parsing. Checked against
+  a local test server sending 39 MB chunked: stopped after about 4 MB sent, process RSS +2 MB.
+- **Run time:** no reference step starts later than 40 s into a quotes run (`error: no_time`); the lines are
+  saved and the reference prices wait for the next run.
+- **Storage:** `ref:` revisions in `quotes.db` older than 14 days are deleted on each save (line and game-odds
+  revisions never are). Real growth per day was not measured.
+- **Ops:** the reference sources' last status is in `reference-status.json` in the sport's folder and in admin
+  ops as `expansion_reference` (`ok`, `error`, `held_until`, `truncated`). There is no alert for it.
 
 ## Polymarket tennis match-winner prices (2026-11-18, reference only)
 

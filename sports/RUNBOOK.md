@@ -335,6 +335,13 @@ in the sport's own `board.json` / `quotes.db` (`ref:kalshi`). Reference only - n
 - `error: http_429` / `http_403` / `held` with `held_until`: Kalshi refused; the hold (15 min or Retry-After
   for a 429, 6 h for a 403) is in `<SPORTS_DATA_DIR>/expansion/request-holds.db` and both sports wait it out.
   Do nothing; if 429s repeat, turn the switch off for one sport rather than work around it.
+- The same status without opening `board.json`: admin ops, `expansion_reference.<sport>.sources` (Kalshi and
+  Polymarket; written by the quotes job to `reference-status.json`). `error: no_time` means the line sources took
+  over 40 s, so the reference step was left for the next run.
+- Kalshi and Polymarket pacing and rate-limit holds (Retry-After, 15 min for a bare 429) are shared with the
+  NBA / NFL jobs through `<SPORTS_DATA_DIR>/request-marks.db`: during one, `ingest-kalshi` reports "asked us to
+  wait until ..." and sends nothing. A soccer / tennis 403 hold is not shared. Off: `SPORTS_SHARED_HOLDS=0`.
+- `quotes.db` keeps 14 days of `ref:` revisions; lines and game odds are never deleted.
 - A team that never matches: add its exact Kalshi name -> ESPN name to `sports/kalshi_expansion_aliases.json`
   by hand after checking both sources. Never add abbreviations.
 - Details and what is not verified: `sports/SOCCER_TENNIS_STATUS.md`.
