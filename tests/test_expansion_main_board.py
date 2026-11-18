@@ -114,7 +114,7 @@ def test_moneylines_show_kalshi_midpoints_as_their_own_reference_card(expansion,
             dict(good, offer_id='not-a-price', outcomes=[dict(o, mid=1.2) for o in good['outcomes']]),
             dict(good, offer_id='text-price', outcomes=[dict(o, mid='0.5') for o in good['outcomes']]),
             dict(good, offer_id='one-leg', outcomes=good['outcomes'][:1]),
-            dict(good, offer_id='other-book', platform='polymarket'),
+            dict(good, offer_id='other-book', platform='betfair'), dict(good, offer_id='list-platform', platform=['kalshi']),
             dict(good, offer_id='other-sport', sport='tennis' if sport == 'soccer' else 'soccer'),
             dict(good, offer_id='started', start=good['observed_at']),
             dict(good, offer_id='no-outcomes', outcomes=None), 'not-a-row', None]
@@ -129,6 +129,37 @@ def test_moneylines_show_kalshi_midpoints_as_their_own_reference_card(expansion,
         'prices': [.455, .265, .275] if sport == 'soccer' else [.665, .335],
         'description': 'Exchange bid/ask midpoint · price reference, not used in grades'}]
     assert card['teams'] == (['Example FC', 'Draw', 'Test United'] if sport == 'soccer' else ['Ana Example', 'Bea Test'])
+
+
+def test_tennis_moneylines_show_polymarket_midpoints_as_their_own_card(expansion):
+    import server, workspace_game_books
+    kalshi = kalshi_reference(expansion['tennis'], 'tennis')
+    poly = dict(kalshi, platform='polymarket', source='gamma', offer_id='atp-example-test-2026-11-17',
+                jurisdiction='Not tradable from the US - public prices only', liquidity=12000,
+                outcomes=[dict(o, mid=mid) for o, mid in zip(kalshi['outcomes'], (.655, .345))])
+    junk = [dict(poly, offer_id='no-mid', outcomes=[{k: v for k, v in o.items() if k != 'mid'} for o in poly['outcomes']]),
+            dict(poly, offer_id='three-way', outcomes=poly['outcomes'] + [poly['outcomes'][0]]),
+            dict(poly, offer_id='started', start=poly['observed_at'])]
+    expansion['tennis']['reference_prices'] = [kalshi] + junk + [poly]
+    status, raw = workspace_game_books.moneylines(server, 'tennis')
+    doc = json.loads(raw)
+    assert status == 200 and [g['id'] for g in doc['games']] == [
+        'betrivers:ml', 'kalshi:KXFIXTURE-26NOV21AAABBB', 'polymarket:atp-example-test-2026-11-17']
+    book, first, card = doc['games']
+    assert book['quotes'][0] == {'source': book['quotes'][0]['source'], 'kind': 'american', 'prices': [150, -170],
+                                 'description': book['quotes'][0]['description']}             # BetRivers card unchanged
+    assert first['quotes'][0]['source'] == 'Kalshi' and first['quotes'][0]['prices'] == [.665, .335]
+    assert card['pick'] is None and card['label'] == poly['match'] and card['teams'] == ['Ana Example', 'Bea Test']
+    assert card['quotes'] == [{'source': 'Polymarket', 'kind': 'midpoint', 'prices': [.655, .345],
+        'description': 'Exchange bid/ask midpoint · price reference, not used in grades · not tradable from the US'}]
+
+
+def test_soccer_moneylines_never_show_a_polymarket_row(expansion):
+    import server, workspace_game_books
+    row = dict(kalshi_reference(expansion['soccer'], 'soccer'), platform='polymarket')
+    expansion['soccer']['reference_prices'] = [row]
+    status, raw = workspace_game_books.moneylines(server, 'soccer')
+    assert status == 200 and [g['id'] for g in json.loads(raw)['games']] == ['betrivers:ml']
 
 
 @pytest.mark.parametrize('sport', adapter.SPORTS)
