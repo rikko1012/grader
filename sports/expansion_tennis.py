@@ -247,7 +247,8 @@ def collect_details(catalogs, get, persist, directory):
                 state[tour + '_checked_at'] = now_utc()
         # Two tournament lists per batch reserve most requests for actual stats.
         todo = [t for t in tournaments.values() if due(t.get('checked_at'), 1800 if t['end'] >= utc(now) else 86400)]
-        todo.sort(key=lambda t:(t.get('checked_at') or '', -parse_utc(t['end']).timestamp()))
+        # Running tournaments first (their upcoming matches feed the pre-match context), then the old backlog.
+        todo.sort(key=lambda t:(t['end'] < utc(now), t.get('checked_at') or '', -parse_utc(t['end']).timestamp()))
         for row in todo[:2]:
             body = get(f"https://api.thescore.com/{row['tour']}/events/{row['id']}/matches", {})
             if not isinstance(body, list):
