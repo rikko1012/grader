@@ -70,20 +70,40 @@ def _write_tagged(path, obj, key):
 
 def write(name, items, built_ms=None):
     """One HMAC-tagged file PER KEY (so the service loads only the keys members ask for - Starter memory) plus an
-    index (built_at, keys) that state() reads without unpickling any value."""
+    index (built_at, keys) that state() reads without unpickling any value. items: a dict, or an iterable of
+    (key, value) pairs - each pair is pickled, written and released before the next is built (2026-11-18: the slip
+    pool held all four pools until the write)."""
     key = _key()
     if key is None:
         raise RuntimeError("SPORTS_TOKEN_SECRET not set: snapshots are off")
-    t = time.time()
-    total = 0
-    for k, v in items.items():
-        total += _write_tagged(_key_file(name, k), {"name": name, "key": k, "built_at": t, "value": v}, key)
-    idx = {"name": name, "built_at": t, "built_ms": built_ms, "keys": [repr(k) for k in items], "bytes": total}
+    pairs = items.items() if isinstance(items, dict) else items
+    t, total, keys = None, 0, []
+    for k, v in pairs:
+        tk = time.time()
+        t = tk if t is None else t                      # the index carries the FIRST key's time (read(): >= built_at)
+        total += _write_tagged(_key_file(name, k), {"name": name, "key": k, "built_at": tk, "value": v}, key)
+        keys.append(repr(k))
+        del v
+        _trim()
+    t = time.time() if t is None else t
+    idx = {"name": name, "built_at": t, "built_ms": built_ms, "keys": keys, "bytes": total}
     tmp = snap_dir() / name / f".index.{os.getpid()}.tmp"
     tmp.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_text(json.dumps(idx), encoding="utf-8")
     os.replace(tmp, snap_dir() / name / "index.json")
     return total
+
+
+def _trim():
+    """Hand freed heap back to the OS (glibc malloc_trim; no-op elsewhere) so one key's or one league's freed objects
+    do not stack on the next one's peak - the same step as sports/model/fwd.py _trim."""
+    import gc
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
 
 
 def _read_tagged(path):
@@ -181,9 +201,15 @@ def build(names=None):
             mod, _, fn = target.partition(":")
             with store.opened(read_only=True) as con:
                 items = getattr(importlib.import_module(mod), fn)(con)
-            ms = round((time.time() - t0) * 1000)
-            size = write(name, items, ms)
-            rep[name] = {"ok": True, "keys": len(items), "ms": ms, "bytes": size}
+                if isinstance(items, dict):
+                    ms = round((time.time() - t0) * 1000)
+                    size = write(name, items, ms)
+                    n = len(items)
+                else:                                   # a generator: built and written one key at a time
+                    size = write(name, items, None)
+                    ms = round((time.time() - t0) * 1000)
+                    n = len((index(name) or {}).get("keys") or ())
+            rep[name] = {"ok": True, "keys": n, "ms": ms, "bytes": size}
         except FileNotFoundError:
             rep[name] = {"ok": False, "error": "sports_store_not_ready"}
         except Exception as e:                          # noqa: BLE001 - one snapshot's failure is its own
@@ -192,18 +218,25 @@ def build(names=None):
 
 
 # --------------------------------------------------------------------------- snapshot builders (adapters)
-def slips_pool(con):
+def iter_slips_pool(con):
     """The slips agent's member leg pool for every (league, platform), under the exact cache keys api_slips._pool
-    uses: ("slips_pool", league, platform, "member"). Calls the slips module's public pool.build; admin "research"
-    pools stay on-demand."""
+    uses: ("slips_pool", league, platform, "member"), YIELDED one at a time (written and released by write before
+    the next is built); the board maps of one league are dropped before the next league's board is parsed. Calls the
+    slips module's public pool.build; admin "research" pools stay on-demand."""
     from . import api_slips
     from .slips import pool, rules
-    out = {}
     for lg in ("nba", "nfl"):
         # the SAME inputs as the on-demand path (api_slips._pool): the board's market chance per quote (N4) and its
         # cal-mi-1 displayed chance - without them the served pool ranked raw sm-1 chances the board no longer shows
         mk, ca = api_slips._board_markets(lg, cached=False)
+        _trim()                                         # the parsed board files are garbage now
         for plat in rules.PLATFORMS:
-            out[("slips_pool", lg, plat, "member")] = pool.build(con, lg, plat, policy="member", market_at=mk,
-                                                                 cal_at=ca)
-    return out
+            yield ("slips_pool", lg, plat, "member"), pool.build(con, lg, plat, policy="member", market_at=mk,
+                                                                cal_at=ca)
+        del mk, ca
+        _trim()
+
+
+def slips_pool(con):
+    """All keys at once (tests / tools); the prebuilt job streams iter_slips_pool."""
+    return dict(iter_slips_pool(con))

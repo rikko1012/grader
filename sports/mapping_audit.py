@@ -27,8 +27,38 @@ START_TOL_H = 3.0
 TARGETS = ("prizepicks", "underdog")
 
 
+def _open_offers(con, league, events, now):
+    """(record id, offer) for the CURRENT revision of every open offer whose game has not started or that has no game
+    - the former league-wide _iter_latest read the table row of every hot offer revision of the league (2026-11-18:
+    240 s timeouts on every run since at least 2026-11-16 while the archive was stalled). Same rule, index reads only:
+    candidate identities through records_event (rows of an upcoming game / rows with no game), each identity's newest
+    non-late revision through records_current (snapshots._slate_offers), THEN the event / availability filter - so an
+    identity whose newest revision moved away is never resurrected."""
+    from .snapshots import _decode_current_rows, _slate_offers
+    upcoming = {eid for eid, e in events.items() if (e.start_utc or "") > now}
+    for rid, o, _m in _slate_offers(con, league, sorted(upcoming), now):
+        if o.availability == "open" and o.event_id in upcoming:
+            yield rid, o
+    pairs = sorted({(r[0], r[1]) for r in con.execute(
+        "SELECT DISTINCT source, source_key FROM records INDEXED BY records_event "
+        "WHERE kind = 'offer' AND event_id IS NULL AND league = ?", (league,))})
+    for i in range(0, len(pairs), 500):
+        rows = []
+        for source, key in pairs[i:i + 500]:
+            row = con.execute(
+                "SELECT record_id, source, source_key, revision, known_at, last_seen_at, last_source_updated_at "
+                "FROM records INDEXED BY records_current WHERE kind = 'offer' AND source = ? AND source_key = ? "
+                f"AND {store.CURRENT_SQL} AND league = ? AND known_at <= ? ORDER BY revision DESC LIMIT 1",
+                (source, key, league, now)).fetchone()
+            if row is not None:
+                rows.append(row)
+        for rid, o, _m in _decode_current_rows(con, rows):
+            if o.availability == "open" and o.event_id is None:
+                yield rid, o
+
+
 def run(con, league, now=None):
-    from .snapshots import _latest, _iter_latest, snap_root
+    from .snapshots import _latest, snap_root
     now = now or now_utc()
     teams = {t.team_id: t for _, t, _ in _latest(con, "team", "league = ?", [league], now)}
     events = {e.event_id: e for _, e, _ in _latest(con, "event", "league = ?", [league], now)}
@@ -36,9 +66,7 @@ def run(con, league, now=None):
     for _, m, _ in _latest(con, "membership", "player_id LIKE ?", [f"{league}:%"], now):
         if m.valid_to is None and m.source == "espn":
             open_teams[m.player_id].add(m.team_id)
-    offers = ((rid, o) for rid, o, _ in _iter_latest(con, "offer", "league = ?", [league], now)
-              if o.availability == "open" and (o.event_id is None or (events.get(o.event_id) and
-                                                                      (events[o.event_id].start_utc or "") > now)))
+    offers = _open_offers(con, league, events, now)
     checks = {k: {"count": 0, "by_platform": Counter(), "examples": []} for k in (
         "player_team_not_in_event", "team_label_mismatch", "player_unresolved", "event_unresolved",
         "multiple_open_teams", "start_mismatch")}
@@ -99,7 +127,7 @@ def main(argv=None):
     ap.add_argument("--now", default=None)
     a = ap.parse_args(argv)
     flags.require("SPORTS_INGEST")
-    with store.opened() as con:
+    with store.opened(read_only=True) as con:
         res = {lg: run(con, lg, a.now) for lg in a.leagues}
     for lg, r in res.items():
         print(f"{lg}: {r['offers_checked']} open offers checked, {r['total_mismatches']} mismatches")

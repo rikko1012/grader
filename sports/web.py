@@ -113,7 +113,7 @@ def public_open(path, method="GET"):
 # "<name>": ("<module>:<function>", refresh_s, max_age_s) - function(con) -> {web.cached key tuple: value}, key[0] ==
 # name. Built by the scheduled worker child (python -m sports.service snapshots), read by web.cached. ONE line each.
 SNAPSHOTS = {
-    "slips_pool": ("sports.prebuilt:slips_pool", 90, 270),      # Starter: rebuilt every 90 s, served <= 270 s old
+    "slips_pool": ("sports.prebuilt:iter_slips_pool", 90, 270),      # Starter: rebuilt every 90 s, served <= 270 s old
 }
 # ------------------------------------------------------------------------------------------- end of snapshot table
 

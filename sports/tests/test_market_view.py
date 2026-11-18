@@ -356,3 +356,30 @@ def test_manifest_has_no_fallback_key_with_the_switch_off(built, monkeypatch):
     snapshots.build(con, "nba", now="2026-10-23T21:00:00Z")
     con.close()
     assert _load(built, "manifest.json")["market_view"]["fallback"] is True
+
+
+def test_mapping_audit_index_read_matches_the_former_league_scan(built):
+    """2026-11-18: _open_offers (records_event + records_current seeks) returns exactly the offers the former
+    league-wide _iter_latest scan + filter returned - incl. no-game offers, a past game, and an identity whose newest
+    revision moved to another game (never resurrected)."""
+    from sports import mapping_audit
+    from sports.snapshots import _iter_latest, _latest
+    con = store.connect()
+    store.put(con, book("betrivers", "br:noev", event_id=None, observed_at="2026-10-23T20:55:00Z"))
+    store.put(con, book("fanduel", "fd:moved", observed_at="2026-10-23T20:50:00Z"))
+    store.put(con, book("fanduel", "fd:moved", event_id=None, observed_at="2026-10-23T20:56:00Z"))
+    now = "2026-10-23T21:00:00Z"
+    events = {e.event_id: e for _, e, _ in _latest(con, "event", "league = ?", ["nba"], now)}
+    old = sorted(rid for rid, o, _ in _iter_latest(con, "offer", "league = ?", ["nba"], now)
+                 if o.availability == "open" and (o.event_id is None or (events.get(o.event_id) and
+                                                                         (events[o.event_id].start_utc or "") > now)))
+    new = sorted(rid for rid, _o in mapping_audit._open_offers(con, "nba", events, now))
+    later = "2026-10-26T21:00:00Z"                                       # every game started: only no-game offers
+    ev2 = {e.event_id: e for _, e, _ in _latest(con, "event", "league = ?", ["nba"], later)}
+    old2 = sorted(rid for rid, o, _ in _iter_latest(con, "offer", "league = ?", ["nba"], later)
+                  if o.availability == "open" and (o.event_id is None or (ev2.get(o.event_id) and
+                                                                          (ev2[o.event_id].start_utc or "") > later)))
+    new2 = sorted(rid for rid, _o in mapping_audit._open_offers(con, "nba", ev2, later))
+    con.close()
+    assert new == old and len(old) >= 3
+    assert new2 == old2

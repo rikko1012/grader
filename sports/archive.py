@@ -50,6 +50,7 @@ VERSION = "arch-2"           # arch-2 (2026-10-24): one index row per identity s
 AFTER_H = float(os.environ.get("SPORTS_ARCHIVE_AFTER_H", "72"))
 PART_ROWS = int(os.environ.get("SPORTS_ARCHIVE_PART_ROWS", "5000"))
 DISK_FLOOR_MB = float(os.environ.get("SPORTS_ARCHIVE_DISK_FLOOR_MB", "300"))
+PROGRESS_OPS = 20000         # SQLite VM steps between budget checks during the candidate scan
 LRU_BYTES = int(float(os.environ.get("SPORTS_ARCHIVE_CACHE_MB", "32")) * 1_000_000)
 COLS = ("rid", "kind", "record_id", "source", "source_key", "revision", "content_hash", "schema_version", "league",
         "event_id", "player_id", "stat", "platform", "line", "observed_at", "known_at", "stored_at", "payload",
@@ -480,17 +481,38 @@ def _dim(con, cache, v):
     return i
 
 
-def candidates(con, now=None):
-    """[(league, day, [rids...])] cold offer rows grouped by league and the day of the identity's last sighting."""
+# 2026-11-18: the former candidates query (a GROUP BY over records_ident_rev joined back through records_league) read
+# the TABLE ROW (payload pages) of every hot offer revision twice - ~1.7x the store on a synthetic copy - so on the
+# 14.8 GB store it ran 1,200-1,800+ s and every pass since at least 2026-11-16 broke out before its first part
+# (archive data flat at 344 MB, canonical 10.8 -> 14.8 GB). The window form reads only records_offer_seen (covering:
+# rid, league, source, source_key, revision and the three sighting times) - same rows, same order (plan_probe.py).
+CANDIDATES_SQL = (
+    "SELECT rid, league, substr(seen, 1, 10) AS day FROM (SELECT rid, league, source, source_key, revision, "
+    "MAX(COALESCE(last_seen_at, observed_at, known_at)) OVER (PARTITION BY source, source_key) AS seen "
+    "FROM records INDEXED BY records_offer_seen WHERE kind = 'offer') WHERE seen < ? "
+    "ORDER BY league, day, source, source_key, revision LIMIT ?")
+CANDIDATES_SQL_OLD = (
+    "WITH ident AS (SELECT source, source_key, MAX(COALESCE(last_seen_at, observed_at, known_at)) AS seen "
+    "FROM records WHERE kind = 'offer' GROUP BY source, source_key HAVING seen < ?) "
+    "SELECT r.rid, r.league, substr(i.seen, 1, 10) AS day FROM records r JOIN ident i "
+    "ON r.source = i.source AND r.source_key = i.source_key WHERE r.kind = 'offer' ORDER BY r.league, day, "
+    "r.source, r.source_key, r.revision LIMIT ?")
+
+
+def candidates(con, now=None, max_rows=None):
+    """[(league, day, [rids...])] cold offer rows grouped by league and the day of the identity's last sighting - at
+    most max_rows rows (the first ones in league / day / identity order; None = all)."""
     now = now or datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=AFTER_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    q = ("WITH ident AS (SELECT source, source_key, MAX(COALESCE(last_seen_at, observed_at, known_at)) AS seen "
-         "FROM records WHERE kind = 'offer' GROUP BY source, source_key HAVING seen < ?) "
-         "SELECT r.rid, r.league, substr(i.seen, 1, 10) AS day FROM records r JOIN ident i "
-         "ON r.source = i.source AND r.source_key = i.source_key WHERE r.kind = 'offer' ORDER BY r.league, day, "
-         "r.source, r.source_key, r.revision")
+    lim = -1 if max_rows is None else int(max_rows)
+    try:
+        cur = con.execute(CANDIDATES_SQL, (cutoff, lim))
+    except sqlite3.OperationalError as e:            # no records_offer_seen (store < migration 8) / no window functions
+        if "interrupt" in str(e).lower():
+            raise
+        cur = con.execute(CANDIDATES_SQL_OLD, (cutoff, lim))
     parts = OrderedDict()
-    for rid, league, day in con.execute(q, (cutoff,)):
+    for rid, league, day in cur:
         parts.setdefault((league or "-", day), []).append(rid)
     out = []
     for (league, day), rids in parts.items():
@@ -650,12 +672,19 @@ def _remove_orphans(con):
 
 
 def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
+    """One bounded pass. time_budget_s covers the WHOLE pass (setup + candidate scan + parts): the scan is interrupted
+    at the budget (SQLite progress handler), no part starts once the budget is spent or when the slowest part so far
+    would not end inside it, and the closing WAL checkpoint waits at most 5 s for readers."""
     from . import store
     own = con is None
     con = con or store.connect()
     con.isolation_level = None
-    out = {"at": None, "parts": [], "rows": 0, "bytes": 0, "error": None}
+    out = {"at": None, "parts": [], "rows": 0, "bytes": 0, "error": None, "stages": []}
     t0 = time.time()
+    deadline = t0 + time_budget_s
+
+    def stage(name):
+        out["stages"].append((name, round(time.time() - t0, 1)))
     try:
         ensure_schema(con)
         install(con)
@@ -663,19 +692,35 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
         out["at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         out["removed_tmp"] = _remove_stale_tmp()
         out["removed_orphans"] = _remove_orphans(con)
-        parts = candidates(con, now)
+        stage("setup")
+        con.set_progress_handler(lambda: 1 if time.time() > deadline else 0, PROGRESS_OPS)
+        try:
+            parts = candidates(con, now, max_rows=max_parts * PART_ROWS + 1)
+        finally:
+            con.set_progress_handler(None, 0)
+        stage("candidates")
         out["pending_parts"] = len(parts)
+        out["more_pending"] = sum(len(r) for _l, _d, r in parts) > max_parts * PART_ROWS
+        slowest = 0.0
         for league, day, rids in parts[:max_parts]:
-            if time.time() - t0 > time_budget_s:
+            if time.time() + slowest > deadline:
+                out["stopped"] = "time budget"
                 break
+            tp = time.time()
             r = _archive_part(con, league, day, rids, out["at"])
+            slowest = max(slowest, time.time() - tp)
             out["parts"].append(r["file"])
             out["rows"] += r["rows"]
             out["bytes"] += r["bytes"]
-        try:
+        stage("parts")
+        try:                                            # bounded wait on readers (was the store's 30 s busy timeout)
+            con.execute("PRAGMA busy_timeout=5000")
             con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except sqlite3.Error:
             pass
+        finally:
+            con.execute("PRAGMA busy_timeout=30000")
+        stage("checkpoint")
     except Exception as e:                              # noqa: BLE001 - every row stays hot on any failure
         out["error"] = f"{type(e).__name__}: {str(e)[:300]}"
     finally:

@@ -152,3 +152,21 @@ def test_the_snapshots_command_runs_in_a_child_process(tmp_path):
                        capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
     out = json.loads(r.stdout.strip().splitlines()[-1])
     assert r.returncode == 1 and out["slips_pool"]["error"] == "sports_store_not_ready"   # no store yet: reported
+
+
+def test_a_streamed_snapshot_writes_each_key_before_the_next_is_built(monkeypatch):
+    """2026-11-18 (prebuilt killed over its 288 MB cap 7 times): a generator builder's keys are written one at a time
+    and read back exactly like a dict builder's."""
+    monkeypatch.setitem(web.SNAPSHOTS, "tsnap", ("x:y", 10, 60))
+    written = []
+    real = prebuilt._write_tagged
+    monkeypatch.setattr(prebuilt, "_write_tagged", lambda path, obj, key: written.append(obj["key"]) or real(path, obj, key))
+
+    def gen():
+        for i in range(3):
+            assert written == [("tsnap", j) for j in range(i)]          # every earlier key already on disk
+            yield ("tsnap", i), {"v": i}
+    prebuilt.write("tsnap", gen())
+    assert [prebuilt.lookup(("tsnap", i)) for i in range(3)] == [{"v": 0}, {"v": 1}, {"v": 2}]
+    r = prebuilt.read("tsnap")
+    assert set(r["items"]) == {("tsnap", i) for i in range(3)} and prebuilt.index("tsnap")["keys"] == [repr(("tsnap", i)) for i in range(3)]

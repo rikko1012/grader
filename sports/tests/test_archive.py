@@ -197,3 +197,48 @@ def test_compaction_shrinks_what_cold_rows_cost_on_disk(world):
     archive.run_pass(con, now=NOW)
     files = sum(f.stat().st_size for f in archive.archive_dir().glob("*.xz"))
     assert files < hot_payload / 3
+
+
+# ------------------------------------------------------------------- 2026-11-18: candidates scan + a real time budget
+def test_candidates_reads_only_the_covering_index_and_matches_the_former_query(world):
+    con = world[0]
+    cutoff = (NOW - timedelta(hours=archive.AFTER_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    plan = " ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN " + archive.CANDIDATES_SQL, (cutoff, -1)))
+    assert "COVERING INDEX records_offer_seen" in plan, plan
+    old = [tuple(r) for r in con.execute(archive.CANDIDATES_SQL_OLD, (cutoff, -1))]
+    new = [tuple(r) for r in con.execute(archive.CANDIDATES_SQL, (cutoff, -1))]
+    assert new == old and len(new) == 3 + 38 * 2 + 10
+    first = archive.candidates(con, NOW, max_rows=5)
+    assert sum(len(r) for _l, _d, r in first) == 5 and [x for _l, _d, r in first for x in r] == [t[0] for t in old[:5]]
+
+
+def test_the_budget_covers_the_candidate_scan_and_nothing_is_removed(world, monkeypatch):
+    con, before = world[0], world[1]
+    clock = [1000.0]
+    monkeypatch.setattr(archive.time, "time", lambda: clock[0])
+    real = archive.candidates
+
+    def slow_scan(c, now, max_rows=None):
+        clock[0] += 10_000                              # the scan alone outlives the budget
+        return real(c, now, max_rows)
+    monkeypatch.setattr(archive, "candidates", slow_scan)
+    monkeypatch.setattr(archive, "PROGRESS_OPS", 1)
+    out = archive.run_pass(con, now=NOW, time_budget_s=600)
+    assert out["error"] and "interrupt" in out["error"].lower() and out["parts"] == []
+    assert set(_all_rows(con)) == set(before)                                    # every row still hot
+
+
+def test_no_part_starts_past_the_budget(world, monkeypatch):
+    con = world[0]
+    monkeypatch.setattr(archive, "PART_ROWS", 10)
+    clock = [1000.0]
+    monkeypatch.setattr(archive.time, "time", lambda: clock[0])
+    real = archive._archive_part
+
+    def part(*a):
+        clock[0] += 250                                 # each part takes 250 s
+        return real(*a)
+    monkeypatch.setattr(archive, "_archive_part", part)
+    out = archive.run_pass(con, now=NOW, time_budget_s=600)
+    assert out["error"] is None and out["stopped"] == "time budget"
+    assert len(out["parts"]) == 2 and out["took_s"] <= 600                     # 250 + 250; a third would end at 750
