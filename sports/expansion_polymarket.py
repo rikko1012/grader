@@ -214,7 +214,7 @@ def collect(sport, get, directory):
                 stop = (e.not_before if e.held else max(e.not_before or 0, time.time() + HOLD_429_S)
                         if e.status == 429 else time.time() + HOLD_403_S if e.status == 403 else None)
                 if stop:
-                    sources.hold(sport, HOST, stop)
+                    sources.hold(sport, HOST, stop, shared=e.status != 403)
                     status['held_until'] = net._iso(stop)
                 break
             except (ValueError, OSError) as e:
