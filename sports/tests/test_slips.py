@@ -690,3 +690,54 @@ def test_copy_text_uses_the_market_label_not_the_book_raw_stat():
                  start_utc=w.START), dict(L(2, "B", 2), stat_label="Points", league="nba", player="P2", start_utc=w.START)]
     t = validate.copy_text("underdog", "standard", legs)
     assert "3-pointers made Higher 20.5" in t and "three_points_made" not in t
+
+
+# ===================================================== pool forecast read: one platform's current revisions only
+def _pool_core(p):
+    legs = [{k: leg[k] for k in leg.keys()} for leg in p["legs"]]
+    return {"snapshot_id": p["snapshot_id"], "legs": legs, "state": dict(p["state"]), "excluded": dict(p["excluded"]),
+            "offers": p["offers"]}
+
+
+@pytest.mark.parametrize("policy", ["member", "research"])
+def test_pool_forecast_filter_matches_the_unfiltered_read(con, monkeypatch, policy):
+    made = w.world(con, [("g1", "H1", 1, "over", 0.6), ("g2", "A2", 2, "under", 0.6)])
+    # g1 moves to a new revision with its own forecast (made["g1"] is now an older revision), the same player is
+    # listed on another platform, and g2's current revision has both a research-only and a member forecast
+    w.put_leg(con, w.offer("g1", "H1", 1, line=21.5, oid="un:g1:points:20.5", observed_at="2026-10-23T20:03:00Z"),
+              forecast_at="2026-10-23T20:03:00Z")
+    old_rid = made["g1"][0]
+    other_rid, _ = w.put_leg(con, w.offer("g1", "H1", 1, platform="prizepicks"))
+    rid = made["g2"][0]
+    store.put(con, w.forecast(rid, w.offer("g2", "A2", 2), side="under", research_only=True, model="test-m2",
+                              forecast_at="2026-10-23T20:02:00Z"))
+    filtered = pool.build(con, "nba", "underdog", now=w.NOW, policy=policy)
+    seen = {}
+    real = pool._forecasts_by_offer
+
+    def unfiltered(con_, league, now, event_ids=None, wanted=None):
+        seen["wanted"] = wanted
+        return real(con_, league, now, event_ids)
+
+    monkeypatch.setattr(pool, "_forecasts_by_offer", unfiltered)
+    assert _pool_core(pool.build(con, "nba", "underdog", now=w.NOW, policy=policy)) == _pool_core(filtered)
+    assert not {other_rid, old_rid} & seen["wanted"] and rid in seen["wanted"]
+    events = {"nba:espn:1", "nba:espn:2"}
+    assert {other_rid, old_rid} <= set(real(con, "nba", w.NOW, events))
+    only = real(con, "nba", w.NOW, events, wanted={rid})
+    assert set(only) == {rid} and len(only[rid]) == 2
+    picked = [leg for leg in filtered["legs"] if leg["record_id"] == rid]
+    if policy == "member":                                   # the member pool still prefers the non-research forecast
+        assert picked and picked[0]["forecast_id"] == made["g2"][1].forecast_id
+
+
+def test_pool_forecast_read_uses_the_event_index(con):
+    w.world(con, [("g1", "H1", 1, "over", 0.6), ("g2", "A2", 2, "under", 0.6)])
+    new = pool._FORECAST_EVENT_SQL % "?,?"
+    args = ["nba", "nba:espn:1", "nba:espn:2"]
+    plan = " ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN " + new, args).fetchall())
+    assert "records_event" in plan and "records_league" not in plan
+    old = "SELECT payload FROM records WHERE kind='forecast' AND league=? AND event_id IN (?,?)"
+    assert sorted(r[0] for r in con.execute(new, args)) == sorted(r[0] for r in con.execute(old, args))
+    assert len(con.execute(new, args).fetchall()) == 2
+    assert not con.execute(new, ["nfl", *args[1:]]).fetchall()
