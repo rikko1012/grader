@@ -124,3 +124,26 @@ def test_shared_response_cache_expires_at_game_start_and_quote_expiry(monkeypatc
     assert json.loads(board.http_board(req)[1])['offers']==[]
     Clock.current=base+timedelta(seconds=301)
     assert board.http_board(req)[0]==503
+
+
+def ud(away_name='(2) Kyrian Jacquet', known=('p1',)):
+    people={'p1':{'id':'p1','first_name':'Luca','last_name':'Nardi','sport_id':'TENNIS'},
+            'p2':{'id':'p2','first_name':'Kyrian','last_name':'Jacquet','sport_id':'TENNIS'}}
+    return {'players':[people[k] for k in known],
+            'appearances':[{'id':'a1','player_id':'p1','match_id':'g1'}],
+            'solo_games':[{'id':'g1','home_player_id':'p1','away_player_id':'p2','home_player_name':'Luca Nardi',
+                           'away_player_name':away_name,'scheduled_at':'2026-11-18T12:00:00Z','status':'scheduled',
+                           'title':'Nardi vs Jacquet','sport_group_name':'ATP Challenger Metz'}],
+            'over_under_lines':[{'id':'l1','stat_value':'5.5','status':'active','line_type':'balanced',
+                'over_under':{'category':'player_prop','appearance_stat':{'appearance_id':'a1','stat':'aces'}},
+                'options':[{'choice':'higher','status':'active','payout_multiplier':'1.0'}]}]}
+
+
+def test_underdog_opponent_without_their_own_line_comes_from_the_game():
+    # the opponent is in `players` only when they have a line too; the game names both sides in full
+    assert offers.underdog(ud(known=('p1','p2')),NOW)[0]['opponent']=='Kyrian Jacquet'
+    row=offers.underdog(ud(),NOW)[0]
+    assert row['opponent']=='Kyrian Jacquet' and row['player']=='Luca Nardi' and row['tour']=='atp'
+    assert offers.underdog(ud(away_name='Kyrian Jacquet'),NOW)[0]['opponent']=='Kyrian Jacquet'
+    for missing in (None,'','(2) '):
+        assert offers.underdog(ud(away_name=missing),NOW)[0]['opponent']==''  # still unlinked, never guessed

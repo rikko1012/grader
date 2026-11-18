@@ -97,7 +97,7 @@ def collect_details(catalogs, get, persist, directory):
     import json
     from datetime import datetime, timedelta
     from .contracts import now_utc, parse_utc
-    from .expansion_history import atomic_json, resolve
+    from .expansion_history import atomic_json, error_label, resolve
     from . import net
     path = directory / 'serve-history-state.json'
     try:
@@ -161,9 +161,9 @@ def collect_details(catalogs, get, persist, directory):
                 row['stored_stats'] = len(feed.records)
             except (net.HttpError, ValueError, OSError) as e:
                 row['attempt_at'] = now_utc()
-                errors.append(type(e).__name__)
+                errors.append(error_label(e))
     except (net.HttpError, ValueError, OSError) as e:
-        errors.append(type(e).__name__)
+        errors.append(error_label(e))
     finally:
         state['tournaments'] = {k:v for k,v in tournaments.items() if v['end'] >= cutoff}
         state['matches'] = {k:v for k,v in pending.items() if v['start'] >= cutoff}

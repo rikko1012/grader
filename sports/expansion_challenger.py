@@ -101,7 +101,7 @@ def parse_stats(body,match,observed):
 
 
 def collect(catalogs,get,persist,directory,offset,backfill=True):
-    from .expansion_history import atomic_json
+    from .expansion_history import atomic_json, error_label
     from . import net
     errors=[];today=datetime.now(timezone.utc).date();path=directory/'challenger-state.json'
     try:state=json.loads(path.read_text(encoding='utf-8'))
@@ -121,8 +121,8 @@ def collect(catalogs,get,persist,directory,offset,backfill=True):
                 body=get(BASE+'game/stats/',{**PARAMS,'games':m['source_event_id']})
                 persist(parse_stats(body,m,now_utc()),m['competition']);state[m['event_id']]=now_utc()
             except (net.HttpError,ValueError,OSError) as exc:
-                state[m['event_id']]=now_utc();errors.append(type(exc).__name__)
-    except (net.HttpError,ValueError,OSError) as exc:errors.append(type(exc).__name__)
+                state[m['event_id']]=now_utc();errors.append(error_label(exc))
+    except (net.HttpError,ValueError,OSError) as exc:errors.append(error_label(exc))
     finally:
         cutoff=utc(datetime.now(timezone.utc)-timedelta(days=100))
         atomic_json(path,{k:v for k,v in state.items() if v>=cutoff})

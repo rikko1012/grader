@@ -186,7 +186,7 @@ def test_one_tour_outage_does_not_block_the_other(monkeypatch,tmp_path):
         return scoreboard()
     monkeypatch.setattr(history.net,'get_json',get)
     result=history.collect('tennis',max_requests=2)
-    assert len(calls)==2 and result['errors']==['HttpError']
+    assert len(calls)==2 and result['errors']==['HttpError:503:site.api.espn.com']
     assert (tmp_path/'tennis/wta/canonical.db').exists()
     assert not (tmp_path/'tennis/atp/canonical.db').exists()
 
@@ -277,3 +277,26 @@ def test_main_exit_codes(monkeypatch,capsys):
     with pytest.raises(SystemExit) as stop:
         run(errors=['HttpError','HttpError'],scoreboards_ok=0)
     assert stop.value.code==1
+
+
+def test_tennis_live_window_is_one_date_and_soccer_asks_for_the_whole_slate(monkeypatch,tmp_path):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR',str(tmp_path))
+    asked=[]
+    def get(url,**kw):
+        asked.append((url,dict(kw.get('params') or {})));return {}
+    monkeypatch.setattr(history.net,'get_json',get)
+    history.collect('tennis',max_requests=2)
+    today=f'{datetime.now(timezone.utc).date():%Y%m%d}'
+    assert [p['dates'] for _,p in asked]==[today,today]  # a range selects tournaments by START date
+    assert all(p['limit']==200 for _,p in asked)
+    asked.clear()
+    history.collect('soccer',max_requests=1)
+    assert asked[0][1]=={'dates':today,'limit':1000}
+
+
+def test_error_labels_name_host_status_and_held_requests():
+    net=history.net
+    assert history.error_label(net.HttpError(403,'https://api.thescore.com/atp/events'))=='HttpError:403:api.thescore.com'
+    assert history.error_label(net.HttpError(429,'https://www.fotmob.com/api/data/x',not_before=1,held=True))=='HttpError:held:www.fotmob.com'
+    assert history.error_label(ValueError('roster team mismatch'))=='ValueError:roster team mismatch'
+    assert history.error_label(ValueError())=='ValueError' and history.error_label(OSError('disk'))=='OSError'

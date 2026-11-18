@@ -30,6 +30,19 @@ def normalized(value):
         'NFKD', str(value or '')) if not unicodedata.combining(c))).casefold().split())
 
 
+def error_label(exc):
+    """Which host and status failed, so ops can tell a provider outage from a parse error.
+
+    'HttpError:503:site.api.espn.com', 'HttpError:held:host' when a provider's
+    Retry-After meant no request was sent, else the type and our own short reason.
+    """
+    if isinstance(exc, net.HttpError):
+        from urllib.parse import urlsplit
+        return f"HttpError:{'held' if exc.held else exc.status}:{urlsplit(str(exc.url)).hostname or ''}"
+    text = ' '.join(str(exc).split())[:80]
+    return f'{type(exc).__name__}:{text}' if text and isinstance(exc, ValueError) else type(exc).__name__
+
+
 def atomic_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -210,7 +223,7 @@ def collect_soccer_teams(catalogs, get, persist, directory):
                         persist(feed, actual)
                 saved['schedule_checked_at'] = now_utc()
             except (net.HttpError, ValueError, OSError) as e:
-                errors.append(type(e).__name__)
+                errors.append(error_label(e))
     finally:
         atomic_json(path, {k:v for k,v in state.items() if v.get('checked_at') and
                           (now-parse_utc(v['checked_at'])).total_seconds() < 7*86400})
@@ -348,8 +361,13 @@ def collect(sport, max_requests=16, max_seconds=150):
 
     # A one-week scoreboard window also returns a tennis tournament's completed
     # rounds; the older cursor advances only after its scoreboard was fetched.
+    # ESPN selects tennis tournaments by START date when given a range: a
+    # today..today+2 range returned no events during the ATP Finals (started
+    # three days earlier), so live fixtures only refreshed when the backfill
+    # cursor passed them. A single date returns every tournament in progress
+    # with all its rounds (verified 2026-11-18: 30 ATP and 42 WTA matches).
     requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(3)]
-                if sport == 'soccer' else [('live', f'{today:%Y%m%d}-{today+timedelta(days=2):%Y%m%d}')])
+                if sport == 'soccer' else [('live', f'{today:%Y%m%d}')])
     # Tennis providers accept bounded date ranges. Seven days per request
     # avoids spending 7.5 hours walking 90 individual dates on a new store.
     width = 7 if sport == 'tennis' else 1
@@ -363,9 +381,10 @@ def collect(sport, max_requests=16, max_seconds=150):
             for comp in (('all',) if sport == 'soccer' else ('atp', 'wta')):
                 try:
                     body = get(f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{comp}/scoreboard',
-                               {'dates': dates, 'limit': 200})
+                               # Saturdays list more than 200 soccer events (225 / 252 seen).
+                               {'dates': dates, 'limit': 1000 if sport == 'soccer' else 200})
                 except (net.HttpError, ValueError, OSError) as e:
-                    counts['errors'].append(type(e).__name__)
+                    counts['errors'].append(error_label(e))
                     phase_ok = False
                     continue
                 counts['scoreboards_ok'] += 1
@@ -415,7 +434,7 @@ def collect(sport, max_requests=16, max_seconds=150):
                     match['summary_checked_at'] = now_utc()
                 except (net.HttpError, ValueError, OSError) as e:
                     match['summary_attempt_at'] = now_utc()
-                    counts['errors'].append(type(e).__name__)
+                    counts['errors'].append(error_label(e))
             # While full, detail sources see only recent matches, so an older
             # match is not marked checked without its facts being stored.
             current = catalogs if not full else {c: {k: m for k, m in rows.items() if (m.get('start') or '') >= recent}
@@ -432,7 +451,7 @@ def collect(sport, max_requests=16, max_seconds=150):
     except StopIteration:
         pass
     except (net.HttpError, ValueError, OSError, sqlite3.Error) as e:
-        counts['errors'].append(type(e).__name__)
+        counts['errors'].append(error_label(e))
     cutoff = (today - timedelta(days=100)).isoformat()
     for competition, matches in catalogs.items():
         atomic_json(isolated_database(directory.parent, competition).parent / 'matches.json',

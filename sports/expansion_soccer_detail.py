@@ -112,7 +112,7 @@ def parse_detail(body, competition, matches, observed_at):
 
 
 def collect_details(catalogs,get,persist,directory):
-    from .expansion_history import atomic_json
+    from .expansion_history import atomic_json, error_label
     path=directory/'detail-history-state.json'
     try:state=json.loads(path.read_text(encoding='utf-8'))
     except (OSError,ValueError):state={}
@@ -155,9 +155,9 @@ def collect_details(catalogs,get,persist,directory):
                 state[match['event_id']]=now_utc()
             except (net.HttpError,ValueError,OSError) as e:
                 state[match['event_id']]=now_utc()
-                errors.append(type(e).__name__)
+                errors.append(error_label(e))
     except (net.HttpError,ValueError,OSError) as e:
-        errors.append(type(e).__name__)
+        errors.append(error_label(e))
     finally:
         atomic_json(path,{k:v for k,v in state.items() if (now-parse_utc(v)).total_seconds()<100*86400})
     return errors
