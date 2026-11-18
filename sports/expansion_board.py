@@ -209,8 +209,10 @@ def collect(sport):
                          {"league_id": league, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
     # (source, provider, request): one serial request each, through the shared Retry-After holds.
     jobs = [("prizepicks", "prizepicks", pp(82 if sport == "soccer" else 5))]
-    if sport == "soccer" and os.environ.get("SCOUT_SOCCER_PP_MLS", "1") != "0":
-        jobs.append(("prizepicks_mls", "prizepicks", pp(6)))      # MLS is its own PrizePicks league
+    if sport == "soccer" and os.environ.get("SCOUT_SOCCER_PP_MLS") == "1":
+        # MLS is its own PrizePicks league. Off by default: a third PrizePicks call in the same few seconds as the
+        # soccer and tennis calls drew HTTP 429 locally (2026-11-18), and a failed source drops its rows that run.
+        jobs.append(("prizepicks_mls", "prizepicks", pp(6)))
     if sport == "tennis":
         jobs.append(("underdog", "underdog", ("https://api.underdogfantasy.com/v1/over_under_lines", {"sport_id": "TENNIS"})))
     if sport == "soccer" and os.environ.get("SCOUT_SOCCER_UNDERDOG") == "1":
