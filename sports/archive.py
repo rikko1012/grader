@@ -484,6 +484,10 @@ def _dim(con, cache, v):
 _SEEN = "COALESCE(last_seen_at, observed_at, known_at)"
 _SCAN = (f"SELECT rid, source, league, source_key, {_SEEN} FROM records INDEXED BY records_offer_seen "
          "WHERE kind = 'offer'%s ORDER BY kind, source, league, source_key")
+# The confirmation is driven from the chosen identities (CROSS JOIN fixes the order): without statistics SQLite
+# planned a full scan of every stored offer row, probing the temp table per row - unbounded on a large store.
+_CONFIRM_FROM = ("temp.arch_idents i CROSS JOIN records r INDEXED BY records_ident "
+                 "WHERE r.kind = 'offer' AND r.source = i.source AND r.source_key = i.source_key")
 SCAN_BUDGET_S = 120          # share of a deadline-bound pass the candidate scan may use before the parts start
 
 
@@ -571,8 +575,7 @@ def select_cold(con, now=None, max_rows=None, cursor=None, deadline=None, clock=
     rows, newest = [], {}
     for rid, league, source, source_key, revision, seen in con.execute(
             "SELECT r.rid, r.league, r.source, r.source_key, r.revision, "
-            "COALESCE(r.last_seen_at, r.observed_at, r.known_at) FROM temp.arch_idents i JOIN records r ON r.kind = 'offer' AND r.source = i.source "
-            "AND r.source_key = i.source_key"):
+            "COALESCE(r.last_seen_at, r.observed_at, r.known_at) FROM " + _CONFIRM_FROM):
         k = (source, source_key)
         newest[k] = max(newest.get(k, ""), seen or "")
         rows.append((rid, league, k, revision))
@@ -784,6 +787,7 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200, deadline_s=No
     con.isolation_level = None
     out = {"at": None, "parts": [], "rows": 0, "bytes": 0, "error": None}
     t0, wall = clock(), time.time()
+    sel = None
     hard = t0 + deadline_s if deadline_s else None
     note = {"started_at": datetime.now(timezone.utc).strftime(TS), "pid": os.getpid(), "stage": "setup", "parts": []}
     path = _state_path("last_pass.json")
@@ -812,7 +816,6 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200, deadline_s=No
         sel = select_cold(con, now, max_rows=max_parts * PART_ROWS, cursor=saved.get("cursor"), clock=clock,
                           deadline=None if hard is None else min(hard, t1 + SCAN_BUDGET_S))
         parts = sel["parts"]
-        _write_json(_state_path("scan_cursor.json"), {"cursor": sel["cursor"], "at": out["at"]})
         out["pending_parts"] = len(parts)
         stage("part", scan_s=round(clock() - t1, 2), scanned_rows=sel["scanned"], scan_complete=sel["complete"],
               selected_rows=sum(len(p[2]) for p in parts), cursor=sel["cursor"])
@@ -837,6 +840,11 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200, deadline_s=No
             out["bytes"] += r["bytes"]
             note["parts"].append({"file": r["file"], "rows": r["rows"], "s": round(took, 2)})
             stage("part", rows=out["rows"])
+        # The cursor moves only when every selected part was archived. A stop on budget / deadline / max_parts
+        # leaves it where it was: the next pass re-walks the same window (the archived identities are gone from it)
+        # instead of leaving confirmed-cold rows behind the cursor until the scan wraps the whole index.
+        if len(out["parts"]) == len(parts):
+            _write_json(_state_path("scan_cursor.json"), {"cursor": sel["cursor"], "at": out["at"]})
         stage("checkpoint")
         t = clock()
         try:
@@ -855,6 +863,11 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200, deadline_s=No
         else:
             out["error"] = f"{type(e).__name__}: {str(e)[:300]}"
             out.pop("stopped", None)
+            if sel is not None:                         # a part that fails every time must not pin the scan to its
+                try:                                    # window: move on, the window is seen again after the wrap
+                    _write_json(_state_path("scan_cursor.json"), {"cursor": sel["cursor"], "at": out["at"]})
+                except OSError:
+                    pass
     finally:
         if hard is not None:
             _DEADLINE = None

@@ -258,13 +258,62 @@ def test_small_passes_resume_wrap_and_archive_everything(world, monkeypatch):
         out = archive.run_pass(con, now=NOW, max_parts=1)
         assert out["error"] is None and out["rows"] <= 9
         rows += out["rows"]
-        cursors.append(json.loads((archive.archive_dir().parent / "scan_cursor.json").read_text())["cursor"])
+        saved = archive._read_json(archive.archive_dir().parent / "scan_cursor.json")
+        cursors.append((saved or {}).get("cursor"))
         if out["stopped"] == "done" and not out["rows"]:
             break
     assert rows == len(before) - 10 and out["stopped"] == "done"
-    moved = [c for c in cursors if c]
-    assert len({tuple(c) for c in moved}) > 1 and cursors[-1] is None           # it advanced, then wrapped
+    assert cursors[-1] is None                         # a window with parts left over never moved the cursor past them
     assert _all_rows(con, "records_all") == before and archive.verify(con)["bad"] == []
+
+
+def _cursor_file():
+    return archive.archive_dir().parent / "scan_cursor.json"
+
+
+def test_cursor_moves_only_when_every_selected_part_was_archived(world, monkeypatch):
+    con, before = world[0], world[1]
+    monkeypatch.setattr(archive, "PART_ROWS", 9)
+    nxt, real = ["prizepicks", "nba", "pp:50"], archive.select_cold
+
+    def scan(*a, **kw):                                # a scan that stopped part way: it reports where to resume
+        return dict(real(*a, **kw), cursor=nxt, complete=False)
+    monkeypatch.setattr(archive, "select_cold", scan)
+    # stopped on the parts budget with parts left: the selected identities must not end up behind the cursor
+    archive._write_json(_cursor_file(), {"cursor": None, "at": "x"})
+    out = archive.run_pass(con, now=NOW, time_budget_s=-1)
+    assert out["stopped"] == "budget" and out["rows"] == 0 and out["pending_parts"] >= 2
+    assert json.loads(_cursor_file().read_text()) == {"cursor": None, "at": "x"}
+    # stopped on max_parts: the same
+    out = archive.run_pass(con, now=NOW, max_parts=1)
+    assert out["stopped"] == "max_parts" and len(out["parts"]) == 1 < out["pending_parts"]
+    assert json.loads(_cursor_file().read_text())["cursor"] is None
+    # every selected part archived: now it moves
+    out = archive.run_pass(con, now=NOW)
+    assert out["error"] is None and out["rows"] and len(out["parts"]) == out["pending_parts"]
+    assert json.loads(_cursor_file().read_text())["cursor"] == nxt
+    assert _all_rows(con, "records_all") == before
+
+
+def test_a_failing_part_does_not_pin_the_scan_to_its_window(world, monkeypatch):
+    con, real = world[0], archive.select_cold
+    nxt = ["prizepicks", "nba", "pp:50"]
+    monkeypatch.setattr(archive, "select_cold", lambda *a, **kw: dict(real(*a, **kw), cursor=nxt, complete=False))
+
+    def broken(*a, **kw):
+        raise RuntimeError("archive candidates changed before the write")
+    monkeypatch.setattr(archive, "_archive_part", broken)
+    out = archive.run_pass(con, now=NOW)
+    assert out["error"].startswith("RuntimeError") and out["rows"] == 0
+    assert json.loads(_cursor_file().read_text())["cursor"] == nxt
+
+
+def test_confirmation_is_driven_from_the_chosen_identities(world):
+    con = world[0]
+    archive.select_cold(con, NOW)                      # creates the temp table
+    plan = " | ".join(r[3] for r in con.execute("EXPLAIN QUERY PLAN SELECT r.rid FROM " + archive._CONFIRM_FROM))
+    assert plan.index("SCAN i") < plan.index("SEARCH r USING") and "records_ident" in plan, plan
+    assert "SCAN r" not in plan, plan
 
 
 def test_slow_setup_does_not_eat_the_parts_budget_and_checkpoint_is_skipped_near_the_deadline(world, monkeypatch):
