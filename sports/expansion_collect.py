@@ -18,7 +18,7 @@ import time
 from . import net
 
 RESERVE_S = 45
-PHASES = {'soccer': (('fotmob', 6, 20),),
+PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10)),
           'tennis': (('thescore', 10, 25),)}
 
 
