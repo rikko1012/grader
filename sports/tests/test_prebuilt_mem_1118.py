@@ -284,6 +284,7 @@ def test_slim_board_parse_holds_far_less(monkeypatch):
             tracemalloc.stop()
     full = peak(lambda: _full_parse(root))
     slim = peak(lambda: api_slips._board_markets("nba", cached=False))
+    print(f"slim board parse peak {slim / full:.2f} of the full parse")
     assert slim < 0.6 * full, (slim, full)
 
 
@@ -317,6 +318,7 @@ def test_pool_build_no_longer_holds_every_current_offer(world):
     old_peak, old = peak(lambda: ref.build(con, "nba", "prizepicks", now=w.NOW))
     new_peak, new = peak(lambda: pool.build(con, "nba", "prizepicks", now=w.NOW))
     assert _dump(new) == _dump(old)
+    print(f"streamed build peak {new_peak / old_peak:.2f} of the 53dad0b build")
     assert new_peak < 0.5 * old_peak, (new_peak, old_peak)
 
 

@@ -170,7 +170,8 @@ def _pick_forecast(fs, policy):
 def market_by_record(boards):
     """{offer record id: (p_over, p_under)} - the market chance at each quote's own line from compact board snapshot
     objects (snapshots.compact_row "mk": {l, c, at}); mirrors SportsRows.marketAt (web/sports/table.js): at[rid] when
-    present (None = no consensus), else the headline c when the quote is at the headline line; n > 0 only."""
+    present (None = no consensus), else the headline c when the quote is at the headline line; n > 0 only.
+    The fields read here are the ones api_slips._slim keeps when it parses a board file: change both together."""
     out = {}
     for b in boards or ():
         for m in (b or {}).get("markets") or ():
@@ -187,7 +188,8 @@ def market_by_record(boards):
 
 def cal_by_record(boards):
     """{offer record id: cal-mi-1 chance dict (po, pu, pp, f, v, mode)} from compact board snapshot objects (the
-    quote's `ca`, REGISTER A8) - a slip leg uses the SAME calibrated chance the board shows for that forecast."""
+    quote's `ca`, REGISTER A8) - a slip leg uses the SAME calibrated chance the board shows for that forecast.
+    The fields read here are the ones api_slips._slim keeps when it parses a board file: change both together."""
     out = {}
     for b in boards or ():
         for m in (b or {}).get("markets") or ():
