@@ -36,7 +36,8 @@ def _tally(games, line, n):
 def _eligible(offer, sport, now):
     try:
         return (offer['sport'] == sport and
-                ('stat' not in offer or offer.get('variant') == 'standard') and
+                ('stat' not in offer or offer.get('variant') == 'standard' or
+                 (offer.get('platform') == 'underdog' and offer.get('variant') == 'balanced')) and
                 datetime.fromisoformat(offer['start'].replace('Z', '+00:00')).timestamp() > now and
                 0 <= now-datetime.fromisoformat(offer['observed_at'].replace('Z', '+00:00')).timestamp() < 300)
     except (KeyError, TypeError, ValueError):
