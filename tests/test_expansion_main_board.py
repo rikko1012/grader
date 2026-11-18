@@ -194,6 +194,24 @@ def test_adapter_refuses_forecast_from_another_identity_or_revision():
 
 
 @pytest.mark.parametrize('sport',adapter.SPORTS)
+def test_board_and_direct_cards_exclude_nonstandard_lines(expansion,sport):
+    import server
+    doc=expansion[sport]
+    standard=doc['offers'][0]
+    for variant in ('demon','goblin','alternate','unknown',None):
+        doc['offers'].append(dict(standard,offer_id='alt-'+str(variant),variant=variant))
+    snap=adapter.snapshot(server,sport)
+    records=json.loads(snap['body'])['records']
+    assert len(records)==2
+    assert all(r['market']['line_type']=='standard' for r in records)
+    assert all(not x['offer']['offer_id'].startswith('alt-') for x in snap['index'].values())
+    # A previously opened card also closes if its source becomes an alternate.
+    rid=records[0]['offer']['offer_id']
+    standard['variant']='demon'
+    assert adapter.line_doc(server,sport,'prizepicks',rid)[0]==404
+
+
+@pytest.mark.parametrize('sport',adapter.SPORTS)
 @pytest.mark.parametrize('size',[DESK,PHONE])
 def test_unoffered_model_direction_is_clear_without_reversing_the_pick(ctx,env,expansion,sport,size):
     doc=expansion[sport];offer=doc['offers'][0];offer['sides']={'over':{}}
