@@ -367,7 +367,9 @@ def collect(sport, max_requests=16, max_seconds=150):
             for comp in (('all',) if sport == 'soccer' else ('atp', 'wta')):
                 try:
                     body = get(f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{comp}/scoreboard',
-                               {'dates': dates, 'limit': 200})
+                               # A Saturday all-leagues soccer slate passes 200 events (234 and 225 seen
+                               # 2026-11-18; 200 came back, the rest were cut). Payload grew about 0.15 MB.
+                               {'dates': dates, 'limit': 1000 if sport == 'soccer' else 200})
                 except (net.HttpError, ValueError, OSError) as e:
                     counts['errors'].append(type(e).__name__)
                     phase_ok = False

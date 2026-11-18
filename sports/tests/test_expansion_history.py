@@ -244,6 +244,7 @@ def test_live_window_starts_yesterday(monkeypatch, tmp_path):
     history.collect('soccer', max_requests=4)
     today = datetime.now(timezone.utc).date()
     assert [c['dates'] for c in calls[:4]] == [f'{today+timedelta(days=i):%Y%m%d}' for i in range(-1, 3)]
+    assert {c['limit'] for c in calls[:4]} == {1000}        # a Saturday all-leagues slate passes 200 events
     calls.clear()
     history.collect('tennis', max_requests=8)
     today = datetime.now(timezone.utc).date()
@@ -251,6 +252,7 @@ def test_live_window_starts_yesterday(monkeypatch, tmp_path):
     # today, yesterday (a final that ended after midnight), tomorrow - each for ATP and WTA; then the 7-day backfill.
     live = [f'{today+timedelta(days=i):%Y%m%d}' for i in (0, 0, -1, -1, 1, 1)]
     assert [c['dates'] for c in calls[:6]] == live and not any('-' in d for d in live)
+    assert {c['limit'] for c in calls[:8]} == {200}
     assert [c['dates'] for c in calls[6:8]] == [f'{today-timedelta(days=7):%Y%m%d}-{today-timedelta(days=1):%Y%m%d}'] * 2
 
 
