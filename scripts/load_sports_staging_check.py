@@ -139,8 +139,11 @@ def main():
     for plat, f in sorted((feeds.get("platforms") or {}).items()):
         print(f"    feed {plat}: newest sighting {f.get('age_min')} min ago", flush=True)
     arch = feeds.get("archive") or {}
+    lp = arch.get("last_pass") or {}                    # drain-1119: the pass's own progress record
     print(f"    store {feeds.get('store_mb')} MB; archive {arch.get('files')} files / {arch.get('rows')} rows / "
-          f"{arch.get('file_mb')} MB; disk {feeds.get('disk')}; data {feeds.get('data_mb')}", flush=True)
+          f"{arch.get('file_mb')} MB; last pass {lp.get('finished_at')}: {lp.get('rows_moved')} rows / "
+          f"{lp.get('parts_done')} parts ({lp.get('stopped')}), ~{lp.get('remaining_estimate_rows')} cold rows left; "
+          f"disk {feeds.get('disk')}; data {feeds.get('data_mb')}", flush=True)
     rss = ops.get("rss_mb")
     check("service RSS under its cap", rss is not None and rss < ops.get("rss_max_mb", 160), f"{rss} / {ops.get('rss_max_mb')} MB")
     stats = sched.get("stats") or {}

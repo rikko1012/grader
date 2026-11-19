@@ -25,7 +25,7 @@ cached in a bounded LRU) - store.py's record lookups, point-in-time and event / 
 cannot tell where a row lives. League-wide CURRENT listings (store.offers without as_of, raw SQL on `records`) read
 the hot window - an offer not seen for 72 h is not current; this is what keeps the builders' memory bounded.
 
-    python -m sports.archive pass [--max-parts 40]     # one bounded pass (the scheduler runs it every 6 h)
+    python -m sports.archive pass [--time-budget-s 600] # one bounded pass (the scheduler runs it every 6 h)
     python -m sports.archive verify                    # re-read every listed file (daily)
     python -m sports.archive stats                     # sizes / counts (read-only)
 """
@@ -521,8 +521,167 @@ def candidates(con, now=None, max_rows=None):
     return out
 
 
-def _archive_part(con, league, day, rids, now_s):
-    adir = archive_dir()
+# drain-1119: the streaming candidate scan. The window query above sorts EVERY hot offer row (PARTITION BY source,
+# source_key does not follow records_offer_seen's order) and sorts again for ORDER BY league, day - on a live-sized
+# store (~9M offer rows) ~2.3 GB read + ~1.4 GB temp written per pass, and LIMIT cannot stop it early. The scan reads
+# records_offer_seen in its OWN order (no sorter, no temp file), resumes from a saved key and stops at a row bound or
+# the deadline - always at a segment boundary, so no identity is ever cut. An identity whose revisions span leagues
+# (two places in that order) is detected by a records_ident count probe and judged on ALL its revisions.
+SCAN_SQL = ("SELECT rid, source, league, source_key, COALESCE(last_seen_at, observed_at, known_at) FROM records "
+            "INDEXED BY records_offer_seen WHERE kind = 'offer' AND {} ORDER BY source, league, source_key, late, revision")
+# resume after (source, league, source_key) - three plain range queries in index order (a row-value comparison
+# against a NULL league is NULL: it would skip or repeat the NULL-league segment)
+SCAN_RESUME = (("source = ? AND league IS ? AND source_key > ?", lambda s, lg, sk: (s, lg, sk)),
+               ("source = ? AND league > ?", lambda s, lg, sk: (s, lg)),
+               ("source = ? AND league IS NOT NULL", lambda s, lg, sk: (s,)),
+               ("source > ?", lambda s, lg, sk: (s,)))
+SCAN_EMIT_ROWS = int(os.environ.get("SPORTS_ARCHIVE_SCAN_ROWS", str(40 * 5000)))   # cold rows per scan batch
+SCAN_MAX_ROWS = int(os.environ.get("SPORTS_ARCHIVE_SCAN_MAX", "1000000"))          # rows read per scan batch
+PENDING_MAX = 2 * SCAN_EMIT_ROWS          # cold rids held between batches (ints; ~10 MB at 400k)
+CACHE_KB = int(os.environ.get("SPORTS_ARCHIVE_CACHE_KB", "32768"))   # pass connection page cache: index pages reused across deletes (measured 64 MB: -38 % reads, +79 MB)
+
+
+def _scan_sql(cursor):
+    """[(sql, args)] that read records_offer_seen from just after `cursor` (None = from the start) to the end."""
+    if cursor is None:
+        return [(SCAN_SQL.format("1"), ())]
+    s, lg, sk = cursor
+    out = []
+    for cond, args in SCAN_RESUME:
+        if lg is not None and cond == "source = ? AND league IS NOT NULL":
+            continue                                    # only after the NULL-league segment (NULL sorts first)
+        if lg is None and cond == "source = ? AND league > ?":
+            continue
+        out.append((SCAN_SQL.format(cond), args(s, lg, sk)))
+    return out
+
+
+def _ident_count(con, source, source_key):
+    try:
+        return con.execute("SELECT COUNT(*) FROM records INDEXED BY records_ident WHERE kind = 'offer' AND source = ? "
+                           "AND source_key = ?", (source, source_key)).fetchone()[0]
+    except sqlite3.OperationalError:                    # no such index (never dropped from the NBA / NFL store)
+        return con.execute("SELECT COUNT(*) FROM records WHERE kind = 'offer' AND source = ? AND source_key = ?",
+                           (source, source_key)).fetchone()[0]
+
+
+def _ident_rows(con, source, source_key):
+    """Every hot revision of one offer identity: (rid, league, newest sighting). Through records_ident - left to the
+    planner, SQLite picked records_offer_seen (kind, source, ...) and walked the source's whole range per identity
+    (measured: ~300 league-changing identities = 50 GB read in one scan batch)."""
+    q = ("SELECT rid, league, COALESCE(last_seen_at, observed_at, known_at) FROM records {} WHERE kind = 'offer' AND "
+         "source = ? AND source_key = ?")
+    try:
+        return con.execute(q.format("INDEXED BY records_ident"), (source, source_key)).fetchall()
+    except sqlite3.OperationalError:
+        return con.execute(q.format(""), (source, source_key)).fetchall()
+
+
+def scan(con, cutoff, cursor=None, deadline=None, emit_rows=None, max_rows=None, emitted=None):
+    """One bounded batch of the streaming candidate scan.
+    -> {"rows": [(rid, league or "-", day)], "cursor": key of the last COMPLETE segment (None = lap finished),
+        "scanned": rows read, "cold": cold rows found, "seconds"}.
+    Stops after a complete segment once emit_rows cold rows were found, max_rows rows were read or the deadline
+    passed. emitted: set of identities of league-changing identities already emitted in this pass (shared between
+    batches, so the second segment of such an identity is not emitted twice)."""
+    t0 = time.time()
+    emit_rows = SCAN_EMIT_ROWS if emit_rows is None else emit_rows
+    max_rows = SCAN_MAX_ROWS if max_rows is None else max_rows
+    emitted = set() if emitted is None else emitted
+    out = {"rows": [], "cursor": cursor, "scanned": 0, "cold": 0, "lap_done": False, "changers": 0}
+    seg, seg_rows, seg_max = None, [], ""
+
+    def close_segment():
+        if seg is None or seg_max >= cutoff:            # hot: some revision seen inside the window
+            return
+        s, lg, sk = seg
+        if _ident_count(con, s, sk) != len(seg_rows):   # revisions in another league: judge the WHOLE identity
+            out["changers"] += 1
+            if (s, sk) in emitted:
+                return
+            allr = _ident_rows(con, s, sk)
+            mx = max((r[2] or "") for r in allr)
+            if mx >= cutoff:
+                return
+            emitted.add((s, sk))
+            out["rows"].extend((r[0], r[1] or "-", mx[:10]) for r in allr)
+            out["cold"] += len(allr)
+            return
+        out["rows"].extend((rid, lg or "-", seg_max[:10]) for rid in seg_rows)
+        out["cold"] += len(seg_rows)
+
+    stop = False
+    for sql, args in _scan_sql(cursor):
+        cur = con.execute(sql, args)
+        try:
+            for rid, s, lg, sk, seen in cur:
+                key = (s, lg, sk)
+                if key != seg:
+                    close_segment()
+                    if seg is not None:
+                        out["cursor"] = seg
+                        if (len(out["rows"]) >= emit_rows or out["scanned"] >= max_rows or
+                                (deadline is not None and time.time() > deadline)):
+                            stop = True
+                            break
+                    seg, seg_rows, seg_max = key, [], ""
+                out["scanned"] += 1
+                seg_rows.append(rid)
+                if seen and seen > seg_max:
+                    seg_max = seen
+        finally:
+            cur.close()                                 # no statement stays open while parts write
+        if stop:
+            break
+    if not stop:                                        # the end of the index: the last segment is complete
+        close_segment()
+        out["cursor"], out["lap_done"] = None, True
+    out["seconds"] = round(time.time() - t0, 3)
+    return out
+
+
+def _state_path():
+    return config.DATA_DIR / "archive" / "scan_state.json"
+
+
+def _write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(value, separators=(",", ":"), default=str), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _read_json(path):
+    try:
+        v = json.loads(path.read_text(encoding="utf-8"))
+        return v if isinstance(v, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _kind_sql(kinds):
+    for k in kinds:
+        if k not in ("offer", "stat", "context"):        # constants only: they are written into the SQL text
+            raise ValueError(f"kind {k!r} is never archived")
+    return "kind = 'offer'" if tuple(kinds) == ("offer",) else "kind IN (" + ", ".join(f"'{k}'" for k in kinds) + ")"
+
+
+def part_sql(kinds=("offer",)):
+    """The part statements. NOT INDEXED (drain-1119): with "kind = 'offer'" SQLite chose the partial index
+    records_feed_seen (kind=?) and walked EVERY hot offer entry per statement (~1.4 GB read per 5,000-row part on a
+    live-sized store, ~930 MB of it inside the write transaction); NOT INDEXED forces rowid lookups of exactly these
+    rids, whatever the planner's statistics say."""
+    k = _kind_sql(kinds)
+    return {"stat": "SELECT COUNT(*), TOTAL(rid), MAX(COALESCE(last_seen_at, '')), TOTAL(seen_count) FROM records "
+                    f"NOT INDEXED WHERE rid IN (SELECT r FROM temp.arch_ids) AND {k}",
+            "delete": f"DELETE FROM records NOT INDEXED WHERE rid IN (SELECT r FROM temp.arch_ids) AND {k}"}
+
+
+def _archive_part(con, league, day, rids, now_s, kinds=("offer",), adir=None, label="offer", preset=6):
+    """Archive one part: exactly these rids (all of kind in `kinds`) into one verified file in adir (default: the
+    NBA / NFL store's archive/records), manifest kind `label`, file name '<label>-<league>-<day>-<seq>.jsonl.xz'."""
+    sql = part_sql(kinds)
+    adir = Path(adir) if adir is not None else archive_dir()
     adir.mkdir(parents=True, exist_ok=True)
     try:
         import shutil
@@ -531,15 +690,14 @@ def _archive_part(con, league, day, rids, now_s):
         free = None
     if free is not None and free < DISK_FLOOR_MB:
         raise RuntimeError(f"disk free {free:.0f} MB < floor {DISK_FLOOR_MB:.0f} MB - archive postponed")
-    seq = con.execute("SELECT COALESCE(MAX(seq) + 1, 0) FROM archive_files WHERE kind='offer' AND league IS ? AND day=?",
-                      (league, day)).fetchone()[0]
-    name = f"offer-{league}-{day}-{seq:04d}.jsonl.xz"
+    seq = con.execute("SELECT COALESCE(MAX(seq) + 1, 0) FROM archive_files WHERE kind=? AND league IS ? AND day=?",
+                      (label, league, day)).fetchone()[0]
+    name = f"{label}-{league}-{day}-{seq:04d}.jsonl.xz"
     final, tmp = adir / name, adir / f".{name}.tmp"
     con.execute("CREATE TEMP TABLE IF NOT EXISTS arch_ids (r INTEGER PRIMARY KEY)")
     con.execute("DELETE FROM temp.arch_ids")
     con.executemany("INSERT INTO temp.arch_ids (r) VALUES (?)", ((r,) for r in rids))
-    stat = con.execute("SELECT COUNT(*), TOTAL(rid), MAX(COALESCE(last_seen_at, '')), TOTAL(seen_count) FROM records "
-                       "WHERE rid IN (SELECT r FROM temp.arch_ids) AND kind = 'offer'").fetchone()
+    stat = con.execute(sql["stat"]).fetchone()
     rows = con.execute("SELECT * FROM records WHERE rid IN (SELECT r FROM temp.arch_ids) "
                        "ORDER BY event_id, player_id, source, source_key, revision").fetchall()
     # event-clustered and identity-contiguous: an event's offers sit in few files, an identity's revisions are
@@ -547,7 +705,7 @@ def _archive_part(con, league, day, rids, now_s):
     if len(rows) != len(rids):
         raise RuntimeError("archive candidates changed before the write")
     h = hashlib.sha256()
-    with lzma.open(tmp, "wb", preset=6) as f:
+    with lzma.open(tmp, "wb", preset=preset) as f:
         for r in rows:
             ln = _line(r) + b"\n"
             h.update(ln)
@@ -572,18 +730,17 @@ def _archive_part(con, league, day, rids, now_s):
     dims = {}
     con.execute("BEGIN IMMEDIATE")
     try:
-        again = con.execute("SELECT COUNT(*), TOTAL(rid), MAX(COALESCE(last_seen_at, '')), TOTAL(seen_count) FROM "
-                            "records WHERE rid IN (SELECT r FROM temp.arch_ids) AND kind = 'offer'").fetchone()
+        again = con.execute(sql["stat"]).fetchone()
         if tuple(again) != tuple(stat):
             raise RuntimeError(f"rows of {name} changed during the archive; nothing removed")
         cur = con.execute("INSERT INTO archive_files (file, kind, league, day, seq, rows, sha256, bytes, min_rid, max_rid, "
                           "archived_at, version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                          (name, "offer", league, day, seq, len(rows), digest, size, min(r["rid"] for r in rows),
+                          (name, label, league, day, seq, len(rows), digest, size, min(r["rid"] for r in rows),
                            max(r["rid"] for r in rows), now_s, VERSION))
         fid = cur.lastrowid
         _step("manifest", final=final)
         _write_index2(con, rows, fid, dims)
-        cur = con.execute("DELETE FROM records WHERE rid IN (SELECT r FROM temp.arch_ids) AND kind = 'offer'")
+        cur = con.execute(sql["delete"])
         if cur.rowcount != len(rows):
             raise RuntimeError(f"delete of {name} touched {cur.rowcount} rows, expected {len(rows)}")
         _step("deleted", final=final)
@@ -644,9 +801,9 @@ def _write_index2(con, rows, fid, dims):
         con.executemany("INSERT INTO arch_text (rid, record_id, known_at) VALUES (?,?,?)", texts)
 
 
-def _remove_stale_tmp():
+def _remove_stale_tmp(adir=None):
     n = 0
-    d = archive_dir()
+    d = Path(adir) if adir is not None else archive_dir()
     if d.exists():
         for f in d.glob(".*.tmp"):
             try:
@@ -657,14 +814,14 @@ def _remove_stale_tmp():
     return n
 
 
-def _remove_orphans(con):
+def _remove_orphans(con, adir=None, label="offer"):
     """Final files without a manifest row (a crash between rename and commit): their rows are still hot - redone."""
-    d = archive_dir()
+    d = Path(adir) if adir is not None else archive_dir()
     if not d.exists():
         return 0
     listed = {r[0] for r in con.execute("SELECT file FROM archive_files")}
     n = 0
-    for f in d.glob("offer-*.jsonl.xz"):
+    for f in d.glob(f"{label}-*.jsonl.xz"):
         if f.name not in listed:
             f.unlink()
             n += 1
@@ -674,13 +831,17 @@ def _remove_orphans(con):
 LAST_PASS = "last_pass.json"                           # admin ops: how far the latest pass got (even a killed one)
 
 
-def _write_last_pass(out, t0, finished):
+def _write_last_pass(out, t0, finished, prog=None):
     """The pass's own result without the file list, written after every stage, after every part and at the end: a pass that is killed
     (cap / timeout) or interrupted still says where it stopped. A record only - never a reason for the pass to fail."""
     try:
         d = archive_dir()
         d.mkdir(parents=True, exist_ok=True)
         rec = {k: v for k, v in out.items() if k != "parts"}
+        rec.pop("progress", None)
+        if prog:                                        # drain-1119: the pass's progress numbers (rows moved, scan
+            rec.update({k: v for k, v in prog.items() if k not in ("parts", "started_at", "finished", "took_s")})
+            rec["started_utc"] = prog.get("started_at")  # seconds, per-part times, cursor, remaining estimate)
         rec.update(parts_done=len(out["parts"]), started_at=round(t0), written_at=round(time.time()),
                    pid=os.getpid(), finished=finished)
         tmp = d / f".{LAST_PASS}.{os.getpid()}.tmp"
@@ -702,52 +863,108 @@ def last_pass(max_bytes=65536):
         return None
 
 
-def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
-    """One bounded pass. time_budget_s covers the WHOLE pass (setup + candidate scan + parts): the scan is interrupted
-    at the budget (SQLite progress handler), no part starts once the budget is spent or when the slowest part so far
-    would not end inside it, and the closing WAL checkpoint waits at most 5 s for readers."""
+def _has_scan_index(con):
+    try:
+        return con.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='records_offer_seen'").fetchone() \
+            is not None
+    except sqlite3.Error:
+        return False
+
+
+def _cursor_of(v):
+    return tuple(v) if isinstance(v, (list, tuple)) and len(v) == 3 else None
+
+
+def run_pass(con=None, now=None, max_parts=None, time_budget_s=1200):
+    """One bounded pass. time_budget_s covers the WHOLE pass (setup + candidate scans + parts): scan batches and parts
+    alternate until the budget is spent - no scan batch runs past the budget, no part starts when the slowest part so
+    far would not end inside it (so the canonical lock is held at most budget + one part), and the closing WAL
+    checkpoint waits at most 5 s for readers. max_parts (None = no cap) bounds the parts of one pass.
+    Progress is written to archive/last_pass.json after every part (ops reads it; a killed pass still shows what it
+    moved) and the scan's resume key to archive/scan_state.json."""
     from . import store
     own = con is None
     con = con or store.connect()
     con.isolation_level = None
+    try:
+        con.execute(f"PRAGMA cache_size = -{CACHE_KB}")
+    except sqlite3.Error:
+        pass
     out = {"at": None, "parts": [], "rows": 0, "bytes": 0, "error": None, "stages": []}
     t0 = time.time()
     deadline = t0 + time_budget_s
+    prog = {"started_at": datetime.now(timezone.utc).strftime(TS), "budget_s": time_budget_s, "finished": False,
+            "rows_moved": 0, "parts": 0, "bytes": 0, "scan_s": 0.0, "scan_batches": 0, "rows_scanned": 0,
+            "cold_rows_found": 0, "part_s_max": None, "part_s_mean": None, "part_rows_min": None,
+            "part_rows_max": None, "stopped": None, "error": None}
+    part_s = []
+    state = {}
 
     def stage(name):
         out["stages"].append((name, round(time.time() - t0, 1)))
-        _write_last_pass(out, t0, False)
-    _write_last_pass(out, t0, False)
+        _write_last_pass(out, t0, False, prog)
+
+    _write_last_pass(out, t0, False, prog)
+
+    def save(final=False):
+        prog["part_s_max"] = round(max(part_s), 2) if part_s else None
+        prog["part_s_mean"] = round(sum(part_s) / len(part_s), 2) if part_s else None
+        try:
+            if state:
+                _write_json(_state_path(), state)
+            if final:
+                prog["finished"] = True
+                prog["finished_at"] = datetime.now(timezone.utc).strftime(TS)
+                try:
+                    prog["freelist_pages"] = con.execute("PRAGMA freelist_count").fetchone()[0]
+                    prog["page_count"] = con.execute("PRAGMA page_count").fetchone()[0]
+                except sqlite3.Error:
+                    pass
+        except OSError:                                 # progress files never fail a pass
+            pass
+        _write_last_pass(out, t0, final, prog)          # admin ops (archive_dir()/last_pass.json); never raises
+
+    def do_part(league, day, rids):
+        tp = time.time()
+        r = _archive_part(con, league, day, rids, out["at"])
+        part_s.append(time.time() - tp)
+        out["parts"].append(r["file"])
+        out["rows"] += r["rows"]
+        out["bytes"] += r["bytes"]
+        prog.update(rows_moved=out["rows"], parts=len(out["parts"]), bytes=out["bytes"])
+        prog["part_rows_min"] = min(prog["part_rows_min"] or r["rows"], r["rows"])
+        prog["part_rows_max"] = max(prog["part_rows_max"] or 0, r["rows"])
+        return part_s[-1]
+
     try:
         ensure_schema(con)
         install(con)
         now = now or datetime.now(timezone.utc)
-        out["at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        out["at"] = now.strftime(TS)
+        prog["now"] = out["at"]
         out["removed_tmp"] = _remove_stale_tmp()
         out["removed_orphans"] = _remove_orphans(con)
         stage("setup")
-        con.set_progress_handler(lambda: 1 if time.time() > deadline else 0, PROGRESS_OPS)
-        try:
-            parts = candidates(con, now, max_rows=max_parts * PART_ROWS + 1)
-        finally:
-            con.set_progress_handler(None, 0)
-        stage("candidates")
-        out["pending_parts"] = len(parts)
-        out["more_pending"] = sum(len(r) for _l, _d, r in parts) > max_parts * PART_ROWS
-        _write_last_pass(out, t0, False)
-        slowest = 0.0
-        for league, day, rids in parts[:max_parts]:
-            if time.time() + slowest > deadline:
-                out["stopped"] = "time budget"
-                break
-            tp = time.time()
-            r = _archive_part(con, league, day, rids, out["at"])
-            slowest = max(slowest, time.time() - tp)
-            out["parts"].append(r["file"])
-            out["rows"] += r["rows"]
-            out["bytes"] += r["bytes"]
-            _write_last_pass(out, t0, False)            # a pass killed mid-way still shows the parts it finished
-        stage("parts")
+        if not _has_scan_index(con):                    # store before migration 8: the former single candidate list
+            con.set_progress_handler(lambda: 1 if time.time() > deadline else 0, PROGRESS_OPS)
+            try:
+                parts = candidates(con, now, max_rows=(max_parts or 40) * PART_ROWS + 1)
+            finally:
+                con.set_progress_handler(None, 0)
+            stage("candidates")
+            out["pending_parts"] = len(parts)
+            slowest = 0.0
+            for league, day, rids in parts[:max_parts or 40]:
+                if time.time() + slowest > deadline:
+                    out["stopped"] = "time budget"
+                    break
+                slowest = max(slowest, do_part(league, day, rids))
+                save()
+            stage("parts")
+        else:
+            out["stopped"] = _drain(con, now, deadline, max_parts, out, prog, do_part, save, stage, state)
+            if out["stages"][-1][0] != "parts":
+                stage("parts")
         try:                                            # bounded wait on readers (was the store's 30 s busy timeout)
             con.execute("PRAGMA busy_timeout=5000")
             con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -760,24 +977,169 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
         out["error"] = f"{type(e).__name__}: {str(e)[:300]}"
     finally:
         out["took_s"] = round(time.time() - t0, 2)
-        _write_last_pass(out, t0, True)
+        prog["stopped"] = out.get("stopped")
+        prog["error"] = out["error"]
+        save(final=True)
         if own:
             con.close()
     return out
 
 
-def verify(con=None):
-    """Re-read every manifest-listed file: rows, sha256 and the archive_rows count per file must match."""
+def _drain(con, now, deadline, max_parts, out, prog, do_part, save, stage, state):
+    """The streaming loop: scan batch -> parts of PART_ROWS rows per (league, day) -> next batch, until the budget.
+    A (league, day) group under PART_ROWS waits for the next batch (fewer, fuller files) and is written once the scan
+    reaches the end, the held rows reach PENDING_MAX, or the last 15 % of the budget (>= 20 s) begins. Rows still held
+    at the end stay hot; the saved resume key points before the oldest of them, so the next pass sees them again."""
+    cutoff = (now - timedelta(hours=AFTER_H)).strftime(TS)
+    saved = _read_json(_state_path())
+    cursor = _cursor_of(saved.get("cursor"))
+    started_at_cursor = cursor is not None
+    lap = dict(saved.get("lap") or {"scanned": 0, "cold": 0})
+    last_lap = saved.get("last_lap") or None
+    flush_reserve = max(20.0, 0.15 * (deadline - time.time()))
+    # an upper bound on the hot rows without a COUNT (which walks every index entry): rowids ever handed out minus the
+    # rows already in archive files (O(log n) + the small manifest). Other kinds and deleted rows make it an upper bound.
+    try:
+        top = con.execute("SELECT MAX(rid) FROM records").fetchone()[0] or 0
+        gone = con.execute("SELECT COALESCE(SUM(rows), 0) FROM archive_files").fetchone()[0] or 0
+        hot_upper0 = max(0, int(top) - int(gone))
+    except sqlite3.Error:
+        hot_upper0 = None
+    pending = OrderedDict()                             # (league, day) -> [rids]   (scan order)
+    first_mark = {}                                     # (league, day) -> (seq, resume key from before its oldest rid)
+    emitted, slowest, exhausted, wrapped, stopped, seq, n_pending = set(), 0.0, False, False, None, 0, 0
+    held = set()                                        # rids in `pending`
+
+    def update_state():
+        resume = min(first_mark.values(), key=lambda m: m[0])[1] if first_mark else cursor
+        share = None
+        if lap["scanned"]:
+            share = lap["cold"] / lap["scanned"]
+        elif last_lap and last_lap.get("scanned"):
+            share = last_lap["cold"] / last_lap["scanned"]
+        state.clear()
+        state.update(cursor=list(resume) if resume else None, lap=dict(lap), last_lap=last_lap, cutoff=cutoff,
+                     updated_at=datetime.now(timezone.utc).strftime(TS))
+        prog["cold_rows_held"] = n_pending
+        prog["lap_rows_scanned"] = lap["scanned"]
+        prog["last_lap"] = last_lap
+        prog["cursor"] = state["cursor"]
+        # cold rows not yet moved: those held + the cold share of the rows this lap has not read yet (a lap read in
+        # full in this pass leaves only the held rows). An estimate - None until one full lap was read.
+        hot_upper = None if hot_upper0 is None else max(0, hot_upper0 - prog["rows_moved"])
+        prog["hot_rows_upper_bound"] = hot_upper
+        if exhausted:
+            prog["remaining_estimate_rows"] = n_pending
+            prog["remaining_basis"] = "full lap read in this pass"
+        elif last_lap and share is not None:
+            prog["remaining_estimate_rows"] = int(n_pending + share * max(0, last_lap["scanned"] - lap["scanned"]))
+            prog["remaining_basis"] = "last full lap's cold share"
+        elif share is not None and hot_upper is not None:
+            # before the first full lap: this lap's cold share x the rows it has not read yet (from the upper bound)
+            prog["remaining_estimate_rows"] = int(n_pending + share * max(0, hot_upper0 - lap["scanned"]))
+            prog["remaining_basis"] = "current lap's cold share x hot-row upper bound (rough)"
+        else:
+            prog["remaining_estimate_rows"] = None
+            prog["remaining_basis"] = None
+
+    while True:
+        if max_parts and len(out["parts"]) >= max_parts:
+            stopped = "max parts"
+            break
+        left = deadline - time.time()
+        if left <= slowest:
+            stopped = "time budget"
+            break
+        final = exhausted or left < flush_reserve
+        scanned_now = False
+        if not final and n_pending < PENDING_MAX:
+            mark_before = cursor
+            b = scan(con, cutoff, cursor, deadline=deadline - slowest, emitted=emitted)
+            scanned_now = True
+            prog["scan_s"] = round(prog["scan_s"] + b["seconds"], 2)
+            prog["scan_batches"] += 1
+            prog["rows_scanned"] += b["scanned"]
+            prog["cold_rows_found"] += b["cold"]
+            lap["scanned"] += b["scanned"]
+            lap["cold"] += b["cold"]
+            for rid, lg, day in b["rows"]:
+                if rid in held:                         # rescanned after a wrap while still held: once only
+                    continue
+                held.add(rid)
+                g = pending.get((lg, day))
+                if g is None:
+                    g = pending[(lg, day)] = []
+                if not g:
+                    seq += 1
+                    first_mark[(lg, day)] = (seq, mark_before)
+                g.append(rid)
+            n_pending = len(held)
+            cursor = b["cursor"]
+            if b["lap_done"]:
+                last_lap = {"scanned": lap["scanned"], "cold": lap["cold"],
+                            "finished_at": datetime.now(timezone.utc).strftime(TS)}
+                lap = {"scanned": 0, "cold": 0}
+                if wrapped or not started_at_cursor:
+                    exhausted = True                    # the whole index was read in this pass
+                wrapped = True
+            stage("candidates")
+        groups = sorted(pending.items(), key=lambda kv: -len(kv[1]))
+        work = [(key, g[i:i + PART_ROWS]) for key, g in groups for i in range(0, len(g) - len(g) % PART_ROWS, PART_ROWS)]
+        if not work and (final or n_pending >= PENDING_MAX or not scanned_now):
+            work = [(key, list(g)) for key, g in groups if g]       # the remainders, largest first
+        if not work:
+            if not scanned_now or (exhausted and not n_pending):
+                stopped = "done" if exhausted and not n_pending else ("time budget" if final else "held")
+                break
+            update_state()
+            save()
+            continue
+        stop = False
+        for key, rids in work:
+            if max_parts and len(out["parts"]) >= max_parts:
+                stop, stopped = True, "max parts"
+                break
+            if time.time() + slowest > deadline:
+                stop, stopped = True, "time budget"
+                break
+            slowest = max(slowest, do_part(key[0], key[1], rids))
+            done = set(rids)
+            rest = [r for r in pending[key] if r not in done]
+            held.difference_update(done)
+            n_pending = len(held)
+            if rest:
+                pending[key] = rest
+            else:
+                del pending[key]
+                first_mark.pop(key, None)
+            update_state()
+            save()
+        stage("parts")
+        if stop:
+            break
+        if exhausted and not n_pending:
+            stopped = "done"
+            break
+    update_state()
+    out["pending_parts"] = sum(-(-len(g) // PART_ROWS) for g in pending.values())
+    out["more_pending"] = bool(n_pending) or not exhausted
+    return stopped
+
+
+def verify(con=None, adir=None):
+    """Re-read every manifest-listed file: rows, sha256 and the archive_rows count per file must match. adir: the
+    store's archive directory (default: the NBA / NFL store's; a soccer / tennis store passes its own)."""
     from . import store
     own = con is None
     con = con or store.connect()
+    base = Path(adir) if adir is not None else archive_dir()
     out = {"files": 0, "rows": 0, "bad": []}
     try:
         if not _has_tables(con):
             return out
         for fid, name, rows, sha in con.execute("SELECT id, file, rows, sha256 FROM archive_files").fetchall():
             try:
-                n, d, _ = _read_file(archive_dir() / name)
+                n, d, _ = _read_file(base / name)
                 idx = con.execute("SELECT COUNT(*) FROM archive_rows WHERE file = ?", (fid,)).fetchone()[0] + (
                     con.execute("SELECT COUNT(*) FROM arch_revs r JOIN arch_segs g ON g.id = r.seg WHERE g.file = ?",
                                 (fid,)).fetchone()[0] if _has2(con) else 0)
@@ -797,18 +1159,22 @@ def verify(con=None):
     return out
 
 
-def stats(con):
+def stats(con, hot=True):
+    """Archive manifest totals; hot=True adds the hot offer COUNT (walks every offer index entry - the CLI only, never
+    the web process: ops passes hot=False)."""
     if not _has_tables(con):
         return {"files": 0, "rows": 0, "file_mb": 0.0}
     f, r, b = con.execute("SELECT COUNT(*), TOTAL(rows), TOTAL(bytes) FROM archive_files").fetchone()
-    return {"files": f, "rows": int(r), "file_mb": round(b / 1e6, 2),
-            "hot_offer_rows": con.execute("SELECT COUNT(*) FROM records WHERE kind='offer'").fetchone()[0]}
+    out = {"files": f, "rows": int(r), "file_mb": round(b / 1e6, 2)}
+    if hot:
+        out["hot_offer_rows"] = con.execute("SELECT COUNT(*) FROM records WHERE kind='offer'").fetchone()[0]
+    return out
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m sports.archive")
     p.add_argument("cmd", choices=("pass", "verify", "stats"))
-    p.add_argument("--max-parts", type=int, default=40)
+    p.add_argument("--max-parts", type=int, default=None)
     p.add_argument("--time-budget-s", type=int, default=1200)
     a = p.parse_args(argv)
     from . import flags, store

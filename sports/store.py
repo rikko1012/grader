@@ -282,9 +282,22 @@ def _current_row(con, kind, source, source_key):
                        "ORDER BY revision DESC LIMIT 1", (kind, source, source_key)).fetchone()
 
 
-def _span(kind):
-    """The table a read of `kind` uses: only offers are ever archived (sports/archive.py), every other kind is hot."""
-    return "records_all" if kind == "offer" else "records"
+def archived_kinds(con):
+    """Kinds besides offers this store archives (meta 'archived_kinds', set by sports/expansion_compact.py before its
+    first part - soccer / tennis competition stores only; the NBA / NFL store never sets it). -> set."""
+    try:
+        row = con.execute("SELECT v FROM main.meta WHERE k = 'archived_kinds'").fetchone()
+    except sqlite3.Error:
+        return set()
+    return set(row[0].split(",")) if row and row[0] else set()
+
+
+def _span(kind, con=None):
+    """The table a read of `kind` uses: offers are archived (sports/archive.py), and the kinds a store marks archived
+    (archived_kinds); every other kind is hot."""
+    if kind == "offer" or (con is not None and kind in archived_kinds(con)):
+        return "records_all"
+    return "records"
 
 
 def _archived_current(con, kind, source, source_key):
@@ -373,6 +386,12 @@ def _put(con, rec, known_at):
         last = tail[0]
         if cur is None:                         # its current revision is archived: the late rule still applies
             cur = _archived_current(con, rec.KIND, source, source_key)
+            # drain-1119: an archived soccer / tennis result re-read unchanged (a final's 24 h re-read) is a duplicate,
+            # never a new revision. Offers keep their rule (a returning offer is a new revision); the NBA / NFL store
+            # archives offers only, so nothing changes there.
+            if (cur is not None and rec.KIND != "offer" and rec.KIND in archived_kinds(con)
+                    and str(cur["content_hash"]).split("~", 1)[0] == h):
+                return {"status": "duplicate", "record_id": cur["record_id"], "revision": cur["revision"]}
     late = 0
     if cur is not None and rec.KIND != "forecast":
         late = int(is_late(obs, src, *current_times(cur)))
@@ -576,14 +595,14 @@ def row_meta(con, record_id):
 
 def revisions(con, kind, source, source_key):
     """Every stored revision, oldest first: [(meta, record)]."""
-    rows = con.execute(f"SELECT * FROM {_span(kind)} WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
+    rows = con.execute(f"SELECT * FROM {_span(kind, con)} WHERE kind=? AND source=? AND source_key=? ORDER BY revision",
                        (kind, source, source_key)).fetchall()
     return [({k: r[k] for k in ("record_id", "revision", "known_at", "content_hash", "late", "origin", "last_seen_at",
                                 "observed_at", "source_updated_at")}, _rec(r)) for r in rows]
 
 
 def latest(con, kind, source, source_key, as_of=None):
-    q = f"SELECT * FROM {_span(kind)} WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL}"
+    q = f"SELECT * FROM {_span(kind, con)} WHERE kind=? AND source=? AND source_key=? AND {CURRENT_SQL}"
     a = [kind, source, source_key]
     if as_of:
         q += " AND known_at <= ?"
@@ -604,7 +623,10 @@ def _latest_rows(con, kind, where, args, as_of, limit, scoped=False, stream=Fals
     """CURRENT revision per identity (store.CURRENT_SQL) among rows matching `where`, known at as_of. A CURRENT (as_of
     None) league-wide offer listing reads the hot window (offers seen in the last SPORTS_ARCHIVE_AFTER_H); point-in-time
     and event / player scoped reads span hot + archive (records_all) - sports/archive.py."""
-    tbl = "records" if (kind != "offer" or (as_of is None and not scoped)) else "records_all"   # only offers archive
+    if kind == "offer":                             # offers archive; a current league-wide listing is the hot window
+        tbl = "records" if (as_of is None and not scoped) else "records_all"
+    else:                                           # soccer / tennis stores may archive stat / context (archived_kinds)
+        tbl = "records_all" if kind in archived_kinds(con) else "records"
     cond = f"kind = ? AND {CURRENT_SQL}" + (f" AND {where}" if where else "")
     a = [kind] + list(args)
     if as_of:
