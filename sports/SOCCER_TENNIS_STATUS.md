@@ -158,3 +158,33 @@ New-sport forecast/settlement validation is still incomplete: they are excluded
 from generated/tracked slips and Public Record, not represented as validated
 grades. CS2/LoL/NBA/NFL continue their existing grading paths. No paid-resource
 changes are part of this correction.
+
+## PrizePicks soccer per-league tabs (2026-11-19, ppsoccer-1119)
+
+PrizePicks moved soccer from the single SOCCER tab (league 82) into one tab per league (member report: Liga MX,
+MLS and Serie A props missing). The soccer quotes job now reads every mapped tab:
+
+- Exact table `expansion_offers.PP_SOCCER_LEAGUES`: 82 SOCCER (mixed, no pin, read exactly as before), 14 EPL eng.1,
+  6 MLS usa.1, 536 Liga MX mex.1, 534 Serie A ita.1, 531 La Liga esp.1, 533 Bundesliga ger.1, 535 Ligue 1 fra.1,
+  79 UCL uefa.champions. A tab is read only when `/leagues` (read at most hourly; cached list trusted 24 h, then
+  every mapped tab is tried) lists it with projections under the exact same name. 1H / 2H child tabs, SOCCERSZN (262)
+  and WORLD CUP TRNY (457) are never read. A new soccer-icon tab with lines is only reported
+  (`pp_soccer_tab_unmapped`): HANDBALL carries the same icon.
+- Per-league rows are filtered by numeric `league_id`, keep standard lines only, and carry `pp_league`,
+  `competition_code` (identity resolves only against a fixture of exactly that competition) and `team_aliases` (the
+  game's own full team names, exact equality: "Atlético de San Luis", "Seattle Sounders FC"). Tab-82 rows have none of
+  these keys, so their revisions and forecasts are byte-identical to 5036ce4.
+- Rate limits: tab 82 first every run; at most `SCOUT_SOCCER_PP_MAX_CALLS` (5) PrizePicks requests a run including
+  `/leagues`, none started after `SCOUT_SOCCER_PP_BUDGET_S` (35 s), `SCOUT_PP_GAP_S` (8 s) between any two PrizePicks
+  requests of the soccer and tennis jobs (shared through request-holds.db), and the first 429 / Retry-After hold /
+  failed request stops every further PrizePicks request that run. Tabs whose last good read had no standard line are
+  re-read every 15 min. A tab not read in a run keeps its last good rows with their own `observed_at`; the 300 s rule
+  hides them exactly when they go stale. An empty answer from a tab `/leagues` lists with lines is a failed read.
+- Grading is unchanged: MLS and Liga MX full-match lines stop at `extra_time_scope_unverified` (usa.1 / mex.1 are not
+  regulation-only leagues), passes / tackles / crosses / clearances / dribbles have forecast inputs only for the six
+  FotMob leagues, `shots_assisted` has no collector. Goal + Assist and fantasy-score labels are unmapped, as before.
+- Ops (GET): `expansion_pp_soccer` = per tab `listed`, `parsed`, `kept`, `on_board`, `last_ok_at`, `last_error`,
+  `poll`; plus `calls`, `stopped`, `unmapped_with_lines`, `renamed`.
+- Kill switch: `SCOUT_SOCCER_PP_LEAGUES=0` = the single tab-82 request exactly as at 5036ce4. `SCOUT_SOCCER_PP_MLS`
+  is retired (MLS is tab 6 in the table); it still works only with the kill switch on, as before.
+

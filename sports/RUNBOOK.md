@@ -468,6 +468,9 @@ deploys and health-check failures).
 | expansion_store_large | warn | soccer / tennis history store >= 70 % of `SCOUT_EXPANSION_HISTORY_MB` (512; `backfill_paused` from 100 %) | ops `expansion_storage.<sport>`: `largest`, `mb_24h`, `archive_mb`; is the history job's `compact` / `tidy` running (history-state.json) |
 | expansion_store_full | page | store >= 150 % of the budget: every write stops, today's results included, history exits 1 | same; `SCOUT_EXPANSION_COMPACT` must not be 0 |
 | expansion_quotes_large | warn | a sport's quotes.db >= 80 % of its 250 MB cap (the board stops at the cap) | expansion_board quote history |
+| pp_soccer_tab_stale | warn | a PrizePicks soccer tab with standard lines (or tab 82) has no good read for 15 min | ops `expansion_pp_soccer`: `stopped` (http_429 / retry_after_hold / call_cap / time_budget), the tab's `last_error`; raise `SCOUT_SOCCER_PP_MAX_CALLS` only if `stopped` is `call_cap` |
+| pp_soccer_tab_unmapped | warn | PrizePicks lists a top-level "soccer"-icon tab with lines that is not in `PP_SOCCER_LEAGUES` (never read) | add its exact id / name / competition code to `sports/expansion_offers.py` after checking it is one-match soccer (HANDBALL also carries the soccer icon) |
+| pp_soccer_tab_renamed | warn | a mapped tab id now has another name (no longer read) | check the tab, then update the exact name |
 
 **drain-1119 ops fields.** `feeds.archive.last_pass` is the archive pass's own record (`archive/records/last_pass.json`,
 written after every stage and part - a killed pass still shows what it moved), with the progress numbers: `rows_moved`, `parts`, `scan_s`, `rows_scanned`,

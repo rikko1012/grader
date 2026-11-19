@@ -369,6 +369,26 @@ def alerts(o):
         if st.get("quotes_mb") is not None and st["quotes_mb"] >= 0.8 * st.get("quotes_cap_mb", 250):
             out.append({"level": "warn", "code": "expansion_quotes_large", "detail": {
                 "sport": sport, "quotes_mb": st["quotes_mb"], "cap_mb": st.get("quotes_cap_mb", 250)}})
+    # ppsoccer-1119: a PrizePicks soccer tab with standard lines not read for 15 min, or a soccer tab with lines that
+    # is not in the exact league table (it is never read until a person adds it)
+    pps = o.get("expansion_pp_soccer")
+    if isinstance(pps, dict) and pps.get("leagues"):
+        for lg in pps["leagues"]:
+            if lg.get("poll") == "every_run" and lg.get("fetched"):
+                age = None
+                try:
+                    from .contracts import parse_utc
+                    age = time.time() - parse_utc(lg["last_ok_at"]).timestamp() if lg.get("last_ok_at") else None
+                except (TypeError, ValueError):
+                    pass
+                if age is None or age > 900:
+                    out.append({"level": "warn", "code": "pp_soccer_tab_stale", "detail": {
+                        "id": lg.get("id"), "name": lg.get("name"), "last_ok_at": lg.get("last_ok_at"),
+                        "last_error": lg.get("last_error")}})
+        for lg in pps.get("unmapped_with_lines") or []:
+            out.append({"level": "warn", "code": "pp_soccer_tab_unmapped", "detail": lg})
+        for lg in pps.get("renamed") or []:
+            out.append({"level": "warn", "code": "pp_soccer_tab_renamed", "detail": lg})
     if not o.get("token_configured"):
         out.append({"level": "page", "code": "token_secret_missing", "detail": "SPORTS_TOKEN_SECRET unset or short"})
     return out
@@ -465,6 +485,15 @@ def expansion_storage():
     return out
 
 
+def expansion_pp_soccer():
+    """PrizePicks soccer per-tab counts (2026-11-19): the soccer quotes job's own small status file; no request, no DB."""
+    try:
+        from .expansion_board import pp_soccer_status
+        return pp_soccer_status()
+    except Exception as e:                              # noqa: BLE001 - ops never breaks on it
+        return {"error": type(e).__name__}
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -480,6 +509,7 @@ def ops():
             "sheets_stages": sheets_stages(),
             "grades_daily": settle_stages("model/daily_state.json"),
             "expansion_learning": expansion_learning_status(), "expansion_storage": expansion_storage(),
+            "expansion_pp_soccer": expansion_pp_soccer(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC)),
             "restarts": service_life.recent(10), "cgroup": service_life.cgroup()}
