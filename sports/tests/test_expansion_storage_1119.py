@@ -318,6 +318,7 @@ def test_compaction_in_the_history_job_is_counted_and_switchable(monkeypatch, tm
 def test_storage_status_reads_sizes_and_worker_json_only(monkeypatch, tmp_path):
     monkeypatch.setenv("SCOUT_EXPANSION_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("SCOUT_EXPANSION_HISTORY_MB", "16")
+    monkeypatch.delenv("SCOUT_SOCCER_ENABLED", raising=False)                # the suite also runs with it on
     st = history.storage_status("soccer")                                    # no directory: sane, empty
     assert st["canonical_mb"] is None and st["budget_mb"] == 16 and st["enabled"] is False
     _fill(tmp_path / "soccer" / "eng.1" / "canonical.db", 12)
