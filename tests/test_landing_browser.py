@@ -84,9 +84,10 @@ def test_landing_fits_every_width_with_big_targets_and_the_right_links(browser, 
       }).map(e => e.tagName + '.' + e.className)""", size["width"])
     assert not wide, wide
     small = page.evaluate("""() => [...document.querySelectorAll('a[href],button')].filter(e => {
-        const r = e.getBoundingClientRect(); return r.width && r.height && getComputedStyle(e).visibility !== 'hidden' && (r.height < 44 || r.width < 44)
+        const r = e.getBoundingClientRect(); return r.width && r.height && getComputedStyle(e).visibility !== 'hidden' && (r.height < 43.5 || r.width < 43.5)
       }).map(e => e.textContent.trim() + ' ' + Math.round(e.getBoundingClientRect().width) + 'x' + Math.round(e.getBoundingClientRect().height))""")
-    small = [s for s in small if not s.startswith("Skip to content")]   # the skip link sits off-screen until focused
+    small = [s for s in small if not s.startswith("Skip to content")]
+    # (43.5: the example card's 44 px pause button can read 43.99 mid entrance animation - seen on main 93625b6 too)   # the skip link sits off-screen until focused
     assert not small, small
     signin = page.locator("a", has_text="Sign in with Whop").first
     join = page.locator("a", has_text="Join on Whop").first
@@ -261,4 +262,50 @@ def test_first_screen_with_reviews(browser, base, size, nrev):
     if SHOTS.parts:
         SHOTS.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(SHOTS / f"first-{size['width']}x{size['height']}-{nrev}rev.png"))
+    ctx.close()
+
+
+@pytest.mark.parametrize("size", (SIZES[0], SIZES[-1]), ids=lambda s: str(s["width"]))
+def test_carousel_clamps_real_shaped_reviews(browser, base, size):
+    """Long reviews stay one line on a desktop and two on a phone: a 1,500-character body with line breaks, an unbroken string,
+    an 80-character title and a long full name - no sideways overflow, the same height on every slide."""
+    import reviews
+    long_body = ("The board is the first thing I open every night. " * 30)[:1400] + "\n\nSecond paragraph\nthird line."
+    reviews.upsert("user_l1", "Alexandria Montgomery-Fitzgerald Wellington", {"stars": 4, "title": "", "body": long_body, "name_style": "full"})
+    reviews.upsert("user_l2", "Pat Q", {"stars": 5, "title": "", "body": "x" * 600})
+    reviews.upsert("user_l3", "Sam K", {"stars": 3, "title": ("Title " * 20)[:80], "body": "short body here."})
+    ctx, page, errors = _open(browser, base, size)
+    page.wait_for_selector("#rvq:not([hidden])")
+    line = page.evaluate("parseFloat(getComputedStyle(document.querySelector('#rvq .rvq-s.on blockquote')).lineHeight)")
+    lines = 2 if size["width"] <= 640 else 1
+    heights = set()
+    if SHOTS.parts:
+        SHOTS.mkdir(parents=True, exist_ok=True)
+        page.clock.run_for(1000)
+        page.screenshot(path=str(SHOTS / f"first-{size['width']}x{size['height']}-long-reviews.png"))
+    for i in range(3):
+        assert _idx(page) == i
+        q = page.locator("#rvq .rvq-s.on blockquote").bounding_box()
+        assert q["height"] <= line * lines + 1, (i, q["height"])
+        heights.add(round(page.locator("#rvq").bounding_box()["height"]))
+        assert page.evaluate("document.documentElement.scrollWidth") <= size["width"]
+        r = page.locator("#rvq").bounding_box()
+        assert r["x"] >= 0 and r["x"] + r["width"] <= size["width"]
+        page.locator("#rvq-next").click()
+    assert len(heights) == 1, heights
+    assert not errors
+    ctx.close()
+
+
+def test_carousel_resumes_after_an_arrow_click(browser, base):
+    """A mouse click on an arrow steps once; rotation carries on after the pointer leaves (only keyboard focus holds it)."""
+    seed(3)
+    ctx, page, errors = _open(browser, base)
+    page.wait_for_selector("#rvq:not([hidden])")
+    page.locator("#rvq-next").click()
+    assert _idx(page) == 1
+    page.mouse.move(5, 895)
+    page.clock.run_for(6000)
+    assert _idx(page) == 2
+    assert not errors
     ctx.close()

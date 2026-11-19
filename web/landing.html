@@ -1142,7 +1142,10 @@ footer.foot a:hover{color:#fff;background:#242d39}
       $("#rvq-next").addEventListener("click", function () { stage.setAttribute("aria-live", "polite"); go(cur + 1); plan(); });
       root.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") hold("hover", true); });
       root.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") hold("hover", false); });
-      root.addEventListener("focusin", function () { hold("focus", true); });
+      root.addEventListener("focusin", function (e) {               // keyboard focus holds; a mouse click on an arrow does not
+        var kb = true; try { kb = e.target.matches(":focus-visible"); } catch (_) {}
+        hold("focus", kb);
+      });
       root.addEventListener("focusout", function (e) { if (!root.contains(e.relatedTarget)) hold("focus", false); });
       root.addEventListener("touchstart", function () { clearTimeout(touchT); hold("touch", true); }, { passive: true });
       root.addEventListener("touchend", function () { clearTimeout(touchT); touchT = setTimeout(function () { hold("touch", false); }, 6000); }, { passive: true });
