@@ -62,6 +62,11 @@ def settle(page, scroll=False):
             page.evaluate(f"window.scrollTo(0, {y})")
             page.wait_for_timeout(60)
         page.evaluate("window.scrollTo(0, 0)")
+        # screenshots: stop the hero's example card on its first example (its own sport tab stops the rotation) so the picture
+        # never catches it mid-swap, then wait for its number
+        page.evaluate("(b => b && b.click())(document.querySelector('#hc-nav button'))")
+        page.wait_for_function("(document.getElementById('hc-pct') || {textContent: 'x'}).textContent.trim() !== ''", timeout=10000)
+        page.wait_for_timeout(900)
     page.evaluate("""async () => {
         document.querySelectorAll('.rv, #steps, .gd-plot').forEach(n => n.classList.add('in'));
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));

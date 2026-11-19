@@ -255,7 +255,7 @@ def _seed_reviews(n):
 def test_reviews_carousel_sits_under_the_headline_and_stays_quiet():
     """The carousel is the first thing after the h1 and before the lede; hidden in the HTML until the script finds a review; built
     with textContent only (member text is user text); one reviews request (the cached list) feeds the carousel, the proof card and
-    the reviews line; the rating shows only from ten reviews; newest first, every rating."""
+    the reviews line; the rating shows only from ten reviews; the carousel leads with the newest 4-5 star reviews, then the rest."""
     s = (server.WEB / "landing.html").read_text(encoding="utf-8")
     h1, rvq, lede = s.index('<h1 id="hero-title">'), s.index('<div class="rvq" id="rvq"'), s.index('<p class="lede">')
     assert h1 < rvq < lede

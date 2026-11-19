@@ -628,6 +628,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .rvq-s blockquote{font-size:13px;-webkit-line-clamp:2;line-clamp:2}
   .rvq-dots{display:none}
   .rvq-all{padding-left:6px}
+  .rvq-when{display:none}
   .ctas .btn{flex:1 1 100%}
   .ctas .btn.ghost{display:none}
   .hero-k{font-size:10.5px;letter-spacing:.12em;gap:10px}.hero-k::before{width:20px}
@@ -1129,7 +1130,9 @@ footer.foot a:hover{color:#fff;background:#242d39}
       slides[cur].classList.remove("on"); slides[cur].setAttribute("aria-hidden", "true"); marks[cur].classList.remove("on");
       cur = i;
       slides[cur].classList.add("on"); slides[cur].removeAttribute("aria-hidden"); marks[cur].classList.add("on");
-      who.textContent = slides[cur].lastChild.textContent;         // name and date, shown once beside the arrows
+      var nw = slides[cur].rvq || ["", ""];                        // name and date, shown once beside the arrows
+      who.textContent = nw[0];                                      // (a phone shows the name only: the controls take the room)
+      if (nw[1]) who.appendChild(el("span", "rvq-when", " · " + nw[1]));
       root.setAttribute("data-i", String(cur));
     }
     function slide(r, i, n) {
@@ -1142,7 +1145,8 @@ footer.foot a:hover{color:#fff;background:#242d39}
       q.appendChild(document.createTextNode(String(r.title || r.body || "").replace(/\s+/g, " ").trim()));
       f.appendChild(q);
       var when = day(r.created);
-      f.appendChild(el("figcaption", null, String(r.name || "Member") + (when ? " · " + when : "")));
+      f.rvq = [String(r.name || "Member"), when];
+      f.appendChild(el("figcaption", null, f.rvq[0] + (when ? " · " + when : "")));
       f.setAttribute("aria-hidden", "true");
       return f;
     }
