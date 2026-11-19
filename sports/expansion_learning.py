@@ -254,6 +254,8 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('sport',choices=boards.SPORTS)
     args=p.parse_args()
     if not boards.enabled(args.sport):raise SystemExit('sport disabled')
+    from .expansion_compact import bound_cache
+    bound_cache()                   # drain-1119: archived results are read through a smaller file cache
     print(encode(cycle(args.sport)))
 
 

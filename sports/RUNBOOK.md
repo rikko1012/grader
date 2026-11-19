@@ -465,6 +465,21 @@ deploys and health-check failures).
 | job_starved | warn | a job queued for > 30 min | section 13.4 |
 | disk_80 / disk_90 | warn / page | the sports disk >= 80 % / 90 % used | section 13.3 (enlarge) |
 | snapshot_stale | warn | API on and a prebuilt snapshot older than 3x its max age (or never built) | the `snapshots` job; members fall back to request-time builds (slower, still correct) |
+| expansion_store_large | warn | soccer / tennis history store >= 70 % of `SCOUT_EXPANSION_HISTORY_MB` (512; `backfill_paused` from 100 %) | ops `expansion_storage.<sport>`: `largest`, `mb_24h`, `archive_mb`; is the history job's `compact` / `tidy` running (history-state.json) |
+| expansion_store_full | page | store >= 150 % of the budget: every write stops, today's results included, history exits 1 | same; `SCOUT_EXPANSION_COMPACT` must not be 0 |
+| expansion_quotes_large | warn | a sport's quotes.db >= 80 % of its 250 MB cap (the board stops at the cap) | expansion_board quote history |
+
+**drain-1119 ops fields.** `feeds.archive.last_pass` is the archive pass's own record (`archive/records/last_pass.json`,
+written after every stage and part - a killed pass still shows what it moved), with the progress numbers: `rows_moved`, `parts`, `scan_s`, `rows_scanned`,
+`cold_rows_found`, `part_s_max` / `part_s_mean`, `stopped` (time budget / done / max parts), `cursor` (resume key),
+`last_lap` (rows read in the last full scan of the hot offers), `remaining_estimate_rows` (cold rows not yet moved:
+held + the last lap's cold share of the rows not read yet; before the first full lap, this lap's cold share x
+`hot_rows_upper_bound` = MAX(rid) - archived rows, rough - `remaining_basis` says which), `freelist_pages`. No store
+query for these: the former `archive.stats()` COUNT walked every hot offer index entry and was interrupted with the
+sightings query (`feeds.error = "Busy"`); `feeds.archive.files / rows / file_mb` now come from the small manifest
+only, read before the sightings query. `expansion_storage.<sport>`: canonical MB (stores + their archive files - what the
+budget counts), budget / stop MB, state (ok / warn / backfill_paused / full), the 10 largest competitions, other files
+(quotes.db against 250 MB), growth over the last 24 h - all from stat() and worker-written storage.json.
 
 Esports side: `/health` (unchanged) and, with `SPORTS_API=1`, `/api/sports/admin/gateway` (admin token):
 `token_minted`, `token_refused`, `not_here`, `pages`, mode.
@@ -660,6 +675,24 @@ verified lzma files (`<SPORTS_DATA_DIR>/archive/records/`) with a per-identity i
 archived **185 B / row** (70 B file + 115 B index) = **8.2x**. That copy holds ~11 h of collection (1.69 revisions per
 identity); price-tick identities collect many more revisions over their life, which this index amortises - but the
 lifetime revision count is NOT confirmed from this copy, so the projection uses 8x.
+
+**drain-1119 (pass mechanics):** the candidate scan streams `records_offer_seen` in its own order (no sort, no temp
+file) in bounded batches from a saved resume key (`archive/scan_state.json`), never cutting an identity; the part
+statements look rows up by rowid (`NOT INDEXED`: the planner had walked every hot offer entry per statement, ~1.4 GB
+read per 5,000-row part on a live-sized store, ~930 MB of it inside the write transaction). Scan batches and parts
+alternate until the 600 s budget; the lock is held at most budget + one part.
+
+**Soccer / tennis stores (drain-1119):** each competition store keeps stat / context rows of the last 7 days (and
+any written in the last 48 h) hot; older ones move to `<competition>/archive/records/result-*.jsonl.xz` with the same
+protocol and index (sports/expansion_compact.py, inside the sport's history job, <= 25 s per run; reads are
+byte-identical - research.json, forecasts.json and learning predictions replayed on real stores). Untidied stores
+drop three NBA / NFL-only indexes and VACUUM once (sports/expansion_store.py) - skipped only for time or free disk,
+never for the storage budget (an over-budget store is the one that must shrink). Upkeep gets 25 s per run, or the rest
+of the job's 165 s while the sport holds >= 70 % of its budget or has untidied stores (measured on scratch copies at
+~150 % of a lowered budget: soccer 121 -> 60 MB, tennis 266 -> 88 MB in 1-2 runs, max run 119 s; base stayed at
+121 MB and exited 1 'full'). The soccer / tennis jobs bound the archive-file cache to 6 MB
+(`SCOUT_EXPANSION_ARCHIVE_CACHE_MB`; at 32 MB a tennis run peaked 156-210 MB against its 216 MB cap, at 6 MB 102-105).
+`SCOUT_EXPANSION_COMPACT=0` stops new compaction (archived rows stay readable).
 
 **Growth per day at the Starter cadence** (measured where stated; one night-time 15-min sample - day-time slates
 are busier, hence the range):

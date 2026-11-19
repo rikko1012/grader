@@ -223,9 +223,29 @@ def test_the_budget_covers_the_candidate_scan_and_nothing_is_removed(world, monk
         return real(c, now, max_rows)
     monkeypatch.setattr(archive, "candidates", slow_scan)
     monkeypatch.setattr(archive, "PROGRESS_OPS", 1)
+    # drain-1119: the streaming scan is the default; the former single query is the fallback for a store without
+    # records_offer_seen - that path still interrupts at the budget
+    con.execute("DROP INDEX records_offer_seen")
     out = archive.run_pass(con, now=NOW, time_budget_s=600)
     assert out["error"] and "interrupt" in out["error"].lower() and out["parts"] == []
     assert set(_all_rows(con)) == set(before)                                    # every row still hot
+
+
+def test_the_budget_covers_the_streaming_scan_and_nothing_is_removed(world, monkeypatch):
+    con, before = world[0], world[1]
+    clock = [1000.0]
+    monkeypatch.setattr(archive.time, "time", lambda: clock[0])
+    real = archive.scan
+
+    def slow_scan(*a, **k):
+        clock[0] += 10_000                              # one scan batch outlives the budget
+        return real(*a, **k)
+    monkeypatch.setattr(archive, "scan", slow_scan)
+    out = archive.run_pass(con, now=NOW, time_budget_s=600)
+    assert out["error"] is None and out["parts"] == [] and out["stopped"] == "time budget"
+    assert set(_all_rows(con)) == set(before)                                    # every row still hot
+    lp = archive.last_pass()
+    assert lp["finished"] and lp["rows_moved"] == 0 and lp["stopped"] == "time budget" and lp["cold_rows_held"] > 0
 
 
 def test_no_part_starts_past_the_budget(world, monkeypatch):
@@ -253,7 +273,9 @@ def test_last_pass_record_is_written_after_every_stage_and_survives_a_killed_pas
     out = archive.run_pass(con, now=NOW)
     mid = seen[0]                                      # what a pass killed inside its first part would have left
     assert mid["finished"] is False and [s[0] for s in mid["stages"]] == ["setup", "candidates"]
-    assert mid["pending_parts"] == out["pending_parts"] and mid["pid"] == os.getpid() and "took_s" not in mid
+    # drain-1119: the streaming pass has no single candidate list (pending_parts is what is still held at the end);
+    # what the first scan found is in the record before the first part
+    assert mid["cold_rows_found"] > 0 and mid["rows_moved"] == 0 and mid["pid"] == os.getpid() and "took_s" not in mid
     last = archive.last_pass()
     assert last["finished"] is True and last["error"] is None and "parts" not in last
     assert [s[0] for s in last["stages"]] == ["setup", "candidates", "parts", "checkpoint"]

@@ -394,6 +394,54 @@ def storage_budget_mb():
         return 512
 
 
+# drain-1119: a write is BACKFILL when every match it carries started more than this long ago - a re-read summary, roster,
+# FotMob or theScore detail of a 90-day-old match is history, not a live result. Before, those were stored as "live"
+# and kept writing past the budget up to the 1.5x stop, where even today's results stop. Only matters over budget.
+BACKFILL_AGE_H = 48
+UPKEEP_S = 25        # store upkeep per run, at most (expansion_compact + expansion_store.tidy) ...
+UPKEEP_WARN = 0.7    # ... unless the sport holds >= 70 % of its budget or has untidied stores: then upkeep may use the
+                     # rest of the job's time (a 100-200 MB store's VACUUM does not fit 25 s; over the budget the run
+                     # spends little on backfill anyway)
+JOB_S = 165          # the history job's own end: its scheduler timeout is 180 s (startup + exit margin)
+
+
+def write_phase(feed, competition, phase, catalogs, now=None):
+    """The storage phase of one write: 'live' stays 'live' unless every event the feed names (its matches, or the
+    event of each event-bearing record) is known to have started more than BACKFILL_AGE_H ago. Unknown start = live."""
+    if phase != 'live':
+        return phase
+    now = now or datetime.now(timezone.utc)
+    known = catalogs.get(competition) or {}
+    starts = {m.get('event_id'): m.get('start') for m in getattr(feed, 'matches', None) or []}
+    events = set(starts)
+    for rec in getattr(feed, 'records', None) or []:
+        eid = getattr(rec, 'event_id', None)
+        if eid:
+            events.add(eid)
+    if not events:
+        return phase
+    for eid in events:
+        start = starts.get(eid) or (known.get(eid) or {}).get('start')
+        try:
+            if not start or (now - parse_utc(start)).total_seconds() <= BACKFILL_AGE_H * 3600:
+                return phase
+        except (TypeError, ValueError):
+            return phase
+    return 'backfill'
+
+
+def stored_size(directory):
+    """What the history budget counts: every competition store (canonical.db + WAL + SHM) and its archive files."""
+    total = 0
+    for pattern in ('*/canonical.db*', '*/archive/records/*'):
+        for p in Path(directory).glob(pattern):
+            try:
+                total += p.stat().st_size
+            except OSError:
+                pass
+    return total
+
+
 def collect(sport, max_requests=16, max_seconds=150):
     """One resumable small batch; live dates first, one older date per run.
 
@@ -443,19 +491,17 @@ def collect(sport, max_requests=16, max_seconds=150):
     budget = storage_budget_mb() * 1024 * 1024
 
     def stored_bytes():
-        total = 0
-        for p in directory.glob('*/canonical.db*'):
-            try:
-                total += p.stat().st_size
-            except OSError:
-                pass
-        return total
+        return stored_size(directory)
 
-    def persist(feed, competition, phase='live'):
+    def persist(feed, competition, phase=None):
         """Store one feed. Never raises for the storage budget: backfill is skipped at the budget, everything is
-        skipped at 1.5x it, and the run carries on with the next source. -> True when written."""
+        skipped at 1.5x it, and the run carries on with the next source. -> True when written.
+        phase None (rosters, schedules, summaries, research details): 'live' unless every match it names started
+        more than BACKFILL_AGE_H ago (write_phase). The scoreboard windows pass their own phase, unchanged."""
         path = isolated_database(directory.parent, competition)
         size = stored_bytes()
+        if phase is None:
+            phase = write_phase(feed, competition, 'live', catalogs)
         if size > budget * 1.5 or (phase == 'backfill' and size > budget):
             counts['storage'] = 'full' if size > budget * 1.5 else 'backfill_paused'
             return False
@@ -542,6 +588,11 @@ def collect(sport, max_requests=16, max_seconds=150):
                 pending = [m for matches in catalogs.values() for m in matches.values()
                            if (m.get('competition') in BASE_COMPETITIONS) == bool(base_slots)
                            and summary_due(m, recent, instant)]
+                if stored_bytes() > budget:
+                    # over budget: a summary of a match that started > BACKFILL_AGE_H ago would be declined - never
+                    # spend a request (or a slot) on it; it stays unchecked and is read once there is room again
+                    pending = [m for m in pending if not m.get('start') or
+                               (instant - parse_utc(m['start'])).total_seconds() <= BACKFILL_AGE_H * 3600]
                 # Check imminent offered events first, then the oldest unchecked
                 # summary. Once checked, a game waits its interval and frees the queue.
                 offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
@@ -559,8 +610,8 @@ def collect(sport, max_requests=16, max_seconds=150):
                             match['players'] = players
                         records = parse_summary(summary, actual, eid, now_utc())
                         records.records.extend(parse_context(summary,match,now_utc()).records)
-                        persist(records, actual)
-                        match['summary_checked_at'] = now_utc()
+                        if persist(records, actual):    # declined at the budget: still unchecked, read again later
+                            match['summary_checked_at'] = now_utc()
                     except (net.HttpError, ValueError, OSError) as e:
                         match['summary_attempt_at'] = now_utc()
                         counts['errors'].append(type(e).__name__)
@@ -605,9 +656,116 @@ def collect(sport, max_requests=16, max_seconds=150):
     # When results were last really stored (not when research.json was rebuilt): the freshness members see.
     counts['stored_at'] = now_utc() if counts['records'] else state.get('stored_at')
     counts['research'] = publish(sport, budget_s=15, results_at=counts['stored_at'])
+    # drain-1119: store upkeep in what is left of the job's 180 s, at most UPKEEP_S - lossless: cold results move to
+    # verified archive files (sports/expansion_compact.py, SCOUT_EXPANSION_COMPACT=0 switches it off), then untidied
+    # stores drop their unused indexes and VACUUM (sports/expansion_store.py)
+    job_end = deadline - max_seconds + JOB_S
+    end = min(time.monotonic() + UPKEEP_S, job_end)
+    try:
+        from . import expansion_store
+        untidied = expansion_store.pending(directory)
+        if untidied or stored_bytes() >= UPKEEP_WARN * budget:
+            end = job_end
+            counts['upkeep'] = 'extended'
+    except (OSError, sqlite3.Error):
+        untidied = []
+    try:
+        from . import expansion_compact
+        if expansion_compact.enabled() and end - time.monotonic() > 2:
+            counts['compact'] = expansion_compact.compact_all(directory, (end - time.monotonic()) * (0.4 if untidied else 0.6))
+    except (OSError, sqlite3.Error) as e:
+        counts['compact'] = {'error': type(e).__name__}
+    try:
+        from .expansion_store import tidy
+        if untidied and end - time.monotonic() > 1:
+            counts['tidy'] = tidy(directory, end - time.monotonic())
+    except (OSError, sqlite3.Error) as e:
+        counts['tidy'] = {'error': type(e).__name__}
     counts['finished_at'] = now_utc()
     atomic_json(state_path, {**counts, 'offset': (1 if offset+width>90 else offset+width) if advanced else offset})
+    try:
+        record_storage(directory, stored_bytes(), counts['storage'])
+    except (OSError, ValueError):
+        pass
     return counts
+
+
+STORAGE_SAMPLES_H = 48
+
+
+def record_storage(directory, canonical_bytes, state, now=None):
+    """storage.json (worker-written, read by ops): one (time, canonical bytes) sample per run for the last 48 h and the
+    run's budget state - so ops shows size, growth and state without opening a database."""
+    now = now or datetime.now(timezone.utc)
+    path = Path(directory) / 'storage.json'
+    try:
+        old = json.loads(path.read_text(encoding='utf-8'))
+        samples = [x for x in old.get('samples', []) if isinstance(x, list) and len(x) == 2 and
+                   (now - parse_utc(x[0])).total_seconds() <= STORAGE_SAMPLES_H * 3600]
+    except (OSError, ValueError, AttributeError, TypeError):
+        samples = []
+    samples.append([now.strftime('%Y-%m-%dT%H:%M:%SZ'), int(canonical_bytes)])
+    atomic_json(path, {'at': samples[-1][0], 'canonical_bytes': int(canonical_bytes), 'state': state,
+                       'samples': samples[-600:]})
+
+
+def storage_status(sport, top=10):
+    """Per-sport store sizes for ops - stat() sizes and small worker-written JSON only, never a database open.
+    canonical_mb counts exactly what the history budget counts (stored_size: stores + their archive files)."""
+    directory = boards.root(sport)
+    budget = storage_budget_mb()
+    out = {'enabled': boards.enabled(sport), 'budget_mb': budget, 'stop_mb': round(budget * 1.5, 1),
+           'canonical_mb': None, 'state': None, 'pct_of_budget': None, 'mb_24h': None, 'largest': [],
+           'other_mb': {}, 'quotes_mb': None, 'quotes_cap_mb': 250}
+    if not directory.is_dir():
+        return out
+    comps, other, archived = {}, {}, 0
+    for pattern in ('*/canonical.db*', '*/archive/records/*'):
+        for p in directory.glob(pattern):
+            try:
+                comp = p.parent.name if pattern.startswith('*/canonical') else p.parent.parent.parent.name
+                comps[comp] = comps.get(comp, 0) + p.stat().st_size
+                if not pattern.startswith('*/canonical'):
+                    archived += p.stat().st_size
+            except OSError:
+                pass
+    out['archive_mb'] = round(archived / 1048576, 1)
+    for p in directory.iterdir():
+        try:
+            if p.is_file():
+                key = p.name.split('.db')[0] + '.db' if '.db' in p.name else p.name
+                other[key] = other.get(key, 0) + p.stat().st_size
+        except OSError:
+            pass
+    total = sum(comps.values())
+    out['canonical_mb'] = round(total / 1048576, 1)
+    out['pct_of_budget'] = round(100.0 * total / (budget * 1048576), 1)
+    out['largest'] = [{'competition': c, 'mb': round(b / 1048576, 1)}
+                      for c, b in sorted(comps.items(), key=lambda kv: -kv[1])[:top]]
+    out['competitions'] = len(comps)
+    out['other_mb'] = {k: round(v / 1048576, 2) for k, v in sorted(other.items(), key=lambda kv: -kv[1])[:12]}
+    out['quotes_mb'] = round(other.get('quotes.db', 0) / 1048576, 1)
+    out['state'] = ('full' if total > budget * 1.5 * 1048576 else 'backfill_paused' if total > budget * 1048576
+                    else 'warn' if total > 0.7 * budget * 1048576 else 'ok')
+    try:
+        path = directory / 'storage.json'
+        if path.stat().st_size <= 65536:
+            rec = json.loads(path.read_text(encoding='utf-8'))
+            out['last_run'] = {'at': rec.get('at'), 'state': rec.get('state'),
+                               'mb': round(int(rec.get('canonical_bytes') or 0) / 1048576, 1)}
+            samples = rec.get('samples') or []
+            now = datetime.now(timezone.utc)
+            old = [x for x in samples if (now - parse_utc(x[0])).total_seconds() >= 24 * 3600]
+            base = old[-1] if old else (samples[0] if samples else None)
+            if base:                                    # growth since the newest sample >= 24 h old (else the
+                hours = (now - parse_utc(base[0])).total_seconds() / 3600   # oldest one: a shorter window, stated)
+                out['growth_mb'] = round((total - int(base[1])) / 1048576, 1)
+                out['growth_window_h'] = round(hours, 1)
+                if hours >= 24:
+                    out['mb_24h'] = out['growth_mb']
+    except (OSError, ValueError, AttributeError, TypeError, IndexError):
+        pass
+    return out
 
 
 def results_at(sport):
@@ -707,6 +865,8 @@ def main():
     args = parser.parse_args()
     if not boards.enabled(args.sport):
         raise SystemExit('sport disabled')
+    from .expansion_compact import bound_cache
+    bound_cache()
     result = collect(args.sport)
     print(json.dumps(result))
     # Failure = nothing stored while something went wrong (outage / persisted hold / every write failed / store

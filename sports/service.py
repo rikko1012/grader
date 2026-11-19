@@ -208,6 +208,12 @@ def feed_state():
         p = web.store.db_path()
         out["store_mb"] = round(sum(f.stat().st_size for f in p.parent.glob(p.name + "*")) / 1e6, 1)
         with web.store_ro(budget_s=10) as con:
+            # drain-1119: archive manifest totals only (a small table), FIRST - the former archive.stats() COUNT of
+            # every hot offer walked the whole offer index after the sightings query under this 10 s budget and was
+            # interrupted with it, so ops never showed archive numbers (feeds.error "Busy"). The pass's own progress
+            # (rows moved, scan seconds, remaining estimate) is archive.last_pass below - a file, no query.
+            from . import archive
+            out["archive"] = archive.stats(con, hot=False)
             rows = con.execute(web.store.FEED_SIGHTINGS_SQL).fetchall()
         now = time.time()
         for plat, last in rows:
@@ -218,9 +224,6 @@ def feed_state():
             except Exception:                           # noqa: BLE001
                 pass
             out["platforms"][plat] = {"last_seen": last, "age_min": age}
-        with web.store_ro(budget_s=10) as con:
-            from . import archive
-            out["archive"] = archive.stats(con)
     except FileNotFoundError:
         out["store"] = "not_created"
     except Exception as e:                              # noqa: BLE001
@@ -352,6 +355,20 @@ def alerts(o):
         for name, sn in ((o.get("prebuilt") or {}).get("snapshots") or {}).items():
             if sn.get("age_s") is None or sn["age_s"] > 3 * sn["max_age_s"]:
                 out.append({"level": "warn", "code": "snapshot_stale", "detail": {"snapshot": name, **sn}})
+    # drain-1119: soccer / tennis history stores against their budget (backfill pauses at 100 %, every write stops at
+    # 150 % - live results included); quotes.db stops the board at its own 250 MB cap
+    for sport, st in (o.get("expansion_storage") or {}).items():
+        if not isinstance(st, dict) or not st.get("enabled") or st.get("canonical_mb") is None:
+            continue
+        detail = {"sport": sport, "canonical_mb": st["canonical_mb"], "budget_mb": st.get("budget_mb"),
+                  "state": st.get("state")}
+        if st.get("state") == "full":
+            out.append({"level": "page", "code": "expansion_store_full", "detail": detail})
+        elif st.get("state") in ("backfill_paused", "warn"):
+            out.append({"level": "warn", "code": "expansion_store_large", "detail": detail})
+        if st.get("quotes_mb") is not None and st["quotes_mb"] >= 0.8 * st.get("quotes_cap_mb", 250):
+            out.append({"level": "warn", "code": "expansion_quotes_large", "detail": {
+                "sport": sport, "quotes_mb": st["quotes_mb"], "cap_mb": st.get("quotes_cap_mb", 250)}})
     if not o.get("token_configured"):
         out.append({"level": "page", "code": "token_secret_missing", "detail": "SPORTS_TOKEN_SECRET unset or short"})
     return out
@@ -427,6 +444,27 @@ def expansion_learning_status():
     return out
 
 
+_EXP_STORE = {"t": 0.0, "v": None}
+
+
+def expansion_storage():
+    """Soccer / tennis store sizes against the history budget (stat() + worker JSON only; cached 60 s)."""
+    if _EXP_STORE["v"] is not None and time.time() - _EXP_STORE["t"] < 60:
+        return _EXP_STORE["v"]
+    out = {}
+    try:
+        from .expansion_history import storage_status
+        for sport in ("soccer", "tennis"):
+            try:
+                out[sport] = storage_status(sport)
+            except Exception as e:                      # noqa: BLE001 - ops never breaks on it
+                out[sport] = {"error": type(e).__name__}
+    except Exception as e:                              # noqa: BLE001
+        out = {"error": type(e).__name__}
+    _EXP_STORE.update(t=time.time(), v=out)
+    return out
+
+
 def ops():
     with _SLOCK:
         s = dict(STATS)
@@ -441,7 +479,7 @@ def ops():
             "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
             "sheets_stages": sheets_stages(),
             "grades_daily": settle_stages("model/daily_state.json"),
-            "expansion_learning": expansion_learning_status(),
+            "expansion_learning": expansion_learning_status(), "expansion_storage": expansion_storage(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC)),
             "restarts": service_life.recent(10), "cgroup": service_life.cgroup()}
