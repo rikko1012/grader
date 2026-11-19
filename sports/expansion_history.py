@@ -365,6 +365,24 @@ def fit_matches(rows, recent, limit=CURRENT_MATCHES_BYTES):
     return [r for i, r in enumerate(rows) if i in keep]
 
 
+_SCALARS = (str, int, float, bool, type(None))
+
+
+def load_catalog(text, shared):
+    """json.loads of a matches.json where identical player / participant dicts (an 'id' and a 'name', scalar values
+    only) become ONE object: a player appears in every summarised match of his team, so a 100-day store held ~50x
+    duplicates (measured 113 MB -> 19 MB of Python heap for 13k soccer rows). Same keys, values and order, so every
+    file written from it is byte-identical. Nothing in the history job mutates these leaf dicts (rows and their
+    lists are never shared; new player lists are built from new dicts)."""
+    def hook(d):
+        if 'id' in d and 'name' in d:
+            items = tuple(d.items())
+            if all(isinstance(v, _SCALARS) for _, v in items):
+                return shared.setdefault(items, d)
+        return d
+    return json.loads(text, object_hook=hook)
+
+
 def storage_budget_mb():
     """Per-sport isolated history budget. Backfill stops at it; live, summary and detail writes keep going up to
     1.5x so current results are never frozen by old-date backfill (2026-11-18: a fixed 128 MB cap raised on the
@@ -401,14 +419,14 @@ def collect(sport, max_requests=16, max_seconds=150):
     from .expansion_collect import RESERVE_S, graded_inline, research_on
     research = research_on(sport)
     main_deadline = deadline - min(RESERVE_S, max_seconds / 3) if research else deadline
-    catalogs = {}
+    catalogs, shared = {}, {}
     for comp, (kind, _) in COMPETITIONS.items():
         if kind != sport:
             continue
         path = isolated_database(directory.parent, comp).parent / 'matches.json'
         try:
             if path.stat().st_size <= 5_000_000:
-                catalogs[comp] = json.loads(path.read_text(encoding='utf-8'))
+                catalogs[comp] = load_catalog(path.read_text(encoding='utf-8'), shared)
         except (OSError, ValueError):
             pass
 
@@ -448,7 +466,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             con.close()
         if competition not in catalogs:
             try:
-                catalogs[competition] = json.loads((path.parent / 'matches.json').read_text(encoding='utf-8'))
+                catalogs[competition] = load_catalog((path.parent / 'matches.json').read_text(encoding='utf-8'), shared)
             except (OSError, ValueError):
                 catalogs[competition] = {}
         for match in feed.matches:
@@ -575,6 +593,8 @@ def collect(sport, max_requests=16, max_seconds=150):
     atomic_json(directory / 'current-matches.json',
                 fit_matches([m for matches in catalogs.values() for m in matches.values()
                              if (m.get('start') or '') >= earliest], offered(directory)))
+    catalogs.clear()                                       # publish reads its own bounded files; free the catalogs
+    shared.clear()
     from .expansion_research import publish
     # When results were last really stored (not when research.json was rebuilt): the freshness members see.
     counts['stored_at'] = now_utc() if counts['records'] else state.get('stored_at')

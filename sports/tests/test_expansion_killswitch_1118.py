@@ -367,3 +367,18 @@ def test_history_job_runs_new_rosters_after_the_base_summaries(monkeypatch, tmp_
     new_requests = [i for i, u in enumerate(urls) if '/eng.2/' in u]
     assert len(base_summaries) == 4 and new_requests and min(new_requests) > max(base_summaries)
     assert urls[:11] == [u for u, _ in EXPECTED_53DAD0B_SOCCER[:11]]      # 53dad0b prefix untouched
+
+
+# ------------------------------------------------------------------------------------------------- 4. catalog memory
+def test_shared_leaf_catalog_is_byte_identical_and_shares_players():
+    from sports.expansion_history import load_catalog
+    player = {'id': 'soccer:player:espn:1', 'name': 'Test Player', 'team_id': 'soccer:team:espn:1'}
+    rows = {f'e{i}': {'event_id': f'e{i}', 'scores': {'a': 1.0, 'b': float(i)}, 'players': [dict(player)],
+                      'participants': [{'id': 'a', 'name': 'A FC', 'short_name': 'A'}, {'id': 'b', 'name': 'B'}]}
+            for i in range(5)}
+    text = json.dumps(rows, separators=(',', ':'))
+    shared = load_catalog(text, {})
+    assert json.dumps(shared, separators=(',', ':')) == text == json.dumps(json.loads(text), separators=(',', ':'))
+    assert shared['e0']['players'][0] is shared['e4']['players'][0]           # one object for one player
+    assert shared['e0']['scores'] is not shared['e1']['scores']               # non-leaf / non-identity dicts never shared
+    assert shared['e0']['players'] is not shared['e1']['players']             # lists never shared
