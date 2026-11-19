@@ -164,6 +164,9 @@ def collect_details(catalogs,get,persist,directory,recent=None):
                 if not identity or not str(row.get('id','')).isdigit():continue
                 match,_=identity
                 pending.append((row,competition,match))
+        # Research never takes a graded slot: within the date the original six (forecast inputs) are requested first.
+        # Stable sort, so with only the six (recent={}) the order is FotMob's listing order exactly as at 53dad0b.
+        pending.sort(key=lambda p:p[1] not in ORIGINAL)
         matched={m['event_id'] for _,_,m in pending}
         # Unmatched identities wait one day; request-budget interruption leaves
         # unrequested mapped details pending rather than falsely checked.

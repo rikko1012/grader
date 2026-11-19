@@ -59,3 +59,40 @@ def test_request_budget_does_not_mark_unrequested_detail_complete(tmp_path):
         return listing
     with pytest.raises(StopIteration):collect_details({'bra.1':{'x':m}},get,lambda *a:None,tmp_path)
     assert json.loads((tmp_path/'detail-history-state.json').read_text())=={}
+
+
+def test_same_day_new_league_listed_first_never_displaces_an_original_six_match(tmp_path):
+    """2026-11-18 review: research never takes a graded slot. A new league listed BEFORE an original-six league on
+    the same date must not use the phase's request cap ahead of the six's match (forecast input)."""
+    from sports import expansion_soccer_detail as fm
+
+    def match(comp, n, home, away):
+        return {'event_id': f'soccer:espn:{comp}:{n}:1', 'competition': comp, 'start': '2026-11-15T15:00:00Z',
+                'status': 'final', 'scores': {'a': 1}, 'players': [{'id': 'p'}],
+                'participants': [{'id': f't{home}', 'name': f'Team {home}'}, {'id': f't{away}', 'name': f'Team {away}'}]}
+
+    def row(i, h, a):
+        return {'id': str(i), 'status': {'utcTime': '2026-11-15T15:00:00Z'}, 'home': {'name': f'Team {h}'},
+                'away': {'name': f'Team {a}'}}
+
+    catalogs = {'eng.1': {'a': match('eng.1', 1, 'A', 'B')},
+                'eng.2': {f'x{i}': match('eng.2', 10 + i, f'C{i}', f'D{i}') for i in range(5)}}
+    listing = {'leagues': [{'primaryId': 48, 'matches': [row(100 + i, f'C{i}', f'D{i}') for i in range(5)]},
+                           {'primaryId': 47, 'matches': [row(1, 'A', 'B')]}]}
+    asked = []
+
+    class Cap(Exception):
+        pass
+
+    def get(url, params):
+        if len(asked) >= 6:
+            raise Cap()
+        asked.append(params)
+        return listing if 'date' in params else {'general': {'matchId': params['matchId']}}
+
+    try:
+        fm.collect_details(catalogs, get, lambda *a: None, tmp_path, recent={'eng.2': 'x'})
+    except Cap:
+        pass
+    details = [p['matchId'] for p in asked if 'matchId' in p]
+    assert details[0] == '1'
