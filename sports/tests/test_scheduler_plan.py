@@ -91,7 +91,7 @@ def test_standard_plan_cadences(monkeypatch, tmp_path):
     monkeypatch.setenv("SPORTS_LEAGUES", "nba nfl")
     monkeypatch.setenv("SPORTS_MEMORY_MB", "2048")
     j = scheduler.default_jobs()
-    assert j["prebuilt"]["every_s"] == 45 and j["ui-snapshots-nba"]["every_s"] == 60
+    assert j["prebuilt"]["every_s"] == 600 and j["ui-snapshots-nba"]["every_s"] == 60   # heavy-1118: prebuilt 600 s (was 45)
     assert j["settle"]["every_s"] == j["picks-settle"]["every_s"] == j["slips-settle"]["every_s"] == 900
     assert j["model-forward"]["every_s"] == 1800                                 # exclusive: not tightened on 1 CPU
     c = scheduler.cadence_settings()
@@ -100,7 +100,7 @@ def test_standard_plan_cadences(monkeypatch, tmp_path):
     c = scheduler.cadence_settings()
     assert (c["hot_s"], c["gameday_s"], c["idle_s"], c["kalshi_hot_s"], c["kalshi_idle_s"]) == (300, 600, 900, 1200, 3600)
     j = scheduler.default_jobs()
-    assert j["prebuilt"]["every_s"] == 90 and j["ui-snapshots-nba"]["every_s"] == 180 and j["settle"]["every_s"] == 3600
+    assert j["prebuilt"]["every_s"] == 600 and j["ui-snapshots-nba"]["every_s"] == 180 and j["settle"]["every_s"] == 3600   # prebuilt 600 s (was 90)
 
 
 def _spec(cls, locks=None, league=None, s=1.0, prio=5):

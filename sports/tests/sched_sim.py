@@ -68,7 +68,10 @@ def prod_env(extra=None):
     """The production environment: Render Standard (cgroup 2 GB -> std / two heavy slots), owner budget 1,200 MB."""
     env = {"SPORTS_MEMORY_MB": "2048", "SPORTS_CHILD_BUDGET_MB": "1200", "SPORTS_LEAGUES": "nba nfl",
            "SPORTS_API": "1", "SPORTS_INGEST": "1", "SPORTS_FORECAST": "1", "SPORTS_TRAIN": "", "SPORTS_ASSISTANT": "",
-           "SPORTS_MAX_HEAVY": "", "SPORTS_HEAVY_SLOTS": "", "SPORTS_BOOKS_JOB": "1"}
+           "SPORTS_MAX_HEAVY": "", "SPORTS_HEAVY_SLOTS": "", "SPORTS_BOOKS_JOB": "1",
+           # heavy-1118: soccer / tennis pinned off (the Nov 9 replays had none; the runner's env no longer leaks in);
+           # LIVE_1118_ENV turns them on as live
+           "SCOUT_SOCCER_ENABLED": "", "SCOUT_TENNIS_ENABLED": ""}
     env.update(extra or {})
     return env
 

@@ -183,7 +183,8 @@ def default_jobs():
                           timeout_s=300, flag="SPORTS_ASSISTANT", cap_mb=120, cls=LIGHT, prio=0),
         # what members read
         # heavy-1118: every 600 s (was 45 / 90). After the c7e7114 memory fix a run takes 362-419 s live (112-117 MB), so
-        # at 45 s it was due again 1 s after each exit and kept a heavy slot most of the time; its only reader is the
+        # at 45 s it was due again 1 s after each exit (live it still started only twice in the first 36 min: the drain,
+        # boards, collectors and settle held the slots - the archive fix below is what moves); its only reader is the
         # /sports slips page (web/sports/slips.js, SPORTS_UI, off), served while <= 1,200 s old (web.SNAPSHOTS) - under
         # the 25-min line rule (sports/picks.py STALE_S). Not always met: the replays' longest gap is 20-40 min, set by
         # the model-forward drain + run (every heavy start stops), not by this cadence; a stale pool answers 503

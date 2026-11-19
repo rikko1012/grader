@@ -16,7 +16,11 @@ Why (sports/tests/sched_sim.py with LIVE_1118_RUN_S, and the live state rebuilt 
   * at the snapshot one heavy slot was EMPTY: settle (600 MB - a Render override, the table gives 432) + books (108)
     left 492 MB, an urgent board build (540) did not fit and was held, and nothing passes a held urgent job unless it
     ends first - which the 1.0 s in settle's recent runs rules out (test below; reported, no code change);
-  * prebuilt (every 45 s, 362-419 s a run after the memory fix) was due again 1 s after each exit.
+  * prebuilt (every 45 s, 362-419 s a run after the memory fix) was due again 1 s after each exit - but it was NOT what
+    held the slots in these 36 min: it started twice (0 s and 1,723 s after boot; ops starts=2), the model-forward drain
+    + exclusive run (to 1,596 s) and the boards / collectors / settle did. The replay matches the live first starts
+    (ui-snapshots-nfl 3-4 min, ingest-nba 7-8, model-forward 14-15, ingest-nfl 26-27, settle 29-30; live 3.7 / 7.9 /
+    14.5 / 26.6 / 28.7). At 36 min the head would look the same: archive / settle-post first start 38-41 min.
 
 Fix (scheduling only - no grade / chance / stake / projection / settlement change, no cap change):
   * prebuilt every 600 s, slips_pool served while <= 1,200 s old (< the 25-min line rule, sports/picks.py STALE_S);
@@ -108,10 +112,9 @@ def test_prebuilt_cadence_and_the_slip_pool_age_fit_the_line_rule(monkeypatch):
     assert J["prebuilt"]["urgent_after_s"] == 300 and J["prebuilt"]["cap_mb"] == 288      # unchanged
 
 
-def test_prebuilt_no_longer_holds_a_heavy_slot_most_of_the_time(live):
-    starts = live["starts"]["prebuilt"]
-    busy = len(starts) * sim.LIVE_1118_RUN_S["prebuilt"]
-    assert busy <= 0.5 * live["end"], (len(starts), busy / live["end"])  # at most every 600 s + 400 s run
+# no replay test of prebuilt's slot share: on the live replay c7e7114 already starts it only 11 times in 4 h (min gap
+# 709 s; head 10, 932 s) - the drain / boards / collectors / settle hold the slots, not prebuilt. The cadence is pinned
+# by the test above.
 
 
 # ---------------------------------------------------------------------------------------------- the rule itself
