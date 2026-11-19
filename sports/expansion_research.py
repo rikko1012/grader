@@ -56,7 +56,11 @@ def fit(players, starts, limit=RESEARCH_BYTES):
     return keep
 
 
-EVENTS_BYTES = 400_000   # the research-only match block (exchange prices, tennis context, soccer team form)
+# The research-only match block (exchange prices, tennis context, soccer team form) has its OWN budget, outside the
+# players' RESEARCH_BYTES, so events can never push a player out: 3,600,000 + 350,000 + the doc header stays under
+# saved()'s 4,000,000-byte read limit (publish() drops events, never players, if a doc would still be over it).
+EVENTS_BYTES = 350_000
+READ_LIMIT = 4_000_000
 
 
 def _cents(x):
@@ -112,7 +116,8 @@ def event_rows(sport, eid, match, prices, contexts, form):
 
 
 def fit_events(events, starts, limit=EVENTS_BYTES):
-    sizes = {k: len(json.dumps(v, separators=(',', ':'))) + 40 for k, v in events.items()}
+    # Real key length (event ids are longer than the 32-hex player keys): "key":value plus the comma.
+    sizes = {k: len(json.dumps(k)) + 2 + len(json.dumps(v, separators=(',', ':'))) for k, v in events.items()}
     if sum(sizes.values()) <= limit:
         return events
     keep, used = {}, 0
@@ -147,6 +152,18 @@ def _events(sport, players, matches):
             out[eid] = rows
             starts[eid] = (by_id.get(eid) or {}).get('start') or ''
     return fit_events(out, starts)
+
+
+def document(sport, players, starts, events, results_at):
+    """research.json: players fitted to their own RESEARCH_BYTES (events never shrink it), events to EVENTS_BYTES
+    (already fitted by _events), and a last guard that drops events - never players - if the file would still reach
+    saved()'s read limit."""
+    doc = {'sport': sport, 'at': now_utc(), 'results_at': results_at, 'players': fit(players, starts)}
+    if events:
+        doc['events'] = events
+        if len(json.dumps(doc, separators=(',', ':'))) > READ_LIMIT - 1000:
+            del doc['events']
+    return doc
 
 
 def publish(sport, budget_s=20, results_at=None):
@@ -239,11 +256,9 @@ def publish(sport, budget_s=20, results_at=None):
         events = _events(sport, players, matches)
     except (OSError, ValueError, KeyError, TypeError):
         events = {}                                   # research rows never block the player research
-    players = fit(players, {k: unique[k].get('start') or '' for k in players},
-                  RESEARCH_BYTES - len(json.dumps(events, separators=(',', ':'))))
-    doc = {'sport': sport, 'at': now_utc(), 'results_at': results_at or history.results_at(sport), 'players': players}
-    if events:
-        doc['events'] = events
+    doc = document(sport, players, {k: unique[k].get('start') or '' for k in players}, events,
+                   results_at or history.results_at(sport))
+    players = doc['players']
     history.atomic_json(boards.root(sport) / 'research.json', doc)
     return {'offers': len(board['offers']), 'markets': len(players),
             'with_history': sum(bool(x['games']) for x in players.values()), 'at': doc['at']}

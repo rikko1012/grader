@@ -48,7 +48,8 @@ def names(body):
     return result
 
 
-def parse_match(body, matches, observed_at):
+def parse_match(body, matches, observed_at, extra=True):
+    """extra=False: the 53dad0b stats only (COUNT_STATS) - the run with every research phase switched off."""
     from .expansion_history import resolve
     out = Feed()
     tour = (body.get('league') or {}).get('slug')
@@ -85,7 +86,7 @@ def parse_match(body, matches, observed_at):
     for i, person in enumerate(people):
         found = resolve({**offer,'player':person,'opponent':people[1-i]},[match])
         stats = body.get(f'team_{i+1}_stats') or {}
-        for name, (stat, unit) in [(n, (n, 'count')) for n in COUNT_STATS] + list(EXTRA_STATS.items()):
+        for name, (stat, unit) in [(n, (n, 'count')) for n in COUNT_STATS] + (list(EXTRA_STATS.items()) if extra else []):
             value = _number(stats.get(name))
             if value is None or not value.is_integer() or (unit == 'percent' and value > 100):
                 continue
@@ -203,8 +204,11 @@ def save_contexts(directory, contexts, now):
     atomic_json(directory / 'match-context.json', {v['event_id']: v for v in keep[:CONTEXT_MAX]})
 
 
-def collect_details(catalogs, get, persist, directory):
+def collect_details(catalogs, get, persist, directory, research=True):
     """Resume a bounded queue through the caller's request/time budget.
+
+    research=False is the 53dad0b collector exactly (graded finals stats only): no pre-match context, no upcoming
+    queue, no research stat names, the old tournament order. Used when every research phase is switched off.
 
     Cache only identities and check times, not large headshot/history responses.
     Every stored stat still requires an independently verified ESPN match and
@@ -225,7 +229,7 @@ def collect_details(catalogs, get, persist, directory):
     tournaments = state.get('tournaments', {})
     pending = state.get('matches', {})
     upcoming = state.get('upcoming', {})
-    contexts = load_contexts(directory)
+    contexts = load_contexts(directory) if research else None
     errors = []
     def due(checked, seconds):
         return not checked or (now - parse_utc(checked)).total_seconds() >= seconds
@@ -248,7 +252,10 @@ def collect_details(catalogs, get, persist, directory):
         # Two tournament lists per batch reserve most requests for actual stats.
         todo = [t for t in tournaments.values() if due(t.get('checked_at'), 1800 if t['end'] >= utc(now) else 86400)]
         # Running tournaments first (their upcoming matches feed the pre-match context), then the old backlog.
-        todo.sort(key=lambda t:(t['end'] < utc(now), t.get('checked_at') or '', -parse_utc(t['end']).timestamp()))
+        if research:
+            todo.sort(key=lambda t:(t['end'] < utc(now), t.get('checked_at') or '', -parse_utc(t['end']).timestamp()))
+        else:
+            todo.sort(key=lambda t:(t.get('checked_at') or '', -parse_utc(t['end']).timestamp()))
         for row in todo[:2]:
             body = get(f"https://api.thescore.com/{row['tour']}/events/{row['id']}/matches", {})
             if not isinstance(body, list):
@@ -256,7 +263,7 @@ def collect_details(catalogs, get, persist, directory):
             for match in body:
                 people = names(match)
                 start = source_time(match.get('match_date'))
-                if (match.get('status') == 'pre_game' and not match.get('is_double') and all(people) and start
+                if (research and match.get('status') == 'pre_game' and not match.get('is_double') and all(people) and start
                         and str(match.get('id', '')).isdigit() and start <= utc(now + timedelta(days=4))
                         and (match.get('league') or {}).get('slug') == row['tour']):
                     key = f"{row['tour']}:{match['id']}"
@@ -273,9 +280,9 @@ def collect_details(catalogs, get, persist, directory):
             row['checked_at'] = now_utc()
         # Pre-match context for OFFERED upcoming matches first (at most 4 details a run, each re-read every 6 h),
         # so a long finals backlog on a new store cannot starve it; the finals stats take the rest of the budget.
-        offered = offered_events(directory, catalogs)
+        offered = offered_events(directory, catalogs) if research else set()
         todo = []
-        for m in upcoming.values():
+        for m in (upcoming.values() if research else ()):
             joined = _pair_event([m['player'], m['opponent']], m['start'], catalogs, m['tour'])
             if (joined and joined[0]['event_id'] in offered and m['start'] > utc(now)
                     and due(m.get('checked_at'), 21600) and due(m.get('attempt_at'), 1800)):
@@ -302,7 +309,7 @@ def collect_details(catalogs, get, persist, directory):
                 row['attempt_at'] = now_utc()
                 if str(body.get('id')) != str(row['id']) or (body.get('league') or {}).get('slug') != row['tour']:
                     raise ValueError('tennis detail identity mismatch')
-                feed = parse_match(body, list(catalogs.get(row['tour'], {}).values()), now_utc())
+                feed = parse_match(body, list(catalogs.get(row['tour'], {}).values()), now_utc(), extra=research)
                 persist(feed, row['tour'])
                 row['checked_at'] = now_utc()
                 row['stored_stats'] = len(feed.records)
@@ -316,5 +323,6 @@ def collect_details(catalogs, get, persist, directory):
         state['matches'] = {k:v for k,v in pending.items() if v['start'] >= cutoff}
         state['upcoming'] = {k:v for k,v in upcoming.items() if v['start'] >= utc(now - timedelta(hours=6))}
         atomic_json(path, state)
-        save_contexts(directory, contexts, now)
+        if research:
+            save_contexts(directory, contexts, now)
     return errors

@@ -71,3 +71,31 @@ def test_a_price_tick_never_changes_the_board_version(tmp_path, monkeypatch):
                                                    'outcomes': [{'label': 'A', 'mid': 0.5}]}}}, now)
     assert (tmp_path / 'soccer' / 'board.json').stat().st_mtime_ns == stamp
     assert boards.board(SimpleNamespace(query={'sport': 'soccer'}))[1]['version'] == v1
+
+
+def test_events_have_their_own_budget_and_never_push_players_out(tmp_path, monkeypatch):
+    """Review 2026-11-18: players fill their whole RESEARCH_BYTES with or without a full events block, and the file
+    with BOTH blocks at their maximum stays under the 4,000,000-byte read limit (long real event ids)."""
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    players = {f'{i:032x}': {'identity': {'event_id': f'soccer:espn:eng.1:{i}:{i}'}, 'games': [],
+                             'pad': 'p' * 900} for i in range(5000)}            # ~4.7 MB: must be fitted
+    starts = {k: f'2026-11-{10 + i % 20:02}' for i, k in enumerate(players)}
+    long_ids = {f'soccer:espn:usa.w.usl.1:{700000 + i}:{700000 + i}': [{'label': 'Match market (Kalshi, mid)',
+                'value': 'z' * 300, 'group': 'Match market (exchange)', 'source': 'kalshi'}] for i in range(3000)}
+    events = research.fit_events(long_ids, {k: '' for k in long_ids})
+    assert len(json.dumps(events, separators=(',', ':'))) <= research.EVENTS_BYTES
+    alone = research.document('soccer', dict(players), starts, {}, None)
+    both = research.document('soccer', dict(players), starts, events, None)
+    assert set(both['players']) == set(alone['players']) and both['events'] == events
+    path = tmp_path / 'soccer' / 'research.json'
+    atomic_json(path, both)
+    assert path.stat().st_size < 4_000_000
+    research._read.cache_clear()
+    assert set(research.saved('soccer')['players']) == set(alone['players'])
+
+
+def test_the_last_guard_drops_events_not_players(monkeypatch):
+    monkeypatch.setattr(research, 'READ_LIMIT', 50_000)
+    players = {f'{i:032x}': {'pad': 'p' * 100} for i in range(100)}
+    doc = research.document('tennis', players, {}, {'e': [{'value': 'x' * 40_000}]}, None)
+    assert 'events' not in doc and len(doc['players']) == 100

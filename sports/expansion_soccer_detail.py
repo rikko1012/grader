@@ -132,7 +132,8 @@ def parse_detail(body, competition, matches, observed_at):
 
 
 def collect_details(catalogs,get,persist,directory,recent=None):
-    """recent: competitions with an offer in the last 30 days (beyond the original six); None = all mapped."""
+    """recent: competitions with an offer in the last 30 days (beyond the original six); None = all mapped;
+    {} = the original six only (53dad0b's collection: the run with every research phase switched off)."""
     from .expansion_history import atomic_json
     path=directory/'detail-history-state.json'
     try:state=json.loads(path.read_text(encoding='utf-8'))
@@ -145,7 +146,9 @@ def collect_details(catalogs,get,persist,directory,recent=None):
                m.get('status')=='final' and m.get('scores') and m.get('players')]
     due=[m for m in available if not state.get(m['event_id']) or
          (now-parse_utc(state[m['event_id']])).total_seconds()>=86400]
-    due.sort(key=lambda m:(state.get(m['event_id']) or '',-parse_utc(m['start']).timestamp()))
+    # The original six (forecast inputs) first, so a newer league's backlog never takes their date slot; with only
+    # the six (recent={}) this is the 53dad0b order exactly.
+    due.sort(key=lambda m:(m['competition'] not in ORIGINAL,state.get(m['event_id']) or '',-parse_utc(m['start']).timestamp()))
     try:
         # One date per batch prevents broad league discovery from consuming the
         # entire request allowance; pending matches resume on the next run.

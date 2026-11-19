@@ -11,6 +11,10 @@ past the same 150 s deadline as before.
   tennis: theScore (finals stats + pre-match context of offered matches), Kalshi + Polymarket prices
 
 Every phase keeps its last good output on failure (atomic writes) and goes through expansion_sources holds.
+
+Switches (review 2026-11-18): research switches never stop a graded input. With every research phase of a sport off
+(SCOUT_EXPANSION_SOURCES=0, or each SCOUT_EXPANSION_PHASE_<NAME>=0) the job is 53dad0b's: no reserve, FotMob six /
+theScore finals on the shared budget at the old call site, no new-competition roster or summary requests.
 """
 import sqlite3
 import time
@@ -23,22 +27,52 @@ PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10), ('exchanges', 
 
 
 def enabled(name):
-    """Kill switches, no deploy needed: SCOUT_EXPANSION_SOURCES=0 stops every research phase (the history job then
-    runs as at 53dad0b, FotMob / theScore included - they are phases now, so they stop too);
-    SCOUT_EXPANSION_PHASE_<NAME>=0 (FOTMOB, THESCORE, FOOTBALL_DATA, EXCHANGES) stops one."""
+    """Research kill switches, no deploy needed: SCOUT_EXPANSION_SOURCES=0 stops every research phase;
+    SCOUT_EXPANSION_PHASE_<NAME>=0 (FOTMOB, THESCORE, FOOTBALL_DATA, EXCHANGES) stops one. For FotMob / theScore
+    this stops only their research part (new leagues, pre-match context, research stat names): the graded inputs of
+    53dad0b (FotMob's six leagues, theScore finals counts) keep their own switch, graded_enabled()."""
     import os
     return (os.environ.get('SCOUT_EXPANSION_SOURCES', '1') != '0'
             and os.environ.get('SCOUT_EXPANSION_PHASE_' + name.upper(), '1') != '0')
+
+
+def graded_enabled():
+    """FotMob's six 53dad0b leagues and theScore finals counts feed forecasts (FORECAST_INPUTS): always collected,
+    whatever the research switches say. Only SCOUT_EXPANSION_GRADED_SOURCES=0 stops them (separate, default on)."""
+    import os
+    return os.environ.get('SCOUT_EXPANSION_GRADED_SOURCES', '1') != '0'
+
+
+GRADED = {'soccer': 'fotmob', 'tennis': 'thescore'}   # the phase whose collector also gathers graded inputs
+
+
+def research_on(sport):
+    """Any research phase of this sport switched on? When none is, the history job runs as at 53dad0b: ESPN keeps the
+    whole request window (no reserve) and the graded collectors run inline on its shared budget (expansion_history)."""
+    return any(enabled(name) for name, _, _ in PHASES[sport])
+
+
+def graded_inline(sport, catalogs, get, persist, directory):
+    """The 53dad0b call: graded-only collection on the main job's shared get (its 16-request cap, full deadline)."""
+    if not graded_enabled():
+        return []
+    if sport == 'soccer':
+        from .expansion_soccer_detail import collect_details
+        return collect_details(catalogs, get, persist, directory, recent={})
+    from .expansion_tennis import collect_details
+    return collect_details(catalogs, get, persist, directory, research=False)
 
 
 def _phase(name, sport, catalogs, persist, directory, get, get_text):
     from .expansion_history import offered
     if name == 'fotmob':
         from .expansion_soccer_detail import collect_details
-        return {'errors': collect_details(catalogs, get, persist, directory, recent=offered(directory))}
+        # recent={}: the six original leagues only (the research part switched off, graded part still on).
+        recent = offered(directory) if enabled(name) else {}
+        return {'errors': collect_details(catalogs, get, persist, directory, recent=recent)}
     if name == 'thescore':
         from .expansion_tennis import collect_details
-        return {'errors': collect_details(catalogs, get, persist, directory)}
+        return {'errors': collect_details(catalogs, get, persist, directory, research=enabled(name))}
     if name == 'football_data':
         from .expansion_footballdata import collect
         return collect(get_text, directory, catalogs)
@@ -55,9 +89,14 @@ def run(sport, catalogs, persist, directory, deadline):
     for name, max_requests, max_seconds in PHASES[sport]:
         info = {'requests': 0, 'ok': 0, 'rows': 0, 'errors': [], 'state': 'ok'}
         out[name] = info
-        if not enabled(name):
-            info['state'] = 'off'
+        if name == GRADED[sport] and not graded_enabled():
+            info['state'] = 'off'          # one shared queue: the graded switch stops the whole collector
             continue
+        if not enabled(name):
+            if name != GRADED[sport]:
+                info['state'] = 'off'
+                continue
+            info['state'] = 'graded_only'  # research part off: FotMob six leagues / theScore finals counts only
         began = time.monotonic()
         end = min(deadline, began + max_seconds)
         if began >= deadline:
