@@ -378,7 +378,8 @@ def load_catalog(text, shared):
         if 'id' in d and 'name' in d:
             items = tuple(d.items())
             if all(isinstance(v, _SCALARS) for _, v in items):
-                return shared.setdefault(items, d)
+                # The value TYPE is part of the key: 1, 1.0 and True hash equal but serialise differently.
+                return shared.setdefault(tuple((k, type(v), v) for k, v in items), d)
         return d
     return json.loads(text, object_hook=hook)
 

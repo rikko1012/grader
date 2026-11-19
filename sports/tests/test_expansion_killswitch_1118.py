@@ -382,3 +382,10 @@ def test_shared_leaf_catalog_is_byte_identical_and_shares_players():
     assert shared['e0']['players'][0] is shared['e4']['players'][0]           # one object for one player
     assert shared['e0']['scores'] is not shared['e1']['scores']               # non-leaf / non-identity dicts never shared
     assert shared['e0']['players'] is not shared['e1']['players']             # lists never shared
+
+
+def test_shared_leaf_catalog_keeps_number_types_apart():
+    from sports.expansion_history import load_catalog
+    text = json.dumps({'a': {'p': [{'id': 'x', 'name': 'n', 'v': 1}]}, 'b': {'p': [{'id': 'x', 'name': 'n', 'v': 1.0}]},
+                       'c': {'p': [{'id': 'x', 'name': 'n', 'v': True}]}}, separators=(',', ':'))
+    assert json.dumps(load_catalog(text, {}), separators=(',', ':')) == text
