@@ -18,7 +18,8 @@ through a MEMORY-RESERVATION QUEUE:
     and it starts - except a heavy job whose recent runs all ended within the time the running ones still need (a
     board build beside a collector), which finishes first and so never delays it; any other job overdue past
     SPORTS_JOB_STARVE_S (3600) counts as urgent, so a saturated pair of heavy slots cannot starve settle / history /
-    player-context; a job may yield to another (settle-post -> settle);
+    player-context - the archive after its own starve_after_s (1,800 s, heavy-1118); a job may yield to another
+    (settle-post -> settle);
   * a watchdog samples each child's RSS every 0.25 s; above its cap the child is killed (SIGKILL), counted
     (`over_cap`) and retried later with backoff - the service process itself is never the one that runs out;
   * children run at low OS priority (nice 10 / BELOW_NORMAL) so member requests keep the CPU, and on Linux mark
@@ -145,6 +146,18 @@ def budget_mb(mem=None):
     return _env_num("SPORTS_CHILD_BUDGET_MB", int(mem * 0.75) - SERVICE_MB, int)
 
 
+# heavy-1118 (live 2026-11-18 22:03-22:40 UTC, c7e7114): 36 min after a deploy the archive, settle-post, history,
+# player-context, Kalshi and archive-verify had 0 starts. All of them share a store lock with settle or the collectors
+# (canonical / model-daily / games); on live run times that lane is oversubscribed (NBA collector 145 s per 180 s,
+# history ~800 s per 900 s, settle ~330 s, plus a 12-min exclusive model-forward every 30 min), so a non-urgent job there
+# starts only by winning tie-breaks. The archive (prio 6) lost every tie to history (prio 6, same boot tick, defined
+# first) and so waited for the 1-h starve rule (replay: first start 76-92 min); deploys came sooner, its first pass never
+# ran and nothing was archived after 2026-11-16. It counts as starved after 30 min overdue (replays: first start 34-39
+# min, sports/tests/test_sports_heavy_1118.py), then takes its turn between the member-facing jobs like any starved job;
+# the lane is full, so history / player-context / Kalshi start later after a deploy (still inside the 1-h rule + turn).
+# SPORTS_JOB_STARVE_S=0 still turns the rule off for every job.
+ARCHIVE_STARVE_S = 1800.0
+
 BOOKS_CAP_MB = 60                   # Starter cap of the books job (x cap_scale); see the books row in sports/RUNBOOK.md
 
 
@@ -169,8 +182,14 @@ def default_jobs():
         "assistant": dict(argv=_py("-m", "sports.assistant.runner", "--once"), every_s=None, trigger="assistant_queued",
                           timeout_s=300, flag="SPORTS_ASSISTANT", cap_mb=120, cls=LIGHT, prio=0),
         # what members read
-        "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=45 if std else 90, timeout_s=600 if std else 120, flag="SPORTS_API",
-                         urgent_after_s=300, cap_mb=160, cls=HEAVY, prio=1, locks=("prebuilt",)),  # 105-109 MB (slim slip pool)
+        # heavy-1118: every 600 s (was 45 / 90). After the c7e7114 memory fix a run takes 362-419 s live (112-117 MB), so
+        # at 45 s it was due again 1 s after each exit (live it still started only twice in the first 36 min: the drain,
+        # boards, collectors and settle held the slots - the archive fix below is what moves); its only reader is the
+        # /sports slips page (web/sports/slips.js, SPORTS_UI, off), served while <= 1,200 s old (web.SNAPSHOTS) - under
+        # the 25-min line rule (sports/picks.py STALE_S). Not always met: the replays' longest gap is 20-40 min, set by
+        # the model-forward drain + run (every heavy start stops), not by this cadence; a stale pool answers 503
+        "prebuilt": dict(argv=_py("-m", "sports.service", "snapshots"), every_s=600, timeout_s=600 if std else 120, flag="SPORTS_API",
+                         urgent_after_s=300, cap_mb=160, cls=HEAVY, prio=1, locks=("prebuilt",)),  # 105-117 MB (slim slip pool)
         # the board build, ONE PROCESS PER LEAGUE (fresh 2026-10-24): both leagues in one process were killed at
         # 251-265 MB in production; an NFL week alone measured 137 MB on one live read of every board (17k offers),
         # NBA 90 MB. Cap 300 = the envelope the exclusive model jobs already run in (340): with it reserved no other
@@ -338,6 +357,7 @@ def default_jobs():
         # stall replays allow no more runs); the rest waits for the next pass.
         "archive": dict(argv=_py("-m", "sports.archive", "pass", "--time-budget-s", "600"), every_s=6 * 3600, timeout_s=1800,
                         flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6,
+                        starve_after_s=ARCHIVE_STARVE_S,      # heavy-1118: not the global hour
                         locks=("canonical", "archive")),      # 140 MB (80k rows)
         "archive-verify": dict(argv=_py("-m", "sports.archive", "verify"), every_s=86400, timeout_s=1800,
                                flag="SPORTS_INGEST", cap_mb=120, cls=HEAVY, prio=8, locks=("canonical", "archive")),
@@ -654,9 +674,20 @@ class Scheduler:
         after = spec.get("urgent_after_s")
         if after and t - ns >= after:
             return "member"
-        if self.starve_s and spec["cls"] != EXCLUSIVE and t - ns >= self.starve_s:
+        starve = self._starve_after(name)
+        if starve and spec["cls"] != EXCLUSIVE and t - ns >= starve:
             return "starved"
         return None
+
+    def _starve_after(self, name):
+        """Seconds overdue after which a non-exclusive job counts as starved: SPORTS_JOB_STARVE_S (0 = the rule is off),
+        or the job's own shorter starve_after_s (heavy-1118, ARCHIVE_STARVE_S: the archive shares the canonical lock with
+        the collectors / settle / history, which keep that lane busy; at the global hour a deploy every hour or two
+        reset it before it ever ran)."""
+        if not self.starve_s:
+            return 0.0
+        own = self.specs[name].get("starve_after_s")
+        return min(self.starve_s, float(own)) if own else self.starve_s
 
     def _draining(self, due, t):
         """The exclusive job that has waited drain_s or longer (the first in due order), else None. While one drains
@@ -763,7 +794,7 @@ class Scheduler:
             if kind == "starved":
                 # among urgent jobs a starved one ages from the moment it became urgent: it takes its turn between
                 # the member-facing jobs (each slot it waits for is held), it does not jump all of them at once
-                over -= self.starve_s
+                over -= self._starve_after(n)
             return (kind is None, self.specs[n]["prio"] - over / self.aging_s, ns)
         out.sort(key=eff)
         return out

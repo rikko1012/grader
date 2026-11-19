@@ -1,5 +1,6 @@
 """Deterministic simulation of the sports scheduler (sports/scheduler.py) with the PRODUCTION job table and fake
-children whose run times come from live ops (2026-11-09 01:15 UTC, uptime 72 min on c31637d). Used by
+children whose run times come from live ops (2026-11-09 01:15 UTC, uptime 72 min on c31637d; LIVE_1118_* = 2026-11-18
+22:40 UTC, uptime 36 min on c7e7114). Used by
 test_sports_stall_1108.py and scripts/sim_sports_scheduler.py (incident replay).
 
 Nothing here spawns a process: spawn() returns a fake child that exits after its modelled run time, the clock is a
@@ -13,14 +14,30 @@ import random
 
 # run time (s) of each job in production. ops 2026-11-09 01:15 UTC (last_exit.ran_s) where the job ran; the rest from
 # the RUNBOOK / earlier stages files. settle-post's first production run hit its 2,400 s kill (scorecards' first pass
-# with no skip marks); later runs skip unchanged events.
+# with no skip marks); later runs skip unchanged events. prebuilt: 400 s = its measured live run after the c7e7114
+# memory fix (ops 2026-11-18 22:40 UTC: 362.6 / 419.0 s; it was 59 s on 2026-11-09 - NOV9_RUN_S keeps that incident's
+# replay on the run times it happened with).
 RUN_S = {
-    "prebuilt": 59, "ui-snapshots-nba": 150, "ui-snapshots-nfl": 220, "sheets": 90, "results-public": 179,
+    "prebuilt": 400, "ui-snapshots-nba": 150, "ui-snapshots-nfl": 220, "sheets": 90, "results-public": 179,
     "mapping-audit": 170, "slips-ingest": 1, "ingest-nba": 290, "ingest-nfl": 360, "books": 25,
     "ingest-kalshi": 310, "settle": 120, "settle-post": 300, "pregame-news": 4, "picks-ingest": 1,
     "picks-settle": 1, "player-context": 60, "games-backfill": 120, "slips-settle": 3, "grades-daily": 15,
     "model-forward": 300, "history": 300, "archive": 600, "archive-verify": 300, "assistant": 30,
 }
+NOV9_RUN_S = {"prebuilt": 59}         # the 2026-11-09 stall and its review replays ran with this prebuilt time
+# live 2026-11-18 22:03-22:40 UTC (c7e7114, ops_live3: last_exit / recent_ran_s, uptime 36 min): every heavy job slower
+# on the grown store, books (light) 380-425 s a run, soccer / tennis on. LIVE_1118_ENV adds the live settle cap
+# (600 MB: a Render override, the table gives 432) and LIVE_1118_CADENCE the NFL idle collector cadence (593 s live).
+LIVE_1118_RUN_S = {
+    "prebuilt": 400, "ui-snapshots-nba": 175, "ui-snapshots-nfl": 80, "sheets": 40, "results-public": 460,
+    "mapping-audit": 160, "ingest-nba": 145, "ingest-nfl": 135, "books": 400, "ingest-kalshi": 80, "settle": 330,
+    "settle-post": 860, "player-context": 40, "games-backfill": 2, "grades-daily": 2, "model-forward": 720,
+    "history": 800, "archive": 1000, "archive-verify": 210, "soccer-quotes": 5, "tennis-quotes": 5,
+    "soccer-history": 27, "tennis-history": 47, "soccer-learning": 22, "tennis-learning": 8, "slips-ingest": 1,
+    "picks-ingest": 1, "pregame-news": 5, "picks-settle": 1, "slips-settle": 3,
+}
+LIVE_1118_ENV = {"SPORTS_JOB_SETTLE_CAP_MB": "600", "SCOUT_SOCCER_ENABLED": "1", "SCOUT_TENNIS_ENABLED": "1"}
+LIVE_1118_CADENCE = {"gameday:nfl": 600.0}
 FIRST_SETTLE_POST_S = 2400.5          # the first run (no marks) - longer than its timeout
 LEDGER_S = 200                        # results ledger, both leagues (settle_stages 2026-11-07: 263.5 - 64.3 s)
 FIXED_CADENCE = {"gameday:nba": 180.0, "gameday:nfl": 300.0, "kalshi": 3600.0, "books": 60.0}
@@ -51,7 +68,10 @@ def prod_env(extra=None):
     """The production environment: Render Standard (cgroup 2 GB -> std / two heavy slots), owner budget 1,200 MB."""
     env = {"SPORTS_MEMORY_MB": "2048", "SPORTS_CHILD_BUDGET_MB": "1200", "SPORTS_LEAGUES": "nba nfl",
            "SPORTS_API": "1", "SPORTS_INGEST": "1", "SPORTS_FORECAST": "1", "SPORTS_TRAIN": "", "SPORTS_ASSISTANT": "",
-           "SPORTS_MAX_HEAVY": "", "SPORTS_HEAVY_SLOTS": "", "SPORTS_BOOKS_JOB": "1"}
+           "SPORTS_MAX_HEAVY": "", "SPORTS_HEAVY_SLOTS": "", "SPORTS_BOOKS_JOB": "1",
+           # heavy-1118: soccer / tennis pinned off (the Nov 9 replays had none; the runner's env no longer leaks in);
+           # LIVE_1118_ENV turns them on as live
+           "SCOUT_SOCCER_ENABLED": "", "SCOUT_TENNIS_ENABLED": ""}
     env.update(extra or {})
     return env
 
@@ -59,8 +79,9 @@ def prod_env(extra=None):
 class _Patched:
     """Patch a scheduler module (the current one or an older copy) for one simulation and restore it afterwards."""
 
-    def __init__(self, mod, env, seed=1108):
+    def __init__(self, mod, env, seed=1108, cadence=None):
         self.mod, self.env, self.seed = mod, env, seed
+        self.cadence = dict(FIXED_CADENCE, **(cadence or {}))
 
     def __enter__(self):
         self.saved_env = {k: os.environ.get(k) for k in self.env}
@@ -76,7 +97,7 @@ class _Patched:
             if isinstance(self.mod.STATS[k], (int, float)):
                 self.mod.STATS[k] = 0
         self.mod.rss_mb = lambda pid: 10.0
-        self.mod.cadence_every = lambda cad, t, root=None: FIXED_CADENCE[
+        self.mod.cadence_every = lambda cad, t, root=None: self.cadence[
             cad[0] if cad[0] != "gameday" else f"gameday:{cad[1][0]}"]
         self.rstate = random.getstate()
         random.seed(self.seed)
@@ -95,20 +116,21 @@ class _Patched:
 
 
 def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hook=None, first_settle_post_s=None,
-             warm=False, seed=1108, probe=False):
+             warm=False, seed=1108, probe=False, cadence=None):
     """Run mod.Scheduler over `hours` of simulated time with the production table. warm=True starts with each job's
     recent run time known (the service persists them in DATA_DIR/scheduler_runs.json, so a deploy starts warm once the
     file exists); the default (cold) is the first deploy with the file, the worst case. Returns a dict:
     starts {job: [t...]} (seconds since T0), ends {job: [(t, code)]}, waits {job: longest due-but-not-started span},
     max_gap {job: longest start-to-start gap incl. the tail}, stats, jobs (final JOBS), reserved_ok, heavy_ok;
     probe=True adds idle_board_s: seconds a heavy slot sat empty (no exclusive job running) while a due board build
-    fitted and, by its MODELLED run time, would have ended before every running heavy job (review 2026-11-09)."""
+    fitted and, by its MODELLED run time, would have ended before every running heavy job (review 2026-11-09).
+    cadence overrides FIXED_CADENCE entries (e.g. LIVE_1118_CADENCE)."""
     run_s = dict(RUN_S, **(run_s or {}))
     rc = rc or {}
     fsp = FIRST_SETTLE_POST_S if first_settle_post_s is None else first_settle_post_s
     clock = [T0]
     starts, ends = {}, {}
-    with _Patched(mod, prod_env(env), seed):
+    with _Patched(mod, prod_env(env), seed, cadence):
         J = mod.default_jobs()
         if jobs_hook:
             J = jobs_hook(J) or J

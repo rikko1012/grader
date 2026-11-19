@@ -89,7 +89,9 @@ def test_snapshot_build_failure_is_reported_not_raised(monkeypatch):
 
 
 # --------------------------------------------------------------------------------------------------- schedule
-def test_schedule_names_every_worker_side_process_with_its_flag():
+def test_schedule_names_every_worker_side_process_with_its_flag(monkeypatch):
+    for f in ("SCOUT_SOCCER_ENABLED", "SCOUT_TENNIS_ENABLED"):      # opt-in soccer / tennis jobs: the base table only
+        monkeypatch.delenv(f, raising=False)
     s = service.schedule()
     want = {"assistant": "SPORTS_ASSISTANT", "prebuilt": "SPORTS_API", "ui-snapshots-nba": "SPORTS_INGEST", "ui-snapshots-nfl": "SPORTS_INGEST",
             "mapping-audit": "SPORTS_INGEST",
@@ -117,15 +119,18 @@ def test_schedule_names_every_worker_side_process_with_its_flag():
 
 
 def test_supervise_starts_one_scheduler_and_no_job_with_flags_off(monkeypatch):
-    for f in ("SPORTS_INGEST", "SPORTS_API", "SPORTS_ASSISTANT", "SPORTS_TRAIN", "SPORTS_FORECAST"):
+    for f in ("SPORTS_INGEST", "SPORTS_API", "SPORTS_ASSISTANT", "SPORTS_TRAIN", "SPORTS_FORECAST",
+              "SCOUT_SOCCER_ENABLED", "SCOUT_TENNIS_ENABLED"):
         monkeypatch.delenv(f, raising=False)
     from sports import scheduler
     monkeypatch.setattr(scheduler, "JOBS", {})
     stop = threading.Event()
     sch = service.supervise(stop)
-    time.sleep(0.6)
-    assert sch.running == {} and len(scheduler.JOBS) == 30 and not any(j["enabled"] for j in scheduler.JOBS.values())
-    stop.set()
+    try:
+        time.sleep(0.6)
+        assert sch.running == {} and len(scheduler.JOBS) == 30 and not any(j["enabled"] for j in scheduler.JOBS.values())
+    finally:
+        stop.set()          # heavy-1118: a failed assert left this scheduler thread running into later replays
 
 
 # -------------------------------------------------------------------------------------------------- packaging
