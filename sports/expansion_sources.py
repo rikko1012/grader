@@ -60,3 +60,13 @@ def hold(sport, host, until, shared=True):
         con.execute('CREATE TABLE IF NOT EXISTS holds (host TEXT PRIMARY KEY, until REAL NOT NULL)')
         con.execute('INSERT INTO holds(host,until) VALUES(?,?) ON CONFLICT(host) DO UPDATE SET until=max(holds.until,excluded.until)',
                     (host, float(until)))
+
+
+def get_text(sport, url, max_bytes=2_000_000, **kwargs):
+    """A text file (CSV) through the same shared holds; refuses an answer over max_bytes."""
+    def send():
+        r = net.get(url, **kwargs)
+        if len(r.content) > max_bytes:
+            raise ValueError('response too large')
+        return r.content.decode('utf-8-sig', errors='replace')
+    return _held(sport, url, send)

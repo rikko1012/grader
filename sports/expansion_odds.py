@@ -140,7 +140,7 @@ def collect(sport, get, directory):
         try:
             today=datetime.now(timezone.utc).strftime('%Y%m%d')
             b=get('https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard',
-                  params={'dates':today,'limit':200},timeout=12,tries=1)
+                  params={'dates':today,'limit':1000},timeout=12,tries=1)
             checked=now_utc();found=draftkings_soccer(b,checked);rows.extend(found)
             sources['draftkings']={'ok':True,'checked_at':checked,'markets':len(found)}
         except (net.HttpError,ValueError,OSError) as exc:

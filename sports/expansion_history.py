@@ -19,7 +19,7 @@ import unicodedata
 
 from . import expansion_board as boards, net, store
 from .contracts import now_utc, parse_utc
-from .expansion import COMPETITIONS, isolated_database, parse_scoreboard
+from .expansion import BASE_COMPETITIONS, COMPETITIONS, isolated_database, parse_scoreboard
 from .expansion_soccer import parse_summary, parse_context
 
 
@@ -46,6 +46,25 @@ def atomic_json(path, value):
 # League IDs verified from each ESPN scoreboard league header on 2026-11-17.
 # Future fixtures often omit the league links but retain this source UID.
 SOCCER_LEAGUE_IDS = {'700': 'eng.1', '740': 'esp.1', '720': 'ger.1', '730': 'ita.1', '710': 'fra.1', '770': 'usa.1', '630': 'bra.1', '745': 'arg.1', '760': 'mex.1', '725': 'ned.1', '715': 'por.1', '735': 'sco.1', '3901': 'bel.1', '3946': 'tur.1', '775': 'uefa.champions', '3922': 'fifa.friendly', '2395': 'uefa.nations', '786': 'fifa.worldq.uefa', '787': 'fifa.worldq.conmebol', '788': 'fifa.worldq.concacaf', '789': 'fifa.worldq.afc', '790': 'fifa.worldq.caf', '606': 'fifa.world', '19267': 'concacaf.nations.league'}
+SOCCER_LEAGUE_IDS.update({
+    # 2026-11-18: each id read from that slug's own scoreboard league header (sources_1118/probe/espn_slug_ids.json).
+    # Unverified ids (NCAA, U-17 World Cup, Women's FA Cup, Taça de Portugal, play-offs) stay out - never guessed.
+    '3914': 'eng.2', '3915': 'eng.3', '3916': 'eng.4', '3917': 'eng.5', '3927': 'ger.2', '3931': 'ita.2',
+    '3921': 'esp.2', '3926': 'fra.2', '3933': 'ned.2', '3940': 'sco.2', '3907': 'aut.1', '3944': 'sui.1',
+    '3913': 'den.1', '3960': 'nor.1', '3945': 'swe.1', '3955': 'gre.1', '3939': 'rus.1', '750': 'jpn.1',
+    '3906': 'aus.1', '21231': 'ksa.1', '8376': 'chn.1', '4002': 'usa.usl.1', '8301': 'usa.nwsl',
+    '776': 'uefa.europa', '20296': 'uefa.europa.conf', '3918': 'eng.fa', '3920': 'eng.league_cup',
+    '3951': 'esp.copa_del_rey', '3954': 'ger.dfb_pokal', '3956': 'ita.coppa_italia', '3952': 'fra.coupe_de_france',
+    '3903': 'arg.2', '3932': 'mex.2', '4007': 'bra.2', '650': 'col.1', '640': 'chi.1', '670': 'per.1',
+    '680': 'uru.1', '660': 'ecu.1', '3934': 'par.1', '620': 'bol.1', '3949': 'ven.1', '8097': 'eng.w.1',
+    '20956': 'esp.w.1', '19945': 'ned.w.1', '20955': 'fra.w.1', '23633': 'usa.w.usl.1', '19834': 'club.friendly',
+    '19483': 'uefa.wchampions', '20381': 'esp.copa_de_la_reina', '23390': 'eng.w.league_cup', '23541': 'mex.w.1',
+    '8316': 'ind.1', '18505': 'ind.2', '23284': 'bol.copa', '5699': 'concacaf.champions',
+    '783': 'conmebol.libertadores', '5454': 'conmebol.sudamericana', '3902': 'afc.champions',
+    '2391': 'caf.champions', '3930': 'irl.1', '3963': 'wal.1', '10750': 'isr.1', '5346': 'cyp.1', '5347': 'cze.1',
+    '10747': 'rou.1', '3937': 'rsa.1', '8101': 'ger.super_cup', '8339': 'idn.1', '8344': 'tha.1', '8340': 'mys.1',
+    '4005': 'crc.1', '3929': 'hon.1', '3928': 'gua.1', '3943': 'slv.1', '8347': 'jam.1', '18992': 'aus.w.1',
+})
 
 
 def soccer_competition(event):
@@ -168,24 +187,13 @@ def soccer_teams(offer, match):
     return [p for p,names in zip(participants, aliases) if own & names]
 
 
-def collect_soccer_teams(catalogs, get, persist, directory):
-    """Current rosters establish identity, never starting status or participation.
-
-    Team schedules discover recent result IDs; only match-specific summaries
-    supply stat observations. This is the same cached roster/schedule/box-score
-    pattern used by the existing collectors, in separate new-sport storage.
-    """
-    path = directory / 'team-history-state.json'
-    try:
-        state = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        state = {}
+def offered_team_slate(catalogs, directory):
+    """{competition:team -> {'competition', 'team', 'matches'}} for scheduled / live matches with a board offer."""
     try:
         snapshot = directory / 'board.json'
         offers = json.loads(snapshot.read_text(encoding='utf-8')).get('offers', []) if snapshot.stat().st_size <= 3_000_000 else []
     except (OSError, ValueError):
         offers = []
-    now = datetime.now(timezone.utc)
     teams = {}
     for matches in catalogs.values():
         for match in list(matches.values()):
@@ -195,6 +203,40 @@ def collect_soccer_teams(catalogs, get, persist, directory):
                 for team in soccer_teams(offer, match):
                     key = f"{match['competition']}:{team['id']}"
                     teams.setdefault(key, {'competition':match['competition'], 'team':team['id'], 'matches':[]})['matches'].append(match)
+    return teams
+
+
+def collect_soccer_teams(catalogs, get, persist, directory, group=None, slots=2, slate=None):
+    """Current rosters establish identity, never starting status or participation.
+
+    Team schedules discover recent result IDs; only match-specific summaries
+    supply stat observations. This is the same cached roster/schedule/box-score
+    pattern used by the existing collectors, in separate new-sport storage.
+
+    group='base': teams of the 53dad0b competitions only, their 2 refresh slots exactly as at 53dad0b (a newer
+    competition can never take one). group='new': the newer competitions, at most `slots` more; the history job runs
+    this pass after the base rosters and base summaries, so it only spends what the shared budget has left.
+    group=None: base then new (both passes). slate: a dict to reuse the offered-team scan between passes.
+    """
+    if group is None:
+        slate = {} if slate is None else slate
+        return (collect_soccer_teams(catalogs, get, persist, directory, 'base', slots, slate) +
+                collect_soccer_teams(catalogs, get, persist, directory, 'new', slots, slate))
+    path = directory / 'team-history-state.json'
+    try:
+        state = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        state = {}
+    now = datetime.now(timezone.utc)
+    if slate is not None and 'teams' in slate:
+        everything = slate['teams']
+    else:
+        everything = offered_team_slate(catalogs, directory)
+        if slate is not None:
+            slate['teams'] = everything
+    if group != 'new':
+        mark_offered(directory, {item['competition'] for item in everything.values()})
+    teams = {k: v for k, v in everything.items() if (v['competition'] in BASE_COMPETITIONS) == (group == 'base')}
     errors = []
     try:
         # Reuse valid rosters every run, then refresh at most two teams so a busy
@@ -211,7 +253,7 @@ def collect_soccer_teams(catalogs, get, persist, directory):
                not state.get(key, {}).get('schedule_checked_at') or
                (now-parse_utc(state[key]['schedule_checked_at'])).total_seconds() >= 21600]
         due.sort(key=lambda row:state.get(row[0], {}).get('checked_at') or '')
-        for key,item in due[:2]:
+        for key,item in due[:slots]:
             comp, tid = item['competition'], item['team'].split(':')[-1]
             try:
                 saved = state.setdefault(key, {})
@@ -248,6 +290,100 @@ def collect_soccer_teams(catalogs, get, persist, directory):
     return errors
 
 
+OFFERED_DAYS = 30
+
+
+def mark_offered(directory, competitions):
+    """Remember when each competition last had an offered fixture (offered-competitions.json, last 30 days)."""
+    path = directory / 'offered-competitions.json'
+    seen = offered(directory)
+    now = now_utc()
+    seen.update({c: now for c in competitions})
+    if competitions:
+        atomic_json(path, seen)
+    return seen
+
+
+def offered(directory):
+    """{competition: last offered at} within OFFERED_DAYS. A missing / unreadable file = nothing recent."""
+    try:
+        seen = json.loads((directory / 'offered-competitions.json').read_text(encoding='utf-8'))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=OFFERED_DAYS)
+        return {c: t for c, t in seen.items() if isinstance(t, str) and parse_utc(t) >= cutoff}
+    except (OSError, ValueError, AttributeError, TypeError):
+        return {}
+
+
+def summary_due(match, recent, now):
+    """Is this soccer match's ESPN summary due? Base competitions keep the 53dad0b rule (final: every 24 h, else 6 h).
+    A newer competition (2026-11-18) is summarised only while it had an offer in the last 30 days, and a final that
+    already has a stored summary is re-read only inside a 48 h correction window - otherwise ~4x the events would
+    never drain through 6 summaries a run."""
+    checked, attempt = match.get('summary_checked_at'), match.get('summary_attempt_at')
+    if attempt and (now - parse_utc(attempt)).total_seconds() < 1800:
+        return False
+    if match.get('competition') not in BASE_COMPETITIONS:
+        if match.get('competition') not in recent:
+            return False
+        if checked and match.get('status') == 'final' and (
+                not match.get('start') or (now - parse_utc(match['start'])).total_seconds() > 48 * 3600):
+            return False
+    return (not checked or (now - parse_utc(checked)).total_seconds() >=
+            (86400 if match.get('status') == 'final' else 21600))
+
+
+def summary_queue(pending, offered_teams, base_slots=6, new_slots=2):
+    """This run's summaries: the 53dad0b order and 6 slots for the 53dad0b competitions (unchanged), plus at most 2
+    more for the newer competitions, so they never take a slot from a graded league."""
+    def key(m):
+        return (bool(m.get('summary_checked_at')), not any(p['id'] in offered_teams for p in m['participants']),
+                m.get('status') != 'final', m.get('summary_checked_at') or '',
+                -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id'])
+    base = sorted((m for m in pending if m['competition'] in BASE_COMPETITIONS), key=key)
+    new = sorted((m for m in pending if m['competition'] not in BASE_COMPETITIONS), key=key)
+    return base[:base_slots] + new[:new_slots]
+
+
+CURRENT_MATCHES_BYTES = 2_900_000   # readers ignore a current-matches.json over 3,000,000 bytes (every identity pending)
+
+
+def fit_matches(rows, recent, limit=CURRENT_MATCHES_BYTES):
+    """Keep current-matches.json readable: when too large, keep offered competitions first, then the 53dad0b ones,
+    then the rest, earliest start first. Under the limit nothing changes (same list, same order)."""
+    sizes = [len(json.dumps(r, separators=(',', ':'))) + 1 for r in rows]
+    if sum(sizes) + 2 <= limit:
+        return rows
+    order = sorted(range(len(rows)), key=lambda i: (rows[i].get('competition') not in recent,
+                                                     rows[i].get('competition') not in BASE_COMPETITIONS,
+                                                     rows[i].get('start') or '', rows[i].get('event_id') or ''))
+    keep, used = set(), 2
+    for i in order:
+        if used + sizes[i] > limit:
+            continue
+        keep.add(i)
+        used += sizes[i]
+    return [r for i, r in enumerate(rows) if i in keep]
+
+
+_SCALARS = (str, int, float, bool, type(None))
+
+
+def load_catalog(text, shared):
+    """json.loads of a matches.json where identical player / participant dicts (an 'id' and a 'name', scalar values
+    only) become ONE object: a player appears in every summarised match of his team, so a 100-day store held ~50x
+    duplicates (measured 113 MB -> 19 MB of Python heap for 13k soccer rows). Same keys, values and order, so every
+    file written from it is byte-identical. Nothing in the history job mutates these leaf dicts (rows and their
+    lists are never shared; new player lists are built from new dicts)."""
+    def hook(d):
+        if 'id' in d and 'name' in d:
+            items = tuple(d.items())
+            if all(isinstance(v, _SCALARS) for _, v in items):
+                # The value TYPE is part of the key: 1, 1.0 and True hash equal but serialise differently.
+                return shared.setdefault(tuple((k, type(v), v) for k, v in items), d)
+        return d
+    return json.loads(text, object_hook=hook)
+
+
 def storage_budget_mb():
     """Per-sport isolated history budget. Backfill stops at it; live, summary and detail writes keep going up to
     1.5x so current results are never frozen by old-date backfill (2026-11-18: a fixed 128 MB cap raised on the
@@ -278,20 +414,26 @@ def collect(sport, max_requests=16, max_seconds=150):
     counts = {'requests': 0, 'ok_requests': 0, 'records': 0, 'matches': 0, 'errors': [], 'finished_at': None,
               'storage': 'ok', 'phases': {}}
     deadline = time.monotonic() + max_seconds
-    catalogs = {}
+    # 2026-11-18: the ESPN / 365Scores phases stop requesting RESERVE_S early; the research sources run in that reserve
+    # (expansion_collect), each with its own cap, never past the same request deadline.
+    # With every research phase of this sport switched off there is no reserve: ESPN has 53dad0b's whole window.
+    from .expansion_collect import RESERVE_S, graded_inline, research_on
+    research = research_on(sport)
+    main_deadline = deadline - min(RESERVE_S, max_seconds / 3) if research else deadline
+    catalogs, shared = {}, {}
     for comp, (kind, _) in COMPETITIONS.items():
         if kind != sport:
             continue
         path = isolated_database(directory.parent, comp).parent / 'matches.json'
         try:
             if path.stat().st_size <= 5_000_000:
-                catalogs[comp] = json.loads(path.read_text(encoding='utf-8'))
+                catalogs[comp] = load_catalog(path.read_text(encoding='utf-8'), shared)
         except (OSError, ValueError):
             pass
 
     def get(url, params, timeout=10):
         from .expansion_sources import get_json
-        if counts['requests'] >= max_requests or time.monotonic() >= deadline:
+        if counts['requests'] >= max_requests or time.monotonic() >= main_deadline:
             raise StopIteration
         counts['requests'] += 1
         body = get_json(sport, url, params=params, timeout=timeout, tries=1)
@@ -325,7 +467,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             con.close()
         if competition not in catalogs:
             try:
-                catalogs[competition] = json.loads((path.parent / 'matches.json').read_text(encoding='utf-8'))
+                catalogs[competition] = load_catalog((path.parent / 'matches.json').read_text(encoding='utf-8'), shared)
             except (OSError, ValueError):
                 catalogs[competition] = {}
         for match in feed.matches:
@@ -367,9 +509,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             for comp in (('all',) if sport == 'soccer' else ('atp', 'wta')):
                 try:
                     body = get(f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{comp}/scoreboard',
-                               # A Saturday all-leagues soccer slate passes 200 events (234 and 225 seen
-                               # 2026-11-18; 200 came back, the rest were cut). Payload grew about 0.15 MB.
-                               {'dates': dates, 'limit': 1000 if sport == 'soccer' else 200})
+                               {'dates': dates, 'limit': 1000})   # 200 cut busy days (Nov 21: 225 events)
                 except (net.HttpError, ValueError, OSError) as e:
                     counts['errors'].append(type(e).__name__)
                     phase_ok = False
@@ -392,59 +532,75 @@ def collect(sport, max_requests=16, max_seconds=150):
             if phase == 'backfill' and phase_ok:
                 advanced = True
         if sport == 'soccer':
-            counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory))
-            # Scoreboards get their budget first. Pending summaries stay in the
-            # catalog across runs, so advancing the date cannot lose a busy day.
-            pending = [m for matches in catalogs.values() for m in matches.values()
-                       if (not m.get('summary_checked_at') or
-                           (datetime.now(timezone.utc)-parse_utc(m['summary_checked_at'])).total_seconds() >=
-                           (86400 if m.get('status') == 'final' else 21600))
-                       and (not m.get('summary_attempt_at') or
-                            (datetime.now(timezone.utc)-parse_utc(m['summary_attempt_at'])).total_seconds() >= 1800)]
-            # Check imminent offered events first, then the oldest unchecked
-            # summary. Once checked, a game waits its interval and frees the queue.
-            offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
-                             for p in m.get('players', []) if p.get('identity_source') == 'espn_team_roster'}
-            pending.sort(key=lambda m:(bool(m.get('summary_checked_at')),
-                                       not any(p['id'] in offered_teams for p in m['participants']),
-                                       m.get('status') != 'final', m.get('summary_checked_at') or '',
-                                       -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id']))
-            for match in pending[:6]:
-                actual = match['competition']
-                eid = match['event_id'].split(':')[-2]
-                try:
-                    summary = get(f'https://site.api.espn.com/apis/site/v2/sports/soccer/{actual}/summary', {'event':eid})
-                    match['summary_attempt_at'] = now_utc()
-                    if (summary.get('header', {}).get('league') or {}).get('slug') != actual:
-                        raise ValueError('summary competition mismatch')
-                    players = roster_identity(summary, match)
-                    if players:
-                        match['players'] = players
-                    records = parse_summary(summary, actual, eid, now_utc())
-                    records.records.extend(parse_context(summary,match,now_utc()).records)
-                    persist(records, actual)
-                    match['summary_checked_at'] = now_utc()
-                except (net.HttpError, ValueError, OSError) as e:
-                    match['summary_attempt_at'] = now_utc()
-                    counts['errors'].append(type(e).__name__)
-            from .expansion_soccer_detail import collect_details
-            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
+            slate = {}
+            counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory, 'base', slate=slate))
+
+            def summaries(base_slots, new_slots):
+                # Scoreboards get their budget first. Pending summaries stay in the
+                # catalog across runs, so advancing the date cannot lose a busy day.
+                recent, instant = offered(directory), datetime.now(timezone.utc)
+                pending = [m for matches in catalogs.values() for m in matches.values()
+                           if (m.get('competition') in BASE_COMPETITIONS) == bool(base_slots)
+                           and summary_due(m, recent, instant)]
+                # Check imminent offered events first, then the oldest unchecked
+                # summary. Once checked, a game waits its interval and frees the queue.
+                offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
+                                 for p in m.get('players', []) if p.get('identity_source') == 'espn_team_roster'}
+                for match in summary_queue(pending, offered_teams, base_slots, new_slots):
+                    actual = match['competition']
+                    eid = match['event_id'].split(':')[-2]
+                    try:
+                        summary = get(f'https://site.api.espn.com/apis/site/v2/sports/soccer/{actual}/summary', {'event':eid})
+                        match['summary_attempt_at'] = now_utc()
+                        if (summary.get('header', {}).get('league') or {}).get('slug') != actual:
+                            raise ValueError('summary competition mismatch')
+                        players = roster_identity(summary, match)
+                        if players:
+                            match['players'] = players
+                        records = parse_summary(summary, actual, eid, now_utc())
+                        records.records.extend(parse_context(summary,match,now_utc()).records)
+                        persist(records, actual)
+                        match['summary_checked_at'] = now_utc()
+                    except (net.HttpError, ValueError, OSError) as e:
+                        match['summary_attempt_at'] = now_utc()
+                        counts['errors'].append(type(e).__name__)
+            summaries(6, 0)                                 # the 53dad0b competitions: 6 slots, 53dad0b order
+            if research:
+                # Newer competitions only from what the shared budget has left after the graded work: up to 2 more
+                # roster refreshes, then up to 2 more summaries.
+                counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory, 'new', slate=slate))
+                summaries(0, 2)
+            else:
+                counts['errors'].extend(graded_inline(sport, catalogs, get, persist, directory))
         else:
             from .expansion_challenger import collect as collect_challenger
             counts['errors'].extend(collect_challenger(catalogs,get,persist,directory,persist_backfill))
-            from .expansion_tennis import collect_details
-            counts['errors'].extend(collect_details(catalogs, get, persist, directory))
+            if not research:
+                counts['errors'].extend(graded_inline(sport, catalogs, get, persist, directory))
     except StopIteration:
         pass
     except (net.HttpError, ValueError, OSError, sqlite3.Error) as e:
         counts['errors'].append(type(e).__name__)
+    if research:
+        # FotMob (soccer) / theScore (tennis) run here, with football-data and exchange prices, in the reserve.
+        from .expansion_collect import run as run_sources
+        counts['sources'] = run_sources(sport, catalogs, persist, directory, deadline)
+        for phase in counts['sources'].values():
+            counts['errors'].extend(phase['errors'])
+            counts['requests'] += phase['requests']
+            counts['ok_requests'] += phase['ok']
+    else:
+        counts['sources'] = {}                               # all research off: graded collectors ran inline (53dad0b)
     cutoff = (today - timedelta(days=100)).isoformat()
     for competition, matches in catalogs.items():
         atomic_json(isolated_database(directory.parent, competition).parent / 'matches.json',
                     {key: match for key, match in matches.items() if (match.get('start') or '') >= cutoff})
     earliest = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat().replace('+00:00','Z')
     atomic_json(directory / 'current-matches.json',
-                [m for matches in catalogs.values() for m in matches.values() if (m.get('start') or '') >= earliest])
+                fit_matches([m for matches in catalogs.values() for m in matches.values()
+                             if (m.get('start') or '') >= earliest], offered(directory)))
+    catalogs.clear()                                       # publish reads its own bounded files; free the catalogs
+    shared.clear()
     from .expansion_research import publish
     # When results were last really stored (not when research.json was rebuilt): the freshness members see.
     counts['stored_at'] = now_utc() if counts['records'] else state.get('stored_at')
