@@ -237,3 +237,64 @@ def test_landing_price_only_when_set_and_screens_are_public(srv, monkeypatch):
         st, h, body = get(srv, f"/landing/{name}.webp")
         assert st == 200 and h["content-type"] == "image/webp" and "max-age=86400" in h["cache-control"] and body[:4] == b"RIFF"
     assert get(srv, "/landing/../server.py")[0] != 200 and get(srv, "/landing/x.webp")[0] != 200
+
+
+# ---------------------------------------------------------------- reviews carousel under the headline (owner 2026-11-19)
+def _seed_reviews(n):
+    import reviews
+    bodies = ("Board is clean and the reasons read well.", "Love having every app's line in one place.",
+              "Slip Studio saves me time every night.", "Cards are quick to read on my phone.")
+    for i in range(n):
+        reviews.upsert(f"user_rv{i}", f"Member {chr(65 + i)}", {"stars": (5, 4, 5, 3)[i % 4], "title": "", "body": bodies[i % 4]})
+
+
+def test_reviews_carousel_sits_under_the_headline_and_stays_quiet():
+    """The carousel is the first thing after the h1 and before the lede; hidden in the HTML until the script finds a review; built
+    with textContent only (member text is user text); one reviews request (the cached list) feeds the carousel, the proof card and
+    the reviews line; the rating shows only from ten reviews; newest first, every rating."""
+    s = (server.WEB / "landing.html").read_text(encoding="utf-8")
+    h1, rvq, lede = s.index('<h1 id="hero-title">'), s.index('<div class="rvq" id="rvq"'), s.index('<p class="lede">')
+    assert h1 < rvq < lede
+    tag = s[rvq:s.index(">", rvq)]
+    assert " hidden" in tag and 'aria-roledescription="carousel"' in tag
+    assert s.count('href="/reviews"') >= 5                       # nav, proof card, record links, feature card... and All reviews
+    js = s[s.index("/* ---------- member reviews: ONE request"):s.index("/* ---------- hero trust row")]
+    assert "innerHTML" not in js and "insertAdjacentHTML" not in js and "createTextNode(" in js
+    assert s.count('"/api/reviews?sort=new&page=0"') == 1 and "/api/reviews/summary" not in s
+    assert "s.count >= 10 && s.average" in js                      # carousel's rating, same rule as the proof card
+    assert "RM.matches" in js                                      # reduced motion: no rotation
+    css = re.search(r"(?s)<style>(.*?)</style>", s).group(1)
+    size = lambda sel: float(re.search(re.escape(sel) + r"\{[^}]*font-size:([\d.]+)px", css).group(1))
+    assert size(".rvq-s blockquote") < size(".lede") and size(".rvq-who") < size(".rvq-s blockquote")
+
+
+def test_reviews_list_the_landing_reads_holds_700_signed_out_visitors(big_queue, srv, monkeypatch, tmp_path):
+    """Every landing visitor now asks for /api/reviews?sort=new&page=0 (the existing cached route, no new route): 700 signed-out
+    visitors at once get one shared answer, the same bytes and ETag, built once."""
+    from concurrent.futures import ThreadPoolExecutor
+    import reviews
+    monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("REVIEWS_PAGE", raising=False)
+    _seed_reviews(12)
+    calls = [0]
+    real = reviews.public_page
+
+    def counted(*a, **k):
+        calls[0] += 1
+        return real(*a, **k)
+    monkeypatch.setattr(reviews, "public_page", counted)
+
+    def one(_):
+        for attempt in range(3):
+            try:
+                return get(srv, "/api/reviews?sort=new&page=0")
+            except OSError:
+                time.sleep(0.2 * (attempt + 1))
+        return get(srv, "/api/reviews?sort=new&page=0")
+
+    with ThreadPoolExecutor(max_workers=700) as pool:
+        out = list(pool.map(one, range(700)))
+    assert len(out) == 700 and all(st == 200 for st, _h, _b in out)
+    assert len({b for _s, _h, b in out}) == 1 and len({h["etag"] for _s, h, _b in out}) == 1
+    d = json.loads(out[0][2])
+    assert d["summary"]["count"] == 12 and len(d["reviews"]) == 12 and calls[0] == 1

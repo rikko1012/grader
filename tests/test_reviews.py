@@ -397,7 +397,7 @@ def test_sign_in_returns_only_to_allow_listed_pages(srv, monkeypatch):
 
 def test_landing_and_record_link_to_reviews():
     landing = (server.WEB / "landing.html").read_text(encoding="utf-8")
-    assert 'href="/reviews"' in landing and "/api/reviews/summary" in landing
+    assert 'href="/reviews"' in landing and "/api/reviews?sort=new&page=0" in landing     # the cached list carries the summary too (2026-11-19 carousel)
     assert 'href="/reviews"' in (server.WEB / "record.html").read_text(encoding="utf-8")
     js = (server.WEB / "reviews.js").read_text(encoding="utf-8")
     assert "innerHTML" not in js and "insertAdjacentHTML" not in js        # member text only through textContent

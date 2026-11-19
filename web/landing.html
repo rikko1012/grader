@@ -54,7 +54,7 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:66px}
 .brand em{display:block;font-size:10px;letter-spacing:.22em;color:#8996a7;font-style:normal;font-weight:400}
 .grow{flex:1}
 .topnav{display:flex;gap:4px}
-.topnav a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border-radius:6px;color:#aeb8c6;text-decoration:none;font-size:13px}
+.topnav a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;border-radius:6px;color:#aeb8c6;text-decoration:none;font-size:13px;transition:color var(--fast),background var(--fast)}
 .topnav a:hover{color:#fff;background:#242d39}
 
 /* buttons: the hub's primary (blue) and card (navy) buttons */
@@ -99,18 +99,43 @@ html.js .hero:not(.on) .hero-bg::before,html.js .hero:not(.on) .hero-bg::after,h
 .hero-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.04fr);gap:60px;align-items:center;padding-top:68px;padding-bottom:84px}
 .hero-k{display:flex;align-items:center;gap:12px}
 .hero-k::before{content:"";flex:none;width:28px;height:2px;border-radius:2px;background:var(--btn)}
-.hero h1{font:600 clamp(42px,4.1vw,60px)/1.03 var(--font);letter-spacing:-.045em;margin:20px 0 20px}
+.hero h1{font:600 clamp(42px,4.1vw,60px)/1.03 var(--font);letter-spacing:-.045em;margin:20px 0 18px}
 .hero h1>span{white-space:nowrap}
 .nb{white-space:nowrap}
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
   .hero h1 .nb{background:linear-gradient(95deg,#dbeaff 0%,#a9cdff 38%,#77adff 72%,#347ff0 100%);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.06em}
 }
-.lede{font-size:18px;line-height:1.6;color:var(--body);margin:0 0 28px;max-width:30em}
+.lede{font-size:18px;line-height:1.6;color:var(--body);margin:0 0 28px;max-width:30em;text-wrap:pretty}
+/* member reviews under the headline (owner 2026-11-19: "under the headline as a carousel"): one short review at a time, quiet and
+   smaller than the lede, so it backs the headline without becoming the pitch. Slides share one grid cell and crossfade (no sliding
+   track, so nothing pokes out sideways); the height never changes between reviews. Built from /api/reviews (already cached),
+   text only; hidden until there is at least one review. */
+.rvq{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"s s" "w c";align-items:center;column-gap:8px;
+  max-width:34em;margin:0 0 20px;padding:2px 0 0 12px;border-left:2px solid var(--rule-2)}
+.rvq-stage{grid-area:s;display:grid;min-width:0;touch-action:pan-y;cursor:default}
+.rvq-s{position:relative;grid-area:1/1;min-width:0;margin:0;opacity:0;visibility:hidden;transition:opacity var(--reveal) var(--ease),visibility 0s linear var(--reveal)}
+.rvq-s.on{opacity:1;visibility:visible;transition:opacity var(--reveal) var(--ease)}
+.rvq-s blockquote{margin:0;font-size:14px;line-height:1.45;color:var(--muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;line-clamp:1;overflow:hidden;overflow-wrap:anywhere}
+.rvq-st{margin-right:6px;font-size:11px;letter-spacing:.08em;color:var(--accent)}
+.rvq-st i{font-style:normal;color:var(--line-2)}
+.rvq-s figcaption{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.rvq-who{grid-area:w;min-width:0;font-size:11.5px;line-height:1.4;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvq-ctl{grid-area:c;display:flex;align-items:center;margin:-8px -4px -10px 0}
+.rvq-btn{display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--faint);cursor:pointer;transition:color var(--fast),background var(--fast)}
+.rvq-btn:hover{color:var(--text);background:var(--surf-3)}
+.rvq-btn svg{width:14px;height:14px}
+.rvq-dots{display:flex;gap:4px;padding:0 2px}
+.rvq-dots i{width:4px;height:4px;border-radius:50%;background:var(--line-2);transition:background var(--base),transform var(--base)}
+.rvq-dots i.on{background:var(--accent);transform:scale(1.25)}
+.rvq-all{display:inline-flex;align-items:center;min-height:44px;padding:0 4px 0 10px;font-size:12.5px;font-weight:500;color:var(--link);text-decoration:none;white-space:nowrap}
+.rvq-all:hover{text-decoration:underline;text-underline-offset:3px}
+.rvq.one .rvq-btn,.rvq.one .rvq-dots{display:none}
+@media (prefers-reduced-motion:reduce){.rvq-s,.rvq-s.on,.rvq-dots i{transition:none}}
 .ctas{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .btn.ghost{background:rgba(22,28,36,.6);border-color:var(--rule-2);color:var(--text)}
 .btn.ghost:hover{border-color:var(--sel-line);background:var(--surf-3)}
 .btn.ghost svg{width:14px;height:14px}
-.trust{display:flex;margin:30px 0 0;padding:20px 0 0;list-style:none;border-top:1px solid var(--rule);max-width:520px}
+.trust{display:flex;margin:28px 0 0;padding:20px 0 0;list-style:none;border-top:1px solid var(--rule);max-width:520px}
 .trust>li{flex:1 1 0;min-width:0;padding:0 18px;border-left:1px solid var(--rule)}
 .trust>li:first-child{flex-grow:1.35;padding-left:0;border-left:0}
 .trust a,.trust>li>div{display:flex;flex-direction:column;justify-content:center;min-height:44px;color:inherit;text-decoration:none}
@@ -593,6 +618,9 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .hero-in{padding-top:26px;padding-bottom:40px;gap:30px}
   .hero h1{font-size:clamp(32px,9.6vw,42px);line-height:1.04;margin:12px 0 12px}
   .lede{font-size:15.5px;margin-bottom:18px}
+  .rvq{margin:0 0 12px;padding-left:10px}
+  .rvq-s blockquote{font-size:13px;-webkit-line-clamp:2;line-clamp:2}
+  .rvq-dots{display:none}
   .ctas .btn{flex:1 1 100%}
   .ctas .btn.ghost{display:none}
   .hero-k{font-size:10.5px;letter-spacing:.12em;gap:10px}.hero-k::before{width:20px}
@@ -676,6 +704,16 @@ footer.foot a:hover{color:#fff;background:#242d39}
       <div class="hero-copy">
         <p class="eyebrow hero-k">CS2 · League of Legends · NBA · NFL</p>
         <h1 id="hero-title"><span>Every player prop.</span> <span class="nb">One board.</span></h1>
+        <div class="rvq" id="rvq" role="region" aria-roledescription="carousel" aria-label="Member reviews" hidden>
+          <div class="rvq-stage" id="rvq-stage" aria-live="off"></div>
+          <span class="rvq-who" id="rvq-who" aria-hidden="true"></span>
+          <div class="rvq-ctl">
+            <button class="rvq-btn" type="button" id="rvq-prev" aria-label="Previous review"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <span class="rvq-dots" id="rvq-dots" aria-hidden="true"></span>
+            <button class="rvq-btn" type="button" id="rvq-next" aria-label="Next review"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <a class="rvq-all" id="rvq-all" href="/reviews">All reviews</a>
+          </div>
+        </div>
         <p class="lede">Every app's line in one place. Each prop gets a letter grade, Scout's chance for the Over and the Under at that exact line, and the reason in plain English.</p>
         <div class="ctas">
           <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
@@ -1052,6 +1090,77 @@ footer.foot a:hover{color:#fff;background:#242d39}
     }).catch(function () { return null; });
   })();
 
+  /* ---------- member reviews: ONE request (/api/reviews, newest first, cached server side) feeds the carousel under the headline,
+     the proof card and the reviews line. Newest first, every rating: the page says every review is posted, good or bad. ---------- */
+  var REVIEWS = !window.fetch || !window.Promise ? { then: function () {} } : getJSON("/api/reviews?sort=new&page=0");
+  function day(iso) { try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch (_) { return ""; } }
+
+  /* ---------- reviews carousel under the headline: one review at a time, crossfades every few seconds. Holds while hovered,
+     focused, touched, off screen or in a hidden tab; swipe on touch; reduced motion = no rotation (the arrows still work).
+     Member text is set with textContent only. ---------- */
+  safe(function () {
+    var root = $("#rvq");
+    if (!root) return;
+    var stage = $("#rvq-stage"), dots = $("#rvq-dots"), all = $("#rvq-all"), who = $("#rvq-who"), EVERY = 5500, MAX = 8;
+    var slides = [], marks = [], cur = 0, timer = null, holds = {}, touchT = null;
+    function held() { for (var k in holds) if (holds[k]) return true; return false; }
+    function plan() { clearTimeout(timer); timer = null; if (!RM.matches && slides.length > 1 && !held()) timer = setTimeout(function () { go(cur + 1); plan(); }, EVERY); }
+    function hold(k, on) { holds[k] = on; plan(); }
+    function go(i) {
+      if (!slides.length) return;
+      i = (i + slides.length) % slides.length;
+      slides[cur].classList.remove("on"); slides[cur].setAttribute("aria-hidden", "true"); marks[cur].classList.remove("on");
+      cur = i;
+      slides[cur].classList.add("on"); slides[cur].removeAttribute("aria-hidden"); marks[cur].classList.add("on");
+      who.textContent = slides[cur].lastChild.textContent;         // name and date, shown once beside the arrows
+      root.setAttribute("data-i", String(cur));
+    }
+    function slide(r, i, n) {
+      var f = el("figure", "rvq-s"), q = el("blockquote"), k = Math.max(1, Math.min(5, Math.round(+r.stars || 0)));
+      f.setAttribute("role", "group"); f.setAttribute("aria-roledescription", "slide"); f.setAttribute("aria-label", (i + 1) + " of " + n);
+      var st = el("span", "rvq-st", "★★★★★".slice(0, k));
+      if (k < 5) st.appendChild(el("i", null, "★★★★★".slice(0, 5 - k)));
+      st.setAttribute("role", "img"); st.setAttribute("aria-label", k + " out of 5 stars");
+      q.appendChild(st);
+      q.appendChild(document.createTextNode(String(r.title || r.body || "").replace(/\s+/g, " ").trim()));
+      f.appendChild(q);
+      var when = day(r.created);
+      f.appendChild(el("figcaption", null, String(r.name || "Member") + (when ? " · " + when : "")));
+      f.setAttribute("aria-hidden", "true");
+      return f;
+    }
+    REVIEWS.then(function (d) {
+      var list = d && Array.isArray(d.reviews) ? d.reviews.filter(function (r) { return r && (r.title || r.body); }).slice(0, MAX) : [];
+      if (!list.length) return;                                     // no reviews: the carousel stays hidden
+      list.forEach(function (r, i) { var f = slide(r, i, list.length); slides.push(f); stage.appendChild(f); marks.push(dots.appendChild(el("i"))); });
+      var s = d.summary;
+      if (s && s.count >= 10 && s.average) all.textContent = "★ " + Number(s.average).toFixed(1) + " · All reviews";
+      root.classList.toggle("one", slides.length < 2);
+      cur = 0; go(0);
+      root.hidden = false;
+      $("#rvq-prev").addEventListener("click", function () { stage.setAttribute("aria-live", "polite"); go(cur - 1); plan(); });
+      $("#rvq-next").addEventListener("click", function () { stage.setAttribute("aria-live", "polite"); go(cur + 1); plan(); });
+      root.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") hold("hover", true); });
+      root.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") hold("hover", false); });
+      root.addEventListener("focusin", function () { hold("focus", true); });
+      root.addEventListener("focusout", function (e) { if (!root.contains(e.relatedTarget)) hold("focus", false); });
+      root.addEventListener("touchstart", function () { clearTimeout(touchT); hold("touch", true); }, { passive: true });
+      root.addEventListener("touchend", function () { clearTimeout(touchT); touchT = setTimeout(function () { hold("touch", false); }, 6000); }, { passive: true });
+      var x0 = null, y0 = 0;                                         // swipe: a mostly sideways drag of 36 px or more
+      stage.addEventListener("pointerdown", function (e) { x0 = e.clientX; y0 = e.clientY; });
+      stage.addEventListener("pointerup", function (e) {
+        if (x0 === null) return;
+        var dx = e.clientX - x0, dy = e.clientY - y0; x0 = null;
+        if (slides.length > 1 && Math.abs(dx) >= 36 && Math.abs(dx) > Math.abs(dy) * 1.5) { go(cur + (dx < 0 ? 1 : -1)); plan(); }
+      });
+      stage.addEventListener("pointercancel", function () { x0 = null; });
+      document.addEventListener("visibilitychange", function () { hold("tab", document.hidden); });
+      watch([root], function (n, vis) { hold("off", !vis); });
+      onMM(RM, plan);
+      plan();
+    });
+  });
+
   /* ---------- hero trust row: the real record count (never a zero) and the number of books this page lists ---------- */
   safe(function () {
     var nb = $$('ul[aria-label="Books"] li').length;
@@ -1112,7 +1221,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       data = d;
       show();
     });
-    getJSON("/api/reviews/summary").then(function (d) {
+    REVIEWS.then(function (d) {
       var s = d && d.summary, a = $("#reviews-line");
       if (!s) return;
       if (s.count >= 10 && s.average) {      // one or two reviews read thin to a cold visitor: the rating shows from ten
