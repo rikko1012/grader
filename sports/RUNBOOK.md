@@ -295,7 +295,7 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 | Job | Command | Every (Starter) | Class | Cap MB | Measured peak MB | Flag |
 |---|---|---|---|---|---|---|
 | assistant | `sports.assistant.runner --once` | on demand (a queued question, checked every 2 s) | light | 120 | not measurable here (no SDK / key) | SPORTS_ASSISTANT |
-| prebuilt | 17.0 / 17.2 | 14.3 / 15.3 | 14.0 / 17.5 | 30.4 / 34.7 | 22.2 / 23.3 |
+| prebuilt | `sports.service snapshots` (slip pool) | 90 s | heavy | 160 | 105-109 | SPORTS_API |
 | ui-snapshots-nba / ui-snapshots-nfl | `sports.snapshots build <league> --no-results` (one process per league; slate games only, 2026-10-24) | 180 s AND right after every collector cycle of that league | heavy | 300 | live read 2026-10-25: NBA 90, NFL 137 (both in one process 152; prod both 251-265 = killed at 250). Stage RSS in manifest build_rss_mb, seconds in build_stage_s + service log "snapshots stage". Timeout 420 s on Standard. Overdue 300 s = urgent: goes first and later jobs may not take its slot (2026-10-31) | SPORTS_INGEST |
 | slips-ingest | `sports.slips ingest` | 5 min | light | 60 | 23 | SPORTS_INGEST |
 | books | `sports.worker books nba nfl` (FanDuel / BetRivers own feeds + OddsPapi when its guard allows; 2026-11-06 book-cadence). Each run first checks books.db (`books.worker.pending`, no request) and exits in ~1 s unless a game list, a game on the **direct** ladder (3 / 5 / 8 / 8 min inside 2 / 8 / 24 / 72 h of the start, then 12 h inside 7 days; the 24-72 h rung was 3 h until the 2026-11-06 site audit N1) or a blocked-book probe is due; then the ESPN resolver (shared caches) and one `run_once` pass. Store cap / `SPORTS_DISK_FREE_FLOOR_MB` checked before any write (exit 3 when paused). `SPORTS_BOOKS_JOB=0` = rollback (books back inside ingest-<league>) | every 60 s when a league is hot or has a game within 72 h (SPORTS_BOOKS_GAMEDAY_H, site audit N1), 180 s otherwise (SPORTS_BOOKS_HOT_S / _GAMEDAY_S / _IDLE_S) | light | 60 | 46 local, full 17-game NBA slate at real volume (28.6k side quotes, fake feeds); due check 35 MB / 0.6 s | SPORTS_INGEST |
@@ -322,45 +322,6 @@ Peak RSS measured 2026-10-24 on a copy of the real data (each job alone, `script
 Flags are read when the service starts: flip a flag, then restart (Render: Save in the Environment tab restarts).
 `/api/sports/admin/ops` -> `scheduler.jobs.<name>` shows each job's last exit, peak RSS, cap, over-cap kills, queue
 time; `scheduler.stats` the peak reservation and peak children RSS.
-
-#### Soccer / tennis Kalshi reference prices (2026-11-18)
-
-The `soccer-quotes` / `tennis-quotes` jobs (unchanged: 80 MB cap, 90 s timeout, every 180 s) end with one Kalshi
-step (`sports/expansion_kalshi.py`): at most 3 requests and 12 s, match winner only, stored as `reference_prices`
-in the sport's own `board.json` / `quotes.db` (`ref:kalshi`). Reference only - never a grade input.
-
-- Off: `SCOUT_SOCCER_KALSHI=0` / `SCOUT_TENNIS_KALSHI=0` (the next run writes no `reference_prices` key).
-- Check: the job's output line, or `sources.kalshi` in `board.json`: `markets`, `events`, `matched`,
-  `dropped_wide`, `ambiguous`, `unmatched`; `skipped: no_fixture` means no request was needed.
-- `error: http_429` / `http_403` / `held` with `held_until`: Kalshi refused; the hold (15 min or Retry-After
-  for a 429, 6 h for a 403) is in `<SPORTS_DATA_DIR>/expansion/request-holds.db` and both sports wait it out.
-  Do nothing; if 429s repeat, turn the switch off for one sport rather than work around it.
-- The same status without opening `board.json`: admin ops, `expansion_reference.<sport>.sources` (Kalshi and
-  Polymarket; written by the quotes job to `reference-status.json`). `error: no_time` means the line sources took
-  over 40 s, so the reference step was left for the next run.
-- Kalshi and Polymarket pacing and rate-limit holds (Retry-After, 15 min for a bare 429) are shared with the
-  NBA / NFL jobs through `<SPORTS_DATA_DIR>/request-marks.db`: during one, `ingest-kalshi` reports "asked us to
-  wait until ..." and sends nothing. A soccer / tennis 403 hold is not shared. Off: `SPORTS_SHARED_HOLDS=0`.
-- `quotes.db` keeps 14 days of `ref:` revisions; lines and game odds are never deleted.
-- A team that never matches: add its exact Kalshi name -> ESPN name to `sports/kalshi_expansion_aliases.json`
-  by hand after checking both sources. Never add abbreviations.
-- Details and what is not verified: `sports/SOCCER_TENNIS_STATUS.md`.
-
-#### Tennis Polymarket reference prices (2026-11-18)
-
-The `tennis-quotes` job (unchanged spec) then runs one Polymarket step (`sports/expansion_polymarket.py`): at most
-6 requests and 18 s, singles match winner only, stored beside Kalshi's rows in `reference_prices` / `quotes.db`
-(`ref:polymarket`). Reference only - never a grade input. Not tradable from the US; public prices only.
-
-- Off (rollback): `SCOUT_TENNIS_POLYMARKET=0`, then restart. The next run stores no Polymarket rows and the cards
-  disappear within 5 minutes. The `reference_prices` key stays while Kalshi is on for tennis.
-- Check: `sources.polymarket` in the job's output line or `board.json`: `markets`, `events`, `matched`,
-  `unmatched_count`, `dropped_wide`, `dropped_thin`, `started`, `truncated`, `unparsed_types`.
-- `error: http_429` / `http_403` / `held`: Polymarket refused; the hold is in `request-holds.db`. Do nothing; if it
-  repeats, turn the switch off. `http_500` or `ValueError` (answer over 2 MB): that run stores no Polymarket rows
-  and the next run tries again.
-- If the job's peak RSS nears its 80 MB cap, lower `PAGE` in `sports/expansion_polymarket.py` rather than raise
-  the cap (measured 44.1 MB for the whole job on 2026-11-18).
 
 ### 5b. Write path from handlers (blessed 2026-10-23)
 

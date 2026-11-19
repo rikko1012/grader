@@ -6,23 +6,19 @@ features, model validation and house-rule settlement have been connected.
 """
 import argparse
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import sqlite3
 import tempfile
 import threading
-import time
 from functools import lru_cache
 
-from .contracts import now_utc, parse_utc, utc
+from .contracts import now_utc, parse_utc
 from . import expansion_offers as adapters
 
 MAX_AGE = 300
-REFERENCE_START_BY_S = 40  # a reference step never starts later than this into a run (the job is killed at 90 s)
-REFERENCE_STATUS = 'reference-status.json'
-REFERENCE_KEEP_DAYS = 14   # quotes.db history of exchange reference prices (`ref:` rows); fixtures are at most 8 days out
 SPORTS = ("soccer", "tennis")
 _SNAPSHOT_LOCK = threading.Lock()
 _PREPARED = {}  # At most two eligible, encoded boards; shared by concurrent members.
@@ -33,22 +29,6 @@ def _read_snapshot(path, stamp, size):
     # At most one parsed snapshot per new sport, rather than per member request.
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
-
-
-def _current(rows, sport, instant, deadlines):
-    """Rows of this sport that have not started and were seen within MAX_AGE (the offers / game_odds rule)."""
-    kept = []
-    for row in rows:
-        if row.get('sport') != sport:
-            continue
-        start = parse_utc(row['start']).timestamp()
-        observed = parse_utc(row['observed_at']).timestamp()
-        if start > instant and 0 <= instant-observed <= MAX_AGE:
-            kept.append(row)
-            deadlines.extend((start, observed+MAX_AGE))
-        elif observed > instant:
-            deadlines.append(observed)
-    return kept
 
 
 def _prepared(path, st, now, sport):
@@ -82,15 +62,9 @@ def _prepared(path, st, now, sport):
                 odds.append(row);deadlines.extend((start,observed+MAX_AGE))
             elif observed>instant:deadlines.append(observed)
         data['game_odds']=odds
-        # Exchange reference prices (Kalshi, Polymarket): their own key, never mixed into offers or game_odds. A snapshot
-        # without the key answers exactly as before.
-        reference = []
-        if 'reference_prices' in data:
-            reference = data['reference_prices'] = _current(data['reference_prices'], sport, instant, deadlines)
         data['version'] = hashlib.sha256(json.dumps(sorted(
             [(r['platform'],r['offer_id'],r['revision']) for r in rows]+
-            [('odds:'+r['platform'],r['offer_id'],r['revision']) for r in odds]+
-            [('ref:'+r['platform'],r['offer_id'],r['revision']) for r in reference]),separators=(',',':')).encode()).hexdigest()
+            [('odds:'+r['platform'],r['offer_id'],r['revision']) for r in odds]),separators=(',',':')).encode()).hexdigest()
         # Serialize once per snapshot/eligibility boundary, not per member.
         encoded = json.dumps(data,separators=(',',':')).encode('utf-8')
         _PREPARED.pop(key, None)
@@ -183,12 +157,10 @@ def fit(rows, limit=SNAPSHOT_BYTES):
     return [r for i, r in enumerate(rows) if i not in drop]
 
 
-def save(sport, rows, sources, observed_at, directory=None, game_odds=None, reference_prices=None):
+def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
     directory = Path(directory) if directory else root(sport)
     game_odds=game_odds or []
-    # Exchange reference prices: stored and published under their own key (None: the key is not written at all).
-    reference = list(reference_prices or [])
-    if any(r.get("sport") != sport for r in rows+game_odds+reference):
+    if any(r.get("sport") != sport for r in rows+game_odds):
         raise ValueError("mixed sport batch refused")
     directory.mkdir(parents=True, exist_ok=True)
     db = directory / "quotes.db"
@@ -207,68 +179,31 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None, refe
             con.execute("CREATE INDEX IF NOT EXISTS quote_latest ON revisions(platform, offer_id, id DESC)")
             # Namespace native sportsbook markets so their IDs cannot collide
             # with player-prop quotes from a future book adapter.
-            for row in (rows+[dict(r,platform='odds:'+r['platform']) for r in game_odds]
-                        +[dict(r,platform='ref:'+r['platform']) for r in reference]):
+            for row in rows+[dict(r,platform='odds:'+r['platform']) for r in game_odds]:
                 previous = con.execute("SELECT revision FROM revisions WHERE platform=? AND offer_id=? ORDER BY id DESC LIMIT 1",
                                        (row['platform'], row['offer_id'])).fetchone()
                 if not previous or previous[0] != row['revision']:
                     con.execute("INSERT INTO revisions(platform,offer_id,revision,observed_at,payload) VALUES (?,?,?,?,?)",
                                 (row['platform'], row['offer_id'], row['revision'], observed_at, json.dumps(row)))
-            # Exchange reference prices tick far more often than lines and nothing reads their history back, so only
-            # the last REFERENCE_KEEP_DAYS of `ref:` revisions are kept (freed pages are reused: the file stops
-            # growing). Line and game-odds revisions are never deleted.
-            con.execute("DELETE FROM revisions WHERE platform >= 'ref:' AND platform < 'ref;' AND observed_at < ?",
-                        (utc(parse_utc(observed_at) - timedelta(days=REFERENCE_KEEP_DAYS)),))
     finally:
         con.close()
-    rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":")))
-               - (len(json.dumps(reference, separators=(",", ":"))) if reference_prices is not None else 0))
+    rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":"))))
     snapshot = {"sport": sport, "built_at": observed_at, "sources": sources, "offers": rows,
                 "mode": "lines", "grading_ready": False, "game_odds":game_odds}
-    if reference_prices is not None:
-        snapshot["reference_prices"] = reference
-    _write(directory, "board.json", snapshot)
-    # The reference sources' last answer (ok / error / held_until / truncated) as a small file for admin ops: the
-    # job exits 0 when only a reference source fails and the member feeds leave these sources out.
-    status = {k: v for k, v in sources.items() if isinstance(v, dict) and v.get("reference")}
-    if status:
-        _write(directory, REFERENCE_STATUS, {"sport": sport, "built_at": observed_at, "sources": status})
-    else:
-        try:
-            os.unlink(directory / REFERENCE_STATUS)        # switched off: no stale status left behind
-        except OSError:
-            pass
-    return snapshot
-
-
-def _write(directory, name, document):
     fd, temporary = tempfile.mkstemp(prefix="board-", suffix=".tmp", dir=directory)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(document, f, separators=(",", ":"))
-        os.replace(temporary, directory / name)
+            json.dump(snapshot, f, separators=(",", ":"))
+        os.replace(temporary, directory / "board.json")
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-
-
-def reference_status(sport):
-    """The quotes job's last reference-source status ({built_at, sources}), None when there is none. A small file
-    read; never board.json or a database."""
-    try:
-        path = root(sport) / REFERENCE_STATUS
-        if path.stat().st_size > 65536:
-            return None
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        return {"built_at": doc["built_at"], "sources": doc["sources"]} if isinstance(doc.get("sources"), dict) else None
-    except (OSError, ValueError, KeyError, AttributeError):
-        return None
+    return snapshot
 
 
 def collect(sport):
     from . import net
     from .expansion_sources import get_json
-    started = time.monotonic()
     rows, sources = [], {}
     pp = lambda league: ("https://partner-api.prizepicks.com/projections",
                          {"league_id": league, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
@@ -305,27 +240,7 @@ def collect(sport):
     directory=root(sport);directory.mkdir(parents=True,exist_ok=True)
     odds, odds_sources=collect_odds(sport,lambda url,**kw:get_json(sport,url,**kw),directory)
     sources.update(odds_sources)
-    reference = None
-    from . import expansion_kalshi, expansion_polymarket
-    from .expansion_sources import get_limited
-    # Exchange match-winner prices: a price reference only. Last, so their pacing never delays a line source; any
-    # failure costs only that source's rows. Off switches: SCOUT_<SPORT>_KALSHI=0, SCOUT_TENNIS_POLYMARKET=0.
-    for name, module in (('kalshi', expansion_kalshi), ('polymarket', expansion_polymarket)):
-        if not module.switched_on(sport):
-            continue
-        reference = reference or []
-        if time.monotonic() - started > REFERENCE_START_BY_S:
-            # Slow line sources used the run's time. A reference step can take 15 s (Kalshi) or 21 s (Polymarket),
-            # and a job killed at its 90 s timeout stores nothing: the lines are saved, the reference waits a run.
-            sources[name] = {'ok': False, 'reference': True, 'checked_at': now_utc(), 'error': 'no_time'}
-            continue
-        try:
-            found, sources[name] = module.collect(
-                sport, lambda url, limit=module.MAX_BYTES, **kw: get_limited(sport, url, limit, **kw), directory)
-            reference.extend(found)
-        except Exception as e:      # a reference source can never cost the run its lines
-            sources[name] = {'ok': False, 'reference': True, 'checked_at': now_utc(), 'error': type(e).__name__}
-    return save(sport, rows, sources, now_utc(),game_odds=odds,reference_prices=reference)
+    return save(sport, rows, sources, now_utc(),game_odds=odds)
 
 
 def board(req):
@@ -359,7 +274,7 @@ def main():
         raise SystemExit("sport collector disabled")
     result = collect(args.sport)
     print(json.dumps({"sport": args.sport, "offers": len(result["offers"]), "sources": result["sources"]}))
-    if not any(s["ok"] for s in result["sources"].values() if not s.get("reference")):
+    if not any(s["ok"] for s in result["sources"].values()):
         raise SystemExit(1)
 
 

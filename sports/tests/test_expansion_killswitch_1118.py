@@ -183,8 +183,14 @@ EXPECTED_53DAD0B_SOCCER = [
     ["https://www.fotmob.com/api/data/matchDetails", {"matchId": "44"}],
 ]
 EXPECTED_53DAD0B_TENNIS = [
-    ["https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard", {"dates": "D-1-D+2"}],
-    ["https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard", {"dates": "D-1-D+2"}],
+    # 53dad0b asked one range D-1-D+2 here. ESPN answers a tennis date range with no events (checked live
+    # 2026-11-19: range 0 events, single date 30 ATP / 42 WTA matches), so the same days are asked one at a time.
+    ["https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard", {"dates": "D+0"}],
+    ["https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard", {"dates": "D+0"}],
+    ["https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard", {"dates": "D-1"}],
+    ["https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard", {"dates": "D-1"}],
+    ["https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard", {"dates": "D+1"}],
+    ["https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard", {"dates": "D+1"}],
     ["https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard", {"dates": "D-7-D-1"}],
     ["https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard", {"dates": "D-7-D-1"}],
     ["https://api.thescore.com/atp/events", {}],
