@@ -4516,17 +4516,38 @@ def web_file(name):
 
 _LANDING = {"raw": None, "url": None, "data": b""}
 LANDING_PATHS = ("/", "/index.html", "/lol", "/sports", "/sports/")
+_LANDING_RV = {"body": None, "has": False}            # last summary body read -> has at least one published review
+
+
+def landing_has_reviews():
+    """True when the member-reviews summary already cached for /api/reviews/summary counts at least one published review, so the
+    landing page reserves the carousel's height before the reviews arrive (2026-11-19: no layout shift under the headline).
+    The SAME shared entry as that route: at most one SQLite read per 5 min per write, single flight, so 700 visitors at once
+    cost one read. Reviews switched off -> False (their API answers 404, the carousel never fills). A failed read keeps the
+    last answer - the landing page never fails over it."""
+    try:
+        if not reviews.page_on():
+            return False
+        _key, st, body = reviews.cached_summary(sys.modules[__name__])
+        if body is not _LANDING_RV["body"]:
+            _LANDING_RV.update(body=body, has=st == 200 and (json.loads(body).get("summary") or {}).get("count", 0) > 0)
+    except Exception:
+        pass
+    return _LANDING_RV["has"]
 
 
 def landing_page():
     """The signed-out landing page (web/landing.html) with the Join on Whop link filled in. ONE bytes object per (file
-    version, join url): send_shared caches the ETag + gzip by body identity (see sports_nav)."""
+    version, join url, price, reviews yes/no): send_shared caches the ETag + gzip by body identity (see sports_nav). With at
+    least one published review the <html> tag carries class="has-reviews" (the carousel's height is reserved at first paint)."""
     raw, url = web_file("landing.html"), landing_join_url()
-    price = landing_price()
-    if _LANDING["raw"] is not raw or _LANDING["url"] != url or _LANDING.get("price") != price:
+    price, has_rv = landing_price(), landing_has_reviews()
+    if _LANDING["raw"] is not raw or _LANDING["url"] != url or _LANDING.get("price") != price or _LANDING.get("rv") != has_rv:
         label = (" · " + htmllib.escape(price, quote=True)) if price else ""
         data = raw.replace(b"{{JOIN_URL}}", htmllib.escape(url, quote=True).encode("utf-8")).replace(b"{{PRICE_LABEL}}", label.encode("utf-8"))
-        _LANDING.update(raw=raw, url=url, price=price, data=data, next=None)
+        if has_rv:
+            data = data.replace(b'<html lang="en">', b'<html lang="en" class="has-reviews">', 1)
+        _LANDING.update(raw=raw, url=url, price=price, rv=has_rv, data=data, next=None)
     return landing_next() if ui_next_default() else _LANDING["data"]
 
 

@@ -108,18 +108,21 @@ html.js .hero:not(.on) .hero-bg::before,html.js .hero:not(.on) .hero-bg::after,h
 .lede{font-size:18px;line-height:1.6;color:var(--body);margin:0 0 28px;max-width:30em;text-wrap:pretty}
 /* member reviews under the headline (owner 2026-11-19: "under the headline as a carousel"): one short review at a time, quiet and
    smaller than the lede, so it backs the headline without becoming the pitch. Slides share one grid cell and crossfade (no sliding
-   track, so nothing pokes out sideways); the height never changes between reviews. Built from /api/reviews (already cached),
-   text only; hidden until there is at least one review. */
+   track, so nothing pokes out sideways); the height never changes between reviews (the stage keeps the clamp's full height).
+   Built from /api/reviews (already cached), text only; hidden until there is at least one review. The server marks <html>
+   has-reviews when its cached summary counts one, and that height is then reserved at first paint (nothing below moves when
+   the carousel fills). Quieter than the sub-copy: the quote in --faint, name and date fainter still, the link plain. */
 .rvq{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"s s" "w c";align-items:center;column-gap:8px;
   max-width:34em;margin:0 0 20px;padding:2px 0 0 12px;border-left:2px solid var(--rule-2)}
-.rvq-stage{grid-area:s;display:grid;min-width:0;touch-action:pan-y;cursor:default}
+.rvq-stage{grid-area:s;display:grid;min-width:0;min-height:20.3px;touch-action:pan-y;cursor:default}
+html.js.has-reviews .rvq[hidden]{display:grid !important;visibility:hidden}
 .rvq-s{position:relative;grid-area:1/1;min-width:0;margin:0;opacity:0;visibility:hidden;transition:opacity var(--reveal) var(--ease),visibility 0s linear var(--reveal)}
 .rvq-s.on{opacity:1;visibility:visible;transition:opacity var(--reveal) var(--ease)}
-.rvq-s blockquote{margin:0;font-size:14px;line-height:1.45;color:var(--muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;line-clamp:1;overflow:hidden;overflow-wrap:anywhere}
+.rvq-s blockquote{margin:0;font-size:14px;line-height:1.45;color:var(--faint);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;line-clamp:1;overflow:hidden;overflow-wrap:anywhere}
 .rvq-st{margin-right:6px;font-size:11px;letter-spacing:.08em;color:var(--accent)}
 .rvq-st i{font-style:normal;color:var(--line-2)}
 .rvq-s figcaption{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.rvq-who{grid-area:w;min-width:0;font-size:11.5px;line-height:1.4;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rvq-who{grid-area:w;min-width:0;font-size:11.5px;line-height:1.4;color:var(--faint);color:color-mix(in srgb,var(--faint) 80%,var(--bg));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rvq-ctl{grid-area:c;display:flex;align-items:center;margin:-8px -4px -10px 0}
 .rvq-btn{display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--faint);cursor:pointer;transition:color var(--fast),background var(--fast)}
 .rvq-btn:hover{color:var(--text);background:var(--surf-3)}
@@ -127,8 +130,10 @@ html.js .hero:not(.on) .hero-bg::before,html.js .hero:not(.on) .hero-bg::after,h
 .rvq-dots{display:flex;gap:4px;padding:0 2px}
 .rvq-dots i{width:4px;height:4px;border-radius:50%;background:var(--line-2);transition:background var(--base),transform var(--base)}
 .rvq-dots i.on{background:var(--accent);transform:scale(1.25)}
-.rvq-all{display:inline-flex;align-items:center;min-height:44px;padding:0 4px 0 10px;font-size:12.5px;font-weight:500;color:var(--link);text-decoration:none;white-space:nowrap}
-.rvq-all:hover{text-decoration:underline;text-underline-offset:3px}
+.rvq-all{display:inline-flex;align-items:center;min-height:44px;padding:0 4px 0 10px;font-size:12.5px;font-weight:400;color:var(--faint);text-decoration:none;white-space:nowrap;transition:color var(--fast)}
+.rvq-all:hover,.rvq-all:focus-visible{color:var(--link);text-decoration:underline;text-underline-offset:3px}
+.rvq-pp .i-play,.rvq-pp[aria-pressed="true"] .i-pause{display:none}
+.rvq-pp[aria-pressed="true"] .i-play{display:block}
 .rvq.one .rvq-btn,.rvq.one .rvq-dots{display:none}
 @media (prefers-reduced-motion:reduce){.rvq-s,.rvq-s.on,.rvq-dots i{transition:none}}
 .ctas{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
@@ -619,8 +624,10 @@ footer.foot a:hover{color:#fff;background:#242d39}
   .hero h1{font-size:clamp(32px,9.6vw,42px);line-height:1.04;margin:12px 0 12px}
   .lede{font-size:15.5px;margin-bottom:18px}
   .rvq{margin:0 0 12px;padding-left:10px}
+  .rvq-stage{min-height:37.7px}
   .rvq-s blockquote{font-size:13px;-webkit-line-clamp:2;line-clamp:2}
   .rvq-dots{display:none}
+  .rvq-all{padding-left:6px}
   .ctas .btn{flex:1 1 100%}
   .ctas .btn.ghost{display:none}
   .hero-k{font-size:10.5px;letter-spacing:.12em;gap:10px}.hero-k::before{width:20px}
@@ -711,6 +718,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
             <button class="rvq-btn" type="button" id="rvq-prev" aria-label="Previous review"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <span class="rvq-dots" id="rvq-dots" aria-hidden="true"></span>
             <button class="rvq-btn" type="button" id="rvq-next" aria-label="Next review"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="rvq-btn rvq-pp" type="button" id="rvq-pp" aria-pressed="false" aria-label="Pause reviews"><svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6L12.5 8z" fill="currentColor"/></svg></button>
             <a class="rvq-all" id="rvq-all" href="/reviews">All reviews</a>
           </div>
         </div>
@@ -1091,20 +1099,29 @@ footer.foot a:hover{color:#fff;background:#242d39}
   })();
 
   /* ---------- member reviews: ONE request (/api/reviews, newest first, cached server side) feeds the carousel under the headline,
-     the proof card and the reviews line. Newest first, every rating: the page says every review is posted, good or bad. ---------- */
+     the proof card and the reviews line. The carousel leads with the newest 4-5 star reviews, then every other rating newest
+     first; /reviews keeps its full list, every rating, unchanged. ---------- */
   var REVIEWS = !window.fetch || !window.Promise ? { then: function () {} } : getJSON("/api/reviews?sort=new&page=0");
   function day(iso) { try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch (_) { return ""; } }
 
   /* ---------- reviews carousel under the headline: one review at a time, crossfades every few seconds. Holds while hovered,
-     focused, touched, off screen or in a hidden tab; swipe on touch; reduced motion = no rotation (the arrows still work).
-     Member text is set with textContent only. ---------- */
+     keyboard-focused, touched, off screen or in a hidden tab; swipe on touch; a Pause / Play button (WCAG 2.2.2); reduced
+     motion starts paused (Play still works, so do the arrows). Member text is set with textContent only. ---------- */
   safe(function () {
-    var root = $("#rvq");
+    var root = $("#rvq"), HR = document.documentElement;
     if (!root) return;
-    var stage = $("#rvq-stage"), dots = $("#rvq-dots"), all = $("#rvq-all"), who = $("#rvq-who"), EVERY = 5500, MAX = 8;
-    var slides = [], marks = [], cur = 0, timer = null, holds = {}, touchT = null;
+    function unreserve() { HR.classList.remove("has-reviews"); }        // nothing to show: give the reserved height back
+    if (!window.fetch || !window.Promise) { unreserve(); return; }
+    var stage = $("#rvq-stage"), dots = $("#rvq-dots"), all = $("#rvq-all"), who = $("#rvq-who"), pp = $("#rvq-pp"), EVERY = 5500, MAX = 8;
+    var slides = [], marks = [], cur = 0, timer = null, holds = {}, touchT = null, paused = false;
     function held() { for (var k in holds) if (holds[k]) return true; return false; }
-    function plan() { clearTimeout(timer); timer = null; if (!RM.matches && slides.length > 1 && !held()) timer = setTimeout(function () { go(cur + 1); plan(); }, EVERY); }
+    function plan() { clearTimeout(timer); timer = null; if (!paused && slides.length > 1 && !held()) timer = setTimeout(function () { go(cur + 1); plan(); }, EVERY); }
+    function pause(p) {
+      paused = !!p;
+      pp.setAttribute("aria-pressed", paused ? "true" : "false");
+      pp.setAttribute("aria-label", paused ? "Play reviews" : "Pause reviews");
+      plan();
+    }
     function hold(k, on) { holds[k] = on; plan(); }
     function go(i) {
       if (!slides.length) return;
@@ -1130,8 +1147,10 @@ footer.foot a:hover{color:#fff;background:#242d39}
       return f;
     }
     REVIEWS.then(function (d) {
-      var list = d && Array.isArray(d.reviews) ? d.reviews.filter(function (r) { return r && (r.title || r.body); }).slice(0, MAX) : [];
-      if (!list.length) return;                                     // no reviews: the carousel stays hidden
+      var rs = d && Array.isArray(d.reviews) ? d.reviews.filter(function (r) { return r && (r.title || r.body); }) : [];
+      function good(r) { return +r.stars >= 4; }                    // the list arrives newest first; both halves keep that order
+      var list = rs.filter(good).concat(rs.filter(function (r) { return !good(r); })).slice(0, MAX);
+      if (!list.length) { unreserve(); return; }                    // no reviews: the carousel stays hidden
       list.forEach(function (r, i) { var f = slide(r, i, list.length); slides.push(f); stage.appendChild(f); marks.push(dots.appendChild(el("i"))); });
       var s = d.summary;
       if (s && s.count >= 10 && s.average) all.textContent = "★ " + Number(s.average).toFixed(1) + " · All reviews";
@@ -1140,11 +1159,13 @@ footer.foot a:hover{color:#fff;background:#242d39}
       root.hidden = false;
       $("#rvq-prev").addEventListener("click", function () { stage.setAttribute("aria-live", "polite"); go(cur - 1); plan(); });
       $("#rvq-next").addEventListener("click", function () { stage.setAttribute("aria-live", "polite"); go(cur + 1); plan(); });
+      pp.addEventListener("click", function () { pause(!paused); });
+      pause(RM.matches);                                            // reduced motion: starts paused
       root.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") hold("hover", true); });
       root.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") hold("hover", false); });
       root.addEventListener("focusin", function (e) {               // keyboard focus holds; a mouse click on an arrow does not
         var kb = true; try { kb = e.target.matches(":focus-visible"); } catch (_) {}
-        hold("focus", kb);
+        hold("focus", kb && e.target !== pp);                       // Play pressed from the keyboard must actually play
       });
       root.addEventListener("focusout", function (e) { if (!root.contains(e.relatedTarget)) hold("focus", false); });
       root.addEventListener("touchstart", function () { clearTimeout(touchT); hold("touch", true); }, { passive: true });
@@ -1159,7 +1180,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       stage.addEventListener("pointercancel", function () { x0 = null; });
       document.addEventListener("visibilitychange", function () { hold("tab", document.hidden); });
       watch([root], function (n, vis) { hold("off", !vis); });
-      onMM(RM, plan);
+      onMM(RM, function () { if (RM.matches) pause(true); });
       plan();
     });
   });

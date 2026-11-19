@@ -1,8 +1,10 @@
 """The signed-out landing page (web/landing.html) in a real browser against a local server.Handler, signed out, at 360, 390 and
 1440 px: no sideways scroll, every link and button at least 44 px tall, Sign in goes to /auth/login, Join goes to the Whop URL,
 and the page asks for nothing beyond this server and the app's own Google Fonts. Skipped where Playwright or Chromium is missing.
-LANDING_SHOTS=<folder> keeps a full-page screenshot per width (landing-<width>.png)."""
+LANDING_SHOTS=<folder> keeps a full-page screenshot per width (landing-<width>-<n>rev.png) and the first screens, taken with every
+reveal-on-scroll section shown and every entrance animation finished."""
 import os
+import re
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -50,6 +52,26 @@ def base(monkeypatch, tmp_path):
     httpd.shutdown()
 
 
+def settle(page, scroll=False):
+    """Every reveal-on-scroll section shown and every finite animation / transition finished (the hero's endless glow is
+    skipped): tap sizes and screenshots are read from the settled page, never mid entrance. scroll=True first scrolls the
+    page through so the real observers fire (record counter, comparison rows), then returns to the top."""
+    if scroll:
+        h = page.evaluate("document.documentElement.scrollHeight")
+        for y in range(0, h, 500):
+            page.evaluate(f"window.scrollTo(0, {y})")
+            page.wait_for_timeout(60)
+        page.evaluate("window.scrollTo(0, 0)")
+    page.evaluate("""async () => {
+        document.querySelectorAll('.rv, #steps, .gd-plot').forEach(n => n.classList.add('in'));
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const finite = () => document.getAnimations().filter(a => {
+          const t = a.effect && a.effect.getComputedTiming(); return a.playState === 'running' && t && isFinite(t.endTime);
+        });
+        for (let i = 0; i < 5 && finite().length; i++) await Promise.all(finite().map(a => a.finished.catch(() => null)));
+      }""")
+
+
 def seed(n):
     """n published member reviews (newest = the last one written), ratings 5,4,5,3,..."""
     import reviews
@@ -72,6 +94,7 @@ def test_landing_fits_every_width_with_big_targets_and_the_right_links(browser, 
     page.wait_for_timeout(300)
     if nrev:
         page.wait_for_selector("#rvq:not([hidden])")
+    settle(page, scroll=bool(SHOTS.parts))
     if SHOTS.parts:
         SHOTS.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(SHOTS / f"landing-{size['width']}-{nrev}rev.png"), full_page=True)
@@ -84,10 +107,9 @@ def test_landing_fits_every_width_with_big_targets_and_the_right_links(browser, 
       }).map(e => e.tagName + '.' + e.className)""", size["width"])
     assert not wide, wide
     small = page.evaluate("""() => [...document.querySelectorAll('a[href],button')].filter(e => {
-        const r = e.getBoundingClientRect(); return r.width && r.height && getComputedStyle(e).visibility !== 'hidden' && (r.height < 43.5 || r.width < 43.5)
+        const r = e.getBoundingClientRect(); return r.width && r.height && getComputedStyle(e).visibility !== 'hidden' && (r.height < 44 || r.width < 44)
       }).map(e => e.textContent.trim() + ' ' + Math.round(e.getBoundingClientRect().width) + 'x' + Math.round(e.getBoundingClientRect().height))""")
-    small = [s for s in small if not s.startswith("Skip to content")]
-    # (43.5: the example card's 44 px pause button can read 43.99 mid entrance animation - seen on main 93625b6 too)   # the skip link sits off-screen until focused
+    small = [s for s in small if not s.startswith("Skip to content")]    # the skip link sits off-screen until focused
     assert not small, small
     signin = page.locator("a", has_text="Sign in with Whop").first
     join = page.locator("a", has_text="Join on Whop").first
@@ -140,6 +162,12 @@ def test_carousel_under_the_headline_advances_and_pauses(browser, base, size):
     assert page.locator("#rvq .rvq-s.on figcaption").text_content().startswith("Member C. \u00b7 ")     # newest first, name and date
     assert page.locator("#rvq-who").text_content() == page.locator("#rvq .rvq-s.on figcaption").text_content()
     assert page.locator("#rvq-all").text_content() == "All reviews" and page.locator("#rvq-all").get_attribute("href") == "/reviews"
+    # quieter than the sub-copy: the quote in --faint, name and date fainter still, the link plain until hovered or focused
+    css = lambda sel, prop: page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).{prop}")
+    lum = lambda c: sum(float(v) for v in re.findall(r"[\d.]+", c)[:3]) * (255 if c.startswith("color(") else 1)
+    assert lum(css("#rvq .rvq-s.on blockquote", "color")) < lum(css(".lede", "color"))
+    assert lum(css("#rvq-who", "color")) < lum(css("#rvq .rvq-s.on blockquote", "color"))
+    assert css("#rvq-all", "fontWeight") == "400" and css("#rvq-all", "color") == css("#rvq .rvq-s.on blockquote", "color")
     away = (5, size["height"] - 5)
     # advances on its own
     assert _idx(page) == 0
@@ -190,16 +218,134 @@ def test_carousel_swipes_on_a_phone(browser, base):
     ctx.close()
 
 
-def test_carousel_reduced_motion_never_rotates(browser, base):
+def test_carousel_reduced_motion_starts_paused(browser, base):
+    """Reduced motion: the carousel starts paused (the button offers Play); the arrows step; Play starts the rotation."""
     seed(3)
     ctx, page, errors = _open(browser, base, reduced_motion="reduce")
     page.wait_for_selector("#rvq:not([hidden])")
+    pp = page.locator("#rvq-pp")
+    assert pp.get_attribute("aria-pressed") == "true" and pp.get_attribute("aria-label") == "Play reviews"
     page.mouse.move(5, 895)
     page.clock.run_for(30000)
     assert _idx(page) == 0
     page.locator("#rvq-next").click()
     assert _idx(page) == 1
+    pp.click()
+    page.mouse.move(5, 895)
+    assert pp.get_attribute("aria-pressed") == "false" and pp.get_attribute("aria-label") == "Pause reviews"
+    page.clock.run_for(6000)
+    assert _idx(page) == 2
     assert not errors
+    ctx.close()
+
+
+@pytest.mark.parametrize("size", (SIZES[0], SIZES[-1]), ids=lambda s: str(s["width"]))
+def test_carousel_pause_button(browser, base, size):
+    """WCAG 2.2.2: a 44 px Pause / Play toggle in the carousel controls. Pause holds for good (hover and focus leaving do not
+    restart it); Play resumes; it works from the keyboard."""
+    seed(3)
+    ctx, page, errors = _open(browser, base, size)
+    page.wait_for_selector("#rvq:not([hidden])")
+    pp = page.locator("#rvq-pp")
+    b = pp.bounding_box()
+    assert b["width"] >= 44 and b["height"] >= 44 and pp.is_visible()
+    assert pp.get_attribute("aria-pressed") == "false" and pp.get_attribute("aria-label") == "Pause reviews"
+    away = (5, size["height"] - 5)
+    pp.click()
+    page.mouse.move(*away)
+    page.locator(".ctas a").first.focus()
+    assert pp.get_attribute("aria-pressed") == "true" and pp.get_attribute("aria-label") == "Play reviews"
+    page.clock.run_for(30000)
+    assert _idx(page) == 0
+    page.locator("#rvq-next").click()                    # the arrows still step while paused
+    page.mouse.move(*away)
+    page.clock.run_for(30000)
+    assert _idx(page) == 1
+    pp.focus()
+    page.keyboard.press("Enter")                          # Play from the keyboard: plays even while the button keeps focus
+    assert pp.get_attribute("aria-pressed") == "false"
+    page.clock.run_for(6000)
+    assert _idx(page) == 2
+    assert not errors
+    ctx.close()
+
+
+def test_carousel_leads_with_the_newest_good_reviews(browser, base):
+    """The carousel shows the newest 4-5 star reviews first, then the rest newest first; /api/reviews (the /reviews page's list)
+    keeps plain newest first, every rating."""
+    import reviews
+    for i, (stars, name) in enumerate(((5, "Ann A"), (2, "Bo B"), (4, "Cy C"), (3, "Di D"), (5, "Ed E"), (1, "Flo F"))):
+        reviews.upsert(f"user_o{i}", name, {"stars": stars, "title": "", "body": f"review number {i} from {name}"})
+    con = reviews._connect()                              # distinct created_at: one second apart, oldest first
+    for i in range(6):
+        con.execute("UPDATE reviews SET created_at=?, updated_at=? WHERE user_id=?", (1_700_000_000 + i, 1_700_000_000 + i, f"user_o{i}"))
+    con.commit()
+    con.close()
+    reviews._bump()
+    ctx, page, errors = _open(browser, base)
+    page.wait_for_selector("#rvq:not([hidden])")
+    order = page.evaluate("[...document.querySelectorAll('#rvq .rvq-s figcaption')].map(f => f.textContent.split(' \u00b7 ')[0])")
+    assert order == ["Ed E.", "Cy C.", "Ann A.", "Flo F.", "Di D.", "Bo B."], order
+    api = page.evaluate("fetch('/api/reviews?sort=new&page=0').then(r => r.json()).then(d => d.reviews.map(r => r.name))")
+    assert api == ["Flo F.", "Ed E.", "Di D.", "Cy C.", "Bo B.", "Ann A."], api
+    assert not errors
+    ctx.close()
+
+
+def seed_long():
+    import reviews
+    long_body = ("The board is the first thing I open every night. " * 30)[:1400] + "\n\nSecond paragraph\nthird line."
+    reviews.upsert("user_l1", "Alexandria Montgomery-Fitzgerald Wellington", {"stars": 4, "title": "", "body": long_body, "name_style": "full"})
+    reviews.upsert("user_l2", "Pat Q", {"stars": 5, "title": "", "body": "x" * 600})
+    reviews.upsert("user_l3", "Sam K", {"stars": 3, "title": ("Title " * 20)[:80], "body": "short body here."})
+
+
+@pytest.mark.parametrize("kind", ("short", "long"))
+@pytest.mark.parametrize("size", (SIZES[0], SIZES[1], SIZES[-1]), ids=lambda s: str(s["width"]))
+def test_carousel_fills_without_moving_the_join_button(browser, base, size, kind):
+    """No layout shift: the server marks <html> has-reviews from its cached summary, so the carousel's height is held at first
+    paint. The reviews answer is held back, Join's top is measured, the answer is let through, and Join must not move (2 px at
+    most) - with short reviews and long ones, on every slide."""
+    seed(3) if kind == "short" else seed_long()
+    ctx = browser.new_context(viewport=size)
+    page = ctx.new_page()
+    errors, held = [], []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.route(lambda url: "/api/reviews" in url, lambda route: held.append(route))
+    page.goto(base + "/", wait_until="load")
+    page.evaluate("document.fonts.ready.then(() => 1)")
+    page.wait_for_timeout(200)
+    assert page.evaluate("document.documentElement.classList.contains('has-reviews')")
+    assert page.locator("#rvq").is_hidden()
+    join = page.locator(".ctas a").first
+    y0 = join.bounding_box()["y"]
+    assert held, "the reviews request was not made"
+    for r in held:
+        r.continue_()
+    page.wait_for_selector("#rvq:not([hidden])")
+    page.wait_for_timeout(100)
+    tops = [join.bounding_box()["y"]]
+    for _ in range(3):
+        page.locator("#rvq-next").click()
+        tops.append(join.bounding_box()["y"])
+    assert all(abs(y - y0) <= 2 for y in tops), (y0, tops)
+    assert not errors
+    ctx.close()
+
+
+def test_no_reserved_gap_without_reviews_or_when_the_list_fails(browser, base):
+    """No reviews: no has-reviews class, no gap. Reviews counted but the list request failing: the reserved height is given back."""
+    ctx, page, errors = _open(browser, base)
+    assert not page.evaluate("document.documentElement.classList.contains('has-reviews')")
+    lede0 = page.locator(".lede").bounding_box()["y"]
+    ctx.close()
+    seed(3)
+    ctx = browser.new_context(viewport=SIZES[-1])
+    page = ctx.new_page()
+    page.route(lambda url: "/api/reviews" in url, lambda route: route.fulfill(status=503, body="{}"))
+    page.goto(base + "/", wait_until="load")
+    page.wait_for_function("!document.documentElement.classList.contains('has-reviews')")
+    assert page.locator("#rvq").is_hidden() and abs(page.locator(".lede").bounding_box()["y"] - lede0) <= 1
     ctx.close()
 
 
@@ -208,6 +354,7 @@ def test_carousel_hidden_without_reviews(browser, base):
     page.clock.run_for(2000)
     page.wait_for_timeout(300)
     assert page.locator("#rvq").is_hidden() and page.locator("#rvq .rvq-s").count() == 0
+    assert page.locator("#rvq").bounding_box() is None
     assert not errors
     ctx.close()
 
@@ -255,7 +402,8 @@ def test_first_screen_with_reviews(browser, base, size, nrev):
     page.goto(base + "/", wait_until="load")
     if nrev:
         page.wait_for_selector("#rvq:not([hidden])")
-    page.wait_for_timeout(900)
+    page.wait_for_timeout(300)
+    settle(page, scroll=bool(SHOTS.parts))
     for txt in ("Join on Whop", "Sign in with Whop"):
         b = page.locator("a", has_text=txt).first.bounding_box()
         assert b["y"] + b["height"] <= size["height"], txt
@@ -269,11 +417,7 @@ def test_first_screen_with_reviews(browser, base, size, nrev):
 def test_carousel_clamps_real_shaped_reviews(browser, base, size):
     """Long reviews stay one line on a desktop and two on a phone: a 1,500-character body with line breaks, an unbroken string,
     an 80-character title and a long full name - no sideways overflow, the same height on every slide."""
-    import reviews
-    long_body = ("The board is the first thing I open every night. " * 30)[:1400] + "\n\nSecond paragraph\nthird line."
-    reviews.upsert("user_l1", "Alexandria Montgomery-Fitzgerald Wellington", {"stars": 4, "title": "", "body": long_body, "name_style": "full"})
-    reviews.upsert("user_l2", "Pat Q", {"stars": 5, "title": "", "body": "x" * 600})
-    reviews.upsert("user_l3", "Sam K", {"stars": 3, "title": ("Title " * 20)[:80], "body": "short body here."})
+    seed_long()
     ctx, page, errors = _open(browser, base, size)
     page.wait_for_selector("#rvq:not([hidden])")
     line = page.evaluate("parseFloat(getComputedStyle(document.querySelector('#rvq .rvq-s.on blockquote')).lineHeight)")

@@ -685,6 +685,14 @@ def _members_only(h):
     return _refuse(h, 401, {"error": "members_only", "signed_in": bool(h.member()), "upgrade": whop_auth.upgrade_url()})
 
 
+def cached_summary(srv):
+    """(key, status, body) of the shared summary answer (/api/reviews/summary): built at most once per 5 min per write
+    generation (single flight), so the landing page can read it on every visit without touching SQLite."""
+    key = ("reviews_summary", GEN[0], str(db_path()))
+    st, body = srv.shared(key, lambda: (200, json.dumps({"summary": summary()}).encode()), ttl=300)
+    return key, st, body
+
+
 def handles_get(path):
     return path in ("/reviews", "/reviews.js", "/api/reviews", "/api/reviews/me", "/api/reviews/summary",
                     "/admin/reviews", "/admin/reviews.json") or path.startswith("/reviews/p/")
@@ -713,8 +721,7 @@ def handle_get(h, srv, path, q):
     if path == "/api/reviews/me":
         return h.send(200, me(h))
     if path == "/api/reviews/summary":
-        key = ("reviews_summary", GEN[0], str(db_path()))
-        st, body = srv.shared(key, lambda: (200, json.dumps({"summary": summary()}).encode()), ttl=300)
+        key, st, body = cached_summary(srv)
         return h.send_shared(key, st, body, keep=300)
     sort = q.get("sort") or "new"
     try:

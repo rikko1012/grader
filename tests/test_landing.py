@@ -33,6 +33,10 @@ def srv(monkeypatch, tmp_path):
     monkeypatch.setattr(server, "_INFLIGHT", {})
     monkeypatch.setattr(server, "_ENC_LOCKS", {})
     monkeypatch.setattr(server, "_RES_BYTES", [0, 0.0])
+    monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))                 # an empty reviews store unless a test seeds one
+    monkeypatch.delenv("REVIEWS_PAGE", raising=False)
+    monkeypatch.setattr(server, "_LANDING", {"raw": None, "url": None, "data": b""})
+    monkeypatch.setattr(server, "_LANDING_RV", {"body": None, "has": False})
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
     httpd.daemon_threads = True
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -298,3 +302,79 @@ def test_reviews_list_the_landing_reads_holds_700_signed_out_visitors(big_queue,
     assert len({b for _s, _h, b in out}) == 1 and len({h["etag"] for _s, h, _b in out}) == 1
     d = json.loads(out[0][2])
     assert d["summary"]["count"] == 12 and len(d["reviews"]) == 12 and calls[0] == 1
+
+
+# ---------------------------------------------------------------- no layout shift: the reserved carousel height (2026-11-19)
+HAS = b'<html lang="en" class="has-reviews">'
+
+
+def test_landing_marks_has_reviews_only_when_a_review_is_published(srv, monkeypatch):
+    """<html class="has-reviews"> (the carousel's height reserved at first paint) only when the cached summary counts a published
+    review: none with no reviews, none with the reviews page switched off (its API 404s), and a write flips it at once."""
+    import reviews
+    assert HAS not in landing() and b'<html lang="en">' in landing()
+    _seed_reviews(1)
+    assert HAS in landing()
+    monkeypatch.setenv("REVIEWS_PAGE", "0")
+    assert HAS not in landing()
+    monkeypatch.delenv("REVIEWS_PAGE")
+    assert HAS in landing()
+    reviews.delete_own("user_rv0")
+    assert HAS not in landing()
+
+
+def test_landing_review_flag_reads_the_cached_summary_never_per_request(srv, monkeypatch):
+    """The flag comes from the shared /api/reviews/summary entry: many landing builds = one SQLite read until the next write;
+    a failing read keeps the last answer and never fails the page."""
+    import reviews
+    _seed_reviews(2)
+    calls = [0]
+    real = reviews.summary
+
+    def counted(*a, **k):
+        calls[0] += 1
+        return real(*a, **k)
+    monkeypatch.setattr(reviews, "summary", counted)
+    for _ in range(50):
+        assert HAS in landing()
+    assert calls[0] == 1
+    st, _h, body = get(srv, "/api/reviews/summary")             # the route answers from the same entry
+    assert st == 200 and json.loads(body)["summary"]["count"] == 2 and calls[0] == 1
+
+    def boom(*a, **k):
+        raise RuntimeError("database is locked")
+    monkeypatch.setattr(reviews, "summary", boom)
+    reviews._bump()                                             # a new generation: the next read fails
+    assert HAS in landing()                                     # the last answer stands; the page is served
+
+
+def test_700_signed_out_visitors_with_reviews_get_one_page_and_one_summary_read(big_queue, srv, monkeypatch):
+    """700 signed-out visitors on / at once with reviews published: every answer is the same has-reviews page (one ETag), and
+    the reviews summary is read once."""
+    from concurrent.futures import ThreadPoolExecutor
+    import reviews
+    _seed_reviews(12)
+    calls = [0]
+    real = reviews.summary
+
+    def counted(*a, **k):
+        calls[0] += 1
+        return real(*a, **k)
+    monkeypatch.setattr(reviews, "summary", counted)
+
+    def one(_):
+        for attempt in range(3):
+            try:
+                return get(srv, "/")
+            except OSError:
+                time.sleep(0.2 * (attempt + 1))
+        return get(srv, "/")
+
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=700) as pool:
+        out = list(pool.map(one, range(700)))
+    took = time.time() - t0
+    want = landing()
+    assert len(out) == 700 and all(st == 200 and body == want for st, _h, body in out)
+    assert HAS in want and len({h["etag"] for _st, h, _b in out}) == 1 and calls[0] == 1
+    print(f"700 landing visitors with reviews: {took:.2f}s")
