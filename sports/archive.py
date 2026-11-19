@@ -671,6 +671,37 @@ def _remove_orphans(con):
     return n
 
 
+LAST_PASS = "last_pass.json"                           # admin ops: how far the latest pass got (even a killed one)
+
+
+def _write_last_pass(out, t0, finished):
+    """The pass's own result without the file list, written after every stage, after every part and at the end: a pass that is killed
+    (cap / timeout) or interrupted still says where it stopped. A record only - never a reason for the pass to fail."""
+    try:
+        d = archive_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        rec = {k: v for k, v in out.items() if k != "parts"}
+        rec.update(parts_done=len(out["parts"]), started_at=round(t0), written_at=round(time.time()),
+                   pid=os.getpid(), finished=finished)
+        tmp = d / f".{LAST_PASS}.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps(rec, default=str), encoding="utf-8")
+        os.replace(tmp, d / LAST_PASS)
+    except Exception:                                   # noqa: BLE001
+        pass
+
+
+def last_pass(max_bytes=65536):
+    """The record above for admin ops; None when no pass has written one or it cannot be read."""
+    try:
+        path = archive_dir() / LAST_PASS
+        if path.stat().st_size > max_bytes:
+            return None
+        got = json.loads(path.read_text(encoding="utf-8"))
+        return got if isinstance(got, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
 def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
     """One bounded pass. time_budget_s covers the WHOLE pass (setup + candidate scan + parts): the scan is interrupted
     at the budget (SQLite progress handler), no part starts once the budget is spent or when the slowest part so far
@@ -685,6 +716,8 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
 
     def stage(name):
         out["stages"].append((name, round(time.time() - t0, 1)))
+        _write_last_pass(out, t0, False)
+    _write_last_pass(out, t0, False)
     try:
         ensure_schema(con)
         install(con)
@@ -701,6 +734,7 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
         stage("candidates")
         out["pending_parts"] = len(parts)
         out["more_pending"] = sum(len(r) for _l, _d, r in parts) > max_parts * PART_ROWS
+        _write_last_pass(out, t0, False)
         slowest = 0.0
         for league, day, rids in parts[:max_parts]:
             if time.time() + slowest > deadline:
@@ -712,6 +746,7 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
             out["parts"].append(r["file"])
             out["rows"] += r["rows"]
             out["bytes"] += r["bytes"]
+            _write_last_pass(out, t0, False)            # a pass killed mid-way still shows the parts it finished
         stage("parts")
         try:                                            # bounded wait on readers (was the store's 30 s busy timeout)
             con.execute("PRAGMA busy_timeout=5000")
@@ -725,6 +760,7 @@ def run_pass(con=None, now=None, max_parts=40, time_budget_s=1200):
         out["error"] = f"{type(e).__name__}: {str(e)[:300]}"
     finally:
         out["took_s"] = round(time.time() - t0, 2)
+        _write_last_pass(out, t0, True)
         if own:
             con.close()
     return out

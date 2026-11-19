@@ -242,3 +242,39 @@ def test_no_part_starts_past_the_budget(world, monkeypatch):
     out = archive.run_pass(con, now=NOW, time_budget_s=600)
     assert out["error"] is None and out["stopped"] == "time budget"
     assert len(out["parts"]) == 2 and out["took_s"] <= 600                     # 250 + 250; a third would end at 750
+
+
+# ---- 2026-11-18: a pass's result was only printed; a killed pass left nothing ops could read ----------------------
+def test_last_pass_record_is_written_after_every_stage_and_survives_a_killed_pass(world, monkeypatch):
+    con = world[0]
+    assert archive.last_pass() is None
+    seen = []
+    monkeypatch.setattr(archive, "_STEP_HOOK", lambda name, **kw: seen.append(archive.last_pass()))
+    out = archive.run_pass(con, now=NOW)
+    mid = seen[0]                                      # what a pass killed inside its first part would have left
+    assert mid["finished"] is False and [s[0] for s in mid["stages"]] == ["setup", "candidates"]
+    assert mid["pending_parts"] == out["pending_parts"] and mid["pid"] == os.getpid() and "took_s" not in mid
+    last = archive.last_pass()
+    assert last["finished"] is True and last["error"] is None and "parts" not in last
+    assert [s[0] for s in last["stages"]] == ["setup", "candidates", "parts", "checkpoint"]
+    assert (last["parts_done"], last["rows"], last["at"], last["took_s"]) == (
+        len(out["parts"]), out["rows"], out["at"], out["took_s"]) and last["parts_done"] > 0
+    assert not list(archive.archive_dir().glob(".*.tmp")) and archive.verify()["bad"] == []
+    monkeypatch.setattr(archive, "_STEP_HOOK", None)
+    (archive.archive_dir() / archive.LAST_PASS).write_text("{not json")
+    assert archive.last_pass() is None                 # unreadable or oversized: ops shows nothing, never raises
+    (archive.archive_dir() / archive.LAST_PASS).write_text(json.dumps({"x": "y" * 70000}))
+    assert archive.last_pass() is None
+    monkeypatch.setattr(archive, "LAST_PASS", "no-such-dir/last_pass.json")     # the record cannot be written:
+    again = archive.run_pass(con, now=NOW)                                       # the pass itself is unaffected
+    assert again["error"] is None and [s[0] for s in again["stages"]][-1] == "checkpoint"
+
+
+def test_last_pass_records_a_failed_pass(world, monkeypatch):
+    def boom(name, **kw):
+        raise RuntimeError("crash at written")
+    monkeypatch.setattr(archive, "_STEP_HOOK", boom)
+    out = archive.run_pass(world[0], now=NOW)
+    last = archive.last_pass()
+    assert last["finished"] is True and last["error"] == out["error"] and "crash at written" in last["error"]
+    assert [s[0] for s in last["stages"]] == ["setup", "candidates"] and last["parts_done"] == 0

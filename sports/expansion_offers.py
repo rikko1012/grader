@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import re
 
 from .contracts import utc
 
@@ -159,14 +160,21 @@ def underdog(body, observed_at):
                     updates.append(update)
         if not sides:
             continue
-        opponent = players.get(next(x for x in participants if x != p['id'])) or {}
+        other = next(x for x in participants if x != p['id'])
+        opponent = players.get(other) or {}
+        rival = ' '.join(x for x in (opponent.get('first_name'), opponent.get('last_name')) if x)
+        if not rival:
+            # An opponent with no line of their own is absent from `players` (2 of 37 singles games on 2026-11-18);
+            # the game still names both sides, with an optional seed prefix ("(2) Kyrian Jacquet"). Empty: unlinked.
+            side = 'home' if game.get('home_player_id') == other else 'away'
+            rival = re.sub(r'^\(\d+\)\s*', '', str(game.get(f'{side}_player_name') or '').strip())
         group = str(game.get('sport_group_name') or '')
         tour = 'wta' if group.startswith('WTA ') else 'atp' if group.startswith('ATP ') else None
         rows.append(finish({"sport": "tennis", "platform": "underdog", "offer_id": str(line["id"]),
             "event_id": f"tennis:underdog:{game['id']}", "player_id": f"tennis:underdog:{p['id']}",
             "player": " ".join(x for x in (p.get("first_name"), p.get("last_name")) if x),
             "role": None, "team": None, "match": game.get("title"), "competition": game.get("sport_group_name"),
-            "tour": tour, "opponent": ' '.join(x for x in (opponent.get('first_name'), opponent.get('last_name')) if x),
+            "tour": tour, "opponent": rival,
             "stat": market[0], "label": st.get("display_stat") or market[0], "scope": market[1], "line": value,
             "variant": line.get("line_type") or "unknown", "start": start, "sides": sides,
             "observed_at": now, "source_updated_at": min(updates) if len(updates) == len(sides) else None,

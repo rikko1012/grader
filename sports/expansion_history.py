@@ -486,8 +486,13 @@ def collect(sport, max_requests=16, max_seconds=150):
     # rounds; the older cursor advances only after its scoreboard was fetched.
     # Live window starts yesterday (UTC): evening matches that end after midnight must reach final now, not on
     # the next 90-day backfill cycle.
+    # Tennis live requests are SINGLE dates: for a date range ESPN picks tournaments by their start date, so
+    # yesterday..today+2 returned no events during the ATP Finals (started three days earlier; verified
+    # 2026-11-18: range 0 events, single date 30 ATP and 42 WTA matches). A single date returns every tournament
+    # in progress with all its rounds. Today first; yesterday because the day after a tournament's last day no
+    # longer returns it (verified: Stockholm, last day 2026-11-14, absent on 20261115); tomorrow for one about to start.
     requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(-1, 3)]
-                if sport == 'soccer' else [('live', f'{today-timedelta(days=1):%Y%m%d}-{today+timedelta(days=2):%Y%m%d}')])
+                if sport == 'soccer' else [('live', f'{today+timedelta(days=i):%Y%m%d}') for i in (0, -1, 1)])
     # Tennis providers accept bounded date ranges. Seven days per request
     # avoids spending 7.5 hours walking 90 individual dates on a new store.
     width = 7 if sport == 'tennis' else 1

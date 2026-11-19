@@ -260,3 +260,33 @@ def test_quotes_job_requests_mls_and_underdog_soccer_only_when_flagged(monkeypat
     assert snap['sources']['underdog']['ok'] and snap['sources']['prizepicks_mls']['ok']
     calls.clear(); board.collect('tennis')
     assert [p.get('league_id') or p.get('sport_id') for _, p in calls] == [5, 'TENNIS']
+
+
+def ud_tennis(**game):
+    return {'players': [{'id': 'p1', 'sport_id': 'TENNIS', 'first_name': 'Frances', 'last_name': 'Tiafoe'}],
+            'appearances': [{'id': 'a1', 'player_id': 'p1', 'match_id': 'g1'}],
+            'solo_games': [{'id': 'g1', 'sport_group_name': 'ATP Challenger', 'scheduled_at': '2026-11-18T14:00:00Z',
+                            'status': 'scheduled', 'title': 'Tiafoe vs Jacquet', 'home_player_id': 'p1',
+                            'away_player_id': 'p2', 'home_player_name': '(4) Frances Tiafoe',
+                            'away_player_name': '(2) Kyrian Jacquet', **game}],
+            'over_under_lines': [{'id': 'l1', 'status': 'active', 'stat_value': '21.5', 'line_type': 'balanced',
+                'over_under': {'category': 'player_prop', 'appearance_stat': {'appearance_id': 'a1', 'stat': 'games_played'}},
+                'options': [{'choice': 'higher', 'status': 'active', 'payout_multiplier': '1.0',
+                             'updated_at': '2026-11-17T11:00:00Z'}]}]}
+
+
+def test_underdog_tennis_opponent_without_own_line_comes_from_the_game():
+    from sports import expansion_history as history
+    row = offers.underdog(ud_tennis(), NOW)[0]
+    assert (row['player'], row['opponent'], row['tour']) == ('Frances Tiafoe', 'Kyrian Jacquet', 'atp')   # seed prefix dropped
+    m = {'event_id': 'atp:espn:atp:t:1', 'competition': 'atp', 'start': '2026-11-18T14:00:00Z',
+         'participants': [{'id': 'A', 'name': 'Frances Tiafoe'}, {'id': 'B', 'name': 'Kyrian Jacquet'}]}
+    assert history.resolve(row, [m])['player_id'] == 'A'
+    swapped = ud_tennis(home_player_id='p2', away_player_id='p1', home_player_name='Kyrian Jacquet', away_player_name='x')
+    assert offers.underdog(swapped, NOW)[0]['opponent'] == 'Kyrian Jacquet'
+    body = ud_tennis()                                 # the players table still wins when it has the opponent
+    body['players'].append({'id': 'p2', 'sport_id': 'TENNIS', 'first_name': 'K.', 'last_name': 'Jacquet'})
+    assert offers.underdog(body, NOW)[0]['opponent'] == 'K. Jacquet'
+    for missing in ('', None, '(2) '):                 # no name anywhere: the offer stays unlinked, nothing is guessed
+        row = offers.underdog(ud_tennis(away_player_name=missing), NOW)[0]
+        assert row['opponent'] == '' and history.resolve(row, [m]) is None

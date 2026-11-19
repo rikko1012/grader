@@ -58,7 +58,7 @@ from . import scheduler as _plan                        # noqa: E402 - plan size
 # service drain-and-restart ceiling: Starter 160 MB, Standard (>= 1.5 GB, 2026-10-25) 400 MB; children <= budget
 MAX_MB = _int("SPORTS_SERVICE_MAX_MB", "400" if _plan.standard() else "160")
 STATS = {"requests": 0, "errors_5xx": 0, "rejected_busy": 0, "unauthorized": 0, "forbidden_origin": 0,
-         "inflight": 0, "peak_inflight": 0, "ms_total": 0.0, "started": time.time()}
+         "health_bypass": 0, "inflight": 0, "peak_inflight": 0, "ms_total": 0.0, "started": time.time()}
 _SLOCK = threading.Lock()
 _STATE = {"draining": False}
 _PATHS = {}                                             # thread id -> path being served (named in the exit record)
@@ -225,6 +225,13 @@ def feed_state():
         out["store"] = "not_created"
     except Exception as e:                              # noqa: BLE001
         out["error"] = type(e).__name__
+    try:                                                # how far the latest archive pass got (a killed one included)
+        from . import archive
+        last = archive.last_pass()
+        if last is not None:
+            out.setdefault("archive", {})["last_pass"] = last
+    except Exception:                                   # noqa: BLE001
+        pass
     try:                                                # the disk the Starter plan pays for (alerts at 80 / 90 %)
         import shutil
         from . import config
@@ -449,6 +456,7 @@ def ops_with_alerts():
 # ------------------------------------------------------------------------------------------------------- handler
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"                       # keep-alive (browsers, the gateway pool)
+    one_shot = False                                    # True: the reserved health path (Server.process_request)
     server_version = "scout-sports"
     sys_version = ""
 
@@ -547,6 +555,10 @@ class Handler(BaseHTTPRequestHandler):
         self._t0 = time.time()
         self._member_ok = False
         u = urlparse(self.path)
+        if self.one_shot:                               # no request slot is held: health only, one answer, then close
+            self.close_connection = True
+            if method != "GET" or u.path != "/api/sports/health":
+                return self._send(503, {"error": "sports_busy"})
         cors, ok = self._cors()
         body = b""
         if method == "POST":
@@ -627,9 +639,32 @@ class Server(ThreadingHTTPServer):
     def __init__(self, addr, handler=Handler, threads=None):
         super().__init__(addr, handler)
         self.slots = threading.BoundedSemaphore(threads or THREADS)
+        # The platform's health check (render healthCheckPath) must not depend on request capacity: slow reads or
+        # idle keep-alive connections holding every slot answered it with the canned 503, which reads as an
+        # unhealthy instance. Two reserved slots serve that one route, one answer per connection.
+        self.health_slots = threading.BoundedSemaphore(2)
+        self._health_handler = type("HealthHandler", (handler,), {"one_shot": True})
+
+    @staticmethod
+    def _is_health(request):
+        try:
+            request.settimeout(0.05)                    # the accept thread waits at most this long for the first bytes
+            return request.recv(64, socket.MSG_PEEK).startswith(b"GET /api/sports/health")
+        except (OSError, ValueError):
+            return False
 
     def process_request(self, request, client_address):
         if _STATE["draining"] or not self.slots.acquire(timeout=QUEUE_S):
+            if not _STATE["draining"] and self._is_health(request) and self.health_slots.acquire(blocking=False):
+                with _SLOCK:
+                    STATS["health_bypass"] += 1
+                try:
+                    request.settimeout(5)
+                    threading.Thread(target=self._run_health, args=(request, client_address), daemon=True).start()
+                except (OSError, RuntimeError):
+                    self.health_slots.release()
+                    self.shutdown_request(request)
+                return
             with _SLOCK:
                 STATS["rejected_busy"] += 1
             try:
@@ -645,8 +680,22 @@ class Server(ThreadingHTTPServer):
             request.settimeout(30)                      # an idle kept-alive / slow client frees its slot
         except OSError:
             pass
-        t = threading.Thread(target=self._run, args=(request, client_address), daemon=True)
-        t.start()
+        try:
+            threading.Thread(target=self._run, args=(request, client_address), daemon=True).start()
+        except RuntimeError:                            # no thread could start: give the slot back (it leaked before)
+            with _SLOCK:
+                STATS["inflight"] -= 1
+            self.slots.release()
+            self.shutdown_request(request)
+
+    def _run_health(self, request, client_address):
+        try:
+            self._health_handler(request, client_address, self)
+        except Exception:                               # noqa: BLE001
+            self.handle_error(request, client_address)
+        finally:
+            self.shutdown_request(request)
+            self.health_slots.release()
 
     def _run(self, request, client_address):
         try:
