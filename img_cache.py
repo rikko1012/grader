@@ -4,8 +4,9 @@ Display only, behind SCOUT_UI_V3 (server.py answers /img/* only when _v3_on(); o
 
 How a picture reaches a card:
   1. img_index.py reads a sport's CURRENT board snapshot (the same bytes members already get) and registers, for each exact id on
-     it, the upstream URL(s) it may come from: ESPN athlete / team id (NBA, NFL, soccer, tennis), BO3.gg player / team id (CS2),
-     the PrizePicks player id (soccer, tennis). Never a name match, never a URL from a request.
+     it, the upstream URL(s) it may come from: ESPN athlete / team id (NBA, NFL, soccer, tennis), the PrizePicks
+     player id (soccer, tennis). CS2 and LoL have no pictures (monograms): BO3.gg is not a source (owner 2026-11-20) and the
+     HLTV scraper DB stores no picture URLs. Never a name match, never a URL from a request.
   2. One background thread (the warmer) fetches each registered key once, re-encodes it small (WEBP, 160 px headshot / 128 px
      logo, Pillow) and writes it atomically under .cache/img. Paced per host, https only, exact host allowlist, no redirects,
      byte and pixel caps, short timeouts. Misses are remembered (404: 6 h, other failures: 10 min).
@@ -25,15 +26,16 @@ from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
-ALLOWED_HOSTS = frozenset(("a.espncdn.com", "files.bo3.gg", "static.prizepicks.com"))
+# owner 2026-11-20 ("stop using BO3.gg, we have HLTV"): no BO3.gg host. The HLTV scraper DB carries no picture URLs, so CS2 has none.
+ALLOWED_HOSTS = frozenset(("a.espncdn.com", "static.prizepicks.com"))
 # known "no real picture" art: a URL carrying one of these is treated as no image (the sampler's list, 2026-11-20)
 PLACEHOLDER_MARKS = ("placeholder.png", "player_avatar.png", "default_headshot", "/images/teams/", "jersey")
-SPORTS = ("cs2", "nba", "nfl", "soccer", "tennis")
+SPORTS = ("nba", "nfl", "soccer", "tennis")            # CS2 / LoL: monograms (no route, no list, nothing stored or served)
 KINDS = ("p", "t")                         # p = player headshot, t = team logo
 SIZE = {"p": 160, "t": 128}                # output box (2x the largest card avatar / badge)
 TOKEN_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
-ROUTE = re.compile(r"^/img/(p|t)/(cs2|nba|nfl|soccer|tennis)/([a-z0-9][a-z0-9_-]{0,47})\.webp$")
-INDEX_ROUTE = re.compile(r"^/img/index/(cs2|nba|nfl|soccer|tennis)\.json$")
+ROUTE = re.compile(r"^/img/(p|t)/(nba|nfl|soccer|tennis)/([a-z0-9][a-z0-9_-]{0,47})\.webp$")
+INDEX_ROUTE = re.compile(r"^/img/index/(nba|nfl|soccer|tennis)\.json$")
 
 MAX_FETCH_BYTES = 4_000_000                # upstream answer cap (BO3.gg team art is ~60 KB, ESPN headshots ~260 KB)
 # decoded-size cap, checked from the header before any pixel is decoded (every format; see the JPEG note below). 2048 x 2048
@@ -262,7 +264,7 @@ def read(key):
 
 
 def bump():
-    """A picture (or BO3.gg roster data) changed: img_index rebuilds its lists on a later read (see version())."""
+    """A picture changed: img_index rebuilds its lists on a later read (see version())."""
     with _LOCK:
         _VERSION[0] += 1
 
@@ -524,17 +526,10 @@ def _next():
 
 
 def _loop():
-    last_prune = last_scan = 0.0
+    last_prune = 0.0
     while True:
         try:
             now = time.time()
-            if now - last_scan > 600:
-                last_scan = now
-                try:
-                    import img_index
-                    img_index.bo3_scan()
-                except Exception:                      # noqa: BLE001 - a scan failure only means fewer CS2 pictures
-                    pass
             k = _next()
             if k is None:
                 if now - last_prune > 3600:

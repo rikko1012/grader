@@ -6,7 +6,7 @@
    - Pictures come from Scout's own origin (/img/..., img_cache.py), never from a third-party host. Which board player has a READY
      picture is read from /img/index/<sport>.json (exact ids from the board snapshot; a name maps only when one board player has it).
    - A picture needs the card's sport, read from the card itself (the row's record key, the open card's record key, the leg's or
-     slip card's sport tag, the receipt's sport): a sport without pictures (LoL) or an unknown sport keeps the monogram, and a name
+     slip card's sport tag, the receipt's sport): a sport without pictures (CS2, LoL) or an unknown sport keeps the monogram, and a name
      is never looked up in another sport's list (review 2026-11-20: a LoL nick equal to a CS2 nick showed the CS2 face).
    - Where the card carries the player's exact id (the open card's line doc, matched by its record key; an NBA / NFL hotlink id),
      only that id's picture is used: an id with no ready picture keeps the monogram, never a name match. Without an id, only
@@ -23,7 +23,8 @@
   var D = document, root = D.documentElement;
   var PAGE = root.getAttribute('data-v3-page') || '';
   var SPORT_OF = {CS2: 'cs2', NBA: 'nba', NFL: 'nfl', Soccer: 'soccer', Tennis: 'tennis', LoL: 'lol', League: 'lol'};
-  var WITH = {cs2: 1, nba: 1, nfl: 1, soccer: 1, tennis: 1};
+  /* CS2 has no pictures (owner 2026-11-20: no BO3.gg, and the HLTV data has none): CS2 cards keep the monogram, like LoL */
+  var WITH = {nba: 1, nfl: 1, soccer: 1, tennis: 1};
   var IDX = {}, LOADING = {}, SEEN = {}, LAST = {}, REFRESH_MS = 90000;
   var CARDS = {}, CARD_KEYS = [];                          /* the hub's teed line docs: record key -> exact player id + sport */
   var EMPTY_RETRY_MS = 15000;                              /* a list that came back empty (a cold server) is asked again sooner */
@@ -164,7 +165,9 @@
       var box = td.querySelector(':scope > .u-face'), f = face(sport, name, espnPid(box));
       if (!box) {
         if (!anyPics(sport)) return;
-        box = newBox(name, 32, 'h-face'); td.insertBefore(box, btn);
+        var init = td.querySelector(':scope > .sc-bd-av');           /* board.js's desktop initial: replaced, never a second avatar */
+        box = newBox(name, 32, 'h-face'); td.insertBefore(box, init || btn);
+        if (init) init.remove();
       }
       paint(box, f);
     });

@@ -221,10 +221,14 @@ Full set: `V3_SHOTS=<dir> V3_BOARD_SHOTS=<dir> V3_FONTS=1 V3_PROD=1 pytest tests
   collectors in `sports/expansion_board.py`.
 - **Routes (v3 on only; off = the unknown-route answer):** `/img/<p|t>/<sport>/<token>.webp` (stored files only, public, 30-day
   immutable cache + ETag, 404 for 60 s when not ready) and `/img/index/<sport>.json` (members; which board players have a READY picture).
-- **Sources, exact ids only:** CS2 BO3.gg player / team id (from the cached `/teams` + `/players` answers; benched and coaches get none;
-  the logo only when the BO3.gg team name equals the row's team), NBA / NFL ESPN athlete id + team abbreviation, soccer / tennis ESPN
-  athlete id where resolved, then the PrizePicks picture of the offer's own player id (shared art and placeholders dropped).
-  LoL: monograms until the owner approves lolesports images. Hosts: `a.espncdn.com`, `files.bo3.gg`, `static.prizepicks.com`.
+- **Sources, exact ids only:** NBA / NFL ESPN athlete id + team abbreviation, soccer / tennis ESPN athlete id where resolved, then the
+  PrizePicks picture of the offer's own player id (shared art and placeholders dropped). Hosts: `a.espncdn.com`, `static.prizepicks.com`.
+- **CS2: no pictures (owner 2026-11-20 "stop using BO3.gg, we have HLTV").** BO3.gg is not a picture source, and the HLTV scraper
+  DB stores no picture URLs (`players`: playerid, name; `teams`: teamid, name, country), so CS2 cards keep the hub's monogram and
+  show no team logo. No `/img/*/cs2/*` route, no CS2 list, nothing registered or stored; `faces.js` never asks for one.
+  LoL: monograms until the owner approves lolesports images.
+- **Desktop rows:** where `board.js` already drew its initial (`.sc-bd-av`) and that sport has pictures, `faces.js` replaces it with
+  the picture box (never two avatars). Phone rows show no avatar (polish2, mock 06); the card hero, slip legs and My picks do.
 - **Never on a member request:** one warmer thread fetches (paced, https, no redirects, 4 MB / 4.2 MP caps; the pixel cap is read
   from the header before any decode, JPEGs decode at reduced scale), re-encodes WEBP (160 px headshot, 128 px logo on its own
   contrast disc) and writes atomically under `.cache/img` (20k files / 200 MB bound).

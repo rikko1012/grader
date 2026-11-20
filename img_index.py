@@ -1,13 +1,12 @@
 """Which pictures belong to which board player, by EXACT ids only (v3 cards; img_cache.py stores and serves the files).
 
 Per sport, from the board snapshot members already get (read only; nothing in the board payload changes):
-  cs2     player.id is the BO3.gg player id. Picture and team come from the BO3.gg /teams and /players answers bo3.py already
-          cached (kvstore bucket "bo3"; read here, bo3.py untouched). A player listed benched (status 2) or as a coach on his
-          newest roster gets no picture. The team logo is shown only when that BO3.gg team's name equals the row's team text.
+  cs2     none: monogram, no logo. Owner 2026-11-20 "stop using BO3.gg, we have HLTV": no BO3.gg picture, and the HLTV
+          scraper DB (players: playerid, name; teams: teamid, name, country) stores no picture URLs. No route, no list.
   nba/nfl player.id "nba:player:espn:<id>" -> the ESPN headshot; player.team_abbr (the ESPN abbreviation) -> the ESPN logo.
   soccer  ESPN headshot only for a resolved "soccer:player:espn:<id>"; then the PrizePicks picture for the offer's own
   tennis  PrizePicks player id (the sports service sends a per-player map, placeholders and shared art already removed).
-  lol     none yet (lolesports images await the owner's call).
+  lol     none (lolesports images await the owner's call).
 
 index(srv, sport) -> JSON bytes: {"p": {player.id: [headshot url, team logo url, team text]}, "n": {name: player.id}, "tn": {team: logo url}}
 ("" where not ready) with READY pictures only, so a card never asks for a file that is not there. A name maps only when exactly one board player has
@@ -16,10 +15,8 @@ get the last list, or an empty one before the first build) and served with the b
 """
 import json
 import re
-import sqlite3
 import threading
 import time
-import zlib
 
 import img_cache as ic
 
@@ -31,105 +28,13 @@ MIN_REBUILD_S = 15
 _LOCK = threading.Lock()
 _SPORT_LOCKS = {s: threading.Lock() for s in ic.SPORTS}
 _MEMO = {}                                 # sport -> (body id, picture version, built at, bytes)
-_BO3 = {"at": 0.0, "players": {}, "teams": {}}     # players: id -> (at, img, status, team_id, coach); teams: id -> (at, img, name)
-
-
-# ---------------------------------------------------------------------------------------------------------------- BO3.gg cache
-def _bo3_take(d, at, players, teams):
-    if not isinstance(d, dict):
-        return
-    if isinstance(d.get("players"), list) and "slug" in d and "image_url" in d and d.get("id") is not None:   # /teams/<slug>
-        tid = d["id"]
-        old = teams.get(tid)
-        if not old or old[0] <= at:
-            teams[tid] = (at, d.get("image_url"), d.get("name"))
-        for p in d["players"]:
-            if not isinstance(p, dict) or p.get("id") is None:
-                continue
-            old = players.get(p["id"])
-            if not old or old[0] <= at:
-                players[p["id"]] = (at, p.get("image_url"), p.get("status"), tid, bool(p.get("is_coach")))
-    elif "nickname" in d and "image_url" in d and d.get("id") is not None and "slug" in d:                     # /players/<slug>
-        team = d.get("team") if isinstance(d.get("team"), dict) else {}
-        old = players.get(d["id"])
-        if not old or old[0] < at:
-            # the profile has no roster status: keep the newest roster's status when that roster is at least as new
-            status = old[2] if old and old[3] == team.get("id") else 1
-            players[d["id"]] = (at, d.get("image_url"), status, team.get("id") or d.get("team_id"), bool(d.get("is_coach")))
-        if team.get("id") is not None and team.get("image_url") is not None:
-            old = teams.get(team["id"])
-            if not old or old[0] < at:
-                teams[team["id"]] = (at, team.get("image_url"), team.get("name"))
-
-
-def bo3_scan(db_path=None, pause_every=25):
-    """Read the BO3.gg answers saved since the last scan (by their saved time) and update the id -> picture maps. Runs on the
-    warmer thread, never on a request. -> number of entries read."""
-    if db_path is None:
-        import kvstore
-        db_path = kvstore.DB_PATH
-    try:
-        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
-    except sqlite3.Error:
-        return 0
-    players, teams = dict(_BO3["players"]), dict(_BO3["teams"])
-    since, newest, n = _BO3["at"], _BO3["at"], 0
-    try:
-        cur = con.execute("SELECT at, data FROM kv WHERE bucket = 'bo3' AND at > ? ORDER BY at", (since,))
-        for at, blob in cur:
-            n += 1
-            newest = max(newest, at)
-            if pause_every and n % pause_every == 0:
-                time.sleep(0.002)                      # step aside for request threads (GIL)
-            try:
-                raw = zlib.decompress(blob)
-            except (zlib.error, TypeError):
-                continue
-            if b'"image_url"' not in raw:
-                continue
-            try:
-                _bo3_take(json.loads(raw), at, players, teams)
-            except ValueError:
-                continue
-    except sqlite3.Error:
-        pass
-    finally:
-        con.close()
-    with _LOCK:
-        _BO3.update(at=newest, players=players, teams=teams)
-    if n:
-        ic.bump()                                      # new BO3.gg answers: the CS2 list is rebuilt on its next read
-    return n
-
-
-def bo3_player(pid):
-    """-> (picture url or None, team id or None) for a BO3.gg player id; no picture for a benched (2) or coach listing."""
-    try:
-        pid = int(pid)
-    except (TypeError, ValueError):
-        return None, None
-    p = _BO3["players"].get(pid)
-    if not p:
-        return None, None
-    _, img, status, tid, coach = p
-    if status == 2 or coach:
-        return None, None
-    return img, tid
-
-
-def bo3_team(tid):
-    t = _BO3["teams"].get(tid) if tid is not None else None
-    return (t[1], t[2]) if t else (None, None)
 
 
 # ---------------------------------------------------------------------------------------------------------------- per sport
 def _records(srv, sport):
     """-> (body object, records list, offer index or None) from the sport's current snapshot, or (None, [], None)."""
     import workspace_api
-    if sport == "cs2":
-        snap = workspace_api.snapshot(srv)
-    else:
-        snap = workspace_api._adapter(sport).snapshot(srv, sport)
+    snap = workspace_api._adapter(sport).snapshot(srv, sport)
     if not snap or not snap.get("body"):
         return None, [], None
     body = snap["body"]
@@ -146,14 +51,8 @@ def _candidates(sport, rec, extra):
     pid = str(pl.get("id") or "")
     pkey = purls = tkey = turls = None
     tname = pl.get("team") or ""
-    if sport == "cs2":
-        img, tid = bo3_player(pl.get("id"))
-        if img:
-            pkey, purls = ("p", "cs2", str(int(pl["id"]))), [img]
-        if tid is not None:
-            timg, tn = bo3_team(tid)
-            if timg and tn and tname and str(tn).strip().casefold() == str(tname).strip().casefold():
-                tkey, turls = ("t", "cs2", str(int(tid))), [timg]
+    if sport not in ic.SPORTS:                         # CS2 / LoL: no picture source (monogram)
+        pass
     elif sport in ("nba", "nfl"):
         m = ESPN_ID.match(pid)
         if m and m.group(1) == sport:
@@ -233,7 +132,7 @@ def _body_id(srv, sport):
     """id() of the sport's current board body without parsing it (None when there is none)."""
     try:
         import workspace_api
-        snap = workspace_api.snapshot(srv) if sport == "cs2" else workspace_api._adapter(sport).snapshot(srv, sport)
+        snap = workspace_api._adapter(sport).snapshot(srv, sport)
         return id(snap["body"]) if snap and snap.get("body") else None
     except Exception:                                  # noqa: BLE001
         return None
@@ -284,4 +183,3 @@ def index(srv, sport):
 def reset():
     with _LOCK:
         _MEMO.clear()
-        _BO3.update(at=0.0, players={}, teams={})

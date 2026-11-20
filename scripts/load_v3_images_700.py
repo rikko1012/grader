@@ -1,6 +1,6 @@
 """v3 card pictures load test (img_cache.py / img_index.py): 700 simultaneous members, in process, no network, never production.
 
-Each member loads what a v3 board + card visit asks for: the CS2 and NBA picture lists (/img/index/<sport>.json, member-gated, with
+Each member loads what a v3 board + card visit asks for: the NFL and NBA picture lists (/img/index/<sport>.json, member-gated, with
 ETag revalidation) and 40 pictures (/img/<p|t>/<sport>/<id>.webp, the long-cached files), as a browser does (keep-alive, gzip).
 The upstream is a STUB that is slow (0.25 s, every 10th call times out after 1 s), so the run shows that member requests never wait
 on it. Three phases:
@@ -9,7 +9,8 @@ on it. Three phases:
   off    - SCOUT_UI_V3 unset: every /img path is the unknown-route answer
 Fails on any 5xx, a wrong status, a member request reaching the upstream, more than one upstream fetch per picture (single
 flight), the image memory cache over its bound, or a final picture list (after the warm-up) that misses a stored picture (the
-coalesced picture version must always land). Prints one line: RESULT {json}.
+coalesced picture version must always land), or a CS2 picture path that answers anything but the unknown-route 404 (CS2 has no
+pictures: owner 2026-11-20, no BO3.gg; the HLTV data stores no picture URLs). Prints one line: RESULT {json}.
 
 usage: python scripts/load_v3_images_700.py <code_dir> [members=700] [players=320]"""
 import http.client
@@ -49,19 +50,20 @@ whop_auth.session = lambda v: {"user": v[5:], "name": "", "ok": True} if v and v
 whop_auth.cookie_valid = lambda v: bool(v and v.startswith("good-"))
 server.lol_public = lambda: True
 import workspace_api  # noqa: E402
-# every member here may see CS2 and NBA (the index follows the board's own sport gate; the harness has no sports service)
+# every member here may see NFL and NBA (the index follows the board's own sport gate; the harness has no sports service)
 workspace_api.access = lambda h, srv, q: {"cs2": True, "lol": True, "nba": True, "nfl": True}
 
 # ---------------------------------------------------------------------------------------------------- synthetic boards + upstream
-TEAMS = 24
-ix._BO3.update(players={i: (1.0, f"https://files.bo3.gg/uploads/player/{i}/image/p.webp", 1, 1000 + i % TEAMS, False) for i in range(1, PLAYERS + 1)},
-               teams={1000 + t: (1.0, f"https://files.bo3.gg/uploads/team/{1000 + t}/image/t.webp", f"Team {t}") for t in range(TEAMS)})
-ix.bo3_scan = lambda *a, **k: 0
+NFL_TEAMS = ["ari", "atl", "bal", "buf", "car", "chi", "cin", "cle", "dal", "den", "det", "gb", "hou", "ind", "jax", "kc", "lv", "lac",
+             "lar", "mia", "min", "ne", "no", "nyg"]
+TEAMS = len(NFL_TEAMS)                                # 24 team marks, as the CS2 set this replaced
+NFL = [{"sport": "nfl", "player": {"id": f"nfl:player:espn:{3000000 + i}", "name": f"f{i}", "team": NFL_TEAMS[i % TEAMS].upper(),
+                                   "team_abbr": NFL_TEAMS[i % TEAMS]}, "offer": {"offer_id": f"f{i}"}} for i in range(1, PLAYERS + 1)]
 CS2 = [{"sport": "cs2", "player": {"id": i, "name": f"p{i}", "team": f"Team {i % TEAMS}"}, "offer": {"offer_id": f"o{i}"}} for i in range(1, PLAYERS + 1)]
 NBA_TEAMS = ["atl", "bos", "bkn", "cha", "chi", "cle", "dal", "den", "det", "gs", "hou", "ind", "lac", "lal", "mem", "mia", "mil", "min"]
 NBA = [{"sport": "nba", "player": {"id": f"nba:player:espn:{4000000 + i}", "name": f"n{i}", "team": NBA_TEAMS[i % 18].upper(),
                                    "team_abbr": NBA_TEAMS[i % 18]}, "offer": {"offer_id": f"n{i}"}} for i in range(PLAYERS)]
-BODIES = {"cs2": json.dumps({"records": CS2}).encode(), "nba": json.dumps({"records": NBA}).encode()}
+BODIES = {"cs2": json.dumps({"records": CS2}).encode(), "nfl": json.dumps({"records": NFL}).encode(), "nba": json.dumps({"records": NBA}).encode()}
 ix._records = lambda srv, sport: (BODIES.get(sport), json.loads(BODIES[sport])["records"], {"body": BODIES[sport]}) if sport in BODIES else (None, [], None)
 ix._body_id = lambda srv, sport: id(BODIES[sport]) if sport in BODIES else None     # the same board body object, as production
 
@@ -100,9 +102,9 @@ PORT = httpd.server_address[1]
 def keys():
     out = []
     for i in range(1, PLAYERS + 1):
-        out.append(f"/img/p/cs2/{i}.webp")
-    for t in range(TEAMS):
-        out.append(f"/img/t/cs2/{1000 + t}.webp")
+        out.append(f"/img/p/nfl/{3000000 + i}.webp")
+    for a in NFL_TEAMS:
+        out.append(f"/img/t/nfl/{a}.webp")
     for i in range(PLAYERS):
         out.append(f"/img/p/nba/{4000000 + i}.webp")
     for a in NBA_TEAMS:
@@ -141,7 +143,7 @@ def call(conn, path, who, etag=None):
 def visit(i):
     conn, out = [None], []
     try:
-        for sport in ("cs2", "nba"):
+        for sport in ("nfl", "nba"):
             r = call(conn, f"/img/index/{sport}.json", f"m{i}")
             out.append(r)
             out.append(call(conn, f"/img/index/{sport}.json", f"m{i}", r[4]))        # the page's 90 s refresh: a revalidation
@@ -186,16 +188,16 @@ try:
     while time.time() < deadline and (ic.status()["queued"] or ic.status()["ready"] < len(ALL)):
         time.sleep(0.5)
         if not ic.status()["queued"] and ic.status()["ready"] < len(ALL):
-            for s in ("cs2", "nba"):                      # retry the stub's timeouts: what the next board read does
+            for s in ("nfl", "nba"):                      # retry the stub's timeouts: what the next board read does
                 ix._MEMO.clear()
                 ix.index(server, s)
     listed = {}
-    for s in ("cs2", "nba"):                              # the lists every member gets once the warmer is done (no clearing)
+    for s in ("nfl", "nba"):                              # the lists every member gets once the warmer is done (no clearing)
         deadline2 = time.time() + 60
         while True:
             d = json.loads(ix.index(server, s))
             listed[s] = sum(1 for v in d["p"].values() if v[0]) + len({v[1] for v in d["p"].values() if v[1]})
-            if listed[s] >= (PLAYERS + (TEAMS if s == "cs2" else len(NBA_TEAMS))) or time.time() > deadline2:
+            if listed[s] >= (PLAYERS + (TEAMS if s == "nfl" else len(NBA_TEAMS))) or time.time() > deadline2:
                 break
             ix._MEMO[s] = (ix._MEMO[s][0], ix._MEMO[s][1], 0.0, ix._MEMO[s][3])   # the next MIN_REBUILD_S window
             time.sleep(0.2)
@@ -203,6 +205,10 @@ try:
     rep["warm_up_s"] = round(time.time() - t_warm, 1)
     rep["ready"] = ic.status()["ready"]
     rep["warm"] = run("warm")
+    conn = [None]                                         # CS2: no picture route at all, v3 on (the unknown-route answer)
+    rep["cs2_paths"] = {p: call(conn, p, "m0")[1] for p in ("/img/index/cs2.json", "/img/p/cs2/1.webp", "/img/t/cs2/1000.webp")}
+    conn[0] and conn[0].close()
+    rep["cs2_registered"] = sum(1 for k in ic._SRC if k[1] == "cs2")
     os.environ.pop("SCOUT_UI_V3", None)
     rep["off"] = run("off")
     cur, peak = tracemalloc.get_traced_memory()
@@ -215,7 +221,9 @@ try:
     # more than one call per picture only for the stub's own timeouts (every 10th call), never two at once for one key
     rep["pass"] = (all(rep[p]["errors_5xx"] == 0 and rep[p]["wrong_status"] == 0 for p in ("cold", "warm", "off"))
                    and UP["member_thread_calls"] == 0 and rep["ready"] == len(ALL) and st["mem_bytes"] <= ic.MEM_BYTES
-                   and listed == {"cs2": PLAYERS + TEAMS, "nba": PLAYERS + len(NBA_TEAMS)}
+                   and listed == {"nfl": PLAYERS + TEAMS, "nba": PLAYERS + len(NBA_TEAMS)}
+                   and set(rep["cs2_paths"].values()) == {404} and rep["cs2_registered"] == 0
+                   and not any("bo3" in u for u in UP["by_url"])
                    and retried <= UP["calls"] // 10 + 1)
     print("RESULT " + json.dumps(rep))
 finally:

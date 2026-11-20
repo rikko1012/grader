@@ -38,7 +38,8 @@ def cache(tmp_path, monkeypatch):
     "https://images.fotmob.com/image_resources/playerimages/1.png", "https://i.imgur.com/x.png",
     "https://static.flashscore.com/a.png", "https://www.atptour.com/x.png", "https://www.flashscore.com/x.png",
     "ftp://a.espncdn.com/i/x.png", "https://user:pw@a.espncdn.com/i/x.png", "https://a.espncdn.com:8443/i/x.png",
-    "https://a.espncdn.com.evil.test/i/x.png", "https://evil.test/?u=https://a.espncdn.com/x.png", "javascript:alert(1)",
+    "https://a.espncdn.com.evil.test/i/x.png",
+    "https://files.bo3.gg/uploads/a.webp", "http://files.bo3.gg/uploads/a.webp", "https://evil.test/?u=https://a.espncdn.com/x.png", "javascript:alert(1)",
     "https://static.prizepicks.com/images/players/placeholder.png", "https://static.prizepicks.com/x/Player_Avatar.png",
     "https://static.prizepicks.com/images/teams/nfl/jersey_12.png", "https://a.espncdn.com/i/default_headshot.png", None, 7, ""])
 def test_only_allowed_https_hosts_and_never_placeholder_art(url):
@@ -48,7 +49,7 @@ def test_only_allowed_https_hosts_and_never_placeholder_art(url):
 def test_allowed_urls_are_kept_and_encoded():
     assert ic.safe_url("https://a.espncdn.com/i/headshots/nba/players/full/1.png") == "https://a.espncdn.com/i/headshots/nba/players/full/1.png"
     assert ic.safe_url("http://static.lolesports.com/x.png") is None                       # not approved (owner decision pending)
-    assert ic.safe_url("http://files.bo3.gg/uploads/a.webp") == "https://files.bo3.gg/uploads/a.webp"   # http upgraded on an allowed host
+    assert ic.safe_url("http://a.espncdn.com/i/x.png") == "https://a.espncdn.com/i/x.png"   # http upgraded on an allowed host
     got = ic.safe_url("https://static.prizepicks.com/images/manual/Jørgen Strand Larsen.png")
     assert got == "https://static.prizepicks.com/images/manual/J%C3%B8rgen%20Strand%20Larsen.png"
 
@@ -230,45 +231,15 @@ def test_answer_never_calls_upstream(cache, monkeypatch):
 
 
 # ------------------------------------------------------------------------------------------------ exact-id indexes
-def test_bo3_rosters_give_pictures_but_never_to_benched_or_coaches():
-    players, teams = {}, {}
-    ix._bo3_take({"id": 7, "slug": "t", "name": "Team Seven", "image_url": "https://files.bo3.gg/t7.webp",
-                  "players": [{"id": 1, "image_url": "https://files.bo3.gg/p1.webp", "status": 1},
-                              {"id": 2, "image_url": "https://files.bo3.gg/p2.webp", "status": 2},
-                              {"id": 3, "image_url": "https://files.bo3.gg/p3.webp", "status": 1, "is_coach": True}]},
-                 10.0, players, teams)
-    ix._BO3.update(players=players, teams=teams)
-    try:
-        assert ix.bo3_player(1) == ("https://files.bo3.gg/p1.webp", 7)
-        assert ix.bo3_player("2") == (None, None) and ix.bo3_player(3) == (None, None) and ix.bo3_player("x") == (None, None)
-        assert ix.bo3_team(7) == ("https://files.bo3.gg/t7.webp", "Team Seven")
-    finally:
-        ix.reset()
-
-
-def test_bo3_scan_reads_the_saved_answers_incrementally(tmp_path):
-    import sqlite3
-    import zlib
-    db = tmp_path / "cache.db"
-    con = sqlite3.connect(db)
-    con.execute("CREATE TABLE kv (bucket TEXT, name TEXT, at REAL, data BLOB)")
-    team = {"id": 9, "slug": "nine", "name": "Nine", "image_url": "https://files.bo3.gg/t9.webp",
-            "players": [{"id": 5, "image_url": "https://files.bo3.gg/p5.webp", "status": 1}]}
-    con.execute("INSERT INTO kv VALUES ('bo3','a',1.0,?)", (zlib.compress(json.dumps(team).encode()),))
-    con.execute("INSERT INTO kv VALUES ('games','b',2.0,?)", (zlib.compress(json.dumps(team).encode()),))
-    con.commit()
-    ix.reset()
-    try:
-        assert ix.bo3_scan(db) == 1
-        assert ix.bo3_player(5)[0] == "https://files.bo3.gg/p5.webp"
-        assert ix.bo3_scan(db) == 0                    # nothing newer: nothing read again
-        team["players"][0]["status"] = 2               # benched later
-        con.execute("INSERT INTO kv VALUES ('bo3','c',3.0,?)", (zlib.compress(json.dumps(team).encode()),))
-        con.commit()
-        assert ix.bo3_scan(db) == 1 and ix.bo3_player(5) == (None, None)
-    finally:
-        con.close()
-        ix.reset()
+def test_cs2_has_no_picture_source():
+    """Owner 2026-11-20 "stop using BO3.gg, we have HLTV": no BO3.gg host, no CS2 sport, no BO3.gg reader left; the HLTV scraper
+    DB stores no picture URLs, so CS2 cards keep the monogram."""
+    assert "files.bo3.gg" not in ic.ALLOWED_HOSTS and "cs2" not in ic.SPORTS
+    assert not any(hasattr(ix, n) for n in ("bo3_scan", "bo3_player", "bo3_team", "_bo3_take", "_BO3"))
+    assert ic.ROUTE.match("/img/p/cs2/1.webp") is None and ic.ROUTE.match("/img/t/cs2/7.webp") is None
+    assert ic.INDEX_ROUTE.match("/img/index/cs2.json") is None
+    assert ic.answer("/img/p/cs2/1.webp") is None                      # not a picture route: the unknown-route answer
+    assert ix.index(None, "cs2") is None and ix.index(None, "lol") is None
 
 
 def _rec(sport, pid, name, team="", abbr=None, oid="o1"):
@@ -296,18 +267,12 @@ def test_index_lists_ready_pictures_by_exact_id_and_unique_name(cache, monkeypat
     assert out["tn"]["LAL"].startswith("/img/t/nba/lal.webp") and out["tn"]["BKN"].startswith("/img/t/nba/bkn.webp")
 
 
-def test_cs2_team_logo_only_when_the_bo3_team_name_matches_the_row(cache, monkeypatch):
-    ix._BO3.update(players={1: (1.0, "https://files.bo3.gg/p1.webp", 1, 7, False), 2: (1.0, "https://files.bo3.gg/p2.webp", 1, 8, False)},
-                   teams={7: (1.0, "https://files.bo3.gg/t7.webp", "Team Seven"), 8: (1.0, "https://files.bo3.gg/t8.webp", "Eight")})
-    recs = [_rec("cs2", 1, "one", "Team Seven"), _rec("cs2", 2, "two", "Eight Academy")]
+def test_cs2_records_register_nothing(cache, monkeypatch):
+    recs = [_rec("cs2", 1, "one", "Team Seven"), _rec("cs2", 2, "two", "Eight")]
     body = json.dumps({"records": recs}).encode()
     monkeypatch.setattr(ix, "_records", lambda srv, sport: (body, json.loads(body)["records"], {"body": body}))
-    ix.build(None, "cs2")
-    assert ("t", "cs2", "7") in ic._SRC and ("t", "cs2", "8") not in ic._SRC   # "Eight Academy" is not "Eight": no logo
-    for k in list(ic._SRC):
-        ic.fetch_one(k, get=lambda u: png(354, 455))
     out = json.loads(ix.build(None, "cs2")[1])
-    assert out["p"]["1"][1] and out["p"]["2"][1] == "" and out["tn"] == {"Team Seven": out["p"]["1"][1]}
+    assert not ic._SRC and out == {"p": {}, "n": {}, "tn": {}}
 
 
 def test_soccer_uses_espn_then_the_prizepicks_picture_of_the_exact_offer_player(cache, monkeypatch):
@@ -348,14 +313,19 @@ def test_img_routes_are_unknown_with_v3_off_and_gated_with_it_on(env, monkeypatc
     assert st == 200 and h["Content-Type"] == "image/webp" and "immutable" in h["Cache-Control"] and "Content-Encoding" not in h
     assert get(env.base, "/img/p/nba/1.webp", None, {"If-None-Match": h["ETag"]})[0] == 304
     assert get(env.base, "/img/p/nba/99.webp")[0] == 404
-    assert get(env.base, "/img/index/cs2.json")[0] == 403              # the board's player list: members only
+    for path in ("/img/index/cs2.json", "/img/p/cs2/1.webp", "/img/t/cs2/7.webp"):   # CS2 has no pictures: no such route
+        for who in ("good-u1", None):
+            assert get(env.base, path, who)[:2] == unknown[:2], (path, who)
+    assert get(env.base, "/img/index/nba.json")[0] == 403              # the board's player list: members only
     monkeypatch.setattr(ix, "build", lambda srv, sport: (b"x", b'{"n":{},"p":{},"tn":{}}'))
     monkeypatch.setattr(ix, "_body_id", lambda srv, sport: None)
-    assert get(env.base, "/img/index/cs2.json", "good-u1")[0] == 404    # SCOUT_UPGRADE=owner: a member has no hub board here
+    import workspace_api
+    monkeypatch.setattr(workspace_api, "access", lambda h, srv, q: {"nba": True})
+    assert get(env.base, "/img/index/nba.json", "good-u1")[0] == 404    # SCOUT_UPGRADE=owner: a member has no hub board here
     monkeypatch.setenv("SCOUT_UPGRADE", "1")
-    st, body, h = get(env.base, "/img/index/cs2.json", "good-u1")
+    st, body, h = get(env.base, "/img/index/nba.json", "good-u1")
     assert st == 200 and json.loads(body) == {"n": {}, "p": {}, "tn": {}} and h.get("ETag")
-    for sport in ("nba", "soccer"):                                     # sports this member cannot see on the board: 404 here too
+    for sport in ("nfl", "soccer"):                                     # sports this member cannot see on the board: 404 here too
         assert get(env.base, f"/img/index/{sport}.json", "good-u1")[0] == 404, sport
     ic.reset()
     ix.reset()
@@ -452,22 +422,6 @@ def test_picture_version_is_coalesced_while_the_warmer_works_and_always_lands(ca
     with ic._LOCK:
         ic._QUEUE.clear()                                   # the warmer's queue is empty: the last store is seen
     assert ic.version() == ic._VERSION[0]
-
-
-def test_bo3_scan_bumps_through_the_coalesced_version(tmp_path):
-    import sqlite3
-    import zlib
-    db = tmp_path / "kv.db"
-    con = sqlite3.connect(db)
-    con.execute("CREATE TABLE kv (bucket TEXT, k TEXT, at REAL, data BLOB)")
-    team = {"id": 7, "slug": "t", "name": "T", "image_url": "https://files.bo3.gg/t.webp",
-            "players": [{"id": 1, "image_url": "https://files.bo3.gg/p.webp", "status": 1}]}
-    con.execute("INSERT INTO kv VALUES ('bo3', 'x', 5.0, ?)", (zlib.compress(json.dumps(team).encode()),))
-    con.commit(); con.close()
-    ix.reset()
-    before = ic._VERSION[0]
-    assert ix.bo3_scan(str(db)) == 1 and ic._VERSION[0] == before + 1
-    ix.reset()
 
 
 def _jpeg(w, h):
