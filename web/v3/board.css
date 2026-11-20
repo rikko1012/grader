@@ -269,11 +269,12 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
 /* ------------------------------------------------------------------ desktop (1101px+): the hub's table, restyled */
 @media (min-width:1101px){
   html[data-ui-v3] #u-hub.h-board-mode .h-center{padding:0 24px 48px}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar{position:sticky;top:0!important;z-index:6;padding-top:8px;margin-top:0}
   html[data-ui-v3] #u-hub.h-board-mode .h-top.sc-bd-band{margin:0 -24px!important;padding:40px 24px 8px!important}
   html[data-ui-v3] #u-hub #hub-board-section .h-table-wrap{overflow:visible;border-radius:var(--sc-r-xl);background:var(--sc-s1)!important;box-shadow:var(--sc-ring),var(--sc-drop)}
   html[data-ui-v3][data-theme="light"] #u-hub #hub-board-section .h-table-wrap{box-shadow:inset 0 0 0 1px rgba(14,19,32,.08)}
   html[data-ui-v3] #u-hub #hub-table>thead>tr>th{height:40px;padding:0 6px!important;background:var(--sc-s1)!important;border:0!important;box-shadow:inset 0 -1px 0 var(--sc-edge)!important;
-    color:var(--sc-faint)!important;font:500 12px/1 var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important;top:0}
+    color:var(--sc-faint)!important;font:500 12px/1 var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important;top:var(--h-bar,0px)!important}
   html[data-ui-v3] #u-hub #hub-table>thead>tr>th:first-child{border-top-left-radius:var(--sc-r-xl)}
   html[data-ui-v3] #u-hub #hub-table>thead>tr>th:last-child{border-top-right-radius:var(--sc-r-xl)}
   html[data-ui-v3] #u-hub #hub-table .h-th-sort{color:inherit!important;font:inherit!important;text-transform:none!important;letter-spacing:0!important;background:none!important;border:0!important}
@@ -300,7 +301,7 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
   html[data-ui-v3] #u-hub.h-cols #hub-table .h-c-hits{width:178px!important}
   html[data-ui-v3] #u-hub #hub-table .h-c-edge{width:80px!important;display:table-cell!important}
   html[data-ui-v3] #u-hub #hub-table .h-c-medge{width:78px!important}
-  html[data-ui-v3] #u-hub #hub-table .h-c-compare{width:106px!important;display:table-cell!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-compare{width:106px!important}
   html[data-ui-v3] #u-hub #hub-table .h-c-add{width:56px!important;padding-right:8px!important;text-align:right}
   /* one Edge column with both numbers (Scout's edge, then "Books"), as the hub itself does from 1281px: the Market edge column steps aside */
   html[data-ui-v3] #u-hub #hub-table.h-has-edge .h-c-medge{display:none!important}
@@ -334,6 +335,7 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
 /* ------------------------------------------------------------------ phone + narrow (1100px and down): the 4-line card per row */
 @media (max-width:1100px){
   html[data-ui-v3] #u-hub.h-board-mode .h-center{padding:0 16px 24px!important}
+  html[data-ui-v3] #u-hub #hub-pagination:empty{display:none}
   html[data-ui-v3] #u-hub.h-board-mode .h-top.sc-bd-band{margin:0 -16px!important;padding:24px 16px 4px!important}
   html[data-ui-v3] #u-hub.h-board-mode .h-top h1#hub-title{font-size:24px!important;line-height:1.15}
   html[data-ui-v3] #u-hub .sc-bd-meta{margin:2px 0 0;font-size:13px}
@@ -399,7 +401,7 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell{display:contents}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>b{grid-area:ln}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>.sc-seen{grid-area:me;margin:0}
-  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>small:not(.sc-bd-orig){display:none!important}   /* their text is in the meta line (.sc-seen-px) */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>small.h-book-price-summary{display:none!important}   /* their text is in the meta line (.sc-seen-px) */
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div{grid-area:mk;min-width:0;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;color:var(--sc-muted)}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div>*{white-space:nowrap!important}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>.h-prop-toggle{grid-area:mo;margin:0;justify-self:start}
@@ -489,3 +491,28 @@ html[data-ui-v3] #u-hub #hub-games-body .h-game-books span{padding:0 6px!importa
 html[data-ui-v3] #u-hub #hub-games-body .h-game-card>button{display:inline-flex;align-items:center;gap:6px;width:auto!important;white-space:nowrap;align-self:flex-start;margin-top:auto;min-height:36px;padding:0 14px!important;border:0!important;border-radius:var(--sc-r-md)!important;background:var(--sc-s2)!important;
   color:var(--sc-text)!important;font:500 14px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;cursor:pointer}
 html[data-ui-v3] #u-hub #hub-games-body .h-empty{grid-column:1/-1;padding:40px 20px;border-radius:var(--sc-r-xl);background:var(--sc-s1)!important;box-shadow:var(--sc-ring);text-align:center;color:var(--sc-muted)}
+
+/* ------------------------------------------------------------------ narrow desktop beside the slip column (1101-1400px): tighter columns.
+   1101-1180px: Compare and the watch star step aside, exactly as the hub's own table does at these widths (both stay on the card). */
+@media (min-width:1101px) and (max-width:1400px){
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch{width:28px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-market{width:104px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-line{width:106px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-proj{width:42px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-scout{width:116px!important}
+  html[data-ui-v3] #u-hub.h-cols #hub-table .h-c-hits{width:168px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-edge{width:76px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-compare{width:100px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-add{width:52px!important}
+}
+@media (min-width:1101px) and (max-width:1180px){
+  html[data-ui-v3] #u-hub #hub-table .h-c-compare{display:none!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch{width:0!important;padding:0!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch>*{display:none!important}
+  html[data-ui-v3] #u-hub.h-cols #hub-table .h-c-hits{width:150px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-scout{width:110px!important}
+}
+/* phone: the last row and Previous / Next end above the v3 bottom bar (60px + safe area) */
+@media (max-width:1023px){
+  html[data-ui-v3] #u-hub.h-board-mode .h-center{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
+}

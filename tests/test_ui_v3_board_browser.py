@@ -16,7 +16,8 @@ from tests.test_upgrade_browser import browser, env, context, no_h_scroll  # noq
 from tests.test_ui_v3_browser import PHONE, DESK
 
 SHOTS = Path(os.environ.get("V3_BOARD_SHOTS") or "")
-PROD_FLAGS = ("SCOUT_BOARD_H2H", "SCOUT_PARITY_EDGE", "SCOUT_PARITY_HIT_SAMPLES", "SCOUT_PARITY_HIT_SORT", "SCOUT_PARITY_EV_BAND", "SCOUT_MARKET_EDGE")
+PROD_FLAGS = ("SCOUT_BOARD_H2H", "SCOUT_PARITY_EDGE", "SCOUT_PARITY_HIT_SAMPLES", "SCOUT_PARITY_HIT_SORT", "SCOUT_PARITY_EV_BAND", "SCOUT_PARITY_PLAYS",
+              "SCOUT_PICKEM_EV", "SCOUT_MARKET_EDGE")
 PAGES = {"cs2": "/#all-sports", "lol": "/lol#all-sports", "sports": "/sports#/board"}
 ROW = "#hub-rows>tr[data-record]"
 # every cell the hub's board row draws today (web/upgrade-hub.js row()), by class. A row with no past result in any window (h-nohits)
@@ -56,11 +57,11 @@ def visible_cells(p):
     })""", list(CELLS))
 
 
-def check_rows(p, edge=True):
+def check_rows(p, edge=True, allow=()):
     rows = visible_cells(p)
     assert rows
     for r in rows:
-        missing = [k for k, v in r.items() if v == 0]
+        missing = [k for k, v in r.items() if v == 0 and k not in allow]
         assert not missing, (missing, r)
         if edge:
             assert r["edge"] == 1
@@ -277,5 +278,63 @@ def test_flag_off_board_carries_none_of_it(browser, env, monkeypatch):
         assert p.evaluate("document.documentElement.dataset.uiV3") is None
         assert p.evaluate("!window.ScoutV3 && !document.querySelector('.sc-seen,.sc-bd-band,#sc-bd-legend,[data-sc]')")
         assert p.evaluate("[...document.querySelectorAll('link[rel=stylesheet],script[src]')].every(e=>!(e.href||e.src).includes('/v3/'))")
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("width", [1110, 1180, 1240, 1440])
+def test_v3_board_narrow_and_wide_desktop_keep_the_player_column(browser, env, monkeypatch, width):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", {"width": width, "height": 900}, "dark")
+    try:
+        # 1101-1180px: Compare and the watch star step aside, as the hub's own table does there today (both stay on the card)
+        check_rows(p, edge=True, allow=("h-c-watch", "h-c-compare") if width <= 1180 else ())
+        wrap = p.evaluate("(()=>{const w=document.querySelector('#hub-board-section .h-table-wrap'),t=document.getElementById('hub-table');return [t.getBoundingClientRect().width,w.clientWidth]})()")
+        assert wrap[0] <= wrap[1] + 1, wrap
+        name = p.evaluate("document.querySelector('#hub-rows>tr[data-record] td.h-c-player').getBoundingClientRect().width")
+        assert name >= 110, name
+        if width >= 1181:
+            assert p.locator(f"{ROW} td.h-c-compare").first.is_visible()
+        no_h_scroll(p)
+        shot(p, f"cs2-dark-{width}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_v3_board_scrolled_header_and_phone_end_of_list(browser, env, monkeypatch):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", DESK, "dark")
+    try:
+        p.evaluate("document.getElementById('hub-center').scrollTop=600")
+        p.wait_for_timeout(300)
+        bar = p.evaluate("document.querySelector('#hub-board-section .h-toolbar').getBoundingClientRect().bottom")
+        th = p.evaluate("document.querySelector('#hub-table>thead th').getBoundingClientRect().top")
+        assert th >= bar - 1, (th, bar)
+        shot(p, "cs2-dark-1280-rows")
+    finally:
+        c.close()
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", PHONE, "dark")
+    try:
+        p.evaluate("document.getElementById('hub-center').scrollTop=1e6")
+        p.wait_for_timeout(300)
+        last = p.evaluate("Math.max(...[...document.querySelectorAll('#hub-rows>tr[data-record], #hub-pagination')].map(e=>e.getBoundingClientRect().bottom))")
+        tabs = p.evaluate("document.querySelector('.sc-v3-tabs').getBoundingClientRect().top")
+        assert last <= tabs + 1, (last, tabs)
+        shot(p, "cs2-dark-390-end")
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_board_row_opens_the_player_card(browser, env, monkeypatch, size):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", size, "dark")
+    try:
+        p.locator(f"{ROW} .h-player").first.click()
+        p.wait_for_selector("#hub-card:not([hidden]) #hub-detail *")
+        assert p.locator("#hub-card").is_visible()
+        no_h_scroll(p)
+        shot(p, f"card-dark-{size['width']}")
+        if size is DESK:
+            check_rows(p)
+        assert not p.errors, p.errors
     finally:
         c.close()
