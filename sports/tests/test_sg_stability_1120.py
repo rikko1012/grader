@@ -365,3 +365,91 @@ def test_a_correction_learned_inside_48h_keeps_its_event_hot(tmp_path):
     c.close()
     out = expansion_compact.compact(path, 60, now=st1119.NOW)
     assert out['rows'] == 4 * 8 * 4                              # event 900 stays hot for its correction window
+
+
+def test_service_cache_share_for_expansion_archives_leaves_the_global_lru(tmp_path, monkeypatch):
+    """Member history reads in the web process: archived soccer / tennis files get their own small share."""
+    files = archive._Files()
+    monkeypatch.setattr(archive, 'PREFIX_CAPS', {})
+    exp_dir = tmp_path / 'expansion'
+    for d in ('expansion/soccer/eng.1', 'nba'):
+        (tmp_path / d / 'archive' / 'records').mkdir(parents=True)
+    blob = lzma.compress(b'{"a":1}\n' * 20000)             # ~160 KB raw
+    for i in range(6):
+        (tmp_path / 'expansion/soccer/eng.1/archive/records' / f'f{i}').write_bytes(blob)
+        (tmp_path / 'nba/archive/records' / f'f{i}').write_bytes(blob)
+    exp_db, nba_db = str(tmp_path / 'expansion/soccer/eng.1/canonical.db'), str(tmp_path / 'nba/canonical.db')
+    monkeypatch.setattr(archive, 'LRU_BYTES', 10_000_000)
+    monkeypatch.setattr(expansion_compact, 'EXPANSION_LRU_MB', 0.4)
+    expansion_compact.bound_service_cache(exp_dir)
+    for i in range(6):
+        files.rows(nba_db, i, lambda f: f'f{f}')
+        files.rows(exp_db, i, lambda f: f'f{f}')
+    mine = [k for k in files.lru if k[0] == exp_db]
+    nba = [k for k in files.lru if k[0] == nba_db]
+    assert len(nba) == 6                                      # the NBA / NFL share is untouched
+    assert 1 <= len(mine) <= 3 and sum(files.lru[k][1] for k in mine) <= 400_000 + 160_000
+    assert files.size == sum(v[1] for v in files.lru.values())
+
+
+def test_cgroup_reports_anon_file_and_pressure(tmp_path, monkeypatch):
+    from sports import service_life
+    (tmp_path / 'memory.current').write_text('2009400000\n')
+    (tmp_path / 'memory.max').write_text('2147500000\n')
+    (tmp_path / 'memory.stat').write_text('anon 800000000\nfile 1100000000\nfile_dirty 2000000\nsock 0\n')
+    (tmp_path / 'memory.pressure').write_text('some avg10=0.10 avg60=0.25 avg300=0.05 total=123\n'
+                                              'full avg10=0.00 avg60=0.01 avg300=0.00 total=9\n')
+    monkeypatch.setattr(service_life, 'CGROUP', str(tmp_path))
+    out = service_life.cgroup()
+    assert out['stat_mb'] == {'anon': 800.0, 'file': 1100.0, 'file_dirty': 2.0}
+    assert out['pressure']['some']['avg60'] == 0.25 and 'total' not in out['pressure']['full']
+    assert out['current_mb'] == 2009.4
+
+
+def test_net_max_bytes_refuses_a_huge_answer_without_holding_it(monkeypatch):
+    import importlib.util
+    spec = importlib.util.find_spec('sports.net')            # a fresh copy: conftest replaces sports.net.get offline
+    net = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(net)
+
+    class R:
+        status_code, text = 200, ''
+
+        def __init__(self, size, declared=None):
+            self.size, self.headers, self.read = size, ({'Content-Length': str(declared)} if declared else {}), 0
+
+        def iter_content(self, n):
+            while self.read < self.size:
+                self.read += n
+                yield b'x' * n
+
+        def close(self):
+            pass
+
+        def json(self):
+            return json.loads(self._content)
+
+    sent = []
+
+    class S:
+        def get(self, url, **kw):
+            sent.append(kw.get('stream'))
+            return resp
+
+    monkeypatch.setattr(net, 'session', lambda: S())
+    monkeypatch.setattr(net, '_wait', lambda host: None)
+    resp = R(10 * 65536)
+    with pytest.raises(ValueError, match='too large'):
+        net.get('https://example.invalid/a', max_bytes=100_000)
+    assert resp.read <= 2 * 65536 and sent == [True]          # stopped after the limit, never read whole
+    resp = R(0, declared=10**9)
+    with pytest.raises(ValueError, match='too large'):
+        net.get('https://example.invalid/b', max_bytes=100_000)
+    assert resp.read == 0
+    resp = R(1)
+    resp.iter_content = lambda n: iter([b'{"ok": 1}'])
+    assert net.get_json('https://example.invalid/c', max_bytes=100) == {'ok': 1}
+    sent.clear()
+    resp = R(1)
+    resp._content = b'{"x": 2}'
+    assert net.get_json('https://example.invalid/d') == {'x': 2} and sent == [None]   # default: unchanged call

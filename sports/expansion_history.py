@@ -409,6 +409,8 @@ UPKEEP_S = 25        # store upkeep per run, at most (expansion_compact + expans
 UPKEEP_WARN = 0.7    # ... unless the sport holds >= 70 % of its budget or has untidied stores: then upkeep may use the
                      # rest of the job's time (a 100-200 MB store's VACUUM does not fit 25 s; over the budget the run
                      # spends little on backfill anyway)
+HISTORY_MAX_BYTES = 16_000_000   # sg-stability: ESPN answers here are <= ~2.3 MB; parsed JSON is ~5-8x its size and the
+                                 # job's cap is 216 MB - a larger answer is refused (ValueError: counted, run continues)
 JOB_S = 165          # the history job's own end: its scheduler timeout is 180 s (startup + exit margin)
 
 
@@ -491,7 +493,7 @@ def collect(sport, max_requests=16, max_seconds=150):
         if counts['requests'] >= max_requests or time.monotonic() >= main_deadline:
             raise StopIteration
         counts['requests'] += 1
-        body = get_json(sport, url, params=params, timeout=timeout, tries=1)
+        body = get_json(sport, url, params=params, timeout=timeout, tries=1, max_bytes=HISTORY_MAX_BYTES)
         counts['ok_requests'] += 1
         return body
 
@@ -849,6 +851,8 @@ def history(req):
         return 200, {**response, 'state':'identity_pending', 'message':'This player and event are not yet linked to a verified result source.'}
     scope = 'regulation' if offer['sport'] == 'soccer' and offer['scope'] == 'full_game' else offer['scope']
     path = isolated_database(directory.parent, identity['competition'])
+    from .expansion_compact import bound_service_cache
+    bound_service_cache(directory.parent)          # sg-stability: archived result files get their own small cache share
     before = min(now_utc(), offer['start'])
     # Minute boundary limits cached keys; data is still restricted to information
     # known by this boundary. Newly saved facts become visible next minute.

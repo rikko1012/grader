@@ -57,6 +57,15 @@ def bound_cache():
     return archive.LRU_BYTES
 
 
+def bound_service_cache(directory):
+    """The web process (member history requests) reads archived soccer / tennis results through the shared archive
+    file cache: give every store under `directory` the same EXPANSION_LRU_MB share inside it (archive.PREFIX_CAPS),
+    leaving the global LRU_BYTES - and so every NBA / NFL read - untouched. Idempotent."""
+    from . import archive
+    archive.PREFIX_CAPS[os.path.normcase(os.path.abspath(str(directory)))] = int(EXPANSION_LRU_MB * 1_000_000)
+    return archive.PREFIX_CAPS
+
+
 def enabled():
     return os.environ.get("SCOUT_EXPANSION_COMPACT", "1") != "0"
 
