@@ -212,3 +212,19 @@ Full set: `V3_SHOTS=<dir> V3_BOARD_SHOTS=<dir> V3_FONTS=1 V3_PROD=1 pytest tests
 - `python scripts/load_ui_v3_700.py . 700`: 700 members on pages + bundles + art, flag on and off; fails on any 5xx, a wrong status, or more than one build per page.
 - Also run the esports `scripts/load_audit700.py` (with `UPGRADE_LOAD=1 SCOUT_UI_V3=1 … workspace`).
 - Run them for any change to `ui_v3.py` or `server.py`.
+
+## CS2 player stats: HLTV only (claude/ui-v3-maps, 2026-11-20)
+
+Owner, Nov 20: "stop using BO3.gg we have HLTV". The v3 CS2 card's hero stat grid, map cards and 2-map combine read only
+`GET /api/upgrade/player-maps?sport=cs2&book=&id=` (`workspace_api.get_player_maps` -> `hltv_maps.card_doc`).
+
+- **Data.** His HLTV per-map raw totals, last 12 months and last 3 months (maps, rounds, kills, deaths, headshots + the kills/maps of
+  maps with a headshot row, rating/ADR/KAST x rounds, map wins). Exact HLTV id as the projections (`hltv._player_ids`), HLTV-sourced rows only.
+- **Gate.** v3 only: with v3 off the route is the unknown-route answer, byte for byte. Members only; the player is the board row's, never the request's.
+- **Load.** `srv.shared` per board row, plus one HLTV read per player (`hltv.single_flight`) through 3 read slots. Cached 15 min, with a disk copy.
+  A failed read keeps the last good answer; with none, the endpoint answers 503 and the card shows a retry, never "—".
+- **Pool.** `hltv_maps.pool_for`: the match's own HLTV veto pool (veto-1), else the most common complete pool of the last 7 days of
+  HLTV vetoes, else `hltv_maps.ACTIVE_DUTY`. Update that constant when Valve changes Active Duty.
+  Maps outside the pool sit in a closed "Outside the current pool" group, with no combine and no map chance.
+- **Display.** Names come from `hltv_maps.NAMES` ("Dust 2", never "de_dust2"). The combine sums the two maps' totals, then divides.
+- **Tests.** `tests/test_v3_player_maps.py` (maths, ids, pool, names, cache, 700 concurrent) and `tests/test_ui_v3_player_browser.py` (390 / 1280, every pair).
