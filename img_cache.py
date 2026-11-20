@@ -297,12 +297,12 @@ _SOF_BASELINE = (0xC0, 0xC1)                   # baseline / extended sequential 
 
 
 def _jpeg_single_scan_baseline(raw, im):
-    """True only for a sequential (SOF0/SOF1) JPEG with exactly one scan: the only kind libjpeg decodes at reduced scale without a
+    """True only for a sequential (SOF0/SOF1) JPEG with exactly one scan covering every frame component: the only kind libjpeg decodes at reduced scale without a
     full-size coefficient buffer. Walks the marker segments to the first SOS, then counts further SOS markers in the rest (entropy
     data never holds an unstuffed 0xFF 0xDA); anything unexpected answers False (the normal cap applies)."""
     if im.info.get("progressive") or im.info.get("progression"):
         return False
-    n, i, sof = len(raw), 2, None
+    n, i, sof, nf = len(raw), 2, None, None
     if raw[:2] != b"\xff\xd8":
         return False
     while i + 4 <= n:
@@ -321,9 +321,10 @@ def _jpeg_single_scan_baseline(raw, im):
         if 0xC0 <= m <= 0xCF and m not in (0xC4, 0xC8, 0xCC):
             if sof is not None:
                 return False
-            sof = m
+            sof, nf = m, (raw[i + 9] if i + 9 < n else None)
         if m == 0xDA:
-            return sof in _SOF_BASELINE and raw.find(b"\xff\xda", i + 2 + seg) < 0
+            ns = raw[i + 4] if i + 4 < n else None     # a scan with fewer components than the frame = more scans follow (buffered)
+            return sof in _SOF_BASELINE and nf is not None and ns == nf and raw.find(b"\xff\xda", i + 2 + seg) < 0
         i += 2 + seg
     return False
 

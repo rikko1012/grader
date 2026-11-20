@@ -512,6 +512,15 @@ def _jpeg_sized(w, h, progressive=False, sof=None, subsampling=0):
     return bytes(raw)
 
 
+def _one_component_scan(raw):
+    """A sequential JPEG whose only scan covers 1 of its 3 components (libjpeg then buffers full-size coefficients: measured +97 MB
+    at 4000 x 4000 4:4:4 when it was given the baseline allowance)."""
+    raw = bytes(raw)
+    k = raw.find(b"\xff\xda")
+    n = int.from_bytes(raw[k + 2:k + 4], "big")
+    return raw[:k] + bytes.fromhex("ffda0008010100003f00") + raw[k + 2 + n:]
+
+
 def _no_load(monkeypatch):
     from PIL import ImageFile
     loads = []
@@ -528,14 +537,25 @@ def _no_load(monkeypatch):
     (5000, 5000, True, 0xC0),          # sequential frame but ten scans: full-size coefficient buffers, normal cap
     (4001, 4000, False, None),         # single-scan baseline just over its 16 M pixel bound
     (8000, 6000, False, None),         # 48 M pixel baseline (allowed before)
+    (4001, 4000, False, "ns1"),        # one SOS but covering 1 of 3 components: normal cap
+    (2100, 2100, False, "ns1"),
 ])
 def test_jpegs_over_their_cap_are_refused_from_the_header_before_any_decode(monkeypatch, w, h, prog, sof):
     loads = _no_load(monkeypatch)
-    raw = _jpeg_sized(w, h, progressive=prog, sof=sof)
+    raw = _jpeg_sized(w, h, progressive=prog, sof=None if sof == "ns1" else sof)
+    if sof == "ns1":
+        raw = _one_component_scan(raw)
     assert Image.open(io.BytesIO(raw)).size == (w, h)
     with pytest.raises(ic.Refused) as e:
         ic.encode(raw, "p")
     assert str(e.value) == "dims" and loads == []
+
+
+def test_an_absurd_header_is_refused_before_any_decode(monkeypatch):
+    loads = _no_load(monkeypatch)
+    with pytest.raises(ic.Refused):
+        ic.encode(_jpeg_sized(60000, 60000), "p")             # Pillow's own bomb guard answers first; still no decode
+    assert loads == []
 
 
 def test_only_single_scan_baseline_jpegs_get_the_reduced_scale_allowance():
@@ -549,6 +569,7 @@ def test_only_single_scan_baseline_jpegs_get_the_reduced_scale_allowance():
     assert ok(b.getvalue())                                              # APP1 segments are skipped, not scanned
     assert not ok(_jpeg_sized(300, 300, progressive=True))
     assert not ok(_jpeg_sized(300, 300, progressive=True, sof=0xC0))     # multi-scan sequential
+    assert not ok(_one_component_scan(_jpeg(300, 300)))                 # single SOS, fewer components than the frame
     stub = type("Im", (), {"info": {}})()
     for bad in (b"\xff\xd8\xff\xc0\x00\x01", b"\xff\xd8\xff\xe0", b"\x00\x00", b"\xff\xd8\xff\xc0\x00\x02\xff\xc0\x00\x02"):
         assert not ic._jpeg_single_scan_baseline(bad, stub)              # malformed / truncated / two frames: the normal cap
@@ -592,6 +613,9 @@ else:
         f = tmp_path / (name + ".bin")
         f.write_bytes(_jpeg_sized(w, h, progressive=prog, sof=sof))
         cases[name] = (f, False)
+    f = tmp_path / "ns1_jpeg_4000_444.bin"                       # real 16 M pixel data, one scan of 1 of 3 components (+97 MB before)
+    f.write_bytes(_one_component_scan(cases["baseline_jpeg_4000"][0].read_bytes()))
+    cases["ns1_jpeg_4000_444"] = (f, False)
     code = r"""
 import io, sys, psutil, img_cache as ic
 from PIL import Image
