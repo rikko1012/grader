@@ -23,6 +23,7 @@ RUN_S = {
     "ingest-kalshi": 310, "settle": 120, "settle-post": 300, "pregame-news": 4, "picks-ingest": 1,
     "picks-settle": 1, "player-context": 60, "games-backfill": 120, "slips-settle": 3, "grades-daily": 15,
     "model-forward": 300, "history": 300, "archive": 600, "archive-verify": 300, "assistant": 30,
+    "results-ledger": 200,            # settlepost-1120: the ledger's own job (LEDGER_S, formerly inside settle-post)
 }
 NOV9_RUN_S = {"prebuilt": 59}         # the 2026-11-09 stall and its review replays ran with this prebuilt time
 # live 2026-11-18 22:03-22:40 UTC (c7e7114, ops_live3: last_exit / recent_ran_s, uptime 36 min): every heavy job slower
@@ -31,7 +32,10 @@ NOV9_RUN_S = {"prebuilt": 59}         # the 2026-11-09 stall and its review repl
 LIVE_1118_RUN_S = {
     "prebuilt": 400, "ui-snapshots-nba": 175, "ui-snapshots-nfl": 80, "sheets": 40, "results-public": 460,
     "mapping-audit": 160, "ingest-nba": 145, "ingest-nfl": 135, "books": 400, "ingest-kalshi": 80, "settle": 330,
-    "settle-post": 860, "player-context": 40, "games-backfill": 2, "grades-daily": 2, "model-forward": 720,
+    # settlepost-1120: the ledger (437 s in the 2026-11-18 20:10 stages) is its own job now; settle-post keeps its live
+    # 860 s (conservative: its scorecards stop at the 600 s budget) - so this replay carries MORE load than the head has
+    "settle-post": 860, "results-ledger": 440,
+    "player-context": 40, "games-backfill": 2, "grades-daily": 2, "model-forward": 720,
     "history": 800, "archive": 1000, "archive-verify": 210, "soccer-quotes": 5, "tennis-quotes": 5,
     "soccer-history": 27, "tennis-history": 47, "soccer-learning": 22, "tennis-learning": 8, "slips-ingest": 1,
     "picks-ingest": 1, "pregame-news": 5, "picks-settle": 1, "slips-settle": 3,
@@ -142,8 +146,9 @@ def simulate(mod, hours=6.0, tick_s=1.0, run_s=None, rc=None, env=None, jobs_hoo
             if name == "settle-post" and k == 0:
                 d = fsp
                 argv = list(spec["argv"])
-                if "--budget-s" in argv:        # the scorecards stop at the budget; the ledger (~200 s) follows
-                    d = min(fsp, float(argv[argv.index("--budget-s") + 1]) + LEDGER_S)
+                if "--budget-s" in argv:        # the scorecards stop at the budget; the ledger (~200 s) follows,
+                    # unless it is its own job (settlepost-1120: results-ledger)
+                    d = min(fsp, float(argv[argv.index("--budget-s") + 1]) + (0 if "results-ledger" in J else LEDGER_S))
             code = rc.get(name, 0)
             code = code(k) if callable(code) else code
             return FakeChild(clock, d, code)

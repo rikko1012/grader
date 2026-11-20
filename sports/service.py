@@ -36,6 +36,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -274,6 +275,7 @@ def alerts(o):
         if daily_state.get("publish_pending"):
             out.append({"level": "warn", "code": "daily_report_unpublished", "detail": {
                 "attempt_day": daily_state.get("attempt_day")}})
+    out.extend(scorecard_alerts(o, jobs))
     if o.get("scheduler_alive") is False:
         out.append({"level": "page", "code": "scheduler_down", "detail": "the job scheduler thread is not running"})
     # the collector: "ingest" (one job) or one "ingest-<league>" job per league (game-day cadence, scheduler.py)
@@ -413,6 +415,54 @@ def alerts(o):
     return out
 
 
+DAILY_HELD_PAGE_S = 86400               # grades-daily held this long (one game day) pages (settlepost-1120 review)
+
+
+def _age_s(iso):
+    try:
+        return round(time.time() - datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+    except (TypeError, ValueError):
+        return None
+
+
+def scorecard_alerts(o, jobs):
+    """settlepost-1120 review: the model scorecard behind (model/learning_state.json, written by settle-post) and
+    grades-daily held because of it - both page. Same limit as the daily hold (SPORTS_DAILY_SCORECARD_MAX_AGE_S, 3 h;
+    0 = off); no state file (older settle-post code, fresh data dir) = no alert, as the hold."""
+    out = []
+    try:
+        from .model.daily import scorecard_max_age_s
+        lim = scorecard_max_age_s()
+    except Exception:                                   # noqa: BLE001 - the alert never breaks ops
+        lim = 3 * 3600.0
+    ls = o.get("learning_state")
+    if lim and isinstance(ls, dict) and (jobs.get("settle-post") or {}).get("enabled"):
+        c_age = _age_s(ls.get("complete_at"))
+        p_age = _age_s(ls.get("partial_since") or ls.get("at")) if ls.get("partial") else None
+        why = []
+        if p_age is not None and p_age > lim:
+            why.append(f"settle-post passes stopped part way for {p_age} s ({ls.get('events_left')} events left in "
+                       f"the sweep)")
+        if c_age is not None and c_age > lim:
+            why.append(f"last complete scorecard pass {c_age} s ago")
+        if why:
+            out.append({"level": "page", "code": "scorecard_behind", "detail": {
+                "reason": "; ".join(why) + f" (limit {int(lim)} s): grades-daily holds its fit", "limit_s": int(lim),
+                "partial": bool(ls.get("partial")), "events_left": ls.get("events_left"),
+                "partial_since": ls.get("partial_since"), "partial_age_s": p_age,
+                "complete_at": ls.get("complete_at"), "complete_age_s": c_age, "last_run_at": ls.get("at"),
+                "last_run_age_s": _age_s(ls.get("at"))}})
+    ds = o.get("grades_daily") or {}
+    if (jobs.get("grades-daily") or {}).get("enabled") and ds.get("held_since"):
+        h_age = _age_s(ds["held_since"])
+        if h_age is not None and h_age > DAILY_HELD_PAGE_S:
+            out.append({"level": "page", "code": "daily_grading_held", "detail": {
+                "reason": ds.get("held_reason") or ((ds.get("last_skip") or {}).get("why")),
+                "held_since": ds["held_since"], "held_age_s": h_age, "limit_s": DAILY_HELD_PAGE_S,
+                "last_day": ds.get("last_day"), "last_skip": ds.get("last_skip")}})
+    return out
+
+
 EXPANSION_FORECASTS_STALE_S = 1800      # soccer / tennis grades (forecasts.json) older than this page (learning: 180 s)
 
 
@@ -486,7 +536,8 @@ def board_builds():
 
 def settle_stages(name="settle_stages.json"):
     """The last finished settle run: seconds since its start at the end of each stage (admin ops only).
-    settle_post_stages.json: the settle-post job (results ledger + scorecards), written after each stage."""
+    settle_post_stages.json: the settle-post job (scorecards + their counters); results_ledger_stages.json: the
+    results-ledger job (2026-11-20, formerly inside settle-post) - each written after each stage."""
     from . import config
     try:
         return json.loads((config.DATA_DIR / name).read_text(encoding="utf-8"))
@@ -569,8 +620,10 @@ def ops():
             "prebuilt": prebuilt_state(),
             "board_builds": board_builds(),
             "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
+            "results_ledger_stages": settle_stages("results_ledger_stages.json"),
             "sheets_stages": sheets_stages(),
             "grades_daily": settle_stages("model/daily_state.json"),
+            "learning_state": settle_stages("model/learning_state.json"),
             "expansion_learning": expansion_learning_status(), "expansion_storage": expansion_storage(),
             "expansion_pp_soccer": expansion_pp_soccer(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),

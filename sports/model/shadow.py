@@ -485,14 +485,19 @@ def l2_score(sport, hcon, freeze, art):
 CORRECTION_WINDOW_DAYS = 30            # first scan: settlements learned this far back (learning.on_settled's window)
 
 
-def settle(scon, path=None, now=None, deadline=None):
+def settle(scon, path=None, now=None, deadline=None, fired=None):
     """Score shadow forecasts whose offer has a settlement (same rule as learning._score_one: the forecast's OWN line
     and chosen side), each under its OWN model_version (sm-2, sm-nfl-2). Idempotent.
     A corrected settlement (new settlement_id) SUPERSEDES the forecast's earlier row (superseded=1) instead of adding a
     second live row, and events are re-read when a settlement was learned since the last pass - also when every
     forecast of the event is already scored (bug sweep 2026-11-06 #42).
-    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09): stop between events once passed; the events
-    done keep their marks and the closing 'settled_known_at' mark is NOT advanced, so the next run re-reads the rest."""
+    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09): stop between events - and, since 2026-11-20,
+    between forecasts (rows so far committed, no mark for that event) - once passed; the events done keep their marks
+    and the closing 'settled_known_at' mark is NOT advanced, so the next run re-reads the rest.
+    A sweep spans runs (review 2026-11-20, as learning.on_settled): it is complete when the walk wraps back to the
+    event it started at (sweep_start); 'settled_known_at' then advances to the newest settlement known when the sweep
+    STARTED (sweep_newest) - a settlement learned mid-sweep for an event already passed is re-read by the next sweep.
+    A run that stops before it gets back into its resume event keeps that event's cursor (resume_rowid / resume_sig)."""
     import time
     from datetime import timedelta
     from .. import settlement, store
@@ -515,11 +520,24 @@ def settle(scon, path=None, now=None, deadline=None):
     n = 0
     from .learning import event_sig
     done = dict(con.execute("SELECT event_id, sig FROM shadow_events"))
-    left = 0
-    order = sorted(evs)
-    for i, ev in enumerate(order):
+    meta = dict(con.execute("SELECT key, value FROM shadow_meta"))
+    left, cursor, i = 0, None, 0
+    evs = sorted(evs)
+    order, k = evs, 0
+    sweeping = bool(meta.get("resume_event"))
+    if sweeping:                                       # 2026-11-20: a stopped run resumes where it stopped (wrapping)
+        k = next((j for j, e in enumerate(evs) if e >= meta["resume_event"]), len(evs))
+        order = evs[k:] + evs[:k]
+    # the sweep this run belongs to: its start event and the newest settlement known when it started
+    sweep = (meta.get("sweep_start") or meta["resume_event"]) if sweeping else (order[0] if order else None)
+    sweep_newest = (meta.get("sweep_newest") or newest) if sweeping else newest
+    todo = len(order)
+    if sweeping and order and deadline is not None:    # an unbounded run walks every event
+        sk = next((j for j, e in enumerate(evs) if e >= sweep), len(evs)) % len(evs)
+        todo = (sk - k) % len(evs) or len(evs)
+    for i, ev in enumerate(order[:todo]):
         if deadline is not None and time.time() >= deadline:
-            left = len(order) - i
+            left = todo - i
             break
         # skip an event whose settlements and shadow forecasts are exactly those of its last full pass (a no-op: every
         # forecast it can score already has its row); the mark commits with the event's rows, so a killed run (settle
@@ -535,9 +553,18 @@ def settle(scon, path=None, now=None, deadline=None):
             by_offer.setdefault((r["source"], r["source_key"].rsplit("|", 1)[0]), []).append(store._rec(r))
         if not by_offer:
             continue
-        for sid, rid, line, side, p_side, p_push, lg, st, mv in con.execute(
-                "SELECT shadow_id, offer_record_id, line, chosen_side, p_side, p_push, league, stat, model_version "
-                "FROM shadow_forecasts WHERE event_id = ?", (ev,)).fetchall():
+        stopped = False
+        # inside the event a stopped run left off in, records unchanged since: start at the forecast it stopped at
+        start = int(meta["resume_rowid"]) if (i == 0 and ev == meta.get("resume_event") and meta.get("resume_rowid")
+                                              and meta.get("resume_sig") == sig) else 0
+        for row, sid, rid, line, side, p_side, p_push, lg, st, mv in con.execute(
+                "SELECT rowid, shadow_id, offer_record_id, line, chosen_side, p_side, p_push, league, stat, "
+                "model_version FROM shadow_forecasts WHERE event_id = ? AND rowid >= ? ORDER BY rowid",
+                (ev, start)).fetchall():
+            if deadline is not None and time.time() >= deadline:
+                stopped = True                             # 2026-11-20: checked per forecast too; no mark for this event
+                cursor = None if (fired and fired()) else (row, sig)    # see learning.on_settled
+                break
             if side is None:
                 continue
             offer = store.get(scon, rid)
@@ -559,10 +586,25 @@ def settle(scon, path=None, now=None, deadline=None):
                              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
                              (sid, cur.settlement_id, mv or VERSION, lg, st, ev, line, side, p_side, p_push, status,
                               cur.source_value, cur.settled_at)).rowcount
+        if stopped or (fired and fired()):            # fired: learning's statement backstop interrupted a read
+            con.commit()
+            left = todo - i
+            break
         con.execute("INSERT OR REPLACE INTO shadow_events (event_id, sig) VALUES (?, ?)", (ev, sig))
         con.commit()
+    con.execute("DELETE FROM shadow_meta WHERE key IN ('resume_event', 'resume_rowid', 'resume_sig', 'sweep_start', "
+                "'sweep_newest')")
     if not left:
-        con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('settled_known_at', ?)", (newest,))
+        con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('settled_known_at', ?)", (sweep_newest,))
+    else:
+        stop_ev = order[i]
+        con.executemany("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES (?, ?)",
+                        (("resume_event", stop_ev), ("sweep_start", sweep), ("sweep_newest", sweep_newest)))
+        if not cursor and stop_ev == meta.get("resume_event") and meta.get("resume_rowid"):
+            cursor = (meta["resume_rowid"], meta.get("resume_sig"))     # the last run's cursor still holds
+        if cursor and cursor[1]:
+            con.executemany("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES (?, ?)",
+                            (("resume_rowid", str(cursor[0])), ("resume_sig", cursor[1])))
     con.commit()
     con.close()
     return {"shadow_scored": n, **({"partial": True, "events_left": left} if left else {})}
