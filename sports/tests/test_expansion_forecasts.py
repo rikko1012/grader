@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from gradecore import policy
 
 from sports import expansion_forecasts as model, expansion_board as boards, expansion_research as research
 from sports.expansion_history import atomic_json
@@ -53,26 +54,30 @@ def test_integer_push_is_separate_and_chance_conditional():
 def test_only_offered_side_unknown_payout_not_invented():
     offer,facts=fixture();offer.update(sides={'under':{}},variant='goblin',line=8.5)
     f,_=model.make_forecast(offer,facts,NOW)
-    assert f['side']=='under' and f['grade'] is None
+    # soccer-grades-1120: the letter of the model chance at 0U; the payout is still never invented (no EV / stake)
+    assert f['side']=='under' and f['grade']==policy.letter_for(f['p_side']) and f['units']==0.0
+    assert f['letter_basis']=='chance_payout_unknown' and f['grade_policy'] and 'not published' in f['stake_reason']
 
 
 def test_one_sided_app_never_reverses_the_model_direction():
     offer,facts=fixture();offer.update(line=8.5,sides={'over':{}})
     f,_=model.make_forecast(offer,facts,NOW)
-    assert f['side']=='under' and f['p_side']>.5 and f['grade'] is None
+    assert f['side']=='under' and f['p_side']>.5 and f['grade']==policy.letter_for(f['p_side']) and f['units']==0.0
+    assert f['letter_basis']=='model_side_not_offered'
     assert 'not offered' in f['grade_reason'][0]
 
 
 def test_leakage_duplicates_wrong_period_and_too_few_are_refused():
+    # soccer-grades-1120: under 5 exact games the count model still refuses; thin-1 (population prior) grades it
     offer,facts=fixture();facts['games']=facts['games'][:4]
-    assert model.fit(offer,facts,NOW)[1]=='more_exact_history_needed'
+    assert model.fit(offer,facts,NOW)[0]['thin_model']['games']==4
     facts['games']*=4
-    assert model.fit(offer,facts,NOW)[1]=='more_exact_history_needed'
+    assert model.fit(offer,facts,NOW)[0]['thin_model']['games']==4       # duplicates never count
     offer,facts=fixture();facts['scope']='first_half'
     assert model.fit(offer,facts,NOW)[1]=='history_period_mismatch'
     offer,facts=fixture()
     for game in facts['games']:game['known_at']='2026-11-18T20:00:00Z'
-    assert model.fit(offer,facts,NOW)[1]=='more_exact_history_needed'
+    assert model.fit(offer,facts,NOW)[0]['thin_model']['games']==0       # future-known rows never read
 
 
 def test_cup_regulation_does_not_become_full_match():

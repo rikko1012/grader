@@ -72,6 +72,46 @@ def _promoted():
 
 
 PROMOTED_INPUTS = _promoted()
+# thin-1 (soccer-grades-1120): count lines of players with 0-4 earlier exact games in the competition - the count
+# model below refuses them (more_exact_history_needed). Gamma-Poisson predictive with a population prior per
+# (position group, stat): rate mean (sum + K*m0) / (n + K), dispersion alpha0 of the population. m0 / alpha0 / K from
+# the walk-forward TUNE window (ESPN boxes before 2026-09-01, eng.1 ita.1 aus.1 mex.1 usa.1 UCL); holdout
+# 2026-09-01..11-19 scored once against the pre-registered sg-stats tier rule
+# (cs2_scout_ops/logs/soccer_grades_1120/integrate/wf/thin1_walkforward.json): shots / shots on target / goals /
+# fouls passed, assists passed (Brier equal to the base rate to 4 decimals), saves failed. Synthetic lines.
+# Every thin-1 line is 0U with its tier reason. Never used when the count model has its 5 games.
+THIN_VERSION = 'thin-1'
+THIN_PRIOR = {
+    'assists': {'D': (0.0423, 1.1872), 'F': (0.0938, 0.8672), 'G': (0.005, 0.02), 'M': (0.0841, 0.6976), 'U': (0.065, 1.1845)},
+    'fouls': {'D': (0.8094, 0.1924), 'F': (0.7924, 0.3571), 'G': (0.0187, 0.02), 'M': (0.8407, 0.2753), 'U': (0.7449, 0.3732)},
+    'goals': {'D': (0.0352, 0.508), 'F': (0.222, 0.4282), 'G': (0.001, 0.02), 'M': (0.0943, 0.9243), 'U': (0.0913, 1.4503)},
+    'saves': {'G': (3.006, 0.1097), 'U': (3.006, 0.1097)},
+    'shots': {'D': (0.4653, 0.5669), 'F': (1.5816, 0.3923), 'G': (0.0025, 0.02), 'M': (0.9667, 0.5759), 'U': (0.8374, 0.9157)},
+    'shots_on_target': {'D': (0.1292, 0.5659), 'F': (0.6178, 0.4358), 'G': (0.0011, 0.02), 'M': (0.3173, 0.7475), 'U': (0.2867, 1.2043)},
+}
+THIN_K = {'shots': 3, 'shots_on_target': 5, 'goals': 12, 'assists': 20, 'saves': 20, 'fouls': 5}
+THIN_TIERS = {'shots': 'passed', 'shots_on_target': 'passed', 'goals': 'passed', 'assists': 'passed', 'fouls': 'passed',
+              'saves': 'failed'}
+THIN_REASONS = {
+    'passed': '0U: fewer than 5 past games - population-prior model passed its walk-forward test; stakes wait for settled real lines.',
+    'failed': '0U: fewer than 5 past games - population-prior model missed its walk-forward test.',
+}
+
+
+def position_group(role):
+    """G / D / M / F from a listed position ('Goalkeeper', 'Defender', 'Center Back', 'Midfielder', 'Forward', ...);
+    U when unknown (the all-players prior)."""
+    r = str(role or '').lower()
+    if 'goal' in r or r in ('g', 'gk'):
+        return 'G'
+    if 'defen' in r or 'back' in r or r in ('d', 'df'):
+        return 'D'
+    if 'midfield' in r or r in ('m', 'mf'):
+        return 'M'
+    if any(x in r for x in ('forward', 'striker', 'wing', 'attack')) or r in ('f', 'fw'):
+        return 'F'
+    return 'U'
+
 # Grade leak guard (2026-11-18). Frozen: changing it changes grades and needs a walk-forward test first.
 FORECAST_INPUTS = _inputs() | PROMOTED_INPUTS
 
@@ -111,7 +151,10 @@ def fit(offer, facts, now):
     context = facts.get('context') or {}
     if any(context.get(k) and parse_utc(context[k])>parse_utc(now) for k in ('surface_known_at','format_known_at')):
         return None, 'future_context'
-    if stats.model_of(offer):
+    component = stats.model_of(offer)
+    if component == 'first_half_goals' and facts.get('scope') == 'first_half':
+        component = None    # first-half goal history in the facts (no collector writes it today): the e6e155d count path
+    if component:
         # sg-stats component models (fantasy scores, sums, first-half goals, 2nd-set games): stats the count model
         # below never graded. Every other offer takes the unchanged path.
         return stats.fit(offer, facts, now, FORECAST_INPUTS, parse_utc, MIN_GAMES)
@@ -177,12 +220,36 @@ def fit(offer, facts, now):
         games.append(g)
         if len(games) == 20:
             break
+    thin = None
     if len(games) < MIN_GAMES:
-        return None, 'more_exact_history_needed'
+        if not (sport == 'soccer' and stat in THIN_PRIOR and (ident.get('competition'), 'espn', stat) in FORECAST_INPUTS
+                and all(g.get('source') == 'espn' for g in games)):
+            return None, 'more_exact_history_needed'
+        group = position_group(facts.get('role') or offer.get('role'))
+        if group not in THIN_PRIOR[stat]:
+            group = 'U'
+        thin = {'version': THIN_VERSION, 'group': group, 'k': THIN_K[stat], 'm0': THIN_PRIOR[stat][group][0],
+                'alpha0': THIN_PRIOR[stat][group][1], 'games': len(games), 'tier': THIN_TIERS[stat]}
     values = [g['value'] for g in games]
     n = len(values)
-    avg = sum(values) / n
-    if support is not None:
+    avg = sum(values) / n if n else 0.0
+    if thin is not None:
+        mu = (sum(values) + thin['k'] * thin['m0']) / (n + thin['k'])
+        shape = 1 / thin['alpha0']
+        prob = shape / (shape + mu)
+        support, mass, cumulative = [], [], 0.0
+        for k in range(4096):
+            pk = math.exp(math.lgamma(k+shape)-math.lgamma(shape)-math.lgamma(k+1)
+                          +shape*math.log(prob)+k*math.log1p(-prob))
+            support.append(k)
+            mass.append(pk)
+            cumulative += pk
+            if k > mu and cumulative > 1-1e-10:
+                break
+        total = sum(mass)
+        mass = [p/total for p in mass]
+        model = 'thin-history-population-prior'
+    elif support is not None:
         # One total pseudogame spread across the finite score support. A market
         # with more possible scores must not silently receive a stronger prior.
         mass = [(values.count(k) + 1/len(support)) / (n + 1) for k in support]
@@ -258,6 +325,9 @@ def fit(offer, facts, now):
             out['settle_scopes'] = ['full_game', 'regulation']   # extra-time box totals first, else the 90 minutes
     if tennis_rule is not None:
         out['format_rule'] = {k: tennis_rule[k] for k in ('best_of', 'basis') if k in tennis_rule}
+    if thin is not None:
+        out['thin_model'] = thin
+        out['stake_tier'] = thin['tier']
     return out, None
 
 
@@ -289,6 +359,22 @@ def make_forecast(offer, facts, now):
     if fitted.get('component_model'):
         # 0 units with a definite reason by walk-forward tier (display gd-1 keeps the letter on a 0U line).
         result.update(units=0.0, stake_reason=stats.STAKE_REASONS[fitted['stake_tier']])
+    elif fitted.get('thin_model'):
+        result.update(units=0.0, stake_reason=THIN_REASONS[fitted['stake_tier']])
+    if grade.letter is None:
+        # soccer-grades-1120 (owner 2026-11-20: every offered prop gets a letter; testing decides only the stake):
+        # where the policy has no letter - the payout of a demon / goblin / alternate line is not published, or the
+        # model's side is not offered on this line - the letter is the band of the model's own chance (the same
+        # LETTER_CUTS, the NBA/NFL rg-1 basis: chance of the chosen side, payout-agnostic) at 0 units with the reason.
+        # Lines the policy grades are untouched (byte-identical payloads and ids).
+        basis = 'chance_payout_unknown' if chosen in offered else 'model_side_not_offered'
+        why = (f"0U: the payout of this {offer.get('variant') or 'unknown'} line is not published - letter from the model chance only."
+               if basis == 'chance_payout_unknown' else
+               f"0U: the model's side ({chosen.capitalize()}) is not offered on this line - letter shown for information.")
+        result.update(grade=policy.letter_for(side_probs[chosen]), letter_basis=basis, units=0.0,
+                      grade_reason=[*result['grade_reason'], why])
+        if not fitted.get('component_model') and not fitted.get('thin_model'):
+            result['stake_reason'] = why
     result['id'] = digest({k:v for k,v in result.items() if k != 'made_at'})
     return result, None
 

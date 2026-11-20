@@ -42,6 +42,11 @@ def test_only_frozen_inputs_feed_the_forecast(comp, source, stat, allowed):
         offer['scope'] = 'first_half'            # passes the regulation-league check; the guard still holds
         facts['scope'] = 'first_half'
     f, reason = model.fit(offer, facts, NOW)
+    if f is not None and 'thin_model' in f:
+        # soccer-grades-1120 thin-1: weight-0 rows are never read - the line is graded as a player with no exact
+        # history (population prior only), exactly as if those rows did not exist
+        assert not allowed and f['sample'] == 0 and f['inputs'] == []
+        return
     assert (f is not None) is allowed, reason
     if not allowed:
         assert reason == 'more_exact_history_needed'

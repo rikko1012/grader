@@ -52,7 +52,8 @@ def _forecast(o, research, forecasts):
         if (f['identity'] != research['identity'] or
                 any(f[k] != o[k] for k in ('sport','stat','scope','line','platform','offer_id','start')) or
                 f['offer_revision'] != o['revision'] or f['side'] not in ('over','under') or
-                (f['side'] not in o['sides'] and f.get('grade') is not None) or
+                (f['side'] not in o['sides'] and f.get('grade') is not None and
+                 f.get('letter_basis') != 'model_side_not_offered') or   # 2026-11-20: a 0U letter on the model's side
                 not 0 <= time.time()-datetime.fromisoformat(f['made_at'].replace('Z','+00:00')).timestamp() < 86400 or
                 datetime.fromisoformat(f['made_at'].replace('Z','+00:00')) >= datetime.fromisoformat(o['start'].replace('Z','+00:00'))):
             return None

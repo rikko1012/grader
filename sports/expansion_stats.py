@@ -433,12 +433,27 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
         return None, 'cards_rule_unverified'
     if sport == 'soccer' and scope not in ('full_game', 'regulation', 'first_half'):
         return None, 'period_not_modelled'
+    scope_rule = settle_as = tennis_rule = None
     if sport == 'soccer' and scope == 'full_game' and model != 'first_half_goals':
         from .expansion_forecasts import REGULATION_LEAGUES
         if ident['competition'] not in REGULATION_LEAGUES:
-            return None, 'extra_time_scope_unverified'
+            # soccer-grades-1120: the sg-scope rule, exactly as the count path (expansion_forecasts.fit): no extra time
+            # possible -> regulation total; possible -> the platform rule. ET_SHARE = 0 (the walk-forward rejected the
+            # extra-time mixture), so both settle paths use the regulation predictive; only the review scope differs.
+            from . import expansion_scope
+            scope_rule = facts.get('scope_rule') or {}
+            settle_as = expansion_scope.settlement(offer['platform'], scope_rule.get('extra_time'))
+            if settle_as is None:
+                return None, 'extra_time_scope_unverified'
+            p_et = scope_rule.get('p_extra_time')
+            if settle_as == 'regulation_plus_extra_time' and (not isinstance(p_et, (int, float)) or isinstance(p_et, bool)
+                                                              or not 0 <= p_et < 1):
+                return None, 'extra_time_scope_unverified'   # same gate as the count path
     if sport == 'soccer' and model != 'first_half_goals' and scope == 'first_half':
         return None, 'period_not_modelled'
+    if model == 'fantasy_tennis' and context.get('best_of') is None and (facts.get('format_rule') or {}).get('best_of') in (3, 5):
+        tennis_rule = facts['format_rule']              # sg-scope tour rule (ESPN Grand Slam flag), full-match lines
+        context = {**context, 'best_of': tennis_rule['best_of']}
     if model == 'fantasy_tennis' and context.get('best_of') not in (3, 5):
         return None, 'match_format_missing'
     expected = history_scope(offer)
@@ -509,7 +524,21 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
             'p_over': probs['over'], 'p_under': probs['under'], 'p_push': probs['push'],
             'inputs': picked, 'history_scope': expected,
             'context_used': {k: context[k] for k in ('best_of', 'surface') if k in context} if sport == 'tennis' else {},
-            'calibrated': False, 'stake_tier': tier}, None
+            'calibrated': False, 'stake_tier': tier, **_scope_fields(scope_rule, settle_as, tennis_rule)}, None
+
+
+def _scope_fields(scope_rule, settle_as, tennis_rule):
+    """The sg-scope fields the count path writes (expansion_forecasts.fit), only on lines that rule unlocked."""
+    out = {}
+    if scope_rule is not None:
+        out['scope_rule'] = {k: scope_rule[k] for k in ('version', 'extra_time', 'basis', 'stage', 'stage_type',
+                             'p_extra_time', 'p_basis') if scope_rule.get(k) is not None}
+        out['settlement_scope'] = settle_as
+        if settle_as == 'regulation_plus_extra_time':
+            out['settle_scopes'] = ['full_game', 'regulation']   # extra-time box totals first, else the 90 minutes
+    if tennis_rule is not None:
+        out['format_rule'] = {k: tennis_rule[k] for k in ('best_of', 'basis') if k in tennis_rule}
+    return out
 
 
 # ---------------------------------------------------------------- settlement of a component forecast (model review)
@@ -517,11 +546,19 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
 def actual(forecast, by_key):
     """Component total for a settled soccer forecast from the event's stored observations, or None (missing,
     conflicting or non-participation never becomes 0). by_key: {(player, stat, scope): [(row, obs), ...]}."""
+    for scope in forecast.get('settle_scopes') or [forecast['history_scope']]:
+        got = _actual_at(forecast, by_key, scope)     # sg-scope: extra-time box totals first when the line counts them
+        if got[1]:
+            return got
+    return None, []
+
+
+def _actual_at(forecast, by_key, scope):
     model = forecast.get('component_model')
     if model not in ('goals_assists', 'cards', 'shots_assisted', 'fantasy_outfield'):
         return None, []
     _, _, parts = MODELS[model]
-    pid, scope = forecast['identity']['player_id'], forecast['history_scope']
+    pid = forecast['identity']['player_id']
     total, used = 0.0, []
 
     def one(stat):
