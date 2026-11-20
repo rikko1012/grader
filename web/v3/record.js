@@ -49,8 +49,8 @@
       pr = pctOf(cells[2].querySelector('b') && cells[2].querySelector('b').textContent);
     if (obs != null && pr != null && !cells[1].querySelector('.v3-delta')) {
       var d = obs - pr, v = Math.round(d * 1000) / 10, el = document.createElement('span');
-      el.className = 'v3-delta ' + (d >= 0 ? 'is-good' : d > -0.03 ? 'is-near' : 'is-poor');
-      el.innerHTML = '<i class="v3-tri ' + (d >= 0 ? 'up' : 'down') + '" aria-hidden="true"></i>' +
+      el.className = 'v3-delta ' + (v === 0 ? 'is-even' : d >= 0 ? 'is-good' : d > -0.03 ? 'is-near' : 'is-poor');   /* 0.0 pts: no arrow, no colour */
+      el.innerHTML = (v === 0 ? '' : '<i class="v3-tri ' + (d >= 0 ? 'up' : 'down') + '" aria-hidden="true"></i>') +
         esc((v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v).toFixed(1) + ' pts vs stated');
       cells[1].appendChild(el);
     }

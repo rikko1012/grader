@@ -264,6 +264,9 @@ def test_public_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         p.wait_for_function("document.querySelector('#record h2') && document.querySelector('#record h2').textContent==='LoL'")
         p.locator("nav[aria-label='Record sport'] button", has_text="CS2").click()
         p.wait_for_function("document.querySelector('#record h2').textContent==='CS2'")
+        d = p.locator("#record .scores .v3-delta")                    # fixture: 60.0% vs 60.0% -> an even delta, no arrow, no colour
+        if d.count() and d.inner_text().startswith("0.0"):
+            assert d.locator(".v3-tri").count() == 0 and "is-even" in d.get_attribute("class")
         readable(p, "main")
         no_h_scroll(p)
         shot(p, f"record-public-{size['width']}-{theme}", full=True)
