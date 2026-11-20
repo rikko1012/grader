@@ -3,6 +3,7 @@
 numeric league id, pinned to one competition, bounded and rate-limit safe; a failed read never invents or moves a line."""
 import json
 import sqlite3
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -87,7 +88,7 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('SCOUT_SOCCER_ENABLED', '1')
     for k in ('SCOUT_SOCCER_PP_LEAGUES', 'SCOUT_SOCCER_PP_MLS', 'SCOUT_SOCCER_UNDERDOG', 'SCOUT_SOCCER_PP_MAX_CALLS',
-              'SCOUT_SOCCER_PP_BUDGET_S'):
+              'SPORTS_JOB_SOCCER_QUOTES_EVERY_S', 'SCOUT_SOCCER_PP_BACKOFF_S'):
         monkeypatch.delenv(k, raising=False)
     clock = Clock()
     monkeypatch.setattr(board, 'now_utc', clock.iso)
@@ -97,7 +98,7 @@ def env(monkeypatch, tmp_path):
     def get_json(sport, url, params=None, **kw):
         lid = (params or {}).get('league_id', 'leagues')
         state['calls'].append(lid)
-        clock.t += timedelta(seconds=3)
+        clock.t += timedelta(seconds=2)
         f = state['fail'].get(lid)
         if f == 429:
             raise net.HttpError(429, url, '', not_before=None)
@@ -107,7 +108,6 @@ def env(monkeypatch, tmp_path):
             return leagues_body(state['listed'])
         return state['tabs'].get(lid, {'data': [], 'included': []})
     monkeypatch.setattr(sources, 'get_json', get_json)
-    monkeypatch.setattr(board.time if hasattr(board, 'time') else __import__('time'), 'monotonic', clock.mono)
     state['clock'], state['dir'] = clock, tmp_path / 'soccer'
     return state
 
@@ -176,142 +176,151 @@ def test_plan_reads_only_exact_mapped_tabs_with_lines():
     assert board.plan_leagues(None)[0] == sorted(k for k in offers.PP_SOCCER_LEAGUES if k != 82)
 
 
-def test_default_run_reads_every_soccer_tab_bounded_and_standard_only(env):
-    snap = board.collect('soccer')
-    # 82 first, the league list, then never-read mapped tabs in table order up to 5 PrizePicks requests a run
-    assert env['calls'] == [82, 'leagues', 14, 6, 536]
-    assert set(snap['sources']) == {'prizepicks'}                     # one member-facing key, as before
-    assert snap_ids(snap) == ['536a', '6a', '82a', '82b']             # per-league tabs: standard only; 82 unchanged
-    status = json.loads((env['dir'] / board.PP_STATUS).read_text(encoding='utf-8'))
-    assert status['stopped'] == 'call_cap' and status['calls'] == 5
-    by = {x['id']: x for x in status['leagues']}
-    assert by[536]['on_board'] == 1 and by[536]['parsed'] == 2 and by[536]['kept'] == 1
-    assert by[14]['poll'] == 'slow' and by[534]['read_this_run'] is False
-    assert status['unmapped_with_lines'] == [{'id': 284, 'name': 'HANDBALL', 'count': 12}]
-    assert snap['sources']['prizepicks']['ok'] is False                # Serie A not read yet: honest "as of"
-    env['calls'].clear()
-    snap = board.collect('soccer')
-    # EPL had no standard line: slow poll; Serie A (never read) goes first; no /leagues inside its hour
-    assert env['calls'] == [82, 534, 6, 536]
-    assert snap_ids(snap) == ['534a', '536a', '6a', '82a', '82b']      # 82a listed on 534 too: tab 82's row kept
-    assert next(r for r in snap['offers'] if r['offer_id'] == '82a').get('pp_league') is None
-    assert snap['sources']['prizepicks']['ok'] is True
+def run(env, n=1, step=90):
+    """n quotes runs `step` seconds apart -> [(calls, snapshot)]."""
+    out = []
+    for _ in range(n):
+        env['calls'].clear()
+        snap = board.collect('soccer')
+        out.append((list(env['calls']), snap))
+        env['clock'].t += timedelta(seconds=step)
+    return out
 
 
-def test_kill_switch_is_exactly_the_old_single_request(env, monkeypatch):
+def status(env):
+    return json.loads((env['dir'] / board.PP_STATUS).read_text(encoding='utf-8'))
+
+
+def visible_late(snap, env, before_next=85):
+    """Per-source counts a member still sees just before the next run (the 300 s rule at read time)."""
+    late = datetime.fromisoformat(snap['built_at'].replace('Z', '+00:00')) + timedelta(seconds=before_next)
+    seen = Counter()
+    for r in snap['offers']:
+        if (late - datetime.fromisoformat(r['observed_at'].replace('Z', '+00:00'))).total_seconds() <= 300:
+            seen[r.get('pp_league') or 'SOCCER'] += 1
+    return seen
+
+
+def test_one_request_a_run_learns_the_tabs_then_covers_82_and_the_best_tab(env):
+    runs = run(env, 6)
+    assert [c for c, _ in runs] == [[82, 'leagues'],        # tab 82, then the hourly league list (housekeeping)
+                                    [6, 14],                # a free coverage slot learns a tab; discovery reads EPL
+                                    [82, 534],              # discovery: Serie A
+                                    [82, 536],              # Serie A (gradeable, ita.1) now holds the slot
+                                    [534],
+                                    [82]]
+    assert all(len(c) <= 2 for c, _ in runs)                # never a burst of three
+    st = status(env)
+    assert st['covered'] == [82, 534] and st['slots'] == 2 and st['every_s'] == 90
+    assert sorted(st['not_covered']) == [6, 536]            # standard lines outside coverage: ops says so
+    snap = runs[-1][1]
+    assert snap_ids(snap) == ['534a', '82a', '82b']         # covered tabs only; per-league rows standard only
+    assert next(r for r in snap['offers'] if r['offer_id'] == '82a').get('pp_league') is None   # tab 82 wins the id
+    assert set(snap['sources']) == {'prizepicks'} and snap['sources']['prizepicks']['ok'] is True
+
+
+def test_steady_state_tab_82_never_dark_and_covered_tabs_always_visible(env):
+    runs = run(env, 4)
+    for calls, snap in run(env, 12):
+        assert len(calls) <= 2
+        seen = visible_late(snap, env)
+        assert seen['SOCCER'] == 2 and seen['Serie A'] == 1   # just before the next run: still on the board
+        assert snap['sources']['prizepicks']['ok'] is True
+
+
+def test_faster_cadence_widens_coverage(env, monkeypatch):
+    monkeypatch.setenv('SPORTS_JOB_SOCCER_QUOTES_EVERY_S', '60')
+    assert board.coverage_slots(board.quotes_every_s()) == 4
+    run(env, 8, step=60)
+    for calls, snap in run(env, 8, step=60):
+        seen = visible_late(snap, env, before_next=55)
+        assert (seen['SOCCER'], seen['Serie A'], seen['MLS'], seen['Liga MX']) == (2, 1, 1, 1)
+    assert status(env)['not_covered'] == []
+
+
+def test_single_429_honours_retry_after_and_a_second_backs_off_to_tab_82_at_the_old_rate(env, monkeypatch):
+    run(env, 5)
+    before = {r['offer_id']: r for r in json.loads((env['dir'] / 'board.json').read_text(encoding='utf-8'))['offers']}
+    env['fail'] = {534: 429, 82: 429}
+    calls, snap = run(env, 1)[0]
+    assert len(calls) == 1 and status(env)['stopped'] == 'http_429' and not status(env)['backoff_until']
+    rows = {r['offer_id']: r for r in snap['offers']}
+    assert all(rows[k] == before[k] for k in rows)           # carried, observed_at never re-stamped
+    calls, _ = run(env, 1)[0]
+    assert status(env)['backoff_until']                      # a second 429 inside 15 min: back-off
+    env['fail'] = {}
+    backoff = run(env, 6)                                    # 6 x 90 s < 600 s
+    assert all(c in ([82], []) for c, _ in backoff) and [c for c, _ in backoff].count([82]) == 3   # 82 only, every 180 s
+    assert snap_ids(backoff[-1][1]) == ['82a', '82b']        # Serie A lines aged out honestly (300 s)
+    after = run(env, 2)
+    assert any(534 in c for c, _ in after) and '534a' in snap_ids(after[-1][1])   # coverage again after 600 s
+
+
+def test_shared_hold_means_no_request_at_all(env, monkeypatch):
+    run(env, 3)
+    monkeypatch.setattr(sources, 'held_until', lambda sport, url: 10 ** 12)
+    calls, snap = run(env, 1)[0]
+    assert calls == [] and snap['offers'] and status(env)['stopped'] == 'retry_after_hold'
+
+
+def test_empty_answer_from_a_listed_tab_is_a_failed_read_and_rereads_the_list_at_most_every_ten_minutes(env):
+    run(env, 6)
+    env['fail'] = {534: 'empty'}
+    runs = run(env, 8)
+    st = json.loads((env['dir'] / board.PP_STATE).read_text(encoding='utf-8'))
+    assert st['per']['534']['error'] == 'empty_listed_tab'
+    lists = sum(c.count('leagues') for c, _ in runs)
+    assert 1 <= lists <= 2                                    # 8 runs = 12 min: one or two forced list reads
+
+
+def test_no_league_list_tries_mapped_tabs_and_retries_the_list(env):
+    env['fail'] = {'leagues': 429}
+    calls, _ = run(env, 1)[0]
+    assert calls == [82, 'leagues']
+    st = json.loads((env['dir'] / board.PP_STATE).read_text(encoding='utf-8'))
+    assert 'listing' not in st['leagues'] and st['leagues']['error'] == 'HttpError'
+    env['fail'] = {}
+    calls, _ = run(env, 1)[0]
+    assert calls[0] in offers.PP_SOCCER_LEAGUES and calls[1:] == ['leagues']
+
+
+def test_books_keep_their_180_s_cadence_and_carry_between_reads(env, monkeypatch):
+    from sports import expansion_odds
+    n = {'reads': 0}
+    def odds(sport, get, directory):
+        n['reads'] += 1
+        return ([{'sport': 'soccer', 'platform': 'betrivers', 'offer_id': f'o{n["reads"]}', 'revision': 'r',
+                  'start': START, 'observed_at': env['clock'].iso()}],
+                {'betrivers': {'ok': True, 'checked_at': env['clock'].iso(), 'markets': 1}})
+    monkeypatch.setattr(expansion_odds, 'collect', odds)
+    runs = run(env, 6)
+    assert n['reads'] == 3                                    # 6 runs x 90 s: books every second run
+    assert [s['game_odds'][0]['offer_id'] for _, s in runs] == ['o1', 'o1', 'o2', 'o2', 'o3', 'o3']
+    assert runs[1][1]['sources']['betrivers'] == runs[0][1]['sources']['betrivers']   # carried, not re-stamped
+
+
+def test_kill_switch_is_the_old_single_request_every_180_s(env, monkeypatch):
+    from sports.scheduler import default_jobs
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED', '1')
+    assert default_jobs()['soccer-quotes']['every_s'] == 90 and default_jobs()['tennis-quotes']['every_s'] == 180
+    assert default_jobs()['soccer-quotes']['timeout_s'] == 90
     monkeypatch.setenv('SCOUT_SOCCER_PP_LEAGUES', '0')
+    assert default_jobs()['soccer-quotes']['every_s'] == 180
     snap = board.collect('soccer')
     assert env['calls'] == [82] and set(snap['sources']) == {'prizepicks'}
     assert snap_ids(snap) == ['82a', '82b']
-    assert not (env['dir'] / board.PP_STATE).exists()
+    assert not (env['dir'] / board.PP_STATE).exists() and not (env['dir'] / 'odds-carry.json').exists()
+    assert sources.pace_gap_s(sources.PP_HOST) == 0
     env['calls'].clear(); monkeypatch.setenv('SCOUT_SOCCER_PP_MLS', '1')
     snap = board.collect('soccer')
     assert env['calls'] == [82, 6] and set(snap['sources']) == {'prizepicks', 'prizepicks_mls'}
-
-
-def test_429_stops_every_further_prizepicks_request_and_keeps_last_good_rows_until_they_age_out(env):
-    board.collect('soccer'); board.collect('soccer')
-    before = {r['offer_id']: r for r in json.loads((env['dir'] / 'board.json').read_text(encoding='utf-8'))['offers']}
-    env['calls'].clear(); env['fail'][534] = 429
-    env['clock'].t += timedelta(seconds=120)
-    snap = board.collect('soccer')
-    assert env['calls'] == [82, 534]                                   # stopped at the 429: no storm, no 6 / 536 read
-    rows = {r['offer_id']: r for r in snap['offers']}
-    assert set(rows) == set(before)                                    # carried, never dropped on a blip
-    for k in ('534a', '6a', '536a'):
-        assert rows[k] == before[k]                                    # observed_at / revision never re-stamped
-    assert snap['sources']['prizepicks']['ok'] is False
-    status = json.loads((env['dir'] / board.PP_STATUS).read_text(encoding='utf-8'))
-    assert status['stopped'] == 'http_429'
-    env['calls'].clear(); env['fail'] = {82: 429}
-    env['clock'].t += timedelta(seconds=200)                           # > 300 s since 534 / 6 / 536 were read
-    snap = board.collect('soccer')
-    assert env['calls'] == [82]
-    assert snap_ids(snap) == ['82a', '82b']                            # 82 read < 300 s ago: still carried
-    env['calls'].clear()
-    env['clock'].t += timedelta(seconds=200)
-    snap = board.collect('soccer')
-    assert snap['offers'] == []                                        # nothing older than the 300 s rule survives
-
-
-def test_steady_state_no_tab_flickers_and_shared_hold_skips_without_waiting(env, monkeypatch):
-    seen = []
-    for _ in range(8):
-        snap = board.collect('soccer')
-        env['clock'].t += timedelta(seconds=165)
-        seen.append(snap_ids(snap))
-    assert all(ids == ['534a', '536a', '6a', '82a', '82b'] for ids in seen[1:])
-    monkeypatch.setattr(sources, 'held_until', lambda sport, url: 10 ** 12)
-    env['calls'].clear()
-    snap = board.collect('soccer')
-    assert env['calls'] == [] and snap['offers']                       # held: no request at all, rows still carried
-    assert json.loads((env['dir'] / board.PP_STATUS).read_text(encoding='utf-8'))['stopped'] == 'retry_after_hold'
-
-
-def test_empty_answer_from_a_listed_tab_is_a_failed_read_and_rereads_the_list(env):
-    board.collect('soccer'); board.collect('soccer')
-    env['calls'].clear(); env['fail'][536] = 'empty'
-    snap = board.collect('soccer')
-    assert '536a' in snap_ids(snap)                                    # carried, not emptied by a 200 with data: []
-    state = json.loads((env['dir'] / board.PP_STATE).read_text(encoding='utf-8'))
-    assert state['per']['536']['error'] == 'empty_listed_tab' and state['leagues']['refresh'] is True
-    env['calls'].clear()
-    board.collect('soccer')
-    assert env['calls'][:2] == [82, 'leagues']
-
-
-def test_time_budget_and_call_cap_env(env, monkeypatch):
-    monkeypatch.setenv('SCOUT_SOCCER_PP_MAX_CALLS', '2')
-    board.collect('soccer')
-    assert env['calls'] == [82, 'leagues']
-    env['calls'].clear(); monkeypatch.setenv('SCOUT_SOCCER_PP_MAX_CALLS', '9')
-    monkeypatch.setenv('SCOUT_SOCCER_PP_BUDGET_S', '7')
-    board.collect('soccer')
-    assert env['calls'] == [82, 14, 6]                                 # 3 s a request: none started at/after 7 s
-
-
-def test_no_league_list_tries_every_mapped_tab_within_the_cap(env):
-    env['fail']['leagues'] = 429
-    board.collect('soccer')
-    assert env['calls'] == [82, 'leagues']                             # the 429 on /leagues stops the run
-    st = json.loads((env['dir'] / board.PP_STATE).read_text(encoding='utf-8'))
-    assert 'listing' not in st['leagues'] and st['leagues']['error'] == 'HttpError'
-    env['calls'].clear(); env['fail'] = {'leagues': 429}
-    env['clock'].t += timedelta(seconds=70)
-    snap = board.collect('soccer')
-    assert env['calls'] == [82]                                        # 429 back-off: tab 82 only, as at 5036ce4
-    env['clock'].t += timedelta(seconds=600)
-    env['calls'].clear()
-    snap = board.collect('soccer')
-    assert env['calls'] == [82, 'leagues']                             # retried after the back-off while it has no list
-    env['clock'].t += timedelta(seconds=600)
-    env['calls'].clear(); env['fail'] = {}
-    board.collect('soccer')
-    assert env['calls'] == [82, 'leagues', 14, 6, 536]
-
-
-def test_untrusted_old_list_falls_back_to_every_mapped_tab(env, monkeypatch):
-    board.collect('soccer')
-    st_path = env['dir'] / board.PP_STATE
-    st = json.loads(st_path.read_text(encoding='utf-8'))
-    st['leagues']['fetched_at'] = '2026-11-01T00:00:00Z'               # older than a day
-    st_path.write_text(json.dumps(st), encoding='utf-8')
-    env['calls'].clear(); env['fail'] = {'leagues': 429}
-    board.collect('soccer')
-    assert env['calls'] == [82, 'leagues']
-    env['calls'].clear(); env['fail'] = {}
-    env['clock'].t += timedelta(seconds=601)                           # past the 429 back-off
-    monkeypatch.setattr(board, 'LEAGUES_TTL_S', 10 ** 9)
-    monkeypatch.setattr(board, 'LEAGUES_MAX_AGE_S', 1)
-    board.collect('soccer')
-    # no trusted list: mapped tabs never read OK first (Serie A, then the empty-today La Liga / Bundesliga ...)
-    assert env['calls'][0] == 82 and env['calls'][1:] == [534, 531, 533, 535]
 
 
 def test_shared_pace_reserves_slots_across_processes(tmp_path, monkeypatch):
     t = {'now': 1000.0, 'slept': []}
     monkeypatch.setattr(sources.time, 'time', lambda: t['now'])
     monkeypatch.setattr(sources.time, 'sleep', lambda s: t['slept'].append(round(s, 3)))
+    monkeypatch.delenv('SCOUT_SOCCER_PP_LEAGUES', raising=False)
     monkeypatch.setenv('SCOUT_PP_GAP_S', '8')
     db = tmp_path / 'h.db'
     for _ in range(3):
@@ -330,6 +339,15 @@ def test_shared_pace_reserves_slots_across_processes(tmp_path, monkeypatch):
     assert sources.pace_gap_s(sources.PP_HOST) == 0
 
 
+def test_a_broken_holds_db_never_stops_a_request(tmp_path, monkeypatch):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_PP_GAP_S', '3')
+    def broken(con, host):
+        raise sqlite3.OperationalError('database is locked')
+    monkeypatch.setattr(sources, '_pace', broken)
+    assert sources._held('soccer', board.PP_URL, lambda: 'sent') == 'sent'
+
+
 def test_held_until_reads_the_shared_hold(tmp_path, monkeypatch):
     import time
     monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
@@ -340,40 +358,19 @@ def test_held_until_reads_the_shared_hold(tmp_path, monkeypatch):
     assert sources.held_until('tennis', board.PP_URL) > time.time()   # one file for both new-sport jobs
 
 
-def test_ops_reads_the_status_file_and_alerts(env, monkeypatch):
+def test_ops_reads_the_status_file_alerts_and_the_kill_switch_silences_them(env, monkeypatch):
     from sports import service
-    board.collect('soccer')
+    from sports.tests.test_service import _ops
+    run(env, 3)
     st = service.expansion_pp_soccer()
     assert st['mode'] == 'leagues' and {x['id'] for x in st['leagues']} == set(offers.PP_SOCCER_LEAGUES)
     assert st['kill_switch_off'] is False
     for lg in st['leagues']:
-        if lg['id'] == 6:
+        if lg['id'] == 82:
             lg['last_ok_at'] = '2000-01-01T00:00:00Z'
-    from sports.tests.test_service import _ops
-    o = _ops(expansion_pp_soccer=st)
-    codes = [a['code'] for a in service.alerts(o)]
+    codes = [a['code'] for a in service.alerts(_ops(expansion_pp_soccer=st))]
     assert 'pp_soccer_tab_stale' in codes and 'pp_soccer_tab_unmapped' in codes
+    st['kill_switch_off'] = True
+    assert not [c for c in (a['code'] for a in service.alerts(_ops(expansion_pp_soccer=st))) if c.startswith('pp_soccer_tab')]
     monkeypatch.delenv('SCOUT_SOCCER_ENABLED')
     assert service.expansion_pp_soccer() is None
-
-
-def test_429_backs_the_extra_tabs_off_for_ten_minutes_but_tab_82_keeps_its_one_request(env):
-    board.collect('soccer')
-    env['calls'].clear(); env['fail'] = {6: 429}
-    env['clock'].t += timedelta(seconds=180)
-    board.collect('soccer')
-    assert env['calls'] == [82, 534, 6]                                # stopped at the 429
-    st = json.loads((env['dir'] / board.PP_STATUS).read_text(encoding='utf-8'))
-    assert st['backoff_reason'] == 'http_429' and st['backoff_until']
-    env['fail'] = {}
-    for _ in range(3):                                                 # 3 x 180 s < 600 s: tab 82 only
-        env['calls'].clear(); env['clock'].t += timedelta(seconds=180)
-        snap = board.collect('soccer')
-        assert env['calls'] == [82]
-    assert json.loads((env['dir'] / board.PP_STATUS).read_text(encoding='utf-8'))['stopped'] == 'backoff'
-    assert snap_ids(snap) == ['82a', '82b']                            # the tabs' rows aged out honestly (300 s)
-    env['calls'].clear(); env['clock'].t += timedelta(seconds=180)
-    snap = board.collect('soccer')
-    assert env['calls'][0] == 82 and len(env['calls']) > 1             # back after 600 s
-    assert '536a' in snap_ids(snap)
-

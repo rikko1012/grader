@@ -207,7 +207,10 @@ PP_STATE = "pp-soccer-state.json"      # per-league last good rows + the cached 
 PP_STATUS = "pp-soccer-status.json"    # small per-league counts for admin ops (GET only)
 LEAGUES_TTL_S = 3600                   # /leagues at most hourly
 LEAGUES_MAX_AGE_S = 86400              # an older cached list is not trusted: every mapped tab is tried instead
-SLOW_POLL_S = 900                      # a tab whose last good read had no standard line: re-read every 15 min
+LEAGUES_REFRESH_MIN_S = 600            # an empty answer from a listed tab re-reads /leagues at most every 10 min
+COVER_SAFETY_S = 60                    # coverage leaves this much of the 300 s rule for a late scheduler start
+DISCOVERY_S = 7200                     # a listed tab outside coverage is re-read at most every 2 h (ranking only)
+ODDS_EVERY_S = 170                     # soccer book markets keep the 180 s cadence while quotes run every 90 s
 
 
 def pp_leagues_on():
@@ -276,31 +279,58 @@ def plan_leagues(listing):
     return sorted(use), unmapped, renamed
 
 
-def _soccer_prizepicks(get_json, directory, started, clock=None):
-    """Every PrizePicks soccer tab (2026-11-19). Tab 82 first, every run, read exactly as before; then the mapped
-    per-league tabs that /leagues lists with projections (oldest good read first; a tab whose last good read had no
-    standard line only every SLOW_POLL_S). Bounded: at most SCOUT_SOCCER_PP_MAX_CALLS PrizePicks requests a run (the
-    /leagues read counts), none started after SCOUT_SOCCER_PP_BUDGET_S, SCOUT_PP_GAP_S between any two (shared with the
-    tennis job through request-holds.db), and the first 429 / Retry-After hold / dropped request stops every further
-    PrizePicks request this run. A tab not read this run keeps its last good rows with their OWN observed_at, so the
-    300 s age rule hides them exactly when they go stale; a failed read never moves or invents a line. Per-league rows
-    are standard lines only (members see standard only; keeps quotes.db and the board size flat), and tab 82 wins a
-    projection id listed in two tabs. -> (rows, the 'prizepicks' source entry, status for ops)."""
-    import time
+def quotes_every_s(sport="soccer"):
+    """Seconds between soccer quotes runs: SPORTS_JOB_SOCCER_QUOTES_EVERY_S (the scheduler's own override), else 90 with
+    the per-league tabs on and 180 (as at 5036ce4) with them off. The scheduler and the coverage rule both read it."""
+    default = 90 if (sport == "soccer" and pp_leagues_on()) else 180
+    return max(30.0, _env_num("SPORTS_JOB_" + sport.upper() + "_QUOTES_EVERY_S", default))
+
+
+def coverage_slots(every_s):
+    """How many PrizePicks soccer sources (tab 82 + tabs) one request a run keeps continuously inside the 300 s rule:
+    each is re-read every slots x every_s seconds, with COVER_SAFETY_S left for a late scheduler start."""
+    return max(1, int((MAX_AGE - COVER_SAFETY_S) // every_s))
+
+
+def _rank_key(lid, per):
+    """Tabs that fill the coverage slots: competitions whose full-match lines the model can grade first
+    (expansion_forecasts.REGULATION_LEAGUES), then the earliest standard-line start, then table order."""
+    from .expansion_forecasts import REGULATION_LEAGUES
+    code = adapters.PP_SOCCER_LEAGUES[lid][1]
+    e = per.get(str(lid)) or {}
+    return (0 if code in REGULATION_LEAGUES else 1, e.get("first_start") or "9999", list(adapters.PP_SOCCER_LEAGUES).index(lid))
+
+
+def _soccer_prizepicks(get_json, directory, started=None, clock=None):
+    """Every PrizePicks soccer tab (2026-11-19), inside PrizePicks' request limit.
+
+    Measured from one IP (ppsoccer-1119 logs): two requests back-to-back pass, a third within seconds draws 429, and one
+    request every ~40-45 s is sustained - i.e. about 1.3 requests a minute for the WHOLE IP (tennis and the NBA / NFL
+    ingest share it). So: ONE PrizePicks request per run (the job runs every quotes_every_s(), default 90 s), plus at
+    most one housekeeping request (the hourly /leagues read, or a 2-hourly discovery read of a tab outside coverage).
+
+    Coverage (fixed, never a flicker): tab 82 plus the best coverage_slots()-1 tabs with standard lines (gradeable
+    competitions first, then earliest start) are each re-read every slots x every_s seconds (default 2 x 90 = 180 s, so
+    tab 82 keeps its 5036ce4 freshness). Rows of tabs outside coverage are kept for ranking but never put on the board
+    (ops lists them as not_covered). A source not read keeps its last good rows with their OWN observed_at; the 300 s
+    rule hides them exactly when they go stale; a failed read never moves or invents a line.
+
+    429: the shared Retry-After hold skips PrizePicks until it ends (no request at all); a second 429 within 15 min backs
+    the tabs off for SCOUT_SOCCER_PP_BACKOFF_S (600 s): tab 82 only, at most every 180 s (the 5036ce4 request rate).
+    Per-league rows are standard lines only, and tab 82 wins a projection id listed in two tabs.
+    -> (rows, the 'prizepicks' source entry, status for ops)."""
     from . import net
-    from .expansion_sources import held_until
-    clock = clock or time.monotonic
-    max_calls = int(_env_num("SCOUT_SOCCER_PP_MAX_CALLS", 5))
-    budget = _env_num("SCOUT_SOCCER_PP_BUDGET_S", 35)
+    from .expansion_sources import held_until, pace_gap_s, PP_HOST
+    max_calls = max(1, int(_env_num("SCOUT_SOCCER_PP_MAX_CALLS", 2)))
+    every = quotes_every_s()
+    slots = coverage_slots(every)
     state = _read_json(directory / PP_STATE, {})
     if not isinstance(state, dict):
         state = {}
     per = state.setdefault("per", {})
     leagues = state.setdefault("leagues", {})
-    calls, stopped, run_errors, attempted = 0, None, {}, []
-
-    def elapsed():
-        return clock() - started
+    calls, stopped, run_errors, attempted, roles = 0, None, {}, [], {}
+    now = now_utc()
 
     def can_call():
         nonlocal stopped
@@ -308,8 +338,6 @@ def _soccer_prizepicks(get_json, directory, started, clock=None):
             return False
         if calls >= max_calls:
             stopped = "call_cap"
-        elif elapsed() >= budget:
-            stopped = "time_budget"
         elif held_until("soccer", PP_URL):
             stopped = "retry_after_hold"
         return not stopped
@@ -318,23 +346,26 @@ def _soccer_prizepicks(get_json, directory, started, clock=None):
         nonlocal calls, stopped
         calls += 1
         try:
-            return get_json("soccer", url, params=params, timeout=20, tries=1)
+            return get_json("soccer", url, params=params, timeout=15, tries=1)
         except net.HttpError as e:
-            # 429 / hold / 5xx / dropped connection: no further PrizePicks request this run (never a 429 storm)
             stopped = "http_429" if e.status == 429 else "request_failed"
+            if e.status == 429:
+                state["recent_429"] = [t for t in state.get("recent_429") or []
+                                       if 0 <= (_age_s(t, now_utc()) or 10 ** 9) <= 900] + [now_utc()]
             raise
 
-    def read(lid):
+    def read(lid, role):
         entry = per.setdefault(str(lid), {})
         entry["attempt_at"] = now_utc()
         attempted.append(lid)
+        roles[lid] = role
         try:
             body = fetch(PP_URL, {"league_id": lid, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
             observed = now_utc()
             listed = ((leagues.get("listing") or {}).get(str(lid)) or {}).get("count")
             if not (body.get("data") or []) and listed:
                 # A tab /leagues lists with lines answered empty (the comma-list answer looked exactly like this):
-                # a failed read, never "no lines". The list is re-read next run.
+                # a failed read, never "no lines". /leagues is re-read (at most every LEAGUES_REFRESH_MIN_S).
                 leagues["refresh"] = True
                 raise ValueError("empty_listed_tab")
             found = adapters.prizepicks(body, "soccer", observed, None if lid == 82 else lid)
@@ -342,54 +373,65 @@ def _soccer_prizepicks(get_json, directory, started, clock=None):
             parsed = len(found)
             if lid != 82:
                 found = [r for r in found if r["variant"] == "standard"]
-            entry.update(ok_at=observed, rows=found, parsed=parsed, kept=len(found), error=None)
+            starts = sorted(r["start"] for r in found if r["variant"] == "standard")
+            entry.update(ok_at=observed, rows=found, parsed=parsed, kept=len(found), error=None,
+                         first_start=starts[0] if starts else None)
         except (net.HttpError, ValueError, OSError) as e:
             entry["error"] = str(e)[:60] if type(e) is ValueError else type(e).__name__
             entry["error_at"] = now_utc()
             run_errors[lid] = entry["error"]
 
-    if can_call():
-        read(82)
-    # Back-off: after PrizePicks answered 429 (or a shared Retry-After hold was found), the per-league tabs pause for
-    # SCOUT_SOCCER_PP_BACKOFF_S (600) and soccer makes only the one tab-82 request a run, as at 5036ce4, so the extra
-    # tabs never keep pressing a limit the NBA / NFL / tennis requests share.
-    backoff_left = -(_age_s(state.get("backoff_until"), now_utc()) or 0)
-    if backoff_left > 0 and not stopped:
-        stopped = "backoff"
-    list_age = _age_s(leagues.get("fetched_at"), now_utc())
-    if (list_age is None or list_age >= LEAGUES_TTL_S or leagues.get("refresh")) and can_call():
-        try:
-            listing = league_list(fetch(PP_LEAGUES_URL, None))
-            if not listing:
-                raise ValueError("empty league list")
-            leagues.update(listing=listing, fetched_at=now_utc(), refresh=False, error=None)
-        except (net.HttpError, ValueError, OSError) as e:
-            leagues["error"] = type(e).__name__
-            leagues["error_at"] = now_utc()
-    list_age = _age_s(leagues.get("fetched_at"), now_utc())
+    list_age = _age_s(leagues.get("fetched_at"), now)
     trusted = leagues.get("listing") if list_age is not None and list_age < LEAGUES_MAX_AGE_S else None
     use, unmapped, renamed = plan_leagues(trusted)
-    now = now_utc()
+    known = [lid for lid in use if (per.get(str(lid)) or {}).get("kept", 0) > 0]
+    covered = sorted(known, key=lambda lid: _rank_key(lid, per))[:slots - 1]
+    unread = [lid for lid in use if not (per.get(str(lid)) or {}).get("ok_at")]
+    if len(covered) < slots - 1:          # a free slot: learn a never-read tab there (table order)
+        covered += unread[:slots - 1 - len(covered)]
+    fresh_set = [82] + covered
+    backoff_left = -(_age_s(state.get("backoff_until"), now) or 0)
 
-    def due(lid):
-        e = per.get(str(lid)) or {}
-        age = _age_s(e.get("ok_at"), now)
-        return age is None or e.get("kept", 0) > 0 or age >= SLOW_POLL_S
-    table = list(adapters.PP_SOCCER_LEAGUES)
-    order = sorted((lid for lid in use if due(lid)),
-                   key=lambda lid: ((per.get(str(lid)) or {}).get("ok_at") or "", table.index(lid)))
-    for lid in order:
-        if not can_call():
-            break
-        read(lid)
+    # 1. the coverage request: the covered source read longest ago (never read first; tab 82 on a tie)
+    order = sorted(fresh_set, key=lambda lid: ((per.get(str(lid)) or {}).get("ok_at") or "", lid != 82))
+    if backoff_left > 0:
+        e82 = per.get("82") or {}
+        stopped = None
+        if (_age_s(e82.get("attempt_at"), now) or 10 ** 9) >= 170 and can_call():
+            read(82, "coverage")
+        stopped = stopped or "backoff"
+    elif can_call():
+        read(order[0], "coverage")
+    # 2. housekeeping, only after a clean first request: the hourly league list, else a 2-hourly discovery read of a
+    #    listed tab outside coverage (its lines stay off the board; the read keeps the ranking honest)
+    if not stopped and calls < max_calls:
+        forced = leagues.get("refresh") and (list_age is None or list_age >= LEAGUES_REFRESH_MIN_S)
+        if (list_age is None or list_age >= LEAGUES_TTL_S or forced) and can_call():
+            roles["leagues"] = "housekeeping"
+            try:
+                listing = league_list(fetch(PP_LEAGUES_URL, None))
+                if not listing:
+                    raise ValueError("empty league list")
+                leagues.update(listing=listing, fetched_at=now_utc(), refresh=False, error=None)
+            except (net.HttpError, ValueError, OSError) as e:
+                leagues["error"] = type(e).__name__
+                leagues["error_at"] = now_utc()
+        else:
+            outside = [lid for lid in use if lid not in fresh_set and
+                       (_age_s((per.get(str(lid)) or {}).get("attempt_at"), now) or 10 ** 9) >= DISCOVERY_S]
+            outside.sort(key=lambda lid: (per.get(str(lid)) or {}).get("attempt_at") or "")
+            if outside and can_call():
+                read(outside[0], "discovery")
+    if len(state.get("recent_429") or []) >= 2 and stopped == "http_429":
+        until = parse_utc(now_utc()) + timedelta(seconds=_env_num("SCOUT_SOCCER_PP_BACKOFF_S", 600))
+        state["backoff_until"] = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+        state["recent_429"] = []
 
-    # Compose: 82 first (it wins a shared projection id), then the mapped tabs in table order. Only rows still inside
-    # the board's own age rule (MAX_AGE) and not started are carried; observed_at is never re-stamped.
+    # Compose: tab 82 first (it wins a shared projection id), then the covered tabs. Only rows still inside the
+    # board's own age rule and not started are carried; observed_at is never re-stamped.
     now = now_utc()
     rows, seen, counts = [], set(), {}
-    for lid in table:
-        if lid != 82 and lid not in use:
-            continue
+    for lid in fresh_set:
         n = 0
         for r in (per.get(str(lid)) or {}).get("rows") or []:
             age = _age_s(r.get("observed_at"), now)
@@ -401,10 +443,6 @@ def _soccer_prizepicks(get_json, directory, started, clock=None):
             rows.append(r)
             n += 1
         counts[lid] = n
-    if stopped in ("http_429", "retry_after_hold"):
-        until = parse_utc(now_utc()) + timedelta(seconds=_env_num("SCOUT_SOCCER_PP_BACKOFF_S", 600))
-        state["backoff_until"] = until.strftime("%Y-%m-%dT%H:%M:%SZ")
-        state["backoff_reason"] = stopped
     for sid in list(per):                      # the state file only holds what can still be carried
         if not sid.isdigit() or int(sid) not in adapters.PP_SOCCER_LEAGUES:
             per.pop(sid)
@@ -415,39 +453,53 @@ def _soccer_prizepicks(get_json, directory, started, clock=None):
     from .expansion_history import atomic_json
     atomic_json(directory / PP_STATE, state)
 
-    # Member-facing source: the one 'prizepicks' key, as before. ok only when every tab with standard lines was read
-    # this run; otherwise ok False 'as of' the oldest good read among them (the board strip says so honestly).
-    # (a tab never read OK yet counts: nothing says it has no standard line)
-    current = [82] + [lid for lid in use if not (per.get(str(lid)) or {}).get("ok_at")
-                      or (per.get(str(lid)) or {}).get("kept", 0) > 0]
-    oks = [(per.get(str(lid)) or {}).get("ok_at") for lid in current]
-    if all(lid in attempted and lid not in run_errors for lid in current):
+    # Member-facing source: the one 'prizepicks' key, as before. ok while every covered source was read OK recently
+    # enough to stay on the board until the next run (age <= 300 s - every_s); otherwise ok False 'as of' the oldest
+    # good read, so the strip "PrizePicks lines as of ..." shows whenever covered lines are (about to be) missing.
+    oks = [(per.get(str(lid)) or {}).get("ok_at") for lid in fresh_set]
+    if all(x and _age_s(x, now) is not None and 0 <= _age_s(x, now) <= MAX_AGE - every for x in oks):
         source = {"ok": True, "checked_at": min(oks), "offers": len(rows)}
     else:
-        known = [x for x in oks if x]
-        source = {"ok": False, "checked_at": min(known) if known else now_utc(),
-                  "error": next(iter(run_errors.values()), "not_read_this_run"), "offers": len(rows)}
+        good = [x for x in oks if x]
+        source = {"ok": False, "checked_at": min(good) if good else now_utc(),
+                  "error": next(iter(run_errors.values()), "not_read_recently"), "offers": len(rows)}
     listing = leagues.get("listing") or {}
-    status = {"at": now_utc(), "mode": "leagues", "calls": calls, "max_calls": max_calls, "budget_s": budget,
-              "gap_s": None, "stopped": stopped, "elapsed_s": round(elapsed(), 1), "source": source,
-              "backoff_until": state.get("backoff_until"), "backoff_reason": state.get("backoff_reason"),
+    not_covered = [lid for lid in use if lid not in fresh_set and (per.get(str(lid)) or {}).get("kept", 0) > 0]
+    status = {"at": now_utc(), "mode": "leagues", "calls": calls, "max_calls": max_calls, "every_s": every,
+              "slots": slots, "covered": fresh_set, "not_covered": not_covered, "gap_s": pace_gap_s(PP_HOST),
+              "stopped": stopped, "source": source, "backoff_until": state.get("backoff_until"),
+              "recent_429": state.get("recent_429") or [],
               "league_list": {"fetched_at": leagues.get("fetched_at"), "trusted": trusted is not None,
                               "error": leagues.get("error"), "error_at": leagues.get("error_at")},
               "leagues": [], "unmapped_with_lines": unmapped, "renamed": renamed}
-    from .expansion_sources import pace_gap_s, PP_HOST
-    status["gap_s"] = pace_gap_s(PP_HOST)
     for lid, (name, code) in adapters.PP_SOCCER_LEAGUES.items():
         e = per.get(str(lid)) or {}
         status["leagues"].append({
             "id": lid, "name": name, "competition": code, "listed": (listing.get(str(lid)) or {}).get("count"),
-            "fetched": lid == 82 or lid in use, "read_this_run": lid in attempted,
-            "poll": ("off" if lid != 82 and lid not in use else
-                     "every_run" if lid == 82 or not e.get("ok_at") or e.get("kept", 0) > 0 else "slow"),
-            "last_ok_at": e.get("ok_at"), "last_attempt_at": e.get("attempt_at"),
-            "last_error": e.get("error"), "last_error_at": e.get("error_at"),
-            "parsed": e.get("parsed"), "kept": e.get("kept"), "on_board": counts.get(lid, 0)})
+            "fetched": lid == 82 or lid in use, "covered": lid in fresh_set,
+            "read_this_run": roles.get(lid), "last_ok_at": e.get("ok_at"), "last_attempt_at": e.get("attempt_at"),
+            "last_error": e.get("error"), "last_error_at": e.get("error_at"), "parsed": e.get("parsed"),
+            "kept": e.get("kept"), "first_start": e.get("first_start"), "on_board": counts.get(lid, 0)})
     atomic_json(directory / PP_STATUS, status)
     return rows, source, status
+
+
+def _soccer_odds(get_json, directory):
+    """Book markets keep their own 180 s cadence while soccer quotes run every 90 s: between reads the last rows and
+    source entries are carried with their own observed / checked times (the 300 s rule still applies to the rows)."""
+    from .expansion_odds import collect as collect_odds
+    path = directory / "odds-carry.json"
+    saved = _read_json(path, {})
+    now = now_utc()
+    age = _age_s(saved.get("at"), now) if isinstance(saved, dict) else None
+    if age is not None and 0 <= age < ODDS_EVERY_S:
+        rows = [r for r in saved.get("rows") or []
+                if _age_s(r.get("observed_at"), now) is not None and 0 <= _age_s(r.get("observed_at"), now) <= MAX_AGE]
+        return rows, saved.get("sources") or {}
+    odds, sources = collect_odds("soccer", lambda url, **kw: get_json("soccer", url, **kw), directory)
+    from .expansion_history import atomic_json
+    atomic_json(path, {"at": now, "rows": odds, "sources": sources})
+    return odds, sources
 
 
 def pp_soccer_status():
@@ -467,11 +519,11 @@ def collect(sport):
     from .expansion_sources import get_json
     rows, sources = [], {}
     pp = lambda league: (PP_URL, {"league_id": league, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
-    if sport == "soccer" and pp_leagues_on():
-        import time
+    leagues_path = sport == "soccer" and pp_leagues_on()
+    if leagues_path:
         directory = root(sport)
         directory.mkdir(parents=True, exist_ok=True)
-        found, sources["prizepicks"], _ = _soccer_prizepicks(get_json, directory, time.monotonic())
+        found, sources["prizepicks"], _ = _soccer_prizepicks(get_json, directory)
         rows.extend(found)
         jobs = []      # SCOUT_SOCCER_PP_MLS is retired on this path: MLS (league 6) is one of the per-league tabs
     else:
@@ -506,7 +558,10 @@ def collect(sport):
             sources[source] = {"ok": False, "checked_at": now_utc(), "error": type(e).__name__}
     from .expansion_odds import collect as collect_odds
     directory=root(sport);directory.mkdir(parents=True,exist_ok=True)
-    odds, odds_sources=collect_odds(sport,lambda url,**kw:get_json(sport,url,**kw),directory)
+    if leagues_path:
+        odds, odds_sources = _soccer_odds(get_json, directory)
+    else:
+        odds, odds_sources=collect_odds(sport,lambda url,**kw:get_json(sport,url,**kw),directory)
     sources.update(odds_sources)
     return save(sport, rows, sources, now_utc(),game_odds=odds)
 

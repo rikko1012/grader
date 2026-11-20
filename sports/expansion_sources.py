@@ -14,13 +14,14 @@ PP_HOST = 'partner-api.prizepicks.com'
 
 def pace_gap_s(host):
     """Minimum seconds between two requests to `host` from ANY new-sport job process (soccer and tennis quotes).
-    PrizePicks only (2026-11-19, per-league soccer tabs): SCOUT_PP_GAP_S, default 8; 0 turns it off."""
-    if host != PP_HOST:
+    PrizePicks only (2026-11-19, per-league soccer tabs): SCOUT_PP_GAP_S, default 3; 0 turns it off. Off as well
+    when the soccer per-league tabs are switched off (SCOUT_SOCCER_PP_LEAGUES=0): requests exactly as at 5036ce4."""
+    if host != PP_HOST or os.environ.get('SCOUT_SOCCER_PP_LEAGUES', '1') == '0':
         return 0.0
     try:
-        return max(0.0, float(os.environ.get('SCOUT_PP_GAP_S', '8')))
+        return max(0.0, float(os.environ.get('SCOUT_PP_GAP_S', '3')))
     except ValueError:
-        return 8.0
+        return 3.0
 
 
 def _path(sport):
@@ -70,11 +71,14 @@ def _held(sport, url, send):
         if row:
             net.hold(host, row[0])
     if pace_gap_s(host):
-        con = sqlite3.connect(path, timeout=10, isolation_level=None)
-        try:
-            _pace(con, host)
-        finally:
-            con.close()
+        try:                                    # fails open: a locked / broken holds db never stops the request
+            con = sqlite3.connect(path, timeout=10, isolation_level=None)
+            try:
+                _pace(con, host)
+            finally:
+                con.close()
+        except sqlite3.Error:
+            pass
     try:
         return send()
     finally:

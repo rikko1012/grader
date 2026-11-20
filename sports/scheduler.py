@@ -366,7 +366,10 @@ def default_jobs():
     for sport in ("soccer", "tennis"):
         if os.environ.get(f"SCOUT_{sport.upper()}_ENABLED") != "1":
             continue
-        J[f"{sport}-quotes"] = dict(argv=_py("-m", "sports.expansion_board", sport), every_s=180,
+        # ppsoccer-1119: soccer makes ONE PrizePicks request a run (every PrizePicks soccer tab in rotation, inside
+        # PrizePicks' per-IP limit) -> every 90 s; 180 s with the per-league tabs off (SCOUT_SOCCER_PP_LEAGUES=0)
+        every = 90 if sport == "soccer" and os.environ.get("SCOUT_SOCCER_PP_LEAGUES", "1") != "0" else 180
+        J[f"{sport}-quotes"] = dict(argv=_py("-m", "sports.expansion_board", sport), every_s=every,
             # Independent quote stores, measured 58/42 MB and ~4 s per live run.
             # Like books, keep fresh during long exclusive model jobs. Admission
             # still reserves the cap against the existing child memory budget.

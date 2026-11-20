@@ -369,12 +369,13 @@ def alerts(o):
         if st.get("quotes_mb") is not None and st["quotes_mb"] >= 0.8 * st.get("quotes_cap_mb", 250):
             out.append({"level": "warn", "code": "expansion_quotes_large", "detail": {
                 "sport": sport, "quotes_mb": st["quotes_mb"], "cap_mb": st.get("quotes_cap_mb", 250)}})
-    # ppsoccer-1119: a PrizePicks soccer tab with standard lines not read for 15 min, or a soccer tab with lines that
-    # is not in the exact league table (it is never read until a person adds it)
+    # ppsoccer-1119: a covered PrizePicks soccer source (tab 82 + the tabs in coverage) not read OK for 15 min, or a
+    # soccer tab with lines that is not in the exact league table (it is never read until a person adds it)
     pps = o.get("expansion_pp_soccer")
-    if isinstance(pps, dict) and pps.get("leagues"):
+    # kill switch on (SCOUT_SOCCER_PP_LEAGUES=0): the status file is frozen on purpose - no tab alerts
+    if isinstance(pps, dict) and pps.get("leagues") and not pps.get("kill_switch_off"):
         for lg in pps["leagues"]:
-            if lg.get("poll") == "every_run" and lg.get("fetched"):
+            if lg.get("covered"):
                 age = None
                 try:
                     from .contracts import parse_utc
