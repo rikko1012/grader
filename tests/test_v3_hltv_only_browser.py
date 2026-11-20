@@ -14,6 +14,7 @@ import copy
 import itertools
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -161,17 +162,34 @@ def factor_rows(p):
     return dict(p.evaluate("""[...document.querySelectorAll('#hub-card-body .h-fx[data-fx="cs2-factors"] tbody tr')].map(r => [r.cells[0].innerText.trim(), r.cells[1].innerText.trim() + (r.cells[2] ? ' | ' + r.cells[2].innerText.trim() : '')])"""))
 
 
-def open_line(browser, env, monkeypatch, size, docs, pmaps=PMAPS):
+def fresh(x, when=None):
+    """the saved match starts tomorrow from whenever the test runs (the live snapshot's own start would put the row in the past)"""
+    when = when or (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0).isoformat()
+    if isinstance(x, dict):
+        return {k: when if k in ("start_utc", "lock_utc") and isinstance(v, str) else fresh(v, when) for k, v in x.items()}
+    if isinstance(x, list):
+        return [fresh(v, when) for v in x]
+    return x
+
+
+def open_line(browser, env, monkeypatch, size, docs, pmaps=PMAPS, hold=None):
+    """hold: {offer id: 'pending' | 500} - that /line is held unanswered (the routes go to hold['routes']) or fails"""
     monkeypatch.setenv("SCOUT_UI_V3", "1")
     monkeypatch.setenv("SCOUT_GENIE", "1")
     c = context(browser, env, size)
+    board = json.dumps(fresh(json.loads(BOARD)))
     c.route(lambda u: u.split("?")[0].endswith("/api/upgrade/board") and ("sport=" not in u or "sport=cs2" in u),
-            lambda r: r.fulfill(status=200, content_type="application/json", body=BOARD))
+            lambda r: r.fulfill(status=200, content_type="application/json", body=board))
 
     def line(r):
         for oid, d in docs.items():
             if "id=" + oid.replace(":", "%3A") in r.request.url or "id=" + oid in r.request.url:
-                return r.fulfill(status=200, content_type="application/json", body=json.dumps(d))
+                how = (hold or {}).get(oid)
+                if how == "pending":
+                    return hold.setdefault("routes", []).append((r, d))
+                if how == 500:
+                    return r.fulfill(status=500, content_type="application/json", body='{"error": "boom"}')
+                return r.fulfill(status=200, content_type="application/json", body=json.dumps(fresh(d)))
         return r.fallback()
     c.route("**/api/upgrade/line?*", line)
     c.route("**/api/upgrade/player-maps?*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(pmaps)))
@@ -286,3 +304,32 @@ def test_genie_payload_on_v3_carries_no_bo3_number():
     assert d["record"]["scout"] == HS["record"]["scout"] and d["grade_inputs"]["chance"] == HS["grade_inputs"]["chance"]
     assert d["grade_inputs"]["projection"] == HS["grade_inputs"]["projection"] and d["grade_inputs"]["stake"] == HS["grade_inputs"]["stake"]
     assert v3_hltv.scrub({"record": {"sport": "lol"}, "x": 1}) == {"record": {"sport": "lol"}, "x": 1}
+
+
+@pytest.mark.parametrize("how", ["pending", 500])
+def test_no_saved_l10_while_the_doc_loads_or_after_it_failed(browser, env, monkeypatch, how):  # noqa: F811
+    """before the doc arrives (or when /line fails) the hub has only the board record: its saved L10 / recent average (BO3.gg + HLTV)
+    must not show on the v3 CS2 card either"""
+    hold = {"pp:17255714": how}
+    c, p = open_line(browser, env, monkeypatch, PHONE, {"pp:17255714": KILLS, "pp:17255719": HS}, hold=hold)
+    try:
+        p.locator("#hub-rows tr[data-record]", has_text="Kills").first.locator(".h-player").first.click()
+        p.wait_for_selector("#hub-detail .h-why", timeout=20000)
+        if how == 500:
+            p.wait_for_selector("#hub-detail .h-warning", timeout=20000)
+        else:
+            p.wait_for_timeout(800)
+            assert hold.get("routes"), "the /line read was not held"
+        texts = {}
+        for t in ("overview", "ask"):
+            p.locator(f'#hub-detail [role=tab][data-hub=card-tab][data-id={t}]').click()
+            p.wait_for_timeout(300)
+            p.evaluate("document.querySelectorAll('#hub-detail details').forEach(d => d.open = true)")
+            texts[t] = p.locator("#hub-card").inner_text()
+        for t, text in texts.items():
+            assert "of the last" not in text and "Recent average" not in text and "26.2" not in text, (t, text[:800])
+        for r, d in hold.get("routes") or []:
+            r.fulfill(status=200, content_type="application/json", body=json.dumps(fresh(d)))
+        assert not p.errors, p.errors
+    finally:
+        c.close()

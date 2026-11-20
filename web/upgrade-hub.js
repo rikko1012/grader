@@ -1112,10 +1112,13 @@ export function mount(C) {
   const movedRow = (m,cols) => C.moveRow?C.moveRow(m,cols,'h-moved'):'';
   const tallyOf = (list,line) => ({n:list.length,over:list.filter(g=>g.value>line).length,under:list.filter(g=>g.value<line).length,push:list.filter(g=>g.value===line).length});
   /* a window from the loaded games when they cover it, else the board's own count (the newest results, n may be below the window) */
+  /* HLTV only (owner 2026-11-20): a CS2 card on the v3 page counts HLTV series only - also while its doc loads or after it failed (the page
+     marks <html data-hltv-only="cs2">; the doc it rewrites carries hltv_only) - never the board's saved L10 or recent average (BO3.gg + HLTV) */
+  const hltvOnly = r => r?.sport==='cs2'&&(!!H.detailDoc?.hltv_only||document.documentElement.dataset.hltvOnly==='cs2');
   function windowTally(r,all,n) {
     const list=all.slice(0,n), saved=C.tallies(r)['l'+n];
     /* v3 HLTV only (the v3 player page rewrites the doc: hltvOnly): a CS2 doc's counts are its HLTV series only, never the board's saved L10 (BO3.gg + HLTV) */
-    if(H.detailDoc?.hltv_only)return list.length?tallyOf(list,r.offer.line):null;
+    if(hltvOnly(r))return list.length?tallyOf(list,r.offer.line):null;
     if(list.length&&(list.length>=n||!saved||!saved.n))return tallyOf(list,r.offer.line);
     return saved&&saved.n?saved:null;
   }
@@ -1319,7 +1322,7 @@ export function mount(C) {
       if(toward(avg)&&toward(med))add(text,1);
       else if(away(avg)&&away(med))add(text,-1);
       else add(`${text} <small>(the two do not agree on a side)</small>`,0);
-    } else if(r.sport==='cs2'&&!all.length&&!doc?.hltv_only&&num(r.history?.avg)&&Number.isFinite(line)){
+    } else if(r.sport==='cs2'&&!all.length&&!hltvOnly(r)&&num(r.history?.avg)&&Number.isFinite(line)){
       /* CS2's saved recent average is on the line's own maps; LoL's board fallback is a per-game rate, never set against a series line */
       const a=r.history.avg;
       add(`Recent average <b>${esc(a)}</b> on ${esc(r.market.period_label)} · line ${esc(r.offer.line)}`,toward(a)?1:away(a)?-1:0);
@@ -1410,7 +1413,7 @@ export function mount(C) {
   function keyStatsHtml(r) {
     const line=Number(r.offer.line), games=(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)).slice(0,20);
     /* #31: the empty message only when there really is no log; the board's saved counts ("Went Under in 3 of the last 10") are one */
-    if(Number.isFinite(line)&&!games.length&&H.detailState!=='loading'&&!H.detailDoc?.hltv_only&&Object.values(C.tallies(r)||{}).some(t=>t&&t.n>0))return '';
+    if(Number.isFinite(line)&&!games.length&&H.detailState!=='loading'&&!hltvOnly(r)&&Object.values(C.tallies(r)||{}).some(t=>t&&t.n>0))return '';
     if(!Number.isFinite(line)||!games.length)return '<p class="h-history-note h-insight-empty">'+(H.detailState==='loading'?'Loading current-line insights…':'No comparable game log for this exact stat and period. Check the Stats tab for available context.')+'</p>';
     const ten=games.slice(0,10), values=ten.map(g=>g.value), over=values.filter(x=>x>line).length, under=values.filter(x=>x<line).length, pushes=values.length-over-under;
     const avg=values.reduce((a,b)=>a+b,0)/values.length, sorted=[...values].sort((a,b)=>a-b), middle=Math.floor(values.length/2), median=values.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
@@ -1526,7 +1529,7 @@ export function mount(C) {
   function askHtml(r) {
     const side=H.histSide, k=key(r)+'|'+r.offer.revision+'|'+side;
     if(G.key!==k){Object.assign(G,{key:k,ans:null,err:null,busy:false});G.seq++;}
-    const genie=R.me.features?.genie===true, s=r.scout, t=H.detailDoc?.hltv_only?windowTally(r,(H.detailDoc.history?.series||[]).filter(g=>num(g.value)),10):C.tallies(r).l10, other=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform), chance=C.chanceOf(r,side);
+    const genie=R.me.features?.genie===true, s=r.scout, t=hltvOnly(r)?windowTally(r,(H.detailDoc?.history?.series||[]).filter(g=>num(g.value)),10):C.tallies(r).l10, other=C.siblings(r).filter(x=>x.offer.platform!==r.offer.platform), chance=C.chanceOf(r,side);
     // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
     const persona=genie&&R.me.features?.genie_persona===true;
     const out=G.busy?'<p class="h-detail-loading">Checking this line’s saved numbers…</p>':G.err?`<p>${esc(G.err)}</p>`:G.ans?(persona&&G.intro?`<p class="h-genie-intro">${esc(G.intro)}</p>`:'')+G.ans.map(x=>`<p>${esc(x)}</p>`).join(''):'';

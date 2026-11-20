@@ -29,6 +29,8 @@
   'use strict';
   if (!window.ScoutV3) return;
   var V = window.ScoutV3, esc = V.esc;
+  /* HLTV only on the CS2 card (hltvOnly below): the hub reads this mark before any doc arrives (loading / failed states too) */
+  document.documentElement.setAttribute('data-hltv-only', 'cs2');
   var num = function (v) { return typeof v === 'number' && isFinite(v); };
   var MINUS = '−';
   var SPORT = {cs2: 'CS2', lol: 'LoL', nba: 'NBA', nfl: 'NFL', soccer: 'Soccer', tennis: 'Tennis'};
