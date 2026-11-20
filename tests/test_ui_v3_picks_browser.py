@@ -589,6 +589,9 @@ def test_tools_game_lines_follow_the_theme(browser, env, monkeypatch, size, them
         s1 = p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-s1').trim()")
         want = {"#FFFFFF": "rgb(255, 255, 255)", "#0F1524": "rgb(15, 21, 36)"}[s1.upper()]
         assert game.evaluate("e => getComputedStyle(e).backgroundColor") == want
+        p.locator("#hub-game-prices .h-book-game summary").first.click()                     # the price table, open, in both themes
+        p.wait_for_selector("#hub-game-prices .h-book-game[open] table")
+        assert "+150" in p.locator("#hub-game-prices .h-book-game[open]").inner_text()
         sel = p.locator("#hub-game-prices select").first
         assert sel.evaluate("e => getComputedStyle(e).backgroundColor") != "rgb(27, 30, 36)"          # the hub's own dark select
         readable(p, "#hub-game-prices")

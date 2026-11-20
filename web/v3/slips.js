@@ -229,7 +229,7 @@
       lastStat = t;
       if (!/^\d+ of \d+ slips? generated/.test(t.trim()) || !(window.matchMedia && window.matchMedia('(max-width: 1023px)').matches)) return;
       var first = document.querySelector('#hub-generated .h-batch-head') || document.querySelector('#hub-generated .h-generated-card') || document.getElementById('hub-generated');
-      if (first && first.scrollIntoView) first.scrollIntoView({block: 'start', behavior: 'smooth'});
+      if (first && first.scrollIntoView) first.scrollIntoView({block: 'start'});
     };
     if (status) { new MutationObserver(function () { subLine(); showBatch(); }).observe(status, {childList: true, characterData: true, subtree: true}); setTimeout(subLine, 0); }
     var how = [].slice.call(gen.children).filter(function (c) { return c.tagName === 'DETAILS'; })[0];
