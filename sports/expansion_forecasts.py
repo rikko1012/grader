@@ -222,8 +222,8 @@ def fit(offer, facts, now):
             break
     thin = None
     if len(games) < MIN_GAMES:
-        if not (sport == 'soccer' and stat in THIN_PRIOR and (ident.get('competition'), 'espn', stat) in FORECAST_INPUTS
-                and all(g.get('source') == 'espn' for g in games)):
+        # a competition whose ESPN rows are not a tested input (e.g. aus.1 saves): weight 0 - the prior alone (n = 0)
+        if not (sport == 'soccer' and stat in THIN_PRIOR and all(g.get('source') == 'espn' for g in games)):
             return None, 'more_exact_history_needed'
         group = position_group(facts.get('role') or offer.get('role'))
         if group not in THIN_PRIOR[stat]:

@@ -125,6 +125,25 @@ def _team_sets(offer):
     return sets, (mine[0] if len(mine) == 1 else {own})
 
 
+# soccer-grades-1120: book team labels that are not one of ESPN's three names, each CHECKED by hand against a live
+# fixture (PrizePicks tab 82, 2026-11-20 raw pulls in cs2_scout_ops/logs/soccer_grades_1120/): same kick-off, the other
+# side matched exactly, one ESPN fixture at that time. Exact labels only - never a prefix, never fuzzy; a label that was
+# not seen live is not listed (Melbourne City, Newcastle Jets wait for their first observed fixture).
+BOOK_TEAM_ALIASES = {
+    'soccer:team:espn:5328': ('Mel Victory',),            # Melbourne Victory  (v Auckland FC, 2026-11-21 04:00Z)
+    'soccer:team:espn:5322': ('Perth',),                  # Perth Glory FC     (v CC Mariners, 2026-11-21 06:00Z)
+    'soccer:team:espn:5325': ('Central Coast',),          # Central Coast Mariners FC (same fixture)
+    'soccer:team:espn:5327': ('Sydney',),                 # Sydney FC          (v Brisbane Roar, 2026-11-21 08:40Z)
+    'soccer:team:espn:13696': ('Wanderers',),             # Western Sydney Wanderers FC (v Adelaide Utd, 2026-11-20 08:40Z)
+}
+
+
+def participant_names(p):
+    """ESPN's name / abbreviation / short name plus the checked book labels of that team."""
+    return ({normalized(p.get(k)) for k in ('name', 'abbreviation', 'short_name')} |
+            {normalized(x) for x in BOOK_TEAM_ALIASES.get(p.get('id'), ())}) - {''}
+
+
 def _pair(sets, aliases):
     """Both offered teams equal both participants (either order). -> [participant index per offered team] or None."""
     if len(aliases) != 2:
@@ -173,8 +192,7 @@ def resolve(offer, matches):
                 continue
             sets, own = found
             participants = match['participants']
-            aliases = [{normalized(p.get('name')), normalized(p.get('abbreviation')),
-                        normalized(p.get('short_name'))} - {''} for p in participants]
+            aliases = [participant_names(p) for p in participants]
             if not _pair(sets, aliases):
                 continue
             owners = [p['id'] for p, names in zip(participants, aliases) if own & names]
@@ -197,7 +215,7 @@ def soccer_teams(offer, match):
     if not found or len(participants) != 2:
         return []
     sets, own = found
-    aliases = [{normalized(p.get(k)) for k in ('name','abbreviation','short_name')} - {''} for p in participants]
+    aliases = [participant_names(p) for p in participants]
     if not _pair(sets, aliases):
         return []
     return [p for p,names in zip(participants, aliases) if own & names]

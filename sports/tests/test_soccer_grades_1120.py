@@ -186,3 +186,28 @@ def test_thin_never_replaces_the_count_model_and_not_for_untested_inputs():
                                         ('Midfielder', 'M'), ('Forward', 'F'), (None, 'U'), ('Coach', 'U')])
 def test_position_groups(role, group):
     assert model.position_group(role) == group
+
+
+def test_checked_book_team_labels_resolve_exactly():
+    from sports import expansion_history as h
+    match = {'event_id': 'soccer:espn:aus.1:1:1', 'competition': 'aus.1', 'start': '2026-11-21T06:00:00Z',
+             'participants': [{'id': 'soccer:team:espn:5325', 'name': 'Central Coast Mariners FC',
+                               'short_name': 'CC Mariners', 'abbreviation': 'CCM'},
+                              {'id': 'soccer:team:espn:5322', 'name': 'Perth Glory FC', 'short_name': 'Perth Glory',
+                               'abbreviation': 'PER'}],
+             'players': [{'id': 'soccer:player:espn:7', 'team_id': 'soccer:team:espn:5322', 'name': 'Adam Taggart'}]}
+    offer = {'sport': 'soccer', 'start': '2026-11-21T06:00:00Z', 'teams': ['Perth', 'Central Coast'], 'team': 'Perth',
+             'player': 'Adam Taggart'}
+    assert h.resolve(offer, [match])['player_id'] == 'soccer:player:espn:7'
+    assert h.resolve(dict(offer, teams=['Pert', 'Central Coast'], team='Pert'), [match]) is None   # never a prefix
+    assert 'perth' not in h.participant_names({'id': 'soccer:team:espn:999', 'name': 'Perth Glory FC'})
+
+
+def test_thin_prior_alone_where_history_is_not_an_input():
+    offer, facts = fixture()
+    offer['stat'] = 'saves'
+    facts['identity']['competition'] = 'aus.1'                   # aus.1 ESPN saves: not promoted (bias)
+    facts['scope_rule'] = {'extra_time': 'none', 'basis': 'test'}   # A-League regular season
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['sample'] == 0 and f['inputs'] == []
+    assert f['stake_reason'] == model.THIN_REASONS['failed']
