@@ -16,12 +16,18 @@ PP_MARKETS = {
     "soccer": {"Shots": "shots", "Shots On Target": "shots_on_target", "Passes Attempted": "passes_attempted",
                "Tackles": "tackles", "Goalie Saves": "saves", "Goals": "goals", "Assists": "assists",
                "Crosses": "crosses", "Clearances": "clearances", "Fouls": "fouls",
-               "Attempted Dribbles": "attempted_dribbles", "Shots Assisted": "shots_assisted"},
+               "Attempted Dribbles": "attempted_dribbles", "Shots Assisted": "shots_assisted",
+               # sg-stats 2026-11-20 (expansion_stats component models; labels from the PrizePicks pulls of that day)
+               "Goal + Assist": "goals_assists", "Outfield Fantasy Score": "fantasy_outfield",
+               "Goalie Fantasy Score": "fantasy_goalie"},
     "tennis": {"Aces": "aces", "Double Faults": "double_faults", "Total Games": "games_played",
                "Games Won": "games_won", "Sets Won": "sets_won", "Break Points Won": "breakpoints_won",
                # PrizePicks' own labels (raw board 2026-11-18); same stats the result stores already hold.
                "Total Games Won": "games_won", "Total Sets": "sets_played", "Total Tie Breaks": "tie_breakers_played",
-               "1st Set Total Games": "games_played"},
+               "1st Set Total Games": "games_played",
+               # sg-stats 2026-11-20: set-labelled games (period must agree, below) and the tennis fantasy score.
+               "1st Set Total Games Won": "games_won", "2nd Set Total Games": "games_played",
+               "Fantasy Score": "fantasy_tennis"},
 }
 # PrizePicks league per player: soccer board 82 (SOCCER / EPL) and MLS on its own league 6.
 PP_LEAGUES = {"soccer": {"SOCCER", "EPL", "MLS"}, "tennis": {"TENNIS"}}
@@ -37,12 +43,18 @@ PP_SOCCER_LEAGUES = {82: ("SOCCER", None), 14: ("EPL", "eng.1"), 6: ("MLS", "usa
                      534: ("Serie A", "ita.1"), 531: ("La Liga", "esp.1"), 533: ("Bundesliga", "ger.1"),
                      535: ("Ligue 1", "fra.1"), 79: ("UCL", "uefa.champions")}
 PP_SOCCER_NOT_MATCH = {262, 457}    # season-long / tournament-long soccer tabs: never single-match props
-PP_SCOPES = {"Full": "full_game", "1H": "first_half", "2H": "second_half", "1st Set": "set1"}
+PP_SCOPES = {"Full": "full_game", "1H": "first_half", "2H": "second_half", "1st Set": "set1", "2nd Set": "set2"}
+# A set-labelled PrizePicks stat must come with that set's period.
+PP_SET_LABELS = {"1st Set Total Games": "set1", "1st Set Total Games Won": "set1", "2nd Set Total Games": "set2"}
 # Underdog soccer (sport_id FIFA): full-match stats the ESPN box score holds. Goals + Assists, 1H goals and cards
 # stay unmapped (no summed stat / first-half scope / combined-cards house rule registered).
 UD_SOCCER_MARKETS = {"period_1_2_goals": "goals", "period_1_2_assists": "assists",
                      "period_1_2_shots_on_target": "shots_on_target", "period_1_2_shots_attempted": "shots",
-                     "period_1_2_saves": "saves"}
+                     "period_1_2_saves": "saves",
+                     # sg-stats 2026-11-20 (expansion_stats): summed / first-half / renamed stats.
+                     "period_1_2_goals_assists": "goals_assists", "period_1_2_cards": "cards",
+                     "period_1_2_fouls_against": "fouls", "period_1_2_fouls_for": "fouls_suffered"}
+UD_SOCCER_FIRST_HALF = {"period_1_goals": "goals"}
 UD_MARKETS = {s: (s, "full_game") for s in (
     "aces", "double_faults", "breakpoints_won", "games_played", "games_won", "sets_played", "sets_won", "tie_breakers_played")}
 UD_MARKETS.update({"period_1_games_played": ("games_played", "set1"), "period_1_games_won": ("games_won", "set1")})
@@ -118,9 +130,9 @@ def prizepicks(body, sport, observed_at, league=None):
         stat = PP_MARKETS[sport].get(a.get("stat_type"))
         duration = item("duration").get("name")
         scope = PP_SCOPES.get(duration)
-        if a.get("stat_type") == "1st Set Total Games" and scope != "set1":
+        if a.get("stat_type") in PP_SET_LABELS and scope != PP_SET_LABELS[a.get("stat_type")]:
             continue                                   # the label and the period must agree
-        if scope == "set1" and sport != "tennis":
+        if scope in ("set1", "set2") and sport != "tennis":
             continue
         line, start = number(a.get("line_score")), timestamp(a.get("start_time"))
         if (not stat or not scope or line is None or line < 0 or not start or start <= now
@@ -241,7 +253,8 @@ def underdog_soccer(body, observed_at):
         app = apps.get(st.get("appearance_id")) or {}
         p = players.get(app.get("player_id")) or {}
         game = games.get(app.get("match_id")) or {}
-        stat = UD_SOCCER_MARKETS.get(st.get("stat"))
+        stat = UD_SOCCER_MARKETS.get(st.get("stat")) or UD_SOCCER_FIRST_HALF.get(st.get("stat"))
+        ud_scope = "first_half" if st.get("stat") in UD_SOCCER_FIRST_HALF else "full_game"
         value, start = number(line.get("stat_value")), timestamp(game.get("scheduled_at"))
         home, away = game.get("home_team_id"), game.get("away_team_id")
         full = str(game.get("full_team_names_title") or "").split(" vs ")
@@ -273,7 +286,7 @@ def underdog_soccer(body, observed_at):
             "player": " ".join(x for x in (p.get("first_name"), p.get("last_name")) if x),
             "role": p.get("position_display_name"), "team": full[mine], "match": game.get("title"),
             "competition": game.get("sport_group_name"), "teams": [full[0], full[1]], "team_aliases": aliases,
-            "stat": stat, "label": st.get("display_stat") or stat, "scope": "full_game", "line": value,
+            "stat": stat, "label": st.get("display_stat") or stat, "scope": ud_scope, "line": value,
             "variant": line.get("line_type") or "unknown", "start": start, "sides": sides,
             "observed_at": now, "source_updated_at": min(updates) if len(updates) == len(sides) else None,
             "identity_status": "provider_only", "forecast": None}))

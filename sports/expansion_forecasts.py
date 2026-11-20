@@ -14,7 +14,7 @@ import time
 from functools import lru_cache
 
 from gradecore import policy
-from . import expansion_board as boards, expansion_research as research, store
+from . import expansion_board as boards, expansion_research as research, expansion_stats as stats, store
 from .contracts import now_utc, parse_utc
 from .expansion import COMPETITIONS, isolated_database
 from .expansion_history import atomic_json
@@ -91,6 +91,10 @@ def fit(offer, facts, now):
     context = facts.get('context') or {}
     if any(context.get(k) and parse_utc(context[k])>parse_utc(now) for k in ('surface_known_at','format_known_at')):
         return None, 'future_context'
+    if stats.model_of(offer):
+        # sg-stats component models (fantasy scores, sums, first-half goals, 2nd-set games): stats the count model
+        # below never graded. Every other offer takes the unchanged path.
+        return stats.fit(offer, facts, now, FORECAST_INPUTS, parse_utc, MIN_GAMES)
     if sport == 'soccer':
         if stat not in SOCCER_COUNTS:
             return None, 'stat_not_modelled'
@@ -215,6 +219,9 @@ def make_forecast(offer, facts, now):
               'grade_policy':grade.policy, 'grade_reason':list(grade.reasons),
               'units':None, 'stake_reason':'Stakes are not assigned by this new model.',
               'probability_basis':'Conditional on a completed, non-push result; model estimate, not calibrated.'}
+    if fitted.get('component_model'):
+        # 0 units with a definite reason by walk-forward tier (display gd-1 keeps the letter on a 0U line).
+        result.update(units=0.0, stake_reason=stats.STAKE_REASONS[fitted['stake_tier']])
     result['id'] = digest({k:v for k,v in result.items() if k != 'made_at'})
     return result, None
 
@@ -250,7 +257,8 @@ def publish(sport, now=None, budget_s=8):
     facts = research.saved(sport).get('players',{})
     counts, current = {}, {}
     with closing(connect(sport)) as c:
-        for offer in sorted(board['offers'],key=lambda x:x['start']):
+        # Component-model offers go after every count-model offer, so the budget never drops an existing grade.
+        for offer in sorted(board['offers'],key=lambda x:(stats.model_of(x) is not None, x['start'])):
             if time.monotonic() >= deadline:
                 counts['budget'] = counts.get('budget',0)+1
                 break
@@ -320,13 +328,18 @@ def settle(sport, now=None, budget_s=3):
                 by_key.setdefault((obs.participant_id,obs.stat,obs.scope),[]).append((row,obs))
             for row in c.execute('SELECT id,payload FROM forecasts WHERE competition=? AND event_id=?',(comp,eid)):
                 f = json.loads(row['payload'])
-                candidates = by_key.get((f['identity']['player_id'],f['stat'],f['history_scope']),[])
-                if not candidates:
-                    continue
-                values = {o.value for _,o in candidates}
-                valid = all(o.final and o.participation=='played' and o.value is not None and math.isfinite(o.value)
-                            for _,o in candidates) and len(values)==1
-                actual = next(iter(values)) if valid else None
+                if f.get('component_model'):
+                    actual, candidates = stats.actual(f, by_key)
+                    if not candidates:
+                        continue
+                else:
+                    candidates = by_key.get((f['identity']['player_id'],f['stat'],f['history_scope']),[])
+                    if not candidates:
+                        continue
+                    values = {o.value for _,o in candidates}
+                    valid = all(o.final and o.participation=='played' and o.value is not None and math.isfinite(o.value)
+                                for _,o in candidates) and len(values)==1
+                    actual = next(iter(values)) if valid else None
                 result_ids = sorted(r['record_id'] for r,_ in candidates)
                 rid = digest([f['id'],result_ids])
                 outcome = None if actual is None else 'push' if actual==f['line'] else 'over' if actual>f['line'] else 'under'
