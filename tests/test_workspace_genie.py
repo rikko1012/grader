@@ -189,3 +189,19 @@ def test_flag_on_writes_no_forecast_or_grade(genv, monkeypatch):
     workspace_api._PRIVATE.clear()
     after = get(genv, f"line?book=underdog&id={x['id']}")[1]
     assert before["record"]["scout"] == after["record"]["scout"] and before["forecast"] == after["forecast"]
+
+
+def test_v3_answers_state_no_bo3_number_and_v3_off_is_unchanged(genv, monkeypatch):
+    """v3 HLTV only (owner 2026-11-20; v3_hltv.scrub): on a v3 request the stats answer reads the HLTV rows only, never the saved grader
+    inputs (BO3.gg / merged: rating, KAST, ADR...). v3 off: the answer is as before."""
+    monkeypatch.setenv("SCOUT_GENIE", "1")
+    monkeypatch.setenv("SCOUT_GENIE_DAILY", "50")
+    x, d = body(genv, question="What are his stats? rating kast adr kpr")
+    st, line = get(genv, f"line?book=underdog&id={x['id']}")
+    saved = [r for r in line["context"]["rows"] if r.get("group") == "Saved with this forecast"]
+    assert st == 200 and saved, line["context"]
+    st, off = post(genv, "genie", d)
+    assert st == 200 and any(r["label"] in " ".join(off["sentences"]) for r in saved), off
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    st, on = post(genv, "genie", d)
+    assert st == 200 and not any(r["label"] + ":" in " ".join(on["sentences"]) for r in saved), on

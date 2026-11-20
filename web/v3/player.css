@@ -272,6 +272,39 @@ html[data-ui-v3] #u-hub #hub-detail .h-dec-chance>.v3p-lean{display:inline-flex;
 html[data-ui-v3] #u-hub #hub-detail .h-dec-chance>.v3p-lean .h-grade-text{display:inline-block;padding:6px 9px;border-radius:var(--sc-r-sm);font:600 13px/1.2 var(--sc-font);color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge)}
 /* light: source notes at 4.5:1 or better (the hub's light ink for small print was ~2:1 on its near-white) */
 html[data-ui-v3][data-theme="light"] #u-hub :is(.sc-src,.sc-statgrid__legend,.v3p-lmeta,.v3p-facts small,.v3p-hits small){color:#5D6880!important}
+/* ---- maps 1120: HLTV totals (map cards, outside-the-pool group, all numbers by map, combined stats row) ---- */
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id b{white-space:normal;overflow:visible;text-overflow:clip;flex-wrap:wrap;overflow-wrap:anywhere}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .v3p-mapname{min-width:0}
+html[data-ui-v3] #u-hub #hub-detail button.v3p-map:disabled{cursor:default;opacity:.72}
+html[data-ui-v3] #u-hub #hub-detail .v3p-grid>.v3p-hm-state{grid-column:1/-1}
+html[data-ui-v3] #u-hub #hub-detail :is(.v3p-mapdetail,.v3p-outpool){border-radius:var(--sc-r-md);box-shadow:var(--sc-ring);background:var(--sc-s1)}
+html[data-ui-v3] #u-hub #hub-detail :is(.v3p-mapdetail,.v3p-outpool)>summary{min-height:44px;display:flex;align-items:center;padding:0 14px;cursor:pointer;font:500 14px/1.3 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail :is(.v3p-mapdetail,.v3p-outpool)>summary:focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-mapdetail>.sc-src{margin:0;padding:0 14px 12px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-tablewrap{overflow-x:auto;padding:0 14px 8px;-webkit-overflow-scrolling:touch}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maptable{width:100%;border-collapse:collapse;font:500 13px/1.3 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maptable :is(th,td){padding:7px 6px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maptable thead th{font-weight:500;font-size:12px;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maptable .sc-num{text-align:right;font-variant-numeric:tabular-nums}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maptable tbody th{font-weight:600}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maptable tr.v3p-all :is(th,td){border-bottom:0;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outpool ul{list-style:none;margin:0;padding:0 14px 10px;display:grid;gap:10px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outpool li{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;padding-top:10px;border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outpool li>b{font:600 15px/1.2 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outpool li>small{font-size:12px;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outstats{display:grid;grid-template-columns:repeat(4,minmax(0,auto));justify-content:start;column-gap:18px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat>span{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat b,html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat b[class*="sc-v-"]{color:var(--sc-text);font-size:15px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat i{display:block;margin:0}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pooled-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pooled-stats span{display:block;font-size:12px;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pooled-stats b{display:block;font:600 17px/1.2 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-outstats .sc-scene__stat i.sc-v-good{color:#147a4a}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-outstats .sc-scene__stat i.sc-v-poor{color:#b3261e}
+/* the map list never grows past the card: its one column is minmax(0, 1fr) and the wide table scrolls inside its own box */
+html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list{grid-template-columns:minmax(0,1fr)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list>*{min-width:0;max-width:100%}
+@media (max-width:1023px){html[data-ui-v3] #u-hub #hub-detail>.v3p-maps{grid-template-columns:minmax(0,1fr)}}
 /* ---- polish2 (2026-11-20): the line panel as mocks 05 / 10 ---- */
 /* side buttons carry the line, Scout's side carries the Scout dot */
 html[data-ui-v3] #u-hub #hub-detail .h-side-toggle .v3p-scoutdot{display:inline-flex;align-items:center;gap:5px;margin-left:10px;color:var(--sc-accent);font:500 13px/1 var(--sc-font)}
@@ -314,39 +347,6 @@ html[data-ui-v3] #u-hub #hub-detail .h-odds-table tr.v3p-dup{display:none}
 html[data-ui-v3] #u-hub #hub-detail .v3p-match{grid-template-columns:minmax(0,1fr) minmax(0,max-content) minmax(0,1fr)}
 html[data-ui-v3] #u-hub #hub-detail .v3p-match .sc-matchup__team b{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;line-height:20px}
 html[data-ui-v3] #u-hub #hub-detail .v3p-match .sc-matchup__clock{max-width:9.5em;white-space:normal}
-/* ---- maps 1120: HLTV totals (map cards, outside-the-pool group, all numbers by map, combined stats row) ---- */
-html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id b{white-space:normal;overflow:visible;text-overflow:clip;flex-wrap:wrap;overflow-wrap:anywhere}
-html[data-ui-v3] #u-hub #hub-detail .v3p-map .v3p-mapname{min-width:0}
-html[data-ui-v3] #u-hub #hub-detail button.v3p-map:disabled{cursor:default;opacity:.72}
-html[data-ui-v3] #u-hub #hub-detail .v3p-grid>.v3p-hm-state{grid-column:1/-1}
-html[data-ui-v3] #u-hub #hub-detail :is(.v3p-mapdetail,.v3p-outpool){border-radius:var(--sc-r-md);box-shadow:var(--sc-ring);background:var(--sc-s1)}
-html[data-ui-v3] #u-hub #hub-detail :is(.v3p-mapdetail,.v3p-outpool)>summary{min-height:44px;display:flex;align-items:center;padding:0 14px;cursor:pointer;font:500 14px/1.3 var(--sc-font);color:var(--sc-text)}
-html[data-ui-v3] #u-hub #hub-detail :is(.v3p-mapdetail,.v3p-outpool)>summary:focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
-html[data-ui-v3] #u-hub #hub-detail .v3p-mapdetail>.sc-src{margin:0;padding:0 14px 12px}
-html[data-ui-v3] #u-hub #hub-detail .v3p-tablewrap{overflow-x:auto;padding:0 14px 8px;-webkit-overflow-scrolling:touch}
-html[data-ui-v3] #u-hub #hub-detail .v3p-maptable{width:100%;border-collapse:collapse;font:500 13px/1.3 var(--sc-font);color:var(--sc-text)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-maptable :is(th,td){padding:7px 6px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--sc-hair)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-maptable thead th{font-weight:500;font-size:12px;color:var(--sc-muted)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-maptable .sc-num{text-align:right;font-variant-numeric:tabular-nums}
-html[data-ui-v3] #u-hub #hub-detail .v3p-maptable tbody th{font-weight:600}
-html[data-ui-v3] #u-hub #hub-detail .v3p-maptable tr.v3p-all :is(th,td){border-bottom:0;color:var(--sc-muted)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outpool ul{list-style:none;margin:0;padding:0 14px 10px;display:grid;gap:10px}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outpool li{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;padding-top:10px;border-top:1px solid var(--sc-hair)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outpool li>b{font:600 15px/1.2 var(--sc-font);color:var(--sc-text)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outpool li>small{font-size:12px;color:var(--sc-muted)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outstats{display:grid;grid-template-columns:repeat(4,minmax(0,auto));justify-content:start;column-gap:18px}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat>span{color:var(--sc-muted)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat b,html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat b[class*="sc-v-"]{color:var(--sc-text);font-size:15px}
-html[data-ui-v3] #u-hub #hub-detail .v3p-outstats .sc-scene__stat i{display:block;margin:0}
-html[data-ui-v3] #u-hub #hub-detail .v3p-pooled-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--sc-hair)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-pooled-stats span{display:block;font-size:12px;color:var(--sc-muted)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-pooled-stats b{display:block;font:600 17px/1.2 var(--sc-font);color:var(--sc-text)}
-html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-outstats .sc-scene__stat i.sc-v-good{color:#147a4a}
-html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-outstats .sc-scene__stat i.sc-v-poor{color:#b3261e}
-/* the map list never grows past the card: its one column is minmax(0, 1fr) and the wide table scrolls inside its own box */
-html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list{grid-template-columns:minmax(0,1fr)}
-html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list>*{min-width:0;max-width:100%}
-@media (max-width:1023px){html[data-ui-v3] #u-hub #hub-detail>.v3p-maps{grid-template-columns:minmax(0,1fr)}}
 /* ---- qa 1120: delta arrows follow the sign (colour stays good / poor for Scout's side) ---- */
 html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-up::before{border-top:0;border-bottom:5px solid currentColor}
 html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-dn::before{border-bottom:0;border-top:5px solid currentColor}

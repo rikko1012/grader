@@ -29,6 +29,8 @@
   'use strict';
   if (!window.ScoutV3) return;
   var V = window.ScoutV3, esc = V.esc;
+  /* HLTV only on the CS2 card (hltvOnly below): the hub reads this mark before any doc arrives (loading / failed states too) */
+  document.documentElement.setAttribute('data-hltv-only', 'cs2');
   var num = function (v) { return typeof v === 'number' && isFinite(v); };
   var MINUS = '−';
   var SPORT = {cs2: 'CS2', lol: 'LoL', nba: 'NBA', nfl: 'NFL', soccer: 'Soccer', tennis: 'Tennis'};
@@ -44,6 +46,89 @@
     while (ORDER.length > 24) delete DOCS[ORDER.shift()];
     schedule();
   }
+  /* ---------------------------------------------------------------- HLTV only on the CS2 card (owner 2026-11-20, emphatic: "no BO3.gg
+     data anywhere on member-page stats - HLTV only"). The CS2 line doc is rewritten before the hub reads it, so every tab the hub
+     paints (Overview / Why, Behind the grade, the Stats tab's factor table and panels, Ask) prints HLTV numbers or Scout's own
+     outputs (projection, chance, grade, stake, the model's own inputs) and leaves a BO3.gg-derived row out. The same rules, server
+     side, for the Genie's answers on a v3 request: v3_hltv.py (keep the two in step). Display only: no grade, chance, stake or
+     projection is read or changed here. The classic card (v3 off) never runs this file.
+     - cs2_card: stats (BO3.gg rating / KAST / DPR / ADR / KPR / form windows / recent KPR), per_map, teammates, me, team_kill_share,
+       checks (trade / opening kills, sample flags, days since his last map = the min of BO3.gg and HLTV) are removed; the AWP note
+       stays only when it is HLTV's weapon stats; a rank band from BO3.gg is removed; the second-source (CS API) and FACEIT panels
+       are not HLTV and are removed. cs2_card.hltv_v3 carries the HLTV equivalents from /api/upgrade/player-maps (KPR 3 / 12 mo,
+       HS% 3 mo, maps 12 mo, days since his last HLTV map); the grade's own rest stake rule is kept as a yes / no (rest_rule), never
+       recomputed from the HLTV days.
+     - context.rows: the "Saved with this forecast" grader inputs (BO3.gg / merged) are removed; the HLTV rows stay.
+     - grade_inputs: the context-only factors read from those grader inputs, and a BO3.gg (or unknown-source) rank band, are removed.
+       The model's live factors (HLTV perf / cm2 inputs) stay.
+     - history: the saved L10 tally and recent average come from the grader's merged BO3.gg + HLTV last 10; the hit counts are read
+       from HLTV series only: the verified series, else the HLTV series the server adds when they disagree (history.hltv_series). */
+  var CTX_GI = {maps_played: 1, rating: 1, kpr: 1, kpr_last5: 1, adr: 1, kast: 1, hs_pct: 1, days_since_last_map: 1, recent_avg: 1, recent_median: 1, recent_n: 1};
+  var GI_BO3 = {recent_avg: 1, recent_median: 1, kpr_last5: 1, rating: 1, adr: 1, kast: 1, trade_pr: 1, days_since_last_map: 1};
+  var isBo3Band = function (rb) { return !rb || typeof rb !== 'object' || /bo3/i.test(String(rb.source || '')); };
+  function tallyOf(list, line) {
+    if (!list.length || !num(+line)) return null;
+    var t = {n: list.length, over: 0, under: 0, push: 0};
+    list.forEach(function (g) { if (g.value > +line) t.over++; else if (g.value < +line) t.under++; else t.push++; });
+    return t;
+  }
+  function hltvV3(hm) {
+    var d = hm && hm.state === 'ok' ? hm.doc : null;
+    if (!d || !d.windows) return null;
+    var t3 = (d.windows['3m'] || {}).overall, t12 = (d.windows['12m'] || {}).overall, out = {};
+    if (t3 && t3.rounds) { out.kpr3 = t3.kills / t3.rounds; out.maps3 = t3.maps; }
+    if (t3 && t3.hs_kills) out.hs3 = 100 * t3.hs / t3.hs_kills;
+    if (t12 && t12.rounds) { out.kpr12 = t12.kills / t12.rounds; out.maps12 = t12.maps; }
+    if (d.newest_map) {
+      out.newest = d.newest_map;
+      var a = Date.parse(String(d.as_of || '').slice(0, 10) + 'T00:00:00Z'), b = Date.parse(String(d.newest_map).slice(0, 10) + 'T00:00:00Z');
+      if (isFinite(a) && isFinite(b) && a >= b) out.days = Math.round((a - b) / 86400000);
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  function hltvOnly(d, hm) {
+    if (!d || !d.record || d.record.sport !== 'cs2') return d;
+    d.hltv_only = true;
+    var c = d.cs2_card;
+    var band = c && c.rank_band, bandBo3 = !c || isBo3Band(band);
+    if (c) {
+      var ck = c.checks || {};
+      var rest = num(ck.days_since_last_map) && ck.days_since_last_map >= 30;
+      c.hltv_only = true;
+      c.stats = {}; c.per_map = []; c.teammates = []; c.me = null; c.team_kill_share = null; c.csapi = null; c.faceit = null;
+      c.checks = {roster_confirmed: !!ck.roster_confirmed, standin_for: ck.standin_for || null,
+        awp_note: /\(HLTV weapon stats/i.test(String(ck.awp_note || '')) ? ck.awp_note : null, rest_rule: !!rest};
+      if (bandBo3) c.rank_band = null;
+      var hv = hltvV3(hm);
+      if (hv) c.hltv_v3 = hv; else delete c.hltv_v3;
+    }
+    if (d.context && Array.isArray(d.context.rows)) {
+      d.context.rows = d.context.rows.filter(function (f) { return f && !(f.key && CTX_GI[f.key]) && f.group !== 'Saved with this forecast'; });
+    }
+    var g = d.grade_inputs;
+    if (g) {
+      if (Array.isArray(g.factors)) g.factors = g.factors.filter(function (f) { return f && !(f.live !== true && GI_BO3[f.id]) && !(f.id === 'rank_band' && bandBo3); });
+      if (Array.isArray(g.matchup)) g.matchup = g.matchup.filter(function (m) { return m && !(m.id === 'rank_band' && bandBo3); });
+    }
+    var h = d.history || (d.history = {}), line = d.record.offer && d.record.offer.line;
+    var ser = (Array.isArray(h.series) && h.series.length ? h.series : Array.isArray(h.hltv_series) ? h.hltv_series : []).filter(function (x) { return x && num(x.value); });
+    h.series = ser.length ? ser : null;
+    delete h.hltv_series;
+    var ten = ser.slice(0, 10);
+    h.tally = tallyOf(ten, line);
+    h.avg = ten.length ? Math.round(ten.reduce(function (a, x) { return a + x.value; }, 0) / ten.length * 10) / 10 : null;
+    var rh = d.record.history || (d.record.history = {});
+    rh.l5 = tallyOf(ser.slice(0, 5), line); rh.l10 = h.tally; rh.l20 = ser.length > 10 ? tallyOf(ser.slice(0, 20), line) : null; rh.avg = h.avg;
+    return d;
+  }
+  /* the /line URL's board row -> its player-maps URL (main books: known before the doc arrives, so both reads run together) */
+  function hmUrlOf(u) {
+    var q = String(u).split('?')[1] || '', p = {};
+    q.split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) p[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); });
+    if (p.sport && p.sport !== 'cs2') return null;
+    return MAIN[p.book] && p.id ? '/api/upgrade/player-maps?sport=cs2&book=' + encodeURIComponent(p.book) + '&id=' + encodeURIComponent(p.id) : null;
+  }
+  var HM_WAIT = 4000;     /* the card waits at most this long for the HLTV totals; later, they fill the same doc for the next repaint */
   var nativeFetch = window.fetch;
   if (typeof nativeFetch === 'function') {
     window.fetch = function (input, init) {
@@ -52,10 +137,25 @@
         var u = typeof input === 'string' ? input : (input && input.url) || '';
         var m = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
         if (/\/api\/upgrade\/line\?/.test(u) && String(m).toUpperCase() === 'GET') {
-          p.then(function (r) {
-            if (!r || !r.ok) return;
-            r.clone().json().then(keep, function () { /* not JSON: the hub handles it */ });
-          }, function () { /* the hub sees its own failure */ });
+          var pre = hmUrlOf(u);
+          if (pre) hmStart(pre);
+          /* the hub reads the rewritten doc: a CS2 doc is HLTV only before any of it is painted (never the original on a failure) */
+          return p.then(function (r) {
+            if (!r || !r.ok) return r;
+            return r.clone().json().then(function (d) {
+              if (!d || !d.record || d.record.sport !== 'cs2') { keep(d); return r; }
+              var hu = hmUrl(d.record, d), e = hu ? hmStart(hu) : null;
+              var wait = e && e.state === 'loading' ? Promise.race([e.done, new Promise(function (res) { setTimeout(res, HM_WAIT); })]) : Promise.resolve();
+              return wait.then(function () {
+                hltvOnly(d, e);
+                if (e && e.state === 'loading') e.done.then(function () { var hv = hltvV3(e); if (hv && d.cs2_card) d.cs2_card.hltv_v3 = hv; });
+                keep(d);
+                var out = new Response(JSON.stringify(d), {status: r.status, statusText: r.statusText, headers: r.headers});
+                try { Object.defineProperty(out, 'json', {value: function () { return Promise.resolve(d); }}); } catch (x) { /* a plain Response */ }
+                return out;
+              });
+            }, function () { return r; });
+          });
         }
       } catch (e) { /* never in the hub's way */ }
       return p;
@@ -67,10 +167,10 @@
   /* the board row the server reads the player from: this line's own, or for an extra book's line (Sleeper, Dabble) the same prop's
      Underdog / PrizePicks row from the doc's own book list; null = none (the card then shows no HLTV blocks, never a guess) */
   var MAIN = {underdog: 1, prizepicks: 1};
-  function hmUrl(r) {
+  function hmUrl(r, doc) {
     var book = r.offer.platform, id = r.offer.offer_id;
     if (!MAIN[book]) {
-      var d = DOCS[keyOf(r)], b = ((d && d.books) || []).filter(function (x) { return x && MAIN[x.platform] && x.row_id != null; })[0];
+      var d = doc || DOCS[keyOf(r)], b = ((d && d.books) || []).filter(function (x) { return x && MAIN[x.platform] && x.row_id != null; })[0];
       if (!b) return null;
       book = b.platform; id = b.row_id;
     }
@@ -79,14 +179,19 @@
   /* {state: 'loading' | 'ok' | 'none' | 'error', doc} for this row; starts the one read when it is not kept yet */
   function hltvMaps(r) {
     if (!r || r.sport !== 'cs2' || !r.offer || !r.offer.offer_id) return null;
-    var u = hmUrl(r), e = u ? HM[u] : null;
+    var u = hmUrl(r);
     if (!u) return {state: 'skip'};
+    return hmStart(u);
+  }
+  /* the one read of a player-maps URL (kept; a failed read is tried again after 15 s); e.done settles when it does */
+  function hmStart(u) {
+    var e = HM[u];
     if (e && !(e.state === 'error' && Date.now() - e.at > 15000)) return e;
     e = HM[u] = {state: 'loading', at: Date.now(), doc: null};
     HM_ORDER.push(u);
     while (HM_ORDER.length > 40) delete HM[HM_ORDER.shift()];
     var f = typeof nativeFetch === 'function' ? nativeFetch : window.fetch;
-    f.call(window, u, {credentials: 'same-origin'}).then(function (res) {
+    e.done = f.call(window, u, {credentials: 'same-origin'}).then(function (res) {
       if (!res.ok) throw new Error(String(res.status));
       return res.json();
     }).then(function (d) {
@@ -483,7 +588,7 @@
       var on = sel.indexOf(m.key), a = V.mapArt(m.key), has = m.n > 0;
       var sub = '';
       if (m.conf) sub = '<small class="v3p-slot">' + esc(m.conf.slot || 'Confirmed') + (m.conf.by ? ' · <span>' + esc(m.conf.by) + ' pick</span>' : '') + '</small>';
-      /* polish2: one measure on every card (In Maps 1-2 with Scout's veto, else HLTV's Map chance); no figure reads — */
+      /* polish2: one measure on every card (— when this map has no figure); the same 2 x 2 of HLTV stats on every card */
       var ch = pool.veto ? '<small class="v3p-inp">In ' + esc(per) + ' <b>' + (m.inP != null ? esc(fx(m.inP, 1)) + '%' : '—') + '</b></small>'
         : '<small class="v3p-inp">Map chance <b>' + (m.chance != null ? esc(fx(+m.chance, 1)) + '%' : '—') + '</b></small>';
       var stats = cardStats(m.t, base, inv);
@@ -801,9 +906,9 @@
       if (mh) { anchor = put(box, 'v3p-maps', mh, lead); mountArts(anchor); } else drop(box, 'v3p-maps');
     } else drop(box, 'v3p-maps');
     try { paintLine(box, r, doc, st); } catch (e) { /* the hub's own strip stays as it is */ }
+    if (r.sport === 'cs2') { try { hideBo3(box); } catch (e) { /* the hub's panels stay as they are */ } }
     try { likelyMaps(box, r, doc); } catch (e) { /* the hub's own line stays */ }
     try { linesTab(box); } catch (e) { /* the hub's own table stays */ }
-    if (r.sport === 'cs2') { try { hideBo3(box); } catch (e) { /* the hub's panels stay as they are */ } }
     put(box, 'v3p-dock sc-dock', dockHtml(r, doc, st, id), null);
     watchAdd(box);
     /* the hub repainted the whole card: keep the member where they were (a tab change keeps the tabs in view) */
