@@ -289,7 +289,7 @@ def test_tennis_thin_prior_tables_are_distributions_on_the_fit_support():
         assert tt.TIERS[f'{scope}|{stat}'] == 'failed'
 
 
-# --- roster slots go to the next kickoff first (live e2e 2026-11-20: Troyes - Le Havre, 3 h out, never got a roster)
+# --- never-loaded roster slots go to the next kickoff first (not slate order)
 
 def test_never_loaded_rosters_take_slots_by_next_kickoff(tmp_path):
     import re

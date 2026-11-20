@@ -287,9 +287,10 @@ def collect_soccer_teams(catalogs, get, persist, directory, group=None, slots=2,
                not state.get(key, {}).get('schedule_checked_at') or
                (now-parse_utc(state[key]['schedule_checked_at'])).total_seconds() >= 21600]
         # soccer-grades-1120: never-loaded rosters first (as before), then by the team's NEXT offered kickoff, then the
-        # oldest check. Before, teams were taken in slate order: in a 6-run live e2e Troyes - Le Havre (kick-off in 3 h)
-        # never got its roster while teams playing days later did, so its lines stayed without identity / letters.
-        # Same slots, same requests; only the order changes.
+        # oldest check. Before, never-loaded teams were taken in slate (dict) order, so a fixture hours away could wait
+        # behind teams playing days later with its lines unlinked (no identity, no letter). Same slots, same requests;
+        # only the order changes. (Live e2e 2026-11-20: Troyes - Le Havre stayed unlinked because its league tab reached
+        # the board only in the last refresh, not because of this order - the order fix is proven by the unit test.)
         def _next_kickoff(item):
             starts = []
             for m in item['matches']:
