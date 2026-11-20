@@ -105,7 +105,7 @@ def open_landing(browser, base, size, theme, nrev=12, record=True, fonts=False, 
 
 VISIBLE = ("#hero-title", ".hero-k", "#rvq", "#rvq-prev", "#rvq-next", "#rvq-pp", "#rvq-all", ".lede", "#hero-rec-n", "#hero-rec-t", "#hero-books",
            "#hc", "#hc-sport", ".hc-src", "#hc-pause", "#hc-av", "#hc-name", "#hc-meta", "#hc-chips .tag", "#hc-pct", "#hc-side", "#hc-why", "#hc-grade",
-           "#hc-pl", "#hc-ll", "#hc-nav", ".card-shot img",
+           "#hc-pl", "#hc-ll", "#hc-nav",
            "#proof-record-n", "#proof-record-t", "#proof-sports", "#proof-reviews-n", "#mq", "#mq-pause", ".books h2",
            "#why-title", "#vs-seg", "#vs-list", "#demo-title", "#bd-tabs", "#bd-rows .prow", "#pcard", "#bd-src",
            "#grade-title", "#gd-svg", "#gd-line", "#gd-proj", "#gd-grade", "#gd-break", "#gd-ladder", "#gd-note",
@@ -119,8 +119,16 @@ def check_landing_fields(page, size):
         loc = page.locator(sel).first
         loc.scroll_into_view_if_needed()
         assert loc.is_visible(), sel
+    # the previous design's screenshots are not drawn under v3 (they showed a UI that no longer matches); the live card leads
+    assert not page.locator(".board-shot img").is_visible() and not page.locator(".card-shot img").is_visible()
+    # the review ticker sits after the hero's buttons (and, on the phone, after the live card), never between headline and sentence
+    order = page.evaluate("""(() => { const y = s => document.querySelector(s).getBoundingClientRect().top;
+      return [y('#hero-title'), y('.lede'), y('.hero .ctas'), y('#hc'), y('#rvq')]; })()""")
+    assert order[0] < order[1] < order[2] < order[4], order
+    if size is not DESK:
+        assert order[3] < order[4], order
     if size is DESK:
-        assert page.locator(".board-shot img").is_visible() and page.locator(".topnav").is_visible()
+        assert page.locator(".topnav").is_visible()
         assert page.locator(".hero .btn.ghost").is_visible()                       # Try the example board (desktop, as today)
     assert page.locator("#hc-nav button").count() == 4 and page.locator(".fcard").count() == 8 and page.locator("#steps li").count() == 3
     pct = page.locator("#hc-pct").text_content().strip()
@@ -294,3 +302,105 @@ def test_member_nav_stays_while_sign_in_is_checked(browser, env, monkeypatch, si
     for r in held:
         r.continue_()
     c.close()
+
+
+# ---------------------------------------------------------------------------------------------------- the review ticker under v3
+# v3 (approved mocks 01 / 02, polish1): the reviews follow the product - headline, sentence, buttons, then the numbers and the ticker
+# (on a phone the live card comes first). The landing suite's ticker checks run again here with that placement; everything else in
+# them (rotation, pause on hover / focus, arrows, swipe, no layout shift) is unchanged. Positions are page positions (the ticker can
+# sit below the fold, so stepping it may scroll the page).
+from tests.test_landing_browser import _open, _idx, SIZES, seed_long  # noqa: E402,F401
+import re  # noqa: E402
+
+
+@pytest.mark.parametrize("size", (SIZES[1], SIZES[-1]), ids=lambda s: str(s["width"]))
+def test_carousel_under_the_headline_advances_and_pauses(browser, base, size):
+    seed(3)
+    ctx, page, errors = _open(browser, base, size)
+    page.wait_for_selector("#rvq:not([hidden])")
+    top = lambda sel: page.evaluate(f"document.querySelector('{sel}').getBoundingClientRect().top + scrollY")
+    assert top("#hero-title") < top(".lede") < top(".hero .ctas") < top("#rvq")
+    assert page.locator("#rvq").bounding_box()["height"] <= (64 if size["width"] > 640 else 100)
+    fs = lambda sel: page.evaluate(f"parseFloat(getComputedStyle(document.querySelector('{sel}')).fontSize)")
+    assert fs("#rvq .rvq-s.on blockquote") < fs(".lede")
+    assert page.locator("#rvq .rvq-s").count() == 3 and page.locator("#rvq .rvq-s.on").count() == 1
+    assert page.locator("#rvq .rvq-s.on figcaption").text_content().startswith("Member C. · ")
+    assert page.locator("#rvq-who").text_content() == page.locator("#rvq .rvq-s.on figcaption").text_content()
+    assert page.locator("#rvq-all").text_content() == "All reviews" and page.locator("#rvq-all").get_attribute("href") == "/reviews"
+    away = (5, 5)
+    page.locator("#rvq").scroll_into_view_if_needed()                     # the ticker turns only while it is on screen
+    assert _idx(page) == 0
+    page.mouse.move(*away)
+    page.clock.run_for(6000)
+    assert _idx(page) == 1
+    page.locator("#rvq-stage").scroll_into_view_if_needed()
+    page.hover("#rvq-stage")
+    page.clock.run_for(20000)
+    assert _idx(page) == 1
+    page.mouse.move(*away)
+    page.clock.run_for(6000)
+    assert _idx(page) == 2
+    page.focus("#rvq-next")
+    page.clock.run_for(20000)
+    assert _idx(page) == 2
+    page.keyboard.press("Enter")
+    assert _idx(page) == 0
+    page.focus(".ctas a")
+    page.clock.run_for(6000)
+    assert _idx(page) == 1
+    page.locator("#rvq-prev").click()
+    page.locator("#rvq-prev").click()
+    assert _idx(page) == 2
+    assert not errors
+    ctx.close()
+
+
+def test_carousel_swipes_on_a_phone(browser, base):
+    seed(3)
+    ctx, page, errors = _open(browser, base, SIZES[1], has_touch=True)
+    page.wait_for_selector("#rvq:not([hidden])")
+    page.locator("#rvq-stage").scroll_into_view_if_needed()
+    b = page.locator("#rvq-stage").bounding_box()
+    y = b["y"] + b["height"] / 2
+    page.mouse.move(b["x"] + b["width"] - 10, y)
+    page.mouse.down()
+    page.mouse.move(b["x"] + 20, y, steps=5)
+    page.mouse.up()
+    assert _idx(page) == 1
+    page.mouse.move(b["x"] + 20, y)
+    page.mouse.down()
+    page.mouse.move(b["x"] + b["width"] - 10, y, steps=5)
+    page.mouse.up()
+    assert _idx(page) == 0
+    assert not errors
+    ctx.close()
+
+
+@pytest.mark.parametrize("kind", ("short", "long"))
+@pytest.mark.parametrize("size", (SIZES[0], SIZES[1], SIZES[-1]), ids=lambda s: str(s["width"]))
+def test_carousel_fills_without_moving_the_join_button(browser, base, size, kind):
+    seed(3) if kind == "short" else seed_long()
+    ctx = browser.new_context(viewport=size)
+    page = ctx.new_page()
+    errors, held = [], []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.route(lambda url: "/api/reviews" in url, lambda route: held.append(route))
+    page.goto(base + "/", wait_until="load")
+    page.evaluate("document.fonts.ready.then(() => 1)")
+    page.wait_for_timeout(200)
+    assert page.evaluate("document.documentElement.classList.contains('has-reviews')")
+    assert page.locator("#rvq").is_hidden()
+    y = lambda: page.evaluate("document.querySelector('.ctas a').getBoundingClientRect().top + scrollY")
+    y0 = y()
+    assert held, "the reviews request was not made"
+    for r in held:
+        r.continue_()
+    page.wait_for_selector("#rvq:not([hidden])")
+    page.wait_for_timeout(100)
+    tops = [y()]
+    for _ in range(3):
+        page.locator("#rvq-next").click()
+        tops.append(y())
+    assert all(abs(v - y0) <= 2 for v in tops), (y0, tops)
+    assert not errors
+    ctx.close()

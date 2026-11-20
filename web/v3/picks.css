@@ -273,3 +273,18 @@ html[data-ui-v3] #u-hub #hub-books-section .h-book-match strong{font:600 15.5px/
 html[data-ui-v3] #u-hub #hub-books-section .h-book-match strong span,html[data-ui-v3] #u-hub #hub-books-section :is(.h-book-match time,.h-book-seen,.h-book-seen small){color:var(--sc-muted)}
 html[data-ui-v3] #u-hub #hub-books-section .h-book-game .h-table-wrap{box-shadow:none;border-radius:0;background:var(--sc-s2)}
 html[data-ui-v3] #u-hub #hub-books-section .h-book-empty{color:var(--sc-muted)}
+/* ---- polish1 (2026-11-20) ---- */
+/* one eyebrow rule on every page: none above page titles (SHARED-4), as on the Board and Slips */
+html[data-ui-v3] #u-hub .h-center:has(>:is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section):not([hidden])) .h-top .h-eyebrow{display:none!important}
+/* the hit rate against the chance you saw, under the hero figure (no arrow at 0.0, colour only on the delta) */
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw{display:block;margin-top:4px;color:var(--sc-muted);font:400 13px/1.35 var(--sc-font)}
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw b{display:inline!important;font:600 13px/1.35 var(--sc-font)!important;letter-spacing:0!important;color:var(--sc-text)}
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw b.sc-v-good{color:var(--sc-good)}
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw b.sc-v-poor{color:var(--sc-poor)}
+/* the hub's own one-line summary repeats the tiles above: kept for screen readers, not drawn */
+html[data-ui-v3] #u-hub #hub-picks-section .v3c-picks-top:not([hidden])~#hub-picks-body .h-pick-summary{position:absolute!important;width:1px;height:1px;margin:0;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+/* inner tables (EV books, sportsbook, arbitrage, card tables) take the system table header: Outfit 500, sentence case, a hairline,
+   no dark DM Mono band */
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-detail,.h-card) table thead th,
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .ev-src thead th{background:none!important;color:var(--sc-muted)!important;font:500 12.5px/1.3 var(--sc-font)!important;letter-spacing:0!important;text-transform:none!important;border:0!important;box-shadow:inset 0 -1px 0 var(--sc-hair)!important;white-space:normal}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .ev-src :is(table,thead,thead tr){background:none!important}

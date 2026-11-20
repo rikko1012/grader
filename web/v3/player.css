@@ -270,3 +270,5 @@ html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id small b{display:inlin
 html[data-ui-v3] #u-hub #hub-detail .v3p-hide{display:none!important}
 html[data-ui-v3] #u-hub #hub-detail .h-dec-chance>.v3p-lean{display:inline-flex;align-items:center;gap:10px}
 html[data-ui-v3] #u-hub #hub-detail .h-dec-chance>.v3p-lean .h-grade-text{display:inline-block;padding:6px 9px;border-radius:var(--sc-r-sm);font:600 13px/1.2 var(--sc-font);color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge)}
+/* light: source notes at 4.5:1 or better (the hub's light ink for small print was ~2:1 on its near-white) */
+html[data-ui-v3][data-theme="light"] #u-hub :is(.sc-src,.sc-statgrid__legend,.v3p-lmeta,.v3p-facts small,.v3p-hits small){color:#5D6880!important}

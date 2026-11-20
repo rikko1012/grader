@@ -183,6 +183,15 @@ def check_card(p, sport, size, theme):
         assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
         assert "Model estimate" in p.locator(".v3p-pick").inner_text()
         assert " checked " in p.locator(".v3p-pick .sc-book").inner_text()
+    # source notes readable in both themes: 4.5:1 or better against the surface they sit on
+    low = p.evaluate("""[...document.querySelectorAll('#hub-detail .sc-src, #hub-detail .sc-statgrid__legend')].map(e => {
+      const rgb = s => s.match(/[\d.]+/g).slice(0, 3).map(Number), lum = c => { const v = c.map(x => { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); });
+        return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+      let b = e, bg; while (b && ((bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)' || bg.startsWith('rgba') && bg.endsWith(', 0)'))) b = b.parentElement;
+      if (!b) return null; const a = lum(rgb(getComputedStyle(e).color)), z = lum(rgb(bg)), r = (Math.max(a, z) + .05) / (Math.min(a, z) + .05);
+      return r < 4.5 ? [e.className, r] : null; }).filter(Boolean)""")
+    if theme == "light":
+        assert not low, low
     if sport == "cs2":
         m = p.locator("#hub-detail .v3p-match").inner_text()
         assert "VRS #14" in m and "▲3" in m and "VRS #21" in m and "▼2" in m      # rank changes restored
