@@ -47,6 +47,9 @@ whop_auth.enabled = lambda: True
 whop_auth.session = lambda v: {"user": v[5:], "name": "", "ok": True} if v and v.startswith("good-") else None
 whop_auth.cookie_valid = lambda v: bool(v and v.startswith("good-"))
 server.lol_public = lambda: True
+import workspace_api  # noqa: E402
+# every member here may see CS2 and NBA (the index follows the board's own sport gate; the harness has no sports service)
+workspace_api.access = lambda h, srv, q: {"cs2": True, "lol": True, "nba": True, "nfl": True}
 
 # ---------------------------------------------------------------------------------------------------- synthetic boards + upstream
 TEAMS = 24
