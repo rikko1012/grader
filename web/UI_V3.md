@@ -1,0 +1,196 @@
+# v3 interface ("precision instrument")
+
+The owner approved the v3 design on Nov 19-20 ("Yes that's the right direction"). It is built here behind a server-side flag that
+is **off by default**.
+
+- **Design source:** `cs2_scout_ops/logs/design_1119/v3/`
+  - `system/SYSTEM.md`, `tokens.css`, `components.css`, `shell.py`, `art/`
+  - the specimen
+  - the owner shots `owner/01-14`
+  - the A/B/C/D/player mocks
+- **Display only.** It changes no grading, API, stake or wording rule.
+- **With the flag off:** every page, asset and route is byte-for-byte what it was. `tests/test_ui_v3_gate.py` checks this.
+
+## Switches
+
+| Switch | Who | How |
+|---|---|---|
+| `SCOUT_UI_V3=1` (Render env, read per request, no deploy) | everyone, members and signed-out visitors | unset / `0` = off (the default) |
+| `/preview/v3` | the owner only: the admin token (`/preview/v3?token=…`) or the `SPORTS_UI_ALLOW` list (signed in) | sets the HttpOnly cookie `scout_v3` (an HMAC of `ADMIN_TOKEN`, never the token) for this browser, then opens `/#all-sports` |
+| `/preview/v3?to=landing` | the owner | the same, then opens `/preview/v3/landing` (the signed-out page in v3) |
+| `/preview/v3?off=1` | the owner | clears the cookie |
+
+Rules for anyone who is not the owner:
+
+- A member who sends `scout_v3=1`, a copied value or `?ui=v3` gets today's bytes and ETag.
+- `/preview/v3` and `/v3/*` give the unknown-route answer.
+- Without `ADMIN_TOKEN` there is no preview at all.
+
+v3 pages always get their own `send_shared` cache key (`…, "v3"`), so their ETag differs from the off page.
+
+## How a page becomes v3
+
+`server.py` → `ui_v3.page(body, name)`, memoised per body object with a single-flight lock. It changes four things:
+
+1. `<html>` gets `data-ui-v3="1" data-v3-page="<name>" data-sc-sport="<sport>"`.
+2. Before `</head>` it adds:
+   - a theme script (`localStorage['scout-theme']` → `html[data-theme]`, before paint; no stored value follows the OS);
+   - `<link rel=stylesheet href=/v3/<bundle>.css>`;
+   - Outfit 400/500/600, only when the page loads no Outfit itself.
+3. Before `</body>` it adds `<script src=/v3/<bundle>.js defer>`.
+4. It forces the UI_NEXT head switch off (`NEXT=false`), so v3 always sits on the current design's hub, never on the 2026-11-11 redesign.
+
+The page files on disk are never edited.
+
+| Page (route) | name | bundle | sport accent |
+|---|---|---|---|
+| `/` member (CS2 + hub) | `cs2` | member | cs2 |
+| `/lol` | `lol` | member | lol |
+| `/sports`, `/sports/` | `sports` | member | nba |
+| `/sports/results` | `sports-results` | member | nba |
+| `/record` (public; needs `SCOUT_PUBLIC_RECORD=1`) | `record` | record | cs2 |
+| `/` signed out, `/preview/v3/landing` | `landing` | landing | cs2 |
+
+## Bundles (fixed names; the server concatenates `web/v3/` files in this order)
+
+| Route | Files |
+|---|---|
+| `/v3/member.css` | tokens, components, shell, **board, slips, picks, player, account** (`.css`) |
+| `/v3/member.js` | shell, **board, slips, picks, player, account** (`.js`) |
+| `/v3/record.css` · `.js` | tokens, components, shell, **record** · shell, **record** |
+| `/v3/landing.css` · `.js` | tokens, components, shell, **landing** · shell, **landing** |
+| `/v3/art/<scene>.svg` | the 19 scenes in `web/v3/art/` (fixed list `ui_v3.ART`) |
+
+Each bundle is rebuilt only when one of its files changes (mtime). JS files are joined with `;`.
+
+**A syntax error in any one JS file stops the whole bundle.** `tests/test_ui_v3_gate.py` runs `node --check` on every bundle. Keep each file one IIFE.
+
+Adding a new file to a bundle is a one-line change to `ui_v3.BUNDLES`. Ask the shell owner first; that tuple is shared.
+
+## File map: who owns what (parallel work must not collide)
+
+| File | Owner | Scope |
+|---|---|---|
+| `ui_v3.py`, the v3 hooks in `server.py` (`_v3_on`, `_v3`, `_v3_owner`, `_v3_route`, the call sites) | **SHELL** | flag, preview, bundles, injection. Page groups never edit these. |
+| `web/v3/tokens.css`, `web/v3/components.css` | **SHELL** (system copy) | Verbatim copies of the approved system. One deliberate change: the sport attribute is `data-sc-sport`, because `web/record.js` and `web/sports/expansion.js` already query `[data-sport]`. Change the system upstream first, then copy. |
+| `web/v3/shell.css`, `web/v3/shell.js` | **SHELL** | header, phone bottom bar, More sheet, theme, states, art loader, hub bridge |
+| `web/v3/art/*.svg` | **SHELL** | exported unchanged from `system/art/svg` (`export.py`) |
+| `web/v3/board.css` · `board.js` | **A boards** | hub board section (`#hub-board-section`: sport tabs, toolbar, rows, By game), LoL and sports boards |
+| `web/v3/slips.css` · `slips.js` | **B slips** | Slip Studio (`#hub-studio-section`), the slip column / tray (`.h-slip`, `.h-mobile-slip`), book dialog, share card |
+| `web/v3/picks.css` · `picks.js` | **C** | hub My picks, Record, EV, Arbitrage, Sportsbooks sections; line moves / bumps; moneylines in member pages |
+| `web/v3/record.css` · `record.js` | **C** | public `/record` page |
+| `web/v3/player.css` · `player.js` | **PLAYER** | hub player card (`#hub-card`, `#hub-detail`, `upgrade-cards.js` output) |
+| `web/v3/landing.css` · `landing.js` | **D** | signed-out landing |
+| `web/v3/account.css` · `account.js` | **D** | member-side account / help / paywall / sign-in states, nav extras |
+| `tests/test_ui_v3_<group>_browser.py` | each group | its own browser tests (see below); `tests/test_ui_v3_browser.py` + `tests/test_ui_v3_gate.py` are SHELL's |
+
+Existing files (`web/*.html`, `upgrade-*.js/css`, `sports/*`) stay untouched: v3 restyles by CSS and, where markup must change, by
+small DOM additions from the group's own JS. Every field the page shows today must stay.
+
+## Writing a page group's CSS / JS
+
+**Scope.**
+- Scope every rule under `html[data-ui-v3]`.
+- The hub's sheets are added by `upgrade.js` at run time, after the v3 sheet, so equal specificity loses. Prefix hub overrides with `html[data-ui-v3] #u-hub …`. Use `!important` only where the hub itself does.
+
+**Bare tags.**
+- The pages style bare tags globally (e.g. `index.html` styles `header` with negative margins and `!important` padding).
+- Do not add bare `<header>` or `<nav>` elements. Use `div` with a role, as the shell does.
+
+**Inert.** The open hub makes every other `<body>` child `inert`.
+- Put new UI inside `#u-hub`, or call `ScoutV3._keepLive(node)` for a fixed overlay that must stay usable.
+
+**`ScoutV3` API** (from `shell.js`):
+
+| Call | Does |
+|---|---|
+| `ICON` | the approved icon set |
+| `esc` | HTML escaping |
+| `state(el, 'loading'\|'empty'\|'error'\|'boot', opts)` | the shared states |
+| `art(name)` / `mountArt(el, name)` | inline scene SVG (the CSS needs it inline: `.sc-scene__art>svg`, `.sc-lit__art>svg`) |
+| `mapArt('de_dust2')` → `'dust2'` | `''` when there is no scene; never guess |
+| `HUE[map]` | the value for `.sc-scene{--h}` |
+| `toast(text)` | a toast |
+| `setTheme` / `theme` | the theme |
+| `setSport(k)` | the accent |
+| `onHub(fn)` | runs `fn` when the hub is in the page |
+
+**Map art stays subtle** (dusk haze, as approved). In data cards the CSS hides the grid and landmark layers.
+
+**Data.**
+- Use only the page's existing data and controls: no mock data in `web/`, no new API, no new dependency.
+- Fonts are Outfit (+ DM Mono where the page already uses it).
+
+**Hard rules** (from SYSTEM.md and the owner):
+- "Lean Over" / "Lean Under"; Over and Under spelled out.
+- Chances to 0.1%; one stake per line; a missing value is "—", never 0.
+- No hedge or status labels. The only approved ones are "Model estimate" and "Book · checked N min ago".
+- Benched players are hidden.
+- No Results page and no hypothetical returns.
+- My Picks stays separate from Public Record.
+- The Lab is owner-only.
+
+**Player page restore list** (PLAYER group):
+- VRS rank changes (▲/▼)
+- the favourite star
+- the Lines / Stats / Ask tabs
+- the past-series chart
+- every v2 prop field
+- the 2-map combine (HLTV pooling, `design_1119/v3/player/test_pooled.py`)
+- compact map cards
+- the combined bar. Never show "Pick 2 maps to combine them" when 2 are picked.
+
+## The shell (what is already done)
+
+**Header (≥1024px).** One `.sc-appbar`:
+- 1T + Scout;
+- the hub's nav: Board · Slips · EV · Arbitrage · Sportsbooks · My picks · Record · Tools. EV, Arbitrage and Sportsbooks show only when the hub has them, i.e. their flag is on;
+- search, the Slip pill and the theme toggle.
+
+**Phone bottom bar (<1024px).** Board · Slip · My picks · Record · More.
+
+**How it drives the hub.**
+- Nav items press the hub's own sidebar buttons, so routes, history and paint stay the hub's.
+- The current item, the slip count and the alert counts mirror the hub's own elements.
+- The hub's sidebar and phone tab bar are hidden under v3. The sidebar keeps a 0-width grid column.
+- The hub starts below the 56px header.
+
+**More.**
+- Phone, hub open: More presses the hub's own `#hub-more-toggle`, so every item it has stays as it is: Sportsbooks, By game, Tools, Alerts, Auto-build, Tracked slips, Moneylines, Single prop grader, Match research, Classic board.
+- No hub: a v3 sheet of the same destinations as links.
+
+**Theme.** Light/dark use the same `scout-theme` key as the hub. With no stored value, the OS setting is followed.
+
+**Public pages.** `record` and `landing` load the `ScoutV3` API and tokens but no member header. Their own header belongs to C and D.
+
+## Testing with the flag on
+
+**Unit / gate.** `pytest tests/test_ui_v3_gate.py`.
+
+**Browser.** `pytest tests/test_ui_v3_browser.py`. Set `V3_SHOTS=<folder>` to keep screenshots. It reuses `tests/test_upgrade_browser.py`'s `browser` / `env` / `context` fixtures, which give a real `server.Handler` with fixture data and a member cookie. To render a page in v3:
+
+```python
+from tests.test_ui_v3_browser import v3_page, GROUPS, PHONE, DESK      # GROUPS: board, slips, picks, record-hub, lol, sports, record, landing
+def test_my_group(browser, env, monkeypatch):
+    c, p = v3_page(browser, env, monkeypatch, "board", PHONE, "light")  # sets SCOUT_UI_V3=1 and the stored theme, waits for the page + ScoutV3
+    ...
+    c.close()
+```
+
+Or set it up by hand:
+- call `monkeypatch.setenv("SCOUT_UI_V3", "1")` in any test on the `env` fixture (it is read per request);
+- for the theme, add an init script that sets `localStorage['scout-theme']`.
+
+The owner path is `GET /preview/v3?token=<ADMIN_TOKEN>`, then use the cookie (see `test_a_member_cannot_reach_the_preview_and_the_owner_can`).
+
+**Required per group.** 390x844 and 1280, dark and light, with:
+- no sideways scroll (`no_h_scroll`);
+- no `pageerror`;
+- the page's own fields still present.
+
+**Flag off.** The existing suites stay unchanged and passing.
+
+**Load.**
+- `python scripts/load_ui_v3_700.py . 700`: 700 members on pages + bundles + art, flag on and off; fails on any 5xx, a wrong status, or more than one build per page.
+- Also run the esports `scripts/load_audit700.py` (with `UPGRADE_LOAD=1 SCOUT_UI_V3=1 … workspace`).
+- Run them for any change to `ui_v3.py` or `server.py`.

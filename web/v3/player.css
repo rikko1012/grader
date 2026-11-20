@@ -1,0 +1,5 @@
+/* v3 player.css - owned by page group PLAYER (player page).
+   Scope: the hub player card (#hub-card / #hub-detail, web/upgrade-cards.js output): Lines / Stats / Ask, maps, 2-map combine.
+   Loaded in its bundle after tokens.css, components.css and shell.css (see web/UI_V3.md). Only applies on a v3 page: scope every rule
+   under html[data-ui-v3] (the hub's own sheets load after this bundle, so hub overrides need html[data-ui-v3] #u-hub ...).
+   Display only: no grading or API change; every field the page shows today stays. */
