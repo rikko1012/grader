@@ -270,7 +270,7 @@ html[data-ui-v3][data-theme="light"] #u-hub #hub-ev-section [data-ev="app"][aria
 html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-game{margin:0 0 10px;overflow:hidden}
 html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-game>summary{padding:14px 16px;min-height:56px;cursor:pointer}
 html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-match strong{font:600 15.5px/1.25 var(--sc-font);color:var(--sc-text)}
-html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-match strong span,html[data-ui-v3] #u-hub #hub-books-section :is(.h-book-match time,.h-book-seen,.h-book-seen small){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-match strong span,html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) :is(.h-book-match time,.h-book-seen,.h-book-seen small){color:var(--sc-muted)}
 html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-game .h-table-wrap{box-shadow:none;border-radius:0;background:var(--sc-s2)}
 html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-empty{color:var(--sc-muted)}
 /* ---- polish1 (2026-11-20) ---- */
@@ -309,3 +309,9 @@ html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale b{position:absolute;top:0;w
 html[data-ui-v3] #u-hub #hub-ev-section .ev-bar label:has(>input[type=checkbox]){flex-direction:row;align-items:center;gap:8px;min-height:40px;font-size:13.5px;color:var(--sc-text);cursor:pointer}
 html[data-ui-v3] #u-hub #hub-ev-section .ev-quick{align-items:center;column-gap:12px}
 html[data-ui-v3] #u-hub #hub-ev-section .ev-quick>span{color:var(--sc-muted);font-size:13.5px}
+
+/* qa 11-20 (owner rule: no hedge / status labels on member pages): a game card's freshness word ("Collected recently", "Older prices",
+   "Quote age unavailable") is not drawn; the definite fact beside it stays ("Seen 3:46 PM" / "No collection timestamp"). The hub's
+   text node is kept (font-size 0), so nothing the hub writes is removed. Own commit: drop it if the owner wants the word back. */
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-seen{font-size:0;line-height:0}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-seen small{font-size:12px;line-height:1.3}
