@@ -380,3 +380,28 @@ def test_a_board_mixing_reads_never_answers_unchanged(env, monkeypatch):
     assert len({r['observed_at'] for r in data['offers']}) > 1
     again = board.board(SimpleNamespace(query={'sport': 'soccer', 'version': data['version']}))[1]
     assert not again.get('unchanged') and again['offers'] == data['offers']
+
+
+def test_sustained_other_consumer_429s_never_darken_tab_82(env, monkeypatch):
+    """Review blocker (Nov 20): a tennis / NBA-NFL 429 before every run must not stop tab 82 (base read it every 180 s
+    whatever other consumers did). Cool-off skips the league tabs only; tab 82 is still read when due."""
+    import time as _t
+    import types
+    from sports import expansion_board as board, expansion_sources as sources
+    from sports.tests.test_pp_soccer_leagues_1119 import run, status
+    shim = types.SimpleNamespace(**{k: getattr(_t, k) for k in dir(_t) if not k.startswith('__')})
+    shim.time = env['clock'].mono
+    monkeypatch.setattr(board, 'time', shim)
+    monkeypatch.setattr(sources, 'time', shim)
+    all_tabs(env)
+    run(env, 30)
+    ages, oks, tabs = [], [], set()
+    for _ in range(40):            # 30 min, another consumer's 429 right before every 45 s run
+        sources.record_429('nba_nfl')
+        calls, snap = run(env, 1)[0]
+        tabs.update(c for c in calls)
+        st = status(env)
+        ages.append(next(lg for lg in st['leagues'] if lg['id'] == 82)['refresh_age_s'])
+        oks.append(snap['sources']['prizepicks']['ok'])
+    assert max(a for a in ages if a is not None) <= 240
+    assert all(oks)

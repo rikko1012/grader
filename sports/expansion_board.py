@@ -527,7 +527,12 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
         stopped = stopped or "backoff"
         constrained = "backoff"
     elif cool:
-        stopped, constrained = "recent_429_other_consumer", "cool_off"
+        # another consumer's recent 429: like a back-off, tab 82 is still read when due (its pre-tab 180 s rate, so the
+        # base board never goes dark); Retry-After holds still apply via can_call(); the other tabs wait
+        if due(82) and can_call():
+            read(82, "coverage")
+        stopped = stopped or "recent_429_other_consumer"
+        constrained = "cool_off"
     elif not can_call():
         constrained = stopped                      # held (Retry-After): no request at all this run
     else:
