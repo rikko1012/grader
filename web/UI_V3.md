@@ -55,8 +55,8 @@ The page files on disk are never edited.
 
 | Route | Files |
 |---|---|
-| `/v3/member.css` | tokens, components, shell, **board, slips, picks, player, account** (`.css`) |
-| `/v3/member.js` | shell, **board, slips, picks, player, account** (`.js`) |
+| `/v3/member.css` | tokens, components, shell, **board, slips, picks, player, account, views** (`.css`) |
+| `/v3/member.js` | shell, **board, slips, picks, player, account, views** (`.js`) |
 | `/v3/record.css` · `.js` | tokens, components, shell, **record** · shell, **record** |
 | `/v3/landing.css` · `.js` | tokens, components, shell, **landing** · shell, **landing** |
 | `/v3/art/<scene>.svg` | the 19 scenes in `web/v3/art/` (fixed list `ui_v3.ART`) |
@@ -82,6 +82,7 @@ Adding a new file to a bundle is a one-line change to `ui_v3.BUNDLES`. Ask the s
 | `web/v3/player.css` · `player.js` | **PLAYER** | hub player card (`#hub-card`, `#hub-detail`, `upgrade-cards.js` output) |
 | `web/v3/landing.css` · `landing.js` | **D** | signed-out landing |
 | `web/v3/account.css` · `account.js` | **D** | member-side account / help / paywall / sign-in states, nav extras |
+| `web/v3/views.css` · `views.js` | **VIEWS** | Moneylines (`#/tools?v3=moneylines`: a v3 section in the hub; `/api/moneylines` + `/api/moneyline-games`, the classic tab's rules, read only while open), Line moves and Lines differ (`#/board?v3=moves\|differ`: the board with the hub's own `#hub-movedOnly` / `#hub-diff` on, a note, Views + More entries, each book's line per row in Lines differ). `tests/test_ui_v3_views_browser.py` |
 | `tests/test_ui_v3_<group>_browser.py` | each group | its own browser tests (see below); `tests/test_ui_v3_browser.py` + `tests/test_ui_v3_gate.py` are SHELL's |
 
 Existing files (`web/*.html`, `upgrade-*.js/css`, `sports/*`) stay untouched: v3 restyles by CSS and, where markup must change, by
