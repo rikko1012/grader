@@ -20,7 +20,7 @@ import pytest
 
 import hltv
 from tests.test_upgrade_browser import browser, env, context, no_h_scroll  # noqa: F401
-from tests.test_card_factors_browser import seed, open_card, sections, WANT, FLAGS
+from tests.test_card_factors_browser import seed, sections, WANT, FLAGS
 from tests.test_expansion_main_board import expansion  # noqa: F401
 
 PHONE, DESK = {"width": 390, "height": 844}, {"width": 1280, "height": 900}
@@ -93,10 +93,35 @@ def card_shots(p, name):
     p.evaluate("(() => { const s = document.querySelector('[data-v3shot]'); if (s) { s.scrollTop = 0; delete s.dataset.v3shot; } })()")
 
 
+def search(p, text):
+    """Type into the hub's search box. On the phone the v3 board keeps it behind the header's search button (group A), so open it
+    the way a member does first."""
+    q = p.locator('#hub-q')
+    if not q.is_visible():
+        if not text and not q.input_value():
+            return                                   # hidden box is empty already (the board keeps it open while it has text)
+        p.locator(".sc-v3-bar [data-v3=search]").click()
+        p.wait_for_function("document.activeElement && document.activeElement.id==='hub-q'")
+    q.fill(text)
+
+
+
+def open_card(p, sport, q):
+    """tests/test_card_factors_browser.open_card, with the search typed through search() (the phone box sits behind the header's
+    search button under the v3 board)."""
+    p.locator(f'#hub-sports [data-id={sport}]').click()
+    p.wait_for_function(f"[...document.querySelectorAll('#hub-rows tr[data-record]')].length && [...document.querySelectorAll('#hub-rows tr[data-record]')].every(r => r.dataset.record.startsWith('{sport}|'))")
+    search(p, q)
+    p.wait_for_timeout(300)
+    p.locator('#hub-rows tr[data-record] .h-player').first.click()
+    p.wait_for_selector('#hub-detail .h-why', timeout=20000)
+    p.wait_for_function("!document.querySelector('#hub-detail .h-detail-loading')", timeout=20000)
+
+
 def close(p):
     p.locator('#hub-detail [data-hub=card-close]').first.click()
     p.wait_for_function("document.getElementById('hub-card').hidden")
-    p.locator('#hub-q').fill('')
+    search(p, '')
     p.wait_for_timeout(200)
 
 
@@ -273,7 +298,7 @@ def test_v3_lol_card_with_no_saved_results_still_shows_every_field(browser, env,
     p.route("**/api/upgrade/line?sport=lol*", strip_history)
     try:
         p.locator('#hub-sports [data-id=lol]').click()
-        p.locator('#hub-q').fill("Kratos")
+        search(p, "Kratos")
         p.wait_for_timeout(300)
         p.locator('#hub-rows tr[data-record] .h-player').first.click()
         p.wait_for_selector("#hub-detail > .v3p-lead", timeout=20000)
