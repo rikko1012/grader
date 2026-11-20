@@ -92,7 +92,8 @@ def test_component_outside_forecast_inputs_is_weight_zero():
     assert model.fit(offer, facts, NOW)[1] in ('extra_time_scope_unverified', 'more_exact_history_needed')
     offer, facts = facts_with([1, 0, 2, 0, 1, 0, 0, 1], [['espn', 'goals'], ['espn', 'xg']])
     offer.update(stat='goals_assists', line=.5)
-    assert model.fit(offer, facts, NOW)[1] == 'more_exact_history_needed'
+    f = model.fit(offer, facts, NOW)[0]       # every game weight 0: thin-2's population prior alone (n = 0)
+    assert f['thin_model']['games'] == 0 and f['sample'] == 0 and f['inputs'] == []
 
 
 def test_first_half_goals_thin_the_regulation_predictive():

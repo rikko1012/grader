@@ -66,7 +66,59 @@ STAKE_REASONS = {
     'passed': '0U: new model - passed its walk-forward calibration test; stakes wait for settled real lines.',
     'close': '0U: new model - walk-forward chances within 3 points of results; stakes wait for settled real lines.',
     'failed': '0U: new model - missed its walk-forward calibration test.',
+    'untested': '0U: new model - no walk-forward test on this stat.',
 }
+# thin-2 components (soccer-grades-1120 gaps): players with 0-4 exact past games. Population prior per position group
+# from the walk-forward TUNE window (before 2026-09-01), K by tune log loss / log density; holdout 2026-09-01..11-19
+# scored once on the frozen definition (cs2_scout_ops/logs/soccer_grades_1120/gaps_1120/wf_thin2.py,
+# thin2_walkforward.json). count: Gamma-Poisson (m0, alpha0); score: Normal (m0, sd), sd x sqrt(1 + 1/(n + K)).
+# first_half_goals: thin-1's regulation-goals prior, then the measured first-half share (combination not tested).
+THIN_COMPONENT = {
+    'shots_assisted': {'kind': 'count', 'k': 3, 'tier': 'failed', 'source': 'fotmob chances_created',
+                       'prior': {'G': (0.0302, 3.1616), 'D': (0.4203, 1.0663), 'M': (0.8185, 0.6342),
+                                 'F': (0.7102, 0.5969), 'U': (0.6158, 0.9038)}},
+    'goals_assists': {'kind': 'count', 'k': 20, 'tier': 'passed', 'source': 'espn goals + assists',
+                      'prior': {'G': (0.0051, 0.02), 'D': (0.0863, 0.3546), 'M': (0.2136, 0.3953), 'F': (0.3974, 0.1409),
+                                'U': (0.1531, 0.8942)}},
+    'cards': {'kind': 'count', 'k': 20, 'tier': 'failed', 'source': 'espn yellow + red cards',
+              'prior': {'G': (0.0651, 0.02), 'D': (0.1278, 0.02), 'M': (0.1611, 0.02), 'F': (0.1113, 0.02),
+                        'U': (0.1308, 0.02)}},
+    'first_half_goals': {'kind': 'count', 'k': 12, 'tier': 'untested', 'source': 'thin-1 goals prior, thinned',
+                         'prior': {'D': (0.0352, 0.508), 'F': (0.222, 0.4282), 'G': (0.001, 0.02), 'M': (0.0943, 0.9243),
+                                   'U': (0.0913, 1.4503)}},
+    'fantasy_outfield': {'kind': 'score', 'k': 5, 'tier': 'failed', 'source': 'fotmob, PP outfield formula',
+                         'prior': {'D': (8.613, 5.3313), 'M': (7.704, 6.173), 'F': (7.8585, 7.5829),
+                                   'U': (8.0463, 6.3783)}},
+    'fantasy_goalie': {'kind': 'score', 'k': 20, 'tier': 'failed', 'source': 'espn starting keepers',
+                       'prior': {'G': (9.3569, 5.4284), 'U': (9.3569, 5.4284)}},
+}
+
+
+def _nb(mu, alpha):
+    shape = 1 / alpha
+    prob = shape / (shape + mu)
+    support, mass, cumulative = [], [], 0.0
+    for x in range(4096):
+        px = math.exp(math.lgamma(x + shape) - math.lgamma(shape) - math.lgamma(x + 1)
+                      + shape * math.log(prob) + x * math.log1p(-prob))
+        support.append(x)
+        mass.append(px)
+        cumulative += px
+        if x > mu and cumulative > 1 - 1e-10:
+            break
+    t = sum(mass)
+    return support, [p / t for p in mass]
+
+
+def _normal_quantile(p, mean, sd):
+    lo, hi = -12.0, 12.0
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if _phi(mid) < p:
+            lo = mid
+        else:
+            hi = mid
+    return mean + sd * (lo + hi) / 2
 
 
 def model_of(offer):
@@ -485,10 +537,22 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
         picked.append(g)
         if len(picked) == 20:
             break
+    thin_spec = None
     if len(picked) < min_games:
-        return None, 'more_exact_history_needed'
+        spec = THIN_COMPONENT.get(model)
+        if spec is None:
+            return None, 'more_exact_history_needed'
+        from .expansion_forecasts import position_group
+        group = position_group(facts.get('role') or offer.get('role'))
+        group = group if group in spec['prior'] else 'U'
+        m0, second = spec['prior'][group]
+        thin_spec = {'version': 'thin-2', 'group': group, 'k': spec['k'], 'm0': m0,
+                     ('sd' if spec['kind'] == 'score' else 'alpha0'): second, 'games': len(picked),
+                     'tier': spec['tier'], 'prior': spec['source']}
     values = [g['value'] for g in picked]
     n, line = len(values), offer['line']
+    if thin_spec is not None:
+        return _thin_fit(model, thin_spec, values, line, picked, expected, scope_rule, settle_as, tennis_rule), None
     if model in ('fantasy_outfield', 'fantasy_goalie', 'fantasy_tennis'):
         mean, scale, df, p_over = score_probs(values, model, line)
         probs = {'over': p_over, 'under': 1 - p_over, 'push': 0.0}
@@ -525,6 +589,39 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
             'inputs': picked, 'history_scope': expected,
             'context_used': {k: context[k] for k in ('best_of', 'surface') if k in context} if sport == 'tennis' else {},
             'calibrated': False, 'stake_tier': tier, **_scope_fields(scope_rule, settle_as, tennis_rule)}, None
+
+
+def _thin_fit(model, spec, values, line, picked, expected, scope_rule, settle_as, tennis_rule):
+    n = len(values)
+    mu = (sum(values) + spec['k'] * spec['m0']) / (n + spec['k'])
+    if 'sd' in spec:
+        sd = spec['sd'] * math.sqrt(1 + 1 / (n + spec['k']))
+        p_over = 1 - _phi((line - mu) / sd)
+        probs = {'over': p_over, 'under': 1 - p_over, 'push': 0.0}
+        projection, distribution = mu, 'thin-population-normal'
+        quantiles = [round(_normal_quantile(.1, mu, sd), 2), round(_normal_quantile(.9, mu, sd), 2)]
+    else:
+        support, mass = _nb(mu, spec['alpha0'])
+        distribution = 'thin-population-count'
+        if model == 'first_half_goals':
+            support, mass = thin(support, mass, FIRST_HALF_GOAL_SHARE)
+            distribution = 'thin-population-count-thinned-first-half'
+        probs = {name: sum(p for k, p in zip(support, mass) if rule(k)) for name, rule in
+                 [('over', lambda k: k > line), ('under', lambda k: k < line), ('push', lambda k: k == line)]}
+        projection = sum(k * p for k, p in zip(support, mass))
+        cumulative, quantiles = 0, []
+        for k, p in zip(support, mass):
+            cumulative += p
+            if not quantiles and cumulative >= .1:
+                quantiles.append(k)
+            if len(quantiles) == 1 and cumulative >= .9:
+                quantiles.append(k)
+                break
+    return {'model_version': VERSION, 'component_model': model, 'distribution': distribution, 'sample': n,
+            'projection': projection, 'range80': quantiles,
+            'p_over': probs['over'], 'p_under': probs['under'], 'p_push': probs['push'],
+            'inputs': picked, 'history_scope': expected, 'context_used': {}, 'calibrated': False,
+            'stake_tier': spec['tier'], 'thin_model': spec, **_scope_fields(scope_rule, settle_as, tennis_rule)}
 
 
 def _scope_fields(scope_rule, settle_as, tennis_rule):

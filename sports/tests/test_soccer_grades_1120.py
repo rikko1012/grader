@@ -161,7 +161,11 @@ def test_thin_never_replaces_the_count_model_and_not_for_untested_inputs():
     offer, facts = fixture()
     offer['stat'] = 'passes_attempted'                            # FotMob stat: thin-1 was not tested on it
     facts['games'] = []
-    assert model.fit(offer, facts, NOW)[1] == 'more_exact_history_needed'
+    assert model.fit(offer, facts, NOW)[0]['thin_model']['version'] == 'thin-2'      # its own prior (thin-2)
+    offer['stat'] = 'shots'                                       # a non-input (FotMob shots) game: weight 0
+    facts['games'] = [dict(fixture()[1]['games'][0], source='fotmob')]
+    f = model.fit(offer, facts, NOW)[0]
+    assert f['thin_model']['version'] == 'thin-1' and f['thin_model']['games'] == 0
     offer, facts = fixture('tennis')
     facts['games'] = facts['games'][:2]
     # thin-1 is soccer only; a tennis finite-score line under 5 matches takes thin-t1 (tests below), never thin-1
@@ -343,3 +347,44 @@ def test_orphan_temps_older_than_15_min_are_swept_only(tmp_path):
         os.utime(p, (t - 3600, t - 3600))
     assert history.sweep_orphan_temps(tmp_path, now=t) == 3
     assert not any(p.exists() for p in old) and all(p.exists() for p in keep)
+
+
+# ---------------------------------------------------------------- thin-2 (gaps: FotMob counts + component models)
+
+@pytest.mark.parametrize('stat,role,group', [('passes_attempted', 'Defender', 'D'), ('clearances', 'Goalkeeper', 'G'),
+                                             ('crosses', None, 'U'), ('attempted_dribbles', 'Forward', 'F')])
+def test_thin2_fotmob_count_lines_get_a_population_prior_grade(stat, role, group):
+    offer, facts = facts_with([30, 41], [['fotmob', stat]])
+    offer.update(stat=stat, line=34.5, sides={'over': {}})
+    if role:
+        offer['role'] = role
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['thin_model']['version'] == 'thin-2' and f['thin_model']['group'] == group
+    assert f['thin_model']['games'] == 2 and f['units'] == 0.0 and f['side'] == 'over' and f['grade']
+    assert f['stake_tier'] == model.THIN2_TIERS[stat] and f['stake_reason'] == model.THIN_REASONS[f['stake_tier']]
+    facts['games'] = []
+    g, _ = model.make_forecast(offer, facts, NOW)                  # no FotMob game at all: the prior alone
+    assert g['thin_model']['games'] == 0 and g['projection'] == pytest.approx(model.THIN2_PRIOR[stat][group][0], rel=1e-3)
+
+
+def test_thin2_never_replaces_the_count_model_with_five_games():
+    offer, facts = facts_with([30, 41, 35, 28, 33], [['fotmob', 'passes_attempted']])
+    offer.update(stat='passes_attempted', line=34.5)
+    f, _ = model.make_forecast(offer, facts, NOW)
+    assert 'thin_model' not in f and f['distribution'] == 'overdispersed-count-predictive'
+
+
+@pytest.mark.parametrize('stat,sources,line,role', [
+    ('fantasy_outfield', [['fotmob', 'passes_attempted'], ['espn', 'goals']], 9.5, 'Midfielder'),
+    ('fantasy_goalie', [['espn', 'saves'], ['catalog', 'conceded']], 9.0, 'Goalkeeper'),
+    ('shots_assisted', [['fotmob', 'chances_created']], 0.5, 'Forward'),
+    ('goals_assists', ESPN_GA, 0.5, 'Forward')])
+def test_thin2_component_models_under_five_games(stat, sources, line, role):
+    values = [7.0, 12.5] if stat.startswith('fantasy') else [1, 0]
+    offer, facts = facts_with(values, sources)
+    offer.update(stat=stat, line=line, role=role, sides={'over': {}})
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['component_model'] == stat and f['thin_model']['version'] == 'thin-2'
+    assert f['thin_model']['games'] == 2 and f['units'] == 0.0 and f['grade'] and f['side'] == 'over'
+    assert f['stake_reason'] == model.THIN_REASONS[stats.THIN_COMPONENT[stat]['tier']]
+    assert 0 < f['p_over'] < 1 and abs(f['p_over'] + f['p_under'] + f['p_push'] - 1) < 1e-9

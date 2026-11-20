@@ -95,8 +95,27 @@ THIN_TIERS = {'shots': 'passed', 'shots_on_target': 'passed', 'goals': 'passed',
               'saves': 'failed'}
 THIN_REASONS = {
     'passed': '0U: fewer than 5 past games - population-prior model passed its walk-forward test; stakes wait for settled real lines.',
+    'close': '0U: fewer than 5 past games - population-prior model within 3 points in its walk-forward test.',
     'failed': '0U: fewer than 5 past games - population-prior model missed its walk-forward test.',
+    'untested': '0U: fewer than 5 past games - population-prior model, no walk-forward test on this stat.',
 }
+# thin-2 (soccer-grades-1120 gaps): the FotMob count stats thin-1 does not cover, same Gamma-Poisson population-prior
+# form, (m0, alpha0) per position group from the walk-forward TUNE window (FotMob top-5 league matches before
+# 2026-09-01, usualPosition groups), K by tune log loss; holdout 2026-09-01..11-19 scored once against the frozen
+# definition (cs2_scout_ops/logs/soccer_grades_1120/gaps_1120/wf_thin2.py, thin2_walkforward.json): passes close,
+# crosses close, attempted dribbles passed, tackles failed, clearances failed. Every thin-2 line is 0U (decision 3).
+# Caveat kept from sg-stats: the live crosses / attempted-dribbles histories hold only non-zero games.
+THIN2_VERSION = 'thin-2'
+THIN2_PRIOR = {
+    'passes_attempted': {'G': (32.3765, 0.067), 'D': (39.3118, 0.3574), 'M': (29.7197, 0.4524), 'F': (14.1935, 0.5557), 'U': (28.646, 0.5359)},
+    'tackles': {'G': (0.0264, 1.7253), 'D': (1.3439, 0.3124), 'M': (1.2789, 0.4221), 'F': (0.61, 0.7262), 'U': (1.0368, 0.6137)},
+    'crosses': {'G': (0.001, 1.0), 'D': (0.9768, 2.3923), 'M': (1.4825, 1.5961), 'F': (1.1228, 1.924), 'U': (1.1337, 2.137)},
+    'clearances': {'G': (1.0132, 0.1813), 'D': (3.4468, 0.467), 'M': (0.9822, 0.9158), 'F': (0.4663, 0.9731), 'U': (1.6, 1.42)},
+    'attempted_dribbles': {'G': (0.0174, 2.1281), 'D': (0.5757, 1.3745), 'M': (1.0598, 0.7613), 'F': (1.4643, 0.892), 'U': (0.9523, 1.2538)},
+}
+THIN2_K = {'passes_attempted': 1, 'tackles': 5, 'crosses': 1, 'clearances': 3, 'attempted_dribbles': 2}
+THIN2_TIERS = {'passes_attempted': 'close', 'tackles': 'failed', 'crosses': 'close', 'clearances': 'failed',
+               'attempted_dribbles': 'passed'}
 
 
 def position_group(role):
@@ -233,13 +252,20 @@ def fit(offer, facts, now):
         tennis_pop = tp[0]
     elif len(games) < MIN_GAMES:
         # a competition whose ESPN rows are not a tested input (e.g. aus.1 saves): weight 0 - the prior alone (n = 0)
-        if not (sport == 'soccer' and stat in THIN_PRIOR and all(g.get('source') == 'espn' for g in games)):
-            return None, 'more_exact_history_needed'
         group = position_group(facts.get('role') or offer.get('role'))
-        if group not in THIN_PRIOR[stat]:
-            group = 'U'
-        thin = {'version': THIN_VERSION, 'group': group, 'k': THIN_K[stat], 'm0': THIN_PRIOR[stat][group][0],
-                'alpha0': THIN_PRIOR[stat][group][1], 'games': len(games), 'tier': THIN_TIERS[stat]}
+        if sport == 'soccer' and stat in THIN_PRIOR and all(g.get('source') == 'espn' for g in games):
+            if group not in THIN_PRIOR[stat]:
+                group = 'U'
+            thin = {'version': THIN_VERSION, 'group': group, 'k': THIN_K[stat], 'm0': THIN_PRIOR[stat][group][0],
+                    'alpha0': THIN_PRIOR[stat][group][1], 'games': len(games), 'tier': THIN_TIERS[stat]}
+        elif sport == 'soccer' and stat in THIN2_PRIOR and all(g.get('source') == 'fotmob' for g in games):
+            # thin-2 (FotMob count stats; A-League / newer competitions with few or no FotMob games read so far)
+            if group not in THIN2_PRIOR[stat]:
+                group = 'U'
+            thin = {'version': THIN2_VERSION, 'group': group, 'k': THIN2_K[stat], 'm0': THIN2_PRIOR[stat][group][0],
+                    'alpha0': THIN2_PRIOR[stat][group][1], 'games': len(games), 'tier': THIN2_TIERS[stat]}
+        else:
+            return None, 'more_exact_history_needed'
     values = [g['value'] for g in games]
     n = len(values)
     avg = sum(values) / n if n else 0.0
@@ -370,7 +396,7 @@ def make_forecast(offer, facts, now):
               'grade_policy':grade.policy, 'grade_reason':list(grade.reasons),
               'units':None, 'stake_reason':'Stakes are not assigned by this new model.',
               'probability_basis':'Conditional on a completed, non-push result; model estimate, not calibrated.'}
-    if fitted.get('component_model'):
+    if fitted.get('component_model') and not fitted.get('thin_model'):
         # 0 units with a definite reason by walk-forward tier (display gd-1 keeps the letter on a 0U line).
         result.update(units=0.0, stake_reason=stats.STAKE_REASONS[fitted['stake_tier']])
     elif fitted.get('thin_model'):
