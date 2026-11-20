@@ -153,7 +153,7 @@
   function metaHtml(r, doc) {
     var c = doc && doc.cs2_card, env = c && c.environment, comp = r.event.competition || (c && c.match && c.match.event) || '';
     var tw = env && env.tonight === 'lan' ? 'LAN' : env && env.tonight === 'online' ? 'online' : '';
-    if (/^(atp|wta|itf|ufc|nba|nfl|mls)/.test(comp)) comp = comp.replace(/^[a-z]+/, function (w) { return w.toUpperCase(); });   /* 'atp' -> 'ATP' */
+    if (/^(atp|wta|itf|ufc|nba|nfl|mls)(?![a-z])/.test(comp)) comp = comp.replace(/^[a-z]+/, function (w) { return w.toUpperCase(); });   /* 'atp' -> 'ATP' */
     var when = dateText(r.event.start_utc);
     return '<p class="v3p-meta"><span class="sc-chip">' + esc(SPORT[r.sport] || r.sport) + '</span>'
       + (comp || tw ? '<span class="sc-muted">' + esc(comp) + (comp && tw ? ', ' : '') + esc(tw) + '</span>' : '')

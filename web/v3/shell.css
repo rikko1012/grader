@@ -84,3 +84,4 @@ html[data-ui-v3] .sc-v3-bar [data-v3=more]{display:none}
 /* polish2: one phone gutter (16px, --sc-gutter) on every page group; the hub's centre column pads 12px, the board and player pages
    already sit at 16, so the other sections take the 4px difference */
 @media (max-width:1023px){html[data-ui-v3] #u-hub #hub-center>:is(#hub-picks-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-record-section,#hub-alerts-section,#hub-tools-section){padding-left:calc(var(--sc-gutter) - 12px);padding-right:calc(var(--sc-gutter) - 12px)}}
+@media (max-width:1023px){html[data-ui-v3] #u-hub #hub-center:has(>#hub-board-section[hidden])>.h-top{padding-left:calc(var(--sc-gutter) - 12px);padding-right:calc(var(--sc-gutter) - 12px)}}
