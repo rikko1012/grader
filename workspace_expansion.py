@@ -73,13 +73,16 @@ def _forecast(o, research, forecasts):
         return None
 
 
-def member_stake_reason(f):
+def member_stake_reason(f, saved_games=None):
     """Decision 2 (2026-11-20): the member-visible stake reason is a short, definite fact. The stored forecast keeps its
-    full reason (admin / ops / logs); its bytes and id never change for this."""
+    full reason (admin / ops / logs); its bytes and id never change for this. "under 5 past games" only when the card's
+    own saved game log really holds fewer than 5 (a thin model can also run on weight-0 / other-format history)."""
     if f.get('letter_basis') == 'chance_payout_unknown':
         return 'Stake 0U · payout not published'
-    if f.get('thin_model'):
+    if f.get('thin_model') and (saved_games is None or saved_games < 5):
         return 'Stake 0U · under 5 past matches' if f.get('sport') == 'tennis' else 'Stake 0U · under 5 past games'
+    if f.get('thin_model'):
+        return 'Stake 0U · new model'
     if f.get('member_stake_reason'):
         return f['member_stake_reason']
     if f.get('units') is None or f.get('component_model') or f.get('units') == 0:
@@ -132,7 +135,8 @@ def _record(o, research, forecast=None):
         record['scout'].update(side=f['side'],read_rev=f['id'],p_side=f['p_side'],
             p_over=f['p_over']/(1-f['p_push']),p_under=f['p_under']/(1-f['p_push']),p_push=f['p_push'],
             projection=f['projection'],range80=f['range80'],grade=f['grade'],
-            model_version=f['model_version'],forecast_at=f['made_at'],stake_reason=member_stake_reason(f),
+            model_version=f['model_version'],forecast_at=f['made_at'],stake_reason=member_stake_reason(f, len(games)),
+            units=0.0 if f['grade'] else None,   # every soccer / tennis stake is 0U today: the card says so, never a dash
             hold=None if f['grade'] else {'short':'Model estimate','reason':'; '.join(f['grade_reason'])},
             validation={'kind':'model_estimate','label':'Model estimate','detail':detail})
     return record

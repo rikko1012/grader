@@ -231,3 +231,47 @@ def test_unoffered_model_direction_is_clear_without_reversing_the_pick(ctx,env,e
     assert adapter._forecast(offer,facts,{forecast_key(offer):offered})==offered
     both=dict(offer,sides={'over':{},'under':{}})
     assert adapter._forecast(both,facts,{forecast_key(both):offered}) is None     # two sides: the higher one only
+
+
+def _zero_game_forecast(doc):
+    """soccer-grades-1120: a thin-history (population prior) forecast for the 'empty' offer, whose card has no saved game."""
+    offer = next(o for o in doc['offers'] if o['offer_id'] == 'empty')
+    research = {'identity': {'event_id': 'soccer:event:2', 'player_id': 'soccer:player:2', 'competition': 'eng.1'},
+                'scope': 'regulation', 'games': [], 'stats': [], 'context': {}}
+    doc['research'][adapter._key(offer)] = research
+    f = forecast_fixture(offer, research)
+    f.update(id='thin-fixture', side='under', p_over=.3, p_under=.7, p_side=.7, grade='A', sample=0, projection=1.4,
+             range80=[0, 3], units=0.0, thin_model={'version': 'thin-1', 'games': 0, 'tier': 'passed'},
+             stake_reason='0U: fewer than 5 past games - population-prior model passed its walk-forward test.')
+    doc.setdefault('forecasts', {})[forecast_key(offer)] = f
+    return offer, f
+
+
+def test_zero_game_lettered_card_and_drawer_doc(expansion):
+    import server
+    adapter.reset()
+    offer, f = _zero_game_forecast(expansion['soccer'])
+    snap = adapter.snapshot(server, 'soccer')
+    recs = {r['player']['name']: r for r in json.loads(snap['body'])['records']}
+    r = recs['Unsupported Player']
+    assert r['scout']['grade'] == 'A' and r['scout']['units'] == 0.0
+    assert r['scout']['stake_reason'] == 'Stake 0U \u00b7 under 5 past games' and r['history']['avg'] is None
+    assert r['history']['l10'] == {'n': 0, 'over': 0, 'under': 0, 'push': 0}
+    st, card = adapter.line_doc(server, 'soccer', 'prizepicks', r['offer']['offer_id'])
+    assert st == 200 and card['history']['series'] == [] and card['history']['avg'] is None
+    assert card['forecast']['grade'] == 'A'
+
+
+@pytest.mark.parametrize('size', [DESK, PHONE])
+def test_zero_game_lettered_line_renders_row_and_drawer(ctx, env, expansion, size):
+    adapter.reset()
+    offer, f = _zero_game_forecast(expansion['soccer'])
+    p = open_page(ctx, env, '/#scout/board?sport=soccer', size)
+    expect(p.locator('#hub-rows')).to_contain_text('Unsupported Player', timeout=30000)
+    row = p.locator('#hub-rows .h-player', has_text='Unsupported Player').first
+    row.click()
+    expect(p.locator('#hub-detail')).to_contain_text('Model estimate', timeout=20000)
+    expect(p.locator('#hub-detail')).to_contain_text('Under')
+    text = p.locator('#hub-detail').inner_text()
+    assert 'NaN' not in text and 'undefined' not in text
+    no_h_scroll(p)
