@@ -29,7 +29,18 @@ def test_source_full_time_label_without_period():
     assert parse_summary(b,'eng.1','1',NOW).records
     b=summary();b['rosters'][0]['roster'][0]['stats'][0]['value']=0
     assert not parse_summary(b,'eng.1','1',NOW).records
+    # sg-scope: an extra-time match is kept as full_game (regulation + extra time), never as regulation history
     b=summary();b['header']['competitions'][0]['status']['period']=4
+    stats=[r for r in parse_summary(b,'eng.1','1',NOW).records if isinstance(r,StatObservation)]
+    assert stats and all(s.scope=='full_game' and s.includes_overtime=='yes' and not s.validate() for s in stats)
+
+
+def test_extra_time_and_penalty_finals_are_kept_as_full_game():
+    for name, overtime in (('STATUS_FINAL_AET','yes'),('STATUS_FINAL_PEN','unknown')):
+        b=summary();b['header']['competitions'][0]['status']={'type':{'completed':True,'name':name}}
+        stats=[r for r in parse_summary(b,'eng.1','1',NOW).records if isinstance(r,StatObservation)]
+        assert [(s.scope,s.includes_overtime,s.value) for s in stats]==[('full_game',overtime,3)]
+    b=summary();b['header']['competitions'][0]['status']={'type':{'completed':False,'name':'STATUS_FINAL_PEN'}}
     assert not parse_summary(b,'eng.1','1',NOW).records
 
 

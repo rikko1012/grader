@@ -170,7 +170,8 @@ def publish(sport, budget_s=20, results_at=None):
     from . import expansion_history as history
     from .expansion import isolated_database
     from .contracts import parse_utc
-    from .expansion_formats import context as match_context
+    from .expansion_formats import context as match_context, tour_rule
+    from . import expansion_scope
     from types import SimpleNamespace
     deadline = time.monotonic() + budget_s
     code, board = boards.board(SimpleNamespace(query={'sport': sport}))
@@ -178,6 +179,7 @@ def publish(sport, budget_s=20, results_at=None):
         return {'state': 'quotes_unavailable'}
     previous = saved(sport).get('players', {})
     players, unique, fact_cache, catalogs = {}, {}, {}, {}
+    stages = None
     for offer in board['offers']:
         unique.setdefault(key(offer), offer)
     # Rotate pending identities without starving previously missing histories.
@@ -213,13 +215,27 @@ def publish(sport, budget_s=20, results_at=None):
                     past = catalogs[comp].get(game['event_id'], {})
                     team = next((p.get('team_id') for p in past.get('players', []) if p['id'] == identity['player_id']), None)
                     others = [p['name'] for p in past.get('participants', []) if p['id'] != (team or identity['player_id'])]
+                    best_of = match_context(comp, past).get('best_of')
+                    if best_of is None and sport == 'tennis' and offer['scope'] == 'full_game':
+                        best_of = (tour_rule(comp, past) or {}).get('best_of')   # sg-scope: full-match lines only
                     enriched.append({**game, 'opponent': others[0] if len(others) == 1 else '',
-                                     'best_of': match_context(comp, past).get('best_of'), 'surface': past.get('surface'),
+                                     'best_of': best_of, 'surface': past.get('surface'),
                                      'match': ' vs '.join(p['name'] for p in past.get('participants', []))})
                 entry['games'] = enriched
                 match = next((m for m in matches if m['event_id'] == identity['event_id']), {})
                 entry['event'] = {k:match.get(k) for k in ('event_id','start','status')}
                 entry['context'] = match_context(comp, match)
+                if sport == 'soccer' and offer['scope'] == 'full_game':
+                    from .expansion_forecasts import REGULATION_LEAGUES
+                    if comp not in REGULATION_LEAGUES:
+                        # sg-scope: can this fixture reach extra time? (stage facts + stored finals, expansion_scope)
+                        if stages is None:
+                            stages = expansion_scope.load_stages(boards.root(sport))
+                        entry['scope_rule'] = expansion_scope.rule(comp, match, stages)
+                elif sport == 'tennis' and offer['scope'] == 'full_game' and entry['context'].get('best_of') is None:
+                    rule = tour_rule(comp, match)
+                    if rule:
+                        entry['format_rule'] = rule
                 from contextlib import closing
                 with closing(history.store.connect(path, read_only=True)) as con:
                     contexts = history.store._latest_rows(con, 'context', 'event_id=?', [identity['event_id']], before, 64)

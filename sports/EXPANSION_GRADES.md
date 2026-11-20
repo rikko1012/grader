@@ -53,3 +53,36 @@ Release checks cover distributions/pushes, offered sides, unknown payouts,
 input timing, identity/format/surface/period isolation, immutable issuance,
 corrections and desktop/phone cards. Passing them does not establish prediction
 accuracy. Forward calibration and complete data coverage remain separate work.
+
+## sg-scope (2026-11-20): extra-time scope per fixture, kept extra-time history, history inputs
+
+Owner mandate 2026-11-20: every offered soccer / tennis prop gets a grade from a model. This part removes
+`extra_time_scope_unverified` at the root and widens history inputs where a walk-forward passed.
+
+- **Scope per fixture** (`sports/expansion_scope.py`). ESPN scoreboards now carry each fixture's stage
+  (`season.type` id + slug), leg and final period / clock into the catalog. The history job keeps the finished
+  matches' stage outcomes in `stages.json` (bounded 1.5 MB, survives the 100-day catalog). A full-game line in a
+  competition outside `REGULATION_LEAGUES` equals the regulation total when the fixture is a first leg, or its
+  stage (or the same stage name in earlier seasons) has >= 2 drawn single-leg full-time finals and no extra-time /
+  penalty finish. Otherwise the fixture CAN reach extra time and the platform rule decides:
+  PrizePicks counts extra time (not shootouts), Underdog counts regulation + stoppage only.
+  `REGULATION_LEAGUES` lines are untouched (byte-identical forecasts: 4,026 of 4,026 graded grid cases).
+- **Walk-forward** (pre-registered, `cs2_scout_ops/logs/soccer_grades_1120/scope/`): 4,444 fixtures classified
+  "no extra time" from earlier finals only across eng.1, ita.1, aus.1, mex.1, usa.1 and UCL, 0 went to extra time.
+  For PrizePicks lines on fixtures that can reach extra time, a regulation + 30-minute mixture lost to the
+  regulation predictive (log loss +0.0063, 95% CI +0.0050..+0.0079; box totals incl. extra time came in 7.4% under
+  the regulation projection). So `ET_SHARE = 0`: those lines use the regulation predictive and settle on the
+  extra-time box total (`settle_scopes`), else the 90-minute total.
+- **Extra-time history is kept**: ESPN summaries of AET / penalty finals are stored as scope `full_game`
+  (`includes_overtime` yes / unknown; shootout kicks are not in ESPN's player totals). Regulation readers skip them.
+- **History inputs** (`PROMOTED_INPUTS`, same pre-registered criterion: ECE within 0.03 of the graded control at the
+  upper 95% bound, |bias| <= 0.03): aus.1 ESPN stats (ECE 0.0117 vs control 0.0114, diff CI -0.0041..+0.0047);
+  FotMob passes / tackles / crosses / clearances / dribbles for mex.1, aus.1, usa.1 and UCL (ECE 0.0104-0.0197 vs
+  eng.1 FotMob 0.0153, every diff CI upper bound <= 0.0153). Newer competitions get 4 more "deficit" summaries a run (never-read finals of
+  teams with an offered fixture, ESPN only, +6 requests max), read once each.
+- **Tennis tour format** (`expansion_formats.tour_rule`): from ESPN's Grand Slam flag, WTA singles and ATP
+  non-major singles (ATP Finals included) are best of three; men's majors and Next Gen are not inferred. Used for
+  full-match lines and their history only; set-scope lines keep their bytes.
+- **Ops**: `learning-status.json published_model.pending_by` counts each pending reason by
+  competition | stat | platform (top 60).
+- Stakes: unchanged (this model assigns none); new paths carry `scope_rule` / `settlement_scope` / `format_rule`.

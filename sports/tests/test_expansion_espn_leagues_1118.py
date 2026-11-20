@@ -26,7 +26,9 @@ def test_every_mapped_id_round_trips_to_its_slug_and_a_competition():
 def test_new_competitions_are_research_only():
     new = {c for c in COMPETITIONS if c not in BASE_COMPETITIONS}
     assert len(new) == 77
-    assert not {c for c, _s, _t in FORECAST_INPUTS} & new
+    # sg-scope 2026-11-20: a newer competition is an input only after its walk-forward promotion (PROMOTED_INPUTS)
+    from sports.expansion_forecasts import PROMOTED_INPUTS
+    assert {c for c, _s, _t in FORECAST_INPUTS} & new == {c for c, _s, _t in PROMOTED_INPUTS} & new == {'aus.1'}
 
 
 @pytest.mark.parametrize('lid', ['20226', '5499', '5487', '5697', '20922', '3904', '19968', '19989', '999999'])

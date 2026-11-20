@@ -3,7 +3,7 @@
 Source field names verified against ESPN eng.1 summary on 2026-11-17.
 Only records explicitly reported in that match are emitted. A roster listing
 is not evidence of playing; appearances must be reported as one. Extra-time
-matches are not treated as regulation-time history.
+matches are never regulation-time history: they are kept as scope 'full_game'.
 """
 from .contracts import Player, SourceId, StatObservation, ContextSnapshot, utc
 from .expansion import COMPETITIONS, Feed, _number
@@ -68,9 +68,20 @@ def parse_summary(body, competition, source_event_id, observed_at):
     typ=status.get('type') or {}
     regulation_final = (typ.get('name')=='STATUS_FULL_TIME' and status.get('period',2)==2) or (
         typ.get('name')=='STATUS_FINAL' and status.get('period')==2)
-    if not (typ.get('completed') is True and regulation_final):
+    # sg-scope (2026-11-20): a match that went to extra time / penalties is kept, not lost - as scope 'full_game'
+    # (ESPN's box totals: regulation + extra time; shootout kicks are not in them - checked on mex.1 762465, players'
+    # totalGoals summed to the 2-1 score of a 9-8 shootout). Never stored as regulation; regulation readers skip it.
+    period = status.get('period')
+    extra_final = typ.get('completed') is True and not regulation_final and (
+        typ.get('name') in ('STATUS_FINAL_AET', 'STATUS_FINAL_PEN') or
+        (typ.get('name') in ('STATUS_FULL_TIME', 'STATUS_FINAL') and isinstance(period, int) and
+         not isinstance(period, bool) and period > 2))
+    if not ((typ.get('completed') is True and regulation_final) or extra_final):
         out.rejected.append('not a verified completed regulation match')
         return out
+    scope, overtime = ('regulation', 'no') if not extra_final else (
+        'full_game', 'yes' if typ.get('name') == 'STATUS_FINAL_AET' or (isinstance(period, int) and period > 2)
+        else 'unknown')
     teams={str(c.get('id')) for c in match.get('competitors') or [] if c.get('type')=='team' or
            (c.get('team') or {}).get('id') == c.get('id') and c.get('id') is not None}
     if len(teams)!=2 or 'None' in teams:
@@ -100,6 +111,6 @@ def parse_summary(body, competition, source_event_id, observed_at):
             for source_stat, stat in STATS.items():
                 value=values.get(source_stat)
                 if value is not None:
-                    out.records.append(StatObservation(eid,'soccer',player.player_id,'player','regulation','no',stat,
+                    out.records.append(StatObservation(eid,'soccer',player.player_id,'player',scope,overtime,stat,
                         'count',value,'played','espn',str(source_event_id),True,observed_at,observed_at))
     return out

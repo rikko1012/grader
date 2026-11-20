@@ -339,16 +339,26 @@ def summary_due(match, recent, now):
             (86400 if match.get('status') == 'final' else 21600))
 
 
-def summary_queue(pending, offered_teams, base_slots=6, new_slots=2):
+def summary_queue(pending, offered_teams, base_slots=6, new_slots=2, deficit_slots=0):
     """This run's summaries: the 53dad0b order and 6 slots for the 53dad0b competitions (unchanged), plus at most 2
-    more for the newer competitions, so they never take a slot from a graded league."""
+    more for the newer competitions, so they never take a slot from a graded league.
+    deficit_slots (sg-scope): up to that many MORE newer-competition summaries, only never-read finals of a team with
+    an offered fixture (the history an offered line still lacks); each is read once (summary_due's 48 h rule)."""
     def key(m):
         return (bool(m.get('summary_checked_at')), not any(p['id'] in offered_teams for p in m['participants']),
                 m.get('status') != 'final', m.get('summary_checked_at') or '',
                 -parse_utc(m['start']).timestamp() if m.get('start') else 0, m['event_id'])
     base = sorted((m for m in pending if m['competition'] in BASE_COMPETITIONS), key=key)
     new = sorted((m for m in pending if m['competition'] not in BASE_COMPETITIONS), key=key)
-    return base[:base_slots] + new[:new_slots]
+    deficit = [m for m in new[new_slots:] if not m.get('summary_checked_at') and m.get('status') == 'final'
+               and any(p['id'] in offered_teams for p in m['participants'])][:max(0, deficit_slots)]
+    return base[:base_slots] + new[:new_slots] + deficit
+
+
+# sg-scope: extra requests per soccer history run, spent only on newer competitions' rosters and on deficit summaries
+# (never-read finals of offered teams). ESPN only; at most 6 more requests per 5-minute run.
+DEFICIT_SLOTS = 4
+DEFICIT_REQUESTS = 6
 
 
 CURRENT_MATCHES_BYTES = 2_900_000   # readers ignore a current-matches.json over 3,000,000 bytes (every identity pending)
@@ -486,9 +496,11 @@ def collect(sport, max_requests=16, max_seconds=150):
         except (OSError, ValueError):
             pass
 
+    request_limit = [max_requests]
+
     def get(url, params, timeout=10):
         from .expansion_sources import get_json
-        if counts['requests'] >= max_requests or time.monotonic() >= main_deadline:
+        if counts['requests'] >= request_limit[0] or time.monotonic() >= main_deadline:
             raise StopIteration
         counts['requests'] += 1
         body = get_json(sport, url, params=params, timeout=timeout, tries=1)
@@ -588,7 +600,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             slate = {}
             counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory, 'base', slate=slate))
 
-            def summaries(base_slots, new_slots):
+            def summaries(base_slots, new_slots, deficit_slots=0):
                 # Scoreboards get their budget first. Pending summaries stay in the
                 # catalog across runs, so advancing the date cannot lose a busy day.
                 recent, instant = offered(directory), datetime.now(timezone.utc)
@@ -604,7 +616,7 @@ def collect(sport, max_requests=16, max_seconds=150):
                 # summary. Once checked, a game waits its interval and frees the queue.
                 offered_teams = {p['team_id'] for rows in catalogs.values() for m in rows.values()
                                  for p in m.get('players', []) if p.get('identity_source') == 'espn_team_roster'}
-                for match in summary_queue(pending, offered_teams, base_slots, new_slots):
+                for match in summary_queue(pending, offered_teams, base_slots, new_slots, deficit_slots):
                     actual = match['competition']
                     eid = match['event_id'].split(':')[-2]
                     try:
@@ -622,12 +634,17 @@ def collect(sport, max_requests=16, max_seconds=150):
                     except (net.HttpError, ValueError, OSError) as e:
                         match['summary_attempt_at'] = now_utc()
                         counts['errors'].append(type(e).__name__)
-            summaries(6, 0)                                 # the 53dad0b competitions: 6 slots, 53dad0b order
+            try:
+                summaries(6, 0)                             # the 53dad0b competitions: 6 slots, 53dad0b order
+            except StopIteration:                           # base budget spent: base work stops exactly as before;
+                if not research:                            # sg-scope: the newer-competition pass still gets its
+                    raise                                   # own DEFICIT_REQUESTS below
             if research:
                 # Newer competitions only from what the shared budget has left after the graded work: up to 2 more
                 # roster refreshes, then up to 2 more summaries.
+                request_limit[0] = max_requests + DEFICIT_REQUESTS   # sg-scope: newer competitions only
                 counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory, 'new', slate=slate))
-                summaries(0, 2)
+                summaries(0, 2, DEFICIT_SLOTS)
             else:
                 counts['errors'].extend(graded_inline(sport, catalogs, get, persist, directory))
         else:
@@ -657,6 +674,12 @@ def collect(sport, max_requests=16, max_seconds=150):
     atomic_json(directory / 'current-matches.json',
                 fit_matches([m for matches in catalogs.values() for m in matches.values()
                              if (m.get('start') or '') >= earliest], offered(directory)))
+    if sport == 'soccer':
+        try:                                               # sg-scope: stage facts of stored finals (extra-time rule)
+            from .expansion_scope import update_stages
+            counts['stages'] = update_stages(directory, catalogs)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+            counts['stages'] = {'error': type(e).__name__}
     catalogs.clear()                                       # publish reads its own bounded files; free the catalogs
     shared.clear()
     from .expansion_research import publish
