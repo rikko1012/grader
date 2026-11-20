@@ -532,7 +532,7 @@ def settle(scon, path=None, now=None, deadline=None, fired=None):
     sweep = (meta.get("sweep_start") or meta["resume_event"]) if sweeping else (order[0] if order else None)
     sweep_newest = (meta.get("sweep_newest") or newest) if sweeping else newest
     todo = len(order)
-    if sweeping and order:
+    if sweeping and order and deadline is not None:    # an unbounded run walks every event
         sk = next((j for j, e in enumerate(evs) if e >= sweep), len(evs)) % len(evs)
         todo = (sk - k) % len(evs) or len(evs)
     for i, ev in enumerate(order[:todo]):

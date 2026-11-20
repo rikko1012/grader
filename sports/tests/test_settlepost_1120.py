@@ -795,3 +795,38 @@ def test_daily_held_past_one_game_day_pages(monkeypatch, tmp_path):
     out = daily.run(now=AT + timedelta(hours=23))                                     # caught up: runs, hold cleared
     st = json.loads(sp.read_text())
     assert out["ran"] is True and "held_since" not in st and "daily_grading_held" not in _codes(_ops(grades_daily=st))
+
+
+def test_an_unbounded_run_mid_sweep_walks_every_event(monkeypatch, tmp_path):
+    """A run with no deadline that lands mid-sweep walks every event (not only the sweep's remaining arc): a change to
+    an event the sweep already passed is scored by it - the same rows as one run, the change, one run."""
+    d1 = tmp_path / "one"
+    d1.mkdir()
+    _world(d1, monkeypatch, 6)
+    with store.opened() as con:
+        ev = con.execute("SELECT MIN(event_id) FROM records WHERE kind='settlement'").fetchone()[0]
+        learning.on_settled(con, now=NOW)
+        _correct_in(con, ev)
+        learning.on_settled(con, now=NOW)
+    full = _sorted_tables()
+    d = tmp_path / "b"
+    d.mkdir()
+    _world(d, monkeypatch, 6)
+    with store.opened() as con:
+        clock = Clock()
+        monkeypatch.setattr(learning.time, "time", clock)
+        for _ in range(200):
+            learning.on_settled(con, now=NOW, deadline=clock.t + 60)
+            lc = learning.db()
+            meta = dict(lc.execute("SELECT key, value FROM learn_meta"))
+            marked = lc.execute("SELECT 1 FROM learn_events WHERE event_id=?", (ev,)).fetchone()
+            lc.close()
+            if meta.get("sweep_start") and marked:
+                break
+        monkeypatch.undo()
+        monkeypatch.setattr(config, "DATA_DIR", d)
+        assert meta.get("sweep_start") and marked
+        _correct_in(con, ev)                              # behind the sweep's cursor
+        out = learning.on_settled(con, now=NOW)
+    assert not out.get("partial")
+    assert _sorted_tables() == full

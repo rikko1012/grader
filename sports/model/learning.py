@@ -160,7 +160,8 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
     sweep completes, so a backlog older than `days` is never dropped. A sweep (review 2026-11-20) spans runs: it is
     complete when the walk wraps back to the event it started at (sweep_start) - every event passed, unchanged or
     scored and marked - also when no single run can walk them all; the run then ends its main pass there (no
-    "partial", learn_meta empty, the window back to `days`), the next run starts a new sweep."""
+    "partial", learn_meta empty, the window back to `days`), the next run starts a new sweep. A run with no
+    deadline walks every event (not only the sweep's remaining arc) and completes it."""
     lcon = db()
     icon = forward.inputs_db()
     t_start = time.time()
@@ -200,7 +201,7 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
         # change right after one full run is. A sweep starting now (none in progress) is the whole circle.
         sweep = (meta.get("sweep_start") or resume) if sweeping else (order[0] if order else None)
         todo = len(order)
-        if sweeping and order and sweep:
+        if sweeping and order and sweep and deadline is not None:   # an unbounded run walks every event
             sk = next((j for j, e in enumerate(evs) if e >= sweep), len(evs)) % len(evs)
             todo = (sk - k) % len(evs) or len(evs)
         for pos, ev in enumerate(order[:todo]):
