@@ -434,6 +434,7 @@
             var sp = (/[?&]sport=([a-z0-9]+)/.exec(u) || [0, 'cs2'])[1];
             /* kept as text; parsed only while Lines differ is on (the board answers can be large) */
             PENDING[sp] = r.clone().text();
+            PENDING[sp].catch(function () { /* an aborted read: nothing to show */ });
             if (viewOn('differ')) readRecs();
           }, function () { /* the hub sees its own failure */ });
         }
