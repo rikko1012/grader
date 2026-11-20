@@ -3,13 +3,18 @@ member Record, the public /record, EV (Best prices), Arbitrage / price check, Sp
 390x844 and 1280x900, dark and light. Every field the page shows today is still there (the v3 files only restyle and add derived
 items computed from the numbers beside them), no sideways scroll, no script error. V3_SHOTS=<folder> keeps a screenshot each."""
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+import closing_lines as cl
 import workspace_api
 from tests.test_upgrade_browser import browser, env, context, no_h_scroll  # noqa: F401 (fixtures)
 from tests.test_ui_v3_browser import v3_page, PHONE, DESK
+from tests.test_pickem_ev_browser import ev_on  # noqa: F401 (fixture)
+from tests.test_hub_shell_browser import market_doc
+from tests.test_settled_line_moves_browser import flags
 from tests.workspace_fixture import leg_of
 
 SHOTS = Path(os.environ.get("V3_SHOTS") or "")
@@ -80,6 +85,7 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         assert tiles[0] == "50.0%" and tiles[1].replace("–", "-").replace(" ", "") == "1-1-1" and tiles[2] == "1" and tiles[3] == "2"
         assert "Hit rate, 2 decided" in p.locator(f"{sec} .v3-score").inner_text()
         assert p.locator(f"{sec} .v3-ticks i").count() == 6
+        shot(p, f"picks-{size['width']}-{theme}-top")
         # chance you saw, from the saved receipt, beside each status (never a 0 for a missing one)
         saw = p.locator(f"{sec} .u-pick .v3-saw").all_inner_texts()
         assert len(saw) == 6 and all(s.startswith("Chance you saw ") for s in saw)
@@ -185,6 +191,127 @@ def test_public_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         p.wait_for_function("document.querySelector('#record h2').textContent==='CS2'")
         no_h_scroll(p)
         shot(p, f"record-public-{size['width']}-{theme}", full=True)
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------------------------------------ EV (Best prices), price check, books
+def v3_member(browser, env, monkeypatch, size, theme, path, ready, route=None):
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    c = context(browser, env, size)
+    c.add_init_script(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
+    p = c.new_page()
+    p.errors = []
+    p.on("pageerror", lambda e: p.errors.append(str(e)))
+    if route:
+        route(p)
+    p.goto(env.url + path)
+    p.wait_for_selector(ready, timeout=30000)
+    p.wait_for_function("!!window.ScoutV3")
+    return c, p
+
+
+def ground(p, theme):
+    bg = p.evaluate("getComputedStyle(document.getElementById('hub-center')).backgroundColor")
+    assert bg == ("rgb(246, 247, 249)" if theme == "light" else "rgb(8, 11, 19)")
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_ev_v3_keeps_every_control_and_column(browser, env, ev_on, monkeypatch, size, theme):  # noqa: F811
+    c, p = v3_member(browser, env, monkeypatch, size, theme, "/#scout/ev", "#hub-ev-body #ev-entry")
+    try:
+        p.wait_for_selector("#hub-ev-body .ev-list, #hub-ev-body .ev-banner", timeout=20000)
+        assert p.locator('[data-ev="app"]').count() == 2 and p.locator("#ev-entry").count() == 1
+        assert p.locator("#hub-ev-body .ev-search, #hub-ev-body input[type=search]").count() >= 1
+        ground(p, theme)
+        if p.locator("#hub-ev-body .ev-list").count():
+            assert p.evaluate("getComputedStyle(document.querySelector('#hub-ev-body .ev-list')).backgroundColor") == ("rgb(255, 255, 255)" if theme == "light" else "rgb(15, 21, 36)")
+        no_h_scroll(p)
+        shot(p, f"ev-{size['width']}-{theme}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_arbitrage_v3_keeps_the_price_check(browser, env, monkeypatch, size, theme):
+    monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
+    monkeypatch.setenv("SCOUT_MARKET_TOOLS", "1")
+    doc = market_doc()
+    c, p = v3_member(browser, env, monkeypatch, size, theme, "/#/arb", "#hub-arb-section:not([hidden]) #hub-market-tools",
+                     route=lambda p: p.route("**/api/upgrade/market-tools", lambda r: r.fulfill(json=doc)))
+    try:
+        p.wait_for_selector("#hub-market-filters .h-market-filters", timeout=20000)
+        assert p.locator('#hub-market-tools [data-hub="refresh-markets"]').count() == 1
+        assert p.locator("#hub-market-results").count() == 1
+        ground(p, theme)
+        no_h_scroll(p)
+        shot(p, f"arb-{size['width']}-{theme}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_sportsbooks_v3_keeps_game_lines(browser, env, monkeypatch, size, theme):
+    monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
+    now = datetime.now(timezone.utc)
+
+    def response(route):
+        league = "nfl" if "league=nfl" in route.request.url else "nba"
+        route.fulfill(json={"league": league, "source": "ESPN", "observed_at": now.isoformat(), "events": [{
+            "id": "espn:test", "away": "Golden State Warriors", "home": "Minnesota Timberwolves",
+            "start_utc": (now + timedelta(days=1)).isoformat(), "seen_at": None,
+            "books": {"draftkings": {"id": "draftkings", "label": "DraftKings", "markets": {
+                "money-line": {"awayOdds": 150, "homeOdds": -170},
+                "spread": {"awaySpread": 3.5, "homeSpread": -3.5, "awayOdds": -110, "homeOdds": -110},
+                "totals": {"total": 231.5, "overOdds": -115, "underOdds": -105}}}}}]})
+    c, p = v3_member(browser, env, monkeypatch, size, theme, "/#/books", "#hub-book-board summary",
+                     route=lambda p: p.route("**/api/upgrade/game-books?*", response))
+    try:
+        panel = p.locator("#hub-book-board")
+        assert "Quote age unavailable" in panel.inner_text()
+        panel.locator("summary").first.click()
+        t = panel.inner_text()
+        assert "+150" in t and "Over 231.5" in t
+        for k in ("Moneyline", "Spread", "Game total"):
+            assert k.lower() in t.lower(), k
+        for g in ("league", "book", "refresh"):
+            assert panel.locator(f"[data-gb={g}]").count() == 1, g
+        ground(p, theme)
+        no_h_scroll(p)
+        shot(p, f"books-{size['width']}-{theme}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------------------------------------ line move (bump) chip on a receipt
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_bump_chip_on_a_receipt_keeps_its_words_and_title(browser, env, monkeypatch, size, theme):
+    flags(monkeypatch)
+    cl.reset()
+    con = cl._connect()
+    con.execute("INSERT INTO closing_lines (ident, version, sport, book, event_id, player_key, prop, scope, line_type, line, open_line, lock_utc, last_seen_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (cl.ident(env.by("orlo")), "cl-1", "cs2", "underdog", "hltv:901", "orlo", "kills", "12", "standard",
+                                                      33.5, 32.5, "2026-11-07T12:00:00+00:00", "2026-11-07T11:59:00+00:00"))
+    con.commit()
+    con.close()
+    c, p = picks_page(browser, env, monkeypatch, size, theme)
+    try:
+        o = p.locator("#hub-picks-body .u-pick", has_text="orlo Over 33.5")
+        o.locator(".u-move").wait_for()
+        assert " ".join(o.locator(".u-move").inner_text().split()) == "▲ bumped from 32.5"
+        assert o.locator(".u-bump").get_attribute("title")
+        assert o.locator(".v3-saw").count() == 1
+        o.scroll_into_view_if_needed()
+        no_h_scroll(p)
+        shot(p, f"bump-{size['width']}-{theme}")
         assert not p.errors, p.errors
     finally:
         c.close()
