@@ -305,3 +305,37 @@ def test_tennis_thin_prior_tables_are_distributions_on_the_fit_support():
     for (g, bo, scope, stat), (n, pop) in tt.PRIOR.items():
         assert n > 0 and abs(sum(pop) - 1) < 1e-3 and all(p > 0 for p in pop)
         assert tt.TIERS[f'{scope}|{stat}'] == 'failed'
+
+
+# --- roster slots go to the next kickoff first (live e2e 2026-11-20: Troyes - Le Havre, 3 h out, never got a roster)
+
+def test_never_loaded_rosters_take_slots_by_next_kickoff(tmp_path):
+    import re
+    from sports import expansion_history as history
+    from sports.tests.test_expansion_killswitch_1118 import _slate, _getter
+    catalogs = _slate(tmp_path, [1, 2, 3, 4], [])
+    now = datetime.now(timezone.utc)
+    soon = (now + timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    later = (now + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    rows = catalogs['bra.1']
+    rows['0']['start'], rows['2']['start'] = later, soon        # teams 3 / 4 play first, listed second
+    import json as _json
+    board = _json.loads((tmp_path / 'board.json').read_text(encoding='utf-8'))
+    for o in board['offers']:
+        o['start'] = soon if o['team'] in ('Team3', 'Team4') else later
+    history.atomic_json(tmp_path / 'board.json', board)
+    calls = []
+    history.collect_soccer_teams(catalogs, _getter(calls), lambda *a: True, tmp_path, 'base')
+    assert [re.search(r'/teams/(\d+)/', u)[1] for u in calls[::2]] == ['3', '4']
+
+
+def test_due_refresh_still_after_never_loaded_rosters(tmp_path):
+    import re
+    from sports import expansion_history as history
+    from sports.tests.test_expansion_killswitch_1118 import _slate, _getter
+    old = (datetime.now(timezone.utc) - timedelta(hours=7)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    state = {f'bra.1:soccer:team:espn:{t}': {'checked_at': old, 'schedule_checked_at': old} for t in (1, 2)}
+    catalogs = _slate(tmp_path, [1, 2, 3, 4], [], state)
+    calls = []
+    history.collect_soccer_teams(catalogs, _getter(calls), lambda *a: True, tmp_path, 'base')
+    assert [re.search(r'/teams/(\d+)/', u)[1] for u in calls[::2]] == ['3', '4']

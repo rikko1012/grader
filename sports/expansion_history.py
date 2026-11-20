@@ -286,7 +286,21 @@ def collect_soccer_teams(catalogs, get, persist, directory, group=None, slots=2,
                (now-parse_utc(state[key]['checked_at'])).total_seconds() >= 21600 or
                not state.get(key, {}).get('schedule_checked_at') or
                (now-parse_utc(state[key]['schedule_checked_at'])).total_seconds() >= 21600]
-        due.sort(key=lambda row:state.get(row[0], {}).get('checked_at') or '')
+        # soccer-grades-1120: never-loaded rosters first (as before), then by the team's NEXT offered kickoff, then the
+        # oldest check. Before, teams were taken in slate order: in a 6-run live e2e Troyes - Le Havre (kick-off in 3 h)
+        # never got its roster while teams playing days later did, so its lines stayed without identity / letters.
+        # Same slots, same requests; only the order changes.
+        def _next_kickoff(item):
+            starts = []
+            for m in item['matches']:
+                try:
+                    if parse_utc(m['start']) >= now:
+                        starts.append(parse_utc(m['start']).timestamp())
+                except (KeyError, TypeError, ValueError):
+                    continue
+            return min(starts) if starts else float('inf')
+        due.sort(key=lambda row: (bool(state.get(row[0], {}).get('checked_at')), _next_kickoff(row[1]),
+                                  state.get(row[0], {}).get('checked_at') or ''))
         for key,item in due[:slots]:
             comp, tid = item['competition'], item['team'].split(':')[-1]
             try:
