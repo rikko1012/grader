@@ -305,3 +305,63 @@ def test_fit_publication_drops_furthest_starts_only_over_the_limit():
     assert fc.fit_publication(cur) is cur
     small = fc.fit_publication(cur, limit=400)
     assert 'k4' not in small and 'k0' in small and list(small) == sorted(small)
+
+
+# ------------------------------------------------------------------------------------------------- compaction
+import dataclasses  # noqa: E402
+from datetime import timedelta  # noqa: E402
+
+from sports import archive, expansion_compact, store  # noqa: E402
+from sports.contracts import ContextSnapshot, StatObservation  # noqa: E402
+from sports.tests import test_expansion_storage_1119 as st1119  # noqa: E402
+
+
+def _reread(path, recs, at):
+    """The 24 h re-read of every final: the same content, observed again `at` (what parse_summary produces)."""
+    c = store.connect(path)
+    try:
+        again = [dataclasses.replace(r, observed_at=st1119._iso(at), known_at=st1119._iso(at))
+                 for r in recs if isinstance(r, (StatObservation, ContextSnapshot))]
+        res = store.put_many(c, again)
+    finally:
+        c.close()
+    return res
+
+
+def test_unchanged_daily_rereads_no_longer_keep_finals_hot(tmp_path):
+    """Root cause of 'compaction archives almost nothing': each unchanged re-read moved last_seen_at, and coldness
+    used max(known_at, last_seen_at) - an event re-read every 24 h never became cold. Coldness is on content now."""
+    path = tmp_path / 'soccer' / 'eng.1' / 'canonical.db'
+    recs = st1119._expansion_store(path)
+    _reread(path, recs, st1119.NOW - timedelta(hours=3))
+    con = sqlite3.connect(path)
+    seen = con.execute("SELECT MAX(last_seen_at), MAX(known_at) FROM records WHERE kind='stat'").fetchone()
+    con.close()
+    assert seen[0] > seen[1]                                     # the re-read moved last_seen_at, not known_at
+    before = st1119._reads(path)
+    out = expansion_compact.compact(path, 60, now=st1119.NOW)
+    assert out['error'] is None and out['rows'] == 5 * 8 * 4     # the old rule archived 0 here
+    assert st1119._reads(path) == before
+    # the next daily re-read of the archived finals writes no new revision
+    _reread(path, recs, st1119.NOW + timedelta(hours=21))
+    con = sqlite3.connect(path)
+    assert con.execute("SELECT COUNT(*) FROM records WHERE kind IN ('stat','context')").fetchone()[0] == 8 * 4
+    con.close()
+
+    def content(reads):                 # a hot row's re-read moves its sighting counters, nothing else
+        strip = ('last_seen_at', 'seen_count', 'last_source_updated_at')
+        return {k: [{c: v for c, v in r.items() if c not in strip} for r in rows] if isinstance(rows, list)
+                and rows and isinstance(rows[0], dict) and 'rid' in rows[0] else rows for k, rows in reads.items()}
+    assert content(st1119._reads(path)) == content(before)
+
+
+def test_a_correction_learned_inside_48h_keeps_its_event_hot(tmp_path):
+    path = tmp_path / 'soccer' / 'eng.1' / 'canonical.db'
+    recs = st1119._expansion_store(path)
+    old = next(r for r in recs if isinstance(r, StatObservation) and r.event_id.endswith(':900:900'))
+    c = store.connect(path)
+    store.put(c, dataclasses.replace(old, value=old.value + 1, known_at=st1119._iso(st1119.NOW - timedelta(hours=5)),
+                                     observed_at=st1119._iso(st1119.NOW - timedelta(hours=5))))
+    c.close()
+    out = expansion_compact.compact(path, 60, now=st1119.NOW)
+    assert out['rows'] == 4 * 8 * 4                              # event 900 stays hot for its correction window

@@ -6,8 +6,8 @@ source key, ISO times, 6+ indexes repeating the text ids) for ~250 B of data, so
 0.75-1.0 MB and the 90-day backlog alone (~2,000 finals) would be ~1.7 GB against a 512 MB budget.
 
 What is cold: every stat / context row of an EVENT that started more than SCOUT_EXPANSION_COMPACT_DAYS (7) days ago
-(start from the event's own stored record) and none of whose rows was written in the last 48 h (the re-read
-correction window); only whole identities (all revisions of an identity are in the event, checked per identity).
+(start from the event's own stored record) and none of whose revisions was LEARNED in the last 48 h (known_at; the
+re-read correction window - an unchanged re-read only moves last_seen_at and does not keep an event hot); only whole identities (all revisions of an identity are in the event, checked per identity).
 Events, players and teams stay hot (small; _any_event reads them directly).
 
 Where it goes: <competition>/archive/records/result-<competition>-<event day>-<seq>.jsonl.xz (one JSON line per row,
@@ -100,8 +100,14 @@ def candidates(con, now, part_rows=5000):
     for eid in sorted(starts, key=lambda e: (starts[e], e)):
         rows = con.execute("SELECT rid, kind, source, source_key, known_at, COALESCE(last_seen_at, '') FROM records "
                            "WHERE kind IN ('stat', 'context') AND event_id = ?", (eid,)).fetchall()
-        if not rows or max(max(r[4] or "", r[5]) for r in rows) >= quiet:
-            continue                                    # written inside the correction window: stays hot
+        # sg-stability 2026-11-20: coldness is judged on CONTENT (known_at = when a revision was learned), not on
+        # sightings. A final in a base competition is re-read every 24 h for 100 days; each unchanged re-read moves
+        # last_seen_at only, so the old max(known_at, last_seen_at) rule never let those events go cold and almost
+        # nothing was ever archived (0.2 MB archived vs ~950 MB/day of growth, live ops 2026-11-20). A re-read of an
+        # archived identity with unchanged content stays a duplicate (store._put); a correction is a new revision with
+        # a new known_at and stays hot for its own 48 h.
+        if not rows or max(r[4] or "" for r in rows) >= quiet:
+            continue                                    # a revision learned inside the correction window: stays hot
         ident = OrderedDict()
         for rid, kind, source, sk, _k, _s in rows:
             ident.setdefault((kind, source, sk), []).append(rid)
