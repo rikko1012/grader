@@ -315,7 +315,7 @@ def test_v3_a_picture_that_fails_is_removed(browser, env, monkeypatch, tmp_path)
 
 
 def test_flag_off_no_pictures_and_no_requests(browser, env, monkeypatch, tmp_path):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")          # v3 is the default now (8892ffd): "off" is an explicit 0
     seed_pictures(monkeypatch, tmp_path)
     c, p = board(browser, env, PHONE, "dark", "nba")
     try:

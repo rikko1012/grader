@@ -298,7 +298,7 @@ def test_img_routes_are_unknown_with_v3_off_and_gated_with_it_on(env, monkeypatc
     from tests.test_upgrade_gate import get
     monkeypatch.setenv("SCOUT_IMG_DIR", str(tmp_path / "img"))
     monkeypatch.setenv("SCOUT_IMG_WARM", "0")
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")          # v3 is the default now (8892ffd): "off" is an explicit 0
     ic.reset()
     key = ("p", "nba", "1")
     ic.register(key, [ic.espn_headshot("nba", "1")])
