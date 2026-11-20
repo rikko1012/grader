@@ -194,13 +194,13 @@ def test_landing_v3_shots(browser, base, size, theme):
             page.evaluate("document.fonts.ready.then(() => 1)")
         settle(page, scroll=True)
         assert page.evaluate("document.documentElement.dataset.v3Page") == "landing"
-        check_landing_fields(page, size)
         no_h_scroll(page)
         snap(page, f"landing-{size['width']}-{theme}-top")
         snap(page, f"landing-{size['width']}-{theme}-full", full=True)
         if SHOTS.parts:
             for sec in ("proofs", "why", "demo", "grade", "lines", "slips", "features", "how", "final"):
                 page.locator("#" + sec).screenshot(path=str(SHOTS / f"landing-{size['width']}-{theme}-s-{sec}.png"))
+        check_landing_fields(page, size)
         assert not page.errors, page.errors
     finally:
         ctx.close()
@@ -274,3 +274,23 @@ def test_tools_account_v3(browser, env, monkeypatch, size, theme):
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_member_nav_stays_while_sign_in_is_checked(browser, env, monkeypatch, size):
+    """index.html starts every load as body.locked until /auth/me answers: the gate rules key on the gate actually showing, so a
+    member never sees the v3 nav vanish (or the classic header / page width change) while that answer is on its way."""
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    c = context(browser, env, size)
+    held = []
+    c.route("**/auth/me", lambda r: held.append(r))
+    p = c.new_page()
+    p.goto(env.url + "/?view=classic")
+    p.wait_for_function("!!window.ScoutV3 && document.querySelector('.sc-v3-bar')")
+    assert held and p.evaluate("document.body.classList.contains('locked')")
+    nav = ".sc-v3-tabs" if size is PHONE else ".sc-v3-bar .sc-nav"
+    assert p.locator(nav).is_visible()
+    assert p.locator("#gate").is_hidden()
+    for r in held:
+        r.continue_()
+    c.close()

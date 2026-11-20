@@ -1,25 +1,25 @@
 /* v3 account.css - owned by page group D (account, help, sign-in states, nav extras).
    Scope: member-side account / help / paywall / signed-in states inside the member pages.
    Loaded LAST in the member bundle (after board, slips, picks, player): it wins ties against every other group, so every selector
-   here is narrow (#gate, body.locked, #hub-tools-section, #hub-alerts-section, .v3-acct). Display only.
+   here is narrow (#gate, body.locked:has(#gate:not([hidden])), #hub-tools-section, #hub-alerts-section, .v3-acct). Display only.
 
-   1. The sign-in gate (index.html #gate, body.locked): "Members only" / "Your Whop account doesn't have access yet", restyled as the
+   1. The sign-in gate (index.html #gate, body.locked:has(#gate:not([hidden]))): "Members only" / "Your Whop account doesn't have access yet", restyled as the
       approved D sign-in card. Every line, link and perk the gate prints stays. The member nav (Board, Slip, My picks ...) has nothing
       behind it for a visitor without access (the hub never loads), so the v3 header keeps only the brand and the theme switch there.
    2. Tools = account and preferences: the Account card (account.js: who is signed in + Sign out, the same /auth/logout link the hub
       carries), Preferences, the tool index, and Alerts, in the v3 surfaces. */
 
 /* ------------------------------------------------------------------ 1. sign-in gate */
-html[data-ui-v3] body.locked{background:var(--sc-bg)!important;color:var(--sc-text);font-family:var(--sc-font)}
-html[data-ui-v3] body.locked::before{content:"";position:fixed;left:0;right:0;top:0;height:min(70vh,560px);z-index:-1;pointer-events:none;background:
+html[data-ui-v3] body.locked:has(#gate:not([hidden])){background:var(--sc-bg)!important;color:var(--sc-text);font-family:var(--sc-font)}
+html[data-ui-v3] body.locked:has(#gate:not([hidden]))::before{content:"";position:fixed;left:0;right:0;top:0;height:min(70vh,560px);z-index:-1;pointer-events:none;background:
   radial-gradient(70% 90% at 94% -8%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent) 0%,transparent 78%),
   radial-gradient(46% 60% at 4% -10%,rgba(120,130,255,.08),transparent 70%),
   linear-gradient(180deg,var(--sc-sky),var(--sc-bg))}
-html[data-ui-v3] body.locked .wrap>header{display:none!important}              /* the classic brand row: the v3 header already carries 1T Scout */
-html[data-ui-v3] body.locked .sc-v3-tabs,html[data-ui-v3] body.locked .sc-v3-bar .sc-nav,html[data-ui-v3] body.locked .sc-v3-bar [data-v3=search],
-html[data-ui-v3] body.locked .sc-v3-bar [data-v3=slip],html[data-ui-v3] body.locked .sc-v3-bar [data-v3=more],html[data-ui-v3] body.locked .sc-v3-bar .sc-slip{display:none!important}
-html[data-ui-v3] body.locked.sc-v3-shell{padding-bottom:0}
-html[data-ui-v3] body.locked .wrap{max-width:600px}
+html[data-ui-v3] body.locked:has(#gate:not([hidden])) .wrap>header{display:none!important}              /* the classic brand row: the v3 header already carries 1T Scout */
+html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-tabs,html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar .sc-nav,html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar [data-v3=search],
+html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar [data-v3=slip],html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar [data-v3=more],html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar .sc-slip{display:none!important}
+html[data-ui-v3] body.locked.sc-v3-shell:has(#gate:not([hidden])){padding-bottom:0}
+html[data-ui-v3] body.locked:has(#gate:not([hidden])) .wrap{max-width:600px}
 html[data-ui-v3] #gate.card{margin:40px auto 48px;padding:36px 40px 28px!important;text-align:left!important;border:0!important;border-radius:var(--sc-r-sheet);
   background:var(--sc-s1)!important;box-shadow:var(--sc-ring),var(--sc-drop);font-family:var(--sc-font);color:var(--sc-text)}
 html[data-ui-v3] #gate h3{margin:0 0 10px!important;font:600 34px/1.08 var(--sc-font);letter-spacing:-.03em;color:var(--sc-text)}
@@ -92,6 +92,5 @@ html[data-ui-v3] #u-hub #hub-tools-section,html[data-ui-v3] #u-hub #hub-alerts-s
 html[data-ui-v3] #u-hub #hub-tools-section .h-section-head p{color:var(--sc-muted)}
 html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools{color:var(--sc-text)}
 html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools :is(p,label){color:var(--sc-muted)}
-html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools select,html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools>button,
 html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools button{border:0;border-radius:var(--sc-r-md);background-color:var(--sc-s1);color:var(--sc-text);box-shadow:var(--sc-ring);font-family:var(--sc-font)}
-html[data-ui-v3]:has(body.locked){background:var(--sc-bg)!important}
+html[data-ui-v3]:has(body.locked #gate:not([hidden])){background:var(--sc-bg)!important}
