@@ -6,7 +6,8 @@ fixture from ESPN's own stage facts and the stored finals of the same stage, nev
 - a first leg of a two-legged tie never has extra time;
 - a stage (ESPN season.type id: one stage of one season) whose stored single-leg finals include drawn full-time
   results and no extra-time / penalty finish does not use extra time (a drawn single-leg knockout would have gone on);
-- the same competition stage name in earlier seasons (year tokens stripped) counts the same way;
+- the same competition stage name in earlier seasons (year tokens stripped) counts the same way, and an extra-time
+  finish in either one vetoes "none";
 - anything else - a knockout stage, a stage with an extra-time finish, or a stage never seen - CAN reach extra time.
 
 When a fixture can reach extra time, the platform's settlement rule decides what is graded:
@@ -26,14 +27,18 @@ from pathlib import Path
 
 VERSION = 'sg-scope-1'
 # Settlement rules, with where they were read. Same pattern as expansion_formats.SOURCES.
+# Neither page could be opened directly on 2026-11-20 (X returned 402, the Underdog help page 403): 'cited' records
+# where each rule comes from (the 2026-11-20 grade audit for PrizePicks; a search excerpt of Underdog's pick'em soccer
+# scoring page, plus Underdog's soccer prediction-picks article). With ET_SHARE 0 the PrizePicks rule changes no
+# chance: it only decides which box total (extra-time first) a model review compares against.
 PLATFORM_RULES = {
-    'prizepicks': {'extra_time_counts': True, 'shootout_counts': False,
-                   'source': 'https://x.com/PrizePicks/status/2071589350358278620 (PrizePicks, 2026-06-29: extra-time '
-                             'stats count except Goals Allowed; shootouts do not)', 'read_at': '2026-11-20T06:40:00Z'},
-    'underdog': {'extra_time_counts': False, 'shootout_counts': False,
-                 'source': 'https://help.underdogsports.com/en/articles/11006231-pick-em-scoring-soccer-fifa and '
-                           '/14127572-prediction-picks-soccer (regulation plus stoppage time; extra time and penalties '
-                           'excluded)', 'read_at': '2026-11-20T07:05:00Z'},
+    'prizepicks': {'extra_time_counts': True, 'shootout_counts': False, 'verified': False,
+                   'cited': 'https://x.com/PrizePicks/status/2071589350358278620 (PrizePicks, 2026-06-29: extra-time '
+                            'stats count except Goals Allowed; shootouts do not), via the 2026-11-20 grade audit'},
+    'underdog': {'extra_time_counts': False, 'shootout_counts': False, 'verified': False,
+                 'cited': 'https://help.underdogsports.com/en/articles/11006231-pick-em-scoring-soccer-fifa (search '
+                          'excerpt: extra-time stats are not counted) and /14127572-prediction-picks-soccer (90 minutes '
+                          'plus stoppage time; extra time and penalties excluded)'},
 }
 ET_STATUSES = frozenset({'STATUS_FINAL_AET', 'STATUS_FINAL_PEN', 'STATUS_END_OF_EXTRATIME', 'STATUS_SHOOTOUT',
                          'STATUS_FIRST_HALF_EXTRA_TIME', 'STATUS_SECOND_HALF_EXTRA_TIME', 'STATUS_HALFTIME_ET'})
@@ -162,15 +167,17 @@ def rule(competition, match, stages):
         return {**out, 'extra_time': 'none', 'basis': 'first_leg'}
     if stype:
         own = stages.get(f'{competition}|{stype}')
-        if own:
+        earlier = [e for k, e in stages.items() if slug and k.split('|')[0] == competition
+                   and k != f'{competition}|{stype}' and e.get('slug') == slug]
+        # Any extra-time finish in this stage or in the same-named stage of an earlier season vetoes "none".
+        veto = bool((own and _counts([own])['E']) or _counts(earlier)['E'])
+        if own and not veto:
             c = _counts([own])
-            if c['E'] == 0 and c['D'] >= MIN_DRAWS and not match.get('leg'):
+            if c['D'] >= MIN_DRAWS and not match.get('leg'):
                 return {**out, 'extra_time': 'none', 'basis': 'stage_draws', 'draws': c['D'], 'finals': sum(c.values())}
-        if slug:
-            earlier = [e for k, e in stages.items() if k.split('|')[0] == competition and k != f'{competition}|{stype}'
-                       and e.get('slug') == slug]
+        if earlier and not veto:
             c = _counts(earlier)
-            if earlier and c['E'] == 0 and c['D'] >= MIN_DRAWS and not match.get('leg') and not (own and _counts([own])['E']):
+            if c['D'] >= MIN_DRAWS and not match.get('leg'):
                 return {**out, 'extra_time': 'none', 'basis': 'same_stage_earlier_seasons', 'draws': c['D'],
                         'finals': sum(c.values())}
     p, basis, n = p_extra_time(competition, slug, stages)

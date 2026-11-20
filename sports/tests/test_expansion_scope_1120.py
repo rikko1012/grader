@@ -67,6 +67,15 @@ def test_first_leg_earlier_seasons_and_unseen_stage(tmp_path):
     assert r['extra_time'] == 'possible' and r['p_basis'] == 'prior' and r['p_extra_time'] == 0.25
 
 
+def test_extra_time_in_an_earlier_season_of_the_same_stage_vetoes_none(tmp_path):
+    st = stages_from(stored(1, '14435', 'STATUS_FULL_TIME', slug='apertura-finals-2026'),
+                     stored(2, '14435', 'STATUS_FULL_TIME', slug='apertura-finals-2026'),
+                     stored(3, '13440', 'STATUS_FINAL_PEN', period=5, clock="120'", slug='apertura-finals-2025'),
+                     tmp_path=tmp_path)
+    r = scope.rule('mex.1', {'stage_type': '14435', 'stage_slug': 'apertura-finals-2026'}, st)
+    assert r['extra_time'] == 'possible'
+
+
 def test_platform_rules():
     assert scope.settlement('prizepicks', 'none') == scope.settlement('underdog', 'none') == 'regulation'
     assert scope.settlement('prizepicks', 'possible') == 'regulation_plus_extra_time'

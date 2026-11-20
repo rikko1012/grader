@@ -58,14 +58,15 @@ def _promoted():
     scope/walkforward_report.json + walkforward_fotmob.json; criterion: upper 95% bound of ECE minus the graded
     eng.1/ita.1 control <= 0.03 and |mean chance - over rate| <= 0.03, chronological, inputs known before each fixture).
     aus.1 ESPN: 40,598 line tests on 321 matches, ECE 0.0117 vs control 0.0114 (diff CI -0.0041 .. 0.0047), bias
-    +0.0096 -> PASS. FotMob (the five modelled count stats; control eng.1 FotMob, ECE 0.0153): mex.1 26,245 tests
-    ECE 0.0159 (diff CI -0.0078 .. 0.0096), aus.1 14,796 / 0.0197 (-0.0068 .. 0.0153), usa.1 43,135 / 0.0176
+    +0.0096 -> PASS; promoted only for the stats tested one by one and inside the same bias bound: shots, shots on
+    target, goals, assists, fouls. aus.1 saves (548 tests, bias -0.054, ECE 0.050) is NOT promoted; fouls suffered /
+    cards were not tested. FotMob (the five modelled count stats; control eng.1 FotMob, ECE 0.0153): mex.1 26,245
+    tests ECE 0.0159 (diff CI -0.0078 .. 0.0096), aus.1 14,796 / 0.0197 (-0.0068 .. 0.0153), usa.1 43,135 / 0.0176
     (-0.0048 .. 0.0095), uefa.champions 10,371 / 0.0104 (-0.0100 .. 0.0075), |bias| <= 0.0081 -> PASS.
     Written out, never derived from the collectors' growing tables."""
-    espn_soccer = ('shots', 'shots_on_target', 'goals', 'assists', 'saves', 'fouls', 'fouls_suffered', 'yellow_cards',
-                   'red_cards')
+    espn_tested = ('shots', 'shots_on_target', 'goals', 'assists', 'fouls')
     fotmob_counts = ('passes_attempted', 'tackles', 'crosses', 'clearances', 'attempted_dribbles')
-    rows = {('aus.1', 'espn', s) for s in espn_soccer}
+    rows = {('aus.1', 'espn', s) for s in espn_tested}
     rows |= {(c, 'fotmob', s) for c in ('mex.1', 'aus.1', 'usa.1', 'uefa.champions') for s in fotmob_counts}
     return frozenset(rows)
 

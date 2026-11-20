@@ -59,7 +59,7 @@ def test_the_allowlist_is_frozen_not_derived_from_growing_tables():
         assert mutable not in src, mutable
     assert model.FORECAST_INPUTS == model._inputs() | model.PROMOTED_INPUTS
     assert model.PROMOTED_INPUTS == {('aus.1', 'espn', s) for s in ('shots', 'shots_on_target', 'goals', 'assists',
-                                     'saves', 'fouls', 'fouls_suffered', 'yellow_cards', 'red_cards')} | {
+                                     'fouls')} | {
         (c, 'fotmob', s) for c in ('mex.1', 'aus.1', 'usa.1', 'uefa.champions')
         for s in ('passes_attempted', 'tackles', 'crosses', 'clearances', 'attempted_dribbles')}
 

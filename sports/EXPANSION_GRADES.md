@@ -65,18 +65,26 @@ Owner mandate 2026-11-20: every offered soccer / tennis prop gets a grade from a
   competition outside `REGULATION_LEAGUES` equals the regulation total when the fixture is a first leg, or its
   stage (or the same stage name in earlier seasons) has >= 2 drawn single-leg full-time finals and no extra-time /
   penalty finish. Otherwise the fixture CAN reach extra time and the platform rule decides:
-  PrizePicks counts extra time (not shootouts), Underdog counts regulation + stoppage only.
+  PrizePicks counts extra time (not shootouts), Underdog counts regulation + stoppage only. Both rules are CITED,
+  not read first-hand (the X post returned 402, the Underdog page 403 on 2026-11-20); with `ET_SHARE = 0` the
+  PrizePicks rule changes no chance, only which box total a model review uses. An extra-time finish in the stage
+  or in the same-named stage of an earlier season vetoes "no extra time".
   `REGULATION_LEAGUES` lines are untouched (byte-identical forecasts: 4,026 of 4,026 graded grid cases).
 - **Walk-forward** (pre-registered, `cs2_scout_ops/logs/soccer_grades_1120/scope/`): 4,444 fixtures classified
   "no extra time" from earlier finals only across eng.1, ita.1, aus.1, mex.1, usa.1 and UCL, 0 went to extra time.
   For PrizePicks lines on fixtures that can reach extra time, a regulation + 30-minute mixture lost to the
   regulation predictive (log loss +0.0063, 95% CI +0.0050..+0.0079; box totals incl. extra time came in 7.4% under
   the regulation projection). So `ET_SHARE = 0`: those lines use the regulation predictive and settle on the
-  extra-time box total (`settle_scopes`), else the 90-minute total.
+  extra-time box total (`settle_scopes`), else the 90-minute total. That predictive on those fixtures: ECE 0.0198
+  (control 0.0114, diff CI +0.0026..+0.0141), bias +0.0267 (CI +0.020..+0.034) - inside the pre-registered bounds
+  but leaning Over (knockout games run lower than the regular-season history; no stage factor is applied).
+- Test lines in the walk-forward are synthetic (floor of the prior mean + 0.5): calibration evidence, not hit rate
+  at offered lines. ATP/WTA full-match lines unlocked by the tour format rule had no walk-forward here.
 - **Extra-time history is kept**: ESPN summaries of AET / penalty finals are stored as scope `full_game`
   (`includes_overtime` yes / unknown; shootout kicks are not in ESPN's player totals). Regulation readers skip them.
 - **History inputs** (`PROMOTED_INPUTS`, same pre-registered criterion: ECE within 0.03 of the graded control at the
-  upper 95% bound, |bias| <= 0.03): aus.1 ESPN stats (ECE 0.0117 vs control 0.0114, diff CI -0.0041..+0.0047);
+  upper 95% bound, |bias| <= 0.03): aus.1 ESPN shots / shots on target / goals / assists / fouls (ECE 0.0117 vs
+  control 0.0114, diff CI -0.0041..+0.0047; aus.1 saves NOT promoted: bias -0.054 on 548 tests);
   FotMob passes / tackles / crosses / clearances / dribbles for mex.1, aus.1, usa.1 and UCL (ECE 0.0104-0.0197 vs
   eng.1 FotMob 0.0153, every diff CI upper bound <= 0.0153). Newer competitions get 4 more "deficit" summaries a run (never-read finals of
   teams with an offered fixture, ESPN only, +6 requests max), read once each.
