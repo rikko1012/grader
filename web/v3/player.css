@@ -347,3 +347,8 @@ html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-outstats .sc-scene_
 html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list{grid-template-columns:minmax(0,1fr)}
 html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list>*{min-width:0;max-width:100%}
 @media (max-width:1023px){html[data-ui-v3] #u-hub #hub-detail>.v3p-maps{grid-template-columns:minmax(0,1fr)}}
+/* ---- qa 1120: delta arrows follow the sign (colour stays good / poor for Scout's side) ---- */
+html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-up::before{border-top:0;border-bottom:5px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-dn::before{border-bottom:0;border-top:5px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-scene__stat i:is(.sc-v-good,.sc-v-poor).v3p-up::before{border-top:0;border-bottom:4px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-scene__stat i:is(.sc-v-good,.sc-v-poor).v3p-dn::before{border-bottom:0;border-top:4px solid currentColor}
