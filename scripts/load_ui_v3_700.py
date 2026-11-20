@@ -88,7 +88,7 @@ def run(on):
     if on:
         os.environ["SCOUT_UI_V3"] = "1"
     else:
-        os.environ.pop("SCOUT_UI_V3", None)
+        os.environ["SCOUT_UI_V3"] = "0"          # v3 is the default since 8892ffd: off is an explicit 0
     ui_v3._PAGE.clear()
     ui_v3._BUNDLE.clear()
     BUILDS["page"] = 0

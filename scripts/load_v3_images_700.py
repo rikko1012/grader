@@ -6,7 +6,7 @@ The upstream is a STUB that is slow (0.25 s, every 10th call times out after 1 s
 on it. Three phases:
   cold   - empty disk, the warmer thread running: pictures not yet stored answer a fast 404, never a 5xx or a wait
   warm   - every picture stored: 200s (then 304s on revalidation), memory LRU + disk only
-  off    - SCOUT_UI_V3 unset: every /img path is the unknown-route answer
+  off    - SCOUT_UI_V3=0: every /img path is the unknown-route answer
 Fails on any 5xx, a wrong status, a member request reaching the upstream, more than one upstream fetch per picture (single
 flight), the image memory cache over its bound, or a final picture list (after the warm-up) that misses a stored picture (the
 coalesced picture version must always land), or a CS2 picture path that answers anything but the unknown-route 404 (CS2 has no
@@ -209,7 +209,7 @@ try:
     rep["cs2_paths"] = {p: call(conn, p, "m0")[1] for p in ("/img/index/cs2.json", "/img/p/cs2/1.webp", "/img/t/cs2/1000.webp")}
     conn[0] and conn[0].close()
     rep["cs2_registered"] = sum(1 for k in ic._SRC if k[1] == "cs2")
-    os.environ.pop("SCOUT_UI_V3", None)
+    os.environ["SCOUT_UI_V3"] = "0"          # v3 is the default since 8892ffd: off is an explicit 0
     rep["off"] = run("off")
     cur, peak = tracemalloc.get_traced_memory()
     st = ic.status()
