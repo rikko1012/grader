@@ -103,7 +103,7 @@ def open_landing(browser, base, size, theme, nrev=12, record=True, fonts=False, 
     return ctx, page
 
 
-VISIBLE = ("#hero-title", ".hero-k", "#rvq", "#rvq-prev", "#rvq-next", "#rvq-pp", "#rvq-all", ".lede", "#hero-rec-n", "#hero-rec-t", "#hero-books",
+VISIBLE = ("#hero-title", ".v3-crop", ".v3-strip", "#rvq", "#rvq-prev", "#rvq-next", "#rvq-pp", "#rvq-all", ".lede", "#hero-rec-n", "#hero-rec-t", "#hero-books",
            "#hc", "#hc-sport", ".hc-src", "#hc-pause", "#hc-av", "#hc-name", "#hc-meta", "#hc-chips .tag", "#hc-pct", "#hc-side", "#hc-why", "#hc-grade",
            "#hc-pl", "#hc-ll", "#hc-nav",
            "#proof-record-n", "#proof-record-t", "#proof-sports", "#proof-reviews-n", "#mq", "#mq-pause", ".books h2",
@@ -130,6 +130,15 @@ def check_landing_fields(page, size):
     if size is DESK:
         assert page.locator(".topnav").is_visible()
         assert page.locator(".hero .btn.ghost").is_visible()                       # Try the example board (desktop, as today)
+    # polish2: the approved hero (D mock): the eyebrow's sport list now opens the sentence; the capture is captioned with its date
+    assert not page.locator(".hero-k").is_visible()
+    sp = (page.evaluate("document.documentElement.dataset.v3Sports") or "cs2 lol nba nfl").split()
+    assert page.locator(".hero .lede").text_content().startswith("CS2, League of Legends, NBA")
+    assert ("soccer and tennis." in page.locator(".hero .lede").text_content()) == ("soccer" in sp and "tennis" in sp)
+    assert page.locator(".v3-crop figcaption").text_content().endswith("Nov 19, 16:20 UTC")
+    assert "Nov 19, 16:20 UTC" in page.locator(".v3-strip__src").text_content()
+    assert page.locator(".v3-crop .sc-pick__chance b").text_content() == "57.5%" and page.locator(".v3-crop .sc-pick__chance small").text_content() == "Model estimate"
+    assert page.locator(".proofs .books h2").text_content() == {4: "Four", 5: "Five", 6: "Six"}[len(sp)] + " sports, one board"
     assert page.locator("#hc-nav button").count() == 4 and page.locator(".fcard").count() == 8 and page.locator("#steps li").count() == 3
     pct = page.locator("#hc-pct").text_content().strip()
     assert pct.endswith("%") and len(pct.split(".")[-1]) == 2                     # one decimal + %
@@ -328,8 +337,9 @@ def test_carousel_under_the_headline_advances_and_pauses(browser, base, size):
     assert page.locator("#rvq-who").text_content() == page.locator("#rvq .rvq-s.on figcaption").text_content()
     assert page.locator("#rvq-all").text_content() == "All reviews" and page.locator("#rvq-all").get_attribute("href") == "/reviews"
     away = (5, 5)
-    page.locator("#rvq").scroll_into_view_if_needed()                     # the ticker turns only while it is on screen
-    page.wait_for_timeout(400)                                             # its visibility observer runs on a real frame
+    page.evaluate("document.getElementById('rvq').scrollIntoView({block: 'center'})")   # the ticker turns only while it is on screen
+    page.wait_for_function("(() => { const r = document.getElementById('rvq').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()")
+    page.wait_for_timeout(600)                                             # its visibility observer runs on a real frame
     page.clock.run_for(100)
     assert _idx(page) == 0
     page.mouse.move(*away)
@@ -347,7 +357,8 @@ def test_carousel_under_the_headline_advances_and_pauses(browser, base, size):
     assert _idx(page) == 2
     page.keyboard.press("Enter")
     assert _idx(page) == 0
-    page.focus(".ctas a")
+    page.focus(".v3-more .trust a")              # polish2: focus elsewhere, on screen with the ticker (it sits below the hero now; the
+    page.wait_for_timeout(600)                     # hero's buttons would scroll it off screen, where it rightly holds)
     page.clock.run_for(6000)
     assert _idx(page) == 1
     page.locator("#rvq-prev").click()
