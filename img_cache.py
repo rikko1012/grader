@@ -36,7 +36,10 @@ ROUTE = re.compile(r"^/img/(p|t)/(cs2|nba|nfl|soccer|tennis)/([a-z0-9][a-z0-9_-]
 INDEX_ROUTE = re.compile(r"^/img/index/(cs2|nba|nfl|soccer|tennis)\.json$")
 
 MAX_FETCH_BYTES = 4_000_000                # upstream answer cap (BO3.gg team art is ~60 KB, ESPN headshots ~260 KB)
-MAX_PIXELS = 25_000_000                    # Pillow decompression-bomb cap
+# decoded-size cap, checked from the header before any pixel is decoded (JPEG: after a reduced-scale draft decode). 2048 x 2048
+# fits; the largest real art sampled 2026-11-20 is a 1319 x 1681 BO3.gg team logo. A 4.2 M pixel RGBA decode is ~17 MB, so one
+# big upstream file can no longer push the warmer to ~290 MB RSS (review 2026-11-20; production memory sits at its limit).
+MAX_PIXELS = 4_200_000
 MAX_OUT_BYTES = 120_000                    # a re-encoded file over this is refused (a 160 px WEBP is ~5-12 KB)
 MAX_FILES = 20_000
 MAX_BYTES = 200_000_000
@@ -118,6 +121,8 @@ _QUEUE = []                                # FIFO of keys
 _QUEUED = set()
 _HOST_AT = {}
 _VERSION = [0]                             # bumps when a picture becomes ready (img_index rebuilds its lists)
+_PUBLISHED = [0, 0.0]                      # the version img_index sees, and when it was last moved (version(): coalesced)
+VERSION_GAP_S = 30                         # while the warmer is working through its queue, the lists move at most this often
 _WARMER = [None]
 _SCANNED = [False]
 STATS = {"fetched": 0, "stored": 0, "missed": 0, "failed": 0, "served": 0, "served_304": 0, "not_ready": 0, "refused": 0}
@@ -227,8 +232,29 @@ def read(key):
     return data, etag
 
 
+def bump():
+    """A picture (or BO3.gg roster data) changed: img_index rebuilds its lists on a later read (see version())."""
+    with _LOCK:
+        _VERSION[0] += 1
+
+
+def _warming():
+    t = _WARMER[0]
+    return os.environ.get("SCOUT_IMG_WARM", "1") != "0" and t is not None and t.is_alive()
+
+
 def version():
-    return _VERSION[0]
+    """The picture-set version img_index rebuilds on, COALESCED (review 2026-11-20: one bump per stored picture rebuilt every
+    list every MIN_REBUILD_S through a cold warm-up). A change is seen at once when the warmer is idle (queue empty, or no warmer:
+    tests store pictures themselves), at once after a quiet VERSION_GAP_S, and otherwise at most every VERSION_GAP_S - so the
+    last picture of a batch is always seen (the queue is empty by then)."""
+    with _LOCK:
+        v = _VERSION[0]
+        if v != _PUBLISHED[0]:
+            now = time.time()
+            if not (_QUEUE and _warming()) or now - _PUBLISHED[1] >= VERSION_GAP_S:
+                _PUBLISHED[0], _PUBLISHED[1] = v, now
+        return _PUBLISHED[0]
 
 
 # ---------------------------------------------------------------------------------------------------------------- fetch + encode
@@ -266,21 +292,32 @@ def encode(raw, kind):
     """Upstream bytes -> a small WEBP (bytes). Players: a square from the top centre (faces sit high in ESPN / BO3.gg art),
     160 px. Logos: the whole mark centred on a transparent 128 px square. Raises Refused for anything that is not a picture."""
     from PIL import Image
-    Image.MAX_IMAGE_PIXELS = MAX_PIXELS
+    box = SIZE[kind]
     try:
+        # Image.MAX_IMAGE_PIXELS is process-wide (reviews.py sets its own per upload): never changed here; the cap below is ours
         im = Image.open(io.BytesIO(raw))
         if im.format not in ("PNG", "WEBP", "JPEG", "GIF"):
             raise Refused("format")
         w, h = im.size
-        if w < 24 or h < 24 or w * h > MAX_PIXELS:
+        if w < 24 or h < 24:
             raise Refused("dims")
+        if im.format == "JPEG":
+            im.draft("RGB", (box * 2, box * 2))       # decode at 1/2 .. 1/8 scale (never below 2x the output box)
+            w, h = im.size
+        if w * h > MAX_PIXELS:
+            raise Refused("dims")                      # refused from the header: nothing decoded
         im.load()
     except Refused:
         raise
     except Exception as e:                             # noqa: BLE001 - truncated / not an image / bomb
         raise Refused(type(e).__name__) from e
+    if im.mode not in ("RGB", "RGBA", "L", "LA"):
+        im = im.convert("RGBA")
+    f = min(w, h) // (box * 2)
+    if f >= 2:                                         # shrink before the RGBA copy and the crop (box-average, then LANCZOS)
+        im = im.reduce(f)
+        w, h = im.size
     im = im.convert("RGBA")
-    box = SIZE[kind]
     if kind == "p":
         # portrait art (BO3.gg 354x455) and landscape art (ESPN 600x436): a top-centre square; square art (PrizePicks) whole
         # (measured on real art 2026-11-20: 80% of the short side keeps head and shoulders, the face reads at 32 px)
@@ -351,7 +388,7 @@ def _write(key, data):
     etag = hashlib.sha1(data).hexdigest()[:20]
     with _LOCK:
         _READY[key] = (etag, time.time(), len(data))
-        _VERSION[0] += 1
+    bump()
     _mem_put(key, data, etag)
     return True
 
@@ -507,6 +544,7 @@ def reset():
     with _LOCK:
         _SRC.clear(); _MISS.clear(); _READY.clear(); _MEM.clear(); _QUEUE.clear(); _QUEUED.clear(); _HOST_AT.clear()
         _MEM_SIZE[0] = 0
+        _PUBLISHED[0], _PUBLISHED[1] = _VERSION[0], 0.0
 
 
 # ---------------------------------------------------------------------------------------------------------------- HTTP answer

@@ -388,3 +388,146 @@ def test_an_unchanged_board_and_picture_set_is_not_rebuilt(cache, monkeypatch):
         ic.fetch_one(k, get=lambda u: png(300, 300))                        # a picture became ready
     ix._MEMO["nba"] = (ix._MEMO["nba"][0], ix._MEMO["nba"][1], 0.0, first)
     assert ix.index(None, "nba") != first and len(n) == 2
+
+
+# ------------------------------------------------------------------------------------------------ review 2026-11-20 fixes
+def test_index_never_waits_on_a_build_in_progress(cache, monkeypatch):
+    """One request builds; every other request gets the last list (EMPTY before the first build) at once (cold p99 at 700)."""
+    recs = [_rec("nba", "nba:player:espn:11", "Al Pha", "LAL", "lal")]
+    body = json.dumps({"records": recs}).encode()
+    gate, started, builds = threading.Event(), threading.Event(), []
+    monkeypatch.setattr(ix, "_records", lambda srv, sport: (body, json.loads(body)["records"], {"body": body}))
+    ix.build(None, "nba")
+    for k in list(ic._SRC):
+        ic.fetch_one(k, get=lambda u: png(300, 300))        # Al Pha's picture and logo are stored
+
+    def slow_records(srv, sport):
+        builds.append(sport)
+        started.set()
+        gate.wait(10)
+        return body, json.loads(body)["records"], {"body": body}
+    monkeypatch.setattr(ix, "_records", slow_records)
+    monkeypatch.setattr(ix, "_body_id", lambda srv, sport: None)
+    out = {}
+    builder = threading.Thread(target=lambda: out.setdefault("b", ix.index(None, "nba")))
+    builder.start()
+    assert started.wait(5)
+    t0 = time.time()
+    got = [ix.index(None, "nba") for _ in range(30)]
+    assert time.time() - t0 < 1.0 and all(g is ix.EMPTY for g in got)         # nobody waited; nothing promised yet
+    gate.set()
+    builder.join(5)
+    first = out["b"]
+    assert json.loads(first)["p"]["nba:player:espn:11"][0] and len(builds) == 1
+    # the next window: one request rebuilds (blocked again), the others get the last list at once
+    gate.clear(); started.clear()
+    ix._MEMO["nba"] = (None, ix._MEMO["nba"][1], 0.0, first)
+    builder = threading.Thread(target=ix.index, args=(None, "nba"))
+    builder.start()
+    assert started.wait(5)
+    t0 = time.time()
+    got = [ix.index(None, "nba") for _ in range(30)]
+    assert time.time() - t0 < 1.0 and all(g is first for g in got) and len(builds) == 2
+    gate.set()
+    builder.join(5)
+
+
+def test_picture_version_is_coalesced_while_the_warmer_works_and_always_lands(cache, monkeypatch):
+    monkeypatch.setattr(ic, "_warming", lambda: True)
+    v0 = ic.version()
+    with ic._LOCK:
+        ic._QUEUE.append(("p", "nba", "1"))                 # the warmer still has work
+    ic.bump()
+    v1 = ic.version()
+    assert v1 != v0                                         # the first change after a quiet spell is seen at once
+    ic.bump(); ic.bump()
+    assert ic.version() == v1                               # more stores inside VERSION_GAP_S: coalesced
+    monkeypatch.setattr(ic, "VERSION_GAP_S", 0)
+    assert ic.version() != v1                               # the window passed: seen
+    monkeypatch.setattr(ic, "VERSION_GAP_S", 30)
+    ic.bump()
+    v2 = ic.version()
+    ic.bump()
+    assert ic.version() == v2
+    with ic._LOCK:
+        ic._QUEUE.clear()                                   # the warmer's queue is empty: the last store is seen
+    assert ic.version() == ic._VERSION[0]
+
+
+def test_bo3_scan_bumps_through_the_coalesced_version(tmp_path):
+    import sqlite3
+    import zlib
+    db = tmp_path / "kv.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE kv (bucket TEXT, k TEXT, at REAL, data BLOB)")
+    team = {"id": 7, "slug": "t", "name": "T", "image_url": "https://files.bo3.gg/t.webp",
+            "players": [{"id": 1, "image_url": "https://files.bo3.gg/p.webp", "status": 1}]}
+    con.execute("INSERT INTO kv VALUES ('bo3', 'x', 5.0, ?)", (zlib.compress(json.dumps(team).encode()),))
+    con.commit(); con.close()
+    ix.reset()
+    before = ic._VERSION[0]
+    assert ix.bo3_scan(str(db)) == 1 and ic._VERSION[0] == before + 1
+    ix.reset()
+
+
+def _jpeg(w, h):
+    b = io.BytesIO()
+    Image.new("RGB", (w, h), (90, 120, 160)).save(b, "JPEG", quality=70)
+    return b.getvalue()
+
+
+def test_pixel_cap_is_about_4m_and_refuses_from_the_header_before_decoding(monkeypatch):
+    from PIL import ImageFile
+    assert 4_000_000 <= ic.MAX_PIXELS <= 4_200_000
+    loads = []
+    real = ImageFile.ImageFile.load
+    monkeypatch.setattr(ImageFile.ImageFile, "load", lambda self: (loads.append(self.size), real(self))[1])
+    with pytest.raises(ic.Refused) as e:
+        ic.encode(png(2100, 2100), "t")                     # 4.41 M pixels PNG: no reduced decode exists
+    assert str(e.value) == "dims" and loads == []           # refused from the header: no pixel decoded
+    assert Image.open(io.BytesIO(ic.encode(png(2048, 2048), "t"))).size == (128, 128)   # 2048 x 2048 still fits
+
+
+def test_a_big_jpeg_is_decoded_at_reduced_scale(monkeypatch):
+    from PIL import ImageFile
+    loads = []
+    real = ImageFile.ImageFile.load
+    monkeypatch.setattr(ImageFile.ImageFile, "load", lambda self: (loads.append(self.size), real(self))[1])
+    d = ic.encode(_jpeg(4000, 3000), "p")                   # 12 M pixels on the wire
+    assert Image.open(io.BytesIO(d)).size == (160, 160)
+    assert loads and loads[0][0] * loads[0][1] <= 600_000   # decoded at 1/8 scale (500 x 375), never the full 12 M pixels
+
+
+def test_encode_peak_memory_stays_small_for_the_biggest_allowed_inputs(tmp_path):
+    """RSS in a fresh process (Pillow's buffers are invisible to tracemalloc): the largest PNG the cap allows and a 48 M pixel JPEG
+    each add well under 100 MB at peak (before: a 25 M pixel cap allowed ~290 MB)."""
+    import subprocess
+    import sys
+    big_png, big_jpg = tmp_path / "big.png", tmp_path / "big.jpg"
+    Image.new("RGBA", (2048, 2048), (200, 30, 30, 255)).save(big_png, "PNG")
+    Image.new("RGB", (8000, 6000), (90, 120, 160)).save(big_jpg, "JPEG", quality=60)
+    code = r"""
+import sys, psutil, img_cache as ic
+from PIL import Image
+p = psutil.Process()
+def peak():
+    m = p.memory_info()
+    return getattr(m, "peak_wset", None) or __import__("resource").getrusage(__import__("resource").RUSAGE_SELF).ru_maxrss * 1024
+import io
+w = io.BytesIO(); Image.new("RGBA", (300, 300), (1, 2, 3, 255)).save(w, "PNG")
+ic.encode(w.getvalue(), "p"); ic.encode(w.getvalue(), "t")          # plugins and encoders loaded before the baseline
+base = peak()
+out = []
+for f, kind in ((sys.argv[1], "t"), (sys.argv[2], "p")):
+    raw = open(f, "rb").read()
+    ic.encode(raw, kind)
+    out.append(peak() - base)
+print(int(max(out)))
+"""
+    import os
+    r = subprocess.run([sys.executable, "-c", code, str(big_png), str(big_jpg)], capture_output=True, text=True, timeout=120,
+                       cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assert r.returncode == 0, r.stderr
+    grew = int(r.stdout.strip().splitlines()[-1])
+    assert grew < 100_000_000, grew
+    print("encode peak RSS growth MB", round(grew / 1e6, 1))

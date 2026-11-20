@@ -5,6 +5,12 @@
    Display only:
    - Pictures come from Scout's own origin (/img/..., img_cache.py), never from a third-party host. Which board player has a READY
      picture is read from /img/index/<sport>.json (exact ids from the board snapshot; a name maps only when one board player has it).
+   - A picture needs the card's sport, read from the card itself (the row's record key, the open card's record key, the leg's or
+     slip card's sport tag, the receipt's sport): a sport without pictures (LoL) or an unknown sport keeps the monogram, and a name
+     is never looked up in another sport's list (review 2026-11-20: a LoL nick equal to a CS2 nick showed the CS2 face).
+   - Where the card carries the player's exact id (the open card's line doc, matched by its record key; an NBA / NFL hotlink id),
+     only that id's picture is used: an id with no ready picture keeps the monogram, never a name match. Without an id, only
+     that sport's own board can name the player (one board player with that name).
    - Each card keeps its monogram: the picture is laid over it and removed again if it cannot load; nothing else in the card moves.
      The hub's own nodes are never replaced; where a card has no avatar node yet (esports board rows, My picks rows) one is added
      once that sport's board has pictures (the monogram where a player has none, so every name stays aligned).
@@ -19,7 +25,8 @@
   var SPORT_OF = {CS2: 'cs2', NBA: 'nba', NFL: 'nfl', Soccer: 'soccer', Tennis: 'tennis', LoL: 'lol', League: 'lol'};
   var WITH = {cs2: 1, nba: 1, nfl: 1, soccer: 1, tennis: 1};
   var IDX = {}, LOADING = {}, SEEN = {}, LAST = {}, REFRESH_MS = 90000;
-  var CARDS = [];                                          /* the hub's teed line docs: name -> exact player id + sport */
+  var CARDS = {}, CARD_KEYS = [];                          /* the hub's teed line docs: record key -> exact player id + sport */
+  var EMPTY_RETRY_MS = 15000;                              /* a list that came back empty (a cold server) is asked again sooner */
 
   /* ---------------------------------------------------------------- the ready-picture lists */
   function want(sport) {
@@ -31,23 +38,27 @@
       return r.ok ? r.json() : null;
     }).then(function (d) {
       LOADING[sport] = 0; LAST[sport] = Date.now();
-      if (d && d.p && d.n) { IDX[sport] = d; schedule(); }
+      if (d && d.p && d.n) {
+        IDX[sport] = d;
+        if (!Object.keys(d.p).length) LAST[sport] = Date.now() - REFRESH_MS + EMPTY_RETRY_MS;
+        schedule();
+      }
     }, function () { LOADING[sport] = 0; LAST[sport] = Date.now(); });
   }
+  /* one sport's list only. pid known -> that exact id or nothing (no name fallback); no pid -> that board's one player of that name */
   function bySport(sport, name, pid) {
     var d = IDX[sport];
     if (!d) return null;
-    var id = pid && d.p[pid] ? pid : (name ? d.n[name] : null);
-    var f = id && d.p[id];
+    var id = pid ? pid : (name ? d.n[name] : null);
+    var f = id && Object.prototype.hasOwnProperty.call(d.p, id) && d.p[id];
     return f ? {i: f[0] || '', t: f[1] || '', team: f[2] || ''} : null;
   }
   function face(sport, name, pid) {
-    name = String(name || '').trim();
-    if (sport) { want(sport); return bySport(sport, name, pid); }
-    var hit = null, n = 0;                                 /* no sport on screen: only a name that one sport's board has */
-    Object.keys(IDX).forEach(function (s) { var f = bySport(s, name, null); if (f) { hit = f; n++; } });
-    return n === 1 ? hit : null;
+    if (!sport || !WITH[sport]) return null;               /* unknown sport / a sport without pictures: the monogram */
+    want(sport);
+    return bySport(sport, String(name || '').trim(), pid ? String(pid) : '');
   }
+  function sportOfKey(k) { var s = String(k || '').split('|')[0]; return /^(cs2|lol|nba|nfl|soccer|tennis)$/.test(s) ? s : ''; }
   /* a sport whose board has pictures gives every row an avatar (the monogram where there is no picture), so names stay aligned */
   function anyPics(sport) { var d = IDX[sport]; if (!d) return false; if (d.__any == null) d.__any = Object.keys(d.p).length > 0; return d.__any; }
   function teamLogo(sport, team) {
@@ -67,10 +78,10 @@
           p.then(function (r) {
             if (r && r.ok) r.clone().json().then(function (d) {
               var rec = d && d.record;
-              if (!rec || !rec.player) return;
-              CARDS.unshift({name: String(rec.player.name || '').trim(), id: String(rec.player.id || ''), sport: rec.sport,
-                             team: rec.player.team || '', opp: rec.player.opponent || ''});
-              CARDS.length = Math.min(CARDS.length, 24);
+              if (!rec || !rec.player || !rec.offer || !rec.sport) return;
+              var k = [rec.sport, rec.offer.platform, rec.offer.offer_id].join('|');   /* the hub's record key (#hub-detail[data-id]) */
+              if (!CARDS[k]) { CARD_KEYS.push(k); if (CARD_KEYS.length > 48) delete CARDS[CARD_KEYS.shift()]; }
+              CARDS[k] = {id: String(rec.player.id || ''), sport: rec.sport};
               want(rec.sport); schedule();
             }, function () { /* not JSON */ });
           }, function () { /* the hub sees its own failure */ });
@@ -79,7 +90,6 @@
       return p;
     };
   }
-  function cardOf(name) { for (var i = 0; i < CARDS.length; i++) if (CARDS[i].name === name) return CARDS[i]; return null; }
 
   /* ---------------------------------------------------------------- painting */
   function ownText(el) {
@@ -115,8 +125,15 @@
     return pid;
   }
   /* box: the card's avatar node (hub .u-face, slips .sb-av / .sb-face, player .v3p-avatar, or one added here) */
+  function clear(box) {                                    /* no picture for this card (any more): back to the monogram */
+    if (!box || !box.hasAttribute('data-v3f')) return;
+    box.removeAttribute('data-v3f');
+    box.classList.remove('v3f-on');
+    box.querySelectorAll(':scope > .v3f-img, :scope > .v3f-badge').forEach(function (n) { n.remove(); });
+  }
   function paint(box, f) {
-    if (!box || !f) return;
+    if (!box) return;
+    if (!f) { clear(box); return; }
     var sig = f.i + '|' + f.t;
     if (box.getAttribute('data-v3f') === sig && (!f.i || box.querySelector(':scope > .v3f-img'))) return;
     box.setAttribute('data-v3f', sig);
@@ -141,36 +158,37 @@
   function boardRows(scope) {
     scope.querySelectorAll('#u-hub td.h-c-player').forEach(function (td) {
       var btn = td.querySelector(':scope > .h-player'); if (!btn) return;
-      var b = btn.querySelector('b'), tag = btn.querySelector('small > i:last-child');
-      var sport = tag ? SPORT_OF[tag.textContent.trim()] : null, name = b ? b.textContent.trim() : '';
-      if (!sport || !name) return;
+      var b = btn.querySelector('b'), tr = td.closest('tr[data-record]');
+      var sport = tr ? sportOfKey(tr.getAttribute('data-record')) : '', name = b ? b.textContent.trim() : '';
+      if (!WITH[sport] || !name) return;
       var box = td.querySelector(':scope > .u-face'), f = face(sport, name, espnPid(box));
       if (!box) {
         if (!anyPics(sport)) return;
         box = newBox(name, 32, 'h-face'); td.insertBefore(box, btn);
       }
-      if (f) paint(box, f);
+      paint(box, f);
     });
     scope.querySelectorAll('#u-hub .h-player-head').forEach(function (h) {
       var b = h.querySelector(':scope > b'), sp = h.querySelector(':scope > span');
       var name = b ? b.textContent.trim() : '', bits = sp ? sp.textContent.split(' · ') : [];
-      var sport = SPORT_OF[(bits[bits.length - 1] || '').trim()];
-      if (!sport || !name) return;
+      var sport = SPORT_OF[(bits[bits.length - 1] || '').trim()] || '';
+      if (!WITH[sport] || !name) return;
       var box = h.querySelector(':scope > .u-face'), f = face(sport, name, espnPid(box));
       if (!box) { if (!anyPics(sport)) return; box = newBox(name, 24, 'h-face'); h.insertBefore(box, h.firstChild); }
-      if (f) paint(box, f);
+      paint(box, f);
     });
   }
   /* the player card hero + its match strip */
   function playerCard(scope) {
     var head = scope.querySelector('#u-hub #hub-detail .h-card-head');
     if (!head) return;
-    var title = head.querySelector('#hub-card-title'), name = ownText(title);
-    var c = cardOf(name), sport = c ? c.sport : (root.getAttribute('data-sc-sport') || '');
+    var title = head.querySelector('#hub-card-title'), name = ownText(title), detail = head.closest('#hub-detail');
+    var k = detail ? detail.getAttribute('data-id') || '' : '', sport = sportOfKey(k), c = CARDS[k];
     var box = head.querySelector(':scope > .u-face, :scope > .v3p-avatar');
-    var f = name ? face(WITH[sport] ? sport : null, name, c && c.id) : null;
-    if (box && f) paint(box, f);
-    if (!WITH[sport]) return;
+    if (!WITH[sport]) { if (box) clear(box); return; }         /* LoL / unknown: the monogram, never another sport's face */
+    /* the card is one exact record: its line doc's player id (or the NBA / NFL hotlink id) or no picture - never its name */
+    var pid = (c && c.sport === sport && c.id) || espnPid(box);
+    if (box) paint(box, pid ? face(sport, name, pid) : null);
     scope.querySelectorAll('#u-hub #hub-detail .sc-matchup__team').forEach(function (t) {
       var b = t.querySelector(':scope > b'), team = b ? b.textContent.trim() : '', logo = teamLogo(sport, team);
       var have = t.querySelector(':scope > .v3f-team');
@@ -191,16 +209,19 @@
   function legs(scope) {
     scope.querySelectorAll('.u-leg').forEach(function (leg) {
       var nm = leg.querySelector('.u-leg-name'); if (!nm) return;
-      var tag = nm.querySelector(':scope > i'), sport = tag ? SPORT_OF[tag.textContent.trim()] : null, name = ownText(nm);
+      var tag = nm.querySelector(':scope > i'), sport = tag ? SPORT_OF[tag.textContent.trim()] || '' : '', name = ownText(nm);
       var box = leg.querySelector('.sb-face > .u-face, :scope > .sb-av, .u-leg-name > .u-face');
-      if (!box || !sport || !name) return;
-      paint(box, face(sport, name, espnPid(box)));                /* a leg is a current board offer */
+      if (!box || !name) return;
+      paint(box, face(sport, name, espnPid(box)));                /* a leg is a current board offer of its tagged sport */
     });
+    /* Auto-build cards: every leg is a current board offer (the hub drops a leg whose board row it does not have); the leg's sport
+       is its own tag (the first part of its line "<Sport> · <event>"), its id the NBA / NFL hotlink where the hub draws one */
     scope.querySelectorAll('#u-hub .h-generated-card li').forEach(function (li) {
       var box = li.querySelector(':scope > .sb-av, :scope > .u-face'), who = li.querySelector('div > strong');
-      var name = who ? who.textContent.trim() : '';
+      var tag = li.querySelector('div > small'), name = who ? who.textContent.trim() : '';
+      var sport = tag ? SPORT_OF[(tag.textContent.split(' · ')[0] || '').trim()] || '' : '';
       if (!box || !name) return;
-      paint(box, face(null, name));
+      paint(box, face(sport, name, espnPid(box)));
     });
   }
   /* My picks rows (hub section and tray) */
@@ -209,8 +230,8 @@
       var b = btn.querySelector(':scope > span > b'), sm = btn.querySelector(':scope > span > small');
       if (!b || !sm) return;
       var name = b.textContent.replace(/\s+(Over|Under)\s+\S+\s*$/, '').trim();
-      var sport = SPORT_OF[(sm.textContent.split(' · ')[0] || '').trim()];
-      if (!sport || !name) return;
+      var sport = SPORT_OF[(sm.textContent.split(' · ')[0] || '').trim()] || '';
+      if (!WITH[sport] || !name) return;
       var box = btn.querySelector(':scope > .u-face'), pid = espnPid(box), f = face(sport, pid ? '' : name, pid);
       if (f && !pid) {                                       /* a receipt has no player id: only today's board player with that name
                                                                 who plays for one of the receipt's two teams */
@@ -222,7 +243,7 @@
         box = newBox(name, 32); btn.insertBefore(box, btn.firstChild);
         var art = btn.closest('.u-pick'); if (art) art.classList.add('u-pick-face');   /* the row's face column (picks.css) */
       }
-      if (f) paint(box, f);
+      paint(box, f);
     });
   }
 

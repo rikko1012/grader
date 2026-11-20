@@ -6527,7 +6527,8 @@ class Handler(BaseHTTPRequestHandler):
                 return True
             import img_index
             body = img_index.index(sys.modules[__name__], m.group(1))
-            self.send_shared(("img_index", m.group(1)), 200, body, keep=60)
+            # the empty list (sent while the first build runs) has its own key: it never replaces the real list's ETag / gzip copy
+            self.send_shared(("img_index", m.group(1)) + (("empty",) if body is img_index.EMPTY else ()), 200, body, keep=60)
             return True
         hit = img_cache.answer(u.path, self.headers.get("If-None-Match"))
         if hit is None:

@@ -8,7 +8,8 @@ on it. Three phases:
   warm   - every picture stored: 200s (then 304s on revalidation), memory LRU + disk only
   off    - SCOUT_UI_V3 unset: every /img path is the unknown-route answer
 Fails on any 5xx, a wrong status, a member request reaching the upstream, more than one upstream fetch per picture (single
-flight), or the image memory cache over its bound. Prints one line: RESULT {json}.
+flight), the image memory cache over its bound, or a final picture list (after the warm-up) that misses a stored picture (the
+coalesced picture version must always land). Prints one line: RESULT {json}.
 
 usage: python scripts/load_v3_images_700.py <code_dir> [members=700] [players=320]"""
 import http.client
@@ -62,6 +63,7 @@ NBA = [{"sport": "nba", "player": {"id": f"nba:player:espn:{4000000 + i}", "name
                                    "team_abbr": NBA_TEAMS[i % 18]}, "offer": {"offer_id": f"n{i}"}} for i in range(PLAYERS)]
 BODIES = {"cs2": json.dumps({"records": CS2}).encode(), "nba": json.dumps({"records": NBA}).encode()}
 ix._records = lambda srv, sport: (BODIES.get(sport), json.loads(BODIES[sport])["records"], {"body": BODIES[sport]}) if sport in BODIES else (None, [], None)
+ix._body_id = lambda srv, sport: id(BODIES[sport]) if sport in BODIES else None     # the same board body object, as production
 
 _png = io.BytesIO()
 Image.new("RGBA", (354, 455), (90, 110, 160, 255)).save(_png, "PNG")
@@ -187,7 +189,17 @@ try:
             for s in ("cs2", "nba"):                      # retry the stub's timeouts: what the next board read does
                 ix._MEMO.clear()
                 ix.index(server, s)
-    ix._MEMO.clear()
+    listed = {}
+    for s in ("cs2", "nba"):                              # the lists every member gets once the warmer is done (no clearing)
+        deadline2 = time.time() + 60
+        while True:
+            d = json.loads(ix.index(server, s))
+            listed[s] = sum(1 for v in d["p"].values() if v[0]) + len({v[1] for v in d["p"].values() if v[1]})
+            if listed[s] >= (PLAYERS + (TEAMS if s == "cs2" else len(NBA_TEAMS))) or time.time() > deadline2:
+                break
+            ix._MEMO[s] = (ix._MEMO[s][0], ix._MEMO[s][1], 0.0, ix._MEMO[s][3])   # the next MIN_REBUILD_S window
+            time.sleep(0.2)
+    rep["listed_after_warm"] = listed
     rep["warm_up_s"] = round(time.time() - t_warm, 1)
     rep["ready"] = ic.status()["ready"]
     rep["warm"] = run("warm")
@@ -203,6 +215,7 @@ try:
     # more than one call per picture only for the stub's own timeouts (every 10th call), never two at once for one key
     rep["pass"] = (all(rep[p]["errors_5xx"] == 0 and rep[p]["wrong_status"] == 0 for p in ("cold", "warm", "off"))
                    and UP["member_thread_calls"] == 0 and rep["ready"] == len(ALL) and st["mem_bytes"] <= ic.MEM_BYTES
+                   and listed == {"cs2": PLAYERS + TEAMS, "nba": PLAYERS + len(NBA_TEAMS)}
                    and retried <= UP["calls"] // 10 + 1)
     print("RESULT " + json.dumps(rep))
 finally:

@@ -215,6 +215,14 @@ The owner path is `GET /preview/v3?token=<ADMIN_TOKEN>`, then use the cookie (se
   the logo only when the BO3.gg team name equals the row's team), NBA / NFL ESPN athlete id + team abbreviation, soccer / tennis ESPN
   athlete id where resolved, then the PrizePicks picture of the offer's own player id (shared art and placeholders dropped).
   LoL: monograms until the owner approves lolesports images. Hosts: `a.espncdn.com`, `files.bo3.gg`, `static.prizepicks.com`.
-- **Never on a member request:** one warmer thread fetches (paced, https, no redirects, 4 MB / 25 MP caps), re-encodes WEBP
-  (160 px headshot, 128 px logo on its own contrast disc) and writes atomically under `.cache/img` (20k files / 200 MB bound).
+- **Never on a member request:** one warmer thread fetches (paced, https, no redirects, 4 MB / 4.2 MP caps; the pixel cap is read
+  from the header before any decode, JPEGs decode at reduced scale), re-encodes WEBP (160 px headshot, 128 px logo on its own
+  contrast disc) and writes atomically under `.cache/img` (20k files / 200 MB bound).
+- **The picture list never makes a member wait:** one request rebuilds a sport's list; every other request gets the last list (an
+  empty one before the first build) at once. Stored pictures move the list at most every 30 s while the warmer works through its
+  queue, and at once when it is idle.
+- **Which card gets which picture (review 2026-11-20):** the card's own sport (row / card record key, leg or Auto-build sport tag,
+  receipt sport) and only that sport's list; LoL or an unknown sport keeps the monogram. The open card uses its exact player id
+  (its line doc, or the NBA / NFL hotlink id) or nothing; an id without a ready picture keeps the monogram. Rows, legs and Auto-build
+  legs without an id use that sport's own board (a name only when one board player has it).
 - **Load:** `python scripts/load_v3_images_700.py . 700` (cold / warm / off phases, slow stub upstream).

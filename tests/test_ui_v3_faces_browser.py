@@ -310,3 +310,92 @@ def test_flag_off_no_pictures_and_no_requests(browser, env, monkeypatch, tmp_pat
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+# ------------------------------------------------------------------------------------------------ review 2026-11-20: strict sport + id
+def _fake_cs2_index(monkeypatch, edit):
+    """Serve a CS2 picture list changed by edit(d) (a nick collision, an id without a picture); other sports unchanged."""
+    real = json.loads(ix.index(server, "cs2"))
+    edit(real)
+    body = json.dumps(real).encode()
+    orig = ix.index
+    monkeypatch.setattr(ix, "index", lambda srv, sport: body if sport == "cs2" else orig(srv, sport))
+    return real
+
+
+GEN_CARD = """(cards => { const host = document.querySelector('#hub-generated') || document.querySelector('#u-hub');
+  const art = document.createElement('article'); art.className = 'h-generated-card'; art.id = 'faces-probe';
+  art.innerHTML = '<ol>' + cards.map(c => '<li data-probe="' + c[0] + '"><div><strong>' + c[1] + '</strong><small>' + c[0] + ' · Probe event</small></div></li>').join('') + '</ol>';
+  host.appendChild(art); })"""
+
+
+def test_v3_no_face_across_sports_lol_card_rows_and_autobuild_legs(browser, env, monkeypatch, tmp_path):
+    """A LoL player whose name is also a CS2 nick (the CS2 list names him) keeps his monogram on his row, his card and an Auto-build
+    leg; an Auto-build leg tagged CS2 gets the CS2 board player's picture; a leg of an unknown sport gets none."""
+    card_setup(env, monkeypatch, "dark")
+    seed_pictures(monkeypatch, tmp_path)
+    c, p = card_page(browser, env, DESK, "dark")
+    try:
+        p.locator('#hub-sports [data-id=lol]').click()
+        p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].length && [...document.querySelectorAll('#hub-rows tr[data-record]')].every(r => r.dataset.record.startsWith('lol|'))")
+        lol = p.evaluate("document.querySelector('#hub-rows tr[data-record] .h-player b').textContent.trim()")
+        vargo = str(sum(map(ord, "vargo")))
+
+        def collide(d):
+            d["n"][lol] = vargo                        # the CS2 board "has" a player named like the LoL player
+        d = _fake_cs2_index(monkeypatch, collide)
+        assert d["p"][vargo][0]
+        p.reload()
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=30000)
+        p.locator('#hub-sports [data-id=cs2]').click()           # the CS2 list is loaded in this page
+        p.wait_for_selector("#hub-rows td.h-c-player .v3f-img.is-in", timeout=15000)
+        p.locator('#hub-sports [data-id=lol]').click()
+        p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record]')].every(r => r.dataset.record.startsWith('lol|'))")
+        # Auto-build legs (sport from the leg's own tag)
+        p.evaluate(GEN_CARD + "(%s)" % json.dumps([["LoL", lol], ["CS2", "vargo"], ["Darts", lol]]))
+        p.wait_for_selector('#faces-probe li[data-probe=CS2] .v3f-img', state="attached", timeout=10000)
+        p.wait_for_timeout(500)
+        got = p.evaluate("""[...document.querySelectorAll('#faces-probe li')].map(li => [li.dataset.probe,
+            li.querySelector('.v3f-img') && li.querySelector('.v3f-img').getAttribute('src'), !!li.querySelector('.sb-av, .u-face')])""")
+        by = {g[0]: g for g in got}
+        assert by["LoL"][1] is None and by["Darts"][1] is None, got        # never another sport's face; unknown sport: none
+        assert by["CS2"][1].startswith(f"/img/p/cs2/{vargo}.webp"), got    # its own sport's board player
+        # the LoL rows and the LoL card
+        assert p.evaluate("!document.querySelector('#hub-rows .v3f-img')"), "LoL rows show a CS2 face"
+        p.locator('#hub-rows tr[data-record] .h-player').first.click()
+        p.wait_for_selector('#hub-detail .h-card-head', timeout=20000)
+        p.wait_for_timeout(2500)                       # the LoL card's own loads (its saved results may stay loading here)
+        assert p.evaluate("!document.querySelector('#hub-detail .h-card-head .v3f-img')"), "LoL card shows a CS2 face"
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_v3_card_with_a_known_id_and_no_picture_keeps_the_monogram(browser, env, monkeypatch, tmp_path):
+    """The open card's exact id has no ready picture: the monogram stays, even when the name would map to someone else's picture
+    (bySport is strict once an id is known)."""
+    card_setup(env, monkeypatch, "dark")
+    seed_pictures(monkeypatch, tmp_path)
+    vargo, brandr = str(sum(map(ord, "vargo"))), str(sum(map(ord, "brandr")))
+
+    def no_pic(d):
+        d["p"].pop(vargo, None)
+        d["n"]["vargo"] = brandr                       # a name lookup would give brandr's picture
+    _fake_cs2_index(monkeypatch, no_pic)
+    c, p = card_page(browser, env, DESK, "dark")
+    try:
+        p.evaluate("""window.__heroImgs = []; new MutationObserver(l => l.forEach(m => m.addedNodes.forEach(n => {
+            if (n.nodeType === 1 && n.classList.contains('v3f-img') && n.closest('#hub-detail')) window.__heroImgs.push(n.getAttribute('src')); })))
+            .observe(document.documentElement, {childList: true, subtree: true})""")
+        open_card(p, "cs2", "vargo")
+        p.wait_for_selector("#hub-detail .h-card-head > .v3p-avatar, #hub-detail .h-card-head > .u-face", timeout=15000)
+        p.wait_for_timeout(1500)
+        assert p.evaluate("window.__heroImgs") == [], p.evaluate("window.__heroImgs")
+        assert p.evaluate("!document.querySelector('#hub-detail .h-card-head .v3f-img')")
+        close(p)
+        open_card(p, "cs2", "brandr")                  # his own id has a picture: shown
+        p.wait_for_selector("#hub-detail .h-card-head > .v3f .v3f-img.is-in", timeout=15000)
+        assert p.evaluate("document.querySelector('#hub-detail .h-card-head .v3f-img').getAttribute('src')").startswith(f"/img/p/cs2/{brandr}.webp")
+        assert not p.errors, p.errors
+    finally:
+        c.close()

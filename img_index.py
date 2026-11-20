@@ -11,7 +11,8 @@ Per sport, from the board snapshot members already get (read only; nothing in th
 
 index(srv, sport) -> JSON bytes: {"p": {player.id: [headshot url, team logo url, team text]}, "n": {name: player.id}, "tn": {team: logo url}}
 ("" where not ready) with READY pictures only, so a card never asks for a file that is not there. A name maps only when exactly one board player has
-it. Built once per board body / picture version (single flight per sport) and served with the board's own ETag rules.
+it. Built once per board body / picture version (single flight per sport, never waited on: while one request builds, the others
+get the last list, or an empty one before the first build) and served with the board's own ETag rules.
 """
 import json
 import re
@@ -97,8 +98,7 @@ def bo3_scan(db_path=None, pause_every=25):
     with _LOCK:
         _BO3.update(at=newest, players=players, teams=teams)
     if n:
-        with ic._LOCK:
-            ic._VERSION[0] += 1                        # new BO3.gg answers: the CS2 list is rebuilt on its next read
+        ic.bump()                                      # new BO3.gg answers: the CS2 list is rebuilt on its next read
     return n
 
 
@@ -244,20 +244,26 @@ EMPTY = b'{"n":{},"p":{},"tn":{}}'
 
 def index(srv, sport):
     """-> JSON bytes. Rebuilt only when the board body or the set of stored pictures changed (checked at most every
-    MIN_REBUILD_S); one build at a time per sport; a failed build is remembered for MIN_REBUILD_S too (the last good list, or an
-    empty one), so a sports-service outage never turns into one rebuild per waiting member."""
+    MIN_REBUILD_S); one build at a time per sport and NO request waits for it: while one request builds, every other request gets
+    the last list (or EMPTY before the first build) at once (review 2026-11-20: a blocking lock gave a 10 s cold p99 at 700). A
+    failed build is remembered for MIN_REBUILD_S too (the last good list, or an empty one), so a sports-service outage never turns
+    into one rebuild per waiting member."""
     if sport not in ic.SPORTS:
         return None
     ic.start_warmer()
     hit = _MEMO.get(sport)
     if hit and time.time() - hit[2] < MIN_REBUILD_S:
         return hit[3]
-    with _SPORT_LOCKS[sport]:
+    lock = _SPORT_LOCKS[sport]
+    if not lock.acquire(blocking=False):               # another request is building: never wait on it
+        hit = _MEMO.get(sport)
+        return hit[3] if hit else EMPTY
+    try:
         hit = _MEMO.get(sport)
         now = time.time()
         if hit and now - hit[2] < MIN_REBUILD_S:
             return hit[3]
-        v = ic.version()
+        v = ic.version()                               # read BEFORE the build: a picture stored meanwhile rebuilds next time
         if hit and hit[1] == v and hit[0] is not None and hit[0] == _body_id(srv, sport):
             _MEMO[sport] = (hit[0], v, now, hit[3])    # same board, same pictures: nothing to rebuild
             return hit[3]
@@ -271,6 +277,8 @@ def index(srv, sport):
             out = hit[3]                               # same bytes, same object: send_shared keeps its ETag / gzip copy
         _MEMO[sport] = (id(body) if body is not None else None, v, now, out)
         return out
+    finally:
+        lock.release()
 
 
 def reset():
