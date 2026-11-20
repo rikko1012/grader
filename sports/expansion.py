@@ -183,6 +183,27 @@ Retired / walkover / suspended matches never produce completed-match stats.
             out.matches.append({"event_id": eid, "competition": competition, "name": parent.get("name"),
                                 "start": start, "status": state, "participants": participants,
                                 "best_of": None, "surface": None, "source_status": name})
+            if sport == 'soccer':
+                # sg-scope (2026-11-20): the fixture's stage facts, as ESPN reports them (season.type id = one stage of
+                # one season; leg = 1st / 2nd leg of a two-legged tie; period / clock at the end). expansion_scope
+                # decides from these + stored finals whether the fixture can reach extra time. Never inferred.
+                season = parent.get('season') or {}
+                if season.get('type') is not None:
+                    out.matches[-1]['stage_type'] = str(season['type'])
+                if season.get('slug'):
+                    out.matches[-1]['stage_slug'] = str(season['slug'])
+                leg = (c.get('leg') or {}).get('value') if isinstance(c.get('leg'), dict) else None
+                if isinstance(leg, int) and not isinstance(leg, bool):
+                    out.matches[-1]['leg'] = leg
+                status = c.get('status') or {}
+                if typ.get('state') == 'post':
+                    if isinstance(status.get('period'), int) and not isinstance(status.get('period'), bool):
+                        out.matches[-1]['period'] = status['period']
+                    if status.get('displayClock'):
+                        out.matches[-1]['clock'] = str(status['displayClock'])
+            elif isinstance(parent.get('major'), bool):
+                # sg-scope: ESPN's Grand Slam flag; expansion_formats derives best-of from it for full-match lines only.
+                out.matches[-1]['major'] = parent['major']
             if sport == 'soccer' and complete:
                 scores = [_number(s.get('score', {}).get('value') if isinstance(s.get('score'), dict)
                                   else s.get('score')) for s in sides]

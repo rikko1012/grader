@@ -52,7 +52,16 @@ def test_the_allowlist_is_frozen_not_derived_from_growing_tables():
     src = inspect.getsource(model._inputs)
     for mutable in ('COMPETITIONS', 'LEAGUES', 'FIELDS', 'STATS', 'COUNT_STATS', 'SOCCER_LEAGUE_IDS'):
         assert mutable not in src, mutable
-    assert len(model.FORECAST_INPUTS) == 24 * 9 + 6 * 13 + 2 * 5 + 2 * 5 + 2 * 13
+    assert len(model._inputs()) == 24 * 9 + 6 * 13 + 2 * 5 + 2 * 5 + 2 * 13
+    # sg-scope 2026-11-20: plus exactly the walk-forward-promoted rows, written out the same way
+    src = inspect.getsource(model._promoted)
+    for mutable in ('COMPETITIONS', 'LEAGUES', 'FIELDS', 'STATS', 'COUNT_STATS', 'SOCCER_LEAGUE_IDS'):
+        assert mutable not in src, mutable
+    assert model.FORECAST_INPUTS == model._inputs() | model.PROMOTED_INPUTS
+    assert model.PROMOTED_INPUTS == {('aus.1', 'espn', s) for s in ('shots', 'shots_on_target', 'goals', 'assists',
+                                     'fouls')} | {
+        (c, 'fotmob', s) for c in ('mex.1', 'aus.1', 'usa.1', 'uefa.champions')
+        for s in ('passes_attempted', 'tackles', 'crosses', 'clearances', 'attempted_dribbles')}
 
 
 def _new_stat_names():

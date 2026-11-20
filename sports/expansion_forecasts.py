@@ -14,7 +14,7 @@ import time
 from functools import lru_cache
 
 from gradecore import policy
-from . import expansion_board as boards, expansion_research as research, store
+from . import expansion_board as boards, expansion_research as research, expansion_scope, store
 from .contracts import now_utc, parse_utc
 from .expansion import COMPETITIONS, isolated_database
 from .expansion_history import atomic_json
@@ -53,8 +53,27 @@ def _inputs():
     return frozenset(rows)
 
 
+def _promoted():
+    """sg-scope (2026-11-20): rows promoted by the pre-registered walk-forward (cs2_scout_ops/logs/soccer_grades_1120/
+    scope/walkforward_report.json + walkforward_fotmob.json; criterion: upper 95% bound of ECE minus the graded
+    eng.1/ita.1 control <= 0.03 and |mean chance - over rate| <= 0.03, chronological, inputs known before each fixture).
+    aus.1 ESPN: 40,598 line tests on 321 matches, ECE 0.0117 vs control 0.0114 (diff CI -0.0041 .. 0.0047), bias
+    +0.0096 -> PASS; promoted only for the stats tested one by one and inside the same bias bound: shots, shots on
+    target, goals, assists, fouls. aus.1 saves (548 tests, bias -0.054, ECE 0.050) is NOT promoted; fouls suffered /
+    cards were not tested. FotMob (the five modelled count stats; control eng.1 FotMob, ECE 0.0153): mex.1 26,245
+    tests ECE 0.0159 (diff CI -0.0078 .. 0.0096), aus.1 14,796 / 0.0197 (-0.0068 .. 0.0153), usa.1 43,135 / 0.0176
+    (-0.0048 .. 0.0095), uefa.champions 10,371 / 0.0104 (-0.0100 .. 0.0075), |bias| <= 0.0081 -> PASS.
+    Written out, never derived from the collectors' growing tables."""
+    espn_tested = ('shots', 'shots_on_target', 'goals', 'assists', 'fouls')
+    fotmob_counts = ('passes_attempted', 'tackles', 'crosses', 'clearances', 'attempted_dribbles')
+    rows = {('aus.1', 'espn', s) for s in espn_tested}
+    rows |= {(c, 'fotmob', s) for c in ('mex.1', 'aus.1', 'usa.1', 'uefa.champions') for s in fotmob_counts}
+    return frozenset(rows)
+
+
+PROMOTED_INPUTS = _promoted()
 # Grade leak guard (2026-11-18). Frozen: changing it changes grades and needs a walk-forward test first.
-FORECAST_INPUTS = _inputs()
+FORECAST_INPUTS = _inputs() | PROMOTED_INPUTS
 
 
 def encode(x):
@@ -88,6 +107,7 @@ def fit(offer, facts, now):
         return None, 'competition_mismatch'
     expected_scope = scope
     support = None
+    scope_rule = extra_time_p = tennis_rule = None
     context = facts.get('context') or {}
     if any(context.get(k) and parse_utc(context[k])>parse_utc(now) for k in ('surface_known_at','format_known_at')):
         return None, 'future_context'
@@ -96,7 +116,17 @@ def fit(offer, facts, now):
             return None, 'stat_not_modelled'
         if scope == 'full_game':
             if ident['competition'] not in REGULATION_LEAGUES:
-                return None, 'extra_time_scope_unverified'
+                # sg-scope: decided per fixture (expansion_scope): no extra time possible -> the line is the
+                # regulation total; extra time possible -> the platform rule (PrizePicks counts extra time: mixture
+                # model below; Underdog does not: regulation total). REGULATION_LEAGUES keep their unchanged path.
+                scope_rule = facts.get('scope_rule') or {}
+                settle_as = expansion_scope.settlement(offer['platform'], scope_rule.get('extra_time'))
+                if settle_as is None:
+                    return None, 'extra_time_scope_unverified'
+                if settle_as == 'regulation_plus_extra_time':
+                    extra_time_p = scope_rule.get('p_extra_time')
+                    if not isinstance(extra_time_p, (int, float)) or not 0 <= extra_time_p < 1:
+                        return None, 'extra_time_scope_unverified'
             expected_scope = 'regulation'
         if scope not in ('full_game', 'regulation', 'first_half', 'second_half'):
             return None, 'period_not_modelled'
@@ -105,6 +135,10 @@ def fit(offer, facts, now):
             support = list(range(8)) if stat == 'games_won' else list(range(6, 14))
         elif scope == 'full_game' and stat in ('aces', 'double_faults', 'breakpoints_won',
                                               'games_won','games_played','sets_won','sets_played','tie_breakers_played'):
+            rule = facts.get('format_rule') or {}
+            if context.get('best_of') is None and rule.get('best_of') in (3, 5):
+                # sg-scope: tour rule from ESPN's Grand Slam flag (expansion_formats.tour_rule), full-match lines only.
+                context, tennis_rule = {**context, 'best_of': rule['best_of']}, rule
             if context.get('best_of') not in (3, 5):
                 return None, 'match_format_missing'
             sets = context['best_of']
@@ -171,6 +205,27 @@ def fit(offer, facts, now):
         total = sum(mass)
         mass = [p/total for p in mass]
         model = 'overdispersed-count-predictive'
+        if extra_time_p is not None and expansion_scope.ET_SHARE > 0:
+            # Same player rate for 30 more minutes: with P(extra time), the count is Poisson((1+share)*rate) under
+            # the same Gamma posterior, i.e. the same shape at mean (1+share)*mu. Mixture of the two predictives.
+            mu2 = mu*(1+expansion_scope.ET_SHARE)
+            prob2 = shape / (shape + mu2)
+            mass2, cumulative = [], 0.0
+            for k in range(4096):
+                pk = math.exp(math.lgamma(k+shape)-math.lgamma(shape)-math.lgamma(k+1)
+                              +shape*math.log(prob2)+k*math.log1p(-prob2))
+                mass2.append(pk)
+                cumulative += pk
+                if k > mu2 and cumulative > 1-1e-10:
+                    break
+            if sum(mass2) < 1-1e-6:
+                return None, 'distribution_tail_unresolved'
+            total2 = sum(mass2)
+            width = max(len(mass), len(mass2))
+            mass = [(1-extra_time_p)*(mass[k] if k < len(mass) else 0.0) +
+                    extra_time_p*(mass2[k]/total2 if k < len(mass2) else 0.0) for k in range(width)]
+            support = list(range(width))
+            model = 'overdispersed-count-predictive+extra-time-mixture'
     line = offer['line']
     probs = {name: sum(p for k,p in zip(support,mass) if rule(k)) for name,rule in
              [('over', lambda k:k>line), ('under', lambda k:k<line), ('push', lambda k:k==line)]}
@@ -182,12 +237,24 @@ def fit(offer, facts, now):
         if len(quantiles) == 1 and cumulative >= .9:
             quantiles.append(k)
             break
-    return {'model_version': VERSION, 'distribution': model, 'sample': n,
-            'projection': sum(k*p for k,p in zip(support,mass)), 'range80': quantiles,
-            'p_over': probs['over'], 'p_under': probs['under'], 'p_push': probs['push'],
-            'inputs': games, 'history_scope': expected_scope,
-            'context_used': {k:context[k] for k in ('best_of','surface') if k in context} if sport=='tennis' else {},
-            'calibrated': False}, None
+    out = {'model_version': VERSION, 'distribution': model, 'sample': n,
+           'projection': sum(k*p for k,p in zip(support,mass)), 'range80': quantiles,
+           'p_over': probs['over'], 'p_under': probs['under'], 'p_push': probs['push'],
+           'inputs': games, 'history_scope': expected_scope,
+           'context_used': {k:context[k] for k in ('best_of','surface') if k in context} if sport=='tennis' else {},
+           'calibrated': False}
+    if scope_rule is not None:
+        # sg-scope: only on lines this release unlocked (never on a REGULATION_LEAGUES line - their bytes stay).
+        out['scope_rule'] = {k: scope_rule[k] for k in ('version','extra_time','basis','stage','stage_type',
+                             'p_extra_time','p_basis') if scope_rule.get(k) is not None}
+        out['settlement_scope'] = 'regulation_plus_extra_time' if extra_time_p is not None else 'regulation'
+        if extra_time_p is not None:
+            out['extra_time'] = {'p': extra_time_p, 'share_of_regulation_rate': expansion_scope.ET_SHARE,
+                                 'settlement_rule': 'expansion_scope.PLATFORM_RULES:' + offer['platform']}
+            out['settle_scopes'] = ['full_game', 'regulation']   # extra-time box totals first, else the 90 minutes
+    if tennis_rule is not None:
+        out['format_rule'] = {k: tennis_rule[k] for k in ('best_of', 'basis') if k in tennis_rule}
+    return out, None
 
 
 def make_forecast(offer, facts, now):
@@ -258,16 +325,21 @@ def publish(sport, now=None, budget_s=8):
     if status != 200:
         return {'state':'quotes_unavailable'}
     facts = research.saved(sport).get('players',{})
-    counts, current = {}, {}
+    counts, current, detail = {}, {}, {}
     full = storage(sport)['full']
     with closing(connect(sport)) as c:
         for offer in sorted(board['offers'],key=lambda x:x['start']):
             if time.monotonic() >= deadline:
                 counts['budget'] = counts.get('budget',0)+1
                 break
-            forecast, reason = make_forecast(offer, facts.get(research.key(offer),{}), now)
+            fact = facts.get(research.key(offer),{})
+            forecast, reason = make_forecast(offer, fact, now)
             if forecast is None:
                 counts[reason] = counts.get(reason,0)+1
+                # sg-scope: the competition / stat / platform of each pending reason (learning-status.json, ops)
+                comp = (fact.get('identity') or {}).get('competition') or offer.get('competition_code') or 'unlinked'
+                k = '|'.join((reason, comp, offer['stat'], offer['platform']))
+                detail[k] = detail.get(k,0)+1
                 continue
             ident = forecast['identity']
             key = offer_key(offer)
@@ -301,7 +373,8 @@ def publish(sport, now=None, budget_s=8):
             pass
     current = fit_publication(current)
     atomic_json(path, {'sport':sport,'at':now,'forecasts':current})
-    return {'published':len(current),'letters':sum(bool(v['grade']) for v in current.values()),'pending':counts}
+    return {'published':len(current),'letters':sum(bool(v['grade']) for v in current.values()),'pending':counts,
+            'pending_by':dict(sorted(detail.items(), key=lambda kv:(-kv[1],kv[0]))[:60])}
 
 
 PUBLICATION_BYTES = 3_800_000   # attach() ignores a forecasts.json over 4,000,000 bytes (every grade of the sport)
@@ -425,7 +498,11 @@ def settle(sport, now=None, budget_s=3):
                 by_key.setdefault((obs.participant_id,obs.stat,obs.scope),[]).append((row,obs))
             for row in c.execute('SELECT id,payload FROM forecasts WHERE competition=? AND event_id=?',(comp,eid)):
                 f = json.loads(row['payload'])
-                candidates = by_key.get((f['identity']['player_id'],f['stat'],f['history_scope']),[])
+                candidates = []
+                for result_scope in f.get('settle_scopes') or [f['history_scope']]:
+                    candidates = by_key.get((f['identity']['player_id'],f['stat'],result_scope),[])
+                    if candidates:
+                        break
                 if not candidates:
                     continue
                 values = {o.value for _,o in candidates}
