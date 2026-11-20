@@ -25,6 +25,18 @@ PP_MARKETS = {
 }
 # PrizePicks league per player: soccer board 82 (SOCCER / EPL) and MLS on its own league 6.
 PP_LEAGUES = {"soccer": {"SOCCER", "EPL", "MLS"}, "tennis": {"TENNIS"}}
+# 2026-11-19 (ppsoccer-1119): PrizePicks moved soccer from one SOCCER tab (league 82) into a tab per league. Exact
+# PrizePicks league id -> (its display name in /leagues, our competition code). Ids and names read from PrizePicks'
+# /leagues on 2026-11-19; codes are the ESPN slugs the history stores use (expansion_history.SOCCER_LEAGUE_IDS).
+# Nothing is fuzzy: an id whose name no longer matches is not fetched, and a soccer tab missing here is only listed
+# in ops (PrizePicks' "soccer" icon also marks HANDBALL, so it is never trusted on its own). League 82 is the mixed
+# tab (Brazil, A-League, ...): no pin, read exactly as before (prizepicks(..., league=None)).
+# Left out on purpose: 1H / 2H child tabs (parent_id set; no first-/second-half history), SOCCERSZN 262 and
+# WORLD CUP TRNY 457 (season / tournament-long props, not one match), WORLD CUP 241 (no club competition).
+PP_SOCCER_LEAGUES = {82: ("SOCCER", None), 14: ("EPL", "eng.1"), 6: ("MLS", "usa.1"), 536: ("Liga MX", "mex.1"),
+                     534: ("Serie A", "ita.1"), 531: ("La Liga", "esp.1"), 533: ("Bundesliga", "ger.1"),
+                     535: ("Ligue 1", "fra.1"), 79: ("UCL", "uefa.champions")}
+PP_SOCCER_NOT_MATCH = {262, 457}    # season-long / tournament-long soccer tabs: never single-match props
 PP_SCOPES = {"Full": "full_game", "1H": "first_half", "2H": "second_half", "1st Set": "set1"}
 # Underdog soccer (sport_id FIFA): full-match stats the ESPN box score holds. Goals + Assists, 1H goals and cards
 # stay unmapped (no summed stat / first-half scope / combined-cards house rule registered).
@@ -60,11 +72,30 @@ def finish(row):
     return row
 
 
-def prizepicks(body, sport, observed_at):
+def _pp_team_names(included, game_rel, side):
+    """A game's own team object (home_team_data / away_team_data): its exact name and market (full) names."""
+    ref = ((game_rel.get(f"{side}_team_data") or {}).get("data") or {})
+    team = included.get((ref.get("type"), str(ref.get("id")))) or {}
+    names = []
+    for k in ("name", "market"):
+        v = team.get(k)
+        if isinstance(v, str) and v.strip() and v not in names:
+            names.append(v)
+    return team.get("abbreviation"), names
+
+
+def prizepicks(body, sport, observed_at, league=None):
+    """league=None: the original reader (tennis, and soccer's mixed tab 82), byte for byte. league=<PrizePicks soccer
+    league id in PP_SOCCER_LEAGUES>: keep only that tab's players by numeric league_id (never by name), and add
+    pp_league / competition_code (the exact competition pin) / team_aliases (the game's own full team names, exact
+    equality only). Those keys exist only on per-league rows, so tab-82 rows and their revisions never change."""
     now = timestamp(observed_at)
     if now is None or sport not in PP_MARKETS:
         raise ValueError("sport and observation time required")
+    if league is not None and (sport != "soccer" or league not in PP_SOCCER_LEAGUES or league == 82):
+        raise ValueError("unknown PrizePicks soccer league")
     included = {(x.get("type"), str(x.get("id"))): x.get("attributes") or {} for x in body.get("included") or []}
+    games = {str(x.get("id")): x.get("relationships") or {} for x in body.get("included") or [] if x.get("type") == "game"}
     rows = []
     for p in body.get("data") or []:
         a, rel = p.get("attributes") or {}, p.get("relationships") or {}
@@ -76,9 +107,14 @@ def prizepicks(body, sport, observed_at):
         player, game = item("new_player"), item("game")
         if not (player.get("display_name") or player.get("name")):
             continue
-        actual = str(player.get("league") or "").upper()
-        if actual not in PP_LEAGUES[sport]:
-            continue
+        if league is None:
+            actual = str(player.get("league") or "").upper()
+            if actual not in PP_LEAGUES[sport]:
+                continue
+        else:
+            own = ((rel.get("league") or {}).get("data") or {}).get("id")
+            if str(player.get("league_id")) != str(league) or (own is not None and str(own) != str(league)):
+                continue
         stat = PP_MARKETS[sport].get(a.get("stat_type"))
         duration = item("duration").get("name")
         scope = PP_SCOPES.get(duration)
@@ -113,6 +149,13 @@ def prizepicks(body, sport, observed_at):
             if (by_game and by_text and by_game != by_text) or not opponent or "/" in opponent or "/" in str(me):
                 opponent = None
             extra = {"opponent": opponent, "tour": None}
+        if league is not None:
+            name, code = PP_SOCCER_LEAGUES[league]
+            grel = games.get(str(rid("game"))) or {}
+            (a_abbr, a_names), (h_abbr, h_names) = _pp_team_names(included, grel, "away"), _pp_team_names(included, grel, "home")
+            # The full names belong to the same two teams only when the team objects carry the same short labels.
+            aliases = [a_names, h_names] if (a_abbr, h_abbr) == (away, home) else [[], []]
+            extra = {"pp_league": name, "competition_code": code, "team_aliases": aliases}
         rows.append(finish({**extra, "sport": sport, "platform": "prizepicks", "offer_id": str(p["id"]),
             "event_id": f"{sport}:prizepicks:{rid('game')}", "player_id": f"{sport}:prizepicks:{rid('new_player')}",
             "player": player.get("display_name") or player.get("name"), "role": player.get("position"),

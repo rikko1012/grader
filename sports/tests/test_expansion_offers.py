@@ -243,8 +243,11 @@ def test_board_fit_drops_only_hidden_prizepicks_variants_latest_first():
 
 
 def test_quotes_job_requests_mls_and_underdog_soccer_only_when_flagged(monkeypatch, tmp_path):
+    # The tab-82 path exactly as at 5036ce4, now behind the per-league kill switch (SCOUT_SOCCER_PP_LEAGUES=0). The
+    # default per-league path is covered in test_pp_soccer_leagues_1119.py.
     from sports import expansion_odds
     monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_SOCCER_PP_LEAGUES', '0')
     calls = []
     def get_json(sport, url, params=None, **kw):
         calls.append((url, dict(params or {})))

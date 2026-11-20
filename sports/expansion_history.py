@@ -127,12 +127,19 @@ def _pair(sets, aliases):
     return None
 
 
+def pinned(offer, competition):
+    """A PrizePicks per-league soccer offer (competition_code, 2026-11-19) only ever matches a fixture of exactly that
+    competition. Offers without the key (tab 82, Underdog, tennis) are unaffected."""
+    code = offer.get('competition_code')
+    return not code or competition == code
+
+
 def resolve(offer, matches):
     """A single matching event AND player, otherwise abstain. No name-only join."""
     answer = {}
     for match in matches:
         competition = match.get('competition')
-        if COMPETITIONS.get(competition, (None,))[0] != offer['sport']:
+        if COMPETITIONS.get(competition, (None,))[0] != offer['sport'] or not pinned(offer, competition):
             continue
         if not match.get('start') or abs((parse_utc(match['start']) - parse_utc(offer['start'])).total_seconds()) > 7200:
             continue
@@ -173,7 +180,7 @@ def resolve(offer, matches):
 
 def soccer_teams(offer, match):
     """Match the offered fixture before requesting roster or schedule context."""
-    if (offer.get('sport') != 'soccer' or not match.get('start') or
+    if (offer.get('sport') != 'soccer' or not match.get('start') or not pinned(offer, match.get('competition')) or
             abs((parse_utc(offer['start']) - parse_utc(match['start'])).total_seconds()) > 7200):
         return []
     found = _team_sets(offer)

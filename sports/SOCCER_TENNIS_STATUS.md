@@ -158,3 +158,63 @@ New-sport forecast/settlement validation is still incomplete: they are excluded
 from generated/tracked slips and Public Record, not represented as validated
 grades. CS2/LoL/NBA/NFL continue their existing grading paths. No paid-resource
 changes are part of this correction.
+
+## PrizePicks soccer per-league tabs (2026-11-19, ppsoccer-1119)
+
+PrizePicks moved soccer from the single SOCCER tab (league 82) into one tab per league (member report: Liga MX,
+MLS and Serie A props missing). The soccer quotes job now reads every mapped tab:
+
+- Exact table `expansion_offers.PP_SOCCER_LEAGUES`: 82 SOCCER (mixed, no pin, read exactly as before), 14 EPL eng.1,
+  6 MLS usa.1, 536 Liga MX mex.1, 534 Serie A ita.1, 531 La Liga esp.1, 533 Bundesliga ger.1, 535 Ligue 1 fra.1,
+  79 UCL uefa.champions. A tab is read only when `/leagues` (read at most hourly; cached list trusted 24 h, then
+  every mapped tab is tried) lists it with projections under the exact same name. 1H / 2H child tabs, SOCCERSZN (262)
+  and WORLD CUP TRNY (457) are never read. A new soccer-icon tab with lines is only reported
+  (`pp_soccer_tab_unmapped`): HANDBALL carries the same icon.
+- Per-league rows are filtered by numeric `league_id`, keep standard lines only, and carry `pp_league`,
+  `competition_code` (identity resolves only against a fixture of exactly that competition) and `team_aliases` (the
+  game's own full team names, exact equality: "Atlético de San Luis", "Seattle Sounders FC"). Tab-82 rows have none of
+  these keys, so their revisions and forecasts are byte-identical to 5036ce4.
+- Request limit (measured from one IP, logs/ppsoccer_1119): two PrizePicks requests back-to-back pass, a third
+  within seconds draws 429 (3 of 3 runs), one request every ~40-45 s is sustained - about 1.3 requests a minute for
+  the whole IP, shared with tennis and the NBA / NFL ingest. Render's limit is not known, so coverage is ADAPTIVE
+  (AIMD on real 429s, review fix 2026-11-19):
+  - `level` = soccer PrizePicks requests per 90 s, paid out over short runs every 45 s
+    (`SPORTS_JOB_SOCCER_QUOTES_EVERY_S`, clamped >= 30 s; 180 s with the kill switch on) as credit, never a burst
+    after a pause. Start: 1 (tab 82 every 180 s + one tab in rotation). +1 after `SCOUT_SOCCER_PP_GROW_S` (600 s) of
+    clean runs with no 429 from ANY PrizePicks consumer; at most what re-reads every source every 180 s
+    (`max_level` = ceil(sources / 2): 9 sources -> 5) and `SCOUT_SOCCER_PP_MAX_LEVEL` (default 5; 1 = rollback lever).
+  - Any 429 - soccer, tennis (logged by `expansion_sources._held`) or the NBA / NFL lines fetch
+    (`lines._fetch_pp` reports its 429s and its Retry-After hold to `request-holds.db`; its own request, retries,
+    answer and lines are unchanged) - halves the level at once (one halving a run); the level that drew it is not
+    tried again for `SCOUT_SOCCER_PP_CEILING_S` (3600 s). Another consumer's 429 in the last 60 s skips the run; a
+    Retry-After hold (any consumer) means no request at all. Waiting out a hold / cool-off / back-off never counts as
+    clean time. Two own 429s within 15 min still back off to tab 82 only, every 180 s, for
+    `SCOUT_SOCCER_PP_BACKOFF_S` (600 s).
+  - Requests of one run are `SCOUT_SOCCER_PP_SPACE_S` (4 s) apart (and `SCOUT_PP_GAP_S`, 3 s, across processes); no
+    request starts after 30 s. Runs stay short on purpose: the scheduler replay keeps base timing with 6-14 s runs
+    every 45 s (1 of 12 seeds late vs 2 of 12 at base), not with 15-25 s runs every 90 s (4-6 of 12).
+- Rotation (fair): tab 82 whenever it is due (170 s since its last attempt), then the due tabs with standard lines
+  (or never read) least-recently-ATTEMPTED first - a failing tab never starves the others, an earlier kick-off never
+  takes another league's turn. A listed tab whose last read had no standard line is re-read every 30 min. Every
+  source's last good rows stay on the board with their own `observed_at` until the 300 s rule hides them, so BELOW
+  full coverage leagues take turns on the board (level 1: each league ~300 s of every 8 x 180 s); at full coverage
+  every source is re-read every 180 s and stays on continuously. If Render shows no 429s, 9 sources reach full
+  coverage in ~40 min (4 steps x 600 s).
+- An empty answer from a tab `/leagues` lists with lines is a failed read (and re-reads `/leagues`, at most every
+  10 min). A failed `/leagues` read (429, 5xx, timeout, bad JSON, empty list) waits 600 s, then 1200, 2400, then
+  hourly - never a retry every run. Book markets (BetRivers / DraftKings) keep their 180 s cadence and are carried.
+- Member strip: the one `prizepicks` source follows TAB 82 only (a failing league tab shows in ops, not to members);
+  its `checked_at` is the oldest good read among the tabs on the board (the soccer page re-stamps rows with it).
+- Grading is unchanged: MLS and Liga MX full-match lines stop at `extra_time_scope_unverified` (usa.1 / mex.1 are not
+  regulation-only leagues), passes / tackles / crosses / clearances / dribbles have forecast inputs only for the six
+  FotMob leagues, `shots_assisted` has no collector. Goal + Assist and fantasy-score labels are unmapped, as before.
+- Ops (GET): `expansion_pp_soccer` = `coverage` (`level`, `max_level`, `cap`, `credit`, `constrained`,
+  `halved_this_run`, `ceiling` / `ceiling_until`, `grow_in_s`, `last_growth`, `last_halving`, `halvings`), `pp_429`
+  per consumer (`soccer` / `tennis` / `nba_nfl`: `last_1h`, `last_24h`, `last_at`), per tab `ok`, `refresh_age_s`,
+  `listed`, `covered` (rows on the board now), `read_this_run`, `parsed`, `kept`, `first_start`, `on_board`,
+  `last_ok_at`, `last_attempt_at`, `last_error`; plus `every_s`, `space_s`, `calls`, `stopped`, `recent_429`,
+  `backoff_until`, `league_list` (`fails`, `next_try_after_error_s`), `unmapped_with_lines`, `renamed`.
+- Kill switch: `SCOUT_SOCCER_PP_LEAGUES=0` = the single tab-82 request every 180 s exactly as at 5036ce4 (shared pace
+  and odds carry off too). `SCOUT_SOCCER_PP_MLS`
+  is retired (MLS is tab 6 in the table); it still works only with the kill switch on, as before.
+
