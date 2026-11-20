@@ -52,6 +52,7 @@ PART_ROWS = int(os.environ.get("SPORTS_ARCHIVE_PART_ROWS", "5000"))
 DISK_FLOOR_MB = float(os.environ.get("SPORTS_ARCHIVE_DISK_FLOOR_MB", "300"))
 PROGRESS_OPS = 20000         # SQLite VM steps between budget checks during the candidate scan
 LRU_BYTES = int(float(os.environ.get("SPORTS_ARCHIVE_CACHE_MB", "32")) * 1_000_000)
+PREFIX_CAPS = {}            # store-path prefix -> byte cap inside the LRU (expansion_compact.bound_service_cache)
 COLS = ("rid", "kind", "record_id", "source", "source_key", "revision", "content_hash", "schema_version", "league",
         "event_id", "player_id", "stat", "platform", "line", "observed_at", "known_at", "stored_at", "payload",
         "last_seen_at", "seen_count")
@@ -167,7 +168,26 @@ class _Files:
             while self.size > LRU_BYTES and len(self.lru) > 1:
                 _k, (_p, n) = self.lru.popitem(last=False)
                 self.size -= n
+            self._cap_prefixes(key)
         return parsed
+
+    def _cap_prefixes(self, key):
+        """sg-stability 2026-11-20: files of stores under a registered directory (the soccer / tennis result stores,
+        read by member history requests in the web process) share their own smaller byte cap inside the global LRU, so
+        they can never take the NBA / NFL share or grow the service towards its restart watchdog. Nothing registered
+        (the default, and every NBA / NFL path) = the global rule only, unchanged."""
+        def norm(x):
+            return os.path.normcase(os.path.abspath(x))
+        for prefix, cap in PREFIX_CAPS.items():
+            if not norm(str(key[0])).startswith(prefix):
+                continue
+            mine = [k for k in self.lru if norm(str(k[0])).startswith(prefix)]
+            used = sum(self.lru[k][1] for k in mine)
+            for k in mine:
+                if used <= cap or k == key:
+                    break
+                used -= self.lru[k][1]
+                self.size -= self.lru.pop(k)[1]
 
 
 class _Lines:

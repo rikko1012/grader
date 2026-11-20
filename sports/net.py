@@ -108,15 +108,37 @@ def backoff(attempt, base=3.0, cap=30.0):
     return min(cap, base * (2 ** attempt)) * random.uniform(0.5, 1.5)
 
 
-def get(url, params=None, headers=None, timeout=30, tries=3, ok=(200,)):
+def get(url, params=None, headers=None, timeout=30, tries=3, ok=(200,), max_bytes=None):
     """GET with pacing and retries -> Response for a status in `ok`; raises HttpError otherwise. A 429 / 5xx / dropped
     connection is retried with a growing, jittered pause (backoff()). A Retry-After is obeyed in full: it becomes a
     hold (hold()); a hold that fits the call's MAX_SLEEP_S wait budget is waited out, a longer one fails the call at
     once with not_before set - the caller records it and skips the source until then, never retrying early. The hold
     is re-checked right before EVERY send (after pacing, after backoff, on every retry), so no request goes out while
     any hold - including one another request set meanwhile - is in force."""
-    return _request(url, params, headers, timeout, tries, ok,
-                    lambda: session().get(url, params=params, headers=headers, timeout=timeout))
+    if not max_bytes:
+        return _request(url, params, headers, timeout, tries, ok,
+                        lambda: session().get(url, params=params, headers=headers, timeout=timeout))
+    # sg-stability 2026-11-20: max_bytes (opt-in; every existing caller passes none) - the body is read in chunks and an
+    # answer over the limit fails with ValueError('response too large') before it is held whole, so one huge reply can
+    # never push a capped job past its memory cap between two samples
+    r = _request(url, params, headers, timeout, tries, ok,
+                 lambda: session().get(url, params=params, headers=headers, timeout=timeout, stream=True))
+    try:
+        declared = int(r.headers.get("Content-Length") or 0)
+    except (TypeError, ValueError):
+        declared = 0
+    if declared > max_bytes:
+        r.close()
+        raise ValueError("response too large")
+    buf, n = [], 0
+    for chunk in r.iter_content(65536):
+        n += len(chunk)
+        if n > max_bytes:
+            r.close()
+            raise ValueError("response too large")
+        buf.append(chunk)
+    r._content = b"".join(buf)
+    return r
 
 
 def _clear_to_send(host, url, budget):

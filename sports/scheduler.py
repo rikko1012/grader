@@ -382,8 +382,14 @@ def default_jobs():
         J[f"{sport}-history"] = dict(argv=_py("-m", "sports.expansion_history", sport), every_s=300,
             timeout_s=180, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=120, cls=LIGHT, prio=6,
             locks=(f"{sport}-history",), serial_group=f"expansion:{sport}")
+        # sg-stability 2026-11-20: LIGHT (was HEAVY prio 8). This job alone publishes the sport's grades
+        # (forecasts.json); as a heavy prio-8 job it ran 2 / 1 times in 85 min live (start-to-start gaps 47-57 min in the
+        # replays). Peaks 53 / 43 MB, runs 3-21 s. LIGHT keeps its full cap reserved against the child budget and its
+        # serial group with history; 8-seed replay on the 2026-11-20 live run times (cs2_scout_ops/logs/
+        # soccer_grades_1120/stability/sched_grid2.txt): learning gap 53 -> 6.6 min worst, soccer-quotes <= 3.3 min,
+        # settle-post -8.3 min, prebuilt -6 min; player-context's worst seed +9.8 min (median 76.3 -> 75.9)
         J[f"{sport}-learning"] = dict(argv=_py("-m", "sports.expansion_learning", sport), every_s=180,
-            timeout_s=45, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=100, cls=HEAVY, prio=8,
+            timeout_s=45, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=100, cls=LIGHT, prio=8,
             locks=(f"{sport}-history",f"{sport}-learning"), serial_group=f"expansion:{sport}")
     scale, two = cap_scale(), max_heavy() >= 2
     for name, spec in J.items():
@@ -757,6 +763,10 @@ class Scheduler:
                 return True
         return self._ends_first(name, self._blocking(held))
 
+    def _yield_blocked(self, name, waiting):
+        """`name` gives way to a due job in its yields_to (settle-post -> settle: they share the model-daily lock)."""
+        return any(y in waiting for y in self.specs[name].get("yields_to") or ())
+
     def every(self, name):
         """The job's current interval: its game-day cadence when it has one (cached 30 s), else every_s."""
         spec = self.specs[name]
@@ -901,7 +911,7 @@ class Scheduler:
         excl = self._draining(due, t)
         for name in due:
             spec = self.specs[name]
-            if any(y in waiting for y in spec.get("yields_to") or ()):
+            if self._yield_blocked(name, waiting):
                 # e.g. settle-post (shares model-daily with settle) never takes the lock while settle is due
                 if JOBS[name]["queued_since"] is None:
                     JOBS[name]["queued_since"] = t
@@ -946,10 +956,32 @@ class Scheduler:
             except Exception as e:                      # noqa: BLE001 - the scheduler never dies
                 sys.stderr.write(f"  sports scheduler tick failed: {type(e).__name__}: {str(e)[:200]}\n")
             self.stop_ev.wait(self.tick_s)
-        for name, (p, _t0) in list(self.running.items()):
-            _kill(p)
-            del self.running[name]
-            self._finish(name, "stopped", 0.0)
+        self.terminate_all()
+
+    def terminate_all(self, grace_s=None):
+        """sg-stability 2026-11-20: on a stop (deploy SIGTERM) every running child first gets SIGTERM and up to grace_s
+        (SPORTS_CHILD_TERM_GRACE_S, 8 s) to checkpoint and exit - the soccer / tennis history job saves its catalog and
+        cursor on it - and only then the kill. Before, children were killed at once and a history run lost its
+        in-memory catalog marks and cursor (the next runs re-read those summaries). -> {name: exit}."""
+        grace = _env_num("SPORTS_CHILD_TERM_GRACE_S", 8.0) if grace_s is None else grace_s
+        out = {}
+        procs = list(self.running.items())
+        for _name, (p, _t0) in procs:
+            try:
+                p.terminate()
+            except Exception:                           # noqa: BLE001 - already gone
+                pass
+        deadline = time.monotonic() + max(0.0, grace)
+        for name, (p, t0) in procs:
+            rc = None
+            try:
+                rc = p.wait(max(0.0, deadline - time.monotonic()))
+            except Exception:                           # noqa: BLE001 - TimeoutExpired: killed below
+                _kill(p)
+            self.running.pop(name, None)
+            out[name] = "stopped" if rc is None else f"stopped (exit {rc})"
+            self._finish(name, out[name], 0.0)          # 0.0: a cut run never enters recent_ran_s (fill-in rule)
+        return out
 
     def stop(self):
         self.stop_ev.set()
