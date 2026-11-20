@@ -139,7 +139,10 @@ def prizepicks(body, sport, observed_at, league=None):
                 or not p.get("id") or not rid("game") or not rid("new_player") or player.get("combo")
                 or a.get("is_live") or a.get("in_game") or a.get("is_promo")
                 or a.get("flash_sale_line_score") is not None or a.get("status") != "pre_game"
-                or a.get("projection_type") != "Single Stat"):
+                or (a.get("projection_type") != "Single Stat" and
+                    # soccer-grades-1120: PrizePicks lists the one-player tennis Fantasy Score as its own projection
+                    # type (13 of 13 rows, 2026-11-20); the sg-stats component model grades it
+                    not (a.get("projection_type") == "Fantasy Score" and stat == "fantasy_tennis"))):
             continue
         allowed = a.get("allowed_wager_types")
         sides = {"over": ["over"], "under": ["under"], "under_or_over": ["over", "under"]}.get(allowed)

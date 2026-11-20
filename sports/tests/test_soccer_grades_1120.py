@@ -475,3 +475,16 @@ def test_prizepicks_set_line_opponent_from_the_exact_period_suffix():
     row = offers.prizepicks(pp_tennis('1st Set Total Games Won', duration='1st Set', teams=teams,
                                       description='Daniil Medvedev 2nd Set'), 'tennis', PNOW)[0]
     assert row['opponent'] is None                                   # not this line's period: still refused
+
+
+def test_prizepicks_tennis_fantasy_score_projection_type_is_read():
+    from sports import expansion_offers as offers
+    from sports.tests.test_expansion_stats_1120 import pp_tennis, PNOW
+    b = pp_tennis('Fantasy Score', allowed='over', teams=['Frances Tiafoe', 'Daniil Medvedev'],
+                  description='Daniil Medvedev')
+    b['data'][0]['attributes']['projection_type'] = 'Fantasy Score'
+    rows = offers.prizepicks(b, 'tennis', PNOW)
+    assert len(rows) == 1 and rows[0]['stat'] == 'fantasy_tennis' and rows[0]['opponent'] == 'Daniil Medvedev'
+    b = pp_tennis('Aces', teams=['Frances Tiafoe', 'Daniil Medvedev'])
+    b['data'][0]['attributes']['projection_type'] = 'Fantasy Score'          # any other stat: still refused
+    assert offers.prizepicks(b, 'tennis', PNOW) == []
