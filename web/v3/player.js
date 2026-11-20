@@ -285,7 +285,7 @@
     if (anyKpr) src.push('KPR: HLTV 6 mo on the prop maps, else BO3.gg' + (num(baseKpr) ? ', vs ' + fx(baseKpr, 2) : ''));
     if (anyHs) src.push('HS%: BO3.gg' + (num(baseHs) ? ', vs ' + fx(baseHs, 1) + '%' : ''));
     if (anyRt) src.push('rating: HLTV 6 mo, vs 1.00');
-    return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4><span class="sc-muted">Pick 2 to combine</span></div>' + cards
+    return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4><span class="sc-muted">' + (sel.length === 2 ? '2 maps combined · a third pick replaces the first' : sel.length === 1 ? '1 of 2 picked' : 'Pick 2 to combine') + '</span></div>' + cards
       + '<p class="sc-src">' + esc(src.join(' · ')) + '</p></div>' + pooledHtml(r, doc, pool, sel);
   }
   /* the combined number: exact on the integers, half-up at display; three wordings for 0, 1 and 2 maps picked */

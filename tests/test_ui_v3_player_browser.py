@@ -243,14 +243,17 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
         # default: the two likeliest maps are picked, and the bar never asks for 2 maps when 2 are picked
         assert len(pressed(p)) == 2
         assert "Pick 2 maps to combine them" not in combo_text(p)
+        assert "Pick 2" not in p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text()                  # the Maps heading follows the picks too
         cards = p.evaluate("[...document.querySelectorAll('#hub-detail .v3p-map')].map(b => b.dataset.v3pMap)")
         n = 0
         for a, b in itertools.combinations(cards, 2):
             p.locator("#hub-detail [data-v3p=clear]").click()
             assert combo_text(p) == "Pick 2 maps to combine them"
             assert p.locator("#hub-detail .v3p-pooled-ask").inner_text() == "Pick 2 maps to combine them"
+            assert p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text() == "Pick 2 to combine"
             p.locator(f'#hub-detail .v3p-map[data-v3p-map="{a}"]').click()
             assert "pick 1 more map to combine" in combo_text(p)
+            assert p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text() == "1 of 2 picked"
             p.locator(f'#hub-detail .v3p-map[data-v3p-map="{b}"]').click()
             v = F(tot[a][0] + tot[b][0], tot[a][1] + tot[b][1])
             d = v - pace
@@ -260,6 +263,7 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
             assert sg(d, 2) in lead and sg(100 * d / pace, 1) + "%" in lead and rd(pace, 2) in lead, (a, b, lead)
             t = combo_text(p)
             assert "Pick 2 maps to combine them" not in t and rd(v, 2) in t and sg(d, 2) in t
+            assert "Pick 2" not in p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text() and p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text().startswith("2 maps combined")
             assert p.locator(f'#hub-detail .v3p-map[data-v3p-map="{a}"] .sc-badge').inner_text() == "1"
             assert p.locator(f'#hub-detail .v3p-map[data-v3p-map="{b}"] .sc-badge').inner_text() == "2"
             assert p.locator("#hub-decision").inner_text() + "|" + p.locator(".v3p-pick").inner_text() == fixed
