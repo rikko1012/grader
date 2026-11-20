@@ -29,6 +29,8 @@
   'use strict';
   if (!window.ScoutV3) return;
   var V = window.ScoutV3, esc = V.esc;
+  /* HLTV only on the CS2 card (hltvOnly below): the hub reads this mark before any doc arrives (loading / failed states too) */
+  document.documentElement.setAttribute('data-hltv-only', 'cs2');
   var num = function (v) { return typeof v === 'number' && isFinite(v); };
   var MINUS = '−';
   var SPORT = {cs2: 'CS2', lol: 'LoL', nba: 'NBA', nfl: 'NFL', soccer: 'Soccer', tennis: 'Tennis'};
@@ -44,6 +46,89 @@
     while (ORDER.length > 24) delete DOCS[ORDER.shift()];
     schedule();
   }
+  /* ---------------------------------------------------------------- HLTV only on the CS2 card (owner 2026-11-20, emphatic: "no BO3.gg
+     data anywhere on member-page stats - HLTV only"). The CS2 line doc is rewritten before the hub reads it, so every tab the hub
+     paints (Overview / Why, Behind the grade, the Stats tab's factor table and panels, Ask) prints HLTV numbers or Scout's own
+     outputs (projection, chance, grade, stake, the model's own inputs) and leaves a BO3.gg-derived row out. The same rules, server
+     side, for the Genie's answers on a v3 request: v3_hltv.py (keep the two in step). Display only: no grade, chance, stake or
+     projection is read or changed here. The classic card (v3 off) never runs this file.
+     - cs2_card: stats (BO3.gg rating / KAST / DPR / ADR / KPR / form windows / recent KPR), per_map, teammates, me, team_kill_share,
+       checks (trade / opening kills, sample flags, days since his last map = the min of BO3.gg and HLTV) are removed; the AWP note
+       stays only when it is HLTV's weapon stats; a rank band from BO3.gg is removed; the second-source (CS API) and FACEIT panels
+       are not HLTV and are removed. cs2_card.hltv_v3 carries the HLTV equivalents from /api/upgrade/player-maps (KPR 3 / 12 mo,
+       HS% 3 mo, maps 12 mo, days since his last HLTV map); the grade's own rest stake rule is kept as a yes / no (rest_rule), never
+       recomputed from the HLTV days.
+     - context.rows: the "Saved with this forecast" grader inputs (BO3.gg / merged) are removed; the HLTV rows stay.
+     - grade_inputs: the context-only factors read from those grader inputs, and a BO3.gg (or unknown-source) rank band, are removed.
+       The model's live factors (HLTV perf / cm2 inputs) stay.
+     - history: the saved L10 tally and recent average come from the grader's merged BO3.gg + HLTV last 10; the hit counts are read
+       from HLTV series only: the verified series, else the HLTV series the server adds when they disagree (history.hltv_series). */
+  var CTX_GI = {maps_played: 1, rating: 1, kpr: 1, kpr_last5: 1, adr: 1, kast: 1, hs_pct: 1, days_since_last_map: 1, recent_avg: 1, recent_median: 1, recent_n: 1};
+  var GI_BO3 = {recent_avg: 1, recent_median: 1, kpr_last5: 1, rating: 1, adr: 1, kast: 1, trade_pr: 1, days_since_last_map: 1};
+  var isBo3Band = function (rb) { return !rb || typeof rb !== 'object' || /bo3/i.test(String(rb.source || '')); };
+  function tallyOf(list, line) {
+    if (!list.length || !num(+line)) return null;
+    var t = {n: list.length, over: 0, under: 0, push: 0};
+    list.forEach(function (g) { if (g.value > +line) t.over++; else if (g.value < +line) t.under++; else t.push++; });
+    return t;
+  }
+  function hltvV3(hm) {
+    var d = hm && hm.state === 'ok' ? hm.doc : null;
+    if (!d || !d.windows) return null;
+    var t3 = (d.windows['3m'] || {}).overall, t12 = (d.windows['12m'] || {}).overall, out = {};
+    if (t3 && t3.rounds) { out.kpr3 = t3.kills / t3.rounds; out.maps3 = t3.maps; }
+    if (t3 && t3.hs_kills) out.hs3 = 100 * t3.hs / t3.hs_kills;
+    if (t12 && t12.rounds) { out.kpr12 = t12.kills / t12.rounds; out.maps12 = t12.maps; }
+    if (d.newest_map) {
+      out.newest = d.newest_map;
+      var a = Date.parse(String(d.as_of || '').slice(0, 10) + 'T00:00:00Z'), b = Date.parse(String(d.newest_map).slice(0, 10) + 'T00:00:00Z');
+      if (isFinite(a) && isFinite(b) && a >= b) out.days = Math.round((a - b) / 86400000);
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  function hltvOnly(d, hm) {
+    if (!d || !d.record || d.record.sport !== 'cs2') return d;
+    d.hltv_only = true;
+    var c = d.cs2_card;
+    var band = c && c.rank_band, bandBo3 = !c || isBo3Band(band);
+    if (c) {
+      var ck = c.checks || {};
+      var rest = num(ck.days_since_last_map) && ck.days_since_last_map >= 30;
+      c.hltv_only = true;
+      c.stats = {}; c.per_map = []; c.teammates = []; c.me = null; c.team_kill_share = null; c.csapi = null; c.faceit = null;
+      c.checks = {roster_confirmed: !!ck.roster_confirmed, standin_for: ck.standin_for || null,
+        awp_note: /\(HLTV weapon stats/i.test(String(ck.awp_note || '')) ? ck.awp_note : null, rest_rule: !!rest};
+      if (bandBo3) c.rank_band = null;
+      var hv = hltvV3(hm);
+      if (hv) c.hltv_v3 = hv; else delete c.hltv_v3;
+    }
+    if (d.context && Array.isArray(d.context.rows)) {
+      d.context.rows = d.context.rows.filter(function (f) { return f && !(f.key && CTX_GI[f.key]) && f.group !== 'Saved with this forecast'; });
+    }
+    var g = d.grade_inputs;
+    if (g) {
+      if (Array.isArray(g.factors)) g.factors = g.factors.filter(function (f) { return f && !(f.live !== true && GI_BO3[f.id]) && !(f.id === 'rank_band' && bandBo3); });
+      if (Array.isArray(g.matchup)) g.matchup = g.matchup.filter(function (m) { return m && !(m.id === 'rank_band' && bandBo3); });
+    }
+    var h = d.history || (d.history = {}), line = d.record.offer && d.record.offer.line;
+    var ser = (Array.isArray(h.series) && h.series.length ? h.series : Array.isArray(h.hltv_series) ? h.hltv_series : []).filter(function (x) { return x && num(x.value); });
+    h.series = ser.length ? ser : null;
+    delete h.hltv_series;
+    var ten = ser.slice(0, 10);
+    h.tally = tallyOf(ten, line);
+    h.avg = ten.length ? Math.round(ten.reduce(function (a, x) { return a + x.value; }, 0) / ten.length * 10) / 10 : null;
+    var rh = d.record.history || (d.record.history = {});
+    rh.l5 = tallyOf(ser.slice(0, 5), line); rh.l10 = h.tally; rh.l20 = ser.length > 10 ? tallyOf(ser.slice(0, 20), line) : null; rh.avg = h.avg;
+    return d;
+  }
+  /* the /line URL's board row -> its player-maps URL (main books: known before the doc arrives, so both reads run together) */
+  function hmUrlOf(u) {
+    var q = String(u).split('?')[1] || '', p = {};
+    q.split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) p[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); });
+    if (p.sport && p.sport !== 'cs2') return null;
+    return MAIN[p.book] && p.id ? '/api/upgrade/player-maps?sport=cs2&book=' + encodeURIComponent(p.book) + '&id=' + encodeURIComponent(p.id) : null;
+  }
+  var HM_WAIT = 4000;     /* the card waits at most this long for the HLTV totals; later, they fill the same doc for the next repaint */
   var nativeFetch = window.fetch;
   if (typeof nativeFetch === 'function') {
     window.fetch = function (input, init) {
@@ -52,10 +137,25 @@
         var u = typeof input === 'string' ? input : (input && input.url) || '';
         var m = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
         if (/\/api\/upgrade\/line\?/.test(u) && String(m).toUpperCase() === 'GET') {
-          p.then(function (r) {
-            if (!r || !r.ok) return;
-            r.clone().json().then(keep, function () { /* not JSON: the hub handles it */ });
-          }, function () { /* the hub sees its own failure */ });
+          var pre = hmUrlOf(u);
+          if (pre) hmStart(pre);
+          /* the hub reads the rewritten doc: a CS2 doc is HLTV only before any of it is painted (never the original on a failure) */
+          return p.then(function (r) {
+            if (!r || !r.ok) return r;
+            return r.clone().json().then(function (d) {
+              if (!d || !d.record || d.record.sport !== 'cs2') { keep(d); return r; }
+              var hu = hmUrl(d.record, d), e = hu ? hmStart(hu) : null;
+              var wait = e && e.state === 'loading' ? Promise.race([e.done, new Promise(function (res) { setTimeout(res, HM_WAIT); })]) : Promise.resolve();
+              return wait.then(function () {
+                hltvOnly(d, e);
+                if (e && e.state === 'loading') e.done.then(function () { var hv = hltvV3(e); if (hv && d.cs2_card) d.cs2_card.hltv_v3 = hv; });
+                keep(d);
+                var out = new Response(JSON.stringify(d), {status: r.status, statusText: r.statusText, headers: r.headers});
+                try { Object.defineProperty(out, 'json', {value: function () { return Promise.resolve(d); }}); } catch (x) { /* a plain Response */ }
+                return out;
+              });
+            }, function () { return r; });
+          });
         }
       } catch (e) { /* never in the hub's way */ }
       return p;
@@ -67,10 +167,10 @@
   /* the board row the server reads the player from: this line's own, or for an extra book's line (Sleeper, Dabble) the same prop's
      Underdog / PrizePicks row from the doc's own book list; null = none (the card then shows no HLTV blocks, never a guess) */
   var MAIN = {underdog: 1, prizepicks: 1};
-  function hmUrl(r) {
+  function hmUrl(r, doc) {
     var book = r.offer.platform, id = r.offer.offer_id;
     if (!MAIN[book]) {
-      var d = DOCS[keyOf(r)], b = ((d && d.books) || []).filter(function (x) { return x && MAIN[x.platform] && x.row_id != null; })[0];
+      var d = doc || DOCS[keyOf(r)], b = ((d && d.books) || []).filter(function (x) { return x && MAIN[x.platform] && x.row_id != null; })[0];
       if (!b) return null;
       book = b.platform; id = b.row_id;
     }
@@ -79,14 +179,19 @@
   /* {state: 'loading' | 'ok' | 'none' | 'error', doc} for this row; starts the one read when it is not kept yet */
   function hltvMaps(r) {
     if (!r || r.sport !== 'cs2' || !r.offer || !r.offer.offer_id) return null;
-    var u = hmUrl(r), e = u ? HM[u] : null;
+    var u = hmUrl(r);
     if (!u) return {state: 'skip'};
+    return hmStart(u);
+  }
+  /* the one read of a player-maps URL (kept; a failed read is tried again after 15 s); e.done settles when it does */
+  function hmStart(u) {
+    var e = HM[u];
     if (e && !(e.state === 'error' && Date.now() - e.at > 15000)) return e;
     e = HM[u] = {state: 'loading', at: Date.now(), doc: null};
     HM_ORDER.push(u);
     while (HM_ORDER.length > 40) delete HM[HM_ORDER.shift()];
     var f = typeof nativeFetch === 'function' ? nativeFetch : window.fetch;
-    f.call(window, u, {credentials: 'same-origin'}).then(function (res) {
+    e.done = f.call(window, u, {credentials: 'same-origin'}).then(function (res) {
       if (!res.ok) throw new Error(String(res.status));
       return res.json();
     }).then(function (d) {
@@ -192,7 +297,9 @@
     var pressed = dec.querySelector('.h-side-toggle [aria-pressed="true"]');
     var ch = dec.querySelector('.h-dec-chance > b'), pick = dec.querySelector('.h-dec-pick'), stake = dec.querySelector('.h-dec-stake');
     var proj = dec.querySelector('.h-dec-proj b'), below = dec.querySelector('.h-below');
-    return {side: pressed ? pressed.textContent.trim() : '', chance: ch ? ch.textContent.trim() : '', pick: pick ? pick.innerHTML : '',
+    /* the side's word from the button's own id (its text also carries the v3 line + Scout dot) */
+    var sid = pressed ? (pressed.getAttribute('data-id') || '') : '';
+    return {side: sid === 'over' ? 'Over' : sid === 'under' ? 'Under' : pressed ? pressed.textContent.trim() : '', chance: ch ? ch.textContent.trim() : '', pick: pick ? pick.innerHTML : '',
       stake: stake ? stake.textContent.trim() : '', proj: proj ? proj.textContent.trim() : '', below: below ? below.outerHTML : ''};
   }
 
@@ -206,7 +313,7 @@
     var c = doc && doc.cs2_card, hc = (c && c.context) || {}, bo = r.event.best_of || (c && c.match && c.match.bo);
     var cd = document.querySelector('#hub-detail .h-card-head .h-countdown');
     var cdText = cd ? cd.textContent : '';
-    var team = r.player.team || '', opp = r.player.opponent || '';
+    var team = r.player.team || (r.sport === 'tennis' ? r.player.name || '' : ''), opp = r.player.opponent || '';   /* tennis: the player is the side */
     if (!team && !opp) return '';
     return '<div class="sc-matchup v3p-match" role="group" aria-label="Match">'
       + '<div class="sc-matchup__team sc-matchup__team--a"><b>' + esc(team || '—') + '</b>' + (r.sport === 'cs2' ? rankHtml(hc.ranking) : '') + '</div>'
@@ -216,6 +323,7 @@
   function metaHtml(r, doc) {
     var c = doc && doc.cs2_card, env = c && c.environment, comp = r.event.competition || (c && c.match && c.match.event) || '';
     var tw = env && env.tonight === 'lan' ? 'LAN' : env && env.tonight === 'online' ? 'online' : '';
+    if (/^(atp|wta|itf|ufc|nba|nfl|mls)(?![a-z])/.test(comp)) comp = comp.replace(/^[a-z]+/, function (w) { return w.toUpperCase(); });   /* 'atp' -> 'ATP' */
     var when = dateText(r.event.start_utc);
     return '<p class="v3p-meta"><span class="sc-chip">' + esc(SPORT[r.sport] || r.sport) + '</span>'
       + (comp || tw ? '<span class="sc-muted">' + esc(comp) + (comp && tw ? ', ' : '') + esc(tw) + '</span>' : '')
@@ -292,9 +400,12 @@
     var side = st.side.toLowerCase(), scout = r.scout && r.scout.side === side;
     if (scout && leanOnly(r)) st = Object.assign({}, st, {pick: '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span>', stake: 'Stake 0U'});
     var pct = parseFloat(st.chance), hasChance = isFinite(pct);
+    /* polish2: no Scout chance (player research only) = no side headline and no status chip: the prop itself leads */
+    var noRead = !hasChance && !(r.scout && r.scout.side);
+    if (noRead) { scout = false; st = Object.assign({}, st, {pick: /Player research/.test(st.pick || '') ? '' : st.pick}); }
     var book = r.offer.platform_label ? esc(r.offer.platform_label) + (r.offer.seen_at ? ' · checked ' + esc(age(r.offer.seen_at)) : '') : '';
     return '<div class="sc-pick v3p-pick" aria-label="Pick summary">'
-      + '<div class="sc-pick__side">' + (scout ? '<span class="sc-scout-tag">Scout</span>' : '') + '<b>' + esc(st.side + (r.offer.line != null ? ' ' + r.offer.line : '')) + '</b><small>' + esc((r.market.stat_label || '') + ' · ' + (r.market.period_label || '')) + '</small></div>'
+      + '<div class="sc-pick__side">' + (scout ? '<span class="sc-scout-tag">Scout</span>' : '') + '<b>' + esc((!noRead ? st.side : (r.market.stat_label || '')) + (r.offer.line != null ? ' ' + r.offer.line : '')) + '</b><small>' + esc((r.market.stat_label || '') + ' · ' + (r.market.period_label || '')) + '</small></div>'
       + '<div class="sc-pick__chance"><b>' + esc(st.chance || '—') + '</b>' + (hasChance ? '<span class="sc-meter"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></span><small>Model estimate</small>' : (st.proj && st.proj !== '—' ? '<small>Projection ' + esc(st.proj) + ' · Model estimate</small>' : '')) + '</div>'
       + '<div class="sc-pick__stake">' + (st.pick ? '<span class="v3p-pickchip">' + st.pick + '</span>' : '') + (st.stake ? '<small>' + esc(st.stake.replace(/^Stake\s*/, 'Stake ')).replace(/Stake (\S+)/, 'Stake <b>$1</b>') + '</small>' : '') + (st.below || '') + '</div>'
       + '<div class="sc-pick__foot">' + (sparkHtml(r, doc, side) || '<span></span>') + (book ? '<span class="sc-book">' + book + '</span>' : '') + '</div></div>';
@@ -321,15 +432,16 @@
       var t = per[k] || null;
       return {key: k, name: name(k), t: t, n: t ? t.maps : 0, chance: chance[k], conf: conf[k], inP: inP ? inP(k) : null, inPer: inPeriod(conf[k], r)};
     });
-    /* order: confirmed for these maps, then In Maps 1-2 (veto), then HLTV's map chance (two different measures never mixed in one rank) */
+    /* polish2: ONE measure on every card. With Scout's simulated veto for the prop's maps, every card reads In Maps 1-2 (a map the veto
+       cannot put a figure on reads In Maps 1-2 — and ranks after those with one; HLTV's map chance is not mixed into this rank); without
+       a veto, every card reads HLTV's Map chance. Order: confirmed for these maps, then the measure, then maps on file. */
+    var veto = !!inP;
     list.sort(function (a, b) {
       var ca = a.inPer ? 1 : 0, cb = b.inPer ? 1 : 0;
       if (ca !== cb) return cb - ca;
-      var ia = a.inP != null ? 1 : 0, ib = b.inP != null ? 1 : 0;
-      if (ia !== ib) return ib - ia;
-      if (ia) { if (b.inP !== a.inP) return b.inP - a.inP; }
-      var pa = a.chance != null ? +a.chance : -1, pb = b.chance != null ? +b.chance : -1;
-      return pb - pa || b.n - a.n || a.name.localeCompare(b.name);
+      var va = veto ? a.inP : a.chance, vb = veto ? b.inP : b.chance;
+      va = va != null ? +va : -1; vb = vb != null ? +vb : -1;
+      return vb - va || b.n - a.n || a.name.localeCompare(b.name);
     });
     var out = Object.keys(per).filter(function (k) { return !inPool[k]; }).map(function (k) { return {key: k, name: name(k), t: per[k], n: per[k].maps}; })
       .sort(function (a, b) { return b.n - a.n || a.name.localeCompare(b.name); });
@@ -337,7 +449,7 @@
     list.forEach(function (m) { by[m.key] = m; });
     /* a map confirmed for this prop's maps that HLTV has no maps of him on: named, never silently left out of the combine */
     var missing = list.filter(function (m) { return m.inPer && !m.n; }).map(function (m) { return m.name; });
-    return {state: 'ok', list: list, out: out, by: by, base: w12.overall || null, missing: missing, doc: d};
+    return {state: 'ok', list: list, out: out, by: by, base: w12.overall || null, missing: missing, doc: d, veto: veto};
   }
   /* is a confirmed veto slot inside the prop's maps? ("Map 1".."Map k"; a BO3 decider is map 3) */
   function inPeriod(c, r) {
@@ -384,7 +496,7 @@
     if (pool.missing && pool.missing.length) return (SEL[k] = []);
     var has = pool.list.filter(function (m) { return m.n > 0; });
     var conf = has.filter(function (m) { return m.inPer; });
-    var rest = has.filter(function (m) { return !m.inPer && (m.inP != null || m.chance != null); });
+    var rest = has.filter(function (m) { return !m.inPer && (pool.veto ? m.inP != null : m.chance != null); });
     var pick = conf.concat(rest).slice(0, 2);
     SEL[k] = pick.length === 2 ? pick.map(function (m) { return m.key; }) : [];
     return SEL[k];
@@ -432,8 +544,9 @@
       var on = sel.indexOf(m.key), a = V.mapArt(m.key), has = m.n > 0;
       var sub = '';
       if (m.conf) sub = '<small class="v3p-slot">' + esc(m.conf.slot || 'Confirmed') + (m.conf.by ? ' · <span>' + esc(m.conf.by) + ' pick</span>' : '') + '</small>';
-      var ch = m.inP != null ? '<small>In ' + esc(per) + ' <b>' + esc(fx(m.inP, 1)) + '%</b></small>'
-        : m.chance != null ? '<small>Map chance <b>' + esc(fx(+m.chance, 1)) + '%</b></small>' : '';
+      /* polish2: one measure on every card (— when this map has no figure); the same 2 x 2 of HLTV stats on every card */
+      var ch = pool.veto ? '<small class="v3p-inp">In ' + esc(per) + ' <b>' + (m.inP != null ? esc(fx(m.inP, 1)) + '%' : '—') + '</b></small>'
+        : '<small class="v3p-inp">Map chance <b>' + (m.chance != null ? esc(fx(+m.chance, 1)) + '%' : '—') + '</b></small>';
       var stats = cardStats(m.t, base, inv);
       return '<button type="button" class="sc-scene v3p-map' + (on >= 0 ? ' is-on' : '') + (has ? '' : ' is-empty') + '" data-v3p-map="' + esc(m.key) + '" aria-pressed="' + (on >= 0) + '"'
         + (has ? '' : ' disabled') + (a ? ' style="--h:' + (V.HUE[a] || 210) + '"' : '')
@@ -445,7 +558,8 @@
     }).join('');
     var src = ['HLTV, last 12 months, every map he played; deltas vs his all maps: Kills/map ' + fx(R.kpm(base), 1) + ', KPR ' + fx(R.kpr(base), 2)
       + ', HS% ' + pctText(R.hs(base)) + ', K/D ' + fx(R.kd(base), 2)];
-    if (pool.list.some(function (m) { return m.inP != null; })) src.push('In ' + per + ': Scout’s simulated veto, the share that puts the map in ' + per);
+    if (pool.veto) src.push('In ' + per + ': Scout’s simulated veto, the share that puts the map in ' + per
+      + (pool.list.some(function (m) { return m.inP == null && !m.inPer; }) ? ' (— = outside the veto’s shortlist for an open slot)' : ''));
     else if (pool.list.some(function (m) { return m.chance != null; })) src.push('map chance: HLTV simulated vetoes');
     var miss = (pool.missing || []).length ? '<p class="v3p-miss">' + esc(pool.missing.join(', ') + (pool.missing.length === 1 ? ' is confirmed for ' : ' are confirmed for ') + per + (pool.missing.length === 1 ? ' and has' : ' and have') + ' no HLTV maps of his in the last 12 months, so no combined number includes it.') + '</p>' : '';
     return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4><span class="sc-muted">' + (sel.length === 2 ? '2 maps combined · a third pick replaces the first' : sel.length === 1 ? '1 of 2 picked' : 'Pick 2 to combine') + '</span></div>' + miss + cards
@@ -518,9 +632,11 @@
     var tile = function (label, v, sub) { return '<div><span>' + esc(label) + '</span><b class="sc-num">' + v + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>'; };
     var gap = num(proj) && num(+line) ? Math.round((proj - +line) * 10) / 10 : null;
     var out = [tile('Projection', num(proj) ? esc(proj.toFixed(1)) : '—', r.market.period_label || '')];
-    if (gap != null) out.push(tile('Gap to line', (gap > 0 ? '+' : gap < 0 ? MINUS : '') + Math.abs(gap).toFixed(1), gap > 0 ? 'above the line' : gap < 0 ? 'below the line' : 'at the line'));
+    if (gap == null) out.push(tile('Gap to line', '—', ''));
+    else out.push(tile('Gap to line', (gap > 0 ? '+' : gap < 0 ? MINUS : '') + Math.abs(gap).toFixed(1), gap > 0 ? 'above the line' : gap < 0 ? 'below the line' : 'at the line'));
     var mc = marketChance(r, doc, side);
-    if (mc) out.push(tile('Market chance', esc(mc.v), mc.src));
+    /* polish2: the cell is always there (mock 10); a record with no market chance (CS2 board records carry none) reads — */
+    out.push(mc ? tile('Market chance', esc(mc.v), mc.src) : tile('Market chance', '—', ''));
     return out.join('');
   }
   function hitsHtml(r, doc, st) {
@@ -541,7 +657,7 @@
     if (!n) { n = el(cls, ''); }
     if (n.__html !== html) { n.innerHTML = html; n.__html = html; }
     if (ref) { if (before ? n.nextElementSibling !== ref : n.previousElementSibling !== ref) { if (before) ref.before(n); else ref.after(n); } }
-    else if (dec.lastElementChild !== n) dec.appendChild(n);
+    else if (n.parentNode !== dec) dec.appendChild(n);
   }
   function paintLine(box, r, doc, st) {
     var dec = box.querySelector(':scope > #hub-decision'), sel = dec && dec.querySelector(':scope > .h-dec-line');
@@ -556,9 +672,39 @@
     if (ch) {
       var lean = leanOnly(r) && r.scout.side === side;
       var hold = ch.querySelector('.h-hold-why');
-      if (hold) hold.classList.toggle('v3p-hide', lean);
-      addIn(ch, 'v3p-lean', lean ? '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span><span class="h-dec-stake">Stake 0U</span>' : '', null);
+      if (hold) hold.classList.toggle('v3p-hide', lean || /^Player research$/.test(hold.textContent.trim()));   /* a status label, not drawn */
+      addIn(ch, 'v3p-lean', lean ? '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span>' : '', null);
+      /* polish2 (mocks 05 / 10): three labelled cells, Chance <side> + Model estimate | Grade | Stake. The hub's own nodes keep their
+         place and text (its stake text stays for screen readers); the labels and the big stake figure are aria-hidden copies */
+      ch.classList.add('v3p-cgs');
+      var b = ch.querySelector(':scope > b'), word = side === 'over' ? 'Over' : side === 'under' ? 'Under' : '';
+      var hubStake = ch.querySelector(':scope > .h-dec-stake'), sv = hubStake ? (/Stake\s*(\S+)/.exec(hubStake.textContent) || [])[1] : null;
+      if (lean) sv = '0U';
+      var lab = function (cls, html, ref, before) {
+        var n = ch.querySelector(':scope > .' + cls);
+        if (!n) { n = document.createElement('span'); n.className = cls; n.setAttribute('data-v3p-block', ''); n.setAttribute('aria-hidden', 'true'); }
+        if (n.__html !== html) { n.innerHTML = html; n.__html = html; }
+        if (ref) { if (before) { if (n.nextElementSibling !== ref) ref.before(n); } else if (n.previousElementSibling !== ref) ref.after(n); }
+        else if (n.parentNode !== ch) ch.appendChild(n);          /* placed once: grid areas set the order, never re-appended */
+      };
+      if (b) {
+        lab('v3p-cl', 'Chance' + (word ? ' ' + word : ''), b, true);
+        lab('v3p-me', isFinite(parseFloat(b.textContent)) ? 'Model estimate' : '', b, false);
+      }
+      lab('v3p-gl', 'Grade', null);
+      lab('v3p-sk', '<span>Stake</span><b class="sc-num">' + esc(sv || '—') + '</b>', null);
+      if (hubStake) hubStake.classList.add('v3p-sr');
+      if (!ch.querySelector(':scope > .h-dec-pick, :scope > .v3p-lean')) lab('v3p-nog', '—', null); else { var ng = ch.querySelector(':scope > .v3p-nog'); if (ng) ng.remove(); }
     }
+    var tg = dec.querySelector(':scope > .h-side-toggle');
+    if (tg) tg.querySelectorAll('button[data-id]').forEach(function (bt) {
+      var sd = bt.getAttribute('data-id'), want = (r.offer.line != null ? ' ' + r.offer.line : '') + '|' + (r.scout && r.scout.side === sd ? '1' : '');
+      if (bt.__v3p === want) return;
+      bt.__v3p = want;
+      bt.querySelectorAll('[data-v3p-block]').forEach(function (x) { x.remove(); });
+      if (r.offer.line != null) { var ln = document.createElement('span'); ln.setAttribute('data-v3p-block', ''); ln.setAttribute('aria-hidden', 'true'); ln.className = 'v3p-sl'; ln.textContent = ' ' + r.offer.line; bt.appendChild(ln); }
+      if (r.scout && r.scout.side === sd) { var sc = document.createElement('span'); sc.setAttribute('data-v3p-block', ''); sc.className = 'v3p-scoutdot'; sc.setAttribute('aria-hidden', 'true'); sc.textContent = 'Scout'; bt.appendChild(sc); }
+    });
   }
 
   /* ---------------------------------------------------------------- the combined bar (sticky at the foot of the card) */
@@ -605,6 +751,56 @@
       if (a) V.mountArt(s, a).catch(function () { /* no scene: the card stays plain */ });
     });
   }
+
+  /* polish2: the Overview's "Likely maps" line (the hub's, HLTV's map chance, written as "62%") says which measure it is, with one
+     decimal, and when Scout's veto covers the prop's maps it leads with the same In Maps 1-2 figures the map cards show, so the
+     Overview and the cards agree. Only the wording of that one line changes; the hub's "His kills a map there" part is kept. */
+  function likelyMaps(box, r, doc) {
+    var body = box.querySelector('#hub-card-body');
+    if (!body || r.sport !== 'cs2' || !doc) return;
+    var mc = ((doc.map_chances && doc.map_chances.maps) || []).filter(function (x) { return x && num(Number(x.pct)); }).slice(0, 3);
+    if (!mc.length) return;
+    var w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null), t, host = null;
+    while ((t = w.nextNode())) { if (/^\s*Likely maps: /.test(t.nodeValue) && t.parentNode && t.parentNode.firstChild === t) { host = t.parentNode; break; } }
+    if (!host || host.getAttribute('data-v3p-lm') === host.innerHTML) return;
+    var tail = host.innerHTML, i = tail.indexOf('. His ');
+    tail = i >= 0 ? tail.slice(i) : '';
+    var hltv = mc.map(function (x) { return esc(x.name) + ' <b>' + esc(Number(x.pct).toFixed(1)) + '%</b>'; }).join(' · ');
+    var pool = mapPool(r, doc), per = String(r.market.period_label || 'these maps');
+    var lead = '';
+    if (pool && pool.veto) {
+      var top = pool.list.filter(function (m) { return m.inPer || m.inP != null; }).slice(0, 3)
+        .map(function (m) { return esc(m.name) + ' <b>' + esc(fx(m.inPer && m.inP == null ? 100 : m.inP, 1)) + '%</b>'; });
+      if (top.length) lead = 'Likely in ' + esc(per) + ' (Scout’s simulated veto): ' + top.join(' · ') + '. ';
+    }
+    var html = lead + (lead ? 'HLTV map chance for the series: ' : 'Likely maps (HLTV map chance): ') + hltv + tail;
+    host.innerHTML = html;
+    host.setAttribute('data-v3p-lm', host.innerHTML);
+  }
+
+  /* polish2: the Lines tab speaks the card's wording ("checked N min ago"), shows a PrizePicks line once (the hub lists the same
+     PrizePicks line again as a bare "Listed" row with no check time, beside its own Standard row) and names the second table for what it
+     compares (book prices per side, while the first table's Best follows the line rule) */
+  function wordAge(t) { return String(t).replace(/^Seen\s+/, 'checked ').replace(/(\d+)m ago/, '$1 min ago').replace(/(\d+)h ago/, '$1 h ago'); }
+  function linesTab(box) {
+    var body = box.querySelector('#hub-card-body');
+    if (!body) return;
+    body.querySelectorAll('.h-odds-seen-m, td.h-odds-seen time').forEach(function (n) {
+      var w = wordAge(n.textContent); if (n.textContent !== w) n.textContent = w;
+    });
+    var tb = body.querySelector('.h-odds-table tbody');
+    if (tb) {
+      var rows = [].slice.call(tb.rows), base = function (tr) { var th = tr.querySelector('th'); return th && th.firstChild ? String(th.firstChild.nodeValue || '').trim() : ''; };
+      var lineOf = function (tr) { var td = tr.querySelector('td'); return td ? td.textContent.trim() : ''; };
+      rows.forEach(function (tr) {
+        var bare = !tr.querySelector('th small') && /^Listed$/.test((tr.cells[2] || {}).textContent || '') && !tr.classList.contains('is-selected');
+        var twin = bare && rows.some(function (o) { return o !== tr && base(o) === base(tr) && lineOf(o) === lineOf(tr) && o.querySelector('th small'); });
+        if (twin && !tr.classList.contains('v3p-dup')) tr.classList.add('v3p-dup');
+      });
+    }
+    var h = body.querySelector('.h-best-lines h4');
+    if (h && h.textContent === 'Best line per side') h.textContent = 'Best sportsbook price per side';
+  }
   function paint() {
     var cur = current();
     if (!cur) return;
@@ -641,6 +837,8 @@
     } else drop(box, 'v3p-maps');
     try { paintLine(box, r, doc, st); } catch (e) { /* the hub's own strip stays as it is */ }
     if (r.sport === 'cs2') { try { hideBo3(box); } catch (e) { /* the hub's panels stay as they are */ } }
+    try { likelyMaps(box, r, doc); } catch (e) { /* the hub's own line stays */ }
+    try { linesTab(box); } catch (e) { /* the hub's own table stays */ }
     put(box, 'v3p-dock sc-dock', dockHtml(r, doc, st, id), null);
     watchAdd(box);
     /* the hub repainted the whole card: keep the member where they were (a tab change keeps the tabs in view) */

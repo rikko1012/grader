@@ -288,3 +288,18 @@ html[data-ui-v3] #u-hub #hub-picks-section .v3c-picks-top:not([hidden])~#hub-pic
 html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-detail,.h-card) table thead th,
 html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .ev-src thead th{background:none!important;color:var(--sc-muted)!important;font:500 12.5px/1.3 var(--sc-font)!important;letter-spacing:0!important;text-transform:none!important;border:0!important;box-shadow:inset 0 -1px 0 var(--sc-hair)!important;white-space:normal}
 html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .ev-src :is(table,thead,thead tr){background:none!important}
+/* ---- polish2 (2026-11-20): EV on the phone (mock C/ev-390): the books pill with a compact + beside it (the button keeps its label
+   "Add <player> <side> <line> to slip"); the per-book table scrolls inside its own frame instead of being cut at the screen edge */
+@media (max-width:719px){
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-row>.ev-cell[data-label="Market"]{grid-column:1}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-row>.ev-act{grid-column:2!important;justify-self:end;align-self:end}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-act .ev-add{width:44px!important;min-width:44px;height:44px;padding:0!important;font-size:0!important;border-radius:var(--sc-r-md)}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-act .ev-add::before{content:"+";font:500 22px/1 var(--sc-font)}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-row>.ev-src{grid-column:1/-1;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-src table{min-width:520px}
+}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale{position:relative;display:block;width:100%;max-width:140px;height:10px;margin-top:6px}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale::before{content:"";position:absolute;left:0;right:0;top:4px;height:2px;border-radius:1px;background:var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale i{position:absolute;top:1px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale i.ok{background:var(--sc-good)}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale b{position:absolute;top:0;width:2px;height:10px;margin-left:-1px;background:var(--sc-text);opacity:.7}

@@ -305,3 +305,45 @@ html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-outstats .sc-scene_
 html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list{grid-template-columns:minmax(0,1fr)}
 html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list>*{min-width:0;max-width:100%}
 @media (max-width:1023px){html[data-ui-v3] #u-hub #hub-detail>.v3p-maps{grid-template-columns:minmax(0,1fr)}}
+/* ---- polish2 (2026-11-20): the line panel as mocks 05 / 10 ---- */
+/* side buttons carry the line, Scout's side carries the Scout dot */
+html[data-ui-v3] #u-hub #hub-detail .h-side-toggle .v3p-scoutdot{display:inline-flex;align-items:center;gap:5px;margin-left:10px;color:var(--sc-accent);font:500 13px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-detail .h-side-toggle .v3p-scoutdot::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--sc-accent-fill)}
+/* the line select has its chevron */
+html[data-ui-v3] #u-hub #hub-detail .h-dec-line select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M6 8l4 4 4-4' fill='none' stroke='%238E9AB3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;background-position:right 14px center!important;background-size:18px 18px!important;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+/* Chance <side> + Model estimate | Grade | Stake: three labelled cells */
+html[data-ui-v3] #u-hub #hub-detail .h-dec-chance.v3p-cgs{display:grid!important;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr) minmax(0,1fr);
+  grid-template-areas:"cl gl sk" "ch gr sk" "me gr sk" "bl bl bl";column-gap:0;row-gap:4px;align-items:start}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-cl,html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-gl,html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-sk>span{font:400 13px/1.3 var(--sc-font);color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-cl{grid-area:cl}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>b{grid-area:ch;font:600 40px/1.05 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-me{grid-area:me;font:400 12px/1.3 var(--sc-font);color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-gl{grid-area:gl;padding-left:12px;border-left:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>:is(.h-dec-pick,.v3p-lean,.v3p-nog){grid-area:gr;align-self:start;padding-left:12px;border-left:1px solid var(--sc-hair);min-height:100%}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-nog{font:600 22px/1.2 var(--sc-font);color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-sk{grid-area:sk;align-self:stretch;display:flex;flex-direction:column;gap:4px;padding-left:12px;border-left:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-sk b{font:600 40px/1.05 var(--sc-font);letter-spacing:var(--sc-track-display,-.03em);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.h-below,html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.h-hold-why{grid-area:bl}
+html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media (max-width:420px){html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>b,html[data-ui-v3] #u-hub #hub-detail .v3p-cgs>.v3p-sk b{font-size:34px!important}}
+/* map cards: one 2 x 2 on every card (— for a missing value), the measure on its own line, the veto slot on its own line, cut with … */
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__stats{display:grid!important;grid-template-columns:auto auto;column-gap:14px;row-gap:4px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id{min-width:0;overflow:hidden}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .v3p-inp{display:block;white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .v3p-inp b{display:inline!important;font-size:inherit}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .v3p-slot{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1023px){
+  html[data-ui-v3] #u-hub #hub-detail .v3p-map .v3p-inp b{display:block!important;font-size:15px;line-height:18px}
+  /* the combined bar takes the bottom nav's place while it is up (mock 05), its line under the name is one line, cut with … */
+  html.v3p-dock-on[data-ui-v3]:has(#hub-card:not([hidden]) #hub-detail>.v3p-dock) .sc-tabbar.sc-v3-tabs{display:none!important}
+  html.v3p-dock-on[data-ui-v3]:has(#hub-card:not([hidden]) #hub-detail>.v3p-dock) body.sc-v3-shell #u-hub .h-card-panel{bottom:0!important}
+  html.v3p-dock-on[data-ui-v3] #u-hub #hub-detail>.v3p-dock{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  html[data-ui-v3] #u-hub #hub-detail .v3p-dock .sc-dock__ctx{min-width:0}
+  html[data-ui-v3] #u-hub #hub-detail .v3p-dock .sc-dock__ctx small{display:block;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis}
+}
+html[data-ui-v3] #u-hub #hub-detail .h-odds-table tr.v3p-dup{display:none}
+/* the match strip shares its width: team names take two lines before they are cut, the clock wraps under itself */
+html[data-ui-v3] #u-hub #hub-detail .v3p-match{grid-template-columns:minmax(0,1fr) minmax(0,max-content) minmax(0,1fr)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-match .sc-matchup__team b{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;line-height:20px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-match .sc-matchup__clock{max-width:9.5em;white-space:normal}

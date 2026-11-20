@@ -118,6 +118,7 @@
     var top = document.querySelector('#u-hub .h-top');
     if (!top) return;
     var s = currentSport(), band = s === 'all' ? PAGE_SPORT : s;
+    var hubEl = $('u-hub'); if (hubEl) hubEl.classList.toggle('sc-one-sport', s !== 'all');
     if (!BAND[band]) band = 'cs2';
     V.setSport(band);
     if (!top.classList.contains('sc-bd-band')) {
@@ -248,10 +249,85 @@
     q.addEventListener('blur', function () { if (!q.value) sec.classList.remove('sc-bd-search'); });
   }
 
+
+  /* ---------------------------------------------------------------- polish2 (2026-11-20)
+     - desktop rows: an initials avatar where the hub draws no face (CS2 / LoL / soccer / tennis; NBA / NFL keep the hub's face), as
+       mock 11; the phone shows none (mock 06, CSS);
+     - the slip rail (the hub's own .h-slip) starts closed, as mocks 11 / B: it opens by itself only when the slip holds picks on a
+       1440+ screen; the member's own Hide / Show slip press always wins until the slip is emptied. Pressed through the hub's own
+       #hub-focus button, so the hub's state stays the source of truth;
+     - the add-to-slip note gets a check and an Undo (it presses the same row's own add button again, which takes the pick off) and
+       goes away when the view changes (sport tab, List / By game, another section). */
+  function avatars() {
+    document.querySelectorAll('#hub-rows>tr[data-record]>td.h-c-player').forEach(function (td) {
+      if (td.querySelector('.h-face, .sc-bd-av')) return;
+      var b = td.querySelector('.h-player b'), n = b ? b.textContent.trim() : '';
+      if (!n) return;
+      var av = document.createElement('span');
+      av.className = 'sc-bd-av';
+      av.setAttribute('aria-hidden', 'true');
+      av.textContent = n.charAt(0).toUpperCase();
+      td.insertBefore(av, td.firstChild);
+    });
+  }
+  var railUser = false, railBusy = false;
+  function slipN() { var c = $('hub-slip-count'); return c ? parseInt(c.textContent, 10) || 0 : 0; }
+  function railAuto() {
+    var hub = $('u-hub'), btn = $('hub-focus');
+    if (!hub || !btn) return;
+    var n = slipN();
+    hub.classList.toggle('sc-slip-empty', n === 0);
+    if (n === 0) railUser = false;
+    if (window.innerWidth < 1025 || hub.classList.contains('h-studio-mode') || railUser) return;
+    var want = n > 0 && window.innerWidth >= 1440, open = !hub.classList.contains('h-focus-board');
+    if (open !== want) { railBusy = true; try { btn.click(); } finally { railBusy = false; } }
+  }
+  document.addEventListener('click', function (e) {
+    if (!railBusy && e.target.closest && e.target.closest('#hub-focus')) railUser = true;
+  }, true);
+  var lastAdd = null;
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('#hub-rows .h-add, #hub-rows [data-hub="add"]');
+    if (b) lastAdd = b.getAttribute('data-id');
+  }, true);
+  function toastUndo() {
+    var t = document.getElementById('u-toast');
+    if (!t || !t.classList.contains('on')) return;
+    var txt = t.textContent || '';
+    var added = /^Added .+ to your slip\./.test(txt);
+    t.classList.toggle('sc-added', added);
+    if (!added || t.querySelector('.u-toast-undo') || !lastAdd) return;
+    var id = lastAdd, u = document.createElement('button');
+    var find = function () { var all = document.querySelectorAll('#hub-rows [data-hub="add"]'); for (var i = 0; i < all.length; i++) if (all[i].getAttribute('data-id') === id) return all[i]; return null; };
+    if (!find()) return;
+    u.type = 'button'; u.className = 'u-toast-undo sc-undo'; u.textContent = 'Undo';
+    u.addEventListener('click', function () { t.classList.remove('on'); var b = find(); if (b) b.click(); });
+    t.appendChild(document.createTextNode(' ')); t.appendChild(u);
+  }
+  function hideToast() { var t = document.getElementById('u-toast'); if (t) t.classList.remove('on'); }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('#hub-sports [data-hub="sport"], .h-viewmode button, [data-hub="section"], [data-v3-nav]')) hideToast();
+  }, true);
+  window.addEventListener('hashchange', hideToast);
+  function wireP2() {
+    var t = document.getElementById('u-toast');
+    if (t && !t.getAttribute('data-sc-p2')) {
+      t.setAttribute('data-sc-p2', '1');
+      new MutationObserver(function () { try { toastUndo(); } catch (e) {} }).observe(t, {childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class']});
+    }
+    var c = $('hub-slip-count');
+    if (c && !c.getAttribute('data-sc-p2')) {
+      c.setAttribute('data-sc-p2', '1');
+      new MutationObserver(function () { try { railAuto(); } catch (e) {} }).observe(c, {childList: true, characterData: true, subtree: true});
+      window.addEventListener('resize', function () { try { railAuto(); } catch (e) {} });
+    }
+  }
+
   var queued = 0;
   function run() {
     queued = 0;
     try { paintBand(); paintRows(); } catch (e) { /* keep the hub's own board */ }
+    try { avatars(); wireP2(); railAuto(); } catch (e) { /* the hub's own look */ }
   }
   function soon() { if (!queued) queued = requestAnimationFrame(run); }
 
