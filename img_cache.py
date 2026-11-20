@@ -45,6 +45,30 @@ MAX_PIXELS = 4_200_000
 # the FULL original size whatever the draft scale (+48 MB at 16 M pixels 4:2:0, +97 MB at 4:4:4, +544 MB at 177 M pixels), so they
 # get the normal cap, checked from the header before any decode.
 MAX_JPEG_BASELINE_PIXELS = 16_000_000
+# review 2026-11-20 (decode-bomb shapes, fresh-process peaks): libwebp decodes at ~16 bytes/pixel, so a 2048^2 WEBP added
+# +64-67 MB; 2.4 M pixels keeps WEBP under ~40 MB and the largest real BO3.gg art (1319 x 1681 = 2.2 M) still fits.
+MAX_WEBP_PIXELS = 2_400_000
+# very tall / wide strips (24 x 175000) can't be reduced by the short side, so the RGBA copy + logo disc ran full size (+75-85 MB);
+# real art is at most ~1.4:1 (ESPN 600 x 436, BO3.gg 354 x 455, logos 1359 x 1198)
+MAX_ASPECT = 4
+# PNG zTXt / iTXt / tEXt chunks inflate inside Pillow (up to its 64 MB MAX_TEXT_MEMORY) before any pixel: refuse big text
+# up front from the chunk table (compressed sizes; real art carries a few hundred bytes of metadata at most)
+MAX_PNG_TEXT_BYTES = 8_000          # zlib of 1 MB of zeros is ~1 KB, so 8 KB caps inflation near 8 MB
+
+
+def _png_text_bytes(raw):
+    """Total stored size of the text chunks in a PNG, read from the chunk table (nothing inflated). Malformed -> a huge number."""
+    import struct
+    pos, total, n = 8, 0, len(raw)
+    while pos + 8 <= n:
+        length = struct.unpack(">I", raw[pos:pos + 4])[0]
+        kind = raw[pos + 4:pos + 8]
+        if kind in (b"tEXt", b"zTXt", b"iTXt"):
+            total += length
+        if kind == b"IEND":
+            break
+        pos += 12 + length
+    return total
 MAX_OUT_BYTES = 120_000                    # a re-encoded file over this is refused (a 160 px WEBP is ~5-12 KB)
 MAX_FILES = 20_000
 MAX_BYTES = 200_000_000
@@ -335,6 +359,8 @@ def encode(raw, kind):
     from PIL import Image
     box = SIZE[kind]
     try:
+        if raw[:8] == b"\x89PNG\r\n\x1a\n" and _png_text_bytes(raw) > MAX_PNG_TEXT_BYTES:
+            raise Refused("png text")                  # zTXt/iTXt bombs inflate inside Pillow before any pixel is read
         # Image.MAX_IMAGE_PIXELS is process-wide (reviews.py sets its own per upload): never changed here; the cap below is ours
         im = Image.open(io.BytesIO(raw))
         if im.format not in ("PNG", "WEBP", "JPEG", "GIF"):
@@ -342,7 +368,9 @@ def encode(raw, kind):
         w, h = im.size                                 # header size: nothing decoded yet
         if w < 24 or h < 24:
             raise Refused("dims")
-        cap = MAX_PIXELS
+        if max(w, h) > MAX_ASPECT * min(w, h):
+            raise Refused("aspect")                    # strips can't be reduced by the short side: full-size RGBA copies
+        cap = MAX_WEBP_PIXELS if im.format == "WEBP" else MAX_PIXELS   # libwebp decodes at ~16 B/pixel
         if im.format == "JPEG" and _jpeg_single_scan_baseline(raw, im):
             cap = MAX_JPEG_BASELINE_PIXELS
         if w * h > cap:

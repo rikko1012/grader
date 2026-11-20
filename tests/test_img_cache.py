@@ -643,3 +643,31 @@ print(r, int(peak() - base))
         print("encode peak RSS growth", name, res, round(int(grew) / 1e6, 1), "MB")
         assert (res == "ok") == accepted, (name, res)
         assert int(grew) <= 40_000_000, (name, grew)
+
+
+def test_review_shapes_refused_before_decode_1120():
+    """Review 2026-11-20 decode-bomb shapes: big WEBP, strips, PNG text bombs are refused up front; real-sized art passes."""
+    import zlib, struct
+    from PIL import Image
+    import img_cache as ic
+
+    def png(w, h, extra=b""):
+        b = io.BytesIO(); Image.new("RGB", (w, h), (20, 40, 60)).save(b, "PNG"); d = b.getvalue()
+        return d[:33] + extra + d[33:]                 # after IHDR
+
+    def ztxt(i):
+        body = b"k%d\x00\x00" % i + zlib.compress(b"\x00" * 1_000_000, 9)
+        return struct.pack(">I", len(body)) + b"zTXt" + body + struct.pack(">I", zlib.crc32(b"zTXt" + body) & 0xffffffff)
+
+    with pytest.raises(ic.Refused) as e:
+        ic.encode(png(64, 64, b"".join(ztxt(i) for i in range(70))), "t")
+    assert "png text" in str(e.value)
+    with pytest.raises(ic.Refused) as e:
+        ic.encode(png(24, 2400), "t")
+    assert "aspect" in str(e.value)
+    b = io.BytesIO(); Image.new("RGB", (1600, 1600)).save(b, "WEBP", lossless=True)
+    with pytest.raises(ic.Refused) as e:
+        ic.encode(b.getvalue(), "t")
+    assert "dims" in str(e.value)
+    b = io.BytesIO(); Image.new("RGB", (1319, 1681), (200, 30, 30)).save(b, "WEBP", quality=80)
+    assert ic.encode(b.getvalue(), "t") and ic.encode(b.getvalue(), "p")
