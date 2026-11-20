@@ -137,6 +137,9 @@ BOOK_TEAM_ALIASES = {
     'soccer:team:espn:5325': ('Central Coast',),          # Central Coast Mariners FC (same fixture)
     'soccer:team:espn:5327': ('Sydney',),                 # Sydney FC          (v Brisbane Roar, 2026-11-21 08:40Z)
     'soccer:team:espn:13696': ('Wanderers',),             # Western Sydney Wanderers FC (v Adelaide Utd, 2026-11-20 08:40Z)
+    # close-1120 (PrizePicks Liga MX tab 536, raw pull 2026-11-20 21:18Z; ESPN mex.1 lists the club by its short name only)
+    'soccer:team:espn:225': ('Santos Laguna',),           # Santos (v León exact, 2026-11-21 23:00Z, the only mex.1 fixture then)
+    'soccer:team:espn:227': ('Club América',),            # América (v Tigres UANL exact, 2026-11-22 03:00Z, the only one)
 }
 
 

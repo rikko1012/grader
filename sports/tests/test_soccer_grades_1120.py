@@ -192,6 +192,17 @@ def test_checked_book_team_labels_resolve_exactly():
     assert h.resolve(offer, [match])['player_id'] == 'soccer:player:espn:7'
     assert h.resolve(dict(offer, teams=['Pert', 'Central Coast'], team='Pert'), [match]) is None   # never a prefix
     assert 'perth' not in h.participant_names({'id': 'soccer:team:espn:999', 'name': 'Perth Glory FC'})
+    # close-1120: Liga MX labels (ESPN lists 'Santos' / 'América' only)
+    mx = {'event_id': 'soccer:espn:mex.1:2:2', 'competition': 'mex.1', 'start': '2026-11-21T23:00:00Z',
+          'participants': [{'id': 'soccer:team:espn:225', 'name': 'Santos', 'short_name': 'Santos', 'abbreviation': 'SAN'},
+                           {'id': 'soccer:team:espn:228', 'name': 'León', 'short_name': 'León', 'abbreviation': 'LEO'}],
+          'players': [{'id': 'soccer:player:espn:8', 'team_id': 'soccer:team:espn:225', 'name': 'Franco Pardo'}]}
+    o = {'sport': 'soccer', 'start': '2026-11-21T23:00:00Z', 'teams': ['León', 'Santos Laguna'], 'team': 'Santos Laguna',
+         'player': 'Franco Pardo'}
+    assert h.resolve(o, [mx])['player_id'] == 'soccer:player:espn:8'
+    assert h.resolve(dict(o, teams=['León', 'Laguna'], team='Laguna'), [mx]) is None
+    assert 'club america' in h.participant_names({'id': 'soccer:team:espn:227', 'name': 'América'})
+    assert 'santos laguna' not in h.participant_names({'id': 'soccer:team:espn:2', 'name': 'Santos'})   # Brazil's Santos: no
 
 
 def test_thin_prior_alone_where_history_is_not_an_input():
