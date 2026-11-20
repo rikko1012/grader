@@ -460,6 +460,24 @@ def test_tennis_checked_labels_resolve_exactly():
     assert history.resolve(dict(o, player='Matheus Pucinelli'), [m]) is None
 
 
+def test_hyphenated_source_name_matches_the_same_letters_without_hyphens():
+    """close-1120 live e2e: 365Scores 'Soon-Woo Kwon' (Challenger Metz, 2026-11-21 14:00Z) is 'Soonwoo Kwon' on
+    PrizePicks and Underdog - same letters, same order; anything else stays unmatched."""
+    from sports import expansion_history as history
+    m = _tennis_match('atp_challenger', 'e9', ['Soon-Woo Kwon', 'Sascha Gueymard Wayenburg'],
+                      ['atp:player:365scores:1', 'atp:player:365scores:2'], '2026-11-21T14:00:00Z')
+    ud = {'sport': 'tennis', 'platform': 'underdog', 'tour': 'atp', 'competition': 'ATP Challenger Metz',
+          'player': 'Soonwoo Kwon', 'opponent': 'Sascha Gueymard Wayenburg', 'start': '2026-11-21T14:00:00Z'}
+    assert history.resolve(ud, [m])['player_id'] == 'atp:player:365scores:1'
+    assert history.resolve(dict(ud, player='Sascha Gueymard Wayenburg', opponent='Soonwoo Kwon'),
+                           [m])['player_id'] == 'atp:player:365scores:2'
+    pp = {'sport': 'tennis', 'platform': 'prizepicks', 'tour': None, 'player': 'Soonwoo Kwon',
+          'opponent': 'Sascha Gueymard Wayenburg', 'start': '2026-11-21T14:00:00Z'}
+    assert history.resolve(pp, [m])['player_id'] == 'atp:player:365scores:1'
+    for wrong in ('Soonwo Kwon', 'Soon Kwon', 'Woo Kwon', 'S Kwon', 'Kwon'):
+        assert history.resolve(dict(ud, player=wrong), [m]) is None
+
+
 def test_prizepicks_tennis_pair_listed_by_tour_and_125_stores_takes_the_tour_store():
     from sports import expansion_history as history
     wta = _tennis_match('wta', 'wta:espn:1', ['Laura Samson', 'Rebeka Masarova'], ['wta:player:espn:1', 'wta:player:espn:2'])

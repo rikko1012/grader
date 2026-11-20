@@ -162,8 +162,11 @@ BOOK_PLAYER_ALIASES = {
 
 
 def player_names(p):
-    """The source's display name (and 365Scores' own long name) plus the checked book labels of that player."""
-    return ({normalized(p.get(k)) for k in ('name', 'long_name') if p.get(k)} |
+    """The source's display name (and 365Scores' own long name) plus the checked book labels of that player.
+    close-1120: a hyphenated source name also counts written without its hyphens ('Soon-Woo Kwon' = 'Soonwoo Kwon',
+    PrizePicks + Underdog, Challenger Metz 2026-11-21) - the same letters in the same order, never a fuzzy rule."""
+    names = [p.get(k) for k in ('name', 'long_name') if p.get(k)]
+    return ({normalized(x) for x in names} | {normalized(x.replace('-', '')) for x in names if '-' in x} |
             {normalized(x) for x in BOOK_PLAYER_ALIASES.get(p.get('id'), ())})
 
 
