@@ -599,3 +599,26 @@ html[data-ui-v3] .u-toast.sc-added::before{content:"";display:inline-block;width
 html[data-ui-v3] #u-hub #hub-table td.h-c-player .sc-bd-av+.h-player{width:calc(100% - 42px)}
 @media (max-width:1100px){html[data-ui-v3] #u-hub #hub-table td.h-c-player .sc-bd-av+.h-player,html[data-ui-v3] #u-hub #hub-table td.h-c-player .u-face+.h-player{width:auto}}
 html[data-ui-v3] #u-hub #hub-sources p{display:block!important}html[data-ui-v3] #u-hub #hub-sources p b{display:inline!important;margin-right:4px}
+
+/* ---- qa-boards (2026-11-20, live-data pass) ---- */
+/* phone / tablet card, line 2: Scout's letter + stake take only the right-hand tracks (over +N props, watch, add), so the market
+   gets the room the 1fr track used to leave empty beside Proj. (it wrapped to three lines on 390px with 100px blank on its right) */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record],html[data-ui-v3] #u-hub.h-cols #hub-table>tbody>tr[data-record],
+  html[data-ui-v3] #u-hub #hub-table.h-has-edge>tbody>tr[data-record],html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits{
+    grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj pj pj gr gr gr" "hi hi hi hi hi ed ed ed" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record],html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record].h-nohits{
+    grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj pj pj gr gr gr" "hi hi hi hi hi ed ed ed" "mx mx mx mx mx mx mx mx" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+}
+/* a hit figure is one token: "16/18" never breaks inside its cell; the hub's few-games dashed mark sits outside the digits */
+html[data-ui-v3] #u-hub #hub-table .h-hit{white-space:nowrap!important}
+html[data-ui-v3] #u-hub #hub-table .h-strip .h-hit.h-few{outline-offset:1px;border-radius:2px!important}
+/* desktop line cell: "checked N min ago" is the approved wording, never cut to "checked 37 min ..."; it wraps under the book instead */
+@media (min-width:1101px){
+  html[data-ui-v3] #u-hub #hub-table .sc-seen>span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+}
+/* By game shows game cards, not rows: the rows' hit-rate legend steps aside with them */
+html[data-ui-v3] #u-hub #hub-board-section.h-by-game .sc-bd-legend{display:none!important}
+/* the line column fits "checked NN min ago" on one line (it wrapped "ago" alone at 106-116px); the player column gives the room */
+@media (min-width:1101px){html[data-ui-v3] #u-hub #hub-table .h-c-line{width:128px!important}}
+@media (min-width:1101px){html[data-ui-v3] #u-hub #hub-table .h-c-market{width:128px!important}}
