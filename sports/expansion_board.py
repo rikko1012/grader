@@ -72,7 +72,15 @@ def _prepared(path, st, now, sport):
         _PREPARED.pop(key, None)
         while len(_PREPARED) >= 2:
             _PREPARED.pop(next(iter(_PREPARED)))
-        _PREPARED[key] = {'data':data, 'body':encoded, 'checked':instant, 'expires':min(deadlines)}
+        # A source whose rows carry more than one observed_at (PrizePicks soccer tabs read at different times,
+        # 2026-11-19) cannot be re-stamped with one checked_at: no 'unchanged' shortcut for that snapshot.
+        stamps = {}
+        for r in rows:
+            stamps.setdefault(r['platform'], set()).add(r['observed_at'])
+        for r in odds:
+            stamps.setdefault('odds:' + r['platform'], set()).add(r['observed_at'])
+        restamp = all(len(v) <= 1 for v in stamps.values())
+        _PREPARED[key] = {'data':data, 'body':encoded, 'checked':instant, 'expires':min(deadlines), 'restamp':restamp}
         return data
 
 
@@ -370,7 +378,7 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     except (TypeError, ValueError):
         level = 1
 
-    def halve(why):
+    def halve(why, own=False):
         nonlocal level, halved
         if halved:
             return                                     # at most one halving a run
@@ -378,8 +386,11 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
         level = max(1, old // 2)
         halved = why
         stamp = now_utc()
-        aimd.update(ceiling=old, ceiling_until=_iso_plus(stamp, _env_num("SCOUT_SOCCER_PP_CEILING_S", CEILING_S)),
-                    clean_since=stamp, last_change=stamp, last_halving={"at": stamp, "why": why, "from": old,
+        if own and old >= 2:
+            # the level SOCCER's own request drew a 429 at is not tried again for CEILING_S. Not for another
+            # consumer's 429 (soccer may not have caused it) and not from level 1 (that would freeze coverage).
+            aimd.update(ceiling=old, ceiling_until=_iso_plus(stamp, _env_num("SCOUT_SOCCER_PP_CEILING_S", CEILING_S)))
+        aimd.update(clean_since=stamp, last_change=stamp, last_halving={"at": stamp, "why": why, "from": old,
                                                                         "to": level},
                     halvings=int(aimd.get("halvings") or 0) + 1)
 
@@ -429,7 +440,7 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
             if e.status == 429 and not getattr(e, "held", False):
                 state["recent_429"] = [t for t in state.get("recent_429") or []
                                        if 0 <= (_age_s(t, now_utc()) or 10 ** 9) <= 900] + [now_utc()]
-                halve("429:soccer")
+                halve("429:soccer", own=True)
             raise
         if not isinstance(body, dict):
             raise ValueError("bad_body")
@@ -568,6 +579,11 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     now = now_utc()
     if halved or constrained:
         aimd["clean_since"] = now
+    elif stopped == "request_failed" or run_errors or not any(
+            r == "coverage" for k, r in roles.items() if k != "coverage"):
+        pass                                       # growth only on a run with good reads and no failed request
+                                                   # (5xx, timeout, 403, bad answer); one broken tab never blocks
+                                                   # it for good, a full outage never grows the level
     elif level < cap:
         clean = _age_s(aimd.get("clean_since"), now)
         if clean is None or clean < 0:
@@ -621,7 +637,7 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
                   "error": run_errors.get(82) or e82.get("error") or "not_read_recently", "offers": len(rows)}
     listing = leagues.get("listing") or {}
     grow_left = None
-    if level < cap and not (halved or constrained):
+    if level < cap and not (halved or constrained or run_errors):
         c = _age_s(aimd.get("clean_since"), now)
         grow_left = max(0, round(_env_num("SCOUT_SOCCER_PP_GROW_S", GROW_S) - (c or 0)))
     status = {"at": now, "mode": "leagues", "calls": calls, "every_s": every, "stopped": stopped,
@@ -757,15 +773,17 @@ def board(req):
             raise ValueError("oversize")
         data = _prepared(path, st, datetime.now(timezone.utc), sport)
         version = data['version']
-        if req.query.get('version') == version:
+        with _SNAPSHOT_LOCK:
+            restamp = next((v.get('restamp', True) for v in _PREPARED.values() if v['data'] is data), True)
+        if req.query.get('version') == version and restamp:
             # The soccer page (web/sports/expansion.js) DOES use this shortcut: it keeps
-            # its rows and re-stamps each one's observed_at with its source's
-            # checked_at. Since 2026-11-19 the PrizePicks soccer tabs carry a tab's last
-            # good rows between reads with their own observed_at, so 'prizepicks'
-            # checked_at is the OLDEST good read among the tabs on the board (never
-            # fresher than a carried row). A row that goes stale (300 s) or starts
-            # leaves the version (the _prepared deadline), and started/removed/changed
-            # offers change it too: the page then gets a full replacement.
+            # its rows and re-stamps each one's observed_at with its source's checked_at
+            # (and hides a row 300 s after that stamp). That is only right when every
+            # row of a source was seen at one time. Since 2026-11-19 the PrizePicks
+            # soccer tabs carry each tab's last good rows with their own observed_at,
+            # so a snapshot holding rows from several reads (restamp False) always
+            # gets the full board instead. Started/removed/changed offers change the
+            # version and force a full replacement too.
             # (workspace_expansion asks with research=1 and never sends a version.)
             return 200, {k:data[k] for k in ('sport','built_at','sources','version')} | {'unchanged':True}
         return 200, data

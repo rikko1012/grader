@@ -42,15 +42,15 @@ def test_max_level_and_league_backoff_schedule(monkeypatch):
 
 
 def test_level_one_rotation_is_fair_and_tab_82_is_read_every_180_s(env):
+    # Liga MX kicks off FIRST (today) and the other tabs in 2030: an earlier kick-off never takes another tab's turn
+    env['tabs'][536] = pp_tab(536, 'Liga MX', [('536a', 'p4', 'Passes Attempted', 65.5, 'standard')],
+                              start='2026-11-19T23:00:00Z')
     runs = run(env, 13)                                      # 45 s runs; level 1 = one request per 90 s
     calls = [c for c, _ in runs]
     assert calls == [[82, 'leagues'], [], [14], [], [82], [], [6], [], [82], [], [536], [], [82]]
     assert all(len([x for x in c if x != 'leagues']) <= 1 for c in calls)        # least-recently-attempted first
     for _, snap in runs:
         assert visible_late(snap, env)['SOCCER'] == 2                           # tab 82 never dark
-    # a tab with an EARLIER kick-off never takes another tab's turn
-    env['tabs'][536] = pp_tab(536, 'Liga MX', [('536a', 'p4', 'Passes Attempted', 65.5, 'standard')],
-                              start='2026-11-19T18:00:00Z')
     st = status(env)
     assert st['coverage']['max_level'] == 2                                    # 82 + MLS, Liga MX, Serie A
     assert st['source']['ok'] is True
@@ -95,7 +95,7 @@ def test_a_429_from_another_consumer_halves_coverage_at_once_and_skips_this_run(
     calls, snap = run(env, 1)[0]
     st = status(env)
     assert calls == [] and st['stopped'] == 'recent_429_other_consumer'      # cool-off: no request this run
-    assert st['coverage']['level'] == 2 and st['coverage']['ceiling'] == 4
+    assert st['coverage']['level'] == 2 and st['coverage']['ceiling'] is None   # not soccer's 429: no ceiling
     assert st['coverage']['last_halving']['why'] == '429:' + consumer
     assert st['pp_429'][consumer]['last_1h'] == 1
     assert snap['offers']                                                   # last good rows carried
@@ -124,8 +124,9 @@ def test_recovery_after_the_ceiling_expires_and_never_above_the_ceiling_meanwhil
     monkeypatch.setenv('SCOUT_SOCCER_PP_CEILING_S', '1800')
     run(env, 2)
     set_level(env, 4)
-    sources.record_429('nba_nfl')
+    env['fail'] = {lid: 429 for lid in list(env['tabs']) + ['leagues']}     # soccer's OWN 429 sets the ceiling
     run(env, 1)
+    env['fail'] = {}
     until = board.parse_utc(state(env)['aimd']['ceiling_until'])
     levels = []
     for _ in range(90):                                                     # > 60 min
@@ -324,3 +325,58 @@ def test_run_budget_stops_new_requests_inside_the_job_timeout(env, monkeypatch):
     calls, _ = run(env, 1)[0]
     st = status(env)
     assert len(calls) == 2 and st['coverage']['constrained'] == 'run_budget'
+
+
+def test_a_429_at_level_one_never_freezes_coverage(env):
+    run(env, 2)
+    env['fail'] = {lid: 429 for lid in list(env['tabs']) + ['leagues']}
+    while not state(env).get('recent_429'):
+        run(env, 1)
+    env['fail'] = {}
+    st = state(env)
+    assert st['aimd']['level'] == 1 and not st['aimd'].get('ceiling')      # halving from 1 sets no ceiling
+    run(env, 16)                                                          # 12 min clean
+    assert status(env)['coverage']['level'] == 2
+
+
+def test_failed_requests_never_grow_the_level_but_one_broken_tab_does_not_block_growth(env):
+    env['fail'] = {lid: 500 for lid in list(env['tabs'])}
+
+    def get_json(sport, url, params=None, **kw):
+        lid = (params or {}).get('league_id', 'leagues')
+        env['calls'].append(lid)
+        env['clock'].t += timedelta(seconds=2)
+        if lid in env['fail']:
+            raise net.HttpError(500, url, '')
+        from sports.tests.test_pp_soccer_leagues_1119 import leagues_body
+        return leagues_body(env['listed']) if lid == 'leagues' else env['tabs'].get(lid, {'data': [], 'included': []})
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(sources, 'get_json', get_json)
+        run(env, 30)                                                      # 22 min, every tab answering 500
+        assert status(env)['coverage']['level'] == 1
+        env['fail'] = {536: 500}                                          # only Liga MX broken
+        run(env, 30)
+        assert status(env)['coverage']['level'] == 2
+
+
+def test_a_board_mixing_reads_never_answers_unchanged(env, monkeypatch):
+    from types import SimpleNamespace
+
+    class FakeDT:
+        @staticmethod
+        def now(tz=None):
+            return env['clock'].t
+    monkeypatch.setattr(board, 'datetime', FakeDT)
+    board._PREPARED.clear()
+    run(env, 1)
+    env['clock'].t -= timedelta(seconds=40)                               # read the board just after the run
+    data = board.board(SimpleNamespace(query={'sport': 'soccer'}))[1]
+    again = board.board(SimpleNamespace(query={'sport': 'soccer', 'version': data['version']}))[1]
+    assert again.get('unchanged') is True                                 # tab 82 alone: one read, shortcut ok
+    env['clock'].t += timedelta(seconds=40)
+    run(env, 8)                                                           # MLS / Liga MX rows from other reads
+    env['clock'].t -= timedelta(seconds=40)
+    data = board.board(SimpleNamespace(query={'sport': 'soccer'}))[1]
+    assert len({r['observed_at'] for r in data['offers']}) > 1
+    again = board.board(SimpleNamespace(query={'sport': 'soccer', 'version': data['version']}))[1]
+    assert not again.get('unchanged') and again['offers'] == data['offers']
