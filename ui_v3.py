@@ -3,7 +3,7 @@
 Display only: nothing here reads grades, APIs or member data. server.py asks two questions per request and, when the answer is no,
 sends exactly what it sent before (same bytes, same cache key, same unknown-route answer):
 
-  ui_v3_default()          SCOUT_UI_V3=1 (read per request, so a Render env change applies without a deploy): v3 for everyone.
+  ui_v3_default()          v3 for everyone unless SCOUT_UI_V3=0 (read per request, so a Render env change applies without a deploy).
   preview_ok(cookie)       the owner's preview cookie (set by /preview/v3 for the owner only; an HMAC of ADMIN_TOKEN, HttpOnly),
                            so a member can neither forge nor copy-paste a value that turns it on. No ADMIN_TOKEN = no preview.
 
@@ -48,7 +48,9 @@ _PAGE = {}                                   # (id(body), name) -> (body, out)
 
 
 def ui_v3_default():
-    return os.environ.get("SCOUT_UI_V3", "").strip().lower() in ("1", "true", "on", "yes")
+    # ON for everyone since Nov 20 2026 (owner: v3 live). SCOUT_UI_V3=0 (Render env, read per request, no deploy) restores
+    # today's classic pages for everyone at once.
+    return os.environ.get("SCOUT_UI_V3", "1").strip().lower() not in ("0", "false", "off", "no")
 
 
 def preview_value(admin_token):
