@@ -51,6 +51,9 @@ def db():
     # per-event progress of on_settled (2026-11-08): the event's stored settlement + forecast records (count, newest
     # rid, rid sum) at its last full pass - an unchanged event is a no-op and is skipped without decoding anything
     con.execute("CREATE TABLE IF NOT EXISTS learn_events (event_id TEXT PRIMARY KEY, sig TEXT, scored_at TEXT)")
+    # settle-post resume state (2026-11-20): pending_cutoff (a stopped run's window start), resume_event, and inside it
+    # resume_rid / resume_sig (the forecast it stopped at, valid while the event's records are unchanged)
+    con.execute("CREATE TABLE IF NOT EXISTS learn_meta (key TEXT PRIMARY KEY, value TEXT)")
     # Separate additive table: immutable forecast/settlement IDs preserve replay.
     # Probabilities alone cannot tell whether the point projection improved.
     con.execute("""CREATE TABLE IF NOT EXISTS projection_reviews (
@@ -153,14 +156,21 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
     icon = forward.inputs_db()
     t_start = time.time()
     main_deadline = None if deadline is None else t_start + max(0.0, deadline - t_start) * (1.0 - shadow_share)
-    lcon.execute("CREATE TABLE IF NOT EXISTS learn_meta (key TEXT PRIMARY KEY, value TEXT)")
     meta = dict(lcon.execute("SELECT key, value FROM learn_meta"))
     cutoff = (parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     if meta.get("pending_cutoff") and meta["pending_cutoff"] < cutoff:
         cutoff = meta["pending_cutoff"]                 # catch-up: a stopped run's window is kept until one completes
     hard = None if deadline is None else deadline + HARD_GRACE_S
+    fired = [False]                                     # the backstop interrupted a statement (some readers - e.g. the
+    #                                                     archive's table probe - swallow the error and answer None)
+
+    def _guard():
+        if time.time() > hard:
+            fired[0] = True
+            return 1
+        return 0
     if hard is not None:
-        scon.set_progress_handler(lambda: 1 if time.time() > hard else 0, PROGRESS_OPS)
+        scon.set_progress_handler(_guard, PROGRESS_OPS)
     n_new = n_diag = n_skip = n_fc = n_offers = n_fast = n_scored_ev = 0
     evs, order, left, pos, interrupted, cursor = [], [], 0, 0, False, None
     try:
@@ -203,7 +213,9 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
                                    "AND rid >= ? ORDER BY rid", (ev, start)):
                 if _past(main_deadline):
                     stopped = True                      # rows so far are committed below; no mark for this event
-                    cursor = (fr["rid"], sig)
+                    # no cursor once the backstop fired: a read it interrupted may have answered None (a forecast
+                    # skipped without a row) - the event is walked again from its first forecast
+                    cursor = None if fired[0] else (fr["rid"], sig)
                     break
                 fc = store._rec(fr)
                 fid = fr["record_id"]
@@ -229,7 +241,7 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
                 a, d = _score_one(lcon, icon, fid, fc, offer, cur)
                 n_new += a
                 n_diag += d
-            if stopped:
+            if stopped or fired[0]:                     # (fired: never mark an event a swallowed interrupt touched)
                 lcon.commit()
                 left = len(order) - pos
                 break
@@ -262,7 +274,7 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
     _write_state(bool(left), left, now_utc())
     try:                                                # sm-2 shadow scorecard (REGISTER A5); never blocks sm-1
         from . import shadow
-        out["shadow"] = shadow.settle(scon, deadline=deadline)
+        out["shadow"] = shadow.settle(scon, deadline=deadline, fired=lambda: fired[0])
     except Exception as e:                              # noqa: BLE001 (an interrupted statement lands here too)
         out["shadow"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
     finally:

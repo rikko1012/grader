@@ -13,6 +13,8 @@ Every budgeted / killed / resumed sequence must end with exactly the tables of o
 order (the scorecard report and the cal-mi rows read them in rowid order)."""
 import argparse
 import json
+import sqlite3
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -404,3 +406,117 @@ def test_learning_state_file_tracks_partial_and_complete(monkeypatch, tmp_path):
         learning.on_settled(con, now=NOW)
     st = learning.read_state()
     assert not st["partial"] and st["complete_at"] == st["at"]
+
+
+# ------------------------------------------------------------------------------------------ changes behind a cursor
+def _correct_in(con, ev):
+    """A settlement revision for the FIRST forecast of event `ev` (before any saved cursor) and a late forecast on the
+    same event - deterministic, so the one-run world gets the identical change."""
+    from sports.tests import helpers as h
+    fr = con.execute("SELECT payload FROM records WHERE kind='forecast' AND event_id=? ORDER BY rid LIMIT 1",
+                     (ev,)).fetchone()
+    fc = store._rec(fr)
+    o = store.get(con, fc.offer_snapshot_ids[0])
+    s = next(s for _, s in store.settlements(con) if s.platform == o.platform and s.offer_id == o.offer_id
+             and s.side == fc.chosen_side)
+    store.put(con, replace(s, settlement_id=s.settlement_id + "-c", revision=s.revision + 1, supersedes=s.settlement_id,
+                           source_value=(s.source_value or 0) + 7, outcome="over",
+                           status="win" if s.side == "over" else "loss",
+                           known_at="2026-11-01T00:00:00Z", observed_at="2026-11-01T00:00:00Z"))
+    store.put(con, h.forecast(forecast_at="2026-10-30T20:00:00Z", league=o.league, event_id=o.event_id,
+                              player_id=o.player_id, player_key=o.player_key, stat=o.stat, line=o.line,
+                              offer_snapshot_ids=(fc.offer_snapshot_ids[0],),
+                              input_snapshot_ids=(fc.offer_snapshot_ids[0], "late-c"), model_version="sm-1",
+                              projection_mean=o.line + 2, p_over=0.6, p_under=0.4, p_push=0.0,
+                              p_over_given_no_push=0.6, p_under_given_no_push=0.4,
+                              sides_available=tuple(o.offered_sides()), chosen_side=o.offered_sides()[0]))
+
+
+def _sorted_tables():
+    t = _tables()
+    return {k: (sorted(v) if isinstance(v, list) else v) for k, v in t.items()
+            if k in ("scorecard", "projection_reviews", "diagnostics", "shadow")}
+
+
+def test_a_change_inside_the_stopped_event_is_not_skipped_by_the_cursor(monkeypatch, tmp_path):
+    """Stopped mid-event with a forecast cursor saved; a correction for a forecast BEFORE the cursor and a late forecast
+    land in that event; the resumed runs rescore both (the cursor is dropped because the event's records changed) -
+    the same rows and superseded flags as one run that saw the same change."""
+    d = tmp_path / "budget"
+    d.mkdir()
+    _world(d, monkeypatch)
+    ev = None
+    with store.opened() as con:
+        clock = Clock()
+        monkeypatch.setattr(learning.time, "time", clock)
+        for budget in range(20, 400, 7):
+            lc = learning.db()
+            lc.execute("DELETE FROM scorecard"), lc.execute("DELETE FROM projection_reviews")
+            lc.execute("DELETE FROM learn_events"), lc.execute("DELETE FROM learn_meta"), lc.commit()
+            meta = {}
+            learning.on_settled(con, now=NOW, deadline=clock.t + budget)
+            meta = dict(lc.execute("SELECT key, value FROM learn_meta"))
+            lc.close()
+            if meta.get("resume_rid"):
+                ev = meta["resume_event"]
+                first = con.execute("SELECT MIN(rid) FROM records WHERE kind='forecast' AND event_id=?", (ev,)).fetchone()[0]
+                if int(meta["resume_rid"]) > first:
+                    break
+                ev = None
+        assert ev is not None
+        monkeypatch.setattr(config, "DATA_DIR", d)
+        _correct_in(con, ev)
+        outs = _budget_runs(con, monkeypatch, 60)
+    monkeypatch.setattr(config, "DATA_DIR", d)
+    assert _done(outs[-1])
+    got = _sorted_tables()
+    one = tmp_path / "one"
+    one.mkdir()
+    _world(one, monkeypatch)
+    with store.opened() as con:
+        learning.on_settled(con, now=NOW)
+        _correct_in(con, ev)
+        learning.on_settled(con, now=NOW)
+    want = _sorted_tables()
+    assert any(r[-1] == 1 for r in want["scorecard"])      # the correction superseded a row
+    assert got["scorecard"] == want["scorecard"] and got["projection_reviews"] == want["projection_reviews"]
+    assert got["shadow"] == want["shadow"]
+
+
+def test_a_swallowed_interrupt_never_marks_the_event_or_moves_the_cursor(monkeypatch, tmp_path):
+    """The archive's table probe answers None on ANY sqlite error, so an interrupted offer read can look like a missing
+    offer. Once the backstop has fired, no event is marked and no cursor is saved: everything is re-read."""
+    full = _one_run(tmp_path, monkeypatch)
+    d = tmp_path / "swallow"
+    d.mkdir()
+    _world(d, monkeypatch)
+    real_get = store.get
+    state = {"n": 0}
+
+    def get(con, rid):                                   # the 5th offer read is 'interrupted' and swallowed
+        state["n"] += 1
+        if state["n"] == 5:
+            try:
+                con.execute("SELECT 1").fetchone()       # the handler fires on this statement ...
+            except sqlite3.OperationalError:
+                pass
+            return None                                  # ... and the reader answers None, as _has_tables does
+        return real_get(con, rid)
+    import time
+    with store.opened() as con:
+        monkeypatch.setattr(store, "get", get)
+        monkeypatch.setattr(learning, "PROGRESS_OPS", 1)
+        real_time = time.time
+        base = real_time()
+        monkeypatch.setattr(learning.time, "time", lambda: real_time() + (10 ** 6 if state["n"] >= 5 else 0))
+        out = learning.on_settled(con, now=NOW, deadline=base + 300)
+        monkeypatch.undo()
+        monkeypatch.setattr(config, "DATA_DIR", d)
+        lc = learning.db()
+        meta = dict(lc.execute("SELECT key, value FROM learn_meta"))
+        marked = lc.execute("SELECT COUNT(*) FROM learn_events").fetchone()[0]
+        lc.close()
+        assert out.get("partial") and "resume_rid" not in meta and marked == 0, (out, meta, marked)
+        out2 = learning.on_settled(con, now=NOW)
+    assert not out2.get("partial")
+    assert _tables() == full

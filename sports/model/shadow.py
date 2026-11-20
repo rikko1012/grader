@@ -485,7 +485,7 @@ def l2_score(sport, hcon, freeze, art):
 CORRECTION_WINDOW_DAYS = 30            # first scan: settlements learned this far back (learning.on_settled's window)
 
 
-def settle(scon, path=None, now=None, deadline=None):
+def settle(scon, path=None, now=None, deadline=None, fired=None):
     """Score shadow forecasts whose offer has a settlement (same rule as learning._score_one: the forecast's OWN line
     and chosen side), each under its OWN model_version (sm-2, sm-nfl-2). Idempotent.
     A corrected settlement (new settlement_id) SUPERSEDES the forecast's earlier row (superseded=1) instead of adding a
@@ -550,7 +550,7 @@ def settle(scon, path=None, now=None, deadline=None):
                 (ev, start)).fetchall():
             if deadline is not None and time.time() >= deadline:
                 stopped = True                             # 2026-11-20: checked per forecast too; no mark for this event
-                cursor = (row, sig)
+                cursor = None if (fired and fired()) else (row, sig)    # see learning.on_settled
                 break
             if side is None:
                 continue
@@ -573,7 +573,7 @@ def settle(scon, path=None, now=None, deadline=None):
                              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
                              (sid, cur.settlement_id, mv or VERSION, lg, st, ev, line, side, p_side, p_push, status,
                               cur.source_value, cur.settled_at)).rowcount
-        if stopped:
+        if stopped or (fired and fired()):            # fired: learning's statement backstop interrupted a read
             con.commit()
             left = len(order) - i
             break
