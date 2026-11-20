@@ -322,7 +322,7 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
   html[data-ui-v3] #u-hub #hub-table>thead .h-strip-th{font-style:normal}
   html[data-ui-v3] #u-hub #hub-table .sc-seen>i{display:none}
   html[data-ui-v3] #u-hub #hub-table .h-player{display:block!important;min-width:0;overflow:hidden;text-align:left}
-  html[data-ui-v3] #u-hub #hub-table .h-player b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  html[data-ui-v3] #u-hub #hub-table .h-player b{display:block;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:break-word}   /* a player name is never cut (audit 2026-11-06): it wraps */
   html[data-ui-v3] #u-hub #hub-table .h-player small{display:flex!important;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
   html[data-ui-v3] #u-hub #hub-table .h-player small .h-vs{overflow:hidden;text-overflow:ellipsis;min-width:0}
   html[data-ui-v3] #u-hub #hub-table .h-player small>*{flex:none}
@@ -350,6 +350,13 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
   html[data-ui-v3] #u-hub #hub-board-section:not(.sc-bd-search) .h-search:has(input:placeholder-shown){display:none}
   html[data-ui-v3] #u-hub #hub-board-section .h-search{flex:1 1 100%}
   html[data-ui-v3] #u-hub #hub-platform{flex:1 1 0;min-width:0}
+}
+@media (max-width:480px){
+  /* phone: the app pills get their own row so All / PP / UD and their counts are all on screen (they still scroll if extra books are on) */
+  html[data-ui-v3] #u-hub #hub-platform{flex:1 1 100%}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-ev-link{margin-left:auto}
+}
+@media (max-width:1100px){
   html[data-ui-v3] #u-hub #hub-platform>button{min-height:32px;padding:0 11px!important}
   html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-pop-wrap:first-of-type{margin-left:0}
   html[data-ui-v3] #u-hub #hub-board-section .h-toolbar .h-pop-wrap>button,html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-refresh{padding:0 10px!important}
@@ -417,7 +424,7 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
   /* line 1 */
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-face{flex:none;--face:26px;width:26px;height:26px}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player{display:flex!important;flex-wrap:nowrap!important;align-items:baseline;gap:7px;min-width:0;min-height:0!important;height:auto!important;flex:1;padding:0!important;border:0!important;text-align:left;overflow:hidden}
-  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player b{flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15.5px!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player b{flex:0 0 auto;max-width:100%;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:break-word;font-size:15.5px!important}   /* never cut: the name wraps, the matchup beside it gives way */
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small{display:flex!important;align-items:baseline;gap:6px;min-width:0;overflow:hidden;white-space:nowrap;color:var(--sc-faint)!important}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small .h-vs{overflow:hidden;text-overflow:ellipsis;min-width:0}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small i{flex:none}

@@ -37,6 +37,10 @@ def open_board(browser, env, monkeypatch, path, size, theme, flags=True):
     p.goto(env.url + path)
     p.wait_for_selector(ROW, timeout=30000)
     p.wait_for_function("!!window.ScoutV3 && !!document.querySelector('#hub-rows>tr[data-sc=\"1\"]')")
+    # integration: the hub may repaint once more as later sport boards arrive (/sports, /#all-sports); wait until that repaint is
+    # decorated too (legend in place, no undecorated row) so the checks below never read a half-painted board
+    p.wait_for_function("!!document.querySelector('#sc-bd-legend') && !document.querySelector('#hub-rows>tr[data-record]:not([data-sc=\"1\"])')", timeout=20000)
+    p.wait_for_timeout(300)
     return c, p
 
 
