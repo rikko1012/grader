@@ -149,5 +149,35 @@ unchanged count model (byte-identical).
 thin-t1 prior: ESPN ATP / WTA singles, the tune window's thin player-matches per (gender, best-of, scope, stat);
 K = 20 for every stat (a player's own 0-4 matches add almost nothing - the line's matchup is not in the model).
 Challenger / WTA 125 use the tour prior untested. Evidence: `cs2_scout_ops/logs/soccer_grades_1120/integrate/wf/`.
-Still blank: aces / double faults / break points under 5 matches (no tested prior; theScore serve history fills in),
-FotMob-only soccer stats under 5 games, component models (fantasy) under 5 games.
+(thin-2 and thin-t2 below now cover the stats this table left blank.)
+
+## Gaps closed after review e5a86ac (decisions 1-4, 2026-11-20)
+
+- **One-sided lines (decision 1).** See "One-sided lines" above: the graded side is the higher-chance offered side.
+- **Member reasons (decision 2).** Member cards show short facts mapped in `workspace_expansion.member_stake_reason`
+  ("Stake 0U · new model", "Stake 0U · under 5 past games", "Stake 0U · payout not published"). The stored forecast
+  keeps its full reason (admin / ops / logs) and its bytes and id.
+- **Failed-test models letter at 0U (decision 3).** Every thin / component tier below ships its letter at 0 units.
+- **Member scope (decision 4).** A lettered line with no saved game (thin / population models) still gets its member
+  card (the card's average shows "—").
+- **thin-2** (soccer, 0-4 exact games): FotMob counts - passes (close), crosses (close), attempted dribbles (passed),
+  tackles (failed), clearances (failed) - and the component models Shots Assisted (failed), Goal + Assist (passed),
+  cards (failed), outfield fantasy (failed), goalie fantasy (failed), 1H goals (thin-1 goals prior thinned, untested).
+  Population prior per position group, tune window before 2026-09-01, holdout 2026-09-01..11-19 scored once on the
+  frozen definition (`cs2_scout_ops/logs/soccer_grades_1120/gaps_1120/wf_thin2.py`, `thin2_walkforward.json`).
+  Rows outside FORECAST_INPUTS stay weight 0: such a line gets the prior alone (n = 0).
+- **thin-t2** (tennis, 0-4 exact matches): aces, double faults, break points won and the PrizePicks tennis Fantasy
+  Score, population prior per (tour, best-of) from theScore singles details (`wf_thin_t2.py`,
+  `thin_t2_walkforward.json`; tiers in the code constants).
+- **Identity.** First rosters: a never-loaded team of an offered fixture (board offers plus every league tab's last good
+  rows) gets a roster-only ESPN read, next kickoff first, up to 4 a run on their own 4 requests, after the base work.
+  Checked book player labels (`BOOK_PLAYER_ALIASES`, hand-checked: same team / tournament, same start, other side
+  exact; never fuzzy). A tennis pair listed by the tour store and its Challenger / WTA 125 store at the same start is
+  one match (tour identity). PrizePicks set lines name the opponent as "<name> 1st Set" (exact period suffix accepted).
+- **Board.** PrizePicks demons / goblins without the side field are More-only (9,031 of 9,031 listed rows); PrizePicks
+  tennis Fantasy Score rows (their own projection type) reach the board.
+- **Not closed, with reasons:** PrizePicks "Matches Won" (a whole-tournament count; whether earlier-round wins count is
+  not published; one goblin row seen in four pulls, never on the standard board) is not modelled. Doubles pairs have no
+  stored doubles fixtures (the ESPN / 365Scores collectors read singles), so they get no identity and no letter.
+  Lines on a PrizePicks league tab that was not re-read within 300 s are hidden by the member freshness rule (the
+  PrizePicks request level is rate-limit bound and unchanged).

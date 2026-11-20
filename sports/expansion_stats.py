@@ -89,6 +89,9 @@ THIN_COMPONENT = {
     'fantasy_outfield': {'kind': 'score', 'k': 5, 'tier': 'failed', 'source': 'fotmob, PP outfield formula',
                          'prior': {'D': (8.613, 5.3313), 'M': (7.704, 6.173), 'F': (7.8585, 7.5829),
                                    'U': (8.0463, 6.3783)}},
+    # thin-t2: PrizePicks tennis fantasy (full formula) per 'tour|best_of', theScore singles details (wf_thin_t2.py)
+    'fantasy_tennis': {'kind': 'score', 'k': 20, 'tier': 'failed', 'source': 'thescore, PP tennis formula',
+                       'group': 'tour_best_of', 'prior': {"atp|3": [11.2663, 10.4257], "atp|5": [12.8411, 15.1733], "wta|3": [9.4125, 11.3342]}},
     'fantasy_goalie': {'kind': 'score', 'k': 20, 'tier': 'failed', 'source': 'espn starting keepers',
                        'prior': {'G': (9.3569, 5.4284), 'U': (9.3569, 5.4284)}},
 }
@@ -543,10 +546,16 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
         if spec is None:
             return None, 'more_exact_history_needed'
         from .expansion_forecasts import position_group
-        group = position_group(facts.get('role') or offer.get('role'))
-        group = group if group in spec['prior'] else 'U'
+        if spec.get('group') == 'tour_best_of':
+            group = f"{'wta' if ident.get('competition') in ('wta', 'wta125') else 'atp'}|{context.get('best_of')}"
+            if group not in spec['prior']:
+                return None, 'more_exact_history_needed'
+        else:
+            group = position_group(facts.get('role') or offer.get('role'))
+            group = group if group in spec['prior'] else 'U'
         m0, second = spec['prior'][group]
-        thin_spec = {'version': 'thin-2', 'group': group, 'k': spec['k'], 'm0': m0,
+        thin_spec = {'version': 'thin-t2' if spec.get('group') == 'tour_best_of' else 'thin-2', 'group': group,
+                     'k': spec['k'], 'm0': m0,
                      ('sd' if spec['kind'] == 'score' else 'alpha0'): second, 'games': len(picked),
                      'tier': spec['tier'], 'prior': spec['source']}
     values = [g['value'] for g in picked]

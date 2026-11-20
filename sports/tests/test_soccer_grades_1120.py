@@ -286,7 +286,8 @@ def test_tennis_thin_never_replaces_the_count_model_or_runs_without_a_prior():
     offer.update(stat='aces', scope='full_game', line=5.5)                               # not finite-score: no thin-t1
     facts['scope'] = 'full_game'
     facts['context'] = {'best_of': 3}
-    assert model.make_forecast(offer, facts, NOW)[1] == 'more_exact_history_needed'
+    f, _ = model.make_forecast(offer, facts, NOW)
+    assert f['thin_model']['version'] == 'thin-t2'                                     # gaps: the serve-stat prior
 
 
 def test_tennis_thin_prior_tables_are_distributions_on_the_fit_support():
@@ -488,3 +489,37 @@ def test_prizepicks_tennis_fantasy_score_projection_type_is_read():
     b = pp_tennis('Aces', teams=['Frances Tiafoe', 'Daniil Medvedev'])
     b['data'][0]['attributes']['projection_type'] = 'Fantasy Score'          # any other stat: still refused
     assert offers.prizepicks(b, 'tennis', PNOW) == []
+
+
+# --- thin-t2: tennis serve stats and the PrizePicks tennis fantasy score under 5 exact matches
+
+@pytest.mark.parametrize('stat,line,comp,best_of,key', [('aces', 6.5, 'atp', 3, 'atp|3'), ('aces', 9.5, 'atp', 5, 'atp|5'),
+                                                        ('double_faults', 2.5, 'wta', 3, 'wta|3'),
+                                                        ('breakpoints_won', 3.5, 'atp_challenger', 3, 'atp|3')])
+def test_thin_t2_tennis_serve_stats(stat, line, comp, best_of, key):
+    offer, facts = fixture('tennis')
+    offer.update(stat=stat, scope='full_game', line=line)
+    facts.update(scope='full_game', context={'best_of': best_of})
+    facts['identity']['competition'] = comp
+    src = 'thescore' if comp in ('atp', 'wta') else '365scores'
+    facts['games'] = [dict(g, source=src, best_of=best_of) for g in facts['games'][:2]]
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['thin_model']['version'] == 'thin-t2' and f['thin_model']['group'] == key
+    assert f['units'] == 0.0 and f['grade'] and f['stake_reason'] == model.THIN_REASONS[model.THIN_T2_TIERS[stat]]
+    facts['context'] = {'best_of': 5}
+    facts['identity']['competition'] = 'wta'
+    assert model.fit(offer, facts, NOW)[1] == 'more_exact_history_needed'          # no WTA best-of-5 prior
+
+
+def test_thin_t2_tennis_fantasy_score():
+    offer, facts = facts_with([22.0, 15.5], [['espn', 'games_won'], ['espn', 'sets_won'], ['thescore', 'aces'],
+                                             ['thescore', 'double_faults']])
+    offer.update(sport='tennis', stat='fantasy_tennis', scope='full_game', line=18.5, sides={'over': {}})
+    facts['identity'].update(competition='atp', event_id='tennis:event:1', player_id='tennis:player:1')
+    facts.update(scope='full_game', context={'best_of': 3})
+    facts['event']['event_id'] = 'tennis:event:1'
+    for g in facts['games']:
+        g['best_of'] = 3
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['component_model'] == 'fantasy_tennis' and f['thin_model']['version'] == 'thin-t2'
+    assert f['thin_model']['group'] == 'atp|3' and f['units'] == 0.0 and f['side'] == 'over' and f['grade']

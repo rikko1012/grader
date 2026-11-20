@@ -40,6 +40,7 @@ def test_member_stake_reasons_are_short_definite_facts():
     assert wx.member_stake_reason({'units': 0.0, 'thin_model': {'tier': 'failed'},
                                    'stake_reason': '0U: ... missed its walk-forward test.'}) == \
         'Stake 0U · under 5 past games'
+    assert wx.member_stake_reason({'units': 0.0, 'sport': 'tennis', 'thin_model': {'version': 'thin-t2'}}) == 'Stake 0U · under 5 past matches'
     assert wx.member_stake_reason({'units': 0.0, 'letter_basis': 'chance_payout_unknown'}) == \
         'Stake 0U · payout not published'
     assert wx.member_stake_reason({'units': 0.0, 'component_model': 'fantasy_goalie', 'stake_tier': 'failed'}) == \

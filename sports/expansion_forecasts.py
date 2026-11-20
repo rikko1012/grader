@@ -114,6 +114,15 @@ THIN2_PRIOR = {
     'attempted_dribbles': {'G': (0.0174, 2.1281), 'D': (0.5757, 1.3745), 'M': (1.0598, 0.7613), 'F': (1.4643, 0.892), 'U': (0.9523, 1.2538)},
 }
 THIN2_K = {'passes_attempted': 1, 'tackles': 5, 'crosses': 1, 'clearances': 3, 'attempted_dribbles': 2}
+# thin-t2 (soccer-grades-1120 gaps): tennis aces / double faults / break points won (full match) under 5 exact matches.
+# Gamma-Poisson population prior per (tour, best_of): theScore ATP / WTA singles details, tune window 2026-05..08-31,
+# K by tune log loss; holdout 2026-09-01..11-19 scored once on the frozen definition
+# (cs2_scout_ops/logs/soccer_grades_1120/gaps_1120/wf_thin_t2.py, thin_t2_walkforward.json). Challenger / WTA 125 use
+# their tour's prior (untested on those levels). Every thin-t2 line is 0U (decision 3).
+THIN_T2_VERSION = 'thin-t2'
+THIN_T2_PRIOR = {"aces": {"atp|3": [5.5537, 0.4458], "atp|5": [9.9415, 0.3679], "wta|3": [2.5458, 0.7849]}, "double_faults": {"atp|3": [3.0212, 0.2238], "atp|5": [4.2592, 0.2307], "wta|3": [3.7208, 0.2648]}, "breakpoints_won": {"atp|3": [2.1854, 0.0903], "atp|5": [3.6656, 0.1135], "wta|3": [3.9361, 0.0643]}}
+THIN_T2_K = {"aces": 2, "double_faults": 3, "breakpoints_won": 12}
+THIN_T2_TIERS = {"aces": "failed", "double_faults": "failed", "breakpoints_won": "failed"}
 THIN2_TIERS = {'passes_attempted': 'close', 'tackles': 'failed', 'crosses': 'close', 'clearances': 'failed',
                'attempted_dribbles': 'passed'}
 
@@ -258,6 +267,12 @@ def fit(offer, facts, now):
                 group = 'U'
             thin = {'version': THIN_VERSION, 'group': group, 'k': THIN_K[stat], 'm0': THIN_PRIOR[stat][group][0],
                     'alpha0': THIN_PRIOR[stat][group][1], 'games': len(games), 'tier': THIN_TIERS[stat]}
+        elif sport == 'tennis' and stat in THIN_T2_PRIOR and scope == 'full_game':
+            key = f"{'wta' if ident.get('competition') in ('wta', 'wta125') else 'atp'}|{context.get('best_of')}"
+            if key not in THIN_T2_PRIOR[stat]:
+                return None, 'more_exact_history_needed'
+            thin = {'version': THIN_T2_VERSION, 'group': key, 'k': THIN_T2_K[stat], 'm0': THIN_T2_PRIOR[stat][key][0],
+                    'alpha0': THIN_T2_PRIOR[stat][key][1], 'games': len(games), 'tier': THIN_T2_TIERS[stat]}
         elif sport == 'soccer' and stat in THIN2_PRIOR and all(g.get('source') == 'fotmob' for g in games):
             # thin-2 (FotMob count stats; A-League / newer competitions with few or no FotMob games read so far)
             if group not in THIN2_PRIOR[stat]:

@@ -79,7 +79,7 @@ def member_stake_reason(f):
     if f.get('letter_basis') == 'chance_payout_unknown':
         return 'Stake 0U · payout not published'
     if f.get('thin_model'):
-        return 'Stake 0U · under 5 past games'
+        return 'Stake 0U · under 5 past matches' if f.get('sport') == 'tennis' else 'Stake 0U · under 5 past games'
     if f.get('member_stake_reason'):
         return f['member_stake_reason']
     if f.get('units') is None or f.get('component_model') or f.get('units') == 0:
