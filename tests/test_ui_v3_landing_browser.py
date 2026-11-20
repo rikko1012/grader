@@ -329,6 +329,8 @@ def test_carousel_under_the_headline_advances_and_pauses(browser, base, size):
     assert page.locator("#rvq-all").text_content() == "All reviews" and page.locator("#rvq-all").get_attribute("href") == "/reviews"
     away = (5, 5)
     page.locator("#rvq").scroll_into_view_if_needed()                     # the ticker turns only while it is on screen
+    page.wait_for_timeout(400)                                             # its visibility observer runs on a real frame
+    page.clock.run_for(100)
     assert _idx(page) == 0
     page.mouse.move(*away)
     page.clock.run_for(6000)
