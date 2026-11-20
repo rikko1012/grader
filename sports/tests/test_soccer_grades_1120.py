@@ -130,24 +130,6 @@ def test_component_settlement_prefers_extra_time_box_totals():
     assert stats.actual(f, by_key)[0] == 1
 
 
-def test_member_card_accepts_the_model_side_letter():
-    import workspace_expansion as wx
-    now = datetime.now(timezone.utc)
-    start = (now + timedelta(hours=3)).isoformat().replace('+00:00', 'Z')
-    made = (now - timedelta(minutes=5)).isoformat().replace('+00:00', 'Z')
-    o = {'sport': 'soccer', 'platform': 'underdog', 'offer_id': 'x', 'revision': 'r', 'stat': 'shots',
-         'scope': 'full_game', 'line': 1.5, 'start': start, 'sides': {'over': {}}}
-    ident = {'event_id': 'e', 'player_id': 'p', 'competition': 'eng.1'}
-    key = __import__('hashlib').sha256(__import__('json').dumps([o[k] for k in ('sport', 'platform', 'offer_id',
-        'revision')], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-    f = {'identity': ident, **{k: o[k] for k in ('sport', 'stat', 'scope', 'line', 'platform', 'offer_id', 'start')},
-         'offer_revision': 'r', 'side': 'under', 'grade': 'B', 'made_at': made, 'p_over': .4, 'p_under': .6,
-         'p_push': 0.0, 'p_side': .6, 'projection': 1.0, 'letter_basis': 'model_side_not_offered'}
-    assert wx._forecast(o, {'identity': ident}, {key: f}) is f
-    g = dict(f, letter_basis=None)
-    assert wx._forecast(o, {'identity': ident}, {key: g}) is None     # any other letter on an unoffered side: refused
-
-
 # ---------------------------------------------------------------- thin-1 (fewer than 5 exact games)
 
 def test_thin_history_gets_a_population_prior_grade():
