@@ -980,7 +980,7 @@ class Scheduler:
                 _kill(p)
             self.running.pop(name, None)
             out[name] = "stopped" if rc is None else f"stopped (exit {rc})"
-            self._finish(name, out[name], max(0.0, self.now() - t0))
+            self._finish(name, out[name], 0.0)          # 0.0: a cut run never enters recent_ran_s (fill-in rule)
         return out
 
     def stop(self):

@@ -344,6 +344,8 @@ def compact(sport, now=None, budget_s=4, days=SLIM_AFTER_DAYS):
     from . import expansion_archive as xa
     now = now or now_utc()
     t0 = time.monotonic()
+    if storage(sport)['live_mb'] >= 0.5 * MAX_BYTES / 1048576:
+        days = min(days, 1)             # past half the cap: checked events slim after a day (safe at any age)
     cutoff = (parse_utc(now) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
     adir = boards.root(sport)/'archive'/'forecasts'
     out = {'rows': 0, 'parts': 0}

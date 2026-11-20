@@ -185,18 +185,21 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
         raise ValueError("mixed sport batch refused")
     directory.mkdir(parents=True, exist_ok=True)
     db = directory / "quotes.db"
-    con = sqlite3.connect(db, timeout=10)
     try:
-        with con:
-            con.execute("CREATE TABLE IF NOT EXISTS ownership (sport TEXT NOT NULL UNIQUE)")
-            owners = con.execute("SELECT sport FROM ownership").fetchall()
-            if owners and owners != [(sport,)]:
-                raise ValueError("database belongs to another sport")
-            con.execute("INSERT OR IGNORE INTO ownership VALUES (?)", (sport,))
-            con.execute("CREATE TABLE IF NOT EXISTS revisions (id INTEGER PRIMARY KEY, platform TEXT, offer_id TEXT, revision TEXT, observed_at TEXT, payload TEXT)")
-            con.execute("CREATE INDEX IF NOT EXISTS quote_latest ON revisions(platform, offer_id, id DESC)")
-    finally:
-        con.close()
+        con = sqlite3.connect(db, timeout=10)
+        try:
+            with con:
+                con.execute("CREATE TABLE IF NOT EXISTS ownership (sport TEXT NOT NULL UNIQUE)")
+                owners = con.execute("SELECT sport FROM ownership").fetchall()
+                if owners and owners != [(sport,)]:
+                    raise ValueError("database belongs to another sport")
+                con.execute("INSERT OR IGNORE INTO ownership VALUES (?)", (sport,))
+                con.execute("CREATE TABLE IF NOT EXISTS revisions (id INTEGER PRIMARY KEY, platform TEXT, offer_id TEXT, revision TEXT, observed_at TEXT, payload TEXT)")
+                con.execute("CREATE INDEX IF NOT EXISTS quote_latest ON revisions(platform, offer_id, id DESC)")
+        finally:
+            con.close()
+    except sqlite3.Error:
+        pass        # a locked / damaged quote history never stops the board; record_quote_history records the error
     history_rows = rows+[dict(r,platform='odds:'+r['platform']) for r in game_odds]
     rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":"))))
     snapshot = {"sport": sport, "built_at": observed_at, "sources": sources, "offers": rows,

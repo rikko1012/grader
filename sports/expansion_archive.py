@@ -105,17 +105,27 @@ def _read(path):
 
 
 def remove_leftovers(con, adir, prefix):
-    """Stale temp files and orphans (final files with no manifest row: a crash between rename and commit - their rows
-    are still in the store and are archived again later). -> files removed."""
+    """Stale temp files are removed; a final file with no manifest row (a crash between rename and commit - its rows
+    are still in the store and are archived again later) is MOVED to <adir>/unlisted/, never deleted: if the store
+    itself were ever recreated, that file could hold the only copy of its rows. -> files cleared from the archive dir."""
     adir = Path(adir)
     if not adir.is_dir():
         return 0
     ensure(con)
     listed = {r[0] for r in con.execute("SELECT file FROM exp_archive")}
     n = 0
-    for f in list(adir.glob(f".{prefix}-*.tmp")) + [f for f in adir.glob(f"{prefix}-*.jsonl.xz") if f.name not in listed]:
+    for f in adir.glob(f".{prefix}-*.tmp"):
         try:
             f.unlink()
+            n += 1
+        except OSError:
+            pass
+    stamp = now_s().replace(":", "")
+    for f in [f for f in adir.glob(f"{prefix}-*.jsonl.xz") if f.name not in listed]:
+        try:
+            q = adir / "unlisted"
+            q.mkdir(exist_ok=True)
+            os.replace(f, q / f"{f.name}.{stamp}")
             n += 1
         except OSError:
             pass

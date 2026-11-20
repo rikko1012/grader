@@ -60,6 +60,19 @@ def test_board_json_bytes_unchanged_by_the_reorder(tmp_path):
     assert snap['offers'] == [a, b]
 
 
+def test_a_locked_quote_store_at_setup_never_stops_the_board(tmp_path, monkeypatch):
+    board.save('soccer', [row()], {}, NOW, tmp_path)
+    real = sqlite3.connect
+
+    def locked(path, *a, **k):
+        if str(path).endswith('quotes.db'):
+            raise sqlite3.OperationalError('database is locked')
+        return real(path, *a, **k)
+    monkeypatch.setattr(board.sqlite3, 'connect', locked)
+    board.save('soccer', [row(line=5.5)], {}, '2026-11-17T12:03:00Z', tmp_path)
+    assert json.loads((tmp_path / 'board.json').read_text(encoding='utf-8'))['offers'][0]['line'] == 5.5
+
+
 def test_quote_history_error_never_stops_the_board(tmp_path, monkeypatch):
     board.save('soccer', [row()], {}, NOW, tmp_path)
     def locked(db):
@@ -135,6 +148,7 @@ def test_orphan_file_from_a_crash_is_removed_and_rows_archived_again(tmp_path):
     (adir / '.quotes-000001.jsonl.xz.tmp').write_bytes(b'partial')
     out = board.archive_quotes(tmp_path, {(r['platform'], r['offer_id']) for r in cur}, now=NOW, budget_s=30)
     assert out['leftovers_removed'] == 2 and out['rows'] == 60
+    assert len(list((adir / 'unlisted').glob('quotes-000000.jsonl.xz.*'))) == 1     # moved aside, never deleted
     with sqlite3.connect(tmp_path / 'quotes.db') as con:
         assert xa.verify(con, adir)['bad'] == []
 
@@ -568,6 +582,7 @@ def test_scheduler_stop_gives_children_sigterm_and_a_grace(monkeypatch):
     if sys.platform != 'win32':                              # Windows has no catchable SIGTERM (terminate = kill)
         assert out.read_text() == 'checkpointed' and res['h'] == 'stopped (exit 0)'
     assert scheduler.JOBS['h']['last_exit']['code'].startswith('stopped')
+    assert scheduler.JOBS['h']['recent_ran_s'] == []                 # a cut run never feeds the fill-in rule
 
 
 # --------------------------------------------------------------------------------- scheduled archive verification
