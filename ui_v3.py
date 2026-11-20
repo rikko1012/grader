@@ -113,19 +113,34 @@ def head(name):
             b'<link rel="stylesheet" href="/v3/' + stem.encode() + b'.css">'), sport, stem
 
 
+def sports_on():
+    """The sports the signed-out pages name (landing copy, its sport count): the four always on, plus soccer / tennis when their
+    expansion switch is on (the same SCOUT_<SPORT>_ENABLED the sports service reads). Display only."""
+    out = ["cs2", "lol", "nba", "nfl"]
+    for sp in ("soccer", "tennis"):
+        if os.environ.get(f"SCOUT_{sp.upper()}_ENABLED") == "1":
+            out.append(sp)
+    return " ".join(out)
+
+
 def page(body, name):
-    """The v3 copy of a page's bytes (already upgraded or not). Memoised per body OBJECT, as upgrade_page is."""
-    hit = _PAGE.get((id(body), name))
+    """The v3 copy of a page's bytes (already upgraded or not). Memoised per body OBJECT, as upgrade_page is (and per sport list on
+    the landing page, two env reads)."""
+    sp = sports_on() if name == "landing" else ""
+    key = (id(body), name, sp)
+    hit = _PAGE.get(key)
     if hit is not None and hit[0] is body:
         return hit[1]
     with _LOCK:
-        hit = _PAGE.get((id(body), name))
+        hit = _PAGE.get(key)
         if hit is not None and hit[0] is body:
             return hit[1]
         out = _build(body, name)
+        if sp:                               # the landing's sport list, on the <html> mark _build added
+            out = out.replace(b'<html data-ui-v3="1"', b'<html data-v3-sports="' + sp.encode() + b'" data-ui-v3="1"', 1)
         if len(_PAGE) > 24:                  # a handful of pages x variants; old versions drop when a file changes
             _PAGE.clear()
-        _PAGE[(id(body), name)] = (body, out)
+        _PAGE[key] = (body, out)
         return out
 
 

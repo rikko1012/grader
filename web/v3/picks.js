@@ -230,6 +230,23 @@
   }
 
   /* ---------------------------------------------------------------- wiring */
+  /* polish2: EV "To hit" gets the mock's dot scale (C/ev-390): a 0-100% track, a dot at the books' chance, a tick at what the entry
+     needs (the row's own "needs N%"). Display only, from the two numbers printed beside it; aria-hidden (the numbers stay the text) */
+  function decorateEv() {
+    var sec = $('hub-ev-section');
+    if (!sec) return;
+    sec.querySelectorAll('.ev-row .ev-hit').forEach(function (c) {
+      var b = c.querySelector('b'), p = b ? parseFloat(b.textContent) : NaN;
+      var row = c.closest('.ev-row'), nd = row && /needs\s+([\d.]+)%/.exec(row.textContent), need = nd ? parseFloat(nd[1]) : NaN;
+      var key = p + '|' + need, sc = c.querySelector('.v3-hitscale');
+      if (!isFinite(p)) { if (sc) sc.remove(); return; }
+      if (sc && sc.getAttribute('data-k') === key) return;
+      if (!sc) { sc = document.createElement('span'); sc.className = 'v3-hitscale'; sc.setAttribute('aria-hidden', 'true'); c.appendChild(sc); }
+      sc.setAttribute('data-k', key);
+      sc.innerHTML = '<i style="left:' + Math.max(0, Math.min(100, p)) + '%"' + (isFinite(need) && p >= need ? ' class="ok"' : '') + '></i>'
+        + (isFinite(need) ? '<b style="left:' + Math.max(0, Math.min(100, need)) + '%"></b>' : '');
+    });
+  }
   function watch(el, fn, opts) {
     if (!el || el._v3c) return;
     el._v3c = 1;
@@ -245,5 +262,6 @@
     watch($('hub-picks-body'), decoratePicks);
     watch($('hub-picks-section'), decoratePicks, {attributes: true, attributeFilter: ['hidden'], subtree: true});
     watch($('hub-record-body'), decorateRecord);
+    watch($('hub-ev-section'), decorateEv, {childList: true, subtree: true});
   });
 })();
