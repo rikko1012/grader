@@ -209,6 +209,17 @@
     panels.forEach(function (pn) { build.appendChild(pn); });
     var status = document.getElementById('hub-generation-status');
     if (status) rail.appendChild(status);
+    /* polish2: on the phone the generate result is the bar's own subtitle (one line), not a second panel stacked over the form; the
+       hub's status node stays the live region for screen readers */
+    var subLine = function () {
+      var sub = rail.querySelector('.h-generation-submit'), t = status ? status.textContent.replace(/\s+/g, ' ').trim() : '';
+      if (!sub) return;
+      var n = sub.querySelector('.sb-stat');
+      if (!n) { n = document.createElement('span'); n.className = 'sb-stat'; n.setAttribute('aria-hidden', 'true'); var big = sub.querySelector('.sb-big'); if (big) big.after(n); else sub.prepend(n); }
+      if (n.textContent !== t) n.textContent = t;
+      rail.classList.toggle('sb-has-stat', !!t);
+    };
+    if (status) { new MutationObserver(subLine).observe(status, {childList: true, characterData: true, subtree: true}); setTimeout(subLine, 0); }
     var how = [].slice.call(gen.children).filter(function (c) { return c.tagName === 'DETAILS'; })[0];
     if (how) build.appendChild(how);
     controls.hidden = true;                                  /* now empty: its children moved into the panels and the rail */

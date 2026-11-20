@@ -136,8 +136,14 @@ def test_v3_slip_studio_my_slip_auto_build_and_tracked(browser, env, monkeypatch
 def test_v3_desktop_slip_column_reads_like_the_board_row(browser, env, monkeypatch, theme):
     c, p = v3_page(browser, env, monkeypatch, "board", DESK, theme)
     try:
-        p.wait_for_selector('#u-hub .h-slip #hub-slip-content')
+        # polish2 (mocks 11 / B): no slip rail while the slip is empty, and no Hide slip button in the sort row
+        p.wait_for_selector('#hub-rows tr[data-record]')
+        p.wait_for_function("document.getElementById('u-hub').classList.contains('h-focus-board')")
+        assert not p.locator('#u-hub .h-slip').is_visible() and not p.locator('#hub-focus').is_visible()
+        # with a pick on a 1440+ screen the rail opens by itself
+        p.set_viewport_size({"width": 1440, "height": 900})
         p.locator("#hub-rows tr[data-record] .h-add:not(.h-add-info)").first.click()
+        p.wait_for_selector('#u-hub .h-slip #hub-slip-content')
         p.wait_for_selector('#hub-slip-content .u-leg .sb-read', timeout=20000)
         leg = p.locator('#hub-slip-content .u-leg').first
         assert leg.locator('.u-leg-meta .sb-src').count() == 1 and leg.locator('.u-x').count() == 1
@@ -146,7 +152,7 @@ def test_v3_desktop_slip_column_reads_like_the_board_row(browser, env, monkeypat
         bg = p.evaluate("getComputedStyle(document.querySelector('#u-hub .h-slip')).backgroundColor")
         assert bg == ('rgb(246, 247, 249)' if theme == 'light' else 'rgb(8, 11, 19)')
         no_h_scroll(p)
-        shot(p, f"slips-column-1280-{theme}")
+        shot(p, f"slips-column-1440-{theme}")
         assert not p.errors, p.errors
     finally:
         c.close()

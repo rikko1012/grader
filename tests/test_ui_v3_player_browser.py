@@ -198,8 +198,15 @@ def check_card(p, sport, size, theme):
     # the pick summary mirrors the strip (never recomputed)
     if p.locator("#hub-detail .v3p-pick").count():
         assert p.locator(".v3p-pick .sc-pick__chance b").inner_text() == p.locator("#hub-decision .h-dec-chance > b").inner_text()
-        side = p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").inner_text().strip()
-        assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
+        side = p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").get_attribute("data-id").capitalize()
+        if p.locator(".v3p-pick .sc-scout-tag").count() or p.locator(".v3p-pick .sc-pick__chance b").inner_text() != "—":   # no Scout read: the prop leads
+            assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
+        # polish2 (mocks 05 / 10): the side buttons carry the line, the strip has Chance / Grade / Stake and a Market chance cell
+        line = p.locator("#hub-decision .v3p-lh b").inner_text()
+        assert p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").inner_text().startswith(side + " " + line)
+        cgs = p.locator("#hub-decision .h-dec-chance").inner_text()
+        assert "Chance " + side in cgs and "Grade" in cgs and "Stake" in cgs, cgs
+        assert "Market chance" in facts, facts
         assert "Model estimate" in p.locator(".v3p-pick").inner_text()
         assert " checked " in p.locator(".v3p-pick .sc-book").inner_text()
     # source notes readable in both themes: 4.5:1 or better against the surface they sit on
@@ -425,7 +432,14 @@ def test_v3_one_confirmed_map_is_always_in_the_default_combine(browser, env, mon
         assert t.startswith("Mirage + Inferno: "), t
         assert "In Maps 1-2 100.0%" in p.locator('#hub-detail .v3p-map[data-v3p-map="mirage"]').inner_text().replace("\n", " ")
         assert "In Maps 1-2 41.0%" in p.locator('#hub-detail .v3p-map[data-v3p-map="inferno"]').inner_text().replace("\n", " ")
-        assert "Map chance" in p.locator('#hub-detail .v3p-map[data-v3p-map="anubis"]').inner_text().replace("\n", " ")   # no exact veto share: HLTV's
+        # polish2: one measure on every card. Anubis has no exact veto share for Map 2: In Maps 1-2 —, never HLTV's map chance beside it
+        an = p.locator('#hub-detail .v3p-map[data-v3p-map="anubis"]').inner_text().replace("\n", " ")
+        assert "In Maps 1-2 —" in an and "Map chance" not in an, an
+        assert p.locator("#hub-detail .v3p-map .v3p-inp").count() == p.locator("#hub-detail .v3p-map").count()
+        # the Overview's Likely maps line leads with the same measure, one decimal (never "62%")
+        ov = p.locator("#hub-card-body").inner_text()
+        assert "Likely in Maps 1-2 (Scout’s simulated veto): Mirage 100.0% · Inferno 41.0%" in ov, ov[:600]
+        assert "Dust2 62.0%" in ov and "Dust2 62%" not in ov
         slot = p.locator('#hub-detail .v3p-map[data-v3p-map="mirage"] .v3p-slot')
         assert slot.inner_text() == "Map 1 · Halcyon pick"
         assert p.evaluate("(e => e.getClientRects().length)(document.querySelector('#hub-detail .v3p-map[data-v3p-map=\"mirage\"] .v3p-slot'))") == 1
@@ -433,6 +447,9 @@ def test_v3_one_confirmed_map_is_always_in_the_default_combine(browser, env, mon
         for k in HF.per_map(365):
             if k in hltv_maps.ACTIVE_DUTY:
                 assert "—" not in p.locator(f'#hub-detail .v3p-map[data-v3p-map="{k}"] .sc-scene__stats').inner_text(), k
+        # polish2 (mock 04): the same 2 x 2 on every card, — where a map has no figure
+        for b in p.locator("#hub-detail .v3p-map .sc-scene__stats").all():
+            assert b.locator(".sc-scene__stat").count() == 4
         assert not p.errors, p.errors
     finally:
         c.close()
