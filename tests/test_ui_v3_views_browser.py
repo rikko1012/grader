@@ -332,3 +332,19 @@ def test_without_workspace_v2_line_moves_has_no_entry(browser, env, monkeypatch)
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+@pytest.mark.parametrize("group,path", [("lol", "/lol"), ("sports", "/sports")])
+def test_moneylines_open_in_place_on_lol_and_sports(browser, env, monkeypatch, group, path):
+    c, p = v3_page(browser, env, monkeypatch, group, PHONE, "dark")
+    try:
+        feed(c)
+        p.wait_for_selector("#hub-more [data-v3x-ml]", state="attached")
+        p.locator(".sc-v3-tabs [data-v3=more]").click()
+        p.locator(".sc-v3-more .sc-more__a", has_text="Moneylines").click()
+        p.wait_for_selector("#v3-ml-section:not([hidden]) .v3x-ml")
+        assert p.evaluate("location.pathname") == path and "v3=moneylines" in p.evaluate("location.hash")
+        no_h_scroll(p)
+        assert not p.errors, p.errors
+    finally:
+        c.close()

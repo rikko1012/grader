@@ -403,7 +403,18 @@
   }
   /* RECS: the hub's own /api/upgrade/board answers, cloned as they arrive (the hub reads the original). Lines differ states each
      book's line for the row's player, stat and maps / game from them (the hub's own siblings: event, player, stat, period). */
-  var RECS = {}, PROPS = {};
+  var RECS = {}, PROPS = {}, PENDING = {};
+  function readRecs() {
+    Object.keys(PENDING).forEach(function (sp) {
+      var t = PENDING[sp]; delete PENDING[sp];
+      t.then(function (txt) {
+        var d = JSON.parse(txt);
+        Object.keys(RECS).forEach(function (k) { if (k.indexOf(sp + '|') === 0) delete RECS[k]; });   /* this sport's board, replaced whole */
+        ((d && d.records) || []).forEach(function (x) { if (x && x.offer && x.event && x.player && x.market) RECS[recKey(x)] = x; });
+        reindex(); soon();
+      }).catch(function () { /* not JSON: the hub handles it */ });
+    });
+  }
   function recKey(r) { return [r.sport, r.offer.platform, r.offer.offer_id].join('|'); }
   function propKey(r) { return [r.sport, r.event.id, r.player.key, r.market.stat, r.market.period].join('|'); }
   function reindex() {
@@ -421,11 +432,9 @@
           pr.then(function (r) {
             if (!r || r.status !== 200) return;
             var sp = (/[?&]sport=([a-z0-9]+)/.exec(u) || [0, 'cs2'])[1];
-            r.clone().json().then(function (d) {
-              Object.keys(RECS).forEach(function (k) { if (k.indexOf(sp + '|') === 0) delete RECS[k]; });
-              ((d && d.records) || []).forEach(function (x) { if (x && x.offer && x.event && x.player && x.market) RECS[recKey(x)] = x; });
-              reindex(); soon();
-            }, function () { /* not JSON: the hub handles it */ });
+            /* kept as text; parsed only while Lines differ is on (the board answers can be large) */
+            PENDING[sp] = r.clone().text();
+            if (viewOn('differ')) readRecs();
           }, function () { /* the hub sees its own failure */ });
         }
       } catch (e) { /* never in the hub's way */ }
@@ -448,6 +457,7 @@
   }
   function paintRows() {
     var diff = viewOn('differ');
+    if (diff && Object.keys(PENDING).length) readRecs();
     document.querySelectorAll('#hub-rows tr[data-record]').forEach(function (tr) {
       var old = tr.querySelector('.v3x-lines');
       if (!diff) { if (old) old.remove(); return; }
