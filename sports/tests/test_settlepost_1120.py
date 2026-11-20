@@ -121,7 +121,10 @@ def test_budget_stops_inside_an_event_and_the_resumed_runs_equal_one_run(monkeyp
     assert not any(_done(o) for o in outs[:-1]) and _done(outs[-1])
     assert any(o.get("partial") and o["shadow"]["shadow_scored"] > 0 for o in outs)    # the shadow's own slice
     for o in outs[:-1]:
-        assert o["retrain"]["nba"].get("skipped") and o["retrain"]["nba"]["due"] is None   # report skipped, a dict
+        if o["shadow"].get("partial"):                    # the whole budget spent (a shadow sweep that completed
+            #                                               early leaves time: the report then runs, review 2026-11-20)
+            assert o["retrain"]["nba"].get("skipped") and o["retrain"]["nba"]["due"] is None   # report skipped, a dict
+    assert sum(1 for o in outs if o["retrain"]["nba"].get("skipped")) > 3
     assert sum(o["scorecard_rows_added"] for o in outs) == len(full["scorecard"])          # nothing scored twice
     got = _tables()
     assert got == full
@@ -520,3 +523,275 @@ def test_a_swallowed_interrupt_never_marks_the_event_or_moves_the_cursor(monkeyp
         out2 = learning.on_settled(con, now=NOW)
     assert not out2.get("partial")
     assert _tables() == full
+
+
+# ------------------------------------------------------------------------------------------ review 2026-11-20 (round 2)
+def test_cursor_survives_a_run_that_stops_before_its_event(monkeypatch, tmp_path):
+    """Reviewer probe (verbatim): a run whose budget is spent before it gets back into the event the last run left off
+    in keeps that run's forecast cursor (it used to delete resume_rid / resume_sig)."""
+    d = tmp_path / "c"; d.mkdir(); _world(d, monkeypatch, 6)
+    with store.opened() as con:
+        clock = Clock(); monkeypatch.setattr(learning.time, "time", clock)
+        meta = {}
+        for b in range(30, 400, 5):
+            lc = learning.db()
+            for t in ("scorecard", "projection_reviews", "learn_events", "learn_meta"):
+                lc.execute(f"DELETE FROM {t}")
+            lc.commit()
+            learning.on_settled(con, now=NOW, deadline=clock.t + b)
+            meta = dict(lc.execute("SELECT key, value FROM learn_meta")); lc.close()
+            if meta.get("resume_rid"):
+                break
+        assert meta.get("resume_rid")
+        smeta_before = dict(shadow.db().execute("SELECT key, value FROM shadow_meta"))
+        learning.on_settled(con, now=NOW, deadline=clock.t - 1)      # budget already spent at start
+        lc = learning.db(); after = dict(lc.execute("SELECT key, value FROM learn_meta")); lc.close()
+        smeta_after = dict(shadow.db().execute("SELECT key, value FROM shadow_meta"))
+        monkeypatch.undo()
+    print("main before", meta, "after", after)
+    print("shadow before", smeta_before, "after", smeta_after)
+    assert after.get("resume_rid") == meta["resume_rid"], "main cursor dropped"
+
+
+def _wipe_shadow():
+    sdb = shadow.db()
+    for t in ("shadow_scorecard", "shadow_events", "shadow_meta"):
+        sdb.execute(f"DELETE FROM {t}")
+    sdb.commit()
+    sdb.close()
+
+
+def _shadow_meta():
+    sdb = shadow.db()
+    try:
+        return dict(sdb.execute("SELECT key, value FROM shadow_meta"))
+    finally:
+        sdb.close()
+
+
+def test_shadow_cursor_survives_a_run_that_stops_before_its_event(monkeypatch, tmp_path):
+    """The same for the sm-2 shadow scorecard (resume_rowid / resume_sig), and the resumed runs still equal one run."""
+    import time
+    full = _one_run(tmp_path, monkeypatch, name="one6", events=6)
+    d = tmp_path / "s"; d.mkdir(); _world(d, monkeypatch, 6)
+    with store.opened() as con:
+        clock = Clock()
+        monkeypatch.setattr(time, "time", clock)            # shadow.settle imports time inside the function
+        meta = {}
+        for b in range(3, 200, 2):
+            _wipe_shadow()
+            shadow.settle(con, now=NOW, deadline=clock.t + b)
+            meta = _shadow_meta()
+            if meta.get("resume_rowid"):
+                break
+        assert meta.get("resume_rowid"), meta
+        out = shadow.settle(con, now=NOW, deadline=clock.t - 1)        # spent before the resume event
+        after = _shadow_meta()
+        assert out.get("partial") and after.get("resume_rowid") == meta["resume_rowid"]
+        assert after.get("resume_sig") == meta["resume_sig"] and after["resume_event"] == meta["resume_event"]
+        for _ in range(500):
+            out = shadow.settle(con, now=NOW, deadline=clock.t + 6)
+            if not out.get("partial"):
+                break
+        monkeypatch.undo()
+    monkeypatch.setattr(config, "DATA_DIR", d)
+    assert not out.get("partial")
+    assert _tables()["shadow"] == full["shadow"]
+
+
+def test_a_sweep_that_spans_runs_completes(monkeypatch, tmp_path):
+    """Reviewer repro: 24 events, 45-tick budget - no single run can walk every event (each costs clock reads even when
+    unchanged), so 'complete' used to mean never (2,000 runs, still partial; the window start pinned for ever). A
+    sweep that wraps back to its first event is a complete pass: it reports complete, within budget, with exactly the
+    tables of one unbounded run (learn_meta empty: the window start is released)."""
+    full = _one_run(tmp_path, monkeypatch, name="one24", events=24)
+    d = tmp_path / "big"
+    d.mkdir()
+    _world(d, monkeypatch, 24)
+    with store.opened() as con:
+        clock = Clock()
+        monkeypatch.setattr(learning.time, "time", clock)
+        spans, outs = [], []
+        for _ in range(2000):
+            t0 = clock.t
+            outs.append(learning.on_settled(con, now=NOW, deadline=t0 + 45))
+            spans.append(clock.t - t0)
+            if _done(outs[-1]):
+                break
+        monkeypatch.undo()
+    monkeypatch.setattr(config, "DATA_DIR", d)
+    print("runs", len(outs), "max span", max(spans))
+    assert _done(outs[-1]) and max(spans) <= 45 + 10
+    assert outs[0]["events_read"] > 45                   # more events than clock reads in one budget (the repro)
+    assert _tables() == full
+    st = learning.read_state()
+    assert st["partial"] is False and st["complete_at"] == st["at"] and st["partial_since"] is None
+
+
+def test_partial_since_and_the_window_start_are_released_by_a_spanning_sweep(monkeypatch, tmp_path):
+    """partial_since is the first stopped run's time, kept across stopped runs; once the sweep completes the next run
+    reads the normal window again (the pinned start never outlives its sweep)."""
+    d = tmp_path / "w"
+    d.mkdir()
+    _world(d, monkeypatch, 6)
+    later = (datetime.strptime(NOW, "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with store.opened() as con:
+        clock = Clock()
+        monkeypatch.setattr(learning.time, "time", clock)
+        seen, outs = set(), []
+        for _ in range(500):
+            outs.append(learning.on_settled(con, now=NOW, deadline=clock.t + 40))
+            st = learning.read_state()
+            if st["partial"]:
+                seen.add(st["partial_since"])
+            if not outs[-1].get("partial"):
+                break
+        monkeypatch.undo()
+        monkeypatch.setattr(config, "DATA_DIR", d)
+        assert len(outs) > 2 and len(seen) == 1 and None not in seen
+        assert all(o["window_from"] == outs[0]["window_from"] for o in outs)
+        lc = learning.db()
+        assert lc.execute("SELECT COUNT(*) FROM learn_meta").fetchone()[0] == 0
+        lc.close()
+        nxt = learning.on_settled(con, now=later)
+    assert nxt["window_from"] > outs[0]["window_from"] and nxt["events_read"] == 0
+
+
+def _shadow_correct(con, ev, known_at):
+    """A settlement revision, learned at `known_at`, for the offer of the first shadow forecast of `ev`."""
+    sdb = shadow.db()
+    rid, side = sdb.execute("SELECT offer_record_id, chosen_side FROM shadow_forecasts WHERE event_id=? ORDER BY rowid "
+                            "LIMIT 1", (ev,)).fetchone()
+    sdb.close()
+    o = store.get(con, rid)
+    s = max((s for _, s in store.settlements(con) if s.platform == o.platform and s.offer_id == o.offer_id),
+            key=lambda s: (s.side == side, s.revision))
+    store.put(con, replace(s, settlement_id=s.settlement_id + "-sc", revision=s.revision + 1, supersedes=s.settlement_id,
+                           known_at=known_at, observed_at=known_at))      # same value, a new settlement id
+
+
+def test_a_settlement_learned_mid_sweep_behind_the_shadow_cursor_is_read_by_the_next_sweep(monkeypatch, tmp_path):
+    """The shadow's closing mark advances to the newest settlement known when the sweep STARTED: a correction learned
+    mid-sweep for an event the sweep already passed is re-read by the next sweep (with the completing run's newest it
+    was never read again) - the same shadow rows as one run, a correction, one more run."""
+    late, later = "2026-11-08T20:59:00Z", "2026-11-08T20:59:30Z"   # (the mark is inclusive: a later one too)
+    full_d = tmp_path / "full"
+    full_d.mkdir()
+    _world(full_d, monkeypatch, 6)
+    sdb = shadow.db()
+    ev, ev2 = [r[0] for r in sdb.execute("SELECT DISTINCT event_id FROM shadow_forecasts ORDER BY event_id LIMIT 2")]
+    sdb.close()
+    with store.opened() as con:
+        assert con.execute("SELECT MAX(known_at) FROM records WHERE kind='settlement'").fetchone()[0] < late
+        learning.on_settled(con, now=NOW)
+        _shadow_correct(con, ev, late)
+        _shadow_correct(con, ev2, later)
+        learning.on_settled(con, now=NOW)
+    full = [r for r in _sorted_tables()["shadow"] if r[-1] == 0]       # the live (not superseded) rows
+    assert any(r[1].endswith("-sc") for r in full)
+    d = tmp_path / "budget"
+    d.mkdir()
+    _world(d, monkeypatch, 6)
+    with store.opened() as con:
+        clock = Clock()
+        monkeypatch.setattr(learning.time, "time", clock)
+        corrected = False
+        for _ in range(500):
+            out = learning.on_settled(con, now=NOW, deadline=clock.t + 60)
+            if not corrected:
+                sdb = shadow.db()
+                marked = sdb.execute("SELECT COUNT(*) FROM shadow_events WHERE event_id IN (?, ?)",
+                                     (ev, ev2)).fetchone()[0] == 2
+                sweeping = sdb.execute("SELECT 1 FROM shadow_meta WHERE key='sweep_start'").fetchone()
+                sdb.close()
+                if marked and sweeping:
+                    _shadow_correct(con, ev, late)        # learned mid-sweep, behind the cursor
+                    _shadow_correct(con, ev2, later)
+                    corrected = True
+            elif _done(out):
+                break
+        monkeypatch.undo()
+        monkeypatch.setattr(config, "DATA_DIR", d)
+        assert corrected and _done(out)
+        learning.on_settled(con, now=NOW)                 # the next sweep
+    assert [r for r in _sorted_tables()["shadow"] if r[-1] == 0] == full
+
+
+# ------------------------------------------------------------------------------------------ ops pages (review blocker)
+def _iso_ago(s):
+    import time
+    return datetime.fromtimestamp(time.time() - s, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _ops(learning_state=None, grades_daily=None, settle_post=True, daily_on=True):
+    return {"flags": {}, "scheduler": {"jobs": {
+                "settle-post": {"enabled": settle_post, "every_s": 3600, "timeout_s": 1800, "last_ok_at": 9e12},
+                "grades-daily": {"enabled": daily_on, "every_s": 3600, "timeout_s": 600, "last_ok_at": 9e12}},
+                "uptime_s": 10},
+            "feeds": {}, "service": {"requests": 0, "rejected_busy": 0, "errors_5xx": 0}, "db_pool": {},
+            "token_configured": True, "rss_mb": 0, "rss_max_mb": 1,
+            "learning_state": learning_state, "grades_daily": grades_daily}
+
+
+def _codes(o):
+    from sports import service
+    return {a["code"]: a for a in service.alerts(o) if a["level"] == "page"}
+
+
+@pytest.mark.parametrize("ls,page", [
+    (None, False),                                                                     # no state file: no alert
+    ({"at": _iso_ago(60), "partial": False, "complete_at": _iso_ago(60), "partial_since": None}, False),
+    ({"at": _iso_ago(60), "partial": True, "events_left": 9, "complete_at": _iso_ago(3000),
+      "partial_since": _iso_ago(3000)}, False),                                        # behind, not for long
+    ({"at": _iso_ago(60), "partial": True, "events_left": 9, "complete_at": None,
+      "partial_since": _iso_ago(4 * 3600)}, True),                                     # never complete, partial 4 h
+    ({"at": _iso_ago(60), "partial": True, "events_left": 9, "complete_at": _iso_ago(5 * 3600),
+      "partial_since": _iso_ago(5 * 3600 - 60)}, True),                                # last complete pass 5 h ago
+    ({"at": _iso_ago(4 * 3600), "partial": False, "complete_at": _iso_ago(4 * 3600), "partial_since": None}, True),
+])
+def test_scorecard_behind_pages_with_reason_and_ages(ls, page):
+    got = _codes(_ops(learning_state=ls))
+    assert ("scorecard_behind" in got) is page
+    if page:
+        d = got["scorecard_behind"]["detail"]
+        assert d["reason"] and d["limit_s"] == 3 * 3600 and "complete_age_s" in d and "partial_age_s" in d
+        assert (d["partial_age_s"] or 0) > d["limit_s"] or (d["complete_age_s"] or 0) > d["limit_s"]
+
+
+def test_scorecard_behind_follows_the_hold_limit_and_the_job_switch(monkeypatch):
+    ls = {"at": _iso_ago(60), "partial": True, "events_left": 2, "complete_at": _iso_ago(2 * 3600),
+          "partial_since": _iso_ago(2 * 3600)}
+    assert "scorecard_behind" not in _codes(_ops(learning_state=ls))
+    monkeypatch.setenv("SPORTS_DAILY_SCORECARD_MAX_AGE_S", "3600")
+    assert "scorecard_behind" in _codes(_ops(learning_state=ls))
+    assert "scorecard_behind" not in _codes(_ops(learning_state=ls, settle_post=False))
+    monkeypatch.setenv("SPORTS_DAILY_SCORECARD_MAX_AGE_S", "0")                       # hold off -> page off
+    assert "scorecard_behind" not in _codes(_ops(learning_state=ls))
+
+
+def test_daily_held_past_one_game_day_pages(monkeypatch, tmp_path):
+    """grades-daily keeps held_since across held checks (and the 'before 10:00' skips between them), clears it when a
+    due check finds no hold, and ops pages daily_grading_held once the hold is older than one game day."""
+    _daily_env(monkeypatch, tmp_path)
+    _state(tmp_path, at="2026-11-20T11:50:00Z", partial=True, events_left=7, partial_since="2026-11-20T09:00:00Z")
+    sp = tmp_path / "model" / "daily_state.json"
+    assert daily.run(now=AT)["held"]
+    st = json.loads(sp.read_text())
+    assert st["held_since"] == "2026-11-20T12:00:00Z" and st["last_skip"]["held"] and st["held_reason"].startswith("held")
+    daily.run(now=AT + timedelta(hours=14))                                           # 02:00: before 10:00 UTC
+    daily.run(now=AT + timedelta(hours=23))
+    st = json.loads(sp.read_text())
+    assert st["held_since"] == "2026-11-20T12:00:00Z" and st["last_skip"]["held"]
+    from sports import service
+    o = _ops(grades_daily=dict(st, held_since=_iso_ago(23 * 3600)))
+    assert "daily_grading_held" not in _codes(o)
+    o = _ops(grades_daily=dict(st, held_since=_iso_ago(25 * 3600)))
+    a = _codes(o)["daily_grading_held"]["detail"]
+    assert a["reason"].startswith("held: model scorecard behind") and a["held_age_s"] > 86400 and a["limit_s"] == 86400
+    assert "daily_grading_held" not in _codes(_ops(grades_daily=dict(st, held_since=_iso_ago(25 * 3600)),
+                                                   daily_on=False))
+    assert service.ops()["learning_state"]["partial"] is True                       # ops carries the state file
+    _state(tmp_path, at="2026-11-21T10:30:00Z", partial=False, complete_at="2026-11-21T10:30:00Z")
+    out = daily.run(now=AT + timedelta(hours=23))                                     # caught up: runs, hold cleared
+    st = json.loads(sp.read_text())
+    assert out["ran"] is True and "held_since" not in st and "daily_grading_held" not in _codes(_ops(grades_daily=st))

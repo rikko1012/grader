@@ -51,8 +51,9 @@ def db():
     # per-event progress of on_settled (2026-11-08): the event's stored settlement + forecast records (count, newest
     # rid, rid sum) at its last full pass - an unchanged event is a no-op and is skipped without decoding anything
     con.execute("CREATE TABLE IF NOT EXISTS learn_events (event_id TEXT PRIMARY KEY, sig TEXT, scored_at TEXT)")
-    # settle-post resume state (2026-11-20): pending_cutoff (a stopped run's window start), resume_event, and inside it
-    # resume_rid / resume_sig (the forecast it stopped at, valid while the event's records are unchanged)
+    # settle-post resume state (2026-11-20): a sweep that spans runs - sweep_start (the event it began at),
+    # pending_cutoff (its window start), resume_event, and inside it resume_rid / resume_sig (the forecast it stopped
+    # at, valid while the event's records are unchanged). Empty once a sweep is complete.
     con.execute("CREATE TABLE IF NOT EXISTS learn_meta (key TEXT PRIMARY KEY, value TEXT)")
     # Separate additive table: immutable forecast/settlement IDs preserve replay.
     # Probabilities alone cannot tell whether the point projection improved.
@@ -106,9 +107,13 @@ def read_state():
 
 
 def _write_state(partial, left, at):
+    """partial_since (2026-11-20 review): when the run of stopped passes began (kept across consecutive partial runs,
+    None once a sweep completes) - the ops alert scorecard_behind reads it when no pass has ever completed."""
     prev = read_state() or {}
     obj = {"at": at, "partial": bool(partial), "events_left": int(left or 0),
-           "complete_at": prev.get("complete_at") if partial else at}
+           "complete_at": prev.get("complete_at") if partial else at,
+           "partial_since": ((prev.get("partial_since") or prev.get("at")) if prev.get("partial") else at)
+           if partial else None}
     try:
         p = state_path()
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -150,16 +155,23 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
     the deadline is interrupted (SQLite progress handler; the open event's rows roll back with it) and counts as a stop.
     A stopped run says "partial": True, "events_left"; the next run starts at the event it stopped at (wrapping round,
     so a backlog drains in order and no event is starved by earlier ones) - at the forecast it stopped at when that
-    event's records are unchanged (resume_rid / resume_sig: an event bigger than one budget still finishes) - and
-    keeps the stopped run's window start until a run completes, so a backlog older than `days` is never dropped."""
+    event's records are unchanged (resume_rid / resume_sig: an event bigger than one budget still finishes; a run
+    that stops before it gets back into that event keeps the cursor) - and keeps the sweep's window start until the
+    sweep completes, so a backlog older than `days` is never dropped. A sweep (review 2026-11-20) spans runs: it is
+    complete when the walk wraps back to the event it started at (sweep_start) - every event passed, unchanged or
+    scored and marked - also when no single run can walk them all; the run then ends its main pass there (no
+    "partial", learn_meta empty, the window back to `days`), the next run starts a new sweep."""
     lcon = db()
     icon = forward.inputs_db()
     t_start = time.time()
     main_deadline = None if deadline is None else t_start + max(0.0, deadline - t_start) * (1.0 - shadow_share)
     meta = dict(lcon.execute("SELECT key, value FROM learn_meta"))
     cutoff = (parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    if meta.get("pending_cutoff") and meta["pending_cutoff"] < cutoff:
-        cutoff = meta["pending_cutoff"]                 # catch-up: a stopped run's window is kept until one completes
+    # a sweep in progress (an earlier run stopped part way): its window start is kept until the sweep completes, so a
+    # backlog older than `days` is never dropped - and released then (a new sweep takes the window of its first run)
+    sweeping = bool(meta.get("sweep_start") or meta.get("resume_event"))
+    if sweeping and meta.get("pending_cutoff") and meta["pending_cutoff"] < cutoff:
+        cutoff = meta["pending_cutoff"]
     hard = None if deadline is None else deadline + HARD_GRACE_S
     fired = [False]                                     # the backstop interrupted a statement (some readers - e.g. the
     #                                                     archive's table probe - swallow the error and answer None)
@@ -172,7 +184,8 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
     if hard is not None:
         scon.set_progress_handler(_guard, PROGRESS_OPS)
     n_new = n_diag = n_skip = n_fc = n_offers = n_fast = n_scored_ev = 0
-    evs, order, left, pos, interrupted, cursor = [], [], 0, 0, False, None
+    evs, order, left, pos, interrupted, cursor, todo = [], [], 0, 0, False, None, 0
+    sweep = None
     try:
         evs = [r[0] for r in scon.execute("SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND "
                                           "known_at >= ? AND event_id IS NOT NULL ORDER BY event_id", (cutoff,))]
@@ -180,9 +193,19 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
         resume = meta.get("resume_event")
         k = next((j for j, e in enumerate(evs) if e >= resume), len(evs)) if resume else 0
         order = evs[k:] + evs[:k]
-        for pos, ev in enumerate(order):
+        # settlepost-1120 review: a sweep may span runs. It began at sweep_start; this run walks the events from where
+        # the last one stopped up to that start (wrapping), and when it gets there every event of the window was
+        # passed (unchanged, or scored and marked) in this sweep - the sweep, i.e. the pass, is complete, also when no
+        # single run could walk every event. An event that changes behind the cursor is read by the next sweep, as a
+        # change right after one full run is. A sweep starting now (none in progress) is the whole circle.
+        sweep = (meta.get("sweep_start") or resume) if sweeping else (order[0] if order else None)
+        todo = len(order)
+        if sweeping and order and sweep:
+            sk = next((j for j, e in enumerate(evs) if e >= sweep), len(evs)) % len(evs)
+            todo = (sk - k) % len(evs) or len(evs)
+        for pos, ev in enumerate(order[:todo]):
             if _past(main_deadline):
-                left = len(order) - pos                 # resumed by the next run (marks committed per event)
+                left = todo - pos                       # resumed by the next run (marks committed per event)
                 break
             # Skip an event whose records are exactly those of its last full pass: every forecast it could score is
             # already in the scorecard against its current settlement, so the body below would add nothing. The mark
@@ -243,7 +266,7 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
                 n_diag += d
             if stopped or fired[0]:                     # (fired: never mark an event a swallowed interrupt touched)
                 lcon.commit()
-                left = len(order) - pos
+                left = todo - pos
                 break
             lcon.execute("INSERT OR REPLACE INTO learn_events (event_id, sig, scored_at) VALUES (?,?,?)",
                          (ev, sig, now_utc()))
@@ -253,13 +276,21 @@ def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SH
             raise
         interrupted = True                              # the hard backstop: a statement ran past deadline + grace
         lcon.rollback()                                 # the open event's rows and mark go (or stay) together
-        left, cursor = max(1, len(order) - pos), None    # (a rolled-back event restarts from its first forecast)
-    lcon.execute("DELETE FROM learn_meta WHERE key IN ('pending_cutoff', 'resume_event', 'resume_rid', 'resume_sig')")
-    if left:
-        lcon.execute("INSERT OR REPLACE INTO learn_meta VALUES ('pending_cutoff', ?)", (cutoff,))
-        if order:
-            lcon.execute("INSERT OR REPLACE INTO learn_meta VALUES ('resume_event', ?)", (order[len(order) - left],))
-        if cursor:
+        left, cursor = max(1, todo - pos), None         # (a rolled-back event restarts from its first forecast)
+    if left and not order:
+        pass                                            # interrupted before the event list was read: meta unchanged
+    else:
+        lcon.execute("DELETE FROM learn_meta WHERE key IN ('pending_cutoff', 'resume_event', 'resume_rid', "
+                     "'resume_sig', 'sweep_start')")
+    if left and order:
+        stop_ev = order[pos]
+        lcon.executemany("INSERT OR REPLACE INTO learn_meta VALUES (?, ?)",
+                         (("pending_cutoff", cutoff), ("resume_event", stop_ev), ("sweep_start", sweep)))
+        if not cursor and stop_ev == meta.get("resume_event") and meta.get("resume_rid"):
+            # stopped at (or inside, with no cursor of its own) the event the last run left off in: that run's cursor
+            # still holds - its rows before it are committed, and the sig is checked again before it is used
+            cursor = (meta["resume_rid"], meta.get("resume_sig"))
+        if cursor and cursor[1]:
             lcon.executemany("INSERT OR REPLACE INTO learn_meta VALUES (?, ?)",
                              (("resume_rid", str(cursor[0])), ("resume_sig", cursor[1])))
     lcon.commit()

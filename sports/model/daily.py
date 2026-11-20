@@ -307,7 +307,8 @@ def admin_view():
             "containment": containment.snapshot(), "containment_log": ((obj or {}).get("log") or [])[-20:],
             "cal_mi_log": tail, "daily": {k: st.get(k) for k in ("last_day", "last_run_at", "data_as_of", "last_skip",
                                                                  "cal", "cal_fails", "containment", "gradecheck_file",
-                                                                 "attempt_day", "cal_attempt", "last_error")},
+                                                                 "attempt_day", "cal_attempt", "last_error",
+                                                                 "held_since", "held_reason")},
             "switches": {"SPORTS_CAL_AUTOFIT": autofit_on(), "SPORTS_GRADECHECK_DAILY": gradecheck_on(),
                          "SPORTS_DAILY_AFTER_UTC_H": after_hour()}}
 
@@ -322,9 +323,19 @@ def run(now=None, force=False, log=print):
     if ok and not force:                                # --force (owner Shell) bypasses the hold too
         held = scorecard_hold(now, p)
         ok, why = (False, held) if held else (True, None)
+    # held_since (review 2026-11-20): when the CURRENT hold began - kept across the checks in between (a "before 10:00
+    # UTC" skip overwrites last_skip, not this) and cleared once a due check finds no hold or a run starts; the ops
+    # alert daily_grading_held pages when a hold outlives one game day
+    if held:
+        state["held_since"] = state.get("held_since") or _iso(now)
+        state["held_reason"] = held
+    elif ok:
+        state.pop("held_since", None)
+        state.pop("held_reason", None)
     day = game_day(now)
     if not ok:
-        state["last_skip"] = {"at": _iso(now), "why": why}
+        state["last_skip"] = {"at": _iso(now), "why": why,
+                              **({"held": True, "held_since": state["held_since"]} if held else {})}
         if state.get("publish_pending"):
             err = publish(admin_view())
             state["publish_pending"] = bool(err)
