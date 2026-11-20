@@ -8,8 +8,11 @@
    - Data: the line doc the hub itself loaded. The hub's /api/upgrade/line answer is teed (the response is cloned; the hub gets the
      original untouched) and kept by record key. No request of its own: the card makes exactly the requests it makes today.
    - The hub repaints #hub-detail (innerHTML) on every side, tab, line or refresh change. One MutationObserver re-adds the v3 blocks
-     next to the hub's own nodes, idempotently. The hub's nodes are never moved, wrapped, hidden or removed: #hub-decision,
-     #hub-card-line, #hub-card-body, #hub-card-title, the star, the market strip and the tabs stay where the hub puts them.
+     next to the hub's own nodes, idempotently. The hub's nodes are never moved, wrapped or removed: #hub-decision, #hub-card-line,
+     #hub-card-body, #hub-card-title, the star, the market strip and the tabs stay where the hub puts them. polish1 adds v3 nodes
+     inside the decision strip (the line panel: big line, freshness, Projection / Gap / Market chance, L5-L20) and keeps three hub
+     nodes for screen readers only (the head line with its time and countdown, the market tag beside the name, the strip's "Proj."
+     cell), each shown once elsewhere on the card; a sports hold chip "No grade yet" is not drawn where Lean + Stake 0U stands.
    - The pick summary mirrors the hub's own decision strip (side, chance, letter or Lean, stake): nothing about the pick is worked
      out here, so every strip branch (Lean, hold, one-sided, not offered, view only, research only) reads as the strip does.
    - CS2 map cards + the 2-map combine pool his saved Maps-1-2 series results per map (integers, from the same history the card's
@@ -84,7 +87,8 @@
   function dateText(iso) {
     var d = new Date(iso || '');
     if (isNaN(d)) return '';
-    try { return d.toLocaleString([], {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}); }
+    /* one absolute time on the card, with its zone (the match strip carries the countdown) */
+    try { return d.toLocaleString([], {weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'}); }
     catch (e) { return d.toLocaleString(); }
   }
   /* maps in the prop's period: "Maps 1-2" -> 2, "Map 1" -> 1, "Maps 1-3" -> 3; null when the label says nothing definite */
@@ -199,9 +203,16 @@
     var n = all.filter(function (g) { return hit(g.value); }).length;
     return '<span class="v3p-spark"><span class="sc-spark" aria-hidden="true" style="--ln:' + Math.round((1 - line / hi) * 100) + '%">' + bars + '</span><span class="sc-muted"><b>' + n + '/' + all.length + '</b> ' + (side === 'over' ? 'Over' : 'Under') + '</span></span>';
   }
+  /* a sports line with Scout's side but no published letter ("No grade yet"): the sub-threshold rule of the other sports, Lean Over /
+     Lean Under with Stake 0U, in place of the hold chip (the board row reads the same) */
+  function leanOnly(r) {
+    var s = r && r.scout;
+    return !!(s && (s.side === 'over' || s.side === 'under') && !s.grade && s.hold && s.hold.short === 'No grade yet' && !r.extra);
+  }
   function pickHtml(r, doc, st) {
     if (!st || !st.side) return '';
     var side = st.side.toLowerCase(), scout = r.scout && r.scout.side === side;
+    if (scout && leanOnly(r)) st = Object.assign({}, st, {pick: '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span>', stake: 'Stake 0U'});
     var pct = parseFloat(st.chance), hasChance = isFinite(pct);
     var book = r.offer.platform_label ? esc(r.offer.platform_label) + (r.offer.seen_at ? ' · checked ' + esc(age(r.offer.seen_at)) : '') : '';
     return '<div class="sc-pick v3p-pick" aria-label="Pick summary">'
@@ -234,19 +245,68 @@
     (c.per_map || []).forEach(function (m) { if (m && m.map) bo[mapKey(m.map)] = m; });
     ((doc.map_chances && doc.map_chances.maps) || []).forEach(function (m) { if (m && m.name && m.pct != null) chance[mapKey(m.name)] = m.pct; });
     ((doc.veto && doc.veto.confirmed) || []).forEach(function (m) { if (m && m.name) conf[mapKey(m.name)] = m; });
-    var list = order.map(function (k) { var m = by[k]; m.chance = chance[k]; m.conf = conf[k]; m.pm = pm[k]; m.bo = bo[k]; return m; });
+    var inP = periodChance(doc, periodMaps(r.market.period_label));
+    var list = order.map(function (k) { var m = by[k]; m.chance = chance[k]; m.conf = conf[k]; m.pm = pm[k]; m.bo = bo[k]; m.inP = inP ? inP(k) : null; m.inPer = inPeriod(m.conf, r); return m; });
+    /* order: confirmed for these maps, then In Maps 1-2 (veto), then HLTV's map chance (two different measures never mixed in one rank) */
     list.sort(function (a, b) {
-      var ca = a.conf ? 1 : 0, cb = b.conf ? 1 : 0;
+      var ca = a.inPer ? 1 : 0, cb = b.inPer ? 1 : 0;
       if (ca !== cb) return cb - ca;
+      var ia = a.inP != null ? 1 : 0, ib = b.inP != null ? 1 : 0;
+      if (ia !== ib) return ib - ia;
+      if (ia) { if (b.inP !== a.inP) return b.inP - a.inP; }
       var pa = a.chance != null ? +a.chance : -1, pb = b.chance != null ? +b.chance : -1;
       return pb - pa || b.n - a.n || a.name.localeCompare(b.name);
     });
-    return {list: list.slice(0, 8), tot: tot, cnt: cnt, by: by};
+    /* a map confirmed for this prop's maps that has no saved result for him: named, never silently left out of the combine */
+    var missing = ((doc.veto && doc.veto.confirmed) || []).filter(function (m) { return m && m.name && !by[mapKey(m.name)] && inPeriod(m, r); }).map(function (m) { return m.name; });
+    return {list: list.slice(0, 8), tot: tot, cnt: cnt, by: by, missing: missing};
   }
+  /* is a confirmed veto slot inside the prop's maps? ("Map 1".."Map k"; a BO3 decider is map 3) */
+  function inPeriod(c, r) {
+    if (!c) return false;
+    var k = periodMaps(r.market.period_label), m = /^map\s*(\d)/i.exec(String(c.slot || ''));
+    if (!k) return true;
+    return m ? +m[1] <= k : /decider/i.test(c.slot || '') ? k >= 3 : false;
+  }
+  /* "In Maps 1-2": Scout's simulated veto (veto-1, doc.veto), the chance the map is played in one of the prop's map slots = the sum of
+     its per-slot chances (a map is played at most once). A confirmed slot counts 100% for its map. Exact only: a map missing from an
+     unconfirmed slot's shortlist (that slot has an "other" share) gets no figure. null = no veto for these slots. */
+  function periodChance(doc, k) {
+    var v = doc && doc.veto;
+    if (!v || !k || k > 3) return null;
+    var conf = {}, slots = {};
+    var gone = {};     /* a map already confirmed in any slot, or banned, is played in no other slot */
+    (v.confirmed || []).forEach(function (c) { if (c && c.slot) conf[String(c.slot)] = mapKey(c.name); if (c && c.name) gone[mapKey(c.name)] = 1; });
+    (v.bans || []).forEach(function (b) { if (b && b.name) gone[mapKey(b.name)] = 1; });
+    (v.slots || []).forEach(function (s) { if (s && s.slot) slots[String(s.slot)] = s; });
+    var need = [];
+    for (var i = 1; i <= k; i++) {
+      var lab = 'Map ' + i, alt = i === 3 ? 'Decider' : null;
+      if (conf[lab] != null || (alt && conf[alt] != null)) need.push({conf: conf[lab] != null ? conf[lab] : conf[alt]});
+      else if (slots[lab] || (alt && slots[alt])) need.push({slot: slots[lab] || slots[alt]});
+      else return null;
+    }
+    return function (key) {
+      var tot = 0;
+      for (var j = 0; j < need.length; j++) {
+        var n = need[j];
+        if (n.conf != null) { if (n.conf === key) tot += 1; continue; }
+        if (gone[key]) continue;
+        var hit = (n.slot.top || []).filter(function (t) { return t && mapKey(t[1]) === key && num(t[2]); })[0];
+        if (hit) tot += hit[2];
+        else if (num(n.slot.other) && n.slot.other > 0) return null;
+      }
+      return Math.round(Math.min(1, tot) * 1000) / 10;
+    };
+  }
+  /* default: the maps confirmed for the prop's maps first, then the highest chance maps not already picked (In Maps 1-2, else
+     HLTV's map chance), to 2. A confirmed map he has no saved result on leaves the combine empty (it would leave that map out). */
   function defaultPick(k, pool) {
     if (CHOSEN[k]) return SEL[k] || [];
-    var conf = pool.list.filter(function (m) { return m.conf; }).slice(0, 2);
-    var pick = conf.length === 2 ? conf : pool.list.filter(function (m) { return m.chance != null; }).slice(0, 2);
+    if (pool.missing && pool.missing.length) return (SEL[k] = []);
+    var conf = pool.list.filter(function (m) { return m.inPer; });
+    var rest = pool.list.filter(function (m) { return !m.inPer && (m.inP != null || m.chance != null); });
+    var pick = conf.concat(rest).slice(0, 2);
     SEL[k] = pick.length === 2 ? pick.map(function (m) { return m.key; }) : [];
     return SEL[k];
   }
@@ -263,29 +323,37 @@
     var anyKpr = pool.list.some(function (m) { return (m.pm && num(m.pm.kpr)) || (m.bo && num(m.bo.kpr)); });
     var anyHs = pool.list.some(function (m) { return m.bo && num(m.bo.hs_pct); });
     var anyRt = pool.list.some(function (m) { return m.pm && num(m.pm.rating); });
+    var per = String(r.market.period_label || '').replace(/^(Maps?)\s+/i, function (a, w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() + ' '; });
     var cards = pool.list.map(function (m) {
       var on = sel.indexOf(m.key), avg = m.sum / m.n, dAvg = avg - baseAvg;
       var kpr = m.pm && num(m.pm.kpr) ? m.pm.kpr : m.bo && num(m.bo.kpr) ? m.bo.kpr : null, dK = num(kpr) && num(baseKpr) ? kpr - baseKpr : null;
       var hs = m.bo && num(m.bo.hs_pct) ? m.bo.hs_pct : null, dH = num(hs) && num(baseHs) ? hs - baseHs : null;
       var rt = m.pm && num(m.pm.rating) ? m.pm.rating : null;
       var a = V.mapArt(m.name);
-      var sub = [];
-      if (m.conf) sub.push(esc(m.conf.slot || 'Confirmed') + (m.conf.by ? ' · ' + esc(m.conf.by) + ' pick' : ''));
+      var sub = '';
+      if (m.conf) sub = '<small class="v3p-slot">' + esc(m.conf.slot || 'Confirmed') + (m.conf.by ? ' · <span>' + esc(m.conf.by) + ' pick</span>' : '') + '</small>';
+      /* each card shows the stats it has (a stat with no value on this map is left out, never a column of dashes) */
+      var stats = [sceneStat(word, fx(avg, 2), delta(dAvg, 2), tone(dAvg, baseAvg, inv))];
+      if (num(kpr)) stats.push(sceneStat('KPR', fx(kpr, 2), delta(dK, 2), tone(dK, baseKpr)));
+      if (num(hs)) stats.push(sceneStat('HS%', fx(hs, 1) + '%', delta(dH, 1, ' pt'), tone(dH, 0, false, 1.5)));
+      if (num(rt)) stats.push(sceneStat('Rating', fx(rt, 2), delta(rt - 1, 2), tone(rt - 1, 1)));
+      var ch = m.inP != null ? '<small>In ' + esc(per) + ' <b>' + esc(fx(m.inP, 1)) + '%</b></small>'
+        : m.chance != null ? '<small>Map chance <b>' + esc(fx(+m.chance, 1)) + '%</b></small>' : '';
       return '<button type="button" class="sc-scene v3p-map' + (on >= 0 ? ' is-on' : '') + '" data-v3p-map="' + esc(m.key) + '" aria-pressed="' + (on >= 0) + '"'
         + (a ? ' style="--h:' + (V.HUE[a] || 210) + '"' : '') + ' aria-label="' + esc(m.name + (on >= 0 ? ', picked to combine' : ', pick to combine')) + '">'
         + '<span class="sc-scene__art" data-v3p-art="' + esc(a) + '" aria-hidden="true"></span>'
         + '<span class="sc-scene__id"><b>' + (on >= 0 ? '<span class="sc-badge">' + (on + 1) + '</span>' : '') + esc(m.name) + '</b><small>' + m.n + (m.n === 1 ? ' map' : ' maps') + '</small>'
-        + (m.chance != null ? '<small>Map chance <b>' + esc(fx(+m.chance, 1)) + '%</b></small>' : '') + (sub.length ? '<small>' + sub.join('') + '</small>' : '') + '</span>'
-        + '<span class="sc-scene__stats">' + sceneStat(word, fx(avg, 2), delta(dAvg, 2), tone(dAvg, baseAvg, inv))
-        + (anyKpr ? sceneStat('KPR', num(kpr) ? fx(kpr, 2) : '—', delta(dK, 2), tone(dK, baseKpr)) : '')
-        + (anyHs ? sceneStat('HS%', num(hs) ? fx(hs, 1) + '%' : '—', delta(dH, 1, ' pt'), tone(dH, 0, false, 1.5)) : '')
-        + (anyRt ? sceneStat('Rating', num(rt) ? fx(rt, 2) : '—', delta(num(rt) ? rt - 1 : null, 2), tone(num(rt) ? rt - 1 : null, 1)) : '') + '</span></button>';
+        + ch + sub + '</span>'
+        + '<span class="sc-scene__stats" data-n="' + stats.length + '">' + stats.join('') + '</span></button>';
     }).join('');
     var src = [word + ': his last ' + series(doc).length + ' Maps 1-2 series (HLTV), vs his average there ' + fx(baseAvg, 2)];
     if (anyKpr) src.push('KPR: HLTV 6 mo on the prop maps, else BO3.gg' + (num(baseKpr) ? ', vs ' + fx(baseKpr, 2) : ''));
     if (anyHs) src.push('HS%: BO3.gg' + (num(baseHs) ? ', vs ' + fx(baseHs, 1) + '%' : ''));
     if (anyRt) src.push('rating: HLTV 6 mo, vs 1.00');
-    return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4><span class="sc-muted">' + (sel.length === 2 ? '2 maps combined · a third pick replaces the first' : sel.length === 1 ? '1 of 2 picked' : 'Pick 2 to combine') + '</span></div>' + cards
+    if (pool.list.some(function (m) { return m.inP != null; })) src.push('In ' + per + ': Scout’s simulated veto, the share that puts the map in ' + per);
+    else if (pool.list.some(function (m) { return m.chance != null; })) src.push('map chance: HLTV simulated vetoes');
+    var miss = (pool.missing || []).length ? '<p class="v3p-miss">' + esc(pool.missing.join(', ') + (pool.missing.length === 1 ? ' is confirmed for ' : ' are confirmed for ') + per + (pool.missing.length === 1 ? ' and has' : ' and have') + ' no saved ' + per + ' result for him, so no combined number includes it.') + '</p>' : '';
+    return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4><span class="sc-muted">' + (sel.length === 2 ? '2 maps combined · a third pick replaces the first' : sel.length === 1 ? '1 of 2 picked' : 'Pick 2 to combine') + '</span></div>' + miss + cards
       + '<p class="sc-src">' + esc(src.join(' · ')) + '</p></div>' + pooledHtml(r, doc, pool, sel);
   }
   /* the combined number: exact on the integers, half-up at display; three wordings for 0, 1 and 2 maps picked */
@@ -319,6 +387,76 @@
     var bar = p.paceV != null ? '<div class="sc-pace" role="img" aria-label="' + esc(p.value.text + ' against pace ' + p.pace.text) + '"><span class="sc-pace__fill" style="width:' + (p.v / max * 100).toFixed(1) + '%"></span><span class="sc-pace__mark" style="left:' + (p.paceV / max * 100).toFixed(1) + '%"><small>pace ' + p.pace.text + '</small></span></div>' : '';
     return '<div class="sc-surface v3p-pooled" aria-live="polite"><div class="sc-pooled"><span class="sc-pooled__big sc-num" data-v3p-big>' + p.value.text + '</span><span class="sc-pooled__txt" data-v3p-lead>' + lead + '</span></div>'
       + bar + '<p class="sc-src">' + esc(p.names + ' · ' + p.n + ' maps, his saved Maps 1-2 results') + '</p>' + clear + '</div>';
+  }
+
+  /* ---------------------------------------------------------------- the line panel (approved mocks 05 / 10), added inside the hub's
+     own decision strip beside its nodes (nothing of the hub's is moved or removed; the hub rewrites the strip and paint() adds these
+     again): the market and the big line figure before the line select, the book's freshness and line type after it, Projection /
+     Gap to line / Market chance before the Add button, and L5 / L10 / L20 on Scout's side at the end. Every number is the record's. */
+  var LINE_TYPE = {standard: 'Standard line', goblin: 'Goblin line', demon: 'Demon line'};
+  function lineHeadHtml(r) {
+    if (r.offer.line == null) return '';
+    return '<small>' + esc((r.market.stat_label || '') + (r.market.period_label ? ', ' + r.market.period_label : '')) + '</small><b class="sc-num">' + esc(r.offer.line) + '</b>';
+  }
+  function lineMetaHtml(r) {
+    var book = r.offer.platform_label ? esc(r.offer.platform_label) + (r.offer.seen_at && age(r.offer.seen_at) ? ' · checked ' + esc(age(r.offer.seen_at)) : '') : '';
+    var lt = LINE_TYPE[String(r.market.line_type || '').toLowerCase()] || '';
+    return book || lt ? '<span>' + book + '</span><span>' + esc(lt) + '</span>' : '';
+  }
+  function marketChance(r, doc, side) {
+    var mc = r.market_chance;
+    if (mc && (side === 'over' || side === 'under') && num(mc['p_' + side])) return {v: (mc['p_' + side] * 100).toFixed(1) + '%', src: num(mc.sources) && mc.sources > 0 ? 'From ' + mc.sources + (mc.sources === 1 ? ' book' : ' books') : 'From book prices'};
+    var fs = (doc && doc.grade_inputs && doc.grade_inputs.factors) || [];
+    for (var i = 0; i < fs.length; i++) if (fs[i] && /market chance/i.test(fs[i].label || '') && fs[i].value != null) return {v: String(fs[i].value), src: fs[i].label};
+    return null;
+  }
+  function factsHtml(r, doc, st) {
+    var side = st && st.side ? st.side.toLowerCase() : '', proj = r.scout && r.scout.projection, line = r.offer.line;
+    if (!num(proj) && !num(line)) return '';
+    var tile = function (label, v, sub) { return '<div><span>' + esc(label) + '</span><b class="sc-num">' + v + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>'; };
+    var gap = num(proj) && num(+line) ? Math.round((proj - +line) * 10) / 10 : null;
+    var out = [tile('Projection', num(proj) ? esc(proj.toFixed(1)) : '—', r.market.period_label || '')];
+    if (gap != null) out.push(tile('Gap to line', (gap > 0 ? '+' : gap < 0 ? MINUS : '') + Math.abs(gap).toFixed(1), gap > 0 ? 'above the line' : gap < 0 ? 'below the line' : 'at the line'));
+    var mc = marketChance(r, doc, side);
+    if (mc) out.push(tile('Market chance', esc(mc.v), mc.src));
+    return out.join('');
+  }
+  function hitsHtml(r, doc, st) {
+    var side = st && st.side ? st.side.toLowerCase() : (r.scout && r.scout.side) || '', line = r.offer.line;
+    if ((side !== 'over' && side !== 'under') || !num(+line)) return '';
+    var h = r.history || {}, all = series(doc), word = side === 'over' ? 'Over' : 'Under';
+    var cell = function (n) {
+      var t = h['l' + n], hit = null, of = null;
+      if (t && num(t.n) && t.n > 0 && num(t[side])) { hit = t[side]; of = t.n; }
+      else if (all.length) { var w = all.slice(0, n); of = w.length; hit = w.filter(function (g) { return side === 'over' ? g.value > +line : g.value < +line; }).length; }
+      return '<div><b class="sc-num">' + (of ? hit + '<em>/' + of + '</em>' : '—') + '</b><small>' + esc('L' + n + ', ' + word + ' ' + line) + '</small></div>';
+    };
+    return cell(5) + cell(10) + cell(20);
+  }
+  function addIn(dec, cls, html, ref, before) {
+    var n = dec.querySelector(':scope > .' + cls);
+    if (!html) { if (n) n.remove(); return; }
+    if (!n) { n = el(cls, ''); }
+    if (n.__html !== html) { n.innerHTML = html; n.__html = html; }
+    if (ref) { if (before ? n.nextElementSibling !== ref : n.previousElementSibling !== ref) { if (before) ref.before(n); else ref.after(n); } }
+    else if (dec.lastElementChild !== n) dec.appendChild(n);
+  }
+  function paintLine(box, r, doc, st) {
+    var dec = box.querySelector(':scope > #hub-decision'), sel = dec && dec.querySelector(':scope > .h-dec-line');
+    if (!dec || !sel) return;
+    dec.classList.add('v3p-line');
+    addIn(dec, 'v3p-lh', lineHeadHtml(r), sel, true);
+    addIn(dec, 'v3p-lmeta', lineMetaHtml(r), sel, false);
+    var act = dec.querySelector(':scope > .h-dec-act');
+    addIn(dec, 'v3p-facts', factsHtml(r, doc, st), act, true);
+    addIn(dec, 'v3p-hits', hitsHtml(r, doc, st), null);
+    var ch = dec.querySelector(':scope > .h-dec-chance'), side = st && st.side ? st.side.toLowerCase() : '';
+    if (ch) {
+      var lean = leanOnly(r) && r.scout.side === side;
+      var hold = ch.querySelector('.h-hold-why');
+      if (hold) hold.classList.toggle('v3p-hide', lean);
+      addIn(ch, 'v3p-lean', lean ? '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span><span class="h-dec-stake">Stake 0U</span>' : '', null);
+    }
   }
 
   /* ---------------------------------------------------------------- the combined bar (sticky at the foot of the card) */
@@ -360,6 +498,20 @@
       var idn = head.querySelector(':scope > .h-card-id');
       if (idn) { var av = el('v3p-avatar', esc(String(r.player.name || '?').trim().charAt(0).toUpperCase()), 'span'); av.setAttribute('aria-hidden', 'true'); idn.before(av); }
     }
+    /* under the name: "Role, Team" (as the approved mocks), plus the line move the hub's own head line carries. The hub's head line
+       (team vs opponent, event, time, countdown) stays in the page for screen readers; on screen the match strip and the meta row
+       below carry those once each (see .v3p-head in player.css). */
+    var hid = head.querySelector(':scope > .h-card-id'), h3 = hid && hid.querySelector('h3');
+    if (h3) {
+      var who = [String(r.player.role || '').trim(), String(r.player.team || '').trim()].filter(Boolean).join(', ');
+      var mv = r.offer.moved_from != null ? 'Line moved from ' + r.offer.moved_from : '';
+      var wh = esc(who) + (who && mv ? ' · ' : '') + esc(mv), wn = hid.querySelector(':scope > .v3p-who');
+      if (wh) {
+        if (!wn) { wn = el('v3p-who', '', 'p'); h3.after(wn); }
+        if (wn.__html !== wh) { wn.innerHTML = wh; wn.__html = wh; }
+      } else if (wn) wn.remove();
+      if (matchHtml(r, doc)) head.classList.add('v3p-head'); else head.classList.remove('v3p-head');
+    }
     var st = strip();
     var lead = put(box, 'v3p-lead', leadHtml(r, doc, st), head);
     var anchor = lead;
@@ -367,7 +519,9 @@
       var mh = mapsHtml(r, doc, id);
       if (mh) { anchor = put(box, 'v3p-maps', mh, lead); mountArts(anchor); } else drop(box, 'v3p-maps');
     } else drop(box, 'v3p-maps');
+    try { paintLine(box, r, doc, st); } catch (e) { /* the hub's own strip stays as it is */ }
     put(box, 'v3p-dock sc-dock', dockHtml(r, doc, st, id), null);
+    watchAdd(box);
     /* the hub repainted the whole card: keep the member where they were (a tab change keeps the tabs in view) */
     var tab = box.dataset.tab;
     if (last.id === id && box.__v3pPainted !== box.firstElementChild) {
@@ -377,6 +531,26 @@
     }
     box.__v3pPainted = box.firstElementChild;
     last.id = id; last.tab = tab;
+  }
+  /* the phone shows the combined bar only once the card's own Add button (the decision strip) has scrolled out of view: on first view
+     the strip itself is the action, and the bar never sits over the pick summary (player.css, max-width 1023px) */
+  var dockQ = 0;
+  function dockCheck() {
+    dockQ = 0;
+    var box = document.getElementById('hub-detail'), R = document.documentElement;
+    if (!box) return;
+    var add = box.querySelector('#hub-decision [data-hub="detail-add"]') || box.querySelector('#hub-decision');
+    /* above the v3 header's foot (56px) = scrolled away; below the viewport (not reached yet) = not */
+    var on = !add || add.getBoundingClientRect().bottom < 64;
+    if (R.classList.contains('v3p-dock-on') !== on) R.classList.toggle('v3p-dock-on', on);
+  }
+  function watchAdd(box) {
+    if (!box.__v3pDock) {
+      box.__v3pDock = true;
+      box.addEventListener('scroll', function () { if (!dockQ) dockQ = requestAnimationFrame(dockCheck); }, {passive: true});
+      window.addEventListener('scroll', function () { if (!dockQ) dockQ = requestAnimationFrame(dockCheck); }, {passive: true});
+    }
+    dockCheck();
   }
   var queued = false;
   function schedule() {

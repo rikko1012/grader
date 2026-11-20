@@ -24,6 +24,73 @@
 
   function $(id) { return document.getElementById(id); }
 
+  /* ---------------------------------------------------------------- the hub's own board records (teed, never re-fetched)
+     The hub's /api/upgrade/board answers are cloned as they arrive (the hub reads the original untouched) and kept by the row key the
+     hub itself uses (tr[data-record] = sport|platform|offer_id). They give each row its stake and the band's game count: nothing is
+     worked out that the record does not say. */
+  var RECS = {};
+  var recKey = function (r) { return [r.sport, r.offer.platform, r.offer.offer_id].join('|'); };
+  var nativeFetch = window.fetch;
+  if (typeof nativeFetch === 'function') {
+    window.fetch = function (input, init) {
+      var pr = nativeFetch.apply(this, arguments);
+      try {
+        var u = typeof input === 'string' ? input : (input && input.url) || '';
+        var m = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
+        if (/\/api\/upgrade\/board(\?|$)/.test(u) && String(m).toUpperCase() === 'GET') {
+          pr.then(function (r) {
+            if (!r || r.status !== 200) return;
+            var sp = (/[?&]sport=([a-z0-9]+)/.exec(u) || [0, 'cs2'])[1];
+            r.clone().json().then(function (d) {
+              Object.keys(RECS).forEach(function (k) { if (k.indexOf(sp + '|') === 0) delete RECS[k]; });   /* this sport's board, replaced whole */
+              ((d && d.records) || []).forEach(function (x) { if (x && x.offer && x.scout) RECS[recKey(x)] = x; });
+              soon();
+              try { document.dispatchEvent(new CustomEvent('scout-v3-recs')); } catch (e) { /* old browser: legs keep their read */ }
+            }, function () { /* not JSON: the hub handles it */ });
+          }, function () { /* the hub sees its own failure */ });
+        }
+      } catch (e) { /* never in the hub's way */ }
+      return pr;
+    };
+  }
+  /* the row's stake, as the card's decision strip states it (upgrade-hub.js decisionHtml): Scout's side, a number of units, on a line
+     the app offers on both sides with Scout's side offered, not a view-only book. A sports line with a side but no published letter
+     ("No grade yet") reads as the sub-threshold rule the other sports use: Lean Over / Lean Under, Stake 0U. */
+  function leanOnly(r) {
+    var s = r && r.scout;
+    return !!(s && (s.side === 'over' || s.side === 'under') && !s.grade && s.hold && s.hold.short === 'No grade yet' && !r.extra);
+  }
+  function stakeOf(r, tr) {
+    var s = r && r.scout;
+    if (!s || !s.side || r.extra) return null;
+    if (tr && tr.querySelector('.h-scout-nf, .h-one-sided, .h-not-offered')) return null;
+    if (leanOnly(r)) return '0';
+    return typeof s.units === 'number' && isFinite(s.units) ? String(s.units) : null;
+  }
+  /* for the slip legs (slips.js): the same records and the same stake rule */
+  V.boardRecs = function () { return RECS; };
+  V.stakeOf = stakeOf;
+  V.leanOnly = leanOnly;
+  function paintStake(tr) {
+    var r = RECS[tr.getAttribute('data-record')], g = tr.querySelector('.h-scout-grade');
+    if (!r || !g) return;
+    var st = stakeOf(r, tr), have = g.querySelector('.sc-stake');
+    if (leanOnly(r)) {
+      var hold = g.querySelector('.h-hold-why');
+      if (hold) hold.classList.add('sc-bd-hide');
+      if (!g.querySelector('.sc-lean')) {
+        var ln = document.createElement('span');
+        ln.className = 'h-grade-text sc-lean';
+        ln.textContent = 'Lean ' + (r.scout.side === 'over' ? 'Over' : 'Under');
+        g.insertBefore(ln, g.firstChild);
+      }
+    }
+    if (st == null) { if (have) have.remove(); return; }
+    var html = 'Stake <b>' + V.esc(st) + 'U</b>';
+    if (!have) { have = document.createElement('small'); have.className = 'sc-stake'; g.appendChild(have); }
+    if (have.innerHTML !== html) have.innerHTML = html;
+  }
+
   /* the band keeps only the drawing's linework in one tint (currentColor): no ground box, rulers, construction dashes, mass fill,
      mist band or lamp orb (the same cleaning as the approved mock, build_boards.band_art); ids made unique per copy */
   function bandSvg(s) {
@@ -61,7 +128,7 @@
       top.insertBefore(art, top.firstChild);
       var meta = document.createElement('p');
       meta.className = 'sc-lit__meta sc-bd-meta';
-      meta.setAttribute('aria-hidden', 'true');   /* the same text as #hub-count, which screen readers already reach */
+      meta.setAttribute('aria-live', 'polite');   /* the board's count, shown once (the toolbar copy, #hub-count, is visually hidden) */
       var h = $('hub-title');
       if (h && h.parentNode) h.parentNode.appendChild(meta);
     }
@@ -78,6 +145,7 @@
     var m = document.querySelector('#u-hub .sc-bd-meta'), c = $('hub-count');
     if (m && c && m.textContent !== c.textContent) m.textContent = c.textContent;
   }
+
 
   /* ---------------------------------------------------------------- rows */
   var AGE = /^(.*?)\s·\s(now|—|\d+m|\d+h)(?:\s·\swas\s(.+))?$/;
@@ -164,6 +232,8 @@
   function paintRows() {
     var rows = document.querySelectorAll('#hub-rows>tr[data-record]:not([data-sc="1"])');
     for (var i = 0; i < rows.length; i++) { try { decorateRow(rows[i]); } catch (e) { /* one odd row keeps the hub's own look */ } }
+    var all = document.querySelectorAll('#hub-rows>tr[data-record]');
+    for (var j = 0; j < all.length; j++) { try { paintStake(all[j]); } catch (e) { /* the hub's own cell stays */ } }
     paintLegend();
     paintMeta();
   }

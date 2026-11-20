@@ -3,6 +3,7 @@ member Record, the public /record, EV (Best prices), Arbitrage / price check, Sp
 390x844 and 1280x900, dark and light. Every field the page shows today is still there (the v3 files only restyle and add derived
 items computed from the numbers beside them), no sideways scroll, no script error. V3_SHOTS=<folder> keeps a screenshot each."""
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -105,9 +106,14 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         assert "Pending" in p.locator(f"{sec} .h-picks-part h3").first.inner_text()
         assert p.locator(f"{sec} .h-picks-foot [data-hub=section][data-id=record]").count() == 1
         # v3: the server's own record (the tray's Record tab numbers): tiles, ticks and key reconcile with each other
-        tiles = p.locator(f"{sec} .v3c-score .v3c-tile b").all_inner_texts()
+        tiles = p.locator(f"{sec} .v3c-score .v3c-tile > b").all_inner_texts()
         assert tiles[0] == "50.0%" and tiles[1].replace("–", "-").replace(" ", "") == "1-1-1" and tiles[2] == "1" and tiles[3] == "2"
         assert "Hit rate, 2 decided" in p.locator(f"{sec} .v3c-score").inner_text()
+        # the hit rate against the chance you saw on those decided picks (mock 09), signed, no arrow
+        vs = p.locator(f"{sec} .v3c-tile.is-hero .v3c-vsaw").inner_text()
+        assert re.match(r"^[+−]?\d+\.\d pts vs \d+\.\d% you saw$", vs), vs
+        # the hub's one-line summary repeats the tiles: kept for readers, not drawn
+        assert p.evaluate("document.querySelector('#hub-picks-section .h-pick-summary').getBoundingClientRect().width") <= 1
         assert p.locator(f"{sec} .v3c-ticks i").count() == 6
         shot(p, f"picks-{size['width']}-{theme}-top")
         # chance you saw, from the saved receipt, beside each status (never a 0 for a missing one)
@@ -116,11 +122,11 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         assert not any(s.endswith(" 0%") or s.endswith(" 0.0%") for s in saw)
         # pills mirror the selects and press them
         pills = p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button")
-        assert [t.strip() for t in pills.all_inner_texts()] == ["All outcomes", "Pending", "Won", "Lost", "Pushed", "Void"]
-        p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="Won").click()
+        assert [t.strip() for t in pills.all_inner_texts()] == ["All outcomes", "Pending", "Hit", "Miss", "Pushed", "Void"]   # Hit / Miss as the record
+        p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="Hit").click()
         p.wait_for_function("document.getElementById('hub-pick-status').value==='hit'")
         p.wait_for_function("document.querySelectorAll('#hub-picks-body .u-pick').length===1")
-        assert p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button[aria-pressed=true]").inner_text().strip() == "Won"
+        assert p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button[aria-pressed=true]").inner_text().strip() == "Hit"
         p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="All outcomes").click()
         p.wait_for_function("document.querySelectorAll('#hub-picks-body .u-pick').length===6")
         # an open receipt keeps its full field list
@@ -170,7 +176,7 @@ def test_member_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         p.wait_for_selector("#hub-record-body .h-record-card .h-score", timeout=30000)
         card = p.locator("#hub-record-body .h-record-card").first
         txt = card.inner_text()
-        for k in ("Wins / losses", "Actual hit rate", "Average stated chance", "decided picks", "Updated"):
+        for k in ("Wins–losses", "Actual hit rate", "Average stated chance", "decided picks", "Updated"):   # one W–L format on every record page
             assert k in txt, k
         assert p.locator("#hub-record-sport").count() == 1
         assert card.locator(".h-rel-row").count() >= 1 and card.locator(".h-record-calendar").count() == 1

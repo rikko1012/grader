@@ -196,6 +196,16 @@ The owner path is `GET /preview/v3?token=<ADMIN_TOKEN>`, then use the cookie (se
 - no `pageerror`;
 - the page's own fields still present.
 
+**Screenshot runs (polish1).** Two switches in `tests/conftest.py`, off by default, act on `tests/test_ui_v3_*` only:
+- `V3_FONTS=1` lets Outfit / DM Mono load from Google Fonts (normally aborted) and waits for them before each screenshot, so shots
+  compare with the mocks' typography.
+- `V3_PROD=1` turns on the member display features production has on (`design_1119/v3/A/data/me_features.json`): `SCOUT_BOARD_H2H`,
+  `SCOUT_PARITY_*`, `SCOUT_PICKEM_EV`, `SCOUT_MARKET_EDGE`, `SCOUT_MARKET_TOOLS`, `SCOUT_SOCCER_ENABLED`, `SCOUT_TENNIS_ENABLED`. The
+  Edge / H2H / SZN columns, n/N hit counts, per-book O/U prices, EV / Arbitrage nav and the soccer / tennis tabs come from these flags,
+  not from v3. With the expansion flags on and no fixture feed, the board shows the hub's own "Source updates" note.
+
+Full set: `V3_SHOTS=<dir> V3_BOARD_SHOTS=<dir> V3_FONTS=1 V3_PROD=1 pytest tests/test_ui_v3_*browser.py tests/test_ui_v3_gate.py`.
+
 **Flag off.** The existing suites stay unchanged and passing.
 
 **Load.**

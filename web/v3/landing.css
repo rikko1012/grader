@@ -373,3 +373,32 @@ html[data-ui-v3] footer.foot a:hover{color:var(--sc-text);background:color-mix(i
   html[data-ui-v3] .trust b.word{font-size:16px}
 }
 @media (max-width:380px){html[data-ui-v3] .hc-pick::before{display:none}html[data-ui-v3] .hc .ring b{font-size:28px}}
+/* ---- polish1 (2026-11-20) ---- */
+/* the hero shows only the live v3 pick card (real board rows): the two screenshots of the previous design (board window, phone
+   card) advertised a UI that no longer matches the product, so under v3 they are not drawn */
+html[data-ui-v3] .stage .board-shot,html[data-ui-v3] .stage .card-shot{display:none!important}
+html[data-ui-v3] .stage{display:grid;place-items:center;padding:0!important;min-height:0}
+html[data-ui-v3] .stage .hc{position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;top:auto!important;width:min(440px,100%)!important;max-width:100%!important;margin:0 auto}
+/* reviews follow the product, never sit between the headline and its sentence: headline, sentence, buttons, sign-in, numbers,
+   then the review ticker; on the phone the card comes right after the buttons, before the numbers and reviews */
+html[data-ui-v3] .hero-copy{display:flex;flex-direction:column}
+html[data-ui-v3] .hero-copy>.hero-k{order:1}
+html[data-ui-v3] .hero-copy>#hero-title{order:2}
+html[data-ui-v3] .hero-copy>.lede{order:3}
+html[data-ui-v3] .hero-copy>.ctas{order:4}
+html[data-ui-v3] .hero-copy>.member{order:5}
+html[data-ui-v3] .hero-copy>#signin-error{order:6}
+html[data-ui-v3] .hero-copy>.trust{order:7}
+html[data-ui-v3] .hero-copy>#rvq{order:8;margin-top:24px}
+@media (max-width:1024px){
+  html[data-ui-v3] .hero-in{display:flex!important;flex-direction:column;align-items:stretch;gap:0!important}
+  html[data-ui-v3] .hero-in>.hero-copy>*{margin-top:0;margin-bottom:0}
+  html[data-ui-v3] .hero-in>.hero-copy>#hero-title{margin:12px 0 14px}
+  html[data-ui-v3] .hero-in>.hero-copy>.lede{margin-bottom:20px}
+  html[data-ui-v3] .hero-in>.hero-copy>.member{margin-top:12px}
+  html[data-ui-v3] .hero-in>.hero-copy>.trust{margin-top:24px}
+  html[data-ui-v3] .hero-copy{display:contents}
+  html[data-ui-v3] .hero-in>.stage{order:6;margin:24px 0 0}
+  html[data-ui-v3] .hero-copy>.trust{order:7}
+  html[data-ui-v3] .hero-copy>#rvq{order:8}
+}

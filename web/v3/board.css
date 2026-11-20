@@ -523,3 +523,33 @@ html[data-ui-v3] #u-hub #hub-games-body .h-empty{grid-column:1/-1;padding:40px 2
 @media (max-width:1023px){
   html[data-ui-v3] #u-hub.h-board-mode .h-center{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
 }
+/* ---- polish1 (2026-11-20) ---- */
+/* one stake per line on every row (desktop and phone), beside the grade, as the card states it; a sub-threshold sports line reads
+   Lean Over / Lean Under + Stake 0U (the hub's own hold chip stays in the row, not drawn) */
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-stake{flex:none;color:var(--sc-muted);font:400 12px/1.2 var(--sc-font);white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-stake b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-bd-hide{display:none!important}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-lean{white-space:nowrap}
+/* the count shows once: under the title (the band line, with the game count); the toolbar copy is kept for the hub, not drawn */
+html[data-ui-v3] #u-hub #hub-count{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important}
+@media (max-width:1100px){
+  /* market and period never cut: the line wraps between words, the period stays one token ("Maps 1-2"); the book's freshness and
+     the matchup wrap too */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;word-break:normal;overflow-wrap:normal}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div>b{white-space:normal!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div>small{white-space:nowrap!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .sc-seen{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .sc-seen>*{white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
+  /* the role, matchup and sport tag sit on their own line under the name, whole (never cut); they wrap as units if still too long */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player{flex-wrap:wrap!important;row-gap:2px!important;overflow:visible!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small{flex:1 1 100%!important;flex-wrap:wrap!important;row-gap:2px;overflow:visible!important;min-width:0}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small>*{white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge .h-below{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-scout-grade{align-self:start;flex-wrap:nowrap}
+  /* line 1 may now take two lines (a long matchup wraps): the name and Scout's side stay level at the top */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-player{align-self:start}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>:is(.h-direction,.h-direction-options){align-self:start}
+}
+/* the Lean chip is never cut: on a narrow Scout column the stake moves under it */
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade{flex-wrap:wrap;row-gap:4px}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-lean{max-width:none!important;overflow:visible!important;text-overflow:clip!important;flex:none}
