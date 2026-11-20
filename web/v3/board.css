@@ -642,3 +642,7 @@ html[data-ui-v3] #u-hub #hub-table .h-grade.sc-lean-word{white-space:nowrap}
   html[data-ui-v3] #u-hub #hub-clear{order:4}
   html[data-ui-v3] #u-hub #hub-sort-note{order:5}
 }
+/* desktop Compare button: the per-side payouts ("O 0.82x · U 1.15x") wrap inside the button instead of being cut to "U 1…" */
+@media (min-width:1101px){
+  html[data-ui-v3] #u-hub #hub-table td.h-c-compare .h-compare small{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:normal}
+}

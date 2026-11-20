@@ -420,6 +420,10 @@ def test_qa_desktop_line_cell_keeps_checked_min_ago_whole_and_by_game_drops_the_
         assert p.evaluate("document.querySelector('#hub-table th.h-c-line').getBoundingClientRect().width") >= 127
         cut = p.evaluate("[...document.querySelectorAll('#hub-rows .sc-seen>*')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)")
         assert not cut, cut
+        # the Compare button's per-side payouts wrap, never cut ("O 0.82x · U 1…" on live tennis)
+        cut = p.evaluate("""(() => { const s = document.querySelector('#hub-rows td.h-c-compare .h-compare small'); if (!s) return null;
+          s.textContent = 'O 0.82x · U 1.15x'; return s.scrollWidth > s.clientWidth + 1 ? s.textContent : ''; })()""")
+        assert not cut, cut
         assert p.evaluate("[...document.querySelectorAll('#hub-rows .h-hit')].every(h=>h.getClientRects().length<=1 && getComputedStyle(h).whiteSpace==='nowrap')")
         assert p.locator("#sc-bd-legend").is_visible()
         p.locator("#hub-board-section [data-hub=view][data-id=games]").click()
