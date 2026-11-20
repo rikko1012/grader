@@ -2,4 +2,118 @@
    Scope: the public /record page (web/record.html + record.js).
    Loaded in its bundle after tokens.css, components.css and shell.css (see web/UI_V3.md). Only applies on a v3 page: scope every rule
    under html[data-ui-v3] (the hub's own sheets load after this bundle, so hub overrides need html[data-ui-v3] #u-hub ...).
-   Display only: no grading or API change; every field the page shows today stays. */
+   Display only: no grading or API change; every field the page shows today stays.
+   record.html styles bare header / nav / button / table and :root{color-scheme:dark} inline; every rule here out-ranks those with
+   html[data-ui-v3] and follows html[data-theme] (light / dark). */
+
+html[data-ui-v3][data-v3-page="record"]{background:var(--sc-bg);font-family:var(--sc-font)}   /* color-scheme comes from tokens.css (theme / OS) */
+html[data-ui-v3][data-v3-page="record"] body{background:var(--sc-bg);color:var(--sc-text);font:400 15px/1.5 var(--sc-font);-webkit-font-smoothing:antialiased}
+html[data-ui-v3][data-v3-page="record"] main{position:relative;isolation:isolate;max-width:var(--sc-max);padding:0 var(--sc-gutter) 48px}
+@media (min-width:1024px){html[data-ui-v3][data-v3-page="record"] main{padding:0 24px 64px}}
+/* the lit band (approved dusk falloff, subtle) behind header + title */
+html[data-ui-v3][data-v3-page="record"] main::before{content:"";position:absolute;left:50%;transform:translateX(-50%);width:100vw;top:0;height:520px;z-index:-1;pointer-events:none;
+  background:radial-gradient(70% 90% at 94% -8%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent) 0%,color-mix(in srgb,var(--sc-accent-fill) calc(var(--sc-lit) * .4),transparent) 42%,transparent 78%),
+    radial-gradient(120% 70% at 60% -10%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit-fill),transparent),transparent 80%),
+    radial-gradient(46% 60% at 4% -10%,rgba(120,130,255,.10),transparent 70%);
+  -webkit-mask-image:linear-gradient(#000 50%,transparent);mask-image:linear-gradient(#000 50%,transparent)}
+html[data-ui-v3][data-v3-page="record"] a{color:var(--sc-link)}
+html[data-ui-v3][data-v3-page="record"] p{color:var(--sc-muted);max-width:72ch;line-height:1.55}
+html[data-ui-v3][data-v3-page="record"] :is(button,a,summary):focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
+
+/* header: the page's own links, one row like the app bar */
+html[data-ui-v3][data-v3-page="record"] main>header{height:56px;margin:0 calc(-1 * var(--sc-gutter));padding:0 var(--sc-gutter);box-shadow:inset 0 -1px 0 var(--sc-hair)}
+html[data-ui-v3][data-v3-page="record"] main>header a{color:var(--sc-muted);font:500 15px/1 var(--sc-font);letter-spacing:0;text-decoration:none}
+html[data-ui-v3][data-v3-page="record"] main>header a:hover{color:var(--sc-text)}
+html[data-ui-v3][data-v3-page="record"] main>header a.v3-brand{gap:10px;color:var(--sc-text);font:600 15px/1 var(--sc-font);letter-spacing:.02em}
+html[data-ui-v3][data-v3-page="record"] main>header a.v3-brand b{letter-spacing:.02em;font-weight:600}
+html[data-ui-v3][data-v3-page="record"] main>header a.v3-brand .sc-brand__mark{flex:none}
+html[data-ui-v3][data-v3-page="record"] main>header span>a[href="/"]{min-height:40px;padding:0 14px;border-radius:var(--sc-r-md);box-shadow:inset 0 0 0 1px var(--sc-edge);color:var(--sc-text)}
+
+/* title */
+html[data-ui-v3][data-v3-page="record"] main>h1{margin:40px 0 0;color:var(--sc-text);font:600 40px/1.04 var(--sc-font);letter-spacing:-.035em}
+html[data-ui-v3][data-v3-page="record"] main>h1 .v3-h1-sub{color:var(--sc-muted)}
+html[data-ui-v3][data-v3-page="record"] main>h1+p{margin:14px 0 0;font-size:16px;max-width:60ch}
+@media (min-width:1024px){
+  html[data-ui-v3][data-v3-page="record"] main>h1{margin-top:88px;font-size:64px;letter-spacing:-.04em}
+  html[data-ui-v3][data-v3-page="record"] main>h1+p{font-size:17px}}
+
+/* sport pills (record.js's own buttons) and the Props / Slips segment */
+html[data-ui-v3][data-v3-page="record"] nav[aria-label="Record sport"]{gap:8px;margin:36px 0 24px}
+html[data-ui-v3][data-v3-page="record"] nav[aria-label="Record sport"] button{min-height:40px;padding:0 18px;border:0;border-radius:999px;background:none;color:var(--sc-muted);
+  font:500 15px/1 var(--sc-font);box-shadow:inset 0 0 0 1px var(--sc-edge)}
+html[data-ui-v3][data-v3-page="record"] nav[aria-label="Record sport"] button:hover{color:var(--sc-text)}
+html[data-ui-v3][data-v3-page="record"] nav[aria-label="Record sport"] button[aria-pressed="true"]{color:var(--sc-text);background:var(--sc-s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
+html[data-ui-v3][data-v3-page="record"][data-theme="light"] nav[aria-label="Record sport"] button[aria-pressed="true"]{background:#0E1320;color:#fff;box-shadow:none}
+html[data-ui-v3][data-v3-page="record"] nav.view{display:inline-flex;gap:2px;padding:3px;margin:4px 0 18px;border-radius:var(--sc-r-lg);background:var(--sc-s1);box-shadow:var(--sc-ring)}
+html[data-ui-v3][data-v3-page="record"] nav.view button{min-height:40px;padding:0 18px;border:0;border-radius:var(--sc-r-md);background:none;color:var(--sc-muted);font:500 15px/1 var(--sc-font)}
+html[data-ui-v3][data-v3-page="record"] nav.view button[aria-pressed="true"]{background:var(--sc-s3);color:var(--sc-text);box-shadow:var(--sc-ring)}
+html[data-ui-v3][data-v3-page="record"][data-theme="light"] nav.view button[aria-pressed="true"]{background:var(--sc-s2)}
+
+/* the record */
+html[data-ui-v3][data-v3-page="record"] #record{color:var(--sc-text)}
+html[data-ui-v3][data-v3-page="record"] #record h2{margin:8px 0 14px;font:600 30px/1.1 var(--sc-font);letter-spacing:-.025em}
+html[data-ui-v3][data-v3-page="record"] #record h3{margin:30px 0 8px;font:600 20px/1.2 var(--sc-font);letter-spacing:-.015em;color:var(--sc-text)}
+html[data-ui-v3][data-v3-page="record"] .status{display:flex;gap:10px;align-items:center;margin:0 0 16px;padding:0;border:0;background:none;color:var(--sc-muted);font-size:15px}
+html[data-ui-v3][data-v3-page="record"] .status::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--sc-accent-fill)}
+html[data-ui-v3][data-v3-page="record"] .scores{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:0 0 16px;padding:0;border:0;background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop);overflow:hidden}
+html[data-ui-v3][data-v3-page="record"] .scores>div{padding:16px 14px 14px;min-width:0;box-shadow:inset 1px 0 0 var(--sc-hair)}
+html[data-ui-v3][data-v3-page="record"] .scores>div:first-child{grid-column:1/-1;box-shadow:inset 0 -1px 0 var(--sc-hair)}
+html[data-ui-v3][data-v3-page="record"] .scores>div:nth-child(2){box-shadow:none}
+html[data-ui-v3][data-v3-page="record"] .scores b{font:600 28px/1 var(--sc-font);letter-spacing:-.03em;color:var(--sc-text);font-variant-numeric:tabular-nums;white-space:nowrap}
+html[data-ui-v3][data-v3-page="record"] .scores span{display:block;margin-top:8px;color:var(--sc-muted);font-size:13px;line-height:1.35}
+@media (min-width:1024px){
+  html[data-ui-v3][data-v3-page="record"] .scores{grid-template-columns:1.3fr 1fr 1fr}
+  html[data-ui-v3][data-v3-page="record"] .scores>div:first-child{grid-column:auto;box-shadow:none}
+  html[data-ui-v3][data-v3-page="record"] .scores>div:nth-child(2){box-shadow:inset 1px 0 0 var(--sc-hair)}
+  html[data-ui-v3][data-v3-page="record"] .scores>div{padding:20px 22px 18px}
+  html[data-ui-v3][data-v3-page="record"] .scores b{font-size:40px}}
+html[data-ui-v3][data-v3-page="record"] .scores .v3-delta{display:inline-flex;align-items:center;gap:5px;margin-top:10px;font:500 13px/1.2 var(--sc-font);white-space:nowrap;color:var(--sc-muted)}
+html[data-ui-v3][data-v3-page="record"] .scores .v3-delta.is-good{color:var(--sc-good)}
+html[data-ui-v3][data-v3-page="record"] .scores .v3-delta.is-poor{color:var(--sc-poor)}
+html[data-ui-v3][data-v3-page="record"] .v3-tri{display:inline-block;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent}
+html[data-ui-v3][data-v3-page="record"] .v3-tri.up{border-bottom:6px solid currentColor}
+html[data-ui-v3][data-v3-page="record"] .v3-tri.down{border-top:6px solid currentColor}
+html[data-ui-v3][data-v3-page="record"] .counts{gap:6px 22px;color:var(--sc-muted);font-size:15px}
+html[data-ui-v3][data-v3-page="record"] .counts b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3][data-v3-page="record"] #record details>summary{color:var(--sc-text);font-weight:500}
+/* tables: one surface, hairline rows, tabular figures */
+html[data-ui-v3][data-v3-page="record"] .table-wrap{background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop);padding:4px 16px}
+html[data-ui-v3][data-v3-page="record"] table{font-variant-numeric:tabular-nums}
+html[data-ui-v3][data-v3-page="record"] :is(td,th){border-bottom:1px solid var(--sc-hair);color:var(--sc-text);padding:12px 8px;font-size:14.5px}
+html[data-ui-v3][data-v3-page="record"] th{color:var(--sc-faint);font-weight:500;font-size:12.5px}
+html[data-ui-v3][data-v3-page="record"] tbody tr:last-child td{border-bottom:0}
+/* reliability chart: the inline SVG's dark colours on the tokens */
+html[data-ui-v3][data-v3-page="record"] .rel-chart{background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring);padding:8px}
+html[data-ui-v3][data-v3-page="record"] .rel-chart text{fill:var(--sc-faint);font-family:var(--sc-font)}
+html[data-ui-v3][data-v3-page="record"] .rel-chart line[stroke="#344256"]{stroke:var(--sc-edge)}
+html[data-ui-v3][data-v3-page="record"] .rel-chart line[stroke="#5b6b82"]{stroke:var(--sc-faint)}
+html[data-ui-v3][data-v3-page="record"] .rel-chart line[stroke="#8bb8ff"]{stroke:color-mix(in srgb,var(--sc-muted) 60%,transparent)}
+html[data-ui-v3][data-v3-page="record"] .rel-chart circle{fill:var(--sc-accent-fill);stroke:var(--sc-s1)}
+/* 30-day calendar */
+html[data-ui-v3][data-v3-page="record"] .calendar{gap:6px}
+html[data-ui-v3][data-v3-page="record"] .calendar details{position:relative;background:var(--sc-s1);border:0;border-radius:var(--sc-r-md);box-shadow:var(--sc-ring);overflow:hidden}
+html[data-ui-v3][data-v3-page="record"] .calendar details[data-v3="none"]{background:transparent;box-shadow:inset 0 0 0 1px var(--sc-hair)}
+html[data-ui-v3][data-v3-page="record"] .calendar details::after{content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;border-radius:2px 2px 0 0;background:transparent}
+html[data-ui-v3][data-v3-page="record"] .calendar details[data-v3="good"]::after{background:var(--sc-good)}
+html[data-ui-v3][data-v3-page="record"] .calendar details[data-v3="near"]::after{background:var(--sc-near)}
+html[data-ui-v3][data-v3-page="record"] .calendar details[data-v3="poor"]::after{background:var(--sc-poor)}
+html[data-ui-v3][data-v3-page="record"] .calendar summary{min-height:66px;padding:8px 2px 9px}
+html[data-ui-v3][data-v3-page="record"] .calendar small{color:var(--sc-faint)}
+html[data-ui-v3][data-v3-page="record"] .calendar b{color:var(--sc-text);font:500 15px/22px var(--sc-font)}
+html[data-ui-v3][data-v3-page="record"] .calendar p{color:var(--sc-muted)}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:10px 0 0;color:var(--sc-faint);font-size:12.5px}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key span{display:inline-flex;align-items:center;gap:6px}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key i{display:inline-block;width:12px;height:2px;border-radius:2px}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key .good{background:var(--sc-good)}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key .near{background:var(--sc-near)}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key .poor{background:var(--sc-poor)}
+@media (min-width:1024px){html[data-ui-v3][data-v3-page="record"] .calendar{grid-template-columns:repeat(10,minmax(0,1fr));gap:8px}}
+html[data-ui-v3][data-v3-page="record"] .error{border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-poor) 40%,transparent)}
+html[data-ui-v3][data-v3-page="record"] .error button,html[data-ui-v3][data-v3-page="record"] #record button:not(nav button){min-height:44px;border:0;border-radius:var(--sc-r-md);background:var(--sc-cta-bg);color:var(--sc-cta-ink);font:600 15px var(--sc-font);padding:0 18px}
+html[data-ui-v3][data-v3-page="record"] a.skip{background:var(--sc-cta-bg);color:var(--sc-cta-ink)}
+html[data-ui-v3][data-v3-page="record"] main>footer{margin-top:48px;border-top:1px solid var(--sc-hair);color:var(--sc-faint);font-size:13px}
+@media (max-width:640px){
+  html[data-ui-v3][data-v3-page="record"] :is(td,th){padding:10px 5px;font-size:13px}
+  html[data-ui-v3][data-v3-page="record"] .table-wrap{padding:2px 10px}
+  html[data-ui-v3][data-v3-page="record"] .calendar{gap:4px}
+  html[data-ui-v3][data-v3-page="record"] .calendar b{font-size:13.5px}}
