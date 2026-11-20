@@ -29,6 +29,30 @@ def shot(p, name, full=False):
         p.screenshot(path=str(SHOTS / f"{name}.png"), full_page=full)
 
 
+CONTRAST_JS = """(sel) => {
+  const lum = (c) => { const m = c.match(/[\\d.]+/g); if (!m) return null; const [r, g, b] = m.slice(0, 3).map(Number).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * r + .7152 * g + .0722 * b; };
+  const alpha = (c) => { const m = c.match(/[\\d.]+/g); return m && m.length > 3 ? Number(m[3]) : 1; };
+  const bgOf = (el) => { for (let e = el; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (alpha(b) > .5) return b; } return getComputedStyle(document.body).backgroundColor; };
+  const out = [];
+  document.querySelectorAll(sel + ' *').forEach((el) => {
+    if (!el.childNodes.length || ![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) return;
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+    if (!r.width || !r.height || cs.visibility === 'hidden' || cs.display === 'none' || el.closest('[hidden]') || Number(cs.opacity) < .5) return;
+    if (el.closest('option, select')) return;
+    const a = lum(cs.color), b = lum(bgOf(el)); if (a == null || b == null) return;
+    const ratio = (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+    if (ratio < 3) out.push(el.tagName + '.' + el.className + ' "' + el.textContent.trim().slice(0, 30) + '" ' + ratio.toFixed(2));
+  });
+  return out.slice(0, 10);
+}"""
+
+
+def readable(p, sel):
+    """Every visible text in the section reads at 3:1 or better against the surface it sits on (catches hub hard-coded colours)."""
+    bad = p.evaluate(CONTRAST_JS, sel)
+    assert not bad, bad
+
+
 def api(p, method, path, body=None):
     return p.evaluate("""async ([m, path, body]) => { const r = await fetch('/api/upgrade/' + path, {method: m, headers: {'Content-Type': 'application/json'},
       body: body ? JSON.stringify(body) : undefined}); return [r.status, await r.json()]; }""", [method, path, body])
@@ -109,6 +133,7 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         # the light / dark ground is the v3 one, and the page clears the phone bottom bar
         bg = p.evaluate("getComputedStyle(document.getElementById('hub-center')).backgroundColor")
         assert bg == ("rgb(246, 247, 249)" if theme == "light" else "rgb(8, 11, 19)")
+        readable(p, "#hub-picks-section")
         no_h_scroll(p)
         shot(p, f"picks-{size['width']}-{theme}")
         if size is PHONE:
@@ -159,8 +184,55 @@ def test_member_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         assert p.locator("#hub-record-section .v3c-pills[data-for=hub-record-sport] button").count() >= 2
         bg = p.evaluate("getComputedStyle(document.getElementById('hub-center')).backgroundColor")
         assert bg == ("rgb(246, 247, 249)" if theme == "light" else "rgb(8, 11, 19)")
+        readable(p, "#hub-record-section")
         no_h_scroll(p)
         shot(p, f"record-hub-{size['width']}-{theme}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def stated_doc():
+    return {"totals": {"wins": 1357, "losses": 1211, "pushes": 28, "observed": 0.528, "printed": 0.607, "ci": [0.502, 0.553], "matches": 487},
+            "population": "The favoured side when its printed chance was 57% or more", "rule": "Each pick is scored on its own line.",
+            "by_letter": [{"name": "A", "picks": 20, "printed": 0.76, "observed": 0.6}, {"name": "B", "picks": 2063, "printed": 0.593, "observed": 0.524},
+                          {"name": "A+", "picks": 1, "printed": 0.943, "observed": None}],
+            "calendar": {"basis": "Match start date · US Central", "missing_dates": 0, "days": [
+                {"date": "2026-11-16", "decided": 38, "wins": 18, "losses": 20, "pushes": 0, "hit_rate": 0.474},
+                {"date": "2026-11-17", "decided": 75, "wins": 46, "losses": 29, "pushes": 1, "hit_rate": 0.613},
+                {"date": "2026-11-18", "decided": 69, "wins": 41, "losses": 28, "pushes": 0, "hit_rate": 0.594},
+                {"date": "2026-11-19", "decided": 0, "wins": 0, "losses": 0, "pushes": 0, "hit_rate": None}]},
+            "as_of": "2026-11-19T23:35:00+00:00"}
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_member_record_v3_delta_gap_bars_day_marks_and_legend(browser, env, monkeypatch, size, theme):
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    c = context(browser, env, size)
+    c.add_init_script(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
+    c.route("**/api/upgrade/stated", lambda r: r.fulfill(json=stated_doc()))
+    p = c.new_page()
+    p.errors = []
+    p.on("pageerror", lambda e: p.errors.append(str(e)))
+    try:
+        p.goto(env.url + "/#/record")
+        p.wait_for_selector("#hub-record-body .h-record-card .h-score", timeout=30000)
+        p.locator("#hub-record-section .v3c-pills button", has_text="CS2").click()
+        p.wait_for_function("document.getElementById('hub-record-sport').value==='cs2'")
+        p.wait_for_selector("#hub-record-body .h-record-card .v3c-delta")
+        card = p.locator("#hub-record-body .h-record-card").first
+        assert "−7.9 pts vs stated" in card.locator(".v3c-delta").inner_text()
+        assert "is-poor" in card.locator(".v3c-delta").get_attribute("class")
+        assert card.locator(".h-rel-scale .v3c-gap").count() == 2                      # A+ has no actual: no bar, its stated ring stays
+        assert card.locator(".h-calendar-grid details[data-v3=poor]").count() >= 1 and card.locator(".h-calendar-grid details[data-v3=good]").count() >= 1
+        assert "average stated chance, 60.7%" in card.locator(".v3c-cal-key").inner_text()
+        readable(p, "#hub-record-section")
+        no_h_scroll(p)
+        card.locator(".h-reliability").scroll_into_view_if_needed()
+        shot(p, f"record-hub-data-{size['width']}-{theme}")
+        card.locator(".h-record-calendar").scroll_into_view_if_needed()
+        shot(p, f"record-hub-calendar-{size['width']}-{theme}")
         assert not p.errors, p.errors
     finally:
         c.close()
@@ -189,6 +261,7 @@ def test_public_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         p.wait_for_function("document.querySelector('#record h2') && document.querySelector('#record h2').textContent==='LoL'")
         p.locator("nav[aria-label='Record sport'] button", has_text="CS2").click()
         p.wait_for_function("document.querySelector('#record h2').textContent==='CS2'")
+        readable(p, "main")
         no_h_scroll(p)
         shot(p, f"record-public-{size['width']}-{theme}", full=True)
         assert not p.errors, p.errors
@@ -247,6 +320,7 @@ def test_ev_v3_keeps_every_control_and_column(browser, env, ev_on, monkeypatch, 
         p.wait_for_selector("#hub-ev-body .ev-src table")
         src = p.locator("#hub-ev-body .ev-src").first.inner_text()
         assert "FanDuel" in src and "Left out" in src
+        readable(p, "#hub-ev-section")
         no_h_scroll(p)
         shot(p, f"ev-rows-{size['width']}-{theme}")
         assert not p.errors, p.errors
@@ -269,8 +343,11 @@ def test_arbitrage_v3_keeps_the_price_check(browser, env, monkeypatch, size, the
         p.wait_for_selector("#hub-market-results .h-pc-row:not(.h-pc-head)", timeout=20000)
         assert p.locator("#hub-market-results .h-pc-row:not(.h-pc-head)").count() >= 1
         ground(p, theme)
+        readable(p, "#hub-arb-section")
         no_h_scroll(p)
         shot(p, f"arb-{size['width']}-{theme}")
+        p.locator("#hub-market-results .h-pc-row:not(.h-pc-head)").first.scroll_into_view_if_needed()
+        shot(p, f"arb-rows-{size['width']}-{theme}")
         assert not p.errors, p.errors
     finally:
         c.close()
@@ -304,6 +381,7 @@ def test_sportsbooks_v3_keeps_game_lines(browser, env, monkeypatch, size, theme)
         for g in ("league", "book", "refresh"):
             assert panel.locator(f"[data-gb={g}]").count() == 1, g
         ground(p, theme)
+        readable(p, "#hub-books-section")
         no_h_scroll(p)
         shot(p, f"books-{size['width']}-{theme}")
         assert not p.errors, p.errors
@@ -331,6 +409,7 @@ def test_bump_chip_on_a_receipt_keeps_its_words_and_title(browser, env, monkeypa
         assert o.locator(".u-bump").get_attribute("title")
         assert o.locator(".v3c-saw").count() == 1
         o.scroll_into_view_if_needed()
+        readable(p, "#hub-picks-section")
         no_h_scroll(p)
         shot(p, f"bump-{size['width']}-{theme}")
         assert not p.errors, p.errors
@@ -437,6 +516,7 @@ def test_public_record_v3_chart_calendar_slips_and_error(browser, env, monkeypat
         assert "average stated chance, 58.3%" in p.locator("#record .v3-cal-key").inner_text()
         text_fill = p.evaluate("getComputedStyle(document.querySelector('.rel-chart text')).fill")
         assert text_fill == ("rgb(93, 104, 128)" if theme == "light" else "rgb(122, 134, 158)")
+        readable(p, "main")
         no_h_scroll(p)
         shot(p, f"record-public-chart-{size['width']}-{theme}", full=True)
         p.locator("nav.view [data-view=slips]").click()
@@ -445,6 +525,7 @@ def test_public_record_v3_chart_calendar_slips_and_error(browser, env, monkeypat
         for k in ("Every leg hit", "Settled slips", "slips tracked", "By size", "By platform"):
             assert k in t, k
         assert p.locator("#record .scores .v3-delta").count() == 0             # the slip view has no stated chance
+        readable(p, "main")
         no_h_scroll(p)
         shot(p, f"record-public-slips-{size['width']}-{theme}", full=True)
         fail["on"] = True

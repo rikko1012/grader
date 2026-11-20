@@ -36,7 +36,8 @@ html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-secti
   font-family:var(--sc-font);color:var(--sc-text);background:var(--sc-s1);border:0;box-shadow:inset 0 0 0 1px var(--sc-edge);border-radius:var(--sc-r-md)}
 /* the hub sets its inputs and selects with !important (upgrade-hub.css): the same weight here, on the tokens */
 html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(select,input:not([type=checkbox]):not([type=radio])){
-  background:var(--sc-s1)!important;border:0!important;color:var(--sc-text)!important;font:500 14px var(--sc-font)!important}
+  background:var(--sc-s1)!important;border:0!important;color:var(--sc-text)!important;font:500 14px var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge);border-radius:var(--sc-r-md)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(.h-market-tools,.ev-drawer,.h-book-game) :is(select,input:not([type=checkbox]):not([type=radio])){background:var(--sc-s2)!important}
 html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(select,input)::placeholder{color:var(--sc-faint)}
 html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(select,input:not([type=checkbox]):not([type=radio])):focus{background:var(--sc-s2)!important;box-shadow:inset 0 0 0 1px var(--sc-accent)}
 html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) select option{background:var(--sc-s1);color:var(--sc-text)}
@@ -47,6 +48,12 @@ html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section)
 html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-table tbody th{color:var(--sc-text);font-weight:600;font-size:14px}
 html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-table tbody th small{display:block;color:var(--sc-faint);font-weight:500;font-size:12px}
 html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-table td{font:500 14px/1.4 var(--sc-font);font-variant-numeric:tabular-nums}
+/* body text the hub sets in fixed greys (fine on its dark ground, too faint on white): the token inks; value colours keep their classes */
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(p,li){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(b,strong):not([class]){color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(.ev-banner,.ev-banner p){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-pc-chip{color:var(--sc-good);background:var(--sc-good-tint)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-pc-chip.h-pc-short{color:var(--sc-text);background:var(--sc-near-tint)}
 html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-eyebrow{color:var(--sc-faint);font-family:var(--sc-font);letter-spacing:.08em}
 html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(button,select,input,a,summary):focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
 html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) a{color:var(--sc-link)}
