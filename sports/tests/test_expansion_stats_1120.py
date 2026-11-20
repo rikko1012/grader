@@ -21,7 +21,7 @@ def facts_with(values, sources, scope='regulation', comp='eng.1'):
     for i, v in enumerate(values):
         stamp = (datetime(2026, 11, 16, tzinfo=timezone.utc) - timedelta(days=i)).isoformat()
         facts['games'].append({'event_id': f'soccer:old:{i}', 'date': stamp, 'known_at': stamp, 'value': v,
-                               'source': sources[0][0], 'sources': sources})
+                               'source': sources[0][0], 'sources': stats.pack_sources(sources)})
     return offer, facts
 
 
@@ -118,6 +118,35 @@ def test_population_prior_shrinks_rare_event_rates():
     assert sum(x * p for x, p in zip(s1, m1)) == pytest.approx(k * mean / (10 + k), rel=1e-6)
 
 
+def test_first_half_goals_read_model_games_not_the_member_list():
+    offer, facts = facts_with([1, 0, 2, 0, 1, 0, 0, 1, 1, 0], [['espn', 'goals']])
+    offer.update(stat='goals', scope='first_half', line=.5, sides={'over': {}})
+    facts['model_games'], facts['games'] = facts['games'], []
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['sample'] == 10
+
+
+def test_sources_pack_round_trip():
+    pairs = [['fotmob', 'minutes'], ['espn', 'goals'], ['espn', 'assists'], ['fotmob', 'crosses']]
+    text = stats.pack_sources(pairs)
+    assert text == 'espn:assists+goals;fotmob:crosses+minutes'
+    assert sorted(stats.unpack_sources(text)) == sorted(pairs)
+    assert stats.unpack_sources(None) == [] and stats.unpack_sources([['espn', 'goals']]) == []
+
+
+def test_research_fit_drops_component_entries_before_any_count_entry():
+    from sports import expansion_research as research
+    count = {f'c{i}': {'games': [{'v': 'x' * 400}]} for i in range(5)}
+    comp = {f'k{i}': {'games': [{'v': 'x' * 400}], 'component_model': 'fantasy_outfield'} for i in range(5)}
+    starts = {**{k: '2026-11-21' for k in count}, **{k: '2026-11-20' for k in comp}}   # components start earlier
+    one = len(json.dumps(count['c0'], separators=(',', ':'))) + 40
+    kept = research.fit({**comp, **count}, starts, limit=one * 5 + 10)
+    assert set(count) <= set(kept)
+    # a document of count entries only keeps the exact e6e155d order (latest start dropped first)
+    only = research.fit(count, {k: f'2026-11-2{i}' for i, k in enumerate(count)}, limit=one * 3 + 5)
+    assert set(only) == {'c0', 'c1', 'c2'}
+
+
 def test_cards_above_half_line_are_not_graded():
     offer, facts = facts_with([0, 1, 0, 0, 1, 0, 0, 0], [['espn', 'red_cards'], ['espn', 'yellow_cards']])
     offer.update(stat='cards', line=.5)
@@ -187,7 +216,7 @@ def test_fotmob_absent_field_is_zero_only_when_fotmob_reported_the_match(tmp_pat
     assert len(games) == 1
     # 2 shots + 40*0.05 passes + 1 clearance + 2 tackles + 0.5 shot assisted; crosses / dribbles absent = 0
     assert games[0]['value'] == pytest.approx(2 + 2 + 1 + 2 + .5)
-    assert ['fotmob', 'minutes'] in games[0]['sources']
+    assert ['fotmob', 'minutes'] in stats.unpack_sources(games[0]['sources'])
     with closing(store.connect(path, read_only=True)) as con:
         ga = stats.games(con, store, dict(offer, stat='goals_assists'), pid, '2026-11-30T00:00:00Z')
     assert len(ga) == 2 and all(g['value'] == 0 for g in ga)
@@ -223,7 +252,7 @@ def test_publish_runs_count_model_offers_first(tmp_path, monkeypatch):
                                              start='2026-11-18T01:00:00Z')
     lf = copy.deepcopy(facts)
     for g in lf['games']:
-        g['sources'] = ESPN_GA
+        g['sources'] = stats.pack_sources(ESPN_GA)
     seen = []
     real = model.make_forecast
     monkeypatch.setattr(model, 'make_forecast', lambda o, fa, now: (seen.append(o['offer_id']), real(o, fa, now))[1])

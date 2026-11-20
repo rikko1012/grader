@@ -48,7 +48,8 @@ def fit(players, starts, limit=RESEARCH_BYTES):
     if total <= limit:
         return players
     keep, used = {}, 0
-    for k in sorted(players, key=lambda k: (starts.get(k, ''), k)):
+    # sg-stats: component-model entries (expansion_stats) go last, so they can never push out a count-model entry.
+    for k in sorted(players, key=lambda k: (bool(players[k].get('component_model')), starts.get(k, ''), k)):
         if used + sizes[k] > limit:
             break
         keep[k] = players[k]
@@ -217,6 +218,7 @@ def publish(sport, budget_s=20, results_at=None):
                     with closing(history.store.connect(path, read_only=True)) as con:
                         entry['games'] = component_games(con, history.store, offer, identity['player_id'], before,
                                                          catalogs[comp])
+                    entry['component_model'] = component
                 else:
                     entry['games'] = history._history(str(path), history._file_signature(path),
                         identity['player_id'], offer['stat'], scope, before)
@@ -266,6 +268,9 @@ def publish(sport, budget_s=20, results_at=None):
                 entry['stats'] = fact_cache[fk]
             except (OSError, ValueError, history.sqlite3.Error):
                 entry['error'] = 'history_unavailable'
+        if component == 'first_half_goals' and entry['games']:
+            # regulation goals feed the thinned model; the member-visible list stays empty (no 1H results stored)
+            entry['model_games'], entry['games'] = entry['games'], []
         players[k] = entry
     try:
         events = _events(sport, players, matches)

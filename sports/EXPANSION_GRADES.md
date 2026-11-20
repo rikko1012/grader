@@ -80,7 +80,11 @@ count-model offer, so the research and publish budgets cannot drop an existing g
   - 2,749 ESPN match summaries across nine leagues;
   - 1,449 FotMob matches from the top five leagues;
   - ESPN ATP/WTA set scores for Jan 1 – Nov 19, 2026.
-- **Tuning and holdout.** Every setting was chosen on matches before Sep 1. Sep 1 – Nov 19 was scored once, after the settings were frozen.
+- **Tuning and holdout.** Every setting was chosen on matches before Sep 1 by tune-window log loss. The Sep 1 – Nov 19 holdout was NOT scored only once: it was printed in a partial-data smoke run and in a first full run, and the population priors and shrinkage were added after that first run. It is therefore not untouched.
+- **Tiers.** The pre-registered rule ('passed') is met by 1 of 8 models (1H Goals, whose evidence is almost all one Under band). The 'close' tier and its 3-point cut were defined after the holdout had been seen.
+- **Lines.** The lines are synthetic. Count models use fixed offered values (0.5 / 1.5 / 2.5), and fantasy uses the player's history mean plus offsets. No past real lines exist for these stats.
+- **Underdog letters.** Underdog soccer lines are Higher-only, and on 0.5 lines the model picks Under almost every time. Those props get a chance but, under the current letter rules, rarely a letter.
+- **Reliability.** Over-chance deciles for the 0.5-line count models are in `stats/reliability_and_size.json`.
 - **Where the evidence is.** Tables are in `cs2_scout_ops/logs/soccer_grades_1120/stats/wf_final/`.
 - **FotMob fields.** FotMob lists a stat only when it is non-zero. Across 44,170 played player-games there was no contradiction, and the key shares are in `fotmob_zero_check.json`.
   - An absent FotMob component counts as 0 when FotMob reported that player's match, which is shown by a minutes row.

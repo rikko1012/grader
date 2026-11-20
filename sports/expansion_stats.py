@@ -111,6 +111,24 @@ def _rows(con, store, player, stat, scope, before):
     return out
 
 
+def pack_sources(pairs):
+    """[[source, stat], ...] -> 'espn:assists+goals;fotmob:minutes' (compact: research.json has a size budget)."""
+    by = {}
+    for src, stat in pairs:
+        by.setdefault(src, set()).add(stat)
+    return ';'.join(f"{src}:{'+'.join(sorted(stats))}" for src, stats in sorted(by.items()))
+
+
+def unpack_sources(text):
+    if not isinstance(text, str) or not text:
+        return []
+    out = []
+    for part in text.split(';'):
+        src, _, stats = part.partition(':')
+        out += [[src, s] for s in stats.split('+') if s]
+    return out
+
+
 def _opponent_sets(catalog, eid, player):
     past = (catalog or {}).get(eid) or {}
     sets = past.get('set_scores') or {}
@@ -139,14 +157,14 @@ def games(con, store, offer, player, before, catalog=None, limit=20):
     if model == 'first_half_goals':
         for eid, (v, src, known, start) in _rows(con, store, player, 'goals', scope, before).items():
             out.append({'event_id': eid, 'date': start, 'value': v, 'source': src, 'known_at': known,
-                        'sources': [[src, 'goals']]})
+                        'sources': pack_sources([[src, 'goals']])})
     elif model == 'set2_games':
         for eid, (v, src, known, start) in _rows(con, store, player, 'games_won', 'set2', before).items():
             mine, theirs = _opponent_sets(catalog, eid, player)
             if not mine or len(mine) < 2 or mine[1] != v:
                 continue
             out.append({'event_id': eid, 'date': start, 'value': v + theirs[1], 'source': src, 'known_at': known,
-                        'sources': [[src, 'games_won']]})
+                        'sources': pack_sources([[src, 'games_won']])})
     else:
         _, kind, parts = MODELS[model]
         need = [p for p in parts if p not in ('start', 'goals_conceded', 'clean_sheet', 'played', 'games_lost',
@@ -199,7 +217,7 @@ def games(con, store, offer, player, before, catalog=None, limit=20):
                 value = sum(w * vals[p] for p, w in parts.items())
             value = round(value, 4)
             out.append({'event_id': eid, 'date': start, 'value': value, 'source': srcs[0][0],
-                        'known_at': max(known), 'sources': sorted(srcs)})
+                        'known_at': max(known), 'sources': pack_sources(srcs)})
     return sorted(out, key=lambda r: (r['date'], r['event_id']), reverse=True)[:limit]
 
 
@@ -428,9 +446,10 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
         return None, 'history_period_mismatch'
     support = list(range(6, 14)) if model == 'set2_games' else None
     picked, seen = [], set()
-    for g in sorted(facts.get('games') or [], key=lambda x: x['date'], reverse=True):
+    # First-half goals read regulation goals: kept under 'model_games' so no member view counts them as 1H results.
+    for g in sorted(facts.get('model_games') or facts.get('games') or [], key=lambda x: x['date'], reverse=True):
         value = g.get('value')
-        srcs = g.get('sources') or []
+        srcs = unpack_sources(g.get('sources'))
         if not srcs or any((ident.get('competition'), s, p) not in inputs for s, p in srcs if s != 'catalog'):
             continue   # weight 0: a component outside FORECAST_INPUTS (grade leak guard)
         if (g['event_id'] == ident['event_id'] or g['event_id'] in seen or
