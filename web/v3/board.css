@@ -2,4 +2,517 @@
    Scope: the research hub board section (#hub-board-section: sport tabs, toolbar, rows, By game) on /, /lol and /sports, and the LoL / sports boards.
    Loaded in its bundle after tokens.css, components.css and shell.css (see web/UI_V3.md). Only applies on a v3 page: scope every rule
    under html[data-ui-v3] (the hub's own sheets load after this bundle, so hub overrides need html[data-ui-v3] #u-hub ...).
-   Display only: no grading or API change; every field the page shows today stays. */
+   Display only: no grading or API change; every field the page shows today stays.
+
+   Target: cs2_scout_ops/logs/design_1119/v3/A (board-*.html) + owner shots 06, 07, 11. The hub keeps its own markup and its own
+   table / card switch at 1100px (its JS - the slip column, fitGameRows, DESKTOP - depends on it), so:
+   - 1101px and up: the hub's table, restyled (one strong number per row: Scout's chance; value inks only on hit counts and a positive edge);
+   - 1100px and down: each row is the approved 4-line phone card, laid out on a CSS grid from the hub's own cells
+       1 name · role · match .................. side + chance
+       2 line (was) · market · Proj ............ grade
+       3 L5 L10 L20 H2H SZN .................... Edge
+       4 Book · checked N min ago .. Compare · +N props · watch · add
+   No field is hidden at a width where the hub shows it today. */
+
+/* ------------------------------------------------------------------ surface + type (board section only; the other sections are other groups') */
+html[data-ui-v3] #u-hub.h-board-mode,html[data-ui-v3] #u-hub.h-board-mode .h-center{background:var(--sc-bg);color:var(--sc-text)}
+html[data-ui-v3] #u-hub.h-board-mode .h-center{scrollbar-color:var(--sc-s3) transparent}
+html[data-ui-v3] #u-hub #hub-board-section,html[data-ui-v3] #u-hub.h-board-mode .h-top{font-family:var(--sc-font);color:var(--sc-text);font-variant-numeric:tabular-nums}
+html[data-ui-v3] #u-hub #hub-board-section button,html[data-ui-v3] #u-hub #hub-board-section select,html[data-ui-v3] #u-hub #hub-board-section input{font-family:var(--sc-font)}
+
+/* ------------------------------------------------------------------ the lit sport band behind the hub's own title (.sc-lit from components.css) */
+/* the hub keeps its title visually hidden in board mode (upgrade-hub.css .h-top 1px clip); the approved board shows it, in the band */
+html[data-ui-v3] #u-hub.h-board-mode .h-top.sc-bd-band{position:relative;isolation:isolate;overflow:hidden;display:block;width:auto;height:auto;min-height:0;clip:auto;white-space:normal;
+  margin:-26px -26px 0!important;padding:40px 26px 18px!important}
+html[data-ui-v3] #u-hub:not(.h-board-mode) .sc-bd-art,html[data-ui-v3] #u-hub:not(.h-board-mode) .sc-bd-meta{display:none}
+html[data-ui-v3] #u-hub:not(.h-board-mode) .h-top.sc-bd-band::before,html[data-ui-v3] #u-hub:not(.h-board-mode) .h-top.sc-bd-band::after{display:none}
+html[data-ui-v3] #u-hub.h-board-mode .h-top .h-eyebrow{display:none}
+html[data-ui-v3] #u-hub.h-board-mode .h-top h1#hub-title{margin:0;color:var(--sc-text);font:600 36px/1.08 var(--sc-font)!important;letter-spacing:-.03em!important}
+html[data-ui-v3] #u-hub .sc-bd-meta{margin:6px 0 0;color:var(--sc-muted);font-size:15px;line-height:1.35}
+html[data-ui-v3] #u-hub .sc-bd-meta:empty{display:none}
+html[data-ui-v3] #u-hub .sc-bd-art{color:color-mix(in srgb,var(--sc-accent) 55%,var(--sc-text));width:min(60%,780px);opacity:1;
+  -webkit-mask-image:radial-gradient(90% 130% at 88% 30%,#000 10%,rgba(0,0,0,.5) 45%,transparent 78%);mask-image:radial-gradient(90% 130% at 88% 30%,#000 10%,rgba(0,0,0,.5) 45%,transparent 78%)}
+html[data-ui-v3] #u-hub .sc-bd-art>svg{opacity:.12;filter:blur(1.8px)}                       /* a soft silhouette in the haze (owner: art stays subtle) */
+html[data-ui-v3] #u-hub .sc-bd-art.is-elev>svg{right:-10%;top:auto;bottom:-34%;transform:none;height:158%;opacity:.14}
+html[data-ui-v3] #u-hub .sc-bd-art.is-plane{perspective:520px;perspective-origin:78% -30%}
+html[data-ui-v3] #u-hub .sc-bd-art.is-plane>svg{right:-30%;top:-8%;height:190%;transform:rotateX(58deg);transform-origin:70% 0}
+html[data-ui-v3][data-theme="light"] #u-hub .sc-bd-art{color:color-mix(in srgb,var(--sc-accent) 60%,#0E1320);opacity:1}
+html[data-ui-v3][data-theme="light"] #u-hub .sc-bd-art>svg{filter:blur(1.6px);opacity:.12}
+html[data-ui-v3] #u-hub .h-top .h-top-actions{position:relative}
+
+/* ------------------------------------------------------------------ toolbar: sport tabs (underline + counts), search, app pills, Filters / Views / Refresh */
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:0 0 4px;margin:0;border:0!important;
+  background:var(--sc-bg)!important;box-shadow:none!important;backdrop-filter:none}
+html[data-ui-v3] #u-hub #hub-sports{order:-1;flex:1 1 100%!important;display:flex!important;gap:2px;min-width:0;margin:0 0 6px;padding:0;overflow-x:auto;scrollbar-width:none;
+  background:none!important;border:0!important;border-radius:0!important;box-shadow:inset 0 -1px 0 var(--sc-hair)!important}
+html[data-ui-v3] #u-hub #hub-sports::-webkit-scrollbar{display:none}
+html[data-ui-v3] #u-hub #hub-sports>button{flex:none;display:inline-flex!important;flex-direction:row!important;align-items:center;gap:7px;min-height:44px;height:auto;padding:0 14px!important;border:0!important;border-radius:0!important;
+  background:none!important;color:var(--sc-muted)!important;font:500 15px/1 var(--sc-font)!important;box-shadow:none!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-sports>button span{display:inline!important;min-width:0;padding:0;background:none!important;border:0;color:var(--sc-faint)!important;font:500 12px/1 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-sports>button span.h-n-wait{display:inline-block!important;width:14px;height:8px;border-radius:3px;background:var(--sc-s2)!important}
+html[data-ui-v3] #u-hub #hub-sports>button[aria-pressed="true"]{color:var(--sc-text)!important;font-weight:600!important;box-shadow:inset 0 -2px 0 var(--sc-accent-fill)!important}
+html[data-ui-v3] #u-hub #hub-sports>button[aria-pressed="true"] span{color:var(--sc-muted)!important}
+html[data-ui-v3] #u-hub #hub-sports>button:hover{color:var(--sc-text)!important}
+
+html[data-ui-v3] #u-hub #hub-board-section .h-search{order:0;flex:0 1 300px;min-width:0;position:relative;display:block;margin:0}
+html[data-ui-v3] #u-hub #hub-platform{order:1}
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-ev-link{order:2}
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-pop-wrap{order:3}
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-refresh{order:4}
+html[data-ui-v3] #u-hub #hub-board-section .h-search input{width:100%;height:40px;min-height:40px;padding:0 12px 0 36px;border:0!important;border-radius:var(--sc-r-md);
+  background:var(--sc-s1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%237A869E' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='9' cy='9' r='5.6'/%3E%3Cpath d='M13.2 13.2L17 17'/%3E%3C/svg%3E") no-repeat 12px center/16px!important;
+  box-shadow:var(--sc-ring)!important;color:var(--sc-text);font:400 15px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-board-section .h-search input::placeholder{color:var(--sc-faint)}
+
+/* app pills (All / PP / UD / extra books): the system pill */
+html[data-ui-v3] #u-hub #hub-platform{display:flex!important;gap:6px;flex:0 1 auto;min-width:0;padding:0!important;background:none!important;border:0!important;box-shadow:none!important;overflow-x:auto;scrollbar-width:none}
+html[data-ui-v3] #u-hub #hub-platform::-webkit-scrollbar{display:none}
+html[data-ui-v3] #u-hub #hub-platform>button{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:34px;height:auto;padding:0 12px!important;border:0!important;border-radius:999px!important;
+  background:none!important;color:var(--sc-muted)!important;font:500 13.5px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-platform>button[hidden]{display:none!important}
+html[data-ui-v3] #u-hub #hub-platform>button span,html[data-ui-v3] #u-hub #hub-platform>button small{color:var(--sc-faint)!important;background:none!important;font:500 12px/1 var(--sc-font)!important;padding:0;border:0}
+html[data-ui-v3] #u-hub #hub-platform>button[aria-pressed="true"]{color:var(--sc-text)!important;background:var(--sc-s2)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)!important}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-platform>button[aria-pressed="true"]{background:#0E1320!important;color:#fff!important;box-shadow:none!important}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-platform>button[aria-pressed="true"] span,html[data-ui-v3][data-theme="light"] #u-hub #hub-platform>button[aria-pressed="true"] small{color:rgba(255,255,255,.7)!important}
+
+/* Filters / Views / Refresh / EV link: quiet tool buttons on the right */
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-pop-wrap:first-of-type{margin-left:auto}
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar .h-pop-wrap>button,html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-refresh,
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-ev-link{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;height:36px;padding:0 12px!important;
+  border:0!important;border-radius:var(--sc-r-md)!important;background:var(--sc-s1)!important;color:var(--sc-text)!important;font:500 14px/1 var(--sc-font)!important;box-shadow:var(--sc-ring)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-refresh{width:36px;padding:0!important;font-size:16px!important}
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar .h-pop-wrap>button[aria-expanded="true"]{background:var(--sc-s2)!important;box-shadow:inset 0 0 0 1px var(--sc-sel-edge)!important}
+html[data-ui-v3] #u-hub #hub-board-section .h-filter-toggle::before{content:"";width:16px;height:16px;flex:none;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M3.5 6h13M6 10h8M8.5 14h3'/%3E%3C/svg%3E") center/16px no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M3.5 6h13M6 10h8M8.5 14h3'/%3E%3C/svg%3E") center/16px no-repeat}
+html[data-ui-v3] #u-hub #hub-board-section .h-count-badge:not(:empty){display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:var(--sc-r-xs);
+  background:color-mix(in srgb,var(--sc-accent-fill) 16%,transparent)!important;color:var(--sc-accent)!important;font:600 11px/1 var(--sc-font)!important;border:0}
+
+/* pop-overs (Filters, Views): raised sheet */
+html[data-ui-v3] #u-hub #hub-board-section .h-pop{z-index:30;width:380px;max-width:calc(100vw - 32px);padding:16px!important;border:0!important;border-radius:var(--sc-r-xl)!important;
+  background:var(--sc-s3)!important;color:var(--sc-text);box-shadow:var(--sc-ring),0 24px 60px -20px rgba(0,0,0,.7)!important;font-family:var(--sc-font)}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-board-section .h-pop{box-shadow:inset 0 0 0 1px rgba(14,19,32,.1),0 18px 40px -16px rgba(16,24,48,.3)!important}
+html[data-ui-v3] #u-hub #hub-board-section .h-pop label{display:grid;gap:6px;color:var(--sc-muted)!important;font:400 13px/1.3 var(--sc-font)!important;text-transform:none;letter-spacing:0}
+html[data-ui-v3] #u-hub #hub-board-section select,html[data-ui-v3] #u-hub #hub-board-section .h-pop select{appearance:none;-webkit-appearance:none;min-height:40px;padding:0 34px 0 12px;border:0!important;border-radius:var(--sc-r-md)!important;
+  background:var(--sc-s2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%237A869E' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 10px center/14px!important;
+  box-shadow:inset 0 0 0 1px var(--sc-edge)!important;color:var(--sc-text)!important;font:500 14px/1 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-board-section select:focus-visible,html[data-ui-v3] #u-hub #hub-board-section input:focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
+html[data-ui-v3] #u-hub #hub-board-section .h-pop button{min-height:40px;padding:0 14px;border:0!important;border-radius:var(--sc-r-md)!important;background:var(--sc-s2)!important;color:var(--sc-text)!important;
+  font:500 14px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-board-section .h-pop button[aria-pressed="true"]{box-shadow:inset 0 0 0 1px var(--sc-sel-edge),inset 0 1px 0 var(--sc-spec)!important;color:var(--sc-accent)!important}
+html[data-ui-v3] #u-hub #hub-board-section .h-pop-foot{border-top:1px solid var(--sc-hair)!important}
+html[data-ui-v3] #u-hub #hub-board-section .h-pop-foot [data-hub="filters"]{background:var(--sc-cta-bg)!important;color:var(--sc-cta-ink)!important;box-shadow:none!important}
+
+/* ------------------------------------------------------------------ count, chips, sort, List / By game, notes, legend */
+html[data-ui-v3] #u-hub #hub-board-section .h-table-title{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:14px 0 8px;padding:0;border:0;background:none}
+html[data-ui-v3] #u-hub #hub-count{color:var(--sc-muted)!important;font:400 13px/1.3 var(--sc-font)!important;letter-spacing:0!important;text-transform:none!important}
+html[data-ui-v3] #u-hub #hub-chips button,html[data-ui-v3] #u-hub #hub-chips span{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 10px;border:0!important;border-radius:var(--sc-r-sm)!important;
+  background:var(--sc-s2)!important;color:var(--sc-text)!important;font:500 13px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important}
+html[data-ui-v3] #u-hub #hub-clear{border:0;background:none!important;color:var(--sc-link)!important;font:500 13px/1 var(--sc-font)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-board-section .h-sortbar{margin-left:auto;display:flex;align-items:center;gap:8px}
+html[data-ui-v3] #u-hub #hub-board-section .h-sortbar label{color:var(--sc-muted)!important;font:400 13px/1 var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important}
+html[data-ui-v3] #u-hub #hub-sort{min-height:36px;height:36px;width:auto;min-width:184px}
+html[data-ui-v3] #u-hub #hub-board-section .h-sort-dir,html[data-ui-v3] #u-hub #hub-board-section .h-focus-toggle{min-width:36px;height:36px;min-height:36px;padding:0 10px;border:0!important;border-radius:var(--sc-r-md)!important;
+  background:var(--sc-s1)!important;color:var(--sc-text)!important;font:500 14px/1 var(--sc-font)!important;box-shadow:var(--sc-ring)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-sort-note{color:var(--sc-faint)!important;font:400 12px/1.4 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-sort-note:empty{display:none}
+html[data-ui-v3] #u-hub #hub-board-section .h-viewmode{display:inline-grid!important;grid-template-columns:auto auto;gap:2px;padding:2px!important;border:0!important;border-radius:var(--sc-r-md)!important;
+  background:var(--sc-s1)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important}
+html[data-ui-v3] #u-hub #hub-board-section .h-viewmode button{min-height:32px;height:32px;padding:0 14px!important;border:0!important;border-radius:8px!important;background:none!important;color:var(--sc-muted)!important;
+  font:500 14px/1 var(--sc-font)!important;box-shadow:none!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-board-section .h-viewmode button[aria-pressed="true"]{color:var(--sc-text)!important;background:color-mix(in srgb,var(--sc-s3),#fff 3%)!important;
+  box-shadow:inset 0 0 0 1px var(--sc-sel-edge),inset 0 1px 0 var(--sc-spec)!important}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-board-section .h-viewmode button[aria-pressed="true"]{background:#fff!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-accent) 40%,transparent),0 1px 2px rgba(16,24,48,.06)!important}
+html[data-ui-v3] #u-hub .sc-bd-legend{display:flex;flex-wrap:wrap;gap:4px 18px;margin:0 0 12px;color:var(--sc-faint);font:400 12px/1.4 var(--sc-font)}
+html[data-ui-v3] #u-hub .sc-bd-legend[hidden]{display:none}
+html[data-ui-v3] #u-hub .sc-bd-legend .sc-lg-short{display:none}
+html[data-ui-v3] #u-hub .sc-bd-legend .sc-key i{display:inline-block!important;width:7px!important;min-width:0!important;height:7px!important;padding:0!important;border:0!important;margin:0 5px 0 10px;border-radius:1.5px;vertical-align:1px;background:var(--sc-near)}
+html[data-ui-v3] #u-hub .sc-bd-legend .sc-key i:first-child{margin-left:0}
+html[data-ui-v3] #u-hub .sc-bd-legend .sc-key i.g{background:var(--sc-good)}
+html[data-ui-v3] #u-hub .sc-bd-legend .sc-key i.p{background:var(--sc-poor)}
+
+/* sources banner, health notes (About NBA grades, held letters, soccer / tennis history), empty board, pagination */
+html[data-ui-v3] #u-hub #hub-sources p,html[data-ui-v3] #u-hub #hub-health p{margin:8px 0 0;padding:10px 12px;border:0!important;border-radius:var(--sc-r-md);background:var(--sc-s1)!important;
+  color:var(--sc-muted)!important;font:400 13px/1.45 var(--sc-font)!important;box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-sources p b{color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-sources button{border:0;background:none!important;color:var(--sc-link)!important;font:500 13px/1 var(--sc-font)!important;cursor:pointer;padding:0 4px}
+html[data-ui-v3] #u-hub #hub-health details{margin:10px 0 0;padding:0!important;border:0!important;background:none!important;color:var(--sc-muted);font:400 13px/1.45 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-health details summary{cursor:pointer;color:var(--sc-muted);font-size:14px}
+html[data-ui-v3] #u-hub #hub-health details p{margin:6px 0 0;padding:0;background:none!important;box-shadow:none}
+html[data-ui-v3] #u-hub #hub-empty{padding:40px 20px!important;border:0!important;border-radius:var(--sc-r-xl)!important;background:var(--sc-s1)!important;box-shadow:var(--sc-ring)!important;
+  color:var(--sc-muted)!important;font:400 14px/1.5 var(--sc-font)!important;text-align:center}
+html[data-ui-v3] #u-hub #hub-board-section .h-empty-title{display:block;margin:0 0 10px;color:var(--sc-text)!important;font:600 17px/1.3 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-board-section .h-empty button{min-height:40px;padding:0 18px;border:0!important;border-radius:var(--sc-r-md)!important;background:var(--sc-s2)!important;color:var(--sc-text)!important;
+  font:500 14px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:16px 0 40px;color:var(--sc-muted);font:400 13px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-pagination span{margin-right:auto}
+html[data-ui-v3] #u-hub #hub-pagination button{min-height:36px;padding:0 14px;border:0!important;border-radius:var(--sc-r-md)!important;background:var(--sc-s1)!important;color:var(--sc-text)!important;
+  font:500 14px/1 var(--sc-font)!important;box-shadow:var(--sc-ring)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-pagination button[disabled]{color:var(--sc-faint)!important;opacity:.6;cursor:default}
+
+/* ------------------------------------------------------------------ cells shared by both layouts */
+html[data-ui-v3] #u-hub #hub-table{border-collapse:separate;border-spacing:0;background:none!important;color:var(--sc-text);font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-table td,html[data-ui-v3] #u-hub #hub-table th{border-color:var(--sc-hair)!important;color:inherit}
+html[data-ui-v3] #u-hub #hub-table .h-player{color:var(--sc-text)!important;background:none!important;font-family:var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-player b{color:var(--sc-text)!important;font:600 15px/20px var(--sc-font)!important;letter-spacing:-.01em}
+html[data-ui-v3] #u-hub #hub-table .h-player small{color:var(--sc-muted)!important;font:400 12.5px/17px var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-player small i{font-style:normal;color:var(--sc-faint)!important;background:none!important;border:0!important;font:400 11.5px/1 var(--sc-font)!important;padding:0!important}
+html[data-ui-v3] #u-hub #hub-table .h-role{font-style:normal;color:var(--sc-muted)!important;font:500 11.5px/16px var(--sc-font)!important;padding:0 5px!important;border:0!important;border-radius:4px!important;
+  background:color-mix(in srgb,var(--sc-text) 7%,transparent)!important}
+html[data-ui-v3] #u-hub #hub-table .h-face{--face-ring:var(--sc-edge)}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-table .h-face{background:var(--sc-s2)!important;color:var(--sc-muted)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;border-color:var(--sc-edge)!important}
+html[data-ui-v3] #u-hub #hub-table .h-mcell b{color:var(--sc-text)!important;font:500 14px/18px var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-mcell small{color:var(--sc-faint)!important;font:400 12px/16px var(--sc-font)!important}
+/* the player's other props: the hub's own toggle, worded "+N more props" (aria-label unchanged) */
+html[data-ui-v3] #u-hub #hub-table .h-prop-toggle{width:auto!important;height:20px!important;min-width:0!important;margin:2px 0 0;padding:0!important;border:0!important;border-radius:0!important;background:none!important;
+  color:var(--sc-faint)!important;font:500 11.5px/20px var(--sc-font)!important;box-shadow:none!important;white-space:nowrap;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-table .h-prop-toggle:hover{color:var(--sc-text)!important}
+html[data-ui-v3] #u-hub #hub-table .h-prop-toggle span{font:inherit!important;color:inherit!important}
+html[data-ui-v3] #u-hub #hub-table td.h-c-line>b{display:flex;align-items:baseline;gap:6px;color:var(--sc-text)!important;font:600 18px/20px var(--sc-font)!important;letter-spacing:-.02em}
+html[data-ui-v3] #u-hub #hub-table td.h-c-line .u-lt{font:500 10.5px/15px var(--sc-font)!important;font-style:normal;letter-spacing:0;padding:0 5px!important;border:0!important;border-radius:4px!important;
+  background:none!important;color:var(--sc-muted)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)}
+html[data-ui-v3] #u-hub #hub-table td.h-c-line .u-lt-demon{color:var(--sc-poor)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-poor) 35%,transparent)}
+html[data-ui-v3] #u-hub #hub-table td.h-c-line .u-lt-goblin{color:var(--sc-good)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-good) 35%,transparent)}
+html[data-ui-v3] #u-hub #hub-table .sc-was{color:var(--sc-faint);font:400 12px/1 var(--sc-font);text-decoration-color:color-mix(in srgb,var(--sc-faint) 70%,transparent)}
+/* the hub's own "UD · 20m" text stays in the cell for screen readers; sighted members read "Underdog · checked 20 min ago" */
+html[data-ui-v3] #u-hub #hub-table td.h-c-line>small.sc-bd-orig{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+html[data-ui-v3] #u-hub #hub-table td.h-c-line>small.h-book-price-summary{display:block;color:var(--sc-muted)!important;font:400 11.5px/15px var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .sc-seen{display:block;margin-top:2px;color:var(--sc-faint);font:400 11.5px/15px var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-table .sc-seen b{font-weight:400;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-table .sc-seen-px{display:none}
+html[data-ui-v3] #u-hub #hub-table td.h-c-proj{color:var(--sc-muted)!important;font:500 14px/1 var(--sc-font)!important}
+/* Scout: side + chance (the one strong number), then the letter / Lean wording */
+html[data-ui-v3] #u-hub #hub-table .h-scout{display:grid;gap:5px}
+html[data-ui-v3] #u-hub #hub-table .h-direction{display:flex;align-items:baseline;gap:8px;color:var(--sc-text)!important}
+html[data-ui-v3] #u-hub #hub-table .h-direction b{display:inline-flex;align-items:center;gap:4px;color:var(--sc-muted)!important;font:500 13px/1 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-direction .sc-dir{font-style:normal;font-size:8px;color:var(--sc-accent)}
+html[data-ui-v3] #u-hub #hub-table .h-direction>span{color:var(--sc-text)!important;font:600 19px/1 var(--sc-font)!important;letter-spacing:-.02em}
+html[data-ui-v3] #u-hub #hub-table .h-direction-options{display:grid;gap:3px;color:var(--sc-muted)!important;font:400 12.5px/1.3 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-direction-options b{color:var(--sc-text)!important;font:500 13px/1.3 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-direction-options span{font-family:var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-direction-options>span{display:inline-flex!important;align-items:baseline;gap:6px;justify-content:flex-start!important;width:auto!important}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade{display:flex;align-items:center;gap:8px;min-width:0}
+html[data-ui-v3] #u-hub #hub-table .h-grade{display:inline-grid;place-items:center;min-width:28px;height:24px;padding:0 6px!important;border:0!important;border-radius:var(--sc-r-xs)!important;
+  color:var(--sc-accent)!important;background:color-mix(in srgb,var(--sc-accent-fill) 12%,transparent)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-accent-fill) 55%,transparent)!important;
+  font:600 13px/1 var(--sc-font)!important;letter-spacing:0}
+html[data-ui-v3] #u-hub #hub-table .h-grade.h-grade-c{color:var(--sc-muted)!important;background:transparent!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important}
+html[data-ui-v3] #u-hub #hub-table .h-grade-text{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:var(--sc-r-xs);color:var(--sc-muted)!important;
+  background:color-mix(in srgb,var(--sc-text) 4%,transparent)!important;box-shadow:inset 0 0 0 1px var(--sc-edge);font:500 12.5px/1 var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important}
+html[data-ui-v3] #u-hub #hub-table .h-grade-tag{color:var(--sc-faint)!important;font:400 12px/1 var(--sc-font)!important;background:none!important;border:0!important}
+html[data-ui-v3] #u-hub #hub-table .h-below,html[data-ui-v3] #u-hub #hub-table .h-alt-note{display:block;color:var(--sc-faint)!important;font:400 11px/13px var(--sc-font)!important;white-space:nowrap;background:none!important;border:0!important;padding:0!important}
+html[data-ui-v3] #u-hub #hub-table .h-band{font-family:var(--sc-font)!important}
+/* hit counts: the count stays neutral, only the numerator of a 60%+ or under-40% rate carries an ink (the legend says so) */
+html[data-ui-v3] #u-hub #hub-table .h-strip{gap:0}
+html[data-ui-v3] #u-hub #hub-table .h-hit{min-width:0;height:auto;padding:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;
+  color:var(--sc-muted)!important;font:500 14px/1 var(--sc-font)!important;letter-spacing:0!important}
+html[data-ui-v3] #u-hub #hub-table .h-hit::before,html[data-ui-v3] #u-hub #hub-table .h-hit::after{display:none!important}
+html[data-ui-v3] #u-hub #hub-table .h-hit b{font-weight:500;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-table .h-hit em{font-style:normal;font-size:11px;font-weight:400;color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-table .h-hit.sc-hit-g:not(.h-hit-n),html[data-ui-v3] #u-hub #hub-table .h-hit.sc-hit-g b{color:var(--sc-good)!important}
+html[data-ui-v3] #u-hub #hub-table .h-hit.sc-hit-p:not(.h-hit-n),html[data-ui-v3] #u-hub #hub-table .h-hit.sc-hit-p b{color:var(--sc-poor)!important}
+html[data-ui-v3] #u-hub #hub-table .h-hit.empty,html[data-ui-v3] #u-hub #hub-table .h-hit.h-hit-both{color:var(--sc-faint)!important}
+html[data-ui-v3] #u-hub #hub-table .h-hit.h-hit-both{color:var(--sc-muted)!important;font-size:13px!important}
+html[data-ui-v3] #u-hub #hub-table .h-hit.h-hit-wait{width:22px;height:10px;border-radius:3px;background:var(--sc-s2)!important}
+/* Edge: number in text ink, only the sign takes the value colour */
+html[data-ui-v3] #u-hub #hub-table .h-edge{color:var(--sc-text)!important;font-family:var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-edge b{color:var(--sc-text)!important;font:500 15px/1 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-edge.positive b::first-letter{color:var(--sc-good)}
+html[data-ui-v3] #u-hub #hub-table .h-edge:not(.positive):not(.empty) b{color:var(--sc-muted)!important}
+html[data-ui-v3] #u-hub #hub-table .h-edge small{margin-left:3px;color:var(--sc-faint)!important;font:400 11px/1 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-edge.empty{color:var(--sc-faint)!important}
+html[data-ui-v3] #u-hub #hub-table td.h-c-edge small:not(.h-below),html[data-ui-v3] #u-hub #hub-table td.h-c-medge small,html[data-ui-v3] #u-hub #hub-table td.h-c-medge{color:var(--sc-faint)!important;font-family:var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table td.h-c-medge b{color:var(--sc-text)!important;font-weight:500!important}
+html[data-ui-v3] #u-hub #hub-table .h-edge-books{color:var(--sc-faint)!important;font:400 11px/1.3 var(--sc-font)!important;white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-table .h-edge-books i{font-style:normal;margin-right:4px}
+html[data-ui-v3] #u-hub #hub-table .h-edge-books b{color:var(--sc-muted)!important;font-weight:500!important}
+html[data-ui-v3] #u-hub #hub-table .h-gap,html[data-ui-v3] #u-hub #hub-table .h-mgap{display:inline-block;margin-top:3px;padding:0 5px!important;border:0!important;border-radius:4px!important;color:var(--sc-muted)!important;
+  background:none!important;box-shadow:inset 0 0 0 1px var(--sc-edge);font:500 11.5px/17px var(--sc-font)!important;white-space:nowrap}
+/* Compare: a quiet outlined button with the book and price lines */
+html[data-ui-v3] #u-hub #hub-table .h-compare{display:grid;gap:1px;width:100%;padding:6px 8px!important;border:0!important;border-radius:var(--sc-r-md)!important;background:none!important;text-align:left;
+  color:var(--sc-text)!important;box-shadow:inset 0 0 0 1px var(--sc-hair)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-table .h-compare b{color:var(--sc-muted)!important;font:500 13px/16px var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-compare small{color:var(--sc-faint)!important;font:400 11px/14px var(--sc-font)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui-v3] #u-hub #hub-table .h-compare.differ{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-accent-fill) 35%,transparent)!important}
+html[data-ui-v3] #u-hub #hub-table .h-compare:hover{background:var(--sc-s2)!important}
+/* Add: the system's quiet square (+ icon, an accent tick when on the slip); Side / Info / an alt book stay words */
+html[data-ui-v3] #u-hub #hub-table .h-add{display:inline-grid;place-items:center;width:32px;min-width:32px;height:32px;min-height:32px;padding:0!important;border:0!important;border-radius:var(--sc-r-sm)!important;
+  background:none!important;color:var(--sc-muted)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;font:500 12.5px/1 var(--sc-font)!important;cursor:pointer;white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-table .h-add:not(.h-add-info):not(.h-add-alt):not(.selected){font-size:0!important}
+html[data-ui-v3] #u-hub #hub-table .h-add:not(.h-add-info):not(.h-add-alt):not(.selected)::before{content:"";width:15px;height:15px;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M10 4.5v11M4.5 10h11'/%3E%3C/svg%3E") center/15px no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M10 4.5v11M4.5 10h11'/%3E%3C/svg%3E") center/15px no-repeat}
+html[data-ui-v3] #u-hub #hub-table .h-add.is-on{background:color-mix(in srgb,var(--sc-accent-fill) 14%,var(--sc-s2))!important;color:var(--sc-accent)!important;box-shadow:inset 0 0 0 1px var(--sc-sel-edge)!important}
+html[data-ui-v3] #u-hub #hub-table .h-add.is-on::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 10.5l3.6 3.5 7.4-8'/%3E%3C/svg%3E")!important;
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 10.5l3.6 3.5 7.4-8'/%3E%3C/svg%3E")!important}
+html[data-ui-v3] #u-hub #hub-table .h-add.h-add-info,html[data-ui-v3] #u-hub #hub-table .h-add.h-add-alt,html[data-ui-v3] #u-hub #hub-table .h-add.selected{width:auto;min-width:44px;padding:0 9px!important}
+html[data-ui-v3] #u-hub #hub-table .h-add:not(.is-on):not([disabled]):hover{color:var(--sc-text)!important;background:var(--sc-s2)!important}
+html[data-ui-v3] #u-hub #hub-table .h-add[disabled]{opacity:.45;cursor:default}
+html[data-ui-v3] #u-hub #hub-table .h-star{display:grid;place-items:center;width:24px;height:24px;padding:0!important;border:0!important;background:none!important;color:var(--sc-faint)!important;
+  font:400 15px/1 var(--sc-font)!important;box-shadow:none!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-table .h-star[aria-pressed="true"]{color:var(--sc-accent)!important}
+html[data-ui-v3] #u-hub #hub-table .h-countdown{display:inline-flex;align-items:center;height:22px;padding:0 7px!important;border:0!important;border-radius:var(--sc-r-xs)!important;background:none!important;
+  color:var(--sc-text)!important;font:500 12.5px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)}
+html[data-ui-v3] #u-hub #hub-table .h-countdown.soon{color:var(--sc-accent)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-accent-fill) 35%,transparent)}
+/* a picked row: a slightly raised surface + the 2px accent spine (system selection) */
+html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]:has(.h-add.is-on){background:color-mix(in srgb,var(--sc-s2) 80%,#fff 1.5%)!important;box-shadow:inset 2px 0 0 var(--sc-accent-fill)!important}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-table>tbody>tr[data-record]:has(.h-add.is-on){background:color-mix(in srgb,var(--sc-accent) 4%,#fff)!important}
+
+/* game header rows (start-time sort) */
+html[data-ui-v3] #u-hub #hub-table>tbody>tr.h-game-row>td{padding:0!important;border:0!important;border-top:1px solid var(--sc-hair)!important;background:color-mix(in srgb,var(--sc-s2) 55%,transparent)!important}
+html[data-ui-v3] #u-hub #hub-table .h-game-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;width:100%;padding:12px 16px 10px!important;border:0!important;border-radius:0!important;background:none!important;
+  color:var(--sc-muted)!important;font:400 13px/1.3 var(--sc-font)!important;text-align:left;box-shadow:none!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-table .h-game-head b{color:var(--sc-text)!important;font:600 15px/1.3 var(--sc-font)!important;letter-spacing:-.01em}
+html[data-ui-v3] #u-hub #hub-table .h-game-head small{color:var(--sc-faint)!important;font:400 12px/1.3 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-game-head em{margin-left:auto;align-self:center;font-style:normal;color:var(--sc-link)!important;font:500 13px/1 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:inset 2px 0 0 var(--sc-accent-fill)!important}
+
+/* ------------------------------------------------------------------ desktop (1101px+): the hub's table, restyled */
+@media (min-width:1101px){
+  html[data-ui-v3] #u-hub.h-board-mode .h-center{padding:0 24px 48px}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar{position:sticky;top:0!important;z-index:6;padding-top:8px;margin-top:0}
+  html[data-ui-v3] #u-hub.h-board-mode .h-top.sc-bd-band{margin:0 -24px!important;padding:40px 24px 8px!important}
+  html[data-ui-v3] #u-hub #hub-board-section .h-table-wrap{overflow:visible;border-radius:var(--sc-r-xl);background:var(--sc-s1)!important;box-shadow:var(--sc-ring),var(--sc-drop)}
+  html[data-ui-v3][data-theme="light"] #u-hub #hub-board-section .h-table-wrap{box-shadow:inset 0 0 0 1px rgba(14,19,32,.08)}
+  html[data-ui-v3] #u-hub #hub-table>thead>tr>th{height:40px;padding:0 6px!important;background:var(--sc-s1)!important;border:0!important;box-shadow:inset 0 -1px 0 var(--sc-edge)!important;
+    color:var(--sc-faint)!important;font:500 12px/1 var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important;top:var(--h-bar,0px)!important}
+  html[data-ui-v3] #u-hub #hub-table>thead>tr>th:first-child{border-top-left-radius:var(--sc-r-xl)}
+  html[data-ui-v3] #u-hub #hub-table>thead>tr>th:last-child{border-top-right-radius:var(--sc-r-xl)}
+  html[data-ui-v3] #u-hub #hub-table .h-th-sort{color:inherit!important;font:inherit!important;text-transform:none!important;letter-spacing:0!important;background:none!important;border:0!important}
+  html[data-ui-v3] #u-hub #hub-table .h-th-sort[data-sort="ascending"],html[data-ui-v3] #u-hub #hub-table .h-th-sort[data-sort="descending"]{color:var(--sc-text)!important}
+  html[data-ui-v3] #u-hub #hub-table .h-th-sort small,html[data-ui-v3] #u-hub #hub-table th small{color:var(--sc-faint)!important;font:400 10.5px/1.2 var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important;opacity:.85}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]{background:none!important;transition:background-color var(--sc-fast)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td{padding-top:10px!important;padding-bottom:10px!important;border:0!important;border-top:1px solid var(--sc-hair)!important;background:none!important;vertical-align:middle}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]:hover{background:color-mix(in srgb,var(--sc-s2) 70%,transparent)!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].is-expanded{background:var(--sc-s2)!important;box-shadow:inset 2px 0 0 var(--sc-accent-fill)!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr:last-child>td:first-child{border-bottom-left-radius:var(--sc-r-xl)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr:last-child>td:last-child{border-bottom-right-radius:var(--sc-r-xl)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr:first-child>td{border-top:0!important}
+  html[data-ui-v3] #u-hub #hub-table td.h-c-proj{text-align:right}
+  html[data-ui-v3] #u-hub #hub-table .h-strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;text-align:center}
+  /* columns (fixed layout): the slip column stays beside the board at 1101-1400px, so the player column takes what is left */
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch{width:30px!important;padding:0 0 0 8px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch>*{display:grid!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-player{width:auto!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-market{width:112px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-line{width:116px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-proj{width:46px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-scout{width:122px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-hits{width:120px!important}
+  html[data-ui-v3] #u-hub.h-cols #hub-table .h-c-hits{width:178px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-edge{width:80px!important;display:table-cell!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-medge{width:78px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-compare{width:106px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-add{width:56px!important;padding-right:8px!important;text-align:right}
+  /* one Edge column with both numbers (Scout's edge, then "Books"), as the hub itself does from 1281px: the Market edge column steps aside */
+  html[data-ui-v3] #u-hub #hub-table.h-has-edge .h-c-medge{display:none!important}
+  html[data-ui-v3] #u-hub #hub-table.h-has-edge td.h-c-edge .h-edge-books{display:flex!important;justify-content:flex-end;gap:3px;margin-top:3px}
+  html[data-ui-v3] #u-hub #hub-table th.h-c-edge .h-th-sort{flex-direction:column;align-items:flex-end;gap:2px;width:100%;text-align:right}
+  html[data-ui-v3] #u-hub #hub-table td.h-c-edge{text-align:right}
+  html[data-ui-v3] #u-hub #hub-table td.h-c-edge .h-below{text-align:right;white-space:normal!important;line-height:12px!important}
+  html[data-ui-v3] #u-hub #hub-table td.h-c-proj,html[data-ui-v3] #u-hub #hub-table th.h-c-proj{text-align:right}
+  html[data-ui-v3] #u-hub #hub-table .h-mcell{display:block!important}
+  html[data-ui-v3] #u-hub #hub-table .h-mcell>div{min-width:0}
+  html[data-ui-v3] #u-hub #hub-table .h-mcell>div>small.h-m-vs{display:none!important}
+  html[data-ui-v3] #u-hub #hub-table .h-prop-toggle{display:block!important;text-align:left}
+  html[data-ui-v3] #u-hub #hub-table .sc-seen b{display:block}
+  html[data-ui-v3] #u-hub #hub-table .sc-seen,html[data-ui-v3] #u-hub #hub-table .sc-seen>*{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html[data-ui-v3] #u-hub #hub-table .sc-seen>span{display:block}
+  html[data-ui-v3] #u-hub #hub-table>thead>tr>th{vertical-align:middle!important}
+  html[data-ui-v3] #u-hub #hub-table>thead .h-strip-head{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;text-align:center}
+  html[data-ui-v3] #u-hub #hub-table>thead .h-strip-th{font-style:normal}
+  html[data-ui-v3] #u-hub #hub-table .sc-seen>i{display:none}
+  html[data-ui-v3] #u-hub #hub-table .h-player{display:block!important;min-width:0;overflow:hidden;text-align:left}
+  html[data-ui-v3] #u-hub #hub-table .h-player b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  html[data-ui-v3] #u-hub #hub-table .h-player small{display:flex!important;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
+  html[data-ui-v3] #u-hub #hub-table .h-player small .h-vs{overflow:hidden;text-overflow:ellipsis;min-width:0}
+  html[data-ui-v3] #u-hub #hub-table .h-player small>*{flex:none}
+  html[data-ui-v3] #u-hub #hub-table .h-player small>.h-vs{flex:0 1 auto}
+  html[data-ui-v3] #u-hub #hub-table td.h-c-player{display:table-cell}
+  html[data-ui-v3] #u-hub #hub-table td.h-c-player>.h-face{float:left;margin:2px 10px 0 0}
+  html[data-ui-v3] .sc-bd-legend .sc-lg-edge{flex:1 1 100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+
+/* ------------------------------------------------------------------ phone + narrow (1100px and down): the 4-line card per row */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub.h-board-mode .h-center{padding:0 16px 24px!important}
+  html[data-ui-v3] #u-hub #hub-pagination:empty{display:none}
+  html[data-ui-v3] #u-hub.h-board-mode .h-top.sc-bd-band{margin:0 -16px!important;padding:24px 16px 4px!important}
+  html[data-ui-v3] #u-hub.h-board-mode .h-top h1#hub-title{font-size:24px!important;line-height:1.15}
+  html[data-ui-v3] #u-hub .sc-bd-meta{margin:2px 0 0;font-size:13px}
+  html[data-ui-v3] #u-hub .sc-bd-art{width:100%}
+  html[data-ui-v3] #u-hub .sc-bd-art.is-elev{display:none}          /* a cropped landmark reads as a stray arc at phone width: light + grain only */
+  html[data-ui-v3] #u-hub .sc-bd-art.is-plane>svg{right:-70%;height:230%;opacity:.12}
+
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar{gap:6px;flex-wrap:wrap;position:static}
+  html[data-ui-v3] #u-hub #hub-sports{flex:0 0 calc(100% + 32px)!important;margin:0 -16px 8px;padding:0 16px;width:auto;max-width:none}
+  html[data-ui-v3] #u-hub #hub-sports>button{padding:0 10px!important;font-size:14.5px!important;min-height:42px}
+  /* search lives behind the header's search button (it opens this box); a typed search keeps it open */
+  html[data-ui-v3] #u-hub #hub-board-section:not(.sc-bd-search) .h-search:has(input:placeholder-shown){display:none}
+  html[data-ui-v3] #u-hub #hub-board-section .h-search{flex:1 1 100%}
+  html[data-ui-v3] #u-hub #hub-platform{flex:1 1 0;min-width:0}
+  html[data-ui-v3] #u-hub #hub-platform>button{min-height:32px;padding:0 11px!important}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-pop-wrap:first-of-type{margin-left:0}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar .h-pop-wrap>button,html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-refresh{padding:0 10px!important}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar .h-pop-wrap>button.h-filter-toggle{display:inline-flex!important;width:36px;padding:0!important;font-size:0!important;gap:0}
+  html[data-ui-v3] #u-hub #hub-board-section .h-filter-toggle .h-count-badge:not(:empty){position:absolute;top:-6px;right:-6px;font-size:10px!important}
+  html[data-ui-v3] #u-hub #hub-board-section .h-filter-toggle{position:relative}
+  html[data-ui-v3] #u-hub #hub-board-section .h-pop{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:calc(60px + env(safe-area-inset-bottom))!important;width:auto!important;max-width:none;
+    border-radius:var(--sc-r-sheet) var(--sc-r-sheet) 0 0!important;padding:20px 16px 20px!important;z-index:45}
+
+  html[data-ui-v3] #u-hub #hub-board-section .h-table-title{margin:8px 0 6px;gap:6px}
+  html[data-ui-v3] #u-hub #hub-count{display:none}
+  html[data-ui-v3] #u-hub #hub-chips:empty{display:none}
+  html[data-ui-v3] #u-hub #hub-board-section .h-sortbar{margin-left:0;flex:1 1 auto;min-width:0;gap:6px}
+  html[data-ui-v3] #u-hub #hub-board-section .h-sortbar label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  html[data-ui-v3] #u-hub #hub-sort{flex:1;min-width:0;width:100%}
+  html[data-ui-v3] #u-hub #hub-board-section .h-viewmode button{min-height:36px;height:36px;padding:0 10px!important;font-size:13.5px!important}
+  html[data-ui-v3] #u-hub #hub-board-section .h-focus-toggle{display:none}
+  html[data-ui-v3] #u-hub .sc-bd-legend{flex-wrap:nowrap;gap:0 8px;margin-bottom:2px;font-size:11.5px;white-space:nowrap;overflow:hidden}
+  html[data-ui-v3] #u-hub .sc-bd-legend .sc-lg-long,html[data-ui-v3] #u-hub .sc-bd-legend .sc-lg-edge{display:none}
+  html[data-ui-v3] #u-hub .sc-bd-legend .sc-lg-short{display:inline}
+  html[data-ui-v3] #u-hub .sc-bd-legend .sc-key i{margin-left:7px}
+
+  html[data-ui-v3] #u-hub #hub-board-section .h-table-wrap{overflow:visible;margin:0 -16px;background:none!important;border:0!important;box-shadow:none!important}
+  html[data-ui-v3] #u-hub #hub-table,html[data-ui-v3] #u-hub #hub-table>tbody{display:block;width:100%}
+  html[data-ui-v3] #u-hub #hub-table>thead{display:none!important}
+
+  /* the card: one grid, the hub's cells placed by area. 8 tracks: line | market | Proj. | (1fr) | Compare | +N props | watch | add.
+     Items that span the 1fr track (name, grade, meta) do not size the tracks; line 4's controls set the right-hand tracks, and the
+     market takes what is left on line 2 (cut with an ellipsis before anything else moves). The Scout cell's parts sit on two lines (side + chance on line 1, the letter on line 2) through display:contents. */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record],html[data-ui-v3] #u-hub.h-cols #hub-table>tbody>tr[data-record],
+  html[data-ui-v3] #u-hub #hub-table.h-has-edge>tbody>tr[data-record],html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record],
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits{
+    display:grid!important;grid-template-columns:auto minmax(0,auto) auto minmax(0,1fr) auto auto auto auto!important;
+    grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" "hi hi hi hi hi ed ed ed" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important;
+    column-gap:5px!important;row-gap:4px!important;align-items:center!important;margin:0!important;padding:10px 16px 8px!important;border:0!important;border-top:1px solid var(--sc-hair)!important;border-radius:0!important;
+    background:none!important;box-shadow:none!important;min-height:0!important;height:auto!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits{grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" ". . . . . ed ed ed" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record]{grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" "hi hi hi hi hi ed ed ed" "mx mx mx mx mx mx mx mx" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record].h-nohits{grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" "mx mx mx mx mx ed ed ed" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td{display:block;min-width:0;width:auto!important;height:auto!important;padding:0!important;margin:0!important;border:0!important;background:none!important;box-shadow:none!important;text-align:left}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td:not(.h-c-proj):not(.h-c-edge):not(.h-c-medge)::before{display:none!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-player{grid-area:pl;display:flex;align-items:center;gap:7px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-scout,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-scout>.h-scout{display:contents!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-direction,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-direction-options{grid-area:sd;justify-self:end}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-scout-grade{grid-area:gr;justify-self:end}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-below,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-alt-note{grid-area:nt;justify-self:end}
+  html[data-ui-v3] #u-hub #hub-table:not(.h-has-edge)>tbody>tr[data-record] .h-scout>.h-below{grid-area:ed}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line,
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell{display:contents}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>b{grid-area:ln}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>.sc-seen{grid-area:me;margin:0}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-line>small.h-book-price-summary{display:none!important}   /* their text is in the meta line (.sc-seen-px) */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div{grid-area:mk;min-width:0;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;color:var(--sc-muted)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div>*{white-space:nowrap!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>.h-prop-toggle{grid-area:mo;margin:0;justify-self:start}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-proj{grid-area:pj;justify-self:start;white-space:nowrap}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-hits{grid-area:hi;min-width:0}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits>td.h-c-hits{display:none!important}   /* no past result in any window: no hit line (as the hub's own card) */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-edge{grid-area:ed;justify-self:end;text-align:right;white-space:nowrap}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-medge{grid-area:mx;justify-self:start;text-align:left}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-compare{grid-area:cp;justify-self:end}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-watch{grid-area:st;justify-self:end}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-add{grid-area:ad;justify-self:end}
+
+  /* line 1 */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-face{flex:none;--face:26px;width:26px;height:26px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player{display:flex!important;flex-wrap:nowrap!important;align-items:baseline;gap:7px;min-width:0;min-height:0!important;height:auto!important;flex:1;padding:0!important;border:0!important;text-align:left;overflow:hidden}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player b{flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15.5px!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small{display:flex!important;align-items:baseline;gap:6px;min-width:0;overflow:hidden;white-space:nowrap;color:var(--sc-faint)!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small .h-vs{overflow:hidden;text-overflow:ellipsis;min-width:0}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small i{flex:none}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-direction{gap:6px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-direction b{font-size:12.5px!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-direction-options{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:2px 10px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout-grade{justify-content:flex-end}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-below{text-align:right}
+  /* line 2 */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-line>b{display:flex!important;flex-wrap:nowrap;align-items:baseline;font-size:17px!important;line-height:20px!important;white-space:nowrap}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-line>b .u-lt{display:inline-block!important;margin:0!important;position:static!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-mcell>div>b{display:inline!important;font-size:13px!important;font-weight:400!important;color:var(--sc-muted)!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-mcell>div>small{display:inline!important;font-size:13px!important;color:var(--sc-muted)!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-mcell>div>small:not(.h-m-vs)::before{content:" · "}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-mcell>div>small.h-m-vs{display:none!important}   /* the matchup is on line 1 */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-mcell>div>.h-gap,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-mcell>div>.h-mgap{margin:0 0 0 6px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-proj{color:var(--sc-faint)!important;font:400 12px/1 var(--sc-font)!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-proj::before{content:"Proj. "!important;display:inline!important;position:static!important;color:var(--sc-faint);font:400 12px/1 var(--sc-font)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-proj{font-size:13px!important;color:var(--sc-muted)!important}
+  /* line 3: L5 4/5  L10 7/10 ... with the hub's own window labels */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-strip{display:flex!important;flex-wrap:wrap;gap:2px 5px;min-width:0;overflow:hidden;width:auto!important;grid-template-columns:none!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-strip-cell{display:inline-flex!important;flex-direction:row!important;align-items:baseline;flex:none;width:auto!important;min-width:0!important;padding:0!important;border:0!important;background:none!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-strip-cell::before{content:attr(data-label)!important;display:inline!important;position:static!important;margin-right:3px;color:var(--sc-faint)!important;
+    font:400 10.5px/1 var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important;background:none!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-hit{font-size:12px!important;width:auto!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-hit em{font-size:10px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge .h-edge b{font-size:13.5px!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge::before{content:"Edge";display:inline!important;position:static!important;margin-right:5px;color:var(--sc-faint);font:400 11.5px/1 var(--sc-font)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge>.h-edge,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge>.h-edge-wrap{display:inline-flex!important;vertical-align:baseline}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-medge::before{content:"Market edge";display:inline!important;position:static!important;margin-right:6px;color:var(--sc-faint);font:400 11.5px/1 var(--sc-font)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-medge>*{display:inline-flex!important;align-items:baseline;gap:4px;vertical-align:baseline}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-medge small{margin-left:4px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge .h-below{display:block!important;margin-top:2px}
+  /* line 4 */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .sc-seen{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px!important;line-height:16px;color:var(--sc-faint)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .sc-seen b{color:var(--sc-faint)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .sc-seen-px{display:inline}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-compare{display:flex;align-items:center;gap:6px;width:auto;height:24px;min-height:0!important;padding:0 6px!important;border-radius:var(--sc-r-xs)!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-compare b{font-size:11.5px!important;white-space:nowrap}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-compare small{display:none!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-prop-toggle .sc-w-more{display:none}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-star{width:26px;height:28px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-add{width:34px;min-width:34px;height:30px;min-height:30px}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-add.h-add-info,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-add.h-add-alt,html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-add.selected{width:auto}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].is-expanded{background:var(--sc-s1)!important}
+
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr.h-game-row,html[data-ui-v3] #u-hub #hub-table>tbody>tr.h-span-row{display:block!important;margin:0!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr.h-game-row>td,html[data-ui-v3] #u-hub #hub-table>tbody>tr.h-span-row>td{display:block!important;width:auto!important;border-radius:0!important;margin:0!important}
+  html[data-ui-v3] #u-hub #hub-table .h-game-head{position:relative;padding:10px 16px!important;gap:2px 8px;font-size:12.5px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-game-head b{flex:1 1 100%}
+  html[data-ui-v3] #u-hub #hub-table .h-game-head em{position:absolute;right:16px;top:12px}
+  html[data-ui-v3] #u-hub #hub-pagination{margin:16px 0 24px}
+}
+
+/* ------------------------------------------------------------------ By game: game cards (the hub's own cards, restyled) */
+html[data-ui-v3] #u-hub #hub-games-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:12px;margin:8px 0 40px}
+html[data-ui-v3] #u-hub #hub-games-body[hidden]{display:none}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card{display:flex;flex-direction:column;gap:10px;min-width:0;padding:16px!important;border:0!important;border-radius:var(--sc-r-xl)!important;background:var(--sc-s1)!important;
+  box-shadow:var(--sc-ring),var(--sc-drop)!important;color:var(--sc-text)!important;font-family:var(--sc-font)}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-games-body .h-game-card{box-shadow:inset 0 0 0 1px rgba(14,19,32,.08)!important}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card>header{display:flex!important;align-items:center;justify-content:space-between;gap:10px;padding:0!important;margin:0!important}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card .h-eyebrow{color:var(--sc-faint)!important;font:400 12px/16px var(--sc-font)!important;text-transform:none!important;letter-spacing:0!important}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card time{display:inline-flex;align-items:center;gap:8px;color:var(--sc-faint)!important;font:400 11.5px/1 var(--sc-font)!important;white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card .h-countdown{display:inline-flex;align-items:center;height:22px;padding:0 7px!important;border:0!important;border-radius:var(--sc-r-xs)!important;background:none!important;
+  color:var(--sc-accent)!important;font:500 12.5px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-accent-fill) 35%,transparent)}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card h2{margin:0;color:var(--sc-text)!important;font:600 16px/1.25 var(--sc-font)!important;letter-spacing:-.015em}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card p{margin:0;color:var(--sc-muted)!important;font:400 13px/1.4 var(--sc-font)!important}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-books{display:flex;flex-wrap:wrap;gap:4px}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-books span{padding:0 6px!important;border:0!important;border-radius:5px!important;background:none!important;color:var(--sc-muted)!important;font:400 11.5px/19px var(--sc-font)!important;
+  box-shadow:inset 0 0 0 1px var(--sc-edge)}
+html[data-ui-v3] #u-hub #hub-games-body .h-game-card>button{display:inline-flex;align-items:center;gap:6px;width:auto!important;white-space:nowrap;align-self:flex-start;margin-top:auto;min-height:36px;padding:0 14px!important;border:0!important;border-radius:var(--sc-r-md)!important;background:var(--sc-s2)!important;
+  color:var(--sc-text)!important;font:500 14px/1 var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-games-body .h-empty{grid-column:1/-1;padding:40px 20px;border-radius:var(--sc-r-xl);background:var(--sc-s1)!important;box-shadow:var(--sc-ring);text-align:center;color:var(--sc-muted)}
+
+/* ------------------------------------------------------------------ narrow desktop beside the slip column (1101-1400px): tighter columns.
+   1101-1180px: Compare and the watch star step aside, exactly as the hub's own table does at these widths (both stay on the card). */
+@media (min-width:1101px) and (max-width:1400px){
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch{width:28px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-market{width:104px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-line{width:106px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-proj{width:42px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-scout{width:116px!important}
+  html[data-ui-v3] #u-hub.h-cols #hub-table .h-c-hits{width:168px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-edge{width:76px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-compare{width:100px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-add{width:52px!important}
+}
+@media (min-width:1101px) and (max-width:1180px){
+  html[data-ui-v3] #u-hub #hub-table .h-c-compare{display:none!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch{width:0!important;padding:0!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-watch>*{display:none!important}
+  html[data-ui-v3] #u-hub.h-cols #hub-table .h-c-hits{width:150px!important}
+  html[data-ui-v3] #u-hub #hub-table .h-c-scout{width:110px!important}
+}
+/* phone: the last row and Previous / Next end above the v3 bottom bar (60px + safe area) */
+@media (max-width:1023px){
+  html[data-ui-v3] #u-hub.h-board-mode .h-center{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
+}
