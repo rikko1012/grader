@@ -257,3 +257,45 @@ def test_v3_empty_slip_leads_with_auto_build_but_never_hides_picks(browser, env,
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+# ------------------------------------------------------------------------------------------------ qa 11-20 (bug hunt on live data)
+def test_v3_studio_arrives_on_auto_build_without_a_focus_ring(browser, env, monkeypatch):
+    """The empty-slip switch to Auto-build presses the hub's tab, and the hub focuses the tab it selects: the tab showed its focus
+    outline on arrival, as if the member had tabbed to it."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", DESK, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.wait_for_timeout(300)
+        assert p.evaluate("document.activeElement && document.activeElement.matches('[data-hub=studio-tab]')") is False
+        assert p.evaluate("getComputedStyle(document.querySelector('[data-hub=studio-tab][data-id=build]')).outlineStyle") == "none"
+        build_and_open(p, env)
+        badges = p.evaluate("[...document.querySelectorAll('#hub-generated .h-generated-card>header>span')].map(s => Math.round(s.getBoundingClientRect().height))")
+        assert badges and len(set(badges)) == 1                                       # SLIP over its number on every card alike
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_lean_leg_reads_model_estimate_not_no_grade(browser, env, monkeypatch, size):
+    """A sports line with Scout's side and no letter reads Lean Under / Stake 0U on the board; its slip leg kept the hub's raw
+    'No grade: No grade yet' under the chance (a status label). It reads 'Model estimate', as every other leg does."""
+    c, p = v3_page(browser, env, monkeypatch, "board", size, "light")
+    try:
+        row = p.locator('#hub-rows tr[data-record]', has_text="Karl Anders").first
+        row.wait_for(timeout=30000)
+        assert "Lean Under" in row.inner_text()
+        row.locator('.h-add:not(.h-add-info)').click()
+        if p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').is_visible():
+            p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').click()
+        p.goto(env.url + '/#/slips')
+        p.wait_for_selector('#hub-studio-section:not([hidden])')
+        p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').click()
+        leg = p.locator('#hub-studio-body .u-leg', has_text="Karl Anders").first
+        leg.locator('.sb-read .sc-grade--lean').wait_for(timeout=20000)
+        read = leg.locator('.sb-read').inner_text()
+        assert "Lean Under" in read and "Model estimate" in read and "No grade" not in read, read
+        assert not p.errors, p.errors
+    finally:
+        c.close()

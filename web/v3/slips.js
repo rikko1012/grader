@@ -111,7 +111,7 @@
       var g = read.querySelector('.sc-grade'), lab = 'Lean ' + (r.scout.side === 'over' ? 'Over' : 'Under');
       if (!g) read.insertAdjacentHTML('beforeend', '<span class="sc-grade sc-grade--sm sc-grade--lean">' + esc(lab) + '</span>');
       var sm = read.querySelector(':scope > small:not(.sb-stake)');
-      if (sm && sm.textContent === 'No grade yet') sm.textContent = 'Model estimate';
+      if (sm && /^(No grade: )?No grade yet$/.test(sm.textContent)) sm.textContent = 'Model estimate';   /* the leg's own read is "No grade: No grade yet" (upgrade.js) */
     }
   }
   function decorateCard(li) {                               /* Auto-build slip cards: initials when the leg has no face */
@@ -325,7 +325,12 @@
       if (done || sec.hidden) return;
       done = true;
       var slip = tab('slip'), build = tab('build');
-      if (!count() && slip && slip.getAttribute('aria-selected') === 'true' && build) { auto = true; build.click(); }
+      if (!count() && slip && slip.getAttribute('aria-selected') === 'true' && build) {
+        var had = document.activeElement;
+        auto = true; build.click();
+        /* the hub focuses the tab it selects (keyboard use); our own switch is not a member's press, so no focus ring on arrival */
+        if (document.activeElement === build && had !== build) build.blur();
+      }
     }
     /* the switch is ours until the member picks a tab: once the slip holds picks (a saved slip that loads late, or a pick added from
        the board) My slip comes back, so a member with picks never lands on Auto-build because of it */
@@ -334,7 +339,7 @@
       if (!auto || !count() || sec.hidden) return;       /* hidden: done the next time Slips opens (the hidden observer) */
       auto = false;
       var slip = tab('slip');
-      if (slip && slip.getAttribute('aria-selected') !== 'true') slip.click();
+      if (slip && slip.getAttribute('aria-selected') !== 'true') { var had = document.activeElement; slip.click(); if (document.activeElement === slip && had !== slip) slip.blur(); }
     }
     new MutationObserver(function () { check(); back(); }).observe(sec, {attributes: true, attributeFilter: ['hidden']});
     var n = document.getElementById('hub-studio-tab-n');
