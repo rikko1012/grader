@@ -5,10 +5,11 @@
    requested then. The hub's own sheets load after this one (upgrade.js adds them at run time), so bridge rules that must win over
    them carry the html[data-ui-v3] #u-hub prefix (and !important only where the hub itself uses it). */
 
-/* ------------------------------------------------------------------ page ground + type */
-html[data-ui-v3]{background:var(--sc-bg)}
-html[data-ui-v3] body.sc-v3{background:var(--sc-bg);color:var(--sc-text);font-family:var(--sc-font);-webkit-font-smoothing:antialiased}
+/* ------------------------------------------------------------------ page offset
+   The shell does not recolour or re-font the page itself (the classic pages are dark-designed; page groups restyle their own parts).
+   It only makes room for the fixed header, and keeps the classic pages' sticky header below it. */
 html[data-ui-v3] body.sc-v3-shell{padding-top:var(--sc-top-h)}
+html[data-ui-v3] body.sc-v3-shell header:not(#u-hub header){top:var(--sc-top-h)}
 
 /* ------------------------------------------------------------------ the one header + bottom bar, above the hub (fixed, z 90) */
 html[data-ui-v3] .sc-appbar.sc-v3-bar{position:fixed;left:0;right:0;top:0;z-index:95;font-family:var(--sc-font);color:var(--sc-text);
@@ -28,20 +29,24 @@ html[data-ui-v3] .sc-v3-tabs .sc-nav__n:not(:empty){position:absolute;top:6px;le
    The hub is a fixed full-screen grid (upgrade-hub.css .scout-hub). v3 moves it below the header, and its own sidebar nav and
    phone tab bar give way to the v3 header / bottom bar (every item stays reachable: the v3 controls press the hub's own buttons).
    The sidebar keeps its grid column at 0 width (display:none would shift the centre into that column). */
-html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub{top:var(--sc-top-h);--side-w:0px}
+/* transform: the hub becomes the containing block of its own fixed layers (player card, popovers), so their top:0 / inset:0 start
+   below the header instead of under it */
+html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub{top:var(--sc-top-h);--side-w:0px;transform:translateZ(0)}
 html[data-ui-v3] body.sc-v3-shell #u-hub .h-sidebar{visibility:hidden;width:0;min-width:0;padding:0!important;border:0!important;overflow:hidden}
 html[data-ui-v3] body.sc-v3-shell #u-hub .h-tabbar{display:none!important}
 @media (min-width:1101px){html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub{grid-template-columns:0 minmax(0,1fr) var(--slip-w,330px)}
   html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub.h-studio-mode,html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub.h-focus-board{grid-template-columns:0 minmax(0,1fr)}}
-/* the hub's own More sheet opens above the v3 bottom bar (it is the same list of every item, pressed by the v3 'More' tab) */
-html[data-ui-v3] body.sc-v3-shell #u-hub .h-more-sheet{bottom:calc(68px + env(safe-area-inset-bottom));z-index:96}
-@media (min-width:1024px) and (max-width:1100px){html[data-ui-v3] body.sc-v3-shell #u-hub .h-more-sheet{bottom:16px}}
+/* the hub's own More sheet gives way to the v3 one (which presses the same items); the phone card sheet ends above the bottom bar */
+html[data-ui-v3] body.sc-v3-shell #u-hub .h-more-sheet{display:none!important}
+@media (max-width:1023px){html[data-ui-v3] body.sc-v3-shell #u-hub .h-card-panel{bottom:calc(60px + env(safe-area-inset-bottom))}}
 
-/* ------------------------------------------------------------------ More sheet (used when the page has no hub) */
+/* ------------------------------------------------------------------ More sheet (phone tab + desktop header button; items press the hub's own) */
 html[data-ui-v3] .sc-v3-more{z-index:97}
 html[data-ui-v3] .sc-scrim.sc-v3-scrim{z-index:96}
 html[data-ui-v3] .sc-v3-more[hidden],html[data-ui-v3] .sc-v3-scrim[hidden]{display:none}
 html[data-ui-v3] .sc-more__a{cursor:pointer;border:0;background:none;width:100%;text-align:left}
+html[data-ui-v3] .sc-v3-bar [data-v3=more]{display:none}
+@media (min-width:1024px){html[data-ui-v3] .sc-v3-bar [data-v3=more]{display:inline-grid}}
 @media (min-width:1024px){html[data-ui-v3] .sc-v3-more{left:auto;right:16px;bottom:auto;top:calc(var(--sc-top-h) + 8px);width:340px;border-radius:var(--sc-r-xl)}}
 
 /* ------------------------------------------------------------------ states (shared; ported from the D group's approved states)

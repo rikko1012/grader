@@ -155,9 +155,17 @@ small DOM additions from the group's own JS. Every field the page shows today mu
 - The hub's sidebar and phone tab bar are hidden under v3. The sidebar keeps a 0-width grid column.
 - The hub starts below the 56px header.
 
-**More.**
-- Phone, hub open: More presses the hub's own `#hub-more-toggle`, so every item it has stays as it is: Sportsbooks, By game, Tools, Alerts, Auto-build, Tracked slips, Moneylines, Single prop grader, Match research, Classic board.
-- No hub: a v3 sheet of the same destinations as links.
+**More** (phone bottom-bar tab and a desktop header button).
+- One v3 sheet. With the hub in the page, its rows are read on each open from:
+  - the hub's own More list (`#hub-more`: Sportsbooks, By game, Tools, Alerts, Auto-build, Tracked slips, Moneylines, Single prop grader, Match research, Classic board);
+  - the sidebar's EV and Arbitrage (when their flag is on);
+  - the sidebar foot.
+- Each row presses that hub control, so it behaves exactly as today. The hub's own More sheet is hidden under v3.
+- Without a hub (classic view) the sheet is a short list of plain links: hub routes (By game, Tools, Alerts) and the classic tools (Moneylines, Single prop grader, Match research, Classic board).
+
+**Hub overlays.** `#u-hub` gets `transform: translateZ(0)`, so its fixed layers (player card, popovers) start below the header. The phone card sheet ends above the bottom bar.
+
+**Classic views** (`?view=classic`). The shell does not recolour or re-font the page. It pads the body for the bar and keeps classic sticky headers at `top: 56px`.
 
 **Theme.** Light/dark use the same `scout-theme` key as the hub. With no stored value, the OS setting is followed.
 

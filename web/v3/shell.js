@@ -57,7 +57,8 @@
     ['books', 'Sportsbooks', 'books', '#/books'], ['picks', 'My picks', 'picks', '#/picks'], ['record', 'Record', 'record', '#/record'], ['tools', 'Tools', 'tools', '#/tools']];
   var OPTIONAL = {ev: 1, arb: 1, books: 1};
   var TABS = [['board', 'Board', 'board'], ['slips', 'Slip', 'slip'], ['picks', 'My picks', 'picks'], ['record', 'Record', 'record'], ['more', 'More', 'more']];
-  /* the More sheet without a hub: the same destinations as the hub's own More sheet (#hub-more), as links */
+  /* the More sheet without a hub (classic view): plain links to the hub's sections and the classic tools. With a hub the sheet is
+     built from the hub's own More list and sidebar instead, so it holds every item the hub has (flags included). */
   var MORE_LINKS = [['Prices', [['moneyline', 'Moneylines', '/?view=classic#moneylines', 1]]],
     ['Tools', [['games', 'By game', '#/games', 0], ['tools', 'Tools', '#/tools', 0], ['alerts', 'Alerts', '#/alerts', 0], ['grader', 'Single prop grader', '/?view=classic#one', 1],
       ['board', 'Match research', '/?view=classic#matches', 1], ['classic', 'Classic board', '/?view=classic', 1]]]];
@@ -151,7 +152,8 @@
     '<div class="sc-nav" role="navigation" aria-label="Research hub">' + nav + '</div>' +
     '<div class="sc-appbar__end"><button class="sc-iconbtn" type="button" data-v3="search" aria-label="Search players, teams and games">' + ICON.search + '</button>' +
     '<a class="sc-slip" href="' + B + '#/slips" data-v3-nav="slips">' + ICON.slip + 'Slip <b class="sc-num" data-v3-count="slip">0</b></a>' +
-    '<button class="sc-iconbtn" type="button" data-v3="theme" aria-label="Switch theme">' + ICON.sun + '</button></div>';
+    '<button class="sc-iconbtn" type="button" data-v3="theme" aria-label="Switch theme">' + ICON.sun + '</button>' +
+    '<button class="sc-iconbtn" type="button" data-v3="more" aria-expanded="false" aria-label="More: prices, tools, classic board">' + ICON.more + '</button></div>';
   var tabs = document.createElement('div');
   tabs.className = 'sc-tabbar sc-v3-tabs sc-app';
   tabs.setAttribute('role', 'navigation');
@@ -171,29 +173,76 @@
   window.ScoutV3._keepLive = keepLive;
   setTheme(root.dataset.theme || null);
 
-  /* More: the hub's own sheet when the hub is open (every item it has, as it is); else the v3 sheet of the same links */
-  var sheet = null, scrim = null;
-  function closeMore() { if (sheet) { sheet.hidden = true; scrim.hidden = true; } tabs.querySelector('[data-v3="more"]').setAttribute('aria-expanded', 'false'); }
+  /* More (phone tab, desktop header button): one v3 sheet. With the hub in the page its rows are the hub's own More list (#hub-more:
+     Sportsbooks, By game, Tools, Alerts, Auto-build, Tracked slips, Moneylines, Single prop grader, Match research, Classic board ...)
+     plus the sidebar's EV / Arbitrage (when their flag is on) and the sidebar foot; each row presses that item, so it does exactly
+     what it does today. Read fresh on every open (the hub adds items by flag). */
+  var sheet = null, scrim = null, moreItems = [];
+  var MORE_ICON = [[/sportsbook/i, 'books'], [/^ev$/i, 'ev'], [/arbitrage/i, 'arb'], [/moneyline/i, 'moneyline'], [/by game/i, 'games'], [/^tools/i, 'tools'],
+    [/alert|highlight/i, 'alerts'], [/auto-build/i, 'slip'], [/tracked/i, 'picks'], [/grader/i, 'grader'], [/match research/i, 'board'], [/classic/i, 'classic']];
+  var PRICES = /sportsbook|^ev$|arbitrage|moneyline/i;
+  function label(el) { return (el.textContent || '').replace(/[↗→]/g, '').replace(/\s+/g, ' ').trim(); }
+  function hubMore() {
+    var h = document.getElementById('u-hub');
+    if (!h) return null;
+    var out = [], seen = {};
+    function add(el) {
+      var t = label(el).replace(/\s*\d+$/, '');
+      if (!t || seen[t.toLowerCase()]) return;
+      seen[t.toLowerCase()] = 1;
+      out.push({el: el, text: t, ext: /↗/.test(el.textContent || '') || (el.tagName === 'A' && /view=classic/.test(el.getAttribute('href') || ''))});
+    }
+    ['ev', 'arb'].forEach(function (id) { var b = hubBtn(id); if (b) add(b); });
+    h.querySelectorAll('#hub-more > button, #hub-more > a, .h-sidebar-foot > button, .h-sidebar-foot > a').forEach(add);
+    return out;
+  }
+  function closeMore() {
+    if (sheet) { sheet.hidden = true; scrim.hidden = true; }
+    document.querySelectorAll('.sc-v3-bar [data-v3="more"], .sc-v3-tabs [data-v3="more"]').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+  }
+  function paintMore() {
+    var items = hubMore(), groups;
+    moreItems = items || [];
+    if (items) {
+      var icon = function (t) { for (var i = 0; i < MORE_ICON.length; i++) if (MORE_ICON[i][0].test(t)) return MORE_ICON[i][1]; return 'chev'; };
+      var row = function (it, i) { return '<button type="button" class="sc-more__a" data-v3-more="' + i + '">' + ICON[icon(it.text)] + '<span>' + esc(it.text) + '</span>' + (it.ext ? ICON.ext : '') + '</button>'; };
+      var prices = [], tools = [];
+      items.forEach(function (it, i) { (PRICES.test(it.text) ? prices : tools).push(row(it, i)); });
+      groups = [['Prices', prices.join('')], ['Tools', tools.join('')]];
+    } else {
+      groups = MORE_LINKS.map(function (g) {
+        return [g[0], g[1].map(function (i) {
+          return '<a class="sc-more__a" href="' + (i[2].charAt(0) === '#' ? B + i[2] : i[2]) + '">' + ICON[i[0]] + '<span>' + i[1] + '</span>' + (i[3] ? ICON.ext : '') + '</a>';
+        }).join('')];
+      });
+    }
+    sheet.innerHTML = '<div class="sc-more__grab" aria-hidden="true"></div>' + groups.filter(function (g) { return g[1]; }).map(function (g) {
+      return '<div class="sc-more__g" role="group" aria-label="' + g[0] + '"><div class="sc-more__h" aria-hidden="true">' + g[0] + '</div><div class="sc-more__list">' + g[1] + '</div></div>';
+    }).join('');
+  }
   function openMore(btn) {
-    var t = document.getElementById('hub-more-toggle');
-    if (hub() && t) { t.click(); btn.setAttribute('aria-expanded', t.getAttribute('aria-expanded') || 'false'); return; }
     if (!sheet) {
       scrim = document.createElement('div'); scrim.className = 'sc-scrim sc-v3-scrim'; scrim.hidden = true;
       sheet = document.createElement('div'); sheet.className = 'sc-sheet sc-more sc-v3-more sc-app'; sheet.hidden = true;
       sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-label', 'More');
-      sheet.innerHTML = '<div class="sc-more__grab" aria-hidden="true"></div>' + MORE_LINKS.map(function (g) {
-        return '<section class="sc-more__g" aria-label="' + g[0] + '"><h3 class="sc-more__h">' + g[0] + '</h3><div class="sc-more__list">' + g[1].map(function (i) {
-          return '<a class="sc-more__a" href="' + (i[2].charAt(0) === '#' ? B + i[2] : i[2]) + '">' + ICON[i[0]] + '<span>' + i[1] + '</span>' + (i[3] ? ICON.ext : '') + '</a>';
-        }).join('') + '</div></section>';
-      }).join('');
       document.body.appendChild(scrim); document.body.appendChild(sheet); keepLive(scrim); keepLive(sheet);
       scrim.addEventListener('click', closeMore);
-      sheet.addEventListener('click', function (e) { if (e.target.closest('a')) closeMore(); });
+      sheet.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-v3-more]');
+        if (b) {
+          var it = moreItems[+b.getAttribute('data-v3-more')];
+          closeMore();
+          if (it && it.el.isConnected) it.el.click();                 /* the hub's own control: its own route / dialog / link */
+          return;
+        }
+        if (e.target.closest('a')) closeMore();
+      });
     }
     var open = sheet.hidden;
+    if (open) paintMore();
     sheet.hidden = !open; scrim.hidden = !open;
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) { var a = sheet.querySelector('a'); if (a) a.focus(); }
+    if (open) { var a = sheet.querySelector('.sc-more__a'); if (a) a.focus(); }
   }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sheet && !sheet.hidden) closeMore(); });
 

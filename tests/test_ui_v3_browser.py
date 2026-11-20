@@ -110,13 +110,18 @@ def test_v3_nav_presses_the_hubs_own_buttons_and_mirrors_its_state(browser, env,
         p.locator(".sc-v3-bar [data-v3=theme]").click()
         assert p.evaluate("document.documentElement.dataset.theme") == "light"
         assert p.evaluate("localStorage.getItem('scout-theme')") == "light"
-        if size is PHONE:                                                            # More = the hub's own sheet, every item it has
-            p.locator(".sc-v3-tabs [data-v3=more]").click()
-            p.wait_for_selector("#hub-more:not([hidden])")
-            items = p.locator("#hub-more > *").all_inner_texts()
-            assert any("Classic board" in t for t in items) and not any(t.strip() == "Results" for t in items)
-            assert p.locator("#hub-more").is_visible()
-        else:
+        # More (phone tab / desktop header button): every item of the hub's own More list, each pressing that item
+        more = ".sc-v3-tabs [data-v3=more]" if size is PHONE else ".sc-v3-bar [data-v3=more]"
+        p.locator(more).click()
+        p.wait_for_selector(".sc-v3-more:not([hidden])")
+        rows = [t.strip() for t in p.locator(".sc-v3-more .sc-more__a").all_inner_texts()]
+        hub_items = p.evaluate(r"[...document.querySelectorAll('#hub-more > button, #hub-more > a')].map(e=>e.textContent.replace(/[↗→]/g,'').replace(/\s+/g,' ').trim().replace(/\s*\d+$/,''))")
+        assert hub_items and all(h in rows for h in hub_items), (hub_items, rows)
+        assert "Classic board" in rows and "Results" not in rows and not any("Lab" == r for r in rows)
+        p.locator(".sc-v3-more .sc-more__a", has_text="Tools").first.click()
+        p.wait_for_selector("#hub-tools-section:not([hidden])")
+        assert p.locator(".sc-v3-more").is_hidden()
+        if size is DESK:
             p.locator(".sc-v3-bar [data-v3=search]").click()
             p.wait_for_function("document.activeElement && document.activeElement.id==='hub-q'")
         assert not p.errors, p.errors
@@ -162,5 +167,53 @@ def test_flag_off_the_same_pages_carry_no_v3(browser, env, monkeypatch):
         assert p.evaluate("!window.ScoutV3 && !document.documentElement.dataset.uiV3")
         assert p.locator(".sc-v3-bar, .sc-v3-tabs").count() == 0
         assert p.locator("#u-hub .h-tabbar").is_visible()
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_player_card_opens_below_the_header_and_its_controls_work(browser, env, monkeypatch, size):
+    c, p = v3_page(browser, env, monkeypatch, "board", size, "dark")
+    try:
+        p.locator("#hub-rows .h-player").first.click()
+        p.wait_for_selector("#hub-card:not([hidden]) #hub-detail [data-hub=card-close]", timeout=15000)
+        box = p.evaluate("(()=>{const r=document.getElementById('hub-card').getBoundingClientRect();return [r.top,r.bottom]})()")
+        assert box[0] >= 55                                                           # not under the header
+        if size is PHONE:
+            assert box[1] <= 844 - 59                                                 # ends above the bottom bar
+        p.locator("#hub-detail [data-hub=card-close]").click()                       # its own Back works (nothing covers it)
+        p.wait_for_selector("#hub-card", state="hidden")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("path,ready", [("/?view=classic#board", "#boardout"), ("/lol?view=classic", "body"), ("/sports?view=classic#/board", "body")],
+                         ids=["cs2", "lol", "sports"])
+def test_v3_classic_views_keep_their_look_under_the_header(browser, env, monkeypatch, path, ready, theme):
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    c = context(browser, env, PHONE)
+    c.add_init_script(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
+    try:
+        p = c.new_page()
+        p.errors = []
+        p.on("pageerror", lambda e: p.errors.append(str(e)))
+        p.goto(env.url + path)
+        p.wait_for_selector(ready, state="attached", timeout=30000)
+        p.wait_for_selector(".sc-v3-bar", state="visible")
+        # the shell does not recolour the classic page: its body keeps the colours it has with the flag off
+        bg = p.evaluate("getComputedStyle(document.body).backgroundColor")
+        monkeypatch.delenv("SCOUT_UI_V3")
+        q = c.new_page()
+        q.goto(env.url + path)
+        q.wait_for_selector(ready, state="attached", timeout=30000)
+        assert q.evaluate("getComputedStyle(document.body).backgroundColor") == bg
+        # a classic sticky header stays below the fixed bar
+        tops = p.evaluate("[...document.querySelectorAll('header')].filter(h=>!h.closest('#u-hub')&&getComputedStyle(h).position==='sticky').map(h=>getComputedStyle(h).top)")
+        assert all(t == "56px" for t in tops), tops
+        no_h_scroll(p)
+        shot(p, f"classic-{path.split('?')[0].strip('/') or 'cs2'}-390-{theme}")
+        assert not p.errors, p.errors
     finally:
         c.close()
