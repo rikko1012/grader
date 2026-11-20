@@ -25,6 +25,14 @@ RETRY_STATUS = {429, 500, 502, 503, 504}
 
 MAX_SLEEP_S = 60            # longest Retry-After slept inside one call; a longer one is a hold, never shortened
 _HOLD = {}                  # host -> epoch seconds before which no request is sent (a source's Retry-After)
+_N429 = {}                  # host -> HTTP 429 answers received by this process (counted only; changes nothing)
+
+
+def count_429(host):
+    """HTTP 429 answers `host` has sent this process so far (including ones a retry then got past). Read-only: callers
+    take a before/after difference to report rate limits to the shared request-holds store (ppsoccer-1119)."""
+    with _LOCK:
+        return _N429.get(host, 0)
 
 
 class HttpError(RuntimeError):
@@ -139,6 +147,9 @@ def _request(url, params, headers, timeout, tries, ok, send):
         except (requests.ConnectionError, requests.Timeout) as e:
             last = e
         else:
+            if r.status_code == 429:
+                with _LOCK:
+                    _N429[host] = _N429.get(host, 0) + 1
             if r.status_code in ok:
                 return r
             if r.status_code not in RETRY_STATUS:

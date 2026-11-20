@@ -369,13 +369,16 @@ def alerts(o):
         if st.get("quotes_mb") is not None and st["quotes_mb"] >= 0.8 * st.get("quotes_cap_mb", 250):
             out.append({"level": "warn", "code": "expansion_quotes_large", "detail": {
                 "sport": sport, "quotes_mb": st["quotes_mb"], "cap_mb": st.get("quotes_cap_mb", 250)}})
-    # ppsoccer-1119: a covered PrizePicks soccer source (tab 82 + the tabs in coverage) not read OK for 15 min, or a
-    # soccer tab with lines that is not in the exact league table (it is never read until a person adds it)
+    # ppsoccer-1119: PrizePicks soccer tab 82 not read OK for 15 min, a league tab whose latest read failed with no good
+    # read for 15 min, or a soccer tab with lines that is not in the exact league table (it is never read until a person adds it)
     pps = o.get("expansion_pp_soccer")
     # kill switch on (SCOUT_SOCCER_PP_LEAGUES=0): the status file is frozen on purpose - no tab alerts
     if isinstance(pps, dict) and pps.get("leagues") and not pps.get("kill_switch_off"):
         for lg in pps["leagues"]:
-            if lg.get("covered"):
+            # Tab 82: no good read for 15 min. A league tab is read in rotation (adaptive coverage), so a tab simply not
+            # read lately is normal: it alerts only when its LATEST read failed and its last good one is 15 min old.
+            failing = (lg.get("last_error_at") or "") > (lg.get("last_ok_at") or "")
+            if lg.get("id") == 82 or (lg.get("fetched") and failing):
                 age = None
                 try:
                     from .contracts import parse_utc

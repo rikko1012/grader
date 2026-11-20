@@ -366,9 +366,10 @@ def default_jobs():
     for sport in ("soccer", "tennis"):
         if os.environ.get(f"SCOUT_{sport.upper()}_ENABLED") != "1":
             continue
-        # ppsoccer-1119: soccer makes ONE PrizePicks request a run (every PrizePicks soccer tab in rotation, inside
-        # PrizePicks' per-IP limit) -> every 90 s; 180 s with the per-league tabs off (SCOUT_SOCCER_PP_LEAGUES=0)
-        every = 90 if sport == "soccer" and os.environ.get("SCOUT_SOCCER_PP_LEAGUES", "1") != "0" else 180
+        # ppsoccer-1119: soccer reads the PrizePicks soccer tabs in rotation, an adaptive number of requests a run
+        # (AIMD on PrizePicks 429s, expansion_board._soccer_prizepicks) -> short runs every 45 s; 180 s with the
+        # per-league tabs off (SCOUT_SOCCER_PP_LEAGUES=0)
+        every = 45 if sport == "soccer" and os.environ.get("SCOUT_SOCCER_PP_LEAGUES", "1") != "0" else 180
         J[f"{sport}-quotes"] = dict(argv=_py("-m", "sports.expansion_board", sport), every_s=every,
             # Independent quote stores, measured 58/42 MB and ~4 s per live run.
             # Like books, keep fresh during long exclusive model jobs. Admission
@@ -394,6 +395,8 @@ def default_jobs():
             spec["every_s"] = _env_num(key + "_EVERY_S", spec["every_s"])
             if os.environ.get(key + "_EVERY_S"):        # an explicit override pins the interval (no game-day cadence)
                 spec.pop("cadence", None)
+            if name in ("soccer-quotes", "tennis-quotes"):
+                spec["every_s"] = max(30.0, spec["every_s"])   # never a PrizePicks run more often than every 30 s
         spec["cap_mb"] = _env_num(key + "_CAP_MB", spec["cap_mb"], int)
         if spec["cls"] == EXCLUSIVE:
             spec["cap_mb"] = max(spec["cap_mb"], 1)

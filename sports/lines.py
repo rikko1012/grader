@@ -116,9 +116,29 @@ def ud_parse(body, lg):
     return out
 
 
+PP_HOST = "partner-api.prizepicks.com"
+
+
 def _fetch_pp(lg):
-    return net.get_json(PP_URL, params={"league_id": lg["pp"], "per_page": 1000, "single_stat": "true",
-                                        "game_mode": "pickem"}, headers=PP_HEADERS, timeout=60)
+    before = net.count_429(PP_HOST)
+    try:
+        return net.get_json(PP_URL, params={"league_id": lg["pp"], "per_page": 1000, "single_stat": "true",
+                                            "game_mode": "pickem"}, headers=PP_HEADERS, timeout=60)
+    finally:
+        _report_pp_429(before)
+
+
+def _report_pp_429(before):
+    """ppsoccer-1119: tell the shared request-holds store about PrizePicks 429s this fetch drew (the soccer job halves
+    its request rate on them; the same IP). Reporting only: the request, its retries, the answer, the exception and
+    the lines / grades are exactly as before, and any failure here is swallowed."""
+    try:
+        n = net.count_429(PP_HOST) - before
+        if n > 0:
+            from .expansion_sources import record_429
+            record_429("nba_nfl", n)
+    except Exception:                                   # noqa: BLE001 - never affects the NBA / NFL ingest
+        pass
 
 
 def _fetch_ud(lg):

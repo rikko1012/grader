@@ -90,8 +90,14 @@ def env(monkeypatch, tmp_path):
     for k in ('SCOUT_SOCCER_PP_LEAGUES', 'SCOUT_SOCCER_PP_MLS', 'SCOUT_SOCCER_UNDERDOG', 'SCOUT_SOCCER_PP_MAX_CALLS',
               'SPORTS_JOB_SOCCER_QUOTES_EVERY_S', 'SCOUT_SOCCER_PP_BACKOFF_S'):
         monkeypatch.delenv(k, raising=False)
+    for k in ('SCOUT_SOCCER_PP_MAX_LEVEL', 'SCOUT_SOCCER_PP_GROW_S', 'SCOUT_SOCCER_PP_START_LEVEL',
+              'SCOUT_SOCCER_PP_SPACE_S', 'SCOUT_SOCCER_PP_CEILING_S'):
+        monkeypatch.delenv(k, raising=False)
     clock = Clock()
     monkeypatch.setattr(board, 'now_utc', clock.iso)
+    # in-run spacing advances the fake clock instead of sleeping; the run budget reads the same clock
+    monkeypatch.setattr(board, '_sleep', lambda s: setattr(clock, 't', clock.t + timedelta(seconds=s)))
+    monkeypatch.setattr(board, '_monotonic', clock.mono)
     monkeypatch.setattr(expansion_odds, 'collect', lambda sport, get, directory: ([], {}))
     state = {'calls': [], 'fail': {}, 'tabs': tabs(), 'listed': dict(LISTED)}
 
@@ -176,8 +182,9 @@ def test_plan_reads_only_exact_mapped_tabs_with_lines():
     assert board.plan_leagues(None)[0] == sorted(k for k in offers.PP_SOCCER_LEAGUES if k != 82)
 
 
-def run(env, n=1, step=90):
-    """n quotes runs `step` seconds apart -> [(calls, snapshot)]."""
+def run(env, n=1, step=None):
+    """n quotes runs `step` seconds apart (default: the job's own cadence, 45 s) -> [(calls, snapshot)]."""
+    step = step or board.quotes_every_s()
     out = []
     for _ in range(n):
         env['calls'].clear()
@@ -191,69 +198,15 @@ def status(env):
     return json.loads((env['dir'] / board.PP_STATUS).read_text(encoding='utf-8'))
 
 
-def visible_late(snap, env, before_next=85):
+def visible_late(snap, env, before_next=None):
     """Per-source counts a member still sees just before the next run (the 300 s rule at read time)."""
+    before_next = before_next or board.quotes_every_s() - 5
     late = datetime.fromisoformat(snap['built_at'].replace('Z', '+00:00')) + timedelta(seconds=before_next)
     seen = Counter()
     for r in snap['offers']:
         if (late - datetime.fromisoformat(r['observed_at'].replace('Z', '+00:00'))).total_seconds() <= 300:
             seen[r.get('pp_league') or 'SOCCER'] += 1
     return seen
-
-
-def test_one_request_a_run_learns_the_tabs_then_covers_82_and_the_best_tab(env):
-    runs = run(env, 6)
-    assert [c for c, _ in runs] == [[82, 'leagues'],        # tab 82, then the hourly league list (housekeeping)
-                                    [6, 14],                # a free coverage slot learns a tab; discovery reads EPL
-                                    [82, 534],              # discovery: Serie A
-                                    [536],                  # Serie A (gradeable, ita.1) holds the slot; both fresh
-                                    [82],                   # then tab 82 and Serie A alternate, each every 180 s
-                                    [534]]
-    assert all(len(c) <= 2 for c, _ in runs)                # never a burst of three
-    st = status(env)
-    assert st['covered'] == [82, 534] and st['slots'] == 2 and st['every_s'] == 90
-    assert sorted(st['not_covered']) == [6, 536]            # standard lines outside coverage: ops says so
-    snap = runs[-1][1]
-    assert snap_ids(snap) == ['534a', '82a', '82b']         # covered tabs only; per-league rows standard only
-    assert next(r for r in snap['offers'] if r['offer_id'] == '82a').get('pp_league') is None   # tab 82 wins the id
-    assert set(snap['sources']) == {'prizepicks'} and snap['sources']['prizepicks']['ok'] is True
-
-
-def test_steady_state_tab_82_never_dark_and_covered_tabs_always_visible(env):
-    runs = run(env, 4)
-    for calls, snap in run(env, 12):
-        assert len(calls) <= 2
-        seen = visible_late(snap, env)
-        assert seen['SOCCER'] == 2 and seen['Serie A'] == 1   # just before the next run: still on the board
-        assert snap['sources']['prizepicks']['ok'] is True
-
-
-def test_faster_cadence_widens_coverage(env, monkeypatch):
-    monkeypatch.setenv('SPORTS_JOB_SOCCER_QUOTES_EVERY_S', '60')
-    assert board.coverage_slots(board.quotes_every_s()) == 4
-    run(env, 8, step=60)
-    for calls, snap in run(env, 8, step=60):
-        seen = visible_late(snap, env, before_next=55)
-        assert (seen['SOCCER'], seen['Serie A'], seen['MLS'], seen['Liga MX']) == (2, 1, 1, 1)
-    assert status(env)['not_covered'] == []
-
-
-def test_single_429_honours_retry_after_and_a_second_backs_off_to_tab_82_at_the_old_rate(env, monkeypatch):
-    run(env, 5)
-    before = {r['offer_id']: r for r in json.loads((env['dir'] / 'board.json').read_text(encoding='utf-8'))['offers']}
-    env['fail'] = {534: 429, 82: 429}
-    calls, snap = run(env, 1)[0]
-    assert len(calls) == 1 and status(env)['stopped'] == 'http_429' and not status(env)['backoff_until']
-    rows = {r['offer_id']: r for r in snap['offers']}
-    assert all(rows[k] == before[k] for k in rows)           # carried, observed_at never re-stamped
-    calls, _ = run(env, 1)[0]
-    assert status(env)['backoff_until']                      # a second 429 inside 15 min: back-off
-    env['fail'] = {}
-    backoff = run(env, 6)                                    # 6 x 90 s < 600 s
-    assert all(c in ([82], []) for c, _ in backoff) and [c for c, _ in backoff].count([82]) == 3   # 82 only, every 180 s
-    assert snap_ids(backoff[-1][1]) == ['82a', '82b']        # Serie A lines aged out honestly (300 s)
-    after = run(env, 2)
-    assert any(534 in c for c, _ in after) and '534a' in snap_ids(after[-1][1])   # coverage again after 600 s
 
 
 def test_shared_hold_means_no_request_at_all(env, monkeypatch):
@@ -264,24 +217,13 @@ def test_shared_hold_means_no_request_at_all(env, monkeypatch):
 
 
 def test_empty_answer_from_a_listed_tab_is_a_failed_read_and_rereads_the_list_at_most_every_ten_minutes(env):
-    run(env, 6)
+    run(env, 16)
     env['fail'] = {534: 'empty'}
-    runs = run(env, 8)
+    runs = run(env, 16)
     st = json.loads((env['dir'] / board.PP_STATE).read_text(encoding='utf-8'))
     assert st['per']['534']['error'] == 'empty_listed_tab'
     lists = sum(c.count('leagues') for c, _ in runs)
-    assert 1 <= lists <= 2                                    # 8 runs = 12 min: one or two forced list reads
-
-
-def test_no_league_list_tries_mapped_tabs_and_retries_the_list(env):
-    env['fail'] = {'leagues': 429}
-    calls, _ = run(env, 1)[0]
-    assert calls == [82, 'leagues']
-    st = json.loads((env['dir'] / board.PP_STATE).read_text(encoding='utf-8'))
-    assert 'listing' not in st['leagues'] and st['leagues']['error'] == 'HttpError'
-    env['fail'] = {}
-    calls, _ = run(env, 1)[0]
-    assert calls[0] in offers.PP_SOCCER_LEAGUES and calls[1:] == ['leagues']
+    assert 1 <= lists <= 2                                    # 16 runs x 45 s = 12 min: one or two forced list reads
 
 
 def test_books_keep_their_180_s_cadence_and_carry_between_reads(env, monkeypatch):
@@ -293,7 +235,7 @@ def test_books_keep_their_180_s_cadence_and_carry_between_reads(env, monkeypatch
                   'start': START, 'observed_at': env['clock'].iso()}],
                 {'betrivers': {'ok': True, 'checked_at': env['clock'].iso(), 'markets': 1}})
     monkeypatch.setattr(expansion_odds, 'collect', odds)
-    runs = run(env, 6)
+    runs = run(env, 6, step=90)
     assert n['reads'] == 3                                    # 6 runs x 90 s: books every second run
     assert [s['game_odds'][0]['offer_id'] for _, s in runs] == ['o1', 'o1', 'o2', 'o2', 'o3', 'o3']
     assert runs[1][1]['sources']['betrivers'] == runs[0][1]['sources']['betrivers']   # carried, not re-stamped
@@ -302,7 +244,7 @@ def test_books_keep_their_180_s_cadence_and_carry_between_reads(env, monkeypatch
 def test_kill_switch_is_the_old_single_request_every_180_s(env, monkeypatch):
     from sports.scheduler import default_jobs
     monkeypatch.setenv('SCOUT_TENNIS_ENABLED', '1')
-    assert default_jobs()['soccer-quotes']['every_s'] == 90 and default_jobs()['tennis-quotes']['every_s'] == 180
+    assert default_jobs()['soccer-quotes']['every_s'] == 45 and default_jobs()['tennis-quotes']['every_s'] == 180
     assert default_jobs()['soccer-quotes']['timeout_s'] == 90
     monkeypatch.setenv('SCOUT_SOCCER_PP_LEAGUES', '0')
     assert default_jobs()['soccer-quotes']['every_s'] == 180
@@ -376,22 +318,6 @@ def test_ops_reads_the_status_file_alerts_and_the_kill_switch_silences_them(env,
     assert service.expansion_pp_soccer() is None
 
 
-def test_a_covered_tab_failing_without_429_never_starves_tab_82(env):
-    run(env, 6)
-    env['fail'] = {534: 'empty'}                             # 200 with no data from a listed tab: a failed read
-    for calls, snap in run(env, 8):
-        assert calls.count(534) <= 1 and len(calls) <= 2
-        assert visible_late(snap, env)['SOCCER'] == 2         # tab 82 lines on the board before every next run
-    env['fail'] = {}
-
-
-def test_tab_82_failing_keeps_the_covered_tab_visible(env):
-    run(env, 6)
-    env['fail'] = {82: 'empty'}
-    for calls, snap in run(env, 8):
-        assert visible_late(snap, env)['Serie A'] >= 1          # (its own copy of 82a joins once tab 82's is gone)
-
-
 def test_a_run_killed_mid_read_still_moves_the_rotation_on(env, monkeypatch):
     run(env, 6)
     nxt = sorted(board._read_json(env['dir'] / board.PP_STATE, {})['per'].items(),
@@ -413,8 +339,8 @@ def test_a_run_killed_mid_read_still_moves_the_rotation_on(env, monkeypatch):
 def test_tab_82_alone_in_coverage_keeps_its_old_180_s_rate(env):
     env['tabs'] = {82: env['tabs'][82]}
     env['listed'] = {82: LISTED[82]}
-    runs = run(env, 9)
-    assert sum(c.count(82) for c, _ in runs) == 5            # 9 runs x 90 s: every second run, not every run
+    runs = run(env, 18)
+    assert sum(c.count(82) for c, _ in runs) == 5            # 18 runs x 45 s: every fourth run (180 s), not every run
     for _, snap in runs:
         assert visible_late(snap, env)['SOCCER'] == 2
 

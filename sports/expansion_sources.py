@@ -5,6 +5,7 @@ Only transport cooldowns are shared; no player, result, quote or model data.
 import os
 import sqlite3
 import time
+from contextlib import closing
 from urllib.parse import urlsplit
 
 from . import net
@@ -62,9 +63,76 @@ def _pace(con, host):
         time.sleep(at - now)
 
 
+EVENTS_KEEP_S = 2 * 86400
+
+
+def _events_on():
+    """The 429 log only exists for the soccer per-league AIMD (its only reader): soccer on, kill switch off."""
+    return os.environ.get('SCOUT_SOCCER_ENABLED') == '1' and os.environ.get('SCOUT_SOCCER_PP_LEAGUES', '1') != '0'
+
+
+def _events_table(con):
+    con.execute('CREATE TABLE IF NOT EXISTS holds (host TEXT PRIMARY KEY, until REAL NOT NULL)')
+    con.execute('CREATE TABLE IF NOT EXISTS pp_events (id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, '
+                'consumer TEXT NOT NULL, n INTEGER NOT NULL, until REAL)')
+
+
+def record_429(consumer, n=1):
+    """A PrizePicks consumer (soccer / tennis quotes, NBA / NFL lines ingest) got `n` HTTP 429 answers: log it, and
+    copy this process's PrizePicks Retry-After hold (if any) into the shared holds so the soccer and tennis jobs honour
+    it. Never raises, never waits more than ~1 s, never sends a request; a no-op unless the soccer AIMD is on."""
+    if not _events_on() or n <= 0:
+        return False
+    try:
+        until = net.holds().get(PP_HOST)
+        with closing(sqlite3.connect(_path('soccer'), timeout=1)) as con, con:
+            _events_table(con)
+            con.execute('INSERT INTO pp_events(at, consumer, n, until) VALUES (?,?,?,?)',
+                        (time.time(), str(consumer)[:20], int(n), until))
+            if until:
+                con.execute('INSERT INTO holds(host,until) VALUES(?,?) ON CONFLICT(host) DO UPDATE SET '
+                            'until=max(holds.until,excluded.until)', (PP_HOST, until))
+        return True
+    except Exception:                                   # noqa: BLE001 - reporting never breaks a caller
+        return False
+
+
+def pp_events_since(cursor):
+    """-> [{id, at (epoch), consumer, n, until}] logged after row id `cursor` (oldest first; at most 500). Prunes rows
+    older than two days. [] when the log is off or unreadable."""
+    if not _events_on():
+        return []
+    try:
+        with closing(sqlite3.connect(_path('soccer'), timeout=1)) as con, con:
+            _events_table(con)
+            con.execute('DELETE FROM pp_events WHERE at < ?', (time.time() - EVENTS_KEEP_S,))
+            rows = con.execute('SELECT id, at, consumer, n, until FROM pp_events WHERE id > ? ORDER BY id LIMIT 500',
+                               (int(cursor),)).fetchall()
+    except (sqlite3.Error, OSError, ValueError, TypeError):
+        return []
+    return [{'id': r[0], 'at': r[1], 'consumer': r[2], 'n': r[3], 'until': r[4]} for r in rows]
+
+
+def pp_429_counts():
+    """Ops: PrizePicks 429 answers per consumer in the last hour / day, and the latest one (UTC)."""
+    if not _events_on():
+        return {}
+    try:
+        with closing(sqlite3.connect(_path('soccer'), timeout=1)) as con, con:
+            _events_table(con)
+            now = time.time()
+            rows = con.execute('SELECT consumer, SUM(CASE WHEN at >= ? THEN n ELSE 0 END), SUM(n), MAX(at) '
+                               'FROM pp_events WHERE at >= ? GROUP BY consumer', (now - 3600, now - 86400)).fetchall()
+    except (sqlite3.Error, OSError):
+        return {}
+    return {c: {'last_1h': int(h or 0), 'last_24h': int(d or 0),
+                'last_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(t)) if t else None} for c, h, d, t in rows}
+
+
 def _held(sport, url, send):
     path = _path(sport)
     host = urlsplit(url).hostname
+    before = net.count_429(urlsplit(url).netloc) if host == PP_HOST else 0
     with sqlite3.connect(path, timeout=3) as con:
         con.execute('CREATE TABLE IF NOT EXISTS holds (host TEXT PRIMARY KEY, until REAL NOT NULL)')
         row = con.execute('SELECT until FROM holds WHERE host=?', (host,)).fetchone()
@@ -86,6 +154,8 @@ def _held(sport, url, send):
             for name, until in net.holds().items():
                 con.execute('INSERT INTO holds(host,until) VALUES(?,?) ON CONFLICT(host) DO UPDATE SET until=max(holds.until,excluded.until)',
                             (name, until))
+        if host == PP_HOST:
+            record_429(sport, net.count_429(urlsplit(url).netloc) - before)
 
 
 def get_json(sport, url, **kwargs):

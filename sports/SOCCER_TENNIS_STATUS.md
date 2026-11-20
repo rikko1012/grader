@@ -176,30 +176,44 @@ MLS and Serie A props missing). The soccer quotes job now reads every mapped tab
   these keys, so their revisions and forecasts are byte-identical to 5036ce4.
 - Request limit (measured from one IP, logs/ppsoccer_1119): two PrizePicks requests back-to-back pass, a third
   within seconds draws 429 (3 of 3 runs), one request every ~40-45 s is sustained - about 1.3 requests a minute for
-  the whole IP, shared with tennis and the NBA / NFL ingest. So the soccer quotes job makes ONE PrizePicks request a
-  run and runs every 90 s (`SPORTS_JOB_SOCCER_QUOTES_EVERY_S`; 180 s with the kill switch on), plus at most one
-  housekeeping request (the hourly `/leagues` read, or a 2-hourly discovery read of a listed tab outside coverage).
-  `SCOUT_PP_GAP_S` (3 s) spaces any two PrizePicks requests of the soccer and tennis jobs (request-holds.db).
-- Coverage (fixed, never a flicker): tab 82 plus the best `coverage_slots - 1` tabs with standard lines, each re-read
-  every `slots x every_s` (default 2 x 90 = 180 s, so tab 82 keeps its old freshness). Tabs are ranked gradeable
-  competitions first (`REGULATION_LEAGUES`: EPL, La Liga, Serie A, Bundesliga, Ligue 1), then the earliest standard
-  line. Tabs with standard lines outside coverage are listed in ops `not_covered` and are NOT put on the board. Default
-  (90 s): tab 82 + 1 tab (Serie A on 2026-11-19; MLS and Liga MX not covered - they could not get a letter anyway).
-  `SPORTS_JOB_SOCCER_QUOTES_EVERY_S=60` gives 4 slots (82 + 3 tabs, ~1 request / min), 45 gives 5.
-- A source not read keeps its last good rows with their own `observed_at`; the 300 s rule hides them exactly when they
-  go stale. An empty answer from a tab `/leagues` lists with lines is a failed read (and re-reads `/leagues`, at most
-  every 10 min). A 429 sets the shared Retry-After hold (no PrizePicks request until it ends); a second 429 within
-  15 min backs the tabs off for `SCOUT_SOCCER_PP_BACKOFF_S` (600 s): tab 82 only, at most every 180 s (the 5036ce4
-  rate). Book markets (BetRivers / DraftKings) keep their 180 s cadence and are carried between reads.
-- Scheduler: one request a run keeps a run at ~4-8 s. A 30-45 s run (the first, burst design) holds the job's 80 MB
-  reservation long enough to push settle-post's first start past 45 min on 7-9 of 12 replay seeds; 5-12 s runs every
-  90 s match base (0-2 of 12).
+  the whole IP, shared with tennis and the NBA / NFL ingest. Render's limit is not known, so coverage is ADAPTIVE
+  (AIMD on real 429s, review fix 2026-11-19):
+  - `level` = soccer PrizePicks requests per 90 s, paid out over short runs every 45 s
+    (`SPORTS_JOB_SOCCER_QUOTES_EVERY_S`, clamped >= 30 s; 180 s with the kill switch on) as credit, never a burst
+    after a pause. Start: 1 (tab 82 every 180 s + one tab in rotation). +1 after `SCOUT_SOCCER_PP_GROW_S` (600 s) of
+    clean runs with no 429 from ANY PrizePicks consumer; at most what re-reads every source every 180 s
+    (`max_level` = ceil(sources / 2): 9 sources -> 5) and `SCOUT_SOCCER_PP_MAX_LEVEL` (default 5; 1 = rollback lever).
+  - Any 429 - soccer, tennis (logged by `expansion_sources._held`) or the NBA / NFL lines fetch
+    (`lines._fetch_pp` reports its 429s and its Retry-After hold to `request-holds.db`; its own request, retries,
+    answer and lines are unchanged) - halves the level at once (one halving a run); the level that drew it is not
+    tried again for `SCOUT_SOCCER_PP_CEILING_S` (3600 s). Another consumer's 429 in the last 60 s skips the run; a
+    Retry-After hold (any consumer) means no request at all. Waiting out a hold / cool-off / back-off never counts as
+    clean time. Two own 429s within 15 min still back off to tab 82 only, every 180 s, for
+    `SCOUT_SOCCER_PP_BACKOFF_S` (600 s).
+  - Requests of one run are `SCOUT_SOCCER_PP_SPACE_S` (4 s) apart (and `SCOUT_PP_GAP_S`, 3 s, across processes); no
+    request starts after 30 s. Runs stay short on purpose: the scheduler replay keeps base timing with 6-14 s runs
+    every 45 s (1 of 12 seeds late vs 2 of 12 at base), not with 15-25 s runs every 90 s (4-6 of 12).
+- Rotation (fair): tab 82 whenever it is due (170 s since its last attempt), then the due tabs with standard lines
+  (or never read) least-recently-ATTEMPTED first - a failing tab never starves the others, an earlier kick-off never
+  takes another league's turn. A listed tab whose last read had no standard line is re-read every 30 min. Every
+  source's last good rows stay on the board with their own `observed_at` until the 300 s rule hides them, so BELOW
+  full coverage leagues take turns on the board (level 1: each league ~300 s of every 8 x 180 s); at full coverage
+  every source is re-read every 180 s and stays on continuously. If Render shows no 429s, 9 sources reach full
+  coverage in ~40 min (4 steps x 600 s).
+- An empty answer from a tab `/leagues` lists with lines is a failed read (and re-reads `/leagues`, at most every
+  10 min). A failed `/leagues` read (429, 5xx, timeout, bad JSON, empty list) waits 600 s, then 1200, 2400, then
+  hourly - never a retry every run. Book markets (BetRivers / DraftKings) keep their 180 s cadence and are carried.
+- Member strip: the one `prizepicks` source follows TAB 82 only (a failing league tab shows in ops, not to members);
+  its `checked_at` is the oldest good read among the tabs on the board (the soccer page re-stamps rows with it).
 - Grading is unchanged: MLS and Liga MX full-match lines stop at `extra_time_scope_unverified` (usa.1 / mex.1 are not
   regulation-only leagues), passes / tackles / crosses / clearances / dribbles have forecast inputs only for the six
   FotMob leagues, `shots_assisted` has no collector. Goal + Assist and fantasy-score labels are unmapped, as before.
-- Ops (GET): `expansion_pp_soccer` = per tab `listed`, `covered`, `read_this_run`, `parsed`, `kept`, `first_start`,
-  `on_board`, `last_ok_at`, `last_error`; plus `every_s`, `slots`, `covered`, `not_covered`, `calls`, `stopped`,
-  `recent_429`, `backoff_until`, `unmapped_with_lines`, `renamed`.
+- Ops (GET): `expansion_pp_soccer` = `coverage` (`level`, `max_level`, `cap`, `credit`, `constrained`,
+  `halved_this_run`, `ceiling` / `ceiling_until`, `grow_in_s`, `last_growth`, `last_halving`, `halvings`), `pp_429`
+  per consumer (`soccer` / `tennis` / `nba_nfl`: `last_1h`, `last_24h`, `last_at`), per tab `ok`, `refresh_age_s`,
+  `listed`, `covered` (rows on the board now), `read_this_run`, `parsed`, `kept`, `first_start`, `on_board`,
+  `last_ok_at`, `last_attempt_at`, `last_error`; plus `every_s`, `space_s`, `calls`, `stopped`, `recent_429`,
+  `backoff_until`, `league_list` (`fails`, `next_try_after_error_s`), `unmapped_with_lines`, `renamed`.
 - Kill switch: `SCOUT_SOCCER_PP_LEAGUES=0` = the single tab-82 request every 180 s exactly as at 5036ce4 (shared pace
   and odds carry off too). `SCOUT_SOCCER_PP_MLS`
   is retired (MLS is tab 6 in the table); it still works only with the kill switch on, as before.
