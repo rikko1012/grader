@@ -15,9 +15,16 @@
      cell), each shown once elsewhere on the card; a sports hold chip "No grade yet" is not drawn where Lean + Stake 0U stands.
    - The pick summary mirrors the hub's own decision strip (side, chance, letter or Lean, stake): nothing about the pick is worked
      out here, so every strip branch (Lean, hold, one-sided, not offered, view only, research only) reads as the strip does.
-   - CS2 map cards + the 2-map combine pool his saved Maps-1-2 series results per map (integers, from the same history the card's
-     chart and "By map" use): pooled = sum of the picked maps' results / their map count, exact, rounded half-up only for display.
-     Picking maps never changes the pick or the strip. */
+   - CS2 stats are HLTV only (owner 2026-11-20: "stop using BO3.gg we have HLTV"): the hero stat grid, the map cards and the 2-map
+     combine read /api/upgrade/player-maps (hltv_maps.py: his HLTV per-map RAW TOTALS, last 12 months and 3 months, by the
+     projections' exact HLTV id, plus the current map pool). One GET per board row, made only by this file, kept per row. No
+     BO3.gg number is shown anywhere in these blocks; a map HLTV has no maps for shows "—".
+   - Map cards: only the current pool (the match's HLTV veto pool, else the last 7 days of HLTV vetoes, else hltv_maps.ACTIVE_DUTY),
+     with display names; maps outside it sit in a closed "Outside the current pool" group (no combine, no map chance). Each card:
+     Kills/map, KPR, HS%, K/D from the totals, deltas vs his all-maps 12-month numbers; "All numbers by map" adds Rating, ADR, KAST,
+     rounds and maps won. The combine sums the two maps' totals, then divides (HLTV maths): kills / maps, kills / rounds,
+     headshots / kills (maps with a headshot row), kills / deaths, round-weighted rating. Exact on the integers, rounded half-up
+     only for display. Picking maps never changes the pick, the chance, the stake or the strip. */
 (function () {
   'use strict';
   if (!window.ScoutV3) return;
@@ -53,6 +60,52 @@
       } catch (e) { /* never in the hub's way */ }
       return p;
     };
+  }
+
+  /* ---------------------------------------------------------------- HLTV per-map totals (the only source of the CS2 stats here) */
+  var HM = {}, HM_ORDER = [];
+  function hmUrl(r) { return '/api/upgrade/player-maps?sport=cs2&book=' + encodeURIComponent(r.offer.platform) + '&id=' + encodeURIComponent(r.offer.offer_id); }
+  /* {state: 'loading' | 'ok' | 'none' | 'error', doc} for this row; starts the one read when it is not kept yet */
+  function hltvMaps(r) {
+    if (!r || r.sport !== 'cs2' || !r.offer || !r.offer.offer_id) return null;
+    var u = hmUrl(r), e = HM[u];
+    if (e && !(e.state === 'error' && Date.now() - e.at > 15000)) return e;
+    e = HM[u] = {state: 'loading', at: Date.now(), doc: null};
+    HM_ORDER.push(u);
+    while (HM_ORDER.length > 40) delete HM[HM_ORDER.shift()];
+    var f = typeof nativeFetch === 'function' ? nativeFetch : window.fetch;
+    f.call(window, u, {credentials: 'same-origin'}).then(function (res) {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }).then(function (d) {
+      e.doc = d; e.state = d && d.state === 'ok' ? 'ok' : d && d.state === 'none' ? 'none' : 'error'; e.at = Date.now(); schedule();
+    }, function () { e.state = 'error'; e.at = Date.now(); schedule(); });
+    return e;
+  }
+  /* rates from raw totals (null when the denominator is 0 / missing: shown as "—", never 0) */
+  var R = {
+    kpm: function (t) { return t && t.maps ? t.kills / t.maps : null; },
+    kpr: function (t) { return t && t.rounds ? t.kills / t.rounds : null; },
+    hs: function (t) { return t && t.hs_kills ? 100 * t.hs / t.hs_kills : null; },
+    hpm: function (t) { return t && t.hs_maps ? t.hs / t.hs_maps : null; },
+    kd: function (t) { return t && t.deaths ? t.kills / t.deaths : null; },
+    dpr: function (t) { return t && t.rounds ? t.deaths / t.rounds : null; },
+    rating: function (t) { return t && t.rating_rounds && num(t.rating_x_rounds) ? t.rating_x_rounds / t.rating_rounds : null; },
+    adr: function (t) { return t && t.adr_rounds && num(t.adr_x_rounds) ? t.adr_x_rounds / t.adr_rounds : null; },
+    kast: function (t) { return t && t.kast_rounds && num(t.kast_x_rounds) ? t.kast_x_rounds / t.kast_rounds : null; }
+  };
+  var SUMS = ['maps', 'rounds', 'kills', 'deaths', 'hs', 'hs_kills', 'hs_maps', 'rating_x_rounds', 'rating_rounds', 'adr_x_rounds', 'adr_rounds',
+    'kast_x_rounds', 'kast_rounds', 'wins', 'decided'];
+  /* HLTV-style combine: every total summed (a missing weighted sum stays missing only when every map lacks it) */
+  function sumTotals(list) {
+    var out = null;
+    list.forEach(function (t) {
+      if (!t) return;
+      if (!out) { out = {}; SUMS.forEach(function (k) { out[k] = null; }); }
+      SUMS.forEach(function (k) { if (num(t[k])) out[k] = (out[k] || 0) + t[k]; });
+    });
+    if (out) SUMS.forEach(function (k) { if (out[k] == null && !/_x_/.test(k)) out[k] = 0; });
+    return out;
   }
 
   /* ---------------------------------------------------------------- number display */
@@ -159,27 +212,39 @@
   function statRow(label, value, d, t) {
     return '<div class="sc-stat' + (t ? ' is-' + t : '') + '"><dt>' + esc(label) + '</dt><dd><b>' + value + '</b>' + (d ? '<i>' + d + '</i>' : '') + '</dd></div>';
   }
+  /* a read that is still running or failed is never shown as "—" (that means HLTV has no data): a quiet line, then a retry */
+  function hmState(e) {
+    if (!e || e.state === 'loading') return '<div class="sc-skel v3p-hm-state" role="status" aria-busy="true" data-v3p-hm="loading"><span class="sc-sr">Loading</span>'
+      + '<div class="sc-skrow"><span class="sc-sk" style="width:70%"></span><span class="sc-sk"></span><span class="sc-sk"></span><span class="sc-sk"></span></div>'
+      + '<div class="sc-skrow"><span class="sc-sk" style="width:55%"></span><span class="sc-sk"></span><span class="sc-sk"></span><span class="sc-sk"></span></div></div>';
+    return '<div class="sc-errbox v3p-hm-state" role="alert" data-v3p-hm="error">' + (V.ICON.alert || '') + '<p>HLTV stats did not load.</p>'
+      + '<button type="button" class="sc-btn" data-v3p="hm-retry">Try again</button></div>';
+  }
+  var isHsProp = function (r) { return r.market.stat === 'hs' || /head/i.test(r.market.stat_label || ''); };
   function cs2Grid(r, doc) {
-    var c = doc.cs2_card || {}, s = c.stats || {}, hl = c.hltv || {}, fw = s.form_windows || {}, f3 = fw['3m'] || {}, f12 = fw['12m'] || {};
+    var e = hltvMaps(r);
+    if (!e || e.state === 'loading' || e.state === 'error') return '<div class="sc-statgrid v3p-grid">' + hmState(e) + '</div>';
+    var w = (e.doc && e.doc.windows) || {}, t12 = (w['12m'] || {}).overall, t3 = (w['3m'] || {}).overall;
     var line = r.offer.line, k = periodMaps(r.market.period_label), pace = num(line) && k ? line / k : null;
-    var isHs = r.market.stat === 'hs' || /head/i.test(r.market.stat_label || ''), inv = r.scout && r.scout.side === 'under';
-    var mp = ctxVal(doc, 'Maps played'), kpm = ctxVal(doc, 'Kills per map'), hpm = ctxVal(doc, 'Headshots per map');
-    var left = [], right = [], legend = [];
-    if (num(+mp) && mp != null) left.push(statRow('Maps', esc(mp), '', ''));
-    if (num(kpm)) { var dk = !isHs && pace != null ? kpm - pace : null; left.push(statRow('Kills/map', fx(kpm, 1), delta(dk, 2), tone(dk, pace, inv))); }
-    if (num(hl.kd)) left.push(statRow('K/D', fx(hl.kd, 2), delta(hl.kd - 1, 2), tone(hl.kd - 1, 1)));
-    var rating = num(hl.rating) ? hl.rating : s.rating;
-    if (num(rating)) left.push(statRow('Rating', fx(rating, 2), delta(rating - 1, 2), tone(rating - 1, 1)));
-    if (num(f3.hs_pct)) { var dh = num(f12.hs_pct) ? f3.hs_pct - f12.hs_pct : null; right.push(statRow('HS%', fx(f3.hs_pct, 1) + '%', delta(dh, 1, ' pt'), tone(dh, 0, false, 1.5))); }
-    if (num(hpm)) { var dhp = isHs && pace != null ? hpm - pace : null; right.push(statRow('HS/map', fx(hpm, 1), delta(dhp, 2), tone(dhp, pace, inv))); }
-    if (num(f3.kpr)) { var dkp = num(f12.kpr) ? f3.kpr - f12.kpr : null; right.push(statRow('KPR', fx(f3.kpr, 2), delta(dkp, 2), tone(dkp, f12.kpr))); }
-    if (num(s.dpr)) right.push(statRow('Deaths/round', fx(s.dpr, 2), '', ''));
-    if (!left.length && !right.length) return '';
-    if (num(f3.hs_pct) || num(f3.kpr)) legend.push('KPR, HS%: 3 mo vs 12 mo');
-    if (pace != null && (num(kpm) || num(hpm))) legend.push('per map: last 12 mo (HLTV) vs line pace ' + fracText(Math.round(line * 2), 2 * k, 2).text);
-    if (num(hl.kd) || num(rating)) legend.push('K/D, rating vs 1.00');
-    return '<div class="sc-statgrid v3p-grid">' + (left.length ? '<dl>' + left.join('') + '</dl>' : '') + (right.length ? '<dl>' + right.join('') + '</dl>' : '')
-      + (legend.length ? '<p class="sc-statgrid__legend">' + esc(legend.join(' · ')) + '</p>' : '') + '</div>';
+    var isHs = isHsProp(r), inv = r.scout && r.scout.side === 'under';
+    var kpm = R.kpm(t12), hpm = R.hpm(t12), kd = R.kd(t12), rt = R.rating(t12), hs = R.hs(t12), kpr = R.kpr(t12), dpr = R.dpr(t12);
+    var hs3 = R.hs(t3), kpr3 = R.kpr(t3);
+    var dk = !isHs && pace != null && num(kpm) ? kpm - pace : null, dhp = isHs && pace != null && num(hpm) ? hpm - pace : null;
+    var dh = num(hs3) && num(hs) ? hs3 - hs : null, dkp = num(kpr3) && num(kpr) ? kpr3 - kpr : null;
+    var left = [statRow('Maps', t12 ? esc(t12.maps) : '—', '', ''),
+      statRow('Kills/map', fx(kpm, 1), delta(dk, 2), tone(dk, pace, inv)),
+      statRow('K/D', fx(kd, 2), num(kd) ? delta(kd - 1, 2) : '', num(kd) ? tone(kd - 1, 1) : ''),
+      statRow('Rating', fx(rt, 2), num(rt) ? delta(rt - 1, 2) : '', num(rt) ? tone(rt - 1, 1) : '')];
+    var right = [statRow('HS%', num(hs) ? fx(hs, 1) + '%' : '—', delta(dh, 1, ' pt'), tone(dh, 0, false, 1.5)),
+      statRow('HS/map', fx(hpm, 1), delta(dhp, 2), tone(dhp, pace, inv)),
+      statRow('KPR', fx(kpr, 2), delta(dkp, 2), tone(dkp, kpr)),
+      statRow('Deaths/round', fx(dpr, 2), '', '')];
+    var legend = ['HLTV, last 12 months' + (t12 ? '' : ': no maps')];
+    if (num(dh) || num(dkp)) legend.push('KPR, HS% change: last 3 mo vs 12 mo');
+    if (pace != null && (num(dk) || num(dhp))) legend.push((isHs ? 'HS/map' : 'Kills/map') + ' vs line pace ' + fracText(Math.round(line * 2), 2 * k, 2).text);
+    if (num(kd) || num(rt)) legend.push('K/D, rating vs 1.00');
+    return '<div class="sc-statgrid v3p-grid" data-v3p-src="hltv"><dl>' + left.join('') + '</dl><dl>' + right.join('') + '</dl>'
+      + '<p class="sc-statgrid__legend">' + esc(legend.join(' · ')) + '</p></div>';
   }
   function genericGrid(r, doc) {
     var all = series(doc), line = r.offer.line, inv = r.scout && r.scout.side === 'under';
@@ -222,31 +287,27 @@
       + '<div class="sc-pick__foot">' + (sparkHtml(r, doc, side) || '<span></span>') + (book ? '<span class="sc-book">' + book + '</span>' : '') + '</div></div>';
   }
   function leadHtml(r, doc, st) {
-    var grid = doc ? (r.sport === 'cs2' && (doc.cs2_card || ctxVal(doc, 'Kills per map') != null) ? cs2Grid(r, doc) : genericGrid(r, doc)) : '';
+    var grid = doc ? (r.sport === 'cs2' ? cs2Grid(r, doc) : genericGrid(r, doc)) : '';
     return matchHtml(r, doc) + metaHtml(r, doc) + grid + pickHtml(r, doc, st);
   }
 
-  /* ---------------------------------------------------------------- CS2 map cards + the 2-map combine */
+  /* ---------------------------------------------------------------- CS2 map cards + the 2-map combine (HLTV totals only) */
   function mapPool(r, doc) {
-    var by = {}, order = [], tot = 0, cnt = 0;
-    series(doc).forEach(function (g) {
-      (g.maps || []).forEach(function (name, i) {
-        var v = g.values && g.values[i];
-        if (!name || !num(v)) return;
-        var k = mapKey(name);
-        if (!by[k]) { by[k] = {key: k, name: name, n: 0, sum: 0}; order.push(k); }
-        by[k].n += 1; by[k].sum += v; tot += v; cnt += 1;
-      });
-    });
-    if (!order.length) return null;
-    var c = doc.cs2_card || {}, hc = c.context || {};
-    var pm = {}, bo = {}, chance = {}, conf = {};
-    (hc.prop_maps || []).forEach(function (m) { if (m && m.map) pm[mapKey(m.map)] = m; });
-    (c.per_map || []).forEach(function (m) { if (m && m.map) bo[mapKey(m.map)] = m; });
+    var e = hltvMaps(r);
+    if (!e || e.state === 'loading' || e.state === 'error') return {state: e ? e.state : 'loading'};
+    var d = e.doc || {}, w12 = (d.windows || {})['12m'] || {}, per = w12.maps || {}, names = d.names || {};
+    var keys = ((d.pool && d.pool.keys) || []).map(mapKey).filter(Boolean);
+    var inPool = {};
+    keys.forEach(function (k) { inPool[k] = 1; });
+    var chance = {}, conf = {};
     ((doc.map_chances && doc.map_chances.maps) || []).forEach(function (m) { if (m && m.name && m.pct != null) chance[mapKey(m.name)] = m.pct; });
     ((doc.veto && doc.veto.confirmed) || []).forEach(function (m) { if (m && m.name) conf[mapKey(m.name)] = m; });
     var inP = periodChance(doc, periodMaps(r.market.period_label));
-    var list = order.map(function (k) { var m = by[k]; m.chance = chance[k]; m.conf = conf[k]; m.pm = pm[k]; m.bo = bo[k]; m.inP = inP ? inP(k) : null; m.inPer = inPeriod(m.conf, r); return m; });
+    var name = function (k) { return names[k] || (d.pool && d.pool.names && d.pool.names[k]) || k; };
+    var list = keys.map(function (k) {
+      var t = per[k] || null;
+      return {key: k, name: name(k), t: t, n: t ? t.maps : 0, chance: chance[k], conf: conf[k], inP: inP ? inP(k) : null, inPer: inPeriod(conf[k], r)};
+    });
     /* order: confirmed for these maps, then In Maps 1-2 (veto), then HLTV's map chance (two different measures never mixed in one rank) */
     list.sort(function (a, b) {
       var ca = a.inPer ? 1 : 0, cb = b.inPer ? 1 : 0;
@@ -257,9 +318,13 @@
       var pa = a.chance != null ? +a.chance : -1, pb = b.chance != null ? +b.chance : -1;
       return pb - pa || b.n - a.n || a.name.localeCompare(b.name);
     });
-    /* a map confirmed for this prop's maps that has no saved result for him: named, never silently left out of the combine */
-    var missing = ((doc.veto && doc.veto.confirmed) || []).filter(function (m) { return m && m.name && !by[mapKey(m.name)] && inPeriod(m, r); }).map(function (m) { return m.name; });
-    return {list: list.slice(0, 8), tot: tot, cnt: cnt, by: by, missing: missing};
+    var out = Object.keys(per).filter(function (k) { return !inPool[k]; }).map(function (k) { return {key: k, name: name(k), t: per[k], n: per[k].maps}; })
+      .sort(function (a, b) { return b.n - a.n || a.name.localeCompare(b.name); });
+    var by = {};
+    list.forEach(function (m) { by[m.key] = m; });
+    /* a map confirmed for this prop's maps that HLTV has no maps of him on: named, never silently left out of the combine */
+    var missing = list.filter(function (m) { return m.inPer && !m.n; }).map(function (m) { return m.name; });
+    return {state: 'ok', list: list, out: out, by: by, base: w12.overall || null, missing: missing, doc: d};
   }
   /* is a confirmed veto slot inside the prop's maps? ("Map 1".."Map k"; a BO3 decider is map 3) */
   function inPeriod(c, r) {
@@ -300,12 +365,13 @@
     };
   }
   /* default: the maps confirmed for the prop's maps first, then the highest chance maps not already picked (In Maps 1-2, else
-     HLTV's map chance), to 2. A confirmed map he has no saved result on leaves the combine empty (it would leave that map out). */
+     HLTV's map chance), to 2, among maps he has HLTV maps on. A confirmed map with no HLTV maps leaves the combine empty. */
   function defaultPick(k, pool) {
     if (CHOSEN[k]) return SEL[k] || [];
     if (pool.missing && pool.missing.length) return (SEL[k] = []);
-    var conf = pool.list.filter(function (m) { return m.inPer; });
-    var rest = pool.list.filter(function (m) { return !m.inPer && (m.inP != null || m.chance != null); });
+    var has = pool.list.filter(function (m) { return m.n > 0; });
+    var conf = has.filter(function (m) { return m.inPer; });
+    var rest = has.filter(function (m) { return !m.inPer && (m.inP != null || m.chance != null); });
     var pick = conf.concat(rest).slice(0, 2);
     SEL[k] = pick.length === 2 ? pick.map(function (m) { return m.key; }) : [];
     return SEL[k];
@@ -313,56 +379,75 @@
   function sceneStat(label, value, d, t) {
     return '<div class="sc-scene__stat"><span>' + esc(label) + '</span><b' + (t ? ' class="sc-v-' + t + '"' : '') + '>' + value + '</b>' + (d ? '<i class="' + (t ? 'sc-v-' + t : '') + '">' + d + '</i>' : '') + '</div>';
   }
+  var pctText = function (v) { return num(v) ? fx(v, 1) + '%' : '—'; };
+  /* the four card stats of one map's totals, deltas vs his all-maps 12-month numbers (the legend says so) */
+  function cardStats(t, base, inv) {
+    var v = {kpm: R.kpm(t), kpr: R.kpr(t), hs: R.hs(t), kd: R.kd(t)}, b = {kpm: R.kpm(base), kpr: R.kpr(base), hs: R.hs(base), kd: R.kd(base)};
+    var d = function (x) { return num(v[x]) && num(b[x]) ? v[x] - b[x] : null; };
+    return [sceneStat('Kills/map', fx(v.kpm, 1), delta(d('kpm'), 1), tone(d('kpm'), b.kpm, inv)),
+      sceneStat('KPR', fx(v.kpr, 2), delta(d('kpr'), 2), tone(d('kpr'), b.kpr, inv)),
+      sceneStat('HS%', pctText(v.hs), delta(d('hs'), 1, ' pt'), tone(d('hs'), 0, false, 1.5)),
+      sceneStat('K/D', fx(v.kd, 2), delta(d('kd'), 2), tone(d('kd'), b.kd))];
+  }
+  function detailRow(label, t, cls) {
+    var td = function (v) { return '<td class="sc-num">' + v + '</td>'; };
+    return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th scope="row">' + esc(label) + '</th>' + td(t ? esc(t.maps) : '0') + td(fx(R.kpm(t), 1)) + td(fx(R.kpr(t), 2))
+      + td(pctText(R.hs(t))) + td(fx(R.kd(t), 2)) + td(fx(R.rating(t), 2)) + td(fx(R.adr(t), 1)) + td(num(R.kast(t)) ? fx(R.kast(t), 1) + '%' : '—')
+      + td(t && t.decided ? esc(t.wins + '–' + (t.decided - t.wins)) : '—') + '</tr>';
+  }
+  function detailTable(pool) {
+    var head = ['Map', 'Maps', 'Kills/map', 'KPR', 'HS%', 'K/D', 'Rating', 'ADR', 'KAST', 'Won'].map(function (h, i) { return '<th scope="col"' + (i ? ' class="sc-num"' : '') + '>' + h + '</th>'; }).join('');
+    var rows = pool.list.map(function (m) { return detailRow(m.name, m.t); }).join('') + detailRow('All maps', pool.base, 'v3p-all');
+    return '<details class="v3p-mapdetail"><summary>All numbers by map</summary><div class="v3p-tablewrap"><table class="v3p-maptable"><thead><tr>' + head + '</tr></thead><tbody>' + rows
+      + '</tbody></table></div><p class="sc-src">HLTV, last 12 months, every map he played. Rating, ADR and KAST weighted by rounds. Won: maps won–lost.</p></details>';
+  }
+  function outsideHtml(pool, inv) {
+    if (!pool.out.length) return '';
+    var items = pool.out.map(function (m) {
+      return '<li><b>' + esc(m.name) + '</b><small>' + m.n + (m.n === 1 ? ' map' : ' maps') + '</small><span class="v3p-outstats">' + cardStats(m.t, pool.base, inv).join('') + '</span></li>';
+    }).join('');
+    return '<details class="v3p-outpool"><summary>Outside the current pool · ' + pool.out.length + '</summary><ul>' + items + '</ul></details>';
+  }
   function mapsHtml(r, doc, k) {
     var pool = mapPool(r, doc);
-    if (!pool) return '';
-    var sel = defaultPick(k, pool).filter(function (x) { return pool.by[x]; });
-    var c = doc.cs2_card || {}, s = c.stats || {}, f12 = (s.form_windows || {})['12m'] || {};
-    var isHs = r.market.stat === 'hs' || /head/i.test(r.market.stat_label || ''), word = isHs ? 'HS/map' : 'Kills/map', inv = r.scout && r.scout.side === 'under';
-    var baseAvg = pool.tot / pool.cnt, baseKpr = num(f12.kpr) ? f12.kpr : s.kpr, baseHs = f12.hs_pct;
-    var anyKpr = pool.list.some(function (m) { return (m.pm && num(m.pm.kpr)) || (m.bo && num(m.bo.kpr)); });
-    var anyHs = pool.list.some(function (m) { return m.bo && num(m.bo.hs_pct); });
-    var anyRt = pool.list.some(function (m) { return m.pm && num(m.pm.rating); });
+    if (pool.state !== 'ok') return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4></div>' + hmState(hltvMaps(r)) + '</div>';
+    var sel = defaultPick(k, pool).filter(function (x) { return pool.by[x] && pool.by[x].n > 0; });
+    var inv = r.scout && r.scout.side === 'under', base = pool.base;
     var per = String(r.market.period_label || '').replace(/^(Maps?)\s+/i, function (a, w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() + ' '; });
     var cards = pool.list.map(function (m) {
-      var on = sel.indexOf(m.key), avg = m.sum / m.n, dAvg = avg - baseAvg;
-      var kpr = m.pm && num(m.pm.kpr) ? m.pm.kpr : m.bo && num(m.bo.kpr) ? m.bo.kpr : null, dK = num(kpr) && num(baseKpr) ? kpr - baseKpr : null;
-      var hs = m.bo && num(m.bo.hs_pct) ? m.bo.hs_pct : null, dH = num(hs) && num(baseHs) ? hs - baseHs : null;
-      var rt = m.pm && num(m.pm.rating) ? m.pm.rating : null;
-      var a = V.mapArt(m.name);
+      var on = sel.indexOf(m.key), a = V.mapArt(m.key), has = m.n > 0;
       var sub = '';
       if (m.conf) sub = '<small class="v3p-slot">' + esc(m.conf.slot || 'Confirmed') + (m.conf.by ? ' · <span>' + esc(m.conf.by) + ' pick</span>' : '') + '</small>';
-      /* each card shows the stats it has (a stat with no value on this map is left out, never a column of dashes) */
-      var stats = [sceneStat(word, fx(avg, 2), delta(dAvg, 2), tone(dAvg, baseAvg, inv))];
-      if (num(kpr)) stats.push(sceneStat('KPR', fx(kpr, 2), delta(dK, 2), tone(dK, baseKpr)));
-      if (num(hs)) stats.push(sceneStat('HS%', fx(hs, 1) + '%', delta(dH, 1, ' pt'), tone(dH, 0, false, 1.5)));
-      if (num(rt)) stats.push(sceneStat('Rating', fx(rt, 2), delta(rt - 1, 2), tone(rt - 1, 1)));
       var ch = m.inP != null ? '<small>In ' + esc(per) + ' <b>' + esc(fx(m.inP, 1)) + '%</b></small>'
         : m.chance != null ? '<small>Map chance <b>' + esc(fx(+m.chance, 1)) + '%</b></small>' : '';
-      return '<button type="button" class="sc-scene v3p-map' + (on >= 0 ? ' is-on' : '') + '" data-v3p-map="' + esc(m.key) + '" aria-pressed="' + (on >= 0) + '"'
-        + (a ? ' style="--h:' + (V.HUE[a] || 210) + '"' : '') + ' aria-label="' + esc(m.name + (on >= 0 ? ', picked to combine' : ', pick to combine')) + '">'
+      var stats = cardStats(m.t, base, inv);
+      return '<button type="button" class="sc-scene v3p-map' + (on >= 0 ? ' is-on' : '') + (has ? '' : ' is-empty') + '" data-v3p-map="' + esc(m.key) + '" aria-pressed="' + (on >= 0) + '"'
+        + (has ? '' : ' disabled') + (a ? ' style="--h:' + (V.HUE[a] || 210) + '"' : '')
+        + ' aria-label="' + esc(m.name + (has ? (on >= 0 ? ', picked to combine' : ', pick to combine') : ', no HLTV maps in the last 12 months')) + '">'
         + '<span class="sc-scene__art" data-v3p-art="' + esc(a) + '" aria-hidden="true"></span>'
-        + '<span class="sc-scene__id"><b>' + (on >= 0 ? '<span class="sc-badge">' + (on + 1) + '</span>' : '') + esc(m.name) + '</b><small>' + m.n + (m.n === 1 ? ' map' : ' maps') + '</small>'
+        + '<span class="sc-scene__id"><b>' + (on >= 0 ? '<span class="sc-badge">' + (on + 1) + '</span>' : '') + '<span class="v3p-mapname">' + esc(m.name) + '</span></b><small>' + m.n + (m.n === 1 ? ' map' : ' maps') + '</small>'
         + ch + sub + '</span>'
         + '<span class="sc-scene__stats" data-n="' + stats.length + '">' + stats.join('') + '</span></button>';
     }).join('');
-    var src = [word + ': his last ' + series(doc).length + ' Maps 1-2 series (HLTV), vs his average there ' + fx(baseAvg, 2)];
-    if (anyKpr) src.push('KPR: HLTV 6 mo on the prop maps, else BO3.gg' + (num(baseKpr) ? ', vs ' + fx(baseKpr, 2) : ''));
-    if (anyHs) src.push('HS%: BO3.gg' + (num(baseHs) ? ', vs ' + fx(baseHs, 1) + '%' : ''));
-    if (anyRt) src.push('rating: HLTV 6 mo, vs 1.00');
+    var src = ['HLTV, last 12 months, every map he played; deltas vs his all maps: Kills/map ' + fx(R.kpm(base), 1) + ', KPR ' + fx(R.kpr(base), 2)
+      + ', HS% ' + pctText(R.hs(base)) + ', K/D ' + fx(R.kd(base), 2)];
     if (pool.list.some(function (m) { return m.inP != null; })) src.push('In ' + per + ': Scout’s simulated veto, the share that puts the map in ' + per);
     else if (pool.list.some(function (m) { return m.chance != null; })) src.push('map chance: HLTV simulated vetoes');
-    var miss = (pool.missing || []).length ? '<p class="v3p-miss">' + esc(pool.missing.join(', ') + (pool.missing.length === 1 ? ' is confirmed for ' : ' are confirmed for ') + per + (pool.missing.length === 1 ? ' and has' : ' and have') + ' no saved ' + per + ' result for him, so no combined number includes it.') + '</p>' : '';
+    var miss = (pool.missing || []).length ? '<p class="v3p-miss">' + esc(pool.missing.join(', ') + (pool.missing.length === 1 ? ' is confirmed for ' : ' are confirmed for ') + per + (pool.missing.length === 1 ? ' and has' : ' and have') + ' no HLTV maps of his in the last 12 months, so no combined number includes it.') + '</p>' : '';
     return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4><span class="sc-muted">' + (sel.length === 2 ? '2 maps combined · a third pick replaces the first' : sel.length === 1 ? '1 of 2 picked' : 'Pick 2 to combine') + '</span></div>' + miss + cards
-      + '<p class="sc-src">' + esc(src.join(' · ')) + '</p></div>' + pooledHtml(r, doc, pool, sel);
+      + '<p class="sc-src">' + esc(src.join(' · ')) + '</p>' + detailTable(pool) + outsideHtml(pool, inv) + '</div>' + pooledHtml(r, doc, pool, sel);
   }
-  /* the combined number: exact on the integers, half-up at display; three wordings for 0, 1 and 2 maps picked */
+  /* the combined numbers: the two maps' totals summed, then divided (HLTV maths); exact on the integers, half-up at display */
   function pooled(r, pool, sel) {
-    if (sel.length !== 2) return null;
+    if (!pool || pool.state !== 'ok' || sel.length !== 2) return null;
     var a = pool.by[sel[0]], b = pool.by[sel[1]];
-    if (!a || !b) return null;
-    var S = a.sum + b.sum, N = a.n + b.n, k = periodMaps(r.market.period_label), L2 = num(r.offer.line) ? Math.round(r.offer.line * 2) : null;
-    var out = {names: a.name + ' + ' + b.name, n: N, value: fracText(S, N, 2), v: S / N};
+    if (!a || !b || !a.t || !b.t) return null;
+    var T = sumTotals([a.t, b.t]), isHs = isHsProp(r);
+    var S = isHs ? T.hs : T.kills, N = isHs ? T.hs_maps : T.maps;
+    if (!N) return null;
+    var k = periodMaps(r.market.period_label), L2 = num(r.offer.line) ? Math.round(r.offer.line * 2) : null;
+    var out = {names: a.name + ' + ' + b.name, n: T.maps, totals: T, value: fracText(S, N, 2), v: S / N, stat: isHs ? 'hs' : 'kills',
+      kpm: R.kpm(T), kpr: R.kpr(T), hs: R.hs(T), kd: R.kd(T), rating: R.rating(T)};
     if (k && L2 != null && L2 > 0) {
       /* d = S/N - L2/(2k) = (2kS - N*L2) / (2kN); pct = 100 * d / pace = 100 * (2kS - N*L2) / (N*L2) */
       var dn = 2 * k * S - N * L2;
@@ -372,21 +457,23 @@
     return out;
   }
   function comboText(r, pool, sel) {
-    var p = pooled(r, pool, sel), word = r.market.stat === 'hs' || /head/i.test(r.market.stat_label || '') ? 'headshots' : 'kills';
+    var p = pooled(r, pool, sel), word = isHsProp(r) ? 'headshots' : 'kills';
     if (p) return p.names + ': ' + p.value.text + ' ' + word + ' a map' + (p.delta ? ', ' + signed(p.delta) + ' vs line pace ' + p.pace.text : '');
-    if (sel.length === 1) return esc(pool.by[sel[0]].name) + ' picked · pick 1 more map to combine';
+    if (sel.length === 1 && pool.by[sel[0]]) return pool.by[sel[0]].name + ' picked · pick 1 more map to combine';
     return 'Pick 2 maps to combine them';
   }
   function pooledHtml(r, doc, pool, sel) {
     var p = pooled(r, pool, sel);
     var clear = '<button type="button" class="v3p-clear" data-v3p="clear"' + (sel.length ? '' : ' disabled') + '>Clear maps</button>';
-    if (!p) return '<div class="sc-surface v3p-pooled is-empty" aria-live="polite"><p class="v3p-pooled-ask">' + esc(comboText(r, pool, sel)) + '</p><p class="sc-src">The combined number pools the two maps’ saved results: their total divided by their maps.</p>' + clear + '</div>';
+    if (!p) return '<div class="sc-surface v3p-pooled is-empty" aria-live="polite"><p class="v3p-pooled-ask">' + esc(comboText(r, pool, sel)) + '</p><p class="sc-src">The combined numbers add the two maps’ HLTV totals, then divide: kills by maps and by rounds, headshots by kills, kills by deaths.</p>' + clear + '</div>';
     var up = r.scout && r.scout.side === 'under' ? -1 : 1, good = p.dv != null ? (p.dv * up > 0 ? 'sc-v-good' : p.dv * up < 0 ? 'sc-v-poor' : '') : '';
     var lead = p.delta ? '<b class="' + good + '">' + signed(p.delta) + '</b> vs line pace <b>' + p.pace.text + '</b><br><b>' + signed(p.pct) + '%</b> ' + (p.dv > 0 ? 'above' : p.dv < 0 ? 'below' : 'at') + ' pace' : '';
     var max = Math.max(p.v, p.paceV || 0) * 1.7 || 1;
     var bar = p.paceV != null ? '<div class="sc-pace" role="img" aria-label="' + esc(p.value.text + ' against pace ' + p.pace.text) + '"><span class="sc-pace__fill" style="width:' + (p.v / max * 100).toFixed(1) + '%"></span><span class="sc-pace__mark" style="left:' + (p.paceV / max * 100).toFixed(1) + '%"><small>pace ' + p.pace.text + '</small></span></div>' : '';
+    var cell = function (label, v) { return '<div><span>' + esc(label) + '</span><b class="sc-num">' + v + '</b></div>'; };
+    var row = '<div class="v3p-pooled-stats" data-v3p-pooled-stats>' + cell('Kills/map', fx(p.kpm, 1)) + cell('KPR', fx(p.kpr, 2)) + cell('HS%', pctText(p.hs)) + cell('K/D', fx(p.kd, 2)) + cell('Rating', fx(p.rating, 2)) + '</div>';
     return '<div class="sc-surface v3p-pooled" aria-live="polite"><div class="sc-pooled"><span class="sc-pooled__big sc-num" data-v3p-big>' + p.value.text + '</span><span class="sc-pooled__txt" data-v3p-lead>' + lead + '</span></div>'
-      + bar + '<p class="sc-src">' + esc(p.names + ' · ' + p.n + ' maps, his saved Maps 1-2 results') + '</p>' + clear + '</div>';
+      + bar + row + '<p class="sc-src">' + esc(p.names + ' · ' + p.n + ' maps, HLTV last 12 months · ' + (p.stat === 'hs' ? 'headshots' : 'kills') + ' a map') + '</p>' + clear + '</div>';
   }
 
   /* ---------------------------------------------------------------- the line panel (approved mocks 05 / 10), added inside the hub's
@@ -463,7 +550,7 @@
   function dockHtml(r, doc, st, k) {
     var who = '<b>' + esc(r.player.name) + '</b> ' + esc((st && st.side ? st.side + ' ' : '') + (r.offer.line != null ? r.offer.line + ' ' : '') + (r.market.stat_label || ''));
     var sub = '';
-    if (r.sport === 'cs2' && doc) { var pool = mapPool(r, doc); if (pool) sub = comboText(r, pool, (SEL[k] || []).filter(function (x) { return pool.by[x]; })); }
+    if (r.sport === 'cs2' && doc) { var pool = mapPool(r, doc); if (pool.state === 'ok') sub = comboText(r, pool, (SEL[k] || []).filter(function (x) { return pool.by[x] && pool.by[x].n > 0; })); }
     if (!sub && r.offer.platform_label) sub = r.offer.platform_label + (r.offer.seen_at ? ' · checked ' + age(r.offer.seen_at) : '');
     return '<div class="sc-dock__ctx">' + who + (sub ? '<small data-v3p-combo>' + esc(sub) + '</small>' : '') + '</div><button type="button" class="sc-btn v3p-dock-slip" data-v3p="slip">Slip</button>';
   }
@@ -572,6 +659,9 @@
       paint();
       var again = box.querySelector('[data-v3p-map="' + (window.CSS && CSS.escape ? CSS.escape(k) : k) + '"]');
       if (again) again.focus({preventScroll: true});
+    } else if (t.getAttribute('data-v3p') === 'hm-retry') {
+      var cur = current(), rr = cur && cur.doc && cur.doc.record;
+      if (rr) { var e = HM[hmUrl(rr)]; if (e) e.at = 0; hltvMaps(rr); paint(); }
     } else if (t.getAttribute('data-v3p') === 'clear') {
       SEL[id] = []; CHOSEN[id] = true; paint();
     } else if (t.getAttribute('data-v3p') === 'slip') {
@@ -594,6 +684,6 @@
   /* test hook: the pooled maths the page shows, for the browser tests' all-pairs check (no data of its own) */
   V.player = {fracText: fracText, pooled: function (sel) {
     var cur = current(); if (!cur || !cur.doc) return null;
-    var pool = mapPool(cur.doc.record, cur.doc); return pool ? pooled(cur.doc.record, pool, sel) : null;
-  }, mapKey: mapKey};
+    var pool = mapPool(cur.doc.record, cur.doc); return pool.state === 'ok' ? pooled(cur.doc.record, pool, sel) : null;
+  }, sumTotals: sumTotals, rates: R, mapKey: mapKey};
 })();
