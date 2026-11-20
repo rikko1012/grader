@@ -321,3 +321,22 @@ def test_due_refresh_still_after_never_loaded_rosters(tmp_path):
     calls = []
     history.collect_soccer_teams(catalogs, _getter(calls), lambda *a: True, tmp_path, 'base')
     assert [re.search(r'/teams/(\d+)/', u)[1] for u in calls[::2]] == ['3', '4']
+
+
+# --- orphan temp files of hard-killed atomic writes (fault injection: 13 kills left 13 files / 6.2 MB) are swept
+
+def test_orphan_temps_older_than_15_min_are_swept_only(tmp_path):
+    import os
+    from sports import expansion_history as history
+    (tmp_path / 'eng.1').mkdir()
+    (tmp_path / 'archive' / 'quotes').mkdir(parents=True)
+    old = [tmp_path / 'history-a.tmp', tmp_path / 'eng.1' / 'history-b.tmp', tmp_path / 'board-c.tmp']
+    keep = [tmp_path / 'history-fresh.tmp', tmp_path / 'archive' / 'quotes' / 'history-x.tmp',
+            tmp_path / 'other-d.tmp', tmp_path / 'history-state.json']
+    for p in old + keep:
+        p.write_text('{}')
+    t = time.time()
+    for p in old + keep[1:]:
+        os.utime(p, (t - 3600, t - 3600))
+    assert history.sweep_orphan_temps(tmp_path, now=t) == 3
+    assert not any(p.exists() for p in old) and all(p.exists() for p in keep)

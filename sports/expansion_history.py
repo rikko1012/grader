@@ -505,6 +505,32 @@ def stored_size(directory):
     return total
 
 
+ORPHAN_TEMP_AGE_S = 900
+
+
+def sweep_orphan_temps(directory, older_than_s=ORPHAN_TEMP_AGE_S, now=None):
+    """soccer-grades-1120 (fault injection): a hard kill (OOM / SIGKILL) between mkstemp and os.replace leaves the
+    atomic writer's temp copy behind - 13 kills left 13 files, 6.2 MB (up to 1.2 MB each), never removed. Remove
+    `history-*.tmp` / `board-*.tmp` older than 15 min under the sport directory (no writer holds one that long: quotes
+    time out at 90 s, history at 180 s). Only unfinished copies: the target file of each write is untouched. Archive
+    trees are skipped (their own leftovers go to unlisted/). -> number removed."""
+    now = time.time() if now is None else now
+    removed = 0
+    for base, dirs, files in os.walk(directory):
+        dirs[:] = [d for d in dirs if d != 'archive']
+        for name in files:
+            if not (name.endswith('.tmp') and name.startswith(('history-', 'board-'))):
+                continue
+            p = os.path.join(base, name)
+            try:
+                if now - os.stat(p).st_mtime >= older_than_s:
+                    os.unlink(p)
+                    removed += 1
+            except OSError:
+                continue
+    return removed
+
+
 def collect(sport, max_requests=16, max_seconds=150):
     """One resumable small batch; live dates first, one older date per run.
 
@@ -524,6 +550,9 @@ def collect(sport, max_requests=16, max_seconds=150):
     today = datetime.now(timezone.utc).date()
     counts = {'requests': 0, 'ok_requests': 0, 'records': 0, 'matches': 0, 'errors': [], 'finished_at': None,
               'storage': 'ok', 'phases': {}}
+    swept = sweep_orphan_temps(directory)
+    if swept:
+        counts['orphan_temps_removed'] = swept
     deadline = time.monotonic() + max_seconds
     # 2026-11-18: the ESPN / 365Scores phases stop requesting RESERVE_S early; the research sources run in that reserve
     # (expansion_collect), each with its own cap, never past the same request deadline.
