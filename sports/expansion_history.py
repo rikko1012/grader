@@ -150,6 +150,7 @@ BOOK_PLAYER_ALIASES = {
     'soccer:player:espn:263224': ('Juan Purata',),          # Juanjo Purata, Atlas, Defender (v Juarez 2026-11-21 03:00Z)
     'soccer:player:espn:235122': ('Juan Vargas',),          # Juan Pablo Vargas, Puebla, Defender (v San Luis 01:00Z)
     'soccer:player:espn:350647': ('Alexander Robinson',),   # Alex Robinson, Macarthur FC, Goalkeeper (v Wellington)
+    'soccer:player:espn:313058': ('José Eulogio',),         # Jose Eulogio Téllez, Pachuca, Goalkeeper (v Toluca 11-21)
 }
 
 
