@@ -382,8 +382,14 @@ def default_jobs():
         J[f"{sport}-history"] = dict(argv=_py("-m", "sports.expansion_history", sport), every_s=300,
             timeout_s=180, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=120, cls=LIGHT, prio=6,
             locks=(f"{sport}-history",), serial_group=f"expansion:{sport}")
+        # sg-stability 2026-11-20: LIGHT (was HEAVY prio 8). This job alone publishes the sport's grades
+        # (forecasts.json); as a heavy prio-8 job it ran 2 / 1 times in 85 min live (start-to-start gaps 47-57 min in the
+        # replays). Peaks 53 / 43 MB, runs 3-21 s. LIGHT keeps its full cap reserved against the child budget and its
+        # serial group with history; 8-seed replay on the 2026-11-20 live run times (cs2_scout_ops/logs/
+        # soccer_grades_1120/stability/sched_grid2.txt): learning gap 53 -> 6.6 min worst, soccer-quotes <= 3.3 min,
+        # settle-post -8.3 min, prebuilt -6 min; player-context's worst seed +9.8 min (median 76.3 -> 75.9)
         J[f"{sport}-learning"] = dict(argv=_py("-m", "sports.expansion_learning", sport), every_s=180,
-            timeout_s=45, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=100, cls=HEAVY, prio=8,
+            timeout_s=45, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=100, cls=LIGHT, prio=8,
             locks=(f"{sport}-history",f"{sport}-learning"), serial_group=f"expansion:{sport}")
     scale, two = cap_scale(), max_heavy() >= 2
     for name, spec in J.items():

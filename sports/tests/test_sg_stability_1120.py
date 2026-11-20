@@ -660,3 +660,30 @@ def test_board_fit_drops_furthest_starts_when_standard_rows_alone_are_too_large(
     kept = board.fit(rows, limit=3 * one + 10)
     assert [r['offer_id'] for r in kept] == [r['offer_id'] for r in rows[:3]]  # goblin first, then the latest starts
     assert all(r['variant'] == 'standard' for r in kept)
+
+
+# ------------------------------------------------------------------------------------- scheduler: learning LIGHT
+LIVE_1120_RUN_S = {"prebuilt": 326, "ui-snapshots-nba": 64, "ui-snapshots-nfl": 85, "sheets": 200,
+                   "results-public": 475, "mapping-audit": 40, "ingest-nba": 90, "ingest-nfl": 110, "books": 30,
+                   "ingest-kalshi": 100, "settle": 150, "settle-post": 1000, "player-context": 45,
+                   "games-backfill": 2, "grades-daily": 2, "model-forward": 580, "history": 740, "archive": 575,
+                   "archive-verify": 300, "soccer-quotes": 4, "tennis-quotes": 5, "soccer-history": 60,
+                   "tennis-history": 55, "soccer-learning": 10, "tennis-learning": 13, "slips-ingest": 1,
+                   "picks-ingest": 1, "pregame-news": 2, "picks-settle": 1, "slips-settle": 2}
+
+
+def test_learning_light_publishes_grades_every_few_minutes_and_quotes_stay_fresh():
+    """2026-11-20 live run times (ops 06:32Z, e6e155d), live env (settle cap 600 override), model-forward draining
+    every 30 min: the grade publishers run within minutes, the quote boards stay inside their 300 s freshness rule,
+    and the reservation / heavy-slot invariants hold."""
+    from sports import scheduler as mod
+    from sports.tests import sched_sim as sim
+    r = sim.simulate(mod, hours=3.0, tick_s=1.0, run_s=LIVE_1120_RUN_S, env=dict(sim.LIVE_1118_ENV), warm=True,
+                     seed=1108, cadence={"gameday:nba": 300.0, "gameday:nfl": 600.0})
+    assert r["reserved_ok"] and r["heavy_ok"]
+    assert r["specs"]["soccer-learning"]["cls"] == mod.LIGHT
+    for s in ("soccer-learning", "tennis-learning"):
+        assert r["max_gap"][s] < 10 * 60, (s, r["max_gap"][s])         # was 47-57 min as a heavy prio-8 job
+    for s in ("soccer-quotes", "tennis-quotes"):
+        assert r["max_gap"][s] < 300 - 30, (s, r["max_gap"][s])        # board MAX_AGE 300 s, minus a run
+    assert len(r["starts"]["model-forward"]) >= 3                       # the exclusive job still drains and runs

@@ -66,7 +66,8 @@ def test_history_and_quotes_stay_fresh_but_learning_serializes_with_history(monk
         assert history['cls']==LIGHT and Scheduler._beside(history)
         assert history['cap_mb']==120 and history['timeout_s']<=180
         assert history['every_s']==300
-        assert not Scheduler._beside(jobs[sport+'-learning'])
+        # sg-stability 2026-11-20: learning (the grade publisher) is LIGHT - beside exclusive jobs, cap still reserved
+        assert jobs[sport+'-learning']['cls']==LIGHT and Scheduler._beside(jobs[sport+'-learning'])
 
     # Light history still reserves memory and cannot overlap its own learning
     # process, in either start order. Other sports retain independent slots.
