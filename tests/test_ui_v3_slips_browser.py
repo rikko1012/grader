@@ -225,3 +225,29 @@ def test_flag_off_the_slip_studio_is_untouched(browser, env, monkeypatch):
         assert p.locator('[data-studio-panel=slip] > .h-studio-intro').count() == 1
     finally:
         c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_empty_slip_leads_with_auto_build_but_never_hides_picks(browser, env, monkeypatch, size):
+    """polish1: an empty slip opens Slips on Auto-build. That switch is undone as soon as the slip holds picks: a pick added from the
+    board brings My slip back on the next visit, and a reload straight onto /#/slips with a saved slip shows My slip."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", size, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.goto(env.url + '/#/board')
+        p.wait_for_selector('#hub-rows tr[data-record] .h-add:not([disabled]):not(.h-add-info)')
+        p.locator('#hub-rows tr[data-record] .h-add:not([disabled]):not(.h-add-info)').first.click()
+        if p.locator('#hub-card').is_visible():
+            p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').click()
+        p.wait_for_function("document.getElementById('hub-studio-tab-n').textContent.trim() !== '0'")
+        p.evaluate("location.hash='/slips'")
+        p.wait_for_selector('#hub-studio-section:not([hidden])')
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=slip][aria-selected=true]', timeout=10000)
+        p.reload()
+        p.wait_for_selector('#hub-studio-section:not([hidden])', timeout=30000)
+        p.wait_for_function("document.getElementById('hub-studio-tab-n').textContent.trim() !== '0'", timeout=20000)
+        p.wait_for_timeout(500)
+        assert p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').get_attribute('aria-selected') == 'true'
+        assert not p.errors, p.errors
+    finally:
+        c.close()

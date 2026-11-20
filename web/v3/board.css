@@ -550,3 +550,6 @@ html[data-ui-v3] #u-hub #hub-count{position:absolute!important;width:1px!importa
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-player{align-self:start}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>:is(.h-direction,.h-direction-options){align-self:start}
 }
+/* the Lean chip is never cut: on a narrow Scout column the stake moves under it */
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade{flex-wrap:wrap;row-gap:4px}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-lean{max-width:none!important;overflow:visible!important;text-overflow:clip!important;flex:none}

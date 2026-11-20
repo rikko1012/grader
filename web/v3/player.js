@@ -8,8 +8,11 @@
    - Data: the line doc the hub itself loaded. The hub's /api/upgrade/line answer is teed (the response is cloned; the hub gets the
      original untouched) and kept by record key. No request of its own: the card makes exactly the requests it makes today.
    - The hub repaints #hub-detail (innerHTML) on every side, tab, line or refresh change. One MutationObserver re-adds the v3 blocks
-     next to the hub's own nodes, idempotently. The hub's nodes are never moved, wrapped, hidden or removed: #hub-decision,
-     #hub-card-line, #hub-card-body, #hub-card-title, the star, the market strip and the tabs stay where the hub puts them.
+     next to the hub's own nodes, idempotently. The hub's nodes are never moved, wrapped or removed: #hub-decision, #hub-card-line,
+     #hub-card-body, #hub-card-title, the star, the market strip and the tabs stay where the hub puts them. polish1 adds v3 nodes
+     inside the decision strip (the line panel: big line, freshness, Projection / Gap / Market chance, L5-L20) and keeps three hub
+     nodes for screen readers only (the head line with its time and countdown, the market tag beside the name, the strip's "Proj."
+     cell), each shown once elsewhere on the card; a sports hold chip "No grade yet" is not drawn where Lean + Stake 0U stands.
    - The pick summary mirrors the hub's own decision strip (side, chance, letter or Lean, stake): nothing about the pick is worked
      out here, so every strip branch (Lean, hold, one-sided, not offered, view only, research only) reads as the strip does.
    - CS2 map cards + the 2-map combine pool his saved Maps-1-2 series results per map (integers, from the same history the card's
@@ -402,7 +405,7 @@
   }
   function marketChance(r, doc, side) {
     var mc = r.market_chance;
-    if (mc && (side === 'over' || side === 'under') && num(mc['p_' + side])) return {v: (mc['p_' + side] * 100).toFixed(1) + '%', src: 'Book prices, cut removed'};
+    if (mc && (side === 'over' || side === 'under') && num(mc['p_' + side])) return {v: (mc['p_' + side] * 100).toFixed(1) + '%', src: num(mc.sources) && mc.sources > 0 ? 'From ' + mc.sources + (mc.sources === 1 ? ' book' : ' books') : 'From book prices'};
     var fs = (doc && doc.grade_inputs && doc.grade_inputs.factors) || [];
     for (var i = 0; i < fs.length; i++) if (fs[i] && /market chance/i.test(fs[i].label || '') && fs[i].value != null) return {v: String(fs[i].value), src: fs[i].label};
     return null;

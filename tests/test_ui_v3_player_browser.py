@@ -209,6 +209,7 @@ def check_card(p, sport, size, theme):
         if gone:                                   # Add scrolled away above: the bar is there; a short card that cannot scroll that far keeps Add in view
             p.wait_for_function("document.documentElement.classList.contains('v3p-dock-on')", timeout=5000)
             assert vis(p, "#hub-detail > .v3p-dock")
+            shot(p, name + "-dock")
         p.evaluate("document.getElementById('hub-detail').scrollTop = 0")
     else:
         assert vis(p, "#hub-detail > .v3p-dock")

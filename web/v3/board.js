@@ -141,26 +141,11 @@
       el.innerHTML = bandSvg(svg);
     }).catch(function () { el.innerHTML = ''; });   /* no art is a plain band, never an error */
   }
-  /* the band's line: "N games · " + the hub's own count. Games = the matches of the records on this tab, counted only while the
-     board is unfiltered (no search, every app), so the number always describes the same rows as the count beside it */
-  function gamesNow() {
-    var q = $('hub-q'), all = document.querySelector('#u-hub [data-hub="book"][data-id="all"]'), fn = $('hub-filter-n');
-    if ((q && q.value) || (all && all.getAttribute('aria-pressed') !== 'true') || (fn && fn.textContent.trim())) return null;
-    var s = currentSport(), ev = {}, n = 0;
-    Object.keys(RECS).forEach(function (k) {
-      var r = RECS[k];
-      if (s !== 'all' && r.sport !== s) return;
-      var id = r.event && (r.event.id || r.event.label);
-      if (id && !ev[r.sport + '|' + id]) { ev[r.sport + '|' + id] = 1; n++; }
-    });
-    return n || null;
-  }
   function paintMeta() {
     var m = document.querySelector('#u-hub .sc-bd-meta'), c = $('hub-count');
-    if (!m || !c) return;
-    var g = gamesNow(), t = (g ? g + (g === 1 ? ' game · ' : ' games · ') : '') + c.textContent;
-    if (m.textContent !== t) m.textContent = t;
+    if (m && c && m.textContent !== c.textContent) m.textContent = c.textContent;
   }
+
 
   /* ---------------------------------------------------------------- rows */
   var AGE = /^(.*?)\s·\s(now|—|\d+m|\d+h)(?:\s·\swas\s(.+))?$/;

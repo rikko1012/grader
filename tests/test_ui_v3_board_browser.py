@@ -87,11 +87,9 @@ def test_v3_board_keeps_every_cell_and_takes_the_approved_look(browser, env, mon
         top = p.locator("#u-hub .h-top.sc-bd-band")
         assert top.count() == 1 and top.is_visible()
         assert p.locator("#hub-title").inner_text().strip().endswith("player props") or p.locator("#hub-title").inner_text().strip() == "Player props"
-        # the count shows once, under the title, with the games on the board (the toolbar copy is kept but not drawn)
+        # the count shows once, under the title (the toolbar copy is kept for the hub, not drawn)
         meta = p.locator("#u-hub .sc-bd-meta").inner_text()
-        assert meta.endswith(p.locator("#hub-count").inner_text()), meta
-        import re as _re
-        assert _re.match(r"^\d+ games? · ", meta), meta
+        assert meta == p.locator("#hub-count").inner_text(), meta
         assert p.evaluate("document.getElementById('hub-count').getBoundingClientRect().width") <= 1
         check_rows(p)
         # one stake per line: every row with a letter or a Lean shows its stake beside it; no "No grade yet" chip is drawn

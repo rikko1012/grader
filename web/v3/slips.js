@@ -300,22 +300,34 @@
       if (el) new MutationObserver(q).observe(el, {childList: true, subtree: true, characterData: true});
     });
     sec.querySelectorAll('[data-studio-panel]').forEach(function (p) { new MutationObserver(q).observe(p, {attributes: true, attributeFilter: ['hidden']}); });
-    document.addEventListener('scout-v3-recs', q);
+    document.addEventListener('scout-v3-recs', function () { legIx.n = -1; q(); });   /* a new board answer: stakes re-read */
     run();
   }
 
   /* an empty My slip leads with the studio (approved mock 08): the first time Slips opens in this page with nothing on the slip, the
      hub's own Auto-build tab is pressed once. My slip (its empty state) is one tap away and stays the tab whenever it holds picks. */
   function leadWithBuild(sec) {
-    var done = false;
+    var done = false, auto = false;
+    var tab = function (id) { return sec.querySelector('[role=tab][data-hub=studio-tab][data-id=' + id + ']'); };
+    var count = function () { var n = document.getElementById('hub-studio-tab-n'); return n ? parseInt(n.textContent, 10) || 0 : 0; };
     function check() {
       if (done || sec.hidden) return;
       done = true;
-      var n = document.getElementById('hub-studio-tab-n'), slip = sec.querySelector('[role=tab][data-hub=studio-tab][data-id=slip]');
-      var build = sec.querySelector('[role=tab][data-hub=studio-tab][data-id=build]');
-      if (n && n.textContent.trim() === '0' && slip && slip.getAttribute('aria-selected') === 'true' && build) build.click();
+      var slip = tab('slip'), build = tab('build');
+      if (!count() && slip && slip.getAttribute('aria-selected') === 'true' && build) { auto = true; build.click(); }
     }
-    new MutationObserver(check).observe(sec, {attributes: true, attributeFilter: ['hidden']});
+    /* the switch is ours until the member picks a tab: once the slip holds picks (a saved slip that loads late, or a pick added from
+       the board) My slip comes back, so a member with picks never lands on Auto-build because of it */
+    sec.addEventListener('click', function (e) { if (e.isTrusted && e.target.closest && e.target.closest('[data-hub=studio-tab]')) auto = false; }, true);
+    function back() {
+      if (!auto || !count() || sec.hidden) return;       /* hidden: done the next time Slips opens (the hidden observer) */
+      auto = false;
+      var slip = tab('slip');
+      if (slip && slip.getAttribute('aria-selected') !== 'true') slip.click();
+    }
+    new MutationObserver(function () { check(); back(); }).observe(sec, {attributes: true, attributeFilter: ['hidden']});
+    var n = document.getElementById('hub-studio-tab-n');
+    if (n) new MutationObserver(back).observe(n, {childList: true, characterData: true, subtree: true});
     check();
   }
   V.onHub(function (hub) {
