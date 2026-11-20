@@ -206,9 +206,9 @@ def test_one_request_a_run_learns_the_tabs_then_covers_82_and_the_best_tab(env):
     assert [c for c, _ in runs] == [[82, 'leagues'],        # tab 82, then the hourly league list (housekeeping)
                                     [6, 14],                # a free coverage slot learns a tab; discovery reads EPL
                                     [82, 534],              # discovery: Serie A
-                                    [82, 536],              # Serie A (gradeable, ita.1) now holds the slot
-                                    [534],
-                                    [82]]
+                                    [536],                  # Serie A (gradeable, ita.1) holds the slot; both fresh
+                                    [82],                   # then tab 82 and Serie A alternate, each every 180 s
+                                    [534]]
     assert all(len(c) <= 2 for c, _ in runs)                # never a burst of three
     st = status(env)
     assert st['covered'] == [82, 534] and st['slots'] == 2 and st['every_s'] == 90
@@ -374,3 +374,47 @@ def test_ops_reads_the_status_file_alerts_and_the_kill_switch_silences_them(env,
     assert not [c for c in (a['code'] for a in service.alerts(_ops(expansion_pp_soccer=st))) if c.startswith('pp_soccer_tab')]
     monkeypatch.delenv('SCOUT_SOCCER_ENABLED')
     assert service.expansion_pp_soccer() is None
+
+
+def test_a_covered_tab_failing_without_429_never_starves_tab_82(env):
+    run(env, 6)
+    env['fail'] = {534: 'empty'}                             # 200 with no data from a listed tab: a failed read
+    for calls, snap in run(env, 8):
+        assert calls.count(534) <= 1 and len(calls) <= 2
+        assert visible_late(snap, env)['SOCCER'] == 2         # tab 82 lines on the board before every next run
+    env['fail'] = {}
+
+
+def test_tab_82_failing_keeps_the_covered_tab_visible(env):
+    run(env, 6)
+    env['fail'] = {82: 'empty'}
+    for calls, snap in run(env, 8):
+        assert visible_late(snap, env)['Serie A'] >= 1          # (its own copy of 82a joins once tab 82's is gone)
+
+
+def test_a_run_killed_mid_read_still_moves_the_rotation_on(env, monkeypatch):
+    run(env, 6)
+    nxt = sorted(board._read_json(env['dir'] / board.PP_STATE, {})['per'].items(),
+                 key=lambda kv: kv[1].get('attempt_at') or '')
+    real = sources.get_json
+    def killed(sport, url, params=None, **kw):
+        raise SystemExit('killed over cap')                   # the scheduler's SIGKILL, as close as a test gets
+    monkeypatch.setattr(sources, 'get_json', killed)
+    with pytest.raises(SystemExit):
+        board.collect('soccer')
+    first = json.loads((env['dir'] / board.PP_STATE).read_text(encoding='utf-8'))
+    monkeypatch.setattr(sources, 'get_json', real)
+    env['clock'].t += timedelta(seconds=90)
+    calls, _ = run(env, 1)[0]
+    picked_before = max(first['per'].items(), key=lambda kv: kv[1].get('attempt_at') or '')[0]
+    assert calls and str(calls[0]) != picked_before            # the next run asks the OTHER covered source
+
+
+def test_tab_82_alone_in_coverage_keeps_its_old_180_s_rate(env):
+    env['tabs'] = {82: env['tabs'][82]}
+    env['listed'] = {82: LISTED[82]}
+    runs = run(env, 9)
+    assert sum(c.count(82) for c, _ in runs) == 5            # 9 runs x 90 s: every second run, not every run
+    for _, snap in runs:
+        assert visible_late(snap, env)['SOCCER'] == 2
+

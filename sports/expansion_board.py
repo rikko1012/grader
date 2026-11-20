@@ -211,6 +211,7 @@ LEAGUES_REFRESH_MIN_S = 600            # an empty answer from a listed tab re-re
 COVER_SAFETY_S = 60                    # coverage leaves this much of the 300 s rule for a late scheduler start
 DISCOVERY_S = 7200                     # a listed tab outside coverage is re-read at most every 2 h (ranking only)
 ODDS_EVERY_S = 170                     # soccer book markets keep the 180 s cadence while quotes run every 90 s
+REREAD_MIN_S = 170                     # no covered source is asked again sooner (tab 82 alone: its old 180 s rate)
 
 
 def pp_leagues_on():
@@ -359,6 +360,9 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
         entry["attempt_at"] = now_utc()
         attempted.append(lid)
         roles[lid] = role
+        # persisted BEFORE the request: a run killed mid-read (memory cap / timeout) still moves the rotation on
+        from .expansion_history import atomic_json
+        atomic_json(directory / PP_STATE, state)
         try:
             body = fetch(PP_URL, {"league_id": lid, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
             observed = now_utc()
@@ -392,15 +396,23 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     fresh_set = [82] + covered
     backoff_left = -(_age_s(state.get("backoff_until"), now) or 0)
 
-    # 1. the coverage request: the covered source read longest ago (never read first; tab 82 on a tie)
-    order = sorted(fresh_set, key=lambda lid: ((per.get(str(lid)) or {}).get("ok_at") or "", lid != 82))
+    # 1. the coverage request: the covered source ATTEMPTED longest ago (never tried first; tab 82 on a tie). By last
+    #    attempt, not last success: a source that keeps failing (5xx, empty answer, bad JSON) can never take every
+    #    turn and starve tab 82. A source tried under REREAD_MIN_S ago is not asked again (alone in coverage, tab 82
+    #    stays at its old 180 s rate instead of every run).
+    order = sorted(fresh_set, key=lambda lid: ((per.get(str(lid)) or {}).get("attempt_at") or "", lid != 82))
+    first_age = _age_s((per.get(str(order[0])) or {}).get("attempt_at"), now)
     if backoff_left > 0:
         e82 = per.get("82") or {}
         stopped = None
         if (_age_s(e82.get("attempt_at"), now) or 10 ** 9) >= 170 and can_call():
             read(82, "coverage")
         stopped = stopped or "backoff"
-    elif can_call():
+    elif not can_call():
+        pass                                   # held (Retry-After): no request at all this run
+    elif first_age is not None and 0 <= first_age < REREAD_MIN_S:
+        roles["coverage"] = "recently_read"    # nothing due; housekeeping may still use the run
+    else:
         read(order[0], "coverage")
     # 2. housekeeping, only after a clean first request: the hourly league list, else a 2-hourly discovery read of a
     #    listed tab outside coverage (its lines stay off the board; the read keeps the ranking honest)
