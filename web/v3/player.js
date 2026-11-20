@@ -200,9 +200,16 @@
     var n = all.filter(function (g) { return hit(g.value); }).length;
     return '<span class="v3p-spark"><span class="sc-spark" aria-hidden="true" style="--ln:' + Math.round((1 - line / hi) * 100) + '%">' + bars + '</span><span class="sc-muted"><b>' + n + '/' + all.length + '</b> ' + (side === 'over' ? 'Over' : 'Under') + '</span></span>';
   }
+  /* a sports line with Scout's side but no published letter ("No grade yet"): the sub-threshold rule of the other sports, Lean Over /
+     Lean Under with Stake 0U, in place of the hold chip (the board row reads the same) */
+  function leanOnly(r) {
+    var s = r && r.scout;
+    return !!(s && (s.side === 'over' || s.side === 'under') && !s.grade && s.hold && s.hold.short === 'No grade yet' && !r.extra);
+  }
   function pickHtml(r, doc, st) {
     if (!st || !st.side) return '';
     var side = st.side.toLowerCase(), scout = r.scout && r.scout.side === side;
+    if (scout && leanOnly(r)) st = Object.assign({}, st, {pick: '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span>', stake: 'Stake 0U'});
     var pct = parseFloat(st.chance), hasChance = isFinite(pct);
     var book = r.offer.platform_label ? esc(r.offer.platform_label) + (r.offer.seen_at ? ' · checked ' + esc(age(r.offer.seen_at)) : '') : '';
     return '<div class="sc-pick v3p-pick" aria-label="Pick summary">'
@@ -440,6 +447,13 @@
     var act = dec.querySelector(':scope > .h-dec-act');
     addIn(dec, 'v3p-facts', factsHtml(r, doc, st), act, true);
     addIn(dec, 'v3p-hits', hitsHtml(r, doc, st), null);
+    var ch = dec.querySelector(':scope > .h-dec-chance'), side = st && st.side ? st.side.toLowerCase() : '';
+    if (ch) {
+      var lean = leanOnly(r) && r.scout.side === side;
+      var hold = ch.querySelector('.h-hold-why');
+      if (hold) hold.classList.toggle('v3p-hide', lean);
+      addIn(ch, 'v3p-lean', lean ? '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span><span class="h-dec-stake">Stake 0U</span>' : '', null);
+    }
   }
 
   /* ---------------------------------------------------------------- the combined bar (sticky at the foot of the card) */

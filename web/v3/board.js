@@ -45,6 +45,7 @@
               Object.keys(RECS).forEach(function (k) { if (k.indexOf(sp + '|') === 0) delete RECS[k]; });   /* this sport's board, replaced whole */
               ((d && d.records) || []).forEach(function (x) { if (x && x.offer && x.scout) RECS[recKey(x)] = x; });
               soon();
+              try { document.dispatchEvent(new CustomEvent('scout-v3-recs')); } catch (e) { /* old browser: legs keep their read */ }
             }, function () { /* not JSON: the hub handles it */ });
           }, function () { /* the hub sees its own failure */ });
         }
@@ -66,6 +67,10 @@
     if (leanOnly(r)) return '0';
     return typeof s.units === 'number' && isFinite(s.units) ? String(s.units) : null;
   }
+  /* for the slip legs (slips.js): the same records and the same stake rule */
+  V.boardRecs = function () { return RECS; };
+  V.stakeOf = stakeOf;
+  V.leanOnly = leanOnly;
   function paintStake(tr) {
     var r = RECS[tr.getAttribute('data-record')], g = tr.querySelector('.h-scout-grade');
     if (!r || !g) return;

@@ -390,3 +390,20 @@ html[data-ui-v3] #u-hub dialog.h-price-draft li{padding:10px 12px;border-radius:
 html[data-ui-v3] #u-hub dialog.h-price-draft li h3{margin:0 0 4px;font:600 14px/1.2 var(--sc-font);color:var(--sc-muted)}
 html[data-ui-v3] #u-hub dialog.h-price-draft li p{margin:2px 0 0}
 html[data-ui-v3] #u-hub dialog.h-price-draft>button{width:100%;min-height:44px;border:0;border-radius:var(--sc-r-md);background:var(--sc-cta-bg);color:var(--sc-cta-ink);font:600 15px/1 var(--sc-font);cursor:pointer}
+/* ---- polish1 (2026-11-20) ---- */
+/* legs: the market wraps between words, the period never splits; each leg states its stake under its read */
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-pick{word-break:normal;overflow-wrap:normal}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-pick .sb-per{white-space:nowrap}
+html[data-ui-v3] #u-hub .sb-read .sb-stake{display:block;color:var(--sc-muted);font:400 12px/1.3 var(--sc-font);white-space:nowrap}
+html[data-ui-v3] #u-hub .sb-read .sb-stake b{color:var(--sc-text);font-weight:600}
+@media (max-width:719px){
+  /* a long-worded choice (Goblins) is a vertical list, one option per line */
+  html[data-ui-v3] #u-hub .sb-seg.is-wrap{grid-template-columns:minmax(0,1fr)}
+  html[data-ui-v3] #u-hub .sb-seg.is-wrap button{justify-content:flex-start;text-align:left;padding:0 14px;white-space:nowrap}
+}
+@media (max-width:1023px){
+  /* the generate result sits above the docked Generate bar, never under it or the bottom bar */
+  html[data-ui-v3] #u-hub .sb-rail{display:flex;flex-direction:column}
+  html[data-ui-v3] #u-hub .sb-rail #hub-generation-status{order:-1}
+  html[data-ui-v3] #u-hub .sb-rail #hub-generation-status:not(:empty){box-shadow:inset 0 1px 0 var(--sc-hair);background:color-mix(in srgb,var(--sc-bg) 94%,transparent);backdrop-filter:blur(8px)}
+}

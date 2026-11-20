@@ -267,3 +267,6 @@ html[data-ui-v3] #u-hub #hub-detail :is(.v3p-facts,.v3p-hits) small{display:bloc
 html[data-ui-v3] #u-hub #hub-detail .v3p-hits b{display:block;font:600 22px/1.15 var(--sc-font);color:var(--sc-text)}
 html[data-ui-v3] #u-hub #hub-detail .v3p-hits em{font-style:normal;font-weight:500;color:var(--sc-muted)}
 html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id small b{display:inline;font-size:inherit;line-height:inherit}
+html[data-ui-v3] #u-hub #hub-detail .v3p-hide{display:none!important}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-chance>.v3p-lean{display:inline-flex;align-items:center;gap:10px}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-chance>.v3p-lean .h-grade-text{display:inline-block;padding:6px 9px;border-radius:var(--sc-r-sm);font:600 13px/1.2 var(--sc-font);color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge)}
