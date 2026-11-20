@@ -169,3 +169,139 @@ def test_record_quote_history_runs_the_archive_hourly_and_saves_samples(tmp_path
     st = json.loads((tmp_path / board.QUOTE_STATUS).read_text(encoding='utf-8'))
     assert st['archive']['rows'] == 60 or st['archive'].get('ran_at_epoch')   # first run archives at once
     assert st['samples'] and st['live_mb'] is not None and st['cap_mb'] == board.QUOTES_CAP_MB
+
+
+# ------------------------------------------------------------------------------------- forecasts.db / learning.db
+from contextlib import closing  # noqa: E402
+
+from sports import expansion_forecasts as fc, expansion_learning as learn, expansion_research as research  # noqa: E402
+from sports.tests.test_expansion_learning import setup, result  # noqa: E402,F401
+from sports.tests.test_expansion_forecasts import fixture  # noqa: E402
+
+LATER = '2026-11-30T12:00:00Z'      # > 7 days after the fixture match
+
+
+def _tennis_forecast(setup, monkeypatch):
+    root, path, match, offer = setup
+    offer.update(sport='tennis', variant='standard', player_id='native', event_id='native')
+    _, facts = fixture('tennis')
+    facts.update(identity={'competition': 'atp', 'event_id': match['event_id'], 'player_id': match['participants'][0]['id']},
+                 scope='full_game', context={'best_of': 3},
+                 event={'event_id': match['event_id'], 'start': offer['start'], 'status': 'scheduled'})
+    for game in facts['games']:
+        game.update(best_of=3, source='thescore')
+    monkeypatch.setattr(board, 'board', lambda req: (200, {'offers': [offer]}))
+    monkeypatch.setattr(research, 'saved', lambda sport: {'players': {research.key(offer): facts}})
+    return offer, facts
+
+
+def test_forecast_slimming_is_lossless_and_settle_still_reviews_corrections(setup, monkeypatch):
+    _tennis_forecast(setup, monkeypatch)
+    assert fc.publish('tennis', '2026-11-17T23:00:00Z')['published'] == 1
+    with fc.connect('tennis') as c:
+        original = tuple(c.execute('SELECT * FROM forecasts').fetchone())
+    result(setup, 10, '2026-11-18T18:00:00Z')
+    assert fc.settle('tennis', '2026-11-18T18:30:00Z')['added'] == 1
+    out = fc.compact('tennis', LATER, budget_s=10)
+    assert out['rows'] == 1 and out['parts'] == 1
+    with fc.connect('tennis') as c:
+        slim = json.loads(c.execute('SELECT payload FROM forecasts').fetchone()[0])
+        back = list(xa.read(c, setup[0] / 'archive' / 'forecasts', 'forecasts'))
+        assert xa.verify(c, setup[0] / 'archive' / 'forecasts')['bad'] == []
+    full = json.loads(original[5])
+    assert 'inputs' in full and 'inputs' not in slim and slim['archived'].startswith('forecasts-')
+    assert all(slim[k] == full[k] for k in fc.SLIM_REQUIRED if k in full)
+    assert tuple(back[0][c] for c in ('id', 'offer_key', 'competition', 'event_id', 'start', 'payload')) == original
+    # a correction after slimming is still reviewed from the slim row
+    result(setup, 3, '2026-11-18T19:00:00Z')
+    assert fc.settle('tennis', '2026-11-30T12:30:00Z')['added'] == 1
+    assert fc.compact('tennis', LATER, budget_s=10)['rows'] == 0          # never slimmed twice
+
+
+def test_forecast_not_slimmed_before_its_event_was_checked_or_inside_7_days(setup, monkeypatch):
+    _tennis_forecast(setup, monkeypatch)
+    fc.publish('tennis', '2026-11-17T23:00:00Z')
+    assert fc.compact('tennis', LATER, budget_s=10)['rows'] == 0           # never checked
+    result(setup, 10, '2026-11-18T18:00:00Z')
+    fc.settle('tennis', '2026-11-18T18:30:00Z')
+    assert fc.compact('tennis', '2026-11-20T12:00:00Z', budget_s=10)['rows'] == 0   # inside 7 days
+
+
+def test_learning_slimming_keeps_residual_fit_identical(setup):
+    learn.cycle('tennis', '2026-11-17T21:00:00Z')
+    result(setup)
+    learn.cycle('tennis', '2026-11-18T18:00:00Z')
+    identity = {'competition': 'atp', 'event_id': 'atp:espn:atp:tour:next'}
+    with closing(learn.connect('tennis')) as c:
+        before = learn.residual_fit(c, identity, 'aces', 'full_game', '2026-11-19T00:00:00Z', 6)
+        n = c.execute('SELECT COUNT(*) FROM predictions').fetchone()[0]
+        full = c.execute('SELECT payload FROM predictions').fetchone()[0]
+    out = learn.compact('tennis', LATER, budget_s=10)
+    assert out['rows'] == n == 1
+    with closing(learn.connect('tennis')) as c:
+        after = learn.residual_fit(c, identity, 'aces', 'full_game', '2026-11-19T00:00:00Z', 6)
+        slim = json.loads(c.execute('SELECT payload FROM predictions').fetchone()[0])
+        back = list(xa.read(c, setup[0] / 'archive' / 'learning', 'predictions'))
+    assert after == before and before['player_events'] == 1
+    assert back[0]['payload'] == full and 'history' not in slim
+    assert slim['baseline'] == json.loads(full)['baseline']
+    # a correction after slimming is reviewed from the slim row (baseline / candidate / line_for_review kept)
+    result(setup, 3, '2026-11-30T13:00:00Z')
+    with closing(learn.connect('tennis')) as c:
+        assert learn.settle_reviews(c, 'tennis', '2026-11-30T13:30:00Z', 1e12)['added'] == 1
+
+
+def test_cycle_steps_are_isolated_publish_failure_does_not_stop_learning(setup, monkeypatch):
+    monkeypatch.setenv('SPORTS_FORECAST', '1')
+
+    def broken(*a, **k):
+        raise sqlite3.OperationalError('disk I/O error')
+    monkeypatch.setattr(fc, 'publish', broken)
+    out = learn.cycle('tennis', '2026-11-17T21:00:00Z')
+    assert 'disk I/O error' in out['published_model']['error']
+    assert out['forecasts']['saved'] == 1 and out['storage']['learning']['live_mb'] is not None
+
+
+def test_learning_capture_stops_at_its_cap_but_never_raises(setup, monkeypatch):
+    monkeypatch.setattr(learn, 'MAX_BYTES', 0)
+    out = learn.cycle('tennis', '2026-11-17T21:00:00Z')
+    assert out['forecasts'] == {'saved': 0, 'reason': 'storage_full'}
+
+
+def test_forecast_store_hard_stop_publishes_saved_forecasts_only(setup, monkeypatch):
+    offer, _ = _tennis_forecast(setup, monkeypatch)
+    assert fc.publish('tennis', '2026-11-17T23:00:00Z')['published'] == 1
+    monkeypatch.setattr(fc, 'HARD_BYTES', 0)
+    assert fc.publish('tennis', '2026-11-17T23:01:00Z')['published'] == 1   # already saved: still published
+    offer['revision'] = 'moved'
+    out = fc.publish('tennis', '2026-11-17T23:02:00Z')
+    assert out['published'] == 0 and out['pending']['storage_full'] == 1
+
+
+def test_publish_cut_by_budget_carries_previous_grades_of_current_offers(tmp_path, monkeypatch):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    offer, facts = fixture()
+    second = dict(offer, offer_id='o2', start='2026-11-18T19:00:00Z')
+    monkeypatch.setattr(board, 'board', lambda req: (200, {'offers': [offer, second]}))
+    monkeypatch.setattr(research, 'saved', lambda sport: {'players': {research.key(offer): facts,
+                                                                      research.key(second): facts}})
+    full = fc.publish('soccer', '2026-11-17T23:00:00Z')
+    assert full['published'] == 2
+    saved = json.loads((tmp_path / 'soccer' / 'forecasts.json').read_text(encoding='utf-8'))['forecasts']
+    ticks = {'n': 0}
+
+    def clock():                          # deadline at 5; first offer at t=0, the second check at t=100
+        ticks['n'] += 1
+        return 0 if ticks['n'] <= 2 else 100
+    monkeypatch.setattr(fc.time, 'monotonic', clock)
+    out = fc.publish('soccer', '2026-11-17T23:01:00Z', budget_s=5)
+    assert out['pending'].get('budget') == 1 and out['pending']['carried'] == 1 and out['published'] == 2
+    again = json.loads((tmp_path / 'soccer' / 'forecasts.json').read_text(encoding='utf-8'))['forecasts']
+    assert again == saved
+
+
+def test_fit_publication_drops_furthest_starts_only_over_the_limit():
+    cur = {f'k{i}': {'start': f'2026-11-{18 + i}T00:00:00Z', 'x': 'y' * 100} for i in range(5)}
+    assert fc.fit_publication(cur) is cur
+    small = fc.fit_publication(cur, limit=400)
+    assert 'k4' not in small and 'k0' in small and list(small) == sorted(small)

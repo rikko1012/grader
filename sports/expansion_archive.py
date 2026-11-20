@@ -122,6 +122,18 @@ def remove_leftovers(con, adir, prefix):
     return n
 
 
+def next_name(con, adir, prefix):
+    """The file name the next archive_part(con, adir, prefix, ...) call writes (a slimmed row can name its file)."""
+    ensure(con)
+    seq = con.execute("SELECT COUNT(*) FROM exp_archive WHERE file LIKE ?", (f"{prefix}-%",)).fetchone()[0]
+    while True:
+        name = f"{prefix}-{seq:06d}.jsonl.xz"
+        if not (Path(adir) / name).exists() and not con.execute("SELECT 1 FROM exp_archive WHERE file=?",
+                                                                 (name,)).fetchone():
+            return name
+        seq += 1
+
+
 def archive_part(con, adir, prefix, tbl, cols, rows, change_sql, change_params, key_col=None, preset=PRESET):
     """Archive `rows` (sequence of tuples in `cols` order, already read from table `tbl`) into one verified file
     <adir>/<prefix>-<seq>.jsonl.xz, then in ONE transaction add the manifest row and run change_sql (executemany with
@@ -137,13 +149,7 @@ def archive_part(con, adir, prefix, tbl, cols, rows, change_sql, change_params, 
         free = None
     if free is not None and free < DISK_FLOOR_MB:
         raise RuntimeError(f"disk free {free:.0f} MB < floor {DISK_FLOOR_MB} MB - archive postponed")
-    ensure(con)
-    seq = con.execute("SELECT COUNT(*) FROM exp_archive WHERE file LIKE ?", (f"{prefix}-%",)).fetchone()[0]
-    while True:
-        name = f"{prefix}-{seq:06d}.jsonl.xz"
-        if not (adir / name).exists() and not con.execute("SELECT 1 FROM exp_archive WHERE file=?", (name,)).fetchone():
-            break
-        seq += 1
+    name = next_name(con, adir, prefix)
     final, tmp = adir / name, adir / f".{name}.tmp"
     h = hashlib.sha256()
     try:
