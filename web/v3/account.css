@@ -1,5 +1,97 @@
 /* v3 account.css - owned by page group D (account, help, sign-in states, nav extras).
    Scope: member-side account / help / paywall / signed-in states inside the member pages.
-   Loaded in its bundle after tokens.css, components.css and shell.css (see web/UI_V3.md). Only applies on a v3 page: scope every rule
-   under html[data-ui-v3] (the hub's own sheets load after this bundle, so hub overrides need html[data-ui-v3] #u-hub ...).
-   Display only: no grading or API change; every field the page shows today stays. */
+   Loaded LAST in the member bundle (after board, slips, picks, player): it wins ties against every other group, so every selector
+   here is narrow (#gate, body.locked, #hub-tools-section, #hub-alerts-section, .v3-acct). Display only.
+
+   1. The sign-in gate (index.html #gate, body.locked): "Members only" / "Your Whop account doesn't have access yet", restyled as the
+      approved D sign-in card. Every line, link and perk the gate prints stays. The member nav (Board, Slip, My picks ...) has nothing
+      behind it for a visitor without access (the hub never loads), so the v3 header keeps only the brand and the theme switch there.
+   2. Tools = account and preferences: the Account card (account.js: who is signed in + Sign out, the same /auth/logout link the hub
+      carries), Preferences, the tool index, and Alerts, in the v3 surfaces. */
+
+/* ------------------------------------------------------------------ 1. sign-in gate */
+html[data-ui-v3] body.locked{background:var(--sc-bg)!important;color:var(--sc-text);font-family:var(--sc-font)}
+html[data-ui-v3] body.locked::before{content:"";position:fixed;left:0;right:0;top:0;height:min(70vh,560px);z-index:-1;pointer-events:none;background:
+  radial-gradient(70% 90% at 94% -8%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent) 0%,transparent 78%),
+  radial-gradient(46% 60% at 4% -10%,rgba(120,130,255,.08),transparent 70%),
+  linear-gradient(180deg,var(--sc-sky),var(--sc-bg))}
+html[data-ui-v3] body.locked .wrap>header{display:none!important}              /* the classic brand row: the v3 header already carries 1T Scout */
+html[data-ui-v3] body.locked .sc-v3-tabs,html[data-ui-v3] body.locked .sc-v3-bar .sc-nav,html[data-ui-v3] body.locked .sc-v3-bar [data-v3=search],
+html[data-ui-v3] body.locked .sc-v3-bar [data-v3=slip],html[data-ui-v3] body.locked .sc-v3-bar [data-v3=more],html[data-ui-v3] body.locked .sc-v3-bar .sc-slip{display:none!important}
+html[data-ui-v3] body.locked.sc-v3-shell{padding-bottom:0}
+html[data-ui-v3] body.locked .wrap{max-width:600px}
+html[data-ui-v3] #gate.card{margin:40px auto 48px;padding:36px 40px 28px!important;text-align:left!important;border:0!important;border-radius:var(--sc-r-sheet);
+  background:var(--sc-s1)!important;box-shadow:var(--sc-ring),var(--sc-drop);font-family:var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #gate h3{margin:0 0 10px!important;font:600 34px/1.08 var(--sc-font);letter-spacing:-.03em;color:var(--sc-text)}
+html[data-ui-v3] #gate .small{font-size:15px;line-height:1.5}
+html[data-ui-v3] #gate .muted{color:var(--sc-muted)}
+html[data-ui-v3] #gate>.small.muted:first-of-type{margin-bottom:22px!important;font-size:17px;color:var(--sc-text)}
+html[data-ui-v3] #gate a.go{display:flex!important;align-items:center;justify-content:center;width:100%;min-height:52px;padding:0 20px!important;margin:0;border-radius:var(--sc-r-md);
+  background:var(--sc-cta-bg);color:var(--sc-cta-ink)!important;font:600 17px/1 var(--sc-font);text-decoration:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -1px 0 rgba(8,11,19,.12),0 1px 2px rgba(0,0,0,.28)}
+:root[data-ui-v3][data-theme="light"] #gate a.go{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(16,24,48,.2)}
+html[data-ui-v3] #gate a:not(.go),html[data-ui-v3] #who a{color:var(--sc-text);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--sc-text) 40%,transparent);text-underline-offset:3px}
+html[data-ui-v3] #gate a:not(.go){display:inline-flex;align-items:center;min-height:44px}
+html[data-ui-v3] #gate .small[style*="--warn"]{padding:10px 14px;border-radius:var(--sc-r-lg);background:var(--sc-poor-tint);color:var(--sc-text)!important;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-poor) 35%,transparent),inset 3px 0 0 var(--sc-poor)}
+html[data-ui-v3] #gate .perks{display:block;margin:26px 0 8px;border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] #gate .perk{padding:18px 0;border:0;border-bottom:1px solid var(--sc-hair);border-radius:0;background:none}
+html[data-ui-v3] #gate .perk b{font:600 18px/1.3 var(--sc-font);letter-spacing:-.01em;color:var(--sc-text);margin-bottom:6px}
+html[data-ui-v3] #gate .perk span{font-size:15px;line-height:1.55;color:var(--sc-muted)}
+html[data-ui-v3] #gate .perks+.small{margin-top:14px!important;font-size:13px;color:var(--sc-faint)}
+html[data-ui-v3] #who{font-family:var(--sc-font);color:var(--sc-muted)}
+@media (max-width:640px){
+  html[data-ui-v3] #gate.card{margin:20px 0 32px;padding:28px 22px 22px!important;border-radius:var(--sc-r-xl)}
+  html[data-ui-v3] #gate h3{font-size:28px}
+  html[data-ui-v3] #gate>.small.muted:first-of-type{font-size:16px}
+}
+
+/* ------------------------------------------------------------------ 2. Tools: account, preferences, tool index, alerts */
+html[data-ui-v3] #u-hub #hub-tools-section .h-tool-grid>article,
+html[data-ui-v3] #u-hub #hub-tools-section .h-prefs,
+html[data-ui-v3] #u-hub #hub-tools-section .v3-acct,
+html[data-ui-v3] #u-hub #hub-tools-section .h-tools-alerts,
+html[data-ui-v3] #u-hub #hub-alerts-section #hub-alerts-body{border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);color:var(--sc-text);
+  box-shadow:var(--sc-ring),var(--sc-drop);font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-tools-section .h-tools-alerts,html[data-ui-v3] #u-hub #hub-alerts-section #hub-alerts-body{margin-top:16px;padding:20px 22px}
+html[data-ui-v3] #u-hub #hub-tools-section .h-tool-grid>article{padding:20px 22px}
+html[data-ui-v3] #u-hub #hub-tools-section .h-eyebrow{font:600 11.5px/1.2 var(--sc-font);letter-spacing:.1em;color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-tools-section h2,html[data-ui-v3] #u-hub #hub-alerts-section h2{font:600 19px/1.25 var(--sc-font);letter-spacing:-.015em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-tools-section h3,html[data-ui-v3] #u-hub #hub-alerts-section h3{font:600 16px/1.3 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-tools-section p,html[data-ui-v3] #u-hub #hub-alerts-section p{color:var(--sc-muted);font-size:13.5px;line-height:1.55}
+html[data-ui-v3] #u-hub #hub-tools-section .h-tool-links a{color:var(--sc-link);font-weight:500}
+html[data-ui-v3] #u-hub #hub-tools-section .h-tool-links a:hover{text-decoration:underline;text-underline-offset:3px}
+html[data-ui-v3] #u-hub #hub-tools-section .h-prefs{padding:20px 22px;margin:0 0 16px}
+html[data-ui-v3] #u-hub #hub-tools-section .h-prefs-grid label{color:var(--sc-muted);font:500 13px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-tools-section .h-prefs-grid select,html[data-ui-v3] #u-hub #hub-tools-section .h-prefs-grid input{min-height:48px;padding:0 14px;border:0;border-radius:var(--sc-r-md);
+  background-color:var(--sc-s2);color:var(--sc-text);font:500 15px/1 var(--sc-font);box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-tools-section .h-prefs-grid input::placeholder{color:var(--sc-faint)}
+html[data-ui-v3] #u-hub :is(#hub-tools-section,#hub-alerts-section) .h-alert{border:0;border-radius:var(--sc-r-lg);background:var(--sc-s2);box-shadow:inset 0 0 0 1px var(--sc-hair);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-tools-section,#hub-alerts-section) .h-alert span{color:var(--sc-muted);font-size:12.5px}
+html[data-ui-v3] #u-hub :is(#hub-tools-section,#hub-alerts-section) .h-alert button,
+html[data-ui-v3] #u-hub :is(#hub-tools-section,#hub-alerts-section) .h-alert-new,
+html[data-ui-v3] #u-hub :is(#hub-tools-section,#hub-alerts-section) .h-sec-head button{min-height:44px;padding:0 16px;border:0;border-radius:var(--sc-r-md);background:none;
+  color:var(--sc-text);font:600 14px/1 var(--sc-font);box-shadow:var(--sc-ring);cursor:pointer}
+html[data-ui-v3] #u-hub :is(#hub-tools-section,#hub-alerts-section) .h-notice{border:0;border-radius:var(--sc-r-lg);background:var(--sc-s2);box-shadow:inset 0 0 0 1px var(--sc-hair);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-tools-section,#hub-alerts-section) .h-warning{color:var(--sc-text);background:var(--sc-poor-tint);border-radius:var(--sc-r-md);padding:8px 12px}
+/* the Account card (account.js): who is signed in, and Sign out */
+html[data-ui-v3] #u-hub .v3-acct{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 16px;padding:18px 22px}
+html[data-ui-v3] #u-hub .v3-acct h2{margin:0 0 6px}
+html[data-ui-v3] #u-hub .v3-acct b{display:block;font:600 15px/1.3 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub .v3-acct p{margin:2px 0 0}
+html[data-ui-v3] #u-hub .v3-acct a{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:var(--sc-r-md);color:var(--sc-text);font:600 15px/1 var(--sc-font);
+  text-decoration:none;box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub .v3-acct a:hover{background:var(--sc-s2)}
+/* while Tools or Alerts is open, the centre column and its title sit on the v3 ground too (light theme: the hub's own frame is dark-only
+   in this design; scoped by :has to these two sections, so the board and every other section keep their own group's styling) */
+html[data-ui-v3] #u-hub #hub-center:has(#hub-tools-section:not([hidden]),#hub-alerts-section:not([hidden])){background:var(--sc-bg);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-center:has(#hub-tools-section:not([hidden]),#hub-alerts-section:not([hidden])) .h-top{background:transparent;border-color:var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-center:has(#hub-tools-section:not([hidden]),#hub-alerts-section:not([hidden])) .h-top .h-eyebrow{font:600 11.5px/1.2 var(--sc-font);letter-spacing:.1em;color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-center:has(#hub-tools-section:not([hidden]),#hub-alerts-section:not([hidden])) #hub-title{font:600 30px/1.05 var(--sc-font);letter-spacing:-.025em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-tools-section,html[data-ui-v3] #u-hub #hub-alerts-section{color:var(--sc-text);font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-tools-section .h-section-head p{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools{color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools :is(p,label){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools select,html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools>button,
+html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools button{border:0;border-radius:var(--sc-r-md);background-color:var(--sc-s1);color:var(--sc-text);box-shadow:var(--sc-ring);font-family:var(--sc-font)}
+html[data-ui-v3]:has(body.locked){background:var(--sc-bg)!important}
