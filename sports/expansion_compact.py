@@ -6,8 +6,8 @@ source key, ISO times, 6+ indexes repeating the text ids) for ~250 B of data, so
 0.75-1.0 MB and the 90-day backlog alone (~2,000 finals) would be ~1.7 GB against a 512 MB budget.
 
 What is cold: every stat / context row of an EVENT that started more than SCOUT_EXPANSION_COMPACT_DAYS (7) days ago
-(start from the event's own stored record) and none of whose rows was written in the last 48 h (the re-read
-correction window); only whole identities (all revisions of an identity are in the event, checked per identity).
+(start from the event's own stored record) and none of whose revisions was LEARNED in the last 48 h (known_at; the
+re-read correction window - an unchanged re-read only moves last_seen_at and does not keep an event hot); only whole identities (all revisions of an identity are in the event, checked per identity).
 Events, players and teams stay hot (small; _any_event reads them directly).
 
 Where it goes: <competition>/archive/records/result-<competition>-<event day>-<seq>.jsonl.xz (one JSON line per row,
@@ -25,6 +25,7 @@ the archive files too.
 """
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import time
@@ -55,6 +56,15 @@ def bound_cache():
     from . import archive
     archive.LRU_BYTES = min(archive.LRU_BYTES, int(EXPANSION_LRU_MB * 1_000_000))
     return archive.LRU_BYTES
+
+
+def bound_service_cache(directory):
+    """The web process (member history requests) reads archived soccer / tennis results through the shared archive
+    file cache: give every store under `directory` the same EXPANSION_LRU_MB share inside it (archive.PREFIX_CAPS),
+    leaving the global LRU_BYTES - and so every NBA / NFL read - untouched. Idempotent."""
+    from . import archive
+    archive.PREFIX_CAPS[os.path.normcase(os.path.abspath(str(directory)))] = int(EXPANSION_LRU_MB * 1_000_000)
+    return archive.PREFIX_CAPS
 
 
 def enabled():
@@ -100,8 +110,14 @@ def candidates(con, now, part_rows=5000):
     for eid in sorted(starts, key=lambda e: (starts[e], e)):
         rows = con.execute("SELECT rid, kind, source, source_key, known_at, COALESCE(last_seen_at, '') FROM records "
                            "WHERE kind IN ('stat', 'context') AND event_id = ?", (eid,)).fetchall()
-        if not rows or max(max(r[4] or "", r[5]) for r in rows) >= quiet:
-            continue                                    # written inside the correction window: stays hot
+        # sg-stability 2026-11-20: coldness is judged on CONTENT (known_at = when a revision was learned), not on
+        # sightings. A final in a base competition is re-read every 24 h for 100 days; each unchanged re-read moves
+        # last_seen_at only, so the old max(known_at, last_seen_at) rule never let those events go cold and almost
+        # nothing was ever archived (0.2 MB archived vs ~950 MB/day of growth, live ops 2026-11-20). A re-read of an
+        # archived identity with unchanged content stays a duplicate (store._put); a correction is a new revision with
+        # a new known_at and stays hot for its own 48 h.
+        if not rows or max(r[4] or "" for r in rows) >= quiet:
+            continue                                    # a revision learned inside the correction window: stays hot
         ident = OrderedDict()
         for rid, kind, source, sk, _k, _s in rows:
             ident.setdefault((kind, source, sk), []).append(rid)
@@ -193,3 +209,99 @@ def compact_all(directory, budget_s, now=None):
         out["errors"] += bool(r["error"])
     out["seconds"] = round(time.monotonic() - t0, 2)
     return out
+
+
+# ------------------------------------------------------------------------------------------- scheduled verification
+VERIFY_FILE = "archive-verify.json"
+VERIFY_EVERY_H = 24
+SIDE_STORES = (("quotes", "quotes.db", "archive/quotes"), ("learning", "learning.db", "archive/learning"),
+               ("forecasts", "forecasts.db", "archive/forecasts"))
+
+
+def _verify_one(sport_dir, name):
+    """Re-read every archive file of one store (a competition's result archive or a side store's). -> result dict."""
+    from . import archive, expansion_archive as xa, store
+    t0 = time.monotonic()
+    side = {n: (db, sub) for n, db, sub in SIDE_STORES}
+    if name.startswith("side:"):
+        db, sub = side[name[5:]]
+        path = Path(sport_dir) / db
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        try:
+            r = xa.verify(con, Path(sport_dir) / sub, stamp=False)
+        finally:
+            con.close()
+    else:
+        path = Path(sport_dir) / name / "canonical.db"
+        con = store.connect(path)
+        try:
+            r = archive.verify(con, archive_dir(path))
+        finally:
+            con.close()
+    return {"at": datetime.now(timezone.utc).strftime(TS), "files": r["files"], "rows": r["rows"],
+            "bad": r["bad"][:5], "n_bad": len(r["bad"]), "seconds": round(time.monotonic() - t0, 2)}
+
+
+def stores_with_archives(sport_dir):
+    sport_dir = Path(sport_dir)
+    out = sorted({p.parent.parent.parent.name for p in sport_dir.glob("*/archive/records/*.jsonl.xz")})
+    for n, db, sub in SIDE_STORES:
+        if (sport_dir / db).exists() and any((sport_dir / sub).glob(f"{n}-*.jsonl.xz")):
+            out.append("side:" + n)
+    return out
+
+
+def verify_round(sport_dir, budget_s, now=None, every_h=VERIFY_EVERY_H):
+    """sg-stability 2026-11-20: every soccer / tennis archive (each competition's result archive and the quotes /
+    learning / forecasts archives) is re-read at least every `every_h` hours - stalest first, inside budget_s, from the
+    history job (which holds the sport's history lock). Results go to <sport>/archive-verify.json for ops; a bad file
+    pages (expansion_archive_bad). Before, `python -m sports.archive verify` checked the NBA / NFL store only."""
+    sport_dir = Path(sport_dir)
+    now = now or datetime.now(timezone.utc)
+    t0 = time.monotonic()
+    path = sport_dir / VERIFY_FILE
+    try:
+        state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        stores = state.get("stores") if isinstance(state.get("stores"), dict) else {}
+    except (OSError, ValueError, AttributeError):
+        stores = {}
+    names = stores_with_archives(sport_dir)
+    stores = {k: v for k, v in stores.items() if k in names and isinstance(v, dict)}
+
+    def age_h(n):
+        at = _parse((stores.get(n) or {}).get("at"))
+        return float("inf") if at is None else (now - at).total_seconds() / 3600
+    due = sorted((n for n in names if age_h(n) >= every_h), key=lambda n: -age_h(n))
+    done, slowest = [], 0.0
+    for n in due:
+        if time.monotonic() - t0 + slowest > budget_s:
+            break
+        try:
+            stores[n] = _verify_one(sport_dir, n)
+        except (OSError, sqlite3.Error, ValueError, EOFError) as e:
+            stores[n] = {"at": now.strftime(TS), "error": f"{type(e).__name__}: {str(e)[:160]}", "n_bad": 1}
+        slowest = max(slowest, stores[n].get("seconds") or 0.0)
+        done.append(n)
+    summary = {"at": now.strftime(TS), "stores": stores, "archived_stores": len(names),
+               "n_bad": sum(int(v.get("n_bad") or 0) for v in stores.values()),
+               "never_verified": [n for n in names if n not in stores],
+               "oldest_at": min((v.get("at") for v in stores.values() if v.get("at")), default=None)}
+    from .expansion_history import atomic_json
+    atomic_json(path, summary)
+    return {"verified": done, "n_bad": summary["n_bad"], "pending": max(0, len(due) - len(done)),
+            "seconds": round(time.monotonic() - t0, 2)}
+
+
+def verify_status(sport_dir, max_bytes=262144):
+    """Small summary of archive-verify.json for ops (never opens a database)."""
+    try:
+        p = Path(sport_dir) / VERIFY_FILE
+        if p.stat().st_size > max_bytes:
+            return {"error": "too_large"}
+        s = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    bad = {k: v.get("bad") or v.get("error") for k, v in (s.get("stores") or {}).items() if v.get("n_bad")}
+    return {"at": s.get("at"), "archived_stores": s.get("archived_stores"), "n_bad": s.get("n_bad"),
+            "bad": dict(list(bad.items())[:5]), "never_verified": (s.get("never_verified") or [])[:10],
+            "oldest_at": s.get("oldest_at")}

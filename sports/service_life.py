@@ -62,7 +62,25 @@ def cgroup():
             out[name.split(".")[1] + "_mb"] = None if v == "max" else round(int(v) / 1e6, 1)
         except (OSError, ValueError):
             pass
+    # sg-stability 2026-11-20: anon vs page cache and pressure, so "at the limit, mostly page cache" is measured, not
+    # assumed (anon is what an OOM kill follows; file cache is reclaimed)
+    try:
+        with open(f"{CGROUP}/memory.stat") as f:
+            stat = dict(line.split()[:2] for line in f if line.strip())
+        out["stat_mb"] = {k: round(int(stat[k]) / 1e6, 1) for k in STAT_KEYS if k in stat}
+    except (OSError, ValueError):
+        pass
+    try:
+        with open(f"{CGROUP}/memory.pressure") as f:
+            out["pressure"] = {line.split()[0]: {k: float(v) for k, v in (x.split("=") for x in line.split()[1:])
+                                                 if k != "total"} for line in f if line.strip()}
+    except (OSError, ValueError, IndexError):
+        pass
     return out
+
+
+STAT_KEYS = ("anon", "file", "kernel", "shmem", "file_dirty", "file_writeback", "active_file", "inactive_file",
+             "slab_reclaimable")
 
 
 def trim():

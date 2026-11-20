@@ -41,8 +41,6 @@ def connect(sport):
     directory = boards.root(sport)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / 'learning.db'
-    if sum(p.stat().st_size for p in directory.glob('learning.db*')) >= MAX_BYTES:
-        raise ValueError('isolated learning storage budget reached')
     c = sqlite3.connect(path, timeout=5)
     c.row_factory = sqlite3.Row
     c.execute('PRAGMA journal_mode=WAL')
@@ -119,8 +117,65 @@ def residual_fit(c, identity, stat, scope, before, baseline):
             'review_ids':[x[1] for x in selected], 'known_at':max((x[2] for x in selected),default=None)}
 
 
+def storage(sport):
+    """learning.db live pages + WAL against MAX_BYTES (sg-stability: slimmed rows free pages that new rows reuse)."""
+    from . import expansion_archive as xa
+    live = xa.live_bytes(boards.root(sport)/'learning.db')
+    return {'live_mb': round(live/1048576, 1), 'cap_mb': MAX_BYTES//1048576, 'full': live >= MAX_BYTES}
+
+
+SLIM_AFTER_DAYS = 7
+SLIM_KEEP_BYTES = 1024
+SLIM_REQUIRED = ('model_version', 'baseline', 'candidate', 'line_for_review', 'identity', 'projection_scope',
+                 'made_at', 'source_event_start', 'shadow_only', 'release_allowed')
+
+
+def compact(sport, now=None, budget_s=4, days=SLIM_AFTER_DAYS):
+    """Slim reviewed predictions of events that started more than `days` ago: the full row goes to a verified archive
+    file (<sport>/archive/learning/), the store keeps every key residual_fit / settle_reviews read (model_version,
+    baseline, candidate, line_for_review) and every small key. Lossless; the shadow's numbers are unchanged."""
+    from datetime import timedelta
+    from . import expansion_archive as xa
+    now = now or now_utc()
+    t0 = time.monotonic()
+    if storage(sport)['live_mb'] >= 0.5 * MAX_BYTES / 1048576:
+        days = min(days, 1)             # past half the cap: reviewed predictions slim after a day
+    cutoff = (parse_utc(now) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    adir = boards.root(sport)/'archive'/'learning'
+    cols = ('id', 'competition', 'event_id', 'player_id', 'stat', 'scope', 'start_at', 'made_at', 'payload')
+    out = {'rows': 0, 'parts': 0}
+    with closing(connect(sport)) as c:
+        xa.ensure(c)
+        c.commit()
+        out['leftovers_removed'] = xa.remove_leftovers(c, adir, 'learning')
+        while time.monotonic() - t0 < budget_s:
+            rows = c.execute('''SELECT id,competition,event_id,player_id,stat,scope,start_at,made_at,payload
+                FROM predictions p WHERE start_at<? AND json_extract(payload,'$.archived') IS NULL
+                AND EXISTS (SELECT 1 FROM reviews r WHERE r.prediction_id=p.id) ORDER BY start_at,id LIMIT 2000''',
+                             (cutoff,)).fetchall()
+            if not rows:
+                break
+            rows = [tuple(r) for r in rows]
+            name = xa.next_name(c, adir, 'learning')
+
+            def slim(payload):
+                kept = {k: v for k, v in payload.items() if k in SLIM_REQUIRED or len(encode(v)) <= SLIM_KEEP_BYTES}
+                kept['archived'] = name
+                return kept
+            res = xa.archive_part(c, adir, 'learning', 'predictions', cols, rows,
+                                  'UPDATE predictions SET payload=? WHERE id=?',
+                                  [(encode(slim(json.loads(r[8]))), r[0]) for r in rows], key_col='start_at')
+            out['rows'] += res['rows']
+            out['parts'] += 1
+        out['archived'] = xa.stats(c)
+    out['seconds'] = round(time.monotonic()-t0, 2)
+    return out
+
+
 def capture(c, sport, now, deadline):
     directory = boards.root(sport)
+    if storage(sport)['full']:
+        return {'saved': 0, 'reason': 'storage_full'}
     paths = [directory/'board.json',directory/'current-matches.json']
     if any(not p.exists() or p.stat().st_size>3_000_000 for p in paths):
         return {'saved':0,'reason':'board_or_identity_unavailable'}
@@ -233,18 +288,35 @@ def settle_reviews(c,sport,now,deadline):
     return counts
 
 
+def _step(fn, *a, **k):
+    """sg-stability: one step's failure (a full store, a locked file) is recorded and never stops the next step -
+    above all never the publication of the grades."""
+    try:
+        return fn(*a, **k)
+    except (sqlite3.Error, OSError, ValueError, RuntimeError, KeyError, TypeError) as e:
+        return {'error': f'{type(e).__name__}: {str(e)[:200]}'}
+
+
 def cycle(sport,now=None,budget_s=20):
     now=now or now_utc();deadline=time.monotonic()+budget_s
-    from .expansion_forecasts import publish, settle
-    published=(publish(sport, now, budget_s=budget_s/3) if os.environ.get('SPORTS_FORECAST')=='1'
+    from . import expansion_forecasts as fc
+    published=(_step(fc.publish, sport, now, budget_s=budget_s/3) if os.environ.get('SPORTS_FORECAST')=='1'
                else {'state':'forecast_disabled'})
-    settled=settle(sport, now, budget_s=budget_s/6)
-    with closing(connect(sport)) as c:
-        reviewed=settle_reviews(c,sport,now,min(deadline,time.monotonic()+budget_s/4))
-        captured=capture(c,sport,now,deadline)
-        totals={name:c.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('predictions','reviews')}
+    settled=_step(fc.settle, sport, now, budget_s=budget_s/6)
+    upkeep={'forecasts': _step(fc.compact, sport, now, budget_s=budget_s/10),
+            'learning': _step(compact, sport, now, budget_s=budget_s/10)}
+
+    def learning_steps():
+        with closing(connect(sport)) as c:
+            reviewed=_step(settle_reviews,c,sport,now,min(deadline,time.monotonic()+budget_s/4))
+            captured=_step(capture,c,sport,now,deadline)
+            totals={name:c.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('predictions','reviews')}
+        return reviewed, captured, totals
+    steps=_step(learning_steps)
+    reviewed, captured, totals = steps if isinstance(steps, tuple) else (steps, steps, {})
     result={'sport':sport,'at':now,'reviews':reviewed,'forecasts':captured,'totals':totals,
-            'mode':'shadow','release_allowed':False, 'published_model':published, 'published_reviews':settled}
+            'mode':'shadow','release_allowed':False, 'published_model':published, 'published_reviews':settled,
+            'upkeep':upkeep,'storage':{'learning':_step(storage,sport),'forecasts':_step(fc.storage,sport)}}
     atomic_json(boards.root(sport)/'learning-status.json',result)
     return result
 

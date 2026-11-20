@@ -158,8 +158,12 @@ def _held(sport, url, send):
             record_429(sport, net.count_429(urlsplit(url).netloc) - before)
 
 
-def get_json(sport, url, **kwargs):
-    return _held(sport, url, lambda: net.get_json(url, **kwargs))
+MAX_JSON_BYTES = 32_000_000    # sg-stability: the largest answers seen are ~7 MB (Underdog FIFA) and ~2.3 MB (ESPN
+                               # soccer scoreboard, a busy Saturday): an answer over this fails cleanly as ValueError
+
+
+def get_json(sport, url, max_bytes=MAX_JSON_BYTES, **kwargs):
+    return _held(sport, url, lambda: net.get_json(url, max_bytes=max_bytes, **kwargs))
 
 
 def get_text(sport, url, max_bytes=2_000_000, **kwargs):

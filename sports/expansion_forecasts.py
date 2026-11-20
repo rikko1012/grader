@@ -219,11 +219,21 @@ def make_forecast(offer, facts, now):
     return result, None
 
 
+HARD_BYTES = 2 * MAX_BYTES   # sg-stability: MAX_BYTES is the alert / archive target, this the write stop
+
+
+def storage(sport):
+    """{'live_mb', 'cap_mb', 'hard_mb', 'full'} of forecasts.db (live pages: rows slimmed into the archive free pages
+    that new forecasts reuse)."""
+    from . import expansion_archive as xa
+    live = xa.live_bytes(boards.root(sport)/'forecasts.db')
+    return {'live_mb': round(live/1048576, 1), 'cap_mb': MAX_BYTES//1048576, 'hard_mb': HARD_BYTES//1048576,
+            'full': live >= HARD_BYTES}
+
+
 def connect(sport):
     root = boards.root(sport)
     root.mkdir(parents=True, exist_ok=True)
-    if sum(p.stat().st_size for p in root.glob('forecasts.db*')) >= MAX_BYTES:
-        raise ValueError('expansion forecast budget reached')
     c = sqlite3.connect(root/'forecasts.db', timeout=2)
     c.row_factory = sqlite3.Row
     c.execute('PRAGMA journal_mode=WAL')
@@ -249,6 +259,7 @@ def publish(sport, now=None, budget_s=8):
         return {'state':'quotes_unavailable'}
     facts = research.saved(sport).get('players',{})
     counts, current = {}, {}
+    full = storage(sport)['full']
     with closing(connect(sport)) as c:
         for offer in sorted(board['offers'],key=lambda x:x['start']):
             if time.monotonic() >= deadline:
@@ -260,14 +271,108 @@ def publish(sport, now=None, budget_s=8):
                 continue
             ident = forecast['identity']
             key = offer_key(offer)
-            c.execute('INSERT OR IGNORE INTO forecasts VALUES (?,?,?,?,?,?)',
-                      (forecast['id'],key,ident['competition'],ident['event_id'],offer['start'],encode(forecast)))
+            if not full:
+                c.execute('INSERT OR IGNORE INTO forecasts VALUES (?,?,?,?,?,?)',
+                          (forecast['id'],key,ident['competition'],ident['event_id'],offer['start'],encode(forecast)))
             # Reuse the original issuance time; repeated runs never rewrite it.
-            frozen = json.loads(c.execute('SELECT payload FROM forecasts WHERE id=?',(forecast['id'],)).fetchone()[0])
+            got = c.execute('SELECT payload FROM forecasts WHERE id=?',(forecast['id'],)).fetchone()
+            if got is None:             # store at its hard stop: a forecast that was never saved is not published
+                counts['storage_full'] = counts.get('storage_full',0)+1
+                continue
+            frozen = json.loads(got[0])
+            if 'archived' in frozen:    # slimmed rows are of started events only - never on the board
+                counts['archived_conflict'] = counts.get('archived_conflict',0)+1
+                continue
             current[key] = {k:v for k,v in frozen.items() if k != 'inputs'}
         c.commit()
-    atomic_json(boards.root(sport)/'forecasts.json', {'sport':sport,'at':now,'forecasts':current})
+    path = boards.root(sport)/'forecasts.json'
+    if counts.get('budget'):
+        # sg-stability: a run cut by its time budget keeps the previous publication of every offer it did not reach
+        # (same offer revision = the same frozen forecast) instead of dropping those grades for a cycle
+        eligible = {offer_key(o) for o in board['offers']}
+        try:
+            if path.stat().st_size <= 4_000_000:
+                old = json.loads(path.read_text(encoding='utf-8'))
+                if old.get('sport') == sport:
+                    kept = {k: v for k, v in (old.get('forecasts') or {}).items() if k in eligible and k not in current}
+                    current.update(kept)
+                    counts['carried'] = len(kept)
+        except (OSError, ValueError, AttributeError):
+            pass
+    current = fit_publication(current)
+    atomic_json(path, {'sport':sport,'at':now,'forecasts':current})
     return {'published':len(current),'letters':sum(bool(v['grade']) for v in current.values()),'pending':counts}
+
+
+PUBLICATION_BYTES = 3_800_000   # attach() ignores a forecasts.json over 4,000,000 bytes (every grade of the sport)
+
+
+def fit_publication(current, limit=PUBLICATION_BYTES):
+    """Keep forecasts.json readable: over the limit, leave out the furthest-out starts until it fits (never the whole
+    sport). Under the limit nothing changes (same dict, same order)."""
+    sizes = {k: len(json.dumps(v, separators=(',', ':'))) + len(k) + 6 for k, v in current.items()}
+    total = sum(sizes.values()) + 64
+    if total <= limit:
+        return current
+    drop = set()
+    for k in sorted(current, key=lambda k: (current[k].get('start') or '', k), reverse=True):
+        if total <= limit:
+            break
+        drop.add(k)
+        total -= sizes[k]
+    return {k: v for k, v in current.items() if k not in drop}
+
+
+SLIM_AFTER_DAYS = 7
+SLIM_KEEP_BYTES = 1024          # payload keys whose JSON is larger than this move to the archive file only
+SLIM_REQUIRED = ('id', 'identity', 'stat', 'history_scope', 'line', 'side', 'projection', 'grade', 'p_side', 'platform',
+                 'offer_id', 'offer_revision', 'start', 'made_at', 'model_version', 'scope', 'sport')
+
+
+def slim(payload, file, required=SLIM_REQUIRED):
+    """The payload with its large keys removed (they are in the verified archive `file`) - every small key and every
+    `required` key is kept verbatim."""
+    out = {k: v for k, v in payload.items() if k in required or len(encode(v)) <= SLIM_KEEP_BYTES}
+    out['archived'] = file
+    return out
+
+
+def compact(sport, now=None, budget_s=4, days=SLIM_AFTER_DAYS):
+    """Slim forecasts of events that started more than `days` ago and were already checked once: the full row goes
+    to a verified archive file (<sport>/archive/forecasts/), the store keeps what settle() reads. Lossless."""
+    from datetime import timedelta
+    from . import expansion_archive as xa
+    now = now or now_utc()
+    t0 = time.monotonic()
+    if storage(sport)['live_mb'] >= 0.5 * MAX_BYTES / 1048576:
+        days = min(days, 1)             # past half the cap: checked events slim after a day (safe at any age)
+    cutoff = (parse_utc(now) - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    adir = boards.root(sport)/'archive'/'forecasts'
+    out = {'rows': 0, 'parts': 0}
+    cols = ('id', 'offer_key', 'competition', 'event_id', 'start', 'payload')
+    with closing(connect(sport)) as c:
+        c.execute('CREATE TABLE IF NOT EXISTS checked(event_key TEXT PRIMARY KEY, at TEXT)')
+        xa.ensure(c)
+        c.commit()
+        out['leftovers_removed'] = xa.remove_leftovers(c, adir, 'forecasts')
+        while time.monotonic() - t0 < budget_s:
+            rows = c.execute('''SELECT f.id,f.offer_key,f.competition,f.event_id,f.start,f.payload FROM forecasts f
+                JOIN checked k ON k.event_key=f.competition||'|'||f.event_id
+                WHERE f.start<? AND json_extract(f.payload,'$.archived') IS NULL ORDER BY f.start,f.id LIMIT 2000''',
+                             (cutoff,)).fetchall()
+            if not rows:
+                break
+            rows = [tuple(r) for r in rows]
+            name = xa.next_name(c, adir, 'forecasts')
+            res = xa.archive_part(c, adir, 'forecasts', 'forecasts', cols, rows,
+                                  'UPDATE forecasts SET payload=? WHERE id=?',
+                                  [(encode(slim(json.loads(r[5]), name)), r[0]) for r in rows],
+                                  key_col='start')
+            out['rows'] += res['rows']
+            out['parts'] += 1
+        out['archived'] = xa.stats(c)
+    out['seconds'] = round(time.monotonic()-t0, 2)
+    return out
 
 
 @lru_cache(maxsize=2)
