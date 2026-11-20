@@ -133,14 +133,16 @@ def page(body, name):
         hit = _PAGE.get(key)
         if hit is not None and hit[0] is body:
             return hit[1]
-        out = _build(body, name, sp)
+        out = _build(body, name)
+        if sp:                               # the landing's sport list, on the <html> mark _build added
+            out = out.replace(b'<html data-ui-v3="1"', b'<html data-v3-sports="' + sp.encode() + b'" data-ui-v3="1"', 1)
         if len(_PAGE) > 24:                  # a handful of pages x variants; old versions drop when a file changes
             _PAGE.clear()
         _PAGE[key] = (body, out)
         return out
 
 
-def _build(body, name, sports=""):
+def _build(body, name):
     i, j = body.rfind(b"</head>"), body.rfind(b"</body>")
     if not 0 <= i < j:                       # a page without its markers goes out as it is
         return body
@@ -151,8 +153,6 @@ def _build(body, name, sports=""):
     out = body[:i] + h + body[i:j] + tail + body[j:]
     out = out.replace(NEXT_SWITCH, b"const ck=document.cookie,NEXT=false,_v3next=", 1)
     mark = b'<html data-ui-v3="1" data-v3-page="' + name.encode() + b'" data-sc-sport="' + sport.encode() + b'"'
-    if sports:
-        mark += b' data-v3-sports="' + sports.encode() + b'"'
     k = out.find(b"<html")
     if k >= 0 and out[k + 5:k + 6] in (b" ", b">"):
         out = out[:k] + mark + out[k + 5:]
