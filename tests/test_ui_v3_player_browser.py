@@ -31,6 +31,8 @@ from tests.test_expansion_main_board import expansion  # noqa: F401
 PHONE, DESK = {"width": 390, "height": 844}, {"width": 1280, "height": 900}
 SHOTS = Path(os.environ.get("V3_SHOTS") or "")
 POOL = ["Anubis", "Dust2", "Ancient", "Mirage", "Inferno"]
+# HLTV only (owner 2026-11-20): the v3 card drops the BO3.gg stats panel, teammates' BO3.gg ratings, and the CS API / FACEIT panels
+V3_GONE = {"cs2-stats", "cs2-mates", "cs2-csapi", "cs2-faceit"}
 
 
 @pytest.fixture(autouse=True)
@@ -237,17 +239,17 @@ def check_card(p, sport, size, theme):
         assert vis(p, "#hub-detail > .v3p-dock")
         card_shots(p, name)
     tab(p, "stats")
-    want = WANT[sport][1]
+    want = [x for x in WANT[sport][1] if x not in V3_GONE]
     try:
         p.wait_for_function(f"(w => w.every(x => document.querySelector('#hub-card-body .h-fx[data-fx=\"' + x + '\"]')))({want!r})", timeout=10000)
     except Exception:
         pass
     got = sections(p)
     for fx in WANT[sport][1]:
-        assert fx in got, (fx, got)
-        if fx == "cs2-stats":                       # HLTV only (owner 2026-11-20): the hub's BO3.gg stats panel is hidden on the v3 card
-            assert not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), fx
+        if fx in V3_GONE:                           # HLTV only (owner 2026-11-20): BO3.gg / non-HLTV panels are not on the v3 card
+            assert fx not in got or not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), (fx, got)
             continue
+        assert fx in got, (fx, got)
         if fx == "cs2-maps" and not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"] .h-fx-lab').count():
             assert not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), fx   # BO3.gg table only: hidden
             continue

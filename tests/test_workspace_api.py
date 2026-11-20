@@ -297,6 +297,13 @@ def test_bars_never_disagree_with_the_saved_tally(env, monkeypatch):
     monkeypatch.setattr(server.hltv, "recent_series", lambda *a, **k: maps)
     st, doc = get(env, f"line?book=underdog&id={x['id']}")
     assert st == 200 and doc["history"]["series"] is None and doc["history"]["tally"]["over"] == 6
+    # v3 HLTV only (v3_hltv.py): the HLTV series rides beside it for the v3 card (the classic card does not read it); the tally is unchanged
+    hs = doc["history"]["hltv_series"]
+    assert len(hs) == 10 and all(g["value"] == 60 for g in hs) and hs[0]["maps"] == ["Mirage", "Mirage"]
+    import v3_hltv
+    v = v3_hltv.scrub(doc)
+    assert v["history"]["tally"] == {"n": 10, "over": 10, "under": 0, "push": 0} and "hltv_series" not in v["history"]
+    assert v["record"]["scout"] == doc["record"]["scout"]
 
 
 def test_line_outside_the_snapshot_reads_nothing(env, monkeypatch):

@@ -228,3 +228,12 @@ Owner, Nov 20: "stop using BO3.gg we have HLTV". The v3 CS2 card's hero stat gri
   Maps outside the pool sit in a closed "Outside the current pool" group, with no combine and no map chance.
 - **Display.** Names come from `hltv_maps.NAMES` ("Dust 2", never "de_dust2"). The combine sums the two maps' totals, then divides.
 - **Tests.** `tests/test_v3_player_maps.py` (maths, ids, pool, names, cache, 700 concurrent) and `tests/test_ui_v3_player_browser.py` (390 / 1280, every pair).
+- **Every tab, HLTV only (owner Nov 20, emphatic: "no BO3.gg data anywhere on member-page stats - HLTV only").** `player.js hltvOnly`
+  rewrites the CS2 `/line` doc before the hub paints it (the classic card never runs it): no BO3.gg stats / per-map / teammates / trade,
+  opening and rest days / sample flags, no BO3.gg rank band or AWP note, no CS API / FACEIT panels, no "Saved with this forecast" grader
+  inputs, no context-only grade factors read from them. The factor table's KPR (3 / 12 mo), HS% (3 mo), maps (12 mo) and days since his
+  last map are the player-maps HLTV totals (`cs2_card.hltv_v3`); the rest stake rule stays the grade's own yes / no. Hit counts
+  (L5 / L10 / L20, Why, Ask) are HLTV series only: the verified one, else `history.hltv_series` (added by `/line` when HLTV does not
+  reproduce the saved L10). The Genie's payload on a v3 request goes through the same rules in `v3_hltv.scrub`. Grades, chances, stakes and
+  projections are untouched. Test: `tests/test_v3_hltv_only_browser.py` (real stadodo docs, every tab, 390 / 1280, deny-set from the doc's
+  BO3.gg fields).

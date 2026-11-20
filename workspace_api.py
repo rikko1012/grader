@@ -1096,6 +1096,10 @@ def _line_body(srv, book, rid):
     if full.get("stats"):
         ctx = {"rows": full["stats"] + (ctx or {}).get("rows", [])}
     hist = {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser}
+    if not ser and full.get("ser"):
+        # v3 HLTV only (v3_hltv.py / web/v3/player.js): the saved L10 (BO3.gg + HLTV) is not reproduced by HLTV, so the v3 card counts
+        # his HLTV results from these (the same cached year, no read). The classic card does not read this field.
+        hist["hltv_series"] = full["ser"][:20]
     closing = _closing(srv, x, full) if os.environ.get("SCOUT_CLOSING_LINES") == "1" else None
     if closing:
         hist["closing"] = closing                      # SCOUT_CLOSING_LINES: only when a past game has a saved closing line
@@ -2582,6 +2586,9 @@ def post_genie(h, srv, q, member, scratch, name, n):
     if got is None or got[0] != 200:
         return h.send(404 if got is None or got[0] == 404 else 503, {"error": "not found" if got is None or got[0] == 404 else "line_unavailable"})
     doc = json.loads(got[1])
+    if _v3_request(h) and qq["sport"] == "cs2":
+        import v3_hltv                         # v3 HLTV only (owner 2026-11-20): the answer never states a BO3.gg number
+        doc = v3_hltv.scrub(doc)
     rec = doc.get("record") or {}
     rev = d.get("revision")
     if rev is not None and rev != (rec.get("offer") or {}).get("revision"):
