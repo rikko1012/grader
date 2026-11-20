@@ -175,9 +175,9 @@
         var obs = pctOf(cells[1].querySelector('b') && cells[1].querySelector('b').textContent),
           pr = pctOf(cells[2].querySelector('b') && cells[2].querySelector('b').textContent);
         if (obs != null && pr != null) {
-          var d = obs - pr, s = document.createElement('span');
-          s.className = 'v3c-delta ' + (d >= 0 ? 'is-good' : d > -0.03 ? 'is-near' : 'is-poor');
-          s.innerHTML = tri(d) + esc(signedPts(d) + ' vs stated');
+          var d = obs - pr, s = document.createElement('span'), even = Math.round(d * 1000) === 0;   /* 0.0 pts: no arrow, no colour */
+          s.className = 'v3c-delta ' + (even ? 'is-even' : d >= 0 ? 'is-good' : d > -0.03 ? 'is-near' : 'is-poor');
+          s.innerHTML = (even ? '' : tri(d)) + esc(signedPts(d) + ' vs stated');
           cells[1].appendChild(s);
         }
       }

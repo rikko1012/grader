@@ -180,6 +180,9 @@ def test_member_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         obs, pr, delta = float(nums[0].rstrip("%")), float(nums[1].rstrip("%")), nums[2]
         want = round(obs - pr, 1)
         assert ("pts vs stated" in delta) and (f"{abs(want):.1f}" in delta)
+        if want == 0:                                                  # an even record: no arrow, no sign, no good/poor colour
+            d0 = card.locator(".v3c-delta")
+            assert d0.locator(".v3c-tri").count() == 0 and "is-even" in d0.get_attribute("class") and delta.startswith("0.0")
         # the pill sport switch presses the select
         assert p.locator("#hub-record-section .v3c-pills[data-for=hub-record-sport] button").count() >= 2
         bg = p.evaluate("getComputedStyle(document.getElementById('hub-center')).backgroundColor")
