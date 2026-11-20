@@ -156,8 +156,9 @@ def test_prizepicks_tennis_labels_map_to_stored_stats(label, stat, scope, durati
 def test_prizepicks_missing_wager_field_is_both_sides_only_on_standard_lines():
     assert offers.prizepicks(pp_tennis(), 'tennis', NOW)[0]['sides'] == {'over': {'multiplier': None},
                                                                         'under': {'multiplier': None}}
-    assert offers.prizepicks(pp_tennis(odds='demon'), 'tennis', NOW) == []      # side unknown: never invented
-    assert offers.prizepicks(pp_tennis(odds='goblin'), 'tennis', NOW) == []
+    # soccer-grades-1120: demons / goblins without the field are More-only (9,031 of 9,031 listed rows read "over")
+    for odds in ('demon', 'goblin'):
+        assert list(offers.prizepicks(pp_tennis(odds=odds), 'tennis', NOW)[0]['sides']) == ['over']
     assert list(offers.prizepicks(pp_tennis(odds='demon', allowed='over'), 'tennis', NOW)[0]['sides']) == ['over']
     # sg-stats 2026-11-20: Fantasy Score is mapped (expansion_stats tennis fantasy model)
     assert offers.prizepicks(pp_tennis('Fantasy Score'), 'tennis', NOW)[0]['stat'] == 'fantasy_tennis'
@@ -231,8 +232,12 @@ def test_prizepicks_tennis_without_tour_resolves_exact_pair_only():
     m = {'event_id': 'atp:espn:atp:t:1', 'competition': 'atp', 'start': '2026-11-18T14:30:00Z',
          'participants': [{'id': 'A', 'name': 'Frances Tiafoe'}, {'id': 'B', 'name': 'Flavio Cobolli'}]}
     assert history.resolve(offer, [m])['player_id'] == 'A'
-    assert history.resolve(offer, [m, dict(m, event_id='atp:365scores:atp_challenger:1:2',
-                                            competition='atp_challenger')]) is None    # two answers: abstain
+    # soccer-grades-1120: the same pair at the same start in the tour store and its Challenger store is one match
+    # (a pair cannot play two at once): the tour store's identity. Two answers otherwise still abstain.
+    low = dict(m, event_id='atp:365scores:atp_challenger:1:2', competition='atp_challenger')
+    assert history.resolve(offer, [m, low])['competition'] == 'atp'
+    assert history.resolve(offer, [m, dict(low, start='2026-11-18T15:30:00Z')]) is None
+    assert history.resolve(offer, [m, dict(m, event_id='atp:espn:atp:t:2')]) is None
     assert history.resolve(dict(offer, opponent=None), [m]) is None
     assert history.resolve(dict(offer, platform='underdog'), [m]) is None          # Underdog keeps its tour rule
 

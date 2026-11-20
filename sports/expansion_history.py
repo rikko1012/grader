@@ -138,6 +138,26 @@ BOOK_TEAM_ALIASES = {
 }
 
 
+# soccer-grades-1120: book PLAYER labels that are not ESPN's display name, each CHECKED by hand on 2026-11-20 against
+# the ESPN team roster of the matched fixture (raw roster pulls in cs2_scout_ops/logs/soccer_grades_1120/gaps_1120/):
+# same team, same listed position, the only roster player with that surname. Exact labels only - never a prefix, a
+# first-name rule or fuzzy matching; a label not seen live is not listed.
+BOOK_PLAYER_ALIASES = {
+    # tennis (365Scores Challenger names; Underdog labels): same tournament, same start, the opponent matched exactly
+    'atp:player:365scores:47450': ('Felipe Meligeni Alves',),       # 'Felipe Meligeni' (Montevideo, 2026-11-20 18:50Z)
+    'atp:player:365scores:50126': ('Matheus Pucinelli de Almeida',),  # 'Matheus Almeida' (same match)
+    'atp:player:365scores:79200': ('Jay Friend',),                  # 'Jay Dylan Hara Friend' (Kobe v Liam Broady, 02:00Z)
+    'soccer:player:espn:263224': ('Juan Purata',),          # Juanjo Purata, Atlas, Defender (v Juarez 2026-11-21 03:00Z)
+    'soccer:player:espn:235122': ('Juan Vargas',),          # Juan Pablo Vargas, Puebla, Defender (v San Luis 01:00Z)
+    'soccer:player:espn:350647': ('Alexander Robinson',),   # Alex Robinson, Macarthur FC, Goalkeeper (v Wellington)
+}
+
+
+def player_names(p):
+    """ESPN's display name plus the checked book labels of that player."""
+    return {normalized(p.get('name'))} | {normalized(x) for x in BOOK_PLAYER_ALIASES.get(p.get('id'), ())}
+
+
 def participant_names(p):
     """ESPN's name / abbreviation / short name plus the checked book labels of that team."""
     return ({normalized(p.get(k)) for k in ('name', 'abbreviation', 'short_name')} |
@@ -183,9 +203,19 @@ def resolve(offer, matches):
                     continue
             players = match['participants']
             pair = {normalized(p['name']) for p in players}
-            if len(pair) != 2 or pair != {normalized(offer['player']), normalized(offer['opponent'])}:
+            me, rival = normalized(offer['player']), normalized(offer['opponent'])
+            if len(pair) != 2:
                 continue
-            player = next((p for p in players if normalized(p['name']) == normalized(offer['player'])), None)
+            if pair == {me, rival}:
+                player = next((p for p in players if normalized(p['name']) == me), None)
+            else:
+                # soccer-grades-1120: checked book labels of tennis players (TENNIS_PLAYER_ALIASES): each offered name
+                # equals a DIFFERENT participant's name or checked label - never a prefix or fuzzy rule
+                names = [player_names(p) for p in players]
+                if len(players) != 2 or not ((me in names[0] and rival in names[1]) or (me in names[1] and rival in names[0])) \
+                        or (me in names[0] and me in names[1]):
+                    continue
+                player = players[0] if me in names[0] else players[1]
         else:
             found = _team_sets(offer)
             if not found:
@@ -197,11 +227,20 @@ def resolve(offer, matches):
                 continue
             owners = [p['id'] for p, names in zip(participants, aliases) if own & names]
             candidates = [p for p in match.get('players', []) if p['team_id'] in owners
-                          and normalized(p['name']) == normalized(offer['player'])]
+                          and normalized(offer['player']) in player_names(p)]
             player = candidates[0] if len(candidates) == 1 else None
         if player:
             answer[(match['event_id'], player['id'])] = {'competition': competition,
                 'event_id': match['event_id'], 'player_id': player['id']}
+    if len(answer) == 2 and offer['sport'] == 'tennis':
+        # soccer-grades-1120: one real match listed by the tour store (ESPN) AND its lower-level store (365Scores
+        # Challenger / WTA 125) - exact same pair, same start: the tour store's identity (the graded results source).
+        # PrizePicks tennis carries no tour, so it is the only path that can see both.
+        (a, b) = sorted(answer.values(), key=lambda x: x['competition'])
+        same = {a['competition'], b['competition']} in ({'atp', 'atp_challenger'}, {'wta', 'wta125'})
+        starts = {m['event_id']: m.get('start') for m in matches if m.get('event_id') in (a['event_id'], b['event_id'])}
+        if same and len(set(starts.values())) == 1:
+            return a if a['competition'] in ('atp', 'wta') else b
     return next(iter(answer.values())) if len(answer) == 1 else None
 
 
@@ -221,13 +260,17 @@ def soccer_teams(offer, match):
     return [p for p,names in zip(participants, aliases) if own & names]
 
 
-def offered_team_slate(catalogs, directory):
-    """{competition:team -> {'competition', 'team', 'matches'}} for scheduled / live matches with a board offer."""
+def offered_team_slate(catalogs, directory, with_tabs=False):
+    """{competition:team -> {'competition', 'team', 'matches'}} for scheduled / live matches with a board offer.
+    with_tabs (soccer-grades-1120, first rosters only): also the last good standard rows of every PrizePicks league tab
+    (pp-soccer-state.json), so a fixture whose tab has not reached the board in this refresh still gets its roster."""
     try:
         snapshot = directory / 'board.json'
         offers = json.loads(snapshot.read_text(encoding='utf-8')).get('offers', []) if snapshot.stat().st_size <= 3_000_000 else []
     except (OSError, ValueError):
         offers = []
+    if with_tabs:
+        offers = list(offers) + tab_rows(directory)
     teams = {}
     for matches in catalogs.values():
         for match in list(matches.values()):
@@ -238,6 +281,94 @@ def offered_team_slate(catalogs, directory):
                     key = f"{match['competition']}:{team['id']}"
                     teams.setdefault(key, {'competition':match['competition'], 'team':team['id'], 'matches':[]})['matches'].append(match)
     return teams
+
+
+def tab_rows(directory, now=None):
+    """The last good rows of every PrizePicks soccer league tab (pp-soccer-state.json, worker-only) that have not
+    started: identity work for fixtures whose tab reaches the board late. Never a board or member input."""
+    try:
+        path = directory / 'pp-soccer-state.json'
+        if path.stat().st_size > 8_000_000:
+            return []
+        per = (json.loads(path.read_text(encoding='utf-8')) or {}).get('per') or {}
+    except (OSError, ValueError, AttributeError):
+        return []
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for entry in per.values():
+        for row in (entry or {}).get('rows') or [] if isinstance(entry, dict) else []:
+            try:
+                if row.get('sport') == 'soccer' and parse_utc(row['start']) > now:
+                    out.append(row)
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
+    return out
+
+
+# soccer-grades-1120: a team of an offered fixture whose roster was NEVER loaded gets a roster-only read in this pass
+# (no schedule; the regular slots refresh it later), next kickoff first, at most FIRST_ROSTER_SLOTS a run, within
+# FIRST_ROSTER_HOURS of kickoff, on their own FIRST_ROSTER_REQUESTS (ESPN). Live e2e 2026-11-20: Toluca - Pachuca
+# (27 standard lines, 29 h out) stayed unlinked because 2 shared slots went to earlier kickoffs every run.
+FIRST_ROSTER_SLOTS = 4
+FIRST_ROSTER_REQUESTS = 4
+FIRST_ROSTER_HOURS = 72
+
+
+def first_rosters(catalogs, get, directory, slate=None, slots=FIRST_ROSTER_SLOTS, now=None):
+    """Roster-only reads for never-loaded teams of offered fixtures (board offers + league-tab rows). Exact ESPN team
+    ids from the matched fixture; the roster is identity only, never starts or participation. -> errors"""
+    path = directory / 'team-history-state.json'
+    try:
+        state = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        state = {}
+    now = now or datetime.now(timezone.utc)
+    if slate is not None and 'tabs' in slate:
+        teams = slate['tabs']
+    else:
+        teams = offered_team_slate(catalogs, directory, with_tabs=True)
+        if slate is not None:
+            slate['tabs'] = teams
+
+    def kickoff(item):
+        starts = []
+        for m in item['matches']:
+            try:
+                t = parse_utc(m['start'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if now <= t <= now + timedelta(hours=FIRST_ROSTER_HOURS):
+                starts.append(t.timestamp())
+        return min(starts) if starts else None
+
+    todo = [(kickoff(item), key, item) for key, item in teams.items()
+            if not state.get(key, {}).get('checked_at') and not state.get(key, {}).get('first_attempt_at')]
+    todo = sorted((row for row in todo if row[0] is not None), key=lambda row: (row[0], row[1]))
+    errors = []
+    try:
+        for _, key, item in todo[:slots]:
+            comp, tid = item['competition'], item['team'].split(':')[-1]
+            saved = state.setdefault(key, {})
+            saved['first_attempt_at'] = now_utc()
+            try:
+                roster = get(f'https://site.api.espn.com/apis/site/v2/sports/soccer/{comp}/teams/{tid}/roster', {})
+                if str((roster.get('team') or {}).get('id')) != tid:
+                    raise ValueError('roster team mismatch')
+                players = [{'id': f"soccer:player:espn:{p['id']}", 'name': p['displayName'], 'team_id': item['team'],
+                            'identity_source': 'espn_team_roster', 'identity_known_at': now_utc()}
+                           for p in roster.get('athletes') or [] if p.get('id') and p.get('displayName')]
+                saved.update(players=players, checked_at=now_utc())
+                for match in item['matches']:
+                    known = {p['id']: p for p in players}
+                    known.update({p['id']: p for p in match.get('players', [])})
+                    match['players'] = list(known.values())
+            except (net.HttpError, ValueError, OSError) as e:
+                errors.append(type(e).__name__)
+    finally:
+        atomic_json(path, {k: v for k, v in state.items() if (v.get('checked_at') and
+                          (now - parse_utc(v['checked_at'])).total_seconds() < 7 * 86400) or
+                          (v.get('first_attempt_at') and (now - parse_utc(v['first_attempt_at'])).total_seconds() < 3600)})
+    return errors
 
 
 def collect_soccer_teams(catalogs, get, persist, directory, group=None, slots=2, slate=None):
@@ -750,7 +881,16 @@ def collect(sport, max_requests=16, max_seconds=150):
             if research:
                 # Newer competitions only from what the shared budget has left after the graded work: up to 2 more
                 # roster refreshes, then up to 2 more summaries.
-                request_limit[0] = max_requests + DEFICIT_REQUESTS   # sg-scope: newer competitions only
+                # soccer-grades-1120: never-loaded rosters of offered fixtures (board + league-tab rows), on their own
+                # FIRST_ROSTER_REQUESTS, after the graded base work and before the newer-competition pass
+                used = counts['requests']
+                request_limit[0] = used + FIRST_ROSTER_REQUESTS
+                try:
+                    counts['errors'].extend(first_rosters(catalogs, get, directory, slate))
+                except StopIteration:
+                    if stopping():
+                        raise
+                request_limit[0] = max_requests + DEFICIT_REQUESTS + (counts['requests'] - used)   # sg-scope: newer competitions only
                 counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory, 'new', slate=slate))
                 summaries(0, 2, DEFICIT_SLOTS)
             else:

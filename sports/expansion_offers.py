@@ -145,6 +145,10 @@ def prizepicks(body, sport, observed_at, league=None):
         sides = {"over": ["over"], "under": ["under"], "under_or_over": ["over", "under"]}.get(allowed)
         if allowed is None and a.get("odds_type") == "standard":
             sides = ["over", "under"]                  # sports/lines.py rule: missing = both sides (standard lines)
+        elif allowed is None and a.get("odds_type") in ("demon", "goblin"):
+            # soccer-grades-1120: PrizePicks demons / goblins are More-only - every one of the 9,031 demon / goblin rows
+            # that listed the field on 2026-11-20 (raw2 bodies) read "over"; the 7 without it get that side.
+            sides = ["over"]
         if not sides:
             continue                                   # demon / goblin without the field: side unknown, left out
         teams = ((game.get("metadata") or {}).get("game_info") or {}).get("teams") or {}
@@ -157,6 +161,8 @@ def prizepicks(body, sport, observed_at, league=None):
             pair = [x for x in (away, home) if x]
             by_game = next((x for x in pair if x != me), None) if len(pair) == 2 and me in pair else None
             by_text = a.get("description") if a.get("description") and a.get("description") != me else None
+            if by_text and duration and by_game and by_text == f"{by_game} {duration}":
+                by_text = by_game        # soccer-grades-1120: set lines read "<opponent> 1st Set" - the exact period suffix
             opponent = by_game or by_text
             if (by_game and by_text and by_game != by_text) or not opponent or "/" in opponent or "/" in str(me):
                 opponent = None

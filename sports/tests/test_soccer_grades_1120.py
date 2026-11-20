@@ -388,3 +388,90 @@ def test_thin2_component_models_under_five_games(stat, sources, line, role):
     assert f['thin_model']['games'] == 2 and f['units'] == 0.0 and f['grade'] and f['side'] == 'over'
     assert f['stake_reason'] == model.THIN_REASONS[stats.THIN_COMPONENT[stat]['tier']]
     assert 0 < f['p_over'] < 1 and abs(f['p_over'] + f['p_under'] + f['p_push'] - 1) < 1e-9
+
+
+# --- first rosters: never-loaded teams of offered fixtures (board or league-tab rows), roster only, own allowance
+
+def test_first_rosters_load_never_loaded_teams_by_kickoff_roster_only(tmp_path):
+    import re
+    import json as _json
+    from sports import expansion_history as history
+    from sports.tests.test_expansion_killswitch_1118 import _slate, _getter
+    catalogs = _slate(tmp_path, [1, 2, 3, 4, 5, 6], [])
+    now = datetime.now(timezone.utc)
+    rows = catalogs['bra.1']
+    rows['0']['start'] = (now + timedelta(hours=30)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    rows['4']['start'] = (now + timedelta(days=5)).strftime('%Y-%m-%dT%H:%M:%SZ')     # beyond FIRST_ROSTER_HOURS
+    board = _json.loads((tmp_path / 'board.json').read_text(encoding='utf-8'))
+    tabbed = [o for o in board['offers'] if o['team'] in ('Team1', 'Team2')]
+    board['offers'] = [o for o in board['offers'] if o['team'] not in ('Team1', 'Team2')]   # tab not on the board yet
+    for o in tabbed:
+        o['start'] = rows['0']['start']
+    history.atomic_json(tmp_path / 'board.json', board)
+    history.atomic_json(tmp_path / 'pp-soccer-state.json', {'per': {'14': {'rows': tabbed}}})
+    calls = []
+    history.first_rosters(catalogs, _getter(calls), tmp_path)
+    assert all(u.endswith('/roster') for u in calls)                      # roster only, never a schedule
+    assert [re.search(r'/teams/(\d+)/', u)[1] for u in calls] == ['3', '4', '1', '2']   # by kickoff, tab rows count
+    state = _json.loads((tmp_path / 'team-history-state.json').read_text(encoding='utf-8'))
+    assert state['bra.1:soccer:team:espn:1']['checked_at'] and 'schedule_checked_at' not in state['bra.1:soccer:team:espn:1']
+    calls.clear()
+    history.first_rosters(catalogs, _getter(calls), tmp_path)
+    assert calls == []                                                     # loaded once: the regular slots refresh it
+
+
+def test_checked_book_player_label_resolves_exactly(tmp_path):
+    from sports import expansion_history as history
+    m = {'event_id': 'soccer:espn:mex.1:1:1', 'competition': 'mex.1', 'start': '2026-11-21T03:00:00Z',
+         'participants': [{'id': 'soccer:team:espn:216', 'name': 'Atlas'}, {'id': 'soccer:team:espn:2', 'name': 'Juarez'}],
+         'players': [{'id': 'soccer:player:espn:263224', 'name': 'Juanjo Purata', 'team_id': 'soccer:team:espn:216'},
+                     {'id': 'soccer:player:espn:9', 'name': 'Juan Perez', 'team_id': 'soccer:team:espn:216'}]}
+    o = {'sport': 'soccer', 'teams': ['Atlas', 'Juarez'], 'team': 'Atlas', 'player': 'Juan Purata',
+         'start': '2026-11-21T03:00:00Z'}
+    assert history.resolve(o, [m])['player_id'] == 'soccer:player:espn:263224'
+    for name in ('Juan Purat', 'J. Purata', 'Purata', 'Juan Jose Purata'):           # exact labels only
+        assert history.resolve(dict(o, player=name), [m]) is None
+    assert history.resolve(dict(o, team='Juarez'), [m]) is None                       # the other team's roster: no
+
+
+# --- tennis identity: checked labels, tour vs lower-level duplicate listing, PrizePicks set-line opponents
+
+def _tennis_match(comp, eid, names, ids, start='2026-11-20T22:00:00Z'):
+    return {'competition': comp, 'event_id': eid, 'start': start, 'status': 'scheduled',
+            'participants': [{'id': i, 'name': n} for i, n in zip(ids, names)]}
+
+
+def test_tennis_checked_labels_resolve_exactly():
+    from sports import expansion_history as history
+    m = _tennis_match('atp_challenger', 'e1', ['Felipe Meligeni', 'Matheus Almeida'],
+                      ['atp:player:365scores:47450', 'atp:player:365scores:50126'], '2026-11-20T18:50:00Z')
+    o = {'sport': 'tennis', 'platform': 'underdog', 'tour': 'atp', 'competition': 'ATP Challenger Montevideo',
+         'player': 'Matheus Pucinelli de Almeida', 'opponent': 'Felipe Meligeni Alves', 'start': '2026-11-20T18:50:00Z'}
+    assert history.resolve(o, [m])['player_id'] == 'atp:player:365scores:50126'
+    assert history.resolve(dict(o, player='Felipe Meligeni Alves', opponent='Matheus Pucinelli de Almeida'),
+                           [m])['player_id'] == 'atp:player:365scores:47450'
+    assert history.resolve(dict(o, opponent='Someone Else'), [m]) is None
+    assert history.resolve(dict(o, player='Matheus Pucinelli'), [m]) is None
+
+
+def test_prizepicks_tennis_pair_listed_by_tour_and_125_stores_takes_the_tour_store():
+    from sports import expansion_history as history
+    wta = _tennis_match('wta', 'wta:espn:1', ['Laura Samson', 'Rebeka Masarova'], ['wta:player:espn:1', 'wta:player:espn:2'])
+    low = _tennis_match('wta125', 'wta:365:1', ['Rebeka Masarova', 'Laura Samson'], ['wta:player:365:2', 'wta:player:365:1'])
+    o = {'sport': 'tennis', 'platform': 'prizepicks', 'tour': None, 'player': 'Laura Samson',
+         'opponent': 'Rebeka Masarova', 'start': '2026-11-20T22:00:00Z'}
+    assert history.resolve(o, [wta, low]) == {'competition': 'wta', 'event_id': 'wta:espn:1', 'player_id': 'wta:player:espn:1'}
+    later = dict(low, start='2026-11-20T23:00:00Z')
+    assert history.resolve(o, [wta, later]) is None                     # different starts: not provably one match
+
+
+def test_prizepicks_set_line_opponent_from_the_exact_period_suffix():
+    from sports import expansion_offers as offers
+    from sports.tests.test_expansion_stats_1120 import pp_tennis, PNOW
+    teams = ['Frances Tiafoe', 'Daniil Medvedev']
+    row = offers.prizepicks(pp_tennis('1st Set Total Games Won', duration='1st Set', teams=teams,
+                                      description='Daniil Medvedev 1st Set'), 'tennis', PNOW)[0]
+    assert row['opponent'] == 'Daniil Medvedev'
+    row = offers.prizepicks(pp_tennis('1st Set Total Games Won', duration='1st Set', teams=teams,
+                                      description='Daniil Medvedev 2nd Set'), 'tennis', PNOW)[0]
+    assert row['opponent'] is None                                   # not this line's period: still refused

@@ -145,10 +145,14 @@ def test_forecasts_json_is_byte_identical_with_and_without_new_source_rows(tmp_p
         model.publish('soccer', NOW)
         out.append((root / 'forecasts.json').read_bytes())
     doc = json.loads(out[0])
-    assert len(doc['forecasts']) == 1 and next(iter(doc['forecasts'].values()))['stat'] == 'shots'
+    # soccer-grades-1120 thin-2: tackles / passes get the population prior alone (the untested FotMob rows stay weight 0)
+    by_stat = {f['stat']: f for f in doc['forecasts'].values()}
+    assert sorted(by_stat) == ['passes_attempted', 'shots', 'tackles']
+    assert by_stat['tackles']['sample'] == 0 and by_stat['passes_attempted']['sample'] == 0
     assert out[0] == out[1]
-    # Sensitivity: without the guard the same FotMob rows WOULD add letters (so the identity above is the guard's doing).
+    # Sensitivity: without the guard the same FotMob rows WOULD change those forecasts (the identity is the guard's doing).
     monkeypatch.setattr(model, 'FORECAST_INPUTS', model.FORECAST_INPUTS | {(comp, 'fotmob', 'tackles'),
                                                                            (comp, 'fotmob', 'passes_attempted')})
     model.publish('soccer', '2026-11-17T23:05:00Z')
-    assert len(json.loads((root / 'forecasts.json').read_bytes())['forecasts']) == 3
+    after = {f['stat']: f for f in json.loads((root / 'forecasts.json').read_bytes())['forecasts'].values()}
+    assert after['tackles']['sample'] > 0 and after['passes_attempted']['sample'] > 0

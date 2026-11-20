@@ -224,4 +224,6 @@ def test_end_to_end_liga_mx_line_is_graded_with_and_without_stage_evidence(tmp_p
     second, out = shots()
     assert len(second) == 1 and second[0]['grade'] and second[0]['settlement_scope'] == 'regulation'
     assert second[0]['scope_rule']['basis'] == 'stage_draws' and second[0]['p_side'] == first[0]['p_side']
-    assert out['pending_by'] and all(k.split('|')[1] == 'mex.1' for k in out['pending_by'])
+    # soccer-grades-1120 thin-2: the store's other stats now grade too, so nothing may be pending; any pending reason
+    # still names its competition / stat / platform
+    assert all(k.split('|')[1] == 'mex.1' for k in out['pending_by']) and out['published'] >= 1
