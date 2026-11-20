@@ -58,3 +58,32 @@ def test_v3_player_names_are_never_cut(browser, live_v3, width):
         assert not p.errors
     finally:
         p.ctx.close()
+
+
+def test_v3_700_signed_out_visitors_at_once_get_one_shared_v3_landing(monkeypatch, tmp_path):
+    """tests/test_landing.py's 700-visitor rule with SCOUT_UI_V3=1: every answer is 200, the same v3 landing bytes, one ETag."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    from http.server import ThreadingHTTPServer
+    from tests import test_landing as tl
+    monkeypatch.setattr(ThreadingHTTPServer, "request_queue_size", 2048)
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    gen = tl.srv.__wrapped__(monkeypatch, tmp_path) if hasattr(tl.srv, "__wrapped__") else None
+    port = next(gen) if gen else None
+    if port is None:
+        pytest.skip("landing server fixture not callable directly")
+    try:
+        def one(_):
+            for attempt in range(3):
+                try:
+                    return tl.get(port, "/")
+                except OSError:
+                    time.sleep(0.2 * (attempt + 1))
+            return tl.get(port, "/")
+        with ThreadPoolExecutor(max_workers=700) as pool:
+            out = list(pool.map(one, range(700)))
+        assert len(out) == 700 and all(st == 200 for st, _h, _b in out)
+        assert len({b for _s, _h, b in out}) == 1 and len({h["etag"] for _s, h, _b in out}) == 1
+        assert b"data-ui-v3" in out[0][2] and b"/v3/landing.js" in out[0][2]
+    finally:
+        next(gen, None)
