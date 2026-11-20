@@ -179,7 +179,9 @@ def test_thin_never_replaces_the_count_model_and_not_for_untested_inputs():
     assert model.fit(offer, facts, NOW)[1] == 'more_exact_history_needed'
     offer, facts = fixture('tennis')
     facts['games'] = facts['games'][:2]
-    assert model.fit(offer, facts, NOW)[1] == 'more_exact_history_needed'
+    # thin-1 is soccer only; a tennis finite-score line under 5 matches takes thin-t1 (tests below), never thin-1
+    f, reason = model.fit(offer, facts, NOW)
+    assert reason is None and f['thin_model']['version'] == 'thin-t1'
 
 
 @pytest.mark.parametrize('role,group', [('Goalkeeper', 'G'), ('Defender', 'D'), ('Center Back', 'D'),
@@ -267,3 +269,39 @@ def test_successful_reads_never_carry(monkeypatch, tmp_path):
     monkeypatch.setattr('sports.expansion_sources.get_json', lambda sport, url, params=None, **kw: {})
     snap = board.collect('tennis')
     assert snap['offers'] == [] and all('carried' not in s for s in snap['sources'].values())
+
+
+# --- thin-t1: tennis finite-score lines under 5 exact matches (walk-forward failed -> 0U, letter + chance kept)
+
+def test_tennis_thin_population_prior_grade_at_0u():
+    from sports import expansion_thin_tennis as tt
+    offer, facts = fixture('tennis')                     # atp_challenger, set-1 games won 4.5
+    facts['games'] = facts['games'][:3]
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['distribution'] == 'thin-history-population-prior-finite'
+    assert f['thin_model']['version'] == tt.VERSION and f['thin_model']['games'] == 3 and f['sample'] == 3
+    assert f['grade'] and f['units'] == 0.0 and f['stake_reason'] == model.THIN_REASONS['failed']
+    assert sum(f['p_' + s] for s in ('over', 'under', 'push')) == pytest.approx(1)
+
+
+def test_tennis_thin_never_replaces_the_count_model_or_runs_without_a_prior():
+    offer, facts = fixture('tennis')
+    f, _ = model.make_forecast(offer, facts, NOW)
+    assert 'thin_model' not in f and f['distribution'] == 'finite-score-dirichlet'      # 10 matches: unchanged
+    offer, facts = fixture('tennis')
+    facts['games'] = facts['games'][:2]
+    facts['identity']['competition'] = 'itf_men'                                         # no tested tour prior
+    assert model.make_forecast(offer, facts, NOW)[1] in ('more_exact_history_needed', 'competition_mismatch')
+    offer, facts = fixture('tennis')
+    facts['games'] = facts['games'][:2]
+    offer.update(stat='aces', scope='full_game', line=5.5)                               # not finite-score: no thin-t1
+    facts['scope'] = 'full_game'
+    facts['context'] = {'best_of': 3}
+    assert model.make_forecast(offer, facts, NOW)[1] == 'more_exact_history_needed'
+
+
+def test_tennis_thin_prior_tables_are_distributions_on_the_fit_support():
+    from sports import expansion_thin_tennis as tt
+    for (g, bo, scope, stat), (n, pop) in tt.PRIOR.items():
+        assert n > 0 and abs(sum(pop) - 1) < 1e-3 and all(p > 0 for p in pop)
+        assert tt.TIERS[f'{scope}|{stat}'] == 'failed'

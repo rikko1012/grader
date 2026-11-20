@@ -15,6 +15,7 @@ from functools import lru_cache
 
 from gradecore import policy
 from . import expansion_board as boards, expansion_research as research, expansion_scope, expansion_stats as stats, store
+from . import expansion_thin_tennis as thin_tennis
 from .contracts import now_utc, parse_utc
 from .expansion import COMPETITIONS, isolated_database
 from .expansion_history import atomic_json
@@ -220,8 +221,17 @@ def fit(offer, facts, now):
         games.append(g)
         if len(games) == 20:
             break
-    thin = None
-    if len(games) < MIN_GAMES:
+    thin = tennis_thin = None
+    if len(games) < MIN_GAMES and sport == 'tennis' and support is not None:
+        # thin-t1 (soccer-grades-1120): tennis finite-score lines under 5 exact matches - population prior per
+        # (tour gender, best_of, scope, stat); walk-forward FAILED for every stat -> 0U with that reason.
+        tp = thin_tennis.prior(ident.get('competition'), context.get('best_of'), scope, stat, support)
+        if tp is None:
+            return None, 'more_exact_history_needed'
+        tennis_thin = {'version': thin_tennis.VERSION, 'k': tp[1], 'games': len(games), 'tier': 'failed',
+                       'prior': 'tour population (ESPN ATP/WTA, tune window thin player-matches)'}
+        tennis_pop = tp[0]
+    elif len(games) < MIN_GAMES:
         # a competition whose ESPN rows are not a tested input (e.g. aus.1 saves): weight 0 - the prior alone (n = 0)
         if not (sport == 'soccer' and stat in THIN_PRIOR and all(g.get('source') == 'espn' for g in games)):
             return None, 'more_exact_history_needed'
@@ -249,6 +259,9 @@ def fit(offer, facts, now):
         total = sum(mass)
         mass = [p/total for p in mass]
         model = 'thin-history-population-prior'
+    elif tennis_thin is not None:
+        mass = thin_tennis.mass(values, support, tennis_pop, tennis_thin['k'])
+        model = 'thin-history-population-prior-finite'
     elif support is not None:
         # One total pseudogame spread across the finite score support. A market
         # with more possible scores must not silently receive a stronger prior.
@@ -325,9 +338,9 @@ def fit(offer, facts, now):
             out['settle_scopes'] = ['full_game', 'regulation']   # extra-time box totals first, else the 90 minutes
     if tennis_rule is not None:
         out['format_rule'] = {k: tennis_rule[k] for k in ('best_of', 'basis') if k in tennis_rule}
-    if thin is not None:
-        out['thin_model'] = thin
-        out['stake_tier'] = thin['tier']
+    if thin is not None or tennis_thin is not None:
+        out['thin_model'] = thin or tennis_thin
+        out['stake_tier'] = out['thin_model']['tier']
     return out, None
 
 

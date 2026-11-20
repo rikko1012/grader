@@ -132,3 +132,20 @@ count-model offer, so the research and publish budgets cannot drop an existing g
   - The live crosses and attempted-dribbles histories hold only non-zero games. They are therefore biased toward Over. This release does not change them.
 - **Not modelled.** PrizePicks tennis "Matches Won" covers a whole tournament, not one match, so it is not modelled.
 - **Unverified scoring rules, all at 0U:** FotMob tackles (won or attempted), the PrizePicks goalie start and clean-sheet conditions, the tennis fantasy formula (Rotowire) and Underdog Cards above 0.5.
+
+## Thin-history models (soccer-grades-1120)
+
+Lines whose player has fewer than 5 exact past games were left blank (`more_exact_history_needed`). They now get a
+letter and chance from a population-prior model at **0U** with a definite reason; lines with 5+ games keep the
+unchanged count model (byte-identical).
+
+| Model | Lines | Walk-forward (tune < 2026-09-01, holdout 09-01..11-19, synthetic lines) | Stake |
+|---|---|---|---|
+| thin-1 | soccer shots, shots on target, goals, assists, fouls, saves (ESPN inputs) | passed: shots, SOT, goals, assists, fouls; failed: saves | 0U, tier reason |
+| thin-t1 | tennis games won / played, sets won / played, tie-breaks (full match, tour best-of known), set-1 games won / played | **failed** every stat (Brier equal to the base rate, bands outside their intervals; v1 with an all-player prior failed worse and was scored first, so the holdout was seen twice) | 0U, "missed its walk-forward test" |
+
+thin-t1 prior: ESPN ATP / WTA singles, the tune window's thin player-matches per (gender, best-of, scope, stat);
+K = 20 for every stat (a player's own 0-4 matches add almost nothing - the line's matchup is not in the model).
+Challenger / WTA 125 use the tour prior untested. Evidence: `cs2_scout_ops/logs/soccer_grades_1120/integrate/wf/`.
+Still blank: aces / double faults / break points under 5 matches (no tested prior; theScore serve history fills in),
+FotMob-only soccer stats under 5 games, component models (fantasy) under 5 games.
