@@ -299,3 +299,26 @@ def test_v3_lean_leg_reads_model_estimate_not_no_grade(browser, env, monkeypatch
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+@pytest.mark.parametrize("width", [1280, 1440])
+def test_v3_slip_column_leg_stays_inside_the_column(browser, env, monkeypatch, width):
+    """A column leg with the hub's swap advice: its read (chance, label, grade, stake) sat under the advice in one line and the stake
+    ran past the column's right edge. The read follows the pick and wraps; the advice spans the leg."""
+    c, p = v3_page(browser, env, monkeypatch, "board", {"width": width, "height": 900}, "dark")
+    try:
+        p.wait_for_selector('#hub-rows tr[data-record]')
+        p.locator('#hub-rows tr[data-record]', has_text="brandr").first.locator('.h-add:not(.h-add-info)').click()
+        if not p.locator('#u-hub .h-slip').is_visible():
+            p.locator('#hub-focus').click()
+        p.wait_for_selector('#hub-slip-content .u-leg .sb-read .sb-stake', timeout=20000)
+        p.wait_for_selector('#hub-slip-content .u-leg .u-leg-advice', timeout=20000)
+        out = p.evaluate("""() => { const col = document.querySelector('#u-hub .h-slip').getBoundingClientRect();
+          return [...document.querySelectorAll('#hub-slip-content *')].filter(e => e.offsetParent && e.getBoundingClientRect().right > col.right + 1).map(e => e.className) }""")
+        assert not out, out
+        read, advice = p.evaluate("""() => { const l = document.querySelector('#hub-slip-content .u-leg');
+          return [l.querySelector('.sb-read').getBoundingClientRect().top, l.querySelector('.u-leg-advice').getBoundingClientRect().top] }""")
+        assert read < advice                                                           # the read follows the pick, above the advice
+        assert not p.errors, p.errors
+    finally:
+        c.close()

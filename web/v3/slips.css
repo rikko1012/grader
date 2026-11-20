@@ -338,6 +338,11 @@ html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-acts{grid-template-columns:
 html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg .sb-av,html[data-ui-v3] #u-hub .h-slip #hub-slip-content .sb-face .u-face{width:32px;height:32px;--face:32px!important;font-size:12px}
 html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg .u-x{right:4px}
 html[data-ui-v3] #u-hub .h-slip #hub-slip-content .sb-read>b{font-size:16px}
+/* qa 11-20: in the narrow column the read (chance, label, grade, stake) follows the pick and wraps inside the column (the stake ran past
+   its right edge); the leg's swap advice and problems take the full leg width under it, not a sliver beside the avatar column */
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>.sb-read{order:1;flex-wrap:wrap;row-gap:4px;white-space:normal;min-width:0}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>.sb-read>*{white-space:nowrap}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>:is(.u-leg-notes,.u-leg-advice,.u-problems,.u-below){order:2;grid-column:1/-1;margin-right:-28px}
 html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-entry-foot{padding:12px}
 html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-slip-metrics b{font-size:18px}
 html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-seg button{min-width:0;padding:0 9px}
