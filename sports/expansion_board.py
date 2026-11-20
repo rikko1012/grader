@@ -174,10 +174,7 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
         raise ValueError("mixed sport batch refused")
     directory.mkdir(parents=True, exist_ok=True)
     db = directory / "quotes.db"
-    # Stop before growing past the isolated budget; no silent history deletion.
-    if sum(p.stat().st_size for p in directory.glob("quotes.db*")) > 250 * 1024 * 1024:
-        raise RuntimeError("expansion quote history storage budget reached")
-    con = sqlite3.connect(db)
+    con = sqlite3.connect(db, timeout=10)
     try:
         with con:
             con.execute("CREATE TABLE IF NOT EXISTS ownership (sport TEXT NOT NULL UNIQUE)")
@@ -187,19 +184,14 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
             con.execute("INSERT OR IGNORE INTO ownership VALUES (?)", (sport,))
             con.execute("CREATE TABLE IF NOT EXISTS revisions (id INTEGER PRIMARY KEY, platform TEXT, offer_id TEXT, revision TEXT, observed_at TEXT, payload TEXT)")
             con.execute("CREATE INDEX IF NOT EXISTS quote_latest ON revisions(platform, offer_id, id DESC)")
-            # Namespace native sportsbook markets so their IDs cannot collide
-            # with player-prop quotes from a future book adapter.
-            for row in rows+[dict(r,platform='odds:'+r['platform']) for r in game_odds]:
-                previous = con.execute("SELECT revision FROM revisions WHERE platform=? AND offer_id=? ORDER BY id DESC LIMIT 1",
-                                       (row['platform'], row['offer_id'])).fetchone()
-                if not previous or previous[0] != row['revision']:
-                    con.execute("INSERT INTO revisions(platform,offer_id,revision,observed_at,payload) VALUES (?,?,?,?,?)",
-                                (row['platform'], row['offer_id'], row['revision'], observed_at, json.dumps(row)))
     finally:
         con.close()
+    history_rows = rows+[dict(r,platform='odds:'+r['platform']) for r in game_odds]
     rows = fit(rows, SNAPSHOT_BYTES - len(json.dumps(game_odds, separators=(",", ":"))))
     snapshot = {"sport": sport, "built_at": observed_at, "sources": sources, "offers": rows,
                 "mode": "lines", "grading_ready": False, "game_odds":game_odds}
+    # sg-stability 2026-11-20: the member board is written FIRST. Before, the quote history's 250 MB cap raised ahead of
+    # this write and the whole sport went dark (503 prices_stale) - the history can never take the board down now.
     fd, temporary = tempfile.mkstemp(prefix="board-", suffix=".tmp", dir=directory)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -208,7 +200,186 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+    record_quote_history(directory, history_rows, observed_at)
     return snapshot
+
+
+QUOTES_CAP_MB = 250             # quote revision history: live pages + WAL (expansion_archive.live_bytes)
+QUOTE_STATUS = "quotes-history.json"
+QUOTE_COLD_H = 72               # a revision first seen this long ago may move to the verified archive ...
+QUOTE_KEEP_START_H = 24         # ... unless it is an offer's LATEST revision and that offer is on the board now, or
+                                # its start is less than this long ago / unknown (it may still be offered: the dedupe
+                                # lookup needs its latest revision hot)
+QUOTE_ARCHIVE_EVERY_S = 3600    # an archive pass at most hourly while nothing is pending ...
+QUOTE_ARCHIVE_BUDGET_S = 15     # ... and at most this long per quotes run (the board is already written)
+QUOTE_PART_ROWS = 4000
+QUOTE_SAMPLES_H = 48
+
+
+def _history_connect(db):
+    return sqlite3.connect(db, timeout=10)
+
+
+def _read_status(directory):
+    try:
+        path = Path(directory) / QUOTE_STATUS
+        if path.stat().st_size <= 262144:
+            v = json.loads(path.read_text(encoding="utf-8"))
+            return v if isinstance(v, dict) else {}
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def _write_status(directory, value):
+    fd, temporary = tempfile.mkstemp(prefix="quotes-history-", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(value, f, separators=(",", ":"))
+        os.replace(temporary, Path(directory) / QUOTE_STATUS)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def record_quote_history(directory, history_rows, observed_at, now=None, budget_s=None):
+    """Append changed quote revisions, then (when due) move cold revisions to verified archive files. Never raises:
+    at the cap the revisions are skipped (state 'paused_at_cap', ops alerts), a database error is recorded - the board
+    is already written. -> the status dict (also saved as quotes-history.json for ops)."""
+    from . import expansion_archive as xa
+    directory = Path(directory)
+    db = directory / "quotes.db"
+    status = _read_status(directory)
+    out = {"at": observed_at, "state": "ok", "written": 0, "cap_mb": QUOTES_CAP_MB}
+    cap = QUOTES_CAP_MB * 1024 * 1024
+    live = xa.live_bytes(db)
+    try:
+        if live > cap:
+            out["state"] = "paused_at_cap"
+        else:
+            con = _history_connect(db)
+            try:
+                with con:
+                    # Namespace native sportsbook markets so their IDs cannot collide
+                    # with player-prop quotes from a future book adapter.
+                    for row in history_rows:
+                        previous = con.execute("SELECT revision FROM revisions WHERE platform=? AND offer_id=? ORDER BY id DESC LIMIT 1",
+                                               (row['platform'], row['offer_id'])).fetchone()
+                        if not previous or previous[0] != row['revision']:
+                            con.execute("INSERT INTO revisions(platform,offer_id,revision,observed_at,payload) VALUES (?,?,?,?,?)",
+                                        (row['platform'], row['offer_id'], row['revision'], observed_at, json.dumps(row)))
+                            out["written"] += 1
+            finally:
+                con.close()
+    except sqlite3.Error as e:
+        out["state"] = "error"
+        out["error"] = f"{type(e).__name__}: {str(e)[:160]}"
+    arch = dict(status.get("archive") or {})
+    try:
+        t = time.time()
+        pressed = live > 0.6 * cap or out["state"] == "paused_at_cap"
+        due = arch.get("pending") or t - float(arch.get("ran_at_epoch") or 0) >= (300 if pressed else QUOTE_ARCHIVE_EVERY_S)
+        if due:
+            arch = archive_quotes(directory, {(r['platform'], r['offer_id']) for r in history_rows},
+                                  now=now, budget_s=QUOTE_ARCHIVE_BUDGET_S if budget_s is None else budget_s,
+                                  cursor=int(arch.get("cursor") or 0) if arch.get("pending") else 0)
+            arch["ran_at_epoch"] = round(t, 1)
+    except Exception as e:                              # noqa: BLE001 - the archive never fails the quotes run
+        arch = {**arch, "error": f"{type(e).__name__}: {str(e)[:160]}", "ran_at_epoch": round(time.time(), 1)}
+    out["archive"] = arch
+    live = xa.live_bytes(db)
+    out["live_mb"] = round(live / 1048576, 1)
+    try:
+        out["file_mb"] = round(sum(p.stat().st_size for p in directory.glob("quotes.db*")) / 1048576, 1)
+    except OSError:
+        pass
+    samples = [s for s in status.get("samples") or [] if isinstance(s, list) and len(s) == 2]
+    try:
+        ref = parse_utc(observed_at).timestamp()
+        samples = [s for s in samples if 0 <= ref - parse_utc(s[0]).timestamp() <= QUOTE_SAMPLES_H * 3600]
+        if not samples or ref - parse_utc(samples[-1][0]).timestamp() >= 1800:
+            samples.append([observed_at, out["live_mb"]])
+    except (TypeError, ValueError):
+        pass
+    out["samples"] = samples[-200:]
+    try:
+        _write_status(directory, out)
+    except OSError:
+        pass
+    return out
+
+
+def archive_quotes(directory, current, now=None, budget_s=QUOTE_ARCHIVE_BUDGET_S, cold_h=QUOTE_COLD_H, cursor=0):
+    """Move cold quote revisions into <dir>/archive/quotes/quotes-<seq>.jsonl.xz (expansion_archive: verified before
+    anything is removed). `current` = {(platform, offer_id)} written this run; `cursor` = the revision id a pass stopped
+    at on its time budget (the next run resumes there). -> {"rows", "parts", "pending", "cursor", ...}."""
+    from . import expansion_archive as xa
+    directory = Path(directory)
+    db = directory / "quotes.db"
+    out = {"rows": 0, "parts": 0, "pending": False}
+    if not db.exists():
+        return out
+    t0 = _monotonic()
+    now_dt = parse_utc(now) if isinstance(now, str) else (now or datetime.now(timezone.utc))
+    cutoff = (now_dt - timedelta(hours=cold_h)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    keep_start = (now_dt - timedelta(hours=QUOTE_KEEP_START_H)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    adir = directory / "archive" / "quotes"
+    con = sqlite3.connect(db, timeout=10)
+    try:
+        xa.ensure(con)
+        con.commit()
+        out["leftovers_removed"] = xa.remove_leftovers(con, adir, "quotes")
+        cols = ("id", "platform", "offer_id", "revision", "observed_at", "payload")
+        last_id = int(cursor or 0)
+        latest = {}
+        slowest = 0.0
+        while True:
+            if _monotonic() - t0 + slowest > budget_s:
+                out["pending"] = True
+                out["stopped"] = "time budget"
+                out["cursor"] = last_id
+                break
+            tp = _monotonic()
+            # rowid order: old revisions come first, so the scan stops early on a store whose head is already cold
+            cand = con.execute("SELECT id, platform, offer_id, observed_at FROM revisions WHERE id > ? ORDER BY id LIMIT ?",
+                               (last_id, QUOTE_PART_ROWS * 2)).fetchall()
+            if not cand:
+                break
+            last_id = cand[-1][0]
+            ids, hot_seen = [], False
+            for rid, plat, oid, seen in cand:
+                if (seen or "") >= cutoff:
+                    hot_seen = True
+                    continue
+                key = (plat, oid)
+                if key not in latest:
+                    latest[key] = con.execute("SELECT MAX(id) FROM revisions WHERE platform=? AND offer_id=?",
+                                              key).fetchone()[0]
+                if latest[key] == rid:
+                    if key in current:
+                        continue
+                    start = con.execute("SELECT json_extract(payload, '$.start') FROM revisions WHERE id=?",
+                                        (rid,)).fetchone()[0]
+                    if not isinstance(start, str) or start >= keep_start:
+                        continue
+                ids.append(rid)
+            for i in range(0, len(ids), QUOTE_PART_ROWS):
+                chunk = ids[i:i + QUOTE_PART_ROWS]
+                marks = ",".join("?" * len(chunk))
+                rows = con.execute(f"SELECT {', '.join(cols)} FROM revisions WHERE id IN ({marks}) ORDER BY id",
+                                   chunk).fetchall()
+                r = xa.archive_part(con, adir, "quotes", "revisions", cols, rows, "DELETE FROM revisions WHERE id = ?",
+                                    [(x[0],) for x in rows], key_col="id")
+                out["rows"] += r["rows"]
+                out["parts"] += 1
+            slowest = max(slowest, _monotonic() - tp)
+            if hot_seen and not ids and all((c[3] or "") >= cutoff for c in cand[-50:]):
+                break                                   # reached the warm tail of the store
+        out["archived"] = xa.stats(con)
+    finally:
+        con.close()
+    out["seconds"] = round(_monotonic() - t0, 2)
+    return out
 
 
 PP_URL = "https://partner-api.prizepicks.com/projections"
