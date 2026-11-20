@@ -158,7 +158,7 @@ def test_v3_states_and_art_render_from_the_shared_shell(browser, env, monkeypatc
 
 
 def test_flag_off_the_same_pages_carry_no_v3(browser, env, monkeypatch):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")
     c = context(browser, env, PHONE)
     try:
         p = c.new_page()
@@ -204,7 +204,7 @@ def test_v3_classic_views_keep_their_look_under_the_header(browser, env, monkeyp
         p.wait_for_selector(".sc-v3-bar", state="visible")
         # the shell does not recolour the classic page: its body keeps the colours it has with the flag off
         bg = p.evaluate("getComputedStyle(document.body).backgroundColor")
-        monkeypatch.delenv("SCOUT_UI_V3")
+        monkeypatch.setenv("SCOUT_UI_V3", "0")
         q = c.new_page()
         q.goto(env.url + path)
         q.wait_for_selector(ready, state="attached", timeout=30000)

@@ -1,4 +1,6 @@
 import os
+os.environ.setdefault("SCOUT_UI_V3", "0")   # tests pin the classic pages unless a test turns v3 on (live default is ON)
+import os
 import sys
 
 import pytest

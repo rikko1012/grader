@@ -284,7 +284,7 @@ def test_v3_board_soccer_and_tennis(browser, env, monkeypatch, size, theme):
 
 
 def test_flag_off_board_carries_none_of_it(browser, env, monkeypatch):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")
     c = context(browser, env, PHONE)
     p = c.new_page()
     try:

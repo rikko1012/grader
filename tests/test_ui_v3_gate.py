@@ -48,7 +48,7 @@ def member(c="good-u1"):
 
 @pytest.fixture
 def v3env(env, monkeypatch):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")
     monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
     return env
 
@@ -195,3 +195,14 @@ def test_one_answer_per_request_on_a_kept_alive_connection(v3env, monkeypatch):
         r.read()
         assert r.status == status, path
     c.close()
+
+
+def test_v3_is_the_default_and_zero_turns_it_off(monkeypatch):
+    """Nov 20 2026: v3 is ON for everyone unless SCOUT_UI_V3=0 (the instant way back)."""
+    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    assert ui_v3.ui_v3_default() is True
+    for off in ("0", "false", "off", "no", " OFF "):
+        monkeypatch.setenv("SCOUT_UI_V3", off)
+        assert ui_v3.ui_v3_default() is False
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    assert ui_v3.ui_v3_default() is True
