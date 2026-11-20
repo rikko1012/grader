@@ -82,7 +82,7 @@ def test_goal_plus_assist_is_a_count_on_the_summed_series():
     f, reason = model.make_forecast(offer, facts, NOW)
     assert reason is None and f['component_model'] == 'goals_assists'
     assert f['distribution'] == 'overdispersed-count-predictive' and f['sample'] == 8
-    assert f['units'] == 0.0 and f['stake_reason'] == stats.STAKE_REASONS['passed']
+    assert f['units'] == 0.0 and f['stake_reason'] == stats.STAKE_REASONS[stats.STAKE_TIERS['goals_assists']]
     assert 0 < f['p_over'] < 1 and f['grade'] is not None
 
 
@@ -100,10 +100,22 @@ def test_first_half_goals_thin_the_regulation_predictive():
     offer.update(stat='goals', scope='first_half', line=.5, sides={'over': {}})
     f, reason = model.make_forecast(offer, facts, NOW)
     assert reason is None and f['distribution'] == 'regulation-count-thinned-first-half'
-    full = dict(offer, scope='full_game')
-    g, _ = model.make_forecast(full, facts, NOW)
-    assert f['p_over'] < g['p_over']
-    assert f['projection'] == pytest.approx(g['projection'] * stats.FIRST_HALF_GOAL_SHARE)
+    support, mass = stats.prior_count_predictive([g['value'] for g in facts['games']], 'first_half_goals')
+    regulation = sum(k * p for k, p in zip(support, mass))
+    assert f['projection'] == pytest.approx(regulation * stats.FIRST_HALF_GOAL_SHARE)
+    assert f['p_over'] < sum(p for k, p in zip(support, mass) if k > .5)
+    assert f['stake_reason'] == stats.STAKE_REASONS['passed'] and f['units'] == 0.0
+
+
+def test_population_prior_shrinks_rare_event_rates():
+    """The tuned prior pulls an all-zero Goal + Assist history toward the population rate, not to a fixed half count."""
+    zeros = [0] * 10
+    s0, m0 = stats.count_predictive(zeros)
+    s1, m1 = stats.prior_count_predictive(zeros, 'goals_assists')
+    p_count, p_prior = sum(m0[1:]), sum(m1[1:])
+    assert 0 < p_count and 0 < p_prior
+    mean, k = stats.COUNT_PRIOR['goals_assists']
+    assert sum(x * p for x, p in zip(s1, m1)) == pytest.approx(k * mean / (10 + k), rel=1e-6)
 
 
 def test_cards_above_half_line_are_not_graded():
@@ -121,7 +133,8 @@ def test_fantasy_score_is_a_continuous_predictive():
     offer.update(stat='fantasy_outfield', line=9.5)
     f, reason = model.make_forecast(offer, facts, NOW)
     assert reason is None and f['distribution'] in ('score-kernel-mixture', 'score-student-t') and f['p_push'] == 0
-    assert f['projection'] == pytest.approx(sum(vals) / len(vals))
+    m0, lam = stats.SCORE_SHRINK['fantasy_outfield']
+    assert f['projection'] == pytest.approx(sum(vals) / len(vals) + lam * (m0 - sum(vals) / len(vals)))
     assert f['p_over'] + f['p_under'] == pytest.approx(1)
     assert f['range80'][0] < f['projection'] < f['range80'][1]
     offer['line'] = 30.5

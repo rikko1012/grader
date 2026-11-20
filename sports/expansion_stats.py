@@ -50,19 +50,22 @@ MODELS = {
 SCOPED = {('soccer', 'goals', 'first_half'): 'first_half_goals', ('tennis', 'games_played', 'set2'): 'set2_games'}
 # Share of regulation goals scored in the first half (incl. first-half stoppage time), measured on ESPN goal events
 # in the walk-forward tune window (stats/first_half_share.json). Set only from that measurement.
-FIRST_HALF_GOAL_SHARE = 0.4475
+FIRST_HALF_GOAL_SHARE = 0.4420     # 2,393 of 5,414 scorer-credited goals, TUNE window
 # Cards: the summed count settles 'any card' identically for a 0.5 line whatever a red card counts for; above it the
 # Underdog rule (red = 1 or 2) is unverified, so those lines are not graded.
 CARDS_MAX_LINE = 1.0
 
-# Walk-forward tier per model (stats/walkforward_summary.json). 'passed': calibrated on the untouched holdout.
-STAKE_TIERS = {'goals_assists': 'passed', 'cards': 'passed', 'shots_assisted': 'passed', 'first_half_goals': 'passed',
-               'fantasy_outfield': 'passed', 'fantasy_goalie': 'passed', 'fantasy_tennis': 'untested',
-               'set2_games': 'untested'}
+# Walk-forward tier per model, holdout Sep 1 - Nov 19 2026 (stats/wf_final/walkforward_summary.json):
+# 'passed' = Brier beats the line base rate and every printed-chance band's 95% interval covers its mean chance;
+# 'close' = Brier beats the base rate and every band is within 3 points (the live count model, scored the same way on
+# fouls suffered, is within 2.5); 'failed' = neither. Tennis fantasy: scored on its games/sets part (no past
+# aces / double faults in the test data) and failed. Every tier shows its letter and chance; all stake 0 units.
+STAKE_TIERS = {'first_half_goals': 'passed', 'cards': 'close', 'shots_assisted': 'close', 'fantasy_outfield': 'close',
+               'goals_assists': 'failed', 'fantasy_goalie': 'failed', 'set2_games': 'failed', 'fantasy_tennis': 'failed'}
 STAKE_REASONS = {
-    'passed': '0U: new component model - calibrated in the walk-forward test; stakes wait for settled real lines.',
-    'failed': '0U: new component model - missed calibration in the walk-forward test.',
-    'untested': '0U: new component model - no walk-forward test yet (no past results for this scoring).',
+    'passed': '0U: new model - passed its walk-forward calibration test; stakes wait for settled real lines.',
+    'close': '0U: new model - walk-forward chances within 3 points of results; stakes wait for settled real lines.',
+    'failed': '0U: new model - missed its walk-forward calibration test.',
 }
 
 
@@ -230,8 +233,8 @@ def count_predictive(values):
 # fixed half-count prior over-states rare events (walk-forward: Goal + Assist printed 12.4% Over vs 7.7% observed),
 # so these models shrink each player's rate toward the population mean instead. Both numbers per model come from the
 # walk-forward TUNE window only (stats/count_prior_tuning.json); k = None keeps the count model's own formula.
-COUNT_PRIOR = {'goals_assists': (None, None), 'cards': (None, None), 'shots_assisted': (None, None),
-               'first_half_goals': (None, None)}
+COUNT_PRIOR = {'goals_assists': (0.1531, 8), 'cards': (0.1308, 16), 'shots_assisted': (0.6568, 4),
+               'first_half_goals': (0.0897, 8)}   # first_half_goals: the prior is on regulation goals, then thinned
 
 
 def prior_count_predictive(values, model):
@@ -335,10 +338,10 @@ def score_predictive(values, model):
 
 # Per-model predictive family, chosen on the walk-forward TUNE window by log loss (stats/fantasy_widen_tuning.json):
 # 'kde' = Gaussian-kernel mixture on the past games (keeps the right skew a goal adds), 't' = Student-t.
-SCORE_METHOD = {'fantasy_outfield': 'kde', 'fantasy_goalie': 'kde', 'fantasy_tennis': 'kde'}
+SCORE_METHOD = {'fantasy_outfield': 'kde', 'fantasy_goalie': 't', 'fantasy_tennis': 'kde'}
 # Regression to the population: past scores move toward m0 by share lam before the predictive is fitted (TUNE window,
 # stats/fantasy_widen_tuning.json). lam 0 = no shrinkage.
-SCORE_SHRINK = {'fantasy_outfield': (0.0, 0.0), 'fantasy_goalie': (0.0, 0.0), 'fantasy_tennis': (0.0, 0.0)}
+SCORE_SHRINK = {'fantasy_outfield': (8.0463, 0.2), 'fantasy_goalie': (9.3569, 0.4), 'fantasy_tennis': (0.0, 0.0)}
 
 
 def shrunk(values, model):
@@ -481,7 +484,7 @@ def fit(offer, facts, now, inputs, parse_utc, min_games):
             if len(quantiles) == 1 and cumulative >= .9:
                 quantiles.append(k)
                 break
-    tier = STAKE_TIERS.get(model, 'untested')
+    tier = STAKE_TIERS.get(model, 'failed')
     return {'model_version': VERSION, 'component_model': model, 'distribution': distribution, 'sample': n,
             'projection': projection, 'range80': quantiles,
             'p_over': probs['over'], 'p_under': probs['under'], 'p_push': probs['push'],
