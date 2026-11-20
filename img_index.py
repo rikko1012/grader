@@ -9,7 +9,7 @@ Per sport, from the board snapshot members already get (read only; nothing in th
   tennis  PrizePicks player id (the sports service sends a per-player map, placeholders and shared art already removed).
   lol     none yet (lolesports images await the owner's call).
 
-index(srv, sport) -> JSON bytes: {"p": {player.id: [headshot url, team logo url]}, "n": {name: player.id}, "tn": {team: logo url}}
+index(srv, sport) -> JSON bytes: {"p": {player.id: [headshot url, team logo url, team text]}, "n": {name: player.id}, "tn": {team: logo url}}
 ("" where not ready) with READY pictures only, so a card never asks for a file that is not there. A name maps only when exactly one board player has
 it. Built once per board body / picture version (single flight per sport) and served with the board's own ETag rules.
 """
@@ -96,6 +96,9 @@ def bo3_scan(db_path=None, pause_every=25):
         con.close()
     with _LOCK:
         _BO3.update(at=newest, players=players, teams=teams)
+    if n:
+        with ic._LOCK:
+            ic._VERSION[0] += 1                        # new BO3.gg answers: the CS2 list is rebuilt on its next read
     return n
 
 
@@ -197,7 +200,7 @@ def _expansion_extra(snap, recs):
 def build(srv, sport):
     body, recs, snap = _records(srv, sport)
     if body is None:
-        return None, b'{"n":{},"p":{},"tn":{}}'
+        return None, EMPTY
     extra = _expansion_extra(snap, recs) if sport in ("soccer", "tennis") else None
     p, tn, names = {}, {}, {}
     for r in recs:
@@ -218,7 +221,7 @@ def build(srv, sport):
                 if tname:
                     tn.setdefault(tname, set()).add(logo)
         if pid and (img or logo):
-            p[pid] = [img, logo]
+            p[pid] = [img, logo, tname]
         if name:
             names.setdefault(name, set()).add(pid or ("?" + name))
     n = {name: next(iter(ids)) for name, ids in names.items() if len(ids) == 1 and next(iter(ids)) in p}
@@ -226,27 +229,47 @@ def build(srv, sport):
     return body, json.dumps(out, separators=(",", ":"), sort_keys=True).encode()
 
 
+def _body_id(srv, sport):
+    """id() of the sport's current board body without parsing it (None when there is none)."""
+    try:
+        import workspace_api
+        snap = workspace_api.snapshot(srv) if sport == "cs2" else workspace_api._adapter(sport).snapshot(srv, sport)
+        return id(snap["body"]) if snap and snap.get("body") else None
+    except Exception:                                  # noqa: BLE001
+        return None
+
+
+EMPTY = b'{"n":{},"p":{},"tn":{}}'
+
+
 def index(srv, sport):
-    """-> JSON bytes (memoised per board body and picture version; one build at a time per sport)."""
+    """-> JSON bytes. Rebuilt only when the board body or the set of stored pictures changed (checked at most every
+    MIN_REBUILD_S); one build at a time per sport; a failed build is remembered for MIN_REBUILD_S too (the last good list, or an
+    empty one), so a sports-service outage never turns into one rebuild per waiting member."""
     if sport not in ic.SPORTS:
         return None
     ic.start_warmer()
     hit = _MEMO.get(sport)
-    now = time.time()
-    if hit and now - hit[2] < MIN_REBUILD_S:
+    if hit and time.time() - hit[2] < MIN_REBUILD_S:
         return hit[3]
     with _SPORT_LOCKS[sport]:
         hit = _MEMO.get(sport)
+        now = time.time()
         if hit and now - hit[2] < MIN_REBUILD_S:
             return hit[3]
         v = ic.version()
+        if hit and hit[1] == v and hit[0] is not None and hit[0] == _body_id(srv, sport):
+            _MEMO[sport] = (hit[0], v, now, hit[3])    # same board, same pictures: nothing to rebuild
+            return hit[3]
         try:
             body, out = build(srv, sport)
-        except Exception:                              # noqa: BLE001 - pictures are optional: an empty list, monograms show
-            return hit[3] if hit else b'{"n":{},"p":{},"tn":{}}'
+        except Exception:                              # noqa: BLE001 - pictures are optional: the last list, or none
+            out = hit[3] if hit else EMPTY
+            _MEMO[sport] = (None, v, now, out)
+            return out
         if hit and hit[3] == out:
             out = hit[3]                               # same bytes, same object: send_shared keeps its ETag / gzip copy
-        _MEMO[sport] = (id(body), v, time.time(), out)
+        _MEMO[sport] = (id(body) if body is not None else None, v, now, out)
         return out
 
 

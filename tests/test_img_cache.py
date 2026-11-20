@@ -348,9 +348,43 @@ def test_img_routes_are_unknown_with_v3_off_and_gated_with_it_on(env, monkeypatc
     assert st == 200 and h["Content-Type"] == "image/webp" and "immutable" in h["Cache-Control"] and "Content-Encoding" not in h
     assert get(env.base, "/img/p/nba/1.webp", None, {"If-None-Match": h["ETag"]})[0] == 304
     assert get(env.base, "/img/p/nba/99.webp")[0] == 404
-    assert get(env.base, "/img/index/nba.json")[0] == 403              # the board's player list: members only
+    assert get(env.base, "/img/index/cs2.json")[0] == 403              # the board's player list: members only
     monkeypatch.setattr(ix, "build", lambda srv, sport: (b"x", b'{"n":{},"p":{},"tn":{}}'))
-    st, body, h = get(env.base, "/img/index/nba.json", "good-u1")
+    monkeypatch.setattr(ix, "_body_id", lambda srv, sport: None)
+    assert get(env.base, "/img/index/cs2.json", "good-u1")[0] == 404    # SCOUT_UPGRADE=owner: a member has no hub board here
+    monkeypatch.setenv("SCOUT_UPGRADE", "1")
+    st, body, h = get(env.base, "/img/index/cs2.json", "good-u1")
     assert st == 200 and json.loads(body) == {"n": {}, "p": {}, "tn": {}} and h.get("ETag")
+    for sport in ("nba", "soccer"):                                     # sports this member cannot see on the board: 404 here too
+        assert get(env.base, f"/img/index/{sport}.json", "good-u1")[0] == 404, sport
     ic.reset()
     ix.reset()
+
+
+def test_a_failing_board_read_builds_once_per_window_not_once_per_member(cache, monkeypatch):
+    calls = []
+
+    def boom(srv, sport):
+        calls.append(sport)
+        raise RuntimeError("sports service down")
+    monkeypatch.setattr(ix, "_records", boom)
+    monkeypatch.setattr(ix, "_body_id", lambda srv, sport: None)
+    ts = [threading.Thread(target=ix.index, args=(None, "nba")) for _ in range(50)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert calls == ["nba"] and ix.index(None, "nba") == ix.EMPTY
+
+
+def test_an_unchanged_board_and_picture_set_is_not_rebuilt(cache, monkeypatch):
+    recs = [_rec("nba", "nba:player:espn:11", "Al Pha", "LAL", "lal")]
+    body = json.dumps({"records": recs}).encode()
+    n = []
+    monkeypatch.setattr(ix, "_records", lambda srv, sport: (n.append(1), (body, json.loads(body)["records"], {"body": body}))[1])
+    monkeypatch.setattr(ix, "_body_id", lambda srv, sport: id(body))
+    first = ix.index(None, "nba")
+    ix._MEMO["nba"] = (ix._MEMO["nba"][0], ix._MEMO["nba"][1], 0.0, first)   # the 15 s window has passed
+    assert ix.index(None, "nba") is first and len(n) == 1                     # same body, same pictures: no rebuild
+    for k in list(ic._SRC):
+        ic.fetch_one(k, get=lambda u: png(300, 300))                        # a picture became ready
+    ix._MEMO["nba"] = (ix._MEMO["nba"][0], ix._MEMO["nba"][1], 0.0, first)
+    assert ix.index(None, "nba") != first and len(n) == 2

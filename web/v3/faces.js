@@ -39,7 +39,7 @@
     if (!d) return null;
     var id = pid && d.p[pid] ? pid : (name ? d.n[name] : null);
     var f = id && d.p[id];
-    return f ? {i: f[0] || '', t: f[1] || ''} : null;
+    return f ? {i: f[0] || '', t: f[1] || '', team: f[2] || ''} : null;
   }
   function face(sport, name, pid) {
     name = String(name || '').trim();
@@ -104,6 +104,16 @@
     if (im.complete && im.naturalWidth) { im.classList.add('is-in'); if (cls === 'v3f-img') box.classList.add('v3f-on'); }
     return im;
   }
+  /* NBA / NFL: the hub's own face carries the exact ESPN id in its hotlink (kept on the node once the hotlink is swapped) */
+  function espnPid(box) {
+    if (!box) return '';
+    var have = box.getAttribute('data-v3f-pid');
+    if (have) return have;
+    var im = box.querySelector(':scope > img.u-face-shot'), m = im && /\/headshots\/(nba|nfl)\/players\/full\/(\d+)\.png/.exec(im.getAttribute('src') || '');
+    var pid = m ? m[1] + ':player:espn:' + m[2] : '';
+    if (pid) box.setAttribute('data-v3f-pid', pid);
+    return pid;
+  }
   /* box: the card's avatar node (hub .u-face, slips .sb-av / .sb-face, player .v3p-avatar, or one added here) */
   function paint(box, f) {
     if (!box || !f) return;
@@ -134,7 +144,7 @@
       var b = btn.querySelector('b'), tag = btn.querySelector('small > i:last-child');
       var sport = tag ? SPORT_OF[tag.textContent.trim()] : null, name = b ? b.textContent.trim() : '';
       if (!sport || !name) return;
-      var f = face(sport, name), box = td.querySelector(':scope > .u-face');
+      var box = td.querySelector(':scope > .u-face'), f = face(sport, name, espnPid(box));
       if (!box) {
         if (!anyPics(sport)) return;
         box = newBox(name, 32, 'h-face'); td.insertBefore(box, btn);
@@ -146,7 +156,7 @@
       var name = b ? b.textContent.trim() : '', bits = sp ? sp.textContent.split(' · ') : [];
       var sport = SPORT_OF[(bits[bits.length - 1] || '').trim()];
       if (!sport || !name) return;
-      var f = face(sport, name), box = h.querySelector(':scope > .u-face');
+      var box = h.querySelector(':scope > .u-face'), f = face(sport, name, espnPid(box));
       if (!box) { if (!anyPics(sport)) return; box = newBox(name, 24, 'h-face'); h.insertBefore(box, h.firstChild); }
       if (f) paint(box, f);
     });
@@ -184,7 +194,7 @@
       var tag = nm.querySelector(':scope > i'), sport = tag ? SPORT_OF[tag.textContent.trim()] : null, name = ownText(nm);
       var box = leg.querySelector('.sb-face > .u-face, :scope > .sb-av, .u-leg-name > .u-face');
       if (!box || !sport || !name) return;
-      paint(box, face(sport, name));
+      paint(box, face(sport, name, espnPid(box)));                /* a leg is a current board offer */
     });
     scope.querySelectorAll('#u-hub .h-generated-card li').forEach(function (li) {
       var box = li.querySelector(':scope > .sb-av, :scope > .u-face'), who = li.querySelector('div > strong');
@@ -201,7 +211,12 @@
       var name = b.textContent.replace(/\s+(Over|Under)\s+\S+\s*$/, '').trim();
       var sport = SPORT_OF[(sm.textContent.split(' · ')[0] || '').trim()];
       if (!sport || !name) return;
-      var f = face(sport, name), box = btn.querySelector(':scope > .u-face');
+      var box = btn.querySelector(':scope > .u-face'), pid = espnPid(box), f = face(sport, pid ? '' : name, pid);
+      if (f && !pid) {                                       /* a receipt has no player id: only today's board player with that name
+                                                                who plays for one of the receipt's two teams */
+        var match = (sm.textContent.split(' · ').pop() || '').split(' vs ').map(function (x) { return x.trim(); });
+        if (!f.team || match.indexOf(f.team) < 0) f = null;
+      }
       if (!box) {
         if (!anyPics(sport)) return;
         box = newBox(name, 32); btn.insertBefore(box, btn.firstChild);
