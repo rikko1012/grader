@@ -202,3 +202,19 @@ The owner path is `GET /preview/v3?token=<ADMIN_TOKEN>`, then use the cookie (se
 - `python scripts/load_ui_v3_700.py . 700`: 700 members on pages + bundles + art, flag on and off; fails on any 5xx, a wrong status, or more than one build per page.
 - Also run the esports `scripts/load_audit700.py` (with `UPGRADE_LOAD=1 SCOUT_UI_V3=1 … workspace`).
 - Run them for any change to `ui_v3.py` or `server.py`.
+
+## Card pictures (`faces`, owner 2026-11-20: "Add player and team pictures to cards also")
+
+- **Files:** `web/v3/faces.css` · `faces.js` (last in the member bundle), `img_cache.py`, `img_index.py`, `sports/expansion_images.py`.
+  Shared lines touched: one `ui_v3.BUNDLES` entry each for member.css / member.js, one `server.py` dispatch line + `Handler._img_route`,
+  one line in `workspace_expansion._build` (keeps the sports service's `images` map beside the board), and the research body /
+  collectors in `sports/expansion_board.py`.
+- **Routes (v3 on only; off = the unknown-route answer):** `/img/<p|t>/<sport>/<token>.webp` (stored files only, public, 30-day
+  immutable cache + ETag, 404 for 60 s when not ready) and `/img/index/<sport>.json` (members; which board players have a READY picture).
+- **Sources, exact ids only:** CS2 BO3.gg player / team id (from the cached `/teams` + `/players` answers; benched and coaches get none;
+  the logo only when the BO3.gg team name equals the row's team), NBA / NFL ESPN athlete id + team abbreviation, soccer / tennis ESPN
+  athlete id where resolved, then the PrizePicks picture of the offer's own player id (shared art and placeholders dropped).
+  LoL: monograms until the owner approves lolesports images. Hosts: `a.espncdn.com`, `files.bo3.gg`, `static.prizepicks.com`.
+- **Never on a member request:** one warmer thread fetches (paced, https, no redirects, 4 MB / 25 MP caps), re-encodes WEBP
+  (160 px headshot, 128 px logo on its own contrast disc) and writes atomically under `.cache/img` (20k files / 200 MB bound).
+- **Load:** `python scripts/load_v3_images_700.py . 700` (cold / warm / off phases, slow stub upstream).
