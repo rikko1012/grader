@@ -2,4 +2,226 @@
    Scope: the hub player card (#hub-card / #hub-detail, web/upgrade-cards.js output): Lines / Stats / Ask, maps, 2-map combine.
    Loaded in its bundle after tokens.css, components.css and shell.css (see web/UI_V3.md). Only applies on a v3 page: scope every rule
    under html[data-ui-v3] (the hub's own sheets load after this bundle, so hub overrides need html[data-ui-v3] #u-hub ...).
-   Display only: no grading or API change; every field the page shows today stays. */
+   Display only: no grading or API change; every field the page shows today stays.
+
+   The card becomes the v3 player page: one scroller (#hub-detail) from the hero down, the hub's own decision strip restyled as the
+   prop panel, its tabs sticky, and player.js's blocks (.v3p-*) beside the hub's nodes. At 1024px+ the card covers the board column
+   (the slip column stays where it is); at 900px+ of card width it runs in two columns. Nothing here hides a hub field. */
+
+/* ------------------------------------------------------------------ the panel and its one scroller */
+html[data-ui-v3] #u-hub .h-card-panel{background:var(--sc-bg);color:var(--sc-text);font-family:var(--sc-font);border:0;box-shadow:none;container-type:inline-size;container-name:v3card}
+@media (min-width:1101px){html[data-ui-v3] #u-hub .h-card-panel{left:0;width:auto;top:0}}
+html[data-ui-v3] #u-hub #hub-detail.h-card{display:block;height:100%;overflow-y:auto;overscroll-behavior:contain;padding:0;color:var(--sc-text);font:400 14px/1.45 var(--sc-font);font-variant-numeric:tabular-nums;scroll-padding-top:52px}
+html[data-ui-v3] #u-hub #hub-detail>.h-card-body{overflow:visible;flex:none;min-height:0;padding:16px var(--sc-gutter) 24px}
+html[data-ui-v3] #u-hub #hub-detail :is(b,strong,h3,h4,h5,td,th,dd,dt,small,span,p,li,button,select,input,label,summary){font-family:var(--sc-font)}
+
+/* ------------------------------------------------------------------ hero: avatar, name, role / team (the hub's own header) */
+/* the pages style bare <header> globally (height, sticky, overflow, blur): the card's header element is reset here first */
+html[data-ui-v3] #u-hub #hub-detail>.h-card-head{height:auto!important;min-height:0;max-height:none;overflow:visible;top:auto;z-index:auto;margin:0;border:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-sizing:border-box}
+html[data-ui-v3] #u-hub #hub-detail>.h-card-head{position:relative;isolation:isolate;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 16px;padding:14px var(--sc-gutter) 14px}
+html[data-ui-v3] #u-hub #hub-detail>.h-card-head::before{content:"";position:absolute;inset:0 0 -150px;z-index:-2;pointer-events:none;-webkit-mask-image:linear-gradient(180deg,#000 45%,transparent);mask-image:linear-gradient(180deg,#000 45%,transparent);background:
+  radial-gradient(70% 90% at 94% -8%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent) 0%,color-mix(in srgb,var(--sc-accent-fill) calc(var(--sc-lit) * .4),transparent) 42%,transparent 78%),
+  radial-gradient(120% 70% at 60% -10%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit-fill),transparent),transparent 80%),linear-gradient(180deg,var(--sc-sky),var(--sc-bg))}
+html[data-ui-v3] #u-hub #hub-detail>.h-card-head::after{content:"";position:absolute;inset:0 0 -150px;z-index:-1;-webkit-mask-image:linear-gradient(180deg,#000 45%,transparent);mask-image:linear-gradient(180deg,#000 45%,transparent);pointer-events:none;background-image:var(--sc-grain);background-size:180px 180px;opacity:var(--sc-grain-o)}
+html[data-ui-v3] #u-hub #hub-detail .h-back{grid-column:1/-1;justify-self:start;min-height:34px;padding:0 12px;border:0;border-radius:var(--sc-r-md);background:color-mix(in srgb,var(--sc-text) 6%,transparent);box-shadow:var(--sc-ring);color:var(--sc-text);font:500 13px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head>.u-face,html[data-ui-v3] #u-hub #hub-detail .h-card-head>.v3p-avatar{--face:60px;grid-column:1;width:60px;height:60px;flex:0 0 60px;border:0;font-size:24px}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head>.u-face{background:radial-gradient(110% 100% at 32% 12%,#4a76ff 0%,#1e3a9a 70%);color:#F1F3F8;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 0 0 1px var(--sc-edge)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-avatar{display:grid;place-items:center;border-radius:50%;font:600 24px/1 var(--sc-font);color:#F1F3F8;background:radial-gradient(110% 100% at 32% 12%,#4a76ff 0%,#1e3a9a 70%);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 0 0 1px var(--sc-edge)}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-detail :is(.v3p-avatar,.h-card-head>.u-face){color:#0E1320;background:radial-gradient(110% 100% at 32% 12%,#fff 0%,#dfe6ff 70%)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head>.h-card-id{grid-column:2;min-width:0}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head>.h-card-id:first-child,html[data-ui-v3] #u-hub #hub-detail .h-card-head>.h-back+.h-card-id{grid-column:1/3}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head h3{margin:0;font:600 30px/1.05 var(--sc-font);letter-spacing:-.025em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head h3 span{display:block;margin:6px 0 0;font:500 15px/1.3 var(--sc-font);letter-spacing:0;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head p{margin:6px 0 0;font-size:13px;line-height:1.45;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head .h-role{font-style:normal;padding:1px 6px;border-radius:var(--sc-r-xs);color:var(--sc-text);background:color-mix(in srgb,var(--sc-text) 7%,transparent);border:0}
+html[data-ui-v3] #u-hub #hub-detail .h-countdown{font:500 12px/18px var(--sc-font);padding:0 6px;border-radius:var(--sc-r-xs);border:0;background:color-mix(in srgb,var(--sc-text) 6%,transparent);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-match .h-countdown{padding:0;background:none;font:inherit;color:inherit}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head>.h-star{grid-column:3;grid-row:2;align-self:start;width:40px;height:40px;border-radius:var(--sc-r-md);box-shadow:var(--sc-ring);background:transparent;color:var(--sc-muted);font-size:18px}
+html[data-ui-v3] #u-hub #hub-detail .h-card-head>.h-star[aria-pressed=true]{color:var(--sc-accent);box-shadow:var(--sc-sel)}
+@container v3card (min-width:900px){
+  html[data-ui-v3] #u-hub #hub-detail .h-card-head>.u-face,html[data-ui-v3] #u-hub #hub-detail .h-card-head>.v3p-avatar{--face:84px;width:84px;height:84px;flex-basis:84px;font-size:32px}
+  html[data-ui-v3] #u-hub #hub-detail .h-card-head h3{font-size:40px}
+}
+
+/* ------------------------------------------------------------------ the lead: match strip, meta row, stat grid, pick summary */
+html[data-ui-v3] #u-hub #hub-detail>.v3p-lead{display:grid;gap:12px;padding:0 var(--sc-gutter) 8px}
+/* the hero glow runs under the lead: everything after the header is positioned, so it paints above that glow */
+html[data-ui-v3] #u-hub #hub-detail>:is(.v3p-lead,.v3p-maps,.h-player-markets,.h-decision,.h-card-body){position:relative}
+html[data-ui-v3] #u-hub #hub-detail .v3p-match{background:color-mix(in srgb,var(--sc-s1) 82%,transparent);box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-rk{font-style:normal;font-size:11px;margin-left:6px;letter-spacing:0}
+html[data-ui-v3] #u-hub #hub-detail .v3p-rk.is-up{color:var(--sc-pos)} html[data-ui-v3] #u-hub #hub-detail .v3p-rk.is-down{color:var(--sc-neg)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0;font-size:14px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-meta b{font-weight:500;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-grid{margin-top:2px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-grid dl{align-self:start}
+html[data-ui-v3] #u-hub #hub-detail .v3p-grid .sc-stat dt{white-space:normal;line-height:1.15}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pick{margin-top:6px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-spark{display:inline-flex;align-items:center;gap:10px;min-width:0}
+html[data-ui-v3] #u-hub #hub-detail .v3p-spark b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub #hub-detail .sc-pick__foot .sc-book{white-space:normal;text-align:right}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pickchip{display:inline-flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px;max-width:9.5em;text-align:center}
+@media (max-width:420px){html[data-ui-v3] #u-hub #hub-detail .v3p-grid .sc-stat{padding:0 8px 0 10px}html[data-ui-v3] #u-hub #hub-detail .v3p-grid .sc-stat dd b{font-size:15px}}
+
+/* the hub's letter / Lean chips in v3 grade tiles (the hub's own markup and words) */
+html[data-ui-v3] #u-hub #hub-detail :is(.v3p-pickchip,.h-dec-pick) .h-grade{display:inline-grid;place-items:center;min-width:36px;height:36px;padding:0 8px;border:0;border-radius:var(--sc-r-sm);font:600 18px/1 var(--sc-font);color:var(--sc-accent);background:color-mix(in srgb,var(--sc-accent-fill) 12%,transparent);box-shadow:inset 0 0 0 1px var(--sc-sel-edge)}
+html[data-ui-v3] #u-hub #hub-detail :is(.v3p-pickchip,.h-dec-pick) .h-grade-c{color:var(--sc-muted);background:transparent;box-shadow:inset 0 0 0 1px var(--sc-edge)}
+html[data-ui-v3] #u-hub #hub-detail :is(.v3p-pickchip,.h-dec-pick) .h-grade-text{display:inline-block;padding:6px 9px;border-radius:var(--sc-r-sm);font:600 13px/1.2 var(--sc-font);color:var(--sc-muted);background:color-mix(in srgb,var(--sc-text) 4%,transparent);box-shadow:inset 0 0 0 1px var(--sc-edge);white-space:normal}
+html[data-ui-v3] #u-hub #hub-detail :is(.v3p-pickchip,.h-dec-pick) .h-grade-tag{font:600 11px/1 var(--sc-font);color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail .h-below{font:500 11px/1.3 var(--sc-font);color:var(--sc-faint);border:0;background:none;padding:0}
+
+/* ------------------------------------------------------------------ CS2 maps: compact scene cards + the combined number */
+html[data-ui-v3] #u-hub #hub-detail>.v3p-maps{display:grid;gap:12px;padding:12px var(--sc-gutter) 4px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maps-list{display:grid;gap:8px;min-width:0}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maps-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maps-head h4{margin:0;font:600 17px/1.2 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-maps-head .sc-muted{font-size:13px}
+html[data-ui-v3] #u-hub #hub-detail button.v3p-map{width:100%;margin:0;border:0;text-align:left;cursor:pointer;font:inherit;color:inherit;min-height:0}
+html[data-ui-v3] #u-hub #hub-detail button.v3p-map:focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id,html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__stats,html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__stat{display:block}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__stats{display:grid}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id>small{display:block}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__id b{display:flex}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__stat>span{display:block}
+html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__stat b{display:inline}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pooled{display:grid;align-content:start;gap:4px;min-width:0}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pooled .sc-pooled{flex-wrap:wrap}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pooled-ask{margin:0;font:600 17px/1.3 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-pooled .sc-src{margin:0}
+html[data-ui-v3] #u-hub #hub-detail .v3p-clear{justify-self:start;margin-top:10px;min-height:34px;padding:0 12px;border:0;border-radius:var(--sc-r-md);background:transparent;box-shadow:var(--sc-ring);color:var(--sc-text);font:500 13px/1 var(--sc-font);cursor:pointer}
+html[data-ui-v3] #u-hub #hub-detail .v3p-clear:disabled{color:var(--sc-faint);cursor:default}
+@media (max-width:420px){html[data-ui-v3] #u-hub #hub-detail .v3p-map{grid-template-columns:96px auto 1fr;gap:10px}html[data-ui-v3] #u-hub #hub-detail .v3p-pooled .sc-pooled__big{font-size:48px}}
+
+/* ------------------------------------------------------------------ the market strip (the hub's player markets) */
+html[data-ui-v3] #u-hub #hub-detail>.h-player-markets{margin:12px 0 0;padding:0 var(--sc-gutter) 4px;gap:8px}
+html[data-ui-v3] #u-hub #hub-detail .h-player-markets button{min-height:40px;padding:6px 12px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s1);box-shadow:var(--sc-ring);color:var(--sc-muted);font:500 13px/1.2 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-detail .h-player-markets button b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub #hub-detail .h-player-markets button small{color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail .h-player-markets button[aria-pressed=true]{background:var(--sc-s2);color:var(--sc-text);box-shadow:var(--sc-sel)}
+
+/* ------------------------------------------------------------------ the prop panel (the hub's own decision strip, restyled in place) */
+html[data-ui-v3] #u-hub #hub-detail>.h-decision{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px var(--sc-gutter) 0;padding:16px;border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring),var(--sc-drop)}
+html[data-ui-v3] #u-hub #hub-detail .h-decision>*{grid-column:1/-1;min-width:0}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-line{display:grid;gap:6px}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-line span{font-size:13px;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-line select{appearance:none;width:100%;max-width:none;min-height:48px;padding:0 40px 0 16px;border:0;border-radius:var(--sc-r-md);color:var(--sc-text);font:600 17px/1 var(--sc-font);
+  background:var(--sc-s2) no-repeat right 14px center/14px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 5l4 4 4-4' fill='none' stroke='%239AA5BB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-line select option{background:var(--sc-s2);color:var(--sc-text)}
+/* the hub paints inputs and selects dark with !important; v3 uses its own surface in both themes (with !important, as the hub does) */
+html[data-ui-v3] #u-hub #hub-detail .h-dec-line select{background-color:var(--sc-s2)!important;border-color:transparent!important}
+html[data-ui-v3] #u-hub #hub-detail .h-ask input{background:var(--sc-s2)!important;border-color:transparent!important}
+html[data-ui-v3] #u-hub #hub-detail .h-decision .h-side-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:auto;border:0;background:none;overflow:visible}
+html[data-ui-v3] #u-hub #hub-detail .h-decision .h-side-toggle button{min-width:0;min-height:48px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s1);color:var(--sc-muted);font:500 16px/20px var(--sc-font);box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-detail .h-decision .h-side-toggle button[aria-pressed=true]{background:var(--sc-s2);color:var(--sc-text);font-weight:600;box-shadow:var(--sc-sel)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-chance{grid-column:1/3;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-top:12px;border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-chance>b{font:600 40px/1 var(--sc-font);letter-spacing:var(--sc-track-display);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-stake{margin:0;padding:0;border:0;font:600 15px/1.2 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-proj{grid-column:3;align-self:stretch;display:grid;align-content:center;justify-items:start;padding:12px 0 0 12px;border-top:1px solid var(--sc-hair);border-left:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-proj b{font:500 22px/1.15 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-proj span{font-size:13px;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-size,html[data-ui-v3] #u-hub #hub-detail .h-dec-note{color:var(--sc-muted);font-size:13px}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-act{display:flex;flex-wrap:wrap;gap:8px;margin:0;width:100%}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-act small{color:var(--sc-muted);font-size:13px}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-act>button{flex:1 1 auto;min-height:48px;border:0;border-radius:var(--sc-r-md);font:600 16px/1.2 var(--sc-font);background:transparent;color:var(--sc-text);box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-add{flex:1 1 100%!important;background:var(--sc-cta-bg)!important;color:var(--sc-cta-ink)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.35)!important}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-add.is-on{background:var(--sc-s2)!important;color:var(--sc-text)!important;box-shadow:var(--sc-sel)!important}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-add:disabled{background:var(--sc-s2)!important;color:var(--sc-faint)!important;box-shadow:var(--sc-ring)!important}
+html[data-ui-v3] #u-hub #hub-detail .h-dec-alt{min-height:44px;border:0;border-radius:var(--sc-r-md);background:transparent;color:var(--sc-text);box-shadow:var(--sc-ring)}
+
+/* ------------------------------------------------------------------ tabs (sticky in the scroller) and the tab bodies */
+html[data-ui-v3] #u-hub #hub-detail>.h-card-tabs{position:sticky;top:0;z-index:5;display:flex;gap:0;margin:16px 0 0;padding:0 var(--sc-gutter);border-bottom:1px solid var(--sc-hair);background:var(--sc-bg);overflow-x:auto}
+html[data-ui-v3] #u-hub #hub-detail .h-card-tabs button{flex:1 1 0;min-height:48px;padding:0 12px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--sc-muted);font:500 15px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-tabs button[aria-selected=true]{color:var(--sc-text);font-weight:600;border-bottom-color:var(--sc-accent-fill)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-body{color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-body :is(h4,h5){color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub #hub-detail .h-card-body h4{font-size:17px;letter-spacing:-.01em}
+html[data-ui-v3] #u-hub #hub-detail .h-card-body :is(small,.h-history-note,.h-sec-head small){color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-body :is(.h-why,.h-fx,.h-stat-group,.h-insight-stats,.h-history-summary,.h-mini-tiles,details.h-history-table,.h-lh,.h-best-lines,.h-line-shop,.h-genie,.h-ask){border-color:var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-body>.h-why{padding:16px;border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring),var(--sc-drop)}
+html[data-ui-v3] #u-hub #hub-detail .h-why h4,html[data-ui-v3] #u-hub #hub-detail .h-why h3{font-size:20px;letter-spacing:-.015em}
+html[data-ui-v3] #u-hub #hub-detail .h-eyebrow{font:500 12px/1.3 var(--sc-font);letter-spacing:0;text-transform:none;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-why-list li{border-left:0;border-radius:0;background:transparent;padding:10px 0;border-top:1px solid var(--sc-hair);color:var(--sc-text);font-size:14px}
+html[data-ui-v3] #u-hub #hub-detail .h-why-list li:first-child{border-top:0}
+html[data-ui-v3] #u-hub #hub-detail .h-why-also li{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-why-dot{border-color:var(--sc-accent)} html[data-ui-v3] #u-hub #hub-detail .h-why-dot.is-used{background:var(--sc-accent-fill)}
+html[data-ui-v3] #u-hub #hub-detail .h-why-sub,html[data-ui-v3] #u-hub #hub-detail .h-why-for-head,html[data-ui-v3] #u-hub #hub-detail .h-why-risk-head{color:var(--sc-muted)!important;font-size:13px}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-insight-stats){gap:0;background:var(--sc-s1);border:0;border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-detail .h-insight-stats>div{background:transparent;box-shadow:inset -1px -1px 0 var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-insight-stats,.h-tile,.h-mini-tiles>div) b{font:600 22px/1.1 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-tile,.h-mini-tiles>div) b em{font-style:normal;font-weight:500;color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-tile,.h-mini-tiles>div) span,html[data-ui-v3] #u-hub #hub-detail .h-insight-stats span{color:var(--sc-muted);font-size:12px}
+html[data-ui-v3] #u-hub #hub-detail .h-history-summary{gap:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring);overflow:hidden}
+html[data-ui-v3] #u-hub #hub-detail .h-history-summary .h-tile{border:0;border-radius:0;background:transparent;box-shadow:inset -1px -1px 0 var(--sc-hair);padding:12px}
+html[data-ui-v3] #u-hub #hub-detail .h-history-summary .h-tile.is-window{background:var(--sc-s2);box-shadow:inset 2px 0 0 var(--sc-accent-fill),inset -1px -1px 0 var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-history-panel,.h-h2h,.h-lh,.h-stat-library,.h-mapchances,.h-line-shop,.h-best-lines){border-color:var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .h-history-stats{color:var(--sc-muted)} html[data-ui-v3] #u-hub #hub-detail .h-history-stats b{color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-segment{border:0;border-radius:var(--sc-r-md);background:var(--sc-s1);box-shadow:var(--sc-ring);overflow:hidden}
+html[data-ui-v3] #u-hub #hub-detail .h-segment button{background:transparent;color:var(--sc-muted);font:500 13px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-detail .h-segment button[aria-pressed=true]{background:var(--sc-s2);color:var(--sc-text);box-shadow:var(--sc-sel)}
+html[data-ui-v3] #u-hub #hub-detail .h-legend{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-fx{border:0;border-radius:var(--sc-r-lg);background:var(--sc-s1);box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-detail .h-fx>summary{color:var(--sc-text);font:600 15px/1.3 var(--sc-font);letter-spacing:0;text-transform:none}
+html[data-ui-v3] #u-hub #hub-detail .h-fx>summary>span{font:inherit;letter-spacing:0;text-transform:none}
+html[data-ui-v3] #u-hub #hub-detail .h-fx>summary small{color:var(--sc-faint);font-weight:400}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-fx-kv,.h-stat-group dl) dt{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-fx-kv,.h-stat-group dl) dd{color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-fx-lab{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-fx-chips span{border-color:var(--sc-hair);background:var(--sc-s2);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-fx-up,html[data-ui-v3] #u-hub #hub-detail .h-fx-used{color:var(--sc-pos)} html[data-ui-v3] #u-hub #hub-detail .h-fx-dn{color:var(--sc-neg)}
+html[data-ui-v3] #u-hub #hub-detail .h-fx-w0{color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail .h-fx-bars li i{background:var(--sc-s2)} html[data-ui-v3] #u-hub #hub-detail .h-fx-bars li i b{background:color-mix(in srgb,var(--sc-accent-fill) 60%,transparent)} html[data-ui-v3] #u-hub #hub-detail .h-fx-bars li.is-me i b{background:var(--sc-accent-fill)}
+html[data-ui-v3] #u-hub #hub-detail .h-stat-group{border:0;border-radius:var(--sc-r-lg);background:var(--sc-s1);box-shadow:var(--sc-ring)}
+html[data-ui-v3] #u-hub #hub-detail :is(table,thead,tbody,tr){color:var(--sc-text);background:transparent}
+html[data-ui-v3] #u-hub #hub-detail table thead th{font:500 12px/1.3 var(--sc-font);letter-spacing:0;text-transform:none;color:var(--sc-muted);background:var(--sc-s2)}
+html[data-ui-v3] #u-hub #hub-detail table td,html[data-ui-v3] #u-hub #hub-detail table tbody th{border-color:var(--sc-hair);color:var(--sc-text);background:transparent}
+html[data-ui-v3] #u-hub #hub-detail table tbody th{color:var(--sc-muted);font:400 13px/1.35 var(--sc-font);letter-spacing:0;text-transform:none}
+/* plain emphasis the hub prints in near-white (Why, tiles, tables): the page's ink, so light reads; classed (coloured) figures keep theirs */
+html[data-ui-v3] #u-hub #hub-detail .h-card-body :is(b,strong,td,dd,h4,h5):not([class]){color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-card-body :is(b,strong):not([class]){font-family:var(--sc-font)}
+/* "Behind the grade" (upgrade-cards.js): the same numbers in a v3 surface */
+html[data-ui-v3] #u-hub #hub-detail .h-gi{border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring);color:var(--sc-text);font-family:var(--sc-font);overflow:hidden}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-head{padding:14px 16px 8px;border:0;background:transparent}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-head h4{font:600 17px/1.2 var(--sc-font);letter-spacing:-.01em;text-transform:none;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-table{font:400 13px/1.4 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-table caption{padding:12px 16px 4px;font:500 13px/1.3 var(--sc-font);letter-spacing:0;text-transform:none;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-table :is(th,td){padding:8px 16px;border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-table thead th{background:transparent;font:500 12px/1.3 var(--sc-font);letter-spacing:0;text-transform:none;color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-table small,html[data-ui-v3] #u-hub #hub-detail .h-gi-note{font-family:var(--sc-font);color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-gi-num,.h-gi-table td.h-gi-num,.h-gi-table th.h-gi-num){font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-detail .h-gi-def td b{color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail :is(.h-gi-up,.h-gi-side-over){color:var(--sc-pos)} html[data-ui-v3] #u-hub #hub-detail :is(.h-gi-dn,.h-gi-side-under){color:var(--sc-neg)}
+html[data-ui-v3] #u-hub #hub-detail .h-line-shop tr.is-selected td,html[data-ui-v3] #u-hub #hub-detail :is(.h-fx-table,.h-odds-table) tr.is-selected :is(td,th){background:var(--sc-s2)}
+html[data-ui-v3] #u-hub #hub-detail .h-line-shop td:first-child button{color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-detail .h-odds-table td.is-best{background:var(--sc-good-tint);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-good) 40%,transparent)}
+html[data-ui-v3] #u-hub #hub-detail .h-medge-list li{border-left:0;background:var(--sc-s1);box-shadow:var(--sc-ring);color:var(--sc-text);border-radius:var(--sc-r-sm)}
+html[data-ui-v3] #u-hub #hub-detail details>summary{color:var(--sc-link)}
+html[data-ui-v3] #u-hub #hub-detail .h-link{color:var(--sc-link)}
+html[data-ui-v3] #u-hub #hub-detail .h-ask input{border:0;border-radius:var(--sc-r-md);background:var(--sc-s2);color:var(--sc-text);box-shadow:var(--sc-ring);min-height:44px}
+html[data-ui-v3] #u-hub #hub-detail .h-ask button{border:0;border-radius:var(--sc-r-md);background:var(--sc-cta-bg);color:var(--sc-cta-ink);font-weight:600;min-height:44px}
+html[data-ui-v3] #u-hub #hub-detail .h-warning{color:var(--sc-text);background:var(--sc-poor-tint);border-color:transparent}
+html[data-ui-v3] #u-hub #hub-detail .h-detail-loading{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-history-chart svg text,html[data-ui-v3] #u-hub #hub-detail .h-lh-chart svg text{fill:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-detail .h-history-chart svg .grid,html[data-ui-v3] #u-hub #hub-detail .h-lh-chart svg .grid{stroke:var(--sc-hair)}
+
+/* ------------------------------------------------------------------ the combined bar: sticky at the foot of the card scroller */
+html[data-ui-v3] #u-hub #hub-detail>.v3p-dock{position:sticky;bottom:0;left:auto;right:auto;z-index:6;margin-top:8px;min-height:60px;padding:10px var(--sc-gutter);background:color-mix(in srgb,var(--sc-s2) 94%,transparent);backdrop-filter:blur(10px);box-shadow:0 -1px 0 var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-detail .v3p-dock .sc-dock__ctx{font-size:15px;line-height:1.3;overflow:hidden}
+html[data-ui-v3] #u-hub #hub-detail .v3p-dock .sc-dock__ctx b{font-weight:600}
+html[data-ui-v3] #u-hub #hub-detail .v3p-dock .sc-dock__ctx small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui-v3] #u-hub #hub-detail .v3p-dock-slip{flex:none;min-height:44px;padding:0 18px;border:0;border-radius:var(--sc-r-md);background:transparent;color:var(--sc-text);box-shadow:var(--sc-ring);font:600 15px/1 var(--sc-font);cursor:pointer}
+
+/* ------------------------------------------------------------------ two columns when the card is wide (1024px+ with room) */
+@container v3card (min-width:900px){
+  html[data-ui-v3] #u-hub #hub-detail.h-card{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-rows:max-content;column-gap:24px;align-content:start;padding:0 24px}
+  html[data-ui-v3] #u-hub #hub-detail>*{grid-column:1/-1;align-self:start}
+  html[data-ui-v3] #u-hub #hub-detail>.h-card-head{margin:0 -24px;padding:16px 24px}
+  html[data-ui-v3] #u-hub #hub-detail>.v3p-lead,html[data-ui-v3] #u-hub #hub-detail>.v3p-maps,html[data-ui-v3] #u-hub #hub-detail>.h-player-markets{padding-left:0;padding-right:0}
+  html[data-ui-v3] #u-hub #hub-detail .v3p-pick{margin-top:12px}
+  html[data-ui-v3] #u-hub #hub-detail>.v3p-maps{grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);align-items:start;gap:16px;padding-top:24px}
+  html[data-ui-v3] #u-hub #hub-detail .v3p-pooled{margin-top:31px}
+  html[data-ui-v3] #u-hub #hub-detail .v3p-map{grid-template-columns:150px auto 1fr;min-height:72px}
+  html[data-ui-v3] #u-hub #hub-detail .v3p-map .sc-scene__stats{grid-template-columns:repeat(4,auto);column-gap:22px}
+  html[data-ui-v3] #u-hub #hub-detail>.h-decision{grid-column:1;grid-row:span 3;align-self:start;position:sticky;top:12px;margin:24px 0 16px}
+  html[data-ui-v3] #u-hub #hub-detail>.h-card-tabs{grid-column:2;margin:24px 0 0;padding:0}
+  html[data-ui-v3] #u-hub #hub-detail>.h-card-body{grid-column:2;padding:16px 0 24px}
+  html[data-ui-v3] #u-hub #hub-detail>.v3p-dock{margin:8px -24px 0}
+}
