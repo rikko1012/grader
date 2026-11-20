@@ -65,7 +65,7 @@ jobs:
   # esports job above, which the manual full-history collection depends on (sports/INTEGRATION_MANIFEST.md).
   sports-offline-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25  # the sports suite passed 15 min on 2026-11-20 (cancelled at the limit twice, no failing test)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

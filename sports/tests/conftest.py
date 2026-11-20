@@ -1,3 +1,5 @@
+import os
+os.environ.setdefault("SCOUT_UI_V3", "0")   # pin the classic esports pages in tests (live default is v3 ON since Nov 20)
 import json
 import sys
 import threading

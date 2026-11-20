@@ -221,7 +221,7 @@ def test_v3_slips_between_1024_and_1100(browser, env, monkeypatch):
 
 
 def test_flag_off_the_slip_studio_is_untouched(browser, env, monkeypatch):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")
     c = context(browser, env, PHONE)
     try:
         p = c.new_page()

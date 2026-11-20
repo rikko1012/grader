@@ -275,7 +275,7 @@ from tests.test_upgrade_browser import env  # noqa: E402,F401
 
 
 def test_endpoint_off_is_the_unknown_route_answer_byte_for_byte(env, monkeypatch):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")
     book, rid = _cs2_row(env)
     a = _get(env, f"/api/upgrade/player-maps?sport=cs2&book={book}&id={rid}")
     b = _get(env, f"/api/upgrade/no-such-route?sport=cs2&book={book}&id={rid}")
