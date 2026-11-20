@@ -498,36 +498,124 @@ def test_a_big_jpeg_is_decoded_at_reduced_scale(monkeypatch):
     assert loads and loads[0][0] * loads[0][1] <= 600_000   # decoded at 1/8 scale (500 x 375), never the full 12 M pixels
 
 
+def _jpeg_sized(w, h, progressive=False, sof=None, subsampling=0):
+    """A real small JPEG whose header claims w x h (the SOF size field rewritten; no big image is ever built here). sof rewrites
+    the frame type too (0xC0 on a progressive file = a multi-scan sequential JPEG)."""
+    b = io.BytesIO()
+    Image.new("RGB", (64, 64), (90, 120, 160)).save(b, "JPEG", quality=70, progressive=progressive, subsampling=subsampling)
+    raw = bytearray(b.getvalue())
+    k = next(j for j in range(2, len(raw) - 9) if raw[j] == 0xFF and raw[j + 1] in (0xC0, 0xC1, 0xC2))
+    if sof is not None:
+        raw[k + 1] = sof
+    raw[k + 5:k + 7] = h.to_bytes(2, "big")
+    raw[k + 7:k + 9] = w.to_bytes(2, "big")
+    return bytes(raw)
+
+
+def _no_load(monkeypatch):
+    from PIL import ImageFile
+    loads = []
+    real = ImageFile.ImageFile.load
+    monkeypatch.setattr(ImageFile.ImageFile, "load", lambda self: (loads.append(self.size), real(self))[1])
+    return loads
+
+
+@pytest.mark.parametrize("w,h,prog,sof", [
+    (13300, 13300, True, None),        # review 2026-11-20: 1 MB file, +544 MB before (draft-then-check)
+    (7000, 7000, True, None),          # +152 MB before
+    (2100, 2100, True, None),          # progressive just over the normal cap
+    (5000, 5000, False, 0xC2),         # header says progressive
+    (5000, 5000, True, 0xC0),          # sequential frame but ten scans: full-size coefficient buffers, normal cap
+    (4001, 4000, False, None),         # single-scan baseline just over its 16 M pixel bound
+    (8000, 6000, False, None),         # 48 M pixel baseline (allowed before)
+])
+def test_jpegs_over_their_cap_are_refused_from_the_header_before_any_decode(monkeypatch, w, h, prog, sof):
+    loads = _no_load(monkeypatch)
+    raw = _jpeg_sized(w, h, progressive=prog, sof=sof)
+    assert Image.open(io.BytesIO(raw)).size == (w, h)
+    with pytest.raises(ic.Refused) as e:
+        ic.encode(raw, "p")
+    assert str(e.value) == "dims" and loads == []
+
+
+def test_only_single_scan_baseline_jpegs_get_the_reduced_scale_allowance():
+    def ok(raw):
+        return ic._jpeg_single_scan_baseline(raw, Image.open(io.BytesIO(raw)))
+    assert ok(_jpeg(300, 300)) and ok(_jpeg_sized(4000, 4000))
+    ex = Image.new("RGB", (300, 300)).getexif()
+    ex[0x010F] = "cam"
+    b = io.BytesIO()
+    Image.new("RGB", (300, 300)).save(b, "JPEG", exif=ex)
+    assert ok(b.getvalue())                                              # APP1 segments are skipped, not scanned
+    assert not ok(_jpeg_sized(300, 300, progressive=True))
+    assert not ok(_jpeg_sized(300, 300, progressive=True, sof=0xC0))     # multi-scan sequential
+    stub = type("Im", (), {"info": {}})()
+    for bad in (b"\xff\xd8\xff\xc0\x00\x01", b"\xff\xd8\xff\xe0", b"\x00\x00", b"\xff\xd8\xff\xc0\x00\x02\xff\xc0\x00\x02"):
+        assert not ic._jpeg_single_scan_baseline(bad, stub)              # malformed / truncated / two frames: the normal cap
+
+
+def test_progressive_jpeg_within_the_normal_cap_and_real_sizes_still_encode():
+    for w, h, prog in ((2048, 2048, True), (1319, 1681, True), (1319, 1681, False), (4000, 3000, False)):
+        b = io.BytesIO()
+        Image.new("RGB", (w, h), (90, 120, 160)).save(b, "JPEG", quality=60, progressive=prog)
+        assert Image.open(io.BytesIO(ic.encode(b.getvalue(), "p"))).size == (160, 160)
+    assert Image.open(io.BytesIO(ic.encode(png(1319, 1681), "t"))).size == (128, 128)
+
+
 def test_encode_peak_memory_stays_small_for_the_biggest_allowed_inputs(tmp_path):
-    """RSS in a fresh process (Pillow's buffers are invisible to tracemalloc): the largest PNG the cap allows and a 48 M pixel JPEG
-    each add well under 100 MB at peak (before: a 25 M pixel cap allowed ~290 MB)."""
+    """RSS in a fresh process (Pillow / libjpeg buffers are invisible to tracemalloc), one case at a time: the largest PNG the cap
+    allows, a progressive JPEG at the cap (4:4:4, the costliest layout), the largest single-scan baseline JPEG (16 M pixels,
+    decoded at reduced scale), and progressive / baseline / multi-scan headers far over their caps (13300 x 13300 was +544 MB when
+    the cap was checked after draft). Each must add <= 40 MB at peak."""
+    import os
     import subprocess
     import sys
-    big_png, big_jpg = tmp_path / "big.png", tmp_path / "big.jpg"
-    Image.new("RGBA", (2048, 2048), (200, 30, 30, 255)).save(big_png, "PNG")
-    Image.new("RGB", (8000, 6000), (90, 120, 160)).save(big_jpg, "JPEG", quality=60)
+    gen = r"""
+import sys
+from PIL import Image
+w, h, fmt, prog, out = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4] == "1", sys.argv[5]
+if fmt == "PNG":
+    Image.new("RGBA", (w, h), (200, 30, 30, 255)).save(out, "PNG")
+else:
+    Image.new("RGB", (w, h), (90, 120, 160)).save(out, "JPEG", quality=60, progressive=prog, subsampling=0)
+"""
+    cases = {}
+    for name, (w, h, fmt, prog) in {"png_2048": (2048, 2048, "PNG", 0), "prog_jpeg_2048_444": (2048, 2048, "JPEG", 1),
+                                    "baseline_jpeg_4000": (4000, 4000, "JPEG", 0)}.items():
+        f = tmp_path / (name + ".bin")
+        subprocess.run([sys.executable, "-c", gen, str(w), str(h), fmt, str(prog), str(f)], check=True, timeout=120)
+        cases[name] = (f, True)
+    for name, (w, h, prog, sof) in {"prog_jpeg_13300_hdr": (13300, 13300, True, None),
+                                    "prog_jpeg_7000_hdr": (7000, 7000, True, None),
+                                    "multiscan_jpeg_7000_hdr": (7000, 7000, True, 0xC0),
+                                    "baseline_jpeg_13300_hdr": (13300, 13300, False, None)}.items():
+        f = tmp_path / (name + ".bin")
+        f.write_bytes(_jpeg_sized(w, h, progressive=prog, sof=sof))
+        cases[name] = (f, False)
     code = r"""
-import sys, psutil, img_cache as ic
+import io, sys, psutil, img_cache as ic
 from PIL import Image
 p = psutil.Process()
 def peak():
     m = p.memory_info()
     return getattr(m, "peak_wset", None) or __import__("resource").getrusage(__import__("resource").RUSAGE_SELF).ru_maxrss * 1024
-import io
 w = io.BytesIO(); Image.new("RGBA", (300, 300), (1, 2, 3, 255)).save(w, "PNG")
-ic.encode(w.getvalue(), "p"); ic.encode(w.getvalue(), "t")          # plugins and encoders loaded before the baseline
+j = io.BytesIO(); Image.new("RGB", (300, 300), (1, 2, 3)).save(j, "JPEG", progressive=True)
+for raw in (w.getvalue(), j.getvalue()):
+    ic.encode(raw, "p"); ic.encode(raw, "t")                        # plugins and encoders loaded before the baseline
+raw = open(sys.argv[1], "rb").read()
 base = peak()
-out = []
-for f, kind in ((sys.argv[1], "t"), (sys.argv[2], "p")):
-    raw = open(f, "rb").read()
-    ic.encode(raw, kind)
-    out.append(peak() - base)
-print(int(max(out)))
+try:
+    ic.encode(raw, "p"); ic.encode(raw, "t"); r = "ok"
+except ic.Refused as e:
+    r = "refused:" + str(e)
+print(r, int(peak() - base))
 """
-    import os
-    r = subprocess.run([sys.executable, "-c", code, str(big_png), str(big_jpg)], capture_output=True, text=True, timeout=120,
-                       cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    assert r.returncode == 0, r.stderr
-    grew = int(r.stdout.strip().splitlines()[-1])
-    assert grew < 100_000_000, grew
-    print("encode peak RSS growth MB", round(grew / 1e6, 1))
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name, (f, accepted) in cases.items():
+        r = subprocess.run([sys.executable, "-c", code, str(f)], capture_output=True, text=True, timeout=120, cwd=root)
+        assert r.returncode == 0, (name, r.stderr)
+        res, grew = r.stdout.strip().splitlines()[-1].split()
+        print("encode peak RSS growth", name, res, round(int(grew) / 1e6, 1), "MB")
+        assert (res == "ok") == accepted, (name, res)
+        assert int(grew) <= 40_000_000, (name, grew)

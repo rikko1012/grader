@@ -36,10 +36,15 @@ ROUTE = re.compile(r"^/img/(p|t)/(cs2|nba|nfl|soccer|tennis)/([a-z0-9][a-z0-9_-]
 INDEX_ROUTE = re.compile(r"^/img/index/(cs2|nba|nfl|soccer|tennis)\.json$")
 
 MAX_FETCH_BYTES = 4_000_000                # upstream answer cap (BO3.gg team art is ~60 KB, ESPN headshots ~260 KB)
-# decoded-size cap, checked from the header before any pixel is decoded (JPEG: after a reduced-scale draft decode). 2048 x 2048
+# decoded-size cap, checked from the header before any pixel is decoded (every format; see the JPEG note below). 2048 x 2048
 # fits; the largest real art sampled 2026-11-20 is a 1319 x 1681 BO3.gg team logo. A 4.2 M pixel RGBA decode is ~17 MB, so one
 # big upstream file can no longer push the warmer to ~290 MB RSS (review 2026-11-20; production memory sits at its limit).
 MAX_PIXELS = 4_200_000
+# a JPEG may be bigger on the wire ONLY when it is a single-scan baseline file: libjpeg then decodes it strip by strip at 1/2 ..
+# 1/8 scale (measured 2026-11-20: 48 M pixels baseline +2.8 MB). Progressive and multi-scan JPEGs allocate coefficient buffers for
+# the FULL original size whatever the draft scale (+48 MB at 16 M pixels 4:2:0, +97 MB at 4:4:4, +544 MB at 177 M pixels), so they
+# get the normal cap, checked from the header before any decode.
+MAX_JPEG_BASELINE_PIXELS = 16_000_000
 MAX_OUT_BYTES = 120_000                    # a re-encoded file over this is refused (a 160 px WEBP is ~5-12 KB)
 MAX_FILES = 20_000
 MAX_BYTES = 200_000_000
@@ -288,6 +293,41 @@ def _http_get(url):
         r.close()
 
 
+_SOF_BASELINE = (0xC0, 0xC1)                   # baseline / extended sequential Huffman; every other SOF is refused the bigger cap
+
+
+def _jpeg_single_scan_baseline(raw, im):
+    """True only for a sequential (SOF0/SOF1) JPEG with exactly one scan: the only kind libjpeg decodes at reduced scale without a
+    full-size coefficient buffer. Walks the marker segments to the first SOS, then counts further SOS markers in the rest (entropy
+    data never holds an unstuffed 0xFF 0xDA); anything unexpected answers False (the normal cap applies)."""
+    if im.info.get("progressive") or im.info.get("progression"):
+        return False
+    n, i, sof = len(raw), 2, None
+    if raw[:2] != b"\xff\xd8":
+        return False
+    while i + 4 <= n:
+        if raw[i] != 0xFF:
+            return False
+        m = raw[i + 1]
+        if m == 0xFF:                                  # fill byte
+            i += 1
+            continue
+        if m in (0x01,) or 0xD0 <= m <= 0xD7:          # standalone markers
+            i += 2
+            continue
+        seg = int.from_bytes(raw[i + 2:i + 4], "big")
+        if seg < 2:
+            return False
+        if 0xC0 <= m <= 0xCF and m not in (0xC4, 0xC8, 0xCC):
+            if sof is not None:
+                return False
+            sof = m
+        if m == 0xDA:
+            return sof in _SOF_BASELINE and raw.find(b"\xff\xda", i + 2 + seg) < 0
+        i += 2 + seg
+    return False
+
+
 def encode(raw, kind):
     """Upstream bytes -> a small WEBP (bytes). Players: a square from the top centre (faces sit high in ESPN / BO3.gg art),
     160 px. Logos: the whole mark centred on a transparent 128 px square. Raises Refused for anything that is not a picture."""
@@ -298,14 +338,19 @@ def encode(raw, kind):
         im = Image.open(io.BytesIO(raw))
         if im.format not in ("PNG", "WEBP", "JPEG", "GIF"):
             raise Refused("format")
-        w, h = im.size
+        w, h = im.size                                 # header size: nothing decoded yet
         if w < 24 or h < 24:
             raise Refused("dims")
+        cap = MAX_PIXELS
+        if im.format == "JPEG" and _jpeg_single_scan_baseline(raw, im):
+            cap = MAX_JPEG_BASELINE_PIXELS
+        if w * h > cap:
+            raise Refused("dims")                      # refused from the header, every format, before any decode
         if im.format == "JPEG":
             im.draft("RGB", (box * 2, box * 2))       # decode at 1/2 .. 1/8 scale (never below 2x the output box)
             w, h = im.size
-        if w * h > MAX_PIXELS:
-            raise Refused("dims")                      # refused from the header: nothing decoded
+            if w * h > MAX_PIXELS:
+                raise Refused("dims")
         im.load()
     except Refused:
         raise
