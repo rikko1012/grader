@@ -116,6 +116,8 @@ html[data-ui-v3] #u-hub .sb-av{display:grid;place-items:center;width:36px;height
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.13),inset 0 1px 0 rgba(255,255,255,.28),0 0 0 1px rgba(5,8,16,.5)}
 :root[data-theme="light"] #u-hub .sb-av{color:#0E1320;background:radial-gradient(110% 100% at 32% 12%,#fff 0%,color-mix(in srgb,var(--sc-accent-fill) 18%,#fff) 70%);box-shadow:inset 0 0 0 1px rgba(16,24,48,.12)}
 html[data-ui-v3] #u-hub .sb-face .u-face{--face:36px!important;margin:0}
+/* light theme: the hub's face fallback (initials) is a dark disc; match the board's light faces (board.css) so the initials stay legible */
+html[data-ui-v3][data-theme="light"] #u-hub :is(#hub-studio-body,#hub-slip-content,#hub-studio-section) .u-face{background:var(--sc-s2)!important;color:var(--sc-muted)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;border-color:var(--sc-edge)!important}
 html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-name{display:flex;align-items:center;gap:7px;min-width:0;font:600 15px/20px var(--sc-font);letter-spacing:-.01em;color:var(--sc-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-name>i{margin:0;font:500 11px/1 var(--sc-font);font-style:normal;color:var(--sc-muted);padding:3px 6px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--sc-edge)}
 html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-pick{font:400 14px/1.4 var(--sc-font);color:var(--sc-text)}
