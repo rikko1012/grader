@@ -559,3 +559,34 @@ def test_365scores_long_name_is_kept_only_when_it_differs():
     parts = ch.parse_games(body, '2026-11-20T10:00:00Z')['atp_challenger'].matches[0]['participants']
     assert parts[0] == {'id': 'atp:player:365scores:47450', 'name': 'Felipe Meligeni', 'long_name': 'Felipe Meligeni Alves'}
     assert parts[1] == {'id': 'atp:player:365scores:7', 'name': 'Liam Broady'}
+
+
+def test_short_team_label_links_by_the_players_own_full_team_name_only():
+    """close-1120 live e2e (EPL tab, 2026-11-21 15:00Z): PrizePicks labels Dean Henderson's team 'Palace' while the game's
+    sides are 'Crystal Palace' / 'Coventry'; the player's own team_name 'Crystal Palace' is exactly one side. Before: no
+    own side -> the roster was never loaded and the line stayed blank. Rows whose label names a side are unchanged."""
+    import json as _json
+    from sports import expansion_offers as offers, expansion_history as history
+    from sports.tests.test_pp_soccer_leagues_1119 import pp_tab, NOW, START
+    body = pp_tab(14, 'EPL', [('14p', 'p9', 'Shots', 2.5, 'standard')], teams=('Crystal Palace', 'Coventry'),
+                  full=(('Crystal Palace', 'Crystal Palace FC'), ('Coventry City', 'Coventry City FC')))
+    plain = offers.prizepicks(_json.loads(_json.dumps(body)), 'soccer', NOW, 14)[0]
+    assert 'team_names' not in plain                                   # label 'Crystal Palace' names a side: unchanged
+    for x in body['included']:
+        if x['type'] == 'new_player':
+            x['attributes'].update(team='Palace', team_name='Crystal Palace', name='Dean Henderson')
+    row = offers.prizepicks(_json.loads(_json.dumps(body)), 'soccer', NOW, 14)[0]
+    assert row['team'] == 'Palace' and row['team_names'] == ['Crystal Palace']
+    m = {'event_id': 'soccer:espn:eng.1:1:1', 'competition': 'eng.1', 'start': START, 'status': 'scheduled',
+         'participants': [{'id': 'soccer:team:espn:388', 'name': 'Coventry City', 'abbreviation': 'COV', 'short_name': 'Coventry'},
+                          {'id': 'soccer:team:espn:384', 'name': 'Crystal Palace', 'abbreviation': 'CRY', 'short_name': 'C Palace'}],
+         'players': [{'id': 'soccer:player:espn:7', 'name': 'Dean Henderson', 'team_id': 'soccer:team:espn:384'},
+                     {'id': 'soccer:player:espn:8', 'name': 'Dean Henderson', 'team_id': 'soccer:team:espn:388'}]}
+    assert [p['id'] for p in history.soccer_teams(row, m)] == ['soccer:team:espn:384']      # the roster slate gets Palace
+    assert history.resolve(row, [m])['player_id'] == 'soccer:player:espn:7'                  # own team only
+    assert history.resolve({k: v for k, v in row.items() if k != 'team_names'}, [m]) is None  # before the fix
+    for wrong in ('Palace', 'Crystal', 'Crystal Palace FC ', None):   # not exactly one side's name: never set
+        for x in body['included']:
+            if x['type'] == 'new_player':
+                x['attributes']['team_name'] = wrong
+        assert 'team_names' not in offers.prizepicks(_json.loads(_json.dumps(body)), 'soccer', NOW, 14)[0]

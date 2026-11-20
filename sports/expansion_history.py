@@ -120,9 +120,11 @@ def _team_sets(offer):
     if len(extra) != 2:
         return None
     sets = [({normalized(teams[i])} | {normalized(x) for x in extra[i] or []}) - {''} for i in range(2)]
-    own = normalized(offer.get('team'))
-    mine = [s for s in sets if own in s]
-    return sets, (mine[0] if len(mine) == 1 else {own})
+    # close-1120: 'team_names' = the book's own full name of the player's team (PrizePicks team_name, set only when
+    # the short label is neither side's name) - an exact equality like the rest, never a prefix
+    own = {normalized(offer.get('team'))} | {normalized(x) for x in offer.get('team_names') or []}
+    mine = [s for s in sets if own & s]
+    return sets, (mine[0] if len(mine) == 1 else own)
 
 
 # soccer-grades-1120: book team labels that are not one of ESPN's three names, each CHECKED by hand against a live

@@ -177,6 +177,13 @@ def prizepicks(body, sport, observed_at, league=None):
             # The full names belong to the same two teams only when the team objects carry the same short labels.
             aliases = [a_names, h_names] if (a_abbr, h_abbr) == (away, home) else [[], []]
             extra = {"pp_league": name, "competition_code": code, "team_aliases": aliases}
+            # close-1120: a player's short team label that is neither side's name ('Palace', 'Villa', 'Forest' - EPL tab,
+            # 2026-11-21) gets the player's OWN full team name when it equals exactly one side's name. Only rows whose
+            # label misses both sides carry the key, so every other row and its revision is unchanged.
+            own, full = player.get("team"), player.get("team_name")
+            sides_named = [{away, *a_names} - {None}, {home, *h_names} - {None}]
+            if own and isinstance(full, str) and full.strip() and not any(own in x for x in sides_named)                     and sum(full in x for x in sides_named) == 1:
+                extra["team_names"] = [full]
         rows.append(finish({**extra, "sport": sport, "platform": "prizepicks", "offer_id": str(p["id"]),
             "event_id": f"{sport}:prizepicks:{rid('game')}", "player_id": f"{sport}:prizepicks:{rid('new_player')}",
             "player": player.get("display_name") or player.get("name"), "role": player.get("position"),
