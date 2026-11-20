@@ -64,11 +64,23 @@
 
   /* ---------------------------------------------------------------- HLTV per-map totals (the only source of the CS2 stats here) */
   var HM = {}, HM_ORDER = [];
-  function hmUrl(r) { return '/api/upgrade/player-maps?sport=cs2&book=' + encodeURIComponent(r.offer.platform) + '&id=' + encodeURIComponent(r.offer.offer_id); }
+  /* the board row the server reads the player from: this line's own, or for an extra book's line (Sleeper, Dabble) the same prop's
+     Underdog / PrizePicks row from the doc's own book list; null = none (the card then shows no HLTV blocks, never a guess) */
+  var MAIN = {underdog: 1, prizepicks: 1};
+  function hmUrl(r) {
+    var book = r.offer.platform, id = r.offer.offer_id;
+    if (!MAIN[book]) {
+      var d = DOCS[keyOf(r)], b = ((d && d.books) || []).filter(function (x) { return x && MAIN[x.platform] && x.row_id != null; })[0];
+      if (!b) return null;
+      book = b.platform; id = b.row_id;
+    }
+    return '/api/upgrade/player-maps?sport=cs2&book=' + encodeURIComponent(book) + '&id=' + encodeURIComponent(id);
+  }
   /* {state: 'loading' | 'ok' | 'none' | 'error', doc} for this row; starts the one read when it is not kept yet */
   function hltvMaps(r) {
     if (!r || r.sport !== 'cs2' || !r.offer || !r.offer.offer_id) return null;
-    var u = hmUrl(r), e = HM[u];
+    var u = hmUrl(r), e = u ? HM[u] : null;
+    if (!u) return {state: 'skip'};
     if (e && !(e.state === 'error' && Date.now() - e.at > 15000)) return e;
     e = HM[u] = {state: 'loading', at: Date.now(), doc: null};
     HM_ORDER.push(u);
@@ -223,6 +235,7 @@
   var isHsProp = function (r) { return r.market.stat === 'hs' || /head/i.test(r.market.stat_label || ''); };
   function cs2Grid(r, doc) {
     var e = hltvMaps(r);
+    if (e && e.state === 'skip') return '';
     if (!e || e.state === 'loading' || e.state === 'error') return '<div class="sc-statgrid v3p-grid">' + hmState(e) + '</div>';
     var w = (e.doc && e.doc.windows) || {}, t12 = (w['12m'] || {}).overall, t3 = (w['3m'] || {}).overall;
     var line = r.offer.line, k = periodMaps(r.market.period_label), pace = num(line) && k ? line / k : null;
@@ -239,7 +252,7 @@
       statRow('HS/map', fx(hpm, 1), delta(dhp, 2), tone(dhp, pace, inv)),
       statRow('KPR', fx(kpr, 2), delta(dkp, 2), tone(dkp, kpr)),
       statRow('Deaths/round', fx(dpr, 2), '', '')];
-    var legend = ['HLTV, last 12 months' + (t12 ? '' : ': no maps')];
+    var legend = ['HLTV, last 12 months, every map' + (t12 ? '' : ': no maps')];
     if (num(dh) || num(dkp)) legend.push('KPR, HS% change: last 3 mo vs 12 mo');
     if (pace != null && (num(dk) || num(dhp))) legend.push((isHs ? 'HS/map' : 'Kills/map') + ' vs line pace ' + fracText(Math.round(line * 2), 2 * k, 2).text);
     if (num(kd) || num(rt)) legend.push('K/D, rating vs 1.00');
@@ -410,6 +423,7 @@
   }
   function mapsHtml(r, doc, k) {
     var pool = mapPool(r, doc);
+    if (pool.state === 'skip') return '';
     if (pool.state !== 'ok') return '<div class="v3p-maps-list"><div class="v3p-maps-head"><h4>Maps</h4></div>' + hmState(hltvMaps(r)) + '</div>';
     var sel = defaultPick(k, pool).filter(function (x) { return pool.by[x] && pool.by[x].n > 0; });
     var inv = r.scout && r.scout.side === 'under', base = pool.base;
@@ -444,10 +458,11 @@
     if (!a || !b || !a.t || !b.t) return null;
     var T = sumTotals([a.t, b.t]), isHs = isHsProp(r);
     var S = isHs ? T.hs : T.kills, N = isHs ? T.hs_maps : T.maps;
-    if (!N) return null;
-    var k = periodMaps(r.market.period_label), L2 = num(r.offer.line) ? Math.round(r.offer.line * 2) : null;
-    var out = {names: a.name + ' + ' + b.name, n: T.maps, totals: T, value: fracText(S, N, 2), v: S / N, stat: isHs ? 'hs' : 'kills',
+    var base = {names: a.name + ' + ' + b.name, n: T.maps, totals: T, stat: isHs ? 'hs' : 'kills',
       kpm: R.kpm(T), kpr: R.kpr(T), hs: R.hs(T), kd: R.kd(T), rating: R.rating(T)};
+    if (!N) return Object.assign(base, {value: {text: '—'}, v: null});      /* 2 picked, no headshot rows on either: "—", never "pick 2" */
+    var k = periodMaps(r.market.period_label), L2 = num(r.offer.line) ? Math.round(r.offer.line * 2) : null;
+    var out = Object.assign(base, {value: fracText(S, N, 2), v: S / N});
     if (k && L2 != null && L2 > 0) {
       /* d = S/N - L2/(2k) = (2kS - N*L2) / (2kN); pct = 100 * d / pace = 100 * (2kS - N*L2) / (N*L2) */
       var dn = 2 * k * S - N * L2;
@@ -469,7 +484,7 @@
     var up = r.scout && r.scout.side === 'under' ? -1 : 1, good = p.dv != null ? (p.dv * up > 0 ? 'sc-v-good' : p.dv * up < 0 ? 'sc-v-poor' : '') : '';
     var lead = p.delta ? '<b class="' + good + '">' + signed(p.delta) + '</b> vs line pace <b>' + p.pace.text + '</b><br><b>' + signed(p.pct) + '%</b> ' + (p.dv > 0 ? 'above' : p.dv < 0 ? 'below' : 'at') + ' pace' : '';
     var max = Math.max(p.v, p.paceV || 0) * 1.7 || 1;
-    var bar = p.paceV != null ? '<div class="sc-pace" role="img" aria-label="' + esc(p.value.text + ' against pace ' + p.pace.text) + '"><span class="sc-pace__fill" style="width:' + (p.v / max * 100).toFixed(1) + '%"></span><span class="sc-pace__mark" style="left:' + (p.paceV / max * 100).toFixed(1) + '%"><small>pace ' + p.pace.text + '</small></span></div>' : '';
+    var bar = p.paceV != null && p.v != null ? '<div class="sc-pace" role="img" aria-label="' + esc(p.value.text + ' against pace ' + p.pace.text) + '"><span class="sc-pace__fill" style="width:' + (p.v / max * 100).toFixed(1) + '%"></span><span class="sc-pace__mark" style="left:' + (p.paceV / max * 100).toFixed(1) + '%"><small>pace ' + p.pace.text + '</small></span></div>' : '';
     var cell = function (label, v) { return '<div><span>' + esc(label) + '</span><b class="sc-num">' + v + '</b></div>'; };
     var row = '<div class="v3p-pooled-stats" data-v3p-pooled-stats>' + cell('Kills/map', fx(p.kpm, 1)) + cell('KPR', fx(p.kpr, 2)) + cell('HS%', pctText(p.hs)) + cell('K/D', fx(p.kd, 2)) + cell('Rating', fx(p.rating, 2)) + '</div>';
     return '<div class="sc-surface v3p-pooled" aria-live="polite"><div class="sc-pooled"><span class="sc-pooled__big sc-num" data-v3p-big>' + p.value.text + '</span><span class="sc-pooled__txt" data-v3p-lead>' + lead + '</span></div>'
@@ -566,6 +581,24 @@
     return n;
   }
   function drop(box, cls) { var n = box.querySelector(':scope > .' + cls); if (n) n.remove(); }
+  /* HLTV only (owner 2026-11-20): the hub's Stats tab panels that print BO3.gg numbers are hidden on the v3 card (the HLTV ones stay):
+     "Stats · Maps 1–2 · BO3.gg" whole, and in "Map pool" the BO3.gg table + its note (the HLTV prop-map table stays). The hub's
+     nodes are only hidden (class), never moved or removed; the classic card (v3 off) is untouched. */
+  function hideBo3(box) {
+    var body = box.querySelector('#hub-card-body');
+    if (!body) return;
+    var st = body.querySelector('.h-fx[data-fx="cs2-stats"]');
+    if (st && !st.classList.contains('v3p-hide')) st.classList.add('v3p-hide');
+    var mp = body.querySelector('.h-fx[data-fx="cs2-maps"]'), inner = mp && mp.querySelector('.h-fx-body');
+    if (!inner || mp.__v3pBo3 === inner.firstChild) return;
+    mp.__v3pBo3 = inner.firstChild;
+    var kids = [].slice.call(inner.children), lab = -1;
+    kids.forEach(function (k, i) { if (lab < 0 && k.classList.contains('h-fx-lab')) lab = i; });
+    var bo3 = kids.some(function (k) { return /BO3\.gg/.test(k.textContent || ''); });
+    if (!bo3) return;
+    if (lab < 0) { mp.classList.add('v3p-hide'); return; }
+    kids.slice(0, lab).forEach(function (k) { k.classList.add('v3p-hide'); });
+  }
   function mountArts(box) {
     box.querySelectorAll('[data-v3p-art]:not([data-v3p-in])').forEach(function (s) {
       var a = s.getAttribute('data-v3p-art'); s.setAttribute('data-v3p-in', '1');
@@ -607,6 +640,7 @@
       if (mh) { anchor = put(box, 'v3p-maps', mh, lead); mountArts(anchor); } else drop(box, 'v3p-maps');
     } else drop(box, 'v3p-maps');
     try { paintLine(box, r, doc, st); } catch (e) { /* the hub's own strip stays as it is */ }
+    if (r.sport === 'cs2') { try { hideBo3(box); } catch (e) { /* the hub's panels stay as they are */ } }
     put(box, 'v3p-dock sc-dock', dockHtml(r, doc, st, id), null);
     watchAdd(box);
     /* the hub repainted the whole card: keep the member where they were (a tab change keeps the tabs in view) */
@@ -661,7 +695,8 @@
       if (again) again.focus({preventScroll: true});
     } else if (t.getAttribute('data-v3p') === 'hm-retry') {
       var cur = current(), rr = cur && cur.doc && cur.doc.record;
-      if (rr) { var e = HM[hmUrl(rr)]; if (e) e.at = 0; hltvMaps(rr); paint(); }
+      var hu = rr && hmUrl(rr);
+      if (hu) { var e = HM[hu]; if (e) e.at = 0; hltvMaps(rr); paint(); }
     } else if (t.getAttribute('data-v3p') === 'clear') {
       SEL[id] = []; CHOSEN[id] = true; paint();
     } else if (t.getAttribute('data-v3p') === 'slip') {

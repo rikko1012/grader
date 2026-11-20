@@ -21,6 +21,7 @@ The current map pool (pool_for): the match's own pool from veto-1 (veto_serve - 
 the most common complete pool of the last 7 days of HLTV vetoes (veto_serve's table), else ACTIVE_DUTY below."""
 import threading
 from datetime import date, timedelta
+from decimal import Decimal
 
 import hltv
 
@@ -64,7 +65,13 @@ def display(key, fallback=None):
 
 
 def _num(v):
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    """float of a number the driver returns (int, float or Decimal for a numeric column); None for missing / not a number."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float, Decimal)):
+        f = float(v)
+        return f if f == f else None
+    return None
 
 
 def totals(rows):

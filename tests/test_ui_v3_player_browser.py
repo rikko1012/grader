@@ -245,7 +245,16 @@ def check_card(p, sport, size, theme):
     got = sections(p)
     for fx in WANT[sport][1]:
         assert fx in got, (fx, got)
+        if fx == "cs2-stats":                       # HLTV only (owner 2026-11-20): the hub's BO3.gg stats panel is hidden on the v3 card
+            assert not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), fx
+            continue
+        if fx == "cs2-maps" and not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"] .h-fx-lab').count():
+            assert not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), fx   # BO3.gg table only: hidden
+            continue
         assert p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), fx
+    if sport == "cs2":
+        p.evaluate("document.querySelectorAll('#hub-card-body details.h-fx').forEach(d => d.open = true)")
+        assert "BO3.gg" not in p.locator("#hub-card-body").inner_text()
     assert p.locator("#hub-detail > .v3p-lead").count() == 1                   # survived the repaint, once
     p.evaluate("(() => { const t = document.querySelector('#hub-detail > .h-card-tabs'); document.getElementById('hub-detail').scrollTop = t.offsetTop; })()")
     shot(p, name + "-stats")

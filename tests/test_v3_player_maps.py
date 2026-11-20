@@ -62,6 +62,16 @@ def test_headshots_count_only_maps_with_a_real_headshot_row():
     assert t["hs_kills"] == sum(r[3] for r in rs if r[5] is not None and not (r[5] == 0 and r[3] >= 12))
 
 
+def test_postgres_decimal_values_count():
+    """psycopg2 hands numeric columns over as Decimal: rating / ADR / KAST must still count (never blank in production only)."""
+    from decimal import Decimal
+    t = hltv_maps.totals([("Nuke", date(2026, 11, 1), 1, 20, 15, 9, 13, 9, Decimal("1.21"), Decimal("88.5"), Decimal("75.0"))])
+    assert t["rating_rounds"] == 22 and abs(t["rating_x_rounds"] - 1.21 * 22) < 1e-9 and abs(t["adr_x_rounds"] - 88.5 * 22) < 1e-9
+    doc = hltv_maps.build([("Nuke", date.today(), 1, 20, 15, 9, 13, 9, Decimal("1.21"), Decimal("88.5"), Decimal("75.0"))], date.today(), 1)
+    json.dumps(doc)
+    assert doc["windows"]["3m"]["maps"]["nuke"]["maps"] == 1                     # a date object (not text) is windowed too
+
+
 def test_missing_values_stay_missing_never_zero():
     t = hltv_maps.totals([("Nuke", "2026-11-01", 1, 10, 12, None, 13, 9, None, None, None)])
     assert t["hs_maps"] == 0 and t["rating_x_rounds"] is None and t["adr_x_rounds"] is None and t["kast_x_rounds"] is None
