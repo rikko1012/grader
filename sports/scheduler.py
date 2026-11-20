@@ -757,6 +757,10 @@ class Scheduler:
                 return True
         return self._ends_first(name, self._blocking(held))
 
+    def _yield_blocked(self, name, waiting):
+        """`name` gives way to a due job in its yields_to (settle-post -> settle: they share the model-daily lock)."""
+        return any(y in waiting for y in self.specs[name].get("yields_to") or ())
+
     def every(self, name):
         """The job's current interval: its game-day cadence when it has one (cached 30 s), else every_s."""
         spec = self.specs[name]
@@ -901,7 +905,7 @@ class Scheduler:
         excl = self._draining(due, t)
         for name in due:
             spec = self.specs[name]
-            if any(y in waiting for y in spec.get("yields_to") or ()):
+            if self._yield_blocked(name, waiting):
                 # e.g. settle-post (shares model-daily with settle) never takes the lock while settle is due
                 if JOBS[name]["queued_since"] is None:
                     JOBS[name]["queued_since"] = t

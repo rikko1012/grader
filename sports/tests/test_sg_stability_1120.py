@@ -650,3 +650,13 @@ def test_storage_status_reports_quotes_history_and_days_to_cap(tmp_path, monkeyp
     st = history.storage_status('soccer')
     q = st['quotes_history']
     assert q['mb_per_day'] == 24.0 and q['days_to_cap'] == pytest.approx(3.3, abs=0.05) and q['archive']['rows'] == 5
+
+
+def test_board_fit_drops_furthest_starts_when_standard_rows_alone_are_too_large():
+    rows = [dict(row(f's{i}', f'2026-11-{18 + i}T12:00:00Z'), variant='standard') for i in range(6)]
+    rows += [dict(row('g1', '2026-11-18T12:00:00Z'), variant='goblin')]
+    assert board.fit(rows) == rows                                              # under the limit: unchanged
+    one = len(json.dumps(rows[0], separators=(',', ':'))) + 1
+    kept = board.fit(rows, limit=3 * one + 10)
+    assert [r['offer_id'] for r in kept] == [r['offer_id'] for r in rows[:3]]  # goblin first, then the latest starts
+    assert all(r['variant'] == 'standard' for r in kept)

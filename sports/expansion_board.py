@@ -152,7 +152,8 @@ SNAPSHOT_BYTES = 2_850_000   # offers + game odds; board() refuses a board.json 
 
 def fit(rows, limit=SNAPSHOT_BYTES):
     """Keep the board under the member size limit: when too large, leave out PrizePicks demon / goblin rows (never
-    shown on the board), latest start first, until it fits. Standard and Underdog lines are never dropped."""
+    shown on the board), latest start first, until it fits; then, only if still too large, the latest starts of any
+    row (never the whole sport)."""
     sizes = [len(json.dumps(r, separators=(",", ":"))) + 1 for r in rows]
     total = sum(sizes)
     if total <= limit:
@@ -164,6 +165,16 @@ def fit(rows, limit=SNAPSHOT_BYTES):
             break
         drop.add(i)
         total -= sizes[i]
+    # sg-stability 2026-11-20: still over (standard / Underdog lines alone - e.g. every league tab read at once):
+    # leave out the furthest-out starts of any row until it fits. Before, board.json passed 3,000,000 bytes and board()
+    # answered 503 for the WHOLE sport. Nearest matches stay; under the limit nothing changes.
+    if total > limit:
+        for i in sorted((i for i in range(len(rows)) if i not in drop),
+                        key=lambda i: (rows[i].get("start") or "", i), reverse=True):
+            if total <= limit:
+                break
+            drop.add(i)
+            total -= sizes[i]
     return [r for i, r in enumerate(rows) if i not in drop]
 
 
