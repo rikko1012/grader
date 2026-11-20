@@ -288,14 +288,29 @@ def default_jobs():
         # the scorecards stop between events after --budget-s (their per-event marks keep the progress; the next run
         # resumes), the ledger follows, and the job never starts while settle is due (yields_to) - settle waits at most
         # one bounded settle-post run (~budget + ledger, kill at timeout_s)
+        # settle-post 2026-11-20: the run went 1,085 -> 1,214 s -> its 1,500 s kill (learning 943 s, 343 s past a budget
+        # only checked between events, then the ledger's 430-650 s). Now the scorecards alone, the budget checked per
+        # forecast (+ a 60 s statement backstop; the shadow scorecard keeps the last 15% as its own slice), so a run ends
+        # near --budget-s at worst; the ledger is "results-ledger" below
         "settle-post": dict(argv=_py("-m", "sports.worker", "settle-post", *lg, "--budget-s",
                                      str(_env_num("SPORTS_SETTLE_POST_BUDGET_S", 600, int))),
                             every_s=900 if std else 3600,
                             timeout_s=1500 if std else 1800, flag="SPORTS_INGEST", cap_mb=150,
-                            cls=HEAVY, prio=5, locks=("model-daily", "settle-post", "season-results"),
+                            cls=HEAVY, prio=5, locks=("model-daily", "settle-post"),
                             yields_to=("settle",),
                             env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
                             if std else {}),
+        # the results ledger (<league>/results.json: admin Results + the board's settled-by-model counts) as its OWN job
+        # (2026-11-20, out of settle-post): a full-season rebuild (430-650 s live, growing with the season) that cannot
+        # resume. Reads the store only, so no model-daily / canonical lock - it never holds settle back; "season-results"
+        # keeps it off results-public (the other full-season build). Oldest league first, so a kill never starves one.
+        # Admin-only file: hourly (the stall replays - test_sports_stall_1108 / test_sports_heavy_1118 - keep every
+        # board-build / collector bound at prio 6 + 3,600 s; at 1,800 s one of them slides past its bound)
+        "results-ledger": dict(argv=_py("-m", "sports.worker", "results-ledger", *lg), every_s=3600,
+                               timeout_s=1500 if std else 1800, flag="SPORTS_INGEST", cap_mb=150, cls=HEAVY, prio=6,
+                               locks=("results-ledger", "season-results"),
+                               env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
+                               if std else {}),
         # pre-game news archive (pgn-1, pregame_news/): injury report + depth charts through the shared caches and the
         # game summary of games starting within 2 h -> pregame_news.db, append-only, change-only. Research input only.
         "pregame-news": dict(argv=_py("-m", "sports.pregame_news", "run", *lg), every_s=900, timeout_s=300,

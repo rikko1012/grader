@@ -491,8 +491,9 @@ def settle(scon, path=None, now=None, deadline=None):
     A corrected settlement (new settlement_id) SUPERSEDES the forecast's earlier row (superseded=1) instead of adding a
     second live row, and events are re-read when a settlement was learned since the last pass - also when every
     forecast of the event is already scored (bug sweep 2026-11-06 #42).
-    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09): stop between events once passed; the events
-    done keep their marks and the closing 'settled_known_at' mark is NOT advanced, so the next run re-reads the rest."""
+    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09): stop between events - and, since 2026-11-20,
+    between forecasts (rows so far committed, no mark for that event) - once passed; the events done keep their marks
+    and the closing 'settled_known_at' mark is NOT advanced, so the next run re-reads the rest."""
     import time
     from datetime import timedelta
     from .. import settlement, store
@@ -515,8 +516,12 @@ def settle(scon, path=None, now=None, deadline=None):
     n = 0
     from .learning import event_sig
     done = dict(con.execute("SELECT event_id, sig FROM shadow_events"))
-    left = 0
+    meta = dict(con.execute("SELECT key, value FROM shadow_meta"))
+    left, cursor = 0, None
     order = sorted(evs)
+    if meta.get("resume_event"):                       # 2026-11-20: a stopped run resumes where it stopped (wrapping)
+        k = next((j for j, e in enumerate(order) if e >= meta["resume_event"]), len(order))
+        order = order[k:] + order[:k]
     for i, ev in enumerate(order):
         if deadline is not None and time.time() >= deadline:
             left = len(order) - i
@@ -535,9 +540,18 @@ def settle(scon, path=None, now=None, deadline=None):
             by_offer.setdefault((r["source"], r["source_key"].rsplit("|", 1)[0]), []).append(store._rec(r))
         if not by_offer:
             continue
-        for sid, rid, line, side, p_side, p_push, lg, st, mv in con.execute(
-                "SELECT shadow_id, offer_record_id, line, chosen_side, p_side, p_push, league, stat, model_version "
-                "FROM shadow_forecasts WHERE event_id = ?", (ev,)).fetchall():
+        stopped = False
+        # inside the event a stopped run left off in, records unchanged since: start at the forecast it stopped at
+        start = int(meta["resume_rowid"]) if (i == 0 and ev == meta.get("resume_event") and meta.get("resume_rowid")
+                                              and meta.get("resume_sig") == sig) else 0
+        for row, sid, rid, line, side, p_side, p_push, lg, st, mv in con.execute(
+                "SELECT rowid, shadow_id, offer_record_id, line, chosen_side, p_side, p_push, league, stat, "
+                "model_version FROM shadow_forecasts WHERE event_id = ? AND rowid >= ? ORDER BY rowid",
+                (ev, start)).fetchall():
+            if deadline is not None and time.time() >= deadline:
+                stopped = True                             # 2026-11-20: checked per forecast too; no mark for this event
+                cursor = (row, sig)
+                break
             if side is None:
                 continue
             offer = store.get(scon, rid)
@@ -559,10 +573,21 @@ def settle(scon, path=None, now=None, deadline=None):
                              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
                              (sid, cur.settlement_id, mv or VERSION, lg, st, ev, line, side, p_side, p_push, status,
                               cur.source_value, cur.settled_at)).rowcount
+        if stopped:
+            con.commit()
+            left = len(order) - i
+            break
         con.execute("INSERT OR REPLACE INTO shadow_events (event_id, sig) VALUES (?, ?)", (ev, sig))
         con.commit()
+    con.execute("DELETE FROM shadow_meta WHERE key IN ('resume_event', 'resume_rowid', 'resume_sig')")
     if not left:
         con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('settled_known_at', ?)", (newest,))
+    else:
+        con.execute("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES ('resume_event', ?)",
+                    (order[len(order) - left],))
+        if cursor:
+            con.executemany("INSERT OR REPLACE INTO shadow_meta (key, value) VALUES (?, ?)",
+                            (("resume_rowid", str(cursor[0])), ("resume_sig", cursor[1])))
     con.commit()
     con.close()
     return {"shadow_scored": n, **({"partial": True, "events_left": left} if left else {})}

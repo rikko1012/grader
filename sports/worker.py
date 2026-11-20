@@ -7,6 +7,8 @@ at import time. Run it as its own service / cron:
   python -m sports.worker loop nba nfl --every 10       ingest every N minutes + settle hourly       (SPORTS_INGEST)
   python -m sports.worker books nba nfl                 the books job alone, when a game is due      (SPORTS_INGEST)
   python -m sports.worker settle [nba nfl]              settle stored offers of final games           (SPORTS_INGEST)
+  python -m sports.worker settle-post [nba nfl]         model + shadow scorecards (--budget-s)        (SPORTS_INGEST)
+  python -m sports.worker results-ledger [nba nfl]      <league>/results.json from the settlements    (SPORTS_INGEST)
   python -m sports.worker verify nba --date YYYY-MM-DD  Kalshi settled values vs ESPN box scores      (SPORTS_INGEST)
   python -m sports.worker forecast [nba nfl]            sharp-2 market-only research forecasts         (SPORTS_INGEST)
   python -m sports.worker coverage [--json]             coverage report from the store (read-only, no flag)
@@ -715,22 +717,42 @@ def cmd_settle(a, con):
     return out
 
 
-def _write_stages(name, stage_s, finished=True):
-    """admin ops: seconds since start at the end of each stage (settle_stages.json / settle_post_stages.json)."""
+def _write_stages(name, stage_s, finished=True, extra=None):
+    """admin ops: seconds since start at the end of each stage (settle_stages.json / settle_post_stages.json /
+    results_ledger_stages.json); extra: e.g. the scorecard counters of settle-post (GET /api/sports/admin/ops)."""
     try:
-        (config.DATA_DIR / name).write_text(json.dumps({"at": now_utc(), "stage_s": stage_s, "finished": finished}))
+        (config.DATA_DIR / name).write_text(json.dumps({"at": now_utc(), "stage_s": stage_s, "finished": finished,
+                                                        **(extra or {})}))
     except OSError:
         pass
 
 
-def _post_settle(leagues, con, stage_s, t0, stages_name, budget_s=None):
-    """The bookkeeping after settling: the model + shadow scorecards, then the results ledger per league. Never breaks
-    settlement. The stages file is written after each stage, so a killed run still says how far it got.
+LEARNING_COUNTERS = ("events_read", "events_unchanged", "events_scored", "partial", "events_left", "interrupted",
+                     "forecasts_read", "forecasts_already_scored", "offers_read", "scorecard_rows_added",
+                     "diagnostics_added", "window_from", "main_s")
+
+
+def _learning_counters(res):
+    """The model_learning counters for the stages file (ops): what the run read, skipped and left."""
+    if not isinstance(res, dict):
+        return None
+    out = {k: res[k] for k in LEARNING_COUNTERS if k in res}
+    if "error" in res:
+        out["error"] = res["error"]
+    if isinstance(res.get("shadow"), dict):
+        out["shadow"] = res["shadow"]
+    return out
+
+
+def _post_settle(leagues, con, stage_s, t0, stages_name, budget_s=None, ledger=True):
+    """The bookkeeping after settling: the model + shadow scorecards, then (ledger=True) the results ledger per league.
+    Never breaks settlement. The stages file is written after each stage, so a killed run still says how far it got.
     Scorecards FIRST (2026-11-08 review): they resume per event (learning.on_settled / shadow.settle marks), while the
     ledger is rebuilt in full each run - a ledger that is killed (cap / timeout) can no longer starve the scorecards.
-    budget_s (settle-post, stall 2026-11-09): the scorecards stop between events once it is spent - the events done so
-    far keep their marks, the next run resumes - and the ledger still runs, so one run never holds model-daily (and so
-    settle) for long. None = no limit (manual runs, settle without --no-post)."""
+    budget_s (settle-post, stall 2026-11-09; strict since 2026-11-20): the scorecards stop once it is spent (checked per
+    forecast) - the work done so far is kept, the next run resumes. None = no limit (manual runs, settle without
+    --no-post). ledger=False (settle-post since 2026-11-20): the ledger is the `results-ledger` job's - inside
+    settle-post it took 430-650 s after the scorecards and pushed the job past its 1,500 s kill."""
     out = {}
     deadline = (t0 + budget_s) if budget_s else None
     try:                                                # model scorecard + diagnostic queue (sports/model/learning.py)
@@ -739,29 +761,67 @@ def _post_settle(leagues, con, stage_s, t0, stages_name, budget_s=None):
     except Exception as e:                              # noqa: BLE001
         out["model_learning"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     stage_s.append(["model_learning", round(time.time() - t0, 1)])
-    _write_stages(stages_name, stage_s, finished=False)
+    counters = {"model_learning": _learning_counters(out["model_learning"])}
+    if not ledger:
+        _write_stages(stages_name, stage_s, extra=counters)
+        return out
+    _write_stages(stages_name, stage_s, finished=False, extra=counters)
+    out["results"] = _write_ledgers(leagues, con)
+    stage_s.append(["results", round(time.time() - t0, 1)])
+    _write_stages(stages_name, stage_s, extra=counters)
+    return out
+
+
+def _write_ledgers(leagues, con, stage_s=None, t0=None, stages_name=None):
     from . import snapshots                             # Results ledger (never breaks settlement)
-    out["results"] = {}
+    res = {}
     for lg in leagues:
         if lg not in snapshots.LEAGUES:
             continue
         try:
-            out["results"][lg] = snapshots.write_results(con, lg)
+            res[lg] = snapshots.write_results(con, lg)
         except Exception as e:                          # noqa: BLE001
-            out["results"][lg] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
-    stage_s.append(["results", round(time.time() - t0, 1)])
-    _write_stages(stages_name, stage_s)
-    return out
+            res[lg] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+        if stage_s is not None:
+            stage_s.append([f"results:{lg}", round(time.time() - t0, 1)])
+            _write_stages(stages_name, stage_s, finished=False)
+    return res
 
 
 def cmd_settle_post(a, con):
-    """python -m sports.worker settle-post nba nfl: the results ledger and the model / shadow scorecards from the
-    settlements already stored (the scheduler starts it after each settle run). Writes only results.json,
-    learning.db and shadow.db; never a settlement."""
+    """python -m sports.worker settle-post nba nfl: the model / shadow scorecards from the settlements already stored
+    (the scheduler starts it after each settle run). Writes only learning.db and shadow.db; never a settlement. The
+    results ledger is its own job since 2026-11-20 (`results-ledger`)."""
     flags.require("SPORTS_INGEST")
     leagues = a.leagues or ["nba", "nfl"]
     out = _post_settle(leagues, con, [], time.time(), "settle_post_stages.json",
-                       budget_s=getattr(a, "budget_s", None))
+                       budget_s=getattr(a, "budget_s", None), ledger=False)
+    _print(out)
+    return out
+
+
+def _ledger_order(leagues):
+    """Oldest results.json first, so a run killed after one league never starves the other."""
+    from . import snapshots
+
+    def age(lg):
+        try:
+            return (snapshots.snap_root() / lg / "results.json").stat().st_mtime
+        except OSError:
+            return 0.0
+    return sorted(leagues, key=lambda lg: (age(lg), leagues.index(lg)))
+
+
+def cmd_results_ledger(a, con):
+    """python -m sports.worker results-ledger nba nfl: <league>/results.json (admin Results ledger + the board's
+    settled-by-model counts) from the stored settlements - its own scheduler job since 2026-11-20 (it was the second
+    half of settle-post). Reads the store only; writes only results.json - the same file (snapshots.write_results)."""
+    flags.require("SPORTS_INGEST")
+    leagues = _ledger_order(list(a.leagues or ["nba", "nfl"]))
+    stage_s = []
+    t0 = time.time()
+    out = {"results": _write_ledgers(leagues, con, stage_s, t0, "results_ledger_stages.json")}
+    _write_stages("results_ledger_stages.json", stage_s)
     _print(out)
     return out
 
@@ -852,8 +912,9 @@ def main(argv=None):
     s = sub.add_parser("settle-post")
     s.add_argument("leagues", nargs="*")
     s.add_argument("--budget-s", type=float, default=None,
-                   help="stop the scorecards between events after this many seconds (resumed next run); the ledger "
-                        "still runs")
+                   help="stop the scorecards after this many seconds (checked per forecast; resumed next run)")
+    s = sub.add_parser("results-ledger")
+    s.add_argument("leagues", nargs="*")
     s = sub.add_parser("forecast")
     s.add_argument("leagues", nargs="*")
     s = sub.add_parser("coverage")
@@ -867,7 +928,8 @@ def main(argv=None):
     a = p.parse_args(argv)
     if a.cmd == "train":
         flags.require("SPORTS_TRAIN")                   # a refused command sets no memory cap on its process
-    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "settle", "settle-post", "train") else None
+    cap = apply_memory_cap() if a.cmd in ("ingest", "loop", "books", "settle", "settle-post", "results-ledger",
+                                          "train") else None
     if a.cmd == "train":
         from .model import jobs as model_jobs           # model agent's registered training jobs (sports/model/jobs.py)
         return model_jobs.main(a.rest)
@@ -878,7 +940,7 @@ def main(argv=None):
         if cap:
             print(f"memory cap: {cap}", file=sys.stderr)
         res = {"ingest": cmd_ingest, "loop": cmd_loop, "books": cmd_books, "settle": cmd_settle,
-               "settle-post": cmd_settle_post,
+               "settle-post": cmd_settle_post, "results-ledger": cmd_results_ledger,
                "coverage": cmd_coverage, "verify": cmd_verify, "forecast": cmd_forecast, "jobs": lambda a, con: _print(Jobs(con).list())}[a.cmd](a, con)
         if a.cmd in ("ingest", "loop", "settle") and _still_running(res):
             # bug sweep #12 review: a timed-out job's thread is still writing on this connection. End the process now

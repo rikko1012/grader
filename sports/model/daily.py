@@ -7,7 +7,9 @@ the scorecard it reads).
 
 When it runs: at most ONCE per game-day (UTC date of now - 10 h, the A8 4 boundary), not before
 SPORTS_DAILY_AFTER_UTC_H (10) UTC = after the overnight settlement, and only when learning.db holds a settlement newer
-than the last run. Otherwise it exits at once ("not due: ...") without importing numpy.
+than the last run. Otherwise it exits at once ("not due: ...") without importing numpy. HELD (settlepost-1120, exits
+0 with "held": True and the reason in last_skip) while the model scorecard is behind: settle-post's last pass stopped
+part way, or its last complete pass is older than SPORTS_DAILY_SCORECARD_MAX_AGE_S (scorecard_hold).
 
 Steps (one child, in order):
   1. cal-mi fit (SPORTS_CAL_AUTOFIT=0 skips): the exact sports.model.cal fit path (rows_from_learning -> walk -> report
@@ -121,6 +123,42 @@ def due(now, state, latest):
     if (state or {}).get("data_as_of") and latest <= state["data_as_of"]:
         return False, f"nothing new settled since {state['data_as_of']}"
     return True, None
+
+
+SCORECARD_MAX_AGE_S = 3 * 3600
+
+
+def scorecard_max_age_s():
+    try:
+        return max(0.0, float(os.environ.get("SPORTS_DAILY_SCORECARD_MAX_AGE_S", SCORECARD_MAX_AGE_S)))
+    except ValueError:
+        return float(SCORECARD_MAX_AGE_S)
+
+
+def scorecard_hold(now, p=None):
+    """settlepost-1120: None, or why today's fit must wait - the model scorecard (learning.db, written by settle-post) is
+    behind: its last pass stopped part way (partial) or the last COMPLETE pass is older than
+    SPORTS_DAILY_SCORECARD_MAX_AGE_S (3 h; 0 = off). A fit on a partly scored learning.db could switch a market on / off
+    on incomplete evidence, so the run is skipped (nothing fitted, nothing switched, last_day not set) and retried by
+    the next check. No model/learning_state.json (settle-post code older than this rule, a fresh data dir) = no hold."""
+    lim = scorecard_max_age_s()
+    if not lim:
+        return None
+    st = _read_json(Path((p or paths())["learning"]).parent / "learning_state.json")
+    if not isinstance(st, dict):
+        return None
+    if st.get("partial"):
+        return (f"held: model scorecard behind (settle-post pass at {st.get('at')} stopped with "
+                f"{st.get('events_left')} events left); no fit, no switch until a complete pass")
+    ca = st.get("complete_at")
+    try:
+        age = (now - datetime.strptime(ca, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds()
+    except (TypeError, ValueError):
+        age = None
+    if age is None or age > lim:
+        return (f"held: model scorecard behind (last complete settle-post pass {ca or 'never'}, limit "
+                f"{int(lim)} s); no fit, no switch until it catches up")
+    return None
 
 
 # ================================================================================================ step 1: cal-mi fit
@@ -280,6 +318,10 @@ def run(now=None, force=False, log=print):
     state = _read_json(p["state"]) or {}
     latest = latest_settled(p["learning"])
     ok, why = (True, None) if force else due(now, state, latest)
+    held = None
+    if ok and not force:                                # --force (owner Shell) bypasses the hold too
+        held = scorecard_hold(now, p)
+        ok, why = (False, held) if held else (True, None)
     day = game_day(now)
     if not ok:
         state["last_skip"] = {"at": _iso(now), "why": why}
@@ -287,9 +329,10 @@ def run(now=None, force=False, log=print):
             err = publish(admin_view())
             state["publish_pending"] = bool(err)
             _atomic(p["state"], json.dumps(state, indent=1))
-            return dict(ran=False, why=why, **({"publish_error": err} if err else {}))
+            return dict(ran=False, why=why, **({"held": True} if held else {}),
+                        **({"publish_error": err} if err else {}))
         _atomic(p["state"], json.dumps(state, indent=1))
-        return {"ran": False, "why": why}
+        return dict(ran=False, why=why, **({"held": True} if held else {}))
     out = {"ran": True, "game_day": day, "data_as_of": latest}
     t0 = time.time()
     # Resume a failed read/report stage without counting another calibration decision

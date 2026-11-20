@@ -431,7 +431,8 @@ def board_builds():
 
 def settle_stages(name="settle_stages.json"):
     """The last finished settle run: seconds since its start at the end of each stage (admin ops only).
-    settle_post_stages.json: the settle-post job (results ledger + scorecards), written after each stage."""
+    settle_post_stages.json: the settle-post job (scorecards + their counters); results_ledger_stages.json: the
+    results-ledger job (2026-11-20, formerly inside settle-post) - each written after each stage."""
     from . import config
     try:
         return json.loads((config.DATA_DIR / name).read_text(encoding="utf-8"))
@@ -510,6 +511,7 @@ def ops():
             "prebuilt": prebuilt_state(),
             "board_builds": board_builds(),
             "settle_stages": settle_stages(), "settle_post_stages": settle_stages("settle_post_stages.json"),
+            "results_ledger_stages": settle_stages("results_ledger_stages.json"),
             "sheets_stages": sheets_stages(),
             "grades_daily": settle_stages("model/daily_state.json"),
             "expansion_learning": expansion_learning_status(), "expansion_storage": expansion_storage(),

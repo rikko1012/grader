@@ -79,80 +79,200 @@ def _pit(fc, value, pmf_row=None, lo=None):
     return float(p[ks < value].sum() + 0.5 * p[ks == value].sum())
 
 
-def on_settled(scon, log=None, now=None, days=30, deadline=None):
+SHADOW_SHARE = 0.15             # settle-post (2026-11-20): the last 15% of the time budget is the sm-2 shadow's own slice
+HARD_GRACE_S = 60.0             # a single statement still running this long after the deadline is interrupted
+PROGRESS_OPS = 20000            # SQLite VM steps between two checks of that backstop
+STATE_FILE = "learning_state.json"
+
+
+def _past(t):
+    return t is not None and time.time() >= t
+
+
+def state_path():
+    return config.DATA_DIR / "model" / STATE_FILE
+
+
+def read_state():
+    """model/learning_state.json: the last on_settled run ({"at", "partial", "events_left", "complete_at"}) - what
+    grades-daily checks before it fits on learning.db (None when no run of this code wrote it yet)."""
+    try:
+        return json.loads(state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _write_state(partial, left, at):
+    prev = read_state() or {}
+    obj = {"at": at, "partial": bool(partial), "events_left": int(left or 0),
+           "complete_at": prev.get("complete_at") if partial else at}
+    try:
+        p = state_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(obj), encoding="utf-8")
+        tmp.replace(p)
+    except OSError:
+        pass
+
+
+def _current_for_side(by_offer):
+    """settlement_id -> the chosen sides it is the CURRENT settlement for, by the exact rule of the loop below (the
+    side's own records, else all of the offer's; highest revision, first on a tie). Lets an already-scored forecast be
+    recognised without reading its offer: a settlement id belongs to one offer, the one the earlier row was scored on."""
+    out = {}
+    for alls in by_offer.values():
+        for side in ("over", "under"):
+            sts = [x for x in alls if x.side == side] or alls
+            cur = max(sts, key=lambda x: x.revision)
+            out.setdefault(cur.settlement_id, set()).add(side)
+    return out
+
+
+def on_settled(scon, log=None, now=None, days=30, deadline=None, shadow_share=SHADOW_SHARE):
     """Score every forecast whose event has a settlement learned within the last `days`.
     Idempotent: one row per forecast x current settlement; a corrected settlement supersedes the earlier row.
 
     Bounded (Starter, 2026-10-24): event by event - only events with a settlement known in the window are read, each
     event's settlements are read once (records_event index) and only that event's forecasts are decoded; a forecast
-    already scored against its current settlement costs one indexed lookup. Never retrains (retrain_due only REPORTS
-    whether the registered trigger is met; fitting needs `train fit` under SPORTS_TRAIN).
-    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09): stop between events once passed; every event
-    done so far is committed with its mark, the rest are read by the next run ("partial": True, "events_left")."""
+    already scored against its current settlement costs one indexed lookup and no offer read (2026-11-20). Never
+    retrains (retrain_due only REPORTS whether the registered trigger is met; fitting needs `train fit` under
+    SPORTS_TRAIN).
+
+    deadline (epoch seconds, settle-post's time budget - stall 2026-11-09; strict since 2026-11-20, when a run went
+    343 s past it): the main scorecard stops at (1 - shadow_share) of the time left, checked before every event AND
+    every forecast. Rows written so far are committed; an unfinished event keeps no mark (its scored forecasts are
+    skipped by the next run). The sm-2 shadow scorecard then gets the rest (its own slice: a long main pass never
+    starves it), and retrain_due (a report) runs only if time is left. A statement still running HARD_GRACE_S after
+    the deadline is interrupted (SQLite progress handler; the open event's rows roll back with it) and counts as a stop.
+    A stopped run says "partial": True, "events_left"; the next run starts at the event it stopped at (wrapping round,
+    so a backlog drains in order and no event is starved by earlier ones) - at the forecast it stopped at when that
+    event's records are unchanged (resume_rid / resume_sig: an event bigger than one budget still finishes) - and
+    keeps the stopped run's window start until a run completes, so a backlog older than `days` is never dropped."""
     lcon = db()
     icon = forward.inputs_db()
+    t_start = time.time()
+    main_deadline = None if deadline is None else t_start + max(0.0, deadline - t_start) * (1.0 - shadow_share)
+    lcon.execute("CREATE TABLE IF NOT EXISTS learn_meta (key TEXT PRIMARY KEY, value TEXT)")
+    meta = dict(lcon.execute("SELECT key, value FROM learn_meta"))
     cutoff = (parse_utc(now or now_utc()) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    evs = [r[0] for r in scon.execute("SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND known_at >= ? "
-                                      "AND event_id IS NOT NULL ORDER BY event_id", (cutoff,))]
-    n_new = n_diag = n_skip = 0
-    done = dict(lcon.execute("SELECT event_id, sig FROM learn_events"))
-    left = 0
-    for i, ev in enumerate(evs):
-        if deadline is not None and time.time() >= deadline:
-            left = len(evs) - i                         # resumed by the next run (marks committed per event)
-            break
-        # Skip an event whose records are exactly those of its last full pass: every forecast it could score is
-        # already in the scorecard against its current settlement, so the body below would add nothing. The mark is
-        # committed with the event's rows, so a run killed mid-way keeps what it finished (settle 1,500 s timeouts,
-        # 2026-11-08: each run re-decoded every forecast of the season before its already-scored check).
-        sig = event_sig(scon, ev)
-        if done.get(ev) == sig:
-            n_skip += 1
-            continue
-        by_offer = {}
-        for r in scon.execute("SELECT source, source_key, payload FROM records WHERE kind='settlement' AND event_id=? "
-                              "ORDER BY source_key, revision", (ev,)):
-            by_offer.setdefault((r["source"], r["source_key"].rsplit("|", 1)[0]), []).append(store._rec(r))
-        if not by_offer:
-            continue
-        # The window selects newly learned results, not forecast ages. A delayed result or
-        # correction must still update an older forecast. Stream this event's forecasts
-        # so catching up a long history does not materialize every payload in memory.
-        for fr in scon.execute("SELECT record_id, payload FROM records WHERE kind='forecast' AND event_id=? "
-                               "ORDER BY rid", (ev,)):
-            fc = store._rec(fr)
-            fid = fr["record_id"]
-            if fc is None or not fc.offer_snapshot_ids or fc.chosen_side is None:
+    if meta.get("pending_cutoff") and meta["pending_cutoff"] < cutoff:
+        cutoff = meta["pending_cutoff"]                 # catch-up: a stopped run's window is kept until one completes
+    hard = None if deadline is None else deadline + HARD_GRACE_S
+    if hard is not None:
+        scon.set_progress_handler(lambda: 1 if time.time() > hard else 0, PROGRESS_OPS)
+    n_new = n_diag = n_skip = n_fc = n_offers = n_fast = n_scored_ev = 0
+    evs, order, left, pos, interrupted, cursor = [], [], 0, 0, False, None
+    try:
+        evs = [r[0] for r in scon.execute("SELECT DISTINCT event_id FROM records WHERE kind='settlement' AND "
+                                          "known_at >= ? AND event_id IS NOT NULL ORDER BY event_id", (cutoff,))]
+        done = dict(lcon.execute("SELECT event_id, sig FROM learn_events"))
+        resume = meta.get("resume_event")
+        k = next((j for j, e in enumerate(evs) if e >= resume), len(evs)) if resume else 0
+        order = evs[k:] + evs[:k]
+        for pos, ev in enumerate(order):
+            if _past(main_deadline):
+                left = len(order) - pos                 # resumed by the next run (marks committed per event)
+                break
+            # Skip an event whose records are exactly those of its last full pass: every forecast it could score is
+            # already in the scorecard against its current settlement, so the body below would add nothing. The mark
+            # is committed with the event's rows, so a run killed mid-way keeps what it finished (settle 1,500 s
+            # timeouts, 2026-11-08: each run re-decoded every forecast of the season before its already-scored check).
+            sig = event_sig(scon, ev)
+            if done.get(ev) == sig:
+                n_skip += 1
                 continue
-            offer = store.get(scon, fc.offer_snapshot_ids[0])
-            if offer is None:
+            by_offer = {}
+            for r in scon.execute("SELECT source, source_key, payload FROM records WHERE kind='settlement' AND "
+                                  "event_id=? ORDER BY source_key, revision", (ev,)):
+                by_offer.setdefault((r["source"], r["source_key"].rsplit("|", 1)[0]), []).append(store._rec(r))
+            if not by_offer:
                 continue
-            alls = by_offer.get((offer.platform, offer.offer_id), [])
-            sts = [x for x in alls if x.side == fc.chosen_side] or alls  # the other side's record has the value too
-            if not sts:
-                continue
-            cur = max(sts, key=lambda x: x.revision)
-            if lcon.execute("SELECT 1 FROM projection_reviews WHERE forecast_id=? AND settlement_id=?",
-                            (fid, cur.settlement_id)).fetchone():
-                continue
-            a, d = _score_one(lcon, icon, fid, fc, offer, cur)
-            n_new += a
-            n_diag += d
-        lcon.execute("INSERT OR REPLACE INTO learn_events (event_id, sig, scored_at) VALUES (?,?,?)",
-                     (ev, sig, now_utc()))
-        lcon.commit()
+            n_scored_ev += 1
+            current = _current_for_side(by_offer)
+            stopped = False
+            # inside the event a stopped run left off in, with the event's records unchanged since: its forecasts
+            # before that point were all passed by that run (its rows committed before the cursor was saved), so they
+            # are not walked again - an event bigger than one budget still finishes
+            start = int(meta["resume_rid"]) if (pos == 0 and ev == meta.get("resume_event") and meta.get("resume_rid")
+                                                and meta.get("resume_sig") == sig) else 0
+            # The window selects newly learned results, not forecast ages. A delayed result or
+            # correction must still update an older forecast. Stream this event's forecasts
+            # so catching up a long history does not materialize every payload in memory.
+            for fr in scon.execute("SELECT rid, record_id, payload FROM records WHERE kind='forecast' AND event_id=? "
+                                   "AND rid >= ? ORDER BY rid", (ev, start)):
+                if _past(main_deadline):
+                    stopped = True                      # rows so far are committed below; no mark for this event
+                    cursor = (fr["rid"], sig)
+                    break
+                fc = store._rec(fr)
+                fid = fr["record_id"]
+                if fc is None or not fc.offer_snapshot_ids or fc.chosen_side is None:
+                    continue
+                n_fc += 1
+                if any(fc.chosen_side in current.get(sid, ()) for (sid,) in lcon.execute(
+                        "SELECT settlement_id FROM projection_reviews WHERE forecast_id=?", (fid,))):
+                    n_fast += 1                         # already scored against its current settlement
+                    continue
+                offer = store.get(scon, fc.offer_snapshot_ids[0])
+                n_offers += 1
+                if offer is None:
+                    continue
+                alls = by_offer.get((offer.platform, offer.offer_id), [])
+                sts = [x for x in alls if x.side == fc.chosen_side] or alls  # the other side's record has the value
+                if not sts:
+                    continue
+                cur = max(sts, key=lambda x: x.revision)
+                if lcon.execute("SELECT 1 FROM projection_reviews WHERE forecast_id=? AND settlement_id=?",
+                                (fid, cur.settlement_id)).fetchone():
+                    continue
+                a, d = _score_one(lcon, icon, fid, fc, offer, cur)
+                n_new += a
+                n_diag += d
+            if stopped:
+                lcon.commit()
+                left = len(order) - pos
+                break
+            lcon.execute("INSERT OR REPLACE INTO learn_events (event_id, sig, scored_at) VALUES (?,?,?)",
+                         (ev, sig, now_utc()))
+            lcon.commit()
+    except sqlite3.OperationalError as e:
+        if "interrupt" not in str(e).lower():
+            raise
+        interrupted = True                              # the hard backstop: a statement ran past deadline + grace
+        lcon.rollback()                                 # the open event's rows and mark go (or stay) together
+        left, cursor = max(1, len(order) - pos), None    # (a rolled-back event restarts from its first forecast)
+    lcon.execute("DELETE FROM learn_meta WHERE key IN ('pending_cutoff', 'resume_event', 'resume_rid', 'resume_sig')")
+    if left:
+        lcon.execute("INSERT OR REPLACE INTO learn_meta VALUES ('pending_cutoff', ?)", (cutoff,))
+        if order:
+            lcon.execute("INSERT OR REPLACE INTO learn_meta VALUES ('resume_event', ?)", (order[len(order) - left],))
+        if cursor:
+            lcon.executemany("INSERT OR REPLACE INTO learn_meta VALUES (?, ?)",
+                             (("resume_rid", str(cursor[0])), ("resume_sig", cursor[1])))
     lcon.commit()
     out = {"scorecard_rows_added": n_new, "diagnostics_added": n_diag, "events_read": len(evs),
-           "events_unchanged": n_skip, "retrain": {}}
+           "events_unchanged": n_skip, "events_scored": n_scored_ev, "forecasts_read": n_fc,
+           "forecasts_already_scored": n_fast, "offers_read": n_offers, "window_from": cutoff,
+           "main_s": round(time.time() - t_start, 1), "retrain": {}}
     if left:
         out.update(partial=True, events_left=left)
-    for sport in ("nba", "nfl"):
-        out["retrain"][sport] = retrain_due(sport, lcon)
+    if interrupted:
+        out["interrupted"] = True
+    _write_state(bool(left), left, now_utc())
     try:                                                # sm-2 shadow scorecard (REGISTER A5); never blocks sm-1
         from . import shadow
         out["shadow"] = shadow.settle(scon, deadline=deadline)
-    except Exception as e:                              # noqa: BLE001
+    except Exception as e:                              # noqa: BLE001 (an interrupted statement lands here too)
         out["shadow"] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+    finally:
+        if hard is not None:
+            scon.set_progress_handler(None, 0)
+    for sport in ("nba", "nfl"):
+        if _past(deadline):                             # a report only (pipeline `learn` runs it with no deadline)
+            out["retrain"][sport] = {"due": None, "skipped": "settle-post time budget spent"}
+        else:
+            out["retrain"][sport] = retrain_due(sport, lcon)
     lcon.close()
     icon.close()
     if log:
