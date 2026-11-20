@@ -1,0 +1,87 @@
+/* 1time Scout design tokens (v3 "precision instrument"). Source of truth for every page: player, board, slip, landing.
+   Scout repo copy: the sport accent attribute is html[data-sc-sport] (not data-sport, which page scripts already query: web/record.js,
+   web/sports/expansion.js). Otherwise byte-identical to cs2_scout_ops/logs/design_1119/v3/system/tokens.css.
+   Dark is the default; light via html[data-theme="light"] (or the OS, when no data-theme is set).
+   Sport accent via html[data-sc-sport="cs2|nba|nfl|soccer|tennis|lol"]. One accent per surface; value colours only on numbers. */
+
+:root{
+  /* ground and surfaces: deep layered navy, each step +2-3% lightness */
+  --sc-bg:#080B13; --sc-sky:#0C1222; --sc-s1:#0F1524; --sc-s2:#141B2D; --sc-s3:#1A2236;
+  /* hairlines, edges, the 1px specular top edge */
+  --sc-hair:rgba(160,180,230,.08); --sc-edge:rgba(160,180,230,.13); --sc-spec:rgba(255,255,255,.06);
+  /* ink */
+  --sc-text:#E9ECF2; --sc-muted:#9AA5BB; --sc-faint:#7A869E; --sc-link:#A9B6CE; --sc-ink-on-accent:#05121A;
+  /* value colours (vs a stated baseline): good / near / poor, and the faint tint each one sits on */
+  --sc-good:#5BD69A; --sc-near:#A9B2C4; --sc-poor:#F0787A;   /* near = neutral: a grey, never yellow (Nov 19 r4) */
+  --sc-good-tint:rgba(91,214,154,.075); --sc-near-tint:rgba(169,178,196,.05); --sc-poor-tint:rgba(240,120,122,.075);
+  /* r5 (SHARED-1) value rule aliases: big value = --sc-text 600 tabular; only the delta + its arrow carry --sc-pos / --sc-neg; neutral = --sc-text-2 */
+  --sc-text-2:var(--sc-muted); --sc-text-3:var(--sc-faint); --sc-pos:var(--sc-good); --sc-neg:var(--sc-poor);
+  /* r5 (SHARED-3) primary CTA: white-on-ink (dark) / ink-on-white (light), so the sport accent stays the one hero colour */
+  --sc-cta-bg:#E8ECF3; --sc-cta-ink:#080B13;
+  /* r5 (SHARED-3) selection: 1px hairline at ~40% accent + 2px inner left rule + a raised surface (+3% L). Never an outer glow. */
+  --sc-sel-edge:color-mix(in srgb,var(--sc-accent-fill) 40%,transparent);
+  --sc-sel:inset 0 0 0 1px var(--sc-sel-edge),inset 2px 0 0 var(--sc-accent-fill);
+  /* accent (CS2 default) */
+  --sc-accent:#4CC8F0; --sc-accent-fill:#2BB3E0;
+  /* depth */
+  --sc-drop:0 1px 0 rgba(0,0,0,.25),0 24px 48px -32px rgba(0,0,0,.75);
+  --sc-ring:inset 0 0 0 1px var(--sc-edge),inset 0 1px 0 var(--sc-spec);
+  --sc-scrim:rgba(8,11,19,1);
+  /* lit hero band (SHARED-2): sport-tinted dusk falloff strength + film grain (3-4%) */
+  --sc-lit:25%; --sc-lit-fill:14%; --sc-grain-o:.035;
+  --sc-grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.1 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* team colour for avatars / matchup spines (pages set --t1 inline) */
+  /* type: one family, tabular figures, weights 400 / 500 / 600 only */
+  --sc-font:Outfit,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --sc-fs-11:11px; --sc-fs-12:12px; --sc-fs-13:13px; --sc-fs-15:15px; --sc-fs-17:17px; --sc-fs-20:20px;
+  --sc-fs-22:22px; --sc-fs-30:30px; --sc-fs-40:40px; --sc-fs-56:56px; --sc-fs-64:64px;
+  --sc-track-display:-.035em; --sc-track-title:-.015em;
+  /* space (4px grid) and radii (small, precise: never bubbly) */
+  --sc-1:4px; --sc-2:8px; --sc-3:12px; --sc-4:16px; --sc-5:20px; --sc-6:24px; --sc-8:32px; --sc-10:40px;
+  --sc-r-xs:5px; --sc-r-sm:6px; --sc-r-md:10px; --sc-r-lg:12px; --sc-r-xl:14px; --sc-r-sheet:20px;
+  /* motion */
+  --sc-ease:cubic-bezier(.2,.8,.2,1); --sc-fast:.16s; --sc-med:.24s;
+  /* layout */
+  --sc-gutter:16px; --sc-top-h:56px; --sc-max:1232px;
+  color-scheme:dark;
+}
+/* sport accents (dark) */
+:root[data-sc-sport="nba"]{--sc-accent:#F2924A;--sc-accent-fill:#E07A2E}
+:root[data-sc-sport="nfl"]{--sc-accent:#4FCF86;--sc-accent-fill:#2FB46A}
+:root[data-sc-sport="soccer"]{--sc-accent:#4CC7A0;--sc-accent-fill:#2AAE86}
+:root[data-sc-sport="tennis"]{--sc-accent:#C9E86A;--sc-accent-fill:#B5D650}
+:root[data-sc-sport="lol"]{--sc-accent:#D8B46A;--sc-accent-fill:#C29A4A}
+
+/* light: paper white surfaces, darker value inks so they pass AA on white */
+:root[data-theme="light"]{
+  /* r5 (SHARED-8): warm off-white base, 1px hairlines at 8% ink, no drop shadows */
+  --sc-bg:#F6F7F9; --sc-sky:#F6F7F9; --sc-s1:#FFFFFF; --sc-s2:#F1F3F6; --sc-s3:#FFFFFF;
+  --sc-hair:rgba(16,24,48,.08); --sc-edge:rgba(16,24,48,.09); --sc-spec:rgba(255,255,255,0);
+  --sc-text:#0E1320; --sc-muted:#4B566D; --sc-faint:#5D6880; --sc-link:#2D5E86;
+  --sc-good:#0F7A4A; --sc-near:#5D6880; --sc-poor:#B42318;
+  --sc-good-tint:rgba(15,122,74,.06); --sc-near-tint:rgba(93,104,128,.05); --sc-poor-tint:rgba(180,35,24,.055);
+  --sc-accent:#00799A;
+  --sc-drop:0 0 0 transparent;
+  --sc-scrim:rgba(255,255,255,1);
+  --sc-lit:7%; --sc-lit-fill:3%; --sc-grain-o:.025;
+  --sc-cta-bg:#0E1320; --sc-cta-ink:#FFFFFF;
+  color-scheme:light;
+}
+:root[data-theme="light"][data-sc-sport="nba"]{--sc-accent:#B4500F}
+:root[data-theme="light"][data-sc-sport="nfl"]{--sc-accent:#0F7A3E}
+:root[data-theme="light"][data-sc-sport="soccer"]{--sc-accent:#047857}
+:root[data-theme="light"][data-sc-sport="tennis"]{--sc-accent:#4D7C0F}
+:root[data-theme="light"][data-sc-sport="lol"]{--sc-accent:#8A6516}
+
+/* OS light when the page sets no theme */
+@media (prefers-color-scheme: light){
+  :root:not([data-theme]){
+    --sc-bg:#F6F7F9; --sc-sky:#F6F7F9; --sc-s1:#FFFFFF; --sc-s2:#F1F3F6; --sc-s3:#FFFFFF;
+    --sc-hair:rgba(16,24,48,.08); --sc-edge:rgba(16,24,48,.09); --sc-spec:rgba(255,255,255,0);
+    --sc-text:#0E1320; --sc-muted:#4B566D; --sc-faint:#5D6880; --sc-link:#2D5E86;
+    --sc-good:#0F7A4A; --sc-near:#5D6880; --sc-poor:#B42318;
+    --sc-good-tint:rgba(15,122,74,.06); --sc-near-tint:rgba(93,104,128,.05); --sc-poor-tint:rgba(180,35,24,.055);
+    --sc-accent:#00799A; --sc-drop:0 0 0 transparent; --sc-cta-bg:#0E1320; --sc-cta-ink:#FFFFFF;
+    --sc-scrim:rgba(255,255,255,1); --sc-lit:7%; --sc-lit-fill:3%; --sc-grain-o:.025; color-scheme:light;
+  }
+}

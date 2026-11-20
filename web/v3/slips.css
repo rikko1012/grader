@@ -1,0 +1,392 @@
+/* v3 slips.css - owned by page group B (slips).
+   Scope: Slip Studio (#hub-studio-section: My slip / Auto-build / Tracked), the desktop slip column (.h-slip), the phone slip dock
+   (the hub's own toast + .h-mobile-slip above the v3 bottom bar), the book dialogs (.u-book-dialog, #hub-price-draft).
+   Target: cs2_scout_ops/logs/design_1119/v3/B (approved Nov 19-20). Loaded after tokens.css, components.css and shell.css; the hub's
+   own sheets load later, so every rule carries html[data-ui-v3] (+ #u-hub) to win on specificity. Display only: no grading or API
+   change, every field the slip shows today stays (slips.js only wraps / mirrors existing nodes). */
+
+/* ------------------------------------------------------------------ the hub's --u-* tokens become the v3 tokens inside B's surfaces,
+   so anything not restyled below still follows the v3 theme (light and dark) */
+html[data-ui-v3] #u-hub #hub-studio-section,html[data-ui-v3] #u-hub .h-slip,html[data-ui-v3] #u-hub .h-price-draft,html[data-ui-v3] dialog.u-book-dialog,html[data-ui-v3] .u-toast{
+  --u-bg:var(--sc-bg);--u-panel:var(--sc-s1);--u-panel2:var(--sc-s2);--u-panel3:var(--sc-s3);--u-line:var(--sc-hair);--u-line2:var(--sc-edge);
+  --u-text:var(--sc-text);--u-muted:var(--sc-muted);--u-faint:var(--sc-faint);--u-gold:var(--sc-accent-fill);--u-gold2:var(--sc-accent);--u-good:var(--sc-good);--u-bad:var(--sc-poor);
+  --u-mono:var(--sc-font);font-family:var(--sc-font);color:var(--sc-text);font-variant-numeric:tabular-nums}
+
+/* ------------------------------------------------------------------ page: navy ground, sport-tinted dusk band behind the title */
+html[data-ui-v3] #u-hub.h-studio-mode #hub-center{background:var(--sc-bg);padding:0 24px 64px}
+html[data-ui-v3] #u-hub.h-studio-mode .h-top>div:first-child{display:none}
+html[data-ui-v3] #u-hub.h-studio-mode .h-top:not(:has(.h-top-actions>*)){display:none}
+html[data-ui-v3] #u-hub #hub-studio-section{display:block;max-width:var(--sc-max);margin:0 auto;padding:0}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band{margin:0 -24px;padding:40px 24px 20px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;
+  column-gap:8px;align-items:end;background:transparent}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .sc-lit__title{grid-column:1;grid-row:1;margin:0;font:600 40px/1.05 var(--sc-font);letter-spacing:-.025em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-studio-intro{display:contents}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-sync{grid-column:1;grid-row:2;display:inline-flex;align-items:center;gap:7px;margin:8px 0 0;padding:0;
+  color:var(--sc-muted)!important;font:400 13.5px/1.4 var(--sc-font);background:none;border:0}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-sync::before{content:"";flex:none;margin:0;width:6px;height:6px;border-radius:50%;background:var(--sc-good)}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-sync.sb-off::before{background:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-studio-intro>button{grid-row:1/3;align-self:end;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:38px;margin:0;padding:0 13px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s1);color:var(--sc-text);box-shadow:var(--sc-ring);
+  font:500 14px/1 var(--sc-font);cursor:pointer;white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-studio-intro>button:hover{background:var(--sc-s2)}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-studio-intro>button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+/* the band's actions belong to My slip (as today: they live in its panel); the sync line shows on every tab */
+html[data-ui-v3] #u-hub #hub-studio-section:has(>[data-studio-panel=slip][hidden]) .sb-band .h-studio-intro>button{display:none}
+
+/* tabs: underline, opaque, count tile */
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-tabs{display:flex;gap:0;margin:0 0 4px;padding:0;border:0;box-shadow:inset 0 -1px 0 var(--sc-hair);overflow-x:auto;background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-tabs button{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:46px;margin:0 24px 0 0;padding:0;border:0;border-radius:0;
+  background:none;color:var(--sc-muted);font:500 16px/1 var(--sc-font);box-shadow:none;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-tabs button:hover{color:var(--sc-text);background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-tabs button[aria-selected=true]{color:var(--sc-text);font-weight:600;background:none;box-shadow:inset 0 -2px 0 var(--sc-accent-fill);border-radius:0}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-tabs .h-count-badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border:0;border-radius:var(--sc-r-xs);
+  background:var(--sc-s3);color:var(--sc-text);box-shadow:inset 0 0 0 1px var(--sc-edge);font:600 12px/1 var(--sc-font)}
+
+/* ------------------------------------------------------------------ My slip: draft | aside (This slip, Before you track) */
+html[data-ui-v3] #u-hub #hub-studio-section [data-studio-panel=slip]:not([hidden]){display:block}
+html[data-ui-v3] #u-hub #hub-studio-section .h-working-draft{border:0;padding:0;margin:0;min-width:0}
+html[data-ui-v3] #u-hub #hub-studio-section .sb-aside{display:grid;gap:16px;align-content:start;margin-top:16px}
+@media (min-width:1024px){
+  html[data-ui-v3] #u-hub #hub-studio-section [data-studio-panel=slip]:not([hidden]){display:grid;grid-template-columns:minmax(0,8fr) minmax(0,4fr);gap:24px;align-items:start}
+  html[data-ui-v3] #u-hub #hub-studio-section [data-studio-panel=slip]>.h-working-draft{grid-column:1;grid-row:1}
+  html[data-ui-v3] #u-hub #hub-studio-section [data-studio-panel=slip]>.sb-aside{grid-column:2;grid-row:1}
+  html[data-ui-v3] #u-hub #hub-studio-section .sb-aside{position:sticky;top:16px;margin-top:18px}
+}
+html[data-ui-v3] #u-hub .sb-sum{padding:16px;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring),var(--sc-drop)}
+html[data-ui-v3] #u-hub .sb-sum h3{margin:0 0 10px;font:600 16px/1.2 var(--sc-font);color:var(--sc-text);letter-spacing:-.005em}
+html[data-ui-v3] #u-hub .sb-sum dl{margin:0}
+html[data-ui-v3] #u-hub .sb-sum dl>div,html[data-ui-v3] #u-hub dl.sb-sum>div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--sc-hair);font-size:14px}
+html[data-ui-v3] #u-hub .sb-sum dt{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub .sb-sum dd{margin:0;font-weight:600;text-align:right;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-explain{grid-column:auto;grid-row:auto;max-width:none;margin:0;padding:16px;border:0;border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring);background:none;
+  color:var(--sc-muted);font:400 14px/1.55 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-explain h3{margin:0 0 6px;color:var(--sc-text);font:600 16px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-explain p{margin:0 0 8px;color:var(--sc-muted);font-size:14px}
+html[data-ui-v3] #u-hub #hub-studio-section .h-studio-explain button{min-height:32px;padding:0;border:0;background:none;color:var(--sc-link);font:500 14px/1 var(--sc-font);box-shadow:none;cursor:pointer}
+
+/* status row + check details (studio and column) */
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:14px 0 10px;border:0;
+  font-size:14px;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-status p{margin:0;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-status b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-link{min-height:32px;margin-left:12px;text-decoration:none;padding:0;border:0;background:none;color:var(--sc-link);font:500 14px/1 var(--sc-font);cursor:pointer;box-shadow:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-link:hover{color:var(--sc-text);background:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det{margin:0 0 14px;padding:0;border:0;border-radius:var(--sc-r-lg);box-shadow:var(--sc-ring);
+  background:color-mix(in srgb,var(--sc-s1) 60%,transparent);font-size:14px;line-height:1.5;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:0 14px;
+  color:var(--sc-muted);list-style:none;cursor:pointer}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det>summary::-webkit-details-marker{display:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det>summary::after{content:"";flex:none;width:7px;height:7px;border-right:1.5px solid var(--sc-faint);
+  border-bottom:1.5px solid var(--sc-faint);transform:rotate(45deg) translateY(-3px)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det[open]>summary::after{transform:rotate(-135deg) translateY(-1px)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det>summary b{color:var(--sc-text);font-weight:500}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det ul{list-style:none;margin:0;padding:2px 14px 10px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det li{padding:7px 0;border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det li b.yes,html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det li b.no{
+  display:inline-block;min-width:52px;margin-right:6px;padding-left:8px;font-weight:500;color:var(--sc-text);box-shadow:inset 2px 0 0 var(--sc-good)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det li b.no{box-shadow:inset 2px 0 0 var(--sc-poor)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det a{color:var(--sc-link)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-det>p{margin:0;padding:0 14px 12px}
+
+/* entry: one per platform */
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry,html[data-ui-v3] #u-hub #hub-studio-section .h-working-draft .u-entry{margin:0 0 16px;padding:0;border:0;
+  border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring),var(--sc-drop);overflow:hidden}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry.refused{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-poor) 40%,transparent),var(--sc-drop)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px 12px;border-bottom:1px solid var(--sc-hair);
+  font:600 18px/1.2 var(--sc-font);letter-spacing:-.01em;color:var(--sc-text);background:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-h small{display:block;margin-top:2px;color:var(--sc-muted);font:400 13px/1.3 var(--sc-font);letter-spacing:0}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-seg{display:inline-grid;grid-auto-flow:column;gap:0;padding:3px;border:0;border-radius:var(--sc-r-md);background:var(--sc-bg);box-shadow:inset 0 0 0 1px var(--sc-hair)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-seg button{min-height:30px;min-width:60px;padding:0 12px;border:0;border-radius:7px;background:none;color:var(--sc-muted);font:500 13.5px/1 var(--sc-font);box-shadow:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-seg button[aria-pressed=true]{background:var(--sc-s2);color:var(--sc-text);font-weight:600;box-shadow:inset 0 0 0 1px var(--sc-sel-edge),inset 0 1px 0 var(--sc-spec)}
+:root[data-theme="light"] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-seg{background:var(--sc-s2)}
+:root[data-theme="light"] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-seg button[aria-pressed=true]{background:var(--sc-s1)}
+
+/* leg row = the board row's read: avatar | who | chance + Model estimate + grade | remove */
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto;grid-template-rows:auto auto minmax(0,1fr);align-content:start;column-gap:12px;row-gap:1px;align-items:start;
+  padding:13px 48px 13px 16px;border:0;border-top:1px solid var(--sc-hair);background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-working-draft .u-leg{padding-block:13px;border-bottom:0}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-h+.u-leg{border-top:0}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg.bad{background:color-mix(in srgb,var(--sc-poor) 5%,transparent)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg.u-leg-below{box-shadow:inset 2px 0 0 var(--sc-poor)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg>*{grid-column:2}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-index{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg>.sb-av,html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg>.sb-face{grid-column:1;grid-row:1/span 3;margin-top:2px}
+html[data-ui-v3] #u-hub .sb-av{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;color:#F1F3F8;font:600 13px/1 var(--sc-font);letter-spacing:-.02em;
+  background:radial-gradient(110% 100% at 32% 12%,color-mix(in srgb,var(--sc-accent-fill) 52%,#1A2236) 0%,color-mix(in srgb,var(--sc-accent-fill) 26%,#111829) 55%,#0A0F1C 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.13),inset 0 1px 0 rgba(255,255,255,.28),0 0 0 1px rgba(5,8,16,.5)}
+:root[data-theme="light"] #u-hub .sb-av{color:#0E1320;background:radial-gradient(110% 100% at 32% 12%,#fff 0%,color-mix(in srgb,var(--sc-accent-fill) 18%,#fff) 70%);box-shadow:inset 0 0 0 1px rgba(16,24,48,.12)}
+html[data-ui-v3] #u-hub .sb-face .u-face{--face:36px!important;margin:0}
+/* light theme: the hub's face fallback (initials) is a dark disc; match the board's light faces (board.css) so the initials stay legible */
+html[data-ui-v3][data-theme="light"] #u-hub :is(#hub-studio-body,#hub-slip-content,#hub-studio-section) .u-face{background:var(--sc-s2)!important;color:var(--sc-muted)!important;box-shadow:inset 0 0 0 1px var(--sc-edge)!important;border-color:var(--sc-edge)!important}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-name{display:flex;align-items:center;gap:7px;min-width:0;font:600 15px/20px var(--sc-font);letter-spacing:-.01em;color:var(--sc-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-name>i{margin:0;font:500 11px/1 var(--sc-font);font-style:normal;color:var(--sc-muted);padding:3px 6px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--sc-edge)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-pick{font:400 14px/1.4 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-pick b{margin:0;font-weight:600;font-size:15px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-lt{margin-left:4px;padding:2px 6px;border:0;border-radius:4px;text-transform:none;letter-spacing:0;font:500 11px/1 var(--sc-font);font-style:normal;color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge);background:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-meta{margin-top:3px;color:var(--sc-muted);font:400 12.5px/1.4 var(--sc-font)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-meta .u-btn{min-height:28px;padding:0;border:0;background:none;color:var(--sc-link);font:500 12.5px/1 var(--sc-font);box-shadow:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg-ev{color:var(--sc-text);font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-src,html[data-ui-v3] #u-hub .sb-sep{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg>.sb-read{grid-column:3;grid-row:1/span 3;display:flex;flex-direction:column;align-items:flex-end;text-align:right;white-space:nowrap}
+html[data-ui-v3] #u-hub .sb-read>b{font:600 19px/1 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub .sb-read>small{margin-top:4px;color:var(--sc-faint);font:400 11px/1.2 var(--sc-font);letter-spacing:.01em}
+html[data-ui-v3] #u-hub .sb-read>.sc-grade{margin-top:7px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg .u-x{position:absolute;right:8px;top:12px;width:32px;height:32px;border:0;border-radius:var(--sc-r-sm);background:none;color:var(--sc-faint);box-shadow:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg .u-x:hover{color:var(--sc-text);background:var(--sc-s2)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg .u-x svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6}
+/* the leg's notes, advice, problems: a quiet note with a coloured 2px rule */
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-leg :is(.u-leg-notes,.u-leg-advice,.u-problems,.u-below){grid-column:2/-1;margin:8px 0 0}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) :is(.u-leg-notes p,.u-leg-advice,.u-problems p,.u-below){margin:6px 0 0;padding:8px 10px;border-radius:var(--sc-r-sm);background:var(--sc-s2);
+  color:var(--sc-muted);font:400 13px/1.4 var(--sc-font);box-shadow:inset 2px 0 0 var(--sc-faint)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) :is(.u-problems p,.u-below){color:var(--sc-text);box-shadow:inset 2px 0 0 var(--sc-poor)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) :is(.u-leg-advice,.u-problems) .u-btn{min-height:32px;margin-left:8px;padding:0 10px;font-size:13px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .h-flash{background:color-mix(in srgb,var(--sc-accent-fill) 8%,transparent)}
+
+/* entry foot: payout + win chance, the research-estimate lines, rules, actions */
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-foot{display:block;padding:14px 16px 16px;border-top:1px solid var(--sc-hair);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sc-s2) 50%,transparent),transparent)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-slip-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:0;margin:0 0 10px;border-radius:var(--sc-r-lg);
+  box-shadow:var(--sc-ring);background:var(--sc-s1);overflow:hidden}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-slip-metrics>div{padding:10px 12px;min-width:0;border:0;border-radius:0;background:none;box-shadow:inset 1px 0 0 var(--sc-hair)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-slip-metrics>div:first-child{box-shadow:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-slip-metrics b{display:block;font:600 22px/1.05 var(--sc-font);letter-spacing:-.025em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-slip-metrics b.u-pos{color:var(--sc-pos)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-slip-metrics b.u-neg{color:var(--sc-neg)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-slip-metrics span{display:block;margin-top:4px;color:var(--sc-muted);font:400 12.5px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) :is(.u-need,.u-progress,.u-cant){margin:0 0 8px;font:400 14px/1.45 var(--sc-font);color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-need b{font:600 14px var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-progress{padding:10px 12px;border-radius:var(--sc-r-md);box-shadow:inset 0 0 0 1px var(--sc-edge);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-dim{margin:0 0 10px;color:var(--sc-faint);font:400 12.5px/1.45 var(--sc-font)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-foot .u-det{margin:0 0 12px;background:none}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-foot>.u-problems p{margin:0 0 8px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border:0;border-radius:var(--sc-r-md);
+  background:var(--sc-s3);color:var(--sc-text);box-shadow:var(--sc-ring);font:600 15px/1 var(--sc-font);text-align:center;cursor:pointer}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-btn:hover{background:var(--sc-s2);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-btn.u-gold,html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-acts .u-gold{
+  background:var(--sc-cta-bg)!important;color:var(--sc-cta-ink)!important;border:0!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.28)}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-foot>.u-btn.u-gold{width:100%;margin:0 0 8px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-btn:disabled{opacity:.45;cursor:default}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-acts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-note{margin:0 0 12px;padding:10px 12px;border-radius:var(--sc-r-md);background:var(--sc-good-tint);
+  box-shadow:inset 2px 0 0 var(--sc-good);color:var(--sc-text);font-size:14px}
+html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) :is(.u-empty,.h-empty-slip){color:var(--sc-muted);font:400 14px/1.5 var(--sc-font)}
+
+/* empty states (My slip, generated) */
+html[data-ui-v3] #u-hub #hub-studio-section .h-empty{margin:16px 0 0;padding:28px 20px;border:0;border-radius:var(--sc-r-xl);text-align:center;box-shadow:inset 0 0 0 1px var(--sc-edge);
+  background:radial-gradient(60% 120% at 50% 0%,color-mix(in srgb,var(--sc-accent-fill) 6%,transparent),transparent 70%)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-empty h3{margin:0 0 6px;font:600 19px/1.25 var(--sc-font);letter-spacing:-.01em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-empty p{margin:0 auto 16px;max-width:420px;color:var(--sc-muted);font-size:14.5px;line-height:1.5}
+html[data-ui-v3] #u-hub #hub-studio-section .h-empty-acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+html[data-ui-v3] #u-hub #hub-studio-section .h-empty-acts button{min-height:44px;padding:0 18px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s3);color:var(--sc-text);box-shadow:var(--sc-ring);font:600 15px/1 var(--sc-font);cursor:pointer}
+html[data-ui-v3] #u-hub #hub-studio-section .h-empty-acts button:first-child{background:var(--sc-cta-bg);color:var(--sc-cta-ink);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.28)}
+
+/* ------------------------------------------------------------------ Auto-build: settings panels with segmented controls | batch rail */
+html[data-ui-v3] #u-hub #hub-studio-section [data-studio-panel=build]:not([hidden]){display:block}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generator{margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none;position:static;min-width:0}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generator>.h-eyebrow{display:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generator>h2{margin:16px 0 2px;font:600 18px/1.25 var(--sc-font);letter-spacing:-.01em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generator>p{margin:0;color:var(--sc-muted);font:400 13.5px/1.5 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-bcols{display:grid;gap:14px;margin:14px 0 0}
+@media (min-width:1024px){html[data-ui-v3] #u-hub .sb-bcols{grid-template-columns:minmax(0,8fr) minmax(0,4fr);gap:24px;align-items:start}
+  html[data-ui-v3] #u-hub .sb-rail{position:sticky;top:16px}}
+html[data-ui-v3] #u-hub .sb-build{display:grid;gap:14px;min-width:0}
+html[data-ui-v3] #u-hub .sb-panel{display:block;padding:4px 16px 14px;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring),var(--sc-drop);min-width:0}
+html[data-ui-v3] #u-hub .sb-panel .h-generator-step{display:flex;align-items:center;gap:10px;margin:0;padding:12px 0;border:0}
+html[data-ui-v3] #u-hub .sb-panel .h-generator-step span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:var(--sc-r-xs);background:var(--sc-s3);color:var(--sc-muted);
+  box-shadow:inset 0 0 0 1px var(--sc-edge);font:600 11.5px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-panel .h-generator-step h3{margin:0;font:600 16px/1 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub .sb-panel .sb-set,html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px 16px;align-items:center;
+  margin:0;padding:10px 0;border:0;border-top:1px solid var(--sc-hair);border-radius:0;min-width:0;color:var(--sc-muted);font:400 13.5px/1.3 var(--sc-font);background:none}
+html[data-ui-v3] #u-hub .sb-panel .sb-set>small{grid-column:2;margin:0;color:var(--sc-faint);font:400 12.5px/1.45 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-panel .sb-set>small b{color:var(--sc-muted);font-weight:500}
+html[data-ui-v3] #u-hub .sb-panel .sb-set>select{display:none!important}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports legend{float:left;padding:0;color:var(--sc-muted);font:400 13.5px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports{display:flex!important;flex-wrap:wrap;justify-content:flex-start;gap:8px}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports legend{width:150px;margin-right:8px;align-self:center}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports label{position:relative;flex:none;width:auto;display:inline-flex;margin:0;padding:0;border:0;background:none}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports label span{display:inline-flex;align-items:center;min-height:34px;padding:0 14px;border-radius:999px;color:var(--sc-muted);
+  box-shadow:inset 0 0 0 1px var(--sc-hair);font:500 14px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports label:has(input:checked) span{color:var(--sc-text);font-weight:600;background:var(--sc-s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
+:root[data-theme="light"] #u-hub .sb-panel #hub-generation-sports label:has(input:checked) span{background:#0E1320;color:#fff;box-shadow:none}
+html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports label:has(input:focus-visible) span{outline:2px solid var(--sc-accent-fill);outline-offset:2px}
+html[data-ui-v3] #u-hub .sb-seg{display:inline-flex;flex-wrap:wrap;justify-self:start;gap:2px;max-width:100%;padding:3px;border-radius:var(--sc-r-md);background:var(--sc-bg);box-shadow:inset 0 0 0 1px var(--sc-hair)}
+:root[data-theme="light"] #u-hub .sb-seg{background:var(--sc-s2)}
+html[data-ui-v3] #u-hub .sb-seg button{min-height:34px;min-width:0;margin:0;padding:0 13px;border:0;border-radius:7px;background:none;color:var(--sc-muted);font:500 13.5px/1 var(--sc-font);
+  box-shadow:none;cursor:pointer;white-space:nowrap}
+html[data-ui-v3] #u-hub .sb-seg button:hover{color:var(--sc-text);background:none}
+html[data-ui-v3] #u-hub .sb-seg button[aria-pressed=true]{background:var(--sc-s2);color:var(--sc-text);font-weight:600;box-shadow:inset 0 0 0 1px var(--sc-sel-edge),inset 0 1px 0 var(--sc-spec)}
+:root[data-theme="light"] #u-hub .sb-seg button[aria-pressed=true]{background:var(--sc-s1)}
+html[data-ui-v3] #u-hub .sb-seg button:disabled{opacity:.4;cursor:default}
+html[data-ui-v3] #u-hub .sb-seg.is-num button{min-width:40px;padding:0 10px}
+html[data-ui-v3] #u-hub .sb-panel .h-generation-more{margin:0;padding:0;border:0;border-top:1px solid var(--sc-hair);border-radius:0;background:none}
+html[data-ui-v3] #u-hub .sb-panel .h-generation-more>summary{display:flex;align-items:center;gap:8px;min-height:44px;padding:0;color:var(--sc-muted);font:500 13.5px/1 var(--sc-font);list-style:none;cursor:pointer}
+html[data-ui-v3] #u-hub .sb-panel .h-generation-more>summary::-webkit-details-marker{display:none}
+html[data-ui-v3] #u-hub .sb-panel .h-generation-more>summary::after{content:"";width:7px;height:7px;margin-left:auto;border-right:1.5px solid var(--sc-faint);border-bottom:1.5px solid var(--sc-faint);transform:rotate(45deg) translateY(-3px)}
+html[data-ui-v3] #u-hub .sb-panel .h-generation-more[open]>summary::after{transform:rotate(-135deg)}
+html[data-ui-v3] #u-hub .sb-panel .h-generation-more>div{padding:0}
+html[data-ui-v3] #u-hub .sb-panel .h-generation-more #hub-generation-filter-count:not(:empty){padding:3px 6px;border-radius:var(--sc-r-xs);background:var(--sc-s3);color:var(--sc-text);font-size:12px}
+/* rail: This batch (mirrors the hub's own live summary) + Generate */
+html[data-ui-v3] #u-hub .sb-rail{display:grid;gap:12px;align-content:start;min-width:0}
+html[data-ui-v3] #u-hub .sb-rail .h-generation-submit{display:block;margin:0;padding:16px;border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:var(--sc-ring),var(--sc-drop)}
+html[data-ui-v3] #u-hub .sb-rail .sb-cap{display:block;margin:0 0 6px;color:var(--sc-faint);font:600 11px/1 var(--sc-font);letter-spacing:.06em;text-transform:uppercase}
+html[data-ui-v3] #u-hub .sb-rail .sb-big{margin:0 0 8px;font:600 26px/1.1 var(--sc-font);letter-spacing:-.025em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub .sb-rail .sb-big small{display:none}
+html[data-ui-v3] #u-hub .sb-rail .sb-sum{padding:0;background:none;box-shadow:none;border-radius:0}
+html[data-ui-v3] #u-hub .sb-rail #hub-generation-summary.sb-mirrored{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:0}
+html[data-ui-v3] #u-hub .sb-rail #hub-generate{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin:14px 0 0;border:0!important;border-radius:var(--sc-r-md);
+  background:var(--sc-cta-bg)!important;color:var(--sc-cta-ink)!important;font:600 16px/20px var(--sc-font);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.28);cursor:pointer}
+html[data-ui-v3] #u-hub .sb-rail #hub-generate:disabled{opacity:.6;cursor:default}
+html[data-ui-v3] #u-hub .sb-rail .h-generation-submit>small{display:block;margin-top:8px;color:var(--sc-faint);font:400 12.5px/1.4 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-rail #hub-generation-status{margin:0;padding:0 4px;border:0;background:none;color:var(--sc-muted);font:400 13.5px/1.5 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-rail #hub-generation-status:empty{display:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generator>details{margin:0;padding:0;border:0;border-radius:var(--sc-r-lg);box-shadow:var(--sc-ring);background:none}
+html[data-ui-v3] #u-hub .sb-build>details{margin:0;border:0;border-radius:var(--sc-r-lg);box-shadow:var(--sc-ring);background:none;color:var(--sc-muted);font:400 13.5px/1.55 var(--sc-font)}
+html[data-ui-v3] #u-hub .sb-build>details>summary{display:flex;align-items:center;min-height:44px;padding:0 14px;color:var(--sc-muted);list-style:none;cursor:pointer;font-size:14px}
+html[data-ui-v3] #u-hub .sb-build>details>summary::-webkit-details-marker{display:none}
+html[data-ui-v3] #u-hub .sb-build>details>summary::after{content:"";width:7px;height:7px;margin-left:auto;border-right:1.5px solid var(--sc-faint);border-bottom:1.5px solid var(--sc-faint);transform:rotate(45deg) translateY(-3px)}
+html[data-ui-v3] #u-hub .sb-build>details[open]>summary::after{transform:rotate(-135deg)}
+html[data-ui-v3] #u-hub .sb-build>details>p{margin:0;padding:0 14px 14px}
+/* phone: settings stack (label over control); the batch rail docks above the bottom bar with Generate */
+@media (max-width:719px){
+  html[data-ui-v3] #u-hub .sb-panel .sb-set{grid-template-columns:minmax(0,1fr);gap:10px}
+  html[data-ui-v3] #u-hub .sb-panel .sb-set>small{grid-column:1}
+  html[data-ui-v3] #u-hub .sb-panel #hub-generation-sports legend{width:100%;margin:0 0 4px}
+  html[data-ui-v3] #u-hub .sb-seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);width:100%;justify-self:stretch}
+  html[data-ui-v3] #u-hub .sb-seg.is-wrap{grid-auto-flow:row;grid-template-columns:1fr 1fr}
+  html[data-ui-v3] #u-hub .sb-seg button{padding:0 6px;min-height:44px;white-space:normal;line-height:1.15}
+}
+@media (max-width:1023px){
+  html[data-ui-v3] #u-hub .sb-rail{position:sticky;bottom:0;z-index:5;margin:0 -24px;gap:0}
+  html[data-ui-v3] #u-hub .sb-rail .h-generation-submit{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 14px;padding:12px 16px;border-radius:0;
+    background:color-mix(in srgb,var(--sc-bg) 94%,transparent);box-shadow:inset 0 1px 0 var(--sc-hair);backdrop-filter:blur(8px)}
+  html[data-ui-v3] #u-hub .sb-rail .sb-cap,html[data-ui-v3] #u-hub .sb-rail .sb-sum,html[data-ui-v3] #u-hub .sb-rail .h-generation-submit>small{display:none}
+  html[data-ui-v3] #u-hub .sb-rail .sb-big{grid-column:1;margin:0;font-size:17px;letter-spacing:-.015em}
+  html[data-ui-v3] #u-hub .sb-rail .sb-big small{display:block;margin-top:3px;color:var(--sc-muted);font:400 13px/1.3 var(--sc-font);letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html[data-ui-v3] #u-hub .sb-rail #hub-generate{grid-column:2;grid-row:1/span 2;width:auto;min-width:112px;min-height:44px;margin:0;padding:0 18px}
+  html[data-ui-v3] #u-hub .sb-rail #hub-generation-status:not(:empty){padding:10px 16px;background:var(--sc-bg);box-shadow:inset 0 1px 0 var(--sc-hair)}
+}
+
+/* generated slips: head, note, a 2-up grid of slip cards */
+html[data-ui-v3] #u-hub #hub-studio-section #hub-generated{margin-top:32px;min-width:0}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 0 6px;padding:0;border:0}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-head .h-eyebrow{display:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-head h2{margin:0;font:600 26px/1.15 var(--sc-font);letter-spacing:-.025em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-head p{margin:4px 0 0;color:var(--sc-muted);font:400 13.5px/1.45 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-head button{min-height:38px;padding:0 13px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s1);color:var(--sc-text);box-shadow:var(--sc-ring);font:500 14px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-note{max-width:760px;margin:6px 0 16px;color:var(--sc-faint);font:400 13px/1.55 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:16px}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card{display:flex;flex-direction:column;margin:0;padding:0;border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);
+  box-shadow:var(--sc-ring),var(--sc-drop);overflow:hidden;min-width:0}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>header{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:12px;align-items:center;margin:0;padding:14px 16px 12px;border:0;border-bottom:1px solid var(--sc-hair);background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>header>span{grid-row:1/span 2;margin:0;display:grid;place-items:center;min-width:38px;height:38px;padding:0 6px;border-radius:var(--sc-r-sm);
+  background:var(--sc-s3);color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge);font:600 10.5px/1.15 var(--sc-font);letter-spacing:.04em;text-align:center;white-space:normal;max-width:48px}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>header>strong{margin:0;font:600 16px/1.25 var(--sc-font);color:var(--sc-text);text-transform:capitalize}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>header>small{margin:2px 0 0;color:var(--sc-muted);font:400 13px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-why{margin:0;padding:10px 16px 0;border:0;background:none;color:var(--sc-faint);font:400 12.5px/1.45 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-range{display:flex;flex-wrap:wrap;gap:6px 18px;margin:0;padding:10px 16px 6px;border:0!important;background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-range span{color:var(--sc-muted);font:400 12.5px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-batch-range b{display:block;margin-top:2px;color:var(--sc-text);font:600 20px/1.1 var(--sc-font);letter-spacing:-.02em}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card ol{list-style:none;margin:6px 0 0;padding:0;flex:1}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li{display:grid;grid-template-columns:32px minmax(0,1fr) auto;column-gap:12px;align-items:start;margin:0;padding:12px 16px;border:0;border-top:1px solid var(--sc-hair);background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li>div{grid-column:2;display:flex;flex-direction:column;min-width:0}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li>.sb-av,html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li>.u-face{grid-column:1;grid-row:1;width:32px;height:32px;font-size:12px;margin:2px 0 0}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li strong{font:600 15px/20px var(--sc-font);color:var(--sc-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li span{font:400 14px/1.4 var(--sc-font);color:var(--sc-text);text-transform:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li span::first-letter{text-transform:uppercase}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li span b{font-weight:600;font-size:15px}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li small{color:var(--sc-muted);font:400 12.5px/1.4 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li small:last-child{color:var(--sc-faint)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card li>b{grid-column:3;grid-row:1;font:600 17px/1 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text);text-align:right}
+html[data-ui-v3] #u-hub #hub-studio-section .h-line-tag{margin-left:4px;padding:2px 6px;border:0;border-radius:4px;text-transform:none;letter-spacing:0;font:500 11px/1 var(--sc-font);font-style:normal;color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge);background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>footer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0;padding:12px 16px 14px;border:0;border-top:1px solid var(--sc-hair);background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>footer button{min-height:40px;padding:0 14px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s3);color:var(--sc-text);box-shadow:var(--sc-ring);
+  font:600 14px/1.2 var(--sc-font);cursor:pointer}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>footer button:only-of-type{grid-column:1/-1}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>footer small{grid-column:1/-1;color:var(--sc-muted);font:400 12.5px/1.4 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-generated-card>footer small:empty{display:none}
+
+/* ------------------------------------------------------------------ Tracked */
+html[data-ui-v3] #u-hub #hub-studio-section .h-tracked-slips{margin:16px 0 0;padding:0;border:0;background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-tracked-slips>header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 0 14px;padding:0;border:0;background:none}
+html[data-ui-v3] #u-hub #hub-studio-section .h-tracked-slips>header h2{margin:0;font:600 22px/1.2 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-tracked-slips>header p{margin:4px 0 0;color:var(--sc-muted);font:400 13.5px/1.45 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section .h-tracked-slips>header button{flex:none;min-height:32px;padding:0;border:0;background:none;color:var(--sc-link);font:500 14px/1 var(--sc-font);box-shadow:none;cursor:pointer}
+html[data-ui-v3] #u-hub #hub-studio-section #hub-slip-history .u-empty{padding:28px 20px;border-radius:var(--sc-r-xl);text-align:center;box-shadow:inset 0 0 0 1px var(--sc-edge);color:var(--sc-muted);font:400 14.5px/1.5 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-studio-section #hub-slip-history :is(.u-pick,.u-receipt,article,.u-slipcard){border-color:var(--sc-hair)}
+
+/* ------------------------------------------------------------------ desktop slip column (board, >=1101px) */
+html[data-ui-v3] #u-hub .h-slip{background:var(--sc-bg);border-left:1px solid var(--sc-hair);box-shadow:none}
+html[data-ui-v3] #u-hub .h-slip>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 16px 4px;margin:0;border:0;background:none}
+html[data-ui-v3] #u-hub .h-slip>header h2{display:flex;align-items:center;gap:8px;margin:0;font:600 20px/1.1 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text)}
+html[data-ui-v3] #u-hub .h-slip>header h2 span{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:var(--sc-r-xs);background:var(--sc-s3);color:var(--sc-text);
+  box-shadow:inset 0 0 0 1px var(--sc-edge);font:600 12px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub .h-slip>header button{min-height:32px;padding:0;border:0;background:none;color:var(--sc-link);font:500 14px/1 var(--sc-font);box-shadow:none}
+html[data-ui-v3] #u-hub .h-slip>.h-sync{margin:0;padding:0 16px;color:var(--sc-muted)!important;font:400 13px/1.4 var(--sc-font)}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content{padding:0 12px}
+html[data-ui-v3] #u-hub .h-slip>footer{margin:0;padding:12px 16px;border-top:1px solid var(--sc-hair);color:var(--sc-faint);font:400 12.5px/1.45 var(--sc-font);background:none}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-entry-h{font-size:16px;padding:12px}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg{padding:12px 40px 12px 12px;column-gap:10px;grid-template-columns:32px minmax(0,1fr);grid-template-rows:none}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>.sb-read{grid-column:2;grid-row:auto;flex-direction:row;align-items:center;gap:8px;margin-top:6px}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>.sb-read>small,html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>.sb-read>.sc-grade{margin:0}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>.sb-av,html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg>.sb-face{grid-row:1/span 2}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-entry-h{flex-wrap:wrap}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-status{align-items:flex-start}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-status p{display:flex;flex-direction:column}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-status p .u-link{margin:4px 0 0;align-self:flex-start}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-acts{grid-template-columns:1fr 1fr}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg .sb-av,html[data-ui-v3] #u-hub .h-slip #hub-slip-content .sb-face .u-face{width:32px;height:32px;--face:32px!important;font-size:12px}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-leg .u-x{right:4px}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .sb-read>b{font-size:16px}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-entry-foot{padding:12px}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-slip-metrics b{font-size:18px}
+html[data-ui-v3] #u-hub .h-slip #hub-slip-content .u-seg button{min-width:0;padding:0 9px}
+html[data-ui-v3] #u-hub .h-slip .h-empty-slip{margin:8px 4px;padding:20px 16px;border-radius:var(--sc-r-xl);box-shadow:inset 0 0 0 1px var(--sc-edge);text-align:center;background:none;border:0}
+html[data-ui-v3] #u-hub .h-slip .h-empty-slip p{margin:0 0 6px;color:var(--sc-muted)}
+html[data-ui-v3] #u-hub .h-slip .h-empty-slip b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub .h-slip .h-empty-slip small{color:var(--sc-faint)}
+
+/* ------------------------------------------------------------------ phone slip dock: the hub's own toast (with Undo) as the v3 toast,
+   docked above the bottom bar; the legacy .h-mobile-slip button (when a page shows it) sits above the bar too */
+html[data-ui-v3] .u-toast{left:50%!important;right:auto!important;transform:translateX(-50%);width:min(calc(100% - 32px),440px);min-height:44px;padding:8px 8px 8px 14px;border:0!important;border-radius:var(--sc-r-md)!important;
+  background:#151C2E!important;color:#E9ECF2!important;font:500 14px/1.3 var(--sc-font)!important;box-shadow:inset 0 0 0 1px rgba(160,180,230,.16),inset 0 1px 0 rgba(255,255,255,.06),0 12px 32px -12px rgba(0,0,0,.7)!important;box-sizing:border-box}
+html[data-ui-v3] .u-toast .u-toast-undo{float:right;min-height:32px;margin-left:10px;padding:0 12px;border:0;border-radius:var(--sc-r-sm);background:rgba(255,255,255,.08);color:#E9ECF2;font:600 14px/1 var(--sc-font);cursor:pointer}
+@media (max-width:1023px){html[data-ui-v3] body.sc-v3-shell .u-tray-btn:not(.u-docked){bottom:calc(72px + env(safe-area-inset-bottom))!important;z-index:96}
+  html[data-ui-v3] .u-toast{bottom:calc(72px + env(safe-area-inset-bottom))!important}
+  html[data-ui-v3] #u-hub .h-mobile-slip{bottom:calc(72px + env(safe-area-inset-bottom))!important}
+  html[data-ui-v3] #u-hub.h-studio-mode #hub-center{padding:0 16px calc(76px + env(safe-area-inset-bottom))}
+  html[data-ui-v3] #u-hub #hub-studio-section .sb-band{margin:0 -16px;padding:24px 16px 16px;grid-template-columns:1fr 1fr;row-gap:0}
+  html[data-ui-v3] #u-hub #hub-studio-section .sb-band .sc-lit__title{grid-column:1/-1;font-size:30px}
+  html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-sync{grid-column:1/-1}
+  html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-studio-intro>button{grid-row:3;margin-top:16px}
+  html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-studio-intro>button:only-of-type,html[data-ui-v3] #u-hub #hub-studio-section .sb-band .h-studio-intro>button:last-child:nth-of-type(odd){grid-column:1/-1}
+  html[data-ui-v3] #u-hub #hub-studio-section .h-studio-tabs button{flex:1;justify-content:center;margin:0}
+  html[data-ui-v3] #u-hub .sb-rail{margin:0 -16px}
+}
+@media (max-width:520px){
+  html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-entry-h{flex-wrap:wrap}
+  html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-status{align-items:flex-start}
+  html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-status p{display:flex;flex-direction:column}
+  html[data-ui-v3] #u-hub :is(#hub-studio-body,#hub-slip-content) .u-status p .u-link{margin:4px 0 0;align-self:flex-start}
+}
+
+/* ------------------------------------------------------------------ book dialogs: Open in <book>, one line, the sportsbook slip */
+html[data-ui-v3] dialog.u-book-dialog,html[data-ui-v3] #u-hub dialog.h-price-draft{width:min(420px,calc(100vw - 32px));padding:20px;border:0;border-radius:var(--sc-r-xl);background:var(--sc-s2);
+  color:var(--sc-text);box-shadow:inset 0 0 0 1px var(--sc-edge),inset 0 1px 0 var(--sc-spec),0 24px 64px -24px rgba(0,0,0,.8);font-family:var(--sc-font)}
+:root[data-theme="light"] dialog.u-book-dialog,:root[data-theme="light"] #u-hub dialog.h-price-draft{background:var(--sc-s1)}
+html[data-ui-v3] dialog.u-book-dialog::backdrop,html[data-ui-v3] #u-hub dialog.h-price-draft::backdrop{background:rgba(5,8,16,.62)}
+html[data-ui-v3] dialog.u-book-dialog h2,html[data-ui-v3] #u-hub dialog.h-price-draft h2{margin:0 40px 6px 0;font:600 20px/1.25 var(--sc-font);letter-spacing:-.015em;color:var(--sc-text)}
+html[data-ui-v3] dialog.u-book-dialog p,html[data-ui-v3] #u-hub dialog.h-price-draft p{margin:0 0 12px;color:var(--sc-muted);font:400 14px/1.5 var(--sc-font)}
+html[data-ui-v3] dialog.u-book-dialog form{position:absolute;right:12px;top:12px}
+html[data-ui-v3] dialog.u-book-dialog .u-x,html[data-ui-v3] #u-hub dialog.h-price-draft form button{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:var(--sc-r-sm);background:none;
+  color:var(--sc-faint);font:400 22px/1 var(--sc-font);cursor:pointer;box-shadow:none}
+html[data-ui-v3] dialog.u-book-dialog a.u-btn{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:44px;margin:0 0 8px;padding:0 16px;border:0;border-radius:var(--sc-r-md);
+  background:var(--sc-s3);color:var(--sc-text);box-shadow:var(--sc-ring);font:600 15px/1.2 var(--sc-font);text-decoration:none;box-sizing:border-box}
+html[data-ui-v3] dialog.u-book-dialog a.u-btn.u-gold{justify-content:center;min-height:48px;margin:4px 0 12px;background:var(--sc-cta-bg);color:var(--sc-cta-ink);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.28)}
+html[data-ui-v3] dialog.u-book-dialog p:has(>a.u-btn){margin:0}
+html[data-ui-v3] #u-hub dialog.h-price-draft form{position:absolute;right:12px;top:12px;margin:0}
+html[data-ui-v3] #u-hub dialog.h-price-draft ol{list-style:none;margin:0 0 12px;padding:0}
+html[data-ui-v3] #u-hub dialog.h-price-draft li{padding:10px 12px;border-radius:var(--sc-r-md);box-shadow:var(--sc-ring);margin:0 0 8px}
+html[data-ui-v3] #u-hub dialog.h-price-draft li h3{margin:0 0 4px;font:600 14px/1.2 var(--sc-font);color:var(--sc-muted)}
+html[data-ui-v3] #u-hub dialog.h-price-draft li p{margin:2px 0 0}
+html[data-ui-v3] #u-hub dialog.h-price-draft>button{width:100%;min-height:44px;border:0;border-radius:var(--sc-r-md);background:var(--sc-cta-bg);color:var(--sc-cta-ink);font:600 15px/1 var(--sc-font);cursor:pointer}

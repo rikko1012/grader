@@ -53,6 +53,7 @@ import line_chance
 import perf_shadow
 import whop_auth
 import reviews                  # member reviews (/reviews): its own SQLite file + photo store; never grades
+import ui_v3                    # v3 interface, SCOUT_UI_V3 / owner preview only (web/UI_V3.md); display only, off = nothing changes
 import bo3
 from bo3 import BO3, DATA_DIR, prune, storage_report
 import letter_containment
@@ -4996,6 +4997,8 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path != '/api/record':
                     name,ctype=('record.html','text/html; charset=utf-8') if u.path=='/record' else ('record.js','text/javascript; charset=utf-8')
                     asset=web_file(name)
+                    if name=='record.html' and self._v3_on():                              # v3 (web/UI_V3.md): styling only
+                        return self.send_shared(('public_record_asset',name,'v3'),200,ui_v3.page(asset,'record'),ctype,keep=600)
                     if name=='record.html' and ui_next_default():asset=public_next(asset)      # styling only
                     return self.send_shared(('public_record_asset',name,name=='record.html' and ui_next_default()),200,asset,ctype,keep=600)
                 sport=q.get('sport','cs2')
@@ -5011,6 +5014,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(key,status,body,keep=300)
             if u.path == "/scout-ui.css":
                 return self.send_shared(("asset", "scout-ui"), 200, web_file("scout-ui.css"), "text/css; charset=utf-8", keep=600)
+            if u.path.startswith(("/v3/", ui_v3.PREVIEW)) and self._v3_route(u, q):   # v3 (web/UI_V3.md): False = not sent, so
+                return                                                              # off / not the owner = the unknown-route answer below
             if u.path == "/alerts/unsubscribe":
                 return self.send(*unsubscribe_page(q.get("m"), q.get("t")))
             if u.path == "/health":
@@ -5019,6 +5024,9 @@ class Handler(BaseHTTPRequestHandler):
                                        "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:40],
                                        **({"sports_transport": ws_.transport_status()} if ws_ and hasattr(ws_, "transport_status") else {})})
             if u.path in LANDING_PATHS and landing_route(u.path) and self.signed_out():     # signed-out visitors only
+                if self._v3_on():
+                    landing_page()
+                    return self.send_shared(("page", "landing", "v3"), 200, ui_v3.page(_LANDING["data"], "landing"), "text/html; charset=utf-8", keep=600)
                 return self.send_shared(("page", "landing", ui_next_default()), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
                 return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
@@ -5050,19 +5058,19 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in ("/", "/index.html"):
                 if self._sports_on("/sports"):                          # sports nav link: SPORTS_UI only (else unchanged)
                     if self._upgrade_on(q):
-                        return self.send_shared(("page", "index", "sports", "upgrade"), 200, upgrade_page(sports_nav(page()), "cs2"), "text/html; charset=utf-8", keep=600)
-                    return self.send_shared(("page", "index", "sports"), 200, sports_nav(page()), "text/html; charset=utf-8", keep=600)
+                        return self.send_shared(*self._v3(("page", "index", "sports", "upgrade"), upgrade_page(sports_nav(page()), "cs2"), "cs2"), "text/html; charset=utf-8", keep=600)
+                    return self.send_shared(*self._v3(("page", "index", "sports"), sports_nav(page()), "cs2"), "text/html; charset=utf-8", keep=600)
                 if self._upgrade_on(q):
-                    return self.send_shared(("page", "index", "upgrade"), 200, upgrade_page(page(), "cs2"), "text/html; charset=utf-8", keep=600)
-                return self.send_shared(("page", "index"), 200, page(), "text/html; charset=utf-8", keep=600)
+                    return self.send_shared(*self._v3(("page", "index", "upgrade"), upgrade_page(page(), "cs2"), "cs2"), "text/html; charset=utf-8", keep=600)
+                return self.send_shared(*self._v3(("page", "index"), page(), "cs2"), "text/html; charset=utf-8", keep=600)
             if u.path == "/lol" and lol_public():                       # the member LoL page (owner's release switch)
                 if self._sports_on("/sports"):
                     if self._upgrade_on(q):
-                        return self.send_shared(("page", "lol", "sports", "upgrade"), 200, upgrade_page(sports_nav(web_file("lol.html")), "lol"), "text/html; charset=utf-8", keep=600)
-                    return self.send_shared(("page", "lol", "sports"), 200, sports_nav(web_file("lol.html")), "text/html; charset=utf-8", keep=600)
+                        return self.send_shared(*self._v3(("page", "lol", "sports", "upgrade"), upgrade_page(sports_nav(web_file("lol.html")), "lol"), "lol"), "text/html; charset=utf-8", keep=600)
+                    return self.send_shared(*self._v3(("page", "lol", "sports"), sports_nav(web_file("lol.html")), "lol"), "text/html; charset=utf-8", keep=600)
                 if self._upgrade_on(q):
-                    return self.send_shared(("page", "lol", "upgrade"), 200, upgrade_page(web_file("lol.html"), "lol"), "text/html; charset=utf-8", keep=600)
-                return self.send_shared(("page", "lol"), 200, web_file("lol.html"), "text/html; charset=utf-8", keep=600)
+                    return self.send_shared(*self._v3(("page", "lol", "upgrade"), upgrade_page(web_file("lol.html"), "lol"), "lol"), "text/html; charset=utf-8", keep=600)
+                return self.send_shared(*self._v3(("page", "lol"), web_file("lol.html"), "lol"), "text/html; charset=utf-8", keep=600)
             if u.path == "/api/lol/board" and lol_public():
                 if not self.allowed():
                     sess = self.member()
@@ -6472,7 +6480,56 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(503, {"error": "sports_unavailable"})
         if code == 200 and u.path in ("/sports", "/sports/", "/sports/results") and self._upgrade_on(q):
             body = upgrade_page(body, "sports-results" if u.path == "/sports/results" else "sports")
+        if code == 200 and u.path in ("/sports", "/sports/", "/sports/results") and isinstance(body, bytes) and self._v3_on():
+            body = ui_v3.page(body, "sports-results" if u.path == "/sports/results" else "sports")      # v3: styling only
         return self.send(code, body, ctype, hdrs)
+
+    def _v3_on(self):
+        """v3 interface (web/UI_V3.md) for this request: SCOUT_UI_V3=1 (everyone), or the owner's preview cookie (an HMAC of ADMIN_TOKEN
+        that /preview/v3 sets for the owner only). Off and no cookie = two cheap reads, and every caller sends exactly what it sent before."""
+        if ui_v3.ui_v3_default():
+            return True
+        c = self.cookie(ui_v3.COOKIE)
+        return bool(c) and ui_v3.preview_ok(c, ADMIN_TOKEN)
+
+    def _v3(self, key, body, name):
+        """-> (key, 200, body) for send_shared: unchanged when v3 is off; else the v3 copy under its own cache key."""
+        if not self._v3_on():
+            return key, 200, body
+        return key + ("v3",), 200, ui_v3.page(body, name)
+
+    def _v3_owner(self, q):
+        """Who may turn the v3 preview on: the owner by the admin token (?token= / X-Admin-Token) or on the SPORTS_UI_ALLOW list, the
+        same owner test as _upgrade_on's (read from the signed cookie, then the paid check)."""
+        if self.authed(q.get("token")):
+            return True
+        allow = {x.strip().lower() for x in os.environ.get("SPORTS_UI_ALLOW", "").split(",") if x.strip()}
+        user = whop_auth.cookie_user(self.cookie(whop_auth.COOKIE)) if allow else None
+        return bool(user) and sports_allow_id(user) in allow and self._sports_owner()
+
+    def _v3_route(self, u, q):
+        """/v3/* assets and the owner's /preview/v3 switch. True = answered; False = not for this request (nothing was sent, so the
+        caller goes on to its unknown-route answer)."""
+        if u.path.startswith("/v3/"):
+            hit = ui_v3.route(u.path) if self._v3_on() else None
+            if hit is None:
+                return False
+            body, ctype, key = hit
+            self.send_shared(key, 200, body, ctype, keep=600)
+            return True
+        if u.path == ui_v3.PREVIEW + "/landing" and self._v3_on():       # the signed-out page in v3, for the owner to look at
+            landing_page()
+            self.send_shared(("page", "landing", "v3"), 200, ui_v3.page(_LANDING["data"], "landing"), "text/html; charset=utf-8", keep=600)
+            return True
+        if u.path == ui_v3.PREVIEW and ui_v3.preview_value(ADMIN_TOKEN) and self._v3_owner(q):
+            secure = "; Secure" if self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
+            if q.get("off") in ("1", "true"):
+                self.redirect("/#all-sports", cookies=(f"{ui_v3.COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax{secure}",))
+                return True
+            to = ui_v3.PREVIEW + "/landing" if q.get("to") == "landing" else "/#all-sports"
+            self.redirect(to, cookies=(f"{ui_v3.COOKIE}={ui_v3.preview_value(ADMIN_TOKEN)}; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax{secure}",))
+            return True
+        return False
 
     def authed(self, token):
         # the admin link's ?token= still works; scripts send the X-Admin-Token header instead, so the token stays out

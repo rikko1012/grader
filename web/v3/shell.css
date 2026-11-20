@@ -1,0 +1,83 @@
+/* 1time Scout v3 shell (SHARED). Loaded after tokens.css + components.css in every v3 bundle (web/UI_V3.md).
+   Owns: the fixed header + phone bottom bar placement over the existing pages, the More sheet, the theme, and the shared
+   loading / empty / error / boot states. Page groups never edit this file; they add their own sheet (board.css, slips.css ...).
+   Every rule here is scoped under html[data-ui-v3] (or an sc- class), so nothing applies with the flag off: the file is not even
+   requested then. The hub's own sheets load after this one (upgrade.js adds them at run time), so bridge rules that must win over
+   them carry the html[data-ui-v3] #u-hub prefix (and !important only where the hub itself uses it). */
+
+/* ------------------------------------------------------------------ page offset
+   The shell does not recolour or re-font the page itself (the classic pages are dark-designed; page groups restyle their own parts).
+   It only makes room for the fixed header, and keeps the classic pages' sticky header below it. */
+html[data-ui-v3] body.sc-v3-shell{padding-top:var(--sc-top-h)}
+html[data-ui-v3] body.sc-v3-shell header:not(#u-hub header){top:var(--sc-top-h)}
+
+/* ------------------------------------------------------------------ the one header + bottom bar, above the hub (fixed, z 90) */
+html[data-ui-v3] .sc-appbar.sc-v3-bar{position:fixed;left:0;right:0;top:0;z-index:95;font-family:var(--sc-font);color:var(--sc-text);
+  background:var(--sc-bg)}                       /* opaque: nothing ghosts through (SYSTEM.md header rule) */
+html[data-ui-v3] .sc-v3-bar .sc-brand{display:inline-flex;align-items:center;gap:10px;color:var(--sc-text);text-decoration:none;font-weight:600;letter-spacing:var(--sc-track-title)}
+html[data-ui-v3] .sc-v3-bar .sc-iconbtn svg,html[data-ui-v3] .sc-v3-tabs svg{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+html[data-ui-v3] .sc-v3-bar .sc-nav__a{background:none;border:0;cursor:pointer}
+html[data-ui-v3] .sc-v3-bar .sc-nav__a[hidden]{display:none}
+html[data-ui-v3] .sc-nav__n:not(:empty){display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;padding:0 4px;border-radius:var(--sc-r-xs);
+  background:color-mix(in srgb,var(--sc-accent-fill) 16%,transparent);color:var(--sc-accent);font:600 11px/1 var(--sc-font);box-shadow:inset 0 0 0 1px var(--sc-sel-edge)}
+html[data-ui-v3] .sc-tabbar.sc-v3-tabs{z-index:95;font-family:var(--sc-font)}
+html[data-ui-v3] .sc-v3-tabs a{position:relative;-webkit-tap-highlight-color:transparent}
+html[data-ui-v3] .sc-v3-tabs .sc-nav__n:not(:empty){position:absolute;top:6px;left:calc(50% + 6px);margin:0;min-width:16px;height:16px;font-size:10px}
+@media (max-width:1023px){html[data-ui-v3] body.sc-v3-shell{padding-bottom:calc(60px + env(safe-area-inset-bottom))}}
+
+/* ------------------------------------------------------------------ bridge: the research hub under the v3 header
+   The hub is a fixed full-screen grid (upgrade-hub.css .scout-hub). v3 moves it below the header, and its own sidebar nav and
+   phone tab bar give way to the v3 header / bottom bar (every item stays reachable: the v3 controls press the hub's own buttons).
+   The sidebar keeps its grid column at 0 width (display:none would shift the centre into that column). */
+/* transform: the hub becomes the containing block of its own fixed layers (player card, popovers), so their top:0 / inset:0 start
+   below the header instead of under it */
+html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub{top:var(--sc-top-h);--side-w:0px;transform:translateZ(0)}
+html[data-ui-v3] body.sc-v3-shell #u-hub .h-sidebar{visibility:hidden;width:0;min-width:0;padding:0!important;border:0!important;overflow:hidden}
+html[data-ui-v3] body.sc-v3-shell #u-hub .h-tabbar{display:none!important}
+@media (min-width:1101px){html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub{grid-template-columns:0 minmax(0,1fr) var(--slip-w,330px)}
+  html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub.h-studio-mode,html[data-ui-v3] body.sc-v3-shell #u-hub.scout-hub.h-focus-board{grid-template-columns:0 minmax(0,1fr)}}
+/* the hub's own More sheet gives way to the v3 one (which presses the same items); the phone card sheet ends above the bottom bar */
+html[data-ui-v3] body.sc-v3-shell #u-hub .h-more-sheet{display:none!important}
+@media (max-width:1023px){html[data-ui-v3] body.sc-v3-shell #u-hub .h-card-panel{bottom:calc(60px + env(safe-area-inset-bottom))}}
+
+/* ------------------------------------------------------------------ More sheet (phone tab + desktop header button; items press the hub's own) */
+html[data-ui-v3] .sc-v3-more{z-index:97}
+html[data-ui-v3] .sc-scrim.sc-v3-scrim{z-index:96}
+html[data-ui-v3] .sc-v3-more[hidden],html[data-ui-v3] .sc-v3-scrim[hidden]{display:none}
+html[data-ui-v3] .sc-more__a{cursor:pointer;border:0;background:none;width:100%;text-align:left}
+html[data-ui-v3] .sc-v3-bar [data-v3=more]{display:none}
+@media (min-width:1024px){html[data-ui-v3] .sc-v3-bar [data-v3=more]{display:inline-grid}}
+@media (min-width:1024px){html[data-ui-v3] .sc-v3-more{left:auto;right:16px;bottom:auto;top:calc(var(--sc-top-h) + 8px);width:340px;border-radius:var(--sc-r-xl)}}
+
+/* ------------------------------------------------------------------ states (shared; ported from the D group's approved states)
+   ScoutV3.state(el, 'loading' | 'empty' | 'error', {...}) renders these. Skeletons carry no digits and no zeros. */
+.sc-empty{display:grid;justify-items:center;gap:8px;padding:40px 20px;text-align:center;font-family:var(--sc-font)}
+.sc-empty__ic{display:grid;place-items:center;width:44px;height:44px;margin-bottom:6px;border-radius:var(--sc-r-lg);color:var(--sc-muted);box-shadow:var(--sc-ring)}
+.sc-empty__ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.sc-empty b{font:600 17px/1.3 var(--sc-font);letter-spacing:-.01em;color:var(--sc-text)}
+.sc-empty p{margin:0;max-width:26rem;color:var(--sc-muted);font-size:14px;line-height:1.5}
+.sc-empty .sc-btn,.sc-empty .sc-cta{margin-top:10px;width:auto;padding:0 18px}
+.sc-errbox{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:var(--sc-r-lg);background:var(--sc-poor-tint);font-family:var(--sc-font);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-poor) 35%,transparent)}
+.sc-errbox svg{flex:none;width:18px;height:18px;margin-top:2px;color:var(--sc-poor);fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+.sc-errbox p{flex:1;margin:0;color:var(--sc-text);font-size:14px;line-height:1.5}
+.sc-errbox .sc-btn{min-height:36px;flex:none;width:auto;padding:0 14px}
+.sc-sk{display:block;height:12px;border-radius:var(--sc-r-xs);background:linear-gradient(90deg,var(--sc-s2) 0%,var(--sc-s3) 40%,var(--sc-s2) 80%);background-size:300% 100%;animation:sc-sk 1.6s linear infinite}
+@keyframes sc-sk{from{background-position:100% 0}to{background-position:-50% 0}}
+@media (prefers-reduced-motion:reduce){.sc-sk{animation:none}}
+:root[data-theme="light"] .sc-sk{background:linear-gradient(90deg,#ECEFF4 0%,#F6F7FA 40%,#ECEFF4 80%);background-size:300% 100%}
+@media (prefers-color-scheme:light){:root:not([data-theme]) .sc-sk{background:linear-gradient(90deg,#ECEFF4 0%,#F6F7FA 40%,#ECEFF4 80%);background-size:300% 100%}}
+.sc-skel{border-radius:var(--sc-r-lg);box-shadow:var(--sc-ring);background:var(--sc-s1);overflow:hidden}
+.sc-skrow{display:grid;grid-template-columns:40px minmax(0,1fr) 64px 32px;gap:12px;align-items:center;padding:14px 16px;border-top:1px solid var(--sc-hair)}
+.sc-skrow:first-child{border-top:0}
+.sc-skrow .sc-sk.c{width:40px;height:40px;border-radius:50%}
+.sc-skrow .sc-sk.w2{width:70%}
+.sc-boot{position:relative;display:grid;place-items:center;min-height:260px;border-radius:var(--sc-r-xl);background:var(--sc-bg);box-shadow:var(--sc-ring);font-family:var(--sc-font)}
+.sc-boot>div{display:grid;justify-items:center;gap:16px}
+.sc-boot .sc-brand__mark{width:40px;height:40px;font-size:19px;border-radius:10px}
+.sc-boot p{margin:0;color:var(--sc-muted);font-size:15px}
+.sc-boot i{display:block;width:120px;height:2px;background:var(--sc-hair);overflow:hidden;position:relative}
+.sc-boot i::after{content:"";position:absolute;inset:0;width:40%;background:var(--sc-accent-fill);animation:sc-bootbar 1.4s var(--sc-ease) infinite}
+@keyframes sc-bootbar{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
+@media (prefers-reduced-motion:reduce){.sc-boot i::after{animation:none;width:100%}}
+.sc-sr{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}

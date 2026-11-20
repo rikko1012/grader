@@ -1,0 +1,387 @@
+/* 1time Scout components (v3). Needs tokens.css first. Plain class rules, no !important, no page-specific selectors.
+   Naming: .sc-<block>, .sc-<block>__<part>, modifiers .is-<state> / .sc-<block>--<variant>. Value inks: .sc-v-good/.sc-v-near/.sc-v-poor.
+   Rules baked in: Outfit 400/500/600 only, tabular figures, hairlines + 1px specular top edge, no glows, one accent per surface. */
+
+/* ------------------------------------------------------------------ base */
+.sc-app{margin:0;background:var(--sc-bg);color:var(--sc-text);font:400 15px/1.45 var(--sc-font);font-variant-numeric:tabular-nums;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.sc-app *,.sc-app *::before,.sc-app *::after{box-sizing:border-box}
+.sc-app :focus-visible{outline:2px solid var(--sc-accent-fill);outline-offset:2px}
+.sc-app b,.sc-app strong,.sc-app h1,.sc-app h2,.sc-app h3,.sc-app h4{font-weight:600}
+.sc-num{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.sc-v-good{color:var(--sc-good)} .sc-v-near{color:var(--sc-text-2)} .sc-v-poor{color:var(--sc-poor)}
+/* r5 (SHARED-1) ONE value rule for every page: the big value is ink (--sc-text) at 600 with tabular figures; ONLY the delta and its arrow
+   carry --sc-pos / --sc-neg; a neutral delta is --sc-text-2 with no arrow. A soft cell tint (.sc-tint-pos / -neg) is the only big-area cue.
+   <b class="sc-val">14.37</b> <i class="sc-delta is-pos">+0.12</i>   |   is-pos / is-neg / is-flat */
+.sc-val{color:var(--sc-text);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.015em}
+.sc-delta{font-style:normal;font-weight:500;font-size:.68em;color:var(--sc-text-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.sc-delta.is-pos{color:var(--sc-pos)} .sc-delta.is-neg{color:var(--sc-neg)}
+.sc-delta.is-pos::before,.sc-delta.is-neg::before{content:"";display:inline-block;width:0;height:0;margin:0 3px .12em 0;border-left:.3em solid transparent;border-right:.3em solid transparent;vertical-align:middle}
+.sc-delta.is-pos::before{border-bottom:.42em solid currentColor} .sc-delta.is-neg::before{border-top:.42em solid currentColor}
+.sc-tint-pos{background:var(--sc-good-tint)} .sc-tint-neg{background:var(--sc-poor-tint)}
+/* hit count (L5 / L10 / L20, 'Last 12'): 500; the numerator is coloured only at >= 60% (.is-pos) or <= 40% (.is-neg); the denominator is --sc-text-3 */
+.sc-hits{font-weight:500;font-variant-numeric:tabular-nums;color:var(--sc-text)} .sc-hits b{font-weight:500} .sc-hits em{font-style:normal;color:var(--sc-text-3)}
+.sc-hits.is-pos b{color:var(--sc-pos)} .sc-hits.is-neg b{color:var(--sc-neg)}
+/* r5 (SHARED-4): no eyebrow pills above page titles, on any page. (SHARED-6): one container (.sc-wrap, max 1232) + optional 8/4 split with a side rail */
+.sc-split{display:grid;gap:var(--sc-6);grid-template-columns:minmax(0,1fr)}
+@media (min-width:1024px){.sc-split{grid-template-columns:minmax(0,8fr) minmax(0,4fr)}.sc-split__rail{position:sticky;top:calc(var(--sc-top-h) + var(--sc-4));align-self:start}}
+.sc-muted{color:var(--sc-muted)} .sc-faint{color:var(--sc-faint)}
+.sc-wrap{max-width:var(--sc-max);margin:0 auto;padding:0 var(--sc-gutter)}
+
+/* ------------------------------------------------------------------ header + brand */
+.sc-top{position:sticky;top:0;z-index:20;height:var(--sc-top-h);display:flex;align-items:center;justify-content:space-between;gap:var(--sc-3);
+  padding:0 var(--sc-gutter);background:var(--sc-bg);box-shadow:0 1px 0 var(--sc-hair)}
+.sc-brand{display:inline-flex;align-items:center;gap:10px;color:var(--sc-text);text-decoration:none;font:600 20px/1 var(--sc-font);letter-spacing:-.01em}
+.sc-brand__mark{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;border-radius:8px;background:#fff;color:#080B13;
+  font:600 15px/1 var(--sc-font);letter-spacing:-.02em;box-shadow:inset 0 -1px 0 rgba(8,11,19,.12),0 1px 2px rgba(0,0,0,.3)}
+/* r5 (PLAYER-2): the tile is the brand mark: white-filled in BOTH themes, same size and place on every page */
+:root[data-theme="light"] .sc-brand__mark{background:#fff;color:#080B13;box-shadow:0 0 0 1px rgba(16,24,48,.10),0 1px 2px rgba(16,24,48,.14)}
+.sc-iconbtn{display:inline-grid;place-items:center;min-width:44px;height:44px;border:0;border-radius:var(--sc-r-md);background:none;color:var(--sc-text);font:500 15px/1 var(--sc-font);cursor:pointer}
+.sc-iconbtn--outline{box-shadow:var(--sc-ring);padding:0 14px}
+.sc-iconbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* ------------------------------------------------------------------ member shell: ONE header + ONE nav on every member page (r4, SHARED-1)
+   Markup comes from system/shell.py (header(), tabbar()) so every group renders the same bytes.
+   Left: 1T tile + 'Scout' (never replaced by a page title; the title lives in the page hero).
+   Desktop (>=1024): hub nav Board, Slips, EV, Arbitrage, Sportsbooks, My picks, Record, Tools; right slot search, Slip pill, theme.
+   Phone: brand left, right slot search + theme; Slip lives ONLY in the bottom bar (Board, Slip, My picks, Record, More). */
+.sc-appbar{position:sticky;top:0;z-index:30;height:var(--sc-top-h);display:flex;align-items:center;gap:var(--sc-6);padding:0 var(--sc-6);
+  background:color-mix(in srgb,var(--sc-bg) 90%,transparent);-webkit-backdrop-filter:saturate(1.2) blur(14px);backdrop-filter:saturate(1.2) blur(14px);box-shadow:0 1px 0 var(--sc-hair)}
+.sc-appbar .sc-brand{font-size:19px;flex:none}
+.sc-nav{display:flex;align-items:stretch;gap:2px;height:100%;min-width:0}
+.sc-nav__a{display:flex;align-items:center;padding:0 12px;color:var(--sc-muted);font:500 14px/1 var(--sc-font);text-decoration:none;white-space:nowrap;position:relative}
+.sc-nav__a:hover{color:var(--sc-text)}
+.sc-nav__a[aria-current=page]{color:var(--sc-text);font-weight:600}
+.sc-nav__a[aria-current=page]::after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2px;background:var(--sc-accent-fill)}
+.sc-appbar__end{margin-left:auto;display:flex;align-items:center;gap:var(--sc-1)}
+.sc-slip{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 10px 0 12px;border:0;border-radius:var(--sc-r-md);background:none;color:var(--sc-text);
+  font:600 14px/1 var(--sc-font);box-shadow:var(--sc-ring);cursor:pointer;text-decoration:none;margin:0 var(--sc-1)}
+.sc-slip svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sc-muted)}
+.sc-slip b{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:var(--sc-r-xs);background:var(--sc-s3);color:var(--sc-muted);
+  font:600 12px/1 var(--sc-font);box-shadow:inset 0 0 0 1px var(--sc-edge)}
+.sc-slip.has-items b{background:color-mix(in srgb,var(--sc-accent-fill) 16%,transparent);color:var(--sc-accent);box-shadow:inset 0 0 0 1px var(--sc-sel-edge)}
+.sc-tabbar{display:none}
+@media (max-width:1023px){
+  .sc-appbar{padding:0 var(--sc-2) 0 var(--sc-gutter);gap:var(--sc-3)}
+  .sc-nav,.sc-slip{display:none}
+  .sc-tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);height:calc(60px + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom);background:color-mix(in srgb,var(--sc-s1) 94%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 -1px 0 var(--sc-edge)}
+  .sc-tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--sc-faint);text-decoration:none;font:500 11px/1 var(--sc-font)}
+  .sc-tabbar svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .sc-tabbar a[aria-current=page]{color:var(--sc-text)}
+  .sc-tabbar a[aria-current=page] svg{stroke:var(--sc-accent)}
+  .sc-tabbar b{font-weight:600;color:var(--sc-muted)}
+  .sc-has-tabbar{padding-bottom:76px}
+}
+/* toast: dark, docked above the bottom bar (phone) / bottom-centre (desktop); never a pale bubble over a row */
+.sc-toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:45;display:flex;align-items:center;gap:var(--sc-3);
+  width:min(calc(100% - 2 * var(--sc-gutter)),440px);min-height:44px;padding:8px 8px 8px 14px;border-radius:var(--sc-r-md);background:#151C2E;color:#E9ECF2;
+  font:500 14px/1.3 var(--sc-font);box-shadow:inset 0 0 0 1px rgba(160,180,230,.16),inset 0 1px 0 rgba(255,255,255,.06),0 12px 32px -12px rgba(0,0,0,.7)}
+.sc-toast>span{flex:1;min-width:0}
+.sc-toast a,.sc-toast button{border:0;background:none;color:#A9B6CE;font:600 14px/1 var(--sc-font);padding:8px;cursor:pointer;text-decoration:none}
+@media (min-width:1024px){.sc-toast{bottom:24px}}
+
+/* ------------------------------------------------------------------ surfaces + headings */
+.sc-surface{background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop);padding:var(--sc-4)}
+@media (min-width:1024px){.sc-surface{padding:var(--sc-5) 22px}}
+.sc-surface--flat{box-shadow:var(--sc-ring)}
+.sc-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--sc-3);flex-wrap:wrap;margin:0 0 var(--sc-3)}
+.sc-head h2{margin:0;font:600 var(--sc-fs-20)/1.2 var(--sc-font);letter-spacing:var(--sc-track-title)}
+.sc-head h3{margin:0;font:600 var(--sc-fs-17)/1.25 var(--sc-font);letter-spacing:-.005em}
+.sc-src{color:var(--sc-faint);font-size:var(--sc-fs-12)}
+.sc-note{color:var(--sc-muted);font-size:var(--sc-fs-13);margin:var(--sc-2) 0 0}
+.sc-label-caps{font-variant-caps:all-small-caps;letter-spacing:.06em;color:var(--sc-muted);font-weight:500}
+.sc-rule{height:1px;border:0;background:var(--sc-hair);margin:var(--sc-3) 0}
+
+/* ------------------------------------------------------------------ lit band (r4, SHARED-2): every page hero reads LIT, not black.
+   Sport-tinted dusk falloff top-right (--sc-lit, ~22% of the sport fill), a cool counter-fill top-left, 3.5% film grain and a long scrim
+   to the page colour (no visible edge). .sc-hero (player page) and .sc-lit (board / record / my picks / EV / moneylines / account / sign-in /
+   landing hero) share it. Optional art: .sc-lit__art holds a scene SVG that bleeds off the right edge under a radial scrim (no frame). */
+.sc-hero,.sc-lit{position:relative;isolation:isolate}
+.sc-hero{padding:var(--sc-5) var(--sc-gutter) var(--sc-4)}
+.sc-hero::before,.sc-lit::before{content:"";position:absolute;inset:0;z-index:-3;pointer-events:none;background:
+  radial-gradient(70% 90% at 94% -8%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent) 0%,color-mix(in srgb,var(--sc-accent-fill) calc(var(--sc-lit) * .4),transparent) 42%,transparent 78%),
+  radial-gradient(120% 70% at 60% -10%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit-fill),transparent),transparent 80%),
+  radial-gradient(46% 60% at 4% -10%,rgba(120,130,255,.10),transparent 70%),
+  linear-gradient(180deg,color-mix(in srgb,var(--sc-sky) 80%,#1B2747) 0%,var(--sc-sky) 45%,var(--sc-bg) 100%)}
+.sc-hero::after,.sc-lit::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:var(--sc-grain);background-size:180px 180px;opacity:var(--sc-grain-o);
+  -webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent)}
+.sc-lit__art{position:absolute;top:0;right:0;bottom:0;width:min(64%,820px);z-index:-2;pointer-events:none;overflow:hidden;opacity:.9;
+  -webkit-mask-image:radial-gradient(95% 120% at 100% 25%,#000 25%,transparent 75%);mask-image:radial-gradient(95% 120% at 100% 25%,#000 25%,transparent 75%)}
+.sc-lit__art>svg{position:absolute;right:-4%;top:50%;transform:translateY(-50%);height:150%;width:auto;aspect-ratio:4/1;display:block}
+.sc-lit__art>svg>rect:first-of-type{opacity:0}
+/* r5 (SHARED-2): no blueprint grid, contours or orb; the landmark is a soft silhouette (~5% alpha, 2px blur) inside the dusk haze */
+.sc-lit__art>svg>g:first-of-type{display:none}
+.sc-lit__art>svg{filter:blur(2px)}
+.sc-lit__art>svg>g:last-of-type{opacity:.4}
+:root[data-theme="light"] .sc-lit__art{opacity:.5}
+:root[data-theme="light"] .sc-lit__art>svg{filter:invert(1) hue-rotate(180deg) saturate(.6) contrast(.85)}
+:root[data-theme="light"] .sc-hero::before,:root[data-theme="light"] .sc-lit::before{background:
+  radial-gradient(58% 78% at 92% -6%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent),transparent 72%),
+  radial-gradient(46% 60% at 4% -10%,rgba(120,130,255,.05),transparent 70%),linear-gradient(180deg,var(--sc-sky),var(--sc-bg))}
+@media (prefers-color-scheme: light){:root:not([data-theme]) .sc-hero::before,:root:not([data-theme]) .sc-lit::before{background:
+  radial-gradient(58% 78% at 92% -6%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent),transparent 72%),linear-gradient(180deg,var(--sc-sky),var(--sc-bg))}}
+/* r5 (SHARED-5) one page-header spec: 24px top (phone) / 40px (desktop); the haze sits behind the title, never a blank strip above it */
+.sc-lit__in{position:relative;padding-top:var(--sc-6);padding-bottom:var(--sc-6)}
+.sc-lit__title{margin:0;font:600 var(--sc-fs-30)/1.05 var(--sc-font);letter-spacing:-.025em}
+.sc-lit__meta{margin:6px 0 0;color:var(--sc-muted);font-size:var(--sc-fs-15)}
+@media (min-width:1024px){.sc-lit__in{padding-top:var(--sc-10);padding-bottom:var(--sc-8)}.sc-lit__title{font-size:40px}}
+.sc-id{display:flex;align-items:center;gap:var(--sc-4);margin-bottom:var(--sc-4)}
+.sc-id h1{margin:0;font:600 var(--sc-fs-30)/1.05 var(--sc-font);letter-spacing:-.025em}
+@media (min-width:1024px){.sc-id h1{font-size:40px}}
+.sc-id__role{color:var(--sc-muted);font-size:var(--sc-fs-15);margin-top:4px}
+
+/* avatar: flat tinted initials disc + hairline ring. Tag only where it carries info found nowhere else (tennis nationality). */
+.sc-avatar{--d:60px;--t1:#2f64ff;position:relative;flex:none;width:var(--d);height:var(--d)}
+@media (min-width:1024px){.sc-avatar{--d:84px}}
+.sc-avatar__face{width:100%;height:100%;border-radius:50%;display:grid;place-items:center;color:#F1F3F8;
+  background:radial-gradient(110% 100% at 32% 12%,color-mix(in srgb,var(--t1) 62%,#1A2236) 0%,color-mix(in srgb,var(--t1) 34%,#111829) 52%,color-mix(in srgb,var(--t1) 16%,#0A0F1C) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.13),inset 0 1px 0 rgba(255,255,255,.30),inset 0 -12px 20px -10px rgba(0,0,0,.55),0 0 0 1px rgba(5,8,16,.55),0 8px 18px -8px rgba(0,0,0,.65);
+  font:600 calc(var(--d) * .4)/1 var(--sc-font);letter-spacing:-.02em;text-shadow:0 1px 1px rgba(0,0,0,.35)}
+:root[data-theme="light"] .sc-avatar__face{color:#0E1320;text-shadow:none;background:radial-gradient(110% 100% at 32% 12%,#fff 0%,color-mix(in srgb,var(--t1) 16%,#fff) 70%);
+  box-shadow:inset 0 0 0 1px rgba(16,24,48,.12),inset 0 1px 0 #fff,0 4px 10px -6px rgba(16,24,48,.25)}
+.sc-avatar__tag{position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);padding:1px 6px;border-radius:var(--sc-r-xs);background:var(--sc-s2);
+  color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge);font:600 10px/14px var(--sc-font);letter-spacing:.02em;white-space:nowrap}
+
+/* matchup strip: one hairline-divided row; team colour as a 2px spine */
+.sc-matchup{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);border-radius:var(--sc-r-lg);overflow:hidden;
+  background:color-mix(in srgb,var(--sc-s1) 72%,transparent);box-shadow:var(--sc-ring)}
+.sc-matchup>*{padding:10px 12px;min-width:0}
+.sc-matchup>*+*{border-left:1px solid var(--sc-hair)}
+.sc-matchup__team b{display:block;font:600 16px/22px var(--sc-font);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-matchup__team>span{display:block;color:var(--sc-muted);font-size:var(--sc-fs-13);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-matchup__team--a{box-shadow:inset 2px 0 0 var(--t1,#2f64ff)}
+.sc-matchup__team--b{text-align:right;box-shadow:inset -2px 0 0 #8fa0c8}
+.sc-matchup__clock{text-align:center;color:var(--sc-muted);font-size:var(--sc-fs-13);align-self:center}
+.sc-matchup__clock b{color:var(--sc-text);font:500 15px/18px var(--sc-font)}
+.sc-matchup__clock small{display:block;color:var(--sc-faint);font-size:var(--sc-fs-12)}
+.sc-live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--sc-good);margin-right:6px;vertical-align:middle}
+
+/* chips: sport tag (accent hairline) and filter pills (aria-pressed) */
+.sc-chip{display:inline-flex;align-items:center;height:26px;padding:0 9px;border-radius:var(--sc-r-sm);color:var(--sc-accent);font:600 12px/1 var(--sc-font);
+  letter-spacing:.01em;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-accent-fill) 45%,transparent)}
+.sc-pill{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 14px;border:0;border-radius:999px;background:none;color:var(--sc-muted);
+  font:500 14px/1 var(--sc-font);box-shadow:inset 0 0 0 1px var(--sc-edge);cursor:pointer}
+.sc-pill[aria-pressed="true"]{color:var(--sc-text);background:var(--sc-s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
+:root[data-theme="light"] .sc-pill[aria-pressed="true"]{background:#0E1320;color:#fff;box-shadow:none}
+
+/* ------------------------------------------------------------------ hero stat grid: 2 columns, label left, value right on a faint tint of its own ink */
+.sc-statgrid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sc-2)}
+.sc-statgrid dl{margin:0;background:var(--sc-s1);border-radius:var(--sc-r-lg);overflow:hidden;box-shadow:var(--sc-ring),var(--sc-drop)}
+.sc-stat{display:flex;align-items:center;justify-content:space-between;gap:6px;height:40px;padding:0 10px 0 12px;border-top:1px solid var(--sc-hair)}
+.sc-stat:first-child{border-top:0}
+.sc-stat dt{color:var(--sc-muted);font-size:var(--sc-fs-13);white-space:nowrap}
+.sc-stat dd{margin:0;display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.sc-stat dd b{font:600 16px/18px var(--sc-font);letter-spacing:-.015em;color:var(--sc-text)}
+.sc-stat dd i{font:500 11px/12px var(--sc-font);font-style:normal;color:var(--sc-text-2)}
+/* r5 (SHARED-1): the value is ink at 600 in every cell (no hero colour, no left tick); the delta + arrow carry the ink; the soft cell tint is the only area cue */
+.sc-stat{position:relative}
+.sc-stat.is-good{background:var(--sc-good-tint)} .sc-stat.is-poor{background:var(--sc-poor-tint)}
+.sc-stat.is-good i{color:var(--sc-pos)} .sc-stat.is-poor i{color:var(--sc-neg)}
+.sc-stat.is-good i::before,.sc-stat.is-poor i::before{content:"";display:inline-block;width:0;height:0;margin:0 3px 1px 0;border-left:3.5px solid transparent;border-right:3.5px solid transparent;vertical-align:middle}
+.sc-stat.is-good i::before{border-bottom:5px solid currentColor} .sc-stat.is-poor i::before{border-top:5px solid currentColor}
+.sc-statgrid__legend{grid-column:1/-1;color:var(--sc-faint);font-size:var(--sc-fs-12)}
+@media (min-width:1024px){.sc-stat{height:44px;padding:0 16px}.sc-stat dd b{font-size:18px}.sc-stat dd i{font-size:12px}}
+
+/* ------------------------------------------------------------------ grade tile + Lean chip */
+/* r4 (SHARED-5): ONE chip spec site-wide. Every letter A+ to B- uses it at the same fill and border (so B+ never reads weaker than B elsewhere);
+   data-tier="c" mutes C grades; Lean Over / Lean Under is its own neutral chip. Board rows, slip, tray, landing, studio and player page all use these. */
+.sc-grade{display:inline-grid;place-items:center;min-width:32px;height:32px;padding:0 8px;border-radius:var(--sc-r-sm);color:var(--sc-accent);
+  background:color-mix(in srgb,var(--sc-accent-fill) 12%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-accent-fill) 50%,transparent);
+  font:600 16px/1 var(--sc-font);letter-spacing:-.01em;white-space:nowrap}
+.sc-grade--sm{min-width:28px;height:24px;padding:0 6px;font-size:13px;border-radius:var(--sc-r-xs)}
+.sc-grade--lg{min-width:36px;height:36px;font-size:18px}
+.sc-grade[data-tier="c"]{color:var(--sc-muted);background:transparent;box-shadow:inset 0 0 0 1px var(--sc-edge)}
+.sc-grade--lean,.sc-grade[data-tier="lean"]{color:var(--sc-muted);background:color-mix(in srgb,var(--sc-text) 4%,transparent);box-shadow:inset 0 0 0 1px var(--sc-edge);
+  font-size:13px;font-weight:500;padding:0 10px;letter-spacing:0}
+.sc-grade--lean.sc-grade--lg{font-size:14px}
+
+/* ------------------------------------------------------------------ pick summary (decision strip): side, chance to 0.1%, grade, one stake, book line */
+.sc-pick{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:start;gap:var(--sc-3) var(--sc-4);padding:var(--sc-4) var(--sc-5);
+  background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop)}
+.sc-scout-tag{display:inline-flex;align-items:center;gap:5px;color:var(--sc-accent);font:500 12px/16px var(--sc-font)}
+.sc-scout-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--sc-accent-fill)}
+.sc-pick__side b{display:block;font:600 var(--sc-fs-22)/1.15 var(--sc-font);letter-spacing:-.02em}
+.sc-pick__side small,.sc-pick small{color:var(--sc-muted);font-size:var(--sc-fs-13)}
+.sc-pick__chance b{display:block;font:600 var(--sc-fs-40)/1 var(--sc-font);letter-spacing:var(--sc-track-display)}
+@media (max-width:520px){.sc-pick{padding:14px 16px;column-gap:12px}.sc-pick__chance b{font-size:34px}.sc-pick__side b{font-size:20px;white-space:nowrap}}
+.sc-pick__stake{display:grid;justify-items:center;align-content:start;gap:6px;text-align:center}
+.sc-pick__stake small b{color:var(--sc-text);font-weight:600}
+.sc-pick__stake br{display:none}
+.sc-pick__reason{display:block;margin-top:2px;color:var(--sc-faint);font-size:var(--sc-fs-12);line-height:1.3;max-width:13em}
+.sc-pick__foot{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:var(--sc-3);padding-top:var(--sc-3);border-top:1px solid var(--sc-hair);
+  color:var(--sc-faint);font-size:var(--sc-fs-13)}
+.sc-meter{display:block;height:3px;max-width:132px;margin:8px 0 6px;background:var(--sc-hair)}
+.sc-meter>i{display:block;height:100%;background:var(--sc-accent-fill)}
+/* book line freshness: 'Underdog · checked 9 min ago' */
+.sc-book{color:var(--sc-faint);font-size:var(--sc-fs-13);white-space:nowrap}
+
+/* tiny hit bars (last 10 vs the line); .on = went the Scout side, the dashed line is the line */
+.sc-spark{display:inline-flex;align-items:flex-end;gap:2px;height:22px;position:relative}
+.sc-spark i{display:block;width:3px;background:color-mix(in srgb,var(--sc-muted) 45%,transparent)}
+.sc-spark i.on{background:var(--sc-accent-fill)}
+.sc-spark::after{content:"";position:absolute;left:0;right:0;top:var(--ln,40%);border-top:1px dashed color-mix(in srgb,var(--sc-text) 45%,transparent)}
+
+/* ------------------------------------------------------------------ prop panel: big line, book picker, Over / Under, facts, CTA */
+.sc-line{font:600 var(--sc-fs-64)/.95 var(--sc-font);letter-spacing:-.04em}
+.sc-select{appearance:none;min-height:48px;width:100%;padding:0 40px 0 16px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s2) no-repeat right 14px center/14px
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239AA5BB' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  color:var(--sc-text);font:500 16px/1 var(--sc-font);box-shadow:var(--sc-ring)}
+.sc-seg{display:grid;grid-template-columns:1fr 1fr;gap:var(--sc-2)}
+.sc-seg button{min-height:48px;border:0;border-radius:var(--sc-r-md);background:var(--sc-s1);color:var(--sc-muted);font:500 16px/20px var(--sc-font);
+  box-shadow:inset 0 0 0 1px var(--sc-edge);cursor:pointer;transition:background-color var(--sc-fast),color var(--sc-fast)}
+.sc-seg button[aria-pressed="true"]{background:var(--sc-s2);color:var(--sc-text);font-weight:600;
+  box-shadow:var(--sc-sel),inset 0 1px 0 var(--sc-spec)}
+.sc-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;border-top:1px solid var(--sc-hair)}
+.sc-facts>div{padding:var(--sc-3) var(--sc-3) var(--sc-3) 0;border-bottom:1px solid var(--sc-hair)}
+.sc-facts>div+div{padding-left:var(--sc-3);border-left:1px solid var(--sc-hair)}
+.sc-facts dt{color:var(--sc-muted);font-size:var(--sc-fs-13);margin-bottom:4px}
+.sc-facts dd{margin:0;font:500 20px/1.15 var(--sc-font);letter-spacing:-.01em}
+.sc-facts dd.sc-big{font:600 var(--sc-fs-40)/1 var(--sc-font);letter-spacing:var(--sc-track-display)}
+.sc-facts small{display:block;color:var(--sc-faint);font-size:var(--sc-fs-12);margin-top:4px}
+.sc-cta{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;border:0;border-radius:var(--sc-r-md);background:var(--sc-cta-bg);
+  color:var(--sc-cta-ink);font:600 16px/20px var(--sc-font);letter-spacing:-.005em;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -1px 0 rgba(8,11,19,.12),0 1px 2px rgba(0,0,0,.28);cursor:pointer;text-decoration:none}
+.sc-cta:hover{filter:brightness(1.04)}
+.sc-app a.sc-cta,.sc-app a.sc-cta:visited{color:var(--sc-cta-ink)}
+/* r5 (SHARED-3): primary CTA = white-on-ink (dark) / ink fill (light); never a solid accent fill */
+:root[data-theme="light"] .sc-cta{box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(16,24,48,.2)}
+.sc-btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:0;border-radius:var(--sc-r-md);background:none;
+  color:var(--sc-text);font:600 15px/1 var(--sc-font);box-shadow:var(--sc-ring);cursor:pointer;text-decoration:none}
+
+/* ------------------------------------------------------------------ tabs (underline) and market tabs */
+.sc-tabs{position:sticky;top:var(--sc-top-h);z-index:15;display:flex;background:var(--sc-bg);box-shadow:inset 0 -1px 0 var(--sc-hair)}
+.sc-tabs [role=tab]{flex:1;min-height:44px;border:0;background:none;color:var(--sc-muted);font:500 16px/1 var(--sc-font);cursor:pointer}
+.sc-tabs [role=tab][aria-selected=true]{color:var(--sc-text);font-weight:600;box-shadow:inset 0 -2px 0 var(--sc-accent-fill)}
+
+/* ------------------------------------------------------------------ hit-rate tiles L5 / L10 / L20 */
+.sc-tiles{display:grid;grid-template-columns:repeat(3,1fr);background:var(--sc-s1);border-radius:var(--sc-r-xl);overflow:hidden;box-shadow:var(--sc-ring)}
+.sc-tile{padding:var(--sc-3);box-shadow:inset -1px 0 0 var(--sc-hair)}
+.sc-tile:last-child{box-shadow:none}
+.sc-tile b{display:block;font:600 22px/1.1 var(--sc-font);letter-spacing:-.02em}
+.sc-tile b em{font-style:normal;font-weight:500;color:var(--sc-faint)}
+/* r5: the numerator is coloured only at >= 60% / <= 40% (wrap it in <span>) */
+.sc-tile b.is-pos>span{color:var(--sc-pos)} .sc-tile b.is-neg>span{color:var(--sc-neg)}
+.sc-tile span{color:var(--sc-muted);font-size:var(--sc-fs-12)}
+
+/* ------------------------------------------------------------------ Why Scout leans: each figure on a faint tint of its own ink */
+.sc-why{list-style:none;margin:0;padding:0}
+.sc-why li{display:grid;grid-template-columns:76px minmax(0,1fr);gap:var(--sc-3);align-items:start;padding:10px 0;border-top:1px solid var(--sc-hair);color:var(--sc-muted);font-size:var(--sc-fs-15)}
+.sc-why li b{color:var(--sc-text);font-weight:600}
+.sc-fig{justify-self:end;padding:2px 7px;border-radius:var(--sc-r-xs);font:500 13.5px/18px var(--sc-font);color:var(--sc-text);background:rgba(160,180,230,.05);white-space:nowrap}
+:root[data-theme="light"] .sc-fig{background:rgba(16,24,48,.04)}
+.sc-fig.is-good{color:var(--sc-good);background:var(--sc-good-tint)} .sc-fig.is-poor{color:var(--sc-poor);background:var(--sc-poor-tint)}
+
+/* ------------------------------------------------------------------ pace bar with tick marks (pooled maps vs line pace) */
+.sc-pace{position:relative;height:4px;margin:12px 0 26px;background:var(--sc-hair);
+  background-image:repeating-linear-gradient(90deg,transparent 0 calc(10% - 1px),rgba(160,180,230,.18) calc(10% - 1px) 10%)}
+.sc-pace__fill{position:absolute;inset:0 auto 0 0;background:var(--sc-text)}
+/* r5: the fill is neutral ink; the pooled delta beside the number carries the colour */
+.sc-pace__fill,.sc-pace__fill.is-good,.sc-pace__fill.is-near,.sc-pace__fill.is-poor{background:color-mix(in srgb,var(--sc-text) 70%,transparent)}
+.sc-pace__mark{position:absolute;top:-6px;bottom:-6px;width:1px;background:var(--sc-text)}
+.sc-pace__mark small{position:absolute;top:18px;left:50%;transform:translateX(-50%);white-space:nowrap;color:var(--sc-muted);font-size:var(--sc-fs-12)}
+.sc-pooled{display:flex;align-items:flex-start;gap:var(--sc-3)}
+.sc-pooled__big{font:600 var(--sc-fs-56)/1 var(--sc-font);letter-spacing:-.04em}
+.sc-pooled__txt{color:var(--sc-muted);font-size:var(--sc-fs-13);line-height:1.45;padding-top:8px}
+.sc-pooled__txt b{color:var(--sc-text);font-weight:600}
+.sc-pooled__txt b.sc-v-good{color:var(--sc-pos)} .sc-pooled__txt b.sc-v-poor{color:var(--sc-neg)}
+
+/* ------------------------------------------------------------------ scene card (map / venue), r4: identity | values | art lane.
+   The art lives ONLY in the right lane (--lane, ~30% phone / 35% desktop) and fades in left to right, so it is 0 behind every value column
+   (D/shoot.py checks the lane's left edge against the right edge of the last value column). Values are the text colour at 500;
+   only the delta carries the ink. No orb: each scene's light is a broad wash, placed per scene. */
+.sc-scene{--h:210;--lane:24%;position:relative;isolation:isolate;overflow:hidden;display:grid;grid-template-columns:92px auto 1fr;gap:var(--sc-3);align-items:center;
+  min-height:78px;padding:9px 12px;border-radius:var(--sc-r-lg);background:linear-gradient(90deg,#0E1424 0%,#0E1424 52%,hsl(var(--h) 24% 10%) 100%);color:#E9ECF2;box-shadow:var(--sc-drop)}
+.sc-scene::before{content:"";position:absolute;inset:0;z-index:3;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(200,215,255,.10),inset 0 1px 0 rgba(255,255,255,.06)}
+.sc-scene::after{content:none}
+/* the art is the grid's third column (whatever room the values leave), bleeding to the card's top, right and bottom edges:
+   it can never sit behind a value column, whatever the card width. --lane is kept as a minimum hint only. */
+.sc-scene__id{grid-column:1;grid-row:1}.sc-scene__stats{grid-column:2;grid-row:1}
+.sc-scene__art{grid-column:3;grid-row:1;align-self:stretch;position:relative;margin:-9px -12px -9px 0;min-height:100%;z-index:-2;pointer-events:none;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.5) 40%,#000 78%);mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.5) 40%,#000 78%)}
+.sc-scene__art>svg{position:absolute;right:0;top:0;height:100%;width:auto;aspect-ratio:4/1;display:block}
+.sc-scene__art>svg>rect:first-of-type{opacity:0}
+.sc-scene__art::after{content:"";position:absolute;inset:0;opacity:.05;background-image:var(--sc-grain);background-size:180px 180px}
+/* r5 (SHARED-2): inside data cards the scene is light only: the tinted ground, the warm wash, the backlight and the ground mist, plus grain.
+   No line drawing, no grid, no orb (the svg's two <g> layers are not drawn). */
+.sc-scene__art>svg>g{display:none}
+/* r5 (SHARED-3): selected = 1px hairline at ~40% accent, 2px inner left rule, surface +3% L. No glow. */
+.sc-scene.is-on{background:linear-gradient(90deg,#141B2E 0%,#141B2E 52%,hsl(var(--h) 22% 13%) 100%)}
+.sc-scene.is-on::before{box-shadow:var(--sc-sel),inset 0 1px 0 rgba(255,255,255,.07)}
+.sc-scene__id{min-width:0}
+.sc-scene__id b{display:flex;align-items:center;gap:6px;font:600 16px/20px var(--sc-font);letter-spacing:-.01em;color:#F1F3F8;white-space:nowrap}
+.sc-scene__id>small{display:block;color:rgba(225,231,242,.66);font-size:12px;line-height:15px}
+.sc-scene__id small b{display:inline;font:600 13px/15px var(--sc-font);color:#F1F3F8}
+.sc-scene__id b{overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1023px){.sc-scene__id>small:last-child b{display:block;font-size:15px;line-height:18px;letter-spacing:-.01em}}
+.sc-scene__stats{display:grid;grid-template-columns:auto auto;justify-content:start;column-gap:12px;row-gap:4px}
+.sc-scene__stat{white-space:nowrap}
+.sc-scene__stat>span{display:block;color:rgba(214,222,238,.56);font-size:11px;line-height:13px}
+/* r5 (PLAYER-1): values ink 600 tabular (17px phone / 20px desktop), labels 11px --text-3; only the delta is coloured; 'In Maps 1-2' is the one emphasised figure */
+.sc-scene__stat b{font:600 17px/20px var(--sc-font);letter-spacing:-.015em;color:#E9ECF2}
+.sc-scene__stat b[class*="sc-v-"]{color:#E9ECF2}
+.sc-scene__stat i{font:500 11px/14px var(--sc-font);font-style:normal;margin-left:4px;letter-spacing:0}
+.sc-scene .sc-v-good{color:#5BD69A} .sc-scene .sc-v-near{color:#8E98AC} .sc-scene .sc-v-poor{color:#F0787A}
+.sc-scene__stat i.sc-v-good::before,.sc-scene__stat i.sc-v-poor::before{content:"";display:inline-block;width:0;height:0;margin:0 2px 1px 0;border-left:3px solid transparent;border-right:3px solid transparent;vertical-align:middle}
+.sc-scene__stat i.sc-v-good::before{border-bottom:4px solid currentColor} .sc-scene__stat i.sc-v-poor::before{border-top:4px solid currentColor}
+.sc-badge{display:inline-grid;place-items:center;flex:none;width:20px;height:20px;border-radius:var(--sc-r-xs);background:color-mix(in srgb,var(--sc-accent-fill) 16%,transparent);color:var(--sc-accent);box-shadow:inset 0 0 0 1px var(--sc-sel-edge);font:600 12px/1 var(--sc-font)}
+@media (min-width:1024px){
+  .sc-scene{--lane:35%;grid-template-columns:184px auto 1fr;min-height:76px;padding:10px 18px 10px 16px}
+  .sc-scene__art{margin:-10px -18px -10px 0}
+  .sc-scene__stats{grid-template-columns:repeat(4,auto);column-gap:28px}
+  .sc-scene__stat b{font-size:20px;line-height:24px}
+}
+/* light: a paper card (no per-map mint / peach / rose fills); the drawing is a pale engraving in the lane only */
+:root[data-theme="light"] .sc-scene{background:#fff;color:#0E1320}
+:root[data-theme="light"] .sc-scene::before{box-shadow:inset 0 0 0 1px rgba(16,24,48,.10)}
+:root[data-theme="light"] .sc-scene.is-on{background:#F4F7FA}
+:root[data-theme="light"] .sc-scene.is-on::before{box-shadow:var(--sc-sel)}
+:root[data-theme="light"] .sc-scene__art>svg>rect{opacity:0}
+:root[data-theme="light"] .sc-scene__art>svg{filter:invert(1) hue-rotate(180deg) saturate(.5) contrast(.8);opacity:.7}
+:root[data-theme="light"] .sc-scene__id b,:root[data-theme="light"] .sc-scene__id small b,:root[data-theme="light"] .sc-scene__stat b,:root[data-theme="light"] .sc-scene__stat b[class*="sc-v-"]{color:#0E1320}
+:root[data-theme="light"] .sc-scene__id small,:root[data-theme="light"] .sc-scene__stat span{color:#4B566D}
+:root[data-theme="light"] .sc-scene .sc-v-good{color:#0F7A4A} :root[data-theme="light"] .sc-scene .sc-v-near{color:#5D6880} :root[data-theme="light"] .sc-scene .sc-v-poor{color:#B42318}
+
+/* ------------------------------------------------------------------ board row (board page, landing product shots): one prop per row */
+.sc-row{display:grid;grid-template-columns:40px minmax(0,1fr) auto auto;align-items:center;gap:var(--sc-3);padding:12px var(--sc-4);border-top:1px solid var(--sc-hair);color:inherit;text-decoration:none}
+.sc-row:first-child{border-top:0}
+.sc-row:hover{background:color-mix(in srgb,var(--sc-s2) 60%,transparent)}
+.sc-row .sc-avatar{--d:40px}
+.sc-row__who b{display:block;font:600 15px/20px var(--sc-font);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-row__who small{display:block;color:var(--sc-muted);font-size:var(--sc-fs-13);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-row__chance{text-align:right}
+.sc-row__chance b{display:block;font:600 20px/1 var(--sc-font);letter-spacing:-.02em}
+.sc-row__chance small{color:var(--sc-faint);font-size:var(--sc-fs-12)}
+/* r4: '6 lines' chip (never a bare '+6' next to a line: it reads as odds), quiet add button with a filled state, 'was X' strike-through */
+.sc-lines{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:var(--sc-r-xs);color:var(--sc-muted);font:500 12px/1 var(--sc-font);
+  box-shadow:inset 0 0 0 1px var(--sc-edge);white-space:nowrap}
+.sc-add{display:inline-grid;place-items:center;width:36px;height:36px;border:0;border-radius:var(--sc-r-md);background:none;color:var(--sc-muted);box-shadow:inset 0 0 0 1px var(--sc-edge);cursor:pointer}
+.sc-add svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.sc-add[aria-pressed="true"]{background:color-mix(in srgb,var(--sc-accent-fill) 14%,var(--sc-s2));color:var(--sc-accent);box-shadow:inset 0 0 0 1px var(--sc-sel-edge)}
+.sc-was{color:var(--sc-faint);font-size:var(--sc-fs-12);text-decoration:line-through;margin-left:6px}
+@media (max-width:520px){.sc-row{grid-template-columns:36px minmax(0,1fr) auto;row-gap:6px}.sc-row .sc-avatar{--d:36px;grid-row:span 2}.sc-row__who{grid-row:span 2}.sc-row>.sc-grade{grid-column:3;justify-self:end}}
+
+/* ------------------------------------------------------------------ phone dock + sheet */
+.sc-dock{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:center;gap:var(--sc-3);min-height:64px;padding:10px var(--sc-gutter) calc(10px + env(safe-area-inset-bottom));
+  background:var(--sc-s3);box-shadow:0 -1px 0 var(--sc-edge)}
+.sc-dock__ctx{flex:1;min-width:0;font-size:var(--sc-fs-15)}
+.sc-dock__ctx small{display:block;color:var(--sc-muted);font-size:var(--sc-fs-13)}
+.sc-sheet{position:fixed;left:0;right:0;bottom:0;z-index:40;max-height:86vh;overflow:auto;padding:var(--sc-3) var(--sc-gutter) var(--sc-6);background:var(--sc-s3);
+  border-radius:var(--sc-r-sheet) var(--sc-r-sheet) 0 0;box-shadow:inset 0 1px 0 var(--sc-edge),0 -24px 60px rgba(0,0,0,.6)}
+.sc-scrim{position:fixed;inset:0;z-index:35;background:rgba(4,6,12,.6)}
+
+@media (prefers-reduced-motion: reduce){.sc-app *{transition:none !important;animation:none !important}}
+
+/* ------------------------------------------------------------------ r5 (D-6) grouped More sheet (shell.more_sheet()): small-caps section labels,
+   20px line icons matching the tab bar, hairline-divided rows in one inset list per group. */
+.sc-more{padding:var(--sc-2) var(--sc-gutter) calc(var(--sc-6) + env(safe-area-inset-bottom))}
+.sc-more__grab{width:36px;height:4px;margin:2px auto 10px;border-radius:2px;background:var(--sc-edge)}
+.sc-more__g+.sc-more__g{margin-top:var(--sc-4)}
+.sc-more__h{margin:0 0 6px 4px;font:500 12px/1 var(--sc-font);font-variant-caps:all-small-caps;letter-spacing:.07em;color:var(--sc-text-3)}
+.sc-more__list{border-radius:var(--sc-r-lg);background:color-mix(in srgb,var(--sc-text) 3%,transparent);box-shadow:inset 0 0 0 1px var(--sc-hair);overflow:hidden}
+.sc-more__a{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 14px;color:var(--sc-text);text-decoration:none;font:500 15px/1 var(--sc-font)}
+.sc-more__a+.sc-more__a{box-shadow:inset 0 1px 0 var(--sc-hair)}
+.sc-more__a span{flex:1}
+.sc-more__a svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sc-text-2)}
+.sc-more__a svg:last-child:not(:first-child){width:14px;height:14px;color:var(--sc-text-3)}
+/* the one header in its phone form, for mock-ups drawn inside a frame at desktop width */
+.sc-appbar--compact{position:static;padding:0 var(--sc-2) 0 var(--sc-gutter);gap:var(--sc-3);background:var(--sc-bg);-webkit-backdrop-filter:none;backdrop-filter:none}
