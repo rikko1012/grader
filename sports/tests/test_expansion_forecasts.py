@@ -89,10 +89,11 @@ def test_tennis_format_surface_and_period_are_exact():
     offer,facts=fixture('tennis');offer.update(stat='aces',scope='full_game');facts['scope']='full_game'
     assert model.fit(offer,facts,NOW)[1]=='match_format_missing'
     facts['context']={'best_of':3,'surface':'Hard'}
+    # soccer-grades-1120 thin-t2: no mismatched match is ever borrowed - the line gets the tour prior alone (n = 0)
     for game in facts['games']:game.update(best_of=5,surface='Hard')
-    assert model.fit(offer,facts,NOW)[1]=='more_exact_history_needed'
+    assert model.fit(offer,facts,NOW)[0]['thin_model']['games']==0
     for game in facts['games']:game.update(best_of=3,surface='Clay')
-    assert model.fit(offer,facts,NOW)[1]=='more_exact_history_needed'
+    assert model.fit(offer,facts,NOW)[0]['thin_model']['games']==0
     for game in facts['games']:game['surface']='Hard'
     assert model.fit(offer,facts,NOW)[0]['sample']==10
 
