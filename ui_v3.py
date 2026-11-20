@@ -25,8 +25,8 @@ PREVIEW = "/preview/v3"                      # owner only: ?off=1 clears; /previ
 
 # Bundles: served at /v3/<name>. Order matters (tokens, then components, then the shell, then the page groups).
 BUNDLES = {
-    "member.css": ("tokens.css", "components.css", "shell.css", "board.css", "slips.css", "picks.css", "player.css", "account.css", "views.css"),
-    "member.js": ("shell.js", "board.js", "slips.js", "picks.js", "player.js", "account.js", "views.js"),
+    "member.css": ("tokens.css", "components.css", "shell.css", "board.css", "slips.css", "picks.css", "player.css", "account.css", "views.css", "faces.css"),
+    "member.js": ("shell.js", "board.js", "slips.js", "picks.js", "player.js", "account.js", "views.js", "faces.js"),
     "record.css": ("tokens.css", "components.css", "shell.css", "record.css"),
     "record.js": ("shell.js", "record.js"),
     "landing.css": ("tokens.css", "components.css", "shell.css", "landing.css"),
