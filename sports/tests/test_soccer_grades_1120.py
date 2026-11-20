@@ -203,6 +203,10 @@ def test_checked_book_team_labels_resolve_exactly():
     assert h.resolve(dict(o, teams=['León', 'Laguna'], team='Laguna'), [mx]) is None
     assert 'club america' in h.participant_names({'id': 'soccer:team:espn:227', 'name': 'América'})
     assert 'santos laguna' not in h.participant_names({'id': 'soccer:team:espn:2', 'name': 'Santos'})   # Brazil's Santos: no
+    mx['players'] = [{'id': 'soccer:player:espn:110987', 'team_id': 'soccer:team:espn:225', 'name': 'Francisco Villalba'}]
+    assert h.resolve(dict(o, player='Fran Villalba'), [mx])['player_id'] == 'soccer:player:espn:110987'
+    assert h.resolve(dict(o, player='Fran Villalb'), [mx]) is None
+    assert h.resolve(dict(o, player='Fran Villalba', team='León'), [mx]) is None          # the other team: never
 
 
 def test_thin_prior_alone_where_history_is_not_an_input():

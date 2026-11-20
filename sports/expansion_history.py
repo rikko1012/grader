@@ -163,6 +163,10 @@ BOOK_PLAYER_ALIASES = {
     'soccer:player:espn:3141854': ('Alexander Bolton',),    # Alexander Jesse Bolton, Central Coast, Defender (v Perth)
     'soccer:player:espn:374882': ('Joe Lacey',),            # Joseph Lacey, Sydney FC, Midfielder (v Brisbane)
     'soccer:player:espn:412224': ('Dimitri Valkanis',),     # Dimitrios Valkanis, Brisbane Roar, Defender (v Sydney)
+    # close-1120 (PrizePicks Liga MX tab 536; ESPN rosters pulled 2026-11-20 in cs2_scout_ops/logs/soccer_grades_1120/close/espn_rosters)
+    'soccer:player:espn:110987': ('Fran Villalba',),        # Francisco Villalba, Santos, Midfielder (v León 11-21 23:00Z)
+    'soccer:player:espn:82782': ('Santiago Ramos Mingo',),  # Santiago Ramos, América, Defender (v Tigres 11-22 03:00Z)
+    'soccer:player:espn:200101': ('Luis Malagón',),         # Ángel Malagón, América, Goalkeeper (same fixture)
 }
 
 
