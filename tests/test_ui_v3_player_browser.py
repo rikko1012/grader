@@ -184,7 +184,7 @@ def check_card(p, sport, size, theme):
         assert "Model estimate" in p.locator(".v3p-pick").inner_text()
         assert " checked " in p.locator(".v3p-pick .sc-book").inner_text()
     # source notes readable in both themes: 4.5:1 or better against the surface they sit on
-    low = p.evaluate("""[...document.querySelectorAll('#hub-detail .sc-src, #hub-detail .sc-statgrid__legend')].map(e => {
+    low = p.evaluate(r"""[...document.querySelectorAll('#hub-detail .sc-src, #hub-detail .sc-statgrid__legend')].map(e => {
       const rgb = s => s.match(/[\d.]+/g).slice(0, 3).map(Number), lum = c => { const v = c.map(x => { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); });
         return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
       let b = e, bg; while (b && ((bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)' || bg.startsWith('rgba') && bg.endsWith(', 0)'))) b = b.parentElement;
@@ -204,8 +204,11 @@ def check_card(p, sport, size, theme):
         assert not vis(p, "#hub-detail > .v3p-dock")
         card_shots(p, name)
         p.evaluate("(() => { const d = document.getElementById('hub-detail'), a = document.querySelector('#hub-decision'); d.scrollTop = a.offsetTop + a.offsetHeight + 40; })()")
-        p.wait_for_function("document.getElementById('hub-detail').classList.contains('v3p-dock-on')", timeout=5000)
-        assert vis(p, "#hub-detail > .v3p-dock")
+        p.wait_for_timeout(300)
+        gone = p.evaluate("(() => { const a = document.querySelector('#hub-decision [data-hub=detail-add]') || document.querySelector('#hub-decision'); return a.getBoundingClientRect().bottom < 60; })()")
+        if gone:                                   # Add scrolled away above: the bar is there; a short card that cannot scroll that far keeps Add in view
+            p.wait_for_function("document.documentElement.classList.contains('v3p-dock-on')", timeout=5000)
+            assert vis(p, "#hub-detail > .v3p-dock")
         p.evaluate("document.getElementById('hub-detail').scrollTop = 0")
     else:
         assert vis(p, "#hub-detail > .v3p-dock")

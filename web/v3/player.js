@@ -531,19 +531,23 @@
   }
   /* the phone shows the combined bar only once the card's own Add button (the decision strip) has scrolled out of view: on first view
      the strip itself is the action, and the bar never sits over the pick summary (player.css, max-width 1023px) */
-  var addIO = null, addEl = null;
-  function watchAdd(box) {
+  var dockQ = 0;
+  function dockCheck() {
+    dockQ = 0;
+    var box = document.getElementById('hub-detail'), R = document.documentElement;
+    if (!box) return;
     var add = box.querySelector('#hub-decision [data-hub="detail-add"]') || box.querySelector('#hub-decision');
-    if (add === addEl) return;
-    if (addIO) addIO.disconnect();
-    addEl = add;
-    if (!add || typeof IntersectionObserver !== 'function') { box.classList.add('v3p-dock-on'); return; }
-    box.classList.remove('v3p-dock-on');
-    addIO = new IntersectionObserver(function (es) {
-      var e = es[es.length - 1];
-      box.classList.toggle('v3p-dock-on', !e.isIntersecting && e.boundingClientRect.top < innerHeight / 2);   /* out of view above, not below */
-    });
-    addIO.observe(add);
+    /* above the v3 header's foot (56px) = scrolled away; below the viewport (not reached yet) = not */
+    var on = !add || add.getBoundingClientRect().bottom < 64;
+    if (R.classList.contains('v3p-dock-on') !== on) R.classList.toggle('v3p-dock-on', on);
+  }
+  function watchAdd(box) {
+    if (!box.__v3pDock) {
+      box.__v3pDock = true;
+      box.addEventListener('scroll', function () { if (!dockQ) dockQ = requestAnimationFrame(dockCheck); }, {passive: true});
+      window.addEventListener('scroll', function () { if (!dockQ) dockQ = requestAnimationFrame(dockCheck); }, {passive: true});
+    }
+    dockCheck();
   }
   var queued = false;
   function schedule() {

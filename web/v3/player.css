@@ -245,7 +245,7 @@ html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-map.sc-scene{backgr
 html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .v3p-map.sc-scene.is-on{background:linear-gradient(90deg,#F4F7FA 0%,#F4F7FA 50%,hsl(var(--h) 45% 91%) 100%)}
 /* phone: the combined bar only after the card's own Add has scrolled away; its text wraps instead of being cut */
 @media (max-width:1023px){
-  html[data-ui-v3] #u-hub #hub-detail:not(.v3p-dock-on)>.v3p-dock{display:none}
+  html[data-ui-v3]:not(.v3p-dock-on) #u-hub #hub-detail>.v3p-dock{display:none}
   html[data-ui-v3] #u-hub #hub-detail .v3p-dock .sc-dock__ctx small{white-space:normal;overflow:visible}
 }
 /* line panel (mocks 05 / 10): market + big line beside the select, freshness + line type, Projection / Gap / Market chance, L5-L20 */
