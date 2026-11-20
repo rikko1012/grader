@@ -346,8 +346,10 @@
     new MutationObserver(function () {
       try {
         if (cardUp()) {
-          if (!cardEntry && DESK.matches && !(history.state && (history.state.hubCard || history.state.scV3Card))) {
-            history.pushState({scV3Card: 1}, '', location.href);
+          if (!cardEntry && DESK.matches && !(history.state && history.state.hubCard)) {
+            /* a marker left on this entry (a reload with the card up, or Back onto it after leaving for another page) is adopted as
+               this card's entry, so Back still closes it; otherwise the card gets its own entry */
+            if (!(history.state && history.state.scV3Card)) history.pushState({scV3Card: 1}, '', location.href);
             cardEntry = location.href;
           }
         } else if (cardEntry) {

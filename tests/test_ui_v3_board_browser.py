@@ -473,6 +473,31 @@ def test_qa_browser_back_closes_the_player_card(browser, env, monkeypatch, size)
         p.wait_for_selector("#hub-card", state="hidden")
         p.wait_for_timeout(300)
         assert p.evaluate("!(history.state && (history.state.scV3Card || history.state.hubCard))")
+        if size is DESK:
+            # a marker left behind (card up, then another page, then Back onto it; or a reload with the card up) is adopted: Back
+            # still closes the next card
+            p.locator(f"{ROW} .h-player").first.click()
+            p.wait_for_selector("#hub-card:not([hidden])")
+            p.locator(".sc-v3-bar .sc-nav [data-v3-nav=picks]").click()
+            p.wait_for_selector("#hub-picks-section:not([hidden])")
+            p.go_back()
+            p.wait_for_selector("#hub-board-section:not([hidden])")
+            p.wait_for_selector(ROW)
+            for step in ("after another page", "after a reload"):
+                if step == "after a reload":
+                    p.locator(f"{ROW} .h-player").first.click()
+                    p.wait_for_selector("#hub-card:not([hidden])")
+                    p.reload()
+                    p.wait_for_selector(ROW, timeout=30000)
+                    p.wait_for_function("!!window.ScoutV3")
+                    if p.locator("#hub-card:not([hidden])").count():
+                        p.locator("#hub-card [data-hub=card-close]").first.click()
+                        p.wait_for_selector("#hub-card", state="hidden")
+                p.locator(f"{ROW} .h-player").first.click()
+                p.wait_for_selector("#hub-card:not([hidden])")
+                p.go_back()
+                p.wait_for_selector("#hub-card", state="hidden", timeout=5000)
+                assert p.locator("#hub-board-section").is_visible(), step
         assert not p.errors, p.errors
     finally:
         c.close()
