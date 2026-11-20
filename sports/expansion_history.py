@@ -143,10 +143,10 @@ BOOK_TEAM_ALIASES = {
 # same team, same listed position, the only roster player with that surname. Exact labels only - never a prefix, a
 # first-name rule or fuzzy matching; a label not seen live is not listed.
 BOOK_PLAYER_ALIASES = {
-    # tennis (365Scores Challenger names; Underdog labels): same tournament, same start, the opponent matched exactly
-    'atp:player:365scores:47450': ('Felipe Meligeni Alves',),       # 'Felipe Meligeni' (Montevideo, 2026-11-20 18:50Z)
-    'atp:player:365scores:50126': ('Matheus Pucinelli de Almeida',),  # 'Matheus Almeida' (same match)
-    'atp:player:365scores:79200': ('Jay Friend',),                  # 'Jay Dylan Hara Friend' (Kobe v Liam Broady, 02:00Z)
+    # tennis: 365Scores 'Jay Dylan Hara Friend' (short name 'Jay Dylan Friend'), Underdog 'Jay Friend' - Challenger Kobe
+    # semi-final, both listed at 2026-11-21 02:00Z, the opponent 'Liam Broady' exact in both. (Meligeni Alves /
+    # Pucinelli de Almeida resolve from 365Scores' own long names, no hand label.)
+    'atp:player:365scores:79200': ('Jay Friend',),
     'soccer:player:espn:263224': ('Juan Purata',),          # Juanjo Purata, Atlas, Defender (v Juarez 2026-11-21 03:00Z)
     'soccer:player:espn:235122': ('Juan Vargas',),          # Juan Pablo Vargas, Puebla, Defender (v San Luis 01:00Z)
     'soccer:player:espn:350647': ('Alexander Robinson',),   # Alex Robinson, Macarthur FC, Goalkeeper (v Wellington)
@@ -162,8 +162,9 @@ BOOK_PLAYER_ALIASES = {
 
 
 def player_names(p):
-    """ESPN's display name plus the checked book labels of that player."""
-    return {normalized(p.get('name'))} | {normalized(x) for x in BOOK_PLAYER_ALIASES.get(p.get('id'), ())}
+    """The source's display name (and 365Scores' own long name) plus the checked book labels of that player."""
+    return ({normalized(p.get(k)) for k in ('name', 'long_name') if p.get(k)} |
+            {normalized(x) for x in BOOK_PLAYER_ALIASES.get(p.get('id'), ())})
 
 
 def participant_names(p):

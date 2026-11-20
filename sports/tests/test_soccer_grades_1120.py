@@ -446,6 +446,11 @@ def test_tennis_checked_labels_resolve_exactly():
     from sports import expansion_history as history
     m = _tennis_match('atp_challenger', 'e1', ['Felipe Meligeni', 'Matheus Almeida'],
                       ['atp:player:365scores:47450', 'atp:player:365scores:50126'], '2026-11-20T18:50:00Z')
+    o0 = {'sport': 'tennis', 'platform': 'underdog', 'tour': 'atp', 'competition': 'ATP Challenger Montevideo',
+          'player': 'Matheus Pucinelli de Almeida', 'opponent': 'Felipe Meligeni Alves', 'start': '2026-11-20T18:50:00Z'}
+    assert history.resolve(o0, [m]) is None                         # without the source's long names: no match
+    m['participants'][0]['long_name'] = 'Felipe Meligeni Alves'     # 365Scores longName (allscores, 2026-11-20)
+    m['participants'][1]['long_name'] = 'Matheus Pucinelli De Almeida'
     o = {'sport': 'tennis', 'platform': 'underdog', 'tour': 'atp', 'competition': 'ATP Challenger Montevideo',
          'player': 'Matheus Pucinelli de Almeida', 'opponent': 'Felipe Meligeni Alves', 'start': '2026-11-20T18:50:00Z'}
     assert history.resolve(o, [m])['player_id'] == 'atp:player:365scores:50126'
@@ -523,3 +528,16 @@ def test_thin_t2_tennis_fantasy_score():
     f, reason = model.make_forecast(offer, facts, NOW)
     assert reason is None and f['component_model'] == 'fantasy_tennis' and f['thin_model']['version'] == 'thin-t2'
     assert f['thin_model']['group'] == 'atp|3' and f['units'] == 0.0 and f['side'] == 'over' and f['grade']
+
+
+def test_365scores_long_name_is_kept_only_when_it_differs():
+    from sports import expansion_challenger as ch
+    body = {'countries': [{'id': 301, 'name': 'Challenger'}], 'competitions': [{'id': 9, 'countryId': 301, 'sportId': 3,
+            'name': 'Montevideo'}], 'games': [{'id': 1, 'competitionId': 9, 'sportId': 3, 'statusGroup': 2,
+            'startTime': '2026-11-20T18:50:00+00:00', 'statusText': '',
+            'homeCompetitor': {'id': 47450, 'type': 4, 'sportId': 3, 'name': 'Felipe Meligeni',
+                               'longName': 'Felipe Meligeni Alves'},
+            'awayCompetitor': {'id': 7, 'type': 4, 'sportId': 3, 'name': 'Liam Broady', 'longName': 'Liam Broady'}}]}
+    parts = ch.parse_games(body, '2026-11-20T10:00:00Z')['atp_challenger'].matches[0]['participants']
+    assert parts[0] == {'id': 'atp:player:365scores:47450', 'name': 'Felipe Meligeni', 'long_name': 'Felipe Meligeni Alves'}
+    assert parts[1] == {'id': 'atp:player:365scores:7', 'name': 'Liam Broady'}

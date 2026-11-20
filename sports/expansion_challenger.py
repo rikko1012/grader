@@ -40,6 +40,11 @@ def parse_games(body,observed):
         if not final and not scheduled:continue
         eid=f'{tour}:365scores:{key}:{g["competitionId"]}:{g["id"]}'
         participants=[{'id':f'{tour}:player:365scores:{p["id"]}','name':p['name']} for p in players]
+        for part,raw in zip(participants,players):
+            # soccer-grades-1120: 365Scores' own long name when it differs ('Felipe Meligeni' / 'Felipe Meligeni Alves'):
+            # an exact second name from the source, matched only by equality (expansion_history.player_names)
+            if isinstance(raw.get('longName'),str) and raw['longName'].strip() and raw['longName']!=raw['name']:
+                part['long_name']=raw['longName']
         f=out.setdefault(key,Feed())
         f.records.extend(Player(p['id'],tour,p['name'],source_ids=(SourceId('365scores',str(raw['id'])),),
             observed_at=observed,known_at=observed) for p,raw in zip(participants,players))
