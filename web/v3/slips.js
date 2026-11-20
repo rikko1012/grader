@@ -46,9 +46,8 @@
     if (name) {
       var face = name.querySelector('.u-face');
       if (face) {
-        var wrap = document.createElement('span'); wrap.className = 'sb-face'; wrap.setAttribute('aria-hidden', 'true');
-        wrap.appendChild(face.cloneNode(true)); leg.insertBefore(wrap, leg.firstChild);
-        face.classList.add('sb-src');
+        var wrap = document.createElement('span'); wrap.className = 'sb-face';
+        wrap.appendChild(face); leg.insertBefore(wrap, leg.firstChild);   /* the hub's own face node (its image load / fallback handlers are document-wide) */
       } else {
         var av = document.createElement('span'); av.className = 'sb-av'; av.setAttribute('aria-hidden', 'true');
         av.textContent = initials(textOf(name)); leg.insertBefore(av, leg.firstChild);

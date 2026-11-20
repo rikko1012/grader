@@ -158,6 +158,51 @@ def test_v3_phone_toast_docks_above_the_bottom_bar(browser, env, monkeypatch, th
         c.close()
 
 
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_v3_book_dialog_and_lineup_image_action(browser, env, monkeypatch, theme):
+    import server
+    monkeypatch.setenv('SCOUT_WORKSPACE_V2', '1')
+    monkeypatch.setattr(server, 'PP_OPEN_LINK', True)
+    c, p = v3_page(browser, env, monkeypatch, "slips", DESK, theme)
+    try:
+        p.wait_for_selector('.sb-band [data-hub=share-card] svg')                            # the hub's own button, in the band
+        assert 'Download lineup image' in p.locator('.sb-band [data-hub=share-card]').inner_text()
+        p.goto(env.url + '/#/board')
+        p.wait_for_selector('#hub-rows tr[data-record]')
+        p.locator('#hub-sports [data-id=cs2]').click()
+        p.locator('#hub-platform [data-id=prizepicks]').click()
+        for name in ('vargo', 'orlo'):                                                       # as test_workspace_v2_browser does
+            p.locator('#hub-q').fill(name)
+            p.locator('#hub-rows .h-add:not([disabled])').first.click()
+        p.evaluate("location.hash='/slips'")
+        p.wait_for_selector('#hub-studio-body [data-u=open-entry]', timeout=20000)
+        p.locator('#hub-studio-body [data-u=open-entry]').first.click()
+        box = p.locator('#u-book-open')
+        box.wait_for(state='visible')
+        assert box.locator('a.u-gold').get_attribute('href').startswith('https://app.prizepicks.com/board?projections=')
+        assert box.bounding_box()['width'] <= 421
+        shot(p, f"slips-book-dialog-1280-{theme}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_v3_slips_between_1024_and_1100(browser, env, monkeypatch):
+    c, p = v3_page(browser, env, monkeypatch, "slips", {"width": 1060, "height": 900}, "dark")
+    try:
+        build_and_open(p, env)
+        no_h_scroll(p)
+        shot(p, "slips-build-1060-dark")
+        p.locator('#hub-generated [data-hub=use-generated]').first.click()
+        p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').click()
+        p.wait_for_selector('#hub-studio-body .u-entry.ready', timeout=20000)
+        no_h_scroll(p)
+        shot(p, "slips-my-slip-1060-dark")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
 def test_flag_off_the_slip_studio_is_untouched(browser, env, monkeypatch):
     monkeypatch.delenv("SCOUT_UI_V3", raising=False)
     c = context(browser, env, PHONE)
