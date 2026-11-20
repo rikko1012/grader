@@ -211,3 +211,59 @@ def test_thin_prior_alone_where_history_is_not_an_input():
     f, reason = model.make_forecast(offer, facts, NOW)
     assert reason is None and f['sample'] == 0 and f['inputs'] == []
     assert f['stake_reason'] == model.THIN_REASONS['failed']
+
+
+# --- tennis / Underdog board carry on a failed read (fault injection 2026-11-20: a 429 storm emptied tennis 253 -> 0)
+
+def _board_row(platform, offer_id, observed, start):
+    return {'sport': 'tennis', 'platform': platform, 'offer_id': offer_id, 'revision': 'r' + offer_id,
+            'observed_at': observed, 'start': start, 'variant': 'standard', 'sides': {'over': {'multiplier': None}}}
+
+
+def test_failed_source_carries_last_good_rows_inside_max_age_only(monkeypatch, tmp_path):
+    import json as _json
+    from sports import expansion_board as board, expansion_odds, net
+    from sports.contracts import now_utc, parse_utc
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setattr(expansion_odds, 'collect', lambda sport, get, directory: ([], {}))
+    now = parse_utc(now_utc())
+    iso = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    fresh, stale = iso(now - timedelta(seconds=60)), iso(now - timedelta(seconds=board.MAX_AGE + 60))
+    later, gone = iso(now + timedelta(hours=3)), iso(now - timedelta(minutes=5))
+    d = board.root('tennis'); d.mkdir(parents=True)
+    prev = [_board_row('prizepicks', '1', fresh, later), _board_row('prizepicks', '2', stale, later),
+            _board_row('prizepicks', '3', fresh, gone), _board_row('underdog', '4', fresh, later)]
+    (d / 'board.json').write_text(_json.dumps({'sport': 'tennis', 'built_at': fresh, 'sources': {}, 'offers': prev}))
+
+    def get_json(sport, url, params=None, **kw):
+        if 'prizepicks' in url:
+            raise net.HttpError(429, url)
+        return {}                                          # Underdog answers (empty)
+    monkeypatch.setattr('sports.expansion_sources.get_json', get_json)
+    snap = board.collect('tennis')
+    kept = [(r['platform'], r['offer_id']) for r in snap['offers']]
+    assert kept == [('prizepicks', '1')]                   # stale and started rows drop; Underdog read fine -> its own rows
+    assert snap['offers'][0]['observed_at'] == fresh       # never re-stamped
+    assert snap['sources']['prizepicks'] == {**snap['sources']['prizepicks'], 'ok': False, 'carried': 1}
+    # the member snapshot never re-stamps carried rows with the failed read's checked_at
+    path = d / 'board.json'
+    data = board._prepared(path, path.stat(), datetime.now(timezone.utc), 'tennis')
+    hit = next(v for v in board._PREPARED.values() if v['data'] is data)
+    assert hit['restamp'] is False and [r['offer_id'] for r in data['offers']] == ['1']
+
+
+def test_successful_reads_never_carry(monkeypatch, tmp_path):
+    import json as _json
+    from sports import expansion_board as board, expansion_odds
+    from sports.contracts import now_utc, parse_utc
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setattr(expansion_odds, 'collect', lambda sport, get, directory: ([], {}))
+    now = parse_utc(now_utc())
+    iso = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    d = board.root('tennis'); d.mkdir(parents=True)
+    prev = [_board_row('prizepicks', '1', iso(now - timedelta(seconds=30)), iso(now + timedelta(hours=3)))]
+    (d / 'board.json').write_text(_json.dumps({'sport': 'tennis', 'built_at': prev[0]['observed_at'], 'sources': {},
+                                               'offers': prev}))
+    monkeypatch.setattr('sports.expansion_sources.get_json', lambda sport, url, params=None, **kw: {})
+    snap = board.collect('tennis')
+    assert snap['offers'] == [] and all('carried' not in s for s in snap['sources'].values())

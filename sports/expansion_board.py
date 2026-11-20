@@ -80,6 +80,10 @@ def _prepared(path, st, now, sport):
         for r in odds:
             stamps.setdefault('odds:' + r['platform'], set()).add(r['observed_at'])
         restamp = all(len(v) <= 1 for v in stamps.values())
+        # A source whose read failed and whose last good rows are carried (_carry): its checked_at is the failed
+        # read's time, so it must never re-stamp those rows as fresh - no 'unchanged' shortcut for that snapshot.
+        if any(isinstance(s, dict) and s.get('carried') for s in (data.get('sources') or {}).values()):
+            restamp = False
         _PREPARED[key] = {'data':data, 'body':encoded, 'checked':instant, 'expires':min(deadlines), 'restamp':restamp}
         return data
 
@@ -898,6 +902,34 @@ def pp_soccer_status():
     return status
 
 
+def _carry(sport, platform, seen, now=None):
+    """soccer-grades-1120 (fault injection: one 429 / outage on the tennis PrizePicks or Underdog read emptied that
+    source's rows from the board for the whole run, 253 -> 0 tennis offers): the previous board's rows of a source
+    whose read failed are carried, unchanged (observed_at is never re-stamped), while they are inside the board's own
+    MAX_AGE and not started - exactly what _prepared() would still show. Past MAX_AGE they drop as before (stale lines
+    are hidden, never shown as fresh). Nothing changes when every read succeeds."""
+    now = now or now_utc()
+    try:
+        path = root(sport) / "board.json"
+        if path.stat().st_size > 3_000_000:
+            return []
+        prev = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    out = []
+    for r in prev.get("offers") or []:
+        try:
+            if r.get("sport") != sport or r.get("platform") != platform or (r["platform"], r["offer_id"]) in seen:
+                continue
+            age = _age_s(r.get("observed_at"), now)
+            if age is None or not 0 <= age <= MAX_AGE or parse_utc(r["start"]) <= parse_utc(now):
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append(r)
+    return out
+
+
 def collect(sport):
     from . import net
     from .expansion_sources import get_json
@@ -940,6 +972,12 @@ def collect(sport):
             sources[source] = {"ok": True, "checked_at": observed, "offers": len(found)}
         except (net.HttpError, ValueError, OSError) as e:
             sources[source] = {"ok": False, "checked_at": now_utc(), "error": type(e).__name__}
+            if source in ("prizepicks", "underdog"):
+                carried = _carry(sport, provider, seen)
+                if carried:
+                    seen.update((r["platform"], r["offer_id"]) for r in carried)
+                    rows.extend(carried)
+                    sources[source]["carried"] = len(carried)
     from .expansion_odds import collect as collect_odds
     directory=root(sport);directory.mkdir(parents=True,exist_ok=True)
     if leagues_path:
