@@ -151,6 +151,13 @@ BOOK_PLAYER_ALIASES = {
     'soccer:player:espn:235122': ('Juan Vargas',),          # Juan Pablo Vargas, Puebla, Defender (v San Luis 01:00Z)
     'soccer:player:espn:350647': ('Alexander Robinson',),   # Alex Robinson, Macarthur FC, Goalkeeper (v Wellington)
     'soccer:player:espn:313058': ('José Eulogio',),         # Jose Eulogio Téllez, Pachuca, Goalkeeper (v Toluca 11-21)
+    # A-League (PrizePicks tab 82 labels, 2026-11-21 fixtures; book role Attacker = ESPN Forward)
+    'soccer:player:espn:251930': ('Harry Sawyer',),         # Harrison Sawyer, Melbourne Victory, Forward (v Auckland)
+    'soccer:player:espn:176886': ('Luis Felipe Gallegos',),  # Felipe Gallegos, Auckland FC, Midfielder (v Mel Victory)
+    'soccer:player:espn:3141853': ('Presley Ortiz',),       # Presley Lucien Ortiz, Central Coast, Forward (v Perth)
+    'soccer:player:espn:3141854': ('Alexander Bolton',),    # Alexander Jesse Bolton, Central Coast, Defender (v Perth)
+    'soccer:player:espn:374882': ('Joe Lacey',),            # Joseph Lacey, Sydney FC, Midfielder (v Brisbane)
+    'soccer:player:espn:412224': ('Dimitri Valkanis',),     # Dimitrios Valkanis, Brisbane Roar, Defender (v Sydney)
 }
 
 
