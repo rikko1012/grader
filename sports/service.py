@@ -332,7 +332,9 @@ def alerts(o):
         # These stages used to stay quiet during the long retry backoff: unlike
         # collectors they had no success-age check. A healthy HTTP server alone
         # does not mean new forecasts or settlements are being produced.
-        if name in {"model-forward", "books", "settle", "settle-post", "picks-settle", "slips-settle", "grades-daily"}:
+        # sg-stability: the soccer / tennis learning jobs publish those sports' grades (forecasts.json) - same rule
+        if name in {"model-forward", "books", "settle", "settle-post", "picks-settle", "slips-settle", "grades-daily",
+                    "soccer-learning", "tennis-learning"}:
             every = j.get("every_s")
             if every:
                 limit = max(3 * every, every + (j.get("timeout_s") or 0), 1800)
@@ -366,9 +368,22 @@ def alerts(o):
             out.append({"level": "page", "code": "expansion_store_full", "detail": detail})
         elif st.get("state") in ("backfill_paused", "warn"):
             out.append({"level": "warn", "code": "expansion_store_large", "detail": detail})
-        if st.get("quotes_mb") is not None and st["quotes_mb"] >= 0.8 * st.get("quotes_cap_mb", 250):
-            out.append({"level": "warn", "code": "expansion_quotes_large", "detail": {
-                "sport": sport, "quotes_mb": st["quotes_mb"], "cap_mb": st.get("quotes_cap_mb", 250)}})
+        out.extend(expansion_side_alerts(sport, st))
+    for sport, row in (o.get("expansion_learning") or {}).items():
+        if not isinstance(row, dict) or not row.get("enabled"):
+            continue
+        rep = row.get("report") or {}
+        errs = {k: (rep.get(k) or {}).get("error") for k in ("published_model", "published_reviews", "reviews", "forecasts")
+                if isinstance(rep.get(k), dict) and (rep.get(k) or {}).get("error")}
+        for k, v in ((rep.get("upkeep") or {}).items() if isinstance(rep.get("upkeep"), dict) else ()):
+            if isinstance(v, dict) and v.get("error"):
+                errs["upkeep_" + k] = v["error"]
+        if errs:
+            out.append({"level": "warn", "code": "expansion_learning_step_error", "detail": {"sport": sport, **errs}})
+        age = row.get("forecasts_age_s")
+        if os.environ.get("SPORTS_FORECAST") == "1" and (age is None or age > EXPANSION_FORECASTS_STALE_S):
+            out.append({"level": "page", "code": "expansion_forecasts_stale", "detail": {
+                "sport": sport, "age_s": age, "limit_s": EXPANSION_FORECASTS_STALE_S}})
     # ppsoccer-1119: PrizePicks soccer tab 82 not read OK for 15 min, a league tab whose latest read failed with no good
     # read for 15 min, or a soccer tab with lines that is not in the exact league table (it is never read until a person adds it)
     pps = o.get("expansion_pp_soccer")
@@ -395,6 +410,46 @@ def alerts(o):
             out.append({"level": "warn", "code": "pp_soccer_tab_renamed", "detail": lg})
     if not o.get("token_configured"):
         out.append({"level": "page", "code": "token_secret_missing", "detail": "SPORTS_TOKEN_SECRET unset or short"})
+    return out
+
+
+EXPANSION_FORECASTS_STALE_S = 1800      # soccer / tennis grades (forecasts.json) older than this page (learning: 180 s)
+
+
+def expansion_side_alerts(sport, st):
+    """sg-stability 2026-11-20: soccer / tennis side stores and archives - before anything fills or goes dark."""
+    out = []
+    q = st.get("quotes_history") or {}
+    cap = q.get("cap_mb") or st.get("quotes_cap_mb", 250)
+    live = q.get("live_mb") if q.get("live_mb") is not None else st.get("quotes_mb")
+    if q.get("state") == "paused_at_cap":
+        out.append({"level": "page", "code": "expansion_quotes_full", "detail": {"sport": sport, "live_mb": live,
+                                                                               "cap_mb": cap}})
+    elif live is not None and (live >= 0.8 * cap or (q.get("days_to_cap") is not None and q["days_to_cap"] < 3)):
+        out.append({"level": "warn", "code": "expansion_quotes_large", "detail": {
+            "sport": sport, "quotes_mb": live, "cap_mb": cap, "days_to_cap": q.get("days_to_cap"),
+            "mb_per_day": q.get("mb_per_day")}})
+    if q.get("state") == "error" or (q.get("archive") or {}).get("error"):
+        out.append({"level": "warn", "code": "expansion_quotes_history_error", "detail": {
+            "sport": sport, "error": q.get("error") or (q.get("archive") or {}).get("error")}})
+    for name, s in ((st.get("side_stores") or {}).items() if isinstance(st.get("side_stores"), dict) else ()):
+        if not isinstance(s, dict) or s.get("live_mb") is None or not s.get("cap_mb"):
+            continue
+        if s.get("full"):
+            out.append({"level": "page", "code": "expansion_store_cap", "detail": {"sport": sport, "store": name, **s}})
+        elif s["live_mb"] >= 0.7 * s["cap_mb"]:
+            out.append({"level": "warn", "code": "expansion_store_cap_near", "detail": {"sport": sport, "store": name, **s}})
+    v = st.get("archive_verify") or {}
+    if v.get("n_bad"):
+        out.append({"level": "page", "code": "expansion_archive_bad", "detail": {"sport": sport, "bad": v.get("bad")}})
+    try:
+        from .contracts import parse_utc
+        oldest = v.get("oldest_at")
+        if oldest and time.time() - parse_utc(oldest).timestamp() > 48 * 3600:
+            out.append({"level": "warn", "code": "expansion_archive_verify_stale", "detail": {
+                "sport": sport, "oldest_at": oldest}})
+    except (TypeError, ValueError):
+        pass
     return out
 
 
@@ -464,6 +519,10 @@ def expansion_learning_status():
                     row['report'] = json.loads(path.read_text(encoding='utf-8'))
             except (OSError,ValueError):
                 pass
+            try:                                        # sg-stability: how old the published grades are
+                row['forecasts_age_s'] = round(time.time() - (root / sport / 'forecasts.json').stat().st_mtime)
+            except OSError:
+                row['forecasts_age_s'] = None
         out[sport] = row
     return out
 
@@ -822,8 +881,25 @@ def _on_sigterm(signum, frame):
     import signal
     _STATE["draining"] = True
     _record_exit("sigterm", wait_s=2.0)
+    _stop_children()
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     os.kill(os.getpid(), signal.SIGTERM)
+
+
+def _stop_children(join_s=None):
+    """sg-stability 2026-11-20: a deploy's SIGTERM reaches the job children too: the scheduler stops starting jobs and
+    gives every running child SIGTERM plus a grace (Scheduler.terminate_all) before the kill, inside Render's shutdown
+    window. Never raises; returns at most join_s (grace + 2 s) later."""
+    sch, t = _SCHED.get("obj"), _SCHED.get("thread")
+    if sch is None:
+        return
+    try:
+        sch.stop()
+        grace = float(os.environ.get("SPORTS_CHILD_TERM_GRACE_S", "8"))
+        if t is not None and t.is_alive() and t is not threading.current_thread():
+            t.join(grace + 2.0 if join_s is None else join_s)
+    except Exception:                                   # noqa: BLE001 - the exit itself must never be blocked
+        pass
 
 
 def _watchdog(srv, every=5.0):

@@ -946,10 +946,32 @@ class Scheduler:
             except Exception as e:                      # noqa: BLE001 - the scheduler never dies
                 sys.stderr.write(f"  sports scheduler tick failed: {type(e).__name__}: {str(e)[:200]}\n")
             self.stop_ev.wait(self.tick_s)
-        for name, (p, _t0) in list(self.running.items()):
-            _kill(p)
-            del self.running[name]
-            self._finish(name, "stopped", 0.0)
+        self.terminate_all()
+
+    def terminate_all(self, grace_s=None):
+        """sg-stability 2026-11-20: on a stop (deploy SIGTERM) every running child first gets SIGTERM and up to grace_s
+        (SPORTS_CHILD_TERM_GRACE_S, 8 s) to checkpoint and exit - the soccer / tennis history job saves its catalog and
+        cursor on it - and only then the kill. Before, children were killed at once and a history run lost its
+        in-memory catalog marks and cursor (the next runs re-read those summaries). -> {name: exit}."""
+        grace = _env_num("SPORTS_CHILD_TERM_GRACE_S", 8.0) if grace_s is None else grace_s
+        out = {}
+        procs = list(self.running.items())
+        for _name, (p, _t0) in procs:
+            try:
+                p.terminate()
+            except Exception:                           # noqa: BLE001 - already gone
+                pass
+        deadline = time.monotonic() + max(0.0, grace)
+        for name, (p, t0) in procs:
+            rc = None
+            try:
+                rc = p.wait(max(0.0, deadline - time.monotonic()))
+            except Exception:                           # noqa: BLE001 - TimeoutExpired: killed below
+                _kill(p)
+            self.running.pop(name, None)
+            out[name] = "stopped" if rc is None else f"stopped (exit {rc})"
+            self._finish(name, out[name], max(0.0, self.now() - t0))
+        return out
 
     def stop(self):
         self.stop_ev.set()

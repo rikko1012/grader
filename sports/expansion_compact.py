@@ -25,6 +25,7 @@ the archive files too.
 """
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import time
@@ -208,3 +209,99 @@ def compact_all(directory, budget_s, now=None):
         out["errors"] += bool(r["error"])
     out["seconds"] = round(time.monotonic() - t0, 2)
     return out
+
+
+# ------------------------------------------------------------------------------------------- scheduled verification
+VERIFY_FILE = "archive-verify.json"
+VERIFY_EVERY_H = 24
+SIDE_STORES = (("quotes", "quotes.db", "archive/quotes"), ("learning", "learning.db", "archive/learning"),
+               ("forecasts", "forecasts.db", "archive/forecasts"))
+
+
+def _verify_one(sport_dir, name):
+    """Re-read every archive file of one store (a competition's result archive or a side store's). -> result dict."""
+    from . import archive, expansion_archive as xa, store
+    t0 = time.monotonic()
+    side = {n: (db, sub) for n, db, sub in SIDE_STORES}
+    if name.startswith("side:"):
+        db, sub = side[name[5:]]
+        path = Path(sport_dir) / db
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        try:
+            r = xa.verify(con, Path(sport_dir) / sub, stamp=False)
+        finally:
+            con.close()
+    else:
+        path = Path(sport_dir) / name / "canonical.db"
+        con = store.connect(path)
+        try:
+            r = archive.verify(con, archive_dir(path))
+        finally:
+            con.close()
+    return {"at": datetime.now(timezone.utc).strftime(TS), "files": r["files"], "rows": r["rows"],
+            "bad": r["bad"][:5], "n_bad": len(r["bad"]), "seconds": round(time.monotonic() - t0, 2)}
+
+
+def stores_with_archives(sport_dir):
+    sport_dir = Path(sport_dir)
+    out = sorted({p.parent.parent.parent.name for p in sport_dir.glob("*/archive/records/*.jsonl.xz")})
+    for n, db, sub in SIDE_STORES:
+        if (sport_dir / db).exists() and any((sport_dir / sub).glob(f"{n}-*.jsonl.xz")):
+            out.append("side:" + n)
+    return out
+
+
+def verify_round(sport_dir, budget_s, now=None, every_h=VERIFY_EVERY_H):
+    """sg-stability 2026-11-20: every soccer / tennis archive (each competition's result archive and the quotes /
+    learning / forecasts archives) is re-read at least every `every_h` hours - stalest first, inside budget_s, from the
+    history job (which holds the sport's history lock). Results go to <sport>/archive-verify.json for ops; a bad file
+    pages (expansion_archive_bad). Before, `python -m sports.archive verify` checked the NBA / NFL store only."""
+    sport_dir = Path(sport_dir)
+    now = now or datetime.now(timezone.utc)
+    t0 = time.monotonic()
+    path = sport_dir / VERIFY_FILE
+    try:
+        state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        stores = state.get("stores") if isinstance(state.get("stores"), dict) else {}
+    except (OSError, ValueError, AttributeError):
+        stores = {}
+    names = stores_with_archives(sport_dir)
+    stores = {k: v for k, v in stores.items() if k in names and isinstance(v, dict)}
+
+    def age_h(n):
+        at = _parse((stores.get(n) or {}).get("at"))
+        return float("inf") if at is None else (now - at).total_seconds() / 3600
+    due = sorted((n for n in names if age_h(n) >= every_h), key=lambda n: -age_h(n))
+    done, slowest = [], 0.0
+    for n in due:
+        if time.monotonic() - t0 + slowest > budget_s:
+            break
+        try:
+            stores[n] = _verify_one(sport_dir, n)
+        except (OSError, sqlite3.Error, ValueError, EOFError) as e:
+            stores[n] = {"at": now.strftime(TS), "error": f"{type(e).__name__}: {str(e)[:160]}", "n_bad": 1}
+        slowest = max(slowest, stores[n].get("seconds") or 0.0)
+        done.append(n)
+    summary = {"at": now.strftime(TS), "stores": stores, "archived_stores": len(names),
+               "n_bad": sum(int(v.get("n_bad") or 0) for v in stores.values()),
+               "never_verified": [n for n in names if n not in stores],
+               "oldest_at": min((v.get("at") for v in stores.values() if v.get("at")), default=None)}
+    from .expansion_history import atomic_json
+    atomic_json(path, summary)
+    return {"verified": done, "n_bad": summary["n_bad"], "pending": max(0, len(due) - len(done)),
+            "seconds": round(time.monotonic() - t0, 2)}
+
+
+def verify_status(sport_dir, max_bytes=262144):
+    """Small summary of archive-verify.json for ops (never opens a database)."""
+    try:
+        p = Path(sport_dir) / VERIFY_FILE
+        if p.stat().st_size > max_bytes:
+            return {"error": "too_large"}
+        s = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    bad = {k: v.get("bad") or v.get("error") for k, v in (s.get("stores") or {}).items() if v.get("n_bad")}
+    return {"at": s.get("at"), "archived_stores": s.get("archived_stores"), "n_bad": s.get("n_bad"),
+            "bad": dict(list(bad.items())[:5]), "never_verified": (s.get("never_verified") or [])[:10],
+            "oldest_at": s.get("oldest_at")}

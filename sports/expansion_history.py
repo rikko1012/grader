@@ -30,6 +30,13 @@ def normalized(value):
         'NFKD', str(value or '')) if not unicodedata.combining(c))).casefold().split())
 
 
+_STOP = {'requested': False}      # sg-stability: set by SIGTERM (deploy) - the run stops requesting and checkpoints
+
+
+def stopping():
+    return _STOP['requested']
+
+
 def atomic_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -37,6 +44,8 @@ def atomic_json(path, value):
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(value, f, separators=(',', ':'), allow_nan=False)
+            f.flush()
+            os.fsync(f.fileno())            # sg-stability: a crash right after the rename never leaves an empty file
         os.replace(temp, path)
     finally:
         if os.path.exists(temp):
@@ -409,6 +418,8 @@ UPKEEP_S = 25        # store upkeep per run, at most (expansion_compact + expans
 UPKEEP_WARN = 0.7    # ... unless the sport holds >= 70 % of its budget or has untidied stores: then upkeep may use the
                      # rest of the job's time (a 100-200 MB store's VACUUM does not fit 25 s; over the budget the run
                      # spends little on backfill anyway)
+VERIFY_S = 10         # sg-stability: archive verification per run, at most (expansion_compact.verify_round)
+CHECKPOINT_S = 20     # sg-stability: at most this much catalog work is lost on a kill (SIGKILL / over cap / timeout)
 HISTORY_MAX_BYTES = 16_000_000   # sg-stability: ESPN answers here are <= ~2.3 MB; parsed JSON is ~5-8x its size and the
                                  # job's cap is 216 MB - a larger answer is refused (ValueError: counted, run continues)
 JOB_S = 165          # the history job's own end: its scheduler timeout is 180 s (startup + exit margin)
@@ -490,7 +501,7 @@ def collect(sport, max_requests=16, max_seconds=150):
 
     def get(url, params, timeout=10):
         from .expansion_sources import get_json
-        if counts['requests'] >= max_requests or time.monotonic() >= main_deadline:
+        if counts['requests'] >= max_requests or time.monotonic() >= main_deadline or stopping():
             raise StopIteration
         counts['requests'] += 1
         body = get_json(sport, url, params=params, timeout=timeout, tries=1, max_bytes=HISTORY_MAX_BYTES)
@@ -498,6 +509,9 @@ def collect(sport, max_requests=16, max_seconds=150):
         return body
 
     budget = storage_budget_mb() * 1024 * 1024
+    advanced = False
+    width = 7 if sport == 'tennis' else 1
+    dirty, last_checkpoint = set(), [time.monotonic()]
 
     def stored_bytes():
         return stored_size(directory)
@@ -532,7 +546,35 @@ def collect(sport, max_requests=16, max_seconds=150):
                     match[field] = previous[field]
             catalogs[competition][match['event_id']] = {**previous, **match}
         counts['matches'] += len(feed.matches)
+        dirty.add(competition)
+        if time.monotonic() - last_checkpoint[0] >= CHECKPOINT_S:
+            checkpoint()
         return True
+
+    def checkpoint(final=False):
+        """sg-stability 2026-11-20: save what this run learned so far - every changed competition's matches.json (roster
+        identities, summary_checked_at marks), current-matches.json and the cursor. Before, all of it was written once at
+        the end: a deploy SIGTERM, an over-cap kill or the timeout lost it and the next runs re-read those summaries
+        (request budget, 429 headroom). Stored result rows were never lost (committed per competition)."""
+        cutoff = (today - timedelta(days=100)).isoformat()
+        for competition in sorted(dirty if not final else set(catalogs)):
+            matches = catalogs.get(competition)
+            if matches is None:
+                continue
+            atomic_json(isolated_database(directory.parent, competition).parent / 'matches.json',
+                        {key: match for key, match in matches.items() if (match.get('start') or '') >= cutoff})
+        dirty.clear()
+        earliest = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat().replace('+00:00','Z')
+        atomic_json(directory / 'current-matches.json',
+                    fit_matches([m for matches in catalogs.values() for m in matches.values()
+                                 if (m.get('start') or '') >= earliest], offered(directory)))
+        if not final:
+            atomic_json(state_path, {**state, 'offset': next_offset(), 'checkpoint_at': now_utc(),
+                                     'stored_at': now_utc() if counts['records'] else state.get('stored_at')})
+        last_checkpoint[0] = time.monotonic()
+
+    def next_offset():
+        return (1 if offset+width>90 else offset+width) if advanced else offset
 
     def persist_backfill(feed, competition):
         return persist(feed, competition, 'backfill')
@@ -553,7 +595,6 @@ def collect(sport, max_requests=16, max_seconds=150):
     width = 7 if sport == 'tennis' else 1
     requests.append(('backfill', f'{today-timedelta(days=min(90,offset+width-1)):%Y%m%d}-{today-timedelta(days=offset):%Y%m%d}'
                      if width>1 else f'{today-timedelta(days=offset):%Y%m%d}'))
-    advanced = False
     try:
         for phase, dates in requests:
             phase_ok = True
@@ -586,6 +627,7 @@ def collect(sport, max_requests=16, max_seconds=150):
             counts['phases'][phase] = 'ok' if phase_ok else 'partial'
             if phase == 'backfill' and phase_ok:
                 advanced = True
+        checkpoint()
         if sport == 'soccer':
             slate = {}
             counts['errors'].extend(collect_soccer_teams(catalogs, get, persist, directory, 'base', slate=slate))
@@ -624,6 +666,8 @@ def collect(sport, max_requests=16, max_seconds=150):
                     except (net.HttpError, ValueError, OSError) as e:
                         match['summary_attempt_at'] = now_utc()
                         counts['errors'].append(type(e).__name__)
+                    dirty.add(actual)
+                checkpoint()
             summaries(6, 0)                                 # the 53dad0b competitions: 6 slots, 53dad0b order
             if research:
                 # Newer competitions only from what the shared budget has left after the graded work: up to 2 more
@@ -641,7 +685,7 @@ def collect(sport, max_requests=16, max_seconds=150):
         pass
     except (net.HttpError, ValueError, OSError, sqlite3.Error) as e:
         counts['errors'].append(type(e).__name__)
-    if research:
+    if research and not stopping():
         # FotMob (soccer) / theScore (tennis) run here, with football-data and exchange prices, in the reserve.
         from .expansion_collect import run as run_sources
         counts['sources'] = run_sources(sport, catalogs, persist, directory, deadline)
@@ -651,19 +695,17 @@ def collect(sport, max_requests=16, max_seconds=150):
             counts['ok_requests'] += phase['ok']
     else:
         counts['sources'] = {}                               # all research off: graded collectors ran inline (53dad0b)
-    cutoff = (today - timedelta(days=100)).isoformat()
-    for competition, matches in catalogs.items():
-        atomic_json(isolated_database(directory.parent, competition).parent / 'matches.json',
-                    {key: match for key, match in matches.items() if (match.get('start') or '') >= cutoff})
-    earliest = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat().replace('+00:00','Z')
-    atomic_json(directory / 'current-matches.json',
-                fit_matches([m for matches in catalogs.values() for m in matches.values()
-                             if (m.get('start') or '') >= earliest], offered(directory)))
+    checkpoint(final=True)                                   # every catalog, as before (byte-identical files)
     catalogs.clear()                                       # publish reads its own bounded files; free the catalogs
     shared.clear()
     from .expansion_research import publish
     # When results were last really stored (not when research.json was rebuilt): the freshness members see.
     counts['stored_at'] = now_utc() if counts['records'] else state.get('stored_at')
+    if stopping():                                           # SIGTERM: save the cursor now, leave the rest to the next run
+        counts['stopped'] = 'sigterm'
+        counts['finished_at'] = now_utc()
+        atomic_json(state_path, {**counts, 'offset': next_offset()})
+        return counts
     counts['research'] = publish(sport, budget_s=15, results_at=counts['stored_at'])
     # drain-1119: store upkeep in what is left of the job's 180 s, at most UPKEEP_S - lossless: cold results move to
     # verified archive files (sports/expansion_compact.py, SCOUT_EXPANSION_COMPACT=0 switches it off), then untidied
@@ -679,6 +721,14 @@ def collect(sport, max_requests=16, max_seconds=150):
     except (OSError, sqlite3.Error):
         untidied = []
     try:
+        # sg-stability: scheduled re-read of every archive of this sport (stalest first, each at least daily) - before
+        # compaction so an extended upkeep never starves it; free when nothing is due
+        from . import expansion_compact
+        if job_end - time.monotonic() > 3:
+            counts['verify'] = expansion_compact.verify_round(directory, min(VERIFY_S, job_end - time.monotonic() - 2))
+    except (OSError, sqlite3.Error, ValueError) as e:
+        counts['verify'] = {'error': type(e).__name__}
+    try:
         from . import expansion_compact
         if expansion_compact.enabled() and end - time.monotonic() > 2:
             counts['compact'] = expansion_compact.compact_all(directory, (end - time.monotonic()) * (0.4 if untidied else 0.6))
@@ -691,7 +741,7 @@ def collect(sport, max_requests=16, max_seconds=150):
     except (OSError, sqlite3.Error) as e:
         counts['tidy'] = {'error': type(e).__name__}
     counts['finished_at'] = now_utc()
-    atomic_json(state_path, {**counts, 'offset': (1 if offset+width>90 else offset+width) if advanced else offset})
+    atomic_json(state_path, {**counts, 'offset': next_offset()})
     try:
         record_storage(directory, stored_bytes(), counts['storage'])
     except (OSError, ValueError):
@@ -754,6 +804,13 @@ def storage_status(sport, top=10):
     out['competitions'] = len(comps)
     out['other_mb'] = {k: round(v / 1048576, 2) for k, v in sorted(other.items(), key=lambda kv: -kv[1])[:12]}
     out['quotes_mb'] = round(other.get('quotes.db', 0) / 1048576, 1)
+    try:
+        from .expansion_compact import verify_status
+        out['archive_verify'] = verify_status(directory)
+    except Exception:                                   # noqa: BLE001 - ops never breaks on it
+        out['archive_verify'] = None
+    out['quotes_history'] = quotes_history_status(directory)
+    out['side_stores'] = side_store_status(directory)
     out['state'] = ('full' if total > budget * 1.5 * 1048576 else 'backfill_paused' if total > budget * 1048576
                     else 'warn' if total > 0.7 * budget * 1048576 else 'ok')
     try:
@@ -775,6 +832,43 @@ def storage_status(sport, top=10):
     except (OSError, ValueError, AttributeError, TypeError, IndexError):
         pass
     return out
+
+
+def quotes_history_status(directory):
+    """The quotes job's own quotes-history.json (sg-stability): live MB against the cap, state, archive progress and a
+    days-to-cap estimate from its 48 h samples. Small file only."""
+    try:
+        p = Path(directory) / 'quotes-history.json'
+        if p.stat().st_size > 262144:
+            return None
+        q = json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    out = {'at': q.get('at'), 'state': q.get('state'), 'live_mb': q.get('live_mb'), 'file_mb': q.get('file_mb'),
+           'cap_mb': q.get('cap_mb'), 'error': q.get('error'),
+           'archive': {k: (q.get('archive') or {}).get(k) for k in ('rows', 'parts', 'pending', 'error', 'archived')}}
+    samples = [s for s in q.get('samples') or [] if isinstance(s, list) and len(s) == 2]
+    try:
+        if len(samples) >= 2 and q.get('live_mb') is not None and q.get('cap_mb'):
+            hours = (parse_utc(samples[-1][0]) - parse_utc(samples[0][0])).total_seconds() / 3600
+            rate = (float(samples[-1][1]) - float(samples[0][1])) / hours if hours >= 6 else None
+            out['mb_per_day'] = None if rate is None else round(rate * 24, 1)
+            if rate and rate > 0:
+                out['days_to_cap'] = round((float(q['cap_mb']) - float(q['live_mb'])) / rate / 24, 1)
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+    return out
+
+
+def side_store_status(directory):
+    """learning / forecasts status from the learning job's learning-status.json (its storage block)."""
+    try:
+        p = Path(directory) / 'learning-status.json'
+        if p.stat().st_size > 65536:
+            return None
+        return (json.loads(p.read_text(encoding='utf-8')).get('storage') or None)
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def results_at(sport):
@@ -870,6 +964,19 @@ def history(req):
     return 200, response
 
 
+def install_sigterm():
+    """A deploy's SIGTERM (the scheduler forwards it with a grace) stops new requests; the run checkpoints its catalog
+    and cursor and exits. Without it Python died at once and lost the run's in-memory marks."""
+    import signal
+
+    def handler(signum, frame):
+        _STOP['requested'] = True
+    try:
+        signal.signal(signal.SIGTERM, handler)
+    except (ValueError, OSError, AttributeError):
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('sport', choices=boards.SPORTS)
@@ -878,6 +985,7 @@ def main():
         raise SystemExit('sport disabled')
     from .expansion_compact import bound_cache
     bound_cache()
+    install_sigterm()
     result = collect(args.sport)
     print(json.dumps(result))
     # Failure = nothing stored while something went wrong (outage / persisted hold / every write failed / store

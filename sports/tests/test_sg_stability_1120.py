@@ -453,3 +453,200 @@ def test_net_max_bytes_refuses_a_huge_answer_without_holding_it(monkeypatch):
     resp = R(1)
     resp._content = b'{"x": 2}'
     assert net.get_json('https://example.invalid/d') == {'x': 2} and sent == [None]   # default: unchanged call
+
+
+# ------------------------------------------------------------------------------------- history crash safety
+from datetime import datetime, timezone  # noqa: E402
+
+from sports import expansion_history as history  # noqa: E402
+
+
+def _history_env(monkeypatch, tmp_path, on_summary=None):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_EXPANSION_HISTORY_MB', '64')
+    monkeypatch.setenv('SCOUT_EXPANSION_COMPACT', '0')
+    now = datetime.now(timezone.utc)
+    st1119._soccer_dir(tmp_path, {701: st1119._iso(now - timedelta(days=5)), 702: st1119._iso(now - timedelta(hours=10))})
+    import sports.expansion_sources as src
+    from sports.expansion import Feed
+
+    def fake(sport, url, params=None, **kw):
+        if url.endswith('/summary'):
+            if on_summary:
+                on_summary(params['event'])
+            return {'header': {'league': {'slug': 'eng.1'}, 'id': params['event']}}
+        return {'events': []}
+    monkeypatch.setattr(src, 'get_json', fake)
+    monkeypatch.setattr(history, 'parse_summary', lambda *a, **k: Feed())
+    monkeypatch.setattr(history, 'parse_context', lambda *a, **k: Feed())
+    monkeypatch.setattr('sports.expansion_research.publish', lambda *a, **k: {})
+    monkeypatch.setattr('sports.expansion_collect.research_on', lambda sport: False)
+    monkeypatch.setattr('sports.expansion_collect.graded_inline', lambda *a, **k: [])
+    return tmp_path / 'soccer' / 'eng.1' / 'matches.json'
+
+
+def test_history_checkpoints_marks_before_a_kill(monkeypatch, tmp_path):
+    """A run killed (SIGKILL / over cap / timeout) right after its summaries still has their marks on disk."""
+    path = None
+
+    class Killed(BaseException):
+        pass
+
+    def kill_after_summaries(*a, **k):
+        raise Killed()                                      # the process dies in the research publish step
+    path = _history_env(monkeypatch, tmp_path)
+    monkeypatch.setattr('sports.expansion_research.publish', kill_after_summaries)
+    with pytest.raises(Killed):
+        history.collect('soccer', max_requests=12)
+    saved = json.loads(path.read_text(encoding='utf-8'))
+    assert all(m.get('summary_checked_at') for m in saved.values())   # before: written only at the very end
+    state = json.loads((tmp_path / 'soccer' / 'history-state.json').read_text(encoding='utf-8'))
+    assert state['offset'] == 2 and state.get('checkpoint_at')         # the backfill cursor advanced too
+
+
+def test_history_sigterm_stops_requests_and_saves_the_catalog(monkeypatch, tmp_path):
+    asked = []
+
+    def first_then_stop(event):
+        asked.append(event)
+        history._STOP['requested'] = True                    # SIGTERM arrives during the first summary
+    path = _history_env(monkeypatch, tmp_path, first_then_stop)
+    monkeypatch.setattr(history, '_STOP', {'requested': False})
+    called = []
+    monkeypatch.setattr('sports.expansion_research.publish', lambda *a, **k: called.append(1) or {})
+    out = history.collect('soccer', max_requests=12)
+    assert len(asked) == 1 and out.get('stopped') == 'sigterm' and not called   # no new request, no publish
+    saved = json.loads(path.read_text(encoding='utf-8'))
+    assert sum(bool(m.get('summary_checked_at')) for m in saved.values()) == 1
+    state = json.loads((tmp_path / 'soccer' / 'history-state.json').read_text(encoding='utf-8'))
+    assert state['stopped'] == 'sigterm' and state['offset'] == 2
+
+
+def test_history_files_byte_identical_to_the_end_of_run_write(monkeypatch, tmp_path):
+    """The checkpoints change WHEN files are written, never what the finished run leaves behind."""
+    path = _history_env(monkeypatch, tmp_path)
+    history.collect('soccer', max_requests=12)
+    saved = json.loads(path.read_text(encoding='utf-8'))
+    assert set(saved) == {'eng.1:espn:701:m', 'eng.1:espn:702:m'}
+    assert json.loads((tmp_path / 'soccer' / 'current-matches.json').read_text(encoding='utf-8')) == []
+
+
+def test_atomic_json_fsyncs_before_the_rename(tmp_path, monkeypatch):
+    import os as _os
+    order = []
+    real_fsync, real_replace = _os.fsync, _os.replace
+    monkeypatch.setattr(history.os, 'fsync', lambda fd: order.append('fsync') or real_fsync(fd))
+    monkeypatch.setattr(history.os, 'replace', lambda a, b: order.append('replace') or real_replace(a, b))
+    history.atomic_json(tmp_path / 'x.json', {'a': 1})
+    assert order == ['fsync', 'replace'] and json.loads((tmp_path / 'x.json').read_text()) == {'a': 1}
+
+
+def test_scheduler_stop_gives_children_sigterm_and_a_grace(monkeypatch):
+    from sports import scheduler
+    import subprocess
+    import sys
+    import time as _time
+    monkeypatch.setenv('SPORTS_API', '1')
+    monkeypatch.setattr(scheduler, 'JOBS', {})
+    code = ("import signal, sys, time, pathlib\n"
+            "p = pathlib.Path(sys.argv[1])\n"
+            "def h(s, f):\n"
+            "    p.write_text('checkpointed'); sys.exit(0)\n"
+            "signal.signal(signal.SIGTERM, h)\n"
+            "time.sleep(30)\n")
+    import tempfile
+    out = Path(tempfile.mkdtemp()) / 'flag.txt'
+    jobs = {'h': dict(argv=[sys.executable, '-c', code, str(out)], every_s=60, timeout_s=60, flag='SPORTS_API',
+                      cap_mb=50, cls='light', prio=1, first_s=0.0)}
+    sch = scheduler.Scheduler(jobs=jobs, budget=500, tick_s=0.05)
+    sch.tick()
+    assert 'h' in sch.running
+    _time.sleep(1.0)
+    t0 = _time.monotonic()
+    res = sch.terminate_all(grace_s=5)
+    assert 'h' not in sch.running and res['h'].startswith('stopped') and _time.monotonic() - t0 < 6
+    if sys.platform != 'win32':                              # Windows has no catchable SIGTERM (terminate = kill)
+        assert out.read_text() == 'checkpointed' and res['h'] == 'stopped (exit 0)'
+    assert scheduler.JOBS['h']['last_exit']['code'].startswith('stopped')
+
+
+# --------------------------------------------------------------------------------- scheduled archive verification
+def test_verify_round_covers_result_and_side_archives_and_finds_damage(tmp_path):
+    sport = tmp_path / 'soccer'
+    path = sport / 'eng.1' / 'canonical.db'
+    st1119._expansion_store(path)
+    assert expansion_compact.compact(path, 60, now=st1119.NOW)['rows'] > 0
+    cur = _fill_history(sport)
+    board.archive_quotes(sport, {(r['platform'], r['offer_id']) for r in cur}, now=NOW, budget_s=30)
+    assert expansion_compact.stores_with_archives(sport) == ['eng.1', 'side:quotes']
+    r = expansion_compact.verify_round(sport, 30)
+    assert sorted(r['verified']) == ['eng.1', 'side:quotes'] and r['n_bad'] == 0
+    assert expansion_compact.verify_round(sport, 30)['verified'] == []          # not due again for 24 h
+    status = expansion_compact.verify_status(sport)
+    assert status['n_bad'] == 0 and status['archived_stores'] == 2 and status['never_verified'] == []
+    # damage one result file: the next due round reports it
+    f = next((sport / 'eng.1' / 'archive' / 'records').glob('*.jsonl.xz'))
+    f.write_bytes(lzma.compress(b'{"rid": 1}\n'))
+    later = datetime.now(timezone.utc) + timedelta(hours=25)
+    r = expansion_compact.verify_round(sport, 30, now=later)
+    assert r['n_bad'] >= 1
+    status = expansion_compact.verify_status(sport)
+    assert 'eng.1' in status['bad']
+    from sports import service
+    alerts = service.expansion_side_alerts('soccer', {'archive_verify': status})
+    assert [a['code'] for a in alerts] == ['expansion_archive_bad'] and alerts[0]['level'] == 'page'
+
+
+def test_verify_round_respects_its_budget_and_rotates_stalest_first(tmp_path, monkeypatch):
+    sport = tmp_path / 'soccer'
+    for comp in ('eng.1', 'esp.1', 'ger.1'):
+        p = sport / comp / 'canonical.db'
+        st1119._expansion_store(p)
+        expansion_compact.compact(p, 60, now=st1119.NOW)
+    calls = []
+    real = expansion_compact._verify_one
+
+    def slow(d, n):
+        calls.append(n)
+        out = real(d, n)
+        out['seconds'] = 5.0
+        return out
+    monkeypatch.setattr(expansion_compact, '_verify_one', slow)
+    r = expansion_compact.verify_round(sport, 4)
+    assert len(r['verified']) == 1 and r['pending'] == 2       # one store, then the slowest-so-far guard stops it
+    r = expansion_compact.verify_round(sport, 4)
+    assert r['verified'] and r['verified'][0] not in calls[:1]
+
+
+def test_ops_alerts_for_quotes_side_stores_learning_and_forecast_age(monkeypatch):
+    from sports import service
+    st = {'quotes_history': {'state': 'ok', 'live_mb': 120.0, 'cap_mb': 250, 'days_to_cap': 2.1, 'mb_per_day': 60},
+          'side_stores': {'learning': {'live_mb': 75.0, 'cap_mb': 100, 'full': False},
+                          'forecasts': {'live_mb': 300.0, 'cap_mb': 128, 'hard_mb': 256, 'full': True}}}
+    codes = [(a['level'], a['code']) for a in service.expansion_side_alerts('soccer', st)]
+    assert ('warn', 'expansion_quotes_large') in codes                      # growth: under 3 days to the cap
+    assert ('warn', 'expansion_store_cap_near') in codes and ('page', 'expansion_store_cap') in codes
+    st = {'quotes_history': {'state': 'paused_at_cap', 'live_mb': 251.0, 'cap_mb': 250}}
+    assert [a['code'] for a in service.expansion_side_alerts('soccer', st)] == ['expansion_quotes_full']
+    monkeypatch.setenv('SPORTS_FORECAST', '1')
+    o = {'flags': {}, 'scheduler': {'jobs': {
+            'soccer-learning': {'enabled': True, 'every_s': 180, 'timeout_s': 45, 'last_ok_at': 1.0}}, 'uptime_s': 99999},
+         'feeds': {}, 'service': {'requests': 0, 'rejected_busy': 0, 'errors_5xx': 0}, 'db_pool': {},
+         'token_configured': True, 'rss_mb': 0, 'rss_max_mb': 1,
+         'expansion_learning': {'soccer': {'enabled': True, 'forecasts_age_s': 4000, 'report': {
+             'published_model': {'error': 'OperationalError: disk I/O error'}}}}}
+    got = {(a['code'], a['detail'].get('sport') or a['detail'].get('job')) for a in service.alerts(o)}
+    assert ('grading_job_stale', 'soccer-learning') in got
+    assert ('expansion_forecasts_stale', 'soccer') in got and ('expansion_learning_step_error', 'soccer') in got
+
+
+def test_storage_status_reports_quotes_history_and_days_to_cap(tmp_path, monkeypatch):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    d = tmp_path / 'soccer'
+    d.mkdir()
+    (d / 'quotes-history.json').write_text(json.dumps({
+        'at': '2026-11-20T12:00:00Z', 'state': 'ok', 'live_mb': 170.0, 'cap_mb': 250, 'archive': {'rows': 5},
+        'samples': [['2026-11-19T12:00:00Z', 146.0], ['2026-11-20T12:00:00Z', 170.0]]}), encoding='utf-8')
+    st = history.storage_status('soccer')
+    q = st['quotes_history']
+    assert q['mb_per_day'] == 24.0 and q['days_to_cap'] == pytest.approx(3.3, abs=0.05) and q['archive']['rows'] == 5
