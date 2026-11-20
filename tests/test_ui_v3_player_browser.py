@@ -154,13 +154,51 @@ def check_card(p, sport, size, theme):
         assert vis(p, "#hub-card-body [data-hub-chart]")
     assert p.locator("#hub-detail > .v3p-lead").count() == 1
     assert vis(p, "#hub-detail .v3p-match")
+    # header: the avatar centred on the name block; one absolute time on the card, with its zone
+    box = p.evaluate("""(() => { const h = document.querySelector('#hub-detail .h-card-head'), a = h.querySelector(':scope > .u-face, :scope > .v3p-avatar'),
+      n = h.querySelector(':scope > .h-card-id'); if (!a) return null; const ra = a.getBoundingClientRect(), rn = n.getBoundingClientRect();
+      return [ra.top + ra.height / 2, rn.top + rn.height / 2, rn.height]; })()""")
+    if box:
+        assert abs(box[0] - box[1]) <= max(6, box[2] / 4), box
+    # the hub's head line (time, countdown pill) is kept for screen readers only; on screen the time sits once, in the meta row
+    assert p.evaluate("[...document.querySelectorAll('#hub-detail .h-card-head .h-countdown')].every(e => { const r = e.getBoundingClientRect(); return r.width <= 1 || r.height <= 1 || !e.checkVisibility || !e.checkVisibility() || e.closest('p').getBoundingClientRect().width <= 1; })")
+    who = p.locator("#hub-detail .h-card-head .v3p-who")
+    if who.count():
+        assert who.inner_text().strip()
+    meta = p.locator("#hub-detail .v3p-meta").inner_text()
+    import re as _re
+    assert _re.search(r"\d:\d\d\s?(AM|PM)?\s?[A-Z]{2,5}|GMT|UTC", meta), meta
+    # the line panel: the big line, the book's freshness, Projection and Gap to line, L5 / L10 / L20 on the side shown
+    line = p.locator("#hub-card-line option:checked").inner_text()
+    assert p.locator("#hub-decision .v3p-lh b").inner_text() in line
+    assert " checked " in p.locator("#hub-decision .v3p-lmeta").inner_text()
+    facts = p.locator("#hub-decision .v3p-facts").inner_text()
+    assert "Projection" in facts and "Gap to line" in facts, facts
+    hits = p.locator("#hub-decision .v3p-hits").inner_text()
+    assert "L5, " in hits and "L10, " in hits and "L20, " in hits, hits
     # the pick summary mirrors the strip (never recomputed)
     if p.locator("#hub-detail .v3p-pick").count():
         assert p.locator(".v3p-pick .sc-pick__chance b").inner_text() == p.locator("#hub-decision .h-dec-chance > b").inner_text()
-        side = p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").inner_text().strip()
-        assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
+        side = p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").get_attribute("data-id").capitalize()
+        if p.locator(".v3p-pick .sc-scout-tag").count() or p.locator(".v3p-pick .sc-pick__chance b").inner_text() != "—":   # no Scout read: the prop leads
+            assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
+        # polish2 (mocks 05 / 10): the side buttons carry the line, the strip has Chance / Grade / Stake and a Market chance cell
+        line = p.locator("#hub-decision .v3p-lh b").inner_text()
+        assert p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").inner_text().startswith(side + " " + line)
+        cgs = p.locator("#hub-decision .h-dec-chance").inner_text()
+        assert "Chance " + side in cgs and "Grade" in cgs and "Stake" in cgs, cgs
+        assert "Market chance" in facts, facts
         assert "Model estimate" in p.locator(".v3p-pick").inner_text()
         assert " checked " in p.locator(".v3p-pick .sc-book").inner_text()
+    # source notes readable in both themes: 4.5:1 or better against the surface they sit on
+    low = p.evaluate(r"""[...document.querySelectorAll('#hub-detail .sc-src, #hub-detail .sc-statgrid__legend')].map(e => {
+      const rgb = s => s.match(/[\d.]+/g).slice(0, 3).map(Number), lum = c => { const v = c.map(x => { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); });
+        return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+      let b = e, bg; while (b && ((bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)' || bg.startsWith('rgba') && bg.endsWith(', 0)'))) b = b.parentElement;
+      if (!b) return null; const a = lum(rgb(getComputedStyle(e).color)), z = lum(rgb(bg)), r = (Math.max(a, z) + .05) / (Math.min(a, z) + .05);
+      return r < 4.5 ? [e.className, r] : null; }).filter(Boolean)""")
+    if theme == "light":
+        assert not low, low
     if sport == "cs2":
         m = p.locator("#hub-detail .v3p-match").inner_text()
         assert "VRS #14" in m and "▲3" in m and "VRS #21" in m and "▼2" in m      # rank changes restored
@@ -168,8 +206,21 @@ def check_card(p, sport, size, theme):
         assert "Kills/map" in p.locator(".v3p-grid").inner_text()
     else:
         assert p.locator("#hub-detail .v3p-map").count() == 0
-    assert vis(p, "#hub-detail > .v3p-dock")
-    card_shots(p, name)
+    if size is PHONE:
+        # phone: the combined bar waits until the card's own Add has scrolled away, so it never sits over the pick summary
+        assert not vis(p, "#hub-detail > .v3p-dock")
+        card_shots(p, name)
+        p.evaluate("(() => { const d = document.getElementById('hub-detail'), a = document.querySelector('#hub-decision'); d.scrollTop = a.offsetTop + a.offsetHeight + 40; })()")
+        p.wait_for_timeout(300)
+        gone = p.evaluate("(() => { const a = document.querySelector('#hub-decision [data-hub=detail-add]') || document.querySelector('#hub-decision'); return a.getBoundingClientRect().bottom < 60; })()")
+        if gone:                                   # Add scrolled away above: the bar is there; a short card that cannot scroll that far keeps Add in view
+            p.wait_for_function("document.documentElement.classList.contains('v3p-dock-on')", timeout=5000)
+            assert vis(p, "#hub-detail > .v3p-dock")
+            shot(p, name + "-dock")
+        p.evaluate("document.getElementById('hub-detail').scrollTop = 0")
+    else:
+        assert vis(p, "#hub-detail > .v3p-dock")
+        card_shots(p, name)
     tab(p, "stats")
     want = WANT[sport][1]
     try:
@@ -282,6 +333,57 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
         tab(p, "overview")
         assert pressed(p) == cards[1:3]
         assert p.locator("#hub-detail > .v3p-maps").count() == 1
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_one_confirmed_map_is_always_in_the_default_combine(browser, env, monkeypatch, size):
+    """Map 1 confirmed (Mirage, Halcyon pick) and Map 2 still open: the default combine is Mirage + the likeliest Map 2 by Scout's
+    simulated veto (Inferno 41%), never two other maps. Each card says how likely it is to be played in Maps 1-2 (Mirage 100%)."""
+    setup(env, monkeypatch, "dark")
+    c, p = page(browser, env, size, "dark")
+    try:
+        open_card(p, "cs2", "vargo")
+        p.wait_for_selector("#hub-detail .v3p-map")
+        assert pressed(p) == ["mirage", "inferno"], pressed(p)
+        t = combo_text(p)
+        assert t.startswith("Mirage + Inferno: "), t
+        assert "In Maps 1-2 100.0%" in p.locator('#hub-detail .v3p-map[data-v3p-map="mirage"]').inner_text().replace("\n", " ")
+        assert "In Maps 1-2 41.0%" in p.locator('#hub-detail .v3p-map[data-v3p-map="inferno"]').inner_text().replace("\n", " ")
+        # polish2: one measure on every card. Anubis has no exact veto share for Map 2: In Maps 1-2 —, never HLTV's map chance beside it
+        an = p.locator('#hub-detail .v3p-map[data-v3p-map="anubis"]').inner_text().replace("\n", " ")
+        assert "In Maps 1-2 —" in an and "Map chance" not in an, an
+        assert p.locator("#hub-detail .v3p-map .v3p-inp").count() == p.locator("#hub-detail .v3p-map").count()
+        # the Overview's Likely maps line leads with the same measure, one decimal (never "62%")
+        ov = p.locator("#hub-card-body").inner_text()
+        assert "Likely in Maps 1-2 (Scout’s simulated veto): Mirage 100.0% · Inferno 41.0%" in ov, ov[:600]
+        assert "Dust2 62.0%" in ov and "Dust2 62%" not in ov
+        slot = p.locator('#hub-detail .v3p-map[data-v3p-map="mirage"] .v3p-slot')
+        assert slot.inner_text() == "Map 1 · Halcyon pick"
+        assert p.evaluate("(e => e.getClientRects().length)(document.querySelector('#hub-detail .v3p-map[data-v3p-map=\"mirage\"] .v3p-slot'))") == 1
+        # polish2 (mock 04): the same 2 x 2 on every card, — where a map has no figure
+        for b in p.locator("#hub-detail .v3p-map .sc-scene__stats").all():
+            assert b.locator(".sc-scene__stat").count() == 4
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE], ids=["390"])
+def test_v3_confirmed_map_with_no_saved_result_is_named_not_left_out(browser, env, monkeypatch, size):
+    """Map 1 confirmed on a map he has no saved Maps 1-2 result on: no default combine (it would leave that map out), and the card says so."""
+    setup(env, monkeypatch, "dark")
+    import veto_serve
+    from tests.card_factors_fixture import VETO
+    monkeypatch.setattr(veto_serve, "for_match", lambda mid: dict(VETO, confirmed=[{"slot": "Map 1", "name": "Nuke", "by": "Halcyon"}]))
+    c, p = page(browser, env, size, "dark")
+    try:
+        open_card(p, "cs2", "vargo")
+        p.wait_for_selector("#hub-detail .v3p-map")
+        assert pressed(p) == []
+        assert "Nuke is confirmed for Maps 1-2" in p.locator("#hub-detail .v3p-miss").inner_text()
         assert not p.errors, p.errors
     finally:
         c.close()

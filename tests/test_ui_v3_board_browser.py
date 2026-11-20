@@ -87,8 +87,20 @@ def test_v3_board_keeps_every_cell_and_takes_the_approved_look(browser, env, mon
         top = p.locator("#u-hub .h-top.sc-bd-band")
         assert top.count() == 1 and top.is_visible()
         assert p.locator("#hub-title").inner_text().strip().endswith("player props") or p.locator("#hub-title").inner_text().strip() == "Player props"
-        assert p.locator("#u-hub .sc-bd-meta").inner_text() == p.locator("#hub-count").inner_text()
+        # the count shows once, under the title (the toolbar copy is kept for the hub, not drawn)
+        meta = p.locator("#u-hub .sc-bd-meta").inner_text()
+        assert meta == p.locator("#hub-count").inner_text(), meta
+        assert p.evaluate("document.getElementById('hub-count').getBoundingClientRect().width") <= 1
         check_rows(p)
+        # one stake per line: every row with a letter or a Lean shows its stake beside it; no "No grade yet" chip is drawn
+        bad = p.evaluate("""[...document.querySelectorAll('#hub-rows>tr[data-record]')].filter(tr => {
+          const g = tr.querySelector('.h-scout-grade'); if (!g) return false;
+          const shown = [...g.children].filter(e => e.getClientRects().length && getComputedStyle(e).display !== 'none');
+          const letter = shown.some(e => e.matches('.h-grade, .sc-lean') || /^Lean (Over|Under)$/.test(e.textContent.trim()));
+          return letter && !g.querySelector('.sc-stake');
+        }).map(tr => tr.dataset.record)""")
+        assert not bad, bad
+        assert p.locator("#hub-rows .h-scout-grade :visible", has_text="No grade yet").count() == 0
         # value inks only where the legend says: 60%+ green, under 40% red
         legend = p.locator("#sc-bd-legend")
         assert legend.is_visible() and "60%+" in legend.inner_text() and "under 40%" in legend.inner_text()

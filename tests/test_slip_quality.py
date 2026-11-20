@@ -336,6 +336,16 @@ def test_repeats_allowed_spread_and_never_twice_the_same_slip():
     assert not (first & second)                          # the second slip uses fresh legs while fresh legs remain
 
 
+def test_why_line_pool_size_counts_the_ranked_pool():
+    """Ranks are per platform over every leg; a line rule that drops goblins must not shrink the "of N" below the ranks shown."""
+    recs = [rec(f"g{i}", f"eg{i}", .86 - i * .01, line_type="goblin", line=14.5) for i in range(3)] +            [rec(f"s{i}", f"es{i}", .6 - i * .01) for i in range(3)]
+    s = build(recs, size=2, count=1, lines="no_goblins")["slips"]
+    why = s[0]["why"]
+    ranks = [int(x) for x in why.split("legs rank ")[1].split(" of ")[0].split(", ")]
+    n = int(why.split(" of ")[1].split(" ")[0])
+    assert ranks == [4, 5] and n == 6 and max(ranks) <= n
+
+
 def test_why_line_names_matches_and_ranks():
     recs = [rec(f"p{i}", f"e{i}", .7 - i / 100) for i in range(4)]
     s = build(recs, size=2, count=2)["slips"]

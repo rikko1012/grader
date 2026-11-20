@@ -533,6 +533,9 @@ def build(legs, opts):
     lines = opts.get("lines") or "all"
     cap = max_goblins(lines)
     cands = [l for l in legs if l["book"] == platform and line_ok(l, lines)]
+    # the "of N" in why_line counts the pool the ranks come from: pool() ranks every leg of the platform, before the member's line
+    # rule drops goblins / demons here (counting cands gave "legs rank 4, 5, 6 of 5" when goblins were left out)
+    ranked_n = sum(1 for l in legs if l["book"] == platform)
     used_prop, used_player, taken, slips, nodes, exact = {}, {}, set(), [], 0, True
 
     def uses(l):
@@ -552,7 +555,7 @@ def build(legs, opts):
             used_player[(l["sport"], l["pkey"])] = used_player.get((l["sport"], l["pkey"]), 0) + 1
         got = sorted(got, key=lambda l: l["rank"])
         slips.append({"platform": platform, "entry_type": et, "legs": got, "all_hit": all_hit(got), "payout": payout(platform, et, got),
-                      "same_match": len({(l["sport"], l["event"]) for l in got}) < len(got), "why": why_line(got, len(cands), k == 0, reused)})
+                      "same_match": len({(l["sport"], l["event"]) for l in got}) < len(got), "why": why_line(got, ranked_n, k == 0, reused)})
     shortage = None
     if len(slips) < count:
         label = rules.LABEL.get(platform, platform)

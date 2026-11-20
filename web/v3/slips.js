@@ -53,6 +53,17 @@
         av.textContent = initials(textOf(name)); leg.insertBefore(av, leg.firstChild);
       }
     }
+    /* the period stays one token ("Maps 1-2", "Full game"): never broken after its hyphen (the Nov 6 wrap rule); same text */
+    var pick = leg.querySelector('.u-leg-pick');
+    if (pick) [].slice.call(pick.childNodes).forEach(function (n) {
+      if (n.nodeType !== 3) return;
+      var m2 = /(·\s*)([^·]+?)\s*$/.exec(n.nodeValue);
+      if (!m2 || !m2[2].trim()) return;
+      var at = n.nodeValue.length - m2[0].length + m2[1].length, tail = n.splitText(at), rest = tail.nodeValue.replace(/\s+$/, '');
+      var sp = document.createElement('span'); sp.className = 'sb-per'; sp.textContent = rest;
+      tail.nodeValue = tail.nodeValue.slice(rest.length);
+      tail.before(sp);
+    });
     var meta = leg.querySelector('.u-leg-meta'), first = meta && meta.firstChild;
     if (!first || first.nodeType !== 3) return;
     var raw = first.nodeValue, rest = '', cut = raw.indexOf(' · ');
@@ -72,6 +83,36 @@
     var read = document.createElement('span'); read.className = 'sb-read'; read.setAttribute('aria-hidden', 'true');
     read.innerHTML = '<b class="sc-num">' + esc(chance) + '</b><small>' + (chip ? 'Model estimate' : esc(label)) + '</small>' + chip;
     leg.appendChild(read);
+  }
+  /* each leg's stake, from the board record it was added from (the hub's own leg id: sport|event|player|stat|period|platform|side|line)
+     and only on Scout's side: the stake the board row and the card state for that line. No record on the board now = no stake shown. */
+  var legIx = {n: -1, map: {}};
+  function legIndex() {
+    var recs = V.boardRecs ? V.boardRecs() : {}, keys = Object.keys(recs);
+    if (keys.length === legIx.n) return legIx.map;
+    var map = {};
+    keys.forEach(function (k) {
+      var r = recs[k];
+      if (!r || !r.scout || !r.scout.side) return;
+      map[[r.sport, r.event.id, r.player.id || r.player.name, r.market.stat, r.market.period, r.offer.platform, r.scout.side, r.offer.line].join('|')] = r;
+    });
+    legIx = {n: keys.length, map: map};
+    return map;
+  }
+  function legStake(leg) {
+    var x = leg.querySelector('[data-u="leg-x"]'), read = leg.querySelector('.sb-read');
+    if (!x || !read || !V.stakeOf) return;
+    var r = legIndex()[x.getAttribute('data-id')], st = r ? V.stakeOf(r, null) : null, have = read.querySelector('.sb-stake');
+    if (st == null) { if (have) have.remove(); return; }
+    var html = 'Stake <b>' + esc(st) + 'U</b>';
+    if (!have) { have = document.createElement('small'); have.className = 'sb-stake'; read.appendChild(have); }
+    if (have.innerHTML !== html) have.innerHTML = html;
+    if (V.leanOnly && V.leanOnly(r)) {
+      var g = read.querySelector('.sc-grade'), lab = 'Lean ' + (r.scout.side === 'over' ? 'Over' : 'Under');
+      if (!g) read.insertAdjacentHTML('beforeend', '<span class="sc-grade sc-grade--sm sc-grade--lean">' + esc(lab) + '</span>');
+      var sm = read.querySelector(':scope > small:not(.sb-stake)');
+      if (sm && sm.textContent === 'No grade yet') sm.textContent = 'Model estimate';
+    }
   }
   function decorateCard(li) {                               /* Auto-build slip cards: initials when the leg has no face */
     if (li.classList.contains('sb-dec')) return;
@@ -168,6 +209,17 @@
     panels.forEach(function (pn) { build.appendChild(pn); });
     var status = document.getElementById('hub-generation-status');
     if (status) rail.appendChild(status);
+    /* polish2: on the phone the generate result is the bar's own subtitle (one line), not a second panel stacked over the form; the
+       hub's status node stays the live region for screen readers */
+    var subLine = function () {
+      var sub = rail.querySelector('.h-generation-submit'), t = status ? status.textContent.replace(/\s+/g, ' ').trim() : '';
+      if (!sub) return;
+      var n = sub.querySelector('.sb-stat');
+      if (!n) { n = document.createElement('span'); n.className = 'sb-stat'; n.setAttribute('aria-hidden', 'true'); var big = sub.querySelector('.sb-big'); if (big) big.after(n); else sub.prepend(n); }
+      if (n.textContent !== t) n.textContent = t;
+      rail.classList.toggle('sb-has-stat', !!t);
+    };
+    if (status) { new MutationObserver(subLine).observe(status, {childList: true, characterData: true, subtree: true}); setTimeout(subLine, 0); }
     var how = [].slice.call(gen.children).filter(function (c) { return c.tagName === 'DETAILS'; })[0];
     if (how) build.appendChild(how);
     controls.hidden = true;                                  /* now empty: its children moved into the panels and the rail */
@@ -246,6 +298,7 @@
     function run() {
       queued = false;
       hub.querySelectorAll('#hub-studio-body .u-leg:not(.sb-dec), #hub-slip-content .u-leg:not(.sb-dec)').forEach(decorateLeg);
+      hub.querySelectorAll('#hub-studio-body .u-leg, #hub-slip-content .u-leg').forEach(function (l) { try { legStake(l); } catch (e) { /* the leg keeps its read */ } });
       hub.querySelectorAll('#hub-generated .h-generated-card li:not(.sb-dec)').forEach(decorateCard);
       var sync = document.getElementById('hub-studio-sync');
       if (sync) sync.classList.toggle('sb-off', /^Not yet synced/.test(sync.textContent));
@@ -258,13 +311,41 @@
       if (el) new MutationObserver(q).observe(el, {childList: true, subtree: true, characterData: true});
     });
     sec.querySelectorAll('[data-studio-panel]').forEach(function (p) { new MutationObserver(q).observe(p, {attributes: true, attributeFilter: ['hidden']}); });
+    document.addEventListener('scout-v3-recs', function () { legIx.n = -1; q(); });   /* a new board answer: stakes re-read */
     run();
   }
 
+  /* an empty My slip leads with the studio (approved mock 08): the first time Slips opens in this page with nothing on the slip, the
+     hub's own Auto-build tab is pressed once. My slip (its empty state) is one tap away and stays the tab whenever it holds picks. */
+  function leadWithBuild(sec) {
+    var done = false, auto = false;
+    var tab = function (id) { return sec.querySelector('[role=tab][data-hub=studio-tab][data-id=' + id + ']'); };
+    var count = function () { var n = document.getElementById('hub-studio-tab-n'); return n ? parseInt(n.textContent, 10) || 0 : 0; };
+    function check() {
+      if (done || sec.hidden) return;
+      done = true;
+      var slip = tab('slip'), build = tab('build');
+      if (!count() && slip && slip.getAttribute('aria-selected') === 'true' && build) { auto = true; build.click(); }
+    }
+    /* the switch is ours until the member picks a tab: once the slip holds picks (a saved slip that loads late, or a pick added from
+       the board) My slip comes back, so a member with picks never lands on Auto-build because of it */
+    sec.addEventListener('click', function (e) { if (e.isTrusted && e.target.closest && e.target.closest('[data-hub=studio-tab]')) auto = false; }, true);
+    function back() {
+      if (!auto || !count() || sec.hidden) return;       /* hidden: done the next time Slips opens (the hidden observer) */
+      auto = false;
+      var slip = tab('slip');
+      if (slip && slip.getAttribute('aria-selected') !== 'true') slip.click();
+    }
+    new MutationObserver(function () { check(); back(); }).observe(sec, {attributes: true, attributeFilter: ['hidden']});
+    var n = document.getElementById('hub-studio-tab-n');
+    if (n) new MutationObserver(back).observe(n, {childList: true, characterData: true, subtree: true});
+    check();
+  }
   V.onHub(function (hub) {
     var sec = document.getElementById('hub-studio-section');
     if (!sec) return;
     buildStudio(sec);
     watch(hub, sec);
+    leadWithBuild(sec);
   });
 })();

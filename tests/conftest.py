@@ -63,3 +63,42 @@ def pin_clock(monkeypatch, at, modules):
     for m in modules:
         if getattr(m, "datetime", None) is _dt.datetime:
             monkeypatch.setattr(m, "datetime", Clock)
+
+
+# v3 screenshot runs (web/UI_V3.md "Testing with the flag on"). Both switches are off by default, so every suite runs as before.
+#   V3_FONTS=1  the v3 browser tests load Outfit / DM Mono from Google Fonts (normally aborted) and wait for them before each
+#               screenshot, so shots compare with the approved mocks' typography.
+#   V3_PROD=1   the v3 browser tests also run with the member features production has on (the /me features the approved mocks were
+#               built from, design_1119/v3/A/data/me_features.json): Edge / H2H / SZN columns, n/N hit counts, EV, Arbitrage,
+#               soccer and tennis tabs. Display flags only; nothing here grades.
+V3_PROD_FLAGS = ("SCOUT_BOARD_H2H", "SCOUT_PARITY_EDGE", "SCOUT_PARITY_HIT_SAMPLES", "SCOUT_PARITY_HIT_SORT", "SCOUT_PARITY_EV_BAND",
+                 "SCOUT_PARITY_PLAYS", "SCOUT_PICKEM_EV", "SCOUT_MARKET_EDGE", "SCOUT_MARKET_TOOLS", "SCOUT_SOCCER_ENABLED",
+                 "SCOUT_TENNIS_ENABLED")
+
+
+@pytest.fixture(autouse=True)
+def v3_shot_run(request, monkeypatch):
+    if not request.node.module.__name__.rsplit(".", 1)[-1].startswith("test_ui_v3_"):
+        yield
+        return
+    if os.environ.get("V3_PROD") == "1":
+        for k in V3_PROD_FLAGS:
+            monkeypatch.setenv(k, "1")
+    if os.environ.get("V3_FONTS") == "1":
+        from playwright.sync_api import BrowserContext, Page
+        route, shoot = BrowserContext.route, Page.screenshot
+
+        def fonts_route(self, url, handler, *a, **k):
+            if isinstance(url, str) and url.startswith("https://fonts."):
+                handler = lambda r: r.continue_()          # noqa: E731  (fonts load; every other route stays as the test set it)
+            return route(self, url, handler, *a, **k)
+
+        def fonts_shot(self, *a, **k):
+            try:
+                self.evaluate("document.fonts.ready.then(() => 1)")
+            except Exception:
+                pass
+            return shoot(self, *a, **k)
+        monkeypatch.setattr(BrowserContext, "route", fonts_route)
+        monkeypatch.setattr(Page, "screenshot", fonts_shot)
+    yield
