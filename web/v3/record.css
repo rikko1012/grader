@@ -6,8 +6,7 @@
    record.html styles bare header / nav / button / table and :root{color-scheme:dark} inline; every rule here out-ranks those with
    html[data-ui-v3] and follows html[data-theme] (light / dark). */
 
-html[data-ui-v3][data-v3-page="record"]{color-scheme:dark;background:var(--sc-bg);font-family:var(--sc-font)}
-html[data-ui-v3][data-v3-page="record"][data-theme="light"]{color-scheme:light}
+html[data-ui-v3][data-v3-page="record"]{background:var(--sc-bg);font-family:var(--sc-font)}   /* color-scheme comes from tokens.css (theme / OS) */
 html[data-ui-v3][data-v3-page="record"] body{background:var(--sc-bg);color:var(--sc-text);font:400 15px/1.5 var(--sc-font);-webkit-font-smoothing:antialiased}
 html[data-ui-v3][data-v3-page="record"] main{position:relative;isolation:isolate;max-width:var(--sc-max);padding:0 var(--sc-gutter) 48px}
 @media (min-width:1024px){html[data-ui-v3][data-v3-page="record"] main{padding:0 24px 64px}}
@@ -102,6 +101,12 @@ html[data-ui-v3][data-v3-page="record"] .calendar summary{min-height:66px;paddin
 html[data-ui-v3][data-v3-page="record"] .calendar small{color:var(--sc-faint)}
 html[data-ui-v3][data-v3-page="record"] .calendar b{color:var(--sc-text);font:500 15px/22px var(--sc-font)}
 html[data-ui-v3][data-v3-page="record"] .calendar p{color:var(--sc-muted)}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:10px 0 0;color:var(--sc-faint);font-size:12.5px}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key span{display:inline-flex;align-items:center;gap:6px}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key i{display:inline-block;width:12px;height:2px;border-radius:2px}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key .good{background:var(--sc-good)}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key .near{background:var(--sc-near)}
+html[data-ui-v3][data-v3-page="record"] .v3-cal-key .poor{background:var(--sc-poor)}
 @media (min-width:1024px){html[data-ui-v3][data-v3-page="record"] .calendar{grid-template-columns:repeat(10,minmax(0,1fr));gap:8px}}
 html[data-ui-v3][data-v3-page="record"] .error{border:0;border-radius:var(--sc-r-xl);background:var(--sc-s1);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-poor) 40%,transparent)}
 html[data-ui-v3][data-v3-page="record"] .error button,html[data-ui-v3][data-v3-page="record"] #record button:not(nav button){min-height:44px;border:0;border-radius:var(--sc-r-md);background:var(--sc-cta-bg);color:var(--sc-cta-ink);font:600 15px var(--sc-font);padding:0 18px}

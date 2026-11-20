@@ -58,7 +58,7 @@ def picks_page(browser, env, monkeypatch, size, theme):
     seed_picks(p, env)
     p.goto(env.url + "/#/picks")
     p.wait_for_selector("#hub-picks-body .u-pick", timeout=20000)
-    p.wait_for_selector("#hub-picks-section .v3-score .v3-tile", timeout=10000)
+    p.wait_for_selector("#hub-picks-section .v3c-score .v3c-tile", timeout=10000)
     return c, p
 
 
@@ -81,23 +81,23 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         assert "Pending" in p.locator(f"{sec} .h-picks-part h3").first.inner_text()
         assert p.locator(f"{sec} .h-picks-foot [data-hub=section][data-id=record]").count() == 1
         # v3: the server's own record (the tray's Record tab numbers): tiles, ticks and key reconcile with each other
-        tiles = p.locator(f"{sec} .v3-score .v3-tile b").all_inner_texts()
+        tiles = p.locator(f"{sec} .v3c-score .v3c-tile b").all_inner_texts()
         assert tiles[0] == "50.0%" and tiles[1].replace("–", "-").replace(" ", "") == "1-1-1" and tiles[2] == "1" and tiles[3] == "2"
-        assert "Hit rate, 2 decided" in p.locator(f"{sec} .v3-score").inner_text()
-        assert p.locator(f"{sec} .v3-ticks i").count() == 6
+        assert "Hit rate, 2 decided" in p.locator(f"{sec} .v3c-score").inner_text()
+        assert p.locator(f"{sec} .v3c-ticks i").count() == 6
         shot(p, f"picks-{size['width']}-{theme}-top")
         # chance you saw, from the saved receipt, beside each status (never a 0 for a missing one)
-        saw = p.locator(f"{sec} .u-pick .v3-saw").all_inner_texts()
+        saw = p.locator(f"{sec} .u-pick .v3c-saw").all_inner_texts()
         assert len(saw) == 6 and all(s.startswith("Chance you saw ") for s in saw)
         assert not any(s.endswith(" 0%") or s.endswith(" 0.0%") for s in saw)
         # pills mirror the selects and press them
-        pills = p.locator(f"{sec} .v3-pills[data-for=hub-pick-status] button")
+        pills = p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button")
         assert [t.strip() for t in pills.all_inner_texts()] == ["All outcomes", "Pending", "Won", "Lost", "Pushed", "Void"]
-        p.locator(f"{sec} .v3-pills[data-for=hub-pick-status] button", has_text="Won").click()
+        p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="Won").click()
         p.wait_for_function("document.getElementById('hub-pick-status').value==='hit'")
         p.wait_for_function("document.querySelectorAll('#hub-picks-body .u-pick').length===1")
-        assert p.locator(f"{sec} .v3-pills[data-for=hub-pick-status] button[aria-pressed=true]").inner_text().strip() == "Won"
-        p.locator(f"{sec} .v3-pills[data-for=hub-pick-status] button", has_text="All outcomes").click()
+        assert p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button[aria-pressed=true]").inner_text().strip() == "Won"
+        p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="All outcomes").click()
         p.wait_for_function("document.querySelectorAll('#hub-picks-body .u-pick').length===6")
         # an open receipt keeps its full field list
         p.locator(f"{sec} .u-pick button[data-u=pick]").first.click()
@@ -129,7 +129,7 @@ def test_my_picks_v3_empty_state_keeps_todays_words(browser, env, monkeypatch):
         p.wait_for_selector("#hub-picks-body .h-empty")
         t = p.locator("#hub-picks-body .h-empty").inner_text()
         assert "No tracked picks yet" in t and "Find a player prop" in t
-        assert p.locator("#hub-picks-section .v3-score").count() == 0
+        assert p.locator("#hub-picks-section .v3c-score").count() == 0
         shot(p, "picks-empty-390-dark")
         assert not p.errors, p.errors
     finally:
@@ -151,12 +151,12 @@ def test_member_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         assert card.locator(".h-rel-row").count() >= 1 and card.locator(".h-record-calendar").count() == 1
         # v3: the delta is the two numbers shown beside it, never computed from anything else
         nums = p.evaluate("""() => { const c = document.querySelector('#hub-record-body .h-record-card'), b = [...c.querySelectorAll('.h-score > div > b')].map(x => x.textContent);
-          return [b[1], b[2], (c.querySelector('.v3-delta') || {}).textContent || ''] }""")
+          return [b[1], b[2], (c.querySelector('.v3c-delta') || {}).textContent || ''] }""")
         obs, pr, delta = float(nums[0].rstrip("%")), float(nums[1].rstrip("%")), nums[2]
         want = round(obs - pr, 1)
         assert ("pts vs stated" in delta) and (f"{abs(want):.1f}" in delta)
         # the pill sport switch presses the select
-        assert p.locator("#hub-record-section .v3-pills[data-for=hub-record-sport] button").count() >= 2
+        assert p.locator("#hub-record-section .v3c-pills[data-for=hub-record-sport] button").count() >= 2
         bg = p.evaluate("getComputedStyle(document.getElementById('hub-center')).backgroundColor")
         assert bg == ("rgb(246, 247, 249)" if theme == "light" else "rgb(8, 11, 19)")
         no_h_scroll(p)
@@ -226,10 +226,29 @@ def test_ev_v3_keeps_every_control_and_column(browser, env, ev_on, monkeypatch, 
         assert p.locator('[data-ev="app"]').count() == 2 and p.locator("#ev-entry").count() == 1
         assert p.locator("#hub-ev-body .ev-search, #hub-ev-body input[type=search]").count() >= 1
         ground(p, theme)
-        if p.locator("#hub-ev-body .ev-list").count():
-            assert p.evaluate("getComputedStyle(document.querySelector('#hub-ev-body .ev-list')).backgroundColor") == ("rgb(255, 255, 255)" if theme == "light" else "rgb(15, 21, 36)")
         no_h_scroll(p)
         shot(p, f"ev-{size['width']}-{theme}")
+        # rows (Underdog standard 2 in the fixture): every column, the books table, the positive figure in the good ink
+        p.locator('[data-ev="app"][data-id="underdog"]').click()
+        p.wait_for_selector("#hub-ev-body .ev-row", timeout=30000)
+        rows = p.locator("#hub-ev-body .ev-list:not(.ev-list-model) .ev-row")
+        assert rows.count() >= 1 and "Austin Reaves" in rows.first.inner_text()
+        labels = rows.first.evaluate("r => [...r.querySelectorAll('.ev-cell')].map(c => c.dataset.label || '')")
+        assert "Play" in labels and len(labels) >= 5
+        assert p.evaluate("getComputedStyle(document.querySelector('#hub-ev-body .ev-list')).backgroundColor") == ("rgb(255, 255, 255)" if theme == "light" else "rgb(15, 21, 36)")
+        pos = p.locator("#hub-ev-body .ev-ev.is-pos b")
+        if pos.count():
+            good = p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-good').trim()")
+            assert pos.first.evaluate("e => getComputedStyle(e).color") == {"#5BD69A": "rgb(91, 214, 154)", "#0F7A4A": "rgb(15, 122, 74)"}[good.upper()]
+        gen = p.locator('#hub-ev-body [data-ev="generate"]')
+        if gen.count():
+            assert gen.evaluate("e => getComputedStyle(e).backgroundColor") == ("rgb(14, 19, 32)" if theme == "light" else "rgb(232, 236, 243)")
+        rows.first.locator('[data-ev="books"]').click()
+        p.wait_for_selector("#hub-ev-body .ev-src table")
+        src = p.locator("#hub-ev-body .ev-src").first.inner_text()
+        assert "FanDuel" in src and "Left out" in src
+        no_h_scroll(p)
+        shot(p, f"ev-rows-{size['width']}-{theme}")
         assert not p.errors, p.errors
     finally:
         c.close()
@@ -247,6 +266,8 @@ def test_arbitrage_v3_keeps_the_price_check(browser, env, monkeypatch, size, the
         p.wait_for_selector("#hub-market-filters .h-market-filters", timeout=20000)
         assert p.locator('#hub-market-tools [data-hub="refresh-markets"]').count() == 1
         assert p.locator("#hub-market-results").count() == 1
+        p.wait_for_selector("#hub-market-results .h-pc-row:not(.h-pc-head)", timeout=20000)
+        assert p.locator("#hub-market-results .h-pc-row:not(.h-pc-head)").count() >= 1
         ground(p, theme)
         no_h_scroll(p)
         shot(p, f"arb-{size['width']}-{theme}")
@@ -308,10 +329,145 @@ def test_bump_chip_on_a_receipt_keeps_its_words_and_title(browser, env, monkeypa
         o.locator(".u-move").wait_for()
         assert " ".join(o.locator(".u-move").inner_text().split()) == "▲ bumped from 32.5"
         assert o.locator(".u-bump").get_attribute("title")
-        assert o.locator(".v3-saw").count() == 1
+        assert o.locator(".v3c-saw").count() == 1
         o.scroll_into_view_if_needed()
         no_h_scroll(p)
         shot(p, f"bump-{size['width']}-{theme}")
         assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------------------------------------ line discrepancy chip on the board
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_line_discrepancy_chip_keeps_its_words_and_tip(browser, env, monkeypatch, size, theme):
+    c, p = v3_page(browser, env, monkeypatch, "board", size, theme)
+    try:
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=30000)
+        # the fixture board carries no market-edge doc, so the chip is the hub's own gapChip() markup placed in the first row
+        p.evaluate("""() => { const td = document.querySelector('#hub-rows tr[data-record] td:nth-child(2)') || document.querySelector('#hub-rows tr[data-record] td');
+          td.insertAdjacentHTML('beforeend', '<span class="h-gap" title="Line discrepancy: PrizePicks lists 34.5 for the same player, stat and maps, 1 higher than this line." tabindex="0">≠ PrizePicks 34.5</span>'); }""")
+        g = p.locator("#hub-rows .h-gap").first
+        assert g.evaluate("e => getComputedStyle(e).fontFamily").startswith("Outfit")
+        assert g.evaluate("e => getComputedStyle(e).color") != "rgb(255, 155, 138)"            # neutral ink, never a value colour
+        no_h_scroll(p)
+        g.scroll_into_view_if_needed()
+        shot(p, f"gap-chip-{size['width']}-{theme}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------------------------------------ the mine read never loops
+def test_my_picks_reads_mine_once_per_receipt_set_even_when_it_cannot_cover_the_page(browser, env, monkeypatch):
+    c, p = v3_page(browser, env, monkeypatch, "board", DESK, "dark")
+    try:
+        p.wait_for_selector("#hub-rows tr[data-record]", timeout=30000)
+        seed_picks(p, env)
+        calls = []
+
+        def stale(route):          # every read answers with one receipt still pending: the doc never covers the page
+            calls.append(1)
+            r = route.fetch()
+            doc = r.json()
+            for x in doc["receipts"]:
+                if x["status"] == "hit":
+                    x["status"] = "pending"
+            route.fulfill(response=r, json=doc)
+        p.route("**/api/upgrade/mine", stale)
+        p.goto(env.url + "/#/picks")
+        p.wait_for_selector("#hub-picks-body .u-pick", timeout=20000)
+        p.wait_for_timeout(1500)
+        n = len(calls)
+        p.wait_for_timeout(1500)
+        assert len(calls) == n and n <= 3, calls            # the hub's own read + one v3 read; nothing after
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------------------------------------ public /record: slips view, bin chart, errors, OS theme
+def record_doc():
+    return {"sport": "cs2", "totals": {"wins": 120, "losses": 100, "pushes": 3, "void": 2, "observed": 0.5455, "printed": 0.583, "ci": [0.48, 0.61],
+                                       "matches": 80, "match_word": "matches"},
+            "population": "The favoured side when its printed chance was 57% or more", "rule": "Each pick is scored on its own line.",
+            "bands": [{"name": "A", "wins": 30, "losses": 20, "printed": 0.66, "observed": 0.6, "ci": [0.45, 0.72]},
+                      {"name": "B", "wins": 90, "losses": 80, "printed": 0.58, "observed": 0.53, "ci": [0.46, 0.6]}],
+            "reliability": [{"lo": 0.55, "hi": 0.6, "n": 150, "stated": 0.575, "hit": 0.54, "ci": [0.47, 0.61]},
+                            {"lo": 0.6, "hi": 0.65, "n": 70, "stated": 0.62, "hit": 0.6, "ci": [0.5, 0.7]}],
+            "calendar": {"basis": "Match start date · US Central", "days": [
+                {"date": "2026-11-17", "decided": 20, "wins": 12, "losses": 8, "pushes": 0, "hit_rate": 0.6},
+                {"date": "2026-11-18", "decided": 25, "wins": 14, "losses": 11, "pushes": 1, "hit_rate": 0.56},
+                {"date": "2026-11-19", "decided": 10, "wins": 4, "losses": 6, "pushes": 0, "hit_rate": 0.4}]},
+            "as_of": "2026-11-19T12:00:00+00:00", "status": {"text": "The CS2 board shows letter grades.", "letters": "shown"}, "slips_tab": True}
+
+
+def slips_doc():
+    return {"all_hit": 12, "missed": 30, "all_hit_rate": 0.2857, "settled": 42, "tracked": 50, "pending": 6, "push_or_void": 2, "mixed": 1,
+            "legs": {"hit": 90, "miss": 40, "push": 2, "void": 1, "pending": 9},
+            "by_size": [{"name": "2 picks", "settled": 20, "all_hit": 8, "missed": 12, "push_or_void": 1}],
+            "by_platform": [{"name": "Underdog", "settled": 42, "all_hit": 12, "missed": 30, "push_or_void": 2}]}
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_public_record_v3_chart_calendar_slips_and_error(browser, env, monkeypatch, size, theme):
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
+    c = browser.new_context(viewport=size)
+    c.route("https://fonts.*/**", lambda r: r.abort())
+    c.add_init_script(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
+    fail = {"on": False}
+    c.route(lambda u: "/api/record?" in u, lambda r: r.fulfill(status=503, json={"error": "busy"}) if fail["on"] else r.fulfill(json=record_doc()))
+    c.route(lambda u: "/api/record/slips?" in u, lambda r: r.fulfill(json=slips_doc()))
+    p = c.new_page()
+    p.errors = []
+    p.on("pageerror", lambda e: p.errors.append(str(e)))
+    try:
+        p.goto(env.url + "/record")
+        p.wait_for_selector("#record .rel-chart", timeout=30000)
+        txt = p.locator("#record").inner_text()
+        for k in ("120–100", "95% range", "decided (wins plus losses)", "pushes, counted apart", "voids, left out", "Stated vs actual, in 5-point bins",
+                  "Stated bin", "Last 30 days", "The CS2 board shows letter grades."):
+            assert k in txt, k
+        delta = p.locator("#record .scores .v3-delta").inner_text()
+        assert "−3.8 pts vs stated" in delta                            # 54.5% - 58.3%, both shown beside it
+        assert p.locator("#record .calendar details[data-v3=poor]").count() == 1 and p.locator("#record .calendar details[data-v3=good]").count() == 1
+        assert "average stated chance, 58.3%" in p.locator("#record .v3-cal-key").inner_text()
+        text_fill = p.evaluate("getComputedStyle(document.querySelector('.rel-chart text')).fill")
+        assert text_fill == ("rgb(93, 104, 128)" if theme == "light" else "rgb(122, 134, 158)")
+        no_h_scroll(p)
+        shot(p, f"record-public-chart-{size['width']}-{theme}", full=True)
+        p.locator("nav.view [data-view=slips]").click()
+        p.wait_for_function("location.hash==='#cs2/slips' && document.querySelector('#record .scores b').textContent.startsWith('12–')")
+        t = p.locator("#record").inner_text()
+        for k in ("Every leg hit", "Settled slips", "slips tracked", "By size", "By platform"):
+            assert k in t, k
+        assert p.locator("#record .scores .v3-delta").count() == 0             # the slip view has no stated chance
+        no_h_scroll(p)
+        shot(p, f"record-public-slips-{size['width']}-{theme}", full=True)
+        fail["on"] = True
+        p.locator("nav[aria-label='Record sport'] button", has_text="LoL").click()
+        p.wait_for_selector("#record .error #retry")
+        assert "No result has been replaced with zero." in p.locator("#record .error").inner_text()
+        shot(p, f"record-public-error-{size['width']}-{theme}")
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_public_record_v3_follows_the_os_theme_with_nothing_stored(browser, env, monkeypatch):
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
+    c = browser.new_context(viewport=PHONE, color_scheme="light")
+    c.route("https://fonts.*/**", lambda r: r.abort())
+    p = c.new_page()
+    try:
+        p.goto(env.url + "/record")
+        p.wait_for_selector("#record h2", timeout=30000)
+        assert p.evaluate("document.documentElement.dataset.theme || ''") == ""
+        assert p.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(246, 247, 249)"
+        assert p.evaluate("getComputedStyle(document.documentElement).colorScheme") == "light"
     finally:
         c.close()

@@ -57,47 +57,47 @@ html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-secti
   background:var(--sc-cta-bg);color:var(--sc-cta-ink);box-shadow:none;font-weight:600;min-height:44px;padding:0 18px}
 
 /* pills (picks.js: they press the hub's own selects) */
-html[data-ui-v3] #u-hub .v3-pills{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 2px 0;margin:0 0 8px}
-html[data-ui-v3] #u-hub .v3-pills::-webkit-scrollbar{display:none}
-html[data-ui-v3] #u-hub .v3-pills[hidden]{display:none}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section) .v3-pill{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 16px;
+html[data-ui-v3] #u-hub .v3c-pills{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 2px 0;margin:0 0 8px}
+html[data-ui-v3] #u-hub .v3c-pills::-webkit-scrollbar{display:none}
+html[data-ui-v3] #u-hub .v3c-pills[hidden]{display:none}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section) .v3c-pill{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 16px;
   border-radius:999px;background:none;color:var(--sc-muted);font:500 14px/1 var(--sc-font);box-shadow:inset 0 0 0 1px var(--sc-edge);cursor:pointer;white-space:nowrap}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section) .v3-pill:hover{color:var(--sc-text);background:none}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section) .v3-pill[aria-pressed="true"]{color:var(--sc-text);background:var(--sc-s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
-html[data-ui-v3][data-theme="light"] #u-hub :is(#hub-picks-section,#hub-record-section) .v3-pill[aria-pressed="true"]{background:#0E1320;color:#fff;box-shadow:none}
-html[data-ui-v3] #u-hub .v3-pill-n{color:var(--sc-faint);font-weight:500}
-html[data-ui-v3][data-theme="light"] #u-hub .v3-pill[aria-pressed="true"] .v3-pill-n{color:#B8C0CF}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section) .v3c-pill:hover{color:var(--sc-text);background:none}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section) .v3c-pill[aria-pressed="true"]{color:var(--sc-text);background:var(--sc-s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
+html[data-ui-v3][data-theme="light"] #u-hub :is(#hub-picks-section,#hub-record-section) .v3c-pill[aria-pressed="true"]{background:#0E1320;color:#fff;box-shadow:none}
+html[data-ui-v3] #u-hub .v3c-pill-n{color:var(--sc-faint);font-weight:500}
+html[data-ui-v3][data-theme="light"] #u-hub .v3c-pill[aria-pressed="true"] .v3c-pill-n{color:#B8C0CF}
 
 /* ---------------------------------------------------------------- My picks */
 html[data-ui-v3] #u-hub #hub-picks-section .h-section-head{margin:0 0 18px}
-html[data-ui-v3] #u-hub #hub-picks-section:has(.v3-pills) .h-pick-filters{display:none}
-html[data-ui-v3] #u-hub #hub-picks-section .v3-picks-top[hidden]{display:none}
-html[data-ui-v3] #u-hub #hub-picks-section .v3-pill-rows{margin:20px 0 4px}
-html[data-ui-v3] #u-hub .v3-score{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop);overflow:hidden}
-html[data-ui-v3] #u-hub .v3-tile{padding:16px 14px 14px;min-width:0;box-shadow:inset 1px 0 0 var(--sc-hair),inset 0 1px 0 var(--sc-hair)}
-html[data-ui-v3] #u-hub .v3-tile:nth-child(odd){box-shadow:inset 0 1px 0 var(--sc-hair)}
-html[data-ui-v3] #u-hub .v3-tile:nth-child(-n+2){box-shadow:inset 1px 0 0 var(--sc-hair)}
-html[data-ui-v3] #u-hub .v3-tile:first-child{box-shadow:none}
-html[data-ui-v3] #u-hub .v3-tile b{display:block;font:600 28px/1 var(--sc-font);letter-spacing:-.03em;white-space:nowrap;color:var(--sc-text);font-variant-numeric:tabular-nums}
-html[data-ui-v3] #u-hub .v3-tile b em{font-style:normal;color:var(--sc-faint);font-weight:500}
-html[data-ui-v3] #u-hub .v3-tile span{display:block;margin-top:8px;color:var(--sc-muted);font-size:13px;line-height:1.35}
+html[data-ui-v3] #u-hub #hub-picks-section:has(.v3c-pills) .h-pick-filters{display:none}
+html[data-ui-v3] #u-hub #hub-picks-section .v3c-picks-top[hidden]{display:none}
+html[data-ui-v3] #u-hub #hub-picks-section .v3c-pill-rows{margin:20px 0 4px}
+html[data-ui-v3] #u-hub .v3c-score{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop);overflow:hidden}
+html[data-ui-v3] #u-hub .v3c-tile{padding:16px 14px 14px;min-width:0;box-shadow:inset 1px 0 0 var(--sc-hair),inset 0 1px 0 var(--sc-hair)}
+html[data-ui-v3] #u-hub .v3c-tile:nth-child(odd){box-shadow:inset 0 1px 0 var(--sc-hair)}
+html[data-ui-v3] #u-hub .v3c-tile:nth-child(-n+2){box-shadow:inset 1px 0 0 var(--sc-hair)}
+html[data-ui-v3] #u-hub .v3c-tile:first-child{box-shadow:none}
+html[data-ui-v3] #u-hub .v3c-tile b{display:block;font:600 28px/1 var(--sc-font);letter-spacing:-.03em;white-space:nowrap;color:var(--sc-text);font-variant-numeric:tabular-nums}
+html[data-ui-v3] #u-hub .v3c-tile b em{font-style:normal;color:var(--sc-faint);font-weight:500}
+html[data-ui-v3] #u-hub .v3c-tile span{display:block;margin-top:8px;color:var(--sc-muted);font-size:13px;line-height:1.35}
 @media (min-width:1024px){
-  html[data-ui-v3] #u-hub .v3-score{grid-template-columns:repeat(4,minmax(0,1fr))}
-  html[data-ui-v3] #u-hub .v3-tile,html[data-ui-v3] #u-hub .v3-tile:nth-child(odd),html[data-ui-v3] #u-hub .v3-tile:nth-child(-n+2){box-shadow:inset 1px 0 0 var(--sc-hair)}
-  html[data-ui-v3] #u-hub .v3-tile:first-child{box-shadow:none}
-  html[data-ui-v3] #u-hub .v3-tile b{font-size:34px}}
-html[data-ui-v3] #u-hub .v3-ticks{display:flex;gap:3px;height:6px;margin:16px 0 0}
-html[data-ui-v3] #u-hub .v3-ticks i{flex:1;border-radius:1px;min-width:2px}
-html[data-ui-v3] #u-hub .v3-ticks.is-bar i{flex-basis:0}
-html[data-ui-v3] #u-hub :is(.v3-ticks,.v3-ticks-key) .h{background:color-mix(in srgb,var(--sc-text) 78%,transparent)}
-html[data-ui-v3] #u-hub :is(.v3-ticks,.v3-ticks-key) .m{background:color-mix(in srgb,var(--sc-muted) 38%,transparent)}
-html[data-ui-v3] #u-hub :is(.v3-ticks,.v3-ticks-key) .v{background:none;box-shadow:inset 0 0 0 1px var(--sc-edge)}
-html[data-ui-v3] #u-hub :is(.v3-ticks,.v3-ticks-key) .p{background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--sc-muted) 34%,transparent) 0 2px,transparent 2px 4px)}
-html[data-ui-v3] #u-hub .v3-ticks-key{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;color:var(--sc-faint);font-size:13px}
-html[data-ui-v3] #u-hub .v3-ticks-key span{display:inline-flex;align-items:center;gap:6px}
-html[data-ui-v3] #u-hub .v3-ticks-key i{display:inline-block;width:12px;height:6px;border-radius:1px}
-html[data-ui-v3] #u-hub .v3-ticks-key b{color:var(--sc-text);font-weight:500}
-html[data-ui-v3] #u-hub .v3-rule{margin:10px 0 0;color:var(--sc-muted);font-size:14px;line-height:1.55;max-width:72ch}
+  html[data-ui-v3] #u-hub .v3c-score{grid-template-columns:repeat(4,minmax(0,1fr))}
+  html[data-ui-v3] #u-hub .v3c-tile,html[data-ui-v3] #u-hub .v3c-tile:nth-child(odd),html[data-ui-v3] #u-hub .v3c-tile:nth-child(-n+2){box-shadow:inset 1px 0 0 var(--sc-hair)}
+  html[data-ui-v3] #u-hub .v3c-tile:first-child{box-shadow:none}
+  html[data-ui-v3] #u-hub .v3c-tile b{font-size:34px}}
+html[data-ui-v3] #u-hub .v3c-ticks{display:flex;gap:3px;height:6px;margin:16px 0 0}
+html[data-ui-v3] #u-hub .v3c-ticks i{flex:1;border-radius:1px;min-width:2px}
+html[data-ui-v3] #u-hub .v3c-ticks.is-bar i{flex-basis:0}
+html[data-ui-v3] #u-hub :is(.v3c-ticks,.v3c-ticks-key) .h{background:color-mix(in srgb,var(--sc-text) 78%,transparent)}
+html[data-ui-v3] #u-hub :is(.v3c-ticks,.v3c-ticks-key) .m{background:color-mix(in srgb,var(--sc-muted) 38%,transparent)}
+html[data-ui-v3] #u-hub :is(.v3c-ticks,.v3c-ticks-key) .v{background:none;box-shadow:inset 0 0 0 1px var(--sc-edge)}
+html[data-ui-v3] #u-hub :is(.v3c-ticks,.v3c-ticks-key) .p{background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--sc-muted) 34%,transparent) 0 2px,transparent 2px 4px)}
+html[data-ui-v3] #u-hub .v3c-ticks-key{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;color:var(--sc-faint);font-size:13px}
+html[data-ui-v3] #u-hub .v3c-ticks-key span{display:inline-flex;align-items:center;gap:6px}
+html[data-ui-v3] #u-hub .v3c-ticks-key i{display:inline-block;width:12px;height:6px;border-radius:1px}
+html[data-ui-v3] #u-hub .v3c-ticks-key b{color:var(--sc-text);font-weight:500}
+html[data-ui-v3] #u-hub .v3c-rule{margin:10px 0 0;color:var(--sc-muted);font-size:14px;line-height:1.55;max-width:72ch}
 /* today's summary line stays (it follows the filters); v3 sets it as body text */
 html[data-ui-v3] #u-hub #hub-picks-section .h-pick-summary{border:0;margin:4px 0 0;padding:0;color:var(--sc-muted);font:400 14px/1.55 var(--sc-font)}
 html[data-ui-v3] #u-hub #hub-picks-section .h-pick-summary b{font:600 14px var(--sc-font);color:var(--sc-text)}
@@ -129,7 +129,7 @@ html[data-ui-v3] #u-hub #hub-picks-section .u-st.push{color:var(--sc-muted)}
 html[data-ui-v3] #u-hub #hub-picks-section .u-st.void{color:var(--sc-faint)}
 html[data-ui-v3] #u-hub #hub-picks-section .u-st.pending{color:var(--sc-text)}
 html[data-ui-v3] #u-hub #hub-picks-section .u-st.pending::before{background:var(--sc-accent-fill)}
-html[data-ui-v3] #u-hub #hub-picks-section .v3-saw{grid-area:saw;justify-self:end;color:var(--sc-faint);font-size:12px;line-height:16px;white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-picks-section .v3c-saw{grid-area:saw;justify-self:end;color:var(--sc-faint);font-size:12px;line-height:16px;white-space:nowrap}
 /* the open receipt */
 html[data-ui-v3] #u-hub #hub-picks-section .u-pick-body{display:grid;gap:14px;padding:4px 16px 14px;background:var(--sc-s2)}
 html[data-ui-v3] #u-hub #hub-picks-section .u-kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;margin:0}
@@ -156,8 +156,8 @@ html[data-ui-v3] #u-hub .h-gap:focus-visible{outline:2px solid var(--sc-accent);
 /* ---------------------------------------------------------------- Record (member hub) */
 html[data-ui-v3] #u-hub #hub-record-section .h-section-head{flex-wrap:wrap;align-items:flex-start;margin:0 0 18px}
 html[data-ui-v3] #u-hub #hub-record-section .h-section-head h2{font:600 20px/1.2 var(--sc-font)}
-html[data-ui-v3] #u-hub #hub-record-section:has(.v3-pills) #hub-record-sport{display:none}
-html[data-ui-v3] #u-hub #hub-record-section .h-section-head .v3-pills{flex:1 1 100%;margin:4px 0 0}
+html[data-ui-v3] #u-hub #hub-record-section:has(.v3c-pills) #hub-record-sport{display:none}
+html[data-ui-v3] #u-hub #hub-record-section .h-section-head .v3c-pills{flex:1 1 100%;margin:4px 0 0}
 html[data-ui-v3] #u-hub #hub-record-body>p{display:inline-block;margin:0 22px 4px 0;font-size:14px}
 html[data-ui-v3] #u-hub #hub-record-body>p a{color:var(--sc-link);text-decoration:none;min-height:40px;display:inline-flex;align-items:center}
 html[data-ui-v3] #u-hub #hub-record-body>p a:hover{color:var(--sc-text)}
@@ -178,12 +178,12 @@ html[data-ui-v3] #u-hub #hub-record-section .h-score span{display:block;margin-t
   html[data-ui-v3] #u-hub #hub-record-section .h-score>div:nth-child(2){box-shadow:inset 1px 0 0 var(--sc-hair)}
   html[data-ui-v3] #u-hub #hub-record-section .h-score>div{padding:20px 22px 18px}
   html[data-ui-v3] #u-hub #hub-record-section .h-score b{font-size:40px}}
-html[data-ui-v3] #u-hub .v3-delta{display:inline-flex!important;align-items:center;gap:5px;margin-top:10px!important;font:500 13px/1.2 var(--sc-font)!important;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--sc-muted)!important}
-html[data-ui-v3] #u-hub .v3-delta.is-good{color:var(--sc-good)!important}
-html[data-ui-v3] #u-hub .v3-delta.is-poor{color:var(--sc-poor)!important}
-html[data-ui-v3] #u-hub .v3-tri{display:inline-block;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent}
-html[data-ui-v3] #u-hub .v3-tri.up{border-bottom:6px solid currentColor}
-html[data-ui-v3] #u-hub .v3-tri.down{border-top:6px solid currentColor}
+html[data-ui-v3] #u-hub .v3c-delta{display:inline-flex!important;align-items:center;gap:5px;margin-top:10px!important;font:500 13px/1.2 var(--sc-font)!important;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--sc-muted)!important}
+html[data-ui-v3] #u-hub .v3c-delta.is-good{color:var(--sc-good)!important}
+html[data-ui-v3] #u-hub .v3c-delta.is-poor{color:var(--sc-poor)!important}
+html[data-ui-v3] #u-hub .v3c-tri{display:inline-block;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent}
+html[data-ui-v3] #u-hub .v3c-tri.up{border-bottom:6px solid currentColor}
+html[data-ui-v3] #u-hub .v3c-tri.down{border-top:6px solid currentColor}
 html[data-ui-v3] #u-hub #hub-record-section .h-record-card>p,html[data-ui-v3] #u-hub #hub-record-section .h-record-card details p{color:var(--sc-muted);font-size:14px;line-height:1.55;max-width:72ch;margin:12px 0}
 html[data-ui-v3] #u-hub #hub-record-section .h-record-card details>summary{min-height:40px;display:flex;align-items:center;cursor:pointer;color:var(--sc-text);font-weight:500}
 /* tiers: stated (ring) and actual (dot) on one scale, joined by the gap */
@@ -197,7 +197,7 @@ html[data-ui-v3] #u-hub #hub-record-section .h-rel-scale{height:1px;background:v
 html[data-ui-v3] #u-hub #hub-record-section .h-rel-scale i{top:-5px;width:11px;height:11px;margin-left:-5.5px;border:0;border-radius:50%}
 html[data-ui-v3] #u-hub #hub-record-section .h-rel-scale .stated{box-shadow:inset 0 0 0 1.5px var(--sc-text);background:var(--sc-s1)}
 html[data-ui-v3] #u-hub #hub-record-section .h-rel-scale .actual{top:-5px;width:11px;height:11px;margin-left:-5.5px;background:var(--sc-text)}
-html[data-ui-v3] #u-hub #hub-record-section .h-rel-scale .v3-gap{position:absolute;top:-1px;height:3px;background:color-mix(in srgb,var(--sc-muted) 45%,transparent)}
+html[data-ui-v3] #u-hub #hub-record-section .h-rel-scale .v3c-gap{position:absolute;top:-1px;height:3px;background:color-mix(in srgb,var(--sc-muted) 45%,transparent)}
 html[data-ui-v3] #u-hub #hub-record-section .h-reliability .h-axis,html[data-ui-v3] #u-hub #hub-record-section .h-reliability .h-axis span{color:var(--sc-faint)!important;font:400 11.5px var(--sc-font)!important}
 @media (max-width:640px){html[data-ui-v3] #u-hub #hub-record-section .h-rel-row{grid-template-columns:64px minmax(0,1fr) 92px;gap:10px;font-size:12.5px}}
 /* 30-day calendar: one tile per day, a 2px foot mark against the card's average stated chance */
@@ -218,6 +218,12 @@ html[data-ui-v3] #u-hub #hub-record-section .h-calendar-grid summary{min-height:
 html[data-ui-v3] #u-hub #hub-record-section .h-calendar-grid time,html[data-ui-v3] #u-hub #hub-record-section .h-calendar-grid small{color:var(--sc-faint)}
 html[data-ui-v3] #u-hub #hub-record-section .h-calendar-grid b{color:var(--sc-text);font:500 16px/22px var(--sc-font)}
 html[data-ui-v3] #u-hub #hub-record-section .h-calendar-grid details p{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-record-section .v3c-cal-key{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:10px 0 0;color:var(--sc-faint);font-size:12.5px}
+html[data-ui-v3] #u-hub #hub-record-section .v3c-cal-key span{display:inline-flex;align-items:center;gap:6px}
+html[data-ui-v3] #u-hub #hub-record-section .v3c-cal-key i{display:inline-block;width:12px;height:2px;border-radius:2px}
+html[data-ui-v3] #u-hub #hub-record-section .v3c-cal-key .good{background:var(--sc-good)}
+html[data-ui-v3] #u-hub #hub-record-section .v3c-cal-key .near{background:var(--sc-near)}
+html[data-ui-v3] #u-hub #hub-record-section .v3c-cal-key .poor{background:var(--sc-poor)}
 html[data-ui-v3] #u-hub #hub-record-section .h-record-card>footer{margin-top:14px;padding-top:12px;border-top:1px solid var(--sc-hair);color:var(--sc-faint);font-size:12.5px}
 
 /* ---------------------------------------------------------------- EV (Best prices), Arbitrage / price check, Sportsbooks game lines */

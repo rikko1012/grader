@@ -34,15 +34,19 @@
     var v = Math.round(d * 1000) / 10;
     return (v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v).toFixed(1) + ' pts';
   }
-  function tri(d) { return '<i class="v3-tri ' + (d >= 0 ? 'up' : 'down') + '" aria-hidden="true"></i>'; }
+  function calKey(avg) {                                              /* the legend for the calendar's day marks (as approved) */
+    return '<p class="v3c-cal-key">Bar under each day vs the average stated chance, ' + pct(avg) + ': <span><i class="good"></i>at or above</span>' +
+      '<span><i class="near"></i>within 3 pts below</span><span><i class="poor"></i>further below</span></p>';
+  }
+  function tri(d) { return '<i class="v3c-tri ' + (d >= 0 ? 'up' : 'down') + '" aria-hidden="true"></i>'; }
 
   /* ---------------------------------------------------------------- pills that press a hub <select> */
   function pills(sel, host, counts) {
     if (!sel || !host) return;
-    var box = host.querySelector('.v3-pills[data-for="' + sel.id + '"]');
+    var box = host.querySelector('.v3c-pills[data-for="' + sel.id + '"]');
     if (!box) {
       box = document.createElement('div');
-      box.className = 'v3-pills';
+      box.className = 'v3c-pills';
       box.setAttribute('role', 'group');
       box.dataset.for = sel.id;
       var lab = sel.getAttribute('aria-label') || (sel.closest('label') && sel.closest('label').firstChild && sel.closest('label').firstChild.textContent) || '';
@@ -64,14 +68,14 @@
     [].forEach.call(sel.options, function (o) {
       var n = counts ? (o.value === 'all' ? counts.all : counts[o.value]) : null;
       if (counts && o.value !== 'all' && !n && sel.value !== o.value) return;     /* a sport with no receipts gets no pill */
-      html += '<button type="button" class="v3-pill" data-v="' + esc(o.value) + '" aria-pressed="' + (sel.value === o.value) + '">' + esc(o.textContent) +
-        (num(n) ? ' <span class="v3-pill-n">' + n + '</span>' : '') + '</button>';
+      html += '<button type="button" class="v3c-pill" data-v="' + esc(o.value) + '" aria-pressed="' + (sel.value === o.value) + '">' + esc(o.textContent) +
+        (num(n) ? ' <span class="v3c-pill-n">' + n + '</span>' : '') + '</button>';
     });
     if (box.innerHTML !== html) box.innerHTML = html;
   }
 
   /* ---------------------------------------------------------------- My picks */
-  var mine = null, mineBusy = null, mineFailKey = null;
+  var mine = null, mineBusy = null, mineTried = {}, mineTriedN = 0;
   function domReceipts(box) {
     return [].map.call(box.querySelectorAll('.u-pick > button[data-u="pick"]'), function (b) {
       var st = b.querySelector('.u-st');
@@ -81,7 +85,7 @@
   function covers(list) {
     return !!mine && list.every(function (r) { var m = mine.by[r.id]; return m && (!r.status || m.status === r.status); });
   }
-  function readMine(key) {
+  function readMine() {
     if (mineBusy) return mineBusy;
     var headers = TOKEN ? {'X-Admin-Token': TOKEN} : {};
     mineBusy = fetch('/api/upgrade/mine', {credentials: 'same-origin', headers: headers}).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
@@ -89,9 +93,8 @@
         var by = {};
         d.receipts.forEach(function (r) { if (r && r.id) by[r.id] = r; });
         mine = {record: d.record, receipts: d.receipts, by: by};
-        mineFailKey = null;
-      } else mineFailKey = key;
-    }, function () { mineFailKey = key; }).then(function () { mineBusy = null; });
+      }
+    }, function () { /* the last good doc stays (transient-failure rule); no tiles without one */ }).then(function () { mineBusy = null; });
     return mineBusy;
   }
   function scoreHtml(rec) {
@@ -105,24 +108,24 @@
       var seg = function (n, c, t) { return n ? '<i class="' + c + '" style="flex-grow:' + n + '" title="' + t + '"></i>' : ''; };
       ticks = seg(hit, 'h', 'Hit') + seg(miss, 'm', 'Miss') + seg(push + vd, 'v', 'Push or void') + seg(pend, 'p', 'Pending');
     }
-    return '<div class="v3-score" aria-label="Your record">' +
-      '<div class="v3-tile is-hero"><b class="sc-num">' + pct(rec.hit_rate) + '</b><span>Hit rate, ' + (num(rec.decided) ? rec.decided : '\u2014') + ' decided</span></div>' +
-      '<div class="v3-tile"><b class="sc-num">' + hit + '<em>' + EN + '</em>' + miss + '<em>' + EN + '</em>' + push + '</b><span>Hit, miss, push</span></div>' +
-      '<div class="v3-tile"><b class="sc-num">' + vd + '</b><span>Void</span></div>' +
-      '<div class="v3-tile"><b class="sc-num">' + pend + '</b><span>Pending</span></div></div>' +
-      '<div class="v3-ticks' + (total > 40 ? ' is-bar' : '') + '" aria-hidden="true">' + ticks + '</div>' +
-      '<div class="v3-ticks-key"><span><i class="h"></i>Hit <b class="sc-num">' + hit + '</b></span><span><i class="m"></i>Miss <b class="sc-num">' + miss + '</b></span>' +
+    return '<div class="v3c-score" aria-label="Your record">' +
+      '<div class="v3c-tile is-hero"><b class="sc-num">' + pct(rec.hit_rate) + '</b><span>Hit rate, ' + (num(rec.decided) ? rec.decided : '\u2014') + ' decided</span></div>' +
+      '<div class="v3c-tile"><b class="sc-num">' + hit + '<em>' + EN + '</em>' + miss + '<em>' + EN + '</em>' + push + '</b><span>Hit, miss, push</span></div>' +
+      '<div class="v3c-tile"><b class="sc-num">' + vd + '</b><span>Void</span></div>' +
+      '<div class="v3c-tile"><b class="sc-num">' + pend + '</b><span>Pending</span></div></div>' +
+      '<div class="v3c-ticks' + (total > 40 ? ' is-bar' : '') + '" aria-hidden="true">' + ticks + '</div>' +
+      '<div class="v3c-ticks-key"><span><i class="h"></i>Hit <b class="sc-num">' + hit + '</b></span><span><i class="m"></i>Miss <b class="sc-num">' + miss + '</b></span>' +
       '<span><i class="v"></i>Push or void <b class="sc-num">' + (push + vd) + '</b></span><span><i class="p"></i>Pending <b class="sc-num">' + pend + '</b></span></div>' +
-      (rec.rule ? '<p class="v3-rule">' + esc(rec.rule) + (rec.scope ? ' ' + esc(rec.scope) + '.' : '') + '</p>' : '');
+      (rec.rule ? '<p class="v3c-rule">' + esc(rec.rule) + (rec.scope ? ' ' + esc(rec.scope) + '.' : '') + '</p>' : '');
   }
   function decoratePicks() {
     var sec = $('hub-picks-section'), box = $('hub-picks-body');
     if (!sec || !box) return;
-    var top = sec.querySelector('.v3-picks-top');
+    var top = sec.querySelector('.v3c-picks-top');
     if (!top) {
       top = document.createElement('div');
-      top.className = 'v3-picks-top';
-      top.innerHTML = '<div class="v3-score-box"></div><div class="v3-pill-rows"></div>';
+      top.className = 'v3c-picks-top';
+      top.innerHTML = '<div class="v3c-score-box"></div><div class="v3c-pill-rows"></div>';
       sec.insertBefore(top, box);
     }
     var list = domReceipts(box), filters = sec.querySelector('.h-pick-filters');
@@ -130,10 +133,14 @@
     setHidden(top, !any);
     if (!any || sec.hidden) return;
     var key = list.map(function (r) { return r.id + ':' + r.status; }).join(',');
-    if (list.length && !covers(list) && mineFailKey !== key) {
-      readMine(key).then(decoratePicks);
+    /* one read per receipt set on screen, whatever its answer: a doc that still does not cover the page (a receipt off its first
+       page, a settle the cache has not seen yet) is never asked for again until the receipts on screen change */
+    if (list.length && !covers(list) && !mineTried[key] && !mineBusy) {
+      if (++mineTriedN > 50) { mineTried = {}; mineTriedN = 1; }
+      mineTried[key] = 1;
+      readMine().then(decoratePicks);
     }
-    var scoreBox = top.querySelector('.v3-score-box');
+    var scoreBox = top.querySelector('.v3c-score-box');
     var html = mine ? scoreHtml(mine.record) : '';
     if (scoreBox.dataset.html !== html) { scoreBox.innerHTML = html; scoreBox.dataset.html = html; }
     var counts = null;
@@ -141,16 +148,16 @@
       counts = {all: mine.receipts.length};
       mine.receipts.forEach(function (r) { counts[r.sport] = (counts[r.sport] || 0) + 1; });
     }
-    var rows = top.querySelector('.v3-pill-rows');
+    var rows = top.querySelector('.v3c-pill-rows');
     setHidden(rows, !!(filters && filters.hidden));
     pills($('hub-pick-sport'), rows, counts);
     pills($('hub-pick-status'), rows, null);
     list.forEach(function (r) {
-      if (!r.st || r.btn.querySelector('.v3-saw')) return;
+      if (!r.st || r.btn.querySelector('.v3c-saw')) return;
       var m = mine && mine.by[r.id];
       if (!m) return;
       var s = document.createElement('small');
-      s.className = 'v3-saw';
+      s.className = 'v3c-saw';
       s.textContent = 'Chance you saw ' + (num(m.displayed_p) ? pct(m.displayed_p) : '\u2014');
       r.st.insertAdjacentElement('afterend', s);
     });
@@ -164,12 +171,12 @@
     if (head) pills($('hub-record-sport'), head, null);
     [].forEach.call(body.querySelectorAll('.h-record-card'), function (card) {
       var cells = card.querySelectorAll('.h-score > div');
-      if (cells.length >= 3 && !cells[1].querySelector('.v3-delta')) {
+      if (cells.length >= 3 && !cells[1].querySelector('.v3c-delta')) {
         var obs = pctOf(cells[1].querySelector('b') && cells[1].querySelector('b').textContent),
           pr = pctOf(cells[2].querySelector('b') && cells[2].querySelector('b').textContent);
         if (obs != null && pr != null) {
           var d = obs - pr, s = document.createElement('span');
-          s.className = 'v3-delta ' + (d >= 0 ? 'is-good' : d > -0.03 ? 'is-near' : 'is-poor');
+          s.className = 'v3c-delta ' + (d >= 0 ? 'is-good' : d > -0.03 ? 'is-near' : 'is-poor');
           s.innerHTML = tri(d) + esc(signedPts(d) + ' vs stated');
           cells[1].appendChild(s);
         }
@@ -177,13 +184,13 @@
       var avg = cells.length >= 3 ? pctOf(cells[2].querySelector('b') && cells[2].querySelector('b').textContent) : null;
       [].forEach.call(card.querySelectorAll('.h-rel-row'), function (row) {
         var sc = row.querySelector('.h-rel-scale');
-        if (!sc || sc.querySelector('.v3-gap')) return;
+        if (!sc || sc.querySelector('.v3c-gap')) return;
         var a = sc.querySelector('.stated'), b = sc.querySelector('.actual');
         if (!a || !b) return;
         var x = parseFloat(a.style.left), y = parseFloat(b.style.left);
         if (!isFinite(x) || !isFinite(y)) return;
         var g = document.createElement('b');
-        g.className = 'v3-gap ' + (y >= x ? 'is-good' : y > x - 3 ? 'is-near' : 'is-poor');
+        g.className = 'v3c-gap ' + (y >= x ? 'is-good' : y > x - 3 ? 'is-near' : 'is-poor');
         g.style.left = Math.min(x, y) + '%';
         g.style.width = Math.abs(y - x) + '%';
         g.setAttribute('aria-hidden', 'true');
@@ -194,6 +201,10 @@
         var v = pctOf(d.querySelector('summary b') && d.querySelector('summary b').textContent);
         d.dataset.v3 = v == null ? 'none' : v >= avg ? 'good' : v > avg - 0.03 ? 'near' : 'poor';
       });
+      var grid = card.querySelector('.h-calendar-grid');
+      if (avg != null && grid && grid.querySelector('details[data-v3]:not([data-v3="none"])') && !card.querySelector('.v3c-cal-key')) {
+        grid.insertAdjacentHTML('afterend', calKey(avg));
+      }
     });
   }
 

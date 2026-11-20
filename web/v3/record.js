@@ -59,6 +59,11 @@
       var x = pctOf(dd.querySelector('summary b') && dd.querySelector('summary b').textContent);
       dd.dataset.v3 = x == null ? 'none' : x >= pr ? 'good' : x > pr - 0.03 ? 'near' : 'poor';
     });
+    var cal = root.querySelector('.calendar');
+    if (pr != null && cal && cal.querySelector('details[data-v3]:not([data-v3="none"])') && !root.querySelector('.v3-cal-key')) {
+      cal.insertAdjacentHTML('afterend', '<p class="v3-cal-key">Bar under each day vs the average stated chance, ' + (pr * 100).toFixed(1) +
+        '%: <span><i class="good"></i>at or above</span><span><i class="near"></i>within 3 pts below</span><span><i class="poor"></i>further below</span></p>');
+    }
   }
 
   function start() {
