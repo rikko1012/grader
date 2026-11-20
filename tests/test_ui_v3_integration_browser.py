@@ -47,6 +47,13 @@ def test_v3_player_names_are_never_cut(browser, live_v3, width):
         cut = p.evaluate("""[...document.querySelectorAll('#hub-rows .h-player b')].filter(b => b.offsetParent && (b.scrollWidth > b.clientWidth + 1
           || getComputedStyle(b).textOverflow === 'ellipsis' && getComputedStyle(b).whiteSpace === 'nowrap')).map(b => b.textContent)""")
         assert cut == [], cut
+        # and never broken inside a word: a one-word name sits on one line (no "Har / ky")
+        split = p.evaluate("""[...document.querySelectorAll('#hub-rows .h-player b')].filter(b => b.offsetParent && !/\\s/.test(b.textContent.trim()))
+          .filter(b => { const r = document.createRange(); r.selectNodeContents(b); const tops = new Set([...r.getClientRects()].map(x => Math.round(x.top)));
+                         return tops.size > 1; }).map(b => b.textContent)""")
+        assert split == [], split
+        plat = p.evaluate("(() => { const g = document.querySelector('#hub-platform'); return [g.clientWidth, g.scrollWidth]; })()")
+        assert plat[0] >= plat[1] - 1, plat                              # All / PP / UD and their counts all on screen
         assert p.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         assert not p.errors
     finally:
