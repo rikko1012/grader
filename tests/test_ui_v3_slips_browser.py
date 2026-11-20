@@ -322,3 +322,18 @@ def test_v3_slip_column_leg_stays_inside_the_column(browser, env, monkeypatch, w
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+def test_v3_phone_generate_brings_the_batch_into_view(browser, env, monkeypatch):
+    """Phone: the generated slips sit about 1,800px under the Auto-build form and only the bar's subtitle changed, so a tap on
+    Generate looked like nothing happened. A fresh batch now scrolls its header into view under the 56px app bar."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", PHONE, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.locator('#hub-generate').click()
+        p.wait_for_selector('#hub-generated .h-generated-card', timeout=30000)
+        p.wait_for_function("(() => { const t = document.querySelector('#hub-generated .h-batch-head').getBoundingClientRect().top; return t >= 56 && t < innerHeight / 2 })()",
+                            timeout=5000)
+        assert not p.errors, p.errors
+    finally:
+        c.close()

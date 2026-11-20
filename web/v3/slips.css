@@ -420,3 +420,5 @@ html[data-ui-v3] #u-hub .sb-rail .sb-stat{display:none}
   html[data-ui-v3] #u-hub .sb-rail #hub-generation-status:not(:empty){position:absolute!important;width:1px;height:1px;padding:0!important;overflow:hidden;clip-path:inset(50%);white-space:nowrap;box-shadow:none}
   html[data-ui-v3]:has(#hub-studio-section:not([hidden]) .sb-rail) .u-toast{bottom:calc(150px + env(safe-area-inset-bottom))!important}
 }
+/* qa 11-20: a fresh batch scrolled into view (slips.js) clears the 56px header */
+html[data-ui-v3] #u-hub #hub-generated :is(.h-batch-head,.h-generated-card){scroll-margin-top:72px}

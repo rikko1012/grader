@@ -219,7 +219,19 @@
       if (n.textContent !== t) n.textContent = t;
       rail.classList.toggle('sb-has-stat', !!t);
     };
-    if (status) { new MutationObserver(subLine).observe(status, {childList: true, characterData: true, subtree: true}); setTimeout(subLine, 0); }
+    /* qa 11-20: on a phone / tablet the generated slips sit far below the form (about 1,800px on a phone) and only the bar's one-line
+       subtitle changed, so a tap on Generate looked like nothing happened: a fresh batch brings its first card into view (a member's own
+       scrolling afterwards is left alone; the desktop shows the rail beside the form, unchanged) */
+    var lastStat = status ? status.textContent : '';
+    var showBatch = function () {
+      var t = status ? status.textContent : '';
+      if (t === lastStat) return;
+      lastStat = t;
+      if (!/^\d+ of \d+ slips? generated/.test(t.trim()) || !(window.matchMedia && window.matchMedia('(max-width: 1023px)').matches)) return;
+      var first = document.querySelector('#hub-generated .h-batch-head') || document.querySelector('#hub-generated .h-generated-card') || document.getElementById('hub-generated');
+      if (first && first.scrollIntoView) first.scrollIntoView({block: 'start', behavior: 'smooth'});
+    };
+    if (status) { new MutationObserver(function () { subLine(); showBatch(); }).observe(status, {childList: true, characterData: true, subtree: true}); setTimeout(subLine, 0); }
     var how = [].slice.call(gen.children).filter(function (c) { return c.tagName === 'DETAILS'; })[0];
     if (how) build.appendChild(how);
     controls.hidden = true;                                  /* now empty: its children moved into the panels and the rail */
