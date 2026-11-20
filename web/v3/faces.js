@@ -7,7 +7,7 @@
      picture is read from /img/index/<sport>.json (exact ids from the board snapshot; a name maps only when one board player has it).
    - Each card keeps its monogram: the picture is laid over it and removed again if it cannot load; nothing else in the card moves.
      The hub's own nodes are never replaced; where a card has no avatar node yet (esports board rows, My picks rows) one is added
-     only once its picture is ready.
+     once that sport's board has pictures (the monogram where a player has none, so every name stays aligned).
    - Where the hub draws an ESPN hotlink (NBA / NFL faces), it is swapped for the same-origin copy when that copy is ready.
    - The hub repaints by innerHTML: one MutationObserver re-applies, idempotently; an image already in the browser cache shows at
      once (no fade on a repaint). */
@@ -48,6 +48,8 @@
     Object.keys(IDX).forEach(function (s) { var f = bySport(s, name, null); if (f) { hit = f; n++; } });
     return n === 1 ? hit : null;
   }
+  /* a sport whose board has pictures gives every row an avatar (the monogram where there is no picture), so names stay aligned */
+  function anyPics(sport) { var d = IDX[sport]; if (!d) return false; if (d.__any == null) d.__any = Object.keys(d.p).length > 0; return d.__any; }
   function teamLogo(sport, team) {
     var d = IDX[sport];
     if (sport) want(sport);
@@ -96,7 +98,7 @@
     im.addEventListener('load', function () { im.classList.add('is-in'); if (cls === 'v3f-img') box.classList.add('v3f-on'); });
     im.addEventListener('error', function () {
       im.remove();
-      if (cls === 'v3f-img') { box.classList.remove('v3f-on'); if (box.classList.contains('v3f-new')) box.remove(); }
+      if (cls === 'v3f-img') box.classList.remove('v3f-on');      /* the monogram under it stays */
     });
     im.src = src;
     if (im.complete && im.naturalWidth) { im.classList.add('is-in'); if (cls === 'v3f-img') box.classList.add('v3f-on'); }
@@ -133,12 +135,11 @@
       var sport = tag ? SPORT_OF[tag.textContent.trim()] : null, name = b ? b.textContent.trim() : '';
       if (!sport || !name) return;
       var f = face(sport, name), box = td.querySelector(':scope > .u-face');
-      if (!f) return;
       if (!box) {
-        if (!f.i) return;
+        if (!anyPics(sport)) return;
         box = newBox(name, 32, 'h-face'); td.insertBefore(box, btn);
       }
-      paint(box, f);
+      if (f) paint(box, f);
     });
     scope.querySelectorAll('#u-hub .h-player-head').forEach(function (h) {
       var b = h.querySelector(':scope > b'), sp = h.querySelector(':scope > span');
@@ -146,9 +147,8 @@
       var sport = SPORT_OF[(bits[bits.length - 1] || '').trim()];
       if (!sport || !name) return;
       var f = face(sport, name), box = h.querySelector(':scope > .u-face');
-      if (!f) return;
-      if (!box) { if (!f.i) return; box = newBox(name, 24, 'h-face'); h.insertBefore(box, h.firstChild); }
-      paint(box, f);
+      if (!box) { if (!anyPics(sport)) return; box = newBox(name, 24, 'h-face'); h.insertBefore(box, h.firstChild); }
+      if (f) paint(box, f);
     });
   }
   /* the player card hero + its match strip */
@@ -202,9 +202,12 @@
       var sport = SPORT_OF[(sm.textContent.split(' · ')[0] || '').trim()];
       if (!sport || !name) return;
       var f = face(sport, name), box = btn.querySelector(':scope > .u-face');
-      if (!f) return;
-      if (!box) { if (!f.i) return; box = newBox(name, 32); btn.insertBefore(box, btn.firstChild); }
-      paint(box, f);
+      if (!box) {
+        if (!anyPics(sport)) return;
+        box = newBox(name, 32); btn.insertBefore(box, btn.firstChild);
+        var art = btn.closest('.u-pick'); if (art) art.classList.add('u-pick-face');   /* the row's face column (picks.css) */
+      }
+      if (f) paint(box, f);
     });
   }
 
