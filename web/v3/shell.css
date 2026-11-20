@@ -81,3 +81,6 @@ html[data-ui-v3] .sc-v3-bar [data-v3=more]{display:none}
 @keyframes sc-bootbar{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
 @media (prefers-reduced-motion:reduce){.sc-boot i::after{animation:none;width:100%}}
 .sc-sr{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* polish2: one phone gutter (16px, --sc-gutter) on every page group; the hub's centre column pads 12px, the board and player pages
+   already sit at 16, so the other sections take the 4px difference */
+@media (max-width:1023px){html[data-ui-v3] #u-hub #hub-center>:is(#hub-picks-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-record-section,#hub-alerts-section,#hub-tools-section){padding-left:calc(var(--sc-gutter) - 12px);padding-right:calc(var(--sc-gutter) - 12px)}}

@@ -553,3 +553,49 @@ html[data-ui-v3] #u-hub #hub-count{position:absolute!important;width:1px!importa
 /* the Lean chip is never cut: on a narrow Scout column the stake moves under it */
 html[data-ui-v3] #u-hub #hub-table .h-scout-grade{flex-wrap:wrap;row-gap:4px}
 html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-lean{max-width:none!important;overflow:visible!important;text-overflow:clip!important;flex:none}
+
+/* ---- polish2 (2026-11-20) ---- */
+/* the toolbar is one row, as mocks 06 / 07 / 11: [All][PP][UD] ... [Filters][Views][refresh]. EV is not a toolbar pill: it is in the
+   header nav (desktop) and the More sheet (phone), the hub's own EV section either way */
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-ev-link{display:none!important}
+@media (max-width:480px){
+  html[data-ui-v3] #u-hub #hub-platform{flex:0 1 auto!important;min-width:0;overflow-x:auto;scrollbar-width:none}
+  html[data-ui-v3] #u-hub #hub-platform::-webkit-scrollbar{display:none}
+  html[data-ui-v3] #u-hub #hub-platform>button{padding:0 9px!important}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-pop-wrap:first-of-type{margin-left:auto}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar .h-pop-wrap>button,html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-refresh{padding:0 9px!important}
+}
+/* no slip toggle in the sort row while the slip is empty (the rail stays closed; the header's Slip opens Slips) */
+html[data-ui-v3] #u-hub.sc-slip-empty #hub-focus{display:none!important}
+/* the Edge explanation wraps instead of being cut */
+html[data-ui-v3] #u-hub .sc-bd-legend .sc-lg-edge{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+/* Source updates: one quiet line (the full text on hover / focus), never a panel pushing the rows down */
+html[data-ui-v3] #u-hub #hub-sources p{position:relative;margin:4px 0 0!important;padding:0 64px 0 0!important;background:none!important;box-shadow:none!important;
+  color:var(--sc-faint)!important;font:400 12px/20px var(--sc-font)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui-v3] #u-hub #hub-sources p:hover,html[data-ui-v3] #u-hub #hub-sources p:focus-within{white-space:normal}
+html[data-ui-v3] #u-hub #hub-sources p b{color:var(--sc-muted)!important;font-weight:500}
+html[data-ui-v3] #u-hub #hub-sources p button{position:absolute;right:0;top:0;min-height:20px;font-size:12px!important}
+/* avatars: every desktop row (the hub's face for NBA / NFL, an initial elsewhere, as mock 11); none on the phone (mock 06) */
+html[data-ui-v3] #u-hub #hub-table .sc-bd-av{display:inline-grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;float:left;margin:2px 10px 0 0;
+  color:#F1F3F8;font:600 13px/1 var(--sc-font);background:radial-gradient(110% 100% at 32% 12%,#3A4E78 0%,#22304D 55%,#141C2E 100%);box-shadow:inset 0 0 0 1px rgba(200,215,255,.12)}
+:root[data-ui-v3][data-theme="light"] #u-hub #hub-table .sc-bd-av{color:var(--sc-muted);background:var(--sc-s2);box-shadow:inset 0 0 0 1px var(--sc-edge)}
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-face,html[data-ui-v3] #u-hub #hub-table .sc-bd-av{display:none!important}
+  /* every row keeps its hit-rate line; an empty window reads — (the rule for missing values), never a dropped line */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits{grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" "hi hi hi hi hi ed ed ed" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record].h-nohits{grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" "hi hi hi hi hi ed ed ed" "mx mx mx mx mx mx mx mx" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits>td.h-c-hits{display:block!important}
+}
+/* the add note: a check, the pick, and Undo */
+html[data-ui-v3] .u-toast.sc-added::before{content:"";display:inline-block;width:14px;height:8px;margin:0 10px 3px 2px;border:solid var(--sc-good);border-width:0 0 2px 2px;transform:rotate(-45deg)}
+/* phone rows (mocks 06 / 07): the role chip and matchup follow the name on line 1, each wrapping whole only when it does not fit
+   (never cut) */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small{display:contents!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small>*{flex:none;color:var(--sc-faint)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player{column-gap:7px!important;align-items:baseline!important}
+  html[data-ui-v3] #u-hub.sc-one-sport #hub-table>tbody>tr[data-record] .h-player small>i{display:none}   /* the sport is in the title */
+}
+html[data-ui-v3] #u-hub #hub-table td.h-c-player .sc-bd-av+.h-player{width:calc(100% - 42px)}
+@media (max-width:1100px){html[data-ui-v3] #u-hub #hub-table td.h-c-player .sc-bd-av+.h-player,html[data-ui-v3] #u-hub #hub-table td.h-c-player .u-face+.h-player{width:auto}}
+html[data-ui-v3] #u-hub #hub-sources p{display:block!important}html[data-ui-v3] #u-hub #hub-sources p b{display:inline!important;margin-right:4px}
