@@ -1,7 +1,7 @@
 """soccer-grades-1120: integration of sg-stability + sg-scope + sg-stats, and every offered prop gets a letter.
 
 - A line the policy grades keeps its exact payload (no new key, same id).
-- A line the policy cannot letter (payout of a demon / goblin line not published, or the model's side not offered)
+- A line the policy cannot letter (payout of a demon / goblin line not published)
   gets the band of the model's own chance at 0 units with a definite reason (owner 2026-11-20; display gd-1).
 - Component models use the sg-scope extra-time rule and tennis tour format exactly as the count path does.
 """
@@ -43,13 +43,16 @@ def test_low_chance_alt_line_is_a_lean_never_a_band():
         assert f['grade'] == policy.LEAN
 
 
-def test_model_side_not_offered_keeps_direction_and_gets_letter():
+def test_one_sided_line_grades_the_offered_side_with_its_own_chance():
+    # decision 1 (2026-11-20): never a letter for a side the line does not offer - the offered side, its own chance
     offer, facts = fixture()
     offer.update(line=8.5, sides={'over': {}})
     f, _ = model.make_forecast(offer, facts, NOW)
-    assert f['side'] == 'under' and f['p_side'] > .5
-    assert f['grade'] == policy.letter_for(f['p_side']) and f['units'] == 0.0
-    assert f['letter_basis'] == 'model_side_not_offered' and 'Under' in f['stake_reason']
+    assert f['side'] == 'over' and f['p_side'] < .5 and f['p_side'] == pytest.approx(f['p_over'] / (1 - f['p_push']))
+    assert f['grade'] == policy.LEAN and 'letter_basis' not in f
+    two = dict(offer, sides={'over': {}, 'under': {}})
+    g, _ = model.make_forecast(two, facts, NOW)
+    assert g['side'] == 'under' and g['grade'] == policy.grade(g['p_side'], 'prizepicks', 'standard').letter
 
 
 def test_component_model_letter_basis_keeps_the_tier_stake_reason():

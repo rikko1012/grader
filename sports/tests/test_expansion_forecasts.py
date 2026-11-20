@@ -59,12 +59,12 @@ def test_only_offered_side_unknown_payout_not_invented():
     assert f['letter_basis']=='chance_payout_unknown' and f['grade_policy'] and 'not published' in f['stake_reason']
 
 
-def test_one_sided_app_never_reverses_the_model_direction():
+def test_one_sided_app_grades_only_the_offered_side():
+    # decision 1 (2026-11-20): the offered side with its own chance (a low chance is a Lean), never the other side
     offer,facts=fixture();offer.update(line=8.5,sides={'over':{}})
     f,_=model.make_forecast(offer,facts,NOW)
-    assert f['side']=='under' and f['p_side']>.5 and f['grade']==policy.letter_for(f['p_side']) and f['units']==0.0
-    assert f['letter_basis']=='model_side_not_offered'
-    assert 'not offered' in f['grade_reason'][0]
+    assert f['side']=='over' and f['p_side']<.5 and f['grade']==policy.LEAN and 'letter_basis' not in f
+    assert f['grade']==policy.grade(f['p_side'],'prizepicks','standard').letter
 
 
 def test_leakage_duplicates_wrong_period_and_too_few_are_refused():

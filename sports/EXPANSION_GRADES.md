@@ -28,10 +28,12 @@ The unchanged `gradecore.policy` assigns letters to offered sides using its
 existing payout policy and non-push probabilities. Unknown variant payouts do
 not receive invented letters or EV. No stakes are assigned by this new model.
 Cards identify Model estimates and retain real sample counts and push counts.
-The model keeps its most likely side even when the app only offers the other
-side. That case is labelled Not offered, with no letter. Availability never
-turns an Under prediction into an Over recommendation. Version 1.1 corrects
-this selection issue; the forecast distributions are unchanged.
+One-sided lines (decision 1, 2026-11-20): the graded side is the higher-chance
+OFFERED side, with the model's own chance for that side (the
+`gradecore.policy.grade_offer` rule). When the model favours the side the line
+does not offer, the offered side gets its honest low chance and letter (usually
+Lean); no letter is ever shown for a side the line does not offer. Two-sided
+lines and lines that offer the model's side are unchanged (byte-identical).
 No existing sport's grading rules, models or containment change.
 
 The existing learning worker publishes with `SPORTS_FORECAST=1`; training stays

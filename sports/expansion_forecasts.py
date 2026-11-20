@@ -356,12 +356,13 @@ def make_forecast(offer, facts, now):
     offered = [s for s in side_probs if s in offer['sides']]
     if not offered:
         return None, 'no_offered_side'
-    # Preserve the model's direction even when an app lists only the other side.
-    # Availability must never turn a strong Under forecast into an Over lean.
-    chosen = max(side_probs, key=side_probs.get)
-    grade = (policy.grade(side_probs[chosen], offer['platform'], offer.get('variant') or 'unknown',
-                         multiplier=offer['sides'][chosen].get('multiplier')) if chosen in offered
-             else policy.Grade(None, None, 0.0, ('Model side not offered on this line.',)))
+    # soccer-grades-1120 decision 1 (2026-11-20): the graded side is the higher-chance OFFERED side, with the model's
+    # chance for that side (gradecore.policy.grade_offer's rule). A one-sided line whose model side is the other one gets
+    # the offered side's own (low) chance and letter - never a letter for a side the line does not offer. Lines that
+    # offer the model's side (every two-sided line) choose exactly as before: byte-identical payloads and ids.
+    chosen = max(offered, key=side_probs.get)
+    grade = policy.grade(side_probs[chosen], offer['platform'], offer.get('variant') or 'unknown',
+                         multiplier=offer['sides'][chosen].get('multiplier'))
     result = {**fitted, 'identity': facts['identity'], 'sport':offer['sport'], 'stat':offer['stat'],
               'scope':offer['scope'], 'line':offer['line'], 'platform':offer['platform'],
               'offer_id':offer['offer_id'], 'offer_revision':offer['revision'], 'start':offer['start'],
@@ -376,14 +377,11 @@ def make_forecast(offer, facts, now):
         result.update(units=0.0, stake_reason=THIN_REASONS[fitted['stake_tier']])
     if grade.letter is None:
         # soccer-grades-1120 (owner 2026-11-20: every offered prop gets a letter; testing decides only the stake):
-        # where the policy has no letter - the payout of a demon / goblin / alternate line is not published, or the
-        # model's side is not offered on this line - the letter is the band of the model's own chance (the same
-        # LETTER_CUTS, the NBA/NFL rg-1 basis: chance of the chosen side, payout-agnostic) at 0 units with the reason.
-        # Lines the policy grades are untouched (byte-identical payloads and ids).
-        basis = 'chance_payout_unknown' if chosen in offered else 'model_side_not_offered'
-        why = (f"0U: the payout of this {offer.get('variant') or 'unknown'} line is not published - letter from the model chance only."
-               if basis == 'chance_payout_unknown' else
-               f"0U: the model's side ({chosen.capitalize()}) is not offered on this line - letter shown for information.")
+        # where the policy has no letter - the payout of a demon / goblin / alternate line is not published - the letter
+        # is the band of the offered side's own chance (the same LETTER_CUTS, the NBA/NFL rg-1 basis, payout-agnostic)
+        # at 0 units with the reason. Lines the policy grades are untouched (byte-identical payloads and ids).
+        basis = 'chance_payout_unknown'
+        why = f"0U: the payout of this {offer.get('variant') or 'unknown'} line is not published - letter from the model chance only."
         result.update(grade=policy.letter_for(side_probs[chosen]), letter_basis=basis, units=0.0,
                       grade_reason=[*result['grade_reason'], why])
         if not fitted.get('component_model') and not fitted.get('thin_model'):

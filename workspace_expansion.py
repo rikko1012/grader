@@ -52,8 +52,7 @@ def _forecast(o, research, forecasts):
         if (f['identity'] != research['identity'] or
                 any(f[k] != o[k] for k in ('sport','stat','scope','line','platform','offer_id','start')) or
                 f['offer_revision'] != o['revision'] or f['side'] not in ('over','under') or
-                (f['side'] not in o['sides'] and f.get('grade') is not None and
-                 f.get('letter_basis') != 'model_side_not_offered') or   # 2026-11-20: a 0U letter on the model's side
+                (f['side'] not in o['sides'] and f.get('grade') is not None) or
                 not 0 <= time.time()-datetime.fromisoformat(f['made_at'].replace('Z','+00:00')).timestamp() < 86400 or
                 datetime.fromisoformat(f['made_at'].replace('Z','+00:00')) >= datetime.fromisoformat(o['start'].replace('Z','+00:00'))):
             return None
@@ -64,11 +63,28 @@ def _forecast(o, research, forecasts):
             return None
         if abs(f['p_side']-f['p_'+f['side']]/(1-f['p_push']))>1e-6:
             return None
-        if f['p_side']+1e-6 < max(probabilities[:2])/(1-f['p_push']):
+        # soccer-grades-1120 decision 1: the graded side is the higher-chance OFFERED side (on a one-sided line it may be
+        # the lower-chance side). Two-sided lines: the same check as before.
+        offered = [f['p_'+s] for s in ('over','under') if s in o['sides']] or probabilities[:2]
+        if f['p_side']+1e-6 < max(offered)/(1-f['p_push']):
             return None
         return f
     except (KeyError,ValueError,TypeError):
         return None
+
+
+def member_stake_reason(f):
+    """Decision 2 (2026-11-20): the member-visible stake reason is a short, definite fact. The stored forecast keeps its
+    full reason (admin / ops / logs); its bytes and id never change for this."""
+    if f.get('letter_basis') == 'chance_payout_unknown':
+        return 'Stake 0U · payout not published'
+    if f.get('thin_model'):
+        return 'Stake 0U · under 5 past games'
+    if f.get('member_stake_reason'):
+        return f['member_stake_reason']
+    if f.get('units') is None or f.get('component_model') or f.get('units') == 0:
+        return 'Stake 0U · new model'
+    return f.get('stake_reason')
 
 
 def _record(o, research, forecast=None):
@@ -101,19 +117,22 @@ def _record(o, research, forecast=None):
                   'hold': {'short': 'Player research', 'reason': 'Verified game history. Scout projections are not released.'},
                   'validation': {'kind': 'history', 'label': 'Player research', 'detail': context_note}},
         'history': {**{f'l{n}': _tally(games, o['line'], n) for n in (5, 10, 20)},
-                    'avg': sum(g['value'] for g in games[:10])/len(games[:10]), 'recent': None,
+                    'avg': sum(g['value'] for g in games[:10])/len(games[:10]) if games else None, 'recent': None,
                     'scope': scope, 'scope_label': PERIODS.get(scope, scope)},
         'market_chance': None, 'state': {'kind': 'ok', 'reason': None},
         'research_only': True}
     if forecast:
         f = forecast
-        detail = (f"Model estimate from {f['sample']} completed games at the same stat and period. "
+        basis = (f"Model estimate from {f['sample']} completed games at the same stat and period and the average of "
+                 "similar players. " if f.get('thin_model') or f.get('population_model') else
+                 f"Model estimate from {f['sample']} completed games at the same stat and period. ")
+        detail = (basis +
                   "The forecast allows for variation between games. Chances are conditional on a non-push result. "
                   "This new model has not yet been calibrated against forward results.")
         record['scout'].update(side=f['side'],read_rev=f['id'],p_side=f['p_side'],
             p_over=f['p_over']/(1-f['p_push']),p_under=f['p_under']/(1-f['p_push']),p_push=f['p_push'],
             projection=f['projection'],range80=f['range80'],grade=f['grade'],
-            model_version=f['model_version'],forecast_at=f['made_at'],stake_reason=f['stake_reason'],
+            model_version=f['model_version'],forecast_at=f['made_at'],stake_reason=member_stake_reason(f),
             hold=None if f['grade'] else {'short':'Model estimate','reason':'; '.join(f['grade_reason'])},
             validation={'kind':'model_estimate','label':'Model estimate','detail':detail})
     return record
@@ -131,10 +150,13 @@ def _build(srv, sport):
             continue
         eligible += 1
         research = (doc.get('research') or {}).get(_key(o)) or {}
-        # Do not publish an empty prop card. A saved, verified exact-stat log is required.
-        if not research.get('identity') or not research.get('games'):
+        # Do not publish an empty prop card: a saved, verified exact-stat log is required - or (soccer-grades-1120, every
+        # offered prop graded) a current lettered forecast for this exact revision (thin-history / player-only models).
+        if not research.get('identity'):
             continue
         forecast = _forecast(o, research, doc.get('forecasts') or {})
+        if not research.get('games') and not (forecast and forecast.get('grade')):
+            continue
         r = _record(o, research, forecast)
         records.append(r)
         k = (o['platform'], r['offer']['offer_id'])

@@ -226,5 +226,8 @@ def test_unoffered_model_direction_is_clear_without_reversing_the_pick(ctx,env,e
     p.locator('#hub-rows .h-player').first.click()
     expect(p.locator('#hub-detail')).to_contain_text('1.3',timeout=20000)
     no_h_scroll(p)
-    bad=dict(f,side='over',p_side=.3,grade='Lean')
-    assert adapter._forecast(offer,facts,{forecast_key(offer):bad}) is None
+    # decision 1 (2026-11-20): the offered side with its own (low) chance is the honest grade of a one-sided line
+    offered=dict(f,side='over',p_side=.3,grade='Lean')
+    assert adapter._forecast(offer,facts,{forecast_key(offer):offered})==offered
+    both=dict(offer,sides={'over':{},'under':{}})
+    assert adapter._forecast(both,facts,{forecast_key(both):offered}) is None     # two sides: the higher one only
